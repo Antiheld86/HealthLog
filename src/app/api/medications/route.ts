@@ -19,6 +19,15 @@ import { invalidateUserMedications } from "@/lib/cache/invalidate";
 import { readMedicationsListCached } from "@/lib/medications/list-read";
 import { NextRequest } from "next/server";
 
+// v1.32.25 — blast-radius cap on externally-mirrored medications per user.
+// A client that mints a fresh `externalId` for the same source concept on
+// every sync sweep (a known iOS unstable-key bug class) never matches the
+// idempotency triple, so each sweep would otherwise create a new mirror
+// row unbounded. Apple's own medication list makes >30 genuinely distinct
+// meds implausible, so this caps the damage a buggy client can do without
+// breaking any legitimate use.
+const APPLE_HEALTH_MIRROR_CAP = 30;
+
 export const GET = apiHandler(async () => {
   const { user } = await requireAuth();
 
@@ -132,6 +141,31 @@ export const POST = apiHandler(async (request: NextRequest) => {
     });
     if (existing) {
       return respondWithExistingMirror(existing);
+    }
+
+    // v1.32.25 — growth guard. This point is only reached when the
+    // idempotency lookup MISSED, i.e. this is a genuinely NEW mirror row,
+    // not a replay of one the user already holds (a replay returned 200
+    // above). An idempotent re-post of an existing mirror is therefore
+    // never blocked, even for a user already at the cap. Refuse only the
+    // minting of a fresh row once the user already holds the cap of
+    // Apple-Health-mirrored medications, so a client feeding a rotating
+    // key can no longer fill the list with duplicates. The count runs on
+    // the mirror-create-miss path only; native creates (no
+    // `externalSource`) never reach this branch and pay nothing.
+    const mirroredCount = await prisma.medication.count({
+      where: { userId: user.id, externalSource: "APPLE_HEALTH" },
+    });
+    if (mirroredCount >= APPLE_HEALTH_MIRROR_CAP) {
+      annotate({
+        action: { name: "medication.mirror.limit_exceeded" },
+        meta: { existing: mirroredCount },
+      });
+      return apiError(
+        "This account already mirrors the maximum number of medications from an external source",
+        422,
+        { errorCode: "medications.mirror.limit_exceeded" },
+      );
     }
   }
 

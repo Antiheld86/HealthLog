@@ -239,6 +239,11 @@ export async function buildMedicationsList(
       // the string Prisma would otherwise serialise a Decimal to.
       unitsPerDose: Number(m.unitsPerDose),
       category: categoryMap[m.id] ?? "OTHER",
+      // v1.32.25 — provenance echo. Surfacing the mirror source lets the
+      // web UI and an operator tell an externally-mirrored row (today only
+      // Apple Health) from a native HealthLog medication. NULL for a native
+      // medication.
+      externalSource: m.externalSource ?? null,
       lastTakenAt: lastTakenAtByMedicationId[m.id] ?? null,
       todayEventCount: todayEventCountByMedId[m.id] ?? 0,
       nextDueAt: display ? display.at.toISOString() : null,
