@@ -66,7 +66,9 @@ async function main(): Promise<void> {
     deletable.push({ id: m.id, userId: m.userId });
   }
 
-  console.log(`\n=== cleanup plan for name "${name}" (externalSource APPLE_HEALTH) ===`);
+  console.log(
+    `\n=== cleanup plan for name "${name}" (externalSource APPLE_HEALTH) ===`,
+  );
   console.log(`candidates found:   ${candidates.length}`);
   console.log(`safe to delete:     ${deletable.length}`);
   console.log(`preserved (intake/schedule present): ${skipped.length}`);
@@ -103,7 +105,11 @@ async function main(): Promise<void> {
     await prisma.medication.delete({ where: { id } });
     await auditLog("medication.delete", {
       userId,
-      details: { medicationId: id, name, reason: "apple_health_phantom_cleanup" },
+      details: {
+        medicationId: id,
+        name,
+        reason: "apple_health_phantom_cleanup",
+      },
     });
     affectedUsers.add(userId);
     deleted += 1;
@@ -113,7 +119,9 @@ async function main(): Promise<void> {
     invalidateUserMedications(userId, { evict: true });
   }
 
-  console.log(`\nDone. Deleted ${deleted} row(s) across ${affectedUsers.size} user(s).`);
+  console.log(
+    `\nDone. Deleted ${deleted} row(s) across ${affectedUsers.size} user(s).`,
+  );
   console.log(
     "Caches were busted for the affected users; a page refresh reflects the change.",
   );
