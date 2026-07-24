@@ -108,25 +108,72 @@ export async function handleWithingsFallbackSync(
 }
 
 /**
- * Drain webhook-owned ECG events. A failed source read or write is allowed to
- * reject the handler so pg-boss retains the job and applies its retry policy.
+ * ECG sync handler. Two enqueue paths feed this queue, mirroring the
+ * activity / sleep handlers:
+ *
+ *   1. Webhook (appli=54) — payload carries `userId` (+ the source
+ *      `startdate`/`enddate` window); the handler runs `syncUserEcg` for that
+ *      one user over the windowed range.
+ *   2. Cron (`withings-ecg-sync` at :41) — payload has no `userId`, the handler
+ *      iterates every Withings connection and runs `syncUserEcg` over its
+ *      default trailing 30-day window. This is the catch-net that lets a
+ *      watch-only account (no scale, appli 54 unsubscribed) pull its ECG strips
+ *      without a webhook.
+ *
+ * Per-user failures are warned and the cohort carries on so one user's
+ * parked-at-reauth state (or a transient device outage) never starves the rest;
+ * the ECG leaf records its own classified failure on the shared `withings`
+ * ledger, so honesty is preserved without rejecting the whole batch.
  */
 export async function handleWithingsEcgSync(
   jobs: Job<WithingsEcgSyncPayload>[],
 ) {
   await withBackgroundEvent("job.withings_ecg_sync", async (evt) => {
+    const prisma = getWorkerPrisma();
     try {
-      let recordingsImported = 0;
+      const targets: Array<{
+        userId: string;
+        startdate?: number;
+        enddate?: number;
+      }> = [];
       for (const job of jobs) {
-        recordingsImported += await syncUserEcg(job.data.userId, {
-          startdate: job.data.startdate,
-          enddate: job.data.enddate,
-        });
+        if (job.data?.userId) {
+          targets.push({
+            userId: job.data.userId,
+            startdate: job.data.startdate,
+            enddate: job.data.enddate,
+          });
+        }
       }
+      // No user-specific enqueue → cron fallback iterating every connection.
+      if (targets.length === 0) {
+        const connections = await prisma.withingsConnection.findMany({
+          select: { userId: true },
+        });
+        targets.push(...connections);
+      }
+      if (targets.length === 0) return;
+
+      let usersSynced = 0;
+      let recordingsImported = 0;
+      for (const { userId, startdate, enddate } of targets) {
+        try {
+          const options =
+            startdate === undefined && enddate === undefined
+              ? {}
+              : { startdate, enddate };
+          recordingsImported += await syncUserEcg(userId, options);
+          usersSynced++;
+        } catch (err) {
+          evt.addWarning(`Withings ECG sync failed for user ${userId}: ${err}`);
+        }
+      }
+
       evt.setBackground({
         task_name: "job.withings_ecg_sync",
         result: {
-          events_processed: jobs.length,
+          users_synced: usersSynced,
+          total: targets.length,
           recordings_imported: recordingsImported,
         },
       });

@@ -76,4 +76,15 @@ describe("reminder-worker — Withings activity + sleep v2 queues", () => {
     );
     expect(source).toMatch(/\[WITHINGS_SLEEP_QUEUE,\s*WITHINGS_SLEEP_CRON\]/);
   });
+
+  it("schedules the ECG catch-net cron at :41 so watch-only accounts pull strips", () => {
+    // The queue is already in allQueues + boss.work-bound; W-1 adds the missing
+    // schedule entry so a payload-less cron tick walks the connection cohort.
+    expect(source).toMatch(
+      /WITHINGS_ECG_SYNC_CRON\s*=\s*["']41 \* \* \* \*["']/,
+    );
+    expect(source).toMatch(
+      /\[WITHINGS_ECG_SYNC_QUEUE,\s*WITHINGS_ECG_SYNC_CRON\]/,
+    );
+  });
 });
