@@ -31,9 +31,9 @@ import {
   withOutputLanguage,
 } from "@/lib/ai/prompts/output-language";
 import {
+  extractAssessmentSummary,
   normalizeLocale,
   normalizeSummaryText,
-  parseSummaryFromContent,
   persistStatusInsight,
 } from "@/lib/insights/status-shared";
 import { runStatusCompletion } from "@/lib/insights/status-provider";
@@ -311,7 +311,19 @@ export async function generateDerivedScoreAssessment(args: {
     return;
   }
 
-  const text = normalizeSummaryText(parseSummaryFromContent(outcome.content));
+  // A malformed / truncated / summary-less structured envelope must never
+  // persist as the derived-score assessment (the raw-JSON class of bug). On an
+  // unparseable envelope persist nothing — the route keeps serving the
+  // always-grounded deterministic fallback, so the field stays honest.
+  const extracted = extractAssessmentSummary(outcome.content);
+  if (extracted.kind === "unparseable") {
+    annotate({
+      action: { name: "insights.derived-assessment.unparseable" },
+      meta: { metric: args.metric },
+    });
+    return;
+  }
+  const text = normalizeSummaryText(extracted.text);
   if (!text) return;
 
   // v1.22 (W6) — score number-grounding gate. The only numbers the prose may
