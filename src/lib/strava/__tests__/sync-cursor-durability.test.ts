@@ -39,6 +39,7 @@ vi.mock("@/lib/integrations/status", () => ({
   recordSyncFailure: mocks.recordSyncFailure,
   recordSyncSuccess: mocks.recordSyncSuccess,
   toFailureKind: vi.fn(() => "transient"),
+  markSyncFailureRecorded: <T>(err: T) => err,
 }));
 vi.mock("../credentials", () => ({
   getStravaConnection: mocks.getStravaConnection,

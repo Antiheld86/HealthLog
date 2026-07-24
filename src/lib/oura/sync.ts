@@ -37,6 +37,7 @@ import { prisma } from "@/lib/db";
 import type { MeasurementType } from "@/generated/prisma/client";
 import { getEvent } from "@/lib/logging/context";
 import {
+  markSyncFailureRecorded,
   recordSyncFailure,
   recordSyncSuccess,
   toFailureKind,
@@ -95,6 +96,28 @@ export const OURA_SYNC_LOOKBACK_DAYS = 7;
 
 export function classifyOuraFailure(err: unknown): FailureKind {
   return toFailureKind(classifyOuraError(err));
+}
+
+/**
+ * Record a whole-connection Oura sync failure on the shared `oura` ledger with
+ * the correct classification + HTTP code. Extracted so the poll-cohort boundary
+ * can record a future escape with the SAME provider-owned classification the
+ * inline catch already applies.
+ */
+export async function recordOuraSyncFailure(
+  userId: string,
+  err: unknown,
+): Promise<void> {
+  await recordSyncFailure({
+    userId,
+    integration: "oura",
+    kind: classifyOuraFailure(err),
+    message: err instanceof Error ? err.message : String(err),
+    errorCode:
+      err instanceof OuraApiError && err.httpStatus != null
+        ? String(err.httpStatus)
+        : undefined,
+  });
 }
 
 function ymd(d: Date): string {
@@ -355,17 +378,10 @@ export async function syncUserOura(
   } catch (err) {
     // Only a whole-connection failure (a failed token refresh → reauth) reaches
     // here now; per-collection failures are captured on `result.failures`.
-    await recordSyncFailure({
-      userId,
-      integration: "oura",
-      kind: classifyOuraFailure(err),
-      message: err instanceof Error ? err.message : String(err),
-      errorCode:
-        err instanceof OuraApiError && err.httpStatus != null
-          ? String(err.httpStatus)
-          : undefined,
-    });
-    throw err;
+    // Recorded here, then marked so the poll-cohort boundary does not
+    // double-record it when it surfaces there.
+    await recordOuraSyncFailure(userId, err);
+    throw markSyncFailureRecorded(err);
   }
 
   // Clear whatever an earlier scoring left under the re-fetched sleep records

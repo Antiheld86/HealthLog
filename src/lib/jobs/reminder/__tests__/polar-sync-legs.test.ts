@@ -5,7 +5,12 @@ const { syncUserPolar, syncUserPolarWorkouts } = vi.hoisted(() => ({
   syncUserPolarWorkouts: vi.fn(),
 }));
 
-vi.mock("@/lib/polar/sync", () => ({ syncUserPolar }));
+vi.mock("@/lib/polar/sync", () => ({
+  syncUserPolar,
+  // The cohort config wires `recordPolarSyncFailure` as its recorder; the legs
+  // handler imports the module, so the mock must expose it too.
+  recordPolarSyncFailure: vi.fn(async () => {}),
+}));
 vi.mock("@/lib/polar/sync-workouts", () => ({ syncUserPolarWorkouts }));
 
 import { syncUserPolarLegs } from "../polar-sync";

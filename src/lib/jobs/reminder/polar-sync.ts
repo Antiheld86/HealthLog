@@ -13,7 +13,7 @@
  * reminder-worker.ts — no new queue: the workout leg rides the existing hourly
  * `polar-sync` tick (one extra request per connected user per hour).
  */
-import { syncUserPolar } from "@/lib/polar/sync";
+import { recordPolarSyncFailure, syncUserPolar } from "@/lib/polar/sync";
 import { syncUserPolarWorkouts } from "@/lib/polar/sync-workouts";
 import { makePollCohortHandler, type PollCohortPayload } from "./poll-cohort";
 
@@ -63,4 +63,8 @@ export const handlePolarSync = makePollCohortHandler({
     return users.map((u) => u.id);
   },
   syncUser: syncUserPolarLegs,
+  // Catches an UNMARKED escape — today the `upsertPolarMeasurements` /
+  // `upsertPolarWorkouts` write-path throws (the fetch paths record + mark
+  // their own failures, and the legs wrapper rethrows the marked error).
+  recordFailure: recordPolarSyncFailure,
 });

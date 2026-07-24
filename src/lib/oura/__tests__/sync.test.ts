@@ -114,6 +114,7 @@ vi.mock("../client", async (importOriginal) => {
 
 import { syncUserOura, upsertOuraMeasurements } from "../sync";
 import { OuraApiError } from "../response-classifier";
+import { isSyncFailureRecorded } from "@/lib/integrations/status";
 
 const CONN = {
   accessToken: "acc",
@@ -284,10 +285,36 @@ describe("syncUserOura", () => {
         upstreamError: "invalid_grant",
       }),
     );
-    await expect(syncUserOura("u1")).rejects.toBeInstanceOf(OuraApiError);
+    const err = await syncUserOura("u1").catch((e) => e);
+    expect(err).toBeInstanceOf(OuraApiError);
+    // Recorded at the source AND marked, so the poll-cohort boundary does not
+    // record it a second time.
+    expect(isSyncFailureRecorded(err)).toBe(true);
+    expect(recordFailureMock).toHaveBeenCalledTimes(1);
     expect(recordFailureMock).toHaveBeenCalledWith(
       expect.objectContaining({ integration: "oura", kind: "reauth_required" }),
     );
+    expect(recordSuccessMock).not.toHaveBeenCalled();
+  });
+
+  it("leaves a write-path failure UNMARKED so the cohort boundary records it once", async () => {
+    // The `upsertOuraMeasurements` transaction throw escapes `syncUserOura`
+    // uncaught: no source-site record, no mark — the poll-cohort boundary is
+    // what records it (exactly once).
+    getConnMock.mockResolvedValue(CONN);
+    fetchReadinessMock.mockResolvedValue([
+      { id: "r1", day: "2026-06-10", score: 71 },
+    ]);
+    reconcileMock.mockResolvedValue({
+      status: "failed",
+      reason: "db_error",
+      error: new Error("write boom"),
+    });
+
+    const err = await syncUserOura("u1").catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(isSyncFailureRecorded(err)).toBe(false);
+    expect(recordFailureMock).not.toHaveBeenCalled();
     expect(recordSuccessMock).not.toHaveBeenCalled();
   });
 

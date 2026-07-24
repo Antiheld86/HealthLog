@@ -23,6 +23,7 @@ import { prisma } from "@/lib/db";
 import type { MeasurementType } from "@/generated/prisma/client";
 import { getEvent } from "@/lib/logging/context";
 import {
+  markSyncFailureRecorded,
   recordSyncFailure,
   recordSyncSuccess,
   toFailureKind,
@@ -33,6 +34,10 @@ import {
   collapseToTypeDayKeys,
   recomputeBucketsForMeasurement,
 } from "@/lib/rollups/measurement-rollups";
+import {
+  emitInsertedMeasurementArrivals,
+  type InsertedMeasurementArrivalRow,
+} from "@/lib/arrivals/measurement-emit";
 import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
 import {
   fetchSgvEntries,
@@ -46,7 +51,12 @@ import { getUserNightscoutCredentials } from "./credentials";
  * How many recent SGV entries to pull per sync tick. A CGM emits one reading
  * every ~5 min (≈288/day); 576 covers ~48 h of catch-up so a missed hourly
  * tick (or a brief outage) still backfills on the next run without paging the
- * full instance. The far-history backfill walks larger windows separately.
+ * full instance.
+ *
+ * This ~48 h window is the ONLY history Nightscout imports: there is no
+ * far-history backfill queue, so connecting Nightscout brings in about two
+ * days of readings and every tick thereafter walks the same recent set. A
+ * deeper walk would need its own windowed-pagination queue; it is not built.
  */
 export const NIGHTSCOUT_SYNC_COUNT = 576;
 
@@ -69,6 +79,32 @@ export function redactNightscoutSecret(message: string): string {
   return message.replace(/\b(token|api-secret)=[^\s&"']+/gi, "$1=REDACTED");
 }
 
+/**
+ * Record a Nightscout sync failure on the shared `nightscout` ledger with the
+ * correct classification + HTTP code + the token STRIPPED from the message.
+ * Extracted so the poll-cohort boundary can record a future escape with the
+ * same provider-owned classification AND redaction the inline fetch catch
+ * applies — a boundary-blind recorder would persist the token-bearing URL a
+ * `SafeFetchError` embeds.
+ */
+export async function recordNightscoutSyncFailure(
+  userId: string,
+  err: unknown,
+): Promise<void> {
+  await recordSyncFailure({
+    userId,
+    integration: "nightscout",
+    kind: classifyNightscoutFailure(err),
+    message: redactNightscoutSecret(
+      err instanceof Error ? err.message : String(err),
+    ),
+    errorCode:
+      err instanceof NightscoutApiError && err.status != null
+        ? String(err.status)
+        : undefined,
+  });
+}
+
 /** Map a Nightscout HTTP status / network error onto the shared ledger kind. */
 export function classifyNightscoutFailure(err: unknown): FailureKind {
   let classification: IntegrationClassification = "transient";
@@ -86,9 +122,12 @@ export function classifyNightscoutFailure(err: unknown): FailureKind {
 }
 
 /**
- * Sync one user's recent SGV entries. Returns the count of rows written
- * (newly inserted or re-confirmed). A user with no configured instance is a
- * clean no-op (returns 0, touches no status row).
+ * Sync one user's recent SGV entries. Returns the count of rows FRESHLY
+ * INSERTED this tick (re-confirmed rows the upsert merely touched are not
+ * counted — the old insert+reconfirm total inflated the cohort's
+ * `measurements_imported` and fired the reminder-satisfy trigger every tick
+ * regardless of whether new glucose actually arrived). A user with no
+ * configured instance is a clean no-op (returns 0, touches no status row).
  */
 export async function syncUserNightscout(
   userId: string,
@@ -106,25 +145,34 @@ export async function syncUserNightscout(
       allowPrivateHost: creds.allowPrivateHost,
     });
   } catch (err) {
+    // Recorded here (token-redacted), then marked so the poll-cohort boundary
+    // does not double-record it — and never re-persists the token-bearing URL
+    // a boundary-blind recorder would.
+    await recordNightscoutSyncFailure(userId, err);
+    throw markSyncFailureRecorded(err);
+  }
+
+  const { inserted, failedRows } = await upsertNightscoutEntries(
+    userId,
+    entries,
+  );
+
+  if (failedRows > 0) {
+    // Partial write failure: keep the tick honest. `transient` because the
+    // ~48 h re-fetch window self-heals a transient DB hiccup, while a
+    // persistent malformed-row failure now accrues visible strikes instead of
+    // being invisibly reset by a success stamp. Do NOT stamp success.
     await recordSyncFailure({
       userId,
       integration: "nightscout",
-      kind: classifyNightscoutFailure(err),
-      message: redactNightscoutSecret(
-        err instanceof Error ? err.message : String(err),
-      ),
-      errorCode:
-        err instanceof NightscoutApiError && err.status != null
-          ? String(err.status)
-          : undefined,
+      kind: "transient",
+      message: `${failedRows} of ${entries.length} SGV rows failed to write`,
     });
-    throw err;
+    return inserted;
   }
 
-  const imported = await upsertNightscoutEntries(userId, entries);
-
   await recordSyncSuccess(userId, "nightscout");
-  return imported;
+  return inserted;
 }
 
 /**
@@ -132,38 +180,71 @@ export async function syncUserNightscout(
  * rollup tier + invalidate status-insight caches once at the end (mirrors the
  * Withings / WHOOP sync tail). First-write-wins: the `update` branch is empty
  * so a re-sync of the same reading is a no-op rather than a rewrite. Best-effort
- * on the per-row write + the rollup fold — one bad row never aborts the pass.
+ * on the per-row write + the rollup fold — one bad row never aborts the pass,
+ * and the count of failed rows is returned so the caller can surface a partial
+ * write failure instead of stamping success over it.
+ *
+ * Returns `inserted` (rows whose key was absent before this pass — the honest
+ * "new readings" count that also drives the arrival emit) and `failedRows`.
  */
 export async function upsertNightscoutEntries(
   userId: string,
   entries: ParsedSgvEntry[],
-): Promise<number> {
-  if (entries.length === 0) return 0;
+): Promise<{ inserted: number; failedRows: number }> {
+  if (entries.length === 0) return { inserted: 0, failedRows: 0 };
 
   const type = "BLOOD_GLUCOSE" as MeasurementType;
-  let imported = 0;
+  const mapped = entries.map((entry) => mapSgvEntryToMeasurement(entry));
+
+  // Probe which keys already exist so a re-confirmed reading (the upsert's
+  // no-op update branch) is not miscounted as a fresh import and the arrival
+  // spine emits ONLY the genuinely-new rows. Cohort passes are sequential per
+  // user, so no concurrent insert races this probe. A probe failure degrades
+  // to "treat every row as fresh" — the rollup fold + count self-correct on
+  // the next tick.
+  const existingKeys = new Set<string>();
+  try {
+    const existing = await prisma.measurement.findMany({
+      where: {
+        userId,
+        type,
+        source: "NIGHTSCOUT",
+        externalId: { in: mapped.map((m) => m.externalId) },
+      },
+      select: { externalId: true },
+    });
+    for (const row of existing) {
+      if (row.externalId) existingKeys.add(row.externalId);
+    }
+  } catch (err) {
+    getEvent()?.addWarning(
+      `nightscout: insert-probe failed for ${userId}: ${err}`,
+    );
+  }
+
+  let failedRows = 0;
+  const insertedRows: InsertedMeasurementArrivalRow[] = [];
   const touched: Array<{ type: MeasurementType; measuredAt: Date }> = [];
 
-  for (const entry of entries) {
-    const mapped = mapSgvEntryToMeasurement(entry);
+  for (const m of mapped) {
     try {
-      await prisma.measurement.upsert({
+      const row = await prisma.measurement.upsert({
         where: {
           userId_type_source_externalId: {
             userId,
             type,
             source: "NIGHTSCOUT",
-            externalId: mapped.externalId,
+            externalId: m.externalId,
           },
         },
         create: {
           userId,
           type,
           source: "NIGHTSCOUT",
-          value: mapped.value,
-          unit: mapped.unit,
-          measuredAt: mapped.measuredAt,
-          externalId: mapped.externalId,
+          value: m.value,
+          unit: m.unit,
+          measuredAt: m.measuredAt,
+          externalId: m.externalId,
         },
         // First-write-wins: a CGM sample is immutable, so a re-sync of the
         // same reading must not rewrite the stored value or measuredAt.
@@ -172,15 +253,31 @@ export async function upsertNightscoutEntries(
         // truth for its own rows, so a re-synced reading brings the row
         // back (mirrors Google / Fitbit).
         update: { deletedAt: null },
+        select: { id: true },
       });
-      touched.push({ type, measuredAt: mapped.measuredAt });
-      imported++;
+      touched.push({ type, measuredAt: m.measuredAt });
+      if (!existingKeys.has(m.externalId)) {
+        insertedRows.push({ type, measuredAt: m.measuredAt, id: row.id });
+      }
     } catch (err) {
       getEvent()?.addWarning(
         `nightscout: failed to upsert measurement: ${err}`,
       );
+      failedRows++;
     }
   }
+
+  // Spine parity with every other measurement writer: emit at most one arrival
+  // per supported kind for the rows freshly inserted. BLOOD_GLUCOSE is not yet
+  // an arrival kind (`ARRIVAL_MEASUREMENT_KIND`), so this is behaviourally
+  // inert for glucose today — it removes Nightscout as the spine's odd one out
+  // and lights up automatically once a `glucose` arrival kind + its consuming
+  // surface land in a later release.
+  void emitInsertedMeasurementArrivals(
+    userId,
+    insertedRows,
+    "nightscout",
+  ).catch(() => {});
 
   try {
     const keys = collapseToTypeDayKeys(touched);
@@ -201,5 +298,5 @@ export async function upsertNightscoutEntries(
     );
   }
 
-  return imported;
+  return { inserted: insertedRows.length, failedRows };
 }

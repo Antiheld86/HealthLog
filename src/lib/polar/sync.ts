@@ -25,6 +25,7 @@ import { prisma } from "@/lib/db";
 import type { MeasurementType } from "@/generated/prisma/client";
 import { getEvent } from "@/lib/logging/context";
 import {
+  markSyncFailureRecorded,
   recordSyncFailure,
   recordSyncSuccess,
   toFailureKind,
@@ -67,6 +68,28 @@ import { PolarApiError, classifyPolarError } from "./response-classifier";
 /** Map a Polar error onto the shared integration-ledger failure kind. */
 export function classifyPolarFailure(err: unknown): FailureKind {
   return toFailureKind(classifyPolarError(err));
+}
+
+/**
+ * Record a Polar vitals-leg sync failure on the shared `polar` ledger with the
+ * correct classification + HTTP code. Extracted so the poll-cohort boundary can
+ * record a future escape with the SAME provider-owned classification the inline
+ * catch already applies.
+ */
+export async function recordPolarSyncFailure(
+  userId: string,
+  err: unknown,
+): Promise<void> {
+  await recordSyncFailure({
+    userId,
+    integration: "polar",
+    kind: classifyPolarFailure(err),
+    message: err instanceof Error ? err.message : String(err),
+    errorCode:
+      err instanceof PolarApiError && err.httpStatus != null
+        ? String(err.httpStatus)
+        : undefined,
+  });
 }
 
 /** One mapped reading with its `externalId` resolved. */
@@ -151,17 +174,10 @@ export async function syncUserPolar(userId: string): Promise<number> {
       readings.push(...toUpsert(mapSpo2(t), "spo2"));
     }
   } catch (err) {
-    await recordSyncFailure({
-      userId,
-      integration: "polar",
-      kind: classifyPolarFailure(err),
-      message: err instanceof Error ? err.message : String(err),
-      errorCode:
-        err instanceof PolarApiError && err.httpStatus != null
-          ? String(err.httpStatus)
-          : undefined,
-    });
-    throw err;
+    // Recorded here, then marked so the poll-cohort boundary does not
+    // double-record it when the legs wrapper rethrows it there.
+    await recordPolarSyncFailure(userId, err);
+    throw markSyncFailureRecorded(err);
   }
 
   // Clear whatever an earlier scoring left under the re-fetched nights before

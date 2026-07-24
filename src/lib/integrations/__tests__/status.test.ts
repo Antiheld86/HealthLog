@@ -47,6 +47,8 @@ import {
   isReauthRequired,
   getPersistentFailureThreshold,
   resumeIntegrationFromPark,
+  markSyncFailureRecorded,
+  isSyncFailureRecorded,
 } from "../status";
 import { prisma } from "@/lib/db";
 import { auditLog } from "@/lib/auth/audit";
@@ -854,5 +856,38 @@ describe("resumeIntegrationFromPark", () => {
     const result = await resumeIntegrationFromPark("u1", "withings");
     expect(result.wasParked).toBe(false);
     expect(auditLog).not.toHaveBeenCalled();
+  });
+});
+
+describe("sync-failure-recorded marker (§5)", () => {
+  it("round-trips: a marked error reads back as recorded", () => {
+    const err = new Error("boom");
+    expect(isSyncFailureRecorded(err)).toBe(false);
+    const returned = markSyncFailureRecorded(err);
+    // Returns the SAME object so `throw markSyncFailureRecorded(err)` works.
+    expect(returned).toBe(err);
+    expect(isSyncFailureRecorded(err)).toBe(true);
+  });
+
+  it("the marker is non-enumerable (never serialised into logs / JSON)", () => {
+    const err = markSyncFailureRecorded(new Error("boom"));
+    expect(Object.keys(err)).not.toContain("healthlog.syncFailureRecorded");
+    expect(JSON.stringify({ ...err })).not.toContain("syncFailureRecorded");
+  });
+
+  it("is a no-op on non-objects and never reports them as recorded", () => {
+    expect(markSyncFailureRecorded("boom")).toBe("boom");
+    expect(markSyncFailureRecorded(null)).toBe(null);
+    expect(markSyncFailureRecorded(undefined)).toBe(undefined);
+    expect(isSyncFailureRecorded("boom")).toBe(false);
+    expect(isSyncFailureRecorded(null)).toBe(false);
+    expect(isSyncFailureRecorded(undefined)).toBe(false);
+  });
+
+  it("tolerates a frozen error without throwing (falls back to unmarked)", () => {
+    const frozen = Object.freeze(new Error("frozen"));
+    expect(() => markSyncFailureRecorded(frozen)).not.toThrow();
+    // Frozen can't carry the marker, so the boundary records it once — safe.
+    expect(isSyncFailureRecorded(frozen)).toBe(false);
   });
 });

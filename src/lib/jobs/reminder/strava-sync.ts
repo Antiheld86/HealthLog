@@ -11,7 +11,7 @@
  * The queue name, cron schedule, and boss.work registration live in
  * `register-integration-sync.ts`.
  */
-import { syncUserStrava } from "@/lib/strava/sync";
+import { recordStravaFailure, syncUserStrava } from "@/lib/strava/sync";
 import { makePollCohortHandler, type PollCohortPayload } from "./poll-cohort";
 
 export type StravaSyncPayload = PollCohortPayload;
@@ -26,4 +26,8 @@ export const handleStravaSync = makePollCohortHandler({
     return users.map((u) => u.id);
   },
   syncUser: (userId) => syncUserStrava(userId),
+  // Strava records + marks every failure at its source today, so this is inert
+  // now — it's the net for a future unmarked escape (matching the cohort's
+  // contract that every provider supplies a recorder).
+  recordFailure: recordStravaFailure,
 });

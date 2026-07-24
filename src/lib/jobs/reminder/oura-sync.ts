@@ -7,7 +7,7 @@
  * lives in `./poll-cohort`; the queue name, cron schedule, and boss.work
  * registration live in reminder-worker.ts.
  */
-import { syncUserOura } from "@/lib/oura/sync";
+import { recordOuraSyncFailure, syncUserOura } from "@/lib/oura/sync";
 import { makePollCohortHandler, type PollCohortPayload } from "./poll-cohort";
 
 export type OuraSyncPayload = PollCohortPayload;
@@ -22,4 +22,7 @@ export const handleOuraSync = makePollCohortHandler({
     return users.map((u) => u.id);
   },
   syncUser: syncUserOura,
+  // Catches an UNMARKED escape — today the `upsertOuraMeasurements` write-path
+  // throw (the fetch/refresh path already records + marks its own failures).
+  recordFailure: recordOuraSyncFailure,
 });

@@ -4,6 +4,8 @@ const {
   fetchSgvEntriesMock,
   getCredsMock,
   upsertMock,
+  findManyMock,
+  emitArrivalsMock,
   recordSuccessMock,
   recordFailureMock,
   recomputeMock,
@@ -12,6 +14,8 @@ const {
   fetchSgvEntriesMock: vi.fn(),
   getCredsMock: vi.fn(),
   upsertMock: vi.fn(),
+  findManyMock: vi.fn(),
+  emitArrivalsMock: vi.fn(),
   recordSuccessMock: vi.fn(),
   recordFailureMock: vi.fn(),
   recomputeMock: vi.fn(),
@@ -23,7 +27,11 @@ vi.mock("../credentials", () => ({
 }));
 
 vi.mock("@/lib/db", () => ({
-  prisma: { measurement: { upsert: upsertMock } },
+  prisma: { measurement: { upsert: upsertMock, findMany: findManyMock } },
+}));
+
+vi.mock("@/lib/arrivals/measurement-emit", () => ({
+  emitInsertedMeasurementArrivals: emitArrivalsMock,
 }));
 
 vi.mock("@/lib/integrations/status", async (importOriginal) => ({
@@ -63,12 +71,17 @@ beforeEach(() => {
   fetchSgvEntriesMock.mockReset();
   getCredsMock.mockReset();
   upsertMock.mockReset();
+  findManyMock.mockReset();
+  emitArrivalsMock.mockReset();
   recordSuccessMock.mockReset();
   recordFailureMock.mockReset();
   recomputeMock.mockReset();
   invalidateMock.mockReset();
   getCredsMock.mockResolvedValue(CREDS);
-  upsertMock.mockResolvedValue({});
+  upsertMock.mockResolvedValue({ id: "row" });
+  // Default: no rows pre-exist → every entry is a fresh insert.
+  findManyMock.mockResolvedValue([]);
+  emitArrivalsMock.mockResolvedValue(undefined);
   invalidateMock.mockResolvedValue(undefined);
 });
 
@@ -126,6 +139,51 @@ describe("syncUserNightscout", () => {
     fetchSgvEntriesMock.mockResolvedValue([ENTRY_A]);
     await syncUserNightscout("u1");
     expect(recordSuccessMock).toHaveBeenCalledWith("u1", "nightscout");
+  });
+
+  it("N-1 — counts only fresh inserts and emits ONLY the newly-inserted rows", async () => {
+    fetchSgvEntriesMock.mockResolvedValue([ENTRY_A, ENTRY_B]);
+    // ENTRY_A already exists (a re-confirm); ENTRY_B is genuinely new.
+    findManyMock.mockResolvedValue([{ externalId: "ns:abc" }]);
+
+    const n = await syncUserNightscout("u1");
+
+    // The inflated insert+reconfirm count used to fire the reminder-satisfy
+    // trigger every tick; the honest count is the single fresh insert.
+    expect(n).toBe(1);
+    // Both rows are still written (idempotent), but only the fresh one emits.
+    expect(upsertMock).toHaveBeenCalledTimes(2);
+    expect(emitArrivalsMock).toHaveBeenCalledTimes(1);
+    const [uid, rows, source] = emitArrivalsMock.mock.calls[0]!;
+    expect(uid).toBe("u1");
+    expect(source).toBe("nightscout");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      type: "BLOOD_GLUCOSE",
+      measuredAt: new Date(1718000300000),
+    });
+    expect(recordSuccessMock).toHaveBeenCalledWith("u1", "nightscout");
+  });
+
+  it("N-2 — a partial row failure records a transient failure and SKIPS success", async () => {
+    fetchSgvEntriesMock.mockResolvedValue([ENTRY_A, ENTRY_B]);
+    findManyMock.mockResolvedValue([]);
+    upsertMock
+      .mockResolvedValueOnce({ id: "r1" })
+      .mockRejectedValueOnce(new Error("bad row"));
+
+    const n = await syncUserNightscout("u1");
+
+    // The one good row still landed; the tick is honest about the failed row.
+    expect(n).toBe(1);
+    expect(recordSuccessMock).not.toHaveBeenCalled();
+    expect(recordFailureMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        integration: "nightscout",
+        kind: "transient",
+        message: "1 of 2 SGV rows failed to write",
+      }),
+    );
   });
 
   it("records a failure and rethrows when the instance is unreachable", async () => {

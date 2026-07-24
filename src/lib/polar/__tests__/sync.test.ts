@@ -92,6 +92,7 @@ vi.mock("../client", async (importOriginal) => {
 });
 
 import { syncUserPolar, upsertPolarMeasurements } from "../sync";
+import { isSyncFailureRecorded } from "@/lib/integrations/status";
 import { PolarApiError } from "../response-classifier";
 
 const CONN = { accessToken: "tok", polarUserId: "42" };
@@ -340,7 +341,12 @@ describe("syncUserPolar", () => {
         reason: "http_401",
       }),
     );
-    await expect(syncUserPolar("u1")).rejects.toBeInstanceOf(PolarApiError);
+    const err = await syncUserPolar("u1").catch((e) => e);
+    expect(err).toBeInstanceOf(PolarApiError);
+    // Recorded at the source AND marked (the legs wrapper rethrows the marked
+    // error), so the poll-cohort boundary does not double-record it.
+    expect(isSyncFailureRecorded(err)).toBe(true);
+    expect(recordFailureMock).toHaveBeenCalledTimes(1);
     expect(recordFailureMock).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: "u1",
@@ -349,6 +355,27 @@ describe("syncUserPolar", () => {
         errorCode: "401",
       }),
     );
+    expect(recordSuccessMock).not.toHaveBeenCalled();
+  });
+
+  it("leaves a write-path failure UNMARKED so the cohort boundary records it once", async () => {
+    // The `upsertPolarMeasurements` transaction throw escapes `syncUserPolar`
+    // uncaught: no source-site record, no mark — the poll-cohort boundary is
+    // what records it (exactly once).
+    getConnMock.mockResolvedValue(CONN);
+    fetchRechargesMock.mockResolvedValue([
+      { date: "2026-06-10", nightly_recharge_status: 6 },
+    ]);
+    reconcileMock.mockReset().mockResolvedValue({
+      status: "failed",
+      reason: "db_error",
+      error: new Error("write boom"),
+    });
+
+    const err = await syncUserPolar("u1").catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(isSyncFailureRecorded(err)).toBe(false);
+    expect(recordFailureMock).not.toHaveBeenCalled();
     expect(recordSuccessMock).not.toHaveBeenCalled();
   });
 });
