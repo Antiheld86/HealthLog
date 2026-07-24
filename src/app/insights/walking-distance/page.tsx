@@ -22,10 +22,6 @@ export default function InsightsGehstreckePage() {
       i18nPrefix="insights.walkingRunningDistance"
       explainerMetric="walkingDistance"
       color="var(--success)"
-      unit="km"
-      yAxisUnit="km"
-      // Stored in metres; display daily totals in km (1 m = 0.001 km).
-      valueScale={0.001}
       emptyStateIcon={<Footprints className="size-6" />}
       emptyStateCtaType={null}
       coachPrefill="I haven't logged any walking and running distance yet — what does this metric tell me about my health, and how do I improve it?"

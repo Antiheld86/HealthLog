@@ -22,8 +22,6 @@ export default function InsightsWristTemperaturePage() {
       i18nPrefix="insights.wristTemperature"
       explainerMetric="wristTemperature"
       color="var(--warning)"
-      unit="°C"
-      yAxisUnit="°C"
       emptyStateIcon={<Thermometer className="size-6" />}
       emptyStateCtaType={null}
       coachPrefill="I haven't logged any wrist-temperature data yet — what does this metric tell me about my health, and how do I improve it?"

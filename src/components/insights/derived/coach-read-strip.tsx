@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Sparkles } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
+import { useUnitDisplay } from "@/hooks/use-unit-display";
 import { useMounted } from "@/hooks/use-mounted";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
@@ -60,6 +61,15 @@ export function CoachReadStrip({
   const { isAuthenticated } = useAuth();
   const { t, locale } = useTranslations();
   const mounted = useMounted();
+  // v1.32.26 — a type with a registered metric/imperial transform resolves its
+  // display unit + conversion from the user's preference and IGNORES the
+  // page-passed `unit` / `valueScale` (weight labelled "kg" would otherwise
+  // never follow the toggle). The band edges + today's value are ABSOLUTE, so
+  // the affine `toDisplay` (factor + offset) is correct here. Untransformed
+  // metrics keep the props (glucose passes its own unit + reciprocal scale).
+  const unitDisplay = useUnitDisplay();
+  const transformed = unitDisplay.isTransformed(metricType);
+  const resolvedUnit = transformed ? unitDisplay.unitFor(metricType) : unit;
 
   const { data } = useQuery({
     queryKey: queryKeys.insightsCoachRead(metricType),
@@ -80,7 +90,11 @@ export function CoachReadStrip({
     new Intl.NumberFormat(locale, {
       minimumFractionDigits: 0,
       maximumFractionDigits: fractionDigits,
-    }).format(value * valueScale);
+    }).format(
+      transformed
+        ? unitDisplay.toDisplay(metricType, value)
+        : value * valueScale,
+    );
 
   const baselineLine = ((): string | null => {
     if (data.learning || !data.baseline) {
@@ -97,7 +111,7 @@ export function CoachReadStrip({
       low: fmt(low),
       high: fmt(high),
       value: fmt(latest),
-      unit,
+      unit: resolvedUnit,
     });
   })();
 

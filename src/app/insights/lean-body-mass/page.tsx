@@ -22,8 +22,6 @@ export default function InsightsMagermassePage() {
       i18nPrefix="insights.leanBodyMass"
       explainerMetric="leanBodyMass"
       color="var(--chart-1)"
-      unit="kg"
-      yAxisUnit="kg"
       emptyStateIcon={<Scale className="size-6" />}
       emptyStateCtaType={null}
       coachPrefill="I haven't logged any lean body mass yet — what does this metric tell me about my health, and how do I improve it?"

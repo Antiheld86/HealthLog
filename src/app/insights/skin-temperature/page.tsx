@@ -30,8 +30,6 @@ export default function InsightsHauttemperaturPage() {
       i18nPrefix="insights.skinTemperature"
       explainerMetric="skinTemperature"
       color="var(--warning)"
-      unit="°C"
-      yAxisUnit="°C"
       emptyStateIcon={<Thermometer className="size-6" />}
       emptyStateCtaType={null}
       coachPrefill="I haven't logged any skin temperature yet — what does this metric tell me about my health, and how do I improve it?"
@@ -41,7 +39,6 @@ export default function InsightsHauttemperaturPage() {
           title={t("measurements.typeBodyTemperatureDeviation")}
           icon={ThermometerSnowflake}
           color="var(--info)"
-          unit="°C"
           fractionDigits={2}
           sectionTitle={t("insights.bodyTempDeviation.title")}
           sectionIcon={ThermometerSnowflake}

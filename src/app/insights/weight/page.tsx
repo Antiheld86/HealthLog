@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Scale } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
+import { useUnitDisplay } from "@/hooks/use-unit-display";
 import { useInsightsAnalytics } from "@/hooks/use-insights-analytics";
 import { useTranslations } from "@/lib/i18n/context";
 import { useInsightsLayoutPrefs } from "@/hooks/use-insights-layout-prefs";
@@ -36,9 +37,37 @@ export default function InsightsGewichtPage() {
   const { isAuthenticated, user } = useAuth();
   const { t } = useTranslations();
   const { compareBaseline } = useInsightsLayoutPrefs(isAuthenticated);
+  const unitDisplay = useUnitDisplay();
 
   const { data: analytics, isEmpty } = useInsightsAnalytics("WEIGHT");
   const weightSummary = analytics?.summaries?.WEIGHT ?? null;
+
+  // v1.32.26 — resolve the weight display unit + scale from the user's
+  // preference (kg for metric, lb for imperial). This page inlines the shell
+  // rather than riding the scaffold, so it converts the stat strip + chart
+  // series + bands here. Weight has no affine offset, so the factor alone
+  // covers both the values and the bands.
+  const weightTransform = unitDisplay.transformFor("WEIGHT");
+  const weightUnit = weightTransform.displayUnit;
+  const weightScale = weightTransform.factor;
+  const displaySummary =
+    weightSummary && weightScale !== 1
+      ? {
+          ...weightSummary,
+          min:
+            weightSummary.min === null ? null : weightSummary.min * weightScale,
+          max:
+            weightSummary.max === null ? null : weightSummary.max * weightScale,
+          mean:
+            weightSummary.mean === null
+              ? null
+              : weightSummary.mean * weightScale,
+          median:
+            weightSummary.median === null
+              ? null
+              : weightSummary.median * weightScale,
+        }
+      : weightSummary;
 
   // v1.12.8 — visible-range stats shared between the chart and the strip.
   const { statsByType, onVisibleStats } = useChartDomainStats();
@@ -73,6 +102,16 @@ export default function InsightsGewichtPage() {
         upperBound: 250,
       })
     : undefined;
+  // The bands are kg bounds → scale into the display unit so the shaded zone
+  // tracks the converted line (factor-only; weight carries no offset).
+  const displayBands =
+    weightBands && weightScale !== 1
+      ? weightBands.map((band) => ({
+          ...band,
+          min: band.min * weightScale,
+          max: band.max * weightScale,
+        }))
+      : weightBands;
 
   return (
     <SubPageShell
@@ -81,14 +120,14 @@ export default function InsightsGewichtPage() {
       explainerMetric="weight"
       statStrip={
         <MetricStatStrip
-          summary={weightSummary}
-          unit="kg"
+          summary={displaySummary}
+          unit={weightUnit}
           seriesLabel={t("insights.weightSectionTitle")}
           icon={Scale}
           windowStats={statsByType?.WEIGHT ?? null}
         />
       }
-      coachReadStrip={<CoachReadStrip metricType="WEIGHT" unit="kg" />}
+      coachReadStrip={<CoachReadStrip metricType="WEIGHT" unit={weightUnit} />}
       diversityNudge={
         <MeasurementDiversityNudge
           measurementType="WEIGHT"
@@ -106,10 +145,11 @@ export default function InsightsGewichtPage() {
         title={t("charts.weight")}
         titleIcon={Scale}
         colors={["var(--chart-1)"]}
-        unit="kg"
-        valueBands={weightBands}
+        unit={weightUnit}
+        valueBands={displayBands}
         compareBaseline={compareBaseline}
         userTimezone={user?.timezone}
+        valueScale={weightScale}
         onVisibleStats={onVisibleStats}
       />
 

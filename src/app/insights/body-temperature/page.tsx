@@ -22,8 +22,6 @@ export default function InsightsBodyTemperaturePage() {
       i18nPrefix="insights.bodyTemperature"
       explainerMetric="bodyTemperature"
       color="var(--chart-3)"
-      unit="°C"
-      yAxisUnit="°C"
       emptyStateIcon={<Thermometer className="size-6" />}
       emptyStateCtaType="BODY_TEMPERATURE"
       coachPrefill="I haven't logged any body temperature yet — what's the healthy range, and what should I do if it drifts?"

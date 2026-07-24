@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
 import { getUnitForType } from "@/lib/validations/measurement";
+import { useUnitDisplay } from "@/hooks/use-unit-display";
 import {
   MEASUREMENT_TYPE_ICONS,
   MEASUREMENT_TYPE_LABEL_KEYS,
@@ -69,23 +70,6 @@ const UP_BAD_VITALS = new Set([
 ]);
 /** Up-is-good for the vitals where a rise is favourable. */
 const UP_GOOD_VITALS = new Set(["HEART_RATE_VARIABILITY", "OXYGEN_SATURATION"]);
-
-/**
- * Storage-unit → display-symbol overrides. `getUnitForType` returns the
- * canonical *storage* string (e.g. the literal "celsius"); a tile must show
- * the symbol a user reads ("°C"). Only the units whose storage string is not
- * already a display symbol need an entry — kg / bpm / ms / % / mg/dL render
- * fine as-is.
- */
-const DISPLAY_UNIT_SYMBOL: Record<string, string> = {
-  celsius: "°C",
-  fahrenheit: "°F",
-};
-
-function displayUnit(type: string): string {
-  const storage = getUnitForType(type);
-  return DISPLAY_UNIT_SYMBOL[storage] ?? storage;
-}
 
 function vitalSentiment(type: string): TrendDirectionSentiment {
   if (UP_BAD_VITALS.has(type)) return "up-bad";
@@ -229,6 +213,7 @@ function BaselineTile({
 }) {
   const { t } = useTranslations();
   const fmt = useFormatters();
+  const unitDisplay = useUnitDisplay();
   // `VITALS_BASELINE` is the type-generic engine and needs the type on the
   // token; the dedicated bands pin their own single input, so no `type`.
   const data = read<VitalsBaselineValue>(
@@ -247,7 +232,12 @@ function BaselineTile({
   const Icon = MEASUREMENT_TYPE_ICONS[type] ?? Gauge;
   const labelKey = MEASUREMENT_TYPE_LABEL_KEYS[type];
   const label = labelKey ? t(labelKey) : type;
-  const unit = displayUnit(type);
+  // v1.32.26 — resolve the display unit from the user's preference. For an
+  // absolute temperature this converts celsius→°F (affine); the reporter's
+  // proven canonical-label bug (a value labelled by the storage unit rather
+  // than the preferred one) is fixed here, retiring the local celsius shim.
+  const unit = unitDisplay.unitFor(type);
+  const toShown = (raw: number) => unitDisplay.toDisplay(type, raw);
   // `VITALS_BASELINE` tiles tag the DOM by their vital type (the stable
   // contract the existing surfaces + tests key on); the dedicated bands tag
   // by their own metric id.
@@ -283,19 +273,23 @@ function BaselineTile({
   }
 
   const v = data.value!;
+  // Range bounds + centre + sparkline are ABSOLUTE readings → affine-convert.
   const framing = t("insights.derived.vitals.typicalRange", {
-    low: fmt.number(v.low, 1),
-    high: fmt.number(v.high, 1),
+    low: fmt.number(toShown(v.low), 1),
+    high: fmt.number(toShown(v.high), 1),
   });
+  const displaySeries = unitDisplay.isTransformed(type)
+    ? v.series.map(toShown)
+    : v.series;
 
   return (
     <div data-slot="vitals-tile" data-metric={tileId} data-state="ok">
       <SparklineDeltaTile
         label={label}
-        value={v.center}
+        value={toShown(v.center)}
         unit={unit}
         icon={Icon}
-        series={v.series}
+        series={displaySeries}
         framing={framing}
         directionSentiment={vitalSentiment(type)}
         provenance={

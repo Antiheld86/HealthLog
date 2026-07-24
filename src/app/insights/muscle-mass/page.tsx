@@ -22,8 +22,6 @@ export default function InsightsMuskelmassePage() {
       i18nPrefix="insights.muscleMass"
       explainerMetric="muscleMass"
       color="var(--chart-1)"
-      unit="kg"
-      yAxisUnit="kg"
       emptyStateIcon={<Dumbbell className="size-6" />}
       emptyStateCtaType={null}
       coachPrefill="I haven't logged any muscle mass yet — what does this metric tell me about my health, and how do I improve it?"

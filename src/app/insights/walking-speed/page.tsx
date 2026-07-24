@@ -22,9 +22,6 @@ export default function InsightsGehgeschwindigkeitPage() {
       i18nPrefix="insights.walkingSpeed"
       explainerMetric="walkingSpeed"
       color="var(--success)"
-      unit="km/h"
-      yAxisUnit="km/h"
-      valueScale={3.6}
       emptyStateIcon={<Gauge className="size-6" />}
       emptyStateCtaType={null}
       coachPrefill="I haven't logged any walking speed yet — what does this metric tell me about my health, and how do I improve it?"

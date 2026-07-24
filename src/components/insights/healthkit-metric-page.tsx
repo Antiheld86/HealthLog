@@ -6,6 +6,7 @@ import type { ComponentProps, ComponentType, ReactNode } from "react";
 import { RefreshCw, Sparkles } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
+import { useUnitDisplay } from "@/hooks/use-unit-display";
 import { useInsightsAnalytics } from "@/hooks/use-insights-analytics";
 import { useInsightsLayoutPrefs } from "@/hooks/use-insights-layout-prefs";
 import { useChartDomainStats } from "@/hooks/use-chart-domain-stats";
@@ -88,8 +89,14 @@ export interface HealthKitMetricPageProps {
    * token retune (see UI standards, colour token rules).
    */
   color: `var(--${string})`;
-  /** Unit suffix the chart renders next to the value. */
-  unit: string;
+  /**
+   * Unit suffix the chart renders next to the value. Optional: for a type
+   * with a registered metric/imperial transform (weight-class, temperature,
+   * waist) the scaffold resolves the unit + scale from the user's preference
+   * and IGNORES any page-passed `unit` / `yAxisUnit` / `valueScale`. Pages for
+   * transformed types omit these props; everything else still passes `unit`.
+   */
+  unit?: string;
   /** Optional y-axis label shown above the unit. */
   yAxisUnit?: string;
   /** Optional value bands (Apple-Health-style target zone shading). */
@@ -246,22 +253,60 @@ export function HealthKitMetricPage({
     ? (fallbackMeasurementType as string)
     : measurementType;
 
+  // v1.32.26 — resolve the display unit + scale from the user's preference for
+  // a type with a registered transform (kg↔lb, cm↔in, °C↔°F). When resolved,
+  // the scaffold OWNS the unit / y-axis unit / value scale / offset / bands +
+  // stat precision and IGNORES the page-passed values, so no page can double-
+  // scale or drift its unit label from the line. Untransformed types keep the
+  // page-passed props exactly (glucose, pulse, %, scores, …).
+  const unitDisplay = useUnitDisplay();
+  const transform = unitDisplay.isTransformed(effectiveType)
+    ? unitDisplay.transformFor(effectiveType)
+    : null;
+  const resolvedUnit = transform ? transform.displayUnit : unit;
+  const resolvedYAxisUnit = transform ? transform.displayUnit : yAxisUnit;
+  const resolvedScale = transform ? transform.factor : (valueScale ?? 1);
+  const resolvedOffset = transform ? (transform.offset ?? 0) : 0;
+  const resolvedFractionDigits = transform
+    ? transform.decimals
+    : statFractionDigits;
+  // Value bands are absolute bounds → affine-convert (factor + offset) so the
+  // shaded zone tracks the converted line. Metric users get the identity.
+  const resolvedBands =
+    transform && valueBands
+      ? valueBands.map((band) => ({
+          ...band,
+          min: unitDisplay.toDisplay(effectiveType, band.min),
+          max: unitDisplay.toDisplay(effectiveType, band.max),
+        }))
+      : valueBands;
+
   const rawSummary = analytics?.summaries?.[effectiveType] ?? null;
   // The stat strip renders display-unit values. The summary holds stored
-  // values, so when the page renders a scaled unit (e.g. WALKING_SPEED
-  // stores m/s but displays km/h via `valueScale`), fold the same scale
-  // into the strip's min / max / median / mean so the numbers and the
-  // unit agree. `valueScale` defaults to 1 (identity) → byte-identical
-  // for every non-scaled metric.
-  const scale = valueScale ?? 1;
+  // values, so fold the resolved scale + offset (affine) into the strip's
+  // min / max / median / mean so the numbers and the unit agree. All four are
+  // ABSOLUTE values, so they take the offset; an untransformed metric keeps
+  // scale 1 / offset 0 → byte-identical.
   const summary =
-    rawSummary && scale !== 1
+    rawSummary && (resolvedScale !== 1 || resolvedOffset !== 0)
       ? {
           ...rawSummary,
-          min: rawSummary.min === null ? null : rawSummary.min * scale,
-          max: rawSummary.max === null ? null : rawSummary.max * scale,
-          mean: rawSummary.mean === null ? null : rawSummary.mean * scale,
-          median: rawSummary.median === null ? null : rawSummary.median * scale,
+          min:
+            rawSummary.min === null
+              ? null
+              : rawSummary.min * resolvedScale + resolvedOffset,
+          max:
+            rawSummary.max === null
+              ? null
+              : rawSummary.max * resolvedScale + resolvedOffset,
+          mean:
+            rawSummary.mean === null
+              ? null
+              : rawSummary.mean * resolvedScale + resolvedOffset,
+          median:
+            rawSummary.median === null
+              ? null
+              : rawSummary.median * resolvedScale + resolvedOffset,
         }
       : rawSummary;
 
@@ -353,8 +398,8 @@ export function HealthKitMetricPage({
       statStrip={
         <MetricStatStrip
           summary={summary}
-          unit={yAxisUnit ?? unit}
-          fractionDigits={statFractionDigits}
+          unit={resolvedYAxisUnit ?? resolvedUnit ?? ""}
+          fractionDigits={resolvedFractionDigits}
           seriesLabel={title}
           icon={statIcon}
           windowStats={statsByType?.[effectiveType] ?? null}
@@ -364,9 +409,9 @@ export function HealthKitMetricPage({
       coachReadStrip={
         <CoachReadStrip
           metricType={effectiveType}
-          unit={yAxisUnit ?? unit}
-          fractionDigits={statFractionDigits}
-          valueScale={valueScale}
+          unit={resolvedYAxisUnit ?? resolvedUnit ?? ""}
+          fractionDigits={resolvedFractionDigits}
+          valueScale={resolvedScale}
         />
       }
       diversityNudge={
@@ -393,12 +438,13 @@ export function HealthKitMetricPage({
         }
         titleIcon={statIcon}
         colors={[color]}
-        unit={unit}
-        yAxisUnit={yAxisUnit}
-        valueBands={valueBands}
+        unit={resolvedUnit}
+        yAxisUnit={resolvedYAxisUnit}
+        valueBands={resolvedBands}
         compareBaseline={compareBaseline}
         userTimezone={user?.timezone}
-        valueScale={valueScale}
+        valueScale={resolvedScale}
+        valueOffset={resolvedOffset}
         onVisibleStats={onVisibleStats}
       />
       {targetSummarySlug ? (

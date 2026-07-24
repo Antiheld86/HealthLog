@@ -221,6 +221,15 @@ interface HealthChartProps {
    */
   valueScale?: number;
   /**
+   * v1.32.26 — display-time additive offset folded in alongside
+   * `valueScale` at the same read boundary: `display = raw * valueScale +
+   * valueOffset`. Required for the affine °C→°F conversion (a shift, not
+   * just a scale). Defaults to `0`. Because every tooltip delta / trend
+   * slope is computed as a DIFFERENCE of two offset values, the offset
+   * cancels there automatically — a rate never inherits the +32 shift.
+   */
+  valueOffset?: number;
+  /**
    * v1.12.8 — chart-reactive metric statistics. When supplied, the chart
    * reports the per-type Min / Max / Median / Mean of the data currently
    * visible under the active range tab (the 7 / 30 / 90 / All selector),
@@ -586,6 +595,7 @@ export function HealthChart({
   verticalMarkers,
   userTimezone = "Europe/Berlin",
   valueScale = 1,
+  valueOffset = 0,
   onVisibleStats,
   titleIcon,
   onDataReady,
@@ -832,7 +842,7 @@ export function HealthChart({
         }>(`/api/measurements/series?${sleepParams}`);
         const points = data?.points ?? [];
         for (const point of points) {
-          const value = point.value * valueScale;
+          const value = point.value * valueScale + valueOffset;
           if (value == null || !Number.isFinite(value)) continue;
           const dayKey = toDayKey(point.at, dayKeyFormatter);
           const bucket = dailyAggregates.get(dayKey) ?? {
@@ -927,7 +937,7 @@ export function HealthChart({
           // v1.15.20 — the BMI division moved into the query's `select`
           // callback so the cached series stays raw and the WEIGHT and
           // BMI views share one cache entry.
-          const value = measurement.value * valueScale;
+          const value = measurement.value * valueScale + valueOffset;
 
           if (!Number.isFinite(value)) {
             continue;
@@ -957,8 +967,8 @@ export function HealthChart({
             typeof measurement.minValue === "number" &&
             typeof measurement.maxValue === "number"
           ) {
-            const scaledMin = measurement.minValue * valueScale;
-            const scaledMax = measurement.maxValue * valueScale;
+            const scaledMin = measurement.minValue * valueScale + valueOffset;
+            const scaledMax = measurement.maxValue * valueScale + valueOffset;
             current.min =
               current.min === null
                 ? scaledMin
