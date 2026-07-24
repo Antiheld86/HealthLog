@@ -70,7 +70,7 @@ import {
   resolveDashboardLayout,
   type ComparisonBaseline,
 } from "@/lib/dashboard-layout";
-import type { MeasurementType } from "@/generated/prisma/client";
+import type { MeasurementType, Prisma } from "@/generated/prisma/client";
 import { insightResultSchema, type InsightResult } from "@/lib/ai/types";
 import { resolveProvider, resolveProviderChain } from "@/lib/ai/provider";
 import { AllProvidersFailedError } from "@/lib/ai/provider-runner";
@@ -132,7 +132,19 @@ export type GenerateOutcome =
    * than with `failed` on purpose: there is no upstream fault to retry
    * against, so the caller must not enqueue the provider-failure retry.
    */
-  | { status: "skipped"; reason: "no-provider" | "no-consent" | "budget" }
+  /**
+   * v1.32.22 (M6) — a privacy-mode flip landed WHILE this generation was in
+   * flight. The generation read the old scope at snapshot time; committing its
+   * output would re-populate the cache under a scope the user just changed
+   * away from. Each cache write is guarded on `insightsPrivacyMode` still being
+   * what it was read as; a zero-row match returns this skip and writes nothing.
+   * The flip already nulled the cache, so the next scheduled/explicit run
+   * regenerates under the new scope — no warm-on-mount.
+   */
+  | {
+      status: "skipped";
+      reason: "no-provider" | "no-consent" | "budget" | "privacy-mode-changed";
+    }
   | { status: "failed"; reason: string };
 
 /** Higher, seedless temperature for the daily-briefing phrasing re-roll. */
@@ -492,6 +504,36 @@ function failBeforeProvider(
   return { status: "failed", reason };
 }
 
+/**
+ * v1.32.22 (M6) — commit a cache write ONLY while the privacy mode is still
+ * what this generation read. Returns `true` when the guarded update matched
+ * the row, `false` when a concurrent `PUT /api/insights/settings` flip
+ * advanced `insightsPrivacyMode` since the read — in which case the caller
+ * must abandon the commit (the flip already nulled the cache). Guards on the
+ * raw column value including `null`, so a null → "aggregated" explicit write
+ * also invalidates an in-flight generation correctly.
+ */
+async function commitInsightUnderMode(
+  userId: string,
+  modeAtRead: string,
+  data: Prisma.UserUpdateInput,
+): Promise<boolean> {
+  const res = await prisma.user.updateMany({
+    where: { id: userId, insightsPrivacyMode: modeAtRead },
+    data,
+  });
+  return res.count > 0;
+}
+
+/** v1.32.22 (M6) — the shared skip outcome when a privacy flip beat the commit. */
+function privacyModeChangedSkip(locale: SupportedLocale): GenerateOutcome {
+  annotate({
+    action: { name: "insights.generate.privacy_mode_changed" },
+    meta: { locale },
+  });
+  return { status: "skipped", reason: "privacy-mode-changed" };
+}
+
 interface GenerateOptions {
   /** Resolved UI locale for the prompt + cache row. */
   locale: SupportedLocale;
@@ -592,6 +634,13 @@ export async function generateComprehensiveInsight(
   }
 
   const includeRaw = dbUser?.insightsPrivacyMode === "raw";
+  // v1.32.22 (M6) — capture the privacy-mode column value read here (a
+  // non-nullable String defaulting to "aggregated"), so every cache commit
+  // below can guard on it. A `PUT /api/insights/settings` flip that lands
+  // between this read and a commit advances the column ("aggregated" ⇄ "raw");
+  // the guarded write then matches zero rows and the generation is skipped
+  // rather than stamping an old-scope payload over the cache the flip nulled.
+  const modeAtRead = dbUser?.insightsPrivacyMode ?? "aggregated";
   // v1.18.11 P1 — bound the briefing's bulk feature read to a recent window
   // (all-time extremes are sourced separately, see features.ts). The downgrade
   // ladder below stays as the safety net for the rare oversize payload.
@@ -788,14 +837,15 @@ export async function generateComprehensiveInsight(
         effectiveTimeoutMs,
       });
       if (rerolled) {
-        await prisma.user.update({
-          where: { id: userId },
-          data: {
-            insightsCachedAt: new Date(),
-            insightsCachedText: rerolled.text,
-            insightsBriefingRerollDate: todayKey,
-          },
+        // v1.32.22 (M6) — the reroll rewrites `insightsCachedText` derived
+        // from the OLD-scope cache; refuse it if a privacy flip landed since
+        // the read.
+        const committed = await commitInsightUnderMode(userId, modeAtRead, {
+          insightsCachedAt: new Date(),
+          insightsCachedText: rerolled.text,
+          insightsBriefingRerollDate: todayKey,
         });
+        if (!committed) return privacyModeChangedSkip(locale);
         invalidateUserInsights(userId);
         annotate({
           action: { name: "insights.generate.briefing_rerolled" },
@@ -805,23 +855,24 @@ export async function generateComprehensiveInsight(
       }
       // A re-roll miss still stamps the day so a persistently failing
       // provider cannot be re-driven on every page-open; the next day retries.
-      await prisma.user.update({
-        where: { id: userId },
-        data: {
-          insightsCachedAt: new Date(),
-          insightsBriefingRerollDate: todayKey,
-        },
+      // v1.32.22 (M6) — even a timestamp-only stamp would resurrect a "fresh
+      // insight" claim over a cache a privacy flip deliberately nulled, so it
+      // is guarded too.
+      const stamped = await commitInsightUnderMode(userId, modeAtRead, {
+        insightsCachedAt: new Date(),
+        insightsBriefingRerollDate: todayKey,
       });
+      if (!stamped) return privacyModeChangedSkip(locale);
       annotate({
         action: { name: "insights.generate.skipped_unchanged" },
         meta: { locale, rerollAttempted: true },
       });
       return { status: "unchanged" };
     }
-    await prisma.user.update({
-      where: { id: userId },
-      data: { insightsCachedAt: new Date() },
+    const stamped = await commitInsightUnderMode(userId, modeAtRead, {
+      insightsCachedAt: new Date(),
     });
+    if (!stamped) return privacyModeChangedSkip(locale);
     annotate({
       action: { name: "insights.generate.skipped_unchanged" },
       meta: { locale },
@@ -1145,14 +1196,16 @@ export async function generateComprehensiveInsight(
     return failBeforeProvider(userId, locale, "aborted");
   }
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      insightsCachedAt: new Date(),
-      insightsCachedText: JSON.stringify(insights),
-      insightsSnapshotHash: snapshotHash,
-    },
+  // v1.32.22 (M6) — the payload was built under the scope read at the top of
+  // this function. If a privacy flip landed since, committing it would stamp an
+  // old-scope briefing over the null the flip wrote — guard the write on the
+  // mode being unchanged and skip when it advanced.
+  const committed = await commitInsightUnderMode(userId, modeAtRead, {
+    insightsCachedAt: new Date(),
+    insightsCachedText: JSON.stringify(insights),
+    insightsSnapshotHash: snapshotHash,
   });
+  if (!committed) return privacyModeChangedSkip(locale);
   // v1.16.8 — no blanket per-status eviction here any more. The cards
   // track their own data through the ingest invalidator and their own
   // content-hash gates; a fresh comprehensive briefing does not change

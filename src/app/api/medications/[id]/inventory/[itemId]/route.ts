@@ -36,32 +36,16 @@ import {
   computeInventoryState,
 } from "@/lib/medications/inventory/state-machine";
 import { serializeInventoryItem } from "@/lib/medications/inventory/service";
+import { lockMedicationInventory } from "@/lib/medications/inventory/consumption";
 import { invalidateUserMedications } from "@/lib/cache/invalidate";
 import { encryptNote, shapeInventoryItemNotes } from "@/lib/crypto/note-cipher";
 
 type RouteParams = { params: Promise<{ id: string; itemId: string }> };
 
-async function loadOwnedItem(
-  medicationId: string,
-  itemId: string,
-  userId: string,
-) {
-  const item = await prisma.medicationInventoryItem.findUnique({
-    where: { id: itemId },
-  });
-  if (!item || item.userId !== userId || item.medicationId !== medicationId) {
-    return null;
-  }
-  return item;
-}
-
 export const PATCH = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
     const { user } = await requireAuth();
     const { id, itemId } = await params;
-
-    const existing = await loadOwnedItem(id, itemId, user.id);
-    if (!existing) return apiError("Inventory item not found", 404);
 
     const { data: body, error: jsonError } = await safeJson(request, {
       maxBytes: 64 * 1024,
@@ -84,67 +68,6 @@ export const PATCH = apiHandler(
       notes,
     } = parsed.data;
 
-    // Compose the next-row shape. Each mutation field is optional and
-    // commutative — applying them in any order produces the same row.
-    let nextFirstUseAt = existing.firstUseAt;
-    let nextState = existing.state;
-    // v1.16.12 — Decimal column; work in JS numbers locally (the
-    // arithmetic below stays well within double precision) and let
-    // Prisma re-widen on write.
-    let nextUnitsRemaining: number = Number(existing.unitsRemaining);
-    let nextPrintedExpiry = existing.printedExpiry;
-
-    if (markAsFirstUseAt) {
-      // The clock can be set manually if the user opened the pen
-      // without logging an intake event.
-      nextFirstUseAt = markAsFirstUseAt;
-      if (nextState === "ACTIVE") nextState = "IN_USE";
-    }
-
-    if (printedExpiry !== undefined) {
-      nextPrintedExpiry = printedExpiry;
-    }
-
-    if (unitsRemaining !== undefined) {
-      // v1.16.1 — stock correction (Bestand tab adjust / withdraw).
-      // The wire field counts UNITS. Clamp to the item's capacity; the
-      // state-machine re-run below owns every state consequence (0 ⇒
-      // USED_UP, a raise out of 0 re-evaluates against the expiry
-      // clocks).
-      nextUnitsRemaining = Math.min(
-        unitsRemaining,
-        Number(existing.unitsTotal),
-      );
-    }
-
-    if (markAsUsedUp === true) {
-      nextUnitsRemaining = 0;
-      nextState = "USED_UP";
-    }
-
-    const nextExpiresAt = computeExpiresAt(nextFirstUseAt, nextPrintedExpiry);
-
-    // Re-run the canonical state machine over the composed next-row
-    // view. The clause-by-clause updates above set the state ad-hoc
-    // (`ACTIVE → IN_USE` on first use, `* → USED_UP` on mark-as-used),
-    // but a back-dated `markAsFirstUseAt` whose 30-day window already
-    // elapsed should land at EXPIRED, not IN_USE. The state machine is
-    // pure and idempotent — running it once more with the composed view
-    // collapses every edge case onto the same decision tree the intake
-    // hook and the daily expire cron already share. USED_UP is terminal
-    // (unitsRemaining === 0 ⇒ USED_UP wins at clause 1), so the manual
-    // override remains sticky.
-    nextState = computeInventoryState(
-      {
-        state: nextState,
-        unitsTotal: Number(existing.unitsTotal),
-        unitsRemaining: nextUnitsRemaining,
-        firstUseAt: nextFirstUseAt,
-        printedExpiry: nextPrintedExpiry,
-      },
-      Date.now(),
-    );
-
     // Only touch the note columns when the caller supplied a value; an absent
     // `notes` leaves the existing ciphertext untouched. When present, encrypt
     // at rest and null the plaintext column.
@@ -163,18 +86,106 @@ export const PATCH = apiHandler(
     if (manufacturer !== undefined) labellingData.manufacturer = manufacturer;
     if (doseStrength !== undefined) labellingData.doseStrength = doseStrength;
 
-    const updated = await prisma.medicationInventoryItem.update({
-      where: { id: itemId },
-      data: {
-        state: nextState,
-        firstUseAt: nextFirstUseAt,
-        unitsRemaining: nextUnitsRemaining,
-        printedExpiry: nextPrintedExpiry,
-        expiresAt: nextExpiresAt,
-        ...labellingData,
-        ...notesData,
-      },
+    // v1.32.22 (M5) — the stock correction writes an ABSOLUTE `unitsRemaining`
+    // composed from a prior read. `consumeForIntake` decrements the same rows
+    // under a per-medication advisory lock; without taking that SAME lock the
+    // correction's read-compose-write could clobber a concurrent decrement (or
+    // vice versa). Route the whole read-compose-write through one transaction
+    // that takes the lock first and re-reads INSIDE it, so the correction
+    // serializes against intake consumption instead of racing it.
+    const outcome = await prisma.$transaction(async (tx) => {
+      await lockMedicationInventory(tx, id);
+
+      const existing = await tx.medicationInventoryItem.findUnique({
+        where: { id: itemId },
+      });
+      if (
+        !existing ||
+        existing.userId !== user.id ||
+        existing.medicationId !== id
+      ) {
+        return { notFound: true as const };
+      }
+
+      // Compose the next-row shape. Each mutation field is optional and
+      // commutative — applying them in any order produces the same row.
+      let nextFirstUseAt = existing.firstUseAt;
+      let nextState = existing.state;
+      // v1.16.12 — Decimal column; work in JS numbers locally (the
+      // arithmetic below stays well within double precision) and let
+      // Prisma re-widen on write.
+      let nextUnitsRemaining: number = Number(existing.unitsRemaining);
+      let nextPrintedExpiry = existing.printedExpiry;
+
+      if (markAsFirstUseAt) {
+        // The clock can be set manually if the user opened the pen
+        // without logging an intake event.
+        nextFirstUseAt = markAsFirstUseAt;
+        if (nextState === "ACTIVE") nextState = "IN_USE";
+      }
+
+      if (printedExpiry !== undefined) {
+        nextPrintedExpiry = printedExpiry;
+      }
+
+      if (unitsRemaining !== undefined) {
+        // v1.16.1 — stock correction (Bestand tab adjust / withdraw).
+        // The wire field counts UNITS. Clamp to the item's capacity; the
+        // state-machine re-run below owns every state consequence (0 ⇒
+        // USED_UP, a raise out of 0 re-evaluates against the expiry
+        // clocks).
+        nextUnitsRemaining = Math.min(
+          unitsRemaining,
+          Number(existing.unitsTotal),
+        );
+      }
+
+      if (markAsUsedUp === true) {
+        nextUnitsRemaining = 0;
+        nextState = "USED_UP";
+      }
+
+      const nextExpiresAt = computeExpiresAt(nextFirstUseAt, nextPrintedExpiry);
+
+      // Re-run the canonical state machine over the composed next-row
+      // view. The clause-by-clause updates above set the state ad-hoc
+      // (`ACTIVE → IN_USE` on first use, `* → USED_UP` on mark-as-used),
+      // but a back-dated `markAsFirstUseAt` whose 30-day window already
+      // elapsed should land at EXPIRED, not IN_USE. The state machine is
+      // pure and idempotent — running it once more with the composed view
+      // collapses every edge case onto the same decision tree the intake
+      // hook and the daily expire cron already share. USED_UP is terminal
+      // (unitsRemaining === 0 ⇒ USED_UP wins at clause 1), so the manual
+      // override remains sticky.
+      nextState = computeInventoryState(
+        {
+          state: nextState,
+          unitsTotal: Number(existing.unitsTotal),
+          unitsRemaining: nextUnitsRemaining,
+          firstUseAt: nextFirstUseAt,
+          printedExpiry: nextPrintedExpiry,
+        },
+        Date.now(),
+      );
+
+      const updated = await tx.medicationInventoryItem.update({
+        where: { id: itemId },
+        data: {
+          state: nextState,
+          firstUseAt: nextFirstUseAt,
+          unitsRemaining: nextUnitsRemaining,
+          printedExpiry: nextPrintedExpiry,
+          expiresAt: nextExpiresAt,
+          ...labellingData,
+          ...notesData,
+        },
+      });
+
+      return { prevState: existing.state, updated };
     });
+
+    if ("notFound" in outcome) return apiError("Inventory item not found", 404);
+    const { prevState, updated } = outcome;
 
     await auditLog("medication.inventory.update", {
       userId: user.id,
@@ -182,7 +193,7 @@ export const PATCH = apiHandler(
       details: {
         medicationId: id,
         itemId,
-        prevState: existing.state,
+        prevState,
         nextState: updated.state,
       },
     });
@@ -193,7 +204,7 @@ export const PATCH = apiHandler(
         entity_type: "inventory_item",
         entity_id: itemId,
       },
-      meta: { medication_id: id, prev: existing.state, next: updated.state },
+      meta: { medication_id: id, prev: prevState, next: updated.state },
     });
 
     // A stock correction / first-use / used-up flip changes the
@@ -211,10 +222,23 @@ export const DELETE = apiHandler(
     const { user } = await requireAuth();
     const { id, itemId } = await params;
 
-    const existing = await loadOwnedItem(id, itemId, user.id);
+    // v1.32.22 (M5) — take the same per-medication advisory lock the intake
+    // consumption hook takes, so a delete that interleaves a `consumeForIntake`
+    // serializes against it: the consume either fully applies before the row
+    // vanishes or blocks until the delete commits and then finds nothing to
+    // decrement, instead of half-applying against a row deleted mid-flight.
+    const existing = await prisma.$transaction(async (tx) => {
+      await lockMedicationInventory(tx, id);
+      const item = await tx.medicationInventoryItem.findUnique({
+        where: { id: itemId },
+      });
+      if (!item || item.userId !== user.id || item.medicationId !== id) {
+        return null;
+      }
+      await tx.medicationInventoryItem.delete({ where: { id: itemId } });
+      return item;
+    });
     if (!existing) return apiError("Inventory item not found", 404);
-
-    await prisma.medicationInventoryItem.delete({ where: { id: itemId } });
 
     await auditLog("medication.inventory.delete", {
       userId: user.id,

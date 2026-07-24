@@ -35,6 +35,11 @@ import { auditLog } from "@/lib/auth/audit";
 import { prisma, toJson } from "@/lib/db";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import {
+  takeBaseToken,
+  guardedUserUpdate,
+  invalidBaseTokenError,
+} from "@/lib/optimistic-lock";
+import {
   notificationPrefsSchema,
   parseNotificationPrefs,
   resolveNotificationPrefs,
@@ -51,9 +56,14 @@ export const GET = apiHandler(async () => {
 
   const row = await prisma.user.findUnique({
     where: { id: user.id },
-    select: { notificationPrefs: true },
+    // v1.32.22 (M1) — `updatedAt` rides the response as the optimistic-
+    // concurrency token so a client can echo it on its next PATCH.
+    select: { notificationPrefs: true, updatedAt: true },
   });
-  return apiSuccess(parseNotificationPrefs(row?.notificationPrefs ?? null));
+  return apiSuccess({
+    ...parseNotificationPrefs(row?.notificationPrefs ?? null),
+    updatedAt: row?.updatedAt?.toISOString(),
+  });
 });
 
 export const PATCH = apiHandler(async (req: Request) => {
@@ -79,7 +89,17 @@ export const PATCH = apiHandler(async (req: Request) => {
     throw new HttpError(422, "notification-prefs.body.invalid_json");
   }
 
-  const parsed = notificationPrefsSchema.safeParse(body ?? {});
+  // v1.32.22 (M1) — pull the optimistic-concurrency base token off the body
+  // BEFORE the Zod parse so it never pollutes `changedCategories`
+  // (`Object.keys(parsed.data)`) or the schema. The race that matters: iOS
+  // sets `medication.clientManaged = true`, a web card PATCH based on a
+  // pre-iOS read deep-merges the whole blob WITHOUT it, silently reverting the
+  // flag (the double-reminder class). With the token, that stale write 409s.
+  const taken = takeBaseToken(body ?? {});
+  if ("invalid" in taken) return invalidBaseTokenError();
+  const base = taken.base;
+
+  const parsed = notificationPrefsSchema.safeParse(taken.rest ?? {});
   if (!parsed.success) {
     annotate({
       action: { name: "auth.me.notification-prefs.patch.invalid_shape" },
@@ -103,10 +123,21 @@ export const PATCH = apiHandler(async (req: Request) => {
     parsed.data,
   );
 
-  await prisma.user.update({
-    where: { id: user.id },
+  // v1.32.22 (M1) — guard the deep-merge write on the client's base token. A
+  // stale base 409s and writes NOTHING, so a concurrent web PATCH can't revert
+  // a category (e.g. `medication.clientManaged`) another writer just set from a
+  // fresher read. A tokenless request keeps the prior unconditional write.
+  const guarded = await guardedUserUpdate({
+    userId: user.id,
+    base,
     data: { notificationPrefs: toJson(merged) },
+    conflict: {
+      action: "user.notification_prefs.conflict",
+      errorCode: "notification_prefs_conflict",
+      message: "Notification preferences changed since they were loaded",
+    },
   });
+  if ("conflict" in guarded) return guarded.conflict;
 
   // Capture which categories the PATCH actually touched so the audit
   // trail records the user's intent, not just the full resolved row.
@@ -130,5 +161,5 @@ export const PATCH = apiHandler(async (req: Request) => {
     },
   });
 
-  return apiSuccess(merged);
+  return apiSuccess({ ...merged, updatedAt: guarded.updatedAt });
 });

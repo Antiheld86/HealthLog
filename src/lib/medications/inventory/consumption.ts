@@ -76,7 +76,16 @@ async function runAtomically<T>(
   return fn(client);
 }
 
-async function lockMedicationInventory(
+/**
+ * Serialize every write against one medication's inventory on a
+ * transaction-scoped Postgres advisory lock. Intake consumption already
+ * takes it; the stock-correction PATCH / DELETE route it through the SAME
+ * key (v1.32.22, M5) so an absolute stock write can no longer race a
+ * concurrent dose decrement and clobber it. Exported because the key must
+ * be shared verbatim — a re-derived hash elsewhere would be a different
+ * lock, i.e. no lock at all.
+ */
+export async function lockMedicationInventory(
   tx: TxClient,
   medicationId: string,
 ): Promise<void> {

@@ -36,6 +36,11 @@ import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
+import {
+  takeBaseToken,
+  guardedUserUpdate,
+  invalidBaseTokenError,
+} from "@/lib/optimistic-lock";
 import { resolveModuleMap, normalisePrefs } from "@/lib/modules/gate";
 import { modulePrefsPatchSchema } from "@/lib/validations/modules";
 
@@ -49,7 +54,13 @@ export const GET = apiHandler(async () => {
   annotate({ action: { name: "auth.me.modules.get" } });
 
   const modules = await resolveModuleMap(user.id);
-  return apiSuccess({ modules });
+  // v1.32.22 (M3) — surface the optimistic-concurrency token. `resolveModuleMap`
+  // returns no row metadata, so read `updatedAt` on its own.
+  const row = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { updatedAt: true },
+  });
+  return apiSuccess({ modules, updatedAt: row?.updatedAt?.toISOString() });
 });
 
 export const PATCH = apiHandler(async (req: Request) => {
@@ -75,7 +86,14 @@ export const PATCH = apiHandler(async (req: Request) => {
     throw new HttpError(422, "modules.body.invalid_json");
   }
 
-  const parsed = modulePrefsPatchSchema.safeParse(body ?? {});
+  // v1.32.22 (M3) — strip the optimistic-concurrency base token BEFORE the
+  // parse: `modulePrefsPatchSchema` is `.strict()` and must stay strict, so
+  // the transport token can never reach it (it would 422 as an unknown key).
+  const taken = takeBaseToken(body ?? {});
+  if ("invalid" in taken) return invalidBaseTokenError();
+  const base = taken.base;
+
+  const parsed = modulePrefsPatchSchema.safeParse(taken.rest ?? {});
   if (!parsed.success) {
     annotate({
       action: { name: "auth.me.modules.patch.invalid_shape" },
@@ -105,10 +123,19 @@ export const PATCH = apiHandler(async (req: Request) => {
     changed.push(key);
   }
 
-  await prisma.user.update({
-    where: { id: user.id },
+  // v1.32.22 (M3) — guard the write on the client's base token; a stale base
+  // 409s and writes nothing. Tokenless requests keep the unconditional write.
+  const guarded = await guardedUserUpdate({
+    userId: user.id,
+    base,
     data: { modulePreferencesJson: merged },
+    conflict: {
+      action: "auth.me.modules.conflict",
+      errorCode: "modules_conflict",
+      message: "Module preferences changed since they were loaded",
+    },
   });
+  if ("conflict" in guarded) return guarded.conflict;
 
   const modules = await resolveModuleMap(user.id);
 
@@ -123,5 +150,5 @@ export const PATCH = apiHandler(async (req: Request) => {
     meta: { changed },
   });
 
-  return apiSuccess({ modules });
+  return apiSuccess({ modules, updatedAt: guarded.updatedAt });
 });
