@@ -8,6 +8,8 @@ import {
   DASHBOARD_IOS_ONLY_WIDGET_IDS,
   DASHBOARD_WIDGET_IDS,
   IOS_PIN_ONLY_WIDGET_IDS,
+  buildRingMutationPayload,
+  widgetWritesBusy,
   type DashboardLayout,
 } from "@/lib/dashboard-layout";
 
@@ -540,10 +542,72 @@ describe("<DashboardLayoutSection> — health-score anchor + reorder (v1.27.27)"
       ),
       "utf8",
     );
-    expect(src).toContain("buildRingMutationPayload(next)");
+    // v1.32.16 — the ring body is built via `buildRingMutationPayload`,
+    // now also threading the optimistic-concurrency base token.
+    expect(src).toContain("buildRingMutationPayload({ ...next, baseUpdatedAt");
     // The pre-fix shape must never come back: spreading a query-cache
     // snapshot into the ring PUT body is exactly the stale-`widgets`
     // race issue #581 reported.
     expect(src).not.toMatch(/\.\.\.remote,/);
+  });
+});
+
+/**
+ * v1.32.16 (issue #581) — a committed Save must stay authoritative against a
+ * concurrent instant hero-ring write. The full DOM interaction (fire a ring
+ * write, then a Save, assert the disabled/pending gate) can't run under this
+ * suite's SSR-only convention, so the load-bearing client contract is pinned
+ * as pure exported units plus source pins for the wiring the JSX depends on.
+ */
+describe("dashboard layout — Save cannot be clobbered by a ring write (#581)", () => {
+  it("buildRingMutationPayload never carries widgets and threads the base token", () => {
+    const payload = buildRingMutationPayload({
+      selectedScoreRings: ["READINESS"],
+      heroRingOrder: ["HEALTH_SCORE", "READINESS"],
+      baseUpdatedAt: "2026-07-24T10:00:00.000Z",
+    });
+    // None of the fields a stale snapshot could carry and use to overwrite
+    // a fresher Save.
+    expect(payload).not.toHaveProperty("widgets");
+    expect(payload).not.toHaveProperty("comparisonBaseline");
+    expect(payload).not.toHaveProperty("chartOverlayPrefs");
+    // The ring selection + the guard token DO ride.
+    expect(payload.selectedScoreRings).toEqual(["READINESS"]);
+    expect(payload.baseUpdatedAt).toBe("2026-07-24T10:00:00.000Z");
+  });
+
+  it("buildRingMutationPayload omits the base-token key when none is known", () => {
+    const payload = buildRingMutationPayload({
+      selectedScoreRings: [],
+      heroRingOrder: ["HEALTH_SCORE"],
+    });
+    expect(payload).not.toHaveProperty("baseUpdatedAt");
+  });
+
+  it("widgetWritesBusy gates off EITHER write being in flight", () => {
+    expect(widgetWritesBusy(false, false)).toBe(false);
+    expect(widgetWritesBusy(true, false)).toBe(true); // Save pending
+    expect(widgetWritesBusy(false, true)).toBe(true); // ring pending
+    expect(widgetWritesBusy(true, true)).toBe(true);
+  });
+
+  it("the Save + ring controls bind the shared busy gate and serialise via one scope (source pin)", () => {
+    const src = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/settings/dashboard-layout-section.tsx",
+      ),
+      "utf8",
+    );
+    // Save button + ring controls both read `widgetWritesBusy(...)` so the
+    // gate is one source of truth — the button can never disable on
+    // `saveMutation.isPending` alone (the pre-fix hole).
+    expect(src).toContain("widgetWritesBusy(");
+    // Both writes share a mutation scope so they run serially at the client.
+    expect(src).toContain("scope: { id: DASHBOARD_WIDGETS_MUTATION_SCOPE }");
+    // Each write sends the optimistic-concurrency base token.
+    expect(src).toContain("baseUpdatedAt: readBaseToken()");
+    // A 409 is handled (refetch + gentle nudge), not swallowed as a hard error.
+    expect(src).toContain("err.status === 409");
   });
 });
