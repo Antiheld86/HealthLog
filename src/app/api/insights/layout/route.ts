@@ -24,12 +24,17 @@ import {
 import { annotate } from "@/lib/logging/context";
 import { prisma, toJson } from "@/lib/db";
 import {
+  takeBaseToken,
+  guardedUserUpdate,
+  invalidBaseTokenError,
+} from "@/lib/optimistic-lock";
+import {
   resolveInsightsLayout,
   serializeInsightsLayout,
   DEFAULT_INSIGHTS_LAYOUT,
   ACCEPTED_INSIGHTS_TILE_IDS,
   INSIGHTS_SECTION_IDS,
-  type InsightsLayout,
+  type InsightsLayoutWithToken,
 } from "@/lib/insights-layout";
 import { Prisma } from "@/generated/prisma/client";
 import { z } from "zod/v4";
@@ -95,12 +100,21 @@ const layoutSchema = z.object({
     .optional(),
 });
 
-async function buildInsightsLayout(userId: string): Promise<InsightsLayout> {
+async function buildInsightsLayout(
+  userId: string,
+): Promise<InsightsLayoutWithToken> {
   const row = await prisma.user.findUnique({
     where: { id: userId },
-    select: { insightsLayoutJson: true },
+    // v1.32.21 (R5a) — `updatedAt` rides the cached layout so GET hands the
+    // client the optimistic-concurrency token alongside the layout it applies
+    // to. Cached together (and busted on every write) so the (layout, token)
+    // pair a client reads is always consistent — the widgets precedent.
+    select: { insightsLayoutJson: true, updatedAt: true },
   });
-  return resolveInsightsLayout(row?.insightsLayoutJson);
+  return {
+    ...resolveInsightsLayout(row?.insightsLayoutJson),
+    updatedAt: row?.updatedAt?.toISOString(),
+  };
 }
 
 export const GET = apiHandler(async () => {
@@ -110,7 +124,7 @@ export const GET = apiHandler(async () => {
   // changes only when the user hits the Settings save button, which
   // invalidates this cache via `invalidateUserInsightsLayout()`.
   const layout = await cached(
-    caches.insightsLayout as ServerCache<InsightsLayout>,
+    caches.insightsLayout as ServerCache<InsightsLayoutWithToken>,
     user.id,
     () => buildInsightsLayout(user.id),
     annotate,
@@ -121,10 +135,17 @@ export const GET = apiHandler(async () => {
 export const PUT = apiHandler(async (request: NextRequest) => {
   const { user } = await requireAuth();
 
-  const { data: body, error: jsonError } = await safeJson(request, {
+  const { data: rawBody, error: jsonError } = await safeJson(request, {
     maxBytes: 256 * 1024,
   });
   if (jsonError) return jsonError;
+
+  // v1.32.21 (R5a) — pull the optimistic-concurrency base token off the body
+  // BEFORE the Zod parse so the domain schema stays pure (issue #581 family).
+  const taken = takeBaseToken(rawBody);
+  if ("invalid" in taken) return invalidBaseTokenError();
+  const base = taken.base;
+  const body = taken.rest;
 
   const parsed = layoutSchema.safeParse(body);
   if (!parsed.success) {
@@ -179,12 +200,21 @@ export const PUT = apiHandler(async (request: NextRequest) => {
   const previous = await buildInsightsLayout(user.id);
   const normalized = serializeInsightsLayout(parsed.data, previous);
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      insightsLayoutJson: toJson(normalized),
+  // v1.32.21 (R5a) — guard the write on the client's base token. A stale base
+  // 409s and writes NOTHING (so an interleaved edit-mode Save can't be
+  // reverted by a Settings pill-order Save that started from an older read,
+  // and vice versa); a tokenless request keeps the prior unconditional write.
+  const guarded = await guardedUserUpdate({
+    userId: user.id,
+    base,
+    data: { insightsLayoutJson: toJson(normalized) },
+    conflict: {
+      action: "insights.layout.conflict",
+      errorCode: "insights_layout_conflict",
+      message: "Insights layout changed since it was loaded",
     },
   });
+  if ("conflict" in guarded) return guarded.conflict;
 
   annotate({
     action: { name: "insights.layout.update" },
@@ -193,7 +223,10 @@ export const PUT = apiHandler(async (request: NextRequest) => {
 
   invalidateUserInsightsLayout(user.id);
 
-  return apiSuccess(normalized);
+  return apiSuccess({
+    ...normalized,
+    updatedAt: guarded.updatedAt,
+  } satisfies InsightsLayoutWithToken);
 });
 
 export const DELETE = apiHandler(async () => {

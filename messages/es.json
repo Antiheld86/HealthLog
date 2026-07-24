@@ -1,6 +1,7 @@
 {
   "common": {
     "save": "Guardar",
+    "conflictReloaded": "Recargado desde el servidor. Vuelve a aplicar tu cambio.",
     "cancel": "Cancelar",
     "delete": "Eliminar",
     "undo": "Deshacer",

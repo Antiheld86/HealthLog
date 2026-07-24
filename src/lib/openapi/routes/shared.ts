@@ -91,6 +91,41 @@ createBatchWorkoutSchema.meta({
     "Typed workout batch ingest. Each entry is an HKWorkout-aligned record with an optional nested GeoJSON LineString route AND an optional route-independent per-workout heart-rate series (`samples`: `[{ t, hr?, speedMs?, power?, cadence? }]`, up to 30 000 points). The `samples` series is the strain-engine input for indoor workouts that have no GPS route. Up to 100 workouts per call; nested route geometry capped at 20 000 points. Withings server-to-server callers pass source: WITHINGS and ship no route (Withings reports aggregates only).",
 });
 
+// ── Optimistic concurrency (v1.32.21 / R5a) ──────────────────────────
+// The write endpoints that read-modify-write a per-user blob accept an
+// optional `baseUpdatedAt` base token (the `updatedAt` the client last
+// read) and guard the write on the stored row still carrying it. A stale
+// token fails the write with 409 and changes nothing; an omitted token
+// takes the prior unconditional write (backward-compatible). The token is
+// OPAQUE — clients only ever echo a server-returned value.
+
+/**
+ * Optional request field carrying the optimistic-concurrency base token.
+ * Extend a request schema with `{ baseUpdatedAt: baseUpdatedAtField }` at the
+ * OpenAPI layer: the runtime strips it pre-Zod (`takeBaseToken`), so the
+ * runtime schema alone would under-document the wire.
+ */
+export const baseUpdatedAtField = z.iso
+  .datetime({ offset: true })
+  .optional()
+  .describe(
+    "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored row still carrying this exact value — a stale token fails with 409 and changes nothing. Treat as opaque: only ever echo a server-returned value, never parse or synthesise it.",
+  );
+
+/**
+ * The 409 the guarded write returns when the base token is stale. `errorCode`
+ * is per-endpoint; the caller passes the resource noun + the concrete
+ * errorCode so the prose enumerates it.
+ */
+export function conflictResponse409(resource: string, errorCode: string) {
+  return {
+    "409": {
+      description: `${resource} changed since it was loaded (optimistic-concurrency conflict). No write happened. Re-read the resource, re-apply the user's change against the fresh state, and resend with the new token. \`meta.errorCode\` = \`${errorCode}\`.`,
+      content: { "application/json": { schema: errorEnvelope } },
+    },
+  };
+}
+
 // ── Standard 401 / 422 / 429 responses ───────────────────────────────
 
 export const stdResponses = {

@@ -1,6 +1,7 @@
 {
   "common": {
     "save": "Salva",
+    "conflictReloaded": "Ricaricato dal server. Applica di nuovo la tua modifica.",
     "cancel": "Annulla",
     "delete": "Elimina",
     "undo": "Annulla",

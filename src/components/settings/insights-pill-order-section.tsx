@@ -33,7 +33,7 @@ import {
   rebuildTilesWithReorderedVitals,
 } from "@/lib/insights-layout-reorder";
 import {
-  type InsightsLayout,
+  type InsightsLayoutWithToken,
   type InsightsTileConfig,
 } from "@/lib/insights-layout";
 import {
@@ -43,6 +43,11 @@ import {
 } from "@/lib/insights/sub-page-metric";
 import { SUB_PAGE_TABS } from "@/components/insights/insights-tab-strip";
 import { apiPut } from "@/lib/api/api-fetch";
+import {
+  readUpdatedAtToken,
+  withBaseToken,
+  isConflict,
+} from "@/lib/api/optimistic-token";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
@@ -154,11 +159,15 @@ export function InsightsPillOrderSection({ id }: { id?: string }) {
               s.id === "ecg" ? { ...s, visible: ecgVisibleDraft } : s,
             )
           : layout.sections;
-      return apiPut<InsightsLayout>("/api/insights/layout", {
-        version: 2,
-        sections,
-        tiles,
-      });
+      // v1.32.21 (R5a) — echo the base token so a concurrent insights write
+      // (the overview edit mode, or another tab) 409s instead of clobbering.
+      return apiPut<InsightsLayoutWithToken>(
+        "/api/insights/layout",
+        withBaseToken(
+          { version: 2, sections, tiles },
+          readUpdatedAtToken(queryClient, queryKeys.insightsLayout()),
+        ),
+      );
     },
     onSuccess: (saved) => {
       queryClient.setQueryData(queryKeys.insightsLayout(), saved);
@@ -167,7 +176,18 @@ export function InsightsPillOrderSection({ id }: { id?: string }) {
       });
       toast.success(t("insights.pillOrder.saveSuccess"));
     },
-    onError: () => toast.error(t("insights.pillOrder.saveError")),
+    onError: (err) => {
+      // v1.32.21 (R5a) — explicit-Save disposition: on a 409 refetch so the
+      // token advances, KEEP the draft so the user can re-save, nudge gently.
+      if (isConflict(err)) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.insightsLayout(),
+        });
+        toast.message(t("common.conflictReloaded"));
+        return;
+      }
+      toast.error(t("insights.pillOrder.saveError"));
+    },
   });
 
   const busy = saveMutation.isPending;

@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+## [1.32.21] — 2026-07-24
+
+Insights and medications layout saves, and the coach about-me note, are now
+protected against a concurrent edit overwriting a newer one. This is the same
+protection the dashboard layout already had. If you save a layout in one place
+while something else saved a change to the same record a moment earlier, your
+save now stops and reloads the current state instead of quietly reverting that
+other change. Older clients that do not send the new marker keep working exactly
+as before.
+
+- **Insights layout saves no longer clobber a concurrent edit.** Saving the
+  overview arrangement and saving the pill order are two separate surfaces that
+  write the same record. If one lands while the other was based on an older
+  read, the later save now reloads and asks you to redo it rather than reverting
+  the first.
+- **Medications layout saves get the same guard.** The card/table view toggle
+  and the manual order both write one record, so a stale toggle can no longer
+  resurrect an order you just saved, and the reverse holds too.
+- **The coach about-me note is guarded as well.** A save based on an older read
+  is stopped and reloaded instead of overwriting a newer version of the note.
+- **Older clients are unaffected.** A request that does not carry the new base
+  marker keeps the previous save behavior unchanged, so nothing needs updating
+  to keep working.
+- **The dashboard layout contract is now in the published API spec.** It was
+  missing from the OpenAPI file even though it was the first surface to get this
+  protection.
+
 ## [1.32.20] — 2026-07-24
 
 The medication-adherence insight now passes through the same safety screen as

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HealthLog API
-  version: 1.32.20
+  version: 1.32.21
   description: >-
     Self-hosted personal-health-tracking PWA — public API surface for the iOS native client and external ingest.
 
@@ -3548,11 +3548,12 @@ paths:
       tags:
         - Medications
       summary: Read the calling user's medications list presentation
-      description: Returns the per-user /medications presentation (card/table view + manual order). Falls back to the defaults
-        (cards, empty order) when the user has not customised it. Mirrors the insights-layout contract.
+      description: Returns the per-user /medications presentation (card/table view + manual order) plus the
+        optimistic-concurrency `updatedAt` token. Falls back to the defaults (cards, empty order) when the user has not
+        customised it. Mirrors the insights-layout contract.
       responses:
         "200":
-          description: The resolved presentation (custom or default).
+          description: The resolved presentation (custom or default) plus its token.
           content:
             application/json:
               schema:
@@ -3565,22 +3566,32 @@ paths:
         - Medications
       summary: Update the calling user's medications list presentation
       description: "Field-scoped update: `view` and `order` are each optional, and whichever the body omits is preserved from
-        the stored blob — a view toggle can never wipe the manual order and vice versa. The normalised presentation is
-        returned. Invalid bodies return the multi-issue 422 envelope."
+        the stored blob — a view toggle can never wipe the manual order and vice versa. The normalised presentation plus
+        the advanced `updatedAt` token is returned. Optimistic concurrency (v1.32.21): send `baseUpdatedAt` (the token
+        from a prior read) and the write 409s if the stored blob changed since; omit it for the legacy unconditional
+        write. Invalid bodies return the multi-issue 422 envelope."
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/MedicationListLayout"
+              $ref: "#/components/schemas/MedicationListLayoutPutBody"
       responses:
         "200":
-          description: Presentation saved; the normalised blob is echoed back.
+          description: Presentation saved; the normalised blob plus the advanced token is echoed back.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/MedicationListLayoutSaved"
         "401": *a1
+        "409":
+          description: Medications layout changed since it was loaded (optimistic-concurrency conflict). No write happened.
+            Re-read the resource, re-apply the user's change against the fresh state, and resend with the new token.
+            `meta.errorCode` = `medication_layout_conflict`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a3
         "429": *a4
     delete:
@@ -6009,11 +6020,12 @@ paths:
       tags:
         - Insights
       summary: Read the calling user's Insights tile layout
-      description: Returns the per-user Insights tile layout (visibility + order). Falls back to the default layout when the
-        user has not customised it. Mirrors the dashboard-widgets contract.
+      description: Returns the per-user Insights tile layout (visibility + order) plus the optimistic-concurrency `updatedAt`
+        token. Falls back to the default layout when the user has not customised it. Mirrors the dashboard-widgets
+        contract.
       responses:
         "200":
-          description: The resolved layout (custom or default).
+          description: The resolved layout (custom or default) plus its token.
           content:
             application/json:
               schema:
@@ -6025,22 +6037,32 @@ paths:
       tags:
         - Insights
       summary: Replace the calling user's Insights tile layout
-      description: Persists the full tile layout. The normalised layout is returned. Invalid bodies return the multi-issue 422
-        envelope, matching the dashboard-widgets route.
+      description: "Persists the full tile layout. The normalised layout plus the advanced `updatedAt` token is returned.
+        Optimistic concurrency (v1.32.21): send `baseUpdatedAt` (the token from a prior read) and the write 409s if the
+        stored row changed since; omit it for the legacy unconditional write. Invalid bodies return the multi-issue 422
+        envelope, matching the dashboard-widgets route."
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/InsightsLayoutBody"
+              $ref: "#/components/schemas/InsightsLayoutPutBody"
       responses:
         "200":
-          description: Layout saved; the normalised layout is echoed back.
+          description: Layout saved; the normalised layout plus the advanced token is echoed back.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/InsightsLayoutSaved"
         "401": *a1
+        "409":
+          description: Insights layout changed since it was loaded (optimistic-concurrency conflict). No write happened. Re-read
+            the resource, re-apply the user's change against the fresh state, and resend with the new token.
+            `meta.errorCode` = `insights_layout_conflict`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a3
         "429": *a4
     delete:
@@ -6179,7 +6201,10 @@ paths:
         encrypted at rest; caps are enforced before encryption. Structured fields are optional: omitted leaves the
         stored value untouched, an empty string clears it. After a non-empty save the server derives up to 3 clarifying
         questions (AI when a provider and the daily Coach token budget allow, deterministic completion hints otherwise)
-        and returns them as `pendingQuestions`. Rate-limited per user."
+        and returns them as `pendingQuestions`. Rate-limited per user. Optimistic concurrency (v1.32.21): send
+        `baseUpdatedAt` (the `updatedAt` from a prior read) and the write 409s if the stored self-context changed since;
+        omit it for the legacy unconditional write. The token is per-surface (`UserHealthProfile.updatedAt`), so it is
+        not perturbed by unrelated account writes."
       requestBody:
         required: true
         content:
@@ -6199,16 +6224,33 @@ paths:
                 coachFocus:
                   type: string
                   maxLength: 500
+                baseUpdatedAt:
+                  description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
+                    legacy unconditional write (older clients are unaffected). When present, the write is guarded on the
+                    stored row still carrying this exact value — a stale token fails with 409 and changes nothing. Treat
+                    as opaque: only ever echo a server-returned value, never parse or synthesise it."
+                  type: string
+                  format: date-time
+                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
               required:
                 - aboutMe
       responses:
         "200":
-          description: The effective (trimmed) state echoed back plus the freshly derived pending questions.
+          description: The effective (trimmed) state echoed back plus the freshly derived pending questions and the advanced
+            `updatedAt` token.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/PutCoachAboutMeResponse"
         "401": *a1
+        "409":
+          description: Self-context changed since it was loaded (optimistic-concurrency conflict). No write happened. Re-read the
+            resource, re-apply the user's change against the fresh state, and resend with the new token.
+            `meta.errorCode` = `about_me_conflict`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a3
         "429": *a4
   /api/coach/about-me/questions:
@@ -11566,6 +11608,71 @@ paths:
         "403": *a5
         "422": *a3
         "429": *a4
+  /api/dashboard/widgets:
+    get:
+      tags:
+        - Dashboard
+      summary: Read the calling user's dashboard widget layout
+      description: Returns the resolved effective layout (defaults merged in if the user has not customised it) plus the
+        optimistic-concurrency `updatedAt` token.
+      responses:
+        "200":
+          description: The resolved layout (custom or default) plus its token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardLayout"
+        "401": *a1
+        "422": *a3
+        "429": *a4
+    put:
+      tags:
+        - Dashboard
+      summary: Replace the calling user's dashboard widget layout
+      description: "Persists the layout with preserve-when-absent semantics and returns the normalised layout plus the
+        advanced `updatedAt` token. Optimistic concurrency (v1.32.16): send `baseUpdatedAt` (the token from a prior
+        read) and the write 409s if the stored row changed since — so a committed Save can never be silently reverted by
+        a later request that started from an older snapshot; omit it for the legacy unconditional write. Invalid bodies
+        return the multi-issue 422 envelope."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardLayoutPutBody"
+      responses:
+        "200":
+          description: Layout saved; the normalised layout plus the advanced token is echoed back.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardLayoutSaved"
+        "401": *a1
+        "409":
+          description: Dashboard layout changed since it was loaded (optimistic-concurrency conflict). No write happened. Re-read
+            the resource, re-apply the user's change against the fresh state, and resend with the new token.
+            `meta.errorCode` = `dashboard_layout_conflict`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422": *a3
+        "429": *a4
+    delete:
+      tags:
+        - Dashboard
+      summary: Reset the calling user's dashboard widget layout
+      description: Clears the persisted layout and returns the default layout. Idempotent.
+      responses:
+        "200":
+          description: Layout reset; the default layout is returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardLayoutReset"
+        "401": *a1
+        "422": *a3
+        "429": *a4
 components:
   schemas:
     EncryptedExportRequest:
@@ -12537,7 +12644,7 @@ components:
       description: One explicit per-dose on-time intake window. `timeOfDay` matches a schedule dose time; `[start, end]`
         (HH:mm, user local, `start <= end`) is the on-time band. Outside it the cadence-derived late tail applies, then
         ad-hoc.
-    MedicationListLayout:
+    MedicationListLayoutPutBody:
       type: object
       properties:
         version:
@@ -12561,10 +12668,18 @@ components:
             type: string
             minLength: 1
             maxLength: 64
+        baseUpdatedAt:
+          description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
+            legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
+            row still carrying this exact value — a stale token fails with 409 and changes nothing. Treat as opaque:
+            only ever echo a server-returned value, never parse or synthesise it."
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
       required:
         - version
-      description: "Per-user /medications presentation: the card/table view choice plus the manual medication order shared by
-        both views. Mirrors the dashboard-widgets / insights-layout contract."
+      description: PUT body for the medications list presentation — the presentation fields plus the optional
+        optimistic-concurrency base token (`baseUpdatedAt`). Omit the token for the legacy unconditional write.
     UpdateMedicationRequest:
       type: object
       properties:
@@ -13183,7 +13298,7 @@ components:
       required:
         - documentId
       additionalProperties: false
-    InsightsLayoutBody:
+    InsightsLayoutPutBody:
       type: object
       properties:
         version:
@@ -13305,21 +13420,18 @@ components:
               - id
               - visible
               - order
+        baseUpdatedAt:
+          description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
+            legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
+            row still carrying this exact value — a stale token fails with 409 and changes nothing. Treat as opaque:
+            only ever echo a server-returned value, never parse or synthesise it."
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
       required:
         - version
-      description: "Per-user Insights layout (v2). `tiles` is the per-metric pill list (ordered, with a visibility flag);
-        `sections` is the additive v2 list of the overview's big semantic blocks (wellness-scores, daily-briefing,
-        vitals, trends, period-review, cycle-summary, signals, rhythm-events), each with order + visibility. `version`
-        is the layout schema version: BOTH 1 and 2 are accepted on input (a pre-v2 iOS client still PUTs `version: 1`);
-        the server always normalises to the canonical v2 blob before persisting, and GET responses always carry
-        `version: 2`. Both arrays are optional on input — a client sending only `tiles` (the pre-v2 contract) still
-        validates, and the server fills missing defaults; a v1 blob with no `sections` resolves forward with all
-        sections default-visible. Tile ids are a closed enum: the canonical ids are English (matching the routed
-        `/insights/<slug>` sub-pages). The legacy German tile ids (blutdruck, puls, sauerstoff, koerpertemperatur,
-        gewicht, aktive-energie, schlaf, ruhepuls, stimmung, medikamente) remain accepted on input for backward
-        compatibility and are normalised to their English equivalents before persisting; GET responses always carry the
-        canonical English ids. Section ids are English-only. The legacy tile ids are deprecated and will be removed in a
-        future major version."
+      description: PUT body for the Insights layout — the layout fields plus the optional optimistic-concurrency base token
+        (`baseUpdatedAt`). Omit the token for the legacy unconditional write.
     CoachReminderCreate:
       type: object
       properties:
@@ -13879,6 +13991,206 @@ components:
         - entries
       description: Merge-by-`id` update of the HealthKit metric config. Unknown ids are silently ignored; omitted fields fall
         back to the stored (or default) value for that entry. Up to 50 entries per call.
+    DashboardLayoutPutBody:
+      type: object
+      properties:
+        version:
+          type: number
+          const: 1
+        widgets:
+          minItems: 1
+          maxItems: 50
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                enum:
+                  - weight
+                  - bp
+                  - pulse
+                  - bodyFat
+                  - mood
+                  - medications
+                  - sleep
+                  - steps
+                  - glucose
+                  - totalBodyWater
+                  - boneMass
+                  - muscleMass
+                  - bpInTarget
+                  - oxygenSaturation
+                  - hrv
+                  - respiratoryRate
+                  - achievements
+                  - vo2Max
+                  - recentWorkouts
+                  - cardioRecovery
+                  - sixMinuteWalk
+                  - stairAscentSpeed
+                  - stairDescentSpeed
+                  - breathingDisturbances
+                  - wristTemperature
+                  - falls
+                  - walkingSteadiness
+                  - vorsorge
+                  - waterIntake
+                  - restingHeartRate
+                  - walkingSpeed
+                  - walkingAsymmetry
+                  - walkingStepLength
+                  - bmi
+                  - bodyTemperature
+                  - walkingDoubleSupport
+                  - audioExposureEnvironment
+                  - audioExposureHeadphone
+                  - gripStrength
+                  - painNRS
+                  - waistCircumference
+                  - waistToHeight
+              visible:
+                type: boolean
+              tileVisible:
+                type: boolean
+              order:
+                type: integer
+                minimum: 0
+                maximum: 99
+            required:
+              - id
+              - visible
+              - order
+        comparisonBaseline:
+          type: string
+          enum:
+            - none
+            - lastMonth
+            - lastYear
+        chartOverlayPrefs:
+          type: object
+          propertyNames:
+            type: string
+            enum:
+              - bp
+              - weight
+              - bmi
+              - pulse
+              - bodyFat
+              - mood
+              - medications
+              - sleep
+              - steps
+              - vo2Max
+              - hrv
+              - restingHr
+              - oxygenSaturation
+              - bodyTemperature
+              - activeEnergy
+              - bloodGlucose
+              - totalBodyWater
+              - boneMass
+              - flightsClimbed
+              - walkingRunningDistance
+              - fatFreeMass
+              - fatMass
+              - muscleMass
+              - skinTemperature
+              - pulseWaveVelocity
+              - vascularAge
+              - visceralFat
+              - audioExposureEnv
+              - audioExposureHeadphone
+              - timeInDaylight
+              - walkingSteadiness
+              - audioExposureEvent
+              - respiratoryRate
+              - leanBodyMass
+              - walkingHeartRateAverage
+              - walkingAsymmetry
+              - walkingDoubleSupport
+              - walkingStepLength
+              - walkingSpeed
+              - cardioRecovery
+              - wristTemperature
+              - fallCount
+              - sixMinuteWalkDistance
+              - stairAscentSpeed
+              - stairDescentSpeed
+              - breathingDisturbances
+              - ansCharge
+              - dayStrain
+              - workoutStrain
+              - cardioLoad
+              - averageHeartRate
+              - maxHeartRate
+              - energyExpenditureKj
+              - gripStrength
+              - painNrs
+              - waistCircumference
+              - waistToHeight
+          additionalProperties:
+            type: object
+            properties:
+              showTrendIndicator:
+                type: boolean
+              showTrendArrow:
+                type: boolean
+              showTargetRange:
+                type: boolean
+              comparisonBaseline:
+                type: string
+                enum:
+                  - none
+                  - lastMonth
+                  - lastYear
+              rangePoints:
+                anyOf:
+                  - type: number
+                    const: 0
+                  - type: number
+                    const: 7
+                  - type: number
+                    const: 30
+                  - type: number
+                    const: 90
+            required:
+              - showTrendIndicator
+              - showTrendArrow
+              - showTargetRange
+        selectedScoreRings:
+          maxItems: 3
+          type: array
+          items:
+            type: string
+            enum:
+              - READINESS
+              - RECOVERY_SCORE
+              - SLEEP_SCORE
+              - MED_COMPLIANCE
+        heroRingOrder:
+          maxItems: 4
+          type: array
+          items:
+            type: string
+            enum:
+              - HEALTH_SCORE
+              - READINESS
+              - RECOVERY_SCORE
+              - SLEEP_SCORE
+              - MED_COMPLIANCE
+        baseUpdatedAt:
+          description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
+            legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
+            row still carrying this exact value — a stale token fails with 409 and changes nothing. Treat as opaque:
+            only ever echo a server-returned value, never parse or synthesise it."
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+      required:
+        - version
+      description: PUT body for the dashboard layout — the layout fields plus the optional optimistic-concurrency base token
+        (`baseUpdatedAt`). Omit the token for the legacy unconditional write.
     MedicationTreatmentClass:
       type: string
       enum:
@@ -19662,7 +19974,7 @@ components:
       type: object
       properties:
         data:
-          $ref: "#/components/schemas/MedicationListLayoutOutput"
+          $ref: "#/components/schemas/MedicationListLayoutResult"
         error:
           type: "null"
         meta:
@@ -19675,11 +19987,45 @@ components:
         - data
         - error
       additionalProperties: false
+    MedicationListLayoutResult:
+      type: object
+      properties:
+        version:
+          type: number
+          const: 1
+        view:
+          description: Which presentation /medications renders in. Default "cards". Optional on PUT — when omitted the stored
+            value is preserved (preserve-when-absent, like `chartOverlayPrefs` on the dashboard layout). Always present
+            on responses.
+          type: string
+          enum:
+            - cards
+            - table
+        order:
+          description: User-defined manual medication order (medication ids, first = top), shared by both views. Display-only —
+            unknown / deleted ids are ignored at render time, never 422. Optional on PUT (preserve-when-absent); always
+            present on responses.
+          maxItems: 200
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        updatedAt:
+          description: "Optimistic-concurrency token: the stored row's `updatedAt` at read/write time. Echo it back as
+            `baseUpdatedAt` on the next write. Opaque."
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+      required:
+        - version
+      additionalProperties: false
+      description: Resolved medications list presentation plus the optimistic-concurrency `updatedAt` token.
     MedicationListLayoutSaved:
       type: object
       properties:
         data:
-          $ref: "#/components/schemas/MedicationListLayoutOutput"
+          $ref: "#/components/schemas/MedicationListLayoutResult"
         error:
           type: "null"
         meta:
@@ -19696,7 +20042,7 @@ components:
       type: object
       properties:
         data:
-          $ref: "#/components/schemas/MedicationListLayoutOutput"
+          $ref: "#/components/schemas/MedicationListLayoutResult"
         error:
           type: "null"
         meta:
@@ -24229,7 +24575,7 @@ components:
       type: object
       properties:
         data:
-          $ref: "#/components/schemas/InsightsLayoutBodyOutput"
+          $ref: "#/components/schemas/InsightsLayoutResult"
         error:
           type: "null"
         meta:
@@ -24242,11 +24588,145 @@ components:
         - data
         - error
       additionalProperties: false
+    InsightsLayoutResult:
+      type: object
+      properties:
+        version:
+          anyOf:
+            - type: number
+              const: 1
+            - type: number
+              const: 2
+        sections:
+          maxItems: 50
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                enum:
+                  - wellness-scores
+                  - daily-briefing
+                  - vitals
+                  - trends
+                  - period-review
+                  - cycle-summary
+                  - signals
+                  - rhythm-events
+                  - health-status
+                  - breathing
+                  - labs-changes
+                  - ecg
+              visible:
+                type: boolean
+              order:
+                type: integer
+                minimum: 0
+                maximum: 99
+            required:
+              - id
+              - visible
+              - order
+            additionalProperties: false
+        tiles:
+          minItems: 1
+          maxItems: 62
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                enum:
+                  - overview
+                  - blood-pressure
+                  - pulse
+                  - oxygen
+                  - body-temperature
+                  - respiratory-rate
+                  - pain
+                  - weight
+                  - bmi
+                  - body-water
+                  - bone-mass
+                  - fat-free-mass
+                  - fat-mass
+                  - muscle-mass
+                  - visceral-fat
+                  - lean-body-mass
+                  - waist
+                  - waist-to-height
+                  - steps
+                  - active-energy
+                  - workouts
+                  - flights-climbed
+                  - walking-distance
+                  - walking-steadiness
+                  - walking-heart-rate
+                  - walking-asymmetry
+                  - double-support-time
+                  - step-length
+                  - walking-speed
+                  - cardio-fitness
+                  - falls
+                  - six-minute-walk
+                  - stair-ascent-speed
+                  - stair-descent-speed
+                  - grip-strength
+                  - sleep
+                  - breathing-disturbances
+                  - resting-pulse
+                  - hrv
+                  - pulse-wave-velocity
+                  - vascular-age
+                  - cardio-recovery
+                  - environmental-audio
+                  - headphone-audio
+                  - audio-events
+                  - daylight
+                  - blood-glucose
+                  - skin-temperature
+                  - wrist-temperature
+                  - mood
+                  - medications
+                  - nutrients
+                  - blutdruck
+                  - puls
+                  - sauerstoff
+                  - koerpertemperatur
+                  - gewicht
+                  - aktive-energie
+                  - schlaf
+                  - ruhepuls
+                  - stimmung
+                  - medikamente
+              visible:
+                type: boolean
+              order:
+                type: integer
+                minimum: 0
+                maximum: 99
+            required:
+              - id
+              - visible
+              - order
+            additionalProperties: false
+        updatedAt:
+          description: "Optimistic-concurrency token: the stored row's `updatedAt` at read/write time. Echo it back as
+            `baseUpdatedAt` on the next write. Opaque."
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+      required:
+        - version
+      additionalProperties: false
+      description: Resolved Insights layout plus the optimistic-concurrency `updatedAt` token.
     InsightsLayoutSaved:
       type: object
       properties:
         data:
-          $ref: "#/components/schemas/InsightsLayoutBodyOutput"
+          $ref: "#/components/schemas/InsightsLayoutResult"
         error:
           type: "null"
         meta:
@@ -24263,7 +24743,7 @@ components:
       type: object
       properties:
         data:
-          $ref: "#/components/schemas/InsightsLayoutBodyOutput"
+          $ref: "#/components/schemas/InsightsLayoutResult"
         error:
           type: "null"
         meta:
@@ -32234,6 +32714,257 @@ components:
         - data
         - error
       additionalProperties: false
+    DashboardLayout:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/DashboardLayoutResult"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    DashboardLayoutResult:
+      type: object
+      properties:
+        version:
+          type: number
+          const: 1
+        widgets:
+          minItems: 1
+          maxItems: 50
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                enum:
+                  - weight
+                  - bp
+                  - pulse
+                  - bodyFat
+                  - mood
+                  - medications
+                  - sleep
+                  - steps
+                  - glucose
+                  - totalBodyWater
+                  - boneMass
+                  - muscleMass
+                  - bpInTarget
+                  - oxygenSaturation
+                  - hrv
+                  - respiratoryRate
+                  - achievements
+                  - vo2Max
+                  - recentWorkouts
+                  - cardioRecovery
+                  - sixMinuteWalk
+                  - stairAscentSpeed
+                  - stairDescentSpeed
+                  - breathingDisturbances
+                  - wristTemperature
+                  - falls
+                  - walkingSteadiness
+                  - vorsorge
+                  - waterIntake
+                  - restingHeartRate
+                  - walkingSpeed
+                  - walkingAsymmetry
+                  - walkingStepLength
+                  - bmi
+                  - bodyTemperature
+                  - walkingDoubleSupport
+                  - audioExposureEnvironment
+                  - audioExposureHeadphone
+                  - gripStrength
+                  - painNRS
+                  - waistCircumference
+                  - waistToHeight
+              visible:
+                type: boolean
+              tileVisible:
+                type: boolean
+              order:
+                type: integer
+                minimum: 0
+                maximum: 99
+            required:
+              - id
+              - visible
+              - order
+            additionalProperties: false
+        comparisonBaseline:
+          type: string
+          enum:
+            - none
+            - lastMonth
+            - lastYear
+        chartOverlayPrefs:
+          type: object
+          propertyNames:
+            type: string
+            enum:
+              - bp
+              - weight
+              - bmi
+              - pulse
+              - bodyFat
+              - mood
+              - medications
+              - sleep
+              - steps
+              - vo2Max
+              - hrv
+              - restingHr
+              - oxygenSaturation
+              - bodyTemperature
+              - activeEnergy
+              - bloodGlucose
+              - totalBodyWater
+              - boneMass
+              - flightsClimbed
+              - walkingRunningDistance
+              - fatFreeMass
+              - fatMass
+              - muscleMass
+              - skinTemperature
+              - pulseWaveVelocity
+              - vascularAge
+              - visceralFat
+              - audioExposureEnv
+              - audioExposureHeadphone
+              - timeInDaylight
+              - walkingSteadiness
+              - audioExposureEvent
+              - respiratoryRate
+              - leanBodyMass
+              - walkingHeartRateAverage
+              - walkingAsymmetry
+              - walkingDoubleSupport
+              - walkingStepLength
+              - walkingSpeed
+              - cardioRecovery
+              - wristTemperature
+              - fallCount
+              - sixMinuteWalkDistance
+              - stairAscentSpeed
+              - stairDescentSpeed
+              - breathingDisturbances
+              - ansCharge
+              - dayStrain
+              - workoutStrain
+              - cardioLoad
+              - averageHeartRate
+              - maxHeartRate
+              - energyExpenditureKj
+              - gripStrength
+              - painNrs
+              - waistCircumference
+              - waistToHeight
+          additionalProperties:
+            type: object
+            properties:
+              showTrendIndicator:
+                type: boolean
+              showTrendArrow:
+                type: boolean
+              showTargetRange:
+                type: boolean
+              comparisonBaseline:
+                type: string
+                enum:
+                  - none
+                  - lastMonth
+                  - lastYear
+              rangePoints:
+                anyOf:
+                  - type: number
+                    const: 0
+                  - type: number
+                    const: 7
+                  - type: number
+                    const: 30
+                  - type: number
+                    const: 90
+            required:
+              - showTrendIndicator
+              - showTrendArrow
+              - showTargetRange
+            additionalProperties: false
+        selectedScoreRings:
+          maxItems: 3
+          type: array
+          items:
+            type: string
+            enum:
+              - READINESS
+              - RECOVERY_SCORE
+              - SLEEP_SCORE
+              - MED_COMPLIANCE
+        heroRingOrder:
+          maxItems: 4
+          type: array
+          items:
+            type: string
+            enum:
+              - HEALTH_SCORE
+              - READINESS
+              - RECOVERY_SCORE
+              - SLEEP_SCORE
+              - MED_COMPLIANCE
+        updatedAt:
+          description: "Optimistic-concurrency token: the stored row's `updatedAt` at read/write time. Echo it back as
+            `baseUpdatedAt` on the next write. Opaque."
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+      required:
+        - version
+      additionalProperties: false
+      description: Resolved dashboard layout plus the optimistic-concurrency `updatedAt` token.
+    DashboardLayoutSaved:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/DashboardLayoutResult"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    DashboardLayoutReset:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/DashboardLayoutResult"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
     MedicationScheduleOutput:
       type: object
       properties:
@@ -32336,35 +33067,6 @@ components:
         primitives are mutually exclusive — enforced by the Zod refine on writes, the route layer, and a DB CHECK
         constraint (`medication_schedules_rrule_xor_rolling`). v1.7.0 adds `scheduleType` (SCHEDULED / PRN / CYCLIC) and
         the cyclic on/off-week fields.
-    MedicationListLayoutOutput:
-      type: object
-      properties:
-        version:
-          type: number
-          const: 1
-        view:
-          description: Which presentation /medications renders in. Default "cards". Optional on PUT — when omitted the stored
-            value is preserved (preserve-when-absent, like `chartOverlayPrefs` on the dashboard layout). Always present
-            on responses.
-          type: string
-          enum:
-            - cards
-            - table
-        order:
-          description: User-defined manual medication order (medication ids, first = top), shared by both views. Display-only —
-            unknown / deleted ids are ignored at render time, never 422. Optional on PUT (preserve-when-absent); always
-            present on responses.
-          maxItems: 200
-          type: array
-          items:
-            type: string
-            minLength: 1
-            maxLength: 64
-      required:
-        - version
-      additionalProperties: false
-      description: "Per-user /medications presentation: the card/table view choice plus the manual medication order shared by
-        both views. Mirrors the dashboard-widgets / insights-layout contract."
     DisableCoachFlagOutput:
       type: object
       properties:
@@ -32385,146 +33087,6 @@ components:
       description: Per-account diabetes opt-in (v1.18.6). `true` selects the ADA glycemic GOAL bands (fasting 80–130,
         postprandial < 180) for glucose targets instead of the general non-diabetic bands. A user-declared preference
         only — never inferred from a value, never a diagnosis.
-    InsightsLayoutBodyOutput:
-      type: object
-      properties:
-        version:
-          anyOf:
-            - type: number
-              const: 1
-            - type: number
-              const: 2
-        sections:
-          maxItems: 50
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: string
-                enum:
-                  - wellness-scores
-                  - daily-briefing
-                  - vitals
-                  - trends
-                  - period-review
-                  - cycle-summary
-                  - signals
-                  - rhythm-events
-                  - health-status
-                  - breathing
-                  - labs-changes
-                  - ecg
-              visible:
-                type: boolean
-              order:
-                type: integer
-                minimum: 0
-                maximum: 99
-            required:
-              - id
-              - visible
-              - order
-            additionalProperties: false
-        tiles:
-          minItems: 1
-          maxItems: 62
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: string
-                enum:
-                  - overview
-                  - blood-pressure
-                  - pulse
-                  - oxygen
-                  - body-temperature
-                  - respiratory-rate
-                  - pain
-                  - weight
-                  - bmi
-                  - body-water
-                  - bone-mass
-                  - fat-free-mass
-                  - fat-mass
-                  - muscle-mass
-                  - visceral-fat
-                  - lean-body-mass
-                  - waist
-                  - waist-to-height
-                  - steps
-                  - active-energy
-                  - workouts
-                  - flights-climbed
-                  - walking-distance
-                  - walking-steadiness
-                  - walking-heart-rate
-                  - walking-asymmetry
-                  - double-support-time
-                  - step-length
-                  - walking-speed
-                  - cardio-fitness
-                  - falls
-                  - six-minute-walk
-                  - stair-ascent-speed
-                  - stair-descent-speed
-                  - grip-strength
-                  - sleep
-                  - breathing-disturbances
-                  - resting-pulse
-                  - hrv
-                  - pulse-wave-velocity
-                  - vascular-age
-                  - cardio-recovery
-                  - environmental-audio
-                  - headphone-audio
-                  - audio-events
-                  - daylight
-                  - blood-glucose
-                  - skin-temperature
-                  - wrist-temperature
-                  - mood
-                  - medications
-                  - nutrients
-                  - blutdruck
-                  - puls
-                  - sauerstoff
-                  - koerpertemperatur
-                  - gewicht
-                  - aktive-energie
-                  - schlaf
-                  - ruhepuls
-                  - stimmung
-                  - medikamente
-              visible:
-                type: boolean
-              order:
-                type: integer
-                minimum: 0
-                maximum: 99
-            required:
-              - id
-              - visible
-              - order
-            additionalProperties: false
-      required:
-        - version
-      additionalProperties: false
-      description: "Per-user Insights layout (v2). `tiles` is the per-metric pill list (ordered, with a visibility flag);
-        `sections` is the additive v2 list of the overview's big semantic blocks (wellness-scores, daily-briefing,
-        vitals, trends, period-review, cycle-summary, signals, rhythm-events), each with order + visibility. `version`
-        is the layout schema version: BOTH 1 and 2 are accepted on input (a pre-v2 iOS client still PUTs `version: 1`);
-        the server always normalises to the canonical v2 blob before persisting, and GET responses always carry
-        `version: 2`. Both arrays are optional on input — a client sending only `tiles` (the pre-v2 contract) still
-        validates, and the server fills missing defaults; a v1 blob with no `sections` resolves forward with all
-        sections default-visible. Tile ids are a closed enum: the canonical ids are English (matching the routed
-        `/insights/<slug>` sub-pages). The legacy German tile ids (blutdruck, puls, sauerstoff, koerpertemperatur,
-        gewicht, aktive-energie, schlaf, ruhepuls, stimmung, medikamente) remain accepted on input for backward
-        compatibility and are normalised to their English equivalents before persisting; GET responses always carry the
-        canonical English ids. Section ids are English-only. The legacy tile ids are deprecated and will be removed in a
-        future major version."
     TourProgressOutput:
       type: object
       properties:

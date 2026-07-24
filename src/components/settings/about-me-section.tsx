@@ -46,6 +46,7 @@ import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { apiGet, apiPut } from "@/lib/api/api-fetch";
+import { withBaseToken, isConflict } from "@/lib/api/optimistic-token";
 
 const FALLBACK_MAX_CHARS = 4000;
 const FALLBACK_FIELD_MAX_CHARS = 500;
@@ -114,8 +115,14 @@ export function AboutMeSection({
     mutationKey: queryKeys.coachAboutMe(),
     // Send only the two fields this panel owns. `conditions` / `coachFocus`
     // are omitted so the server preserves them (they are edited under Anamnese).
+    // v1.32.21 (R5a) — echo the base token this edit was based on so a
+    // concurrent write to the same self-context (another tab, or Coach adopt)
+    // 409s instead of silently overwriting the newer state.
     mutationFn: async (input: { aboutMe: string; allergies: string }) => {
-      return apiPut<AboutMeData>("/api/coach/about-me", input);
+      return apiPut<AboutMeData>(
+        "/api/coach/about-me",
+        withBaseToken(input, query.data?.updatedAt ?? undefined),
+      );
     },
     onSuccess: (next) => {
       const cleared = !next.aboutMe && !next.allergies;
@@ -130,7 +137,15 @@ export function AboutMeSection({
         queryKey: queryKeys.coachAboutMeQuestions(),
       });
     },
-    onError: () => {
+    onError: (err) => {
+      // v1.32.21 (R5a) — explicit-Save disposition: a 409 means the stored
+      // self-context advanced since this edit was based. Refetch so the token
+      // advances, KEEP the drafts so the user can re-save, nudge gently.
+      if (isConflict(err)) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.coachAboutMe() });
+        toast.message(t("common.conflictReloaded"));
+        return;
+      }
       toast.error(t("settings.ai.aboutMe.saveError"));
     },
   });

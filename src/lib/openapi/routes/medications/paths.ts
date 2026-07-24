@@ -22,7 +22,12 @@ import {
   efficacyTargetOverrideSchema,
   medicationEfficacyResponseSchema,
 } from "@/lib/validations/medication-efficacy";
-import { dataEnvelope, errorEnvelope, stdResponses } from "../shared";
+import {
+  dataEnvelope,
+  errorEnvelope,
+  stdResponses,
+  conflictResponse409,
+} from "../shared";
 
 efficacyTargetOverrideSchema.meta({
   id: "SetMedicationEfficacyTargetRequest",
@@ -47,7 +52,8 @@ import {
   scheduleRevisionResource,
   scheduleRevisionListResponse,
   medicationExtractRequest,
-  medicationListLayoutSchema,
+  medicationListLayoutPutBody,
+  medicationListLayoutResult,
   doseHistoryQuery,
   doseHistoryResponse,
 } from "./schemas";
@@ -224,14 +230,15 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Medications"],
       summary: "Read the calling user's medications list presentation",
       description:
-        "Returns the per-user /medications presentation (card/table view + manual order). Falls back to the defaults (cards, empty order) when the user has not customised it. Mirrors the insights-layout contract.",
+        "Returns the per-user /medications presentation (card/table view + manual order) plus the optimistic-concurrency `updatedAt` token. Falls back to the defaults (cards, empty order) when the user has not customised it. Mirrors the insights-layout contract.",
       responses: {
         "200": {
-          description: "The resolved presentation (custom or default).",
+          description:
+            "The resolved presentation (custom or default) plus its token.",
           content: {
             "application/json": {
               schema: dataEnvelope(
-                medicationListLayoutSchema,
+                medicationListLayoutResult,
                 "MedicationListLayoutResponse",
               ),
             },
@@ -244,26 +251,30 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Medications"],
       summary: "Update the calling user's medications list presentation",
       description:
-        "Field-scoped update: `view` and `order` are each optional, and whichever the body omits is preserved from the stored blob — a view toggle can never wipe the manual order and vice versa. The normalised presentation is returned. Invalid bodies return the multi-issue 422 envelope.",
+        "Field-scoped update: `view` and `order` are each optional, and whichever the body omits is preserved from the stored blob — a view toggle can never wipe the manual order and vice versa. The normalised presentation plus the advanced `updatedAt` token is returned. Optimistic concurrency (v1.32.21): send `baseUpdatedAt` (the token from a prior read) and the write 409s if the stored blob changed since; omit it for the legacy unconditional write. Invalid bodies return the multi-issue 422 envelope.",
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: medicationListLayoutSchema },
+          "application/json": { schema: medicationListLayoutPutBody },
         },
       },
       responses: {
         "200": {
           description:
-            "Presentation saved; the normalised blob is echoed back.",
+            "Presentation saved; the normalised blob plus the advanced token is echoed back.",
           content: {
             "application/json": {
               schema: dataEnvelope(
-                medicationListLayoutSchema,
+                medicationListLayoutResult,
                 "MedicationListLayoutSaved",
               ),
             },
           },
         },
+        ...conflictResponse409(
+          "Medications layout",
+          "medication_layout_conflict",
+        ),
         ...stdResponses,
       },
     },
@@ -278,7 +289,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: {
             "application/json": {
               schema: dataEnvelope(
-                medicationListLayoutSchema,
+                medicationListLayoutResult,
                 "MedicationListLayoutReset",
               ),
             },

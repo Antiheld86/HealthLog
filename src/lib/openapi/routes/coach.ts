@@ -33,7 +33,13 @@ import {
   coachReminderPatchSchema,
   coachSuggestedActionSchema,
 } from "@/lib/validations/coach-reminder";
-import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
+import {
+  dataEnvelope,
+  errorEnvelope,
+  stdResponses,
+  baseUpdatedAtField,
+  conflictResponse409,
+} from "./shared";
 
 // ── Coach cadence suggestions (v1.18.1) ──────────────────────────────
 // The action endpoint behind the one-tap reminder-suggestion card. The
@@ -189,6 +195,31 @@ const insightsLayoutSchema = z
     id: "InsightsLayoutBody",
     description:
       "Per-user Insights layout (v2). `tiles` is the per-metric pill list (ordered, with a visibility flag); `sections` is the additive v2 list of the overview's big semantic blocks (wellness-scores, daily-briefing, vitals, trends, period-review, cycle-summary, signals, rhythm-events), each with order + visibility. `version` is the layout schema version: BOTH 1 and 2 are accepted on input (a pre-v2 iOS client still PUTs `version: 1`); the server always normalises to the canonical v2 blob before persisting, and GET responses always carry `version: 2`. Both arrays are optional on input — a client sending only `tiles` (the pre-v2 contract) still validates, and the server fills missing defaults; a v1 blob with no `sections` resolves forward with all sections default-visible. Tile ids are a closed enum: the canonical ids are English (matching the routed `/insights/<slug>` sub-pages). The legacy German tile ids (blutdruck, puls, sauerstoff, koerpertemperatur, gewicht, aktive-energie, schlaf, ruhepuls, stimmung, medikamente) remain accepted on input for backward compatibility and are normalised to their English equivalents before persisting; GET responses always carry the canonical English ids. Section ids are English-only. The legacy tile ids are deprecated and will be removed in a future major version.",
+  });
+
+// v1.32.21 (R5a) — the PUT body additionally carries the optional
+// optimistic-concurrency base token (stripped pre-Zod at runtime by
+// `takeBaseToken`); GET / PUT responses echo the fresh `updatedAt` token.
+const insightsLayoutPutBody = insightsLayoutSchema
+  .extend({ baseUpdatedAt: baseUpdatedAtField })
+  .meta({
+    id: "InsightsLayoutPutBody",
+    description:
+      "PUT body for the Insights layout — the layout fields plus the optional optimistic-concurrency base token (`baseUpdatedAt`). Omit the token for the legacy unconditional write.",
+  });
+const insightsLayoutResult = insightsLayoutSchema
+  .extend({
+    updatedAt: z.iso
+      .datetime({ offset: true })
+      .optional()
+      .describe(
+        "Optimistic-concurrency token: the stored row's `updatedAt` at read/write time. Echo it back as `baseUpdatedAt` on the next write. Opaque.",
+      ),
+  })
+  .meta({
+    id: "InsightsLayoutResult",
+    description:
+      "Resolved Insights layout plus the optimistic-concurrency `updatedAt` token.",
   });
 
 // v1.7.0 — health-record export selection. Strict shape: unknown keys
@@ -920,13 +951,14 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Read the calling user's Insights tile layout",
       description:
-        "Returns the per-user Insights tile layout (visibility + order). Falls back to the default layout when the user has not customised it. Mirrors the dashboard-widgets contract.",
+        "Returns the per-user Insights tile layout (visibility + order) plus the optimistic-concurrency `updatedAt` token. Falls back to the default layout when the user has not customised it. Mirrors the dashboard-widgets contract.",
       responses: {
         "200": {
-          description: "The resolved layout (custom or default).",
+          description:
+            "The resolved layout (custom or default) plus its token.",
           content: {
             "application/json": {
-              schema: dataEnvelope(insightsLayoutSchema, "InsightsLayout"),
+              schema: dataEnvelope(insightsLayoutResult, "InsightsLayout"),
             },
           },
         },
@@ -937,22 +969,24 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Replace the calling user's Insights tile layout",
       description:
-        "Persists the full tile layout. The normalised layout is returned. Invalid bodies return the multi-issue 422 envelope, matching the dashboard-widgets route.",
+        "Persists the full tile layout. The normalised layout plus the advanced `updatedAt` token is returned. Optimistic concurrency (v1.32.21): send `baseUpdatedAt` (the token from a prior read) and the write 409s if the stored row changed since; omit it for the legacy unconditional write. Invalid bodies return the multi-issue 422 envelope, matching the dashboard-widgets route.",
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: insightsLayoutSchema },
+          "application/json": { schema: insightsLayoutPutBody },
         },
       },
       responses: {
         "200": {
-          description: "Layout saved; the normalised layout is echoed back.",
+          description:
+            "Layout saved; the normalised layout plus the advanced token is echoed back.",
           content: {
             "application/json": {
-              schema: dataEnvelope(insightsLayoutSchema, "InsightsLayoutSaved"),
+              schema: dataEnvelope(insightsLayoutResult, "InsightsLayoutSaved"),
             },
           },
         },
+        ...conflictResponse409("Insights layout", "insights_layout_conflict"),
         // 422 (multi-issue validation envelope) comes from stdResponses.
         ...stdResponses,
       },
@@ -967,7 +1001,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           description: "Layout reset; the default layout is returned.",
           content: {
             "application/json": {
-              schema: dataEnvelope(insightsLayoutSchema, "InsightsLayoutReset"),
+              schema: dataEnvelope(insightsLayoutResult, "InsightsLayoutReset"),
             },
           },
         },
@@ -1138,15 +1172,21 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Write (or clear) the caller's self-context",
       description:
-        "v1.16.0 — persists the free text (4 000-char cap) and the three structured fields (500-char cap each) encrypted at rest; caps are enforced before encryption. Structured fields are optional: omitted leaves the stored value untouched, an empty string clears it. After a non-empty save the server derives up to 3 clarifying questions (AI when a provider and the daily Coach token budget allow, deterministic completion hints otherwise) and returns them as `pendingQuestions`. Rate-limited per user.",
+        "v1.16.0 — persists the free text (4 000-char cap) and the three structured fields (500-char cap each) encrypted at rest; caps are enforced before encryption. Structured fields are optional: omitted leaves the stored value untouched, an empty string clears it. After a non-empty save the server derives up to 3 clarifying questions (AI when a provider and the daily Coach token budget allow, deterministic completion hints otherwise) and returns them as `pendingQuestions`. Rate-limited per user. Optimistic concurrency (v1.32.21): send `baseUpdatedAt` (the `updatedAt` from a prior read) and the write 409s if the stored self-context changed since; omit it for the legacy unconditional write. The token is per-surface (`UserHealthProfile.updatedAt`), so it is not perturbed by unrelated account writes.",
       requestBody: {
         required: true,
-        content: { "application/json": { schema: aboutMePutSchema } },
+        content: {
+          "application/json": {
+            schema: aboutMePutSchema.extend({
+              baseUpdatedAt: baseUpdatedAtField,
+            }),
+          },
+        },
       },
       responses: {
         "200": {
           description:
-            "The effective (trimmed) state echoed back plus the freshly derived pending questions.",
+            "The effective (trimmed) state echoed back plus the freshly derived pending questions and the advanced `updatedAt` token.",
           content: {
             "application/json": {
               schema: dataEnvelope(
@@ -1165,6 +1205,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
+        ...conflictResponse409("Self-context", "about_me_conflict"),
         ...stdResponses,
       },
     },

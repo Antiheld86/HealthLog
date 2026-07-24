@@ -38,6 +38,17 @@ export interface MedicationListLayout {
  * list itself has no hard cap, but the blob must stay small; beyond
  * this many entries the tail falls back to the alphabetical default.
  */
+/**
+ * v1.32.21 (R5a) — the resolved presentation plus the server-stamped
+ * `updatedAt` optimistic-concurrency token (mirrors `User.updatedAt`, never
+ * persisted inside the blob). GET and every write response carry it; the
+ * client echoes it back as `baseUpdatedAt` on the next write. Mirrors
+ * `DashboardLayoutWithToken` / `InsightsLayoutWithToken`.
+ */
+export type MedicationListLayoutWithToken = MedicationListLayout & {
+  updatedAt?: string;
+};
+
 export const MEDICATION_ORDER_MAX_ENTRIES = 200;
 
 /** Per-entry id length bound (cuids are 25 chars; leave headroom). */

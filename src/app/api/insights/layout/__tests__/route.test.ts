@@ -15,6 +15,7 @@ vi.mock("@/lib/db", () => ({
     user: {
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     auditLog: {
       create: vi.fn(),
@@ -680,5 +681,93 @@ describe("DELETE /api/insights/layout", () => {
     };
     // The Prisma JsonNull sentinel writes NULL into the column.
     expect(call.data.insightsLayoutJson).toBeDefined();
+  });
+});
+
+/**
+ * v1.32.21 (R5a) — optimistic concurrency (issue #581 family). A PUT carrying
+ * the `baseUpdatedAt` it was based on writes CONDITIONALLY on the stored row
+ * still carrying that token, so an interleaved edit-mode Save and Settings
+ * pill-order Save can't clobber one another. A tokenless PUT keeps the prior
+ * unconditional write — the iOS-compat arm.
+ */
+describe("PUT /api/insights/layout — optimistic concurrency", () => {
+  function body(baseUpdatedAt?: string) {
+    return {
+      version: 2,
+      tiles: [{ id: "overview", visible: true, order: 0 }],
+      ...(baseUpdatedAt !== undefined ? { baseUpdatedAt } : {}),
+    };
+  }
+
+  it("guards the write on the base token and returns the advanced token", async () => {
+    const base = new Date("2026-07-24T10:00:00.000Z");
+    const advanced = new Date("2026-07-24T10:05:00.000Z");
+    vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 1 } as never);
+    // The merge-read `previous` (no row) then the post-write token read.
+    vi.mocked(prisma.user.findUnique)
+      .mockResolvedValueOnce({ insightsLayoutJson: null } as never)
+      .mockResolvedValueOnce({ updatedAt: advanced } as never);
+
+    const res = await callPut(makeReq(body(base.toISOString())));
+    expect(res.status).toBe(200);
+
+    expect(prisma.user.updateMany).toHaveBeenCalledTimes(1);
+    const whereArg = vi.mocked(prisma.user.updateMany).mock.calls[0]?.[0]
+      ?.where as { id: string; updatedAt: Date };
+    expect(whereArg.id).toBe("user-1");
+    expect((whereArg.updatedAt as Date).toISOString()).toBe(base.toISOString());
+    expect(prisma.user.update).not.toHaveBeenCalled();
+
+    const bodyJson = (await res.json()) as { data: { updatedAt: string } };
+    expect(bodyJson.data.updatedAt).toBe(advanced.toISOString());
+  });
+
+  it("interleaved writers: the stale-base second writer gets 409 and clobbers nothing", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      insightsLayoutJson: null,
+    } as never);
+    // Writer B committed first; writer A's guarded write matches zero rows.
+    vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 0 } as never);
+
+    const res = await callPut(makeReq(body("2026-07-24T09:00:00.000Z")));
+    expect(res.status).toBe(409);
+
+    const bodyJson = (await res.json()) as {
+      data: null;
+      error: string;
+      meta?: { errorCode?: string };
+    };
+    expect(bodyJson.data).toBeNull();
+    expect(bodyJson.meta?.errorCode).toBe("insights_layout_conflict");
+
+    // Guarded write matched no row; no unconditional fallback → nothing written.
+    expect(prisma.user.updateMany).toHaveBeenCalledTimes(1);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("422s a malformed base token without touching the row", async () => {
+    const res = await callPut(makeReq(body("not-a-date")));
+    expect(res.status).toBe(422);
+    const bodyJson = (await res.json()) as { meta?: { errorCode?: string } };
+    expect(bodyJson.meta?.errorCode).toBe("invalid_base_updated_at");
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("keeps the unconditional write when the client omits the token (iOS compat)", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      insightsLayoutJson: null,
+    } as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({
+      updatedAt: new Date("2026-07-24T11:00:00.000Z"),
+    } as never);
+
+    const res = await callPut(makeReq(body()));
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledTimes(1);
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    const bodyJson = (await res.json()) as { data: { updatedAt: string } };
+    expect(bodyJson.data.updatedAt).toBe("2026-07-24T11:00:00.000Z");
   });
 });

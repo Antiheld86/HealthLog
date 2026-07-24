@@ -1,6 +1,7 @@
 {
   "common": {
     "save": "Zapisz",
+    "conflictReloaded": "Odświeżono z serwera. Wprowadź zmianę jeszcze raz.",
     "cancel": "Anuluj",
     "delete": "Usuń",
     "undo": "Cofnij",

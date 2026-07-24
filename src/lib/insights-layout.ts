@@ -143,6 +143,17 @@ export interface InsightsLayout {
   tiles: InsightsTileConfig[];
 }
 
+/**
+ * v1.32.21 (R5a) — the resolved layout plus the server-stamped `updatedAt`
+ * optimistic-concurrency token (mirrors `User.updatedAt`, never persisted
+ * inside the blob). GET and every write response carry it; the client echoes
+ * it back as `baseUpdatedAt` on the next write. Mirrors
+ * `DashboardLayoutWithToken`.
+ */
+export type InsightsLayoutWithToken = InsightsLayout & {
+  updatedAt?: string;
+};
+
 const INSIGHTS_LAYOUT_VERSION = 2;
 
 /**

@@ -9,12 +9,27 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 
+// A minimal ApiError stand-in so `@/lib/api/optimistic-token` (which imports
+// ApiError from this module and uses it in `isConflict`) resolves a real
+// constructor under the mock. Declared via `vi.hoisted` so it exists before
+// the hoisted `vi.mock` factory runs.
+const { ApiError } = vi.hoisted(() => ({
+  ApiError: class ApiError extends Error {
+    status: number;
+    constructor(message: string, status: number) {
+      super(message);
+      this.name = "ApiError";
+      this.status = status;
+    }
+  },
+}));
 vi.mock("@/lib/api/api-fetch", () => ({
   apiGet: vi.fn(),
   apiPut: vi.fn(),
+  ApiError,
 }));
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() },
 }));
 
 import { apiPut } from "@/lib/api/api-fetch";
@@ -24,7 +39,10 @@ import {
   runSaveMedicationListOrder,
 } from "@/lib/queries/use-medication-list-layout";
 import { queryKeys } from "@/lib/query-keys";
-import type { MedicationListLayout } from "@/lib/medication-list-layout";
+import type {
+  MedicationListLayout,
+  MedicationListLayoutWithToken,
+} from "@/lib/medication-list-layout";
 
 const t = (key: string) => key;
 
@@ -144,5 +162,117 @@ describe("runSaveMedicationListOrder", () => {
 
     expect(ok).toBe(false);
     expect(toast.error).toHaveBeenCalledWith("medications.reorderSaveFailed");
+  });
+});
+
+/**
+ * v1.32.21 (R5a) — optimistic-concurrency token echo + 409 handling.
+ */
+describe("medications layout — optimistic concurrency (client)", () => {
+  it("echoes the cached base token as baseUpdatedAt on the view PUT", async () => {
+    const queryClient = makeClient();
+    queryClient.setQueryData<MedicationListLayoutWithToken>(
+      queryKeys.medicationListLayout(),
+      {
+        version: 1,
+        view: "cards",
+        order: ["med-a"],
+        updatedAt: "2026-07-24T10:00:00.000Z",
+      },
+    );
+    vi.mocked(apiPut).mockResolvedValue({
+      version: 1,
+      view: "table",
+      order: ["med-a"],
+      updatedAt: "2026-07-24T10:05:00.000Z",
+    } as never);
+
+    await runSetMedicationListView({ view: "table", queryClient, t });
+
+    expect(apiPut).toHaveBeenCalledWith("/api/medications/layout", {
+      version: 1,
+      view: "table",
+      baseUpdatedAt: "2026-07-24T10:00:00.000Z",
+    });
+  });
+
+  it("echoes the cached base token on the order Save", async () => {
+    const queryClient = makeClient();
+    queryClient.setQueryData<MedicationListLayoutWithToken>(
+      queryKeys.medicationListLayout(),
+      {
+        version: 1,
+        view: "table",
+        order: [],
+        updatedAt: "2026-07-24T10:00:00.000Z",
+      },
+    );
+    vi.mocked(apiPut).mockResolvedValue({
+      version: 1,
+      view: "table",
+      order: ["med-b"],
+      updatedAt: "2026-07-24T10:05:00.000Z",
+    } as never);
+
+    await runSaveMedicationListOrder({ order: ["med-b"], queryClient, t });
+
+    expect(apiPut).toHaveBeenCalledWith("/api/medications/layout", {
+      version: 1,
+      order: ["med-b"],
+      baseUpdatedAt: "2026-07-24T10:00:00.000Z",
+    });
+  });
+
+  it("view toggle: a 409 rolls back, invalidates, and nudges (not a hard error)", async () => {
+    const queryClient = makeClient();
+    const previous: MedicationListLayoutWithToken = {
+      version: 1,
+      view: "cards",
+      order: ["med-a"],
+      updatedAt: "2026-07-24T09:00:00.000Z",
+    };
+    queryClient.setQueryData(queryKeys.medicationListLayout(), previous);
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    vi.mocked(apiPut).mockRejectedValue(new ApiError("conflict", 409));
+
+    await runSetMedicationListView({ view: "table", queryClient, t });
+
+    // Optimistic view rolled back to the pre-toggle state.
+    expect(queryClient.getQueryData(queryKeys.medicationListLayout())).toEqual(
+      previous,
+    );
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: queryKeys.medicationListLayout(),
+    });
+    expect(toast.message).toHaveBeenCalledWith("common.conflictReloaded");
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("order Save: a 409 keeps the dialog open (returns false), invalidates, nudges", async () => {
+    const queryClient = makeClient();
+    queryClient.setQueryData<MedicationListLayoutWithToken>(
+      queryKeys.medicationListLayout(),
+      {
+        version: 1,
+        view: "table",
+        order: [],
+        updatedAt: "2026-07-24T09:00:00.000Z",
+      },
+    );
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    vi.mocked(apiPut).mockRejectedValue(new ApiError("conflict", 409));
+
+    const ok = await runSaveMedicationListOrder({
+      order: ["med-b"],
+      queryClient,
+      t,
+    });
+
+    expect(ok).toBe(false);
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: queryKeys.medicationListLayout(),
+    });
+    expect(toast.message).toHaveBeenCalledWith("common.conflictReloaded");
+    expect(toast.error).not.toHaveBeenCalled();
   });
 });

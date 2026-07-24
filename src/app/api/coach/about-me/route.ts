@@ -35,6 +35,7 @@ import {
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
+import { takeBaseToken, invalidBaseTokenError } from "@/lib/optimistic-lock";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import {
@@ -110,12 +111,21 @@ export const PUT = apiHandler(async (req: Request) => {
     return response;
   }
 
-  const { data: body, error: jsonError } = await safeJson(req, {
+  const { data: rawBody, error: jsonError } = await safeJson(req, {
     maxBytes: 64 * 1024,
   });
   if (jsonError) return jsonError;
 
-  const parsed = aboutMePutSchema.safeParse(body);
+  // v1.32.21 (R5a) — pull the optimistic-concurrency base token off the body
+  // BEFORE the Zod parse (issue #581 family). The token guards on
+  // `UserHealthProfile.updatedAt`, which — unlike the layout endpoints on the
+  // shared `User` row — moves only when THIS surface (or the `/adopt`
+  // sub-route) writes, so it is noise-free.
+  const taken = takeBaseToken(rawBody);
+  if ("invalid" in taken) return invalidBaseTokenError();
+  const base = taken.base;
+
+  const parsed = aboutMePutSchema.safeParse(taken.rest);
   if (!parsed.success) {
     return returnAllZodIssues(parsed.error, 422);
   }
@@ -165,12 +175,53 @@ export const PUT = apiHandler(async (req: Request) => {
       : {}),
   };
 
-  const row = await prisma.userHealthProfile.upsert({
-    where: { userId: user.id },
-    create: { userId: user.id, ...update },
-    update,
-    select: { updatedAt: true },
-  });
+  // v1.32.21 (R5a) — optimistic concurrency on `UserHealthProfile.updatedAt`.
+  //   - no base token → today's upsert (backward-compat arm, byte-identical);
+  //   - base present + row still carries it → conditional update, echo fresh;
+  //   - base present + zero match → the row either vanished (deleted since the
+  //     read → create wins, nothing to clobber) or advanced (real conflict →
+  //     409, no write).
+  let updatedAtIso: string;
+  if (base === undefined) {
+    const row = await prisma.userHealthProfile.upsert({
+      where: { userId: user.id },
+      create: { userId: user.id, ...update },
+      update,
+      select: { updatedAt: true },
+    });
+    updatedAtIso = row.updatedAt.toISOString();
+  } else {
+    const guarded = await prisma.userHealthProfile.updateMany({
+      where: { userId: user.id, updatedAt: base },
+      data: update,
+    });
+    if (guarded.count === 0) {
+      const existing = await prisma.userHealthProfile.findUnique({
+        where: { userId: user.id },
+        select: { updatedAt: true },
+      });
+      if (existing) {
+        annotate({
+          action: { name: "coach.about_me.conflict" },
+          meta: { base_updated_at: base.toISOString() },
+        });
+        return apiError("Self-context changed since it was loaded", 409, {
+          errorCode: "about_me_conflict",
+        });
+      }
+      const created = await prisma.userHealthProfile.create({
+        data: { userId: user.id, ...update },
+        select: { updatedAt: true },
+      });
+      updatedAtIso = created.updatedAt.toISOString();
+    } else {
+      const fresh = await prisma.userHealthProfile.findUnique({
+        where: { userId: user.id },
+        select: { updatedAt: true },
+      });
+      updatedAtIso = (fresh?.updatedAt ?? new Date()).toISOString();
+    }
+  }
 
   // Read back the effective state (covers omitted fields) and derive
   // the clarifying questions. An entirely empty self-context clears
@@ -222,7 +273,7 @@ export const PUT = apiHandler(async (req: Request) => {
     allergies: ctx.allergies,
     coachFocus: ctx.coachFocus,
     pendingQuestions,
-    updatedAt: row.updatedAt.toISOString(),
+    updatedAt: updatedAtIso,
     maxChars: ABOUT_ME_MAX_CHARS,
     fieldMaxChars: ABOUT_ME_FIELD_MAX_CHARS,
   });
