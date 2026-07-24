@@ -5,12 +5,15 @@ const logMcpMood = vi.fn();
 const logMcpBloodPressure = vi.fn();
 const checkMcpMeasurement = vi.fn();
 const checkMcpBloodPressure = vi.fn();
+const resolveMcpMeasurementUnit = vi.fn();
 vi.mock("../writes", () => ({
   logMcpMeasurement: (...a: unknown[]) => logMcpMeasurement(...a),
   logMcpMood: (...a: unknown[]) => logMcpMood(...a),
   logMcpBloodPressure: (...a: unknown[]) => logMcpBloodPressure(...a),
   checkMcpMeasurement: (...a: unknown[]) => checkMcpMeasurement(...a),
   checkMcpBloodPressure: (...a: unknown[]) => checkMcpBloodPressure(...a),
+  resolveMcpMeasurementUnit: (...a: unknown[]) =>
+    resolveMcpMeasurementUnit(...a),
 }));
 
 const checkMcpWriteRateLimit = vi.fn();
@@ -49,6 +52,10 @@ beforeEach(() => {
   // would-be record. Individual tests override to assert wouldFail.
   checkMcpMeasurement.mockReturnValue({ ok: true });
   checkMcpBloodPressure.mockReturnValue({ ok: true });
+  // Default: the unit hint resolves to canonical, echoing the value through.
+  resolveMcpMeasurementUnit.mockImplementation(
+    (_type: string, value: number) => ({ ok: true, value, unit: "kg" }),
+  );
 });
 
 describe("write-tool surface", () => {
