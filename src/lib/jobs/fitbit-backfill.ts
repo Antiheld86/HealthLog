@@ -14,6 +14,7 @@ import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { integrationBackfillSourceOptions } from "@/lib/jobs/integration-backfill-admission";
+import { isReauthRequired } from "@/lib/integrations/status";
 import { syncUserFitbit } from "@/lib/fitbit/sync";
 
 export const FITBIT_BACKFILL_QUEUE = "fitbit-backfill";
@@ -32,14 +33,45 @@ export interface FitbitBackfillPayload {
 
 /**
  * Per-user backfill handler. Runs a full-history sync for one account and stamps
- * `backfillCompletedAt` so the discovery query drops it. Idempotent: the
- * per-resource upserts are key-stable, so a re-run (e.g. a reboot mid-walk)
- * overwrites rather than duplicating. Mirrors `runWhoopBackfillForUser`.
+ * `backfillCompletedAt` ONLY on a clean run, so the discovery query drops it.
+ * Idempotent: the per-resource upserts are key-stable, so a re-run (e.g. a
+ * reboot mid-walk) overwrites rather than duplicating. Mirrors
+ * `runWhoopBackfillForUser` (whose identical unconditional-stamp bug is fixed
+ * separately — this is the template for that port).
+ *
+ * Verdict-gated: a partial hard failure (one collection 400ing, a write
+ * failing, a dead token) THROWS so pg-boss retries the job — stamping the
+ * marker over a partial walk would freeze the history gap in forever and the
+ * configured `retryLimit` would be dead code. A connection parked at
+ * `error_reauth` is NOT clean either, but throwing against a dead grant would
+ * just burn the retry budget on the same no-op: return WITHOUT stamping — the
+ * boot discovery re-enqueues the account on the next boot, and the stamp lands
+ * once the user reconnects and a clean walk completes.
  */
 export async function runFitbitBackfillForUser(
   userId: string,
 ): Promise<{ imported: number }> {
-  const imported = await syncUserFitbit(userId, { fullSync: true });
+  if (await isReauthRequired(userId, "fitbit")) {
+    annotate({
+      action: {
+        name: "fitbit.backfill.skipped_reauth",
+        details: { imported: 0 },
+      },
+    });
+    return { imported: 0 };
+  }
+
+  const { imported, failed } = await syncUserFitbit(userId, { fullSync: true });
+
+  if (failed) {
+    // Surface through the pg-boss retry path (retryLimit 3, backoff, set by
+    // `integrationBackfillSourceOptions`). If the failure parked the connection
+    // at error_reauth meanwhile, the next attempt takes the reauth return above
+    // instead of failing again.
+    throw new Error(
+      `fitbit backfill incomplete for user ${userId} — marker not stamped`,
+    );
+  }
 
   await prisma.fitbitConnection.update({
     where: { userId },

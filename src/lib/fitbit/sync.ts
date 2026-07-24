@@ -50,12 +50,12 @@ import { syncUserWorkout } from "./sync-workout";
 export async function syncUserFitbit(
   userId: string,
   opts: { fullSync?: boolean } = {},
-): Promise<number> {
+): Promise<{ imported: number; failed: boolean }> {
   if (await isReauthRequired(userId, "fitbit")) {
     getEvent()?.addWarning(
       `fitbit sync skipped for ${userId}: parked at error_reauth`,
     );
-    return 0;
+    return { imported: 0, failed: true };
   }
 
   // Snapshot the incremental window ONCE for the whole cycle. Every resource
@@ -65,7 +65,7 @@ export async function syncUserFitbit(
     where: { userId },
     select: { lastSyncedAt: true },
   });
-  if (!connection) return 0;
+  if (!connection) return { imported: 0, failed: true };
   const end = new Date();
   const start = incrementalStart(connection.lastSyncedAt, {
     fullSync: opts.fullSync,
@@ -151,8 +151,9 @@ export async function syncUserFitbit(
   // partial cycle (some rows imported, or at least one resource that did not
   // soft-skip) stamps success as normal.
   const allSoftSkipped = tracker.count >= resources.length && total === 0;
+  const failed = anyFailed || allSoftSkipped;
 
-  if (!anyFailed && !allSoftSkipped) {
+  if (!failed) {
     // Stamp the watermark ONCE for the whole cycle, only on a non-degenerate
     // run. Every resource already saw the snapshot `start`, so stamping now()
     // here can't shrink a later resource's window.
@@ -161,9 +162,9 @@ export async function syncUserFitbit(
   }
 
   annotate({
-    action: { name: "fitbit.sync", details: { imported: total } },
+    action: { name: "fitbit.sync", details: { imported: total, failed } },
   });
-  return total;
+  return { imported: total, failed };
 }
 
 /**
@@ -201,7 +202,9 @@ export async function runFitbitPollCohort(
     onUserSynced?: (userId: string, imported: number) => void;
   } = {},
 ): Promise<{ usersSynced: number; measurementsImported: number }> {
-  const sync = opts.sync ?? ((userId: string) => syncUserFitbit(userId));
+  const sync =
+    opts.sync ??
+    ((userId: string) => syncUserFitbit(userId).then((r) => r.imported));
   const limit = pLimit(opts.concurrency ?? FITBIT_POLL_CONCURRENCY);
 
   let usersSynced = 0;

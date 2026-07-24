@@ -58,6 +58,6 @@ export const POST = apiHandler(async (request: NextRequest) => {
     }
   }
 
-  const imported = await syncUserFitbit(user.id, { fullSync });
+  const { imported } = await syncUserFitbit(user.id, { fullSync });
   return apiSuccess({ imported, fullSync });
 });
