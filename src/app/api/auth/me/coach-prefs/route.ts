@@ -39,12 +39,16 @@ export const GET = apiHandler(async () => {
     where: { id: user.id },
     select: { coachPrefsJson: true, updatedAt: true },
   });
-  return apiSuccess({
-    ...parseCoachPrefs(row?.coachPrefsJson),
-    // v1.32.22 (M4) — optimistic-concurrency token (additive sibling key; the
-    // prefs shape is a fixed key set, so `updatedAt` cannot collide).
-    updatedAt: row?.updatedAt?.toISOString(),
-  });
+  const prefs = parseCoachPrefs(row?.coachPrefsJson);
+  // v1.32.22 (M4) — a never-saved user gets the PURE default with NO token
+  // (mirrors the insights-layout never-saved GET). There is nothing to guard
+  // against yet, and the first save is just the tokenless unconditional write.
+  // A saved row carries `updatedAt` (additive sibling key; the prefs shape is a
+  // fixed key set, so it cannot collide) so the client can echo it.
+  if (row?.coachPrefsJson == null) {
+    return apiSuccess(prefs);
+  }
+  return apiSuccess({ ...prefs, updatedAt: row.updatedAt?.toISOString() });
 });
 
 export const PUT = apiHandler(async (req: Request) => {

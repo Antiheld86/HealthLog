@@ -64,7 +64,24 @@ beforeEach(() => {
 });
 
 describe("GET /api/auth/me/coach-prefs", () => {
-  it("returns the prefs plus the optimistic-concurrency token", async () => {
+  it("returns a SAVED user's prefs plus the optimistic-concurrency token", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      coachPrefsJson: { tone: "concise" },
+      updatedAt: new Date("2026-07-24T10:00:00.000Z"),
+    } as never);
+
+    const res = await (GET as () => Promise<Response>)();
+    expect(res.status).toBe(200);
+    const env = (await res.json()) as {
+      data: { tone: string; updatedAt?: string };
+    };
+    expect(env.data.tone).toBe("concise");
+    expect(env.data.updatedAt).toBe("2026-07-24T10:00:00.000Z");
+  });
+
+  it("returns the PURE default with NO token for a never-saved user", async () => {
+    // Mirrors the insights-layout never-saved GET: nothing to guard yet, and
+    // the first save is the tokenless unconditional write (backward-compat).
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       coachPrefsJson: null,
       updatedAt: new Date("2026-07-24T10:00:00.000Z"),
@@ -76,7 +93,7 @@ describe("GET /api/auth/me/coach-prefs", () => {
       data: { tone: string; updatedAt?: string };
     };
     expect(env.data.tone).toBe("warm");
-    expect(env.data.updatedAt).toBe("2026-07-24T10:00:00.000Z");
+    expect(env.data.updatedAt).toBeUndefined();
   });
 });
 

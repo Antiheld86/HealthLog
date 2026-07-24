@@ -104,23 +104,30 @@ describe("PUT /api/auth/me/coach-prefs", () => {
       }),
     );
     expect(putRes.status).toBe(200);
-    const putEnv = (await putRes.json()) as { data: typeof expected };
-    expect(putEnv.data).toEqual(expected);
+    // v1.32.22 (M4) — the write echoes the fresh optimistic-concurrency
+    // `updatedAt` token alongside the canonical prefs.
+    const putEnv = (await putRes.json()) as {
+      data: typeof expected & { updatedAt?: string };
+    };
+    expect(putEnv.data).toEqual({ ...expected, updatedAt: expect.any(String) });
 
-    // DB row reflects the canonical defaulted form.
+    // DB row reflects the canonical defaulted form. `coachPrefsJson` must NOT
+    // carry `updatedAt` — that token is the separate `User.updatedAt` column.
     const row = await prisma.user.findUnique({
       where: { id: user.id },
       select: { coachPrefsJson: true },
     });
     expect(row?.coachPrefsJson).toEqual(expected);
 
-    // GET reads the saved values back.
+    // GET reads the saved values back, now carrying the token (saved row).
     const getRes = await (GET as (r: Request) => Promise<Response>)(
       new Request("http://localhost/api/auth/me/coach-prefs"),
     );
     expect(getRes.status).toBe(200);
-    const getEnv = (await getRes.json()) as { data: typeof expected };
-    expect(getEnv.data).toEqual(expected);
+    const getEnv = (await getRes.json()) as {
+      data: typeof expected & { updatedAt?: string };
+    };
+    expect(getEnv.data).toEqual({ ...expected, updatedAt: expect.any(String) });
   });
 
   it("rejects unknown tone values with 422", async () => {
