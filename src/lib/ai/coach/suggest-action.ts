@@ -213,11 +213,35 @@ function resolveActionParams(
  * invalid param, drops the action (`malformed: true`) while still removing the
  * raw marker from the prose.
  */
+/**
+ * Strip a TRUNCATED (partial) open sentinel left at the tail of the model's
+ * output. A reply cut off mid-marker — e.g. "…worth a look.\n---SUGGEST-ACTIO"
+ * — never contains the full `OPEN_SENTINEL`, so the block strip below misses it
+ * and the fragment renders raw (the #608 malformed-output class). Remove any
+ * trailing run that is a non-empty proper prefix of the open sentinel of at
+ * least `---S`, so a legitimate bare "---" separator is left untouched.
+ */
+function stripTruncatedOpenSentinel(prose: string): string {
+  const trimmedEnd = prose.replace(/\s+$/u, "");
+  for (let len = OPEN_SENTINEL.length - 1; len >= 4; len--) {
+    const partial = OPEN_SENTINEL.slice(0, len);
+    if (trimmedEnd.endsWith(partial)) {
+      return trimmedEnd.slice(0, trimmedEnd.length - partial.length).trimEnd();
+    }
+  }
+  return prose;
+}
+
 export function parseSuggestAction(raw: string): SuggestActionParseResult {
   if (!raw) return { prose: "", action: null, malformed: false };
 
   const openIdx = raw.indexOf(OPEN_SENTINEL);
-  if (openIdx === -1) return { prose: raw, action: null, malformed: false };
+  if (openIdx === -1) {
+    // No full block — but a truncated open marker at the tail must still be
+    // scrubbed so the raw fragment never reaches the user's prose.
+    const prose = stripTruncatedOpenSentinel(raw);
+    return { prose, action: null, malformed: prose !== raw };
+  }
 
   const before = raw.slice(0, openIdx);
   const afterOpen = raw.slice(openIdx + OPEN_SENTINEL.length);

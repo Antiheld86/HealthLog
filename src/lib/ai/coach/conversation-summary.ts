@@ -205,6 +205,16 @@ export async function refreshConversationSummary(
   if (trimmed.length === 0) {
     return { status: "skipped" };
   }
+  // v1.32.20 — deliberately NOT routed through `screenModelOutput`. This
+  // summary is internal memory only: it is stored encrypted and read back
+  // solely as `priorSummary` to prime the NEXT summary/chat prompt
+  // (`persistence.ts` decrypt → `chat/route.ts` priorSummary). It is never
+  // rendered to a user surface. Any dose/risk/causal phrasing it might carry
+  // cannot reach a person here, and the next Coach reply that could echo it is
+  // itself screened (`screenCoachReply` in the chat route) before it ships.
+  // Screening here would only risk withholding a legitimate internal summary
+  // (memory loss) with no user-facing safety gain — so the screen stays on the
+  // rendering boundaries, not this internal-memory write.
   // Backstop the stored length even if the provider over-ran the prompt's
   // "short paragraph" instruction.
   const text =

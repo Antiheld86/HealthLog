@@ -30,7 +30,7 @@ import { buildMetricSignal } from "@/lib/insights/metric-signal";
 import { degradeStatusSnapshotToBudget } from "@/lib/insights/graded-series";
 import {
   type SupportedLocale,
-  extractAssessmentSummary,
+  finalizeStatusSummary,
   normalizeLocale,
   normalizeSummaryText,
   round,
@@ -577,15 +577,22 @@ export async function prepareMedicationComplianceStatusForUser(
       // does not emit per-medication text. The per-medication cards carry a
       // placeholder so the UI surfaces a row per active medication; the
       // overall `summary` is the model-authored assessment.
-      // A malformed / truncated / summary-less structured envelope must never
-      // persist as the day's assessment (the raw-JSON class of bug). WITHHOLD:
+      //
+      // v1.32.20 — route the completion through the shared status chokepoint,
+      // so this card enforces the exact contracts its seven siblings do rather
+      // than only withholding unparseable envelopes. `finalizeStatusSummary`
+      // parses the `{ summary }` envelope, scrubs chart tokens + whitespace,
+      // then SCREENS the prose against `INSIGHTS_CONTRACTS` (dose / risk /
+      // causal). This is the highest-leverage surface for the outbound screen —
+      // a medication card is exactly where a dose-change imperative or a
+      // fabricated figure lands. WITHHOLD on any block or unparseable envelope:
       // serve the deterministic no-key line, write a short negative stub, and
       // persist no model text. The per-medication rows still render.
-      const extracted = extractAssessmentSummary(outcome.content);
-      if (extracted.kind === "unparseable") {
+      const finalized = finalizeStatusSummary(outcome.content, locale);
+      if (!finalized.ok) {
         annotate({
           action: { name: "insights.status.outbound_blocked" },
-          meta: { cacheAction, reason: "unparseable_output" },
+          meta: { cacheAction, reason: finalized.reason },
         });
         returnTimeoutFallback({
           cacheAction,
@@ -602,7 +609,7 @@ export async function prepareMedicationComplianceStatusForUser(
           updatedAt: null,
         };
       }
-      const summary = normalizeSummaryText(extracted.text);
+      const summary = finalized.text;
       if (!summary) {
         throw new Error(
           "Medication-compliance-status summary was empty after normalization",
