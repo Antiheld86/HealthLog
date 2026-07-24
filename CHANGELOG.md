@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+## [1.32.18] — 2026-07-24
+
+When a Fitbit token was revoked or expired, the hourly sync noticed the failure
+but then stamped the same cycle as a success. The connection flipped back to
+connected, the sync position moved forward, and after you reconnected the
+catch-up window could no longer reach the days that were missed. So the data
+was skipped for good, and in the meantime the failing token was retried every
+hour.
+
+- **A revoked Fitbit token no longer reports a successful sync.** A failed token
+  refresh now fails the whole cycle. The connection stays parked until you
+  reconnect, the sync position holds instead of advancing past real data, and
+  the once-per-failure alert stops repeating every hour.
+- **Data after a reconnect is no longer skipped.** Because the position is held
+  back on a failed cycle, the next successful sync still covers the days that
+  were missed rather than starting after them.
+- **A write failure during a sync holds its place too.** If rows were fetched
+  but could not be saved, the cycle keeps its position so the next run fetches
+  them again instead of letting them fall outside the catch-up window.
+- **An interrupted history backfill no longer marks itself complete.** A partial
+  first-time import is retried until a full pass finishes, so the one-year
+  history walk fills in rather than freezing halfway.
+
+If your Fitbit history already has a gap from before this release: reconnect
+Fitbit if prompted, then open Settings, Integrations, Fitbit and run a full
+sync. It re-walks the last year and fills the gap in place. Gaps older than a
+year are outside the backfill window and cannot be recovered.
+
 ## [1.32.17] — 2026-07-24
 
 The mood correlations on the Insights page could line up a day off. Your mood
