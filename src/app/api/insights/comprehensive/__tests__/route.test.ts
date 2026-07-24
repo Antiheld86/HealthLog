@@ -93,6 +93,7 @@ import { getSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { buildComprehensiveAggregate } from "@/lib/insights/comprehensive-aggregator";
 import { checkAnalyticsReadRateLimit } from "@/lib/rate-limit";
+import { getMedicationCategories } from "@/lib/medication-category";
 import { __resetAllCachesForTests, caches } from "@/lib/cache/server-cache";
 
 const SESSION_OK = {
@@ -157,6 +158,7 @@ describe("GET /api/insights/comprehensive — envelope shape", () => {
       {
         summaries: {},
         bpRawRows: { sys: [], dia: [] },
+        weightRawRows: [],
         dailyByType: {},
         firstMeasurementAt: null,
         totalMeasurements: 0,
@@ -229,6 +231,7 @@ describe("GET /api/insights/comprehensive — envelope shape", () => {
           },
         },
         bpRawRows: { sys: [], dia: [] },
+        weightRawRows: [],
         dailyByType: {},
         firstMeasurementAt: new Date(),
         totalMeasurements: 1,
@@ -285,6 +288,7 @@ describe("GET /api/insights/comprehensive — envelope shape", () => {
           sys: [{ measuredAt: at, value: 125 }],
           dia: [{ measuredAt: at, value: 75 }],
         },
+        weightRawRows: [],
         dailyByType: {},
         firstMeasurementAt: at,
         totalMeasurements: 2,
@@ -324,6 +328,7 @@ describe("GET /api/insights/comprehensive — envelope shape", () => {
           sys: [{ measuredAt: new Date("2026-05-14T21:50:00Z"), value: 125 }],
           dia: [{ measuredAt: new Date("2026-05-14T22:10:00Z"), value: 75 }],
         },
+        weightRawRows: [],
         dailyByType: {},
         firstMeasurementAt: new Date("2026-05-14T21:50:00Z"),
         totalMeasurements: 2,
@@ -350,6 +355,7 @@ describe("GET /api/insights/comprehensive — envelope shape", () => {
       {
         summaries: {},
         bpRawRows: { sys: [], dia: [] },
+        weightRawRows: [],
         dailyByType: {},
         firstMeasurementAt: new Date(),
         totalMeasurements: 0,
@@ -409,6 +415,7 @@ describe("GET /api/insights/comprehensive — envelope shape", () => {
       {
         summaries: {},
         bpRawRows: { sys: [], dia: [] },
+        weightRawRows: [],
         dailyByType: {},
         firstMeasurementAt: new Date(),
         totalMeasurements: 0,
@@ -456,6 +463,7 @@ describe("GET /api/insights/comprehensive — envelope shape", () => {
       {
         summaries: {},
         bpRawRows: { sys: [], dia: [] },
+        weightRawRows: [],
         dailyByType: {
           WEIGHT: days.map((d, i) => ({ day: d, value: 80 + i })),
           BLOOD_PRESSURE_SYS: days.map((d, i) => ({
@@ -491,6 +499,7 @@ describe("GET /api/insights/comprehensive — stale-while-revalidate marker", ()
   const EMPTY_AGGREGATE = {
     summaries: {},
     bpRawRows: { sys: [], dia: [] },
+    weightRawRows: [],
     dailyByType: {},
     firstMeasurementAt: null,
     totalMeasurements: 0,
@@ -541,5 +550,280 @@ describe("GET /api/insights/comprehensive — stale-while-revalidate marker", ()
       data: { revalidating: boolean };
     };
     expect(freshBody.data.revalidating).toBe(false);
+  });
+});
+
+// v1.32.17 (R1) — mood × metric correlations must pair on the LOCAL
+// logging day. The mood series has been local-day-keyed since v1.32.12;
+// the three metric partners (sys BP, weight, resting pulse) were still
+// UTC-keyed, so for non-UTC users an evening reading landed a day off and
+// paired with the wrong mood entry. These tests run under CI's TZ=UTC and
+// carry tz-explicit fixtures so the assertions are host-TZ-independent.
+describe("GET /api/insights/comprehensive — mood × metric local-day pairing (v1.32.17)", () => {
+  type MoodBody = {
+    data: {
+      moodBpScatterData: Array<{ mood: number; sysBP: number }>;
+      moodWeightScatterData: Array<{ mood: number; weight: number }>;
+      moodPulseScatterData: Array<{ mood: number; pulse: number }>;
+      scatterData: Array<{ weight: number; sysBP: number }>;
+      weightBpCorrelation: unknown;
+      bpMedicationCorrelation: unknown;
+    };
+  };
+
+  function moodRollupDay(midnightZ: string, mean: number, count = 1) {
+    return {
+      userId: "user-comp-1",
+      granularity: "DAY",
+      bucketStart: new Date(midnightZ),
+      count,
+      mean,
+      minScore: mean,
+      maxScore: mean,
+      sd: null,
+      computedAt: new Date(),
+    };
+  }
+
+  function sessionWithTz(tz: string) {
+    vi.mocked(getSession).mockResolvedValue({
+      ...SESSION_OK,
+      user: { ...SESSION_OK.user, timezone: tz },
+    } as never);
+  }
+
+  it("Berlin: a mood + BP logged the same local evening now pair (previously dropped)", async () => {
+    sessionWithTz("Europe/Berlin");
+    // Mood logged 00:30 local on 2026-07-10 → rollup bucketStart is the
+    // canonical local day at UTC midnight.
+    (
+      prisma.moodEntryRollup.findMany as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([moodRollupDay("2026-07-10T00:00:00.000Z", 4)]);
+    (buildComprehensiveAggregate as ReturnType<typeof vi.fn>).mockResolvedValue(
+      {
+        summaries: {},
+        // 22:35Z = 00:35 Berlin on Jul 10 → local day 2026-07-10, but UTC
+        // day 2026-07-09. The old UTC `dailyByType` key (below) would never
+        // match the mood's local 2026-07-10 → the pair was dropped.
+        bpRawRows: {
+          sys: [{ measuredAt: new Date("2026-07-09T22:35:00Z"), value: 128 }],
+          dia: [],
+        },
+        weightRawRows: [],
+        dailyByType: {
+          BLOOD_PRESSURE_SYS: [{ day: "2026-07-09", value: 128 }],
+        },
+        firstMeasurementAt: new Date("2026-07-09T22:35:00Z"),
+        totalMeasurements: 1,
+      },
+    );
+
+    const res = await callGet(makeReq());
+    const body = (await res.json()) as MoodBody;
+    // Derived from the raw row in the user's tz → pairs on local 2026-07-10.
+    expect(body.data.moodBpScatterData).toEqual([{ mood: 4, sysBP: 128 }]);
+  });
+
+  it("New York: the lag-1 offset is gone — each pair couples mood(D) with the metric logged local day D", async () => {
+    sessionWithTz("America/New_York");
+    (
+      prisma.moodEntryRollup.findMany as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([
+      moodRollupDay("2026-07-10T00:00:00.000Z", 2),
+      moodRollupDay("2026-07-11T00:00:00.000Z", 3),
+      moodRollupDay("2026-07-12T00:00:00.000Z", 4),
+    ]);
+    (buildComprehensiveAggregate as ReturnType<typeof vi.fn>).mockResolvedValue(
+      {
+        summaries: {},
+        // Each sys row is at (D+1)T01:00Z = 21:00 local on day D (EDT UTC-4).
+        // Old UTC code keyed each on D+1 and paired it with mood(D+1) — a
+        // lag-1 correlation sold as same-day. Local derivation keys on D.
+        bpRawRows: {
+          sys: [
+            { measuredAt: new Date("2026-07-11T01:00:00Z"), value: 120 },
+            { measuredAt: new Date("2026-07-12T01:00:00Z"), value: 130 },
+            { measuredAt: new Date("2026-07-13T01:00:00Z"), value: 140 },
+          ],
+          dia: [],
+        },
+        weightRawRows: [],
+        dailyByType: {},
+        firstMeasurementAt: new Date("2026-07-11T01:00:00Z"),
+        totalMeasurements: 3,
+      },
+    );
+
+    const res = await callGet(makeReq());
+    const body = (await res.json()) as MoodBody;
+    // mood(07-10)=2 ↔ 120 (logged local 07-10), not 130 (the old +1 offset).
+    expect(body.data.moodBpScatterData).toEqual([
+      { mood: 2, sysBP: 120 },
+      { mood: 3, sysBP: 130 },
+      { mood: 4, sysBP: 140 },
+    ]);
+  });
+
+  it("Berlin: mood × weight and mood × resting pulse also pair on the local day (all three partners moved)", async () => {
+    sessionWithTz("Europe/Berlin");
+    (
+      prisma.moodEntryRollup.findMany as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([moodRollupDay("2026-07-10T00:00:00.000Z", 4)]);
+    // Resting-HR row at 00:30 local Jul 10 (= 22:30Z Jul 9).
+    (prisma.measurement.findMany as ReturnType<typeof vi.fn>).mockResolvedValue(
+      [{ measuredAt: new Date("2026-07-09T22:30:00Z"), value: 58 }],
+    );
+    (buildComprehensiveAggregate as ReturnType<typeof vi.fn>).mockResolvedValue(
+      {
+        summaries: {},
+        bpRawRows: { sys: [], dia: [] },
+        // Weight row at 00:30 local Jul 10 (= 22:30Z Jul 9).
+        weightRawRows: [
+          { measuredAt: new Date("2026-07-09T22:30:00Z"), value: 80.5 },
+        ],
+        dailyByType: {},
+        firstMeasurementAt: new Date("2026-07-09T22:30:00Z"),
+        totalMeasurements: 2,
+      },
+    );
+
+    const res = await callGet(makeReq());
+    const body = (await res.json()) as MoodBody;
+    expect(body.data.moodWeightScatterData).toEqual([
+      { mood: 4, weight: 80.5 },
+    ]);
+    expect(body.data.moodPulseScatterData).toEqual([{ mood: 4, pulse: 58 }]);
+  });
+
+  it("UTC user: pairing is byte-identical to the pre-fix UTC-slice join (invariance)", async () => {
+    sessionWithTz("UTC");
+    (
+      prisma.moodEntryRollup.findMany as ReturnType<typeof vi.fn>
+    ).mockResolvedValue([moodRollupDay("2026-07-10T00:00:00.000Z", 4)]);
+    (buildComprehensiveAggregate as ReturnType<typeof vi.fn>).mockResolvedValue(
+      {
+        summaries: {},
+        // Under UTC, `userDayKey` degenerates to the ISO slice, so the raw
+        // derivation reproduces exactly what the old `dailyByType` join gave.
+        bpRawRows: {
+          sys: [{ measuredAt: new Date("2026-07-10T08:00:00Z"), value: 122 }],
+          dia: [],
+        },
+        weightRawRows: [],
+        dailyByType: {
+          BLOOD_PRESSURE_SYS: [{ day: "2026-07-10", value: 122 }],
+        },
+        firstMeasurementAt: new Date("2026-07-10T08:00:00Z"),
+        totalMeasurements: 1,
+      },
+    );
+
+    const res = await callGet(makeReq());
+    const body = (await res.json()) as MoodBody;
+    expect(body.data.moodBpScatterData).toEqual([{ mood: 4, sysBP: 122 }]);
+  });
+
+  it("metric × metric guard: weight × BP and BP-med continuity are byte-identical across timezones (UTC joins untouched)", async () => {
+    // R1 must NOT re-key the two internally-consistent UTC joins
+    // (weight × BP, BP-med continuity) — those migrate with the rollup
+    // tier in R12. Both read the UTC `dailyByType` / UTC `scheduledFor`
+    // slice, so their output must be invariant to the caller's timezone.
+    // Run the SAME fixture under UTC then America/New_York and deep-equal.
+    const days = [
+      "2026-05-01",
+      "2026-05-02",
+      "2026-05-03",
+      "2026-05-04",
+      "2026-05-05",
+    ];
+    const aggregate = {
+      summaries: {},
+      bpRawRows: { sys: [], dia: [] },
+      weightRawRows: [],
+      dailyByType: {
+        WEIGHT: days.map((d, i) => ({ day: d, value: 80 + i })),
+        BLOOD_PRESSURE_SYS: days.map((d, i) => ({
+          day: d,
+          value: 120 + i * 2,
+        })),
+      },
+      firstMeasurementAt: new Date(),
+      totalMeasurements: 10,
+    };
+    const medication = {
+      id: "med-bp",
+      name: "Amlodipine",
+      dose: "5mg",
+      active: true,
+      asNeeded: false,
+      createdAt: new Date("2026-04-01T00:00:00Z"),
+      schedules: [
+        {
+          id: "sch-1",
+          windowStart: "07:00",
+          windowEnd: "08:00",
+          timesOfDay: ["07:00"],
+          daysOfWeek: null,
+          rrule: null,
+          rollingIntervalDays: null,
+          reminderGraceMinutes: null,
+          scheduleType: "SCHEDULED",
+          cyclicOnWeeks: null,
+          cyclicOffWeeks: null,
+          doseWindows: [],
+        },
+      ],
+      scheduleRevisions: [],
+      pauseEras: [],
+    };
+    // Intake taken on the first three days, missed on the last two → a
+    // non-degenerate continuity series.
+    const intakeEvents = days.slice(0, 3).map((d) => ({
+      medicationId: "med-bp",
+      userId: "user-comp-1",
+      deletedAt: null,
+      scheduledFor: new Date(`${d}T07:00:00Z`),
+      takenAt: new Date(`${d}T07:05:00Z`),
+      skipped: false,
+    }));
+
+    function primeMocks() {
+      (
+        buildComprehensiveAggregate as ReturnType<typeof vi.fn>
+      ).mockResolvedValue(aggregate);
+      (
+        prisma.medication.findMany as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([medication]);
+      (
+        prisma.medicationIntakeEvent.findMany as ReturnType<typeof vi.fn>
+      ).mockResolvedValue(intakeEvents);
+      vi.mocked(getMedicationCategories).mockResolvedValue({
+        "med-bp": "BLOOD_PRESSURE",
+      });
+    }
+
+    sessionWithTz("UTC");
+    primeMocks();
+    const utcBody = (await (await callGet(makeReq())).json()) as MoodBody;
+
+    // Fresh cache so the second run recomputes rather than serving the
+    // cached UTC body under the same user id.
+    __resetAllCachesForTests();
+
+    sessionWithTz("America/New_York");
+    primeMocks();
+    const nyBody = (await (await callGet(makeReq())).json()) as MoodBody;
+
+    expect(nyBody.data.scatterData).toEqual(utcBody.data.scatterData);
+    expect(nyBody.data.weightBpCorrelation).toEqual(
+      utcBody.data.weightBpCorrelation,
+    );
+    expect(nyBody.data.bpMedicationCorrelation).toEqual(
+      utcBody.data.bpMedicationCorrelation,
+    );
+    // And the guard is meaningful only if these joins actually produced
+    // output to compare.
+    expect(utcBody.data.scatterData).toHaveLength(5);
+    expect(utcBody.data.bpMedicationCorrelation).not.toBeNull();
   });
 });
