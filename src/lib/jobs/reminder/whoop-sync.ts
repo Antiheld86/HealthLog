@@ -21,7 +21,11 @@ import {
   syncUserWorkout,
   syncWhoopWorkoutById,
 } from "@/lib/whoop/sync-workout";
-import { syncWhoopResourceWithStatus } from "@/lib/whoop/sync-core";
+import {
+  recordWhoopSyncFailure,
+  syncWhoopResourceWithStatus,
+} from "@/lib/whoop/sync-core";
+import { isSyncFailureRecorded } from "@/lib/integrations/status";
 import { enqueueReminderSatisfy } from "@/lib/jobs/reminder-satisfy";
 import { getWorkerPrisma } from "./shared";
 
@@ -110,6 +114,13 @@ export async function runWhoopResourceSync(
             });
           }
         } catch (err) {
+          // WH-4: a write-path throw on the hourly cron reaches no ledger
+          // otherwise (stale-green pill). Fetch hard-fails already recorded +
+          // marked in `handleCollectionFetchError`, so record only the UNMARKED
+          // escapes here.
+          if (!isSyncFailureRecorded(err)) {
+            await recordWhoopSyncFailure(userId, err);
+          }
           evt.addWarning(`${taskName} failed for user ${userId}: ${err}`);
         }
       }

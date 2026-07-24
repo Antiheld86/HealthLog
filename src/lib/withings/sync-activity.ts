@@ -311,6 +311,11 @@ export async function syncUserActivity(
   }
 
   let imported = 0;
+  // W-2 — a swallowed batch-write must not read as a clean sync. The catch
+  // below sets this so the tail stamps success ONLY when the write landed; a
+  // persistent write bug then accrues strikes instead of being reset by its
+  // own success stamp every tick.
+  let writeFailed = false;
   // v1.4.39.1 — track every (type, measuredAt) we touched so the
   // persistent rollup tier can be re-folded at the end of the sync.
   // See sync.ts header for the full rationale; the chart's
@@ -446,9 +451,24 @@ export async function syncUserActivity(
         );
       }
     } catch (err) {
+      // Data is lost for this tick and the pill would otherwise read green. Keep
+      // the no-rethrow (sibling day-chunks + the rollup fold still run) but
+      // record a transient failure and refuse the success stamp below.
+      // `transient` because the next hourly tick re-walks the fixed 30-day
+      // window, so a transient DB error self-heals while a persistent one now
+      // surfaces on the status card instead of resetting itself.
+      writeFailed = true;
       getEvent()?.addWarning(
         `Failed to batch-upsert ${planned.length} activity rows for ${userId}: ${err}`,
       );
+      await recordSyncFailure({
+        userId,
+        integration: "withings",
+        kind: "transient",
+        message: `activity batch write failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      });
     }
   }
 
@@ -477,6 +497,10 @@ export async function syncUserActivity(
     );
   }
 
-  await recordSyncSuccess(userId, "withings");
+  // W-2 — only a clean write stamps success. A swallowed batch-write left the
+  // ledger honest via the transient failure recorded above.
+  if (!writeFailed) {
+    await recordSyncSuccess(userId, "withings");
+  }
   return imported;
 }

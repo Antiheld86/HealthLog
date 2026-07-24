@@ -9,7 +9,10 @@
  * `./poll-cohort`; reminder-worker.ts owns the queue name, cron schedule, and
  * boss.work registration.
  */
-import { syncUserNightscout } from "@/lib/nightscout/sync";
+import {
+  recordNightscoutSyncFailure,
+  syncUserNightscout,
+} from "@/lib/nightscout/sync";
 import { makePollCohortHandler, type PollCohortPayload } from "./poll-cohort";
 
 export type NightscoutSyncPayload = PollCohortPayload;
@@ -25,4 +28,8 @@ export const handleNightscoutSync = makePollCohortHandler({
     return users.map((u) => u.id);
   },
   syncUser: syncUserNightscout,
+  // The fetch path already records + marks its own failure (token-redacted), so
+  // this fires only for a future UNMARKED escape — and redacts the token before
+  // the message reaches the ledger.
+  recordFailure: recordNightscoutSyncFailure,
 });

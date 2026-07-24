@@ -107,7 +107,7 @@ describe("enqueueBootTimeSleepTimelineBackfill — discovery", () => {
 describe("runSleepTimelineBackfillForUser", () => {
   it("WHOOP: deletes the source's sleep rows, full-syncs, and stamps the marker", async () => {
     prismaMock.measurement.deleteMany.mockResolvedValue({ count: 5 });
-    syncUserWhoop.mockResolvedValue(42);
+    syncUserWhoop.mockResolvedValue({ imported: 42, failed: false });
     prismaMock.whoopConnection.update.mockResolvedValue({});
 
     const { deleted, imported } = await runSleepTimelineBackfillForUser(
@@ -124,6 +124,18 @@ describe("runSleepTimelineBackfillForUser", () => {
     const updateArg = prismaMock.whoopConnection.update.mock.calls[0]![0];
     expect(updateArg.where).toEqual({ userId: "w1" });
     expect(updateArg.data.sleepTimelineBackfillAt).toBeInstanceOf(Date);
+  });
+
+  it("WHOOP: a failed verdict THROWS without stamping the marker (gated re-sync)", async () => {
+    // The rows were already deleted; a partial re-sync must not stamp the
+    // completion marker over the gap — it throws so pg-boss retries.
+    prismaMock.measurement.deleteMany.mockResolvedValue({ count: 5 });
+    syncUserWhoop.mockResolvedValue({ imported: 3, failed: true });
+
+    await expect(
+      runSleepTimelineBackfillForUser("w1", "WHOOP"),
+    ).rejects.toThrow(/incomplete/);
+    expect(prismaMock.whoopConnection.update).not.toHaveBeenCalled();
   });
 
   it("WITHINGS: deletes the source's sleep rows, re-syncs, and stamps the marker", async () => {

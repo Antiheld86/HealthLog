@@ -99,6 +99,51 @@ export function toFailureKind(
 }
 
 /**
+ * Non-enumerable marker stamped on an error a provider sync ALREADY recorded on
+ * the integration ledger before rethrowing. The poll-cohort boundary
+ * (`makePollCohortHandler`) reads it so a record-then-rethrow failure is not
+ * recorded a SECOND time when it surfaces in the cohort catch — a double-record
+ * would inflate the per-kind failure buckets (firing the 3-strike admin alert a
+ * tick early) and churn `lastError`. A provider-blind recorder at the boundary
+ * would also persist an UNREDACTED message (e.g. Nightscout's token-bearing
+ * URL), so the marker keeps classification + redaction provider-owned: only an
+ * UNMARKED escape reaches the boundary recorder.
+ *
+ * No-op on non-objects; tolerant of a frozen error (the boundary then records
+ * it once, which is the correct fallback — never a double-record).
+ */
+const SYNC_FAILURE_RECORDED: unique symbol = Symbol(
+  "healthlog.syncFailureRecorded",
+);
+
+/** Stamp `err` as already-recorded and return it (for `throw markSync…(err)`). */
+export function markSyncFailureRecorded<T>(err: T): T {
+  if (err !== null && typeof err === "object") {
+    try {
+      Object.defineProperty(err, SYNC_FAILURE_RECORDED, {
+        value: true,
+        enumerable: false,
+        configurable: true,
+        writable: true,
+      });
+    } catch {
+      // A frozen / sealed error can't carry the marker; the boundary records
+      // it once — the safe fallback, never a double-record.
+    }
+  }
+  return err;
+}
+
+/** True when `err` was already recorded on the ledger by its source site. */
+export function isSyncFailureRecorded(err: unknown): boolean {
+  return (
+    err !== null &&
+    typeof err === "object" &&
+    (err as Record<symbol, unknown>)[SYNC_FAILURE_RECORDED] === true
+  );
+}
+
+/**
  * Recognised IntegrationStatus states.
  *
  * `parked` (v1.4.43 W14) is set when an integration's persistent

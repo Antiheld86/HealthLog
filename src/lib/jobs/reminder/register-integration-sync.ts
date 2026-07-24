@@ -137,6 +137,14 @@ const WITHINGS_ACTIVITY_CRON = "0 * * * *"; // every hour at :00
 const WITHINGS_SLEEP_QUEUE = "withings-sleep-sync";
 
 const WITHINGS_SLEEP_CRON = "15 * * * *"; // every hour at :15
+// v1.32.23 — Withings ECG cron catch-net. The queue is webhook-primary
+// (appli=54 → `enqueueWithingsEcgSync`), but appli 54 is not in the
+// subscription set and the manual sync route measures only, so a ScanWatch-only
+// account (no scale) never had its ECG strips pulled. An hourly cohort walk
+// (one `v2/heart list` call per connected user, empty + cheap for non-ECG
+// devices) closes the gap. :41 is a free minute (used: 0,5,8,11,13,15,17,18,
+// 20,30,35,50) staggered off every other hourly sync tick.
+const WITHINGS_ECG_SYNC_CRON = "41 * * * *"; // every hour at :41
 
 const MOODLOG_SYNC_QUEUE = "moodlog-sync";
 
@@ -310,6 +318,9 @@ const schedules: ScheduleEntry[] = [
   [WITHINGS_SYNC_QUEUE, WITHINGS_SYNC_CRON],
   [WITHINGS_ACTIVITY_QUEUE, WITHINGS_ACTIVITY_CRON],
   [WITHINGS_SLEEP_QUEUE, WITHINGS_SLEEP_CRON],
+  // v1.32.23 — hourly ECG catch-net (:41) so watch-only accounts pull their
+  // strips without a webhook or a scale.
+  [WITHINGS_ECG_SYNC_QUEUE, WITHINGS_ECG_SYNC_CRON],
   [MOODLOG_SYNC_QUEUE, MOODLOG_SYNC_CRON],
   [WITHINGS_OAUTH_STATE_CLEANUP_QUEUE, WITHINGS_OAUTH_STATE_CLEANUP_CRON],
   // v1.11.0 — WHOOP poll-fallback crons. Recovery/sleep/workout catch

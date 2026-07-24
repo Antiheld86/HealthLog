@@ -373,6 +373,31 @@ describe("syncUserActivity — field mapping + idempotency", () => {
     expect(recordSyncSuccess).toHaveBeenCalledWith("user-1", "withings");
   });
 
+  it("W-2 — records a transient failure and refuses the success stamp when the batch write throws", async () => {
+    // A swallowed batch-write used to fall through to recordSyncSuccess: green
+    // pill over lost data, and a PERSISTENT write bug green forever. The write
+    // failure now records a transient failure and the success stamp is skipped.
+    installFetchMock([
+      { date: "2026-05-12", steps: 8420, distance: 6720, calories: 412 },
+    ]);
+    vi.mocked(prisma.measurement.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.measurement.createMany).mockRejectedValue(
+      new Error("db write blew up"),
+    );
+
+    // No rethrow — sibling chunks + the rollup fold still run (matches Google).
+    await expect(syncUserActivity("user-1")).resolves.toBeGreaterThanOrEqual(0);
+
+    expect(recordSyncSuccess).not.toHaveBeenCalled();
+    expect(recordSyncFailure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        integration: "withings",
+        kind: "transient",
+        message: expect.stringContaining("activity batch write failed"),
+      }),
+    );
+  });
+
   it("tags every row with the canonical externalId so future replays dedup", async () => {
     installFetchMock([{ date: "2026-05-12", steps: 8420 }]);
     vi.mocked(prisma.measurement.findMany).mockResolvedValue([] as never);

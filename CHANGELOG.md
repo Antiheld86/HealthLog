@@ -2,6 +2,41 @@
 
 ## [Unreleased]
 
+## [1.32.23] — 2026-07-24
+
+Sync status now tells the truth for the connected wearables and CGM sources. A
+few paths could report a sync as healthy when it had actually failed, which
+reset the failure streak, hid the reconnect prompt, and let a dead grant get
+retried on every hourly tick. This release closes those gaps so a failed sync
+reads as failed, an interrupted history import is retried instead of marked
+complete, and a couple of sources start pulling data sooner.
+
+- **A dead WHOOP token no longer reports a successful sync.** When the stored
+  grant is revoked, the connection stays parked with its reconnect prompt and
+  the last-synced time stays put, instead of flipping back to connected and
+  hammering the revoked token every hour. This holds on both the manual sync and
+  the hourly background path.
+- **An interrupted WHOOP history import is retried, not marked done.** A
+  full-history backfill that stops partway is no longer stamped complete, so the
+  gap is retried rather than frozen in place. To pull deep history after
+  connecting, run a full sync from Settings. It walks back to 2020.
+- **Withings ECG now syncs on its own schedule.** A watch-only account with no
+  scale previously never had its ECG recordings pulled. An hourly check now
+  brings them in without waiting on a webhook.
+- **Withings activity and sleep write failures now surface.** A failed write no
+  longer reads as a clean sync; it shows up on the integration's status instead
+  of leaving a green state over missing data.
+- **Oura, Polar, and Nightscout sync errors that previously vanished now
+  surface.** A write that fails partway through is recorded on the integration
+  status rather than being silently dropped, and each error is classified and
+  redacted by the source that owns it.
+- **Strava history import starts at connect time.** Deep history begins
+  importing right after you connect instead of waiting for the next server
+  restart.
+- **WHOOP cycle data uses a wider catch-up window.** A day's strain and energy
+  figures that are still being revised are re-fetched for a week, matching the
+  other WHOOP collections, so a late revision is not missed.
+
 ## [1.32.22] — 2026-07-24
 
 The concurrent-edit protection that reached the layout surfaces now covers the

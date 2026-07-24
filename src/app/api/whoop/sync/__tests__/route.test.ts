@@ -30,7 +30,7 @@ describe("POST /api/whoop/sync", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("triggers an incremental sync by default", async () => {
-    sync.mockResolvedValue(7);
+    sync.mockResolvedValue({ imported: 7, failed: false });
     const res = (await (
       POST as unknown as (r: NextRequest) => Promise<{ data: unknown }>
     )(req({}))) as { data: { imported: number; fullSync: boolean } };
@@ -40,7 +40,7 @@ describe("POST /api/whoop/sync", () => {
   });
 
   it("honours fullSync: true", async () => {
-    sync.mockResolvedValue(99);
+    sync.mockResolvedValue({ imported: 99, failed: false });
     const res = (await (
       POST as unknown as (r: NextRequest) => Promise<{ data: unknown }>
     )(req({ fullSync: true }))) as { data: { fullSync: boolean } };

@@ -13,6 +13,7 @@ import {
   markResourceSynced,
   resolveResourceCursor,
   upsertWhoopMeasurements,
+  WHOOP_RECOVERY_SLEEP_OVERLAP_MS,
   type WhoopMeasurementUpsert,
 } from "./sync-core";
 import { prisma } from "@/lib/db";
@@ -30,8 +31,16 @@ export async function syncUserCycle(
   });
   if (!connection) return 0;
 
+  // WHOOP re-scores a cycle THROUGH the day (day strain + energy accrue and
+  // settle after the fact) and the collection filters on the cycle's own time
+  // range, not on when it updated — so a narrow 1 h overlap could step the
+  // cursor past a cycle still being revised and miss the final value. Ride the
+  // same 7-day re-score overlap workout/recovery/sleep already use; one cycle
+  // per day means ~7 records re-fetched per tick (one page), and the
+  // `cycle:<id>:<fieldTag>` upsert keeps the overwrite idempotent.
   const start = incrementalStart(resolveResourceCursor(connection, "cycle"), {
     fullSync: opts.fullSync,
+    overlapMs: WHOOP_RECOVERY_SLEEP_OVERLAP_MS,
   });
 
   let records: Awaited<ReturnType<typeof fetchCycles>>;

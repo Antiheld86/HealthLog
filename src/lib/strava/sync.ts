@@ -27,6 +27,7 @@ import { prisma } from "@/lib/db";
 import { emitInsertedWorkoutArrival } from "@/lib/arrivals/workout-emit";
 import { annotate, getEvent } from "@/lib/logging/context";
 import {
+  markSyncFailureRecorded,
   recordSyncFailure,
   recordSyncSuccess,
   toFailureKind,
@@ -68,7 +69,7 @@ export function classifyStravaFailure(err: unknown): FailureKind {
   return toFailureKind(classifyStravaError(err));
 }
 
-async function recordStravaFailure(
+export async function recordStravaFailure(
   userId: string,
   err: unknown,
 ): Promise<void> {
@@ -215,7 +216,7 @@ export async function syncUserStrava(
     }
   } catch (err) {
     await recordStravaFailure(userId, err);
-    throw err;
+    throw markSyncFailureRecorded(err);
   }
 
   let imported: number;
@@ -239,7 +240,7 @@ export async function syncUserStrava(
     }
   } catch (err) {
     await recordStravaFailure(userId, err);
-    throw err;
+    throw markSyncFailureRecorded(err);
   }
 
   await recordSyncSuccess(userId, "strava");

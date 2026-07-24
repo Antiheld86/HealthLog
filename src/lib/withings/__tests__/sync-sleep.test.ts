@@ -473,6 +473,32 @@ describe("syncUserSleep — segment writes + idempotency", () => {
     expect(recordSyncSuccess).toHaveBeenCalledWith("user-1", "withings");
   });
 
+  it("W-3 — records a transient failure and rethrows when a sleep write throws", async () => {
+    // A reconcile throw out of the stage transaction used to propagate past the
+    // success stamp and get swallowed by both callers: neither success NOR
+    // failure recorded, `lastAttemptAt` quietly stale. Now the source records a
+    // transient failure and rethrows (callers keep their warn-and-continue).
+    installFetchMock([
+      { startdate: 1715000000, enddate: 1715003600, state: 2, id: 1 },
+    ]);
+    reconcileMock.mockReset().mockResolvedValueOnce({
+      status: "failed",
+      reason: "db_error",
+      error: new Error("reconcile boom"),
+    });
+
+    await expect(syncUserSleep("user-1")).rejects.toThrow();
+
+    expect(recordSyncFailure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        integration: "withings",
+        kind: "transient",
+        message: expect.stringContaining("sleep write failed"),
+      }),
+    );
+    expect(recordSyncSuccess).not.toHaveBeenCalled();
+  });
+
   it("upserts nightly vitals with stable per-vital externalIds (v1.18.10 P0)", async () => {
     const nightEnd = Math.floor(Date.UTC(2026, 4, 13, 6) / 1000);
     installSegmentThenSummaryFetch(

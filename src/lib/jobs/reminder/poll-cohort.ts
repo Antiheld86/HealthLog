@@ -23,6 +23,7 @@ import { fireAndForget } from "@/lib/logging/fire-and-forget";
 import { recordError } from "@/lib/jobs/worker-status";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import { enqueueReminderSatisfy } from "@/lib/jobs/reminder-satisfy";
+import { isSyncFailureRecorded } from "@/lib/integrations/status";
 import { getWorkerPrisma } from "./shared";
 
 /** Every poll-cohort handler accepts an optional single-user payload. */
@@ -40,6 +41,16 @@ export interface PollCohortConfig {
   findCohort: (prisma: ReturnType<typeof getWorkerPrisma>) => Promise<string[]>;
   /** Sync one user; returns the count of measurements imported. */
   syncUser: (userId: string) => Promise<number>;
+  /**
+   * Record a per-user sync failure that escaped `syncUser` UNRECORDED. Called
+   * only for an error the source site did not already mark via
+   * `markSyncFailureRecorded` — so a provider that records-then-rethrows never
+   * double-records, and the recorder keeps classification + secret redaction
+   * provider-owned (a boundary-blind recorder would leak Nightscout's
+   * token-bearing URL into `lastError`). A rejection here never breaks the
+   * cohort loop.
+   */
+  recordFailure: (userId: string, err: unknown) => Promise<void>;
 }
 
 /**
@@ -52,6 +63,7 @@ export function makePollCohortHandler({
   taskName,
   findCohort,
   syncUser,
+  recordFailure,
 }: PollCohortConfig) {
   return async function handlePollCohort(jobs: Job<PollCohortPayload>[]) {
     await withBackgroundEvent(taskName, async (evt) => {
@@ -82,6 +94,18 @@ export function makePollCohortHandler({
               });
             }
           } catch (err) {
+            // A record-then-rethrow provider already stamped the ledger and
+            // marked the error; recording again would double-count the streak
+            // and (for Nightscout) risk re-persisting an unredacted message.
+            // Only an UNMARKED escape — today's Oura / Polar write-path throw,
+            // or any future provider path — is recorded here.
+            if (!isSyncFailureRecorded(err)) {
+              await recordFailure(userId, err).catch((recErr) => {
+                evt.addWarning(
+                  `${taskName} recordFailure failed for user ${userId}: ${recErr}`,
+                );
+              });
+            }
             evt.addWarning(`${taskName} failed for user ${userId}: ${err}`);
           }
         }

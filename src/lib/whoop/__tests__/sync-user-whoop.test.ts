@@ -46,6 +46,8 @@ vi.mock("@/lib/integrations/status", () => ({
   recordSyncFailure: (...a: unknown[]) => recordSyncFailure(...a),
   recordSyncSuccess: (...a: unknown[]) => recordSyncSuccess(...a),
   isReauthRequired: (...a: unknown[]) => isReauthRequired(...a),
+  isSyncFailureRecorded: () => false,
+  markSyncFailureRecorded: <T>(err: T) => err,
 }));
 vi.mock("@/lib/rollups/measurement-rollups", () => ({
   collapseToTypeDayKeys: () => [],
@@ -109,7 +111,7 @@ describe("syncUserWhoop — all-403 looks-healthy guard", () => {
       fn.mockImplementation(softSkip403);
     }
 
-    const total = await syncUserWhoop("user1");
+    const { imported: total } = await syncUserWhoop("user1");
 
     expect(total).toBe(0);
     expect(recordSyncSuccess).not.toHaveBeenCalled();
@@ -125,7 +127,7 @@ describe("syncUserWhoop — all-403 looks-healthy guard", () => {
     syncUserWorkout.mockImplementation(softSkip403);
     syncUserBody.mockImplementation(softSkip403);
 
-    const total = await syncUserWhoop("user1");
+    const { imported: total } = await syncUserWhoop("user1");
 
     expect(total).toBe(3);
     expect(recordSyncSuccess).toHaveBeenCalledWith("user1", "whoop");
@@ -138,7 +140,7 @@ describe("syncUserWhoop — all-403 looks-healthy guard", () => {
     syncUserWorkout.mockResolvedValue(0);
     syncUserBody.mockResolvedValue(0);
 
-    const total = await syncUserWhoop("user1");
+    const { imported: total } = await syncUserWhoop("user1");
 
     expect(total).toBe(3);
     expect(recordSyncSuccess).toHaveBeenCalledWith("user1", "whoop");
@@ -155,7 +157,7 @@ describe("syncUserWhoop — all-403 looks-healthy guard", () => {
       fn.mockResolvedValue(0);
     }
 
-    const total = await syncUserWhoop("user1");
+    const { imported: total } = await syncUserWhoop("user1");
 
     expect(total).toBe(0);
     // No collection was 403'd → this is a genuine "nothing changed" tick.
@@ -165,7 +167,7 @@ describe("syncUserWhoop — all-403 looks-healthy guard", () => {
   it("short-circuits without stamping success when parked at error_reauth", async () => {
     isReauthRequired.mockResolvedValue(true);
 
-    const total = await syncUserWhoop("user1");
+    const { imported: total } = await syncUserWhoop("user1");
 
     expect(total).toBe(0);
     expect(recordSyncSuccess).not.toHaveBeenCalled();

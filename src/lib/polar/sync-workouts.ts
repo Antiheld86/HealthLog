@@ -31,7 +31,11 @@
 import { prisma } from "@/lib/db";
 import { emitInsertedWorkoutArrival } from "@/lib/arrivals/workout-emit";
 import { annotate, getEvent } from "@/lib/logging/context";
-import { recordSyncFailure, toFailureKind } from "@/lib/integrations/status";
+import {
+  markSyncFailureRecorded,
+  recordSyncFailure,
+  toFailureKind,
+} from "@/lib/integrations/status";
 import { fetchExercises, mapExercise, type PolarWorkoutRow } from "./client";
 import { getPolarConnection } from "./credentials";
 import { PolarApiError, classifyPolarError } from "./response-classifier";
@@ -82,7 +86,7 @@ export async function syncUserPolarWorkouts(userId: string): Promise<number> {
     }
   } catch (err) {
     await recordPolarWorkoutFailure(userId, err);
-    throw err;
+    throw markSyncFailureRecorded(err);
   }
 
   let imported: number;
@@ -90,7 +94,7 @@ export async function syncUserPolarWorkouts(userId: string): Promise<number> {
     imported = await upsertPolarWorkouts(userId, rows);
   } catch (err) {
     await recordPolarWorkoutFailure(userId, err);
-    throw err;
+    throw markSyncFailureRecorded(err);
   }
 
   return imported;

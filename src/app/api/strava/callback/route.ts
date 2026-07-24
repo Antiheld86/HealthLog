@@ -12,6 +12,8 @@ import {
   verifySignedState,
 } from "@/lib/oauth/signed-state";
 import { markReconnected } from "@/lib/integrations/status";
+import { STRAVA_BACKFILL_QUEUE } from "@/lib/jobs/strava-backfill";
+import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { NextRequest, NextResponse } from "next/server";
 
 /**
@@ -106,6 +108,24 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
     await auditLog("strava.connect", { userId });
     await markReconnected(userId, "strava");
+
+    // Enqueue the self-converging history backfill at connect time so deep
+    // history lands within the hour instead of waiting for the next worker
+    // reboot. Best-effort: the boot-time discovery query
+    // (`stravaBackfillCompletedAt IS NULL`) is the safety net, so a missing
+    // boss instance here never strands the connection. Mirrors the WHOOP /
+    // Fitbit callback enqueue.
+    const boss = getGlobalBoss();
+    if (boss) {
+      await boss
+        .send(STRAVA_BACKFILL_QUEUE, {
+          userId,
+          enqueuedAt: new Date().toISOString(),
+        })
+        .catch((err) =>
+          getEvent()?.addWarning(`strava-backfill enqueue failed: ${err}`),
+        );
+    }
 
     const response = NextResponse.redirect(
       new URL(

@@ -71,7 +71,17 @@ export async function runSleepTimelineBackfillForUser(
 
   let imported = 0;
   if (provider === "WHOOP") {
-    imported = await syncUserWhoop(userId, { fullSync: true });
+    // `syncUserWhoop` now returns a verdict; gate the completion marker on a
+    // clean run so a partial re-sync (dead token, write failure) throws for a
+    // pg-boss retry instead of freezing the timeline gap under a stamped
+    // marker — the same discipline the WHOOP/Fitbit backfills use.
+    const result = await syncUserWhoop(userId, { fullSync: true });
+    imported = result.imported;
+    if (result.failed) {
+      throw new Error(
+        `sleep-timeline backfill incomplete for user ${userId} (whoop) — marker not stamped`,
+      );
+    }
     await prisma.whoopConnection.update({
       where: { userId },
       data: { sleepTimelineBackfillAt: new Date() },
