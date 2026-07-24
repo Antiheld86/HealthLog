@@ -2,6 +2,40 @@
 
 ## [Unreleased]
 
+## [1.32.22] — 2026-07-24
+
+The concurrent-edit protection that reached the layout surfaces now covers the
+rest of the preference records too. Notification preferences, module toggles,
+coach preferences, and the mood-tag layout all get the same guard, so a save
+based on an older read stops and reloads instead of quietly reverting a change
+another writer just made. Two more races are closed on the server side: a stock
+correction can no longer overwrite a dose consumption that ran at the same
+moment, and a privacy-mode change is now respected by an insight generation that
+was already running. Older clients that do not send the new marker keep working
+exactly as before.
+
+- **Notification preferences no longer clobber a concurrent change.** The
+  server merges each category into one stored record. A save based on an older
+  read now reloads instead of writing the whole record back without the change
+  another device just made. This is what closes the case where a web save could
+  silently switch off the app-managed medication reminder flag and bring back a
+  duplicate reminder.
+- **Module toggles, coach preferences, and the mood-tag layout get the same
+  guard.** Each is one stored record that more than one surface can write; a
+  stale save is now stopped and reloaded rather than reverting a newer one. The
+  coach-preferences save covers both the tuning options and the excluded-metric
+  list together, so a conflict leaves both untouched.
+- **A stock correction can no longer race a dose consumption.** Correcting the
+  remaining count on a container now runs under the same per-medication lock a
+  logged dose takes, so the two serialize instead of one overwriting the other.
+- **A privacy-mode change is respected by an in-flight insight generation.** A
+  briefing that was already generating when you switch the privacy mode no
+  longer writes its old-scope output over the cache the switch cleared. It stops
+  short of the write and the next run regenerates under the new mode.
+- **Older clients are unaffected.** A request that does not carry the new base
+  marker keeps the previous save behavior, so nothing needs updating to keep
+  working. The new contract is documented in the published API spec.
+
 ## [1.32.21] — 2026-07-24
 
 Insights and medications layout saves, and the coach about-me note, are now
