@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [1.32.25] — 2026-07-24
+
+Mirrored medications are now marked as such, and the server limits how many
+medications one external source can mirror so a client bug can no longer fill
+the list with duplicates.
+
+- **Mirrored medications are marked on the list.** The medications list now
+  reports whether each entry was mirrored from an external source (today Apple
+  Health) or created in HealthLog directly. A synced row is no longer
+  indistinguishable from one you added yourself.
+- **One external source can no longer flood the list.** The server refuses to
+  mirror more than 30 medications from a single external source per account. A
+  client that keeps re-sending the same medication under a changing identifier
+  can no longer create a fresh row on every sync. A repeat of a medication
+  already mirrored still resolves to the existing row, and medications you add
+  yourself are never affected.
+
 ## [1.32.24] — 2026-07-24
 
 Polar sync is more resilient when one data type is unavailable. A single

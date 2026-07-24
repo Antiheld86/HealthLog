@@ -10,6 +10,8 @@ vi.mock("@/lib/db", () => ({
       findMany: vi.fn().mockResolvedValue([]),
       // v1.28 — the Apple-mirror idempotency pre-query.
       findFirst: vi.fn().mockResolvedValue(null),
+      // v1.32.25 — the mirror growth-guard count.
+      count: vi.fn().mockResolvedValue(0),
       create: vi.fn(),
     },
     medicationIntakeEvent: {
@@ -76,6 +78,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { cachedSwr } from "@/lib/cache/server-cache";
 import { getUserTodayBounds } from "@/lib/tz/local-day";
+import { getMedicationCategories } from "@/lib/medication-category";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -93,6 +96,9 @@ function postReq(body: unknown): NextRequest {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+  // v1.32.25 — default the mirror growth-guard count below the cap so the
+  // pre-existing mirror-create tests hit the create path, not the guard.
+  vi.mocked(prisma.medication.count).mockResolvedValue(0 as never);
   // Default happy-path stub: return the data shape the caller passed in
   // so test assertions can inspect what the route actually forwarded
   // to Prisma without re-implementing the create-returning DB.
@@ -628,5 +634,168 @@ describe("POST /api/medications — Apple Health mirror (v1.28)", () => {
     const data = lastCreateData();
     expect("externalSource" in data).toBe(false);
     expect("externalId" in data).toBe(false);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────
+// v1.32.25 — mirror growth guard + provenance echo
+// ────────────────────────────────────────────────────────────────────
+
+describe("POST /api/medications — mirror growth guard (v1.32.25)", () => {
+  const MIRROR_BODY = {
+    name: "Blutdruckmittel",
+    dose: "1",
+    externalSource: "APPLE_HEALTH",
+    externalId: "hk-concept-new",
+    asNeeded: true,
+  };
+
+  it("refuses a NEW mirror create (422) once the user already holds the cap", async () => {
+    // Idempotency miss (genuinely new row) + user already at 30 mirrors.
+    vi.mocked(prisma.medication.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.medication.count).mockResolvedValue(30 as never);
+
+    const res = await POST(postReq(MIRROR_BODY));
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as {
+      error: string;
+      meta: { errorCode: string };
+    };
+    expect(body.meta.errorCode).toBe("medications.mirror.limit_exceeded");
+    // Nothing minted — the guard blocks the write.
+    expect(prisma.medication.create).not.toHaveBeenCalled();
+    // The count was scoped to the user's Apple-Health mirrors.
+    expect(prisma.medication.count).toHaveBeenCalledWith({
+      where: { userId: "user-1", externalSource: "APPLE_HEALTH" },
+    });
+  });
+
+  it("still returns 200 for an idempotent re-post of an EXISTING mirror while at the cap — the guard never blocks a replay", async () => {
+    // Even at/over the cap, a re-post of a mirror the user already holds
+    // must resolve to the existing row (200), because the idempotency
+    // lookup HITS before the growth guard runs.
+    vi.mocked(prisma.medication.findFirst).mockResolvedValue({
+      id: "med-existing",
+      userId: "user-1",
+      name: "Blutdruckmittel",
+      dose: "1",
+      unitsPerDose: 1,
+      externalSource: "APPLE_HEALTH",
+      externalId: "hk-concept-new",
+      schedules: [],
+    } as never);
+    vi.mocked(prisma.medication.count).mockResolvedValue(50 as never);
+
+    const res = await POST(postReq(MIRROR_BODY));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { id: string } };
+    expect(body.data.id).toBe("med-existing");
+    // Replay: neither the guard count nor a write ran.
+    expect(prisma.medication.count).not.toHaveBeenCalled();
+    expect(prisma.medication.create).not.toHaveBeenCalled();
+  });
+
+  it("does not gate a native create (no externalSource) even while at the cap", async () => {
+    // A native medication has no external provenance, so the guard branch
+    // is never entered — the count query must not even run.
+    vi.mocked(prisma.medication.count).mockResolvedValue(999 as never);
+
+    const res = await POST(
+      postReq({
+        name: "Ramipril",
+        dose: "5 mg",
+        schedules: [{ windowStart: "08:00", windowEnd: "09:00" }],
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(prisma.medication.count).not.toHaveBeenCalled();
+    expect(prisma.medication.create).toHaveBeenCalled();
+  });
+
+  it("admits a NEW mirror create below the cap (201)", async () => {
+    vi.mocked(prisma.medication.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.medication.count).mockResolvedValue(29 as never);
+
+    const res = await POST(postReq(MIRROR_BODY));
+    expect(res.status).toBe(201);
+    expect(prisma.medication.create).toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/medications — provenance echo (v1.32.25)", () => {
+  function rewireListRead(medications: unknown[]) {
+    vi.mocked(cachedSwr).mockImplementation((async (
+      _c: unknown,
+      _k: string,
+      f: () => Promise<unknown>,
+    ) => f()) as never);
+    vi.mocked(getUserTodayBounds).mockReturnValue({
+      start: new Date("2026-07-24T00:00:00Z"),
+      end: new Date("2026-07-24T23:59:59Z"),
+    } as never);
+    vi.mocked(prisma.medication.findMany).mockResolvedValue(
+      medications as never,
+    );
+    vi.mocked(prisma.medicationIntakeEvent.groupBy).mockResolvedValue(
+      [] as never,
+    );
+    vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue(
+      [] as never,
+    );
+    vi.mocked(prisma.medicationScheduleRevision.groupBy).mockResolvedValue(
+      [] as never,
+    );
+    vi.mocked(prisma.medicationInventoryItem.groupBy).mockResolvedValue(
+      [] as never,
+    );
+    // `vi.resetAllMocks()` clears the factory default; the list read reads
+    // `categoryMap[m.id]` outside its try/catch, so a non-empty row set
+    // needs the category map to resolve to an object.
+    vi.mocked(getMedicationCategories).mockResolvedValue({});
+  }
+
+  it("exposes externalSource on each row: APPLE_HEALTH for a mirror, null for a native med", async () => {
+    rewireListRead([
+      {
+        id: "med-mirror",
+        userId: "user-1",
+        name: "Blutdruckmittel",
+        dose: "1",
+        unitsPerDose: 1,
+        externalSource: "APPLE_HEALTH",
+        externalId: "hk-1",
+        createdAt: new Date("2026-07-20T00:00:00Z"),
+        startsOn: null,
+        endsOn: null,
+        oneShot: false,
+        schedules: [],
+      },
+      {
+        id: "med-native",
+        userId: "user-1",
+        name: "Ramipril",
+        dose: "5 mg",
+        unitsPerDose: 1,
+        externalSource: null,
+        externalId: null,
+        createdAt: new Date("2026-07-19T00:00:00Z"),
+        startsOn: null,
+        endsOn: null,
+        oneShot: false,
+        schedules: [],
+      },
+    ]);
+
+    const res = await (
+      GET as unknown as (req: NextRequest) => Promise<Response>
+    )(new NextRequest("http://localhost/api/medications"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: Array<{ id: string; externalSource: string | null }>;
+    };
+    const mirror = body.data.find((m) => m.id === "med-mirror");
+    const native = body.data.find((m) => m.id === "med-native");
+    expect(mirror?.externalSource).toBe("APPLE_HEALTH");
+    expect(native?.externalSource).toBeNull();
   });
 });

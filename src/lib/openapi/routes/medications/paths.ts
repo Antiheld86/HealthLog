@@ -204,7 +204,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Medications"],
       summary: "Create a medication with at least one schedule",
       description:
-        "Validates the body against `CreateMedicationRequest`, applies the v1.5 cross-field invariants (one-shot consistency, recurring default `FREQ=DAILY`, `timesOfDay` dual-write), and creates the medication + its schedules in a single Prisma write. Audits as `medication.create`.",
+        "Validates the body against `CreateMedicationRequest`, applies the v1.5 cross-field invariants (one-shot consistency, recurring default `FREQ=DAILY`, `timesOfDay` dual-write), and creates the medication + its schedules in a single Prisma write. Audits as `medication.create`. v1.28 — a mirror create (`externalSource` + `externalId`) re-posting a pair the caller already holds returns the existing medication with 200 instead of a duplicate. v1.32.25 — a NEW mirror create is refused with 422 (`meta.errorCode = medications.mirror.limit_exceeded`) once the caller already holds 30 medications mirrored from the same external source; an idempotent re-post of a medication already mirrored is unaffected, and native creates are never gated.",
       requestBody: {
         required: true,
         content: { "application/json": { schema: createMedicationSchema } },

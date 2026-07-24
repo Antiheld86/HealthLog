@@ -223,6 +223,14 @@ export const medicationResource = z
 export const medicationListEntry = medicationResource
   .extend({
     category: medicationCategoryEnum,
+    // v1.32.25 — mirrored-medication provenance echoed on the list read so
+    // the web UI and an operator can tell a mirror row from a native one.
+    externalSource: z
+      .literal("APPLE_HEALTH")
+      .nullable()
+      .describe(
+        "v1.32.25 — provenance of the medication. `APPLE_HEALTH` marks the row a read-only mirror of the iOS 26+ HealthKit Medications sync; NULL is a native HealthLog medication. Read-only echo of the stored provenance — the create route sets it, the list read surfaces it so mirrored-vs-native is visible without inspecting the iOS client's local registry.",
+      ),
     // The list read always computes these two, so they are required here
     // even though the shared base leaves them optional for the write paths.
     nextDueAt: z.iso.datetime({ offset: true }).nullable(),
@@ -257,7 +265,7 @@ export const medicationListEntry = medicationResource
   .meta({
     id: "MedicationListEntry",
     description:
-      "List-row variant of the medication resource enriched with the joined `category`, `lastTakenAt`, `todayEventCount`, and the v1.16.10 aggregated stock fields (`stockUnitsRemaining`, `stockDosesRemaining`) the dashboard + iOS client consume. The base medication fields (`id`, `name`, `dose`, `treatmentClass`, `dosesPerUnit`, `active`, `notificationsEnabled`, `pausedAt`, `snoozedUntil`, `startsOn`, `endsOn`, `oneShot`, `createdAt`, `updatedAt`, `schedules`) are inlined; see the `Medication` component for their semantics.",
+      "List-row variant of the medication resource enriched with the joined `category`, the v1.32.25 `externalSource` provenance echo, `lastTakenAt`, `todayEventCount`, and the v1.16.10 aggregated stock fields (`stockUnitsRemaining`, `stockDosesRemaining`) the dashboard + iOS client consume. The base medication fields (`id`, `name`, `dose`, `treatmentClass`, `dosesPerUnit`, `active`, `notificationsEnabled`, `pausedAt`, `snoozedUntil`, `startsOn`, `endsOn`, `oneShot`, `createdAt`, `updatedAt`, `schedules`) are inlined; see the `Medication` component for their semantics.",
   });
 
 export const medicationDetailEntry = medicationResource
