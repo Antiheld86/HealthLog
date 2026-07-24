@@ -26,6 +26,7 @@ vi.mock("@/lib/medication-category", () => ({
 import { prisma } from "@/lib/db";
 import { runStatusCompletion } from "@/lib/insights/status-provider";
 import { getMedicationCategories } from "@/lib/medication-category";
+import { getNoKeyMedicationComplianceStatusText } from "@/lib/insights/no-key-fallbacks";
 import { generateMedicationComplianceStatusForUser } from "../medication-compliance-status";
 
 const dayMs = 24 * 60 * 60 * 1000;
@@ -215,6 +216,100 @@ describe("generateMedicationComplianceStatusForUser — cache-read skips a stub"
     expect(runStatusCompletion).toHaveBeenCalledTimes(1);
     expect(result.summary).toBe("Fresh compliance assessment.");
     expect(result.cached).toBe(false);
+  });
+});
+
+describe("generateMedicationComplianceStatusForUser — outbound screen (v1.32.20)", () => {
+  /**
+   * The medication-adherence card is the highest-leverage surface for the
+   * outbound screen — a dose-change imperative or a fabricated figure lands
+   * exactly here. v1.32.20 routes it through `finalizeStatusSummary`, so it now
+   * WITHHOLDS the same dose / risk / causal violations its seven sibling status
+   * cards do (previously it only withheld unparseable envelopes). WITHHOLD =
+   * serve the deterministic no-key line, persist no model text, `updatedAt`
+   * stays null; the per-medication placeholder rows still render.
+   */
+  function setupCard(now: Date) {
+    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.medication.findMany).mockResolvedValue([
+      medFixture(now),
+    ] as never);
+    vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue(
+      [] as never,
+    );
+    vi.mocked(prisma.auditLog.create).mockResolvedValue({
+      createdAt: now,
+    } as never);
+  }
+
+  it("withholds a dose-change imperative instead of rendering the raw prose", async () => {
+    const now = new Date();
+    setupCard(now);
+    stubCompletion('{"summary":"Increase your dose to 10 mg next week."}');
+
+    const result = await generateMedicationComplianceStatusForUser("user-1", {
+      locale: "en",
+    });
+
+    expect(result.summary).toBe(getNoKeyMedicationComplianceStatusText("en"));
+    expect(result.summary).not.toContain("10 mg");
+    expect(result.summary).not.toContain("Increase");
+    expect(result.updatedAt).toBeNull();
+    // The per-medication placeholder rows still surface for the active med.
+    expect(result.medications).toHaveLength(1);
+    // No cache row ever persisted the screened model text.
+    for (const call of vi.mocked(prisma.auditLog.create).mock.calls) {
+      const details = JSON.parse(
+        (call[0] as { data: { details: string } }).data.details,
+      ) as { summary?: string };
+      expect(details.summary ?? "").not.toContain("10 mg");
+    }
+  });
+
+  it("withholds a fabricated risk figure instead of rendering the raw prose", async () => {
+    const now = new Date();
+    setupCard(now);
+    stubCompletion(
+      '{"summary":"Your 10-year cardiovascular risk is about 14%."}',
+    );
+
+    const result = await generateMedicationComplianceStatusForUser("user-1", {
+      locale: "en",
+    });
+
+    expect(result.summary).toBe(getNoKeyMedicationComplianceStatusText("en"));
+    expect(result.summary).not.toContain("14%");
+    expect(result.updatedAt).toBeNull();
+    expect(result.medications).toHaveLength(1);
+  });
+
+  it("still renders a clean grounded compliance summary", async () => {
+    const now = new Date();
+    setupCard(now);
+    stubCompletion(
+      '{"summary":"Adherence held steady at 96% across the last 30 days."}',
+    );
+
+    const result = await generateMedicationComplianceStatusForUser("user-1", {
+      locale: "en",
+    });
+
+    expect(result.summary).toBe(
+      "Adherence held steady at 96% across the last 30 days.",
+    );
+    expect(result.updatedAt).not.toBeNull();
+    expect(result.cached).toBe(false);
+    // The clean assessment was persisted (not the negative stub).
+    const persisted = vi
+      .mocked(prisma.auditLog.create)
+      .mock.calls.map(
+        (call) =>
+          JSON.parse(
+            (call[0] as { data: { details: string } }).data.details,
+          ) as { summary?: string },
+      )
+      .find((details) => (details.summary ?? "").includes("96%"));
+    expect(persisted).toBeTruthy();
   });
 });
 

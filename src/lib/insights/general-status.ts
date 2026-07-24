@@ -284,7 +284,12 @@ export async function prepareGeneralStatusForUser(
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([day, value]) => ({
       measuredAt: new Date(`${day}T12:00:00.000Z`),
-      value: value.total > 0 ? round((value.taken / value.total) * 100, 1) : 0,
+      // A map entry is only ever created after `bucket.total += 1`, so
+      // `value.total` is always >= 1 here — the former `: 0` guard branch was
+      // unreachable. v1.32.20 removed it: a real zero-dose day never reaches
+      // this fold, so a synthesised `0` would have been a fabricated rate, not
+      // an honest absence (the #582 silent-wrong-absence class).
+      value: round((value.taken / value.total) * 100, 1),
     }));
   const adherenceSeries = applyPayloadBudget(adherenceRecords, {
     now,

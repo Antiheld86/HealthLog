@@ -44,6 +44,7 @@ import {
 } from "@/lib/ai/coach/budget";
 import { AI_BUDGETS } from "@/lib/ai/ai-budgets";
 import { screenCoachReply } from "@/lib/ai/coach/outbound-guard";
+import { extractAssessmentSummary } from "@/lib/insights/status-shared";
 import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import { fenceUserText } from "@/lib/ai/coach/data-fence";
 import { singleUserTurn, type CompletionResult } from "@/lib/ai/types";
@@ -113,6 +114,14 @@ export function sanitiseReactionLine(
 ): string | null {
   let text = (raw ?? "").trim();
   if (!text) return null;
+  // v1.32.20 — the same structured-envelope detection the status cards run
+  // (`extractAssessmentSummary`). A hero line is one plain sentence; a
+  // brace-led or fenced `{"line":"…"}` reply — or a truncated envelope under
+  // the char cap — is a broken contract, not a sentence, and must resolve to
+  // the deterministic lead rather than render raw JSON. Only genuine prose
+  // (`kind === "prose"`) passes; a parsed `{ summary }`/`{ line }` object or an
+  // unparseable brace-led attempt both reject here.
+  if (extractAssessmentSummary(text).kind !== "prose") return null;
   text = text
     .replace(/^["“”'`]+/, "")
     .replace(/["“”'`]+$/, "")

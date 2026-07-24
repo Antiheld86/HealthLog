@@ -48,6 +48,7 @@ import {
 import { AI_BUDGETS } from "@/lib/ai/ai-budgets";
 import { singleUserTurn } from "@/lib/ai/types";
 import { screenCoachReply } from "@/lib/ai/coach/outbound-guard";
+import { extractAssessmentSummary } from "@/lib/insights/status-shared";
 import { annotate } from "@/lib/logging/context";
 
 /** Per-call upstream timeout — kept inside the spec's ≤8–10 s window. */
@@ -138,9 +139,16 @@ Rephrase it warmly and naturally in your own words, following every rule. Return
  * unusable (empty / over-length / unsafe). Strips wrapping quotes and collapses
  * whitespace; rejects rather than mid-word-clamping an over-long reply.
  */
-function sanitiseAiBody(raw: string, locale: Locale): string | null {
+export function sanitiseAiBody(raw: string, locale: Locale): string | null {
   let text = (raw ?? "").trim();
   if (!text) return null;
+  // v1.32.20 — the same structured-envelope detection the status cards run
+  // (`extractAssessmentSummary`). A nudge body is one plain sentence; a
+  // brace-led or fenced `{"line":"…"}` / `{"body":"…"}` reply — or a truncated
+  // envelope under the char cap — is a broken contract and must resolve to the
+  // deterministic template rather than render raw JSON. Only genuine prose
+  // (`kind === "prose"`) passes.
+  if (extractAssessmentSummary(text).kind !== "prose") return null;
   // Strip a single layer of wrapping quotes the model sometimes adds.
   text = text
     .replace(/^["“”'`]+/, "")

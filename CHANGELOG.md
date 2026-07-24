@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [1.32.20] — 2026-07-24
+
+The medication-adherence insight now passes through the same safety screen as
+every other insight card. It was the one card of eight that showed the model's
+text without running that screen first. It already held back a reply that came
+back broken or cut off, but a dose-change instruction or an invented figure
+could still reach it. It now runs the same check the other seven cards run, and
+anything that trips the check falls back to the plain, data-grounded line the
+card shows when no model is set up.
+
+- **The medication-adherence card is screened like the rest.** A reply that
+  reads as a dose change, or that cites a made-up risk figure, is held back and
+  the card shows its plain fallback. A normal grounded summary still shows as
+  before.
+- **Two background notification lines can no longer print a raw model reply.**
+  The "just in" reaction line and the proactive coach nudge now catch a reply
+  that arrived as structured data or got cut off partway, and use their fixed
+  wording instead of printing it as is.
+- **Smaller cleanups in the same area.** A stray marker left behind by a
+  cut-off coach reply is now stripped from the text, and an unreachable branch
+  in the adherence figure was removed.
+
 ## [1.32.19] — 2026-07-24
 
 After you logged a dose, the Today view could keep showing it as still due
