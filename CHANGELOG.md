@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [1.32.15] — 2026-07-24
+
+Your Polar training sessions now sync into HealthLog, alongside the recovery,
+sleep, and daily activity that Polar already brought in. Thanks to
+@StefanIndustries, whose report asked for this after the vitals sync landed.
+
+- **Polar exercises arrive as workouts.** Every run, ride, swim, or gym session
+  you upload to Polar Flow shows up in your workout history with its sport,
+  start time, duration, distance, calories, and heart rate. The raw Polar sport
+  label and training load ride along in the background so nothing is lost. The
+  sync reads your last 30 days of uploads once an hour, so a session synced
+  late from your watch is still caught.
+- **A Polar session does not double up with your other sources.** If the same
+  workout also reaches HealthLog through Apple Health or another connection, the
+  two are matched and only one is shown. A Polar watch counts as a direct
+  heart-rate recording, so it ranks above a Strava re-upload of the same run but
+  below your primary on-wrist wearables. You can change that order under
+  Settings, Sources.
+- **The two Polar halves stay independent.** A hiccup fetching your training
+  sessions no longer holds back the recovery and sleep sync, and the reverse
+  holds too, so a problem on one side never masks the other.
+
 ## [1.32.14] — 2026-07-24
 
 When the Coach removes a number it could not check against your data, the reply
