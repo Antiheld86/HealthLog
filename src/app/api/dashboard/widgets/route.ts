@@ -8,6 +8,7 @@
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import {
   apiSuccess,
+  apiError,
   buildPayloadDiagnostic,
   safeJson,
   returnAllZodIssues,
@@ -29,6 +30,7 @@ import {
   layoutNeedsPreserveRead,
   mergePreservedLayoutFields,
   type DashboardLayout,
+  type DashboardLayoutWithToken,
 } from "@/lib/dashboard-layout";
 import { Prisma } from "@/generated/prisma/client";
 import { z } from "zod/v4";
@@ -150,14 +152,27 @@ const layoutSchema = z.object({
     .array(z.enum(HERO_RING_IDS))
     .max(MAX_HERO_RING_ORDER)
     .optional(),
+  // v1.32.16 (issue #581) — optimistic-concurrency base token. The client
+  // sends the ISO `updatedAt` it read the layout at; the write is then
+  // guarded on the stored row still carrying it (else 409, no write).
+  // Optional so older web builds and the native client keep the prior
+  // unconditional write. Not a layout field — stripped before serialize.
+  baseUpdatedAt: z.string().optional(),
 });
 
-async function buildDashboardLayout(userId: string): Promise<DashboardLayout> {
+async function buildDashboardLayout(
+  userId: string,
+): Promise<DashboardLayoutWithToken> {
   const row = await prisma.user.findUnique({
     where: { id: userId },
-    select: { dashboardWidgetsJson: true },
+    // v1.32.16 (issue #581) — `updatedAt` rides the cached layout so GET
+    // hands the client the optimistic-concurrency token alongside the
+    // layout it applies to. Cached together (and busted on every write)
+    // so the (layout, token) pair a client reads is always consistent.
+    select: { dashboardWidgetsJson: true, updatedAt: true },
   });
-  return resolveDashboardLayout(row?.dashboardWidgetsJson);
+  const layout = resolveDashboardLayout(row?.dashboardWidgetsJson);
+  return { ...layout, updatedAt: row?.updatedAt?.toISOString() };
 }
 
 export const GET = apiHandler(async () => {
@@ -167,7 +182,7 @@ export const GET = apiHandler(async () => {
   // hits the Settings → Dashboard save button, which invalidates this
   // cache via `invalidateUserDashboardWidgets()`.
   const layout = await cached(
-    caches.dashboardWidgets as ServerCache<DashboardLayout>,
+    caches.dashboardWidgets as ServerCache<DashboardLayoutWithToken>,
     user.id,
     () => buildDashboardLayout(user.id),
     annotate,
@@ -310,7 +325,11 @@ export const PUT = apiHandler(async (request: NextRequest) => {
   // `ChartOverlayPrefs` requires it; `coerceChartOverlayPrefsMap` inside the
   // serializer fills the gap, so the assertion is safe here exactly as it was
   // on the previous per-field cast.
-  let toSerialize = parsed.data as Partial<DashboardLayout>;
+  // v1.32.16 (issue #581) — the concurrency token is a request-only field,
+  // not part of the layout; split it out before the serialize pipeline so
+  // it can never leak into the stored blob.
+  const { baseUpdatedAt, ...layoutData } = parsed.data;
+  let toSerialize = layoutData as Partial<DashboardLayout>;
   const incomingChartOverlayPrefs = toSerialize.chartOverlayPrefs;
   const needsRangePointsPreserve =
     incomingChartOverlayPrefs !== undefined &&
@@ -358,12 +377,49 @@ export const PUT = apiHandler(async (request: NextRequest) => {
   }
   const normalized = serializeDashboardLayout(toSerialize as DashboardLayout);
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      dashboardWidgetsJson: toJson(normalized),
-    },
-  });
+  // v1.32.16 (issue #581) — optimistic concurrency. When the client sends
+  // the `baseUpdatedAt` it read the layout at, the write is CONDITIONAL on
+  // the stored row still carrying that token: `updateMany` matches zero
+  // rows once any other request has advanced `updatedAt`, so a Save that
+  // already committed can never be silently reverted by a later request
+  // (e.g. an instant hero-ring PUT) that started from the pre-Save
+  // snapshot. A stale base returns 409 and writes NOTHING. Clients that
+  // omit the token (older web builds, the native client) keep the prior
+  // unconditional write — backward-compatible, still preserve-when-absent.
+  let freshUpdatedAt: Date;
+  if (baseUpdatedAt !== undefined) {
+    const base = new Date(baseUpdatedAt);
+    if (Number.isNaN(base.getTime())) {
+      return apiError("Invalid base token", 422, {
+        errorCode: "invalid_base_updated_at",
+      });
+    }
+    const guarded = await prisma.user.updateMany({
+      where: { id: user.id, updatedAt: base },
+      data: { dashboardWidgetsJson: toJson(normalized) },
+    });
+    if (guarded.count === 0) {
+      annotate({
+        action: { name: "dashboard.widgets.conflict" },
+        meta: { base_updated_at: baseUpdatedAt },
+      });
+      return apiError("Dashboard layout changed since it was loaded", 409, {
+        errorCode: "dashboard_layout_conflict",
+      });
+    }
+    const fresh = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { updatedAt: true },
+    });
+    freshUpdatedAt = fresh?.updatedAt ?? new Date();
+  } else {
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: { dashboardWidgetsJson: toJson(normalized) },
+      select: { updatedAt: true },
+    });
+    freshUpdatedAt = updated?.updatedAt ?? new Date();
+  }
 
   annotate({
     action: { name: "dashboard.widgets.update" },
@@ -374,7 +430,11 @@ export const PUT = apiHandler(async (request: NextRequest) => {
   // next dashboard mount paints the new layout.
   invalidateUserDashboardWidgets(user.id);
 
-  return apiSuccess(normalized);
+  // Echo the advanced token so the client can base its next write on it.
+  return apiSuccess({
+    ...normalized,
+    updatedAt: freshUpdatedAt.toISOString(),
+  } satisfies DashboardLayoutWithToken);
 });
 
 export const DELETE = apiHandler(async () => {

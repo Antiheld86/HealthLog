@@ -680,15 +680,63 @@ export function mergePreservedLayoutFields(
  * carries forward whatever is CURRENTLY stored, so this payload can no
  * longer race a concurrent Save no matter which request lands last.
  */
+/**
+ * v1.32.16 (issue #581) — a `/api/dashboard/widgets` write payload plus the
+ * optimistic-concurrency base token. `baseUpdatedAt` is the ISO
+ * `User.updatedAt` the client read the layout at; the route writes only when
+ * the stored row still carries it (else 409). It is request-only and never
+ * lands in the persisted `dashboardWidgetsJson` blob.
+ */
+export type DashboardLayoutWritePayload = Partial<DashboardLayout> & {
+  baseUpdatedAt?: string;
+};
+
+/**
+ * v1.32.16 — the shape every GET / PUT `/api/dashboard/widgets` response
+ * carries: the resolved layout plus the server-stamped `updatedAt`
+ * concurrency token (mirrors `User.updatedAt`, never persisted inside the
+ * blob). The client sends it back as `baseUpdatedAt` on the next write.
+ */
+export type DashboardLayoutWithToken = DashboardLayout & {
+  updatedAt?: string;
+};
+
 export function buildRingMutationPayload(next: {
   selectedScoreRings: ScoreRingId[];
   heroRingOrder: HeroRingId[];
-}): Partial<DashboardLayout> {
+  /**
+   * v1.32.16 (issue #581) — the base token the ring change was made
+   * against. Included when known so the guarded write can 409 rather than
+   * silently overwrite a Save that committed first. Omitted (not sent as
+   * `undefined`) when the client hasn't got a token yet.
+   */
+  baseUpdatedAt?: string;
+}): DashboardLayoutWritePayload {
   return {
     version: DASHBOARD_LAYOUT_VERSION,
     selectedScoreRings: next.selectedScoreRings,
     heroRingOrder: next.heroRingOrder,
+    ...(next.baseUpdatedAt !== undefined
+      ? { baseUpdatedAt: next.baseUpdatedAt }
+      : {}),
   };
+}
+
+/**
+ * v1.32.16 (issue #581) — the Save button and the instant hero-ring controls
+ * both PUT the whole `/api/dashboard/widgets` layout. While EITHER write is in
+ * flight the other must be disabled, so the two PUTs can never overlap at the
+ * server and a committed Save cannot be reverted by a ring write that started
+ * from the pre-Save snapshot. Belt-and-braces with the shared TanStack
+ * mutation `scope` (which already serialises the two) and the server's
+ * optimistic-concurrency token. Exported as a pure predicate so the JSX binds
+ * one source of truth and a unit test can pin the gate.
+ */
+export function widgetWritesBusy(
+  saving: boolean,
+  ringPending: boolean,
+): boolean {
+  return saving || ringPending;
 }
 
 const DASHBOARD_LAYOUT_VERSION = 1;

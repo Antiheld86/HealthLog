@@ -48,6 +48,8 @@ import {
   HEALTH_SCORE_RING_ID,
   resolveHeroRingOrder,
   buildRingMutationPayload,
+  widgetWritesBusy,
+  type DashboardLayoutWithToken,
 } from "@/lib/dashboard-layout";
 import {
   Select,
@@ -56,7 +58,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { apiDelete, apiGet, apiPut } from "@/lib/api/api-fetch";
+import { apiDelete, apiGet, apiPut, ApiError } from "@/lib/api/api-fetch";
 import { useAuth } from "@/hooks/use-auth";
 import { WIDGET_MODULE_BY_ID } from "@/lib/dashboard/widget-modules";
 import { SettingsCard } from "@/components/settings/settings-card";
@@ -126,6 +128,16 @@ function mergeReorderIntoLayout(
     return { ...original, order: i };
   });
 }
+
+/**
+ * v1.32.16 (issue #581) — the normal layout Save and the instant hero-ring
+ * PUT both write the whole `/api/dashboard/widgets` layout. Sharing one
+ * TanStack mutation `scope` serialises them: a second write in this scope
+ * waits for the first to settle, so the two PUTs can never overlap at the
+ * server and a committed Save cannot be reverted by a ring write that
+ * started from the pre-Save snapshot.
+ */
+const DASHBOARD_WIDGETS_MUTATION_SCOPE = "dashboard-widgets" as const;
 
 const WIDGET_LABEL_KEYS: Record<DashboardWidgetId, string> = {
   weight: "dashboard.weight",
@@ -224,9 +236,20 @@ export function DashboardLayoutSection({ id }: { id: string }) {
   const { data: remote, isLoading } = useQuery({
     queryKey: queryKeys.dashboardWidgets(),
     queryFn: async () => {
-      return apiGet<DashboardLayout>("/api/dashboard/widgets");
+      return apiGet<DashboardLayoutWithToken>("/api/dashboard/widgets");
     },
   });
+
+  /**
+   * v1.32.16 (issue #581) — the freshest optimistic-concurrency token the
+   * client knows. Read straight from the widgets query cache at mutate time
+   * (not a render snapshot) so it reflects whatever the last settled write
+   * or refetch advanced it to. Every write sends it as `baseUpdatedAt`.
+   */
+  const readBaseToken = () =>
+    queryClient.getQueryData<DashboardLayoutWithToken>(
+      queryKeys.dashboardWidgets(),
+    )?.updatedAt;
 
   // Local draft state — null means "use server copy". User edits create the
   // draft so reordering/toggling doesn't fire a network call per click; Save
@@ -236,8 +259,15 @@ export function DashboardLayoutSection({ id }: { id: string }) {
   const layout = draft ?? remote ?? null;
 
   const saveMutation = useMutation({
+    // v1.32.16 (issue #581) — shared scope serialises this against the
+    // instant ring PUT so they can never overlap at the server.
+    scope: { id: DASHBOARD_WIDGETS_MUTATION_SCOPE },
     mutationFn: async (next: DashboardLayout) => {
-      return apiPut<DashboardLayout>("/api/dashboard/widgets", next);
+      return apiPut<DashboardLayoutWithToken>("/api/dashboard/widgets", {
+        ...next,
+        // Guard the write on the token this edit was based on.
+        baseUpdatedAt: readBaseToken(),
+      });
     },
     onSuccess: (saved) => {
       queryClient.setQueryData(queryKeys.dashboardWidgets(), saved);
@@ -264,12 +294,28 @@ export function DashboardLayoutSection({ id }: { id: string }) {
       setDraft(null);
       toast.success(t("dashboard.layoutSaveSuccess"));
     },
-    onError: () => toast.error(t("dashboard.layoutSaveError")),
+    onError: (err) => {
+      // v1.32.16 (issue #581) — a 409 means someone else (another tab, or
+      // an interleaved ring write) committed since this edit was based.
+      // Refetch the winning layout so the base token advances, KEEP the
+      // draft so the user can re-apply, and nudge gently instead of a hard
+      // error — nothing was lost, the change just needs re-saving.
+      if (err instanceof ApiError && err.status === 409) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.dashboardWidgets(),
+        });
+        toast.message(t("dashboard.layoutConflictReloaded"));
+        return;
+      }
+      toast.error(t("dashboard.layoutSaveError"));
+    },
   });
 
   const resetMutation = useMutation({
+    // v1.32.16 — same scope so a reset can't race the layout / ring writes.
+    scope: { id: DASHBOARD_WIDGETS_MUTATION_SCOPE },
     mutationFn: async () => {
-      return apiDelete<DashboardLayout>("/api/dashboard/widgets");
+      return apiDelete<DashboardLayoutWithToken>("/api/dashboard/widgets");
     },
     onSuccess: (saved) => {
       queryClient.setQueryData(queryKeys.dashboardWidgets(), saved);
@@ -348,13 +394,19 @@ export function DashboardLayoutSection({ id }: { id: string }) {
    * Save no matter which one lands last.
    */
   const ringMutation = useMutation({
+    // v1.32.16 (issue #581) — shared scope serialises this against the full
+    // layout Save so the two writes can never overlap at the server.
+    scope: { id: DASHBOARD_WIDGETS_MUTATION_SCOPE },
     mutationFn: async (next: {
       selectedScoreRings: ScoreRingId[];
       heroRingOrder: HeroRingId[];
     }) => {
-      return apiPut<DashboardLayout>(
+      return apiPut<DashboardLayoutWithToken>(
         "/api/dashboard/widgets",
-        buildRingMutationPayload(next),
+        // Carries ONLY the ring fields (never `widgets`) plus the base
+        // token, so it can neither clobber a saved layout nor win a stale
+        // race — a conflict 409s instead.
+        buildRingMutationPayload({ ...next, baseUpdatedAt: readBaseToken() }),
       );
     },
     onMutate: async (next) => {
@@ -373,12 +425,23 @@ export function DashboardLayoutSection({ id }: { id: string }) {
       }
       return { previous };
     },
-    onError: (_err, _next, context) => {
+    onError: (err, _next, context) => {
       if (context?.previous) {
         queryClient.setQueryData(
           queryKeys.dashboardWidgets(),
           context.previous,
         );
+      }
+      // v1.32.16 (issue #581) — a 409 means a concurrent write landed
+      // first. Roll back the optimistic ring change (above), refetch the
+      // winning layout so the token advances, drop this now-stale delta,
+      // and nudge gently so the user can re-toggle against fresh state.
+      if (err instanceof ApiError && err.status === 409) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.dashboardWidgets(),
+        });
+        toast.message(t("dashboard.layoutConflictReloaded"));
+        return;
       }
       toast.error(t("dashboard.layoutSaveError"));
     },
@@ -400,7 +463,10 @@ export function DashboardLayoutSection({ id }: { id: string }) {
    * the server resolver and the hero read one consistent sequence.
    */
   function applyHeroRingOrder(next: HeroRingId[]) {
-    if (!remote) return;
+    // v1.32.16 (issue #581) — gate on the freshest layout (`draft ?? remote`)
+    // the rest of the section uses, not the `remote` server snapshot alone,
+    // so an open draft's edits stay the source of truth.
+    if (!layout) return;
     const selectedScoreRings = next.filter(
       (id): id is ScoreRingId => id !== HEALTH_SCORE_RING_ID,
     );
@@ -643,7 +709,12 @@ export function DashboardLayoutSection({ id }: { id: string }) {
               (ringId) => !heroOrder.includes(ringId),
             );
             const atCap = selected.length >= MAX_SELECTED_SCORE_RINGS;
-            const busy = ringMutation.isPending;
+            // v1.32.16 (issue #581) — ring controls also lock while a Save
+            // is in flight, so the two writes can never overlap.
+            const busy = widgetWritesBusy(
+              saveMutation.isPending,
+              ringMutation.isPending,
+            );
             return (
               <div className="space-y-2">
                 <DndContext
@@ -831,7 +902,10 @@ export function DashboardLayoutSection({ id }: { id: string }) {
             size="sm"
             className="min-h-11 sm:min-h-9"
             onClick={() => setDraft(null)}
-            disabled={saveMutation.isPending}
+            disabled={widgetWritesBusy(
+              saveMutation.isPending,
+              ringMutation.isPending,
+            )}
           >
             {t("common.cancel")}
           </Button>
@@ -839,7 +913,12 @@ export function DashboardLayoutSection({ id }: { id: string }) {
             size="sm"
             className="min-h-11 sm:min-h-9"
             onClick={() => layout && saveMutation.mutate(layout)}
-            disabled={saveMutation.isPending}
+            // v1.32.16 (issue #581) — disabled while EITHER write is in
+            // flight so a Save can't be issued mid ring-write and vice versa.
+            disabled={widgetWritesBusy(
+              saveMutation.isPending,
+              ringMutation.isPending,
+            )}
           >
             {saveMutation.isPending && (
               <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />

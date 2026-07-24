@@ -456,6 +456,7 @@
     "layoutReset": "Restablecer valores por defecto",
     "layoutSaveSuccess": "Diseño del panel guardado",
     "layoutSaveError": "No se ha podido guardar el diseño",
+    "layoutConflictReloaded": "Se ha recargado el diseño desde el servidor. Vuelve a aplicar tu cambio.",
     "layoutResetSuccess": "Restablecido al diseño por defecto",
     "layoutUsingDefaults": "Diseño por defecto activo",
     "layoutCustomized": "Diseño personalizado activo",

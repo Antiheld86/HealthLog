@@ -448,6 +448,7 @@
     "layoutReset": "Ripristina i valori predefiniti",
     "layoutSaveSuccess": "Layout della dashboard salvato",
     "layoutSaveError": "Impossibile salvare il layout",
+    "layoutConflictReloaded": "Layout ricaricato dal server. Applica di nuovo la tua modifica.",
     "layoutResetSuccess": "Layout predefinito ripristinato",
     "layoutUsingDefaults": "Layout predefinito attivo",
     "layoutCustomized": "Layout personalizzato attivo",
