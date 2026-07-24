@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+## [1.32.26] — 2026-07-24
+
+The metric and imperial display preference is now applied everywhere your
+weight, body composition, waist, and temperature readings appear. Until now the
+setting was saved but almost nothing read it, so the numbers stayed in
+kilograms and Celsius regardless of the choice. Thanks to a self-hoster who
+reported the gap and traced how the unit was being handled.
+
+- **Weight and body composition follow the preference.** With imperial
+  selected, weight, muscle mass, body water, bone mass, fat mass, and grip
+  strength read in pounds across the dashboard tiles, the charts, the record
+  list, the insight pages, and the coach read strip. Body temperature, skin and
+  wrist temperature read in degrees Fahrenheit, and waist reads in inches.
+  Storage is unchanged: every reading is still kept in canonical SI, and a
+  metric user sees exactly the same numbers as before.
+- **Manual entry converts at the point of entry.** When you log or edit a value
+  with imperial selected, the field is labelled in your unit and the number you
+  type is converted back to canonical on save, so a pound reading is stored as
+  the correct kilogram value rather than a mislabelled one.
+- **A logging tool can no longer store a foreign unit.** The measurement logging
+  tool used by connected assistants now converts a recognised unit hint (such as
+  pounds or Fahrenheit) to canonical, and refuses anything it does not
+  recognise, so a reading is never saved under the wrong unit.
+- **Known remaining.** Height is entered in centimetres for now; an imperial
+  height entry is a separate follow-up.
+
 ## [1.32.25] — 2026-07-24
 
 Mirrored medications are now marked as such, and the server limits how many
