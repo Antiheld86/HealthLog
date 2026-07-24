@@ -47,6 +47,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ApiError, apiPatch, apiPut } from "@/lib/api/api-fetch";
+import {
+  readUpdatedAtToken,
+  withBaseToken,
+  isConflict,
+} from "@/lib/api/optimistic-token";
+import { queryKeys } from "@/lib/query-keys";
 import { reorderById } from "@/lib/insights-layout-reorder";
 import { prefersReducedMotion } from "@/lib/charts/reduced-motion";
 import { useTranslations } from "@/lib/i18n/context";
@@ -65,6 +71,7 @@ import {
   type ManageCatalog,
   type ManageCategory,
   type ManageTag,
+  type MoodTagLayoutResolved,
 } from "./use-mood-tag-manage";
 
 /**
@@ -139,13 +146,26 @@ export function TagManagerCard({ catalog }: TagManagerCardProps) {
     const rollback = await snapshotManageCache(queryClient);
     updateManageCache(queryClient, () => mergeBack(catalog, nextCatalog));
     try {
-      await apiPut("/api/mood/tags/layout", {
-        placements: buildVisiblePlacements(nextCatalog),
-      });
+      // v1.32.22 (R5b) — echo + seed the layout token (see `putGroupOrder` in
+      // the groups card): the sibling group-order card writes the same blob, so
+      // a stale placements merge is exactly the overwrite the token 409s.
+      const resolved = await apiPut<MoodTagLayoutResolved>(
+        "/api/mood/tags/layout",
+        withBaseToken(
+          { placements: buildVisiblePlacements(nextCatalog) },
+          readUpdatedAtToken(queryClient, queryKeys.moodTagLayout()),
+        ),
+      );
+      queryClient.setQueryData(queryKeys.moodTagLayout(), resolved);
       toast.success(t("mood.manage.orderSaved"));
       return true;
     } catch (err) {
       rollback();
+      if (isConflict(err)) {
+        queryClient.removeQueries({ queryKey: queryKeys.moodTagLayout() });
+        toast.message(t("common.conflictReloaded"));
+        return false;
+      }
       toast.error(err instanceof ApiError ? err.message : t("common.error"));
       return false;
     } finally {
@@ -237,12 +257,24 @@ export function TagManagerCard({ catalog }: TagManagerCardProps) {
       }
       // Both kinds pin the resulting per-group order in the layout blob
       // so the resolved tree matches what the user just saw happen.
-      await apiPut("/api/mood/tags/layout", {
-        placements: buildVisiblePlacements(moved),
-      });
+      // v1.32.22 (R5b) — echo + seed the layout token so a concurrent write to
+      // the same blob 409s instead of clobbering.
+      const resolved = await apiPut<MoodTagLayoutResolved>(
+        "/api/mood/tags/layout",
+        withBaseToken(
+          { placements: buildVisiblePlacements(moved) },
+          readUpdatedAtToken(queryClient, queryKeys.moodTagLayout()),
+        ),
+      );
+      queryClient.setQueryData(queryKeys.moodTagLayout(), resolved);
       toast.success(t("common.saved"));
     } catch (err) {
       rollback();
+      if (isConflict(err)) {
+        queryClient.removeQueries({ queryKey: queryKeys.moodTagLayout() });
+        toast.message(t("common.conflictReloaded"));
+        return;
+      }
       toast.error(err instanceof ApiError ? err.message : t("common.error"));
     } finally {
       void invalidateMoodTagCaches(queryClient);

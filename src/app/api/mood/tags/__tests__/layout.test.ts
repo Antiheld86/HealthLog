@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 const db = vi.hoisted(() => ({
-  user: { findUnique: vi.fn(), update: vi.fn() },
+  user: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   moodTagCategory: { findMany: vi.fn() },
 }));
 
@@ -103,6 +103,8 @@ describe("PUT /api/mood/tags/layout", () => {
     expect(res.status).toBe(200);
     expect(db.user.update).toHaveBeenCalledWith({
       where: { id: "user-1" },
+      // v1.32.22 (M2) — tokenless write echoes the fresh `updatedAt` token.
+      select: { updatedAt: true },
       data: {
         moodTagLayoutJson: {
           groupOrder: ["custom", "feelings"],

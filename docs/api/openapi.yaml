@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HealthLog API
-  version: 1.32.21
+  version: 1.32.22
   description: >-
     Self-hosted personal-health-tracking PWA — public API surface for the iOS native client and external ingest.
 
@@ -4408,7 +4408,7 @@ paths:
         v1.4.22 defaults.
       responses:
         "200":
-          description: Resolved preferences.
+          description: Resolved preferences plus the `updatedAt` token.
           content:
             application/json:
               schema:
@@ -4420,104 +4420,31 @@ paths:
       tags:
         - Auth
       summary: Replace per-user Coach prompt-tuning preferences
-      description: Persists the supplied prefs. Body is validated against `CoachPrefs`; missing keys fall back to the
-        documented defaults.
+      description: "Persists the supplied prefs. Body is validated against `CoachPrefs`; missing keys fall back to the
+        documented defaults. Supports optimistic concurrency: echo the `updatedAt` from the last read as `baseUpdatedAt`
+        and the write is refused with 409 if the row changed since; omit it for the legacy unconditional write."
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                tone:
-                  default: warm
-                  type: string
-                  enum:
-                    - warm
-                    - neutral
-                    - concise
-                verbosity:
-                  default: default
-                  type: string
-                  enum:
-                    - brief
-                    - default
-                    - detailed
-                excludeMetrics:
-                  default: []
-                  maxItems: 11
-                  type: array
-                  items:
-                    type: string
-                    enum:
-                      - bp
-                      - weight
-                      - pulse
-                      - mood
-                      - compliance
-                      - hrv
-                      - sleep
-                      - resting_hr
-                      - steps
-                      - medications
-                      - anthropometrics
-                showEvidenceByDefault:
-                  default: false
-                  type: boolean
-                defaultWindow:
-                  default: allTime
-                  type: string
-                  enum:
-                    - last7days
-                    - last30days
-                    - last90days
-                    - allTime
-                dataClusters:
-                  maxItems: 10
-                  type: array
-                  items:
-                    type: string
-                    enum:
-                      - cardio
-                      - body
-                      - activity
-                      - workouts
-                      - sleep
-                      - mood
-                      - glucose
-                      - medication
-                      - mobility
-                      - environment
-                reminderSuggestions:
-                  type: object
-                  properties:
-                    enabled:
-                      default: true
-                      type: boolean
-                    stopped:
-                      default: false
-                      type: boolean
-                    dismissedCadences:
-                      default: []
-                      maxItems: 32
-                      type: array
-                      items:
-                        type: string
-                        maxLength: 64
-                    lastSuggestedAt:
-                      default: null
-                      anyOf:
-                        - type: string
-                          maxLength: 40
-                        - type: "null"
+              $ref: "#/components/schemas/PutCoachPrefsRequest"
       responses:
         "200":
-          description: Saved preferences echoed back.
+          description: Saved preferences echoed back with the fresh token.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/PutCoachPrefsResponse"
         "401": *a1
+        "409":
+          description: Coach preferences changed since it was loaded (optimistic-concurrency conflict). No write happened. Re-read
+            the resource, re-apply the user's change against the fresh state, and resend with the new token.
+            `meta.errorCode` = `coach_prefs_conflict`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a3
         "429": *a4
   /api/auth/me/disable-coach:
@@ -4637,12 +4564,20 @@ paths:
               $ref: "#/components/schemas/ModulePrefsPatchRequest"
       responses:
         "200":
-          description: Resolved next-state module map echoed back.
+          description: Resolved next-state module map echoed back with the fresh `updatedAt` token.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/PatchModulesResponse"
         "401": *a1
+        "409":
+          description: Module preferences changed since it was loaded (optimistic-concurrency conflict). No write happened.
+            Re-read the resource, re-apply the user's change against the fresh state, and resend with the new token.
+            `meta.errorCode` = `modules_conflict`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a3
         "429": *a4
   /api/auth/me/source-priority:
@@ -5630,7 +5565,7 @@ paths:
         nudges on).
       responses:
         "200":
-          description: Resolved preferences.
+          description: Resolved preferences plus the `updatedAt` token.
           content:
             application/json:
               schema:
@@ -5655,12 +5590,20 @@ paths:
               $ref: "#/components/schemas/NotificationPrefsPatchRequest"
       responses:
         "200":
-          description: Resolved next-state preferences echoed back.
+          description: Resolved next-state preferences echoed back with the fresh `updatedAt` token.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/PatchNotificationPrefsResponse"
         "401": *a1
+        "409":
+          description: Notification preferences changed since it was loaded (optimistic-concurrency conflict). No write happened.
+            Re-read the resource, re-apply the user's change against the fresh state, and resend with the new token.
+            `meta.errorCode` = `notification_prefs_conflict`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a3
         "429": *a4
   /api/insights/chat:
@@ -7944,35 +7887,23 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                groupOrder:
-                  maxItems: 50
-                  type: array
-                  items:
-                    type: string
-                    minLength: 1
-                    maxLength: 80
-                placements:
-                  type: object
-                  propertyNames:
-                    type: string
-                    minLength: 1
-                    maxLength: 80
-                  additionalProperties:
-                    type: array
-                    items:
-                      type: string
-                      minLength: 1
-                      maxLength: 80
+              $ref: "#/components/schemas/MoodTagLayoutPutRequest"
       responses:
         "200":
-          description: Merged + resolved layout.
+          description: Merged + resolved layout with the fresh token.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/MoodTagLayoutPutEnvelope"
         "401": *a1
+        "409":
+          description: Mood-tag layout changed since it was loaded (optimistic-concurrency conflict). No write happened. Re-read
+            the resource, re-apply the user's change against the fresh state, and resend with the new token.
+            `meta.errorCode` = `mood_tag_layout_conflict`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a3
         "429": *a4
   /api/settings/reminder-thresholds:
@@ -13054,6 +12985,101 @@ components:
     UpdateScheduleRevisionRequest:
       description: "Corrected schedule-era payload: replacement era bounds plus the daily dose times that were live during the era."
       $ref: "#/components/schemas/CreateScheduleRevisionRequest"
+    PutCoachPrefsRequest:
+      type: object
+      properties:
+        tone:
+          default: warm
+          type: string
+          enum:
+            - warm
+            - neutral
+            - concise
+        verbosity:
+          default: default
+          type: string
+          enum:
+            - brief
+            - default
+            - detailed
+        excludeMetrics:
+          default: []
+          maxItems: 11
+          type: array
+          items:
+            type: string
+            enum:
+              - bp
+              - weight
+              - pulse
+              - mood
+              - compliance
+              - hrv
+              - sleep
+              - resting_hr
+              - steps
+              - medications
+              - anthropometrics
+        showEvidenceByDefault:
+          default: false
+          type: boolean
+        defaultWindow:
+          default: allTime
+          type: string
+          enum:
+            - last7days
+            - last30days
+            - last90days
+            - allTime
+        dataClusters:
+          maxItems: 10
+          type: array
+          items:
+            type: string
+            enum:
+              - cardio
+              - body
+              - activity
+              - workouts
+              - sleep
+              - mood
+              - glucose
+              - medication
+              - mobility
+              - environment
+        reminderSuggestions:
+          type: object
+          properties:
+            enabled:
+              default: true
+              type: boolean
+            stopped:
+              default: false
+              type: boolean
+            dismissedCadences:
+              default: []
+              maxItems: 32
+              type: array
+              items:
+                type: string
+                maxLength: 64
+            lastSuggestedAt:
+              default: null
+              anyOf:
+                - type: string
+                  maxLength: 40
+                - type: "null"
+        baseUpdatedAt:
+          description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
+            legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
+            row still carrying this exact value — a stale token fails with 409 and changes nothing. Treat as opaque:
+            only ever echo a server-returned value, never parse or synthesise it."
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+      description: Coach prompt-tuning preferences to persist, plus the optional optimistic-concurrency `baseUpdatedAt` token.
+        The guarded write covers both `coachPrefsJson` and the mirrored `insightsExcludeMetrics` column atomically. Omit
+        the token for the legacy unconditional write.
     DisableCoachFlag:
       type: object
       properties:
@@ -13107,12 +13133,21 @@ components:
           type: boolean
         nutrients:
           type: boolean
+        baseUpdatedAt:
+          description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
+            legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
+            row still carrying this exact value — a stale token fails with 409 and changes nothing. Treat as opaque:
+            only ever echo a server-returned value, never parse or synthesise it."
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
       additionalProperties: false
       description: Partial module enable/disable update. Each key is an optional boolean; an omitted key is left untouched,
         `false` disables the module, `true` (re-)enables it. Only the toggleable "secondary domains" are accepted — a
         core-domain key (`weight`, `bloodPressure`, `pulse`, `medications`) or any unknown key is a 422, so the
         measurement engine + medications can never be disabled here. `cycle`/`coach` are accepted for forward-compat but
         their real enabled-state is owned elsewhere (the cycle gate / `disableCoach` + the operator assistant flag).
+        `baseUpdatedAt` is the optional optimistic-concurrency token — omit it for the legacy unconditional write.
     ProfileUpdateRequest:
       type: object
       properties:
@@ -13257,10 +13292,20 @@ components:
           properties:
             clientManaged:
               type: boolean
-      description: Partial per-user notification preferences. Every category and field is optional; the server deep-merges the
-        supplied keys over the persisted row, so a PATCH touching only `medication` leaves the siblings intact.
+        baseUpdatedAt:
+          description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
+            legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
+            row still carrying this exact value — a stale token fails with 409 and changes nothing. Treat as opaque:
+            only ever echo a server-returned value, never parse or synthesise it."
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+      description: "Partial per-user notification preferences. Every category and field is optional; the server deep-merges
+        the supplied keys over the persisted row, so a PATCH touching only `medication` leaves the siblings intact.
         `medication.lowStockRunwayDays` (1–60, nullable) is the low-stock alert threshold in remaining runway days —
-        `null` switches the alert off.
+        `null` switches the alert off. `baseUpdatedAt` is the optional optimistic-concurrency token: echo it to have the
+        server refuse (409) a write that would silently revert a category another writer set from a fresher read (e.g.
+        iOS `medication.clientManaged`). Omit it for the legacy unconditional write."
     FencedCoachChatRequest:
       type: object
       properties:
@@ -13625,6 +13670,40 @@ components:
         - mood
         - moodLoggedAt
       description: One bulk mood entry (UPSERT keyed by `externalId`).
+    MoodTagLayoutPutRequest:
+      type: object
+      properties:
+        groupOrder:
+          maxItems: 50
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 80
+        placements:
+          type: object
+          propertyNames:
+            type: string
+            minLength: 1
+            maxLength: 80
+          additionalProperties:
+            type: array
+            items:
+              type: string
+              minLength: 1
+              maxLength: 80
+        baseUpdatedAt:
+          description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
+            legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
+            row still carrying this exact value — a stale token fails with 409 and changes nothing. Treat as opaque:
+            only ever echo a server-returned value, never parse or synthesise it."
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+      description: Mood-tag layout to merge (preserve-when-absent), plus the optional optimistic-concurrency `baseUpdatedAt`
+        token. The two manage cards write different fields of the same blob; echo the token to have a stale write
+        refused with 409 instead of resurrecting the other card's overwritten field. Omit it for the legacy
+        unconditional write.
     MeasurementReminderCreate:
       type: object
       properties:
@@ -21778,102 +21857,7 @@ components:
       type: object
       properties:
         data:
-          type: object
-          properties:
-            tone:
-              default: warm
-              type: string
-              enum:
-                - warm
-                - neutral
-                - concise
-            verbosity:
-              default: default
-              type: string
-              enum:
-                - brief
-                - default
-                - detailed
-            excludeMetrics:
-              default: []
-              maxItems: 11
-              type: array
-              items:
-                type: string
-                enum:
-                  - bp
-                  - weight
-                  - pulse
-                  - mood
-                  - compliance
-                  - hrv
-                  - sleep
-                  - resting_hr
-                  - steps
-                  - medications
-                  - anthropometrics
-            showEvidenceByDefault:
-              default: false
-              type: boolean
-            defaultWindow:
-              default: allTime
-              type: string
-              enum:
-                - last7days
-                - last30days
-                - last90days
-                - allTime
-            dataClusters:
-              maxItems: 10
-              type: array
-              items:
-                type: string
-                enum:
-                  - cardio
-                  - body
-                  - activity
-                  - workouts
-                  - sleep
-                  - mood
-                  - glucose
-                  - medication
-                  - mobility
-                  - environment
-            reminderSuggestions:
-              type: object
-              properties:
-                enabled:
-                  default: true
-                  type: boolean
-                stopped:
-                  default: false
-                  type: boolean
-                dismissedCadences:
-                  default: []
-                  maxItems: 32
-                  type: array
-                  items:
-                    type: string
-                    maxLength: 64
-                lastSuggestedAt:
-                  default: null
-                  anyOf:
-                    - type: string
-                      maxLength: 40
-                    - type: "null"
-              required:
-                - enabled
-                - stopped
-                - dismissedCadences
-                - lastSuggestedAt
-              additionalProperties: false
-          required:
-            - tone
-            - verbosity
-            - excludeMetrics
-            - showEvidenceByDefault
-            - defaultWindow
-          additionalProperties: false
+          $ref: "#/components/schemas/CoachPrefsResponse"
         error:
           type: "null"
         meta:
@@ -21886,106 +21870,115 @@ components:
         - data
         - error
       additionalProperties: false
+    CoachPrefsResponse:
+      type: object
+      properties:
+        tone:
+          default: warm
+          type: string
+          enum:
+            - warm
+            - neutral
+            - concise
+        verbosity:
+          default: default
+          type: string
+          enum:
+            - brief
+            - default
+            - detailed
+        excludeMetrics:
+          default: []
+          maxItems: 11
+          type: array
+          items:
+            type: string
+            enum:
+              - bp
+              - weight
+              - pulse
+              - mood
+              - compliance
+              - hrv
+              - sleep
+              - resting_hr
+              - steps
+              - medications
+              - anthropometrics
+        showEvidenceByDefault:
+          default: false
+          type: boolean
+        defaultWindow:
+          default: allTime
+          type: string
+          enum:
+            - last7days
+            - last30days
+            - last90days
+            - allTime
+        dataClusters:
+          maxItems: 10
+          type: array
+          items:
+            type: string
+            enum:
+              - cardio
+              - body
+              - activity
+              - workouts
+              - sleep
+              - mood
+              - glucose
+              - medication
+              - mobility
+              - environment
+        reminderSuggestions:
+          type: object
+          properties:
+            enabled:
+              default: true
+              type: boolean
+            stopped:
+              default: false
+              type: boolean
+            dismissedCadences:
+              default: []
+              maxItems: 32
+              type: array
+              items:
+                type: string
+                maxLength: 64
+            lastSuggestedAt:
+              default: null
+              anyOf:
+                - type: string
+                  maxLength: 40
+                - type: "null"
+          required:
+            - enabled
+            - stopped
+            - dismissedCadences
+            - lastSuggestedAt
+          additionalProperties: false
+        updatedAt:
+          description: "Optimistic-concurrency token: the stored row's `updatedAt` at read/write time. Echo it back as
+            `baseUpdatedAt` on the next write. Opaque — only ever echo a server-returned value, never parse or
+            synthesise it."
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+      required:
+        - tone
+        - verbosity
+        - excludeMetrics
+        - showEvidenceByDefault
+        - defaultWindow
+      additionalProperties: false
     PutCoachPrefsResponse:
       type: object
       properties:
         data:
-          type: object
-          properties:
-            tone:
-              default: warm
-              type: string
-              enum:
-                - warm
-                - neutral
-                - concise
-            verbosity:
-              default: default
-              type: string
-              enum:
-                - brief
-                - default
-                - detailed
-            excludeMetrics:
-              default: []
-              maxItems: 11
-              type: array
-              items:
-                type: string
-                enum:
-                  - bp
-                  - weight
-                  - pulse
-                  - mood
-                  - compliance
-                  - hrv
-                  - sleep
-                  - resting_hr
-                  - steps
-                  - medications
-                  - anthropometrics
-            showEvidenceByDefault:
-              default: false
-              type: boolean
-            defaultWindow:
-              default: allTime
-              type: string
-              enum:
-                - last7days
-                - last30days
-                - last90days
-                - allTime
-            dataClusters:
-              maxItems: 10
-              type: array
-              items:
-                type: string
-                enum:
-                  - cardio
-                  - body
-                  - activity
-                  - workouts
-                  - sleep
-                  - mood
-                  - glucose
-                  - medication
-                  - mobility
-                  - environment
-            reminderSuggestions:
-              type: object
-              properties:
-                enabled:
-                  default: true
-                  type: boolean
-                stopped:
-                  default: false
-                  type: boolean
-                dismissedCadences:
-                  default: []
-                  maxItems: 32
-                  type: array
-                  items:
-                    type: string
-                    maxLength: 64
-                lastSuggestedAt:
-                  default: null
-                  anyOf:
-                    - type: string
-                      maxLength: 40
-                    - type: "null"
-              required:
-                - enabled
-                - stopped
-                - dismissedCadences
-                - lastSuggestedAt
-              additionalProperties: false
-          required:
-            - tone
-            - verbosity
-            - excludeMetrics
-            - showEvidenceByDefault
-            - defaultWindow
-          additionalProperties: false
+          $ref: "#/components/schemas/CoachPrefsResponse"
         error:
           type: "null"
         meta:
@@ -22088,6 +22081,13 @@ components:
       properties:
         modules:
           $ref: "#/components/schemas/ModuleMap"
+        updatedAt:
+          description: "Optimistic-concurrency token: the stored row's `updatedAt` at read/write time. Echo it back as
+            `baseUpdatedAt` on the next write. Opaque — only ever echo a server-returned value, never parse or
+            synthesise it."
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
       required:
         - modules
       additionalProperties: false
@@ -24067,7 +24067,7 @@ components:
       type: object
       properties:
         data:
-          $ref: "#/components/schemas/NotificationPrefs"
+          $ref: "#/components/schemas/NotificationPrefsResponse"
         error:
           type: "null"
         meta:
@@ -24080,7 +24080,7 @@ components:
         - data
         - error
       additionalProperties: false
-    NotificationPrefs:
+    NotificationPrefsResponse:
       type: object
       properties:
         medication:
@@ -24164,19 +24164,24 @@ components:
             - nudgeRoutine
             - nudgeFrequency
           additionalProperties: false
+        updatedAt:
+          description: "Optimistic-concurrency token: the stored row's `updatedAt` at read/write time. Echo it back as
+            `baseUpdatedAt` on the next write. Opaque — only ever echo a server-returned value, never parse or
+            synthesise it."
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
       required:
         - medication
         - mood
         - cycle
         - coach
       additionalProperties: false
-      description: Fully-resolved per-user notification preferences. Every key is present — a null / drifted persisted row
-        resolves to the documented defaults.
     PatchNotificationPrefsResponse:
       type: object
       properties:
         data:
-          $ref: "#/components/schemas/NotificationPrefs"
+          $ref: "#/components/schemas/NotificationPrefsResponse"
         error:
           type: "null"
         meta:
@@ -28517,12 +28522,20 @@ components:
             type: array
             items:
               type: string
+        updatedAt:
+          description: "Optimistic-concurrency token: the stored row's `updatedAt` at read/write time. Echo it back as
+            `baseUpdatedAt` on the next write. Opaque — only ever echo a server-returned value, never parse or
+            synthesise it."
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
       required:
         - groupOrder
         - placements
       additionalProperties: false
       description: "The stored layout merged over defaults: `groupOrder` fully resolved against the user's effective category
-        set, `placements` as stored."
+        set, `placements` as stored. `updatedAt` is the optimistic-concurrency token — echo it as `baseUpdatedAt` on the
+        next PUT."
     MoodTagLayoutPutEnvelope:
       type: object
       properties:

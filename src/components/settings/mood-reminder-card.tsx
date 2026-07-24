@@ -11,6 +11,7 @@ import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { apiFetchRaw, apiGet } from "@/lib/api/api-fetch";
+import { readUpdatedAtToken, withBaseToken } from "@/lib/api/optimistic-token";
 
 interface ProfileShape {
   moodReminderEnabled: boolean;
@@ -18,6 +19,9 @@ interface ProfileShape {
 
 interface NotificationPrefsShape {
   mood: { reminderHour: number };
+  // v1.32.22 (R5b) — optimistic-concurrency token, a sibling key on the
+  // resolved prefs response, echoed on the reminder-hour PATCH.
+  updatedAt?: string;
 }
 
 export function MoodReminderCard({
@@ -132,10 +136,18 @@ export function MoodReminderCard({
       clearTimerRef.current = null;
     }
 
+    // v1.32.22 (R5b) — echo the base token so a concurrent notification-prefs
+    // write (the iOS client's `clientManaged` flag, another web card) 409s
+    // instead of silently reverting a sibling category through the deep-merge.
     const res = await apiFetchRaw("/api/auth/me/notification-prefs", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mood: { reminderHour: next } }),
+      body: JSON.stringify(
+        withBaseToken(
+          { mood: { reminderHour: next } },
+          readUpdatedAtToken(queryClient, queryKeys.authNotificationPrefs()),
+        ),
+      ),
     });
 
     if (res.ok) {
@@ -145,6 +157,17 @@ export function MoodReminderCard({
         queryKey: queryKeys.authNotificationPrefs(),
       });
       setOptimisticHour(null);
+      scheduleClear();
+    } else if (res.status === 409) {
+      // The prefs advanced since they were loaded. Revert the optimistic hour
+      // and refetch (the active query reseeds a fresh token), then nudge — the
+      // change did not persist, so ask the user to re-apply it.
+      setOptimisticHour(null);
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.authNotificationPrefs(),
+      });
+      setMsg(t("common.conflictReloaded"));
+      setMsgType("error");
       scheduleClear();
     } else {
       setOptimisticHour(null);

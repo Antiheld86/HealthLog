@@ -20,6 +20,11 @@ import { apiSuccess } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { prisma } from "@/lib/db";
 import {
+  takeBaseToken,
+  guardedUserUpdate,
+  invalidBaseTokenError,
+} from "@/lib/optimistic-lock";
+import {
   coachPrefsSchema,
   parseCoachPrefs,
 } from "@/lib/validations/coach-prefs";
@@ -32,9 +37,18 @@ export const GET = apiHandler(async () => {
 
   const row = await prisma.user.findUnique({
     where: { id: user.id },
-    select: { coachPrefsJson: true },
+    select: { coachPrefsJson: true, updatedAt: true },
   });
-  return apiSuccess(parseCoachPrefs(row?.coachPrefsJson));
+  const prefs = parseCoachPrefs(row?.coachPrefsJson);
+  // v1.32.22 (M4) — a never-saved user gets the PURE default with NO token
+  // (mirrors the insights-layout never-saved GET). There is nothing to guard
+  // against yet, and the first save is just the tokenless unconditional write.
+  // A saved row carries `updatedAt` (additive sibling key; the prefs shape is a
+  // fixed key set, so it cannot collide) so the client can echo it.
+  if (row?.coachPrefsJson == null) {
+    return apiSuccess(prefs);
+  }
+  return apiSuccess({ ...prefs, updatedAt: row.updatedAt?.toISOString() });
 });
 
 export const PUT = apiHandler(async (req: Request) => {
@@ -46,7 +60,15 @@ export const PUT = apiHandler(async (req: Request) => {
     throw new HttpError(422, "coach-prefs.body.invalid_json");
   }
 
-  const parsed = coachPrefsSchema.safeParse(body ?? {});
+  // v1.32.22 (M4) — pull the optimistic-concurrency base token off before the
+  // parse. This is a full-replace endpoint, so the classic two-tab / two-device
+  // stale-replace clobbers silently: the form was hydrated from a GET minutes
+  // ago. The token closes that window.
+  const taken = takeBaseToken(body ?? {});
+  if ("invalid" in taken) return invalidBaseTokenError();
+  const base = taken.base;
+
+  const parsed = coachPrefsSchema.safeParse(taken.rest ?? {});
   if (!parsed.success) {
     annotate({
       action: { name: "auth.me.coach-prefs.put.invalid" },
@@ -63,13 +85,23 @@ export const PUT = apiHandler(async (req: Request) => {
   // Coach snapshot share a single source of truth. Keeps the user's
   // privacy contract symmetric across the two surfaces without
   // requiring a separate Insights settings sheet.
-  await prisma.user.update({
-    where: { id: user.id },
+  // v1.32.22 (M4) — the guarded write covers BOTH columns in one conditional
+  // update so the mirror-column contract (v1.4.36 W3 T3) stays unsplittable: a
+  // 409 leaves `coachPrefsJson` AND `insightsExcludeMetrics` untouched together.
+  const guarded = await guardedUserUpdate({
+    userId: user.id,
+    base,
     data: {
       coachPrefsJson: parsed.data,
       insightsExcludeMetrics: parsed.data.excludeMetrics,
     },
+    conflict: {
+      action: "auth.me.coach-prefs.conflict",
+      errorCode: "coach_prefs_conflict",
+      message: "Coach preferences changed since they were loaded",
+    },
   });
+  if ("conflict" in guarded) return guarded.conflict;
 
   annotate({
     action: { name: "auth.me.coach-prefs.put" },
@@ -83,5 +115,5 @@ export const PUT = apiHandler(async (req: Request) => {
       clusterCount: parsed.data.dataClusters?.length ?? null,
     },
   });
-  return apiSuccess(parsed.data);
+  return apiSuccess({ ...parsed.data, updatedAt: guarded.updatedAt });
 });

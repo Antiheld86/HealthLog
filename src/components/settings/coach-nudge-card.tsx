@@ -26,6 +26,7 @@ import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { apiFetchRaw, apiGet } from "@/lib/api/api-fetch";
+import { readUpdatedAtToken, withBaseToken } from "@/lib/api/optimistic-token";
 
 interface CoachPrefsShape {
   nudgesEnabled: boolean;
@@ -39,6 +40,9 @@ interface CoachPrefsShape {
 
 interface NotificationPrefsShape {
   coach: CoachPrefsShape;
+  // v1.32.22 (R5b) — optimistic-concurrency token, a sibling key on the
+  // resolved prefs response, echoed on every PATCH from this card.
+  updatedAt?: string;
 }
 
 const COACH_PREF_DEFAULTS: CoachPrefsShape = {
@@ -140,10 +144,18 @@ export function CoachNudgeCard({
       clearTimerRef.current = null;
     }
 
+    // v1.32.22 (R5b) — echo the base token so a concurrent notification-prefs
+    // write (the iOS client, another web card) 409s instead of reverting a
+    // sibling category through the server-side deep-merge.
     const res = await apiFetchRaw("/api/auth/me/notification-prefs", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ coach: partial }),
+      body: JSON.stringify(
+        withBaseToken(
+          { coach: partial },
+          readUpdatedAtToken(queryClient, queryKeys.authNotificationPrefs()),
+        ),
+      ),
     });
 
     if (res.ok) {
@@ -156,6 +168,17 @@ export function CoachNudgeCard({
         queryKey: queryKeys.authNotificationPrefs(),
       });
       setOptimistic({});
+    } else if (res.status === 409) {
+      // The prefs advanced since they were loaded. Revert the optimistic knob
+      // and refetch (the active query reseeds a fresh token), then nudge — the
+      // change did not persist, so ask the user to re-apply it.
+      setOptimistic({});
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.authNotificationPrefs(),
+      });
+      setMsg(t("common.conflictReloaded"));
+      setMsgType("error");
+      scheduleClear();
     } else {
       setOptimistic({});
       setMsg(t("notifications.coachNudge.saveError"));

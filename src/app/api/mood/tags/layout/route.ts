@@ -3,6 +3,11 @@ import { NextRequest } from "next/server";
 import { prisma, toJson } from "@/lib/db";
 import { apiSuccess, returnAllZodIssues, safeJson } from "@/lib/api-response";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
+import {
+  takeBaseToken,
+  guardedUserUpdate,
+  invalidBaseTokenError,
+} from "@/lib/optimistic-lock";
 import { annotate } from "@/lib/logging/context";
 import {
   moodTagLayoutSchema,
@@ -33,9 +38,11 @@ export const dynamic = "force-dynamic";
 async function resolveLayoutResponse(
   userId: string,
   layout: MoodTagLayout,
+  updatedAt?: string,
 ): Promise<{
   groupOrder: string[];
   placements: Record<string, string[]>;
+  updatedAt?: string;
 }> {
   const categories = await prisma.moodTagCategory.findMany({
     where: { isActive: true, OR: [{ userId: null }, { userId }] },
@@ -48,6 +55,9 @@ async function resolveLayoutResponse(
       layout.groupOrder,
     ),
     placements: layout.placements ?? {},
+    // v1.32.22 (M2) — optimistic-concurrency token; omitted (dropped from
+    // JSON) when absent so a fresh user's response shape is unchanged.
+    ...(updatedAt !== undefined ? { updatedAt } : {}),
   };
 }
 
@@ -55,10 +65,12 @@ export const GET = apiHandler(async () => {
   const { user } = await requireAuth();
   const row = await prisma.user.findUnique({
     where: { id: user.id },
-    select: { moodTagLayoutJson: true },
+    select: { moodTagLayoutJson: true, updatedAt: true },
   });
   const stored = parseStoredMoodTagLayout(row?.moodTagLayoutJson);
-  return apiSuccess(await resolveLayoutResponse(user.id, stored));
+  return apiSuccess(
+    await resolveLayoutResponse(user.id, stored, row?.updatedAt?.toISOString()),
+  );
 });
 
 export const PUT = apiHandler(async (request: NextRequest) => {
@@ -68,7 +80,16 @@ export const PUT = apiHandler(async (request: NextRequest) => {
     maxBytes: 64 * 1024,
   });
   if (jsonError) return jsonError;
-  const parsed = moodTagLayoutSchema.safeParse(rawJsonBody);
+
+  // v1.32.22 (M2) — split the optimistic-concurrency base token off before the
+  // Zod parse. The two cards on this page write DIFFERENT fields of the same
+  // blob (group order vs placements); a stale merge would resurrect the other
+  // card's overwritten field, which the token now 409s instead.
+  const taken = takeBaseToken(rawJsonBody);
+  if ("invalid" in taken) return invalidBaseTokenError();
+  const base = taken.base;
+
+  const parsed = moodTagLayoutSchema.safeParse(taken.rest);
   if (!parsed.success) return returnAllZodIssues(parsed.error, 422);
 
   // Preserve-when-absent: a PUT carrying only `groupOrder` must not wipe
@@ -88,10 +109,17 @@ export const PUT = apiHandler(async (request: NextRequest) => {
       : {}),
   });
 
-  await prisma.user.update({
-    where: { id: user.id },
+  const guarded = await guardedUserUpdate({
+    userId: user.id,
+    base,
     data: { moodTagLayoutJson: toJson(merged) },
+    conflict: {
+      action: "mood.tag.layout.conflict",
+      errorCode: "mood_tag_layout_conflict",
+      message: "Mood-tag layout changed since it was loaded",
+    },
   });
+  if ("conflict" in guarded) return guarded.conflict;
 
   annotate({
     action: { name: "mood.tag.layout.update" },
@@ -101,5 +129,7 @@ export const PUT = apiHandler(async (request: NextRequest) => {
     },
   });
 
-  return apiSuccess(await resolveLayoutResponse(user.id, merged));
+  return apiSuccess(
+    await resolveLayoutResponse(user.id, merged, guarded.updatedAt),
+  );
 });

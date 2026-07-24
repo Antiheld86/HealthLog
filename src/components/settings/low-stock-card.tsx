@@ -12,6 +12,7 @@ import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { apiFetchRaw, apiGet } from "@/lib/api/api-fetch";
+import { readUpdatedAtToken, withBaseToken } from "@/lib/api/optimistic-token";
 
 /**
  * v1.16.11 — medication low-stock alert threshold (Settings →
@@ -26,6 +27,9 @@ import { apiFetchRaw, apiGet } from "@/lib/api/api-fetch";
 
 interface NotificationPrefsShape {
   medication: { lowStockRunwayDays: number | null; reorderLeadDays?: number };
+  // v1.32.22 (R5b) — optimistic-concurrency token, a sibling key on the
+  // resolved prefs response, echoed on every PATCH from this card.
+  updatedAt?: string;
 }
 
 const DEFAULT_DAYS = 7;
@@ -116,10 +120,18 @@ export function LowStockCard({
       clearTimerRef.current = null;
     }
 
+    // v1.32.22 (R5b) — echo the base token so a concurrent notification-prefs
+    // write (the iOS client, another web card) 409s instead of reverting a
+    // sibling category through the server-side deep-merge.
     const res = await apiFetchRaw("/api/auth/me/notification-prefs", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(
+        withBaseToken(
+          body,
+          readUpdatedAtToken(queryClient, queryKeys.authNotificationPrefs()),
+        ),
+      ),
     });
 
     if (res.ok) {
@@ -133,6 +145,15 @@ export function LowStockCard({
           queryKey: queryKeys.settingsReminderThresholds(),
         }),
       ]);
+    } else if (res.status === 409) {
+      // The prefs advanced since they were loaded. Refetch (the active query
+      // reseeds a fresh token) and nudge — the caller reverts its optimistic
+      // value, so the card snaps back to server truth for a re-apply.
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.authNotificationPrefs(),
+      });
+      setMsg(t("common.conflictReloaded"));
+      setMsgType("error");
     } else {
       setMsg(t("notifications.lowStock.saveError"));
       setMsgType("error");

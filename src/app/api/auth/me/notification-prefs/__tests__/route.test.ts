@@ -5,6 +5,7 @@ vi.mock("@/lib/db", () => ({
     user: {
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
   toJson: <T>(v: T) => v,
@@ -234,10 +235,13 @@ describe("PATCH /api/auth/me/notification-prefs", () => {
       measurementReminder: {
         clientManaged: false,
       },
+      // v1.32.22 (M1) — the write echoes the fresh optimistic-concurrency token.
+      updatedAt: expect.any(String),
     });
 
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "user-1" },
+      select: { updatedAt: true },
       data: {
         notificationPrefs: {
           medication: {
@@ -365,6 +369,7 @@ describe("PATCH /api/auth/me/notification-prefs", () => {
 
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "user-1" },
+      select: { updatedAt: true },
       data: {
         notificationPrefs: {
           medication: {
@@ -427,10 +432,13 @@ describe("PATCH /api/auth/me/notification-prefs", () => {
       measurementReminder: {
         clientManaged: false,
       },
+      // v1.32.22 (M1) — the write echoes the fresh optimistic-concurrency token.
+      updatedAt: expect.any(String),
     });
 
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "user-1" },
+      select: { updatedAt: true },
       data: {
         notificationPrefs: {
           medication: {
@@ -476,6 +484,7 @@ describe("PATCH /api/auth/me/notification-prefs", () => {
 
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "user-1" },
+      select: { updatedAt: true },
       data: {
         notificationPrefs: {
           medication: {
@@ -531,6 +540,7 @@ describe("PATCH /api/auth/me/notification-prefs", () => {
 
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "user-1" },
+      select: { updatedAt: true },
       data: {
         notificationPrefs: expect.objectContaining({
           medication: {
@@ -585,6 +595,116 @@ describe("PATCH /api/auth/me/notification-prefs", () => {
       mkPatch({ medication: { clientManaged: true } }),
     );
     expect(res.status).toBe(429);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * v1.32.22 (M1) — optimistic concurrency (issue #581 family). A PATCH carrying
+ * the `baseUpdatedAt` it was based on writes CONDITIONALLY on the stored row
+ * still carrying that token. The headline case: a concurrent web PATCH of a
+ * DIFFERENT category can no longer silently revert the iOS `clientManaged`
+ * flag (the double-reminder class). A tokenless PATCH keeps the prior
+ * unconditional write — the iOS-compat arm.
+ */
+describe("PATCH /api/auth/me/notification-prefs — optimistic concurrency", () => {
+  function mkTokenedPatch(body: unknown, baseUpdatedAt?: string): Request {
+    return mkPatch(
+      baseUpdatedAt !== undefined
+        ? { ...(body as object), baseUpdatedAt }
+        : body,
+    );
+  }
+
+  it("guards on the base token and echoes the advanced token", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    vi.mocked(prisma.user.findUnique)
+      // merge read
+      .mockResolvedValueOnce({ notificationPrefs: null } as never)
+      // post-write fresh-token read
+      .mockResolvedValueOnce({
+        updatedAt: new Date("2026-07-24T10:05:00.000Z"),
+      } as never);
+    vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 1 } as never);
+
+    const res = await (PATCH as (r: Request) => Promise<Response>)(
+      mkTokenedPatch(
+        { medication: { clientManaged: true } },
+        "2026-07-24T10:00:00.000Z",
+      ),
+    );
+    expect(res.status).toBe(200);
+
+    // Conditional write, no unconditional fallback.
+    expect(prisma.user.updateMany).toHaveBeenCalledTimes(1);
+    const whereArg = vi.mocked(prisma.user.updateMany).mock.calls[0]?.[0]
+      ?.where as { id: string; updatedAt: Date };
+    expect(whereArg.id).toBe("user-1");
+    expect((whereArg.updatedAt as Date).toISOString()).toBe(
+      "2026-07-24T10:00:00.000Z",
+    );
+    expect(prisma.user.update).not.toHaveBeenCalled();
+
+    const env = (await res.json()) as { data: { updatedAt: string } };
+    expect(env.data.updatedAt).toBe("2026-07-24T10:05:00.000Z");
+  });
+
+  it("regression: a stale-token web write does NOT revert the iOS clientManaged flag", async () => {
+    // iOS set medication.clientManaged = true (row now carries it). A web card
+    // PATCH based on a pre-iOS read of a DIFFERENT category arrives with a stale
+    // token: it must 409 and write NOTHING, so clientManaged survives.
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      notificationPrefs: { medication: { clientManaged: true } },
+    } as never);
+    vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 0 } as never);
+
+    const res = await (PATCH as (r: Request) => Promise<Response>)(
+      mkTokenedPatch({ mood: { reminderHour: 9 } }, "2026-07-24T08:00:00.000Z"),
+    );
+    expect(res.status).toBe(409);
+    const env = (await res.json()) as {
+      data: null;
+      meta?: { errorCode?: string };
+    };
+    expect(env.data).toBeNull();
+    expect(env.meta?.errorCode).toBe("notification_prefs_conflict");
+
+    // The guarded write matched no row; nothing was written, so the persisted
+    // clientManaged flag is untouched.
+    expect(prisma.user.updateMany).toHaveBeenCalledTimes(1);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("compat: the SAME second write TOKENLESS still lands (old clients keep last-write-wins)", async () => {
+    // Deliberate: a tokenless client keeps the pre-guard race. This pins that
+    // the clobber for old clients is a documented choice, not an accident.
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      notificationPrefs: { medication: { clientManaged: true } },
+    } as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({
+      updatedAt: new Date("2026-07-24T11:00:00.000Z"),
+    } as never);
+
+    const res = await (PATCH as (r: Request) => Promise<Response>)(
+      mkPatch({ mood: { reminderHour: 9 } }),
+    );
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledTimes(1);
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("422s a malformed base token without touching the row", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+
+    const res = await (PATCH as (r: Request) => Promise<Response>)(
+      mkTokenedPatch({ medication: { clientManaged: true } }, "not-a-date"),
+    );
+    expect(res.status).toBe(422);
+    const env = (await res.json()) as { meta?: { errorCode?: string } };
+    expect(env.meta?.errorCode).toBe("invalid_base_updated_at");
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 });
