@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 // exercised without a real Postgres / encryption key. The transaction
 // runner simply invokes the callback with the stubbed `tx`.
 const txCreate = {
-  coachConversation: { create: vi.fn() },
+  coachConversation: { create: vi.fn(), update: vi.fn() },
   coachMessage: { create: vi.fn() },
 };
 vi.mock("@/lib/db", () => ({
@@ -21,8 +21,13 @@ vi.mock("../bytes-codec", () => ({
   decryptFromBytes: vi.fn(),
 }));
 
-import { recordProactiveNudge, summariseTitle } from "../persistence";
+import {
+  appendMessage,
+  recordProactiveNudge,
+  summariseTitle,
+} from "../persistence";
 import { encryptToBytes } from "../bytes-codec";
+import type { CoachProvenance } from "../types";
 
 describe("summariseTitle", () => {
   it("returns the input unchanged when below 80 chars", () => {
@@ -109,5 +114,139 @@ describe("recordProactiveNudge", () => {
     expect(new TextDecoder().decode(msgArg.data.encryptedContent)).toContain(
       "enc:",
     );
+  });
+});
+
+describe("appendMessage — provenance round-trip", () => {
+  // Echo the serialised metricSourceJson the write path produced, so the read
+  // path (`provenanceFromJson`) round-trips it exactly as a reload would.
+  function stubEchoCreate(overrideJson?: string | null): void {
+    txCreate.coachConversation.update.mockResolvedValue({});
+    txCreate.coachMessage.create.mockImplementation(
+      async (arg: {
+        data: {
+          metricSourceJson: string | null;
+          providerType: string | null;
+          promptVersion: string | null;
+          tokensUsed: number | null;
+          model: string | null;
+        };
+      }) => ({
+        id: "m_rt",
+        createdAt: new Date("2026-07-24T00:00:00.000Z"),
+        metricSourceJson:
+          overrideJson !== undefined ? overrideJson : arg.data.metricSourceJson,
+        providerType: arg.data.providerType,
+        promptVersion: arg.data.promptVersion,
+        tokensUsed: arg.data.tokensUsed,
+        model: arg.data.model,
+      }),
+    );
+  }
+
+  it("restores the FULL envelope on reload — including suggestion, suggestedAction and toolCalls (v1.32.14 reload fix)", async () => {
+    stubEchoCreate();
+    const envelope: CoachProvenance = {
+      windows: ["last30days"],
+      metrics: ["bp"],
+      counts: { bp: 12 },
+      keyValues: [{ label: "Systolic", value: "128", unit: "mmHg" }],
+      groundedFigures: [128],
+      suggestion: {
+        cadenceId: "bp-weekly",
+        measurementType: "bp",
+        label: "coach.suggest.bp",
+      },
+      suggestedAction: {
+        actionType: "reminder.note",
+        summary: "Recheck your evening reading",
+        titleKey: "coach.suggestedAction.reminder.note",
+        params: {
+          actionType: "reminder.note",
+          note: "Recheck BP in the evening",
+          when: "evening",
+          metric: "bp",
+        },
+      },
+      toolCalls: [{ name: "get_metric_series", present: true }],
+      unverifiedFigures: 2,
+    };
+
+    const out = await appendMessage({
+      conversationId: "conv_1",
+      role: "assistant",
+      content: "Your systolic averaged 128.",
+      metricSource: envelope,
+    });
+
+    // Before the fix, suggestion/suggestedAction/toolCalls were dropped here.
+    expect(out.metricSource).toEqual(envelope);
+  });
+
+  it("round-trips a checkup.create action card", async () => {
+    stubEchoCreate();
+    const envelope: CoachProvenance = {
+      windows: [],
+      metrics: [],
+      suggestedAction: {
+        actionType: "checkup.create",
+        summary: "Book a yearly check-up",
+        titleKey: "coach.suggestedAction.checkup.create",
+        params: {
+          actionType: "checkup.create",
+          label: "Annual physical",
+          interval: "yearly",
+        },
+      },
+    };
+    const out = await appendMessage({
+      conversationId: "conv_1",
+      role: "assistant",
+      content: "Consider a yearly check-up.",
+      metricSource: envelope,
+    });
+    expect(out.metricSource).toEqual(envelope);
+  });
+
+  it("tolerates a legacy blob without the new fields (no throw, fields absent)", async () => {
+    // A pre-feature row: only the original windows/metrics envelope on disk.
+    stubEchoCreate(
+      JSON.stringify({ windows: ["last7days"], metrics: ["sleep"] }),
+    );
+    const out = await appendMessage({
+      conversationId: "conv_1",
+      role: "assistant",
+      content: "old row",
+      metricSource: { windows: [], metrics: [] },
+    });
+    expect(out.metricSource).toEqual({
+      windows: ["last7days"],
+      metrics: ["sleep"],
+    });
+    expect(out.metricSource?.unverifiedFigures).toBeUndefined();
+    expect(out.metricSource?.suggestion).toBeUndefined();
+  });
+
+  it("drops a malformed unverifiedFigures / suggestedAction rather than trusting it", async () => {
+    stubEchoCreate(
+      JSON.stringify({
+        windows: [],
+        metrics: [],
+        unverifiedFigures: -3, // negative → dropped
+        suggestion: { cadenceId: 42 }, // wrong type → dropped
+        suggestedAction: { actionType: "medication.create" }, // off-allowlist → dropped
+        toolCalls: [{ name: "ok", present: "yes" }], // present not boolean → dropped
+      }),
+    );
+    const out = await appendMessage({
+      conversationId: "conv_1",
+      role: "assistant",
+      content: "malformed",
+      metricSource: { windows: [], metrics: [] },
+    });
+    expect(out.metricSource?.unverifiedFigures).toBeUndefined();
+    expect(out.metricSource?.suggestion).toBeUndefined();
+    expect(out.metricSource?.suggestedAction).toBeUndefined();
+    expect(out.metricSource?.toolCalls).toBeUndefined();
   });
 });

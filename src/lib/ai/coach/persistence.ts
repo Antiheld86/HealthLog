@@ -13,6 +13,11 @@
 import { prisma } from "@/lib/db";
 import { decryptFromBytes, encryptToBytes } from "./bytes-codec";
 import { COACH_CONVERSATION_TITLE_MAX } from "./types";
+import {
+  isCheckupIntervalId,
+  isSuggestedActionType,
+  type CoachSuggestedAction,
+} from "./suggest-action";
 
 import type {
   CoachConversationAttachmentDTO,
@@ -21,6 +26,7 @@ import type {
   CoachMessageDTO,
   CoachMessageRole,
   CoachProvenance,
+  CoachSuggestion,
 } from "./types";
 
 /**
@@ -53,6 +59,107 @@ export function summariseTitle(input: string): string {
 function provenanceToJson(provenance: CoachProvenance | null): string | null {
   if (!provenance) return null;
   return JSON.stringify(provenance);
+}
+
+/**
+ * v1.32.14 — defensive restore of the cadence-suggestion card. The value was
+ * server-written (JSON.stringify of the envelope the server itself built), yet a
+ * persisted blob is parsed shape-first and never blindly trusted: every field
+ * must be the expected type or the whole card is dropped, mirroring the keyValues
+ * restore. Fixes the reload gap where a persisted card silently vanished.
+ */
+function restoreSuggestion(raw: unknown): CoachSuggestion | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const c = raw as Record<string, unknown>;
+  if (
+    typeof c.cadenceId === "string" &&
+    typeof c.measurementType === "string" &&
+    typeof c.label === "string"
+  ) {
+    return {
+      cadenceId: c.cadenceId,
+      measurementType: c.measurementType,
+      label: c.label,
+    };
+  }
+  return undefined;
+}
+
+/**
+ * v1.32.14 — defensive restore of the confirm→apply action card. Validates the
+ * discriminated `params` against the SAME closed allowlists the write path used
+ * (`isSuggestedActionType`, `isCheckupIntervalId`); anything that fails the shape
+ * check is dropped rather than trusted. Fixes the reload gap.
+ */
+function restoreSuggestedAction(
+  raw: unknown,
+): CoachSuggestedAction | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const c = raw as Record<string, unknown>;
+  if (
+    typeof c.actionType !== "string" ||
+    !isSuggestedActionType(c.actionType) ||
+    typeof c.summary !== "string" ||
+    typeof c.titleKey !== "string" ||
+    !c.params ||
+    typeof c.params !== "object"
+  ) {
+    return undefined;
+  }
+  const p = c.params as Record<string, unknown>;
+  if (c.actionType === "checkup.create") {
+    if (
+      p.actionType === "checkup.create" &&
+      typeof p.label === "string" &&
+      typeof p.interval === "string" &&
+      isCheckupIntervalId(p.interval)
+    ) {
+      return {
+        actionType: "checkup.create",
+        summary: c.summary,
+        titleKey: c.titleKey,
+        params: {
+          actionType: "checkup.create",
+          label: p.label,
+          interval: p.interval,
+        },
+      };
+    }
+    return undefined;
+  }
+  // reminder.note — `note` required, `when` / `metric` optional strings.
+  if (p.actionType === "reminder.note" && typeof p.note === "string") {
+    return {
+      actionType: "reminder.note",
+      summary: c.summary,
+      titleKey: c.titleKey,
+      params: {
+        actionType: "reminder.note",
+        note: p.note,
+        ...(typeof p.when === "string" ? { when: p.when } : {}),
+        ...(typeof p.metric === "string" ? { metric: p.metric } : {}),
+      },
+    };
+  }
+  return undefined;
+}
+
+/**
+ * v1.32.14 — defensive restore of the retrieval-tool trace ("what I looked at").
+ * Keeps only well-formed `{ name, present }` entries; an empty or malformed array
+ * restores to undefined. Fixes the reload gap.
+ */
+function restoreToolCalls(raw: unknown): CoachProvenance["toolCalls"] {
+  if (!Array.isArray(raw)) return undefined;
+  const cleaned: Array<{ name: string; present: boolean }> = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const c = item as Record<string, unknown>;
+    if (typeof c.name === "string" && typeof c.present === "boolean") {
+      cleaned.push({ name: c.name, present: c.present });
+    }
+  }
+  return cleaned.length > 0 ? cleaned : undefined;
 }
 
 function provenanceFromJson(raw: string | null): CoachProvenance | null {
@@ -123,12 +230,35 @@ function provenanceFromJson(raw: string | null): CoachProvenance | null {
       );
       if (nums.length > 0) groundedFigures = nums;
     }
+    // v1.32.14 — count of figures the grounding guard withheld from this reply.
+    // Positive integer only; a legacy row without the field, a non-number, or a
+    // zero/negative value restores to undefined (no notice).
+    let unverifiedFigures: number | undefined;
+    if (
+      typeof parsed.unverifiedFigures === "number" &&
+      Number.isInteger(parsed.unverifiedFigures) &&
+      parsed.unverifiedFigures > 0
+    ) {
+      unverifiedFigures = parsed.unverifiedFigures;
+    }
+    // v1.32.14 — the action cards + tool trace were serialised on write but
+    // previously dropped here, so they silently vanished on every conversation
+    // reload despite the render layer expecting them to survive. Restore them
+    // (defensively parsed) so the suggestion card, action card, and "what I
+    // looked at" trace re-render.
+    const suggestion = restoreSuggestion(parsed.suggestion);
+    const suggestedAction = restoreSuggestedAction(parsed.suggestedAction);
+    const toolCalls = restoreToolCalls(parsed.toolCalls);
     return {
       windows,
       metrics,
       counts,
       ...(keyValues ? { keyValues } : {}),
       ...(groundedFigures ? { groundedFigures } : {}),
+      ...(suggestion ? { suggestion } : {}),
+      ...(suggestedAction ? { suggestedAction } : {}),
+      ...(toolCalls ? { toolCalls } : {}),
+      ...(unverifiedFigures !== undefined ? { unverifiedFigures } : {}),
     };
   } catch {
     return null;

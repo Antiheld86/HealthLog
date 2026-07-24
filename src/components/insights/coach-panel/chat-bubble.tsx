@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Clock,
   Copy,
+  Info,
   Loader2,
   RotateCcw,
   Sparkles,
@@ -604,6 +605,18 @@ function ChatBubbleImpl({
       ? selectCoachChartTokens(content, metricSource?.metrics)
       : [];
 
+  // v1.32.14 — quiet per-message notice: the grounding guard withheld ≥1 figure
+  // from this reply (each rewritten to the `[…]` elision mark). Shown only on a
+  // SETTLED assistant turn — skipped while in-flight, on errored and refusal
+  // turns — mirroring the token-footer gating. Rides `metricSource` so it survives
+  // reload with no memo change (the comparator already ref-checks metricSource).
+  const showUnverifiedNotice =
+    !inProgress &&
+    !errorCode &&
+    providerType !== "refusal" &&
+    !!content &&
+    (metricSource?.unverifiedFigures ?? 0) > 0;
+
   return (
     <div
       data-slot="coach-bubble-assistant"
@@ -657,6 +670,19 @@ function ChatBubbleImpl({
         )}
         {safeError && content && (
           <p className="text-warning text-xs">{safeError}</p>
+        )}
+        {/* v1.32.14 — quiet grounding caveat when the guard withheld a figure.
+            Muted meta (UI-STANDARDS §3), never a warning colour — it is a
+            grounding caveat, not an error. Static single line, decorative icon,
+            no interactivity. The `[…]` marks in the prose above point here. */}
+        {showUnverifiedNotice && (
+          <p
+            data-slot="coach-unverified-notice"
+            className="text-muted-foreground flex items-start gap-1.5 text-xs leading-relaxed"
+          >
+            <Info aria-hidden="true" className="mt-0.5 size-3 shrink-0" />
+            {t("insights.coach.unverifiedFiguresNotice")}
+          </p>
         )}
         {/* v1.22 (W5) — accompanying chart(s). The token was already
             stripped from the prose by <StreamedProse>; here it mounts the

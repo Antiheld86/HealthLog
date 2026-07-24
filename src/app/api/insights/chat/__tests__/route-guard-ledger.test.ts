@@ -260,6 +260,18 @@ function assistantContent(): string {
   return (assistant?.[0] as { content: string }).content;
 }
 
+function assistantProvenance(): Record<string, unknown> | null | undefined {
+  const calls = (appendMessage as ReturnType<typeof vi.fn>).mock.calls;
+  const assistant = calls.find(
+    (c) => (c[0] as { role: string }).role === "assistant",
+  );
+  return (
+    assistant?.[0] as {
+      metricSource?: Record<string, unknown> | null;
+    }
+  ).metricSource;
+}
+
 describe("coach chat — cross-turn Grounding Ledger (G2)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -301,6 +313,9 @@ describe("coach chat — cross-turn Grounding Ledger (G2)", () => {
     expect(content).toContain("128");
     expect(content).toContain("440");
     expect(content).not.toContain("[unverified]");
+    expect(content).not.toContain("[…]");
+    // v1.32.14 — a fully grounded reply carries NO unverifiedFigures key.
+    expect(assistantProvenance()?.unverifiedFigures).toBeUndefined();
   });
 
   it("does NOT let a number from a prior ASSISTANT REPLY ground the next turn (D3 / H3)", async () => {
@@ -331,6 +346,10 @@ describe("coach chat — cross-turn Grounding Ledger (G2)", () => {
 
     const content = assistantContent();
     expect(content).not.toContain("158");
-    expect(content).toContain("[unverified]");
+    // v1.32.14 — the withheld figure reads as the editorial elision mark, never
+    // the old internal QA literal, and the count rides the provenance envelope.
+    expect(content).toContain("[…]");
+    expect(content).not.toContain("[unverified]");
+    expect(assistantProvenance()?.unverifiedFigures).toBe(1);
   });
 });

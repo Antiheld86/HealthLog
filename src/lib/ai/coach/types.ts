@@ -379,6 +379,15 @@ export interface CoachProvenance {
    * already persists cited values. Absent when the turn fetched no figures.
    */
   groundedFigures?: ReadonlyArray<number>;
+  /**
+   * v1.32.14 — the count of numeric tokens the post-hoc grounding guard withheld
+   * from this reply (each rewritten to the editorial elision mark `[…]`). Drives
+   * the quiet per-message "some figures couldn't be checked" notice under the
+   * bubble. COUNT ONLY, never the withheld values — same privacy posture as the
+   * rest of the plaintext `metricSourceJson` envelope. Absent (omitted) when the
+   * turn withheld nothing.
+   */
+  unverifiedFigures?: number;
 }
 
 /**

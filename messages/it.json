@@ -2344,6 +2344,7 @@
       "send": "Invia",
       "stop": "Interrompi",
       "thinking": "Sto pensando…",
+      "unverifiedFiguresNotice": "Alcuni numeri non è stato possibile verificarli con i tuoi dati e sono stati omessi.",
       "composerPlaceholder": "Chiedimi pure …",
       "nudgeBubbleLabel": "Nuovo messaggio dal coach — apri la chat",
       "fabLabel": "Apri il coach",

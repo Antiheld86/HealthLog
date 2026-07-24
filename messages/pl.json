@@ -2338,6 +2338,7 @@
       "send": "Wyślij",
       "stop": "Zatrzymaj",
       "thinking": "Myślę…",
+      "unverifiedFiguresNotice": "Niektórych liczb nie udało się zweryfikować z Twoimi danymi, więc je pominięto.",
       "composerPlaceholder": "Zapytaj mnie …",
       "nudgeBubbleLabel": "Nowa wiadomość od trenera — otwórz czat",
       "fabLabel": "Otwórz trenera",

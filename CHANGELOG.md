@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [1.32.14] — 2026-07-24
+
+When the Coach removes a number it could not check against your data, the reply
+now reads clearly and tells you what happened.
+
+- **A withheld figure reads as a quiet omission.** The Coach checks every number
+  in its answer against the figures it was actually shown, and holds back any it
+  cannot verify so a drifted value never reaches you as if it were real. That
+  held-back number used to show up as an internal `[unverified]` marker in the
+  middle of the sentence. It now appears as a short editorial mark, and a small
+  muted line under the message tells you that some figures could not be checked
+  and were left out. The line is worded for each of the six languages and stays
+  out of the way until there is something to say.
+- **Coach action cards and the tool trace survive a reload.** A suggested
+  reminder, a confirm-to-create action card, and the "what I looked at" tool
+  trace were saved with the message but dropped when the conversation was
+  reopened, so they quietly vanished on reload. They are now restored with the
+  rest of the message, so reopening a thread shows the same cards and trace it
+  showed the first time.
+
 ## [1.32.13] — 2026-07-24
 
 An Insights assessment card no longer shows the raw model output when a response

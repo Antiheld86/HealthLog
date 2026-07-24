@@ -937,7 +937,9 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
     // v1.21.0 (P6 / C2-5) — post-hoc numeric verifier on the Coach prose. Cross-
     // check every number the model cited against this turn's authoritative figure
     // set; an unmatched number (transcription / paraphrase drift) is soft-stripped
-    // to "[unverified]" and annotated. Cheap, non-blocking, and a no-op when there
+    // to the editorial elision mark `[…]` and annotated (v1.32.14 — the withheld
+    // count also rides the provenance envelope to drive the per-message notice).
+    // Cheap, non-blocking, and a no-op when there
     // is no authoritative set — the prompt-level grounding rule remains the
     // backstop, exactly like the briefing's "no signals → skip". A blocked turn
     // already carries canned fallback prose, so skip it.
@@ -961,6 +963,11 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
         ? toolResultPayloads
         : noToolsSnapshotPayloads;
     let groundedFigures: number[] = [];
+    // v1.32.14 — count of figures withheld from THIS reply (each rewritten to the
+    // elision mark). Hoisted out of the guard block so it can ride the provenance
+    // envelope and drive the quiet per-message notice. Stays 0 on a blocked turn
+    // (the guard is skipped, its fallback prose carries no figures).
+    let unverifiedStripped = 0;
     if (activatingPayloads.length > 0) {
       const ledger = buildGroundingLedger({
         toolPayloads: activatingPayloads,
@@ -991,6 +998,7 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
             unverified,
           );
           replyText = corrected;
+          unverifiedStripped = stripped;
           annotate({
             action: { name: "coach.prose.number_unverified" },
             meta: {
@@ -1111,6 +1119,13 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
       // prose). Dropped on a blocked turn (its figures rode the discarded reply).
       ...(!outbound.block && groundedFigures.length > 0
         ? { groundedFigures }
+        : {}),
+      // v1.32.14 — the count of figures the grounding guard withheld this turn,
+      // so the quiet "some figures couldn't be checked" notice renders under the
+      // bubble and survives a conversation reload. Count only, no values. Omitted
+      // when nothing was withheld.
+      ...(unverifiedStripped > 0
+        ? { unverifiedFigures: unverifiedStripped }
         : {}),
     };
     if (sentinel.malformed) {
