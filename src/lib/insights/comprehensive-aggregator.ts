@@ -192,6 +192,12 @@ export interface ComprehensiveAggregate {
     sys: Array<{ measuredAt: Date; value: number }>;
     dia: Array<{ measuredAt: Date; value: number }>;
   };
+  /** Raw weight rows over the same 90-day window, same canonical-source
+   *  dedup as `bpRawRows` (they ride one query). Weight is sparse
+   *  (~1-2 rows/day). v1.32.17 derives the mood × weight correlation from
+   *  these local-day-keyed means instead of the UTC `dailyByType.WEIGHT`,
+   *  so the mood join partner shares the mood series' local-day key space. */
+  weightRawRows: Array<{ measuredAt: Date; value: number }>;
   /** Daily means per (type, day) for the correlation pairings. The
    *  route filters down to the types it needs (WEIGHT, BLOOD_PRESSURE_SYS,
    *  PULSE) when joining against mood / weight / bp. */
@@ -343,8 +349,12 @@ async function fetchBpRawRows(
 ): Promise<{
   sys: Array<{ measuredAt: Date; value: number }>;
   dia: Array<{ measuredAt: Date; value: number }>;
+  weight: Array<{ measuredAt: Date; value: number }>;
 }> {
   void ninetyDaysAgo;
+  // v1.32.17 — WEIGHT rides this same canonical-dedup pull (one extra
+  // sparse type, no new round-trip) so the route can derive a local-day
+  // mood × weight series without re-scanning raw rows.
   const rows = await prisma.$queryRawUnsafe<BpRawRow[]>(
     `
       SELECT
@@ -352,22 +362,25 @@ async function fetchBpRawRows(
         m."measured_at"                 AS measured_at,
         m."value"::double precision     AS value
       FROM ${canonicalMeasurementsFrom(rankUnqualified, "90 days")}
-      WHERE m."type" IN ('BLOOD_PRESSURE_SYS', 'BLOOD_PRESSURE_DIA')
+      WHERE m."type" IN ('BLOOD_PRESSURE_SYS', 'BLOOD_PRESSURE_DIA', 'WEIGHT')
       ORDER BY m."measured_at" ASC
     `,
     userId,
   );
   const sys: Array<{ measuredAt: Date; value: number }> = [];
   const dia: Array<{ measuredAt: Date; value: number }> = [];
+  const weight: Array<{ measuredAt: Date; value: number }> = [];
   for (const r of rows) {
     const measuredAt = new Date(r.measured_at);
     if (r.type === "BLOOD_PRESSURE_SYS") {
       sys.push({ measuredAt, value: Number(r.value) });
     } else if (r.type === "BLOOD_PRESSURE_DIA") {
       dia.push({ measuredAt, value: Number(r.value) });
+    } else if (r.type === "WEIGHT") {
+      weight.push({ measuredAt, value: Number(r.value) });
     }
   }
-  return { sys, dia };
+  return { sys, dia, weight };
 }
 
 /**
@@ -610,6 +623,7 @@ async function buildFromRollups(
   return {
     summaries,
     bpRawRows,
+    weightRawRows: bpRawRows.weight,
     dailyByType: buildDailyByType(bucketsByType),
     firstMeasurementAt,
     totalMeasurements,
@@ -833,6 +847,7 @@ async function buildFromLiveAggregate(
   return {
     summaries,
     bpRawRows,
+    weightRawRows: bpRawRows.weight,
     dailyByType: buildDailyByType(bucketsByType),
     firstMeasurementAt,
     totalMeasurements,

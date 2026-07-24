@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [1.32.17] — 2026-07-24
+
+The mood correlations on the Insights page could line up a day off. Your mood
+is dated by the calendar day you logged it in your own timezone, but the
+metrics it was matched against were still grouped by the UTC day. If you live
+away from UTC, an evening reading slid onto the next UTC day, so a mood and a
+reading from the same evening were paired as if a day apart. A regression from
+v1.32.12, when the mood side moved to local days on its own.
+
+- **Mood now pairs with metrics from the same local day.** The blood pressure,
+  weight, and resting pulse series that mood is correlated against are grouped
+  by the day you logged them in your own timezone, so both sides of the pairing
+  share one calendar. An evening entry no longer drifts onto the next day.
+- **Non-UTC users get the correct same-day figures.** For anyone west of UTC an
+  evening reading used to pair with the wrong day's mood, turning a same-day
+  relationship into a one-day-apart one. Those correlations and their scatter
+  charts now reflect the day the data was actually recorded. UTC users see no
+  change.
+
 ## [1.32.16] — 2026-07-24
 
 Changing which tiles and charts appear on your dashboard could get undone if

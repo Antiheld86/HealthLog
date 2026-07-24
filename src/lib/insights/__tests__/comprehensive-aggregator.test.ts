@@ -416,14 +416,25 @@ describe("buildComprehensiveAggregate", () => {
       // already-collapsed sys + dia rows in raw SQL snake_case shape; the
       // aggregator partitions by type in JS so the bpRawRows.sys / .dia
       // byte-shape stays identical.
+      // v1.32.17 — WEIGHT now rides this same canonical pull so the route
+      // can derive a local-day mood × weight series. It partitions into a
+      // separate `weightRawRows` field and must not disturb sys / dia.
       .mockResolvedValueOnce([
         { type: "BLOOD_PRESSURE_SYS", measured_at: measuredAt, value: 120 },
         { type: "BLOOD_PRESSURE_DIA", measured_at: measuredAt, value: 80 },
+        { type: "WEIGHT", measured_at: measuredAt, value: 81.4 },
       ]);
 
     const result = await buildComprehensiveAggregate("user-bp");
     expect(result.bpRawRows.sys).toEqual([{ measuredAt, value: 120 }]);
     expect(result.bpRawRows.dia).toEqual([{ measuredAt, value: 80 }]);
+    // WEIGHT partitions into its own field; sys / dia stay byte-identical.
+    expect(result.weightRawRows).toEqual([{ measuredAt, value: 81.4 }]);
+    // The widened pull selects WEIGHT alongside the BP types in one query.
+    const bpPullSql = UNSAFE.mock.calls
+      .map((c) => String(c[0]))
+      .find((sql) => sql.includes("'WEIGHT'"));
+    expect(bpPullSql).toBeTruthy();
     // The BP pull must route through the canonical-source subquery (the
     // collapse fires in SQL); pin the marker so a revert to a plain findMany
     // (double-counting overlapping sources) fails here.
