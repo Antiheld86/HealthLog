@@ -89,6 +89,52 @@ describe("logMcpMeasurement", () => {
     );
   });
 
+  it("converts a lb unit hint to canonical kg before writing", async () => {
+    const result = await logMcpMeasurement({
+      userId: "u-1",
+      type: "WEIGHT",
+      value: 210,
+      unit: "lb",
+      idempotencyKey: "key-lb",
+    });
+
+    expect(result.status).toBe("written");
+    const data = measurement.create.mock.calls[0][0].data;
+    expect(data.unit).toBe("kg");
+    // 210 lb → 95.25 kg (stored canonical, never the caller's lb verbatim).
+    expect(data.value).toBeCloseTo(210 * 0.45359237, 5);
+    if (result.status === "written") {
+      expect(result.measurement.unit).toBe("kg");
+    }
+  });
+
+  it("refuses an unsupported unit hint without writing", async () => {
+    const result = await logMcpMeasurement({
+      userId: "u-1",
+      type: "WEIGHT",
+      value: 12,
+      unit: "stone",
+      idempotencyKey: "key-stone",
+    });
+
+    expect(result.status).toBe("unsupported_unit");
+    expect(measurement.create).not.toHaveBeenCalled();
+  });
+
+  it("stamps canonical kg when the unit hint is omitted", async () => {
+    const result = await logMcpMeasurement({
+      userId: "u-1",
+      type: "WEIGHT",
+      value: 80,
+      idempotencyKey: "key-none",
+    });
+
+    expect(result.status).toBe("written");
+    const data = measurement.create.mock.calls[0][0].data;
+    expect(data.unit).toBe("kg");
+    expect(data.value).toBe(80);
+  });
+
   it("refuses a non-capturable / clinical-only type without writing", async () => {
     const result = await logMcpMeasurement({
       userId: "u-1",
