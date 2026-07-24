@@ -24,7 +24,14 @@ import {
 } from "@/lib/mood/custom-tags";
 import { moodTagLayoutSchema } from "@/lib/mood/tag-layout";
 import { moodLevelEnum, moodSourceEnum } from "@/lib/validations/moodlog";
-import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
+import {
+  dataEnvelope,
+  errorEnvelope,
+  stdResponses,
+  baseUpdatedAtField,
+  updatedAtTokenField,
+  conflictResponse409,
+} from "./shared";
 
 // ── Request schemas — annotated for spec emission ────────────────────
 
@@ -154,11 +161,23 @@ const moodTagLayoutResolved = z
   .object({
     groupOrder: z.array(z.string()),
     placements: z.record(z.string(), z.array(z.string())),
+    // v1.32.22 (M2) — optimistic-concurrency token echoed on GET / PUT.
+    updatedAt: updatedAtTokenField,
   })
   .meta({
     id: "MoodTagLayoutResolved",
     description:
-      "The stored layout merged over defaults: `groupOrder` fully resolved against the user's effective category set, `placements` as stored.",
+      "The stored layout merged over defaults: `groupOrder` fully resolved against the user's effective category set, `placements` as stored. `updatedAt` is the optimistic-concurrency token — echo it as `baseUpdatedAt` on the next PUT.",
+  });
+
+// v1.32.22 (M2) — the PUT request extends the layout schema with the base
+// token (stripped pre-Zod at runtime).
+const moodTagLayoutPutRequest = moodTagLayoutSchema
+  .extend({ baseUpdatedAt: baseUpdatedAtField })
+  .meta({
+    id: "MoodTagLayoutPutRequest",
+    description:
+      "Mood-tag layout to merge (preserve-when-absent), plus the optional optimistic-concurrency `baseUpdatedAt` token. The two manage cards write different fields of the same blob; echo the token to have a stale write refused with 409 instead of resurrecting the other card's overwritten field. Omit it for the legacy unconditional write.",
   });
 
 const notFoundResponse = {
@@ -531,11 +550,11 @@ export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Preserve-when-absent merge: a `groupOrder`-only PUT keeps the stored `placements` and vice versa. Bounded: ≤ 50 groups, ≤ 400 placement entries, keys ≤ 80 chars. Returns the resolved layout.",
       requestBody: {
         required: true,
-        content: { "application/json": { schema: moodTagLayoutSchema } },
+        content: { "application/json": { schema: moodTagLayoutPutRequest } },
       },
       responses: {
         "200": {
-          description: "Merged + resolved layout.",
+          description: "Merged + resolved layout with the fresh token.",
           content: {
             "application/json": {
               schema: dataEnvelope(
@@ -545,6 +564,7 @@ export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
+        ...conflictResponse409("Mood-tag layout", "mood_tag_layout_conflict"),
         ...stdResponses,
       },
     },

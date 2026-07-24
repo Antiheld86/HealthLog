@@ -62,6 +62,19 @@ export interface ManageCatalog {
   categories: ManageCategory[];
 }
 
+/**
+ * v1.32.22 (R5b) — the resolved `GET/PUT /api/mood/tags/layout` response.
+ * `updatedAt` is the optimistic-concurrency token the two management cards
+ * echo on their next write; no active query reads this key (it is only ever
+ * invalidated), so the token is seeded straight from each write response into
+ * `queryKeys.moodTagLayout()` and read back at mutate time.
+ */
+export interface MoodTagLayoutResolved {
+  groupOrder: string[];
+  placements: Record<string, string[]>;
+  updatedAt?: string;
+}
+
 export function useMoodTagManage(enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.moodTagManage(),

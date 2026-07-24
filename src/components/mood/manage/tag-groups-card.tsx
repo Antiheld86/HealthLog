@@ -59,6 +59,12 @@ import {
   apiPost,
   apiPut,
 } from "@/lib/api/api-fetch";
+import {
+  readUpdatedAtToken,
+  withBaseToken,
+  isConflict,
+} from "@/lib/api/optimistic-token";
+import { queryKeys } from "@/lib/query-keys";
 import { reorderById } from "@/lib/insights-layout-reorder";
 import { prefersReducedMotion } from "@/lib/charts/reduced-motion";
 import { useTranslations } from "@/lib/i18n/context";
@@ -72,6 +78,7 @@ import {
   snapshotManageCache,
   updateManageCache,
   type ManageCatalog,
+  type MoodTagLayoutResolved,
 } from "./use-mood-tag-manage";
 
 /**
@@ -141,11 +148,31 @@ export function TagGroupsCard({ catalog }: TagGroupsCardProps) {
       reorderGroups(current, nextOrder),
     );
     try {
-      await apiPut("/api/mood/tags/layout", { groupOrder: nextOrder });
+      // v1.32.22 (R5b) — echo the base token this order was based on. The two
+      // cards on this page write DIFFERENT fields of the same blob (group order
+      // vs tag placements); a stale merge would resurrect the other card's
+      // overwritten field, which the token now 409s instead. Seed the token
+      // from the response so the next write on this surface is guarded too.
+      const resolved = await apiPut<MoodTagLayoutResolved>(
+        "/api/mood/tags/layout",
+        withBaseToken(
+          { groupOrder: nextOrder },
+          readUpdatedAtToken(queryClient, queryKeys.moodTagLayout()),
+        ),
+      );
+      queryClient.setQueryData(queryKeys.moodTagLayout(), resolved);
       toast.success(t("mood.manage.orderSaved"));
       return true;
     } catch (err) {
       rollback();
+      if (isConflict(err)) {
+        // Drop the stale token so a deliberate retry writes against the tree
+        // the invalidation below reloads; nudge — the optimistic delta rolled
+        // back and nothing was clobbered.
+        queryClient.removeQueries({ queryKey: queryKeys.moodTagLayout() });
+        toast.message(t("common.conflictReloaded"));
+        return false;
+      }
       toast.error(err instanceof ApiError ? err.message : t("common.error"));
       return false;
     } finally {

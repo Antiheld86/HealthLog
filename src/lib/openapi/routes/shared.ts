@@ -113,6 +113,18 @@ export const baseUpdatedAtField = z.iso
   );
 
 /**
+ * Optional response field echoing the fresh optimistic-concurrency token.
+ * Every guarded GET / write response carries the stored row's `updatedAt`; the
+ * client echoes it back as `baseUpdatedAt` on the next write.
+ */
+export const updatedAtTokenField = z.iso
+  .datetime({ offset: true })
+  .optional()
+  .describe(
+    "Optimistic-concurrency token: the stored row's `updatedAt` at read/write time. Echo it back as `baseUpdatedAt` on the next write. Opaque — only ever echo a server-returned value, never parse or synthesise it.",
+  );
+
+/**
  * The 409 the guarded write returns when the base token is stale. `errorCode`
  * is per-endpoint; the caller passes the resource noun + the concrete
  * errorCode so the prose enumerates it.

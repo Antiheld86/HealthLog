@@ -12,7 +12,14 @@ import { notificationPrefsSchema } from "@/lib/validations/notification-prefs";
 import { sourcePrioritySchema } from "@/lib/validations/source-priority";
 import { modulePrefsPatchSchema } from "@/lib/validations/modules";
 import { MODULE_KEYS } from "@/lib/modules/registry";
-import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
+import {
+  dataEnvelope,
+  errorEnvelope,
+  stdResponses,
+  baseUpdatedAtField,
+  updatedAtTokenField,
+  conflictResponse409,
+} from "./shared";
 
 // v1.18.0 — module enable/disable. The PATCH request is the REAL runtime
 // validator (`modulePrefsPatchSchema` — strict over the toggleable key
@@ -22,11 +29,17 @@ import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
 // `disableCoach` + operator master flag, the rest read the per-user
 // disabled-allowlist. The map is the single thing a client needs to gate
 // every secondary domain end-to-end.
-const modulePrefsPatchRequest = modulePrefsPatchSchema.meta({
-  id: "ModulePrefsPatchRequest",
-  description:
-    'Partial module enable/disable update. Each key is an optional boolean; an omitted key is left untouched, `false` disables the module, `true` (re-)enables it. Only the toggleable "secondary domains" are accepted — a core-domain key (`weight`, `bloodPressure`, `pulse`, `medications`) or any unknown key is a 422, so the measurement engine + medications can never be disabled here. `cycle`/`coach` are accepted for forward-compat but their real enabled-state is owned elsewhere (the cycle gate / `disableCoach` + the operator assistant flag).',
-});
+// v1.32.22 (M3) — the doc request extends the strict runtime schema with the
+// optimistic-concurrency `baseUpdatedAt` token. The runtime strips it pre-Zod
+// (`takeBaseToken`) BEFORE the strict parse, so the runtime schema alone would
+// under-document the wire; documenting it here keeps the contract complete.
+const modulePrefsPatchRequest = modulePrefsPatchSchema
+  .extend({ baseUpdatedAt: baseUpdatedAtField })
+  .meta({
+    id: "ModulePrefsPatchRequest",
+    description:
+      'Partial module enable/disable update. Each key is an optional boolean; an omitted key is left untouched, `false` disables the module, `true` (re-)enables it. Only the toggleable "secondary domains" are accepted — a core-domain key (`weight`, `bloodPressure`, `pulse`, `medications`) or any unknown key is a 422, so the measurement engine + medications can never be disabled here. `cycle`/`coach` are accepted for forward-compat but their real enabled-state is owned elsewhere (the cycle gate / `disableCoach` + the operator assistant flag). `baseUpdatedAt` is the optional optimistic-concurrency token — omit it for the legacy unconditional write.',
+  });
 
 const moduleMapResolved = z
   .object(
@@ -46,7 +59,7 @@ const moduleMapResolved = z
   });
 
 const moduleMapEnvelopeInner = z
-  .object({ modules: moduleMapResolved })
+  .object({ modules: moduleMapResolved, updatedAt: updatedAtTokenField })
   .meta({ id: "ModulesResponse" });
 
 // v1.4.49 — single schema for the per-user Coach opt-out flag. Previously
@@ -85,11 +98,15 @@ const diabetesFlag = z
 // is the REAL runtime validator (`notificationPrefsSchema` — every
 // category and field optional, deep-merged server-side); the response
 // is the fully-resolved shape with the documented defaults filled in.
-const notificationPrefsPatchRequest = notificationPrefsSchema.meta({
-  id: "NotificationPrefsPatchRequest",
-  description:
-    "Partial per-user notification preferences. Every category and field is optional; the server deep-merges the supplied keys over the persisted row, so a PATCH touching only `medication` leaves the siblings intact. `medication.lowStockRunwayDays` (1–60, nullable) is the low-stock alert threshold in remaining runway days — `null` switches the alert off.",
-});
+// v1.32.22 (M1) — the doc request extends the runtime validator with the
+// optimistic-concurrency `baseUpdatedAt` token (stripped pre-Zod at runtime).
+const notificationPrefsPatchRequest = notificationPrefsSchema
+  .extend({ baseUpdatedAt: baseUpdatedAtField })
+  .meta({
+    id: "NotificationPrefsPatchRequest",
+    description:
+      "Partial per-user notification preferences. Every category and field is optional; the server deep-merges the supplied keys over the persisted row, so a PATCH touching only `medication` leaves the siblings intact. `medication.lowStockRunwayDays` (1–60, nullable) is the low-stock alert threshold in remaining runway days — `null` switches the alert off. `baseUpdatedAt` is the optional optimistic-concurrency token: echo it to have the server refuse (409) a write that would silently revert a category another writer set from a fresher read (e.g. iOS `medication.clientManaged`). Omit it for the legacy unconditional write.",
+  });
 
 const notificationPrefsResolved = z
   .object({
@@ -161,6 +178,25 @@ const notificationPrefsResolved = z
     id: "NotificationPrefs",
     description:
       "Fully-resolved per-user notification preferences. Every key is present — a null / drifted persisted row resolves to the documented defaults.",
+  });
+
+// v1.32.22 (M1) — GET / PATCH responses carry the optimistic-concurrency token
+// as an additive sibling key next to the resolved categories.
+const notificationPrefsResponse = notificationPrefsResolved
+  .extend({ updatedAt: updatedAtTokenField })
+  .meta({ id: "NotificationPrefsResponse" });
+
+// v1.32.22 (M4) — coach-prefs GET / PUT responses carry the token; the PUT
+// request extends the runtime validator with the base token.
+const coachPrefsResponse = coachPrefsSchema
+  .extend({ updatedAt: updatedAtTokenField })
+  .meta({ id: "CoachPrefsResponse" });
+const coachPrefsPutRequest = coachPrefsSchema
+  .extend({ baseUpdatedAt: baseUpdatedAtField })
+  .meta({
+    id: "PutCoachPrefsRequest",
+    description:
+      "Coach prompt-tuning preferences to persist, plus the optional optimistic-concurrency `baseUpdatedAt` token. The guarded write covers both `coachPrefsJson` and the mirrored `insightsExcludeMetrics` column atomically. Omit the token for the legacy unconditional write.",
   });
 
 // v1.8.6 — profile read/write surface for the native client. The
@@ -376,10 +412,10 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Returns the persisted preferences with defaults filled in. Null persisted state resolves to the legacy v1.4.22 defaults.",
       responses: {
         "200": {
-          description: "Resolved preferences.",
+          description: "Resolved preferences plus the `updatedAt` token.",
           content: {
             "application/json": {
-              schema: dataEnvelope(coachPrefsSchema, "GetCoachPrefsResponse"),
+              schema: dataEnvelope(coachPrefsResponse, "GetCoachPrefsResponse"),
             },
           },
         },
@@ -390,20 +426,21 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Auth"],
       summary: "Replace per-user Coach prompt-tuning preferences",
       description:
-        "Persists the supplied prefs. Body is validated against `CoachPrefs`; missing keys fall back to the documented defaults.",
+        "Persists the supplied prefs. Body is validated against `CoachPrefs`; missing keys fall back to the documented defaults. Supports optimistic concurrency: echo the `updatedAt` from the last read as `baseUpdatedAt` and the write is refused with 409 if the row changed since; omit it for the legacy unconditional write.",
       requestBody: {
         required: true,
-        content: { "application/json": { schema: coachPrefsSchema } },
+        content: { "application/json": { schema: coachPrefsPutRequest } },
       },
       responses: {
         "200": {
-          description: "Saved preferences echoed back.",
+          description: "Saved preferences echoed back with the fresh token.",
           content: {
             "application/json": {
-              schema: dataEnvelope(coachPrefsSchema, "PutCoachPrefsResponse"),
+              schema: dataEnvelope(coachPrefsResponse, "PutCoachPrefsResponse"),
             },
           },
         },
+        ...conflictResponse409("Coach preferences", "coach_prefs_conflict"),
         ...stdResponses,
       },
     },
@@ -527,7 +564,8 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       },
       responses: {
         "200": {
-          description: "Resolved next-state module map echoed back.",
+          description:
+            "Resolved next-state module map echoed back with the fresh `updatedAt` token.",
           content: {
             "application/json": {
               schema: dataEnvelope(
@@ -537,6 +575,7 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
+        ...conflictResponse409("Module preferences", "modules_conflict"),
         ...stdResponses,
       },
     },
@@ -737,11 +776,11 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Returns the fully-resolved preferences with the documented defaults filled in. A null persisted row resolves to the defaults (server-managed reminders, low-stock threshold 7 days, mood reminder 22:00, Coach nudges on).",
       responses: {
         "200": {
-          description: "Resolved preferences.",
+          description: "Resolved preferences plus the `updatedAt` token.",
           content: {
             "application/json": {
               schema: dataEnvelope(
-                notificationPrefsResolved,
+                notificationPrefsResponse,
                 "GetNotificationPrefsResponse",
               ),
             },
@@ -763,16 +802,21 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       },
       responses: {
         "200": {
-          description: "Resolved next-state preferences echoed back.",
+          description:
+            "Resolved next-state preferences echoed back with the fresh `updatedAt` token.",
           content: {
             "application/json": {
               schema: dataEnvelope(
-                notificationPrefsResolved,
+                notificationPrefsResponse,
                 "PatchNotificationPrefsResponse",
               ),
             },
           },
         },
+        ...conflictResponse409(
+          "Notification preferences",
+          "notification_prefs_conflict",
+        ),
         ...stdResponses,
       },
     },

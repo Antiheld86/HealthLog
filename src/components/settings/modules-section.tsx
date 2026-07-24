@@ -65,6 +65,11 @@ import { useAuth } from "@/hooks/use-auth";
 import { useFeatureFlags } from "@/hooks/use-feature-flags";
 import { useTranslations } from "@/lib/i18n/context";
 import { apiPatch } from "@/lib/api/api-fetch";
+import {
+  readUpdatedAtToken,
+  withBaseToken,
+  isConflict,
+} from "@/lib/api/optimistic-token";
 import { queryKeys } from "@/lib/query-keys";
 import {
   MODULE_REGISTRY,
@@ -72,6 +77,12 @@ import {
   moduleDelegatesTo,
   type ModuleKey,
 } from "@/lib/modules/registry";
+
+/** Shape of the `/api/auth/me/modules` PATCH response (resolved map + token). */
+type ModulesPatchResult = {
+  modules: Partial<Record<ModuleKey, boolean>>;
+  updatedAt?: string;
+};
 
 /** Neutral Lucide glyph per toggleable module. */
 const MODULE_ICONS: Record<ModuleKey, LucideIcon> = {
@@ -130,7 +141,26 @@ export function ModulesSection() {
         return apiPatch("/api/auth/me/cycle-prefs", { enabled: vars.enabled });
       }
       // DISABLED allowlist: send only the single key the user flipped.
-      return apiPatch("/api/auth/me/modules", { [vars.key]: vars.enabled });
+      //
+      // v1.32.22 (R5b) — echo the optimistic-concurrency token so an
+      // interleaved modules PATCH (another tab, the iOS client) 409s instead of
+      // clobbering. The token rides on `User.updatedAt`; the module map itself
+      // rides on `/auth/me`, and no dedicated GET populates the token, so it is
+      // seeded from each write response below and read back here at mutate
+      // time. The first write of a session is tokenless — the server's
+      // backward-compatible unconditional arm.
+      const result = await apiPatch<ModulesPatchResult>(
+        "/api/auth/me/modules",
+        withBaseToken(
+          { [vars.key]: vars.enabled },
+          readUpdatedAtToken(queryClient, queryKeys.modulesPrefs()),
+        ),
+      );
+      queryClient.setQueryData<{ updatedAt?: string }>(
+        queryKeys.modulesPrefs(),
+        { updatedAt: result.updatedAt },
+      );
+      return result;
     },
     onSuccess: (_data, vars) => {
       // Re-gate every surface that reads the module map off /auth/me: nav,
@@ -146,7 +176,18 @@ export function ModulesSection() {
       }
       toast.success(t("settings.sections.modules.saved"));
     },
-    onError: () => {
+    onError: (err) => {
+      // v1.32.22 (R5b) — instant-write disposition: a 409 means the module map
+      // advanced since this switch was based (another tab / the iOS client
+      // wrote in between). Drop the now-stale seeded token and refetch /auth/me
+      // so the switch snaps back to server truth, then nudge — nothing was
+      // clobbered. A retry re-seeds a fresh token from its own response.
+      if (isConflict(err)) {
+        queryClient.removeQueries({ queryKey: queryKeys.modulesPrefs() });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.authMe() });
+        toast.message(t("common.conflictReloaded"));
+        return;
+      }
       toast.error(t("settings.sections.modules.error"));
     },
   });
