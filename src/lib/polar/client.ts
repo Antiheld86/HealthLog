@@ -24,7 +24,10 @@ import { getEvent } from "@/lib/logging/context";
 import { canonicalDailyTimestamp } from "@/lib/measurements/consolidation-tz";
 import { safeFetch } from "@/lib/safe-fetch";
 import { reconstructContiguousSleepTimeline } from "@/lib/sleep/reconstruct-timeline";
+import type { Prisma } from "@/generated/prisma/client";
+import type { WorkoutSportType } from "@/lib/validations/workout";
 import { PolarApiError, classifyPolarResponse } from "./response-classifier";
+import { mapPolarSportType } from "./sport-map";
 
 const POLAR_API_BASE = "https://www.polaraccesslink.com";
 const POLAR_OAUTH_AUTH_URL = "https://flow.polar.com/oauth2/authorization";
@@ -650,4 +653,273 @@ export function mapSpo2(r: PolarSpo2): MappedMeasurement[] {
       externalId: `spo2:${r.test_time}:${r.source_device_id ?? "unknown"}`,
     },
   ];
+}
+
+// ─── Exercises (workouts) ──────────────────────────────────────
+
+/**
+ * One Polar AccessLink exercise (`GET /v3/exercises`) — the stateless list of
+ * the last 30 days of uploads. The transaction model is DEPRECATED; this GET
+ * carries NO userId in the path (the user is identified by the Bearer token),
+ * exactly the shape the v1.31.2 vitals-endpoint fix established.
+ *
+ * Field types are conservative on purpose — the live payload's exact per-field
+ * nullability and the `id` type are not machine-verified, so `id` accepts
+ * string OR number (coerced to a stable string externalId) and every optional
+ * numeric is guarded before use.
+ */
+export interface PolarExercise {
+  /** Opaque exercise id. Polar's docs leave the type ambiguous; accept either
+   *  and coerce to a stable string externalId (never parsed). */
+  id?: string | number | null;
+  /** ISO-8601 local start time, e.g. `"2026-06-10T07:00:00"`. May or may not
+   *  carry a zone suffix — handled defensively at map time. */
+  start_time?: string | null;
+  /** Minutes east of UTC for `start_time`. Combined with `start_time` to
+   *  recover the true UTC instant. */
+  start_time_utc_offset?: number | null;
+  /** ISO-8601 duration, e.g. `"PT2H44M30S"`. */
+  duration?: string | null;
+  /** Coarse sport enum, e.g. `"RUNNING"`. */
+  sport?: string | null;
+  /** Granular sport enum, e.g. `"TRAIL_RUNNING"`. */
+  detailed_sport_info?: string | null;
+  calories?: number | null;
+  /** Distance in METRES. */
+  distance?: number | null;
+  heart_rate?: {
+    average?: number | null;
+    maximum?: number | null;
+  } | null;
+  training_load?: number | null;
+  device?: string | null;
+  device_id?: string | null;
+}
+
+/**
+ * Candidate envelope keys a paged `/v3/exercises` response might nest the list
+ * under. Polar's pagination shape on this endpoint is not verified; the fetcher
+ * tolerates a bare array OR any of these envelope shapes so a paged response
+ * degrades to "the rows on this page" rather than an empty result. The 30-day
+ * window is small enough that a single page covers a normal user; if Polar
+ * paginates, the hourly poll re-reads the whole window every tick so nothing is
+ * lost between pages.
+ */
+const EXERCISE_LIST_KEYS = ["exercises", "data", "items", "records"] as const;
+
+/**
+ * Fetch the user's exercises (`GET /v3/exercises`). Summary only — the
+ * `samples` / `zones` / `route` inline params are deliberately omitted (route /
+ * per-sample import is out of scope). Returns `[]` on 204 No Content, a bare
+ * array, or a paged envelope whose list key is unrecognised. Throws a
+ * classified `PolarApiError` on a non-2xx — including a 403, which the workout
+ * sync classifies as a soft/recoverable integration error so a scope gap on
+ * exercises never hard-fails the whole Polar sync.
+ */
+export async function fetchExercises(
+  accessToken: string,
+): Promise<PolarExercise[]> {
+  const start = performance.now();
+  const res = await safeFetch(`${POLAR_API_BASE}/v3/exercises`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    },
+  });
+  const verdict = classifyPolarResponse(res.status);
+  getEvent()?.addExternalCall({
+    service: "polar",
+    method: "fetchExercises",
+    duration_ms: Math.round(performance.now() - start),
+    status: res.status,
+    error: verdict.classification === "success" ? undefined : verdict.reason,
+  });
+  if (verdict.classification !== "success") {
+    throw new PolarApiError({
+      verb: "fetchExercises",
+      classification: verdict.classification,
+      httpStatus: verdict.httpStatus,
+      reason: verdict.reason,
+    });
+  }
+  // 204 No Content — a window with no uploads. Polar returns an empty body.
+  if (res.status === 204) return [];
+  const json = (await res.json().catch(() => null)) as unknown;
+  return normaliseExerciseList(json);
+}
+
+/** Coerce a `/v3/exercises` body into a `PolarExercise[]`: a bare array, a
+ *  paged envelope (list under one of `EXERCISE_LIST_KEYS`), or `[]` otherwise. */
+export function normaliseExerciseList(json: unknown): PolarExercise[] {
+  if (!json) return [];
+  if (Array.isArray(json)) return json as PolarExercise[];
+  if (typeof json === "object") {
+    const obj = json as Record<string, unknown>;
+    for (const key of EXERCISE_LIST_KEYS) {
+      const list = obj[key];
+      if (Array.isArray(list)) return list as PolarExercise[];
+    }
+  }
+  return [];
+}
+
+// ─── Exercise → Workout mapping ────────────────────────────────
+
+/** The `Workout`-row payload a mapped Polar exercise produces. Field names
+ *  mirror `prisma.workout` columns; the sync layer stamps `source = POLAR` +
+ *  `externalId` and upserts on `(userId, source, externalId)`. Mirrors
+ *  `StravaWorkoutRow`. */
+export interface PolarWorkoutRow {
+  externalId: string;
+  sportType: WorkoutSportType;
+  startedAt: Date;
+  endedAt: Date;
+  durationSec: number;
+  totalEnergyKcal: number | null;
+  totalDistanceM: number | null;
+  avgHeartRate: number | null;
+  maxHeartRate: number | null;
+  elevationM: number | null;
+  metadata: Prisma.InputJsonValue;
+}
+
+function nonNegInt(n: number | null | undefined): number | null {
+  if (typeof n !== "number" || !Number.isFinite(n) || n < 0) return null;
+  return Math.round(n);
+}
+
+function nonNegFloat(n: number | null | undefined): number | null {
+  if (typeof n !== "number" || !Number.isFinite(n) || n < 0) return null;
+  return n;
+}
+
+/** True when an ISO-8601 datetime string already carries a zone designator
+ *  (`Z` or `±HH:MM` / `±HHMM`). Drives the two branches of start-time
+ *  composition. */
+function hasZoneDesignator(iso: string): boolean {
+  return /(?:Z|[+-]\d{2}:?\d{2})$/.test(iso.trim());
+}
+
+/**
+ * Combine Polar's `start_time` + `start_time_utc_offset` into the true UTC
+ * instant.
+ *
+ * Two cases, because whether `start_time` carries a zone suffix is not verified
+ * against the live payload:
+ *   - It already has a zone (`…Z` / `…+02:00`): `Date.parse` yields the correct
+ *     instant directly; the offset is NOT applied again.
+ *   - No zone (a naive local wall-clock, the documented shape): interpret the
+ *     wall-clock AS UTC (append `Z`), then subtract the offset minutes (east of
+ *     UTC is positive) to recover the true instant. A missing / non-finite
+ *     offset falls back to 0 (treat the wall-clock as UTC).
+ *
+ * Returns null for a missing / unparseable start (the row is skipped, mirroring
+ * Strava's NaN-start guard).
+ */
+export function combinePolarStart(
+  startTime: string | null | undefined,
+  offsetMinutes: number | null | undefined,
+): Date | null {
+  if (typeof startTime !== "string" || startTime.trim() === "") return null;
+  const trimmed = startTime.trim();
+  if (hasZoneDesignator(trimmed)) {
+    const ms = Date.parse(trimmed);
+    return Number.isNaN(ms) ? null : new Date(ms);
+  }
+  const asUtcMs = Date.parse(`${trimmed}Z`);
+  if (Number.isNaN(asUtcMs)) return null;
+  const offset =
+    typeof offsetMinutes === "number" && Number.isFinite(offsetMinutes)
+      ? offsetMinutes
+      : 0;
+  return new Date(asUtcMs - offset * 60_000);
+}
+
+const ISO_DURATION_RE =
+  /^P(?:(\d+(?:\.\d+)?)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?)?$/i;
+
+/**
+ * Parse an ISO-8601 duration (`PT2H44M30S`, `PT45S`, `P1DT2H`, fractional
+ * seconds allowed) to whole seconds. Malformed / empty input → 0, mirroring
+ * Strava's `durationSec ?? 0` fallback so a bad duration never produces a
+ * negative window. Hand-rolled — no new dependency.
+ */
+export function parseIsoDuration(raw: string | null | undefined): number {
+  if (typeof raw !== "string") return 0;
+  const m = ISO_DURATION_RE.exec(raw.trim());
+  if (!m) return 0;
+  const [, days, hours, minutes, seconds] = m;
+  const total =
+    (days ? parseFloat(days) * 86_400 : 0) +
+    (hours ? parseFloat(hours) * 3_600 : 0) +
+    (minutes ? parseFloat(minutes) * 60 : 0) +
+    (seconds ? parseFloat(seconds) : 0);
+  if (!Number.isFinite(total) || total < 0) return 0;
+  return Math.round(total);
+}
+
+/**
+ * Map one Polar exercise into a `Workout` row. `detailed_sport_info` is
+ * preferred over the coarse `sport`, then mapped through `mapPolarSportType()`
+ * to a canonical `WorkoutSportType` — the raw Polar labels are never written to
+ * `sportType` directly (kept in `metadata` for provenance). `startedAt` is the
+ * UTC instant recovered from `start_time` + `start_time_utc_offset`; `endedAt`
+ * is `startedAt + durationSec` (Polar exposes no explicit end). `training_load`
+ * rides `metadata` tied to this row (the WHOOP per-workout-strain precedent),
+ * never a free-floating Measurement that would survive read-time dedup.
+ *
+ * Returns null for an exercise with no id or no parseable start instant
+ * (nothing to store) — the sync layer skips it, never throws per-row.
+ */
+export function mapExercise(ex: PolarExercise): PolarWorkoutRow | null {
+  if (ex.id === null || ex.id === undefined) return null;
+  const externalId = String(ex.id);
+  if (externalId.trim() === "") return null;
+
+  const startedAt = combinePolarStart(ex.start_time, ex.start_time_utc_offset);
+  if (!startedAt) return null;
+
+  const durationSec = parseIsoDuration(ex.duration);
+  const endedAt = new Date(startedAt.getTime() + durationSec * 1000);
+
+  const sportType = mapPolarSportType(ex.detailed_sport_info, ex.sport);
+
+  const avgHeartRate = nonNegInt(ex.heart_rate?.average);
+  const maxHeartRate = nonNegInt(ex.heart_rate?.maximum);
+
+  const metadata: Prisma.InputJsonValue = {
+    // Raw pre-mapping labels, kept for provenance/debugging — never used as the
+    // canonical `sportType` (see `mapPolarSportType()`).
+    ...(ex.sport ? { polarSport: ex.sport } : {}),
+    ...(ex.detailed_sport_info
+      ? { polarDetailedSportInfo: ex.detailed_sport_info }
+      : {}),
+    ...(ex.device ? { polarDevice: ex.device } : {}),
+    ...(ex.device_id ? { polarDeviceId: ex.device_id } : {}),
+    ...(typeof ex.training_load === "number" &&
+    Number.isFinite(ex.training_load)
+      ? { trainingLoad: ex.training_load }
+      : {}),
+    ...(typeof ex.start_time_utc_offset === "number" &&
+    Number.isFinite(ex.start_time_utc_offset)
+      ? { startTimeUtcOffset: ex.start_time_utc_offset }
+      : {}),
+  };
+
+  return {
+    externalId,
+    sportType,
+    startedAt,
+    endedAt,
+    durationSec,
+    totalEnergyKcal: nonNegFloat(ex.calories),
+    totalDistanceM: nonNegFloat(ex.distance),
+    avgHeartRate,
+    maxHeartRate,
+    // Not on the exercise summary — deriving it would require a GPX fetch
+    // (out of scope). Left null.
+    elevationM: null,
+    metadata,
+  };
 }

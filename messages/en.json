@@ -5535,7 +5535,7 @@
     "nightscoutDisconnectTitle": "Disconnect Nightscout?",
     "nightscoutDisconnectDescription": "Future syncs stop. Glucose readings already imported stay in your history.",
     "polar": "Polar",
-    "polarDescription": "Connect your Polar account to sync Nightly Recharge recovery, sleep stages, and daily activity.",
+    "polarDescription": "Connect your Polar account to sync Nightly Recharge recovery, sleep stages, daily activity, and training sessions.",
     "polarViewData": "View your sleep & recovery",
     "polarHelp": "Sign in with Polar to grant access. Data is pulled in the background once an hour.",
     "polarCredentials": "API Credentials",

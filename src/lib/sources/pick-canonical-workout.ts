@@ -263,6 +263,12 @@ export const DEFAULT_WORKOUT_SOURCE_PRIORITY: readonly MeasurementSource[] = [
   // session.
   "FITBIT",
   "WITHINGS",
+  // v1.32.15 — Polar ranks below Withings and above Strava: a Polar watch is a
+  // device-native HR capture (unlike a Strava re-upload with degraded/absent
+  // HR), so a Polar exercise outranks a Strava twin of the same session but
+  // sits below the primary on-wrist wearables. Matches Polar's slot in the
+  // read-time `steps` ladder (`DEFAULT_SOURCE_PRIORITY.steps`).
+  "POLAR",
   // v1.28.x — Strava ranks below the device-native captures (Apple/WHOOP/
   // Fitbit/Withings on-wrist HR) but above MANUAL/IMPORT: a Strava activity is
   // often itself a re-upload of an Apple/Garmin recording, so its HR/calories
