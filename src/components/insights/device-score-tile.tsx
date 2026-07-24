@@ -3,6 +3,7 @@
 import type { ComponentType } from "react";
 
 import { useAuth } from "@/hooks/use-auth";
+import { useUnitDisplay } from "@/hooks/use-unit-display";
 import { useInsightsAnalytics } from "@/hooks/use-insights-analytics";
 import { useTranslations } from "@/lib/i18n/context";
 import { resolveIntlLocale } from "@/lib/format-locale";
@@ -75,6 +76,16 @@ export function DeviceScoreTile({
 }: DeviceScoreTileProps) {
   const { t, locale } = useTranslations();
   const { user } = useAuth();
+  // v1.32.26 — a type with a registered metric/imperial transform resolves its
+  // display unit + conversion from the user's preference (e.g. the Oura body-
+  // temperature DEVIATION renders in Δ°F for an imperial user). The affine
+  // `toDisplay` is correct for the readout: the deviation transform carries no
+  // offset (a Δ°C → Δ°F is factor-only), so no absolute shift leaks in.
+  const unitDisplay = useUnitDisplay();
+  const transform = unitDisplay.isTransformed(type)
+    ? unitDisplay.transformFor(type)
+    : null;
+  const resolvedUnit = transform ? transform.displayUnit : unit;
 
   const count = summary?.count ?? 0;
   if (count === 0) return null;
@@ -84,10 +95,13 @@ export function DeviceScoreTile({
   const isLearning = count < learningThreshold;
 
   const fmt = (value: number) =>
-    value.toLocaleString(resolveIntlLocale(locale), {
-      minimumFractionDigits: fractionDigits,
-      maximumFractionDigits: fractionDigits,
-    });
+    (transform ? unitDisplay.toDisplay(type, value) : value).toLocaleString(
+      resolveIntlLocale(locale),
+      {
+        minimumFractionDigits: fractionDigits,
+        maximumFractionDigits: fractionDigits,
+      },
+    );
 
   return (
     <Card
@@ -112,9 +126,9 @@ export function DeviceScoreTile({
                 className="text-foreground text-lg font-semibold tabular-nums"
               >
                 {fmt(latest)}
-                {unit ? (
+                {resolvedUnit ? (
                   <span className="text-muted-foreground ml-1 text-xs font-normal">
-                    {unit}
+                    {resolvedUnit}
                   </span>
                 ) : null}
               </span>
@@ -136,8 +150,10 @@ export function DeviceScoreTile({
                 types={[type]}
                 title={title}
                 colors={[color]}
-                unit={unit ?? ""}
+                unit={resolvedUnit ?? ""}
                 mini
+                valueScale={transform ? transform.factor : undefined}
+                valueOffset={transform ? (transform.offset ?? 0) : undefined}
                 userTimezone={user?.timezone}
               />
             </div>
@@ -147,7 +163,7 @@ export function DeviceScoreTile({
                 className="text-muted-foreground text-xs"
               >
                 {t("insights.deviceScore.average", { value: fmt(mean) })}
-                {unit ? ` ${unit}` : ""}
+                {resolvedUnit ? ` ${resolvedUnit}` : ""}
               </p>
             ) : null}
           </>

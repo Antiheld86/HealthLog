@@ -26,6 +26,7 @@ import {
   getUnitForType,
   validateMeasurementRange,
 } from "@/lib/validations/measurement";
+import { resolveToCanonicalUnit } from "@/lib/measurements/unit-aliases";
 import {
   isPlausibleEntryInstant,
   ENTRY_INSTANT_CLOCK_SKEW_MS,
@@ -70,6 +71,34 @@ function mcpExternalId(
 export type McpWriteCheck =
   | { ok: true }
   | { ok: false; error: "unsupported_type" | "out_of_range"; reason?: string };
+
+/**
+ * Resolve a caller-supplied `unit` hint to the canonical unit + converted
+ * value, or refuse it. Canonical storage is an invariant: an omitted hint
+ * stamps the type's canonical unit; a recognised alias (lb/lbs/pound(s), in,
+ * °F, mmol/L) converts the value and stamps canonical; anything else is
+ * refused so a non-canonical unit is never persisted verbatim (the pre-fix
+ * leak — a lb value tagged "kg" corrupts every display surface that trusts
+ * the row's `unit` column). Shared by the confirm-gate preview and the commit
+ * core so both reach one verdict for the same input.
+ */
+export type McpUnitResolution =
+  { ok: true; value: number; unit: string } | { ok: false };
+
+export function resolveMcpMeasurementUnit(
+  type: MeasurementType,
+  value: number,
+  unit: string | undefined,
+): McpUnitResolution {
+  if (unit === undefined) {
+    return { ok: true, value, unit: getUnitForType(type) };
+  }
+  const resolved = resolveToCanonicalUnit(type, value, unit);
+  if (resolved === null) {
+    return { ok: false };
+  }
+  return { ok: true, value: resolved.value, unit: resolved.unit };
+}
 
 /**
  * Bound a client-supplied `measuredAt` exactly like the manual measurement
@@ -156,6 +185,7 @@ export interface McpMeasurementRecord {
 
 export type McpMeasurementResult =
   | { status: "unsupported_type" }
+  | { status: "unsupported_unit" }
   | { status: "out_of_range"; reason: string }
   | { status: "written"; measurement: McpMeasurementRecord }
   | { status: "already_logged"; measurement: McpMeasurementRecord };
@@ -176,9 +206,28 @@ export async function logMcpMeasurement(input: {
   measuredAt?: Date;
   idempotencyKey: string;
 }): Promise<McpMeasurementResult> {
+  // Normalise the caller's unit hint to canonical (converting the value) or
+  // refuse it — a non-canonical unit must never be persisted verbatim. Runs
+  // BEFORE the range check so the plausibility gate sees the canonical value
+  // (e.g. 210 lb → 95.25 kg passes WEIGHT {1..500}).
+  const unitResolution = resolveMcpMeasurementUnit(
+    input.type,
+    input.value,
+    input.unit,
+  );
+  if (!unitResolution.ok) {
+    annotate({
+      action: { name: "mcp.tool.write" },
+      meta: { tool: "log_measurement", status: "unsupported_unit" },
+    });
+    return { status: "unsupported_unit" };
+  }
+  const value = unitResolution.value;
+  const unit = unitResolution.unit;
+
   // Same validation the confirm-gate preview runs (type allowlist, range, and
   // the measuredAt instant bound) — preview and commit reach one verdict.
-  const check = checkMcpMeasurement(input.type, input.value, input.measuredAt);
+  const check = checkMcpMeasurement(input.type, value, input.measuredAt);
   if (!check.ok) {
     annotate({
       action: { name: "mcp.tool.write" },
@@ -193,13 +242,12 @@ export async function logMcpMeasurement(input: {
     };
   }
 
-  const unit = input.unit ?? getUnitForType(input.type);
   const measuredAt = input.measuredAt ?? new Date();
   const externalId = mcpExternalId("measure", input.idempotencyKey);
 
   const record: McpMeasurementRecord = {
     type: input.type,
-    value: input.value,
+    value,
     unit,
     measuredAt: measuredAt.toISOString(),
     source: MCP_SOURCE,
@@ -238,7 +286,7 @@ export async function logMcpMeasurement(input: {
     data: {
       userId: input.userId,
       type: input.type,
-      value: input.value,
+      value,
       unit,
       source: MCP_SOURCE,
       measuredAt,

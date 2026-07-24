@@ -1,6 +1,31 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
+// The vitals tiles read the unit preference through `useUnitDisplay`, which
+// hangs off `useAuth` (a react-query hook). These are static SSR renders with
+// no QueryClient, so mock the hook to a real metric-preference implementation
+// — metric is the identity on values and yields the canonical display symbols
+// (e.g. °C), matching the pre-fix render the assertions expect.
+vi.mock("@/hooks/use-unit-display", async () => {
+  const dt = await import("@/lib/measurements/display-transform");
+  const forType = (t: string) => dt.getDisplayTransform(t, "metric");
+  return {
+    useUnitDisplay: () => ({
+      preference: "metric" as const,
+      transformFor: forType,
+      toDisplay: (t: string, v: number) =>
+        dt.applyDisplayTransform(v, forType(t)),
+      fromDisplay: (t: string, v: number) =>
+        dt.invertDisplayTransform(v, forType(t)),
+      toDisplayDelta: (t: string, v: number) =>
+        dt.applyDisplayTransformDelta(v, forType(t)),
+      unitFor: (t: string) => forType(t).displayUnit,
+      decimalsFor: (t: string) => forType(t).decimals,
+      isTransformed: (t: string) => dt.hasDisplayTransform(t),
+    }),
+  };
+});
+
 import { I18nProvider } from "@/lib/i18n/context";
 import type {
   DerivedMetricResponse,

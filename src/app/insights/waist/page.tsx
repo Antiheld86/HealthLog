@@ -22,8 +22,6 @@ export default function InsightsWaistPage() {
       chartKey="waistCircumference"
       i18nPrefix="insights.waist"
       color="var(--info)"
-      unit="cm"
-      yAxisUnit="cm"
       statIcon={Ruler}
       emptyStateIcon={<Ruler className="size-6" />}
       emptyStateCtaType="WAIST_CIRCUMFERENCE"

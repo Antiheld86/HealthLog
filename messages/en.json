@@ -1875,7 +1875,7 @@
       "levelShift": "A shift in the level was detected around {date}.",
       "plateau": {
         "title": "Weight plateau on the current dose",
-        "evidence": "Weight moved by {delta} kg over the last {window} days ({readings} readings) — {days} days on {dose}."
+        "evidence": "Weight moved by {delta} {unit} over the last {window} days ({readings} readings) — {days} days on {dose}."
       },
       "retarget": {
         "label": "Not the right measurement?",

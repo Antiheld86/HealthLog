@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "@/lib/i18n/context";
+import { useUnitDisplay } from "@/hooks/use-unit-display";
 import { cn } from "@/lib/utils";
 
 /**
@@ -77,6 +78,18 @@ function fmt(value: number, display: CyclePhaseCrosstabDisplay): string {
   return display === "steps" ? Math.round(value).toString() : value.toFixed(1);
 }
 
+/**
+ * v1.32.26 — the two displays whose values follow the metric/imperial
+ * preference, mapped to the measurement type that carries the transform. Weight
+ * is offset-free (kg→lb); temperature is affine (°C→°F), so an ABSOLUTE phase
+ * average takes `toDisplay` while a phase DELTA takes `toDisplayDelta` (the
+ * offset must never leak into a difference).
+ */
+const DISPLAY_TO_TYPE: Partial<Record<CyclePhaseCrosstabDisplay, string>> = {
+  kg: "WEIGHT",
+  celsius: "BODY_TEMPERATURE",
+};
+
 const HEADLINE_KEY: Record<string, string> = {
   restingHeartRate: "cycle.insights.headline.restingHeartRate",
   heartRateVariability: "cycle.insights.headline.heartRateVariability",
@@ -93,6 +106,7 @@ export function CyclePhaseHeadline({
   headline: CyclePhaseCrosstabRow | null;
 }) {
   const { t } = useTranslations();
+  const unitDisplay = useUnitDisplay();
   if (!headline) {
     return (
       <p
@@ -108,8 +122,9 @@ export function CyclePhaseHeadline({
   );
   // Defensive: an unmapped display must never pass undefined to `t` (whose
   // resolver does `key.split(".")`). An empty unit is the honest degrade.
+  const mt = DISPLAY_TO_TYPE[headline.display];
   const unitKey = UNIT_KEY[headline.display];
-  const unit = unitKey ? t(unitKey) : "";
+  const unit = mt ? unitDisplay.unitFor(mt) : unitKey ? t(unitKey) : "";
   const up = headline.delta >= 0;
   const dir = t(
     up
@@ -118,7 +133,13 @@ export function CyclePhaseHeadline({
   );
   const params = {
     metric: metricLabel,
-    delta: fmt(Math.abs(headline.delta), headline.display),
+    // A phase delta → factor-only conversion (no affine offset).
+    delta: fmt(
+      Math.abs(
+        mt ? unitDisplay.toDisplayDelta(mt, headline.delta) : headline.delta,
+      ),
+      headline.display,
+    ),
     unit,
     dir,
   };
@@ -141,6 +162,7 @@ export function CyclePhaseCrosstab({
   rows: CyclePhaseCrosstabRow[];
 }) {
   const { t } = useTranslations();
+  const unitDisplay = useUnitDisplay();
   if (rows.length === 0) return null;
 
   return (
@@ -155,15 +177,20 @@ export function CyclePhaseCrosstab({
           );
           // Defensive: an unmapped display must never pass undefined to `t`
           // (whose resolver does `key.split(".")`). Empty unit on a miss.
+          const mt = DISPLAY_TO_TYPE[row.display];
           const unitKey = UNIT_KEY[row.display];
-          const unit = unitKey ? t(unitKey) : "";
+          const unit = mt ? unitDisplay.unitFor(mt) : unitKey ? t(unitKey) : "";
+          const absConv = (v: number) =>
+            mt ? unitDisplay.toDisplay(mt, v) : v;
+          const deltaConv = (v: number) =>
+            mt ? unitDisplay.toDisplayDelta(mt, v) : v;
           // `delta` = lutealAvg − follicularAvg: positive = the vital runs
           // higher in the luteal phase. The number stays NEUTRAL — higher is
           // good for steps but bad for resting HR, and this board is
           // observational, so colouring it would imply a verdict the data
           // doesn't support. The sign prefix + `data-direction` carry it.
           const up = row.delta >= 0;
-          const deltaText = `${up ? "+" : ""}${fmt(row.delta, row.display)} ${unit}`;
+          const deltaText = `${up ? "+" : ""}${fmt(deltaConv(row.delta), row.display)} ${unit}`;
           return (
             <li
               key={row.metricKey}
@@ -197,8 +224,8 @@ export function CyclePhaseCrosstab({
               <p className="text-muted-foreground text-xs">
                 {t("cycle.insights.crosstab.detail", {
                   metric: metricLabel,
-                  lutealAvg: fmt(row.lutealAvg, row.display),
-                  follicularAvg: fmt(row.follicularAvg, row.display),
+                  lutealAvg: fmt(absConv(row.lutealAvg), row.display),
+                  follicularAvg: fmt(absConv(row.follicularAvg), row.display),
                   unit,
                   lutealDays: row.lutealDays,
                   follicularDays: row.follicularDays,

@@ -58,6 +58,7 @@ import {
   logMcpBloodPressure,
   checkMcpMeasurement,
   checkMcpBloodPressure,
+  resolveMcpMeasurementUnit,
 } from "./writes";
 
 /**
@@ -184,7 +185,7 @@ const WRITE_TOOL_DEFINITIONS: McpToolDefinition[] = [
         .max(20)
         .optional()
         .describe(
-          "Optional unit hint; the server uses the type's canonical unit when omitted.",
+          "Optional unit hint. Omit to use the type's canonical unit. A recognised alias (lb/lbs/pound(s), in/inch(es), °F, mmol/L) is converted to canonical; any other unit is refused with unsupported_unit — the value is never stored in a non-canonical unit.",
         ),
       measuredAt: z.iso
         .datetime({ offset: true })
@@ -214,27 +215,43 @@ const WRITE_TOOL_DEFINITIONS: McpToolDefinition[] = [
       }
 
       if (!confirm) {
-        // Run the SAME validation the commit core runs so the preview cannot
-        // show a value that would then be refused on commit.
-        const check = checkMcpMeasurement(type, value, measuredAt);
+        // Run the SAME normalisation + validation the commit core runs so the
+        // preview cannot show a value that would then be refused on commit. The
+        // unit hint resolves to canonical (converting the value) or refuses;
+        // the preview echoes the canonical value the commit would store.
+        const unitResolution = resolveMcpMeasurementUnit(type, value, unit);
+        const previewValue = unitResolution.ok ? unitResolution.value : value;
+        const previewUnit = unitResolution.ok
+          ? unitResolution.unit
+          : (unit ?? null);
+        const check = unitResolution.ok
+          ? checkMcpMeasurement(type, previewValue, measuredAt)
+          : null;
         annotate({
           action: { name: "mcp.tool.write" },
           meta: { tool: "log_measurement", status: "preview" },
         });
+        const wouldFail = !unitResolution.ok
+          ? { wouldFail: true as const, error: "unsupported_unit" as const }
+          : check && !check.ok
+            ? {
+                wouldFail: true as const,
+                error: check.error,
+                reason: check.reason,
+              }
+            : {};
         return {
           requiresConfirmation: true,
           written: false,
           preview: {
             type,
-            value,
-            unit: unit ?? null,
+            value: previewValue,
+            unit: previewUnit,
             measuredAt: measuredAt ? measuredAt.toISOString() : "now",
             source: "MCP",
           },
           instruction: CONFIRM_INSTRUCTION,
-          ...(check.ok
-            ? {}
-            : { wouldFail: true, error: check.error, reason: check.reason }),
+          ...wouldFail,
         };
       }
 
@@ -253,6 +270,9 @@ const WRITE_TOOL_DEFINITIONS: McpToolDefinition[] = [
 
       if (result.status === "unsupported_type") {
         return { written: false, error: "unsupported_type" };
+      }
+      if (result.status === "unsupported_unit") {
+        return { written: false, error: "unsupported_unit" };
       }
       if (result.status === "out_of_range") {
         return { written: false, error: "out_of_range", reason: result.reason };

@@ -1873,7 +1873,7 @@
       "levelShift": "Wykryto zmianę poziomu w okolicach {date}.",
       "plateau": {
         "title": "Plateau masy ciała przy obecnej dawce",
-        "evidence": "Zmiana masy ciała o {delta} kg w ciągu ostatnich {window} dni ({readings} pomiarów) — {days} dni na dawce {dose}."
+        "evidence": "Zmiana masy ciała o {delta} {unit} w ciągu ostatnich {window} dni ({readings} pomiarów) — {days} dni na dawce {dose}."
       },
       "retarget": {
         "label": "To nie ten pomiar?",

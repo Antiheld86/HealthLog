@@ -23,8 +23,6 @@ export default function InsightsGripStrengthPage() {
       chartKey="gripStrength"
       i18nPrefix="insights.gripStrength"
       color="var(--success)"
-      unit="kg"
-      yAxisUnit="kg"
       statIcon={Dumbbell}
       emptyStateIcon={<Dumbbell className="size-6" />}
       emptyStateCtaType="GRIP_STRENGTH"

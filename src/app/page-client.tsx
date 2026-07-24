@@ -3,6 +3,7 @@
 import React, { Suspense, useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { useUnitDisplay } from "@/hooks/use-unit-display";
 import { useMounted } from "@/hooks/use-mounted";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { PullToRefreshIndicator } from "@/components/ui/pull-to-refresh-indicator";
@@ -225,6 +226,18 @@ export default function DashboardPageClient({
   const { t } = useTranslations();
   const fmt = useFormatters();
   const queryClient = useQueryClient();
+  // v1.32.26 — metric/imperial display choke point for the dashboard tiles +
+  // weight chart. `td` converts an ABSOLUTE reading (affine, so a temperature
+  // picks up the °F offset); `tdd` converts a DELTA / slope (factor only, so a
+  // Δ never inherits the offset). Metric users take the identity path.
+  const unitDisplay = useUnitDisplay();
+  const td = (type: string, value: number | null | undefined): number | null =>
+    value == null ? null : unitDisplay.toDisplay(type, value);
+  const tdd = (
+    type: string,
+    value: number | null | undefined,
+  ): number | null =>
+    value == null ? null : unitDisplay.toDisplayDelta(type, value);
   const [quickEntryDialog, setQuickEntryDialog] =
     useState<QuickEntryDialog>(null);
 
@@ -713,7 +726,29 @@ export default function DashboardPageClient({
   const bands = serverBands ?? clientBands;
   const bpTargets = bands.bpTargets;
   const weightRange = bands.weightRange;
+  // The range hint tooltip prints its band bounds in the display unit, so scale
+  // the kg thresholds by the weight factor (offset-free). The colour-classing
+  // below stays in canonical kg — it compares a canonical avg against the
+  // canonical range, so both sides remain in the same unit.
+  const weightHintRange = weightRange
+    ? {
+        greenMin: unitDisplay.toDisplay("WEIGHT", weightRange.greenMin),
+        greenMax: unitDisplay.toDisplay("WEIGHT", weightRange.greenMax),
+        orangeMin: unitDisplay.toDisplay("WEIGHT", weightRange.orangeMin),
+        orangeMax: unitDisplay.toDisplay("WEIGHT", weightRange.orangeMax),
+      }
+    : weightRange;
   const weightBands = bands.weightBands ?? undefined;
+  // Scale the kg chart bands into the display unit so the shaded zone tracks
+  // the converted line (factor-only; weight has no offset). Metric = identity.
+  const weightDisplayBands =
+    weightBands && unitDisplay.preference === "imperial"
+      ? weightBands.map((band) => ({
+          ...band,
+          min: unitDisplay.toDisplay("WEIGHT", band.min),
+          max: unitDisplay.toDisplay("WEIGHT", band.max),
+        }))
+      : weightBands;
   const bpTargetZones = bpTargets
     ? [
         {
@@ -897,10 +932,10 @@ export default function DashboardPageClient({
               <TrendCard
                 key="weight"
                 label={t("dashboard.weightShort")}
-                latest={w?.latest ?? null}
-                unit="kg"
-                avg7={w?.avg7 ?? null}
-                avg30={w?.avg30 ?? null}
+                latest={td("WEIGHT", w?.latest)}
+                unit={unitDisplay.unitFor("WEIGHT")}
+                avg7={td("WEIGHT", w?.avg7)}
+                avg30={td("WEIGHT", w?.avg30)}
                 avg7ColorClass={getRangeColorClass(w?.avg7, {
                   range: weightRange,
                 })}
@@ -908,23 +943,23 @@ export default function DashboardPageClient({
                   range: weightRange,
                 })}
                 avg7Hint={getRangeHint(
-                  "kg",
-                  { range: weightRange },
+                  unitDisplay.unitFor("WEIGHT"),
+                  { range: weightHintRange },
                   t,
                   fmt.number,
                 )}
                 avg30Hint={getRangeHint(
-                  "kg",
-                  { range: weightRange },
+                  unitDisplay.unitFor("WEIGHT"),
+                  { range: weightHintRange },
                   t,
                   fmt.number,
                 )}
                 slope30={w?.slope30 ?? null}
-                trend7Delta={summaryToTrend7Delta(w)}
+                trend7Delta={tdd("WEIGHT", summaryToTrend7Delta(w))}
                 icon={Activity}
                 directionSentiment="up-bad"
                 compareBaseline={compareBaseline}
-                compareDelta={tileCompareDelta(w)}
+                compareDelta={tdd("WEIGHT", tileCompareDelta(w))}
                 staleDays={tileStaleDays("WEIGHT")}
               />
             ),
@@ -1276,16 +1311,22 @@ export default function DashboardPageClient({
               <TrendCard
                 key="wristTemperature"
                 label={t("measurements.typeWristTemperature")}
-                latest={wristTempSummary?.latest ?? null}
-                unit="°C"
-                avg7={wristTempSummary?.avg7 ?? null}
-                avg30={wristTempSummary?.avg30 ?? null}
+                latest={td("WRIST_TEMPERATURE", wristTempSummary?.latest)}
+                unit={unitDisplay.unitFor("WRIST_TEMPERATURE")}
+                avg7={td("WRIST_TEMPERATURE", wristTempSummary?.avg7)}
+                avg30={td("WRIST_TEMPERATURE", wristTempSummary?.avg30)}
                 slope30={wristTempSummary?.slope30 ?? null}
-                trend7Delta={summaryToTrend7Delta(wristTempSummary)}
+                trend7Delta={tdd(
+                  "WRIST_TEMPERATURE",
+                  summaryToTrend7Delta(wristTempSummary),
+                )}
                 icon={Thermometer}
                 directionSentiment="neutral"
                 compareBaseline={compareBaseline}
-                compareDelta={tileCompareDelta(wristTempSummary)}
+                compareDelta={tdd(
+                  "WRIST_TEMPERATURE",
+                  tileCompareDelta(wristTempSummary),
+                )}
                 staleDays={tileStaleDays("WRIST_TEMPERATURE")}
               />
             ),
@@ -1302,16 +1343,22 @@ export default function DashboardPageClient({
               <TrendCard
                 key="muscleMass"
                 label={t("measurements.typeMuscleMass")}
-                latest={muscleMassSummary?.latest ?? null}
-                unit="kg"
-                avg7={muscleMassSummary?.avg7 ?? null}
-                avg30={muscleMassSummary?.avg30 ?? null}
+                latest={td("MUSCLE_MASS", muscleMassSummary?.latest)}
+                unit={unitDisplay.unitFor("MUSCLE_MASS")}
+                avg7={td("MUSCLE_MASS", muscleMassSummary?.avg7)}
+                avg30={td("MUSCLE_MASS", muscleMassSummary?.avg30)}
                 slope30={muscleMassSummary?.slope30 ?? null}
-                trend7Delta={summaryToTrend7Delta(muscleMassSummary)}
+                trend7Delta={tdd(
+                  "MUSCLE_MASS",
+                  summaryToTrend7Delta(muscleMassSummary),
+                )}
                 icon={Dumbbell}
                 directionSentiment="up-good"
                 compareBaseline={compareBaseline}
-                compareDelta={tileCompareDelta(muscleMassSummary)}
+                compareDelta={tdd(
+                  "MUSCLE_MASS",
+                  tileCompareDelta(muscleMassSummary),
+                )}
                 staleDays={tileStaleDays("MUSCLE_MASS")}
               />
             ),
@@ -1325,16 +1372,22 @@ export default function DashboardPageClient({
               <TrendCard
                 key="totalBodyWater"
                 label={t("measurements.typeTotalBodyWater")}
-                latest={bodyWaterSummary?.latest ?? null}
-                unit="kg"
-                avg7={bodyWaterSummary?.avg7 ?? null}
-                avg30={bodyWaterSummary?.avg30 ?? null}
+                latest={td("TOTAL_BODY_WATER", bodyWaterSummary?.latest)}
+                unit={unitDisplay.unitFor("TOTAL_BODY_WATER")}
+                avg7={td("TOTAL_BODY_WATER", bodyWaterSummary?.avg7)}
+                avg30={td("TOTAL_BODY_WATER", bodyWaterSummary?.avg30)}
                 slope30={bodyWaterSummary?.slope30 ?? null}
-                trend7Delta={summaryToTrend7Delta(bodyWaterSummary)}
+                trend7Delta={tdd(
+                  "TOTAL_BODY_WATER",
+                  summaryToTrend7Delta(bodyWaterSummary),
+                )}
                 icon={Droplet}
                 directionSentiment="neutral"
                 compareBaseline={compareBaseline}
-                compareDelta={tileCompareDelta(bodyWaterSummary)}
+                compareDelta={tdd(
+                  "TOTAL_BODY_WATER",
+                  tileCompareDelta(bodyWaterSummary),
+                )}
                 staleDays={tileStaleDays("TOTAL_BODY_WATER")}
               />
             ),
@@ -1348,16 +1401,22 @@ export default function DashboardPageClient({
               <TrendCard
                 key="boneMass"
                 label={t("measurements.typeBoneMass")}
-                latest={boneMassSummary?.latest ?? null}
-                unit="kg"
-                avg7={boneMassSummary?.avg7 ?? null}
-                avg30={boneMassSummary?.avg30 ?? null}
+                latest={td("BONE_MASS", boneMassSummary?.latest)}
+                unit={unitDisplay.unitFor("BONE_MASS")}
+                avg7={td("BONE_MASS", boneMassSummary?.avg7)}
+                avg30={td("BONE_MASS", boneMassSummary?.avg30)}
                 slope30={boneMassSummary?.slope30 ?? null}
-                trend7Delta={summaryToTrend7Delta(boneMassSummary)}
+                trend7Delta={tdd(
+                  "BONE_MASS",
+                  summaryToTrend7Delta(boneMassSummary),
+                )}
                 icon={Bone}
                 directionSentiment="neutral"
                 compareBaseline={compareBaseline}
-                compareDelta={tileCompareDelta(boneMassSummary)}
+                compareDelta={tdd(
+                  "BONE_MASS",
+                  tileCompareDelta(boneMassSummary),
+                )}
                 staleDays={tileStaleDays("BONE_MASS")}
               />
             ),
@@ -1554,10 +1613,11 @@ export default function DashboardPageClient({
                 types={["WEIGHT"]}
                 title={t("dashboard.weight")}
                 colors={["var(--chart-1)"]}
-                unit="kg"
-                valueBands={weightBands}
+                unit={unitDisplay.unitFor("WEIGHT")}
+                valueBands={weightDisplayBands}
                 compareBaseline={compareBaseline}
                 userTimezone={user?.timezone}
+                valueScale={unitDisplay.transformFor("WEIGHT").factor}
               />
             ),
           });
