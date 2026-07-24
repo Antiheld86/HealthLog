@@ -22,13 +22,18 @@ import {
 import { annotate } from "@/lib/logging/context";
 import { prisma, toJson } from "@/lib/db";
 import {
+  takeBaseToken,
+  guardedUserUpdate,
+  invalidBaseTokenError,
+} from "@/lib/optimistic-lock";
+import {
   resolveMedicationListLayout,
   serializeMedicationListLayout,
   DEFAULT_MEDICATION_LIST_LAYOUT,
   MEDICATION_LIST_VIEWS,
   MEDICATION_ORDER_ID_MAX_LENGTH,
   MEDICATION_ORDER_MAX_ENTRIES,
-  type MedicationListLayout,
+  type MedicationListLayoutWithToken,
 } from "@/lib/medication-list-layout";
 import { Prisma } from "@/generated/prisma/client";
 import { z } from "zod/v4";
@@ -55,12 +60,18 @@ const layoutSchema = z.object({
 
 async function buildMedicationListLayout(
   userId: string,
-): Promise<MedicationListLayout> {
+): Promise<MedicationListLayoutWithToken> {
   const row = await prisma.user.findUnique({
     where: { id: userId },
-    select: { medicationListLayoutJson: true },
+    // v1.32.21 (R5a) — `updatedAt` rides the cached blob so GET hands the
+    // client the optimistic-concurrency token alongside the presentation it
+    // applies to (busted on every write, so the pair stays consistent).
+    select: { medicationListLayoutJson: true, updatedAt: true },
   });
-  return resolveMedicationListLayout(row?.medicationListLayoutJson);
+  return {
+    ...resolveMedicationListLayout(row?.medicationListLayoutJson),
+    updatedAt: row?.updatedAt?.toISOString(),
+  };
 }
 
 export const GET = apiHandler(async () => {
@@ -70,7 +81,7 @@ export const GET = apiHandler(async () => {
   // caches; the blob changes only on a view toggle or an order save,
   // which invalidates via `invalidateUserMedicationListLayout()`.
   const layout = await cached(
-    caches.medicationListLayout as ServerCache<MedicationListLayout>,
+    caches.medicationListLayout as ServerCache<MedicationListLayoutWithToken>,
     user.id,
     () => buildMedicationListLayout(user.id),
     annotate,
@@ -81,10 +92,19 @@ export const GET = apiHandler(async () => {
 export const PUT = apiHandler(async (request: NextRequest) => {
   const { user } = await requireAuth();
 
-  const { data: body, error: jsonError } = await safeJson(request, {
+  const { data: rawBody, error: jsonError } = await safeJson(request, {
     maxBytes: 64 * 1024,
   });
   if (jsonError) return jsonError;
+
+  // v1.32.21 (R5a) — pull the optimistic-concurrency base token off the body
+  // BEFORE the Zod parse so the domain schema stays pure (issue #581 family).
+  // BOTH writers (view toggle, order save) route through here, so the token
+  // guards either against a stale interleave of the other.
+  const taken = takeBaseToken(rawBody);
+  if ("invalid" in taken) return invalidBaseTokenError();
+  const base = taken.base;
+  const body = taken.rest;
 
   const parsed = layoutSchema.safeParse(body);
   if (!parsed.success) {
@@ -144,10 +164,21 @@ export const PUT = apiHandler(async (request: NextRequest) => {
     order: mergedOrder,
   });
 
-  await prisma.user.update({
-    where: { id: user.id },
+  // v1.32.21 (R5a) — guard the write on the client's base token. A stale base
+  // 409s and writes NOTHING, so a view toggle can't resurrect an order the
+  // reorder Save just committed (or vice versa); a tokenless request keeps the
+  // prior unconditional write.
+  const guarded = await guardedUserUpdate({
+    userId: user.id,
+    base,
     data: { medicationListLayoutJson: toJson(normalized) },
+    conflict: {
+      action: "medication.layout.conflict",
+      errorCode: "medication_layout_conflict",
+      message: "Medications layout changed since it was loaded",
+    },
   });
+  if ("conflict" in guarded) return guarded.conflict;
 
   annotate({
     action: { name: "medication.layout.update" },
@@ -156,7 +187,10 @@ export const PUT = apiHandler(async (request: NextRequest) => {
 
   invalidateUserMedicationListLayout(user.id);
 
-  return apiSuccess(normalized);
+  return apiSuccess({
+    ...normalized,
+    updatedAt: guarded.updatedAt,
+  } satisfies MedicationListLayoutWithToken);
 });
 
 export const DELETE = apiHandler(async () => {

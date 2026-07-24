@@ -1,6 +1,7 @@
 {
   "common": {
     "save": "Save",
+    "conflictReloaded": "Reloaded from the server. Please make your change again.",
     "cancel": "Cancel",
     "delete": "Delete",
     "undo": "Undo",

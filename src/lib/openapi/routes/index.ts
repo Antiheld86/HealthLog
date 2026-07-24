@@ -35,6 +35,7 @@ import { consentPaths } from "./consent";
 import { customMetricPaths } from "./custom-metrics";
 import { dailyPaths } from "./daily";
 import { cyclePaths } from "./cycle";
+import { dashboardWidgetPaths } from "./dashboard";
 import { biomarkerPaths } from "./biomarkers";
 import { inboundDocumentPaths } from "./documents";
 import { devicePaths } from "./devices";
@@ -105,6 +106,10 @@ export const openApiPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   // v1.28 — the unified daily digest (P3 spine; appended, spread order is
   // load-bearing).
   ...dailyPaths,
+  // v1.32.21 (R5a) — dashboard widget layout: previously absent from the
+  // registry entirely, now documented as the reference optimistic-concurrency
+  // contract (appended, spread order is load-bearing).
+  ...dashboardWidgetPaths,
 };
 
 export const openApiComponents: NonNullable<ZodOpenApiObject["components"]> = {

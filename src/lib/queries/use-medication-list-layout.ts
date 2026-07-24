@@ -8,11 +8,16 @@ import {
 import { toast } from "sonner";
 
 import { apiGet, apiPut } from "@/lib/api/api-fetch";
+import {
+  readUpdatedAtToken,
+  withBaseToken,
+  isConflict,
+} from "@/lib/api/optimistic-token";
 import { queryKeys } from "@/lib/query-keys";
 import { useTranslations } from "@/lib/i18n/context";
 import {
   DEFAULT_MEDICATION_LIST_LAYOUT,
-  type MedicationListLayout,
+  type MedicationListLayoutWithToken,
   type MedicationListView,
 } from "@/lib/medication-list-layout";
 
@@ -47,19 +52,28 @@ export async function runSetMedicationListView(deps: {
 }): Promise<void> {
   const { view, queryClient, t } = deps;
   const key = queryKeys.medicationListLayout();
-  const previous = queryClient.getQueryData<MedicationListLayout>(key);
-  queryClient.setQueryData<MedicationListLayout>(key, {
+  const previous = queryClient.getQueryData<MedicationListLayoutWithToken>(key);
+  queryClient.setQueryData<MedicationListLayoutWithToken>(key, {
     ...(previous ?? DEFAULT_MEDICATION_LIST_LAYOUT),
     view,
   });
   try {
-    const saved = await apiPut<MedicationListLayout>(
+    // v1.32.21 (R5a) — echo the base token so a concurrent order Save can't be
+    // resurrected by this view toggle (and vice versa).
+    const saved = await apiPut<MedicationListLayoutWithToken>(
       "/api/medications/layout",
-      { version: 1, view },
+      withBaseToken({ version: 1, view }, readUpdatedAtToken(queryClient, key)),
     );
     if (saved) queryClient.setQueryData(key, saved);
-  } catch {
+  } catch (err) {
+    // Instant-write disposition: roll back the optimistic view. On a 409 also
+    // invalidate so the token advances, and nudge instead of a hard error.
     queryClient.setQueryData(key, previous);
+    if (isConflict(err)) {
+      void queryClient.invalidateQueries({ queryKey: key });
+      toast.message(t("common.conflictReloaded"));
+      return;
+    }
     toast.error(t("medications.viewSaveFailed"));
   }
 }
@@ -76,25 +90,35 @@ export async function runSaveMedicationListOrder(deps: {
   t: Translator;
 }): Promise<boolean> {
   const { order, queryClient, t } = deps;
+  const key = queryKeys.medicationListLayout();
   try {
-    const saved = await apiPut<MedicationListLayout>(
+    // v1.32.21 (R5a) — echo the base token so this order Save 409s rather than
+    // clobbering a view toggle that committed since the dialog opened.
+    const saved = await apiPut<MedicationListLayoutWithToken>(
       "/api/medications/layout",
-      { version: 1, order },
+      withBaseToken({ version: 1, order }, readUpdatedAtToken(queryClient, key)),
     );
     if (saved) {
-      queryClient.setQueryData(queryKeys.medicationListLayout(), saved);
+      queryClient.setQueryData(key, saved);
     }
     toast.success(t("medications.reorderSaved"));
     return true;
-  } catch {
+  } catch (err) {
+    // Explicit-Save disposition: on a 409 refetch so the token advances, keep
+    // the dialog open (return false), nudge gently.
+    if (isConflict(err)) {
+      void queryClient.invalidateQueries({ queryKey: key });
+      toast.message(t("common.conflictReloaded"));
+      return false;
+    }
     toast.error(t("medications.reorderSaveFailed"));
     return false;
   }
 }
 
 export function useMedicationListLayout(enabled: boolean = true): {
-  /** Resolved layout — defaults until the GET lands. */
-  layout: MedicationListLayout;
+  /** Resolved layout (plus the optimistic-concurrency token) — defaults until the GET lands. */
+  layout: MedicationListLayoutWithToken;
   /** True while the preference GET is in flight (first load only). */
   isLayoutLoading: boolean;
   setView: (view: MedicationListView) => Promise<void>;
@@ -105,7 +129,8 @@ export function useMedicationListLayout(enabled: boolean = true): {
 
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.medicationListLayout(),
-    queryFn: () => apiGet<MedicationListLayout>("/api/medications/layout"),
+    queryFn: () =>
+      apiGet<MedicationListLayoutWithToken>("/api/medications/layout"),
     staleTime: 5 * 60 * 1000,
     enabled,
   });

@@ -30,10 +30,16 @@ import { queryKeys } from "@/lib/query-keys";
 import { reorderById } from "@/lib/insights-layout-reorder";
 import {
   type InsightsLayout,
+  type InsightsLayoutWithToken,
   type InsightsSectionConfig,
   type InsightsSectionId,
 } from "@/lib/insights-layout";
 import { apiDelete, apiPut } from "@/lib/api/api-fetch";
+import {
+  readUpdatedAtToken,
+  withBaseToken,
+  isConflict,
+} from "@/lib/api/optimistic-token";
 
 /**
  * v1.15.11 W3 — inline "Anpassen" edit mode for the customizable Insights
@@ -119,15 +125,21 @@ export function InsightsEditMode({
 
   const saveMutation = useMutation({
     mutationFn: async (next: InsightsLayout) => {
-      return apiPut<InsightsLayout>("/api/insights/layout", {
-        version: 2,
-        sections: next.sections,
-        tiles: next.tiles,
-      });
+      // v1.32.21 (R5a) — echo the optimistic-concurrency base token this edit
+      // was based on so an interleaved write (a Settings pill-order Save, or
+      // this surface open in another tab) 409s instead of clobbering.
+      return apiPut<InsightsLayoutWithToken>(
+        "/api/insights/layout",
+        withBaseToken(
+          { version: 2, sections: next.sections, tiles: next.tiles },
+          readUpdatedAtToken(queryClient, queryKeys.insightsLayout()),
+        ),
+      );
     },
     onSuccess: (saved) => {
-      // Optimistic-style settle: write the server-resolved layout into the
-      // shared cache so the overview repaints in the new order, then close.
+      // Optimistic-style settle: write the server-resolved layout (carrying
+      // the advanced token) into the shared cache so the overview repaints in
+      // the new order, then close.
       queryClient.setQueryData(queryKeys.insightsLayout(), saved);
       void queryClient.invalidateQueries({
         queryKey: queryKeys.insightsLayout(),
@@ -135,7 +147,20 @@ export function InsightsEditMode({
       toast.success(t("insights.editMode.saveSuccess"));
       onClose();
     },
-    onError: () => toast.error(t("insights.editMode.saveError")),
+    onError: (err) => {
+      // v1.32.21 (R5a) — explicit-Save disposition: a 409 means someone else
+      // committed since this edit was based. Refetch so the token advances,
+      // KEEP the draft (stay in edit mode) so the user can re-save, and nudge
+      // gently — nothing was lost.
+      if (isConflict(err)) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.insightsLayout(),
+        });
+        toast.message(t("common.conflictReloaded"));
+        return;
+      }
+      toast.error(t("insights.editMode.saveError"));
+    },
   });
 
   const resetMutation = useMutation({

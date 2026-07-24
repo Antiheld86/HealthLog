@@ -6,6 +6,7 @@
  * runtime request parsing, so the wire contract stays single-source.
  */
 import { z } from "zod/v4";
+import { baseUpdatedAtField } from "../shared";
 import {
   MEDICATION_CATEGORY_VALUES,
   MEDICATION_CONTAINER_TYPE_VALUES,
@@ -893,4 +894,30 @@ export const medicationListLayoutSchema = z
     id: "MedicationListLayout",
     description:
       "Per-user /medications presentation: the card/table view choice plus the manual medication order shared by both views. Mirrors the dashboard-widgets / insights-layout contract.",
+  });
+
+// v1.32.21 (R5a) — the PUT body additionally carries the optional
+// optimistic-concurrency base token (stripped pre-Zod at runtime by
+// `takeBaseToken`); GET / PUT responses echo the fresh `updatedAt` token.
+export const medicationListLayoutPutBody = medicationListLayoutSchema
+  .extend({ baseUpdatedAt: baseUpdatedAtField })
+  .meta({
+    id: "MedicationListLayoutPutBody",
+    description:
+      "PUT body for the medications list presentation — the presentation fields plus the optional optimistic-concurrency base token (`baseUpdatedAt`). Omit the token for the legacy unconditional write.",
+  });
+
+export const medicationListLayoutResult = medicationListLayoutSchema
+  .extend({
+    updatedAt: z.iso
+      .datetime({ offset: true })
+      .optional()
+      .describe(
+        "Optimistic-concurrency token: the stored row's `updatedAt` at read/write time. Echo it back as `baseUpdatedAt` on the next write. Opaque.",
+      ),
+  })
+  .meta({
+    id: "MedicationListLayoutResult",
+    description:
+      "Resolved medications list presentation plus the optimistic-concurrency `updatedAt` token.",
   });

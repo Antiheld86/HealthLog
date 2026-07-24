@@ -7,7 +7,7 @@ import { apiGet } from "@/lib/api/api-fetch";
 import {
   DEFAULT_INSIGHTS_LAYOUT,
   resolveInsightsLayout,
-  type InsightsLayout,
+  type InsightsLayoutWithToken,
 } from "@/lib/insights-layout";
 
 /**
@@ -32,16 +32,30 @@ import {
  * mode while the layout is still in-flight would seed the editor from
  * `DEFAULT_INSIGHTS_LAYOUT` and a "Fertig" save would PUT defaults over their
  * real saved layout.
+ *
+ * v1.32.21 (R5a, B-3) — the resolver rebuilds a FIXED `InsightsLayout` shape
+ * and would DROP the server's `updatedAt` optimistic-concurrency token. If it
+ * did, every insights-layout write would fall back to the server's compat
+ * (unconditional) arm and the #581-class guard would be dead on arrival. So we
+ * re-attach the token AFTER normalising: the query cache holds an
+ * `InsightsLayoutWithToken`, and the two writers (`insights-edit-mode`,
+ * `insights-pill-order-section`) echo it via `readUpdatedAtToken`. Mirrors the
+ * dashboard B-3 fix that kept the token available through its own seed path.
  */
 export function useInsightsLayoutQuery(enabled: boolean): {
-  layout: InsightsLayout;
+  layout: InsightsLayoutWithToken;
   isLoading: boolean;
   isSuccess: boolean;
 } {
   const { data, isLoading, isSuccess } = useQuery({
     queryKey: queryKeys.insightsLayout(),
-    queryFn: async () =>
-      resolveInsightsLayout(await apiGet("/api/insights/layout")),
+    queryFn: async () => {
+      const raw = await apiGet<InsightsLayoutWithToken>("/api/insights/layout");
+      return {
+        ...resolveInsightsLayout(raw),
+        updatedAt: raw?.updatedAt,
+      } satisfies InsightsLayoutWithToken;
+    },
     enabled,
   });
   return {

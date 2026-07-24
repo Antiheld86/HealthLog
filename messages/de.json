@@ -1,6 +1,7 @@
 {
   "common": {
     "save": "Speichern",
+    "conflictReloaded": "Vom Server neu geladen. Bitte nimm deine Änderung noch einmal vor.",
     "cancel": "Abbrechen",
     "delete": "Löschen",
     "undo": "Rückgängig",
