@@ -445,6 +445,9 @@ Reply now as the assistant, grounded ONLY in the documents above, in ${
     }
 
     // ── Numeric grounding — authoritative set = the LIVE attachments' numbers ──
+    // v1.32.14 — count of figures withheld from this reply (each rewritten to the
+    // elision mark), hoisted so the minimal provenance envelope below carries it.
+    let unverifiedStripped = 0;
     if (!outbound.block) {
       const unverified = findUnverifiedCoachNumbers(
         replyText,
@@ -457,6 +460,7 @@ Reply now as the assistant, grounded ONLY in the documents above, in ${
           unverified,
         );
         replyText = prose;
+        unverifiedStripped = stripped;
         annotate({
           action: { name: "documents.chat.number_unverified" },
           meta: {
@@ -472,6 +476,13 @@ Reply now as the assistant, grounded ONLY in the documents above, in ${
       conversationId,
       role: "assistant",
       content: replyText,
+      // v1.32.14 — the fenced path otherwise persists no provenance; when the
+      // guard withheld a figure, ride a MINIMAL envelope so the per-message notice
+      // renders and survives reload. Count only, no values, no windows/metrics.
+      metricSource:
+        unverifiedStripped > 0
+          ? { windows: [], metrics: [], unverifiedFigures: unverifiedStripped }
+          : null,
       providerType: pick!.providerType,
       tokensUsed: totalTokens || null,
       model: result.model ?? null,

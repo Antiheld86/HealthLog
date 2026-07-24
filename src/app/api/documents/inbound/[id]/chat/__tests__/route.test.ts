@@ -371,12 +371,42 @@ describe("POST — numeric grounding", () => {
       .join("");
     // 999 is not in the document (which says 160) → soft-stripped.
     expect(reply).not.toContain("999");
-    expect(reply).toContain("[unverified]");
+    expect(reply).toContain("[…]");
     // The persisted assistant turn carries the corrected prose.
     const assistantWrite = vi
       .mocked(appendMessage)
       .mock.calls.find((c) => c[0].role === "assistant");
-    expect(assistantWrite?.[0].content).toContain("[unverified]");
+    expect(assistantWrite?.[0].content).toContain("[…]");
+    // v1.32.14 — the fenced path rides a MINIMAL provenance envelope so the
+    // per-message notice renders + survives reload: count only, no windows/metrics.
+    expect(assistantWrite?.[0].metricSource).toEqual({
+      windows: [],
+      metrics: [],
+      unverifiedFigures: 1,
+    });
+  });
+
+  it("persists no provenance when the reply is clean", async () => {
+    vi.mocked(runStreamingRawCompletionWithFallback).mockResolvedValue({
+      result: {
+        content: "Your LDL reading looks steady overall.",
+        tokensUsed: 20,
+        model: "claude",
+        providerType: "anthropic",
+      },
+      workingProvider: { providerType: "anthropic", instance: {} },
+      fallbackHops: [],
+    } as never);
+    const res = await POST(
+      req("doc-1", { message: "how is my ldl?" }) as never,
+      ctx("doc-1") as never,
+    );
+    await frames(res);
+    const assistantWrite = vi
+      .mocked(appendMessage)
+      .mock.calls.find((c) => c[0].role === "assistant");
+    // v1.32.14 — clean reply → metricSourceJson stays null (no notice on reload).
+    expect(assistantWrite?.[0].metricSource ?? null).toBeNull();
   });
 });
 

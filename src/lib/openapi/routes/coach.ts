@@ -453,6 +453,14 @@ const coachProvenanceSchema = z
       .describe(
         "v1.20.0 — the retrieval-tool trace for this turn: which tools the Coach called and whether each found data. Metadata only (no values). Absent on the legacy snapshot path and on turns that called no tools.",
       ),
+    unverifiedFigures: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe(
+        "v1.32.14 — count of numeric tokens the grounding guard withheld from this reply (each rewritten to the editorial elision mark). Drives the quiet per-message notice. Count only, never the withheld values. Absent when the turn withheld nothing.",
+      ),
   })
   .meta({
     id: "CoachProvenance",

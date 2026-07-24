@@ -2340,6 +2340,7 @@
       "send": "Send",
       "stop": "Stop",
       "thinking": "Thinking…",
+      "unverifiedFiguresNotice": "Some figures couldn't be checked against your data and were left out.",
       "composerPlaceholder": "Ask me anything…",
       "nudgeBubbleLabel": "New message from the Coach — open chat",
       "fabLabel": "Open the Coach",

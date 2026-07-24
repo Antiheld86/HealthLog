@@ -299,7 +299,7 @@ describe("coach chat — Guard I at the route level (G1)", () => {
       { present: true, data: { metric: "bp", aggregate: { avgSys30: 128 } } },
     ]);
     expect(out).toBe(content);
-    expect(out).not.toContain("[unverified]");
+    expect(out).not.toContain("[…]");
   });
 
   it("streams dates, ranges and thousands unmangled when they are grounded (tool turn)", async () => {
@@ -316,7 +316,7 @@ describe("coach chat — Guard I at the route level (G1)", () => {
       },
     ]);
     expect(out).toBe(content);
-    expect(out).not.toContain("[unverified]");
+    expect(out).not.toContain("[…]");
   });
 
   it("soft-strips a genuinely fabricated figure on a tool turn (the floor still holds)", async () => {
@@ -327,7 +327,7 @@ describe("coach chat — Guard I at the route level (G1)", () => {
         data: { metric: "bp", section: { aggregate: { avgSys30: 128 } } },
       },
     ]);
-    expect(out).toContain("[unverified]");
+    expect(out).toContain("[…]");
     expect(out).not.toContain("138");
   });
 });

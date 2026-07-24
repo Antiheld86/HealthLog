@@ -2354,6 +2354,7 @@
       "send": "Envoyer",
       "stop": "Arrêter",
       "thinking": "Réflexion en cours…",
+      "unverifiedFiguresNotice": "Certains chiffres n'ont pas pu être vérifiés avec tes données et ont été omis.",
       "composerPlaceholder": "Pose ta question …",
       "nudgeBubbleLabel": "Nouveau message du coach — ouvrir le chat",
       "fabLabel": "Ouvrir le coach",

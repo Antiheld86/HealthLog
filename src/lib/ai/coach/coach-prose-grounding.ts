@@ -879,6 +879,17 @@ export function hasThresholdVerdict(prose: string): boolean {
 }
 
 /**
+ * The editorial elision mark that replaces each withheld numeric token
+ * (bracketed U+2026 ellipsis). Chosen over a localised noun phrase because it is
+ * grammar-safe in every slot the tokenizer produces — mid-sentence, before a
+ * surviving unit ("[…] mmHg"), and as a range endpoint — and locale-invariant, so
+ * the server needs no i18n table. It carries no digit, so the tokenizer can never
+ * re-flag it. The per-message notice (`insights.coach.unverifiedFiguresNotice`)
+ * carries the meaning; this mark only holds the slot.
+ */
+export const UNVERIFIED_ELISION_MARK = "[…]";
+
+/**
  * Soft-correct the prose: replace each unverified numeric token with a neutral
  * placeholder so a drifted figure never reaches the user as if authoritative,
  * while the surrounding qualitative framing is preserved. Conservative — it
@@ -886,7 +897,7 @@ export function hasThresholdVerdict(prose: string): boolean {
  * first occurrence of each.
  *
  * Boundary-safe (v1.32.7): the flagged token is matched only where it is NOT
- * embedded in a larger number, so a flagged "23" can never clip "20[unverified]"
+ * embedded in a larger number, so a flagged "23" can never clip "20[…]"
  * out of a grounded "2023". The old plain `indexOf` had that exact bug.
  *
  * Returns the (possibly unchanged) prose plus the count of tokens stripped.
@@ -911,7 +922,7 @@ export function stripUnverifiedNumbers(
     const match = bounded.exec(out);
     if (match === null) continue;
     const idx = match.index;
-    out = `${out.slice(0, idx)}[unverified]${out.slice(idx + token.length)}`;
+    out = `${out.slice(0, idx)}${UNVERIFIED_ELISION_MARK}${out.slice(idx + token.length)}`;
     stripped += 1;
   }
   return { prose: out, stripped };

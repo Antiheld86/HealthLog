@@ -2350,6 +2350,7 @@
       "send": "Senden",
       "stop": "Stopp",
       "thinking": "Denke nach…",
+      "unverifiedFiguresNotice": "Einige Zahlen ließen sich nicht mit deinen Daten abgleichen und wurden weggelassen.",
       "composerPlaceholder": "Frag mich etwas…",
       "nudgeBubbleLabel": "Neue Nachricht vom Coach — Chat öffnen",
       "fabLabel": "Coach öffnen",

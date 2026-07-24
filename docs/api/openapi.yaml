@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HealthLog API
-  version: 1.32.13
+  version: 1.32.14
   description: >-
     Self-hosted personal-health-tracking PWA — public API surface for the iOS native client and external ingest.
 
@@ -24138,6 +24138,13 @@ components:
               - name
               - present
             additionalProperties: false
+        unverifiedFigures:
+          description: v1.32.14 — count of numeric tokens the grounding guard withheld from this reply (each rewritten to the
+            editorial elision mark). Drives the quiet per-message notice. Count only, never the withheld values. Absent
+            when the turn withheld nothing.
+          type: integer
+          exclusiveMinimum: 0
+          maximum: 9007199254740991
       required:
         - windows
         - metrics

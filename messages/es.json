@@ -2352,6 +2352,7 @@
       "send": "Enviar",
       "stop": "Detener",
       "thinking": "Pensando…",
+      "unverifiedFiguresNotice": "Algunas cifras no se pudieron contrastar con tus datos y se omitieron.",
       "composerPlaceholder": "Pregúntame algo …",
       "nudgeBubbleLabel": "Nuevo mensaje del coach — abrir el chat",
       "fabLabel": "Abrir el coach",

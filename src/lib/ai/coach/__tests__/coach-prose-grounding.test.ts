@@ -18,6 +18,7 @@ import {
   collectNumericLeaves,
   findUnverifiedCoachNumbers,
   stripUnverifiedNumbers,
+  UNVERIFIED_ELISION_MARK,
 } from "@/lib/ai/coach/coach-prose-grounding";
 
 describe("collectNumericLeaves", () => {
@@ -196,7 +197,7 @@ describe("findUnverifiedCoachNumbers", () => {
         "Your blood pressure spiked to 138 on July 21st, well above your typical range.";
       const findings = findUnverifiedCoachNumbers(prose, bpPayload);
       const { prose: out } = stripUnverifiedNumbers(prose, findings);
-      expect(out).not.toContain("[unverified]st");
+      expect(out).not.toContain(`${UNVERIFIED_ELISION_MARK}st`);
       expect(out).toBe(prose);
     });
 
@@ -450,25 +451,57 @@ describe("stripUnverifiedNumbers", () => {
     const { prose: out, stripped } = stripUnverifiedNumbers(prose, findings);
     expect(stripped).toBe(1);
     expect(out).toContain("128");
-    expect(out).toContain("[unverified]");
+    expect(out).toContain(UNVERIFIED_ELISION_MARK);
     expect(out).not.toContain("138");
+  });
+
+  it("rewrites to the editorial elision mark, not the old QA literal", () => {
+    // v1.32.14 — the user reads a deliberate omission, never an internal token.
+    const prose = "Your 10-year risk is 42%.";
+    const { prose: out } = stripUnverifiedNumbers(prose, [
+      { value: 42, source: "42" },
+    ]);
+    expect(UNVERIFIED_ELISION_MARK).toBe("[…]");
+    expect(out).not.toContain("[unverified]");
+    expect(out).toContain("[…]");
+    // Digit-free by construction, so the tokenizer can never re-flag the mark.
+    expect(/\d/.test(UNVERIFIED_ELISION_MARK)).toBe(false);
+  });
+
+  it("reads cleanly before a surviving unit (the unit is not part of the token)", () => {
+    // The tokenizer flags the bare magnitude, so "128 mmHg" strips to "[…] mmHg".
+    const prose = "Your systolic was 128 mmHg.";
+    const { prose: out } = stripUnverifiedNumbers(prose, [
+      { value: 128, source: "128" },
+    ]);
+    expect(out).toBe("Your systolic was […] mmHg.");
+    expect(out).not.toContain("[unverified]");
+  });
+
+  it("reads cleanly as a range endpoint", () => {
+    const prose = "between 118 and 130 mmHg";
+    const { prose: out } = stripUnverifiedNumbers(prose, [
+      { value: 118, source: "118" },
+    ]);
+    expect(out).toBe("between […] and 130 mmHg");
   });
 
   it("is a no-op when nothing was flagged", () => {
     const { prose, stripped } = stripUnverifiedNumbers("all good", []);
     expect(prose).toBe("all good");
     expect(stripped).toBe(0);
+    expect(prose).not.toContain(UNVERIFIED_ELISION_MARK);
   });
 
   it("is boundary-safe: a flagged '23' never clips a grounded '2023' (v1.32.7)", () => {
-    // The old plain indexOf produced "20[unverified]" here.
+    // The old plain indexOf produced "20[…]" here.
     const prose = "Since 2023 your reading of 23 stood out.";
     const { prose: out, stripped } = stripUnverifiedNumbers(prose, [
       { value: 23, source: "23" },
     ]);
     expect(out).toContain("2023");
-    expect(out).not.toContain("20[unverified]");
-    expect(out).toContain("[unverified]");
+    expect(out).not.toContain(`20${UNVERIFIED_ELISION_MARK}`);
+    expect(out).toContain(UNVERIFIED_ELISION_MARK);
     expect(stripped).toBe(1);
   });
 });

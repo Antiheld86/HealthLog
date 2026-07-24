@@ -405,7 +405,7 @@ describe("coach chat — tool-mode routing (F1)", () => {
       (c) => (c[0] as { role: string }).role === "assistant",
     );
     const content = (assistantCall?.[0] as { content: string }).content;
-    expect(content).toContain("[unverified]");
+    expect(content).toContain("[…]");
     expect(content).not.toContain("138");
   });
 
@@ -474,7 +474,7 @@ describe("coach chat — tool-mode routing (F1)", () => {
       (c) => (c[0] as { role: string }).role === "assistant",
     );
     const content = (assistantCall?.[0] as { content: string }).content;
-    expect(content).not.toContain("[unverified]");
+    expect(content).not.toContain("[…]");
     expect(content).toContain("42");
     expect(content).toContain("320");
   });
@@ -534,7 +534,7 @@ describe("coach chat — tool-mode routing (F1)", () => {
       (c) => (c[0] as { role: string }).role === "assistant",
     );
     const content = (assistantCall?.[0] as { content: string }).content;
-    expect(content).not.toContain("[unverified]");
+    expect(content).not.toContain("[…]");
     expect(content).toContain("130");
   });
 
