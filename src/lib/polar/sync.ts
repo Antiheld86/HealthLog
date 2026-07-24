@@ -12,6 +12,22 @@
  * as a 401 → `reauth_required` on the shared integration ledger (`polar` key),
  * exactly like Nightscout's token-rejected path.
  *
+ * Isolation: the five vitals collections are settled independently
+ * (`Promise.allSettled`), so a single dead collection — e.g. a 403 on SpO2 or
+ * cardio-load on an account without the sensor or the higher tier — imports the
+ * healthy four and records ONE partial failure rather than blanking every
+ * collection. Mirrors Oura's shipped per-collection isolation, minus the
+ * token-refresh leg Polar structurally lacks (a 401 is just a per-collection
+ * failure the classifier maps to `reauth_required`).
+ *
+ * Window contract: every hourly tick re-reads the full server-fixed window for
+ * each collection — 28 days for recharge / sleep / activity / cardio-load /
+ * SpO2 (there is no narrower request and no pagination on any of them). A
+ * late-synced device, a re-scored night, or a HealthLog outage shorter than the
+ * window all self-heal on the next tick with no cursor or watermark. History
+ * older than the window is an upstream cap, not a HealthLog gap. See the
+ * client's per-fetcher docstrings for the verified per-endpoint windows.
+ *
  * Idempotency: each row's `externalId` is `<date>:<fieldTag>`. The shared
  * reconciler protects both external and natural identity. Polar re-scores a
  * night for a short window after the fact, so an exact re-post overwrites in
@@ -25,7 +41,6 @@ import { prisma } from "@/lib/db";
 import type { MeasurementType } from "@/generated/prisma/client";
 import { getEvent } from "@/lib/logging/context";
 import {
-  markSyncFailureRecorded,
   recordSyncFailure,
   recordSyncSuccess,
   toFailureKind,
@@ -124,61 +139,115 @@ function toUpsert(
   }));
 }
 
+/** One Polar vitals collection: its ledger name (which doubles as the
+ * externalId resource prefix) and a self-contained fetch+map closure that
+ * resolves to the collection's mapped upserts. Each closure owns its own client
+ * call and mapper so a throw — a failing fetch OR a throwing mapper — is
+ * contained to this one collection under `Promise.allSettled`. */
+interface PolarCollectionSpec {
+  name: string;
+  collect: (token: string) => Promise<PolarMeasurementUpsert[]>;
+}
+
+/** A single collection that failed to fetch/map, carried so the caller can
+ * classify + record ONE partial failure without blanking the collections that
+ * did succeed. */
+export interface PolarCollectionFailure {
+  name: string;
+  err: unknown;
+}
+
 /**
  * Sync one user's Polar data. Returns the count of measurement rows written.
  * A user with no Polar connection is a clean no-op (returns 0, touches no
  * status row).
+ *
+ * The five vitals collections are settled independently: the healthy ones
+ * import, a failing one is recorded as a single partial failure (no success
+ * stamp), and nothing is rethrown for a fetch/map failure. The only throw that
+ * escapes now is a write-path/unexpected error out of `upsertPolarMeasurements`
+ * — the poll-cohort boundary records that unmarked escape once.
  */
 export async function syncUserPolar(userId: string): Promise<number> {
   const conn = await getPolarConnection(userId);
   if (!conn) return 0;
 
-  const readings: PolarMeasurementUpsert[] = [];
+  // Filled by the sleep collection's closure as it maps records; carried so the
+  // caller can run the record-scoped sweep before the upsert. A collection that
+  // throws pushes nothing (the fetch is its first await), so a failed sleep
+  // collection leaves the sweep list empty and no rows are tombstoned.
   const sleepSweeps: SleepSegmentSweep[] = [];
-  try {
-    const [recharges, sleeps, activities, cardioLoads, spo2Tests] =
-      await Promise.all([
-        fetchNightlyRecharges(conn.accessToken),
-        fetchSleeps(conn.accessToken),
-        fetchActivities(conn.accessToken),
-        fetchCardioLoads(conn.accessToken),
-        fetchSpo2(conn.accessToken),
-      ]);
-    for (const r of recharges) {
-      readings.push(...toUpsert(mapNightlyRecharge(r), "recharge"));
+
+  const collections: PolarCollectionSpec[] = [
+    {
+      name: "recharge",
+      collect: async (t) =>
+        (await fetchNightlyRecharges(t)).flatMap((r) =>
+          toUpsert(mapNightlyRecharge(r), "recharge"),
+        ),
+    },
+    {
+      name: "sleep",
+      collect: async (t) => {
+        const records = await fetchSleeps(t);
+        const rowsOut: PolarMeasurementUpsert[] = [];
+        for (const s of records) {
+          const rows = toUpsert(mapSleep(s), "sleep");
+          rowsOut.push(...rows);
+          // Night-scoped sweep entry: the reconstructed segments of this date
+          // all key under `sleep:<date>:seg:` (mapper-supplied). Any live row
+          // under that prefix this fetch did NOT re-produce is a re-score
+          // orphan or a legacy `:seg:<tag>:<i>` indexed row — tombstoned
+          // before the upsert. The prefix deliberately stays on `:seg:` — the
+          // IN_BED envelope keys on its measuredAt's UTC date, which can drift
+          // a calendar day from `s.date`, so a broader `sleep:<date>:` bound
+          // could cross nights.
+          sleepSweeps.push({
+            prefix: `sleep:${s.date}:seg:`,
+            keepIds: rows
+              .filter((r) => r.type === "SLEEP_DURATION")
+              .map((r) => r.externalId),
+          });
+        }
+        return rowsOut;
+      },
+    },
+    {
+      name: "activity",
+      collect: async (t) =>
+        (await fetchActivities(t)).flatMap((a) =>
+          toUpsert(mapActivity(a), "activity"),
+        ),
+    },
+    {
+      name: "cardioload",
+      collect: async (t) =>
+        (await fetchCardioLoads(t)).flatMap((c) =>
+          toUpsert(mapCardioLoad(c), "cardioload"),
+        ),
+    },
+    {
+      name: "spo2",
+      collect: async (t) =>
+        (await fetchSpo2(t)).flatMap((s) => toUpsert(mapSpo2(s), "spo2")),
+    },
+  ];
+
+  // Isolate each collection: a rejection is captured per-collection, never
+  // propagated, so one dead collection no longer blanks the healthy siblings.
+  const settled = await Promise.allSettled(
+    collections.map((spec) => spec.collect(conn.accessToken)),
+  );
+  const readings: PolarMeasurementUpsert[] = [];
+  const failures: PolarCollectionFailure[] = [];
+  settled.forEach((res, i) => {
+    const spec = collections[i]!;
+    if (res.status === "fulfilled") {
+      readings.push(...res.value);
+    } else {
+      failures.push({ name: spec.name, err: res.reason });
     }
-    for (const s of sleeps) {
-      const rows = toUpsert(mapSleep(s), "sleep");
-      readings.push(...rows);
-      // Night-scoped sweep entry: the reconstructed segments of this date all
-      // key under `sleep:<date>:seg:` (mapper-supplied). Any live row under
-      // that prefix this fetch did NOT re-produce is a re-score orphan or a
-      // legacy `:seg:<tag>:<i>` indexed row — tombstoned before the upsert.
-      // The prefix deliberately stays on `:seg:` — the IN_BED envelope keys
-      // on its measuredAt's UTC date, which can drift a calendar day from
-      // `s.date`, so a broader `sleep:<date>:` bound could cross nights.
-      sleepSweeps.push({
-        prefix: `sleep:${s.date}:seg:`,
-        keepIds: rows
-          .filter((r) => r.type === "SLEEP_DURATION")
-          .map((r) => r.externalId),
-      });
-    }
-    for (const a of activities) {
-      readings.push(...toUpsert(mapActivity(a), "activity"));
-    }
-    for (const c of cardioLoads) {
-      readings.push(...toUpsert(mapCardioLoad(c), "cardioload"));
-    }
-    for (const t of spo2Tests) {
-      readings.push(...toUpsert(mapSpo2(t), "spo2"));
-    }
-  } catch (err) {
-    // Recorded here, then marked so the poll-cohort boundary does not
-    // double-record it when the legs wrapper rethrows it there.
-    await recordPolarSyncFailure(userId, err);
-    throw markSyncFailureRecorded(err);
-  }
+  });
 
   // Clear whatever an earlier scoring left under the re-fetched nights before
   // the fresh set upserts (mirrors Google Health's replace-by-window order).
@@ -195,10 +264,41 @@ export async function syncUserPolar(userId: string): Promise<number> {
   });
 
   // S4 — trigger the debounced morning refresh on a last-night segment landing
-  // (mirrors the Withings / WHOOP / Apple seams).
+  // (mirrors the Withings / WHOOP / Apple seams). Fires whether or not a
+  // sibling collection failed, since the sleep readings were still imported.
   void maybeEnqueueMorningRefresh(userId, insertedSleepMeasuredAts).catch(
     () => {},
   );
+
+  if (failures.length > 0) {
+    // Partial failure: import what the healthy collections returned, but keep
+    // the cycle honest — record ONE failure and do NOT stamp success, so the
+    // freshness surface reflects that some collections are behind and the next
+    // tick refetches them rather than showing green. Mirrors Oura's
+    // partial-failure ledger block; the record is inline (not
+    // `recordPolarSyncFailure`) because it needs the `partial sync failure
+    // (<names>)` message prefix — the R6 recorder's boundary contract stays
+    // frozen. No rethrow: a rethrow would suppress the cohort's users_synced /
+    // reminder-satisfy accounting for a user whose data DID land.
+    const firstErr = failures[0]!.err;
+    const names = failures.map((f) => f.name).join(", ");
+    getEvent()?.addWarning(
+      `polar: ${failures.length} collection(s) failed for ${userId}: ${names}`,
+    );
+    await recordSyncFailure({
+      userId,
+      integration: "polar",
+      kind: classifyPolarFailure(firstErr),
+      message: `partial sync failure (${names}): ${
+        firstErr instanceof Error ? firstErr.message : String(firstErr)
+      }`,
+      errorCode:
+        firstErr instanceof PolarApiError && firstErr.httpStatus != null
+          ? String(firstErr.httpStatus)
+          : undefined,
+    });
+    return imported;
+  }
 
   await recordSyncSuccess(userId, "polar");
   return imported;

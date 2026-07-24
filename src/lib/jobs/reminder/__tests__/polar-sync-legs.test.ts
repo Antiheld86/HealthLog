@@ -30,6 +30,18 @@ describe("syncUserPolarLegs — composite independence on the shared polar ledge
     expect(syncUserPolarWorkouts).toHaveBeenCalledWith("u1");
   });
 
+  it("sums both counts without throwing when the vitals leg returns a partial-failure count", async () => {
+    // Post-R7 the vitals leg records a partial failure INTERNALLY and RETURNS
+    // its healthy-collections import count rather than throwing. The wrapper
+    // must sum it with the workout leg and complete cleanly — a partial vitals
+    // failure never starves the user's success accounting at the cohort level.
+    syncUserPolar.mockResolvedValue(4);
+    syncUserPolarWorkouts.mockResolvedValue(2);
+    await expect(syncUserPolarLegs("u1")).resolves.toBe(6);
+    expect(syncUserPolar).toHaveBeenCalledWith("u1");
+    expect(syncUserPolarWorkouts).toHaveBeenCalledWith("u1");
+  });
+
   it("still attempts the workout leg when the vitals leg fails (vice-versa isolation)", async () => {
     syncUserPolar.mockRejectedValue(new Error("vitals down"));
     syncUserPolarWorkouts.mockResolvedValue(3);

@@ -27,6 +27,12 @@ export type PolarSyncPayload = PollCohortPayload;
  * always attempted, so a workouts-leg failure can never mask a vitals success
  * and vice versa — then the FIRST error is rethrown so the cohort handler warns
  * and skips this user's success accounting without losing the error.
+ *
+ * The vitals leg (`syncUserPolar`) now settles its five collections
+ * independently: a fetch/map failure on one collection is recorded as a partial
+ * failure and the leg RETURNS (no rethrow, no success stamp), importing the
+ * healthy collections. So the vitals leg reaching this wrapper's catch means a
+ * write-path/unexpected error, not a collection fetch failure.
  */
 export async function syncUserPolarLegs(userId: string): Promise<number> {
   let total = 0;
@@ -63,8 +69,10 @@ export const handlePolarSync = makePollCohortHandler({
     return users.map((u) => u.id);
   },
   syncUser: syncUserPolarLegs,
-  // Catches an UNMARKED escape — today the `upsertPolarMeasurements` /
-  // `upsertPolarWorkouts` write-path throws (the fetch paths record + mark
-  // their own failures, and the legs wrapper rethrows the marked error).
+  // Catches an UNMARKED escape — the `upsertPolarMeasurements` /
+  // `upsertPolarWorkouts` write-path throw. The vitals leg records its own
+  // per-collection partial failures inline and returns without rethrowing; the
+  // workouts leg records + marks its own fetch failures. Only an unmarked
+  // write-path/unexpected escape reaches this boundary recorder.
   recordFailure: recordPolarSyncFailure,
 });
