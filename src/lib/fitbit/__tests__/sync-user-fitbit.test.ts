@@ -92,6 +92,7 @@ vi.mock("../sync-workout", () => ({
 
 import {
   handleCollectionFetchError,
+  noteHardFailure,
   upsertFitbitMeasurements,
 } from "../sync-core";
 import { syncUserFitbit } from "../sync";
@@ -139,7 +140,7 @@ describe("syncUserFitbit — all-403 looks-healthy guard", () => {
     syncUserSleep.mockImplementation(softSkip403);
     syncUserWorkout.mockImplementation(softSkip403);
 
-    const total = await syncUserFitbit("user1");
+    const { imported: total } = await syncUserFitbit("user1");
 
     expect(total).toBe(0);
     expect(recordSyncSuccess).not.toHaveBeenCalled();
@@ -155,7 +156,7 @@ describe("syncUserFitbit — all-403 looks-healthy guard", () => {
     syncUserSleep.mockImplementation(softSkip403);
     syncUserWorkout.mockImplementation(softSkip403);
 
-    const total = await syncUserFitbit("user1");
+    const { imported: total } = await syncUserFitbit("user1");
 
     expect(total).toBe(5);
     expect(recordSyncSuccess).toHaveBeenCalledWith("user1", "fitbit");
@@ -165,16 +166,16 @@ describe("syncUserFitbit — all-403 looks-healthy guard", () => {
     syncUserMetrics.mockResolvedValue(3);
     syncUserActivity.mockResolvedValue(2);
 
-    const total = await syncUserFitbit("user1");
+    const res = await syncUserFitbit("user1");
 
-    expect(total).toBe(5);
+    expect(res).toEqual({ imported: 5, failed: false });
     expect(recordSyncSuccess).toHaveBeenCalledWith("user1", "fitbit");
   });
 
   it("stamps success on a quiet cycle (no soft-skip, nothing new)", async () => {
     syncUserMetrics.mockResolvedValue(0);
 
-    const total = await syncUserFitbit("user1");
+    const { imported: total } = await syncUserFitbit("user1");
 
     expect(total).toBe(0);
     // No collection was 403'd → this is a genuine "nothing changed" tick.
@@ -184,7 +185,7 @@ describe("syncUserFitbit — all-403 looks-healthy guard", () => {
   it("short-circuits without stamping success when parked at error_reauth", async () => {
     isReauthRequired.mockResolvedValue(true);
 
-    const total = await syncUserFitbit("user1");
+    const { imported: total } = await syncUserFitbit("user1");
 
     expect(total).toBe(0);
     expect(recordSyncSuccess).not.toHaveBeenCalled();
@@ -219,7 +220,7 @@ describe("syncUserFitbit — hard-fail ledger (F-SYNC-4)", () => {
     syncUserWorkout.mockResolvedValue(0);
 
     // Resolves (no rethrow) with the siblings' imports.
-    const total = await syncUserFitbit("user1");
+    const { imported: total } = await syncUserFitbit("user1");
     expect(total).toBe(3);
 
     // Every sibling resource still ran despite the metrics hard failure.
@@ -241,6 +242,27 @@ describe("syncUserFitbit — hard-fail ledger (F-SYNC-4)", () => {
     expect(update).not.toHaveBeenCalled();
     // The hard failure was recorded on the status ledger.
     expect(recordSyncFailure).toHaveBeenCalled();
+  });
+
+  it("a write-failure ledger entry holds the watermark and fails the verdict", async () => {
+    // A resource that fetched rows but failed to write them notes the write
+    // label on the ledger and returns 0. The F-SYNC-4 test above covers a
+    // collection label; this pins the WRITE label (F-2) through the same gate.
+    syncUserMetrics.mockImplementation(async () => {
+      noteHardFailure("measurements:create");
+      return 0;
+    });
+    // A sibling imports so the run is not degenerate — only the ledger keeps it
+    // honest.
+    syncUserActivity.mockResolvedValue(4);
+
+    const { imported, failed } = await syncUserFitbit("user1");
+
+    expect(imported).toBe(4);
+    expect(failed).toBe(true);
+    // The write failure holds the watermark: no stamp, no success.
+    expect(update).not.toHaveBeenCalled();
+    expect(recordSyncSuccess).not.toHaveBeenCalled();
   });
 
   it("a failed natural-key rescue probe notes the ledger: no success stamp, no watermark", async () => {
@@ -270,7 +292,7 @@ describe("syncUserFitbit — hard-fail ledger (F-SYNC-4)", () => {
     });
 
     // Resolves (no rethrow) — the insert was still attempted.
-    const total = await syncUserFitbit("user1");
+    const { imported: total } = await syncUserFitbit("user1");
     expect(total).toBe(1);
 
     // The ledger flips anyFailed → success is NOT stamped and the watermark is
@@ -424,7 +446,7 @@ describe("syncUserFitbit — backfill collapses rollup recompute to one pass", (
   it("returns 0 without running resources when the connection is gone", async () => {
     findUnique.mockResolvedValue(null);
 
-    const total = await syncUserFitbit("user1");
+    const { imported: total } = await syncUserFitbit("user1");
 
     expect(total).toBe(0);
     expect(syncUserMetrics).not.toHaveBeenCalled();

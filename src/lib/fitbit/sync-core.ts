@@ -98,6 +98,12 @@ export async function getValidToken(
           message: "Fitbit credentials missing — token refresh skipped",
           errorCode: "credentials_missing",
         });
+        // A dead token means every resource "succeeds" with 0 rows — without a
+        // ledger entry the cycle would read as clean, stamp `markSynced`, and
+        // `recordSyncSuccess` would flip a parked connection back to connected
+        // (an hourly invalid-refresh hammer with an advancing watermark). Fail
+        // the cycle's verdict so the park holds.
+        noteHardFailure(FITBIT_TOKEN_HARD_FAIL);
         return null;
       }
 
@@ -143,7 +149,16 @@ export async function getValidToken(
         },
       );
 
-      if (!persistedAccessToken) return null;
+      if (!persistedAccessToken) {
+        // `persistRotatedToken` returns null ONLY when the connection row
+        // vanished mid-flight (deleted between the read and the CAS re-read) —
+        // the normal lost-race path reuses the peer's rotated token above. A
+        // vanished-row cycle fetches nothing; register on the ledger so the
+        // same verdict rule as the refresh branch holds and the cycle does not
+        // stamp success over a connection that no longer exists.
+        noteHardFailure(FITBIT_TOKEN_HARD_FAIL);
+        return null;
+      }
 
       return {
         accessToken: persistedAccessToken,
@@ -157,6 +172,14 @@ export async function getValidToken(
         `Fitbit token refresh failed for user ${userId}: ${err}`,
       );
       await recordFitbitSyncFailure(userId, err);
+      // Same verdict rule as the credentials-missing branch above: a refresh
+      // failure must fail the cycle, or the all-zeros run stamps success,
+      // un-parks `error_reauth`, and the hourly cohort retries the dead refresh
+      // token forever while `lastSyncedAt` advances past real data. Fitbit's
+      // reconnect CTA is driven by the status-ledger park (`error_reauth`) that
+      // `recordFitbitSyncFailure` sets — there is no `needsReauth` column to
+      // flag (Google's connection-flag write is deliberately not ported).
+      noteHardFailure(FITBIT_TOKEN_HARD_FAIL);
       return null;
     }
   }
@@ -224,6 +247,27 @@ export interface HardFailTracker {
 export const hardFailStorage = new AsyncLocalStorage<HardFailTracker>();
 
 /**
+ * Ledger label for a dead-token failure (`getValidToken` returning null on a
+ * missing-credentials, failed-refresh, or vanished-connection path). Distinct
+ * from a fetch/write label so a future one-shot leaf job could tell "the token
+ * is dead" (park, don't retry) apart from "a fetch/write hard-failed" (retry).
+ * Ported from Google Health's `GOOGLE_HEALTH_TOKEN_HARD_FAIL`.
+ */
+export const FITBIT_TOKEN_HARD_FAIL = "token";
+
+/**
+ * Record a hard failure on the ambient per-cycle ledger, if one is in scope.
+ * No-op outside a ledger scope (e.g. a direct call from a REPL script). Used by
+ * `getValidToken`'s dead-token paths and the measurement write catches —
+ * anything that must fail the cycle's verdict without aborting sibling work.
+ * Ported from Google Health's `noteHardFailure`.
+ */
+export function noteHardFailure(label: string): void {
+  const tracker = hardFailStorage.getStore();
+  if (tracker) tracker.failures.push(label);
+}
+
+/**
  * Single-source the per-resource collection-fetch error handling. A 403 on one
  * data class soft-skips it (warn + return 0) so sibling resources still sync; a
  * soft-skip increments the ambient tracker so `syncUserFitbit` can refuse to
@@ -251,8 +295,7 @@ export async function handleCollectionFetchError(
   }
   await recordFitbitSyncFailure(userId, err);
   getEvent()?.addWarning(`fitbit ${resource} failed for ${userId}: ${err}`);
-  const hardTracker = hardFailStorage.getStore();
-  if (hardTracker) hardTracker.failures.push(resource);
+  noteHardFailure(resource);
   return 0;
 }
 
@@ -570,8 +613,7 @@ export async function upsertFitbitMeasurements(
       // ambient ledger so the watermark holds and the next tick retries the
       // rescue rather than losing the rows for good.
       getEvent()?.addWarning(`Fitbit: natural-key rescue probe failed: ${err}`);
-      const hardTracker = hardFailStorage.getStore();
-      if (hardTracker) hardTracker.failures.push("measurements:rescue");
+      noteHardFailure("measurements:rescue");
     }
   }
 
@@ -612,6 +654,11 @@ export async function upsertFitbitMeasurements(
       }
     } catch (err) {
       getEvent()?.addWarning(`Fitbit: failed to create measurements: ${err}`);
+      // Fetched-but-unwritten rows are lost for good once they age out of the
+      // 24 h overlap — fail the cycle's verdict so the watermark holds and the
+      // next tick re-fetches. No rethrow: sibling chunks and resources must
+      // keep writing.
+      noteHardFailure("measurements:create");
     }
   }
 
@@ -643,6 +690,10 @@ export async function upsertFitbitMeasurements(
       imported++;
     } catch (err) {
       getEvent()?.addWarning(`Fitbit: failed to update measurement: ${err}`);
+      // Same rule as the create catch: a swallowed update loses the re-fetched
+      // value once it ages out of the overlap — hold the watermark so the next
+      // tick retries. No rethrow, so the remaining rows still write.
+      noteHardFailure("measurements:update");
     }
   }
 
