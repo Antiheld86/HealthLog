@@ -30,6 +30,7 @@ import type { MeasurementType } from "@/generated/prisma/client";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { getEvent } from "@/lib/logging/context";
 import {
+  markSyncFailureRecorded,
   recordSyncFailure,
   recordSyncSuccess,
   type FailureKind,
@@ -98,6 +99,42 @@ export async function runWithWhoopSoftSkipTracking<T>(
 }
 
 /**
+ * Per-cycle ledger of HARD failures that must fail the cycle's verdict WITHOUT
+ * aborting sibling resources — a dead token (`getValidToken` returning null on
+ * a missing-credentials, failed-refresh, or in-lock vanished-connection path).
+ * Every resource leaf short-circuits `if (!tokenInfo) return 0` on a null
+ * token, so without this ledger a dead-token cycle reads as CLEAN: every
+ * resource "succeeds" with 0 rows, no failure is recorded, and
+ * `recordSyncSuccess` un-parks `error_reauth`, resets the failure buckets +
+ * `alertedAt`, and the hourly cohort hammers the dead refresh token forever.
+ * The orchestrator + the per-resource driver read this ledger to refuse the
+ * success stamp. Ported from Fitbit R2 / Google Health's `hardFailStorage`.
+ * Scoped by AsyncLocalStorage so concurrent per-user jobs never cross-pollinate.
+ */
+export interface HardFailTracker {
+  failures: string[];
+}
+export const hardFailStorage = new AsyncLocalStorage<HardFailTracker>();
+
+/**
+ * Ledger label for a dead-token failure (`getValidToken` returning null on a
+ * missing-credentials, failed-refresh, or in-lock vanished-connection path).
+ * Ported from Fitbit's `FITBIT_TOKEN_HARD_FAIL`.
+ */
+export const WHOOP_TOKEN_HARD_FAIL = "token";
+
+/**
+ * Record a hard failure on the ambient per-cycle ledger, if one is in scope.
+ * No-op outside a ledger scope (e.g. a direct REPL call). Used by
+ * `getValidToken`'s dead-token paths — anything that must fail the cycle's
+ * verdict without aborting sibling work. Ported from Fitbit's `noteHardFailure`.
+ */
+export function noteHardFailure(label: string): void {
+  const tracker = hardFailStorage.getStore();
+  if (tracker) tracker.failures.push(label);
+}
+
+/**
  * Single-source the per-resource collection-fetch error handling. A 403 on one
  * data class soft-skips it (warn + return 0) so sibling resources still sync;
  * anything else records a classified sync failure and rethrows. Call as
@@ -122,7 +159,9 @@ export async function handleCollectionFetchError(
     return 0;
   }
   await recordWhoopSyncFailure(userId, err);
-  throw err;
+  // Marked so the orchestrator / cron catch (which records unmarked write-path
+  // throws for WH-4) does not record this fetch failure a SECOND time.
+  throw markSyncFailureRecorded(err);
 }
 
 /** Refresh the access token this many ms before `tokenExpiresAt`. */
@@ -137,8 +176,14 @@ const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
  * narrow overlap; the night's per-stage rows then never reach the DB and
  * every sleep surface keeps showing the parallel coarse source for that
  * night. Seven days re-fetches a handful of records per tick (the upserts
- * are idempotent) and closes the gap for every realistic lag. Workout/cycle
- * settle fast — a smaller overlap suffices and keeps the page count down.
+ * are idempotent) and closes the gap for every realistic lag. Workout AND
+ * cycle now ride the same 7-day overlap: a workout can reach the WHOOP cloud
+ * days after a late phone sync, and a cycle is re-scored through the day —
+ * both collections filter on the record's own time range, so a narrow overlap
+ * steps the cursor past a still-settling record and misses it. One record per
+ * day keeps the re-fetch to a single page. `WHOOP_DEFAULT_OVERLAP_MS` stays
+ * the narrow fallback `incrementalStart` uses when no resource passes an
+ * explicit overlap.
  */
 export const WHOOP_RECOVERY_SLEEP_OVERLAP_MS = 7 * 24 * 60 * 60 * 1000;
 export const WHOOP_DEFAULT_OVERLAP_MS = 60 * 60 * 1000; // 1 h
@@ -242,6 +287,11 @@ export async function getValidToken(
       message: "WHOOP credentials missing — token refresh skipped",
       errorCode: "credentials_missing",
     });
+    // A dead token means every resource "succeeds" with 0 rows — without a
+    // ledger entry the cycle reads as clean and `recordSyncSuccess` un-parks
+    // `error_reauth` while the hourly cohort hammers the dead refresh token.
+    // Fail the cycle's verdict so the park holds.
+    noteHardFailure(WHOOP_TOKEN_HARD_FAIL);
     return null;
   }
 
@@ -252,7 +302,14 @@ export async function getValidToken(
       const current = await tx.whoopConnection.findUnique({
         where: { userId },
       });
-      if (!current?.whoopUserId) return null;
+      if (!current?.whoopUserId) {
+        // The connection vanished on the re-read inside the advisory lock
+        // (disconnect/webhook race). Register on the ledger so the cycle does
+        // not stamp success over a connection that no longer exists — the same
+        // invariant as the refresh branch below.
+        noteHardFailure(WHOOP_TOKEN_HARD_FAIL);
+        return null;
+      }
 
       if (
         current.tokenExpiresAt.getTime() - TOKEN_REFRESH_BUFFER_MS >=
@@ -295,6 +352,9 @@ export async function getValidToken(
       `WHOOP token refresh failed for user ${userId}: ${err}`,
     );
     await recordWhoopSyncFailure(userId, err);
+    // The WH-1 kill shot: an all-zeros refresh-failure run must not stamp
+    // success, un-park `error_reauth`, and re-arm the alert. Fail the verdict.
+    noteHardFailure(WHOOP_TOKEN_HARD_FAIL);
     return null;
   }
 }
@@ -535,10 +595,18 @@ export async function syncWhoopResourceWithStatus(
   userId: string,
   run: () => Promise<number>,
 ): Promise<number> {
+  // Run under BOTH trackers: soft-skip (a 403 scope gate) and hard-fail (a dead
+  // token noted by `getValidToken`). This is the dominant path — the four
+  // hourly crons walk every connection through here — so without the hard-fail
+  // gate a dead-token tick would stamp success, un-park `error_reauth`, and the
+  // whole release would be inert on the path that runs most often.
+  const hardFailTracker: HardFailTracker = { failures: [] };
   const { result: imported, softSkipCount } =
-    await runWithWhoopSoftSkipTracking(run);
+    await runWithWhoopSoftSkipTracking(() =>
+      hardFailStorage.run(hardFailTracker, run),
+    );
   const softSkippedOnly = softSkipCount > 0 && imported === 0;
-  if (!softSkippedOnly) {
+  if (!softSkippedOnly && hardFailTracker.failures.length === 0) {
     await recordSyncSuccess(userId, "whoop");
   }
   return imported;

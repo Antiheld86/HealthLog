@@ -7,16 +7,18 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { prismaMock, bossSend, syncUserWhoop } = vi.hoisted(() => ({
-  prismaMock: {
-    whoopConnection: {
-      findMany: vi.fn(),
-      update: vi.fn(),
+const { prismaMock, bossSend, syncUserWhoop, isReauthRequiredMock } =
+  vi.hoisted(() => ({
+    prismaMock: {
+      whoopConnection: {
+        findMany: vi.fn(),
+        update: vi.fn(),
+      },
     },
-  },
-  bossSend: vi.fn(),
-  syncUserWhoop: vi.fn(),
-}));
+    bossSend: vi.fn(),
+    syncUserWhoop: vi.fn(),
+    isReauthRequiredMock: vi.fn(async () => false),
+  }));
 
 vi.mock("@/lib/db", () => ({ prisma: prismaMock }));
 
@@ -26,6 +28,10 @@ vi.mock("@/lib/jobs/boss-instance", () => ({
 
 vi.mock("@/lib/whoop/sync", () => ({
   syncUserWhoop: (...a: unknown[]) => syncUserWhoop(...a),
+}));
+
+vi.mock("@/lib/integrations/status", () => ({
+  isReauthRequired: isReauthRequiredMock,
 }));
 
 vi.mock("@/lib/logging/context", () => ({
@@ -40,6 +46,8 @@ import {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  isReauthRequiredMock.mockResolvedValue(false);
+  prismaMock.whoopConnection.update.mockResolvedValue({});
 });
 
 describe("enqueueBootTimeWhoopBackfill — discovery", () => {
@@ -85,10 +93,9 @@ describe("enqueueBootTimeWhoopBackfill — discovery", () => {
   });
 });
 
-describe("runWhoopBackfillForUser", () => {
-  it("runs a full sync and stamps backfillCompletedAt", async () => {
-    syncUserWhoop.mockResolvedValue(123);
-    prismaMock.whoopConnection.update.mockResolvedValue({});
+describe("runWhoopBackfillForUser — verdict-gated marker", () => {
+  it("stamps backfillCompletedAt after a CLEAN full-history run", async () => {
+    syncUserWhoop.mockResolvedValue({ imported: 123, failed: false });
 
     const { imported } = await runWhoopBackfillForUser("u1");
 
@@ -97,5 +104,22 @@ describe("runWhoopBackfillForUser", () => {
     const updateArg = prismaMock.whoopConnection.update.mock.calls[0]![0];
     expect(updateArg.where).toEqual({ userId: "u1" });
     expect(updateArg.data.backfillCompletedAt).toBeInstanceOf(Date);
+  });
+
+  it("a failed verdict THROWS without stamping — pg-boss retries become real", async () => {
+    syncUserWhoop.mockResolvedValue({ imported: 7, failed: true });
+
+    await expect(runWhoopBackfillForUser("u1")).rejects.toThrow(/incomplete/);
+    expect(prismaMock.whoopConnection.update).not.toHaveBeenCalled();
+  });
+
+  it("a connection parked at error_reauth returns WITHOUT running the sync or stamping", async () => {
+    isReauthRequiredMock.mockResolvedValue(true);
+
+    await expect(runWhoopBackfillForUser("u1")).resolves.toEqual({
+      imported: 0,
+    });
+    expect(syncUserWhoop).not.toHaveBeenCalled();
+    expect(prismaMock.whoopConnection.update).not.toHaveBeenCalled();
   });
 });

@@ -27,6 +27,6 @@ export const POST = apiHandler(async (request: NextRequest) => {
     // no body provided -> default incremental sync
   }
 
-  const imported = await syncUserWhoop(user.id, { fullSync });
+  const { imported } = await syncUserWhoop(user.id, { fullSync });
   return apiSuccess({ imported, fullSync });
 });

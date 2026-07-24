@@ -20,6 +20,7 @@ import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { integrationBackfillSourceOptions } from "@/lib/jobs/integration-backfill-admission";
+import { isReauthRequired } from "@/lib/integrations/status";
 import { syncUserWhoop } from "@/lib/whoop/sync";
 
 export const WHOOP_BACKFILL_QUEUE = "whoop-backfill";
@@ -37,15 +38,46 @@ export interface WhoopBackfillPayload {
 }
 
 /**
- * Per-user backfill handler. Runs a full-history sync for one account and
- * stamps `backfillCompletedAt` so the discovery query drops it. Idempotent:
- * the per-resource upserts are key-stable, so a re-run (e.g. a reboot mid-walk)
- * overwrites rather than duplicating.
+ * Per-user backfill handler. Runs a full-history sync for one account and stamps
+ * `backfillCompletedAt` ONLY on a clean run, so the discovery query drops it.
+ * Idempotent: the per-resource upserts are key-stable, so a re-run (e.g. a
+ * reboot mid-walk) overwrites rather than duplicating. Mirrors the landed
+ * `runFitbitBackfillForUser`.
+ *
+ * Verdict-gated: a partial hard failure (a dead token, a write failing, a
+ * fetch hard-fail) THROWS so pg-boss retries the job — stamping the marker over
+ * a partial multi-year walk would freeze the history gap forever and the
+ * configured `retryLimit` would be dead code. A connection parked at
+ * `error_reauth` is NOT clean either, but throwing against a dead grant would
+ * just burn the retry budget on the same no-op: return WITHOUT stamping — boot
+ * discovery re-offers the account after the user reconnects and a clean walk
+ * completes. `syncUserWhoop` has its own reauth short-circuit (returns
+ * `failed: true`), but the guard must still live here so a parked account
+ * RETURNS instead of throwing through three retries.
  */
 export async function runWhoopBackfillForUser(
   userId: string,
 ): Promise<{ imported: number }> {
-  const imported = await syncUserWhoop(userId, { fullSync: true });
+  if (await isReauthRequired(userId, "whoop")) {
+    annotate({
+      action: {
+        name: "whoop.backfill.skipped_reauth",
+        details: { imported: 0 },
+      },
+    });
+    return { imported: 0 };
+  }
+
+  const { imported, failed } = await syncUserWhoop(userId, { fullSync: true });
+
+  if (failed) {
+    // Surface through the pg-boss retry path (retryLimit + backoff set by
+    // `integrationBackfillSourceOptions`). If the failure parked the connection
+    // at error_reauth meanwhile, the next attempt takes the reauth return above.
+    throw new Error(
+      `whoop backfill incomplete for user ${userId} — marker not stamped`,
+    );
+  }
 
   await prisma.whoopConnection.update({
     where: { userId },
