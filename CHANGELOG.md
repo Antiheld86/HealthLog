@@ -19,7 +19,7 @@ complete, and a couple of sources start pulling data sooner.
 - **An interrupted WHOOP history import is retried, not marked done.** A
   full-history backfill that stops partway is no longer stamped complete, so the
   gap is retried rather than frozen in place. To pull deep history after
-  connecting, run a full sync from Settings — it walks back to 2020.
+  connecting, run a full sync from Settings. It walks back to 2020.
 - **Withings ECG now syncs on its own schedule.** A watch-only account with no
   scale previously never had its ECG recordings pulled. An hourly check now
   brings them in without waiting on a webhook.
