@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [1.32.26] — 2026-07-24
+## [1.32.26] — 2026-07-25
 
 The metric and imperial display preference is now applied everywhere your
 weight, body composition, waist, and temperature readings appear. Until now the
@@ -25,8 +25,11 @@ reported the gap and traced how the unit was being handled.
   tool used by connected assistants now converts a recognised unit hint (such as
   pounds or Fahrenheit) to canonical, and refuses anything it does not
   recognise, so a reading is never saved under the wrong unit.
-- **Known remaining.** Height is entered in centimetres for now; an imperial
-  height entry is a separate follow-up.
+- **Known remaining.** Height is entered in centimetres for now. Target and
+  threshold panels also still read in kilograms and Celsius, so with imperial
+  selected a weight chart reads in pounds while its target reference below it
+  reads in kilograms. The stored values are correct either way; both are
+  separate follow-ups.
 
 ## [1.32.25] — 2026-07-24
 
