@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [1.32.13] — 2026-07-24
+
+An Insights assessment card no longer shows the raw model output when a response
+comes back incomplete. If the underlying text was cut off, the card now falls
+back to its computed summary instead of printing the unfinished data.
+
+- **A cut-off assessment stays hidden.** The per-metric assessment cards, like
+  the one for resting pulse, ask the model for a small structured reply and then
+  read the summary out of it. When that reply arrived truncated, the reader
+  could see the whole envelope on the card, including the property name, the
+  braces, the quotes, and the escaped line breaks. The card now recognises an
+  incomplete or malformed reply and serves the deterministic summary it already
+  falls back to when no model text is available, so the raw output never reaches
+  you.
+- **Plain-text assessments are untouched.** A model that answers in an ordinary
+  sentence rather than the structured shape is still shown as written, so this
+  change only affects broken replies and leaves normal ones exactly as before.
+- **The same guard covers the other cards.** Medication compliance and the
+  derived-score assessments read their summary the same way, so they now hold
+  back a broken reply too rather than persisting it as the day's text.
+
+Thanks to @lutzkind for reporting this one.
+
 ## [1.32.12] — 2026-07-24
 
 A mood you log late in the evening now lands on the day you logged it, in your
