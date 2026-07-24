@@ -36,6 +36,7 @@ import {
   ensureUserMoodRollupsFresh,
   readMoodDayRollups,
 } from "@/lib/rollups/mood-rollups";
+import { userDayKey } from "@/lib/tz/format";
 
 export const dynamic = "force-dynamic";
 
@@ -136,13 +137,17 @@ export async function buildComprehensiveResponse(user: AuthedUser) {
   // warm-up so the next request lands on the rollup tier. Same posture
   // as `/api/mood/analytics`.
   //
-  // The bucket key shape change is documented in the route-parity test
-  // for `/api/mood/analytics`: rollup `bucketStart` is UTC-anchored
-  // YYYY-MM-DD; the legacy `MoodEntry.date` column is TZ-anchored
-  // (write-time). For Berlin tenants whose mood log timestamps don't
-  // straddle the UTC boundary the two labels agree on every realistic
-  // entry — the v1.5 per-user-tz bucketing closes the residual DST
-  // edge.
+  // Since v1.32.12 the mood rollup writer mints `bucketStart` from the
+  // canonical local `MoodEntry.date` label at UTC midnight, so
+  // `.toISOString().slice(0, 10)` recovers the user's LOCAL calendar day —
+  // byte-identical to the live fallback's `entry.date`. Both mood paths
+  // therefore emit local-day keys. The mood × metric pairing partners
+  // below (sys BP, weight, resting pulse) are consequently derived in the
+  // user's tz (v1.32.17) so both join sides share ONE local-day key space.
+  // The measurement-rollup tier itself still buckets UTC (`dailyByType`)
+  // and migrates to local in a documented follow-up release; the two
+  // internally-consistent UTC joins (weight × BP, BP-med continuity) are
+  // left on it deliberately (see their call sites below).
   void ensureUserMoodRollupsFresh(userId);
   const moodRollupDayRows = await readMoodDayRollups(userId, ninetyDaysAgo);
   let dailyMoodEntries: Array<{ day: string; value: number }>;
@@ -247,6 +252,13 @@ export async function buildComprehensiveResponse(user: AuthedUser) {
   // 24-hour default tolerance — daily-mean buckets are the
   // SQL-side equivalent and the directive explicitly accepts the
   // small semantic shift to bound the raw-row footprint).
+  //
+  // v1.32.17 — this pair stays on the UTC `dailyByType` series: BOTH
+  // sides come from `dailyByType` (weight × sys), so they share one UTC
+  // day-key space and are internally consistent. Re-keying it to local
+  // is R12's read-swap (it migrates with the rollup tier), NOT this
+  // hotfix — doing it here would mean per-request raw re-aggregation
+  // without the local-bucketed rollup behind it.
   const weightDaily = aggregate.dailyByType.WEIGHT ?? [];
   const sysDaily = aggregate.dailyByType.BLOOD_PRESSURE_SYS ?? [];
   const weightBpPairs: PairedPoint[] = joinDailyByDay(weightDaily, sysDaily);
@@ -257,14 +269,26 @@ export async function buildComprehensiveResponse(user: AuthedUser) {
   }));
 
   // ── Correlations: mood × {sys BP, weight, pulse} ─────────
-  // Daily-key matches the legacy `buildMoodMetricPairs` exactly —
-  // mood is already per-day in the legacy code and we just align the
-  // metric side to the same daily bucket.
-  const moodBpPairs = pairMoodWithDaily(dailyMoodEntries, sysDaily);
+  // v1.32.17 — the mood series is LOCAL-day-keyed (since v1.32.12, see the
+  // rollup note above). `pairMoodWithDaily` joins on an EXACT YYYY-MM-DD
+  // key, so the metric partners MUST also be local-day-keyed or every
+  // evening logger west of UTC gets a lag-1 pairing sold as same-day.
+  // Derive the sys / weight partners as exact local-day means from the raw
+  // rows already on the request path (canonical-source deduped in the
+  // aggregator), NOT from the UTC `dailyByType` — a UTC-day MEAN cannot be
+  // relabeled into a local-day mean. `round2` mirrors the aggregator's
+  // `ROUND(AVG, 2)` so correlation thresholds don't drift.
+  const sysDailyLocal = deriveDailyLocalMeans(aggregate.bpRawRows.sys, userTz);
+  const weightDailyLocal = deriveDailyLocalMeans(
+    aggregate.weightRawRows,
+    userTz,
+  );
+
+  const moodBpPairs = pairMoodWithDaily(dailyMoodEntries, sysDailyLocal);
   const moodBpCorrelation = pearsonCorrelation(moodBpPairs);
   const moodBpScatterData = moodBpPairs.map((p) => ({ mood: p.a, sysBP: p.b }));
 
-  const moodWeightPairs = pairMoodWithDaily(dailyMoodEntries, weightDaily);
+  const moodWeightPairs = pairMoodWithDaily(dailyMoodEntries, weightDailyLocal);
   const moodWeightCorrelation = pearsonCorrelation(moodWeightPairs);
   const moodWeightScatterData = moodWeightPairs.map((p) => ({
     mood: p.a,
@@ -278,23 +302,16 @@ export async function buildComprehensiveResponse(user: AuthedUser) {
   // clean RESTING_HEART_RATE rows; only pull RAW PULSE (for the
   // low-percentile daily proxy) when the user has no resting rows — the
   // proxy needs the per-day distribution, which the day-mean discards.
-  // Day keys follow this route's UTC-bucket convention (the per-user-tz
-  // bucketing is the documented v1.5 follow-up) so the resting series pairs
-  // against the same UTC day keys as the mood series.
   //
-  // v1.30.3 (QA F8) — investigated switching this to `userDayKey(d, userTz)`
-  // to match the intraday page's resting-proxy bucketing (`71d7ca78c`), but
-  // `dailyMoodEntries` below (this series' ONLY pairing partner, joined by
-  // an exact YYYY-MM-DD key in `pairMoodWithDaily`) is itself UTC-anchored —
-  // it reads `moodRollupDayRows[].bucketStart.toISOString().slice(0, 10)`,
-  // a real UTC aggregation boundary, not just a display label. Moving ONLY
-  // this side to the user's tz would not fix anything: it would swap
-  // "evening readings shift a day relative to the true local day" for
-  // "evening readings mismatch their mood pairing partner, which used to
-  // line up precisely because both sides shared the same UTC convention."
-  // A genuine fix needs the mood-rollup tier itself to bucket per-user-tz
-  // (the same v1.5 follow-up the comment above already flags) — out of
-  // scope for this pass. Left UTC on both sides intentionally.
+  // v1.32.17 — key this resting series on `userDayKey(d, userTz)`. Its ONLY
+  // pairing partner is `dailyMoodEntries`, which is LOCAL-day-keyed since
+  // v1.32.12 (the mood rollup writer now mints `bucketStart` from the
+  // canonical local `MoodEntry.date` label, not a UTC truncation). Keeping
+  // UTC here would offset every evening logger west of UTC by one day and
+  // sell a lag-1 correlation as same-day. This is exactly the flip the
+  // v1.30.3 F8 note said becomes correct once the mood side goes local —
+  // it now has. (Unlike the mood side, this series builds from raw rows in
+  // this route, so it re-keys directly with no rollup-tier change.)
   const restingPulseRows = await prisma.measurement.findMany({
     where: {
       userId,
@@ -316,15 +333,15 @@ export async function buildComprehensiveResponse(user: AuthedUser) {
           select: { measuredAt: true, value: true },
         })
       : [];
-  const utcDayKey = (d: Date) => d.toISOString().slice(0, 10);
+  const localDayKey = (d: Date) => userDayKey(d, userTz);
   const { series: restingPulseSeries } = resolveRestingPulseSeries({
     restingSamples: restingPulseRows,
     pulseSamples: rawPulseRowsForResting,
-    dayKeyOf: utcDayKey,
+    dayKeyOf: localDayKey,
   });
   const restingByDay = new Map<string, { sum: number; count: number }>();
   for (const s of restingPulseSeries) {
-    const key = utcDayKey(s.measuredAt);
+    const key = localDayKey(s.measuredAt);
     const cur = restingByDay.get(key) ?? { sum: 0, count: 0 };
     cur.sum += s.value;
     cur.count += 1;
@@ -458,14 +475,16 @@ export async function buildComprehensiveResponse(user: AuthedUser) {
 
   if (expectedBpIntakesPerDay > 0) {
     // Daily systolic means (already keyed YYYY-MM-DD) from the SQL pass.
-    // v1.30.3 (QA F8) — `sysDaily` is UTC `date_trunc`-bucketed by the
-    // aggregator (`comprehensive-aggregator.ts`), so `takenByDay` below
-    // MUST key on the same UTC day, not the user's own tz — pairing the
-    // two on different day spaces would silently drop pairs rather than
-    // fix anything. Making this whole correlation user-tz-consistent
-    // needs the aggregator's `dailyByType` to bucket in the user's tz
-    // first (a bigger, already-flagged follow-up); until then this stays
-    // UTC to match its only pairing partner.
+    // v1.32.17 — `sysDaily` (UTC `date_trunc` from the aggregator's
+    // `dailyByType`) and `takenByDay` below (intake `scheduledFor`
+    // truncated to UTC) both live in the SAME UTC day-key space and are
+    // internally consistent with each other — this join is NOT broken and
+    // stays as is. Only the mood pairings above moved to a separately
+    // derived local-day series (their partner, the mood series, is
+    // local-day-keyed). This correlation migrates to local when the
+    // measurement-rollup tier buckets per-user tz (R12), not in this hotfix
+    // — re-keying it here without the local-bucketed rollup would mean
+    // per-request raw re-aggregation.
     const sysByDay = new Map<string, number>();
     for (const row of sysDaily) {
       sysByDay.set(row.day, row.value);
@@ -564,6 +583,40 @@ export async function buildComprehensiveResponse(user: AuthedUser) {
 // ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────
+
+/**
+ * v1.32.17 — derive exact local-day mean series from raw measurement rows,
+ * keyed by the user's timezone via `userDayKey`. The mood series is
+ * local-day-keyed (since v1.32.12), and `pairMoodWithDaily` joins on an
+ * exact YYYY-MM-DD key, so its metric partners must be local-day-keyed too.
+ * A UTC-day mean (from `dailyByType`) cannot be relabeled into a local-day
+ * mean, so the mean is recomputed here from raw rows already on the request
+ * path. `userDayKey` formats via a memoised `Intl.DateTimeFormat` — no
+ * offset arithmetic — so DST-transition days (23 h / 25 h) bucket correctly
+ * and the result is host-TZ-independent (CI runs UTC). `round2` mirrors the
+ * aggregator's `ROUND(AVG, 2)` so correlation thresholds don't drift.
+ * Returns `{ day, value }[]` sorted ASC by day, the shape
+ * `pairMoodWithDaily` expects.
+ */
+function deriveDailyLocalMeans(
+  rows: Array<{ measuredAt: Date; value: number }>,
+  tz: string,
+): Array<{ day: string; value: number }> {
+  const byDay = new Map<string, { sum: number; count: number }>();
+  for (const r of rows) {
+    const key = userDayKey(r.measuredAt, tz);
+    const cur = byDay.get(key) ?? { sum: 0, count: 0 };
+    cur.sum += r.value;
+    cur.count += 1;
+    byDay.set(key, cur);
+  }
+  return Array.from(byDay.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([day, stats]) => ({
+      day,
+      value: Math.round((stats.sum / stats.count) * 100) / 100,
+    }));
+}
 
 /**
  * Daily-key inner join between two daily-aggregated series. Returns
