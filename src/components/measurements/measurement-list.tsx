@@ -66,6 +66,8 @@ import { formatDateOrRelative, formatDateTime } from "@/lib/format";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
 import { CUMULATIVE_DAY_SUM_TYPES } from "@/lib/measurements/cumulative-day-sum";
 import { rawDisplayFractionDigits } from "@/lib/measurements/display-transform";
+import { getUnitForType } from "@/lib/validations/measurement";
+import { useUnitDisplay } from "@/hooks/use-unit-display";
 import {
   invalidateKeys,
   measurementDependentKeys,
@@ -282,6 +284,24 @@ export function MeasurementList({
   const { t } = useTranslations();
   const fmt = useFormatters();
   const { isAuthenticated } = useAuth();
+  const unitDisplay = useUnitDisplay();
+  // v1.32.26 — a single-reading row renders its value + unit in the user's
+  // preferred unit (kg↔lb, cm↔in, °C↔°F). A canonical row converts through the
+  // transform; a legacy non-canonical row (an old MCP write whose `unit` ≠ the
+  // type's canonical unit) is shown verbatim so its stored unit is never
+  // silently relabelled. Metric users take the identity path — unchanged.
+  const rowDisplay = useCallback(
+    (m: { type: string; value: number; unit: string }) => {
+      if (m.unit !== getUnitForType(m.type)) {
+        return { value: m.value, unit: m.unit };
+      }
+      return {
+        value: unitDisplay.toDisplay(m.type, m.value),
+        unit: unitDisplay.unitFor(m.type),
+      };
+    },
+    [unitDisplay],
+  );
   // v1.28.42 (H3) — the desktop table and the mobile card list used to BOTH
   // render (only CSS `display` hid one), so a dense cumulative (up to ~5000
   // rows) or sleep page built every row subtree twice — double the DOM, double
@@ -710,8 +730,20 @@ export function MeasurementList({
       return;
     }
 
+    // Seed the input in the user's preferred unit so an imperial user edits in
+    // lb / in / °F (converted back to canonical on save). Metric users and
+    // legacy non-canonical rows take the identity path — the seed is the raw
+    // stored value, unchanged. Round the converted imperial seed so the input
+    // shows "210" rather than a long float.
+    const rd = rowDisplay(measurement);
+    const seedValue =
+      unitDisplay.preference === "imperial" &&
+      unitDisplay.isTransformed(measurement.type) &&
+      measurement.unit === getUnitForType(measurement.type)
+        ? Math.round(rd.value * 100) / 100
+        : measurement.value;
     const seed = {
-      value: String(measurement.value),
+      value: String(seedValue),
       measuredAt: toDateTimeLocalValue(measurement.measuredAt),
       notes: (measurement.notes ?? "").slice(0, MAX_COMMENT_LENGTH),
     };
@@ -761,10 +793,25 @@ export function MeasurementList({
       return;
     }
 
+    // The input holds a display-unit value; invert it to canonical SI before
+    // the PATCH so an imperial edit persists in the stored unit. Metric users
+    // and legacy non-canonical rows are the identity path — value unchanged.
+    let canonicalValue = parsedValue;
+    if (
+      unitDisplay.isTransformed(editing.type) &&
+      editing.unit === getUnitForType(editing.type)
+    ) {
+      const inverted = unitDisplay.fromDisplay(editing.type, parsedValue);
+      canonicalValue =
+        unitDisplay.preference === "imperial"
+          ? Math.round(inverted * 100) / 100
+          : inverted;
+    }
+
     setEditError(null);
     updateMutation.mutate({
       id: editing.id,
-      value: parsedValue,
+      value: canonicalValue,
       measuredAt: measuredDate.toISOString(),
       notes: editNotes.trim() ? editNotes.trim() : null,
     });
@@ -1050,10 +1097,10 @@ export function MeasurementList({
                                   {isGrouped
                                     ? fmt.integer(m.value)
                                     : fmt.number(
-                                        m.value,
+                                        rowDisplay(m).value,
                                         rawDisplayFractionDigits(m.type),
                                       )}{" "}
-                                  {m.unit}
+                                  {isGrouped ? m.unit : rowDisplay(m).unit}
                                   {isGrouped && (
                                     <span className="text-muted-foreground ml-2 text-xs font-normal">
                                       {t("measurements.dailyTotalCaption", {
@@ -1253,10 +1300,10 @@ export function MeasurementList({
                                   {isGrouped
                                     ? fmt.integer(m.value)
                                     : fmt.number(
-                                        m.value,
+                                        rowDisplay(m).value,
                                         rawDisplayFractionDigits(m.type),
                                       )}{" "}
-                                  {m.unit}
+                                  {isGrouped ? m.unit : rowDisplay(m).unit}
                                 </>
                               )}
                             </span>
@@ -1423,7 +1470,9 @@ export function MeasurementList({
 
             <div className="space-y-2">
               <Label htmlFor="edit-value">
-                {t("measurements.valueWithUnit", { unit: editing.unit })}
+                {t("measurements.valueWithUnit", {
+                  unit: rowDisplay(editing).unit,
+                })}
               </Label>
               <Input
                 id="edit-value"

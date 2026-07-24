@@ -24,6 +24,7 @@ import {
 import { Loader2, MoreHorizontal, Plus, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslations } from "@/lib/i18n/context";
+import { useUnitDisplay } from "@/hooks/use-unit-display";
 import {
   invalidateKeys,
   measurementDependentKeys,
@@ -50,6 +51,7 @@ const MEASUREMENT_TYPES = [
     labelKey: "measurements.typeWeight",
     unit: "kg",
     placeholder: "75.5",
+    placeholderImperial: "165",
   },
   {
     value: "PULSE",
@@ -86,12 +88,14 @@ const MEASUREMENT_TYPES = [
     labelKey: "measurements.typeTotalBodyWater",
     unit: "kg",
     placeholder: "42",
+    placeholderImperial: "93",
   },
   {
     value: "BONE_MASS",
     labelKey: "measurements.typeBoneMass",
     unit: "kg",
     placeholder: "3.2",
+    placeholderImperial: "7",
   },
   {
     value: "OXYGEN_SATURATION",
@@ -104,6 +108,7 @@ const MEASUREMENT_TYPES = [
     labelKey: "measurements.typeBodyTemperature",
     unit: "°C",
     placeholder: "36.6",
+    placeholderImperial: "97.9",
   },
   // v1.25 — physical / clinical signals. Manual web capture so a web-only
   // self-hoster can log them (the iOS client + measurements API already do).
@@ -112,6 +117,7 @@ const MEASUREMENT_TYPES = [
     labelKey: "measurements.typeWaistCircumference",
     unit: "cm",
     placeholder: "84",
+    placeholderImperial: "33",
   },
   {
     value: "WAIST_TO_HEIGHT",
@@ -124,6 +130,7 @@ const MEASUREMENT_TYPES = [
     labelKey: "measurements.typeGripStrength",
     unit: "kg",
     placeholder: "38",
+    placeholderImperial: "84",
   },
   {
     value: "PAIN_NRS",
@@ -232,6 +239,7 @@ export function MeasurementForm({
 }: MeasurementFormProps) {
   const { t } = useTranslations();
   const queryClient = useQueryClient();
+  const unitDisplay = useUnitDisplay();
 
   // Normalize legacy BP types to combined mode
   const normalizedDefault =
@@ -327,10 +335,24 @@ export function MeasurementForm({
 
         await apiPost("/api/measurements", batch);
       } else {
-        // Single measurement
+        // Single measurement. Canonical storage stays SI: an imperial user
+        // types in lb / in / °F and we invert to the canonical unit at the
+        // entry boundary. A metric user (or an untransformed type) takes the
+        // identity path — `fromDisplay` returns the typed number unchanged, so
+        // the payload is byte-identical to before. Round only the converted
+        // imperial value so 210 lb stores as 95.25 kg, not 95.25439770….
+        const typed = parseFloat(value);
+        let canonicalValue = typed;
+        if (unitDisplay.isTransformed(type)) {
+          const inverted = unitDisplay.fromDisplay(type, typed);
+          canonicalValue =
+            unitDisplay.preference === "imperial"
+              ? Math.round(inverted * 100) / 100
+              : inverted;
+        }
         await apiPost("/api/measurements", {
           type,
-          value: parseFloat(value),
+          value: canonicalValue,
           measuredAt: timestamp,
           notes: notes || undefined,
           ...(isGlucoseMode ? { glucoseContext } : {}),
@@ -483,10 +505,15 @@ export function MeasurementForm({
         <FieldGroup
           htmlFor="value"
           label={t("measurements.valueWithUnit", {
+            // For a type with a metric/imperial transform the label follows the
+            // user's preference (kg↔lb, cm↔in, °C↔°F); everything else keeps
+            // its static catalogue unit.
             unit: typeInfo
-              ? "unitKey" in typeInfo
-                ? t(typeInfo.unitKey)
-                : typeInfo.unit
+              ? unitDisplay.isTransformed(type)
+                ? unitDisplay.unitFor(type)
+                : "unitKey" in typeInfo
+                  ? t(typeInfo.unitKey)
+                  : typeInfo.unit
               : "",
           })}
         >
@@ -498,8 +525,13 @@ export function MeasurementForm({
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder={
-              typeInfo && "placeholder" in typeInfo
-                ? typeInfo.placeholder
+              typeInfo
+                ? unitDisplay.preference === "imperial" &&
+                  "placeholderImperial" in typeInfo
+                  ? typeInfo.placeholderImperial
+                  : "placeholder" in typeInfo
+                    ? typeInfo.placeholder
+                    : undefined
                 : undefined
             }
             required

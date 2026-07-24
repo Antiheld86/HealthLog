@@ -18,11 +18,11 @@
  *
  *   - `type`        — a `measurementTypeEnum` value (e.g. WEIGHT). Unknown → skipped.
  *   - `value`       — a number in the row's `unit`.
- *   - `unit`        — the canonical unit for the type, OR a recognised alias:
- *                       glucose  mmol/L → mg/dL (× 18.016),
- *                       weight   lb     → kg    (× 0.453592).
- *                     Any other non-canonical unit → skipped (never silently
- *                     mis-stored).
+ *   - `unit`        — the canonical unit for the type, OR a recognised alias
+ *                     (glucose mmol/L → mg/dL, mass lb → kg, waist in → cm,
+ *                     temperature °F → °C) via the shared
+ *                     `resolveToCanonicalUnit` resolver. Any other
+ *                     non-canonical unit → skipped (never silently mis-stored).
  *   - `measuredAt`  — ISO-8601 WITH an explicit offset (`Z` or ±HH:MM). A row
  *                     without an offset is skipped — the importer never guesses
  *                     a timezone. The instant is bounded by `validateEntryInstant`
@@ -36,15 +36,11 @@
 import {
   measurementTypeEnum,
   glucoseContextEnum,
-  getUnitForType,
   validateMeasurementRange,
   MEASUREMENT_NOTES_MAX_LENGTH,
 } from "@/lib/validations/measurement";
 import { isPlausibleEntryInstant } from "@/lib/validations/entry-instant";
-
-/** Canonical conversion factors keyed by `${type}:${loweredAlias}`. */
-const GLUCOSE_MMOL_TO_MGDL = 18.016;
-const LB_TO_KG = 0.453592;
+import { resolveToCanonicalUnit } from "@/lib/measurements/unit-aliases";
 
 /** A normalised, write-ready row in the `/api/import` measurement shape. */
 export interface NormalisedMeasurementRow {
@@ -165,39 +161,6 @@ function hasExplicitOffset(value: string): boolean {
   return /([zZ]|[+-]\d{2}:?\d{2})$/.test(value.trim());
 }
 
-/**
- * Resolve the row's unit to the canonical unit + converted value, or return
- * `null` when the unit is neither canonical nor a recognised alias.
- */
-function convertToCanonicalUnit(
-  type: string,
-  value: number,
-  rawUnit: string,
-): { value: number; unit: string } | null {
-  const canonical = getUnitForType(type);
-  const unit = rawUnit.trim();
-  // Case-insensitive match against the canonical unit (mg/dL vs MG/DL).
-  if (unit.toLowerCase() === canonical.toLowerCase()) {
-    return { value, unit: canonical };
-  }
-  const lower = unit.toLowerCase();
-  // Glucose: mmol/L → mg/dL.
-  if (type === "BLOOD_GLUCOSE" && (lower === "mmol/l" || lower === "mmol")) {
-    return { value: value * GLUCOSE_MMOL_TO_MGDL, unit: canonical };
-  }
-  // Weight: lb → kg.
-  if (
-    type === "WEIGHT" &&
-    (lower === "lb" ||
-      lower === "lbs" ||
-      lower === "pound" ||
-      lower === "pounds")
-  ) {
-    return { value: value * LB_TO_KG, unit: canonical };
-  }
-  return null;
-}
-
 const KNOWN_TYPES = new Set(measurementTypeEnum.options as readonly string[]);
 const KNOWN_GLUCOSE_CONTEXTS = new Set(
   glucoseContextEnum.options as readonly string[],
@@ -284,7 +247,7 @@ export function parseCsvMeasurements(
       continue;
     }
 
-    const converted = convertToCanonicalUnit(type, value, rawUnit);
+    const converted = resolveToCanonicalUnit(type, value, rawUnit);
     if (converted === null) {
       skip("unknown_unit");
       continue;
