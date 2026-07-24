@@ -1,4 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const { annotateMock } = vi.hoisted(() => ({ annotateMock: vi.fn() }));
+vi.mock("@/lib/logging/context", () => ({
+  annotate: annotateMock,
+  getEvent: () => null,
+}));
 
 import {
   combinePolarStart,
@@ -25,10 +31,20 @@ function installFetchMock(pages: Array<{ status: number; body?: unknown }>) {
   return fetchMock;
 }
 
+beforeEach(() => {
+  annotateMock.mockClear();
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
+
+function driftAnnotations() {
+  return annotateMock.mock.calls
+    .map((c) => c[0])
+    .filter((f) => f?.action?.name === "polar.envelope.drift");
+}
 
 describe("fetchExercises — request path", () => {
   // #568 regression guard: the exercises collection GET carries NO userId in
@@ -115,6 +131,44 @@ describe("fetchExercises — body shape (assumption #3)", () => {
   it("returns the bare top-level array", async () => {
     installFetchMock([{ status: 200, body: [{ id: "a" }, { id: "b" }] }]);
     expect(await fetchExercises("tok")).toHaveLength(2);
+  });
+});
+
+describe("fetchExercises — envelope drift logging (E-77)", () => {
+  it("logs a drift breadcrumb and degrades to [] on an object body with no recognised list key", async () => {
+    installFetchMock([{ status: 200, body: { nope: [{ id: "a" }] } }]);
+    expect(await fetchExercises("tok")).toEqual([]);
+    const drift = driftAnnotations();
+    expect(drift).toHaveLength(1);
+    expect(drift[0].action.details).toMatchObject({
+      verb: "fetchExercises",
+      httpStatus: 200,
+      keys: ["nope"],
+    });
+  });
+
+  it("does NOT drift on a bare array", async () => {
+    installFetchMock([{ status: 200, body: [{ id: "a" }] }]);
+    expect(await fetchExercises("tok")).toHaveLength(1);
+    expect(driftAnnotations()).toHaveLength(0);
+  });
+
+  it("does NOT drift on a recognised envelope key (`data`)", async () => {
+    installFetchMock([{ status: 200, body: { data: [{ id: "a" }] } }]);
+    expect(await fetchExercises("tok")).toHaveLength(1);
+    expect(driftAnnotations()).toHaveLength(0);
+  });
+
+  it("does NOT drift on an empty array under a recognised key", async () => {
+    installFetchMock([{ status: 200, body: { exercises: [] } }]);
+    expect(await fetchExercises("tok")).toEqual([]);
+    expect(driftAnnotations()).toHaveLength(0);
+  });
+
+  it("does NOT drift on a 204 empty window", async () => {
+    installFetchMock([{ status: 204 }]);
+    expect(await fetchExercises("tok")).toEqual([]);
+    expect(driftAnnotations()).toHaveLength(0);
   });
 });
 

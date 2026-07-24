@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const { annotateMock } = vi.hoisted(() => ({ annotateMock: vi.fn() }));
+vi.mock("@/lib/logging/context", () => ({
+  annotate: annotateMock,
+  getEvent: () => null,
+}));
+
 import {
   POLAR_OAUTH_SCOPE,
   exchangeCode,
@@ -43,11 +49,18 @@ function installFetchMock(pages: Array<{ status: number; body?: unknown }>) {
 }
 
 beforeEach(() => {
+  annotateMock.mockClear();
   process.env.POLAR_CLIENT_ID = "env-cid";
   process.env.POLAR_CLIENT_SECRET = "env-secret";
   process.env.NEXT_PUBLIC_APP_URL = "https://app.example";
   delete process.env.POLAR_REDIRECT_URI;
 });
+
+function driftAnnotations() {
+  return annotateMock.mock.calls
+    .map((c) => c[0])
+    .filter((f) => f?.action?.name === "polar.envelope.drift");
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -206,6 +219,55 @@ describe("fetchNightlyRecharges", () => {
     const r = await fetchNightlyRecharges("tok");
     expect(r).toHaveLength(1);
     expect(r[0]!.date).toBe("2026-06-10");
+  });
+});
+
+describe("fetchCollection — envelope drift logging", () => {
+  it("logs a drift breadcrumb (verb + top-level keys) and degrades to [] on an unexpected wrapped shape", async () => {
+    installFetchMock([
+      { status: 200, body: { unexpected: [{ date: "2026-06-10" }] } },
+    ]);
+    expect(await fetchNightlyRecharges("tok")).toEqual([]);
+    const drift = driftAnnotations();
+    expect(drift).toHaveLength(1);
+    expect(drift[0].action.details).toMatchObject({
+      verb: "fetchNightlyRecharges",
+      httpStatus: 200,
+      keys: ["unexpected"],
+    });
+  });
+
+  it("does NOT drift on the correctly wrapped envelope", async () => {
+    installFetchMock([
+      { status: 200, body: { recharges: [{ date: "2026-06-10" }] } },
+    ]);
+    expect(await fetchNightlyRecharges("tok")).toHaveLength(1);
+    expect(driftAnnotations()).toHaveLength(0);
+  });
+
+  it("does NOT drift on a bare array for a bare-array endpoint", async () => {
+    installFetchMock([
+      { status: 200, body: [{ date: "2026-06-10", cardio_load: 12 }] },
+    ]);
+    expect(await fetchCardioLoads("tok")).toHaveLength(1);
+    expect(driftAnnotations()).toHaveLength(0);
+  });
+
+  it("drifts when a bare-array endpoint returns a non-array object", async () => {
+    installFetchMock([{ status: 200, body: { rows: [{ cardio_load: 1 }] } }]);
+    expect(await fetchCardioLoads("tok")).toEqual([]);
+    const drift = driftAnnotations();
+    expect(drift).toHaveLength(1);
+    expect(drift[0].action.details).toMatchObject({
+      verb: "fetchCardioLoads",
+      keys: ["rows"],
+    });
+  });
+
+  it("does NOT drift on a 204 empty window", async () => {
+    installFetchMock([{ status: 204 }]);
+    expect(await fetchSleeps("tok")).toEqual([]);
+    expect(driftAnnotations()).toHaveLength(0);
   });
 });
 
