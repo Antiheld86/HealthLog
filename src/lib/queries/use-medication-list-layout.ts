@@ -96,7 +96,10 @@ export async function runSaveMedicationListOrder(deps: {
     // clobbering a view toggle that committed since the dialog opened.
     const saved = await apiPut<MedicationListLayoutWithToken>(
       "/api/medications/layout",
-      withBaseToken({ version: 1, order }, readUpdatedAtToken(queryClient, key)),
+      withBaseToken(
+        { version: 1, order },
+        readUpdatedAtToken(queryClient, key),
+      ),
     );
     if (saved) {
       queryClient.setQueryData(key, saved);

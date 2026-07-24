@@ -233,7 +233,8 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Returns the per-user /medications presentation (card/table view + manual order) plus the optimistic-concurrency `updatedAt` token. Falls back to the defaults (cards, empty order) when the user has not customised it. Mirrors the insights-layout contract.",
       responses: {
         "200": {
-          description: "The resolved presentation (custom or default) plus its token.",
+          description:
+            "The resolved presentation (custom or default) plus its token.",
           content: {
             "application/json": {
               schema: dataEnvelope(

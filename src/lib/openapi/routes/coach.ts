@@ -954,7 +954,8 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Returns the per-user Insights tile layout (visibility + order) plus the optimistic-concurrency `updatedAt` token. Falls back to the default layout when the user has not customised it. Mirrors the dashboard-widgets contract.",
       responses: {
         "200": {
-          description: "The resolved layout (custom or default) plus its token.",
+          description:
+            "The resolved layout (custom or default) plus its token.",
           content: {
             "application/json": {
               schema: dataEnvelope(insightsLayoutResult, "InsightsLayout"),

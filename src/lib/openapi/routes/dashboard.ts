@@ -100,7 +100,8 @@ export const dashboardWidgetPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Returns the resolved effective layout (defaults merged in if the user has not customised it) plus the optimistic-concurrency `updatedAt` token.",
       responses: {
         "200": {
-          description: "The resolved layout (custom or default) plus its token.",
+          description:
+            "The resolved layout (custom or default) plus its token.",
           content: {
             "application/json": {
               schema: dataEnvelope(dashboardLayoutResult, "DashboardLayout"),

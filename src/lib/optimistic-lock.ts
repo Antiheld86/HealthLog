@@ -33,8 +33,7 @@ import { annotate } from "@/lib/logging/context";
 
 /** Result of pulling the `baseUpdatedAt` transport field off a request body. */
 export type TakeBaseTokenResult =
-  | { base: Date | undefined; rest: unknown }
-  | { invalid: true };
+  { base: Date | undefined; rest: unknown } | { invalid: true };
 
 /**
  * Pull the optimistic-concurrency base token off a raw request body BEFORE
@@ -94,8 +93,7 @@ export interface ConflictSpec {
 
 /** Either a ready-to-return 409 `Response`, or the fresh token to echo. */
 export type GuardedUpdateResult =
-  | { conflict: Response }
-  | { updatedAt: string };
+  { conflict: Response } | { updatedAt: string };
 
 /**
  * Generic conditional-update-or-409 core.
