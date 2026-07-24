@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "@/lib/i18n/context";
+import { useUnitDisplay } from "@/hooks/use-unit-display";
 import { moodTagIcon } from "@/components/mood/mood-tag-icons";
 import { cn } from "@/lib/utils";
 import type { MoodInfluenceConfidence } from "./mood-tag-influence";
@@ -85,6 +86,7 @@ export function MoodFactorMetricCrosstab({
   rows: MoodFactorMetricCrosstabRow[];
 }) {
   const { t } = useTranslations();
+  const unitDisplay = useUnitDisplay();
   if (rows.length === 0) return null;
 
   return (
@@ -99,7 +101,16 @@ export function MoodFactorMetricCrosstab({
           const metricLabel = t(
             METRIC_LABEL_KEY[row.metricKey] ?? row.metricKey,
           );
-          const unit = t(UNIT_KEY[row.display]);
+          // v1.32.26 — the weight ("kg") row follows the metric/imperial
+          // preference: the unit symbol + the values (averages + delta, all in
+          // kg, offset-free) convert together. Every other display is unitless
+          // to the preference and keeps its i18n label + raw value.
+          const isWeightRow = row.display === "kg";
+          const unit = isWeightRow
+            ? unitDisplay.unitFor("WEIGHT")
+            : t(UNIT_KEY[row.display]);
+          const conv = (v: number) =>
+            isWeightRow ? unitDisplay.toDisplay("WEIGHT", v) : v;
           // `delta` = lowAvg − highAvg: positive = the vital runs higher on the
           // low-factor (worse) days. The number stays NEUTRAL — a higher value
           // is good for steps but bad for resting HR, and this board is
@@ -107,7 +118,7 @@ export function MoodFactorMetricCrosstab({
           // green/red would imply a health verdict the data doesn't support.
           // The sign prefix + `data-direction` carry the direction.
           const up = row.delta >= 0;
-          const deltaText = `${up ? "+" : ""}${fmt(row.delta, row.display)} ${unit}`;
+          const deltaText = `${up ? "+" : ""}${fmt(conv(row.delta), row.display)} ${unit}`;
           return (
             <li
               key={`${row.metricKey}:${row.factor}`}
@@ -153,8 +164,8 @@ export function MoodFactorMetricCrosstab({
                   {
                     factor: factorLabel,
                     metric: metricLabel,
-                    lowAvg: fmt(row.lowAvg, row.display),
-                    highAvg: fmt(row.highAvg, row.display),
+                    lowAvg: fmt(conv(row.lowAvg), row.display),
+                    highAvg: fmt(conv(row.highAvg), row.display),
                     unit,
                     lowDays: row.lowDays,
                   },

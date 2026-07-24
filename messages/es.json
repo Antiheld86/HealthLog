@@ -1887,7 +1887,7 @@
       "levelShift": "Se detectó un cambio de nivel en torno a {date}.",
       "plateau": {
         "title": "Meseta de peso con la dosis actual",
-        "evidence": "Variación de peso de {delta} kg en los últimos {window} días ({readings} mediciones) — {days} días con {dose}."
+        "evidence": "Variación de peso de {delta} {unit} en los últimos {window} días ({readings} mediciones) — {days} días con {dose}."
       },
       "retarget": {
         "label": "¿No es la medición correcta?",

@@ -1885,7 +1885,7 @@
       "levelShift": "Um {date} wurde eine Verschiebung des Niveaus erkannt.",
       "plateau": {
         "title": "Gewichts-Plateau auf aktueller Dosis",
-        "evidence": "Gewichtsveränderung von {delta} kg in den letzten {window} Tagen ({readings} Messungen) — seit {days} Tagen auf {dose}."
+        "evidence": "Gewichtsveränderung von {delta} {unit} in den letzten {window} Tagen ({readings} Messungen) — seit {days} Tagen auf {dose}."
       },
       "retarget": {
         "label": "Nicht der richtige Messwert?",

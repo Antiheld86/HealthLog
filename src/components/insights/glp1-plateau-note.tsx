@@ -27,6 +27,7 @@ import { TileHeader } from "@/components/insights/tile-header";
 import { queryKeys } from "@/lib/query-keys";
 import { apiGet } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
+import { useUnitDisplay } from "@/hooks/use-unit-display";
 import type { Glp1PlateauContext } from "@/lib/insights/glp1-plateau";
 
 interface Glp1PlateauResponse {
@@ -36,6 +37,7 @@ interface Glp1PlateauResponse {
 
 export function Glp1PlateauNote() {
   const { t } = useTranslations();
+  const unitDisplay = useUnitDisplay();
   const { data } = useQuery({
     queryKey: queryKeys.insightsGlp1Plateau(),
     queryFn: () => apiGet<Glp1PlateauResponse>("/api/insights/glp1-plateau"),
@@ -45,10 +47,13 @@ export function Glp1PlateauNote() {
   if (!data?.plateau) return null;
   const plateau = data.plateau;
 
-  const delta =
-    plateau.weightDeltaKg > 0
-      ? `+${plateau.weightDeltaKg}`
-      : `${plateau.weightDeltaKg}`;
+  // The weight change is a DELTA → factor-only conversion (no affine offset).
+  const deltaValue =
+    Math.round(
+      unitDisplay.toDisplayDelta("WEIGHT", plateau.weightDeltaKg) * 10,
+    ) / 10;
+  const delta = deltaValue > 0 ? `+${deltaValue}` : `${deltaValue}`;
+  const unit = unitDisplay.unitFor("WEIGHT");
   const dose = `${plateau.drug} ${plateau.doseValue} ${plateau.doseUnit}`;
 
   return (
@@ -64,6 +69,7 @@ export function Glp1PlateauNote() {
         <p className="text-muted-foreground text-sm">
           {t("medications.efficacy.plateau.evidence", {
             delta,
+            unit,
             window: data.windowDays,
             readings: plateau.readingsCount,
             days: plateau.daysOnDose,
