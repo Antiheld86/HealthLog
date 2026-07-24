@@ -38,7 +38,14 @@ const mutateSpy = vi.fn();
 const invalidateSpy = vi.fn();
 
 vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({ invalidateQueries: invalidateSpy }),
+  useQueryClient: () => ({
+    invalidateQueries: invalidateSpy,
+    // v1.32.22 (M3) — the writer reads/seeds the optimistic-concurrency token
+    // via the query cache; no token seeded → tokenless (unconditional) write.
+    getQueryData: () => undefined,
+    setQueryData: vi.fn(),
+    removeQueries: vi.fn(),
+  }),
   useMutation: (config: MutationConfig) => {
     lastMutation = config;
     return { mutate: mutateSpy, isPending: false };

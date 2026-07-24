@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
-vi.mock("@/lib/db", () => ({
-  prisma: {
+vi.mock("@/lib/db", () => {
+  // v1.32.22 (M5) — the [itemId] PATCH / DELETE now run inside a transaction
+  // that takes the per-medication advisory lock. The mock transaction runs the
+  // callback with the base client as tx, and `$queryRaw` stands in for the
+  // advisory-lock query.
+  const prisma: Record<string, unknown> = {
     medication: { findUnique: vi.fn() },
     medicationInventoryItem: {
       findMany: vi.fn(),
@@ -11,8 +15,11 @@ vi.mock("@/lib/db", () => ({
       update: vi.fn(),
       delete: vi.fn(),
     },
-  },
-}));
+    $queryRaw: vi.fn(),
+    $transaction: vi.fn((fn: (tx: unknown) => unknown) => fn(prisma)),
+  };
+  return { prisma };
+});
 
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 
@@ -72,6 +79,12 @@ function jsonReq(url: string, body: unknown, method = "POST"): NextRequest {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  // `resetAllMocks` clears the transaction implementation — re-establish it.
+  (
+    prisma as unknown as { $transaction: ReturnType<typeof vi.fn> }
+  ).$transaction.mockImplementation((fn: (tx: unknown) => unknown) =>
+    fn(prisma),
+  );
   vi.mocked(checkRateLimit).mockResolvedValue({
     allowed: true,
     remaining: 29,

@@ -9,16 +9,23 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
-vi.mock("@/lib/db", () => ({
-  prisma: {
+vi.mock("@/lib/db", () => {
+  // v1.32.22 (M5) — the PATCH / DELETE now run inside `prisma.$transaction`
+  // that takes the per-medication advisory lock. The mock transaction runs the
+  // callback with the base client as the tx, so the existing model mocks apply
+  // inside the transaction and `$queryRaw` (the advisory lock) is observable.
+  const prisma: Record<string, unknown> = {
     medication: { findUnique: vi.fn() },
     medicationInventoryItem: {
       findUnique: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
     },
-  },
-}));
+    $queryRaw: vi.fn(),
+    $transaction: vi.fn((fn: (tx: unknown) => unknown) => fn(prisma)),
+  };
+  return { prisma };
+});
 
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/auth/audit", () => ({
@@ -52,10 +59,15 @@ vi.mock("next/headers", () => ({
   })),
 }));
 
-import { PATCH } from "../route";
+import { PATCH, DELETE } from "../route";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
+
+const prismaTx = prisma as unknown as {
+  $queryRaw: ReturnType<typeof vi.fn>;
+  $transaction: ReturnType<typeof vi.fn>;
+};
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -76,6 +88,11 @@ const ROUTE_CTX = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  // `resetAllMocks` clears the transaction implementation — re-establish it so
+  // the callback still runs with the base client as the tx.
+  prismaTx.$transaction.mockImplementation((fn: (tx: unknown) => unknown) =>
+    fn(prisma),
+  );
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
   vi.mocked(checkRateLimit).mockResolvedValue({ allowed: true } as never);
   vi.mocked(prisma.medicationInventoryItem.findUnique).mockResolvedValue({
@@ -242,5 +259,97 @@ describe("PATCH /api/medications/[id]/inventory/[itemId] — carton labelling", 
     };
     expect(arg.data.manufacturer).toBeNull();
     expect("doseStrength" in arg.data).toBe(false);
+  });
+});
+
+/**
+ * v1.32.22 (M5) — the stock-correction PATCH and the DELETE route their
+ * read-compose-write through the SAME per-medication advisory lock that
+ * `consumeForIntake` takes, so an absolute stock write can no longer clobber a
+ * concurrent dose decrement. These pin the routing: the write runs inside a
+ * transaction that takes the advisory lock BEFORE it reads + writes.
+ */
+describe("PATCH / DELETE inventory — advisory-lock serialisation (M5)", () => {
+  beforeEach(() => {
+    vi.mocked(prisma.medicationInventoryItem.findUnique).mockResolvedValue({
+      id: "i1",
+      medicationId: "m1",
+      userId: "user-1",
+      firstUseAt: null,
+      state: "IN_USE",
+      unitsTotal: 4,
+      unitsRemaining: 3,
+      printedExpiry: null,
+      notes: null,
+    } as never);
+    vi.mocked(prisma.medicationInventoryItem.update).mockImplementation(
+      (async (args: { data: Record<string, unknown> }) => ({
+        id: "i1",
+        ...args.data,
+      })) as never,
+    );
+    vi.mocked(prisma.medicationInventoryItem.delete).mockResolvedValue({
+      id: "i1",
+    } as never);
+  });
+
+  it("takes the medication advisory lock inside a transaction before the write", async () => {
+    const res = await PATCH(patchReq({ unitsRemaining: 1 }), ROUTE_CTX);
+    expect(res.status).toBe(200);
+
+    // One transaction, one advisory-lock query.
+    expect(prismaTx.$transaction).toHaveBeenCalledTimes(1);
+    expect(prismaTx.$queryRaw).toHaveBeenCalledTimes(1);
+
+    // The lock SQL is the canonical `pg_advisory_xact_lock` — proves the route
+    // shares the intake hook's key rather than re-deriving one.
+    const sql = prismaTx.$queryRaw.mock.calls[0]?.[0] as {
+      strings?: string[];
+    };
+    expect((sql.strings ?? []).join("")).toContain("pg_advisory_xact_lock");
+
+    // Lock is acquired BEFORE the row update (serialises against a concurrent
+    // consume decrement).
+    const lockOrder = prismaTx.$queryRaw.mock.invocationCallOrder[0];
+    const updateOrder = vi.mocked(prisma.medicationInventoryItem.update).mock
+      .invocationCallOrder[0];
+    expect(lockOrder).toBeLessThan(updateOrder);
+  });
+
+  it("re-reads the row INSIDE the locked transaction", async () => {
+    await PATCH(patchReq({ unitsRemaining: 1 }), ROUTE_CTX);
+    // The ownership re-read runs after the lock is taken.
+    const lockOrder = prismaTx.$queryRaw.mock.invocationCallOrder[0];
+    const readOrder = vi.mocked(prisma.medicationInventoryItem.findUnique).mock
+      .invocationCallOrder[0];
+    expect(lockOrder).toBeLessThan(readOrder);
+  });
+
+  it("DELETE takes the same lock before deleting", async () => {
+    const res = await DELETE(patchReq({}), ROUTE_CTX);
+    expect(res.status).toBe(200);
+    expect(prismaTx.$queryRaw).toHaveBeenCalledTimes(1);
+    const lockOrder = prismaTx.$queryRaw.mock.invocationCallOrder[0];
+    const deleteOrder = vi.mocked(prisma.medicationInventoryItem.delete).mock
+      .invocationCallOrder[0];
+    expect(lockOrder).toBeLessThan(deleteOrder);
+  });
+
+  it("still 404s an item owned by another user (checked inside the lock)", async () => {
+    vi.mocked(prisma.medicationInventoryItem.findUnique).mockResolvedValue({
+      id: "i1",
+      medicationId: "m1",
+      userId: "someone-else",
+      state: "IN_USE",
+      unitsTotal: 4,
+      unitsRemaining: 3,
+      printedExpiry: null,
+      firstUseAt: null,
+      notes: null,
+    } as never);
+
+    const res = await PATCH(patchReq({ unitsRemaining: 1 }), ROUTE_CTX);
+    expect(res.status).toBe(404);
+    expect(prisma.medicationInventoryItem.update).not.toHaveBeenCalled();
   });
 });

@@ -31,6 +31,13 @@ vi.mock("@/lib/db", () => ({
     user: {
       findUnique: (...a: unknown[]) => findUnique(...a),
       update: (...a: unknown[]) => userUpdate(...a),
+      // v1.32.22 (M6) — the cache commit is now a privacy-mode-guarded
+      // updateMany; record it on the same spy but return a matched count so the
+      // guard proceeds (mode unchanged in these tests).
+      updateMany: (...a: unknown[]) => {
+        userUpdate(...a);
+        return Promise.resolve({ count: 1 });
+      },
     },
     auditLog: { deleteMany: vi.fn(), create: vi.fn() },
   },

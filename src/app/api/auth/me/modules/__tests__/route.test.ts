@@ -12,6 +12,7 @@ vi.mock("@/lib/db", () => ({
     user: {
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     cycleProfile: {
       findUnique: vi.fn(),
@@ -198,6 +199,7 @@ describe("PATCH /api/auth/me/modules", () => {
 
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "user-1" },
+      select: { updatedAt: true },
       data: { modulePreferencesJson: { mood: false } },
     });
     expect(auditLog).toHaveBeenCalledWith(
@@ -220,6 +222,7 @@ describe("PATCH /api/auth/me/modules", () => {
 
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "user-1" },
+      select: { updatedAt: true },
       data: { modulePreferencesJson: { glucose: false, sleep: false } },
     });
   });
@@ -234,6 +237,7 @@ describe("PATCH /api/auth/me/modules", () => {
 
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "user-1" },
+      select: { updatedAt: true },
       data: { modulePreferencesJson: { glucose: true } },
     });
   });
@@ -310,7 +314,100 @@ describe("PATCH /api/auth/me/modules", () => {
 
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "user-1" },
+      select: { updatedAt: true },
       data: { modulePreferencesJson: { sleep: false, labs: false } },
     });
+  });
+});
+
+/**
+ * v1.32.22 (M3) — optimistic concurrency. The base token is stripped BEFORE
+ * the `.strict()` schema parse, so it never trips strict validation; a stale
+ * token 409s and writes nothing; a tokenless PATCH keeps the unconditional
+ * write.
+ */
+describe("PATCH /api/auth/me/modules — optimistic concurrency", () => {
+  it("guards on the base token and skips the unconditional write", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    primeUser({ modulePreferencesJson: null });
+    vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 1 } as never);
+
+    const res = await (PATCH as (r: Request) => Promise<Response>)(
+      mkPatch({ mood: false, baseUpdatedAt: "2026-07-24T10:00:00.000Z" }),
+    );
+    expect(res.status).toBe(200);
+    expect(prisma.user.updateMany).toHaveBeenCalledTimes(1);
+    const whereArg = vi.mocked(prisma.user.updateMany).mock.calls[0]?.[0]
+      ?.where as { id: string; updatedAt: Date };
+    expect(whereArg.id).toBe("user-1");
+    expect((whereArg.updatedAt as Date).toISOString()).toBe(
+      "2026-07-24T10:00:00.000Z",
+    );
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("interleaved writers: the stale-base second writer gets 409 and clobbers nothing", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    primeUser({ modulePreferencesJson: null });
+    vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 0 } as never);
+
+    const res = await (PATCH as (r: Request) => Promise<Response>)(
+      mkPatch({ mood: false, baseUpdatedAt: "2026-07-24T08:00:00.000Z" }),
+    );
+    expect(res.status).toBe(409);
+    const env = (await res.json()) as { meta?: { errorCode?: string } };
+    expect(env.meta?.errorCode).toBe("modules_conflict");
+    expect(prisma.user.updateMany).toHaveBeenCalledTimes(1);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("keeps the unconditional write when the token is omitted (compat)", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    primeUser({ modulePreferencesJson: null });
+
+    const res = await (PATCH as (r: Request) => Promise<Response>)(
+      mkPatch({ mood: false }),
+    );
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledTimes(1);
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("strips the token pre-parse: a token ALONE does not trip the strict schema", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    primeUser({ modulePreferencesJson: null });
+    vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 1 } as never);
+
+    const res = await (PATCH as (r: Request) => Promise<Response>)(
+      mkPatch({ mood: false, baseUpdatedAt: "2026-07-24T10:00:00.000Z" }),
+    );
+    // 200, not 422 — `baseUpdatedAt` was removed before the strict parse.
+    expect(res.status).toBe(200);
+  });
+
+  it("still 422s an unknown key even alongside a valid token (strict stays strict)", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    primeUser({ modulePreferencesJson: null });
+
+    const res = await (PATCH as (r: Request) => Promise<Response>)(
+      mkPatch({ notAModule: false, baseUpdatedAt: "2026-07-24T10:00:00.000Z" }),
+    );
+    expect(res.status).toBe(422);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("422s a malformed base token without touching the row", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    primeUser({ modulePreferencesJson: null });
+
+    const res = await (PATCH as (r: Request) => Promise<Response>)(
+      mkPatch({ mood: false, baseUpdatedAt: "not-a-date" }),
+    );
+    expect(res.status).toBe(422);
+    const env = (await res.json()) as { meta?: { errorCode?: string } };
+    expect(env.meta?.errorCode).toBe("invalid_base_updated_at");
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
   });
 });
