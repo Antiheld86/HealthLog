@@ -77,6 +77,7 @@ vi.mock("@/lib/integrations/status", () => ({
 import {
   classificationToFailureKind,
   getValidToken,
+  hardFailStorage,
   upsertFitbitMeasurements,
 } from "../sync-core";
 
@@ -427,6 +428,97 @@ describe("upsertFitbitMeasurements — batched write, tombstones resurrect", () 
     expect(prismaMock.measurement.findMany).not.toHaveBeenCalled();
     expect(prismaMock.measurement.createManyAndReturn).not.toHaveBeenCalled();
     expect(prismaMock.measurement.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("upsertFitbitMeasurements — write-catch ledger (F-2)", () => {
+  it("a createMany failure notes measurements:create on the ledger and does not throw", async () => {
+    const measuredAt = new Date("2026-05-10T07:00:00.000Z");
+    // Probe: one live row (its externalId) → update branch; the other key is
+    // fresh → create branch. Second findMany is the natural-key rescue probe.
+    prismaMock.measurement.findMany
+      .mockResolvedValueOnce([
+        { id: "m-live", type: "WEIGHT", externalId: "live-key" },
+      ])
+      .mockResolvedValueOnce([]); // natural-key rescue: no twin
+    prismaMock.measurement.createManyAndReturn.mockRejectedValueOnce(
+      new Error("createMany exploded"),
+    );
+
+    const tracker = { failures: [] as string[] };
+    const { imported } = await hardFailStorage.run(tracker, () =>
+      upsertFitbitMeasurements("user1", [
+        {
+          type: "WEIGHT",
+          value: 1,
+          unit: "kg",
+          measuredAt,
+          externalId: "live-key",
+        },
+        {
+          type: "WEIGHT",
+          value: 2,
+          unit: "kg",
+          measuredAt,
+          externalId: "fresh-key",
+        },
+      ]),
+    );
+
+    // No rethrow: the sibling live row still wrote through the update branch.
+    expect(prismaMock.measurement.update).toHaveBeenCalledTimes(1);
+    expect(imported).toBe(1);
+    // The failed create is recorded so the cycle's watermark holds.
+    expect(tracker.failures).toContain("measurements:create");
+  });
+
+  it("an update failure notes measurements:update on the ledger and does not throw", async () => {
+    const measuredAt = new Date("2026-05-10T07:00:00.000Z");
+    // Two live rows (both updates) + one fresh row (create). The first update
+    // throws; the loop must continue to the second, and the create still runs.
+    prismaMock.measurement.findMany
+      .mockResolvedValueOnce([
+        { id: "m-live-1", type: "WEIGHT", externalId: "live-1" },
+        { id: "m-live-2", type: "WEIGHT", externalId: "live-2" },
+      ])
+      .mockResolvedValueOnce([]); // natural-key rescue: no twin
+    prismaMock.measurement.update
+      .mockRejectedValueOnce(new Error("update exploded"))
+      .mockResolvedValueOnce({});
+
+    const tracker = { failures: [] as string[] };
+    const { imported } = await hardFailStorage.run(tracker, () =>
+      upsertFitbitMeasurements("user1", [
+        {
+          type: "WEIGHT",
+          value: 1,
+          unit: "kg",
+          measuredAt,
+          externalId: "live-1",
+        },
+        {
+          type: "WEIGHT",
+          value: 2,
+          unit: "kg",
+          measuredAt,
+          externalId: "live-2",
+        },
+        {
+          type: "WEIGHT",
+          value: 3,
+          unit: "kg",
+          measuredAt,
+          externalId: "fresh-3",
+        },
+      ]),
+    );
+
+    // No rethrow: the sibling update ran and the fresh create still wrote.
+    expect(prismaMock.measurement.update).toHaveBeenCalledTimes(2);
+    expect(prismaMock.measurement.createManyAndReturn).toHaveBeenCalledTimes(1);
+    // create (1) + the one surviving update (1) landed.
+    expect(imported).toBe(2);
+    expect(tracker.failures).toContain("measurements:update");
   });
 });
 
