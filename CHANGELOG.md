@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+## [1.32.19] — 2026-07-24
+
+After you logged a dose, the Today view could keep showing it as still due
+until you reloaded the page. The Today hero and the dashboard read from a cache
+that refreshes on a timer, and a write made from another screen marked that
+cache stale without actually re-reading it. The change reached the server, but
+the screen you came back to still showed the old state for up to two minutes,
+or until a hard refresh.
+
+- **A dose you take now clears from Today at once.** This covers the "Take all
+  due" button on the medications page, editing or deleting a logged dose, and
+  importing intake history. The Today view and the dashboard now re-read the
+  moment the write lands instead of waiting for the timer.
+- **A preventive-care reminder marked done leaves the Today rail immediately.**
+  Marking one off, editing it, or deleting it updates the Today view straight
+  away rather than after a refresh.
+- **A lab reading you add updates its cards right away.** Adding a reading
+  refreshes that marker's assessment on the same page and the "what changed
+  since your last panel" card, instead of leaving them on their earlier text.
+- **A briefing you regenerate shows up on Today without a reload.** The new
+  briefing now reaches the Today hero and the dashboard as soon as it is ready.
+- **Saving a dashboard layout keeps its safeguard against a conflicting edit.**
+  A visit to the home page could leave the layout editor without the token that
+  guards a save, which quietly turned off the protection added in v1.32.16
+  against two edits overwriting each other. The editor now always loads its own
+  copy, so the guard stays on.
+
+Thanks to @lutzkind, whose run of reports surfaced the stale Today view.
+
+Refs #581
+
 ## [1.32.18] — 2026-07-24
 
 When a Fitbit token was revoked or expired, the hourly sync noticed the failure

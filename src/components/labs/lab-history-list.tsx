@@ -108,6 +108,13 @@ export function LabHistoryList({ readings }: { readings: LabResultDto[] }) {
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: queryKeys.labResults() });
+    // v1.32.19 — a lab reading edit / delete / restore shifts the two most
+    // recent panels the Insights "what changed since your last panel" card
+    // reads, so bust it too instead of leaving it on its pre-write deltas
+    // until the 60 s stale window lapses.
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.insightsLabsChanges(),
+    });
   }
 
   async function restore(id: string) {

@@ -1,0 +1,171 @@
+/**
+ * Structural guard on the "stale Today hero / dashboard after a write" class.
+ *
+ * The daily reads — `dailyDigest()` (Today hero) and `dashboardSnapshot()`
+ * (dashboard) — run with `refetchOnMount: false` and a 120 s poll. A mutation
+ * that invalidates one of the daily-reads-bearing bundles
+ * (`medicationDependentKeys` / `measurementDependentKeys` / `moodDependentKeys`)
+ * with the DEFAULT `refetchType: "active"` only refetches MOUNTED queries — so a
+ * write made from a surface where the daily reads are UNMOUNTED (the medications
+ * page, a detail page, the mood/measurement forms) marks them stale but never
+ * refetches them. Returning to `/` then serves the pre-write cache until the
+ * poll ticks or the tab is hard-reloaded.
+ *
+ * The blessed contract is `refetchInactiveDailyReads(queryClient)` (or its
+ * wrapper `invalidateMedicationReads`), which forces the two inactive reads to
+ * refetch. This class has recurred THREE times (v1.16.11 snapshot, v1.29.1
+ * digest, v1.32.19 "Take all due") because the bundle cannot express
+ * `refetchType`, so every new call site re-decides it by hand. This guard makes
+ * a fourth recurrence fail CI.
+ *
+ * Like the Bearer-scope guard, this is a tripwire, not a proof. It cannot show
+ * an allowlisted exception is correct — only that no NEW site invalidates a
+ * daily bundle without the paired refetch, and no PAIRED site loses its refetch,
+ * without someone editing this file.
+ */
+import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join, sep } from "node:path";
+import { globSync } from "node:fs";
+
+const SRC = join(process.cwd(), "src");
+
+/** The factory itself DEFINES the bundles + helpers; it is never a call site. */
+const FACTORY = "lib/query-keys/index.ts";
+
+/**
+ * A direct-bundle invalidation call site: `invalidateKeys(<qc>, <bundle>)` or
+ * `invalidateKeys(<qc>, [...<bundle>, <localKey>])`. Captures every form the
+ * codebase actually uses (bare bundle, or spread into an array with an extra
+ * per-surface key). Sites routed through `invalidateMedicationReads` do NOT
+ * match — the wrapper carries the refetch internally, so they are compliant by
+ * construction and correctly invisible here.
+ */
+const INVALIDATION =
+  /invalidateKeys\(\s*[^,]+,\s*\[?\s*(?:\.\.\.)?\s*(?:medicationDependentKeys|measurementDependentKeys|moodDependentKeys)\b/g;
+// Match the CALL form only (open paren), never the bare import specifier —
+// otherwise the `import { refetchInactiveDailyReads }` line would inflate the
+// count and let a file drop one paired call while still "passing".
+const REFETCH = /refetchInactiveDailyReads\(/g;
+
+function sourceFiles(): string[] {
+  return globSync("**/*.{ts,tsx}", { cwd: SRC })
+    .filter(
+      (p) => !p.startsWith(`generated${sep}`) && !p.startsWith("generated/"),
+    )
+    .filter((p) => !p.includes("__tests__"))
+    .filter((p) => !p.endsWith(".test.ts") && !p.endsWith(".test.tsx"))
+    .map((p) => p.split(sep).join("/"))
+    .sort();
+}
+
+function read(rel: string): string {
+  return readFileSync(join(SRC, rel), "utf8");
+}
+
+function count(s: string, re: RegExp): number {
+  return (s.match(re) ?? []).length;
+}
+
+/**
+ * Files that invalidate a daily bundle WITHOUT pairing the inactive refetch,
+ * deliberately. Frozen: a new entry is a conscious decision that must land in a
+ * reviewed diff, exactly like the Bearer-scope mint allowlist. Each entry is a
+ * surface where the missing refetch is intentional, grouped by reason.
+ */
+const NO_REFETCH_ALLOWLIST = [
+  // The digest is ACTIVE on the dashboard where the quick-add lives, so the
+  // default active invalidation already refetches it (audit B, §1: "not the
+  // bug").
+  "components/dashboard/medication-intake-quick-add.tsx",
+  // Injection-site metadata saved AFTER an already-recorded (and already
+  // refetched) take — it does not change any dose's due/taken state.
+  "components/medications/glp1-medication-card.tsx",
+  "components/medications/medication-card.tsx",
+  // Pull-to-refresh: a current-surface read gesture on the medications page,
+  // not a hero-affecting write (audit B, B-5).
+  "app/medications/page-client.tsx",
+  // Medication configuration / metadata surfaces — rename, dose, schedule
+  // times, phase config, push preferences, API tokens, the create wizard.
+  // None records an intake; a schedule edit's next-due shift converges via the
+  // standard poll from a deep-config surface. Tighten in a later pass if a
+  // config surface is shown to strand the rail.
+  "components/medications/scheduling/schedule-times-editor.tsx",
+  "components/medications/sections/api-tokens-row.tsx",
+  "components/medications/sections/notifications-section.tsx",
+  "components/medications/sections/phase-config-sheet.tsx",
+  "components/medications/sections/settings-section.tsx",
+  "components/medications/wizard/medication-wizard-dialog.tsx",
+  // Background integration-sync completion on the Settings surface — the user
+  // is configuring an integration, not acting on the hero; convergence via the
+  // daily reads' own poll/focus refetch is the intended behaviour.
+  "components/settings/integrations/fitbit-card.tsx",
+  "components/settings/integrations/google-health-card.tsx",
+  "components/settings/integrations/nightscout-card.tsx",
+  "components/settings/integrations/oauth-provider-card.tsx",
+  "components/settings/integrations/whoop-card.tsx",
+  "components/settings/integrations/withings-card.tsx",
+].sort();
+
+describe("daily-reads refetch guard", () => {
+  it("the blessed helper pairs the bundle invalidation with the inactive refetch", () => {
+    const src = read(FACTORY);
+    // The one canonical entry point every intake surface routes through.
+    expect(src).toMatch(/export async function invalidateMedicationReads\(/);
+    // It must do BOTH — invalidate the bundle AND force the inactive refetch.
+    const body = src.slice(
+      src.indexOf("export async function invalidateMedicationReads("),
+    );
+    expect(body).toMatch(
+      /invalidateKeys\(\s*queryClient,\s*medicationDependentKeys\s*\)/,
+    );
+    expect(body).toMatch(/refetchInactiveDailyReads\(queryClient\)/);
+  });
+
+  it("every bundle-invalidation site pairs a refetch, except the frozen allowlist", () => {
+    // For each file that invalidates a daily bundle, the count of paired
+    // refetches must be at least the count of invalidations. A count rule (not
+    // a line-proximity heuristic) catches BOTH a new unpaired file AND a new
+    // unpaired call site slipped into an already-compliant file (its refetch
+    // count would then fall below its invalidation count).
+    const nonCompliant: string[] = [];
+    for (const rel of sourceFiles()) {
+      if (rel === FACTORY) continue;
+      const s = read(rel);
+      const invalidations = count(s, INVALIDATION);
+      if (invalidations === 0) continue;
+      const refetches = count(s, REFETCH);
+      if (refetches < invalidations) nonCompliant.push(rel);
+    }
+
+    // The set of deliberately-unpaired sites must be EXACTLY the allowlist:
+    // a new intake mutation that forgets the refetch appears here but not in
+    // the allowlist → fail; a paired site that loses its refetch drops into
+    // this set → fail; a deliberate new exception must be added above.
+    expect(nonCompliant.sort()).toEqual(NO_REFETCH_ALLOWLIST);
+  });
+
+  it("the fixed intake surfaces route through the blessed helper or pair the refetch", () => {
+    // Positive pin: the v1.32.19 seed sites must carry the fix, so a revert to
+    // a bare `invalidateKeys(medicationDependentKeys)` is caught here as well
+    // as by the count assertion above.
+    const routedThroughHelper = [
+      "components/medications/take-all-due.ts",
+      "components/medications/intake-edit-dialog.tsx",
+      "components/medications/intake-history-editable.tsx",
+      "components/medications/intake-import-dialog.tsx",
+      "components/medications/sections/destructive-zone-section.tsx",
+      "components/medications/use-medication-intake.ts",
+    ];
+    for (const rel of routedThroughHelper) {
+      expect(read(rel)).toMatch(/invalidateMedicationReads\(/);
+    }
+    const pairInPlace = [
+      "components/medications/dose-history-ledger.tsx",
+      "components/medications/dose-history-add-dialog.tsx",
+    ];
+    for (const rel of pairInPlace) {
+      expect(read(rel)).toMatch(REFETCH);
+    }
+  });
+});

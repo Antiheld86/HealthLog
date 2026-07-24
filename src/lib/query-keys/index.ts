@@ -253,3 +253,37 @@ export async function refetchInactiveDailyReads(
     }),
   ]);
 }
+
+/**
+ * The ONE blessed entry point for any intake-affecting medication write. It
+ * pairs the dependent-key bundle invalidation with the forced inactive
+ * refetch so a taken / skipped / edited / deleted / imported dose clears the
+ * Today hero and the dashboard the instant it is recorded — never after the
+ * 120 s poll or a hard reload.
+ *
+ * Route EVERY medication mutation through this instead of calling
+ * `invalidateKeys(queryClient, medicationDependentKeys)` directly. The bundle
+ * cannot express `refetchType`, so a bare invalidation only refetches MOUNTED
+ * queries; the digest and snapshot are typically unmounted while the user is
+ * on the medications page (the "Take all due" repro) or a detail page, so
+ * they were marked stale but never refetched. This helper closes that gap in
+ * one call. The class it closes — a bundle invalidation that never refetches
+ * the unmounted daily reads — has recurred three times (v1.16.11, v1.29.1,
+ * v1.32.19); `daily-reads-refetch-guard.test.ts` now fails CI if a new site
+ * invalidates the bundle without the paired refetch.
+ *
+ * The server intake routes already hard-evict the `${userId}|` analytics
+ * prefix, so the refetch this triggers returns post-write data immediately —
+ * no server change is needed at any call site.
+ *
+ * Sites that need to invalidate an EXTRA key alongside the bundle (the
+ * dose-history ledger's own window key) keep their `invalidateKeys([...bundle,
+ * localKey])` call and add `refetchInactiveDailyReads(queryClient)` directly;
+ * the guard accepts either form.
+ */
+export async function invalidateMedicationReads(
+  queryClient: QueryClient,
+): Promise<void> {
+  await invalidateKeys(queryClient, medicationDependentKeys);
+  await refetchInactiveDailyReads(queryClient);
+}

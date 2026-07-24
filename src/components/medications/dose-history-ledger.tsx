@@ -87,6 +87,7 @@ import {
   invalidateKeys,
   medicationDependentKeys,
   queryKeys,
+  refetchInactiveDailyReads,
 } from "@/lib/query-keys";
 import type { DoseHistoryStatus } from "@/lib/medications/scheduling/dose-history";
 import { runUndoIntake } from "@/components/medications/use-medication-intake";
@@ -295,6 +296,10 @@ export function DoseHistoryLedger({
           ...medicationDependentKeys,
           queryKey,
         ]);
+        // The ledger also invalidates its own window key above; the daily
+        // reads (Today hero + dashboard) are unmounted behind the detail
+        // page, so force their inactive refetch too (v1.32.19).
+        await refetchInactiveDailyReads(queryClient);
       } catch {
         if (prev) queryClient.setQueryData(queryKey, prev);
         toast.error(
@@ -334,6 +339,10 @@ export function DoseHistoryLedger({
           ...medicationDependentKeys,
           queryKey,
         ]);
+        // The ledger also invalidates its own window key above; the daily
+        // reads (Today hero + dashboard) are unmounted behind the detail
+        // page, so force their inactive refetch too (v1.32.19).
+        await refetchInactiveDailyReads(queryClient);
         toast.success(t("medications.detail.intake.edit.savedToast"));
       } catch {
         toast.error(t("medications.detail.intake.edit.failed"));
@@ -365,6 +374,10 @@ export function DoseHistoryLedger({
           ...medicationDependentKeys,
           queryKey,
         ]);
+        // The ledger also invalidates its own window key above; the daily
+        // reads (Today hero + dashboard) are unmounted behind the detail
+        // page, so force their inactive refetch too (v1.32.19).
+        await refetchInactiveDailyReads(queryClient);
       } catch {
         toast.error(t("medications.detail.intake.edit.failed"));
       }
@@ -380,6 +393,10 @@ export function DoseHistoryLedger({
       await apiDelete(`/api/medications/${medicationId}/intake/${id}`);
       toast.success(t("medications.detail.intake.deleteRow.toast"));
       await invalidateKeys(queryClient, [...medicationDependentKeys, queryKey]);
+      // The ledger also invalidates its own window key above; the daily
+      // reads (Today hero + dashboard) are unmounted behind the detail
+      // page, so force their inactive refetch too (v1.32.19).
+      await refetchInactiveDailyReads(queryClient);
     } catch {
       toast.error(t("medications.detail.intake.deleteRow.failed"));
     }

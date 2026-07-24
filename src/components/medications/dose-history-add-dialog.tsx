@@ -28,7 +28,11 @@ import { Label } from "@/components/ui/label";
 import { DateTimeField } from "@/components/ui/date-time-field";
 import { Switch } from "@/components/ui/switch";
 import { useTranslations } from "@/lib/i18n/context";
-import { invalidateKeys, medicationDependentKeys } from "@/lib/query-keys";
+import {
+  invalidateKeys,
+  medicationDependentKeys,
+  refetchInactiveDailyReads,
+} from "@/lib/query-keys";
 import { apiPost } from "@/lib/api/api-fetch";
 import type { QueryKey } from "@tanstack/react-query";
 import type { LedgerSchedule } from "@/components/medications/dose-history-ledger";
@@ -174,6 +178,10 @@ export function LedgerAddDialog({
         ...medicationDependentKeys,
         ledgerKey,
       ]);
+      // A ledger add can land a today-dated dose, so clear the unmounted
+      // Today hero + dashboard too (v1.32.19 — same class as the ledger's
+      // own log/edit/delete sites).
+      await refetchInactiveDailyReads(queryClient);
       setNudgeOpen(false);
       onOpenChange(false);
     } catch {
