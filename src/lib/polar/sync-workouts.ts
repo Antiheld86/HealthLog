@@ -31,11 +31,10 @@
 import { prisma } from "@/lib/db";
 import { emitInsertedWorkoutArrival } from "@/lib/arrivals/workout-emit";
 import { annotate, getEvent } from "@/lib/logging/context";
-import { recordSyncFailure } from "@/lib/integrations/status";
+import { recordSyncFailure, toFailureKind } from "@/lib/integrations/status";
 import { fetchExercises, mapExercise, type PolarWorkoutRow } from "./client";
 import { getPolarConnection } from "./credentials";
-import { PolarApiError } from "./response-classifier";
-import { classifyPolarFailure } from "./sync";
+import { PolarApiError, classifyPolarError } from "./response-classifier";
 
 async function recordPolarWorkoutFailure(
   userId: string,
@@ -44,7 +43,10 @@ async function recordPolarWorkoutFailure(
   await recordSyncFailure({
     userId,
     integration: "polar",
-    kind: classifyPolarFailure(err),
+    // Same classification the vitals leg uses (`classifyPolarFailure` in
+    // `./sync`); resolved directly off the shared classifier so this leg does
+    // not have to import the heavier vitals-sync module.
+    kind: toFailureKind(classifyPolarError(err)),
     message: err instanceof Error ? err.message : String(err),
     errorCode:
       err instanceof PolarApiError && err.httpStatus != null

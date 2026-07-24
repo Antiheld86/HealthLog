@@ -73,7 +73,6 @@ export const POLAR_SPORT_TABLE: readonly PolarSportTableRow[] = [
   { name: "MOUNTAIN_BIKING", canonical: "cycling" },
   { name: "GRAVEL_CYCLING", canonical: "cycling" },
   { name: "E_BIKE", canonical: "cycling" },
-  { name: "EBIKE", canonical: "cycling" },
   { name: "HANDCYCLING", canonical: "cycling" },
   // ── walking ──
   { name: "WALKING", canonical: "walking" },
