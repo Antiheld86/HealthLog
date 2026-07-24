@@ -444,6 +444,7 @@
     "layoutReset": "Reset to defaults",
     "layoutSaveSuccess": "Dashboard layout saved",
     "layoutSaveError": "Could not save dashboard layout",
+    "layoutConflictReloaded": "Layout reloaded from the server. Please make your change again.",
     "layoutResetSuccess": "Reset to default layout",
     "layoutUsingDefaults": "Using default layout",
     "layoutCustomized": "Custom layout active",

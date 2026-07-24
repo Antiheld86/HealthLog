@@ -454,6 +454,7 @@
     "layoutReset": "Auf Defaults zurücksetzen",
     "layoutSaveSuccess": "Dashboard-Layout gespeichert",
     "layoutSaveError": "Layout konnte nicht gespeichert werden",
+    "layoutConflictReloaded": "Layout wurde vom Server neu geladen. Bitte nimm deine Änderung erneut vor.",
     "layoutResetSuccess": "Auf Standard-Layout zurückgesetzt",
     "layoutUsingDefaults": "Standard-Layout aktiv",
     "layoutCustomized": "Eigenes Layout aktiv",

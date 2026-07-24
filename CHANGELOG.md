@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [1.32.16] — 2026-07-24
+
+Changing which tiles and charts appear on your dashboard could get undone if
+you also toggled a hero score ring at about the same moment. Both actions save
+the whole layout, and the ring change was built from an older copy, so
+whichever reached the server last won. Thanks to @lutzkind for the clear
+report.
+
+- **A saved layout now stays saved.** Your dashboard save is treated as the
+  authoritative one. If another change arrives after it but was based on an
+  older version of the layout, the server declines that write rather than
+  letting it overwrite your work. The ring toggle also carries only its own
+  fields, so it can no longer pull stale tiles along with it.
+- **The two saves take turns instead of racing.** While a layout save is in
+  flight the score ring controls are held, and while a ring change is saving
+  the Save button waits, so the two writes can no longer overlap on the server.
+- **A change underneath you reloads instead of getting lost.** In the rare case
+  where another tab saved first, the layout refetches from the server and a
+  small note asks you to make your change again against the fresh copy.
+
+Refs #581.
+
 ## [1.32.15] — 2026-07-24
 
 Your Polar training sessions now sync into HealthLog, alongside the recovery,

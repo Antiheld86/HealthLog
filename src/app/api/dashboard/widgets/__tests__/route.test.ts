@@ -16,6 +16,8 @@ vi.mock("@/lib/db", () => ({
     user: {
       findUnique: vi.fn(),
       update: vi.fn(),
+      // v1.32.16 (issue #581) — the guarded optimistic-concurrency write.
+      updateMany: vi.fn(),
     },
     auditLog: {
       create: vi.fn(),
@@ -739,5 +741,103 @@ describe("dashboard widgets — ring-only PUT cannot race a concurrent full-layo
     expect(res.status).toBe(200);
     const body = (await res.json()) as { data: DashboardLayout };
     expect(body.data.widgets[0].visible).toBe(false);
+  });
+});
+
+/**
+ * v1.32.16 — optimistic concurrency (issue #581). A Save that carries the
+ * `baseUpdatedAt` it was made against writes CONDITIONALLY on the stored row
+ * still carrying that token, so a committed Save can never be silently
+ * reverted by a later request that started from an older snapshot. A full
+ * layout with every top-level field present skips the preserve-read, so the
+ * only `findUnique` here is the post-write token read.
+ */
+describe("dashboard widgets — optimistic concurrency (issue #581)", () => {
+  // A full layout carrying every preserved field so `needsPreserveRead`
+  // is false and the route takes the guarded write path directly.
+  function fullLayoutBody(baseUpdatedAt?: string) {
+    return {
+      version: 1,
+      widgets: DEFAULT_DASHBOARD_LAYOUT.widgets,
+      comparisonBaseline: "none",
+      chartOverlayPrefs: {},
+      selectedScoreRings: ["MED_COMPLIANCE"],
+      heroRingOrder: ["HEALTH_SCORE", "MED_COMPLIANCE"],
+      ...(baseUpdatedAt !== undefined ? { baseUpdatedAt } : {}),
+    };
+  }
+
+  it("guards the write on the base token and returns the advanced token", async () => {
+    const base = new Date("2026-07-24T10:00:00.000Z");
+    const advanced = new Date("2026-07-24T10:05:00.000Z");
+    vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 1 } as never);
+    // The post-write token read.
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      updatedAt: advanced,
+    } as never);
+
+    const res = await callPut(makeReq(fullLayoutBody(base.toISOString())));
+    expect(res.status).toBe(200);
+
+    // Wrote conditionally on the exact base token — never unconditionally.
+    expect(prisma.user.updateMany).toHaveBeenCalledTimes(1);
+    const whereArg = vi.mocked(prisma.user.updateMany).mock.calls[0]?.[0]
+      ?.where as { id: string; updatedAt: Date };
+    expect(whereArg.id).toBe("user-1");
+    expect((whereArg.updatedAt as Date).toISOString()).toBe(base.toISOString());
+    expect(prisma.user.update).not.toHaveBeenCalled();
+
+    // The response echoes the advanced token so the client can rebase.
+    const body = (await res.json()) as { data: { updatedAt: string } };
+    expect(body.data.updatedAt).toBe(advanced.toISOString());
+  });
+
+  it("rejects a stale base token with 409 and writes nothing", async () => {
+    // The guarded update matches zero rows — someone advanced updatedAt.
+    vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 0 } as never);
+
+    const res = await callPut(
+      makeReq(fullLayoutBody("2026-07-24T09:00:00.000Z")),
+    );
+    expect(res.status).toBe(409);
+
+    const body = (await res.json()) as {
+      data: null;
+      error: string;
+      meta?: { errorCode?: string };
+    };
+    expect(body.data).toBeNull();
+    expect(body.meta?.errorCode).toBe("dashboard_layout_conflict");
+
+    // The conditional write matched no row; there is NO unconditional
+    // fallback, so the stored layout is left exactly as it was.
+    expect(prisma.user.updateMany).toHaveBeenCalledTimes(1);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("422s a malformed base token without touching the row", async () => {
+    const res = await callPut(makeReq(fullLayoutBody("not-a-date")));
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { meta?: { errorCode?: string } };
+    expect(body.meta?.errorCode).toBe("invalid_base_updated_at");
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("keeps the unconditional write when the client omits the token", async () => {
+    // Backward-compatible path for older web builds / the native client.
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      dashboardWidgetsJson: null,
+    } as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({
+      updatedAt: new Date("2026-07-24T11:00:00.000Z"),
+    } as never);
+
+    const res = await callPut(makeReq(fullLayoutBody()));
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledTimes(1);
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    const body = (await res.json()) as { data: { updatedAt: string } };
+    expect(body.data.updatedAt).toBe("2026-07-24T11:00:00.000Z");
   });
 });

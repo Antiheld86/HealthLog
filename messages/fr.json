@@ -458,6 +458,7 @@
     "layoutReset": "Rétablir les valeurs par défaut",
     "layoutSaveSuccess": "Mise en page enregistrée",
     "layoutSaveError": "Impossible d’enregistrer la mise en page",
+    "layoutConflictReloaded": "Mise en page rechargée depuis le serveur. Veuillez refaire votre modification.",
     "layoutResetSuccess": "Mise en page par défaut restaurée",
     "layoutUsingDefaults": "Mise en page par défaut active",
     "layoutCustomized": "Mise en page personnalisée active",

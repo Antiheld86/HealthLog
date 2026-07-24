@@ -442,6 +442,7 @@
     "layoutReset": "Przywróć wartości domyślne",
     "layoutSaveSuccess": "Układ panelu zapisany",
     "layoutSaveError": "Nie udało się zapisać układu",
+    "layoutConflictReloaded": "Układ został ponownie wczytany z serwera. Wprowadź zmianę jeszcze raz.",
     "layoutResetSuccess": "Przywrócono układ domyślny",
     "layoutUsingDefaults": "Aktywny układ domyślny",
     "layoutCustomized": "Aktywny układ niestandardowy",
