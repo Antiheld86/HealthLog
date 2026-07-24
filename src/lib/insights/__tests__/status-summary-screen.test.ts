@@ -92,3 +92,37 @@ describe("finalizeStatusSummary — clean assessments pass untouched", () => {
     expect(out.ok).toBe(true);
   });
 });
+
+/**
+ * HealthLog#608 — a truncated `{ "summary": "…` (unclosed, no `}`) used to fall
+ * through the parser and render raw (braces, `"summary"`, quotes, literal `\n`)
+ * in the resting-pulse Assessment card. It must now resolve to the withhold
+ * state so the caller serves its deterministic stub, never the raw envelope.
+ */
+describe("finalizeStatusSummary — malformed structured output is withheld", () => {
+  const TRUNCATED =
+    '{ "summary": "Your resting pulse has been running lower than the last check';
+
+  it("withholds a truncated envelope instead of surfacing raw JSON", () => {
+    const out = finalizeStatusSummary(TRUNCATED, "en");
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.reason).toBe("unparseable_output");
+    // Nothing about the raw envelope can leak on the ok:false branch.
+    if (out.ok) {
+      expect(out.text).not.toContain('"summary"');
+      expect(out.text).not.toContain("{");
+    }
+  });
+
+  it("withholds a summary-less object", () => {
+    const out = finalizeStatusSummary("{}", "en");
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.reason).toBe("unparseable_output");
+  });
+
+  it("still renders a valid object summary", () => {
+    const out = finalizeStatusSummary('{"summary":"Steady at 58 bpm."}', "en");
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.text).toBe("Steady at 58 bpm.");
+  });
+});

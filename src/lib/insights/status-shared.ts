@@ -145,30 +145,120 @@ export function stripJsonFences(content: string): string {
 }
 
 /**
- * Pull the `summary` string out of a model completion. The status
- * prompts return a `{ "summary": "…" }` envelope; a model that ignores
- * the contract and returns bare prose falls back to the raw content.
+ * Outcome of reading a status completion for its user-facing summary.
+ *
+ *   - `summary` — a `{ "summary": "…" }` envelope parsed to a non-empty
+ *     string. Render it.
+ *   - `prose`   — the model ignored the JSON contract and returned a plain
+ *     sentence. Render it verbatim (back-compat with non-JSON-mode providers).
+ *   - `unparseable` — the model ATTEMPTED the structured envelope but it came
+ *     back malformed, truncated, or summary-less. There is NO safe text to
+ *     render: the caller must fall back to its deterministic stub. This is the
+ *     state that stops a partial `{ "summary": "…` (braces, property name,
+ *     quotes, literal `\n`) from ever reaching the card — the class of bug
+ *     reported against the resting-pulse Assessment.
+ */
+export type SummaryExtraction =
+  | { kind: "summary"; text: string }
+  | { kind: "prose"; text: string }
+  | { kind: "unparseable" };
+
+/**
+ * Parse a candidate string as a `{ summary }` object. Reports whether the
+ * string was valid JSON *object* at all (`parsed`) separately from whether it
+ * carried a usable non-empty `summary` — so the caller can tell a malformed /
+ * truncated envelope apart from a well-formed object that simply lacks the
+ * field.
+ */
+function parseSummaryObject(candidate: string): {
+  parsed: boolean;
+  summary: string | null;
+} {
+  try {
+    const obj = JSON.parse(candidate) as unknown;
+    if (obj !== null && typeof obj === "object" && !Array.isArray(obj)) {
+      const value = (obj as { summary?: unknown }).summary;
+      if (typeof value === "string" && value.trim().length > 0) {
+        return { parsed: true, summary: value };
+      }
+      // Well-formed object, but no usable summary (e.g. `{}` or `{summary:""}`).
+      return { parsed: true, summary: null };
+    }
+    // Valid JSON, but not a summary object (array / number / bare string).
+    return { parsed: false, summary: null };
+  } catch {
+    return { parsed: false, summary: null };
+  }
+}
+
+/**
+ * Did the completion OPEN like a JSON object? A genuine prose sentence never
+ * starts with `{` (a stray brace mid-sentence does not count), so a `{`-led
+ * payload that failed both parse attempts above is a malformed / truncated
+ * envelope — never surfaced raw. Strips a leading code fence first so a
+ * fenced-but-truncated object is caught too.
+ */
+function looksLikeJsonObjectAttempt(content: string): boolean {
+  const afterFence = content.replace(/^```(?:json)?\s*/i, "").trimStart();
+  return afterFence.startsWith("{");
+}
+
+/**
+ * Read a model completion for its user-facing summary and classify the result.
  *
  * Tries the content as-is first (the common, fence-free case), then a
- * fence-stripped retry for providers without a native JSON mode.
+ * fence-stripped retry for providers without a native JSON mode. A completion
+ * that attempted the `{ summary }` envelope but came back malformed / truncated
+ * / summary-less resolves to `unparseable` rather than falling through as raw
+ * text — the caller then serves its deterministic fallback. Only a completion
+ * that never attempted the envelope (genuine prose) passes through verbatim.
+ */
+export function extractAssessmentSummary(content: string): SummaryExtraction {
+  const trimmed = content.trim();
+
+  // Attempt 1 — the content is itself a JSON object.
+  const direct = parseSummaryObject(trimmed);
+  if (direct.parsed) {
+    return direct.summary
+      ? { kind: "summary", text: direct.summary }
+      : { kind: "unparseable" };
+  }
+
+  // Attempt 2 — strip a code fence / surrounding prose and retry.
+  const stripped = stripJsonFences(trimmed);
+  if (stripped !== trimmed) {
+    const viaFence = parseSummaryObject(stripped);
+    if (viaFence.parsed) {
+      return viaFence.summary
+        ? { kind: "summary", text: viaFence.summary }
+        : { kind: "unparseable" };
+    }
+  }
+
+  // Neither parse produced a summary object. If the payload OPENED like an
+  // object, the model attempted the envelope and it came back malformed or
+  // truncated — resolve to the controlled fallback, never the raw braces /
+  // property name / quotes / literal `\n`. Genuine prose falls through.
+  if (looksLikeJsonObjectAttempt(trimmed)) {
+    return { kind: "unparseable" };
+  }
+  return { kind: "prose", text: content };
+}
+
+/**
+ * Pull the `summary` string out of a model completion. The status prompts
+ * return a `{ "summary": "…" }` envelope; a model that ignores the contract and
+ * returns bare prose falls back to the raw content. A malformed / truncated /
+ * summary-less structured envelope resolves to an EMPTY string (never the raw
+ * JSON) so no caller can surface partial structured output.
+ *
+ * Prefer `extractAssessmentSummary` in new code: it distinguishes an
+ * unparseable envelope from genuinely empty prose, which this thin wrapper
+ * collapses to `""`.
  */
 export function parseSummaryFromContent(content: string): string {
-  try {
-    const parsed = JSON.parse(content) as { summary?: string };
-    if (typeof parsed.summary === "string") return parsed.summary;
-  } catch {
-    // not directly parseable — try a fence-stripped retry below
-  }
-  try {
-    const stripped = stripJsonFences(content);
-    if (stripped !== content) {
-      const parsed = JSON.parse(stripped) as { summary?: string };
-      if (typeof parsed.summary === "string") return parsed.summary;
-    }
-  } catch {
-    // still not JSON — fall through to the raw content
-  }
-  return content;
+  const extracted = extractAssessmentSummary(content);
+  return extracted.kind === "unparseable" ? "" : extracted.text;
 }
 
 /**
@@ -230,7 +320,8 @@ export async function persistStatusInsight(args: {
  * withholds.
  */
 export type StatusSummaryOutcome =
-  { ok: true; text: string } | { ok: false; reason: OutboundReason };
+  | { ok: true; text: string }
+  | { ok: false; reason: OutboundReason | "unparseable_output" };
 
 /**
  * The single finalize step every per-metric / biomarker / derived-score status
@@ -263,7 +354,14 @@ export function finalizeStatusSummary(
   content: string,
   locale: SupportedLocale,
 ): StatusSummaryOutcome {
-  const text = normalizeSummaryText(parseSummaryFromContent(content));
+  const extracted = extractAssessmentSummary(content);
+  // A malformed / truncated / summary-less structured envelope has no safe
+  // text to render. WITHHOLD — the caller serves its deterministic stub. Only
+  // the `unparseable` discriminator is logged, never the assessment content.
+  if (extracted.kind === "unparseable") {
+    return { ok: false, reason: "unparseable_output" };
+  }
+  const text = normalizeSummaryText(extracted.text);
   if (!text) return { ok: true, text: "" };
   const decision = screenModelOutput(text, locale, INSIGHTS_CONTRACTS);
   if (decision.block && decision.reason) {

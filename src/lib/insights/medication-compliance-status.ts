@@ -30,9 +30,9 @@ import { buildMetricSignal } from "@/lib/insights/metric-signal";
 import { degradeStatusSnapshotToBudget } from "@/lib/insights/graded-series";
 import {
   type SupportedLocale,
+  extractAssessmentSummary,
   normalizeLocale,
   normalizeSummaryText,
-  parseSummaryFromContent,
   round,
 } from "@/lib/insights/status-shared";
 import {
@@ -577,9 +577,32 @@ export async function prepareMedicationComplianceStatusForUser(
       // does not emit per-medication text. The per-medication cards carry a
       // placeholder so the UI surfaces a row per active medication; the
       // overall `summary` is the model-authored assessment.
-      const summary = normalizeSummaryText(
-        parseSummaryFromContent(outcome.content),
-      );
+      // A malformed / truncated / summary-less structured envelope must never
+      // persist as the day's assessment (the raw-JSON class of bug). WITHHOLD:
+      // serve the deterministic no-key line, write a short negative stub, and
+      // persist no model text. The per-medication rows still render.
+      const extracted = extractAssessmentSummary(outcome.content);
+      if (extracted.kind === "unparseable") {
+        annotate({
+          action: { name: "insights.status.outbound_blocked" },
+          meta: { cacheAction, reason: "unparseable_output" },
+        });
+        returnTimeoutFallback({
+          cacheAction,
+          reason: "screened",
+          userId,
+          todayKey,
+          stubText: getNoKeyMedicationComplianceStatusText(locale),
+        });
+        return {
+          hasProvider: true,
+          summary: getNoKeyMedicationComplianceStatusText(locale),
+          medications: medicationSummaries,
+          cached: true,
+          updatedAt: null,
+        };
+      }
+      const summary = normalizeSummaryText(extracted.text);
       if (!summary) {
         throw new Error(
           "Medication-compliance-status summary was empty after normalization",
