@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [1.32.24] — 2026-07-24
+
+Polar sync is more resilient when one data type is unavailable. A single
+collection that a device or account cannot serve no longer blanks the rest of
+the Polar data on every hourly check.
+
+- **One unavailable Polar data type no longer blocks the others.** SpO2 on a
+  watch without the sensor, or a data type an account is not entitled to, used
+  to fail the whole Polar sync and leave recharge, sleep, and activity empty.
+  Each collection now imports on its own, so the ones that are available still
+  come in and only the one that failed is held back.
+- **A failing Polar collection is named on the integration status.** When a
+  collection cannot be read, the sync is recorded as failed with the failing
+  collection named, instead of showing a healthy state over missing data.
+- **Unexpected Polar response shapes are logged, not read as empty.** If Polar
+  returns a body that does not match the expected shape, it is now recorded for
+  diagnosis rather than silently treated as "no data", which previously could
+  mark a sync healthy while importing nothing.
+
 ## [1.32.23] — 2026-07-24
 
 Sync status now tells the truth for the connected wearables and CGM sources. A

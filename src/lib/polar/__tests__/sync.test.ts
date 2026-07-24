@@ -331,8 +331,9 @@ describe("syncUserPolar", () => {
     );
   });
 
-  it("records a reauth_required failure on a 401 and rethrows", async () => {
+  it("records a reauth_required partial failure on a 401 and does NOT throw (per-collection isolation)", async () => {
     getConnMock.mockResolvedValue(CONN);
+    // The recharge collection 401s; the four siblings return data.
     fetchRechargesMock.mockRejectedValue(
       new PolarApiError({
         verb: "fetchNightlyRecharges",
@@ -341,11 +342,17 @@ describe("syncUserPolar", () => {
         reason: "http_401",
       }),
     );
-    const err = await syncUserPolar("u1").catch((e) => e);
-    expect(err).toBeInstanceOf(PolarApiError);
-    // Recorded at the source AND marked (the legs wrapper rethrows the marked
-    // error), so the poll-cohort boundary does not double-record it.
-    expect(isSyncFailureRecorded(err)).toBe(true);
+    fetchCardioLoadsMock.mockResolvedValue([
+      { date: "2026-06-10", cardio_load: 42 },
+    ]);
+
+    const imported = await syncUserPolar("u1");
+
+    // No rethrow now — a fetch failure is isolated per-collection.
+    expect(imported).toBe(1);
+    expect(createdRows().map((row) => row.type)).toContain("CARDIO_LOAD");
+    // Exactly one partial failure recorded, classified off the first error,
+    // naming the failed collection.
     expect(recordFailureMock).toHaveBeenCalledTimes(1);
     expect(recordFailureMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -353,10 +360,205 @@ describe("syncUserPolar", () => {
         integration: "polar",
         kind: "reauth_required",
         errorCode: "401",
+        message: expect.stringContaining("recharge"),
       }),
     );
     expect(recordSuccessMock).not.toHaveBeenCalled();
   });
+
+  it("isolates one dead collection — imports the healthy four and records one named failure", async () => {
+    getConnMock.mockResolvedValue(CONN);
+    // SpO2 403s (no sensor / consent), the other four return one row each.
+    fetchSpo2Mock.mockRejectedValue(
+      new PolarApiError({
+        verb: "fetchSpo2",
+        classification: "reauth_required",
+        httpStatus: 403,
+        reason: "http_403",
+      }),
+    );
+    fetchRechargesMock.mockResolvedValue([
+      { date: "2026-06-10", nightly_recharge_status: 6 },
+    ]);
+    fetchSleepsMock.mockResolvedValue([
+      {
+        date: "2026-06-10",
+        sleep_start_time: "2026-06-09T23:00:00+02:00",
+        sleep_end_time: "2026-06-10T07:00:00+02:00",
+        light_sleep: 3600,
+      },
+    ]);
+    fetchActivitiesMock.mockResolvedValue([
+      { start_time: "2026-06-10T00:00:00", steps: 8000 },
+    ]);
+    fetchCardioLoadsMock.mockResolvedValue([
+      { date: "2026-06-10", cardio_load: 55 },
+    ]);
+
+    const imported = await syncUserPolar("u1");
+
+    // The healthy four still wrote their rows — the source is not blanked.
+    const written = createdRows().map((row) => row.type);
+    expect(written).toContain("RECOVERY_SCORE");
+    expect(written).toContain("SLEEP_DURATION");
+    expect(written).toContain("ACTIVITY_STEPS");
+    expect(written).toContain("CARDIO_LOAD");
+    expect(written).not.toContain("OXYGEN_SATURATION");
+    expect(imported).toBeGreaterThan(0);
+    // Exactly one failure, classified off the 403, naming spo2. No success.
+    expect(recordFailureMock).toHaveBeenCalledTimes(1);
+    expect(recordFailureMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        integration: "polar",
+        kind: "reauth_required",
+        errorCode: "403",
+        message: expect.stringContaining("spo2"),
+      }),
+    );
+    expect(recordSuccessMock).not.toHaveBeenCalled();
+  });
+
+  it("isolates a throwing mapper — one malformed record does not blank siblings", async () => {
+    getConnMock.mockResolvedValue(CONN);
+    // A malformed recharge record whose mapper throws on first field access
+    // must not reject the whole batch (the old Promise.all failure mode).
+    fetchRechargesMock.mockResolvedValue([
+      new Proxy(
+        {},
+        {
+          get() {
+            throw new Error("malformed recharge point");
+          },
+        },
+      ),
+    ]);
+    fetchCardioLoadsMock.mockResolvedValue([
+      { date: "2026-06-10", cardio_load: 77 },
+    ]);
+
+    const imported = await syncUserPolar("u1");
+
+    expect(imported).toBe(1);
+    expect(createdRows().map((row) => row.type)).toContain("CARDIO_LOAD");
+    expect(recordFailureMock).toHaveBeenCalledTimes(1);
+    expect(recordFailureMock).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining("recharge") }),
+    );
+    expect(recordSuccessMock).not.toHaveBeenCalled();
+  });
+
+  it("sleep-collection failure skips the sweep, siblings still import", async () => {
+    getConnMock.mockResolvedValue(CONN);
+    fetchSleepsMock.mockRejectedValue(
+      new PolarApiError({
+        verb: "fetchSleeps",
+        classification: "transient",
+        httpStatus: 500,
+        reason: "http_500",
+      }),
+    );
+    fetchActivitiesMock.mockResolvedValue([
+      { start_time: "2026-06-10T00:00:00", steps: 8000 },
+    ]);
+
+    const imported = await syncUserPolar("u1");
+
+    // The sweep never ran — a failed sleep collection pushes no sweep entries.
+    expect(updateManyMock).not.toHaveBeenCalled();
+    // The activity sibling still imported.
+    expect(createdRows().map((row) => row.type)).toContain("ACTIVITY_STEPS");
+    expect(imported).toBeGreaterThan(0);
+    expect(recordFailureMock).toHaveBeenCalledTimes(1);
+    expect(recordSuccessMock).not.toHaveBeenCalled();
+  });
+
+  it("all five healthy → success stamped once, no failure recorded", async () => {
+    getConnMock.mockResolvedValue(CONN);
+    fetchRechargesMock.mockResolvedValue([
+      { date: "2026-06-10", nightly_recharge_status: 6 },
+    ]);
+
+    await syncUserPolar("u1");
+
+    expect(recordFailureMock).not.toHaveBeenCalled();
+    expect(recordSuccessMock).toHaveBeenCalledTimes(1);
+    expect(recordSuccessMock).toHaveBeenCalledWith("u1", "polar");
+  });
+
+  it.each([
+    { name: "recharge", type: "RECOVERY_SCORE" },
+    { name: "sleep", type: "SLEEP_DURATION" },
+    { name: "activity", type: "ACTIVITY_STEPS" },
+    { name: "cardioload", type: "CARDIO_LOAD" },
+    { name: "spo2", type: "OXYGEN_SATURATION" },
+  ])(
+    "Oura-parity: a 4xx on the $name collection names it in the single failure and imports every sibling",
+    async ({ name }) => {
+      getConnMock.mockResolvedValue(CONN);
+      // Every collection returns one healthy row...
+      fetchRechargesMock.mockResolvedValue([
+        { date: "2026-06-10", nightly_recharge_status: 6 },
+      ]);
+      fetchSleepsMock.mockResolvedValue([
+        {
+          date: "2026-06-10",
+          sleep_start_time: "2026-06-09T23:00:00+02:00",
+          sleep_end_time: "2026-06-10T07:00:00+02:00",
+          light_sleep: 3600,
+        },
+      ]);
+      fetchActivitiesMock.mockResolvedValue([
+        { start_time: "2026-06-10T00:00:00", steps: 8000 },
+      ]);
+      fetchCardioLoadsMock.mockResolvedValue([
+        { date: "2026-06-10", cardio_load: 55 },
+      ]);
+      fetchSpo2Mock.mockResolvedValue([
+        { test_time: 1_781_059_600, blood_oxygen_percent: 96 },
+      ]);
+      // ...except the one under test, which 4xxs.
+      const mockByName: Record<string, ReturnType<typeof vi.fn>> = {
+        recharge: fetchRechargesMock,
+        sleep: fetchSleepsMock,
+        activity: fetchActivitiesMock,
+        cardioload: fetchCardioLoadsMock,
+        spo2: fetchSpo2Mock,
+      };
+      mockByName[name]!.mockRejectedValue(
+        new PolarApiError({
+          verb: name,
+          classification: "reauth_required",
+          httpStatus: 403,
+          reason: "http_403",
+        }),
+      );
+
+      await syncUserPolar("u1");
+
+      // Exactly one failure, naming this collection; no success stamp.
+      expect(recordFailureMock).toHaveBeenCalledTimes(1);
+      expect(recordFailureMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          integration: "polar",
+          message: expect.stringContaining(name),
+        }),
+      );
+      expect(recordSuccessMock).not.toHaveBeenCalled();
+      // Every sibling collection still imported at least one row.
+      const written = createdRows().map((row) => row.type);
+      const siblingTypes: Record<string, string> = {
+        recharge: "RECOVERY_SCORE",
+        sleep: "SLEEP_DURATION",
+        activity: "ACTIVITY_STEPS",
+        cardioload: "CARDIO_LOAD",
+        spo2: "OXYGEN_SATURATION",
+      };
+      for (const [collName, collType] of Object.entries(siblingTypes)) {
+        if (collName === name) continue;
+        expect(written).toContain(collType);
+      }
+    },
+  );
 
   it("leaves a write-path failure UNMARKED so the cohort boundary records it once", async () => {
     // The `upsertPolarMeasurements` transaction throw escapes `syncUserPolar`

@@ -1,6 +1,9 @@
 /**
  * v1.17.0 (F4) — Polar AccessLink v3 client for OAuth + data fetching.
  * Docs: https://www.polar.com/accesslink-api/ (re-verify at build).
+ * Envelope shapes + windows below verified against the live AccessLink swagger
+ * (`accesslink-api/swagger.yaml`) on 2026-07-24; a body that no longer matches
+ * emits a `polar.envelope.drift` breadcrumb rather than silently reading empty.
  *
  * Mirrors the WHOOP client structure (`src/lib/whoop/client.ts`): hand-rolled
  * fetch over `safeFetch` (no SDK), an OAuth handshake, typed collection
@@ -20,7 +23,7 @@
  *     reads work; a 409 from registration means "already registered" and is
  *     treated as success.
  */
-import { getEvent } from "@/lib/logging/context";
+import { annotate, getEvent } from "@/lib/logging/context";
 import { canonicalDailyTimestamp } from "@/lib/measurements/consolidation-tz";
 import { safeFetch } from "@/lib/safe-fetch";
 import { reconstructContiguousSleepTimeline } from "@/lib/sleep/reconstruct-timeline";
@@ -250,6 +253,30 @@ interface CollectionResult<T> {
   records: T[];
 }
 
+/** Top-level key NAMES of a drifted response envelope, capped at 10. NAMES
+ *  only, never values — no health data can ride the drift annotation. */
+function topLevelKeys(body: unknown): string[] {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return [];
+  return Object.keys(body as Record<string, unknown>).slice(0, 10);
+}
+
+/** Emit the fixed-shape envelope-drift breadcrumb, then let the caller degrade
+ *  to `[]`. Pinned `{verb, httpStatus, keys}` shape so the wide-event dashboard
+ *  stays stable; a Polar-side envelope rename shows up here instead of silently
+ *  reading as "no data". */
+function annotateEnvelopeDrift(
+  verb: string,
+  httpStatus: number,
+  body: unknown,
+): void {
+  annotate({
+    action: {
+      name: "polar.envelope.drift",
+      details: { verb, httpStatus, keys: topLevelKeys(body) },
+    },
+  });
+}
+
 async function fetchCollection<T>(
   path: string,
   accessToken: string,
@@ -284,13 +311,30 @@ async function fetchCollection<T>(
   if (res.status === 204) return [];
   const json = (await res.json().catch(() => null)) as
     CollectionResult<T> | Record<string, T[]> | T[] | null;
-  if (!json) return [];
+  // A 200 with a null/unparseable body where the contract documents 204 for an
+  // empty window: log the drift, then degrade to [] (behavior unchanged).
+  if (json === null) {
+    annotateEnvelopeDrift(verb, res.status, null);
+    return [];
+  }
   if (Array.isArray(json)) return json;
-  if (!recordsKey) return [];
+  if (!recordsKey) {
+    // A bare array is the verified shape for this endpoint (activities /
+    // cardio-load / spo2) but the body is a non-array object — an envelope
+    // rename would read as "no data". Log, then degrade.
+    annotateEnvelopeDrift(verb, res.status, json);
+    return [];
+  }
   const list = (json as Record<string, unknown>)[recordsKey];
-  return Array.isArray(list) ? (list as T[]) : [];
+  if (Array.isArray(list)) return list as T[];
+  // The expected records key (`recharges` / `nights`) is missing or not an
+  // array — the same silent-"no data" drift class. Log, then degrade.
+  annotateEnvelopeDrift(verb, res.status, json);
+  return [];
 }
 
+/** Nightly Recharge collection. Verified envelope: wrapped `{recharges: [...]}`.
+ *  Window: the last 28 days, server-fixed (no request params, no pagination). */
 export function fetchNightlyRecharges(
   accessToken: string,
 ): Promise<PolarNightlyRecharge[]> {
@@ -302,6 +346,8 @@ export function fetchNightlyRecharges(
   );
 }
 
+/** Sleep collection. Verified envelope: wrapped `{nights: [...]}`. Window: the
+ *  last 28 days, server-fixed (no request params, no pagination). */
 export function fetchSleeps(accessToken: string): Promise<PolarSleep[]> {
   return fetchCollection<PolarSleep>(
     "/v3/users/sleep",
@@ -311,6 +357,11 @@ export function fetchSleeps(accessToken: string): Promise<PolarSleep[]> {
   );
 }
 
+/** Daily-activity collection. Verified envelope: a BARE array (no wrapper key).
+ *  Window: defaults to the last 28 days; optional `from`/`to` (max 28-day range,
+ *  `from` ≤ 365 days back) are deliberately not sent — the default equals the
+ *  in-window maximum, so pinning them buys no coverage and adds a request-surface
+ *  failure mode. No pagination. */
 export function fetchActivities(accessToken: string): Promise<PolarActivity[]> {
   return fetchCollection<PolarActivity>(
     "/v3/users/activities",
@@ -319,8 +370,10 @@ export function fetchActivities(accessToken: string): Promise<PolarActivity[]> {
   );
 }
 
-/** Training Load Pro collection — `cardio_load` strain figures for the recent
- * window. */
+/** Training Load Pro collection — `cardio_load` strain figures. Verified
+ *  envelope: a BARE array (no wrapper key). Window: the last 28 days on the bare
+ *  list (ranged `/date` and `/period/days/{1..180}` variants exist for deeper
+ *  history but are backfill machinery, not sent here). No pagination. */
 export function fetchCardioLoads(
   accessToken: string,
 ): Promise<PolarCardioLoad[]> {
@@ -331,7 +384,9 @@ export function fetchCardioLoads(
   );
 }
 
-/** SpO2 (Elixir pulse-ox) collection — nightly blood-oxygen readings. */
+/** SpO2 (Elixir pulse-ox) collection — nightly blood-oxygen readings. Verified
+ *  envelope: a BARE array (no wrapper key). Window: defaults to the last 28 days
+ *  (optional `from`/`to`, max 28-day range, not sent). No pagination. */
 export function fetchSpo2(accessToken: string): Promise<PolarSpo2[]> {
   return fetchCollection<PolarSpo2>(
     "/v3/users/biosensing/spo2",
@@ -697,13 +752,13 @@ export interface PolarExercise {
 }
 
 /**
- * Candidate envelope keys a paged `/v3/exercises` response might nest the list
- * under. Polar's pagination shape on this endpoint is not verified; the fetcher
- * tolerates a bare array OR any of these envelope shapes so a paged response
- * degrades to "the rows on this page" rather than an empty result. The 30-day
- * window is small enough that a single page covers a normal user; if Polar
- * paginates, the hourly poll re-reads the whole window every tick so nothing is
- * lost between pages.
+ * Candidate envelope keys the `/v3/exercises` list might nest under. The
+ * verified shape (AccessLink swagger, 2026-07-24) is a BARE array covering the
+ * last 30 days OF UPLOADS, with NO pagination token or page parameter — so the
+ * bare-array branch is the live path. This tolerant key list is kept purely as
+ * defense against a future envelope rename; when it engages (an object body
+ * matching none of these keys), the fetch site logs a `polar.envelope.drift`
+ * breadcrumb rather than silently reading empty.
  */
 const EXERCISE_LIST_KEYS = ["exercises", "data", "items", "records"] as const;
 
@@ -746,6 +801,21 @@ export async function fetchExercises(
   // 204 No Content — a window with no uploads. Polar returns an empty body.
   if (res.status === 204) return [];
   const json = (await res.json().catch(() => null)) as unknown;
+  // Drift: a non-null object body carrying no recognised list array (none of
+  // EXERCISE_LIST_KEYS holds an array) would silently read as "no uploads". Log
+  // at the fetch site — `normaliseExerciseList` stays a pure function — then
+  // degrade to its []. A correctly-shaped `{exercises: []}` finds an (empty)
+  // array under a known key and does NOT drift.
+  if (
+    json !== null &&
+    typeof json === "object" &&
+    !Array.isArray(json) &&
+    !EXERCISE_LIST_KEYS.some((k) =>
+      Array.isArray((json as Record<string, unknown>)[k]),
+    )
+  ) {
+    annotateEnvelopeDrift("fetchExercises", res.status, json);
+  }
   return normaliseExerciseList(json);
 }
 
