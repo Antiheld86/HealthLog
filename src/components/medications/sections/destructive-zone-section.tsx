@@ -46,11 +46,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { useTranslations } from "@/lib/i18n/context";
-import {
-  invalidateKeys,
-  medicationDependentKeys,
-  queryKeys,
-} from "@/lib/query-keys";
+import { invalidateMedicationReads, queryKeys } from "@/lib/query-keys";
 import { apiDelete, apiPut } from "@/lib/api/api-fetch";
 
 const PAUSE_SWITCH_ID = "medication-detail-pause-switch";
@@ -89,7 +85,7 @@ export function LifecycleManageBody({
       // v1.5.5 C-E3-2 — body carries `{ active }` only; server derives
       // pausedAt. No client-side pausedAt literal.
       await apiPut(`/api/medications/${medicationId}`, { active: !pauseNext });
-      await invalidateKeys(queryClient, medicationDependentKeys);
+      await invalidateMedicationReads(queryClient);
       toast.success(
         pauseNext
           ? t("medications.detail.zone.pause.pausedToast")
@@ -110,7 +106,7 @@ export function LifecycleManageBody({
     try {
       const today = new Date().toISOString();
       await apiPut(`/api/medications/${medicationId}`, { endsOn: today });
-      await invalidateKeys(queryClient, medicationDependentKeys);
+      await invalidateMedicationReads(queryClient);
       toast.success(t("medications.detail.zone.end.toast"));
       setEndDialogOpen(false);
       onAfterAction?.();
@@ -246,7 +242,7 @@ export function DangerZoneBody({
     setTier3aBusy(true);
     try {
       await apiDelete(`/api/medications/${medicationId}/intake/purge`);
-      await invalidateKeys(queryClient, medicationDependentKeys);
+      await invalidateMedicationReads(queryClient);
       toast.success(t("medications.detail.zone.purge.toast"));
       setPurgeDialogOpen(false);
       onAfterAction?.();
@@ -281,7 +277,7 @@ export function DangerZoneBody({
       // Fire-and-forget the dependent-bundle invalidation (list /
       // analytics / compliance / inline chart). Not awaited: navigation
       // already happened and a transient refetch must not block it.
-      void invalidateKeys(queryClient, medicationDependentKeys);
+      void invalidateMedicationReads(queryClient);
     } catch {
       toast.error(t("medications.detail.zone.delete.failed"));
       setTier3bBusy(false);

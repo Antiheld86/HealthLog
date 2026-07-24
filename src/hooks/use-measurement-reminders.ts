@@ -9,10 +9,36 @@
  * tile repaint in lockstep. The DTO is the server-authoritative shape —
  * the client renders `nextDueAt` as-is, never recomputing.
  */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api/api-fetch";
-import { queryKeys } from "@/lib/query-keys";
+import { queryKeys, refetchInactiveDailyReads } from "@/lib/query-keys";
+
+/**
+ * v1.32.19 — the read fan-out every Vorsorge reminder mutation runs on
+ * success. Extracted (and exported) so it is unit-testable against a real
+ * `QueryClient` without a React render, mirroring the medication intake
+ * helpers. A reminder is the exact Hero-dose analog on the Today rail:
+ * creating, editing, deleting or marking one done changes what the digest
+ * surfaces as due. Marking it done from the section (or the tile) leaves the
+ * digest + dashboard snapshot UNMOUNTED, so invalidating only the reminders
+ * root marked the daily reads stale but never refetched them
+ * (`refetchOnMount: false`) — the reminder lingered on the Today rail until
+ * the 120 s poll. Force the inactive daily reads to refetch alongside the
+ * reminders invalidation so the rail clears at once, the same freshness
+ * contract the medication intake surfaces use.
+ */
+export function invalidateReminderReads(qc: QueryClient): Promise<unknown> {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: queryKeys.measurementReminders() }),
+    refetchInactiveDailyReads(qc),
+  ]);
+}
 
 export interface MeasurementReminder {
   id: string;
@@ -68,8 +94,7 @@ export function useMeasurementReminders(enabled = true) {
 
 export function useMeasurementReminderMutations() {
   const qc = useQueryClient();
-  const invalidate = () =>
-    qc.invalidateQueries({ queryKey: queryKeys.measurementReminders() });
+  const invalidate = () => invalidateReminderReads(qc);
 
   const create = useMutation({
     mutationKey: queryKeys.measurementReminderCreate(),

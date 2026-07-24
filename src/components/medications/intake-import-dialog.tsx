@@ -32,7 +32,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useTranslations } from "@/lib/i18n/context";
-import { invalidateKeys, medicationDependentKeys } from "@/lib/query-keys";
+import { invalidateMedicationReads } from "@/lib/query-keys";
 import { ApiError, apiPost } from "@/lib/api/api-fetch";
 import {
   MedicationIntakeImportError,
@@ -124,7 +124,10 @@ export function IntakeImportDialog({
               : ""),
         );
         setResultType("success");
-        void invalidateKeys(queryClient, medicationDependentKeys);
+        // An import can land today-dated doses, so clear the Today hero +
+        // dashboard through the blessed helper (they are unmounted behind the
+        // import dialog on the detail page).
+        void invalidateMedicationReads(queryClient);
       } catch (err) {
         if (err instanceof MedicationIntakeImportError) {
           setResult(t("medications.importFailed"));

@@ -238,6 +238,21 @@ export function DashboardLayoutSection({ id }: { id: string }) {
     queryFn: async () => {
       return apiGet<DashboardLayoutWithToken>("/api/dashboard/widgets");
     },
+    // v1.32.19 (B-3, belt for the #581 fix) — the home RSC seeds
+    // `dashboardWidgets()` from the dashboard SNAPSHOT layout, which carries
+    // NO `updatedAt` optimistic-concurrency token (it is a token-less
+    // `DashboardLayout`, not the `DashboardLayoutWithToken` this section's GET
+    // returns). Within the global 5-min `staleTime` a visit to `/` then Settings
+    // read that seeded token-less value with no mount refetch, so `readBaseToken()`
+    // returned undefined, the Save sent no `baseUpdatedAt`, and the route's
+    // compat fallback silently reverted to last-write-wins — disabling the
+    // just-shipped 409 belt. Force a mount refetch so this section always holds
+    // its own tokened GET response and every write carries the base token. The
+    // smallest correct option: the alternatives (a distinct seed key, or
+    // threading the token through the snapshot layout) touch the home client and
+    // the server snapshot shape; this is one line, config-independent, and makes
+    // the settings query authoritative for its own tokened read.
+    refetchOnMount: "always",
   });
 
   /**

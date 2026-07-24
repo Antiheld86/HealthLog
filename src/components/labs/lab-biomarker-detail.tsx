@@ -93,7 +93,7 @@ const READINGS_PAGE_SIZE = 200;
  */
 export function LabBiomarkerDetail({ biomarkerId }: { biomarkerId: string }) {
   const { user } = useAuth();
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations();
   const router = useRouter();
   const queryClient = useQueryClient();
   // v1.24 — the per-marker description used to live on the labs overview rows.
@@ -225,16 +225,32 @@ export function LabBiomarkerDetail({ biomarkerId }: { biomarkerId: string }) {
   const { data: assessment, isLoading: assessmentLoading } =
     useInsightBiomarkerAssessment(biomarkerId, readings.length > 0);
 
+  // v1.32.19 — a new reading for this marker changes the same-page AI
+  // assessment card (`insightsBiomarkerAssessment`, mounted here) and the
+  // Insights "what changed since your last panel" read (`insightsLabsChanges`).
+  // Both used to stay on their pre-write text until their own stale window
+  // lapsed; bust them alongside the result list so the assessment repaints as
+  // soon as the reading lands.
+  function invalidateAfterReadingWrite() {
+    queryClient.invalidateQueries({ queryKey: queryKeys.labResults() });
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.insightsBiomarkerAssessment(biomarkerId, locale),
+    });
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.insightsLabsChanges(),
+    });
+  }
+
   function afterAdd() {
     setAddOpen(false);
-    queryClient.invalidateQueries({ queryKey: queryKeys.labResults() });
+    invalidateAfterReadingWrite();
   }
 
   // v1.30.1 H3 — "Save & add another": same invalidation as `afterAdd`,
   // minus the close. Useful here too — logging several past readings for
   // this one biomarker back-to-back without re-opening the sheet each time.
   function afterAddKeepOpen() {
-    queryClient.invalidateQueries({ queryKey: queryKeys.labResults() });
+    invalidateAfterReadingWrite();
   }
 
   function afterEditMarker() {

@@ -467,10 +467,42 @@ describe("runTakeAllDue — per-medication loop with failure isolation", () => {
     expect(vi.mocked(toast.success)).not.toHaveBeenCalledWith(
       expect.stringContaining("successToast"),
     );
-    // The landed take must reach every dependent consumer.
+    // The landed take must reach every dependent consumer AND force the two
+    // inactive daily reads (dashboard snapshot + Today digest) to refetch —
+    // the blessed `invalidateMedicationReads` fans out the bundle (N keys)
+    // then invalidates those two with `refetchType: "inactive"`.
     expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(
-      medicationDependentKeys.length,
+      medicationDependentKeys.length + 2,
     );
+    vi.unstubAllGlobals();
+  });
+
+  it("forces the inactive Today hero + dashboard reads to refetch after a landed take (v1.32.19 stale-hero fix)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse("evt-a"));
+    vi.stubGlobal("fetch", fetchMock);
+    const queryClient = fakeQueryClient();
+
+    await runTakeAllDue({
+      medications: [dueTwo[0]],
+      t,
+      queryClient,
+    });
+
+    // The batch button lives on `/medications`, where the digest + snapshot
+    // are UNMOUNTED. A bare bundle invalidation (default active refetch) would
+    // leave them stale — so the helper MUST invalidate both with
+    // `refetchType: "inactive"`, which is what actually refetches them.
+    const calls = vi.mocked(queryClient.invalidateQueries).mock.calls;
+    const inactive = calls.filter(
+      ([arg]) =>
+        (arg as { refetchType?: string } | undefined)?.refetchType ===
+        "inactive",
+    );
+    const keys = inactive.map(([arg]) =>
+      JSON.stringify((arg as { queryKey?: unknown }).queryKey),
+    );
+    expect(keys).toContain(JSON.stringify(["dashboard", "snapshot"]));
+    expect(keys).toContain(JSON.stringify(["daily", "digest"]));
     vi.unstubAllGlobals();
   });
 
@@ -491,13 +523,15 @@ describe("runTakeAllDue — per-medication loop with failure isolation", () => {
     vi.unstubAllGlobals();
   });
 
-  it("invalidates exactly the medicationDependentKeys bundle (source pin)", () => {
-    // The bundle includes the dashboard snapshot key (v1.16.11), so a
-    // batch take refreshes the hero dose tally too. Pin the source so a
-    // refactor to a hand-rolled key list cannot slip through.
+  it("routes the batch invalidation through the blessed invalidateMedicationReads (source pin)", () => {
+    // v1.32.19 — the batch take now routes through the one blessed helper,
+    // which fans out `medicationDependentKeys` AND forces the inactive digest
+    // + snapshot to refetch (the maintainer's stale-hero repro). Pin the
+    // source so a revert to a bare bundle invalidation cannot slip through.
     const src = readFileSync(resolve(__dirname, "../take-all-due.ts"), "utf8");
-    expect(src).toContain(
-      "await invalidateKeys(queryClient, medicationDependentKeys)",
+    expect(src).toContain("await invalidateMedicationReads(queryClient)");
+    expect(src).not.toContain(
+      "invalidateKeys(queryClient, medicationDependentKeys)",
     );
   });
 });

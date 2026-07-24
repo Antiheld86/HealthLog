@@ -43,6 +43,15 @@ export function useDailyDigest(enabled = true) {
     staleTime: 60_000,
     refetchOnMount: false,
     refetchOnWindowFocus: "always",
+    // B-4 (INTENDED, not a bug): a dose logged on ANOTHER device (iOS, a
+    // Telegram intake, a background sync) has no web invalidation channel, so
+    // an open web tab converges on it only via this 120 s foreground poll or
+    // the window-focus "always" refetch above — a bounded ≤120 s window on an
+    // idle tab. This is deliberate and is NOT the v1.32.19 stale-hero class,
+    // which was an in-tab write on the SAME device that marked these reads
+    // stale without refetching them (fixed via `invalidateMedicationReads` /
+    // `refetchInactiveDailyReads`). Do not conflate the two: a same-device
+    // action must clear the hero at once; a cross-device one may lag the poll.
     refetchInterval: DASHBOARD_REFETCH_INTERVAL_MS,
     refetchIntervalInBackground: false,
     // One retry on transient network / 5xx (never 401/403) so a single

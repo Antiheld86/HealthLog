@@ -39,7 +39,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { apiPost } from "@/lib/api/api-fetch";
-import { invalidateKeys, medicationDependentKeys } from "@/lib/query-keys";
+import { invalidateMedicationReads } from "@/lib/query-keys";
 import {
   reduceCurrentWindowStatus,
   type ScheduleWindowInput,
@@ -230,12 +230,17 @@ export async function runTakeAllDue(deps: {
     }
   }
 
-  // One invalidation for the whole batch (the bundle includes the
-  // dashboard snapshot key, so the hero dose tally refreshes too). A
-  // zero-success run changed nothing server-side — skip the refetch and
-  // keep the due set as-is for the retry.
+  // One invalidation for the whole batch through the blessed helper: it
+  // fans out the dependent-key bundle AND forces the inactive digest +
+  // snapshot to refetch. The batch button lives on `/medications`, where the
+  // Today hero and dashboard are UNMOUNTED, so a bare bundle invalidation
+  // (default `refetchType: "active"`) marked them stale but never refetched —
+  // the taken doses stayed "due" on the hero until the 120 s poll or a hard
+  // reload (the maintainer's exact repro, v1.32.19). A zero-success run
+  // changed nothing server-side — skip the refetch and keep the due set for
+  // the retry.
   if (taken > 0) {
-    await invalidateKeys(queryClient, medicationDependentKeys);
+    await invalidateMedicationReads(queryClient);
   }
 
   if (failed === 0) {

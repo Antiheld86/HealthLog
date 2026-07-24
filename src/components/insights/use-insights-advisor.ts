@@ -14,7 +14,7 @@ import type {
   DailyBriefing as DailyBriefingPayload,
   TrendAnnotations,
 } from "@/lib/ai/schema";
-import { queryKeys } from "@/lib/query-keys";
+import { queryKeys, refetchInactiveDailyReads } from "@/lib/query-keys";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
 import type { BriefingFailureClass } from "@/lib/insights/briefing-failure-marker";
 
@@ -381,15 +381,19 @@ export function useInsightsAdvisorQuery(
       // their query subtree so the per-section text below the advisor card
       // re-fetches.
       queryClient.invalidateQueries({ queryKey: queryKeys.insightsRoot() });
-      // v1.18.10 — the dashboard hero surfaces the briefing headline from the
-      // SNAPSHOT (server-lifted `User.insightsCachedText`), not from this
-      // advisor cache. A regenerate rewrites that server cache, so invalidate
-      // the snapshot too — otherwise returning to the Startseite shows the
-      // previous briefing under the greeting until the snapshot's own stale
-      // window lapses. Closes "the briefing doesn't update" on the dashboard.
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.dashboardSnapshot(),
-      });
+      // v1.18.10 / v1.32.19 — the dashboard hero surfaces the briefing
+      // headline from the SNAPSHOT (server-lifted `User.insightsCachedText`),
+      // and the Today hero's lead line is the SAME briefing lifted into the
+      // digest — neither is this advisor cache. A regenerate rewrites that
+      // server cache, so both the snapshot and the digest must refetch.
+      // Regenerate runs on `/insights`, where both are UNMOUNTED, so the
+      // earlier active-only snapshot invalidation only marked it stale (never
+      // refetched, `refetchOnMount: false`) and never touched the digest at
+      // all — returning to `/` then showed the previous briefing under the
+      // greeting AND in the Today lead for up to 120 s. `refetchInactiveDailyReads`
+      // forces both to refetch right here so the return paints the fresh
+      // briefing at once.
+      void refetchInactiveDailyReads(queryClient);
     },
   });
 

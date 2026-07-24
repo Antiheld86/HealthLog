@@ -40,7 +40,7 @@ import {
   type IntakeHistorySortKey,
 } from "@/components/medications/intake-history-list-v2";
 import { useTranslations } from "@/lib/i18n/context";
-import { invalidateKeys, medicationDependentKeys } from "@/lib/query-keys";
+import { invalidateMedicationReads } from "@/lib/query-keys";
 import { apiDelete, apiPost } from "@/lib/api/api-fetch";
 
 export interface IntakeHistoryEditableProps {
@@ -94,7 +94,7 @@ export function IntakeHistoryEditable({
       await apiPost(`/api/medications/${medicationId}/intake/bulk-delete`, {
         eventIds: ids,
       });
-      await invalidateKeys(queryClient, medicationDependentKeys);
+      await invalidateMedicationReads(queryClient);
       toast.success(t("medications.detail.intake.bulkDelete.toast"));
       setBulkConfirmOpen(false);
       clearSelection();
@@ -111,7 +111,7 @@ export function IntakeHistoryEditable({
     const id = pendingDeleteId;
     try {
       await apiDelete(`/api/medications/${medicationId}/intake/${id}`);
-      await invalidateKeys(queryClient, medicationDependentKeys);
+      await invalidateMedicationReads(queryClient);
       toast.success(t("medications.detail.intake.deleteRow.toast"));
       setPendingDeleteId(null);
       // Drop the deleted row from the pending selection so the

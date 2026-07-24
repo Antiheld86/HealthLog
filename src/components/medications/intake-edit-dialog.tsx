@@ -32,7 +32,7 @@ import { DateTimeField } from "@/components/ui/date-time-field";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
-import { invalidateKeys, medicationDependentKeys } from "@/lib/query-keys";
+import { invalidateMedicationReads } from "@/lib/query-keys";
 import { apiPut } from "@/lib/api/api-fetch";
 
 export interface IntakeEditDialogProps {
@@ -129,7 +129,10 @@ function IntakeEditDialogBody({
         body.takenAt = null;
       }
       await apiPut(`/api/medications/${medicationId}/intake/${event.id}`, body);
-      await invalidateKeys(queryClient, medicationDependentKeys);
+      // Editing today's dose (un-skip, retime) changes its due/taken state —
+      // route through the blessed helper so the Today hero + dashboard clear
+      // at once even when they are unmounted behind the detail page.
+      await invalidateMedicationReads(queryClient);
       toast.success(t("medications.detail.intake.edit.savedToast"));
       onClose();
     } catch {
