@@ -15,6 +15,7 @@ import {
   Droplet,
   Link2,
   Loader2,
+  RefreshCw,
   Save,
   Unlink,
 } from "lucide-react";
@@ -96,6 +97,11 @@ export function NightscoutCard({ enabled = true }: { enabled?: boolean }) {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [msgType, setMsgType] = useState<"success" | "error" | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [syncMsgType, setSyncMsgType] = useState<"success" | "error" | null>(
+    null,
+  );
 
   const { data: status } = useQuery({
     queryKey: queryKeys.nightscoutStatus(),
@@ -168,6 +174,39 @@ export function NightscoutCard({ enabled = true }: { enabled?: boolean }) {
       setMsgType("error");
     }
     setSaving(false);
+  }
+
+  // Sync now. Same shape as the WHOOP card's incremental arm, minus the
+  // full-history dialog — Nightscout has no full-sync arm to call.
+  async function handleSync() {
+    setSyncing(true);
+    setSyncMsg(null);
+    setSyncMsgType(null);
+    try {
+      const res = await apiFetchRaw("/api/nightscout/sync", { method: "POST" });
+      const json = await res.json();
+      if (res.ok) {
+        setSyncMsg(
+          t("settings.nightscoutSyncResult", { count: json.data.imported }),
+        );
+        setSyncMsgType("success");
+        void invalidateKeys(queryClient, measurementDependentKeys);
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.nightscoutStatus(),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.integrationsStatus(),
+        });
+      } else {
+        setSyncMsg(json.error || t("settings.nightscoutSyncFailed"));
+        setSyncMsgType("error");
+      }
+    } catch {
+      setSyncMsg(t("settings.nightscoutSyncFailed"));
+      setSyncMsgType("error");
+    } finally {
+      setSyncing(false);
+    }
   }
 
   const pillState = pillStateFor(status);
@@ -337,6 +376,22 @@ export function NightscoutCard({ enabled = true }: { enabled?: boolean }) {
         {status?.connected && (
           <>
             <div className="flex flex-wrap items-start gap-2 [&>*]:min-w-[10rem] sm:[&>*]:min-w-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-11"
+                onClick={handleSync}
+                disabled={syncing}
+                data-testid="nightscout-sync"
+              >
+                {syncing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                {t("settings.nightscoutSync")}
+              </Button>
               <TestConnectionButton
                 endpoint="/api/nightscout/test"
                 disabled={!status?.connected}
@@ -373,6 +428,15 @@ export function NightscoutCard({ enabled = true }: { enabled?: boolean }) {
                 </AlertDialogContent>
               </AlertDialog>
             </div>
+            {syncMsg && (
+              <p
+                role="alert"
+                data-testid="nightscout-sync-result"
+                className={`text-sm ${syncMsgType === "success" ? "text-success" : "text-destructive"}`}
+              >
+                {syncMsg}
+              </p>
+            )}
             {/* connect→data loop: a discreet link to where the glucose
                 readings now surface — doubles as the "your data is richer"
                 cue. */}
