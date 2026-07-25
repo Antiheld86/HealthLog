@@ -117,6 +117,13 @@ export interface AuthUser {
   insurerIkNumber: string | null;
   insuranceNumber: string | null;
   /**
+   * Practice / clinic name from the last health-record export, so the export
+   * panel opens pre-filled instead of asking for it again every month. The
+   * export route persists it after a successful generation; `null` means the
+   * user has never set one, or deliberately cleared the line.
+   */
+  lastReportPracticeName: string | null;
+  /**
    * v1.15.0 — cycle-tracking feature gate, resolved server-side from gender
    * + the per-user opt-in. The cycle nav entry + page hide when false; every
    * `/api/cycle/*` route also enforces the gate. Coerced to `false` against a
