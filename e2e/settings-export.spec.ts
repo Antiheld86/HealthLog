@@ -1,3 +1,5 @@
+import type { Page } from "@playwright/test";
+
 import { expect, test } from "./setup/test";
 
 import { STORAGE_STATE_PATH } from "./setup/global-setup";
@@ -24,6 +26,30 @@ import { STORAGE_STATE_PATH } from "./setup/global-setup";
  * download is enough to lock in the wiring without doubling the e2e
  * runtime.
  */
+
+/**
+ * Open Settings → Gesundheitsakte and wait until the page is actually live.
+ *
+ * Everything on that page is server-rendered, so the rows are visible long
+ * before the client boundary that owns them has hydrated — a click or a
+ * `boundingBox()` taken on `domcontentloaded` alone hits inert or replaced
+ * markup often enough to matter. `GesundheitsakteSection` is one client
+ * boundary carrying both the export panel and the sharing card, and the
+ * sharing card's query only runs once that boundary is live, so its request is
+ * the signal that the whole surface is wired.
+ */
+async function openGesundheitsakte(page: Page): Promise<void> {
+  const boundaryHydrated = page.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" &&
+      new URL(response.url()).pathname === "/api/share-links",
+  );
+  await page.goto("/settings/gesundheitsakte", {
+    waitUntil: "domcontentloaded",
+  });
+  await boundaryHydrated;
+}
+
 test.describe("Settings → Export & Import", () => {
   test.use({ storageState: STORAGE_STATE_PATH });
 
@@ -47,9 +73,7 @@ test.describe("Settings → Export & Import", () => {
   }) => {
     // v1.18.0 (S5) — the health-record export is the hero of the
     // dedicated, module-gated Gesundheitsakte section.
-    await page.goto("/settings/gesundheitsakte", {
-      waitUntil: "domcontentloaded",
-    });
+    await openGesundheitsakte(page);
     await expect(page.getByTestId("health-record-export-panel")).toBeVisible({
       timeout: 10_000,
     });
@@ -60,9 +84,7 @@ test.describe("Settings → Export & Import", () => {
     // export panel at the top and the share-link create form under `#sharing`.
     // Every id inside the picker ends with the surface that mounts it, so an
     // assertion binds to one mount instead of resolving to both.
-    await page.goto("/settings/gesundheitsakte", {
-      waitUntil: "domcontentloaded",
-    });
+    await openGesundheitsakte(page);
     await expect(page.getByTestId("report-scope-picker-export")).toHaveCount(1);
     await expect(page.getByTestId("report-scope-picker-share")).toHaveCount(1);
     for (const id of [
@@ -85,9 +107,7 @@ test.describe("Settings → Export & Import", () => {
     // picker, its twelve group rows and the fenced tier all render without a
     // click. Asserted against the export mount; the share form runs its own
     // picker with its own defaults.
-    await page.goto("/settings/gesundheitsakte", {
-      waitUntil: "domcontentloaded",
-    });
+    await openGesundheitsakte(page);
     await expect(page.getByTestId("report-scope-picker-export")).toBeVisible({
       timeout: 10_000,
     });
@@ -110,9 +130,7 @@ test.describe("Settings → Export & Import", () => {
 
   test("clears the tap floor on the group rows at 390 px", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/settings/gesundheitsakte", {
-      waitUntil: "domcontentloaded",
-    });
+    await openGesundheitsakte(page);
     const row = page.getByTestId("report-group-row-vitals-export");
     await expect(row).toBeVisible({ timeout: 10_000 });
     const box = await row.boundingBox();
@@ -121,9 +139,7 @@ test.describe("Settings → Export & Import", () => {
   });
 
   test("opens a group's leaf grid from its chevron", async ({ page }) => {
-    await page.goto("/settings/gesundheitsakte", {
-      waitUntil: "domcontentloaded",
-    });
+    await openGesundheitsakte(page);
     const row = page.getByTestId("report-group-row-vitals-export");
     await expect(row).toBeVisible({ timeout: 10_000 });
     // Collapsed: the leaves are behind the disclosure, which is what makes a
@@ -192,16 +208,7 @@ test.describe("Settings → Export & Import", () => {
         body: JSON.stringify({ data: [], error: null, meta: null }),
       });
     });
-    const sharingDataReady = page.waitForResponse(
-      (response) =>
-        response.status() === 200 &&
-        response.request().method() === "GET" &&
-        new URL(response.url()).pathname === "/api/share-links",
-    );
-    await page.goto("/settings/gesundheitsakte", {
-      waitUntil: "domcontentloaded",
-    });
-    await sharingDataReady;
+    await openGesundheitsakte(page);
     const toggle = page.getByTestId("health-record-included-data-toggle");
     const panel = page.getByTestId("health-record-included-data-panel");
     await expect(toggle).toBeVisible({ timeout: 10_000 });
