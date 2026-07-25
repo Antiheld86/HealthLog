@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HealthLog API
-  version: 1.32.36
+  version: 1.32.37
   description: >-
     Self-hosted personal-health-tracking PWA — public API surface for the iOS native client and external ingest.
 
@@ -12091,6 +12091,10 @@ components:
             {00,10,20,30,40,50}, trailing `Z` (e.g. `2026-06-21T14:10:00.000Z`). A re-post OVERWRITES the row and
             returns `updated`, so iOS uploads ~144 rows/day instead of one per raw HR sample. A row that targets this
             prefix with a malformed bucket-start suffix is `skipped` with reason `malformed_hr_bucket_id`.
+
+            The id MUST be stable across app restarts. An object description or memory address (`<Class: 0x…>`,
+            `0x12ab34cd`) is a new value on every launch, so it can never match its own earlier row; such an entry is
+            `skipped` with reason `unstable_external_id` while the rest of the batch still lands.
         externalSourceVersion:
           type: string
           minLength: 1
@@ -12294,7 +12298,10 @@ components:
           type: string
           const: APPLE_HEALTH
         externalId:
-          description: The HealthKit dose-event UUID. Drives the idempotent re-sync dedup (first-write-wins per Apple dose).
+          description: "The HealthKit dose-event UUID. Drives the idempotent re-sync dedup (first-write-wins per Apple dose). Must
+            be stable across app restarts — an object description or memory address (`<Class: 0x…>`, `0x12ab34cd`) is a
+            new value on every launch; such an entry is `skipped` with reason `unstable_external_id` while the rest of
+            the batch still lands."
           type: string
           minLength: 1
           maxLength: 128
@@ -12411,7 +12418,9 @@ components:
         externalId:
           description: "Stable external identifier of the mirrored medication (the HealthKit `medicationConceptIdentifier`, max
             128 chars). Must be supplied together with `externalSource`. Idempotent: re-posting the same pair returns
-            the existing medication with status 200 instead of minting a duplicate."
+            the existing medication with status 200 instead of minting a duplicate. The value MUST be identical across
+            app restarts: an object description or memory address (`<Class: 0x…>`, `0x12ab34cd`) is a new value on every
+            launch, never matches its own earlier row, and is refused with 422 rather than minting a duplicate mirror."
           type: string
           minLength: 1
           maxLength: 128
@@ -13667,7 +13676,10 @@ components:
             - TELEGRAM
             - DAYLIO
         externalId:
-          description: iOS-side source-stable id for idempotent dedup on the `(userId, source, externalId)` key.
+          description: "iOS-side source-stable id for idempotent dedup on the `(userId, source, externalId)` key. Must be stable
+            across app restarts — an object description or memory address (`<Class: 0x…>`, `0x12ab34cd`) is a new value
+            on every launch; such an entry is `skipped` with reason `unstable_external_id` while the rest of the batch
+            still lands."
           type: string
           minLength: 1
           maxLength: 120

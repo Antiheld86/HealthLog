@@ -1,6 +1,7 @@
 import { z } from "zod/v4";
 
 import { boundedTakenAtSchema, injectionSiteEnum } from "./base";
+import { assertStableIdempotencyKey } from "@/lib/validations/external-id";
 
 export const intakeSchema = z
   .object({
@@ -82,18 +83,29 @@ export const intakeSchema = z
         "Dose actually consumed for THIS intake when it deviates from (or documents) the medication's configured dose, e.g. a half tablet or a titration step. Free text, max 50 characters. Omit to record the take under the medication's configured dose.",
       ),
   })
+  // `MedicationIntakeEvent.idempotency_key` is a `@unique` column persisted
+  // with the dose row forever and matched by equality — an identity, not a
+  // windowed replay token. A key that rotates per client launch never
+  // matches its own earlier row, so every re-sync logs the dose again.
+  .superRefine(assertStableIdempotencyKey)
   .meta({
     id: "MedicationIntakeRequest",
     description:
       "Per-medication intake log body. Idempotent via `idempotencyKey`; the server also dedupes by a 60-second sliding window when the key is absent. Non-skipped intakes auto-decrement pen inventory (best-effort), refresh the per-day compliance rollup, and — for one-shot medications — flip `active` to false. The optional `injectionSite` is persisted only for an INJECTION medication with site-tracking enabled and is validated against the medication's effective allowed set (422 on a disallowed value).",
   });
 
-export const externalIntakeSchema = z.object({
-  medicationName: z.string().min(1).max(200),
-  // v1.16.9 — same plausibility bounds as the interactive create paths.
-  takenAt: boundedTakenAtSchema.optional(),
-  idempotencyKey: z.string().max(128),
-});
+export const externalIntakeSchema = z
+  .object({
+    medicationName: z.string().min(1).max(200),
+    // v1.16.9 — same plausibility bounds as the interactive create paths.
+    takenAt: boundedTakenAtSchema.optional(),
+    idempotencyKey: z.string().max(128),
+  })
+  // Same identity floor as the interactive twin. The blank arm carries real
+  // weight on this surface: the column is `@unique` table-wide, so an empty
+  // key resolves to whichever unrelated row happened to store "" first
+  // instead of to this caller's own earlier post.
+  .superRefine(assertStableIdempotencyKey);
 
 export const listIntakeEventsSchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).optional().default(25),

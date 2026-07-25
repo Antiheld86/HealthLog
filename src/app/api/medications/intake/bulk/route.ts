@@ -75,6 +75,12 @@ import {
   injectionSiteEnum,
   type InjectionSiteValue,
 } from "@/lib/validations/medication";
+import {
+  classifyExternalId,
+  unstableExternalIdMeta,
+  UNSTABLE_EXTERNAL_ID_REASON,
+  type UnstableExternalIdShape,
+} from "@/lib/validations/external-id";
 import type { InjectionSiteKey } from "@/lib/medications/injection-sites";
 import { queueMedicationIntakeSync } from "@/lib/notifications/medication-intake-sync";
 import { dispatchMedicationIntakeWebClearBulk } from "@/lib/notifications/web-push-clear";
@@ -95,6 +101,11 @@ const bulkEntrySchema = z
     // 5-year floor), matching the single-intake create + edit paths.
     takenAt: boundedTakenAtSchema.optional(),
     skipped: z.boolean().optional().default(false),
+    // Persisted to the `@unique` `idempotency_key` column and matched by
+    // equality forever, so it is an identity and carries the same
+    // stability floor. Checked per entry for the same reason as
+    // `externalId` above.
+    // @external-id-checked-per-entry: src/app/api/medications/intake/bulk/route.ts
     idempotencyKey: z.string().min(1).max(128).optional(),
     // v1.8.5 — optional per-entry injection site. Validated against the
     // medication's effective allowed set; a disallowed site marks the
@@ -128,6 +139,10 @@ const bulkEntrySchema = z
     // v1.28 — the HealthKit `HKMedicationDoseEvent` UUID. Drives the
     // idempotent re-sync: an entry whose `(userId, externalId)` already
     // exists live reports `duplicate` (first-write-wins per Apple dose).
+    // Stability is enforced per entry in the loop below, not at the
+    // field: a schema-level refusal would fail the whole batch on one
+    // bad row.
+    // @external-id-checked-per-entry: src/app/api/medications/intake/bulk/route.ts
     externalId: z.string().trim().min(1).max(128).optional(),
   })
   .refine(
@@ -318,6 +333,7 @@ async function postBulk(request: NextRequest): Promise<Response> {
   let updated = 0;
   let duplicates = 0;
   const skipped: Array<{ index: number; reason: string }> = [];
+  const unstableShapes: UnstableExternalIdShape[] = [];
   // v1.4.39 W-MED — collect distinct `(medicationId, dayKey)` pairs
   // touched by the batch so one rollup recompute fires per pair after
   // all inserts complete. Per-row recompute would balloon a 500-entry
@@ -342,6 +358,31 @@ async function postBulk(request: NextRequest): Promise<Response> {
       const reason = "medication_not_found";
       skipped.push({ index: i, reason });
       results.push({ index: i, status: "skipped", reason });
+      continue;
+    }
+
+    // Both dedup keys on this route are only idempotent while the value
+    // is STABLE across client launches: `(userId, externalId)` for the
+    // Apple dose event, and the `@unique` `idempotency_key` column for
+    // the replay probe below. A value that rotates per process (an
+    // object description carrying a memory address) never matches its
+    // own earlier row, so every re-sync logs the dose again. Refused per
+    // entry — one bad row must not stop the rest of the batch landing.
+    const unstable =
+      (entry.externalId === undefined
+        ? null
+        : classifyExternalId(entry.externalId)) ??
+      (entry.idempotencyKey === undefined
+        ? null
+        : classifyExternalId(entry.idempotencyKey));
+    if (unstable) {
+      unstableShapes.push(unstable);
+      skipped.push({ index: i, reason: UNSTABLE_EXTERNAL_ID_REASON });
+      results.push({
+        index: i,
+        status: "skipped",
+        reason: UNSTABLE_EXTERNAL_ID_REASON,
+      });
       continue;
     }
 
@@ -575,8 +616,16 @@ async function postBulk(request: NextRequest): Promise<Response> {
         //      by `source`. The partial unique index carries `source`, so it
         //      cannot catch this duplicate; the probe must.
         if (entry.idempotencyKey) {
+          // Scoped to the caller. The key is client-supplied, so an
+          // unscoped read would resolve another user's row and hand its
+          // id back here (migration 0273 made the unique per user).
           const replay = await prisma.medicationIntakeEvent.findUnique({
-            where: { idempotencyKey: entry.idempotencyKey },
+            where: {
+              userId_idempotencyKey: {
+                userId: user.id,
+                idempotencyKey: entry.idempotencyKey,
+              },
+            },
             select: { id: true },
           });
           if (replay) {
@@ -752,7 +801,12 @@ async function postBulk(request: NextRequest): Promise<Response> {
       ) {
         const existing = entry.idempotencyKey
           ? await prisma.medicationIntakeEvent.findUnique({
-              where: { idempotencyKey: entry.idempotencyKey },
+              where: {
+                userId_idempotencyKey: {
+                  userId: user.id,
+                  idempotencyKey: entry.idempotencyKey,
+                },
+              },
               select: { id: true },
             })
           : // v1.28 — an Apple entry that raced the partial
@@ -803,6 +857,9 @@ async function postBulk(request: NextRequest): Promise<Response> {
       updated,
       duplicates,
       skipped: skipped.length,
+      ...(unstableShapes.length > 0
+        ? unstableExternalIdMeta("medication.intake.bulk", unstableShapes)
+        : {}),
     },
   });
 

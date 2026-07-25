@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+## [1.32.37] — 2026-07-25
+
+Two ways a record could quietly lose data, both closed.
+
+An identifier that a client sends along with a reading is meant to say "this is
+the same reading you already have". One client was sending a value that changed
+every time the app restarted, so nothing ever matched, and every sync created a
+fresh copy. On one instance that produced 23 medications nobody had ever taken,
+none of them with a dose or a single logged intake, because the doses were
+looking for a medication under an identifier that no longer existed.
+
+The server now refuses an identifier that cannot possibly be stable, with a 422
+that says what is wrong instead of quietly making duplicates. A batch rejects
+only the offending entry and still accepts the rest, so one bad row cannot stop
+a sync. Twelve entry points check it. The identifier shapes that real apps and
+devices actually send are pinned by tests, so a future rule cannot get greedy
+and start dropping valid data.
+
+The second one was worse and had no symptom at all. The repeat-protection key
+on a medication intake was unique across the whole database rather than per
+account. Two people generating the same key independently meant the second one
+could not save their dose at all. The database refused it, and the intake was
+gone. The key is now unique per account, and every lookup asks who it belongs
+to. Recording an intake through the automation interface without sending a key
+had a related problem: the first one saved and every one after it was discarded
+as a repeat. Also fixed.
+
+The migration does not touch any existing intake. It relaxes a rule rather than
+tightening one, so nothing that was allowed before becomes disallowed now.
+
 ## [1.32.36] — 2026-07-25
 
 Nothing here changes what you see. This release is about the checks that run

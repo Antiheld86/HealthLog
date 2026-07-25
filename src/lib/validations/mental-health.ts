@@ -11,6 +11,7 @@ import {
   INSTRUMENTS,
   type InstrumentId,
 } from "@/lib/mental-health/instruments";
+import { assertStableExternalId } from "@/lib/validations/external-id";
 
 export const assessmentInstrumentEnum = z.enum(["PHQ9", "GAD7", "WHO5", "SCI"]);
 
@@ -69,7 +70,10 @@ export const createAssessmentSchema = z
         });
       }
     });
-  });
+  })
+  // The replay anchor only protects against a duplicate administration
+  // while the id is stable across client launches.
+  .superRefine(assertStableExternalId);
 
 export const listAssessmentsSchema = z.object({
   instrument: assessmentInstrumentEnum.optional(),

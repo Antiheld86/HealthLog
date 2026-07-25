@@ -41,6 +41,12 @@ import { recomputeMoodBucketsForEntry } from "@/lib/rollups/mood-rollups";
 import { MOOD_ENUM_BY_SCORE } from "@/lib/mood/labels";
 import { getScoreForMood } from "@/lib/validations/mood";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
+import {
+  classifyExternalId,
+  unstableExternalIdMessage,
+  unstableExternalIdMeta,
+  IDEMPOTENCY_KEY_LABEL,
+} from "@/lib/validations/external-id";
 
 /** The MCP write provenance — distinct from MANUAL / TELEGRAM. */
 const MCP_SOURCE = "MCP" as const;
@@ -52,6 +58,41 @@ const MCP_SOURCE = "MCP" as const;
  * `(userId, type, MCP, externalId)` so a key can never collide with a
  * Telegram or manual row.
  */
+/**
+ * The MCP write key is an IDENTITY, not a windowed replay token: it is
+ * hashed into the `externalId` half of `(userId, type, MCP, externalId)`
+ * and matched forever. A key that changes between the preview call and
+ * the commit call — or between two commits of the same logical write —
+ * mints a second row instead of converging.
+ *
+ * The hash launders the shape, so the floor has to run on the INPUT: a
+ * pointer-shaped key and a stable one both digest to clean hex, and the
+ * `externalId` guard downstream could never tell them apart. The blank
+ * case is the live one — every tool handler falls back to `""` when the
+ * host omits the argument, and `""` digests to a CONSTANT, so every
+ * keyless write after the first would report `already_logged` and be
+ * silently dropped.
+ */
+function checkMcpIdempotencyKey(
+  tool: string,
+  idempotencyKey: string,
+): { status: "unstable_idempotency_key"; reason: string } | null {
+  const shape = classifyExternalId(idempotencyKey);
+  if (shape === null) return null;
+  annotate({
+    action: { name: "mcp.tool.write" },
+    meta: {
+      tool,
+      status: "unstable_idempotency_key",
+      ...unstableExternalIdMeta(`mcp.${tool}`, [shape]),
+    },
+  });
+  return {
+    status: "unstable_idempotency_key",
+    reason: unstableExternalIdMessage(shape, IDEMPOTENCY_KEY_LABEL),
+  };
+}
+
 function mcpExternalId(
   prefix: "measure" | "mood" | "bp",
   idempotencyKey: string,
@@ -186,6 +227,7 @@ export type McpMeasurementResult =
   | { status: "unsupported_type" }
   | { status: "unsupported_unit" }
   | { status: "out_of_range"; reason: string }
+  | { status: "unstable_idempotency_key"; reason: string }
   | { status: "written"; measurement: McpMeasurementRecord }
   | { status: "already_logged"; measurement: McpMeasurementRecord };
 
@@ -205,6 +247,12 @@ export async function logMcpMeasurement(input: {
   measuredAt?: Date;
   idempotencyKey: string;
 }): Promise<McpMeasurementResult> {
+  const unstableKey = checkMcpIdempotencyKey(
+    "log_measurement",
+    input.idempotencyKey,
+  );
+  if (unstableKey) return unstableKey;
+
   // Normalise the caller's unit hint to canonical (converting the value) or
   // refuse it — a non-canonical unit must never be persisted verbatim. Runs
   // BEFORE the range check so the plausibility gate sees the canonical value
@@ -337,6 +385,7 @@ export interface McpBloodPressureRecord {
 
 export type McpBloodPressureResult =
   | { status: "out_of_range"; reason: string }
+  | { status: "unstable_idempotency_key"; reason: string }
   | { status: "written"; bloodPressure: McpBloodPressureRecord }
   | { status: "already_logged"; bloodPressure: McpBloodPressureRecord };
 
@@ -359,6 +408,12 @@ export async function logMcpBloodPressure(input: {
   measuredAt?: Date;
   idempotencyKey: string;
 }): Promise<McpBloodPressureResult> {
+  const unstableKey = checkMcpIdempotencyKey(
+    "log_blood_pressure",
+    input.idempotencyKey,
+  );
+  if (unstableKey) return unstableKey;
+
   // Same validation the confirm-gate preview runs (both ranges, the systolic >
   // diastolic guard, and the measuredAt instant bound) — one verdict for both.
   const check = checkMcpBloodPressure(
@@ -514,6 +569,7 @@ export interface McpMoodRecord {
 
 export type McpMoodResult =
   | { status: "invalid_score" }
+  | { status: "unstable_idempotency_key"; reason: string }
   | { status: "written"; moodEntry: McpMoodRecord }
   | { status: "already_logged"; moodEntry: McpMoodRecord };
 
@@ -531,6 +587,9 @@ export async function logMcpMood(input: {
   tz?: string | null;
   idempotencyKey: string;
 }): Promise<McpMoodResult> {
+  const unstableKey = checkMcpIdempotencyKey("log_mood", input.idempotencyKey);
+  if (unstableKey) return unstableKey;
+
   const mood = MOOD_ENUM_BY_SCORE[input.score];
   if (!mood) {
     annotate({

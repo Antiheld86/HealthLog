@@ -8,6 +8,7 @@
  */
 import { z } from "zod/v4";
 import { validateEntryInstant } from "@/lib/validations/entry-instant";
+import { assertStableExternalId } from "@/lib/validations/external-id";
 
 // --- CRUD schemas for mood entries ---
 
@@ -68,39 +69,45 @@ const ratedFactor = z.object({
 });
 const ratedFactors = z.array(ratedFactor).max(30);
 
-export const createMoodEntrySchema = z.object({
-  mood: moodLevelEnum,
-  tags: z.array(z.string().max(50)).max(20).optional(),
-  // v1.8.5 — structured-tag keys from the taxonomy. Server resolves each
-  // key to a `MoodTag` row and writes the `MoodEntryTagLink` join;
-  // unknown keys are dropped silently (the catalog is the source of
-  // truth, a stale client can't mint a tag).
-  tagKeys: structuredTagKeys.optional(),
-  // v1.12.0 — rated factors scored 1..5 (or the factor's own scale).
-  // Parallel to the binary `tagKeys`; persisted on
-  // `MoodEntryTagLink.rating`. Out-of-scale or non-RATED keys are
-  // rejected (422) / dropped server-side per the catalog.
-  ratedFactors: ratedFactors.optional(),
-  // v1.4.30 H-5 — first-class free-text note. Replaces the
-  // `tags: ["note:<text>"]` workaround. Capped at 500 chars so the
-  // Coach evidence shelf renders cleanly without truncating chips.
-  note: z.string().max(500).optional(),
-  // v1.17 W1b — plausibility bound (shared `validateEntryInstant`): no
-  // future instants beyond a 5-min clock-skew tolerance, no instant before
-  // 1900. Mirrors the measurement + medication-intake bound.
-  moodLoggedAt: validateEntryInstant(
-    z.iso.datetime({ offset: true }).transform((s) => new Date(s)),
-  ),
-  source: moodSourceEnum.optional().default("MANUAL"),
-  // v1.12.1 — optional source-stable id (e.g. an iOS SwiftData row UUID).
-  // When present, the create upserts on `(userId, source, externalId)`
-  // so a re-post with the same id updates the existing row in place
-  // instead of either 409-ing or minting a duplicate — the idempotent
-  // re-import iOS drives over Bearer. NULL keeps the legacy
-  // `(userId, date, moodLoggedAt)` behaviour. Bound matches the bulk
-  // `externalId` so one path can't accept an id the other rejects.
-  externalId: z.string().min(1).max(120).optional(),
-});
+export const createMoodEntrySchema = z
+  .object({
+    mood: moodLevelEnum,
+    tags: z.array(z.string().max(50)).max(20).optional(),
+    // v1.8.5 — structured-tag keys from the taxonomy. Server resolves each
+    // key to a `MoodTag` row and writes the `MoodEntryTagLink` join;
+    // unknown keys are dropped silently (the catalog is the source of
+    // truth, a stale client can't mint a tag).
+    tagKeys: structuredTagKeys.optional(),
+    // v1.12.0 — rated factors scored 1..5 (or the factor's own scale).
+    // Parallel to the binary `tagKeys`; persisted on
+    // `MoodEntryTagLink.rating`. Out-of-scale or non-RATED keys are
+    // rejected (422) / dropped server-side per the catalog.
+    ratedFactors: ratedFactors.optional(),
+    // v1.4.30 H-5 — first-class free-text note. Replaces the
+    // `tags: ["note:<text>"]` workaround. Capped at 500 chars so the
+    // Coach evidence shelf renders cleanly without truncating chips.
+    note: z.string().max(500).optional(),
+    // v1.17 W1b — plausibility bound (shared `validateEntryInstant`): no
+    // future instants beyond a 5-min clock-skew tolerance, no instant before
+    // 1900. Mirrors the measurement + medication-intake bound.
+    moodLoggedAt: validateEntryInstant(
+      z.iso.datetime({ offset: true }).transform((s) => new Date(s)),
+    ),
+    source: moodSourceEnum.optional().default("MANUAL"),
+    // v1.12.1 — optional source-stable id (e.g. an iOS SwiftData row UUID).
+    // When present, the create upserts on `(userId, source, externalId)`
+    // so a re-post with the same id updates the existing row in place
+    // instead of either 409-ing or minting a duplicate — the idempotent
+    // re-import iOS drives over Bearer. NULL keeps the legacy
+    // `(userId, date, moodLoggedAt)` behaviour. Bound matches the bulk
+    // `externalId` so one path can't accept an id the other rejects.
+    externalId: z.string().min(1).max(120).optional(),
+  })
+  // The upsert key is only idempotent while the id is stable; an id that
+  // rotates per client launch mints a fresh entry on every re-post. The
+  // bulk twin carries the same rule per entry (it cannot fail the whole
+  // batch on one bad row).
+  .superRefine(assertStableExternalId);
 
 export const updateMoodEntrySchema = z.object({
   mood: moodLevelEnum.optional(),

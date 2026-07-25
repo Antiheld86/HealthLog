@@ -104,7 +104,7 @@ const bulkIntakeEntry = z
       .max(128)
       .optional()
       .describe(
-        "The HealthKit dose-event UUID. Drives the idempotent re-sync dedup (first-write-wins per Apple dose).",
+        "The HealthKit dose-event UUID. Drives the idempotent re-sync dedup (first-write-wins per Apple dose). Must be stable across app restarts — an object description or memory address (`<Class: 0x…>`, `0x12ab34cd`) is a new value on every launch; such an entry is `skipped` with reason `unstable_external_id` while the rest of the batch still lands.",
       ),
   })
   .meta({

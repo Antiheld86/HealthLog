@@ -70,6 +70,12 @@ import {
   createBatchWorkoutSchema,
   MAX_WORKOUTS_PER_BATCH,
 } from "@/lib/validations/workout";
+import {
+  classifyExternalId,
+  unstableExternalIdMeta,
+  UNSTABLE_EXTERNAL_ID_REASON,
+  type UnstableExternalIdShape,
+} from "@/lib/validations/external-id";
 import { dedupeWorkoutBatch } from "@/lib/workouts/canonical-rows";
 import { Prisma, type MeasurementSource } from "@/generated/prisma/client";
 
@@ -281,7 +287,26 @@ async function postBatch(request: NextRequest): Promise<Response> {
   };
 
   const results: EntryResult[] = new Array(workouts.length);
-  const prepared: Prepared[] = workouts.map((w, index) => {
+  const unstableShapes: UnstableExternalIdShape[] = [];
+  const prepared: Prepared[] = workouts.flatMap((w, index) => {
+    // The `(userId, source, externalId)` dedup key is only idempotent
+    // while the id is STABLE across client launches. An id that rotates
+    // per process (an object description carrying a memory address)
+    // never matches its own earlier row, so every re-sync mints another
+    // workout. Refused per entry — one bad row must not stop the rest of
+    // the batch landing.
+    const unstable =
+      w.externalId === undefined ? null : classifyExternalId(w.externalId);
+    if (unstable) {
+      unstableShapes.push(unstable);
+      results[index] = {
+        index,
+        status: "skipped",
+        reason: UNSTABLE_EXTERNAL_ID_REASON,
+      };
+      return [];
+    }
+
     const durationSec = Math.max(
       0,
       Math.round((w.endedAt.getTime() - w.startedAt.getTime()) / 1000),
@@ -319,16 +344,24 @@ async function postBatch(request: NextRequest): Promise<Response> {
         ? (w.metadata as Prisma.InputJsonValue)
         : Prisma.JsonNull,
     };
-    return {
-      index,
-      row,
-      route,
-      samples,
-      dedupKey: w.externalId
-        ? { source: w.source, externalId: w.externalId }
-        : null,
-    };
+    return [
+      {
+        index,
+        row,
+        route,
+        samples,
+        dedupKey: w.externalId
+          ? { source: w.source, externalId: w.externalId }
+          : null,
+      },
+    ];
   });
+
+  if (unstableShapes.length > 0) {
+    annotate({
+      meta: unstableExternalIdMeta("workout.batch", unstableShapes),
+    });
+  }
 
   // v1.4.42 W5 — write-time cross-source dedup. The v1.5 iOS app
   // drains a HealthKit observer queue that frequently carries the

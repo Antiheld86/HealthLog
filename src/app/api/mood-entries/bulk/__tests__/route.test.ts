@@ -461,6 +461,92 @@ describe("POST /api/mood-entries/bulk — structured tagKeys (v1.12.0)", () => {
   });
 });
 
+describe("POST /api/mood-entries/bulk — unstable external ids", () => {
+  /**
+   * `(userId, source, externalId)` dedups only while the id is stable
+   * across client launches. A per-process value — an object description
+   * carrying a memory address — never matches its own earlier row, so
+   * every re-post mints another entry. The refusal is PER ENTRY: a client
+   * draining an offline queue must not lose its good rows to one bad one.
+   */
+  beforeEach(() => {
+    vi.mocked(prisma.moodEntry.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.moodEntry.upsert).mockResolvedValue({
+      id: "entry-1",
+    } as never);
+  });
+
+  it("skips the offending entry and still writes the rest of the batch", async () => {
+    const res = await POST(
+      postReq({
+        entries: [
+          {
+            mood: "GUT",
+            moodLoggedAt: "2026-05-16T08:00:00.000Z",
+            externalId: "8AD2A9CB-3F0C-4E4D-9C1E-4B7E2A1D6F30",
+          },
+          {
+            mood: "OKAY",
+            moodLoggedAt: "2026-05-16T09:00:00.000Z",
+            externalId: "<HKHealthConceptIdentifier: 0x12568db80>",
+          },
+          {
+            mood: "SUPER_GUT",
+            moodLoggedAt: "2026-05-16T10:00:00.000Z",
+            externalId: "0xdeadbeef",
+          },
+        ],
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: {
+        processed: number;
+        inserted: number;
+        skipped: Array<{ index: number; reason: string }>;
+        entries: Array<{
+          index: number;
+          status: string;
+          reason?: string;
+          externalId?: string;
+        }>;
+      };
+    };
+    expect(body.data.processed).toBe(3);
+    expect(body.data.entries[0].status).toBe("inserted");
+    expect(body.data.entries[1]).toMatchObject({
+      index: 1,
+      status: "skipped",
+      reason: "unstable_external_id",
+      externalId: "<HKHealthConceptIdentifier: 0x12568db80>",
+    });
+    expect(body.data.entries[2]).toMatchObject({
+      index: 2,
+      status: "skipped",
+      reason: "unstable_external_id",
+    });
+    expect(body.data.skipped).toEqual([
+      { index: 1, reason: "unstable_external_id" },
+      { index: 2, reason: "unstable_external_id" },
+    ]);
+    // Only the good entry reached the writer.
+    expect(prisma.moodEntry.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves an entry without an externalId untouched", async () => {
+    const res = await POST(
+      postReq({
+        entries: [{ mood: "OKAY", moodLoggedAt: "2026-05-16T08:00:00.000Z" }],
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { entries: Array<{ status: string }> };
+    };
+    expect(body.data.entries[0].status).toBe("inserted");
+  });
+});
+
 describe("POST /api/mood-entries/bulk — tombstone suppression", () => {
   it("keeps a tombstoned match deleted: true no-op reported as duplicate", async () => {
     // A soft-deleted row under the batched pre-read: the sync feed already

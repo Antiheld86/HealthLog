@@ -397,3 +397,54 @@ describe("POST /api/mental-health/assessments", () => {
     expect(prisma.mentalHealthAssessment.create).not.toHaveBeenCalled();
   });
 });
+
+describe("POST /api/mental-health/assessments — external-id stability floor", () => {
+  /**
+   * `externalId` is the durable replay anchor for the native client's
+   * outbox — the only thing standing between a retried submission and a
+   * second recorded administration of the same screener. It only holds
+   * while the value survives an app restart.
+   */
+  it("422s on an object-description externalId and records nothing", async () => {
+    const res = await callPost(
+      makeReq({
+        instrument: "PHQ9",
+        items: [1, 1, 1, 1, 1, 1, 1, 1, 0],
+        externalId: "<HKHealthConceptIdentifier: 0x12568db80>",
+      }),
+    );
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as {
+      details: { issues: Array<{ path: string; message: string }> };
+    };
+    const issue = body.details.issues.find((i) => i.path === "externalId");
+    expect(issue).toBeDefined();
+    expect(issue!.message).toContain("stable across app restarts");
+    expect(prisma.mentalHealthAssessment.create).not.toHaveBeenCalled();
+  });
+
+  it("accepts the outbox UUID the native client actually sends", async () => {
+    vi.mocked(prisma.mentalHealthAssessment.create).mockResolvedValue({
+      id: "mha_2",
+      instrument: "PHQ9",
+      locale: "en",
+      version: "standard",
+      totalScore: 8,
+      severityBand: "mild",
+      item9Flagged: false,
+      crisisShownAt: null,
+      takenAt: new Date("2026-06-28T00:00:00.000Z"),
+      createdAt: new Date("2026-06-28T00:00:00.000Z"),
+    } as never);
+
+    const res = await callPost(
+      makeReq({
+        instrument: "PHQ9",
+        items: [1, 1, 1, 1, 1, 1, 1, 1, 0],
+        externalId: "8AD2A9CB-3F0C-4E4D-9C1E-4B7E2A1D6F30",
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(prisma.mentalHealthAssessment.create).toHaveBeenCalledTimes(1);
+  });
+});

@@ -13,6 +13,10 @@ import {
 import { hashToken } from "@/lib/auth/hmac";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { externalIntakeSchema } from "@/lib/validations/medication";
+import {
+  unstableExternalIdMeta,
+  unstableExternalIdShape,
+} from "@/lib/validations/external-id";
 import { isApiGloballyEnabled } from "@/lib/app-settings";
 import { recomputeMedicationComplianceForEvent } from "@/lib/rollups/medication-compliance-rollups";
 import {
@@ -108,9 +112,13 @@ export const POST = apiHandler(async (request: NextRequest) => {
     // integration sees the full validation shape at once. Audit
     // breadcrumb keyed `ingest.medication.validation-failed`.
     const issues = sanitiseZodIssues(parsed.error.issues);
+    const shape = unstableExternalIdShape(body, "idempotencyKey");
     annotate({
       action: { name: "ingest.medication.validation-failed" },
-      meta: { issue_count: issues.length },
+      meta: {
+        issue_count: issues.length,
+        ...(shape ? unstableExternalIdMeta("medication.ingest", [shape]) : {}),
+      },
     });
     // v1.4.49 — strip `message` from the audit-ledger row; external
     // ingest carries free-text `medicationName` + opaque

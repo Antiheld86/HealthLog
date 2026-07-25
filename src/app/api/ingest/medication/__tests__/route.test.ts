@@ -349,3 +349,87 @@ describe("POST /api/ingest/medication — slot attribution + convergence (v1.16.
     expect(consumeForIntake).not.toHaveBeenCalled();
   });
 });
+
+describe("POST /api/ingest/medication — idempotency-key stability floor", () => {
+  /**
+   * `MedicationIntakeEvent.idempotency_key` is not a windowed replay
+   * token: it is a `@unique` column persisted with the dose row forever
+   * and matched by plain equality, which makes it an identity. A bridge
+   * that mints a per-process key never matches its own earlier post, so
+   * every retry logs the dose again.
+   *
+   * The blank case is the sharper one here — the column is unique
+   * table-wide, so an empty key would resolve to whichever unrelated row
+   * stored "" first rather than to this caller's own earlier post.
+   */
+  it("422s on an object-description key and logs nothing", async () => {
+    const res = await POST(
+      postReq({
+        medicationName: "Metformin",
+        idempotencyKey: "<NSObject: 0x600000c1a2b0>",
+      }),
+    );
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as {
+      details: { issues: Array<{ path: string; message: string }> };
+    };
+    const issue = body.details.issues.find((i) => i.path === "idempotencyKey");
+    expect(issue).toBeDefined();
+    expect(issue!.message).toContain("idempotency key");
+    expect(issue!.message).toContain("stable across app restarts");
+    expect(prisma.medicationIntakeEvent.create).not.toHaveBeenCalled();
+  });
+
+  it("422s on a whitespace-only key rather than matching a stranger's row", async () => {
+    const res = await POST(
+      postReq({ medicationName: "Metformin", idempotencyKey: "   " }),
+    );
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as {
+      details: { issues: Array<{ path: string; message: string }> };
+    };
+    expect(
+      body.details.issues.some(
+        (i) =>
+          i.path === "idempotencyKey" &&
+          i.message.includes("must not be empty"),
+      ),
+    ).toBe(true);
+    expect(prisma.medicationIntakeEvent.create).not.toHaveBeenCalled();
+  });
+
+  it("accepts the timestamped key the documented bridge example sends", async () => {
+    // Ad-hoc take: no schedules on the medication, so the write goes
+    // straight to a create instead of converging onto a slot row.
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      timezone: "Europe/Berlin",
+    } as never);
+    vi.mocked(prisma.medication.findFirst).mockResolvedValue({
+      id: "med-1",
+      name: "Metformin",
+      startsOn: null,
+      endsOn: null,
+      oneShot: false,
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      schedules: [],
+      scheduleRevisions: [],
+    } as never);
+    vi.mocked(prisma.medicationIntakeEvent.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue(
+      [] as never,
+    );
+    vi.mocked(prisma.medicationIntakeEvent.create).mockResolvedValue({
+      id: "evt-new",
+    } as never);
+
+    const res = await POST(
+      postReq({
+        medicationName: "Metformin",
+        takenAt: "2026-06-10T06:42:00.000Z",
+        idempotencyKey: "intake-202602191230",
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(prisma.medicationIntakeEvent.create).toHaveBeenCalledTimes(1);
+  });
+});

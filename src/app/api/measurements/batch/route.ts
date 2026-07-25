@@ -62,6 +62,12 @@ import {
 } from "@/lib/measurements/cross-source-merge";
 import { reconcileExternalMeasurement } from "@/lib/measurements/reconcile-external-measurement";
 import { isPlausibleEntryInstant } from "@/lib/validations/entry-instant";
+import {
+  classifyExternalId,
+  unstableExternalIdMeta,
+  UNSTABLE_EXTERNAL_ID_REASON,
+  type UnstableExternalIdShape,
+} from "@/lib/validations/external-id";
 import { validateMeasurementRange } from "@/lib/validations/measurement";
 import { deviceTypeEnum } from "@/lib/validations/source-priority";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -139,6 +145,9 @@ const batchEntrySchema = z.object({
   // iOS build omits them and the bucket keeps the avg-only contract.
   valueMin: z.number().finite().optional(),
   valueMax: z.number().finite().optional(),
+  // Stability is enforced per entry in the loop below, not at the field:
+  // a schema-level refusal would fail the whole batch on one bad row.
+  // @external-id-checked-per-entry: src/app/api/measurements/batch/route.ts
   externalId: z.string().min(1).max(120),
   externalSourceVersion: z.string().min(1).max(120).optional(),
   // v1.8.6 W6 — optional per-entry source tag. Defaults to
@@ -268,9 +277,29 @@ async function postBatch(request: NextRequest): Promise<Response> {
   };
   const prepared: Prepared[] = [];
   const results: EntryResult[] = new Array(entries.length);
+  const unstableShapes: UnstableExternalIdShape[] = [];
 
   for (let index = 0; index < entries.length; index++) {
     const entry = entries[index];
+
+    // The `(user_id, type, source, external_id)` dedup key above is only
+    // idempotent while the id is STABLE across client launches. An id
+    // that rotates per process (an object description carrying a memory
+    // address) never matches its own earlier row, so every sync sweep
+    // mints a fresh measurement. Refused per entry, like the range and
+    // timestamp guards below — one malformed row must not stop the other
+    // 499 from landing.
+    const unstable = classifyExternalId(entry.externalId);
+    if (unstable) {
+      unstableShapes.push(unstable);
+      results[index] = {
+        index,
+        status: "skipped",
+        reason: UNSTABLE_EXTERNAL_ID_REASON,
+      };
+      continue;
+    }
+
     const mapped = mapAppleHealthEntry({
       hkIdentifier: entry.hkIdentifier,
       value: entry.value,
@@ -393,6 +422,12 @@ async function postBatch(request: NextRequest): Promise<Response> {
         // working without a server-side default.
         deviceType: entry.deviceType ?? null,
       },
+    });
+  }
+
+  if (unstableShapes.length > 0) {
+    annotate({
+      meta: unstableExternalIdMeta("measurement.batch", unstableShapes),
     });
   }
 

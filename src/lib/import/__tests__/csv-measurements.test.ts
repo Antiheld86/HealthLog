@@ -202,3 +202,59 @@ describe("parseCsvMeasurements — optional columns", () => {
     expect(out.rows[0].row?.externalId).toBeUndefined();
   });
 });
+
+describe("parseCsvMeasurements — external-id stability floor", () => {
+  /**
+   * The CSV route upserts on `(userId, type, source=IMPORT, externalId)`,
+   * so an id that cannot be stable between two exports re-imports as a
+   * fresh row every time instead of converging on the one it already
+   * wrote. This importer has no Zod field to hang a refine on — its
+   * contract is a per-row `reason`, so the refusal lands there and every
+   * other row still parses.
+   */
+  it("skips a row whose externalId is an object description", () => {
+    const out = parse([
+      "WEIGHT,80,kg,2026-05-01T08:00:00Z,,,<HKQuantitySample: 0x12568db80>",
+    ]);
+    expect(out.rows[0]).toMatchObject({
+      status: "skipped",
+      reason: "unstable_external_id",
+    });
+    expect(out.rows[0].row).toBeUndefined();
+  });
+
+  it("skips a row whose externalId is a bare memory address", () => {
+    expect(
+      parse(["WEIGHT,80,kg,2026-05-01T08:00:00Z,,,0x126b25160"]).rows[0],
+    ).toMatchObject({ status: "skipped", reason: "unstable_external_id" });
+  });
+
+  it("skips only the offending row — the rest of the file still imports", () => {
+    const out = parse([
+      "WEIGHT,80,kg,2026-05-01T08:00:00Z,,,scale-row-42",
+      "WEIGHT,81,kg,2026-05-02T08:00:00Z,,,<HKQuantitySample: 0x12568db80>",
+      "WEIGHT,82,kg,2026-05-03T08:00:00Z,,,scale-row-43",
+    ]);
+    expect(out.rows.map((r) => r.status)).toEqual(["ok", "skipped", "ok"]);
+    expect(out.rows[1].reason).toBe("unstable_external_id");
+    expect(out.rows[0].row?.externalId).toBe("scale-row-42");
+    expect(out.rows[2].row?.externalId).toBe("scale-row-43");
+    expect(out.fatal).toBeUndefined();
+  });
+
+  it("accepts the spreadsheet / meter-export id shapes a real file carries", () => {
+    const out = parse([
+      "WEIGHT,80,kg,2026-05-01T08:00:00Z,,,scale-row-42",
+      "WEIGHT,81,kg,2026-05-02T08:00:00Z,,,8AD2A9CB-3F0C-4E4D-9C1E-4B7E2A1D6F30",
+      "WEIGHT,82,kg,2026-05-03T08:00:00Z,,,stats:HKQuantityTypeIdentifierBodyMass:2026-05-03",
+      "WEIGHT,83,kg,2026-05-04T08:00:00Z,,,Morning Weigh-In 4",
+    ]);
+    expect(out.rows.every((r) => r.status === "ok")).toBe(true);
+  });
+
+  it("leaves a row with no externalId alone — an absent id is not a blank one", () => {
+    const out = parse(["WEIGHT,80,kg,2026-05-01T08:00:00Z,,,"]);
+    expect(out.rows[0].status).toBe("ok");
+    expect(out.rows[0].row?.externalId).toBeUndefined();
+  });
+});

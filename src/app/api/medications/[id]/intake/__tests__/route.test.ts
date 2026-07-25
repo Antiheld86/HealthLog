@@ -698,3 +698,95 @@ describe("POST /api/medications/[id]/intake — as-needed (schedule-less) medica
     expect(restoreForIntake).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("POST /api/medications/[id]/intake — idempotency-key stability floor", () => {
+  function postReq(body: unknown): NextRequest {
+    return new NextRequest("http://localhost/api/medications/med-1/intake", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  /**
+   * `MedicationIntakeEvent.idempotency_key` is a `@unique` column
+   * persisted with the dose row forever and matched by plain equality —
+   * an identity, not a windowed replay token. A caller minting a
+   * per-process key never matches its own earlier post, so a retried
+   * submission logs the dose a second time.
+   */
+  it("422s on an object-description key and records no dose", async () => {
+    const res = await POST(
+      postReq({
+        takenAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+        idempotencyKey: "<NSObject: 0x600000c1a2b0>",
+      }),
+      ROUTE_PARAMS,
+    );
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as {
+      details: { issues: Array<{ path: string; message: string }> };
+    };
+    const issue = body.details.issues.find((i) => i.path === "idempotencyKey");
+    expect(issue).toBeDefined();
+    expect(issue!.message).toContain("idempotency key");
+    expect(issue!.message).toContain("stable across app restarts");
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("422s on a bare memory-address key", async () => {
+    const res = await POST(
+      postReq({
+        takenAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+        idempotencyKey: "0x126b25160",
+      }),
+      ROUTE_PARAMS,
+    );
+    expect(res.status).toBe(422);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("accepts a stable caller-issued key and records the dose", async () => {
+    const takenAt = new Date(Date.now() - 60 * 60 * 1000);
+    vi.mocked(prisma.$transaction).mockResolvedValue([
+      {
+        id: "evt-idem-1",
+        userId: "user-1",
+        medicationId: "med-1",
+        scheduledFor: takenAt,
+        takenAt,
+        skipped: false,
+      },
+    ] as never);
+    vi.mocked(prisma.medication.findFirst).mockResolvedValueOnce({
+      id: "med-1",
+      startsOn: null,
+      endsOn: null,
+      oneShot: false,
+      createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+      schedules: [],
+    } as never);
+    vi.mocked(prisma.medicationIntakeEvent.findFirst).mockResolvedValueOnce(
+      null as never,
+    );
+    vi.mocked(prisma.medication.findUnique).mockResolvedValue({
+      id: "med-1",
+      userId: "user-1",
+      oneShot: false,
+      active: true,
+    } as never);
+    vi.mocked(prisma.medication.updateMany).mockResolvedValue({
+      count: 0,
+    } as never);
+
+    const res = await POST(
+      postReq({
+        takenAt: takenAt.toISOString(),
+        idempotencyKey: "ios-outbox-8AD2A9CB-3F0C-4E4D-9C1E-4B7E2A1D6F30",
+      }),
+      ROUTE_PARAMS,
+    );
+    expect(res.status).toBe(201);
+    expect(prisma.$transaction).toHaveBeenCalled();
+  });
+});

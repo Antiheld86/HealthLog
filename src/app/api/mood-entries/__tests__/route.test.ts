@@ -563,3 +563,71 @@ describe("POST /api/mood-entries — externalId idempotent re-import (v1.12.1)",
     expect(txClient.moodEntry.create).not.toHaveBeenCalled();
   });
 });
+
+describe("POST /api/mood-entries — external-id stability floor", () => {
+  const BASE = {
+    mood: "GUT",
+    moodLoggedAt: "2026-06-01T08:00:00.000Z",
+  };
+
+  /**
+   * The create upserts on `(userId, source, externalId)` so a re-post with
+   * the same id updates in place. A per-launch id defeats that and mints a
+   * new entry every sync.
+   */
+  it("422s on an object-description externalId and writes nothing", async () => {
+    const res = await POST(
+      postReq({
+        ...BASE,
+        externalId: "<HKHealthConceptIdentifier: 0x12568db80>",
+      }),
+    );
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as {
+      details: { issues: Array<{ path: string; message: string }> };
+      meta?: { errorCode?: string };
+    };
+    const issue = body.details.issues.find((i) => i.path === "externalId");
+    expect(issue).toBeDefined();
+    expect(issue!.message).toContain("stable across app restarts");
+    expect(issue!.message).toContain("object description");
+    expect(body.meta?.errorCode).toBe("mood.create.invalid");
+    expect(txClient.moodEntry.upsert).not.toHaveBeenCalled();
+    expect(txClient.moodEntry.create).not.toHaveBeenCalled();
+  });
+
+  it("422s on a bare memory-address externalId", async () => {
+    const res = await POST(postReq({ ...BASE, externalId: "0x126b25160" }));
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as {
+      details: { issues: Array<{ path: string; message: string }> };
+    };
+    expect(
+      body.details.issues.some(
+        (i) => i.path === "externalId" && i.message.includes("memory address"),
+      ),
+    ).toBe(true);
+    expect(txClient.moodEntry.upsert).not.toHaveBeenCalled();
+  });
+
+  it("accepts the SwiftData row UUID the iOS client actually sends", async () => {
+    txClient.moodEntry.upsert.mockResolvedValue({
+      id: "mood-ext-1",
+      tags: null,
+      moodLoggedAt: new Date(BASE.moodLoggedAt),
+      mood: "GUT",
+      note: null,
+      source: "MANUAL",
+      date: "2026-06-01",
+    });
+
+    const res = await POST(
+      postReq({
+        ...BASE,
+        externalId: "8AD2A9CB-3F0C-4E4D-9C1E-4B7E2A1D6F30",
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(txClient.moodEntry.upsert).toHaveBeenCalledTimes(1);
+  });
+});

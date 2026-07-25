@@ -268,6 +268,13 @@ const WRITE_TOOL_DEFINITIONS: McpToolDefinition[] = [
         idempotencyKey,
       });
 
+      if (result.status === "unstable_idempotency_key") {
+        return {
+          written: false,
+          error: "unstable_idempotency_key",
+          reason: result.reason,
+        };
+      }
       if (result.status === "unsupported_type") {
         return { written: false, error: "unsupported_type" };
       }
@@ -344,6 +351,13 @@ const WRITE_TOOL_DEFINITIONS: McpToolDefinition[] = [
         idempotencyKey,
       });
 
+      if (result.status === "unstable_idempotency_key") {
+        return {
+          written: false,
+          error: "unstable_idempotency_key",
+          reason: result.reason,
+        };
+      }
       if (result.status === "invalid_score") {
         return { written: false, error: "invalid_score" };
       }
@@ -429,6 +443,13 @@ const WRITE_TOOL_DEFINITIONS: McpToolDefinition[] = [
         idempotencyKey,
       });
 
+      if (result.status === "unstable_idempotency_key") {
+        return {
+          written: false,
+          error: "unstable_idempotency_key",
+          reason: result.reason,
+        };
+      }
       if (result.status === "out_of_range") {
         return { written: false, error: "out_of_range", reason: result.reason };
       }

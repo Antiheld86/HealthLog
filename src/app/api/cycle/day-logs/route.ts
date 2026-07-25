@@ -27,9 +27,13 @@ import {
 import { withIdempotency } from "@/lib/idempotency";
 import { requireCycleEnabled } from "@/lib/cycle/gate";
 import {
-  cycleDayLogInputSchema,
+  cycleDayLogCreateSchema,
   cycleDayLogQuerySchema,
 } from "@/lib/validations/cycle";
+import {
+  unstableExternalIdMeta,
+  unstableExternalIdShape,
+} from "@/lib/validations/external-id";
 import { upsertCycleDayLog } from "@/lib/cycle/day-log-write";
 import { findOwningCycleId } from "@/lib/cycle/cycle-attribution";
 import { toCycleDayLogDTO, dayLogSymptomInclude } from "@/lib/cycle/dto";
@@ -82,11 +86,17 @@ async function postDayLog(request: NextRequest): Promise<Response> {
   });
   if (jsonError) return jsonError;
 
-  const parsed = cycleDayLogInputSchema.safeParse(rawBody);
+  const parsed = cycleDayLogCreateSchema.safeParse(rawBody);
   if (!parsed.success) {
+    const shape = unstableExternalIdShape(rawBody);
     annotate({
       action: { name: "cycle.day-log.validation-failed" },
-      meta: { issue_count: parsed.error.issues.length },
+      meta: {
+        issue_count: parsed.error.issues.length,
+        ...(shape
+          ? unstableExternalIdMeta("cycle.day_log.create", [shape])
+          : {}),
+      },
     });
     return returnAllZodIssues(parsed.error, 422, {
       errorCode: "cycle.day-log.invalid",

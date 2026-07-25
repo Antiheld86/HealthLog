@@ -1163,3 +1163,123 @@ describe("POST /api/import — write failure classification", () => {
     expect(auditLog).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("POST /api/import — external-id stability floor", () => {
+  /**
+   * The importer upserts on `(userId, type, source=IMPORT, externalId)` so
+   * a re-import of the same export converges instead of duplicating. An id
+   * that cannot be stable between two exports defeats that. The importer
+   * has no per-entry status envelope — its vocabulary is a skipped COUNT —
+   * so the offending row lands there and every other row still imports.
+   */
+  beforeEach(() => {
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      allowed: true,
+      remaining: 4,
+      resetAt: new Date(Date.now() + 1000),
+    } as never);
+    vi.mocked(prisma.measurement.createManyAndReturn).mockResolvedValue([
+      { id: "m-1", type: "WEIGHT", measuredAt: new Date() },
+    ] as never);
+    vi.mocked(prisma.measurement.create).mockResolvedValue({
+      id: "m-2",
+      type: "WEIGHT",
+      measuredAt: new Date(),
+    } as never);
+    vi.mocked(prisma.moodEntry.upsert).mockResolvedValue({} as never);
+    vi.mocked(prisma.moodEntry.create).mockResolvedValue({} as never);
+  });
+
+  function importReq(body: unknown) {
+    return new NextRequest("http://localhost/api/import", {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  function measurement(externalId?: string) {
+    return {
+      type: "WEIGHT",
+      value: 80,
+      unit: "kg",
+      measuredAt: "2026-05-01T08:00:00.000Z",
+      ...(externalId ? { externalId } : {}),
+    };
+  }
+
+  it("skips the poisoned row, imports the two good ones, and never writes the bad id", async () => {
+    const response = await POST(
+      importReq({
+        measurements: [
+          measurement("scale-row-42"),
+          measurement("<HKQuantitySample: 0x12568db80>"),
+          measurement("scale-row-43"),
+        ],
+      }),
+    );
+    expect(response.status).toBeLessThan(400);
+    const body = (await response.json()) as {
+      data: { measurements: number; skipped: number };
+    };
+    expect(body.data.measurements).toBe(2);
+    expect(body.data.skipped).toBe(1);
+    const written = vi
+      .mocked(prisma.measurement.createManyAndReturn)
+      .mock.calls.flatMap(
+        (call) => (call[0] as { data: Array<{ externalId?: string }> }).data,
+      );
+    expect(written).toHaveLength(2);
+    expect(written.map((r) => r.externalId)).toEqual([
+      "scale-row-42",
+      "scale-row-43",
+    ]);
+  });
+
+  it("skips a poisoned mood row and still imports the good one", async () => {
+    const response = await POST(
+      importReq({
+        moodEntries: [
+          {
+            date: "2026-05-01",
+            mood: "GUT",
+            score: 4,
+            loggedAt: "2026-05-01T08:00:00.000Z",
+            externalId: "daylio-1041",
+          },
+          {
+            date: "2026-05-02",
+            mood: "OKAY",
+            score: 3,
+            loggedAt: "2026-05-02T08:00:00.000Z",
+            externalId: "0xdeadbeef",
+          },
+        ],
+      }),
+    );
+    expect(response.status).toBeLessThan(400);
+    const body = (await response.json()) as {
+      data: { moodEntries: number; skipped: number };
+    };
+    expect(body.data.moodEntries).toBe(1);
+    expect(body.data.skipped).toBe(1);
+    expect(vi.mocked(prisma.moodEntry.upsert)).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts the exporter row ids a real re-import carries", async () => {
+    const response = await POST(
+      importReq({
+        measurements: [
+          measurement("scale-row-42"),
+          measurement("8AD2A9CB-3F0C-4E4D-9C1E-4B7E2A1D6F30"),
+        ],
+      }),
+    );
+    expect(response.status).toBeLessThan(400);
+    const body = (await response.json()) as {
+      data: { measurements: number; skipped: number };
+    };
+    expect(body.data.measurements).toBe(2);
+    expect(body.data.skipped).toBe(0);
+  });
+});

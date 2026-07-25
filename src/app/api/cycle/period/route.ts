@@ -24,6 +24,10 @@ import {
 import { requireCycleEnabled } from "@/lib/cycle/gate";
 import { withIdempotency } from "@/lib/idempotency";
 import { cyclePeriodSchema } from "@/lib/validations/cycle";
+import {
+  unstableExternalIdMeta,
+  unstableExternalIdShape,
+} from "@/lib/validations/external-id";
 import { upsertCycleDayLog } from "@/lib/cycle/day-log-write";
 import type { FlowLevel } from "@/lib/cycle/types";
 import {
@@ -49,9 +53,13 @@ async function postPeriod(request: NextRequest): Promise<Response> {
 
   const parsed = cyclePeriodSchema.safeParse(rawBody);
   if (!parsed.success) {
+    const shape = unstableExternalIdShape(rawBody);
     annotate({
       action: { name: "cycle.period.validation-failed" },
-      meta: { issue_count: parsed.error.issues.length },
+      meta: {
+        issue_count: parsed.error.issues.length,
+        ...(shape ? unstableExternalIdMeta("cycle.period", [shape]) : {}),
+      },
     });
     return returnAllZodIssues(parsed.error, 422, {
       errorCode: "cycle.period.invalid",
