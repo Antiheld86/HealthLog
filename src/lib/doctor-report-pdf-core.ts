@@ -10,7 +10,13 @@
  * `%PDF-` byte stream in both environments.
  */
 import { jsPDF } from "jspdf";
-import { DOCTOR_REPORT_TYPE_LABEL_KEYS } from "./doctor-report/type-label-keys";
+import type { MeasurementType } from "@/generated/prisma/client";
+import {
+  isStructuredLeafId,
+  REPORT_GROUPS,
+} from "./report-selection/catalogue";
+import { MEASUREMENT_TYPE_LABEL_KEYS } from "./measurements/type-label-keys";
+import { getUnitForType } from "./validations/measurement";
 import {
   makeFormatters,
   DISPLAY_TIMEZONE,
@@ -154,20 +160,13 @@ export interface DoctorReportRenderOptions {
    * Defaults to `true`. Off produces a compact text-only report.
    */
   includeCharts?: boolean;
-  /**
-   * v1.7.0 — optional AI summary text. OUT of the clinical PDF by
-   * default; rendered ONLY when the user explicitly opts in, under a
-   * clearly-labelled "AI summary — not clinically validated" heading.
-   * Null/undefined/empty omits the section entirely.
-   */
-  aiSummary?: string | null;
 }
 
-// Per-vital label keys live in a jsPDF-free module so leaf consumers (the
-// public clinician share view) can import the map without dragging the PDF
-// renderer into their graph. Re-exported here so the PDF core stays the
-// single import surface its existing callers already use.
-export { DOCTOR_REPORT_TYPE_LABEL_KEYS };
+// Per-type label keys live in a lucide-free module so leaf consumers — the
+// public clinician share view, this renderer — can import the map without
+// dragging icon components into their graph. Re-exported here so the PDF core
+// stays the single import surface its existing callers already use.
+export { MEASUREMENT_TYPE_LABEL_KEYS };
 
 export const DOCTOR_REPORT_TYPE_UNIT_KEYS: Record<string, string | null> = {
   WEIGHT: "kg",
@@ -183,50 +182,26 @@ export const DOCTOR_REPORT_TYPE_UNIT_KEYS: Record<string, string | null> = {
 };
 
 /**
- * Vital types rendered in the main vitals table. Body composition
- * (TOTAL_BODY_WATER, BONE_MASS) ships alongside body fat — Withings
- * smart scales report all three together. SpO2 (Withings ScanWatch type
- * 54, HealthKit, n8n / Health Connect) is rendered last in the same
- * table for clinical readability. Glucose ships separately via
- * per-context `glucoseStats`. SLEEP_DURATION rides this table too: the
- * `sleep` section toggle is default-ON and the data layer reconstructs a
- * per-night time-asleep total (in minutes) for exactly this row — the
- * render loop converts it to hours so value and unit (`h`) agree, matching
- * the FHIR sleep Observation. Activity (steps) stays excluded from a
- * clinical-focused report.
+ * The measurement table is driven by the selection, not by a whitelist.
  *
- * v1.10.0 — computed scores (WX-C). The server-derived `*_SCORE` types
- * (RECOVERY_SCORE / STRESS_SCORE / STRAIN_SCORE) are NOT clinical vitals:
- * they are 0–100 composites recomputed nightly from the underlying signals
- * and carry a "descriptive, not a clinical assessment" disclaimer. They stay
- * out of this table by design (paired with `PDF_VITAL_EXCLUSIONS` in
- * `measurement-type-enum-coverage.test.ts`).
+ * It used to be a fixed nine types, which meant a user could select resting
+ * heart rate, see it in the FHIR bundle and in the share view, and not find it
+ * in the PDF — a per-format divergence on a document whose whole point is that
+ * every format describes the same record. The table now prints every selected
+ * measurement leaf that has data, sub-headed by the same twelve groups the
+ * selection panel shows, so the panel reads as a table of contents for the
+ * artefact.
  *
- * v1.17.1 — Oura coverage completion. `SLEEP_SCORE` (a nightly derived
- * composite) and `BODY_TEMPERATURE_DEVIATION` (a signed baseline offset, not an
- * absolute reading) are excluded for the same reason as the other derived /
- * lifestyle signals — they are descriptive, not measured clinical vitals.
- *
- * v1.19.0 — Oura resilience. `RESILIENCE` is an ordinal-encoded categorical
- * band (limited=1 … exceptional=5), a derived recovery composite — descriptive,
- * not a measured clinical vital — so it is excluded too.
- *
- * v1.27.9 — WHO-5 / SCI screening totals. `WHO5_SCORE` + `SCI_SCORE` follow
- * the PHQ-9 / GAD-7 precedent: opt-in, derived from an in-app questionnaire,
- * excluded from the vitals table (they ride the module-gated mental-health
- * export section instead, see `doctor-report-data.ts`).
+ * The aggregator has already applied the selection, so `data.stats` carries
+ * exactly the admitted leaves and nothing here can over-serve.
  */
-export const DOCTOR_REPORT_VITAL_TYPES = [
-  "WEIGHT",
-  "BLOOD_PRESSURE_SYS",
-  "BLOOD_PRESSURE_DIA",
-  "PULSE",
-  "BODY_FAT",
-  "TOTAL_BODY_WATER",
-  "BONE_MASS",
-  "OXYGEN_SATURATION",
-  "SLEEP_DURATION",
-] as const;
+export const DOCTOR_REPORT_VITAL_GROUPS = REPORT_GROUPS.map((group) => ({
+  id: group.id,
+  labelKey: group.labelKey,
+  types: group.leaves.filter(
+    (leaf): leaf is MeasurementType => !isStructuredLeafId(leaf),
+  ),
+})).filter((group) => group.types.length > 0);
 
 /**
  * Render the doctor report into a `jsPDF` instance.
@@ -247,7 +222,6 @@ export function buildDoctorReportPdfDocument(
     timeFormat = "AUTO",
     insuranceNumber = null,
     includeCharts = true,
-    aiSummary = null,
   } = options;
   const formatters = makeFormatters(locale, userTz, timeFormat);
   const num = (value: number, decimals = 1) =>
@@ -261,7 +235,12 @@ export function buildDoctorReportPdfDocument(
     if (staticUnit === null && type === "ACTIVITY_STEPS") {
       return t("doctorReport.unitSteps");
     }
-    return staticUnit ?? "";
+    if (staticUnit !== undefined && staticUnit !== null) return staticUnit;
+    // Every other type falls back to the canonical unit the measurement
+    // validation layer already records. A type with no recorded unit prints
+    // none — an absent unit is absent, not a guessed symbol.
+    const canonical = getUnitForType(type);
+    return canonical === "unknown" ? "" : canonical;
   };
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
@@ -298,14 +277,13 @@ export function buildDoctorReportPdfDocument(
     now,
     insuranceNumber,
     includeCharts,
-    aiSummary,
     footerTz,
     margin,
     pageWidth,
     pageHeight,
     contentMaxY,
     tableBottomMargin,
-    vitalTypes: DOCTOR_REPORT_VITAL_TYPES,
+    vitalGroups: DOCTOR_REPORT_VITAL_GROUPS,
     unitFor,
     ensureSpace,
   };

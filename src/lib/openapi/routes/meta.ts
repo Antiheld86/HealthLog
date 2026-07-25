@@ -101,14 +101,25 @@ const capabilitiesResponse = z
           .describe(
             "Maximum lifetime of a share link, in days. No never-expiring share.",
           ),
-        resourceTypes: z
+        reportDownload: z
           .array(z.string())
-          .describe("FHIR resource types a share link may be scoped to serve."),
-        sections: z
+          .describe(
+            "Machine formats a share link serves as a download under its token, behind the same unlock as the page.",
+          ),
+        selectionVersion: z
+          .number()
+          .int()
+          .describe("Version of the leaf-selection grammar this build speaks."),
+        groups: z
           .array(z.string())
-          .describe("Scopeable report sections a share link may toggle."),
+          .describe("Selection group ids, in presentation order."),
+        leaves: z
+          .array(z.string())
+          .describe(
+            "Every leaf id a report selection may carry. Membership is inclusion; absence is exclusion.",
+          ),
       })
-      .describe("Clinician share-link surface descriptor (v1.11)."),
+      .describe("Clinician share-link surface descriptor."),
   })
   .meta({
     id: "CapabilitiesResponse",

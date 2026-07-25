@@ -28,8 +28,16 @@ import {
 } from "@/lib/api-response";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/db";
-import { createShareLinkSchema } from "@/lib/validations/clinician-share-link";
-import { EMPTY_DOCTOR_REPORT_PREFS } from "@/lib/validations/doctor-report-prefs";
+import {
+  createShareLinkSchema,
+  SHARE_LINK_FORBIDDEN_LEAVES,
+} from "@/lib/validations/clinician-share-link";
+import {
+  EMPTY_REPORT_SELECTION,
+  reportSelectionSchema,
+  selectionFromRequest,
+  selectionToBlob,
+} from "@/lib/report-selection/selection";
 import {
   generatePassphrase,
   hashPassphrase,
@@ -66,6 +74,10 @@ const shareLinkSummarySelect = {
   rangeStart: true,
   rangeEnd: true,
   documentOnly: true,
+  // Read to answer one owner-facing question: does this link's frozen scope
+  // predate the selection model? Never returned — only the boolean derived
+  // from it is.
+  sectionsJson: true,
   passphraseHash: true,
   expiresAt: true,
   createdAt: true,
@@ -75,6 +87,22 @@ const shareLinkSummarySelect = {
   _count: { select: { documents: true } },
 } as const;
 
+/**
+ * RETIRED, kept on the response only.
+ *
+ * These two fields described a scoped FHIR face for a share link that was
+ * never built. The request schema refuses them — sending either is a 422 —
+ * their columns are dropped, and nothing reads or honours them. They stay in
+ * the create and list responses, serving the constant `false` and `[]`,
+ * because the native client was given this response shape and a missing
+ * non-optional key fails a whole Swift decode. They come out once #70 in the
+ * native repository confirms the client does not decode them.
+ */
+const RETIRED_FHIR_SCOPE_FIELDS = {
+  allowFhirApi: false,
+  resourceTypes: [] as string[],
+} as const;
+
 /** Project a stored row to the safe owner-facing shape (never the token). */
 function toSummary(row: {
   id: string;
@@ -82,6 +110,7 @@ function toSummary(row: {
   rangeStart: Date;
   rangeEnd: Date | null;
   documentOnly: boolean;
+  sectionsJson: unknown;
   passphraseHash: string | null;
   expiresAt: Date;
   createdAt: Date;
@@ -98,6 +127,14 @@ function toSummary(row: {
     // v1.28.16 — the frozen documents-only flag (owner-facing; the serve path
     // gates on the column, not on "are all sections off?").
     documentOnly: row.documentOnly,
+    // A record link whose frozen scope predates the selection model. The
+    // v1.32.37 migration revoked every one of them, because their scope was
+    // "everything except mood and cycle" — a scope nobody chose. The sharing
+    // list surfaces this so the owner sees why the link closed and can re-mint
+    // with the same label, window and expiry, stopped at the selection step.
+    needsReselection:
+      !row.documentOnly &&
+      !reportSelectionSchema.safeParse(row.sectionsJson).success,
     // v1.18.7 — surface only WHETHER a passphrase guards the link, never the
     // hash itself. Legacy (null-hash) links read `false` and stay ungated.
     protected: row.passphraseHash !== null,
@@ -134,16 +171,41 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
   const input = parsed.data;
 
-  // v1.28.13 — a documents-only share carries NO report scope. Force the scope
-  // column to empty here (not just at the client) so a document link can never
-  // serve a single health metric, whatever the body tried to smuggle: an
-  // explicit all-OFF prefs blob, distinct from the `{}` that means "full record
-  // defaults". "Share this document" means the document, not the whole record.
+  // v1.28.13 — a documents-only share carries NO report scope. Force it empty
+  // here (not just at the client) so a document link can never serve a single
+  // health metric, whatever the body tried to smuggle. "Share this document"
+  // means the document, not the whole record.
   const documentOnly = input.documentOnly === true;
-  const sectionsJson = documentOnly
-    ? EMPTY_DOCTOR_REPORT_PREFS
-    : (input.sections ?? {});
-  annotate({ meta: { documentOnly } });
+
+  let selection = EMPTY_REPORT_SELECTION;
+  if (!documentOnly && input.selection) {
+    const minted = selectionFromRequest(input.selection);
+    if (!minted.ok) {
+      return apiError(
+        `Unknown selection leaf: ${minted.error.unknownLeaves.join(", ")}`,
+        422,
+        { errorCode: "share-link.selection.unknown_leaf" },
+      );
+    }
+    selection = minted.selection;
+  }
+
+  // The insurance leaf is refused on a share link. The share view has never
+  // decrypted the insurance number, and refusing it here makes that structural
+  // rather than incidental: there is no path by which a link could carry it.
+  const forbidden = SHARE_LINK_FORBIDDEN_LEAVES.filter((leaf) =>
+    selection.has(leaf),
+  );
+  if (forbidden.length > 0) {
+    return apiError(`A share link cannot carry: ${forbidden.join(", ")}`, 422, {
+      errorCode: "share-link.selection.forbidden_leaf",
+    });
+  }
+
+  const sectionsJson = selectionToBlob(selection);
+  annotate({
+    meta: { documentOnly, leafCount: selection.leaves.length },
+  });
 
   // Mint the 192-bit raw token, store only its HMAC hash.
   const rawToken = `hls_${randomBytes(24).toString("hex")}`;
@@ -217,6 +279,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   return apiSuccess(
     {
       ...toSummary(created),
+      ...RETIRED_FHIR_SCOPE_FIELDS,
       token: rawToken,
       passphrase: rawPassphrase,
       shareUrl,
@@ -236,5 +299,10 @@ export const GET = apiHandler(async () => {
     select: shareLinkSummarySelect,
   });
 
-  return apiSuccess({ shareLinks: rows.map(toSummary) });
+  return apiSuccess({
+    shareLinks: rows.map((row) => ({
+      ...toSummary(row),
+      ...RETIRED_FHIR_SCOPE_FIELDS,
+    })),
+  });
 });

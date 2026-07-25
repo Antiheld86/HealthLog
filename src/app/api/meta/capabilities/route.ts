@@ -47,7 +47,10 @@ import {
   FHIR_SEARCH_PARAMS,
 } from "@/lib/fhir/rest";
 import { SHARE_LINK_MAX_DAYS } from "@/lib/validations/clinician-share-link";
-import { exportSectionsSchema } from "@/lib/validations/health-record-export";
+import {
+  ALL_LEAF_IDS,
+  REPORT_GROUP_ORDER,
+} from "@/lib/report-selection/catalogue";
 
 export const dynamic = "force-dynamic";
 
@@ -113,17 +116,22 @@ export const GET = apiHandler(async () => {
       operations: [FHIR_EVERYTHING_OPERATION],
       searchParams: FHIR_SEARCH_PARAMS,
     },
-    // Clinician share-link surface (v1.11): a scoped, time-boxed, revocable
-    // read-only link to the owner's record. Descriptor sourced from the
-    // canonical share validation + export-section constants. The share serves
-    // the rendered record view only; no `/api/fhir/*` route honours a share
-    // token yet (they require an authenticated `fhir:read` Bearer), so the
-    // share→FHIR face is not advertised as live.
+    // Clinician share-link surface: a scoped, time-boxed, revocable read-only
+    // link to the owner's record, sourced from the canonical share validation
+    // and the selection catalogue.
+    //
+    // `reportDownload` replaces the old `fhirApi: false`, which described a
+    // face that was never built. The record IS reachable in machine form now:
+    // as a download under the token, behind the same unlock the page uses,
+    // serving exactly the link's frozen selection. No bearer face, no new
+    // scope — `/api/fhir/*` still refuses a share token.
     share: {
       supported: true,
       maxDays: SHARE_LINK_MAX_DAYS,
-      fhirApi: false,
-      sections: Object.keys(exportSectionsSchema.shape),
+      reportDownload: ["fhir", "pdf"],
+      selectionVersion: 2,
+      groups: REPORT_GROUP_ORDER,
+      leaves: ALL_LEAF_IDS,
     },
   });
 });

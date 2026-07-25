@@ -22,10 +22,10 @@ import { isModuleEnabled } from "@/lib/modules/gate";
 import { servingClassFor } from "@/lib/documents/upload-policy";
 import type { DocumentServingClass } from "@/lib/documents/upload-policy";
 import {
-  hasAnyReportSection,
-  type DoctorReportPrefs,
-} from "@/lib/validations/doctor-report-prefs";
-import { resolveStoredReportSections } from "@/lib/validations/health-record-export";
+  isEmptySelection,
+  selectionFromStoredBlob,
+  type ReportSelection,
+} from "@/lib/report-selection/selection";
 import type { ShareContext } from "@/lib/clinician-share/resolve-share-token";
 
 /**
@@ -59,8 +59,8 @@ export interface ShareViewData {
    * the recipient sees only the attached documents.
    */
   report: DoctorReportData | null;
-  /** The resolved section toggles (mood opt-in, defaults otherwise). */
-  sections: DoctorReportPrefs;
+  /** The link's frozen selection, resolved. Empty when it carries no scope. */
+  selection: ReportSelection;
   /** v1.28 — the hand-picked documents on this link (metadata only). */
   documents: ShareViewDocument[];
   /**
@@ -94,12 +94,11 @@ function frozenRange(context: ShareContext): DoctorReportRange {
 export async function loadShareViewData(
   context: ShareContext,
 ): Promise<ShareViewData> {
-  // The stored `sectionsJson` may be the GROUPED export shape (what the create
-  // schema accepts) or the FLAT doctor-report shape (documents-only / legacy).
-  // `resolveStoredReportSections` folds either down correctly — reading a
-  // grouped blob through the flat parser would silently drop every grouped
-  // toggle and default the section back ON, re-widening a scope the owner froze.
-  const sections = resolveStoredReportSections(context.sectionsJson);
+  // The link's frozen scope. A blob this build cannot read — a legacy shape, a
+  // hand-edited row — resolves to the EMPTY selection, so the link serves
+  // nothing rather than defaulting open. Every such link was revoked by the
+  // v1.32.37 migration; this is the second lock behind that.
+  const selection = selectionFromStoredBlob(context.sectionsJson);
   const range = frozenRange(context);
 
   // A documents-only share never aggregates — no health metric is read from the
@@ -128,18 +127,16 @@ export async function loadShareViewData(
     "doctorReport",
   );
   const documentOnly =
-    context.documentOnly ||
-    !hasAnyReportSection(sections) ||
-    !reportModuleEnabled;
+    context.documentOnly || isEmptySelection(selection) || !reportModuleEnabled;
 
   const [report, documents] = await Promise.all([
     documentOnly
       ? Promise.resolve(null)
-      : collectDoctorReportData(context.ownerUserId, range, { sections }),
+      : collectDoctorReportData(context.ownerUserId, range, selection),
     loadShareDocuments(context),
   ]);
 
-  return { report, sections, documents, documentOnly };
+  return { report, selection, documents, documentOnly };
 }
 
 /**

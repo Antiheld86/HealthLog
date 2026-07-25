@@ -23,6 +23,7 @@ import { z } from "zod/v4";
 import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
 import { collectDoctorReportData } from "@/lib/doctor-report-data";
+import { resolveSavedSelection } from "@/lib/report-selection/saved-profile";
 import { isModuleEnabled } from "@/lib/modules/gate";
 import { summariseForVisit } from "./doctor-visit-summary";
 import { coachScopeWindowSchema } from "@/lib/ai/coach/types";
@@ -305,11 +306,17 @@ export const MCP_PROMPTS: McpPromptDefinition[] = [
       const end = new Date();
       const start = new Date(end.getTime() - days * MS_PER_DAY);
 
-      const data = await collectDoctorReportData(ctx.userId, {
-        start,
-        end,
-        days,
-      });
+      // The assistant cannot ask a human, so this replays the owner's SAVED
+      // selection — the same object reviewed in Settings. An account that never
+      // saved one resolves to the empty selection and this surface says so,
+      // rather than inventing a scope. It used to assemble the full record at
+      // server defaults, on the one wire that egresses to a third party.
+      const selection = await resolveSavedSelection(ctx.userId);
+      const data = await collectDoctorReportData(
+        ctx.userId,
+        { start, end, days },
+        selection,
+      );
       const summary = summariseForVisit(data);
 
       annotate({

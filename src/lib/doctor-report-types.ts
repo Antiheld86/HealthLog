@@ -13,7 +13,6 @@
 import type { GlucoseUnit } from "@/lib/glucose";
 import type { GlucoseClinicalMetrics } from "@/lib/analytics/glucose-metrics";
 import type { MeasurementSource } from "@/generated/prisma/client";
-import type { DoctorReportPrefs } from "@/lib/validations/doctor-report-prefs";
 import type { ModuleKey } from "@/lib/modules/gate";
 import type {
   ComplianceSchedule,
@@ -345,25 +344,16 @@ export interface CollectDoctorReportOptions {
   /** Free-text practice/clinic name to print on the cover. Optional. */
   practiceName?: string | null;
   /**
-   * v1.4.25 W6c — per-section visibility toggles. When omitted the
-   * documented defaults apply (every section ON except mood). When
-   * `sections.mood = false` the aggregator does NOT query
-   * `MoodEntry` at all — the mood data never leaves the DB row
-   * (privacy-by-default). Other sections are stripped from the
-   * returned payload so downstream renderers (PDF + JSON consumer)
-   * don't accidentally print a section the user opted out of.
-   */
-  sections?: Partial<DoctorReportPrefs>;
-  /**
    * v1.18.0 — resolved per-user module enable/disable map. When omitted the
    * aggregator resolves it itself via `resolveModuleMap(userId)`. A disabled
-   * module forces its report section / FHIR resources out of the payload,
-   * regardless of the user's per-report `sections` toggles: a user who turned
-   * off the Sleep module exports no sleep series, mood Observations, glucose
-   * panel, recovery/strain scores, cycle summary, or lab results for the
-   * modules they no longer keep. Core clinical sections (weight / BP / pulse /
-   * medications) carry no module key and are always included. Injectable for
-   * tests so the module ↔ section mapping can be asserted without a DB.
+   * module forces its leaves out of the payload regardless of the selection: a
+   * user who turned off the Sleep module exports no sleep series, whatever the
+   * report asked for. Injectable for tests so the module ↔ leaf mapping can be
+   * asserted without a DB.
+   *
+   * The report SCOPE is not an option — it is the required third parameter of
+   * `collectDoctorReportData`, so a new egress path cannot be written without
+   * naming where its selection came from.
    */
   moduleMap?: Record<ModuleKey, boolean>;
 }

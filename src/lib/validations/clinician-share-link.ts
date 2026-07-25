@@ -8,18 +8,28 @@
  * widen/update path. `expiresAt` is REQUIRED and capped at
  * `SHARE_LINK_MAX_DAYS` so no link ever lives forever.
  *
- * The `resourceTypes` / `allowFhirApi` keys are gone. A share link
- * serves a rendered page and the documents frozen onto it; it has never served
- * FHIR, and accepting a scope for a face that does not exist only made the
- * promise look kept. An unknown key is rejected by `.strict()`, so a caller
- * still sending them gets a 422 that names them rather than a silent no-op.
+ * The `resourceTypes` / `allowFhirApi` request keys are gone. They configured
+ * a scoped FHIR face for a share link that was never built, and accepting a
+ * scope for a face that does not exist only made the promise look kept. An
+ * unknown key is rejected by `.strict()`, so a caller still sending them gets
+ * a 422 that names them rather than a silent no-op. The link's record IS
+ * reachable in machine form now — as a download at `/c/{token}/fhir`, behind
+ * the same unlock the page uses, serving exactly the frozen selection.
  *
  * Strict: `.strict()` rejects unknown keys; there is intentionally no `userId`
  * field (the owner is always narrowed from `requireAuth()`).
  */
 import { z } from "zod/v4";
 
-import { exportSectionsSchema } from "@/lib/validations/health-record-export";
+import { reportSelectionSchema } from "@/lib/report-selection/selection";
+
+/**
+ * The one leaf a share link may never carry. The share view has never
+ * decrypted the insurance number, so refusing it here makes that structural
+ * instead of incidental: the create route 422s naming the leaf, and no path
+ * exists by which a link could later be widened to include it.
+ */
+export const SHARE_LINK_FORBIDDEN_LEAVES = ["INSURANCE"] as const;
 
 /** Maximum lifetime of a share link, in days. No never-expiring share. */
 export const SHARE_LINK_MAX_DAYS = 90;
@@ -48,7 +58,7 @@ export const createShareLinkSchema = z
     label: z.string().trim().min(1).max(120),
     rangeStart: z.iso.datetime({ offset: true }),
     rangeEnd: z.iso.datetime({ offset: true }).nullable().optional(),
-    sections: exportSectionsSchema.optional(),
+    selection: reportSelectionSchema.optional(),
     documentIds: z
       .array(z.string().trim().min(1).max(64))
       .max(SHARE_LINK_MAX_DOCUMENTS)
@@ -58,7 +68,7 @@ export const createShareLinkSchema = z
      * report scope and mints a link that serves ONLY the attached documents —
      * never a health metric. "Share this document" means the document, not the
      * whole record. A documents-only share MUST carry at least one
-     * `documentId` (enforced below). Any `sections` sent alongside are ignored
+     * `documentId` (enforced below). Any `selection` sent alongside is ignored
      * server-side so a document link can never widen into a record.
      */
     documentOnly: z.boolean().optional(),
