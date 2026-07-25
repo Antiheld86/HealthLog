@@ -53,13 +53,21 @@
   },
   "apiErrors": {
     "measurement": {
-      "create": { "invalid": "Check the measurement details and try again." },
+      "create": {
+        "invalid": "Check the measurement details and try again."
+      },
       "duplicate_timestamp": "A measurement already exists for this time."
     },
     "mood": {
-      "list": { "invalid": "The mood list filters are invalid." },
-      "create": { "invalid": "Check the mood entry and try again." },
-      "update": { "invalid": "Check the mood entry and try again." },
+      "list": {
+        "invalid": "The mood list filters are invalid."
+      },
+      "create": {
+        "invalid": "Check the mood entry and try again."
+      },
+      "update": {
+        "invalid": "Check the mood entry and try again."
+      },
       "duplicate_timestamp": "A mood entry already exists for this time.",
       "not_found": "This mood entry is no longer available.",
       "ratedFactor": {
@@ -67,12 +75,18 @@
       }
     },
     "labs": {
-      "create": { "invalid": "Check the lab result and try again." },
-      "result": { "notFound": "This lab result is no longer available." },
+      "create": {
+        "invalid": "Check the lab result and try again."
+      },
+      "result": {
+        "notFound": "This lab result is no longer available."
+      },
       "biomarker": {
         "notFound": "This biomarker is no longer available.",
         "duplicate": "A biomarker with this name already exists.",
-        "create": { "invalid": "Check the biomarker details and try again." },
+        "create": {
+          "invalid": "Check the biomarker details and try again."
+        },
         "update": {
           "invalid": "Check the biomarker details and try again.",
           "referenceRangeInvalid": "The lower reference value must not exceed the upper value."
@@ -90,9 +104,15 @@
       "disclaimer": {
         "invalid": "Please confirm the medical disclaimer again."
       },
-      "tour": { "invalid": "The tour progress could not be saved." },
-      "complete": { "invalid": "Check the profile details and try again." },
-      "user": { "notFound": "Your account could not be found." },
+      "tour": {
+        "invalid": "The tour progress could not be saved."
+      },
+      "complete": {
+        "invalid": "Check the profile details and try again."
+      },
+      "user": {
+        "notFound": "Your account could not be found."
+      },
       "step": {
         "rateLimited": "Too many attempts. Please wait and try again.",
         "invalid": "This onboarding step could not be saved.",
@@ -150,16 +170,6 @@
     "footerDisclaimer1": "This report was generated automatically from self-tracked data and is intended to support",
     "footerDisclaimer2": "the doctor–patient conversation. It does not replace a medical diagnosis. Correlations do not imply causation.",
     "footerSource": "Source: HealthLog | Timezone: {timezone} | Created: {timestamp}",
-    "typeWeight": "Body weight",
-    "typeBpSys": "Systolic blood pressure",
-    "typeBpDia": "Diastolic blood pressure",
-    "typePulse": "Resting pulse",
-    "typeBodyFat": "Body fat",
-    "typeSleep": "Sleep duration",
-    "typeSteps": "Activity (steps)",
-    "typeTotalBodyWater": "Total body water",
-    "typeBoneMass": "Bone mass",
-    "typeOxygenSaturation": "Oxygen saturation",
     "unitSteps": "steps",
     "bmiUnderweight": "Underweight",
     "bmiNormal": "Normal weight",
@@ -195,8 +205,6 @@
     "summaryTrend": "{label}: latest {latest} {arrow}",
     "summaryAdherence": "Medication adherence: {rate}% (weighted mean).",
     "chartsTitle": "Trend charts",
-    "aiSummaryTitle": "AI summary — not clinically validated",
-    "aiSummaryDisclaimer": "This section was generated automatically by an AI model and is not clinically validated. It does not replace a medical assessment.",
     "packageReadme": "HealthLog health record\n\nThis package contains:\n- report.pdf: the health report for your doctor.\n- bundle.json: the same data as an HL7 FHIR R4 document Bundle, ePA-compatible.\n\nGenerated with HealthLog.",
     "wellnessTitle": "Wellness summary",
     "wellnessDisclaimer": "These are descriptive wellness scores computed from your tracked signals (0–100). They are not clinical assessments or diagnoses.",
@@ -4437,10 +4445,6 @@
             "passphraseHelp": "Derives the archive key with Argon2id and seals it with AES-256-GCM. Save the file with a .hlx extension.",
             "noRecoveryWarning": "There is no recovery — if you lose this passphrase, the archive cannot be opened. Keep it somewhere safe.",
             "stepUpNeeded": "Confirm your second factor, then try again."
-          },
-          "cycle": {
-            "title": "Cycle",
-            "description": "Cycle and reproductive-health data as a FHIR document — last period, average cycle and period length, current phase."
           }
         },
         "import": {
@@ -5303,35 +5307,18 @@
       "practiceName": "Practice (optional)",
       "practiceNamePlaceholder": "e.g. Dr. Smith",
       "includedData": "Included data",
-      "groupVitals": "Vital signs",
-      "groupCardio": "Heart & fitness",
-      "groupActivity": "Activity & sleep",
-      "weight": "Weight",
-      "bp": "Blood pressure",
-      "pulse": "Pulse",
-      "oxygenSaturation": "Oxygen saturation",
-      "bodyFat": "Body fat",
-      "bodyComposition": "Body composition",
-      "restingHeartRate": "Resting heart rate",
-      "hrv": "Heart rate variability",
-      "vo2max": "VO₂max",
-      "steps": "Steps",
-      "distance": "Distance",
-      "sleep": "Sleep",
-      "glucose": "Blood glucose",
-      "medications": "Medications & adherence",
-      "mood": "Mood (off by default — sensitive data)",
-      "mentalHealthScreeners": "Mental-health screening (PHQ-9, GAD-7, WHO-5, SCI — off by default)",
-      "bmi": "BMI",
       "includeCharts": "Embed trend charts (PDF only)",
-      "includeAiSummary": "Append AI summary (not clinically validated)",
       "fhirNote": "The structured output follows the FHIR R4 standard (ePA-compatible).",
       "generate": "Generate",
-      "error": "Export failed ({code}).",
-      "labs": "Lab results",
-      "allergies": "Allergies & intolerances",
-      "familyHistory": "Family history",
-      "documentsLink": "Documents for this period"
+      "documentsLink": "Documents for this period",
+      "range30": "Last 30 days",
+      "rangeCustom": "Custom period",
+      "rangeCustomStart": "From",
+      "rangeCustomEnd": "To",
+      "errorGeneric": "The export could not be generated. Please try again.",
+      "errorRateLimit": "You have reached the export limit for this hour.",
+      "errorModuleDisabled": "The health record export is switched off for this account.",
+      "errorEmptySelection": "Pick at least one entry to include."
     },
     "globalExcludedInjectionSitesLabel": "Globally excluded injection sites",
     "globalExcludedInjectionSitesHint": "Sites listed here are never offered for any medication and rejected when logging a dose, even if a medication prefers them.",
@@ -5382,7 +5369,11 @@
       "pickerEmpty": "No documents found.",
       "pickerDone": "Done",
       "pickerSelectedCount": "{count} of {max} selected",
-      "pickerMaxReached": "You've reached the maximum of {max} documents."
+      "pickerMaxReached": "You've reached the maximum of {max} documents.",
+      "scopeTitle": "What this link contains",
+      "scopeInsuranceExcluded": "Insurance details are never shared through a link.",
+      "statusNeedsReselect": "Pick contents again",
+      "reselectReason": "This link served a scope that was never chosen, so it was closed. Create a new one and pick what it should contain."
     },
     "genderOther": "Other",
     "cycleTracking": {
@@ -6918,7 +6909,6 @@
     "period": "Reporting period: {start} – {end}",
     "expires": "This link expires on {date}.",
     "provenance": "This is a read-only summary shared by the person it belongs to, exported from their self-tracked HealthLog data. Values are self-recorded and may include device-synced readings; treat them as patient-reported, not as a clinical examination.",
-    "vitals": "Vital signs",
     "labs": "Lab values",
     "medications": "Medications & adherence",
     "bmi": "Body mass index (BMI)",
@@ -6958,7 +6948,10 @@
       "download": "Download",
       "attachmentHint": "This file downloads to your device (no in-page preview).",
       "exifNote": "Camera metadata (EXIF/GPS) has been removed from shared JPEG, PNG and WebP images."
-    }
+    },
+    "downloadPdf": "Download as PDF",
+    "downloadFhir": "Download as FHIR",
+    "bmiSection": "Body mass index"
   },
   "cycle": {
     "symptomCategory": {
@@ -8865,5 +8858,41 @@
         }
       }
     }
+  },
+  "reportSelection": {
+    "groupIdentity": "Personal details",
+    "groupVitals": "Vital signs",
+    "groupCardio": "Heart & circulation",
+    "groupBody": "Body measurements",
+    "groupSleepRecovery": "Sleep & recovery",
+    "groupActivity": "Activity",
+    "groupMobility": "Mobility & gait",
+    "groupEnvironment": "Environment",
+    "groupGlucose": "Blood glucose",
+    "groupLabs": "Lab results",
+    "groupMedications": "Medications",
+    "groupHistory": "Conditions & allergies",
+    "groupSensitive": "Sensitive data",
+    "leafPatientIdentity": "Name, date of birth, gender, height",
+    "leafInsurance": "Insurer and insurance number",
+    "leafGlucosePanel": "Glucose panel (time in range, GMI, variability)",
+    "leafLabResults": "Lab results",
+    "leafMedicationList": "Medication list",
+    "leafMedicationAdministrations": "Every logged dose",
+    "leafMedicationCompliance": "Adherence rate",
+    "leafGlp1Therapy": "GLP-1 therapy (dose history, side effects)",
+    "leafAllergies": "Allergies and intolerances",
+    "leafIllnessEpisodes": "Illness episodes",
+    "leafFamilyHistory": "Family history",
+    "leafMood": "Mood",
+    "leafCycle": "Menstrual cycle",
+    "templateStandard": "Standard doctor's report",
+    "templateApplied": "{template} is preselected. Check it before you generate.",
+    "groupCount": "{on}/{total}",
+    "groupDisclosure": "Show the entries in {group}",
+    "sensitiveHint": "Nothing here is ever preselected. Pick each entry yourself.",
+    "scopeNone": "Nothing selected — the document would be empty.",
+    "scopeCount": "{count} entries from {groups} areas",
+    "scopeSensitive": "incl. {names}"
   }
 }

@@ -53,13 +53,21 @@
   },
   "apiErrors": {
     "measurement": {
-      "create": { "invalid": "Sprawdź dane pomiaru i spróbuj ponownie." },
+      "create": {
+        "invalid": "Sprawdź dane pomiaru i spróbuj ponownie."
+      },
       "duplicate_timestamp": "Pomiar dla tego czasu już istnieje."
     },
     "mood": {
-      "list": { "invalid": "Filtry listy nastroju są nieprawidłowe." },
-      "create": { "invalid": "Sprawdź wpis nastroju i spróbuj ponownie." },
-      "update": { "invalid": "Sprawdź wpis nastroju i spróbuj ponownie." },
+      "list": {
+        "invalid": "Filtry listy nastroju są nieprawidłowe."
+      },
+      "create": {
+        "invalid": "Sprawdź wpis nastroju i spróbuj ponownie."
+      },
+      "update": {
+        "invalid": "Sprawdź wpis nastroju i spróbuj ponownie."
+      },
       "duplicate_timestamp": "Wpis nastroju dla tego czasu już istnieje.",
       "not_found": "Ten wpis nastroju nie jest już dostępny.",
       "ratedFactor": {
@@ -67,12 +75,18 @@
       }
     },
     "labs": {
-      "create": { "invalid": "Sprawdź wynik badania i spróbuj ponownie." },
-      "result": { "notFound": "Ten wynik badania nie jest już dostępny." },
+      "create": {
+        "invalid": "Sprawdź wynik badania i spróbuj ponownie."
+      },
+      "result": {
+        "notFound": "Ten wynik badania nie jest już dostępny."
+      },
       "biomarker": {
         "notFound": "Ten biomarker nie jest już dostępny.",
         "duplicate": "Biomarker o tej nazwie już istnieje.",
-        "create": { "invalid": "Sprawdź dane biomarkera i spróbuj ponownie." },
+        "create": {
+          "invalid": "Sprawdź dane biomarkera i spróbuj ponownie."
+        },
         "update": {
           "invalid": "Sprawdź dane biomarkera i spróbuj ponownie.",
           "referenceRangeInvalid": "Dolna wartość referencyjna nie może przekraczać górnej."
@@ -87,10 +101,18 @@
       }
     },
     "onboarding": {
-      "disclaimer": { "invalid": "Potwierdź ponownie informację medyczną." },
-      "tour": { "invalid": "Nie udało się zapisać postępu prezentacji." },
-      "complete": { "invalid": "Sprawdź dane profilu i spróbuj ponownie." },
-      "user": { "notFound": "Nie znaleziono Twojego konta." },
+      "disclaimer": {
+        "invalid": "Potwierdź ponownie informację medyczną."
+      },
+      "tour": {
+        "invalid": "Nie udało się zapisać postępu prezentacji."
+      },
+      "complete": {
+        "invalid": "Sprawdź dane profilu i spróbuj ponownie."
+      },
+      "user": {
+        "notFound": "Nie znaleziono Twojego konta."
+      },
       "step": {
         "rateLimited": "Zbyt wiele prób. Zaczekaj i spróbuj ponownie.",
         "invalid": "Nie udało się zapisać tego kroku wprowadzenia.",
@@ -148,16 +170,6 @@
     "footerDisclaimer1": "Ten raport został wygenerowany automatycznie z danych samodzielnie rejestrowanych i ma na celu wspierać",
     "footerDisclaimer2": "rozmowę lekarza z pacjentem. Nie zastępuje diagnozy medycznej. Korelacje nie oznaczają związku przyczynowego.",
     "footerSource": "Źródło: HealthLog | Strefa czasowa: {timezone} | Utworzono: {timestamp}",
-    "typeWeight": "Masa ciała",
-    "typeBpSys": "Ciśnienie skurczowe",
-    "typeBpDia": "Ciśnienie rozkurczowe",
-    "typePulse": "Tętno spoczynkowe",
-    "typeBodyFat": "Tkanka tłuszczowa",
-    "typeSleep": "Czas snu",
-    "typeSteps": "Aktywność (kroki)",
-    "typeTotalBodyWater": "Całkowita woda w organizmie",
-    "typeBoneMass": "Masa kostna",
-    "typeOxygenSaturation": "Saturacja tlenem",
     "unitSteps": "Kroki",
     "bmiUnderweight": "Niedowaga",
     "bmiNormal": "Waga prawidłowa",
@@ -193,8 +205,6 @@
     "summaryTrend": "{label}: ostatnio {latest} {arrow}",
     "summaryAdherence": "Przestrzeganie zaleceń lekowych: {rate}% (średnia ważona).",
     "chartsTitle": "Wykresy trendów",
-    "aiSummaryTitle": "Podsumowanie AI — niezweryfikowane klinicznie",
-    "aiSummaryDisclaimer": "Ta sekcja została wygenerowana automatycznie przez model AI i nie jest zweryfikowana klinicznie. Nie zastępuje oceny lekarskiej.",
     "packageReadme": "Dokumentacja zdrowotna HealthLog\n\nTen pakiet zawiera:\n- report.pdf: raport zdrowotny dla lekarza.\n- bundle.json: te same dane jako dokument HL7 FHIR R4 (Bundle), zgodny z ePA.\n\nWygenerowano w HealthLog.",
     "wellnessTitle": "Podsumowanie dobrostanu",
     "wellnessDisclaimer": "To opisowe wyniki dobrostanu obliczone na podstawie śledzonych sygnałów (0–100). Nie są to oceny kliniczne ani diagnozy.",
@@ -4435,10 +4445,6 @@
             "passphraseHelp": "Wyprowadza klucz archiwum za pomocą Argon2id i pieczętuje je AES-256-GCM. Zapisz plik z rozszerzeniem .hlx.",
             "noRecoveryWarning": "Nie ma odzyskiwania — jeśli zgubisz tę frazę, archiwum nie da się otworzyć. Przechowuj ją bezpiecznie.",
             "stepUpNeeded": "Potwierdź drugi składnik i spróbuj ponownie."
-          },
-          "cycle": {
-            "title": "Cykl",
-            "description": "Dane cyklu i zdrowia reprodukcyjnego jako dokument FHIR: ostatnia miesiączka, średnia długość cyklu i miesiączki, bieżąca faza."
           }
         },
         "import": {
@@ -5301,35 +5307,18 @@
       "practiceName": "Gabinet (opcjonalnie)",
       "practiceNamePlaceholder": "np. dr Kowalski",
       "includedData": "Uwzględnione dane",
-      "groupVitals": "Parametry życiowe",
-      "groupCardio": "Serce i kondycja",
-      "groupActivity": "Aktywność i sen",
-      "weight": "Waga",
-      "bp": "Ciśnienie krwi",
-      "pulse": "Tętno",
-      "oxygenSaturation": "Saturacja tlenem",
-      "bodyFat": "Tkanka tłuszczowa",
-      "bodyComposition": "Skład ciała",
-      "restingHeartRate": "Tętno spoczynkowe",
-      "hrv": "Zmienność rytmu serca",
-      "vo2max": "VO₂max",
-      "steps": "Kroki",
-      "distance": "Dystans",
-      "sleep": "Sen",
-      "glucose": "Glukoza we krwi",
-      "medications": "Leki i przestrzeganie zaleceń",
-      "mood": "Nastrój (domyślnie wyłączony — dane wrażliwe)",
-      "mentalHealthScreeners": "Przesiewowe testy zdrowia psychicznego (PHQ-9, GAD-7, WHO-5, SCI — domyślnie wyłączone)",
-      "bmi": "BMI",
       "includeCharts": "Osadź wykresy trendów (tylko PDF)",
-      "includeAiSummary": "Dołącz podsumowanie AI (niezweryfikowane klinicznie)",
       "fhirNote": "Dane ustrukturyzowane są zgodne ze standardem FHIR R4 (kompatybilne z ePA).",
       "generate": "Generuj",
-      "error": "Eksport nie powiódł się ({code}).",
-      "labs": "Wyniki badań",
-      "allergies": "Alergie i nietolerancje",
-      "familyHistory": "Wywiad rodzinny",
-      "documentsLink": "Dokumenty z tego okresu"
+      "documentsLink": "Dokumenty z tego okresu",
+      "range30": "Ostatnie 30 dni",
+      "rangeCustom": "Własny okres",
+      "rangeCustomStart": "Od",
+      "rangeCustomEnd": "Do",
+      "errorGeneric": "Nie udało się wygenerować eksportu. Spróbuj ponownie.",
+      "errorRateLimit": "Osiągnięto limit eksportów w tej godzinie.",
+      "errorModuleDisabled": "Eksport dokumentacji jest wyłączony dla tego konta.",
+      "errorEmptySelection": "Wybierz co najmniej jedną pozycję."
     },
     "globalExcludedInjectionSitesLabel": "Globalnie wykluczone miejsca iniekcji",
     "globalExcludedInjectionSitesHint": "Miejsca wymienione tutaj nie są proponowane dla żadnego leku i są odrzucane przy rejestrowaniu dawki, nawet jeśli lek je preferuje.",
@@ -5380,7 +5369,11 @@
       "pickerEmpty": "Nie znaleziono dokumentów.",
       "pickerDone": "Gotowe",
       "pickerSelectedCount": "Wybrano {count} z {max}",
-      "pickerMaxReached": "Osiągnięto maksymalną liczbę {max} dokumentów."
+      "pickerMaxReached": "Osiągnięto maksymalną liczbę {max} dokumentów.",
+      "scopeTitle": "Co zawiera ten link",
+      "scopeInsuranceExcluded": "Dane ubezpieczenia nigdy nie są udostępniane przez link.",
+      "statusNeedsReselect": "Wybierz zawartość ponownie",
+      "reselectReason": "Ten link udostępniał zakres, którego nikt nie wybrał, więc został zamknięty. Utwórz nowy i wybierz jego zawartość."
     },
     "genderOther": "Inna",
     "cycleTracking": {
@@ -6916,7 +6909,6 @@
     "period": "Okres raportu: {start} – {end}",
     "expires": "Ten link wygasa dnia {date}.",
     "provenance": "To jest tylko do odczytu podsumowanie udostępnione przez osobę, do której należy, wyeksportowane z jej samodzielnie rejestrowanych danych HealthLog. Wartości są zgłaszane samodzielnie i mogą obejmować odczyty zsynchronizowane z urządzeń; należy je traktować jako zgłoszone przez pacjenta, a nie jako badanie kliniczne.",
-    "vitals": "Parametry życiowe",
     "labs": "Wyniki laboratoryjne",
     "medications": "Leki i przestrzeganie zaleceń",
     "bmi": "Wskaźnik masy ciała (BMI)",
@@ -6956,7 +6948,10 @@
       "download": "Pobierz",
       "attachmentHint": "Ten plik zostanie pobrany na Twoje urządzenie (bez podglądu na stronie).",
       "exifNote": "Metadane aparatu (EXIF/GPS) zostały usunięte z udostępnionych obrazów JPEG, PNG i WebP."
-    }
+    },
+    "downloadPdf": "Pobierz jako PDF",
+    "downloadFhir": "Pobierz jako FHIR",
+    "bmiSection": "Wskaźnik masy ciała"
   },
   "cycle": {
     "symptomCategory": {
@@ -8863,5 +8858,41 @@
         }
       }
     }
+  },
+  "reportSelection": {
+    "groupIdentity": "Dane osobowe",
+    "groupVitals": "Parametry życiowe",
+    "groupCardio": "Serce i krążenie",
+    "groupBody": "Wymiary ciała",
+    "groupSleepRecovery": "Sen i regeneracja",
+    "groupActivity": "Aktywność",
+    "groupMobility": "Mobilność i chód",
+    "groupEnvironment": "Otoczenie",
+    "groupGlucose": "Poziom glukozy",
+    "groupLabs": "Wyniki badań",
+    "groupMedications": "Leki",
+    "groupHistory": "Choroby i alergie",
+    "groupSensitive": "Dane wrażliwe",
+    "leafPatientIdentity": "Imię, data urodzenia, płeć, wzrost",
+    "leafInsurance": "Ubezpieczyciel i numer ubezpieczenia",
+    "leafGlucosePanel": "Panel glukozy (czas w zakresie, GMI, zmienność)",
+    "leafLabResults": "Wyniki badań",
+    "leafMedicationList": "Lista leków",
+    "leafMedicationAdministrations": "Każda zarejestrowana dawka",
+    "leafMedicationCompliance": "Przestrzeganie zaleceń",
+    "leafGlp1Therapy": "Terapia GLP-1 (historia dawek, działania niepożądane)",
+    "leafAllergies": "Alergie i nietolerancje",
+    "leafIllnessEpisodes": "Epizody chorobowe",
+    "leafFamilyHistory": "Wywiad rodzinny",
+    "leafMood": "Nastrój",
+    "leafCycle": "Cykl menstruacyjny",
+    "templateStandard": "Standardowy raport lekarski",
+    "templateApplied": "{template} jest wstępnie wybrany. Sprawdź go przed wygenerowaniem.",
+    "groupCount": "{on}/{total}",
+    "groupDisclosure": "Pokaż pozycje w {group}",
+    "sensitiveHint": "Nic tu nie jest wstępnie wybrane. Wybierz każdą pozycję samodzielnie.",
+    "scopeNone": "Nic nie wybrano — dokument byłby pusty.",
+    "scopeCount": "{count} pozycji z {groups} obszarów",
+    "scopeSensitive": "w tym {names}"
   }
 }

@@ -124,6 +124,13 @@ export interface AuthUser {
    */
   lastReportPracticeName: string | null;
   /**
+   * The saved report selection blob (`{ v, leaves, format, rangeDays,
+   * includeCharts }`), or `null` when the account has never saved one. Parsed
+   * through `parseSavedProfile` at the one place that reads it, so a drifted
+   * shape resolves to "never saved" rather than to a partial scope.
+   */
+  reportSelection: unknown;
+  /**
    * v1.15.0 — cycle-tracking feature gate, resolved server-side from gender
    * + the per-user opt-in. The cycle nav entry + page hide when false; every
    * `/api/cycle/*` route also enforces the gate. Coerced to `false` against a

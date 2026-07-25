@@ -1,0 +1,384 @@
+"use client";
+
+/**
+ * Settings → Export → the health-record export panel.
+ *
+ * One surface driving `POST /api/export/health-record`: a format radio, the
+ * reporting window, the practice line, the scope picker, and the generate
+ * action that streams the artefact as a download.
+ *
+ * Three states, by design:
+ *
+ *   1. First run (no saved selection): the picker opens EXPANDED with the
+ *      named standard template applied and the fenced tier visibly empty, so
+ *      the user presses Generate having seen twelve named groups. That is
+ *      consent to a named bundle, not a server-chosen default.
+ *   2. Repeat run: the picker is collapsed behind its disclosure, the saved
+ *      selection is loaded, and the scope line under the button says what will
+ *      be in the document. Two interactions after navigation, and the reading
+ *      is the consent check.
+ *   3. Editing: a group row is one control for up to sixteen leaves; the leaf
+ *      grid opens only when the scope actually changes, which is rare.
+ *
+ * The saved selection seeds per-user during render with a stored-id guard —
+ * `useAuth` resolves asynchronously, so a `useState` initialiser would read
+ * `undefined` and stick — and the per-user gate means a late re-resolve never
+ * clobbers edits the user is in the middle of.
+ */
+import Link from "next/link";
+import { useId, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  ChevronDown,
+  Download,
+  FileText,
+  FolderOpen,
+  Loader2,
+} from "lucide-react";
+
+import { SettingsCard } from "@/components/settings/settings-card";
+import { SettingsCardHeader } from "@/components/settings/_card-header";
+import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Switch } from "@/components/ui/switch";
+import { useRovingRadioGroup } from "@/hooks/use-roving-radio-group";
+import { apiFetchRaw } from "@/lib/api/api-fetch";
+import { useAuth } from "@/hooks/use-auth";
+import { useTranslations } from "@/lib/i18n/context";
+import { queryKeys } from "@/lib/query-keys";
+import { cn } from "@/lib/utils";
+import type { ReportLeafId } from "@/lib/report-selection/catalogue";
+import { parseSavedProfile } from "@/lib/report-selection/saved-profile";
+import { STANDARD_TEMPLATE_LEAVES } from "@/lib/report-selection/template";
+import { orderLeaves } from "@/lib/report-selection/selection";
+
+import { ReportScopePicker } from "./report-scope-picker";
+import { ScopeSummary } from "./scope-summary";
+
+type ExportFormat = "pdf" | "fhir" | "package";
+
+const EXPORT_FORMATS: readonly ExportFormat[] = ["pdf", "fhir", "package"];
+const PRESET_RANGES = [30, 90, 180, 365] as const;
+
+export function HealthRecordExportPanel() {
+  const { t, locale } = useTranslations();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  const [format, setFormat] = useState<ExportFormat>("pdf");
+  const [days, setDays] = useState<number>(90);
+  const [customRange, setCustomRange] = useState(false);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [practiceName, setPracticeName] = useState("");
+  const [includeCharts, setIncludeCharts] = useState(true);
+  const [selected, setSelected] = useState<ReadonlySet<ReportLeafId>>(
+    () => new Set(STANDARD_TEMPLATE_LEAVES),
+  );
+  const [seededUserId, setSeededUserId] = useState<string | null>(null);
+  // First run opens the picker so the template is seen, not merely applied.
+  const [pickerOpen, setPickerOpen] = useState(true);
+  const [templateApplied, setTemplateApplied] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const pickerPanelId = useId();
+
+  if (user && user.id !== seededUserId) {
+    setSeededUserId(user.id);
+    setPracticeName(user.lastReportPracticeName ?? "");
+    const saved = parseSavedProfile(user.reportSelection);
+    if (saved) {
+      setSelected(new Set(saved.leaves as ReportLeafId[]));
+      setFormat(saved.format);
+      setDays(saved.rangeDays);
+      setIncludeCharts(saved.includeCharts);
+      setPickerOpen(false);
+      setTemplateApplied(false);
+    }
+  }
+
+  const isPdfLike = format === "pdf" || format === "package";
+  const isFhirLike = format === "fhir" || format === "package";
+
+  const { getRadioProps: getFormatRadioProps } = useRovingRadioGroup({
+    count: EXPORT_FORMATS.length,
+    selectedIndex: EXPORT_FORMATS.indexOf(format),
+    onSelect: (index) => setFormat(EXPORT_FORMATS[index]!),
+  });
+
+  async function handleGenerate() {
+    if (selected.size === 0) {
+      setError(t("settings.healthRecord.errorEmptySelection"));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const range =
+        customRange && startDate && endDate
+          ? {
+              startDate: new Date(`${startDate}T00:00:00Z`).toISOString(),
+              endDate: new Date(`${endDate}T23:59:59Z`).toISOString(),
+            }
+          : { days };
+      const res = await apiFetchRaw("/api/export/health-record", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          format,
+          // Carry the active in-app locale so the artefact matches the UI
+          // language instead of falling back to Accept-Language on the server.
+          locale,
+          range,
+          practiceName: practiceName.trim() || undefined,
+          includeCharts,
+          selection: { v: 2, leaves: orderLeaves(selected) },
+        }),
+      });
+      if (!res.ok) {
+        setError(
+          res.status === 429
+            ? t("settings.healthRecord.errorRateLimit")
+            : res.status === 403
+              ? t("settings.healthRecord.errorModuleDisabled")
+              : t("settings.healthRecord.errorGeneric"),
+        );
+        return;
+      }
+      const blob = await res.blob();
+      const ext = format === "pdf" ? "pdf" : format === "fhir" ? "json" : "zip";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `healthlog-health-record-${new Date()
+        .toISOString()
+        .slice(0, 10)}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setTemplateApplied(false);
+      // The route just persisted the practice name and the selection, so the
+      // cached `/me` payload is stale. Refresh it, or a remount would seed from
+      // the previous values.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.authMe() });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SettingsCard
+      as="section"
+      aria-labelledby="health-record-export-title"
+      data-testid="health-record-export-panel"
+    >
+      <SettingsCardHeader
+        className="mb-4"
+        icon={FileText}
+        titleId="health-record-export-title"
+        title={t("settings.healthRecord.title")}
+        description={t("settings.healthRecord.description")}
+      />
+
+      <div className="space-y-4">
+        {/* Format + range share a row on desktop; on mobile they stack. */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <fieldset className="space-y-1.5">
+            <legend className="mb-1 text-sm font-medium">
+              {t("settings.healthRecord.format")}
+            </legend>
+            <div className="flex flex-wrap gap-2" role="radiogroup">
+              {EXPORT_FORMATS.map((f, index) => (
+                <Button
+                  key={f}
+                  type="button"
+                  role="radio"
+                  aria-checked={format === f}
+                  variant={format === f ? "default" : "outline"}
+                  size="sm"
+                  className="min-h-11 sm:min-h-9"
+                  onClick={() => setFormat(f)}
+                  {...getFormatRadioProps(index)}
+                >
+                  {t(`settings.healthRecord.format_${f}`)}
+                </Button>
+              ))}
+            </div>
+          </fieldset>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="hr-range">{t("settings.healthRecord.range")}</Label>
+            <NativeSelect
+              id="hr-range"
+              value={customRange ? "custom" : String(days)}
+              onChange={(e) => {
+                if (e.target.value === "custom") {
+                  setCustomRange(true);
+                  return;
+                }
+                setCustomRange(false);
+                setDays(Number(e.target.value));
+              }}
+            >
+              {PRESET_RANGES.map((preset) => (
+                <option key={preset} value={String(preset)}>
+                  {t(`settings.healthRecord.range${preset}`)}
+                </option>
+              ))}
+              <option value="custom">
+                {t("settings.healthRecord.rangeCustom")}
+              </option>
+            </NativeSelect>
+            {/* Entry point into the document vault for the report period
+                (navigation only). Only rendered when the module is enabled. */}
+            {user?.modules?.inboundDocuments ? (
+              <Link
+                href={`/documents?year=${new Date().getFullYear()}`}
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 inline-flex items-center gap-1.5 rounded-md text-xs transition-colors focus-visible:ring-[3px] focus-visible:outline-none"
+              >
+                <FolderOpen className="size-3.5" aria-hidden />
+                {t("settings.healthRecord.documentsLink")}
+              </Link>
+            ) : null}
+          </div>
+        </div>
+
+        {customRange ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="hr-range-start">
+                {t("settings.healthRecord.rangeCustomStart")}
+              </Label>
+              <DateField
+                id="hr-range-start"
+                value={startDate}
+                onChange={setStartDate}
+                max={endDate || undefined}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="hr-range-end">
+                {t("settings.healthRecord.rangeCustomEnd")}
+              </Label>
+              <DateField
+                id="hr-range-end"
+                value={endDate}
+                onChange={setEndDate}
+                min={startDate || undefined}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {/* Practice name — PDF only */}
+        {isPdfLike && (
+          <div className="space-y-1.5">
+            <Label htmlFor="hr-practice">
+              {t("settings.healthRecord.practiceName")}
+            </Label>
+            <Input
+              id="hr-practice"
+              value={practiceName}
+              onChange={(e) => setPracticeName(e.target.value)}
+              maxLength={120}
+              placeholder={t("settings.healthRecord.practiceNamePlaceholder")}
+            />
+          </div>
+        )}
+
+        <fieldset className="space-y-3">
+          <legend className="sr-only">
+            {t("settings.healthRecord.includedData")}
+          </legend>
+          <button
+            type="button"
+            data-testid="health-record-included-data-toggle"
+            aria-expanded={pickerOpen}
+            aria-controls={pickerPanelId}
+            onClick={() => setPickerOpen((v) => !v)}
+            className="text-foreground hover:bg-muted/40 focus-visible:ring-ring/50 flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-1 py-1 text-left text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
+          >
+            <span>{t("settings.healthRecord.includedData")}</span>
+            <ChevronDown
+              className={cn(
+                "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+                pickerOpen && "rotate-180",
+              )}
+              aria-hidden="true"
+            />
+          </button>
+
+          {pickerOpen && (
+            <div
+              id={pickerPanelId}
+              data-testid="health-record-included-data-panel"
+              className="animate-insight-in space-y-3"
+              style={{ animationDuration: "200ms" }}
+            >
+              {templateApplied ? (
+                <p
+                  className="text-muted-foreground text-xs"
+                  data-testid="report-template-note"
+                >
+                  {t("reportSelection.templateApplied", {
+                    template: t("reportSelection.templateStandard"),
+                  })}
+                </p>
+              ) : null}
+              <ReportScopePicker selected={selected} onChange={setSelected} />
+              {isPdfLike ? (
+                <label className="flex min-h-11 items-center justify-between gap-3 text-sm sm:min-h-9">
+                  <span className="text-foreground">
+                    {t("settings.healthRecord.includeCharts")}
+                  </span>
+                  <Switch
+                    checked={includeCharts}
+                    onCheckedChange={() => setIncludeCharts((v) => !v)}
+                  />
+                </label>
+              ) : null}
+            </div>
+          )}
+        </fieldset>
+
+        {/* The FHIR note and the generate action share the footer row. */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0 flex-1 space-y-1">
+            <ScopeSummary t={t} selected={selected} />
+            {isFhirLike ? (
+              <p className="text-muted-foreground max-w-md text-xs">
+                {t("settings.healthRecord.fhirNote")}
+              </p>
+            ) : null}
+          </div>
+          <Button
+            type="button"
+            onClick={handleGenerate}
+            disabled={busy}
+            className="ml-auto min-h-11 shrink-0 sm:min-h-9"
+          >
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            {t("settings.healthRecord.generate")}
+          </Button>
+        </div>
+
+        {error && (
+          <p role="alert" className="text-destructive text-sm">
+            {error}
+          </p>
+        )}
+      </div>
+    </SettingsCard>
+  );
+}

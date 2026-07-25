@@ -53,13 +53,21 @@
   },
   "apiErrors": {
     "measurement": {
-      "create": { "invalid": "Controlla i dati della misurazione e riprova." },
+      "create": {
+        "invalid": "Controlla i dati della misurazione e riprova."
+      },
       "duplicate_timestamp": "Esiste già una misurazione per questo orario."
     },
     "mood": {
-      "list": { "invalid": "I filtri dell’elenco dell’umore non sono validi." },
-      "create": { "invalid": "Controlla la voce dell’umore e riprova." },
-      "update": { "invalid": "Controlla la voce dell’umore e riprova." },
+      "list": {
+        "invalid": "I filtri dell’elenco dell’umore non sono validi."
+      },
+      "create": {
+        "invalid": "Controlla la voce dell’umore e riprova."
+      },
+      "update": {
+        "invalid": "Controlla la voce dell’umore e riprova."
+      },
       "duplicate_timestamp": "Esiste già una voce dell’umore per questo orario.",
       "not_found": "Questa voce dell’umore non è più disponibile.",
       "ratedFactor": {
@@ -76,7 +84,9 @@
       "biomarker": {
         "notFound": "Questo biomarcatore non è più disponibile.",
         "duplicate": "Esiste già un biomarcatore con questo nome.",
-        "create": { "invalid": "Controlla i dati del biomarcatore e riprova." },
+        "create": {
+          "invalid": "Controlla i dati del biomarcatore e riprova."
+        },
         "update": {
           "invalid": "Controlla i dati del biomarcatore e riprova.",
           "referenceRangeInvalid": "Il valore di riferimento inferiore non può superare quello superiore."
@@ -91,12 +101,18 @@
       }
     },
     "onboarding": {
-      "disclaimer": { "invalid": "Conferma nuovamente l’avviso medico." },
+      "disclaimer": {
+        "invalid": "Conferma nuovamente l’avviso medico."
+      },
       "tour": {
         "invalid": "Non è stato possibile salvare l’avanzamento del tour."
       },
-      "complete": { "invalid": "Controlla i dati del profilo e riprova." },
-      "user": { "notFound": "Impossibile trovare il tuo account." },
+      "complete": {
+        "invalid": "Controlla i dati del profilo e riprova."
+      },
+      "user": {
+        "notFound": "Impossibile trovare il tuo account."
+      },
       "step": {
         "rateLimited": "Troppi tentativi. Attendi e riprova.",
         "invalid": "Non è stato possibile salvare questo passaggio introduttivo.",
@@ -154,16 +170,6 @@
     "footerDisclaimer1": "Questo rapporto è stato generato automaticamente da dati auto-registrati ed è destinato a supportare",
     "footerDisclaimer2": "il dialogo medico-paziente. Non sostituisce una diagnosi medica. Le correlazioni non implicano causalità.",
     "footerSource": "Fonte: HealthLog | Fuso orario: {timezone} | Creato: {timestamp}",
-    "typeWeight": "Peso corporeo",
-    "typeBpSys": "Pressione arteriosa sistolica",
-    "typeBpDia": "Pressione arteriosa diastolica",
-    "typePulse": "Pulsazioni a riposo",
-    "typeBodyFat": "Massa grassa",
-    "typeSleep": "Durata del sonno",
-    "typeSteps": "Attività (passi)",
-    "typeTotalBodyWater": "Acqua corporea totale",
-    "typeBoneMass": "Massa ossea",
-    "typeOxygenSaturation": "Saturazione di ossigeno",
     "unitSteps": "Passi",
     "bmiUnderweight": "Sottopeso",
     "bmiNormal": "Peso normale",
@@ -199,8 +205,6 @@
     "summaryTrend": "{label}: ultimo {latest} {arrow}",
     "summaryAdherence": "Aderenza ai farmaci: {rate}% (media ponderata).",
     "chartsTitle": "Grafici di tendenza",
-    "aiSummaryTitle": "Riepilogo IA — non validato clinicamente",
-    "aiSummaryDisclaimer": "Questa sezione è stata generata automaticamente da un modello di IA e non è validata clinicamente. Non sostituisce una valutazione medica.",
     "packageReadme": "Cartella clinica HealthLog\n\nQuesto pacchetto contiene:\n- report.pdf: il referto sanitario per il medico.\n- bundle.json: gli stessi dati come Bundle documento HL7 FHIR R4, compatibile ePA.\n\nGenerato con HealthLog.",
     "wellnessTitle": "Riepilogo del benessere",
     "wellnessDisclaimer": "Sono punteggi di benessere descrittivi calcolati dai tuoi segnali registrati (0–100). Non sono valutazioni cliniche né diagnosi.",
@@ -4441,10 +4445,6 @@
             "passphraseHelp": "Deriva la chiave dell'archivio con Argon2id e lo sigilla con AES-256-GCM. Salva il file con estensione .hlx.",
             "noRecoveryWarning": "Non c'è recupero: se perdi questa passphrase, l'archivio non potrà essere aperto. Conservala in un luogo sicuro.",
             "stepUpNeeded": "Conferma il secondo fattore e riprova."
-          },
-          "cycle": {
-            "title": "Ciclo",
-            "description": "Dati del ciclo e di salute riproduttiva come documento FHIR: ultima mestruazione, durata media di ciclo e mestruazioni, fase attuale."
           }
         },
         "import": {
@@ -5307,35 +5307,18 @@
       "practiceName": "Studio (facoltativo)",
       "practiceNamePlaceholder": "es. Dr. Rossi",
       "includedData": "Dati inclusi",
-      "groupVitals": "Parametri vitali",
-      "groupCardio": "Cuore & fitness",
-      "groupActivity": "Attività & sonno",
-      "weight": "Peso",
-      "bp": "Pressione sanguigna",
-      "pulse": "Polso",
-      "oxygenSaturation": "Saturazione di ossigeno",
-      "bodyFat": "Massa grassa",
-      "bodyComposition": "Composizione corporea",
-      "restingHeartRate": "Frequenza a riposo",
-      "hrv": "Variabilità della frequenza cardiaca",
-      "vo2max": "VO₂max",
-      "steps": "Passi",
-      "distance": "Distanza",
-      "sleep": "Sonno",
-      "glucose": "Glicemia",
-      "medications": "Farmaci e aderenza",
-      "mood": "Umore (disattivato di default — dati sensibili)",
-      "mentalHealthScreeners": "Screening di salute mentale (PHQ-9, GAD-7, WHO-5, SCI — disattivato di default)",
-      "bmi": "BMI",
       "includeCharts": "Incorpora grafici di tendenza (solo PDF)",
-      "includeAiSummary": "Aggiungi riepilogo IA (non validato clinicamente)",
       "fhirNote": "L’output strutturato segue lo standard FHIR R4 (compatibile ePA).",
       "generate": "Genera",
-      "error": "Esportazione non riuscita ({code}).",
-      "labs": "Risultati degli esami",
-      "allergies": "Allergie e intolleranze",
-      "familyHistory": "Anamnesi familiare",
-      "documentsLink": "Documenti del periodo"
+      "documentsLink": "Documenti del periodo",
+      "range30": "Ultimi 30 giorni",
+      "rangeCustom": "Periodo personalizzato",
+      "rangeCustomStart": "Dal",
+      "rangeCustomEnd": "Al",
+      "errorGeneric": "Non è stato possibile generare l'esportazione. Riprova.",
+      "errorRateLimit": "Hai raggiunto il limite di esportazioni per questa ora.",
+      "errorModuleDisabled": "L'esportazione della cartella è disattivata per questo account.",
+      "errorEmptySelection": "Seleziona almeno una voce."
     },
     "globalExcludedInjectionSitesLabel": "Siti di iniezione esclusi globalmente",
     "globalExcludedInjectionSitesHint": "I siti elencati qui non vengono proposti per alcun farmaco e vengono rifiutati al momento della registrazione di una dose, anche se un farmaco li preferisce.",
@@ -5386,7 +5369,11 @@
       "pickerEmpty": "Nessun documento trovato.",
       "pickerDone": "Fatto",
       "pickerSelectedCount": "{count} di {max} selezionati",
-      "pickerMaxReached": "Hai raggiunto il massimo di {max} documenti."
+      "pickerMaxReached": "Hai raggiunto il massimo di {max} documenti.",
+      "scopeTitle": "Cosa contiene questo link",
+      "scopeInsuranceExcluded": "I dati assicurativi non vengono mai condivisi tramite link.",
+      "statusNeedsReselect": "Scegli di nuovo il contenuto",
+      "reselectReason": "Questo link mostrava un ambito che nessuno aveva scelto, perciò è stato chiuso. Creane uno nuovo e scegli cosa deve contenere."
     },
     "genderOther": "Altro",
     "cycleTracking": {
@@ -6922,7 +6909,6 @@
     "period": "Periodo del report: {start} – {end}",
     "expires": "Questo link scade il {date}.",
     "provenance": "Questo è un riepilogo di sola lettura condiviso dalla persona a cui appartiene, esportato dai suoi dati HealthLog autoregistrati. I valori sono autodichiarati e possono includere letture sincronizzate da dispositivi; vanno considerati come riferiti dal paziente, non come un esame clinico.",
-    "vitals": "Parametri vitali",
     "labs": "Valori di laboratorio",
     "medications": "Farmaci e aderenza",
     "bmi": "Indice di massa corporea (IMC)",
@@ -6962,7 +6948,10 @@
       "download": "Scarica",
       "attachmentHint": "Questo file viene scaricato sul tuo dispositivo (nessuna anteprima nella pagina).",
       "exifNote": "I metadati della fotocamera (EXIF/GPS) sono stati rimossi dalle immagini JPEG, PNG e WebP condivise."
-    }
+    },
+    "downloadPdf": "Scarica come PDF",
+    "downloadFhir": "Scarica come FHIR",
+    "bmiSection": "Indice di massa corporea"
   },
   "cycle": {
     "symptomCategory": {
@@ -8869,5 +8858,41 @@
         }
       }
     }
+  },
+  "reportSelection": {
+    "groupIdentity": "Dati anagrafici",
+    "groupVitals": "Parametri vitali",
+    "groupCardio": "Cuore e circolazione",
+    "groupBody": "Misure corporee",
+    "groupSleepRecovery": "Sonno e recupero",
+    "groupActivity": "Attività",
+    "groupMobility": "Mobilità e andatura",
+    "groupEnvironment": "Ambiente",
+    "groupGlucose": "Glicemia",
+    "groupLabs": "Esami di laboratorio",
+    "groupMedications": "Farmaci",
+    "groupHistory": "Patologie e allergie",
+    "groupSensitive": "Dati sensibili",
+    "leafPatientIdentity": "Nome, data di nascita, sesso, altezza",
+    "leafInsurance": "Assicurazione e numero di iscrizione",
+    "leafGlucosePanel": "Pannello glicemico (tempo nel range, GMI, variabilità)",
+    "leafLabResults": "Esami di laboratorio",
+    "leafMedicationList": "Elenco dei farmaci",
+    "leafMedicationAdministrations": "Ogni dose registrata",
+    "leafMedicationCompliance": "Aderenza",
+    "leafGlp1Therapy": "Terapia GLP-1 (storico dosi, effetti collaterali)",
+    "leafAllergies": "Allergie e intolleranze",
+    "leafIllnessEpisodes": "Episodi di malattia",
+    "leafFamilyHistory": "Anamnesi familiare",
+    "leafMood": "Umore",
+    "leafCycle": "Ciclo mestruale",
+    "templateStandard": "Referto medico standard",
+    "templateApplied": "{template} è preselezionato. Controllalo prima di generare.",
+    "groupCount": "{on}/{total}",
+    "groupDisclosure": "Mostra le voci di {group}",
+    "sensitiveHint": "Qui non è mai preselezionato nulla. Scegli ogni voce tu stesso.",
+    "scopeNone": "Niente selezionato: il documento sarebbe vuoto.",
+    "scopeCount": "{count} voci da {groups} aree",
+    "scopeSensitive": "incl. {names}"
   }
 }

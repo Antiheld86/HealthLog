@@ -28,7 +28,7 @@ import { Share2 } from "lucide-react";
 
 import { useTranslations } from "@/lib/i18n/context";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
-import { HealthRecordExportPanel } from "@/components/settings/health-record-export-panel";
+import { HealthRecordExportPanel } from "@/components/settings/report-selection/selection-panel";
 import { SharingSection } from "@/components/settings/sharing-section";
 
 export function GesundheitsakteSection() {

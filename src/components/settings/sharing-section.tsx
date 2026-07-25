@@ -236,11 +236,25 @@ function ShareLinksCard() {
                       {link.label}
                     </p>
                     <Badge variant="secondary" className="text-xs">
-                      {link.revokedAt
-                        ? t("settings.sharing.statusRevoked")
-                        : t("settings.sharing.statusExpired")}
+                      {link.needsReselection
+                        ? t("settings.sharing.statusNeedsReselect")
+                        : link.revokedAt
+                          ? t("settings.sharing.statusRevoked")
+                          : t("settings.sharing.statusExpired")}
                     </Badge>
                   </div>
+                  {/* A link whose frozen scope predates the selection model.
+                      It served a scope nobody chose, so it was closed; the
+                      owner re-mints above with the label, window and expiry
+                      still in front of them. */}
+                  {link.needsReselection ? (
+                    <p
+                      className="text-muted-foreground text-xs"
+                      data-testid={`share-needs-reselect-${link.id}`}
+                    >
+                      {t("settings.sharing.reselectReason")}
+                    </p>
+                  ) : null}
                   <p className="text-muted-foreground text-xs">
                     <span className="font-medium">
                       {t("settings.sharing.accessCount")}:

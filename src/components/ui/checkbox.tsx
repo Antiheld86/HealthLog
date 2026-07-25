@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Checkbox as CheckboxPrimitive } from "radix-ui";
-import { Check } from "lucide-react";
+import { Check, Minus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -16,6 +16,12 @@ import { cn } from "@/lib/utils";
  * Mirrors the v1.4.27 shadcn `<Checkbox>` recipe: a Root that draws
  * the border + checked-state background, an Indicator slot that
  * shows the lucide `<Check>` when the box is checked.
+ *
+ * The Indicator also draws a `<Minus>` for the indeterminate state, which
+ * Radix's Root accepts natively via `checked="indeterminate"`. A group row
+ * whose leaves are partly selected is a real third state and needs to look
+ * like one — drawing it as unchecked would say "none of this is included",
+ * which on this surface is a false statement about what leaves the instance.
  */
 function Checkbox({
   className,
@@ -34,6 +40,7 @@ function Checkbox({
         // blanket neighbouring controls in dense table rows.
         "peer border-border/70 relative size-4 shrink-0 rounded border before:absolute before:inset-[-8px] before:content-['']",
         "data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-background",
+        "data-[state=indeterminate]:bg-primary data-[state=indeterminate]:border-primary data-[state=indeterminate]:text-background",
         "focus-visible:ring-ring/50 focus-visible:ring-2 focus-visible:outline-none",
         "disabled:cursor-not-allowed disabled:opacity-50",
         "transition-colors",
@@ -45,7 +52,11 @@ function Checkbox({
         data-slot="checkbox-indicator"
         className="flex items-center justify-center text-current"
       >
-        <Check className="size-3" aria-hidden="true" />
+        {props.checked === "indeterminate" ? (
+          <Minus className="size-3" aria-hidden="true" />
+        ) : (
+          <Check className="size-3" aria-hidden="true" />
+        )}
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
   );

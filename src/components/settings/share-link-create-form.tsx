@@ -32,6 +32,11 @@ import {
   ShareDocumentPicker,
   type PickedDocument,
 } from "@/components/settings/share-document-picker";
+import { ReportScopePicker } from "@/components/settings/report-selection/report-scope-picker";
+import { ScopeSummary } from "@/components/settings/report-selection/scope-summary";
+import type { ReportLeafId } from "@/lib/report-selection/catalogue";
+import { orderLeaves } from "@/lib/report-selection/selection";
+import { STANDARD_TEMPLATE_LEAVES } from "@/lib/report-selection/template";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { apiPost } from "@/lib/api/api-fetch";
@@ -58,6 +63,13 @@ export interface ShareLinkSummary {
   protected: boolean;
   /** v1.28 — size of the frozen document set (never the ids, never bytes). */
   documentCount: number;
+  /**
+   * Whether this link's frozen scope predates the selection model. Such links
+   * were revoked on upgrade — their scope was "everything except mood and
+   * cycle", which nobody chose — and the sharing list says so, so the owner
+   * re-mints rather than wondering why a working link stopped.
+   */
+  needsReselection: boolean;
   expiresAt: string;
   createdAt: string;
   revokedAt: string | null;
@@ -72,6 +84,14 @@ export interface ShareLinkSummary {
  * hashes). `qrUrl` carries the passphrase in the URL fragment (`#k=`).
  */
 export interface ShareLinkCreated extends ShareLinkSummary {
+  /**
+   * RETIRED, response-only. They configured a FHIR face that was never built;
+   * the request refuses them and the columns are gone. They stay here because
+   * the native client was given this shape and a missing non-optional key
+   * fails a whole Swift decode — see #70 in the native repository.
+   */
+  allowFhirApi: boolean;
+  resourceTypes: string[];
   token: string;
   passphrase: string;
   shareUrl: string;
@@ -87,17 +107,25 @@ export interface ShareLinkCreatePayload {
   label: string;
   rangeStart: string;
   rangeEnd: null;
+  selection?: { v: 2; leaves: readonly string[] };
   documentIds?: string[];
   documentOnly?: boolean;
   expiresAt: string;
 }
 
 /**
+ * The one leaf a share link may never carry — mirrored from the server, which
+ * refuses it with a 422. The picker hides it rather than rendering a control
+ * that cannot be honoured.
+ */
+const SHARE_HIDDEN_LEAVES: readonly ReportLeafId[] = ["INSURANCE"];
+
+/**
  * Build the create payload from the resolved form state. Extracted as a pure
  * function so the two surfaces' scope contract is unit-testable without a DOM.
  *
  * The `documentOnly` branch is the privacy-load-bearing one: a document-launched
- * share posts an EMPTY report scope (no `sections`) plus `documentOnly: true`,
+ * share posts NO report scope at all plus `documentOnly: true`,
  * and ALWAYS carries the picked document ids —
  * so the created link serves the document(s) and nothing else. The record share
  * (Settings → Sharing) keeps its full scope and only attaches documents when
@@ -107,6 +135,7 @@ export function buildShareLinkCreatePayload(input: {
   label: string;
   rangeDays: number;
   expiryDays: number;
+  leaves: readonly ReportLeafId[];
   documentIds: string[];
   documentOnly: boolean;
 }): ShareLinkCreatePayload {
@@ -127,6 +156,7 @@ export function buildShareLinkCreatePayload(input: {
   }
   return {
     ...base,
+    selection: { v: 2, leaves: input.leaves },
     // Omit the key entirely when nothing is attached (a documents-less record
     // share stays the default). The server re-validates each id as the caller's
     // own live document before minting the link.
@@ -162,6 +192,18 @@ export function ShareLinkCreateForm({
   const [expiryDays, setExpiryDays] = useState(DEFAULT_DAYS);
   const [selectedDocs, setSelectedDocs] = useState<PickedDocument[]>(
     initialDocuments ?? [],
+  );
+  // The named standard template is the starting point for a record share, the
+  // same one the export panel opens with, minus the leaf a link may not carry.
+  const [selectedLeaves, setSelectedLeaves] = useState<
+    ReadonlySet<ReportLeafId>
+  >(
+    () =>
+      new Set(
+        STANDARD_TEMPLATE_LEAVES.filter(
+          (leaf) => !SHARE_HIDDEN_LEAVES.includes(leaf),
+        ),
+      ),
   );
   const [pickerOpen, setPickerOpen] = useState(false);
   const [created, setCreated] = useState<ShareLinkCreated | null>(null);
@@ -212,6 +254,7 @@ export function ShareLinkCreateForm({
           label,
           rangeDays,
           expiryDays,
+          leaves: orderLeaves(selectedLeaves),
           documentIds: selectedDocs.map((d) => d.id),
           documentOnly,
         }),
@@ -310,6 +353,26 @@ export function ShareLinkCreateForm({
           </div>
         </div>
 
+        {/* ── What the link contains ───────────────────────────────── */}
+        {!documentOnly ? (
+          <div className="space-y-3">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">
+                {t("settings.sharing.scopeTitle")}
+              </Label>
+              <p className="text-muted-foreground text-xs">
+                {t("settings.sharing.scopeInsuranceExcluded")}
+              </p>
+            </div>
+            <ReportScopePicker
+              selected={selectedLeaves}
+              onChange={setSelectedLeaves}
+              hiddenLeaves={SHARE_HIDDEN_LEAVES}
+            />
+            <ScopeSummary t={t} selected={selectedLeaves} />
+          </div>
+        ) : null}
+
         {/* ── Attach documents ─────────────────────────────────────── */}
         <div className="border-border space-y-2 rounded-lg border p-3">
           <div className="flex items-center justify-between gap-3">
@@ -384,7 +447,11 @@ export function ShareLinkCreateForm({
 
         <Button
           type="submit"
-          disabled={createMutation.isPending || !label.trim()}
+          disabled={
+            createMutation.isPending ||
+            !label.trim() ||
+            (!documentOnly && selectedLeaves.size === 0)
+          }
           className="min-h-11 sm:min-h-9"
         >
           {createMutation.isPending && (
