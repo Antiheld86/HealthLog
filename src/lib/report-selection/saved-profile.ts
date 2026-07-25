@@ -1,5 +1,5 @@
 /**
- * The owner's saved report selection — "my selection".
+ * The owner's saved report selection — "my selection" — read from the row.
  *
  * Persisted on `User.reportSelectionJson` and written after a successful
  * generation, the same way the practice name is. Two kinds of caller read it:
@@ -15,41 +15,23 @@
  * account that has never saved one resolves to the EMPTY selection, so an
  * assistant asking for a record the owner never scoped gets nothing — not a
  * template, not a guess.
+ *
+ * The shape itself lives in `./profile-shape` so the client panel can parse
+ * the blob without pulling the Prisma client into the browser bundle.
  */
-import { z } from "zod/v4";
-
 import { prisma } from "@/lib/db";
 import {
   EMPTY_REPORT_SELECTION,
-  reportSelectionSchema,
   selectionFromStoredBlob,
   type ReportSelection,
 } from "./selection";
 
-/**
- * The stored profile: the leaf list plus the render choices the panel
- * restores. `format` / `rangeDays` / `includeCharts` are presentation, not
- * scope — no gate reads them — so they ride alongside rather than inside the
- * selection.
- */
-export const savedReportProfileSchema = reportSelectionSchema.extend({
-  format: z.enum(["pdf", "fhir", "package"]),
-  rangeDays: z.number().int().min(1).max(365),
-  includeCharts: z.boolean(),
-});
-
-export type SavedReportProfile = z.infer<typeof savedReportProfileSchema>;
-
-/**
- * The render choices the panel starts from when the account has never saved a
- * profile. Presentation only — this is deliberately NOT a scope fallback;
- * there is no such thing here, because a scope nobody chose is the defect.
- */
-export const SAVED_PROFILE_FALLBACK = {
-  format: "pdf",
-  rangeDays: 90,
-  includeCharts: true,
-} as const;
+export {
+  savedReportProfileSchema,
+  parseSavedProfile,
+  SAVED_PROFILE_FALLBACK,
+  type SavedReportProfile,
+} from "./profile-shape";
 
 /**
  * Resolve the owner's saved selection.
@@ -67,10 +49,4 @@ export async function resolveSavedSelection(
   });
   if (!row) return EMPTY_REPORT_SELECTION;
   return selectionFromStoredBlob(row.reportSelectionJson);
-}
-
-/** Parse a stored profile blob for the panel, or null when there is none. */
-export function parseSavedProfile(raw: unknown): SavedReportProfile | null {
-  const parsed = savedReportProfileSchema.safeParse(raw);
-  return parsed.success ? parsed.data : null;
 }

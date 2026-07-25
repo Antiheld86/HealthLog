@@ -21,7 +21,7 @@ import { apiSuccess, getClientIp } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import { prisma, toJson } from "@/lib/db";
-import { savedReportProfileSchema } from "@/lib/report-selection/saved-profile";
+import { savedReportProfileSchema } from "@/lib/report-selection/profile-shape";
 import { selectionFromRequest } from "@/lib/report-selection/selection";
 
 export const dynamic = "force-dynamic";

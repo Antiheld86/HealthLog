@@ -54,7 +54,7 @@ import type { ReportLeafId } from "@/lib/report-selection/catalogue";
 import {
   parseSavedProfile,
   SAVED_PROFILE_FALLBACK,
-} from "@/lib/report-selection/saved-profile";
+} from "@/lib/report-selection/profile-shape";
 import {
   STANDARD_TEMPLATE_LABEL_KEY,
   STANDARD_TEMPLATE_LEAVES,
@@ -82,7 +82,7 @@ export function HealthRecordExportPanel() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [practiceName, setPracticeName] = useState("");
-  const [includeCharts, setIncludeCharts] = useState(
+  const [includeCharts, setIncludeCharts] = useState<boolean>(
     SAVED_PROFILE_FALLBACK.includeCharts,
   );
   const [selected, setSelected] = useState<ReadonlySet<ReportLeafId>>(

@@ -112,6 +112,33 @@ export function summariseForVisit(
     resolvedAt: e.resolvedAt,
   }));
 
+  // Absence is honest here too. An account whose owner never saved a report
+  // selection resolves to the empty one on this surface, and an empty scope
+  // produces an empty payload — which must read as "nothing was recorded for
+  // this", not as a record with every section quietly missing. The
+  // `{ present: false, reason }` sentinel is the same one the other MCP reads
+  // use, so an assistant already knows how to read it.
+  const hasContent =
+    vitals.length > 0 ||
+    medications.length > 0 ||
+    compliance.length > 0 ||
+    labs.length > 0 ||
+    wellness.length > 0 ||
+    illness.length > 0 ||
+    data.mood != null ||
+    data.bmi != null;
+  if (!hasContent) {
+    return {
+      present: false,
+      reason: "empty_report_selection",
+      period: {
+        days: data.period.days,
+        start: data.period.start,
+        end: data.period.end,
+      },
+    };
+  }
+
   return {
     present: true,
     period: {

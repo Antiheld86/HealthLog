@@ -47,6 +47,7 @@ vi.mock("@/lib/cycle/export-data", () => ({
     currentPhase: "FOLLICULAR",
   })),
 }));
+vi.mock("@/lib/crypto", () => ({ decrypt: vi.fn(() => "A123456789") }));
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: vi.fn() }));
 vi.mock("@/lib/auth/audit", () => ({
@@ -80,6 +81,7 @@ vi.mock("@/lib/modules/gate", async (importOriginal) => {
 
 import { prisma } from "@/lib/db";
 import { ALL_LEAF_IDS } from "@/lib/report-selection/catalogue";
+import { decrypt } from "@/lib/crypto";
 import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import {
@@ -721,5 +723,61 @@ describe("POST /api/export/health-record — what the route remembers", () => {
     expect(prisma.user.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "user-1" } }),
     );
+  });
+});
+
+/**
+ * The insurance number is its own leaf, and it is the most sensitive value on
+ * this path: encrypted at rest, and the one identifier a share link may never
+ * carry at all.
+ *
+ * Mutation check: drop the `selection.has("INSURANCE")` condition on the
+ * decrypt and "never decrypts the insurance number" goes red.
+ */
+describe("POST /api/export/health-record — the insurance leaf", () => {
+  beforeEach(() => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      username: "sample",
+      dateOfBirth: null,
+      gender: null,
+      heightCm: null,
+      glucoseUnit: null,
+      thresholdsJson: null,
+      fullName: null,
+      insurerName: "Sample Insurer",
+      insurerIkNumber: "123456789",
+      insuranceNumberEncrypted: Buffer.from("ciphertext"),
+    } as never);
+  });
+
+  it("never decrypts the insurance number when the leaf was not chosen", async () => {
+    const { POST } = await import("../route");
+    const res = await POST(
+      mkReq({ format: "fhir", selection: sel("WEIGHT", "PATIENT_IDENTITY") }),
+    );
+    expect(res.status).toBe(200);
+    // Not decrypted, so it never entered this process's memory — the stronger
+    // statement than "it was decrypted and then left out".
+    expect(decrypt).not.toHaveBeenCalled();
+    const bundle = (await res.json()) as {
+      entry: { resource: { resourceType: string } }[];
+    };
+    expect(bundle.entry.map((e) => e.resource.resourceType)).not.toContain(
+      "Coverage",
+    );
+  });
+
+  it("decrypts and carries it when the leaf was chosen by name", async () => {
+    const { POST } = await import("../route");
+    const res = await POST(
+      mkReq({
+        format: "fhir",
+        selection: sel("WEIGHT", "PATIENT_IDENTITY", "INSURANCE"),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(decrypt).toHaveBeenCalled();
+    const text = JSON.stringify(await res.json());
+    expect(text).toContain("A123456789");
   });
 });

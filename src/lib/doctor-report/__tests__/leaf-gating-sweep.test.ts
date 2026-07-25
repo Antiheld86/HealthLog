@@ -287,6 +287,84 @@ describe("per-leaf gating sweep", () => {
   }, 30_000);
 });
 
+describe("the derived figures ride their own leaf", () => {
+  it("withholds the BMI figure while the weight series stays", async () => {
+    // The sweep alone cannot isolate this: BODY_MASS_INDEX also gates its own
+    // measurement rows, so the payload differs either way. The figure needs
+    // its own assertion, because weight rows stay readable for exactly this
+    // computation and it would be easy to leave the result ungated.
+    const withBmi = await collectDoctorReportData(
+      "u1",
+      RANGE,
+      selectionFromLeaves(["WEIGHT", "BODY_MASS_INDEX"]),
+      { moduleMap: moduleMap() },
+    );
+    expect(withBmi.bmi).not.toBeNull();
+
+    const withoutBmi = await collectDoctorReportData(
+      "u1",
+      RANGE,
+      selectionFromLeaves(["WEIGHT"]),
+      { moduleMap: moduleMap() },
+    );
+    expect(withoutBmi.bmi).toBeNull();
+    expect(withoutBmi.stats.WEIGHT).toBeDefined();
+  });
+
+  it("computes the BMI figure without carrying the weight series", async () => {
+    // The other half: choosing the figure and not the series still needs the
+    // weight rows read, and must not smuggle the series out with them.
+    const payload = await collectDoctorReportData(
+      "u1",
+      RANGE,
+      selectionFromLeaves(["BODY_MASS_INDEX"]),
+      { moduleMap: moduleMap() },
+    );
+    expect(payload.bmi).not.toBeNull();
+    expect(payload.stats.WEIGHT).toBeUndefined();
+    expect(payload.measurements.WEIGHT).toBeUndefined();
+  });
+
+  it("withholds the GLP-1 block while its inputs stay readable", async () => {
+    const on = await collectDoctorReportData(
+      "u1",
+      RANGE,
+      selectionFromLeaves(["GLP1_THERAPY"]),
+      { moduleMap: moduleMap() },
+    );
+    expect(on.glp1).not.toBeNull();
+
+    const off = await collectDoctorReportData(
+      "u1",
+      RANGE,
+      selectionFromLeaves(["MEDICATION_LIST", "MEDICATION_COMPLIANCE"]),
+      { moduleMap: moduleMap() },
+    );
+    expect(off.glp1).toBeNull();
+    expect(off.medications.length).toBeGreaterThan(0);
+  });
+
+  it("withholds the glucose panel while the raw series stays", async () => {
+    const withPanel = await collectDoctorReportData(
+      "u1",
+      RANGE,
+      selectionFromLeaves(["BLOOD_GLUCOSE", "GLUCOSE_PANEL"]),
+      { moduleMap: moduleMap() },
+    );
+    expect(Object.keys(withPanel.glucoseStats).length).toBeGreaterThan(0);
+
+    const seriesOnly = await collectDoctorReportData(
+      "u1",
+      RANGE,
+      selectionFromLeaves(["BLOOD_GLUCOSE"]),
+      { moduleMap: moduleMap() },
+    );
+    expect(seriesOnly.glucoseStats).toEqual({});
+    expect(seriesOnly.glucoseClinical.readingCount).toBe(0);
+    expect(seriesOnly.stats.BLOOD_GLUCOSE).toBeDefined();
+  });
+});
+
 describe("fail-closed exclusion", () => {
   it("excludes a measurement type the catalogue does not know", () => {
     const gate = resolveReportGate(
