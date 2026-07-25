@@ -23,7 +23,7 @@ import {
   hideCatalogueTagSchema,
 } from "@/lib/mood/custom-tags";
 import { moodTagLayoutSchema } from "@/lib/mood/tag-layout";
-import { moodLevelEnum, moodSourceEnum } from "@/lib/validations/moodlog";
+import { moodLevelEnum, moodSourceEnum } from "@/lib/validations/mood";
 import {
   dataEnvelope,
   errorEnvelope,

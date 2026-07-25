@@ -109,7 +109,6 @@ const LEGIT_IDENTICAL = new Set<string>([
   "settings.ai.providerChain.types.anthropic",
   "settings.ai.providerChain.types.codex",
   "settings.ai.providerSelect.anthropic",
-  "settings.moodLogUrl",
   "settings.sections.export.import.appleHealth.title",
   "settings.sections.sources.sourceLabels.APPLE_HEALTH",
   "settings.appleHealth.title",

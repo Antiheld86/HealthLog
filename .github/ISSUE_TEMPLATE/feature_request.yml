@@ -39,7 +39,6 @@ body:
         - Notifications
         - AI Insights
         - Withings integration
-        - moodLog integration
         - Self-hosting / Docker
         - Other
     validations:

@@ -61,7 +61,7 @@ export const INTAKE_AUTO_SKIP_QUEUE = "intake-auto-skip";
 
 /**
  * Cron schedule. Hourly at :05 so the tick doesn't collide with the
- * top-of-the-hour reminder-check (:00) or the moodlog-sync (:30)
+ * top-of-the-hour reminder-check (:00) or the rollup fold (:30)
  * cadences. Europe/Berlin matches the rest of the worker's schedules.
  */
 export const INTAKE_AUTO_SKIP_CRON = "5 * * * *";

@@ -114,14 +114,14 @@ describe("IntegrationStatus end-to-end", () => {
   it("getIntegrationStatus returns plaintext error after roundtrip (decryption succeeds)", async () => {
     await recordSyncFailure({
       userId: TEST_USER_ID,
-      integration: "moodlog",
+      integration: "nightscout",
       kind: "transient",
-      message: "moodLog sync HTTP 502",
+      message: "Nightscout sync HTTP 502",
       errorCode: "http_502",
     });
-    const snapshot = await getIntegrationStatus(TEST_USER_ID, "moodlog");
+    const snapshot = await getIntegrationStatus(TEST_USER_ID, "nightscout");
     expect(snapshot.state).toBe("error_transient");
-    expect(snapshot.lastError).toBe("moodLog sync HTTP 502");
+    expect(snapshot.lastError).toBe("Nightscout sync HTTP 502");
     // v1.4.47 W1 — snapshot drops the legacy `consecutiveFailures`
     // scalar; the per-kind bucket carries the count.
     expect(snapshot.consecutiveFailuresByKind).toMatchObject({
@@ -217,12 +217,12 @@ describe("IntegrationStatus end-to-end", () => {
   it("kind=reauth_required parks the integration so isReauthRequired() returns true", async () => {
     await recordSyncFailure({
       userId: TEST_USER_ID,
-      integration: "moodlog",
+      integration: "nightscout",
       kind: "reauth_required",
-      message: "moodLog sync HTTP 401",
+      message: "Nightscout sync HTTP 401",
       errorCode: "http_401",
     });
-    expect(await isReauthRequired(TEST_USER_ID, "moodlog")).toBe(true);
+    expect(await isReauthRequired(TEST_USER_ID, "nightscout")).toBe(true);
     expect(await isReauthRequired(TEST_USER_ID, "withings")).toBe(false);
   });
 
@@ -246,14 +246,14 @@ describe("IntegrationStatus end-to-end", () => {
   it("markDisconnected wipes the error state but leaves the row as a tombstone", async () => {
     await recordSyncFailure({
       userId: TEST_USER_ID,
-      integration: "moodlog",
+      integration: "nightscout",
       kind: "transient",
       message: "blip",
     });
-    await markDisconnected(TEST_USER_ID, "moodlog");
+    await markDisconnected(TEST_USER_ID, "nightscout");
     const row = await getPrismaClient().integrationStatus.findUnique({
       where: {
-        userId_integration: { userId: TEST_USER_ID, integration: "moodlog" },
+        userId_integration: { userId: TEST_USER_ID, integration: "nightscout" },
       },
     });
     expect(row!.state).toBe("disconnected");

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-HealthLog — a personal health-tracking PWA (weight, blood pressure, pulse, mood, medication compliance) with Withings integration, moodLog.app sync, Dracula-themed UI, mobile-first design, offline caching, and doctor report PDF export.
+HealthLog — a personal health-tracking PWA (weight, blood pressure, pulse, mood, medication compliance) with Withings integration, Dracula-themed UI, mobile-first design, offline caching, and doctor report PDF export.
 
 ## Commands
 

@@ -20,10 +20,6 @@ vi.mock("@/lib/rollups/mood-rollups", () => ({
   recomputeMoodBucketsForEntry: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("@/lib/moodlog/push", () => ({
-  pushMoodEntriesToMoodLog: vi.fn().mockResolvedValue(undefined),
-}));
-
 vi.mock("@/lib/logging/context", () => ({
   getEvent: () => ({ addMeta: vi.fn() }),
 }));

@@ -600,10 +600,10 @@ describe("get_integration_status", () => {
       Date.now() - 28 * 24 * 60 * 60 * 1000,
     ).toISOString();
     vi.mocked(prisma.integrationStatus.findMany).mockResolvedValue([
-      { integration: "moodlog" },
+      { integration: "nightscout" },
     ] as never);
     vi.mocked(getIntegrationStatus).mockResolvedValue({
-      integration: "moodlog",
+      integration: "nightscout",
       state: "error_transient",
       lastSuccessAt: new Date(
         Date.now() - 55 * 24 * 60 * 60 * 1000,
@@ -620,7 +620,7 @@ describe("get_integration_status", () => {
           providers: Array<Record<string, unknown>>;
         };
         expect(result.providers[0]).toMatchObject({
-          provider: "moodlog",
+          provider: "nightscout",
           connected: true,
           verdict: "stalled",
           since: lastAttemptAt,

@@ -20,7 +20,6 @@ import { assertSubsystemEnabled } from "@/lib/process-type";
 import { DATABASE_URL, workerLog } from "./reminder/shared";
 import {
   registerShutdownHandlers,
-  rotateLegacyMoodLogSecretsAtBoot,
   reconcileImportJobsAtBoot,
   probeIntegrationStatusAtBoot,
 } from "./reminder/worker-lifecycle";
@@ -59,10 +58,6 @@ export async function startReminderWorker() {
   await boss.start();
   setGlobalBoss(boss);
   markWorkerStarted();
-
-  // V3 audit STILL-V2-C-2: encrypt-at-rest one-shot migration for any
-  // plaintext mood_log_webhook_secret rows. Idempotent.
-  await rotateLegacyMoodLogSecretsAtBoot();
 
   // Graceful shutdown: drain in-flight jobs on SIGTERM/SIGINT.
   registerShutdownHandlers(boss);

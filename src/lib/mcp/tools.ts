@@ -1484,7 +1484,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     name: "get_integration_status",
     title: "Get device & service sync status",
     description:
-      "Fetch the sync health of the user's connected devices and services (Withings, WHOOP, Fitbit, Nightscout, Polar, Oura, moodLog) — which are connected, when each last synced, and whether one needs reconnecting or is failing. Answers 'why is my data stale?'. Reuses the integration-status ledger; carries no secrets or tokens. `connected` means only 'not explicitly disconnected'; `verdict` is the liveness truth (fresh / stale / stalled / failing / reauth_required / parked / pending_first_sync / disconnected), where `stalled` means the sync has stopped even attempting. Returns { present: false } when no integration has ever attempted a sync.",
+      "Fetch the sync health of the user's connected devices and services (Withings, WHOOP, Fitbit, Nightscout, Polar, Oura, Strava, Google Health) — which are connected, when each last synced, and whether one needs reconnecting or is failing. Answers 'why is my data stale?'. Reuses the integration-status ledger; carries no secrets or tokens. `connected` means only 'not explicitly disconnected'; `verdict` is the liveness truth (fresh / stale / stalled / failing / reauth_required / parked / pending_first_sync / disconnected), where `stalled` means the sync has stopped even attempting. Returns { present: false } when no integration has ever attempted a sync.",
     inputShape: {},
     annotations: READ_ONLY_ANNOTATIONS,
     outputShape: getIntegrationStatusOutput,

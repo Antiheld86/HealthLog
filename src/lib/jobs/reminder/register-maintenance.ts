@@ -446,8 +446,8 @@ const schedules: ScheduleEntry[] = [
   [MEDICATION_INVENTORY_EXPIRE_QUEUE, MEDICATION_INVENTORY_EXPIRE_CRON],
   // v1.4.46 — hourly auto-skip for medication intakes the user never
   // marked. Cron `5 * * * *` slots off the top-of-the-hour
-  // reminder-check (:00) and the moodlog-sync (:30) so the three
-  // hourly ticks don't pile up on the same boss poll.
+  // reminder-check (:00) so the hourly ticks don't pile up on the same
+  // boss poll.
   [INTAKE_AUTO_SKIP_QUEUE, INTAKE_AUTO_SKIP_CRON],
   // v0.5.4 ios-coord — daily mood-reminder dispatch-ledger retention sweep.
   [MOOD_REMINDER_CLEANUP_QUEUE, MOOD_REMINDER_CLEANUP_CRON],

@@ -41,14 +41,6 @@ describe("SSRF requirePublicHost pin inventory", () => {
   // v1.11.2 product-lead M2 (optional) — lock the PRE-EXISTING user/operator
   // webhook pins too, so the full inventory is CI-guarded and a future edit
   // that drops one of these reds here rather than shipping silently.
-  it("moodLog push pins the user-supplied webhook outbound", () => {
-    expect(read("moodlog/push.ts")).toMatch(/requirePublicHost:\s*true/);
-  });
-
-  it("moodLog sync pins the user-supplied webhook outbound", () => {
-    expect(read("moodlog/sync.ts")).toMatch(/requirePublicHost:\s*true/);
-  });
-
   it("ntfy sender pins the user/operator-supplied server outbound", () => {
     expect(read("notifications/senders/ntfy.ts")).toMatch(
       /requirePublicHost:\s*true/,

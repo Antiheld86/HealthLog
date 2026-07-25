@@ -468,7 +468,7 @@ describe("buildDailyDigest — worth-a-look rail item builders", () => {
       input({
         syncIssues: [
           { integration: "withings", state: "error_reauth" },
-          { integration: "moodlog", state: "parked" },
+          { integration: "nightscout", state: "parked" },
         ],
       }),
       t,
@@ -508,7 +508,7 @@ describe("buildDailyDigest — worth-a-look rail item builders", () => {
         medsToday: meds({ nextDueOverdue: true, nextDueMedicationName: "X" }),
         syncIssues: [
           { integration: "withings", state: "error_reauth" },
-          { integration: "moodlog", state: "parked" },
+          { integration: "nightscout", state: "parked" },
           { integration: "fitbit", state: "error_reauth" },
         ],
         preventiveDue: [{ label: "Blood panel" }],
@@ -646,7 +646,7 @@ describe("buildDailyDigest — coach check-in (S3)", () => {
         medsToday: meds({ nextDueOverdue: true, nextDueMedicationName: "X" }),
         syncIssues: [
           { integration: "withings", state: "error_reauth" },
-          { integration: "moodlog", state: "parked" },
+          { integration: "nightscout", state: "parked" },
         ],
         coachPlans: [plan()],
       }),
@@ -784,7 +784,7 @@ describe("buildDailyDigest — S11 tension_window item", () => {
         medsToday: meds({ nextDueOverdue: true, nextDueMedicationName: "X" }),
         syncIssues: [
           { integration: "withings", state: "error_reauth" },
-          { integration: "moodlog", state: "parked" },
+          { integration: "nightscout", state: "parked" },
         ],
         tensionWindow: { partOfDay: "evening" },
       }),

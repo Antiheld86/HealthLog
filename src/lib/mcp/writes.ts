@@ -39,9 +39,8 @@ import {
 import { recomputeBucketsForMeasurement } from "@/lib/rollups/measurement-rollups";
 import { recomputeMoodBucketsForEntry } from "@/lib/rollups/mood-rollups";
 import { MOOD_ENUM_BY_SCORE } from "@/lib/mood/labels";
-import { getScoreForMood } from "@/lib/validations/moodlog";
+import { getScoreForMood } from "@/lib/validations/mood";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
-import { pushMoodEntriesToMoodLog } from "@/lib/moodlog/push";
 
 /** The MCP write provenance — distinct from MANUAL / TELEGRAM. */
 const MCP_SOURCE = "MCP" as const;
@@ -618,18 +617,6 @@ export async function logMcpMood(input: {
       rollupErr instanceof Error ? rollupErr.message : String(rollupErr),
     );
   }
-
-  // Reverse-sync to MoodLog (fire-and-forget; never throws).
-  void pushMoodEntriesToMoodLog(input.userId, [
-    {
-      date: entry.date,
-      moodLoggedAt,
-      mood: entry.mood,
-      note: savedNote,
-      tags: entry.tags,
-      source: MCP_SOURCE,
-    },
-  ]).catch(() => {});
 
   await auditLog("mcp.write.mood", {
     userId: input.userId,

@@ -35,10 +35,9 @@ export type {
 } from "./sync-verdict";
 
 /**
- * The `MeasurementSource` each sync integration's rows carry. `moodlog` is
- * absent — it writes `MoodEntry` rows, not `Measurement` rows, so it has no
- * per-metric measurement freshness. `strava` is absent from the measurement
- * map for the same reason and picks up its `WORKOUTS` entry below.
+ * The `MeasurementSource` each sync integration's rows carry. `strava` is
+ * absent — it writes `Workout` rows, not `Measurement` rows — and picks up its
+ * `WORKOUTS` entry below.
  */
 export const INTEGRATION_MEASUREMENT_SOURCE: Partial<
   Record<IntegrationKey, MeasurementSource>

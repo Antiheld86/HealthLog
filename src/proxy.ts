@@ -43,7 +43,6 @@ const PUBLIC_PATHS = [
   // must bypass the auth gate (mirrors the Withings webhook entry).
   "/api/whoop/webhook",
   "/api/telegram/webhook",
-  "/api/integrations/moodlog/webhook",
   "/api/ingest/",
   // v1.4.26 — `/privacy` is a public legal page. iOS App Store Connect
   // requires a publicly reachable Privacy-Policy URL during submission;

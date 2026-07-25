@@ -95,11 +95,6 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
         telegramEnabled: false,
         withingsClientIdEncrypted: null,
         withingsClientSecretEncrypted: null,
-        moodLogUrlEncrypted: null,
-        moodLogApiKeyEncrypted: null,
-        moodLogEnabled: false,
-        moodLogLastSyncedAt: null,
-        moodLogWebhookSecret: null,
         onboardingCompletedAt: null,
       },
     });

@@ -6,7 +6,6 @@ export interface GlobalServiceAvailability {
   ntfyGlobal: boolean;
   webPushGlobal: boolean;
   apiGlobal: boolean;
-  moodLogGlobal: boolean;
 }
 
 export async function getGlobalServiceAvailability(): Promise<GlobalServiceAvailability> {
@@ -18,7 +17,6 @@ export async function getGlobalServiceAvailability(): Promise<GlobalServiceAvail
         ntfyGlobal: true,
         webPushGlobal: true,
         apiGlobal: true,
-        moodLogGlobal: true,
       },
     });
 
@@ -27,7 +25,6 @@ export async function getGlobalServiceAvailability(): Promise<GlobalServiceAvail
       ntfyGlobal: settings?.ntfyGlobal ?? true,
       webPushGlobal: settings?.webPushGlobal ?? true,
       apiGlobal: settings?.apiGlobal ?? true,
-      moodLogGlobal: settings?.moodLogGlobal ?? true,
     };
   } catch {
     getEvent()?.addWarning("Failed to load app settings, using defaults");
@@ -36,7 +33,6 @@ export async function getGlobalServiceAvailability(): Promise<GlobalServiceAvail
       ntfyGlobal: true,
       webPushGlobal: true,
       apiGlobal: true,
-      moodLogGlobal: true,
     };
   }
 }

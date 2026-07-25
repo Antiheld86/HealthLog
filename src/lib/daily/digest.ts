@@ -99,7 +99,7 @@ export interface DailyDigestScore {
 
 /** A broken integration, deterministically derived from `IntegrationStatus`. */
 export interface DailyDigestSyncIssue {
-  /** Integration token (`withings`, `moodlog`, …). */
+  /** Integration token (`withings`, `whoop`, …). */
   integration: string;
   /** The failure state the row carries (`error_reauth`, `disconnected`, …). */
   state: string;

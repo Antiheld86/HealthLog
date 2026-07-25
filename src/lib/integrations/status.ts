@@ -1,8 +1,7 @@
 /**
  * Per-(user, integration) sync-status bookkeeping.
  *
- * v1.4.15 Phase B2 introduces three responsibilities for every Withings /
- * moodLog sync attempt:
+ * v1.4.15 Phase B2 introduces three responsibilities for every sync attempt:
  *
  *   1. Record success / failure timestamps so Settings → Integrations
  *      can show "last sync 23 minutes ago" instead of guessing from
@@ -23,9 +22,8 @@
  *                       sync entry-point still attempts on the next
  *                       run (network blip, 5xx, etc.).
  *   error_reauth      → refresh-token grant has revoked. `getValidToken`
- *                       / `syncMoodLogEntries` short-circuit until the
- *                       user reconnects. Cleared by markReconnected()
- *                       on the OAuth callback.
+ *                       short-circuits until the user reconnects. Cleared
+ *                       by markReconnected() on the OAuth callback.
  *   disconnected      → user clicked "Disconnect". Set explicitly by
  *                       the disconnect routes; clears any prior error
  *                       state.
@@ -53,8 +51,7 @@ export type IntegrationKey =
   // `fitbit` transport, which sunsets Sept 2026.
   | "google-health"
   // v1.28.x — Strava OAuth workout source.
-  | "strava"
-  | "moodlog";
+  | "strava";
 
 /**
  * Failure kinds carried into `recordSyncFailure`.
@@ -311,9 +308,8 @@ export async function isReauthRequired(
 /**
  * Record a successful sync. Resets the failure counter, clears any
  * prior error message, and (importantly) flips state back to
- * `connected` even from `error_reauth` — the moodLog flow re-enters
- * after the user re-supplies the apiKey, the Withings flow after the
- * OAuth callback writes a new refresh token.
+ * `connected` even from `error_reauth` — the Withings flow re-enters
+ * after the OAuth callback writes a new refresh token.
  */
 export async function recordSyncSuccess(
   userId: string,
@@ -862,7 +858,6 @@ const INTEGRATION_LABELS: Record<IntegrationKey, string> = {
   oura: "Oura",
   "google-health": "Google Health",
   strava: "Strava",
-  moodlog: "moodLog",
 };
 
 const FAILURE_KIND_COPY: Record<

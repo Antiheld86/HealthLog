@@ -8,10 +8,7 @@ import {
   safeJson,
   sanitiseZodIssues,
 } from "@/lib/api-response";
-import {
-  updateMoodEntrySchema,
-  getScoreForMood,
-} from "@/lib/validations/moodlog";
+import { updateMoodEntrySchema, getScoreForMood } from "@/lib/validations/mood";
 import { NextRequest } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { apiHandler, requireAuth } from "@/lib/api-handler";

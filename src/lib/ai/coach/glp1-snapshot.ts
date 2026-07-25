@@ -170,7 +170,7 @@ const SIDE_EFFECT_TAGS = new Set([
 function parseTagList(raw: string | null): string[] {
   if (!raw) return [];
   // The MoodEntry.tags column carries either a JSON array (modern
-  // mood-form writes) or a comma-separated list (legacy moodLog
+  // mood-form writes) or a comma-separated list (legacy imported
   // imports). Be permissive.
   try {
     const parsed = JSON.parse(raw);

@@ -62,7 +62,6 @@ vi.mock("@tanstack/react-query", () => ({
           ntfyGlobal: true,
           webPushGlobal: true,
           apiGlobal: true,
-          moodLogGlobal: true,
         },
         isLoading: false,
       };
@@ -116,18 +115,6 @@ describe("IntegrationsSection — single-status-display contract (A5)", () => {
           hasActivityScope: true,
           syncHealth: { verdict: "fresh", since: null },
         },
-        {
-          // Not configured here, so this entry claims no surface. The
-          // configured, card-less case has its own coverage test — this one is
-          // about one status display per CARD.
-          integration: "moodlog",
-          state: "disconnected",
-          lastSuccessAt: null,
-          lastAttemptAt: null,
-          lastError: null,
-          configured: false,
-          syncHealth: { verdict: "disconnected", since: null },
-        },
       ],
     });
 
@@ -161,13 +148,6 @@ describe("IntegrationsSection — single-status-display contract (A5)", () => {
           legacyLastSyncedAt: "2026-05-09T08:00:00.000Z",
           hasActivityScope: true,
           syncHealth: { verdict: "failing", since: "2026-05-09T08:00:00.000Z" },
-        },
-        {
-          integration: "moodlog",
-          state: "connected",
-          lastSuccessAt: null,
-          lastAttemptAt: null,
-          lastError: null,
         },
       ],
     });
@@ -206,13 +186,6 @@ describe("IntegrationsSection — single-status-display contract (A5)", () => {
             verdict: "reauth_required",
             since: "2026-05-09T18:00:00.000Z",
           },
-        },
-        {
-          integration: "moodlog",
-          state: "connected",
-          lastSuccessAt: null,
-          lastAttemptAt: null,
-          lastError: null,
         },
       ],
     });
@@ -266,13 +239,6 @@ describe("IntegrationsSection — single-status-display contract (A5)", () => {
           legacyLastSyncedAt: "2026-05-08T12:00:00.000Z",
           hasActivityScope: true,
           syncHealth: { verdict: "parked", since: "2026-05-09T18:00:00.000Z" },
-        },
-        {
-          integration: "moodlog",
-          state: "connected",
-          lastSuccessAt: null,
-          lastAttemptAt: null,
-          lastError: null,
         },
       ],
     });

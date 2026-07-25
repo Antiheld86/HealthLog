@@ -49,7 +49,7 @@ vi.mock("@/lib/daily/morning-refresh-trigger", () => ({
 // v1.4.39.1 — surface the rollup hook so the new regression test can
 // assert that the import path now folds the persistent rollup tier
 // for each touched (type, day). Mood rollup mock stays no-op because
-// the existing v1.4.39 W-MOOD hook already covers the moodlog branch.
+// the existing v1.4.39 W-MOOD hook already covers the import branch.
 vi.mock("@/lib/rollups/measurement-rollups", async () => {
   const actual = await vi.importActual<
     typeof import("@/lib/rollups/measurement-rollups")

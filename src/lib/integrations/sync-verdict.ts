@@ -115,14 +115,13 @@ export const INTEGRATION_CADENCE: Record<IntegrationKey, SyncCadence> = {
   oura: POLLED_CADENCE,
   "google-health": POLLED_CADENCE,
   strava: POLLED_CADENCE,
-  moodlog: POLLED_CADENCE,
 };
 
 export interface SyncVerdictInput {
   /**
    * Whether a live connection exists (an OAuth token, a connection row). Pass
-   * `undefined` for providers that carry no connection concept — moodLog is
-   * configured by URL alone — so the ladder falls through to `configured`.
+   * `undefined` for providers that carry no connection concept, so the ladder
+   * falls through to `configured`.
    */
   connected?: boolean;
   /** Whether credentials / a URL are stored for this provider. */

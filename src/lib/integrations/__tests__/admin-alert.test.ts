@@ -87,18 +87,18 @@ describe("formatAdminAlertPayload — Withings re-auth", () => {
   });
 });
 
-describe("formatAdminAlertPayload — moodLog transient", () => {
-  it("uses 'moodLog' display name and the 'investigate the upstream service.' action", () => {
+describe("formatAdminAlertPayload — non-Withings transient", () => {
+  it("uses the provider's display name and the 'investigate the upstream service.' action", () => {
     const out = formatAdminAlertPayload({
       userId: "u-2",
-      integration: "moodlog",
+      integration: "nightscout",
       kind: "transient",
-      message: "moodLog sync HTTP 502",
+      message: "Nightscout sync HTTP 502",
       errorCode: "http_502",
       consecutiveFailures: 4,
       subjectLabel: "user@example.com",
     });
-    expect(out.title).toBe("moodLog sync failing for user@example.com");
+    expect(out.title).toBe("Nightscout sync failing for user@example.com");
     expect(out.message).toContain("Action: investigate the upstream service.");
     expect(out.message).toContain("(http_502)");
   });
@@ -159,14 +159,14 @@ describe("formatAdminAlertPayload — metadata payload", () => {
 
     const withoutCode = formatAdminAlertPayload({
       userId: "u-6",
-      integration: "moodlog",
+      integration: "nightscout",
       kind: "transient",
       message: "blip",
       errorCode: undefined,
       consecutiveFailures: 7,
     });
     expect(withoutCode.metadata).toEqual({
-      integration: "moodlog",
+      integration: "nightscout",
       affectedUserId: "u-6",
       consecutiveFailures: 7,
       errorCode: null,

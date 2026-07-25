@@ -45,7 +45,6 @@ test.describe("/settings/integrations Pixel-5 layout", () => {
             ntfyGlobal: true,
             webPushGlobal: true,
             apiGlobal: true,
-            moodLogGlobal: true,
           },
           error: null,
         }),
@@ -75,7 +74,7 @@ test.describe("/settings/integrations Pixel-5 layout", () => {
                 // v1.12.1 — the cards read connection state from this
                 // consolidated envelope (the per-provider routes were
                 // dropped from the section). The Withings pill keys on
-                // `connected`; the moodLog pill keys on `configured`.
+                // `connected`; a card-less pill keys on `configured`.
                 configured: true,
                 connected: true,
                 connectedAt: "2026-04-01T12:00:00Z",
@@ -90,19 +89,18 @@ test.describe("/settings/integrations Pixel-5 layout", () => {
                 ],
               },
               {
-                integration: "moodlog",
+                // Configured, card-less, and no longer attempting: the case
+                // the fallback row exists for. Synthetic since v1.32.33 —
+                // every shipped provider has a card again, and the row must
+                // stay proven before the next one is dropped.
+                integration: "example-provider",
                 state: "connected",
                 lastSuccessAt: recent,
                 lastAttemptAt: recent,
                 lastError: null,
                 consecutiveFailures: 0,
                 configured: true,
-                enabled: true,
                 legacyLastSyncedAt: monthAgo,
-                webhookSecret: "ml_xxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-                entryCount: 42,
-                // Configured, card-less, and no longer attempting: the case the
-                // fallback row exists for.
                 syncHealth: { verdict: "stalled", since: monthAgo },
                 metricFreshness: [],
               },
@@ -161,23 +159,6 @@ test.describe("/settings/integrations Pixel-5 layout", () => {
       }),
     );
 
-    await page.route("**/api/integrations/moodlog/status", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          data: {
-            configured: true,
-            enabled: true,
-            lastSyncedAt: recent,
-            entryCount: 42,
-            webhookSecret: "ml_xxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-          },
-          error: null,
-        }),
-      }),
-    );
-
     await page.goto("/settings/integrations", {
       waitUntil: "domcontentloaded",
     });
@@ -186,7 +167,7 @@ test.describe("/settings/integrations Pixel-5 layout", () => {
     // Wait for the pills to mount (queries resolve after first paint).
     // One pill per card: Withings, WHOOP, Fitbit, Google Health, Polar,
     // Oura, Strava, Nightscout — plus the fallback row for the configured,
-    // card-less moodLog entry. (The Garmin info note is not an OAuth card and
+    // card-less entry. (The Garmin info note is not an OAuth card and
     // carries no pill; the Apple Health card's pill keeps its own testid.)
     const pills = page.locator('[data-testid="integration-status-pill"]');
     await expect(pills).toHaveCount(9, { timeout: 10_000 });
@@ -194,7 +175,7 @@ test.describe("/settings/integrations Pixel-5 layout", () => {
     // The acceptance case: a configured integration with no card of its own,
     // which has stopped even attempting, is visible on the page.
     const fallback = page.locator(
-      '[data-testid="integration-fallback-row"][data-integration="moodlog"]',
+      '[data-testid="integration-fallback-row"][data-integration="example-provider"]',
     );
     await expect(fallback).toHaveCount(1);
     await expect(

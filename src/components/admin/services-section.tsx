@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Globe, Key, MessageCircle, Smile } from "lucide-react";
+import { Bell, Globe, Key, MessageCircle } from "lucide-react";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations } from "@/lib/i18n/context";
@@ -46,16 +46,6 @@ export function ServicesSection() {
           checked={settings?.webPushGlobal ?? true}
           onCheckedChange={(checked) =>
             updateSettings.mutate({ webPushGlobal: checked })
-          }
-          disabled={updateSettings.isPending}
-        />
-        <SettingsToggle
-          label="moodLog"
-          description={t("admin.moodLogGlobal")}
-          icon={Smile}
-          checked={settings?.moodLogGlobal ?? true}
-          onCheckedChange={(checked) =>
-            updateSettings.mutate({ moodLogGlobal: checked })
           }
           disabled={updateSettings.isPending}
         />

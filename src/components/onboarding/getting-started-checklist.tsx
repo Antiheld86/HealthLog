@@ -265,7 +265,7 @@ export function GettingStartedChecklist() {
 
   // v1.17.0 — any connected data source satisfies the step, so we read
   // the consolidated integrations envelope (Withings / WHOOP / Fitbit /
-  // moodLog) rather than the Withings-only status route.
+  // Google Health / …) rather than the Withings-only status route.
   const { data: integrationsData } = useQuery<IntegrationsStatus>({
     queryKey: queryKeys.integrationsStatus(),
     queryFn: async () => {

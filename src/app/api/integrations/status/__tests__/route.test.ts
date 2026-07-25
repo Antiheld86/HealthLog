@@ -40,7 +40,6 @@ vi.mock("@/lib/integrations/status", () => ({
 const perIntegrationLedger: Record<string, Record<string, unknown>> = {};
 
 vi.mock("@/lib/withings/client", () => ({ hasActivityScope: () => false }));
-vi.mock("@/lib/moodlog-secret", () => ({ readMoodLogSecret: () => null }));
 
 const polarAvailable = vi.fn(async () => true);
 const ouraAvailable = vi.fn(async () => false);
@@ -178,13 +177,14 @@ describe("/api/integrations/status — sync-health verdict on every entry", () =
     }
   });
 
-  it("reports a configured, month-silent card-less provider as stalled", async () => {
-    // The live incident, on the wire: moodLog has no Settings card, so this
-    // entry is the only thing that can tell anyone the sync has stopped.
+  it("reports a configured, month-silent provider as stalled", async () => {
+    // The class the verdict exists for: the ledger state has been frozen
+    // since the last write, so only the age of `lastAttemptAt` can say the
+    // sync has stopped attempting.
     const lastAttemptAt = new Date(
       Date.now() - 28 * 24 * 60 * 60 * 1000,
     ).toISOString();
-    perIntegrationLedger.moodlog = {
+    perIntegrationLedger.nightscout = {
       state: "error_transient",
       lastSuccessAt: new Date(
         Date.now() - 55 * 24 * 60 * 60 * 1000,
@@ -192,23 +192,20 @@ describe("/api/integrations/status — sync-health verdict on every entry", () =
       lastAttemptAt,
       lastError: null,
     };
-    userFind.mockResolvedValue({
-      moodLogUrlEncrypted: "enc",
-      moodLogEnabled: true,
-    });
+    userFind.mockResolvedValue({ nightscoutUrlEncrypted: "enc" });
 
-    const moodlog = (await fetchEntries()).find(
-      (entry) => entry.integration === "moodlog",
+    const nightscout = (await fetchEntries()).find(
+      (entry) => entry.integration === "nightscout",
     )!;
-    expect(moodlog.configured).toBe(true);
-    expect(moodlog.syncHealth).toEqual({
+    expect(nightscout.configured).toBe(true);
+    expect(nightscout.syncHealth).toEqual({
       verdict: "stalled",
       since: lastAttemptAt,
     });
   });
 
   it("keeps an integration that attempted within the window off the stalled arm", async () => {
-    perIntegrationLedger.moodlog = {
+    perIntegrationLedger.nightscout = {
       state: "error_transient",
       lastSuccessAt: null,
       lastAttemptAt: new Date(
@@ -216,12 +213,12 @@ describe("/api/integrations/status — sync-health verdict on every entry", () =
       ).toISOString(),
       lastError: null,
     };
-    userFind.mockResolvedValue({ moodLogUrlEncrypted: "enc" });
+    userFind.mockResolvedValue({ nightscoutUrlEncrypted: "enc" });
 
-    const moodlog = (await fetchEntries()).find(
-      (entry) => entry.integration === "moodlog",
+    const nightscout = (await fetchEntries()).find(
+      (entry) => entry.integration === "nightscout",
     )!;
-    expect(moodlog.syncHealth!.verdict).toBe("failing");
+    expect(nightscout.syncHealth!.verdict).toBe("failing");
   });
 
   it("includes a nightscout entry with the fields the card's form reads", async () => {

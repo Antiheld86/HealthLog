@@ -131,7 +131,6 @@ describe("canonical disaster-recovery backup round-trip", () => {
         webPushVapidPrivateKeyEncrypted: "private-dr",
         webPushVapidSubject: "mailto:dr@example.test",
         apiGlobal: false,
-        moodLogGlobal: false,
         umamiEnabled: true,
         umamiScriptUrl: "https://analytics.example.test/script.js",
         umamiWebsiteId: "website-dr",

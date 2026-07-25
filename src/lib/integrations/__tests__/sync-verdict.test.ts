@@ -35,7 +35,7 @@ describe("resolveSyncVerdict — the ladder", () => {
       state: "error_transient",
       lastSuccessAt: ago(55 * DAY),
       lastAttemptAt,
-      cadence: INTEGRATION_CADENCE.moodlog,
+      cadence: INTEGRATION_CADENCE.nightscout,
       now: NOW,
     });
     expect(result.verdict).toBe("stalled");

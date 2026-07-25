@@ -62,11 +62,10 @@ reset to `'disconnected'`), `ai_anthropic_key_encrypted`,
 `withings_client_id_encrypted`, `withings_client_secret_encrypted`,
 `whoop_client_id_encrypted`, `whoop_client_secret_encrypted`,
 `fitbit_client_id_encrypted`, `fitbit_client_secret_encrypted`,
-`telegram_bot_token`, `telegram_chat_id`, `mood_log_url_encrypted`,
-`mood_log_api_key_encrypted`, `mood_log_webhook_secret`,
+`telegram_bot_token`, `telegram_chat_id`,
 `insurance_number_encrypted`, `insurer_name`, `insurer_ik_number`.
 
-Forced flags: `telegram_enabled=false`, `mood_log_enabled=false`,
+Forced flags: `telegram_enabled=false`,
 `role='ADMIN'`.
 
 **Kept:** `password_hash` (demo login works), `avatar_bytes` /

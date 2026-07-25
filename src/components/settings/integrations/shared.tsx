@@ -27,7 +27,6 @@ export type IntegrationKey =
   | "withings"
   | "whoop"
   | "fitbit"
-  | "moodlog"
   | "polar"
   | "oura"
   // v1.27.0 — Google Health (Fitbit + Pixel Watch + Fitbit Air).
@@ -68,9 +67,6 @@ export interface IntegrationStatusViewModel {
   // paints a distinct re-consent CTA off this flag, separate from the parked
   // state. Server-populated on the `/api/integrations/status` envelope.
   needsReauth?: boolean;
-  // moodLog webhook secret + entry count.
-  webhookSecret?: string | null;
-  entryCount?: number;
   // Polar / Oura OAuth card: usable-credentials + BYO-key flags. `available`
   // greys out the connect button when no credentials resolve; `hasOwnCredentials`
   // drives the saved-placeholder UI.

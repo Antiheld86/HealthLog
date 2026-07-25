@@ -9,7 +9,7 @@ import { useTranslations } from "@/lib/i18n/context";
 
 /**
  * Password input with a built-in show/hide toggle. Lives in the shared UI
- * layer so every surface that needs a masked secret (Withings, moodLog,
+ * layer so every surface that needs a masked secret (Withings, Nightscout,
  * ntfy, Telegram, AI provider keys, account password, auth login /
  * register) can share the same UX without duplicating the
  * visibility-toggle plumbing.

@@ -343,7 +343,6 @@ const handler = apiHandler(
                 settings.webPushVapidPrivateKeyEncrypted,
               webPushVapidSubject: settings.webPushVapidSubject,
               apiGlobal: settings.apiGlobal,
-              moodLogGlobal: settings.moodLogGlobal,
               umamiEnabled: settings.umamiEnabled,
               umamiScriptUrl: settings.umamiScriptUrl,
               umamiWebsiteId: settings.umamiWebsiteId,

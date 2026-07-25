@@ -32,7 +32,6 @@ interface GlobalServiceAvailability {
   ntfyGlobal: boolean;
   webPushGlobal: boolean;
   apiGlobal: boolean;
-  moodLogGlobal: boolean;
 }
 
 export function NotificationChannelsPanel() {

@@ -6,8 +6,8 @@
  * the user from the linked chat instead. This helper holds the shared
  * write so the two entry points agree on the canonical shape: the same
  * `getScoreForMood` / `moodDateKey` derivation, the same per-user `tz`
- * anchoring, the same cache invalidation + DAY-rollup recompute + MoodLog
- * reverse-sync push the route fires. `source` is pinned to "TELEGRAM"
+ * anchoring, the same cache invalidation + DAY-rollup recompute the route
+ * fires. `source` is pinned to "TELEGRAM"
  * (already an accepted free-text source value, no enum migration needed).
  *
  * The `userId` is NEVER taken from the Telegram payload — the caller
@@ -16,12 +16,11 @@
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db";
 import { MOOD_ENUM_BY_SCORE } from "@/lib/mood/labels";
-import { getScoreForMood } from "@/lib/validations/moodlog";
+import { getScoreForMood } from "@/lib/validations/mood";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
-import { encryptNote, readNote } from "@/lib/crypto/note-cipher";
+import { encryptNote } from "@/lib/crypto/note-cipher";
 import { invalidateUserMood } from "@/lib/cache/invalidate";
 import { recomputeMoodBucketsForEntry } from "@/lib/rollups/mood-rollups";
-import { pushMoodEntriesToMoodLog } from "@/lib/moodlog/push";
 import { getEvent } from "@/lib/logging/context";
 
 export interface TelegramMoodResult {
@@ -108,18 +107,6 @@ export async function logTelegramMood(input: {
       rollupErr instanceof Error ? rollupErr.message : String(rollupErr),
     );
   }
-
-  // Reverse-sync to MoodLog (fire-and-forget; never throws).
-  void pushMoodEntriesToMoodLog(input.userId, [
-    {
-      date: entry.date,
-      moodLoggedAt,
-      mood: entry.mood,
-      note: readNote(entry.noteEncrypted, entry.note),
-      tags: entry.tags,
-      source: "TELEGRAM",
-    },
-  ]).catch(() => {});
 
   return { created: true, moodEntryId: entry.id, score };
 }

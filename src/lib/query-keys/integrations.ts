@@ -1,6 +1,6 @@
 /**
  * Query keys — external integrations: API tokens, Telegram, Withings,
- * WHOOP, Fitbit, moodLog, and the Apple Health export import job.
+ * WHOOP, Fitbit, and the Apple Health export import job.
  * Part of the centralized factory; aggregated in `./index.ts`.
  */
 export const integrationKeys = {
@@ -63,7 +63,6 @@ export const integrationKeys = {
   strava: () => ["strava"] as const,
   stravaStatus: () => ["strava", "status"] as const,
 
-  moodlogStatus: () => ["moodlog-status"] as const,
   integrationsStatus: () => ["integrations", "status"] as const,
   // Apple Health live-sync freshness comes from the existing HealthKit config
   // endpoint. It is intentionally separate from the OAuth integration ledger:

@@ -669,7 +669,7 @@ export async function buildAchievementsResult(
     }),
     // v1.4.18 — mood entries feed the new mood badges + the
     // entry-streak/consistent-month engagement metrics. Synced from
-    // moodLog.app or entered directly; we intentionally include all
+    // imported or entered directly; we intentionally include all
     // sources because consistency-of-tracking is what the badge
     // rewards.
     prisma.moodEntry.findMany({
