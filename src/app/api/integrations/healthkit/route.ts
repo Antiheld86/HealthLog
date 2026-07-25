@@ -20,6 +20,12 @@ import {
 import { annotate } from "@/lib/logging/context";
 import { prisma, toJson } from "@/lib/db";
 import { auditLog } from "@/lib/auth/audit";
+import { getSourceFreshness } from "@/lib/integrations/metric-freshness";
+import {
+  classifyMetricFreshness,
+  PUSH_CADENCE,
+  resolveSyncVerdict,
+} from "@/lib/integrations/sync-verdict";
 
 export const directionEnum = z.enum([
   "bidirectional",
@@ -129,10 +135,30 @@ export const GET = apiHandler(async () => {
 
   const stored = parseStored(row?.healthKitConfigJson ?? null);
   const entries = mergeWithDefaults(stored);
+  const lastSyncedAt = row?.healthKitLastSyncedAt?.toISOString() ?? null;
+
+  // Apple Health is push-based: the iOS app delivers and nothing here polls, so
+  // liveness is a data question, not an attempt question. Without a threshold a
+  // three-week-dead pipe rendered the same green as one that delivered an hour
+  // ago. Fail-soft on the per-metric read — an honesty signal is never worth
+  // 500-ing the config the iOS client needs.
+  // No `connected` hint: Apple Health has nothing to connect or disconnect, so
+  // "never delivered" resolves to `pending_first_sync`, not `disconnected`.
+  const syncHealth = resolveSyncVerdict({
+    configured: true,
+    lastDataAt: lastSyncedAt,
+    legacyLastSyncedAt: lastSyncedAt,
+    cadence: PUSH_CADENCE,
+  });
+  const samples = await getSourceFreshness(user.id, "APPLE_HEALTH").catch(
+    () => [],
+  );
 
   return apiSuccess({
     entries,
-    lastSyncedAt: row?.healthKitLastSyncedAt?.toISOString() ?? null,
+    lastSyncedAt,
+    syncHealth,
+    metricFreshness: classifyMetricFreshness(samples, syncHealth.verdict),
   });
 });
 

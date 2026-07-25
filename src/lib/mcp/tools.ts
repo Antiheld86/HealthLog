@@ -62,6 +62,10 @@ import {
   getIntegrationStatus,
   type IntegrationKey,
 } from "@/lib/integrations/status";
+import {
+  INTEGRATION_CADENCE,
+  resolveSyncVerdict,
+} from "@/lib/integrations/sync-verdict";
 import { toMeasurementReminderDto } from "@/lib/measurement-reminders/dto";
 import { fenceUserText, scrubFenceMarkers } from "@/lib/ai/coach/data-fence";
 import type { McpAuthContext } from "./auth";
@@ -860,6 +864,8 @@ const getIntegrationStatusOutput: z.ZodRawShape = {
         reauthRequired: z.boolean(),
         lastSuccessAt: z.string().nullable(),
         lastAttemptAt: z.string().nullable(),
+        verdict: z.string(),
+        since: z.string().nullable(),
       }),
     )
     .optional(),
@@ -1478,7 +1484,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     name: "get_integration_status",
     title: "Get device & service sync status",
     description:
-      "Fetch the sync health of the user's connected devices and services (Withings, WHOOP, Fitbit, Nightscout, Polar, Oura, moodLog) — which are connected, when each last synced, and whether one needs reconnecting or is failing. Answers 'why is my data stale?'. Reuses the integration-status ledger; carries no secrets or tokens. Returns { present: false } when no integration has ever attempted a sync.",
+      "Fetch the sync health of the user's connected devices and services (Withings, WHOOP, Fitbit, Nightscout, Polar, Oura, moodLog) — which are connected, when each last synced, and whether one needs reconnecting or is failing. Answers 'why is my data stale?'. Reuses the integration-status ledger; carries no secrets or tokens. `connected` means only 'not explicitly disconnected'; `verdict` is the liveness truth (fresh / stale / stalled / failing / reauth_required / parked / pending_first_sync / disconnected), where `stalled` means the sync has stopped even attempting. Returns { present: false } when no integration has ever attempted a sync.",
     inputShape: {},
     annotations: READ_ONLY_ANNOTATIONS,
     outputShape: getIntegrationStatusOutput,
@@ -1503,6 +1509,17 @@ export const MCP_TOOLS: McpToolDefinition[] = [
             ctx.userId,
             r.integration as IntegrationKey,
           );
+          // `connected` means "not explicitly disconnected" and says nothing
+          // about liveness — a month-dead pull still reads true. `verdict` is
+          // the liveness truth, resolved by the same server-side rule the
+          // Settings page renders.
+          const health = resolveSyncVerdict({
+            configured: true,
+            state: s.state,
+            lastSuccessAt: s.lastSuccessAt,
+            lastAttemptAt: s.lastAttemptAt,
+            cadence: INTEGRATION_CADENCE[s.integration],
+          });
           return {
             provider: s.integration,
             state: s.state,
@@ -1510,6 +1527,8 @@ export const MCP_TOOLS: McpToolDefinition[] = [
             reauthRequired: s.state === "error_reauth" || s.state === "parked",
             lastSuccessAt: s.lastSuccessAt,
             lastAttemptAt: s.lastAttemptAt,
+            verdict: health.verdict,
+            since: health.since,
           };
         }),
       );

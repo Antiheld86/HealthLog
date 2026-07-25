@@ -27,7 +27,14 @@ import {
 import {
   getSourceMetricFreshness,
   type MetricFreshnessEntry,
+  type MetricFreshnessSample,
 } from "@/lib/integrations/metric-freshness";
+import {
+  classifyMetricFreshness,
+  INTEGRATION_CADENCE,
+  resolveSyncVerdict,
+  type SyncHealth,
+} from "@/lib/integrations/sync-verdict";
 import { getOuraClientCredentials } from "@/lib/oura/credentials";
 import { getPolarClientCredentials } from "@/lib/polar/credentials";
 import { getStravaClientCredentials } from "@/lib/strava/credentials";
@@ -49,6 +56,7 @@ export const GET = apiHandler(async () => {
     polarStatus,
     ouraStatus,
     stravaStatus,
+    nightscoutStatus,
     dbUser,
     withingsConn,
     whoopConn,
@@ -70,6 +78,7 @@ export const GET = apiHandler(async () => {
     getIntegrationStatus(user.id, "polar"),
     getIntegrationStatus(user.id, "oura"),
     getIntegrationStatus(user.id, "strava"),
+    getIntegrationStatus(user.id, "nightscout"),
     prisma.user.findUnique({
       where: { id: user.id },
       select: {
@@ -95,6 +104,11 @@ export const GET = apiHandler(async () => {
         moodLogEnabled: true,
         moodLogLastSyncedAt: true,
         moodLogWebhookSecret: true,
+        // Nightscout folds onto the envelope; the card reads these three off
+        // it instead of its own /api/nightscout/status round-trip.
+        nightscoutUrlEncrypted: true,
+        nightscoutTokenEncrypted: true,
+        nightscoutAllowPrivateHost: true,
       },
     }),
     prisma.withingsConnection.findUnique({
@@ -149,26 +163,93 @@ export const GET = apiHandler(async () => {
   // ("connected · 5 min ago"). Fail-soft: this is an honesty signal, never worth
   // 500-ing the whole Settings card, so a groupBy hiccup degrades to no data.
   const metricFreshness = await getSourceMetricFreshness(user.id).catch(
-    () => ({}) as Partial<Record<IntegrationKey, MetricFreshnessEntry[]>>,
+    () => ({}) as Partial<Record<IntegrationKey, MetricFreshnessSample[]>>,
   );
 
   const now = Date.now();
   const whoopConnected = !!whoopConn?.whoopUserId;
+
+  /**
+   * The sync-health verdict + the per-metric staleness flags, resolved from
+   * data already in hand — no additional query. Every entry carries it,
+   * whether or not a card exists for the provider: a card-level verdict misses
+   * a card-less provider by construction, which is how a month-dead sync went
+   * unnoticed.
+   */
+  function resolve(
+    integration: IntegrationKey,
+    snapshot: {
+      state: string;
+      lastSuccessAt: string | null;
+      lastAttemptAt: string | null;
+    },
+    opts: {
+      connected?: boolean;
+      configured?: boolean;
+      legacyLastSyncedAt?: string | null;
+    },
+  ): { syncHealth: SyncHealth; metricFreshness: MetricFreshnessEntry[] } {
+    const syncHealth = resolveSyncVerdict({
+      connected: opts.connected,
+      configured: opts.configured,
+      state: snapshot.state,
+      lastSuccessAt: snapshot.lastSuccessAt,
+      lastAttemptAt: snapshot.lastAttemptAt,
+      legacyLastSyncedAt: opts.legacyLastSyncedAt ?? null,
+      cadence: INTEGRATION_CADENCE[integration],
+      now,
+    });
+    return {
+      syncHealth,
+      metricFreshness: classifyMetricFreshness(
+        metricFreshness[integration] ?? [],
+        syncHealth.verdict,
+        now,
+      ),
+    };
+  }
+
+  const withingsConfigured =
+    !!dbUser?.withingsClientIdEncrypted &&
+    !!dbUser?.withingsClientSecretEncrypted;
+  const withingsLegacyLastSyncedAt =
+    withingsConn?.lastSyncedAt?.toISOString() ?? null;
+  const moodLogConfigured = !!dbUser?.moodLogUrlEncrypted;
+  const moodLogLegacyLastSyncedAt =
+    dbUser?.moodLogLastSyncedAt?.toISOString() ?? null;
+  const whoopConfigured =
+    !!dbUser?.whoopClientIdEncrypted && !!dbUser?.whoopClientSecretEncrypted;
+  const whoopLegacyLastSyncedAt = whoopConnected
+    ? (whoopConn?.lastSyncedAt?.toISOString() ?? null)
+    : null;
+  const fitbitConnected = !!fitbitConn;
+  const fitbitConfigured =
+    !!dbUser?.fitbitClientIdEncrypted && !!dbUser?.fitbitClientSecretEncrypted;
+  const fitbitLegacyLastSyncedAt =
+    fitbitConn?.lastSyncedAt?.toISOString() ?? null;
+  const googleHealthConnected = !!googleHealthConn;
+  const googleHealthConfigured =
+    !!dbUser?.googleHealthClientIdEncrypted &&
+    !!dbUser?.googleHealthClientSecretEncrypted;
+  const googleHealthLegacyLastSyncedAt =
+    googleHealthConn?.lastSyncedAt?.toISOString() ?? null;
+  const polarConnected = !!dbUser?.polarAccessTokenEncrypted;
+  const ouraConnected = !!dbUser?.ouraAccessTokenEncrypted;
+  const stravaConnected = !!dbUser?.stravaAccessTokenEncrypted;
+  const nightscoutConfigured = !!dbUser?.nightscoutUrlEncrypted;
 
   return apiSuccess({
     threshold: getPersistentFailureThreshold(),
     integrations: [
       {
         ...withingsStatus,
-        configured:
-          !!dbUser?.withingsClientIdEncrypted &&
-          !!dbUser?.withingsClientSecretEncrypted,
+        configured: withingsConfigured,
         connected: !!withingsConn,
         connectedAt: withingsConn?.createdAt?.toISOString() ?? null,
         // Surface the connection row's success time too so the UI
         // can fall back to it when no IntegrationStatus row exists
         // yet (legacy connections established before this feature).
-        legacyLastSyncedAt: withingsConn?.lastSyncedAt?.toISOString() ?? null,
+        legacyLastSyncedAt: withingsLegacyLastSyncedAt,
         tokenExpiresAt: withingsConn?.tokenExpiresAt?.toISOString() ?? null,
         tokenExpired: withingsConn
           ? withingsConn.tokenExpiresAt.getTime() <= now
@@ -178,33 +259,39 @@ export const GET = apiHandler(async () => {
         // Null `scope` = legacy connection that predates activity-scope reads.
         scope: withingsConn?.scope ?? null,
         hasActivityScope: hasActivityScope(withingsConn?.scope ?? null),
-        metricFreshness: metricFreshness.withings ?? [],
+        ...resolve("withings", withingsStatus, {
+          connected: !!withingsConn,
+          configured: withingsConfigured,
+          legacyLastSyncedAt: withingsLegacyLastSyncedAt,
+        }),
       } satisfies IntegrationViewModel & WithingsExtras,
       {
         ...moodLogStatus,
         // moodLog "configured" tracks the URL alone (the API key is
         // optional for the webhook-only path), matching the legacy
         // /api/integrations/moodlog/status contract the card relied on.
-        configured: !!dbUser?.moodLogUrlEncrypted,
+        configured: moodLogConfigured,
         enabled: dbUser?.moodLogEnabled ?? false,
-        legacyLastSyncedAt: dbUser?.moodLogLastSyncedAt?.toISOString() ?? null,
+        legacyLastSyncedAt: moodLogLegacyLastSyncedAt,
         // V3 audit STILL-V2-C-2: stored secret is AES-GCM encrypted at rest;
         // decrypt for the settings page (legacy plaintext is also handled).
         webhookSecret: readMoodLogSecret(dbUser?.moodLogWebhookSecret ?? null),
         entryCount: moodLogEntryCount,
+        // moodLog has no connection row — `configured` alone decides whether it
+        // is meant to be running, so the verdict gets no `connected` hint.
+        ...resolve("moodlog", moodLogStatus, {
+          configured: moodLogConfigured,
+          legacyLastSyncedAt: moodLogLegacyLastSyncedAt,
+        }),
       } satisfies IntegrationViewModel & MoodLogExtras,
       {
         ...whoopStatus,
-        configured:
-          !!dbUser?.whoopClientIdEncrypted &&
-          !!dbUser?.whoopClientSecretEncrypted,
+        configured: whoopConfigured,
         connected: whoopConnected,
         connectedAt: whoopConnected
           ? (whoopConn?.createdAt.toISOString() ?? null)
           : null,
-        legacyLastSyncedAt: whoopConnected
-          ? (whoopConn?.lastSyncedAt?.toISOString() ?? null)
-          : null,
+        legacyLastSyncedAt: whoopLegacyLastSyncedAt,
         tokenExpiresAt: whoopConnected
           ? (whoopConn?.tokenExpiresAt.toISOString() ?? null)
           : null,
@@ -214,32 +301,35 @@ export const GET = apiHandler(async () => {
         backfillCompleted: whoopConnected
           ? !!whoopConn?.backfillCompletedAt
           : null,
-        metricFreshness: metricFreshness.whoop ?? [],
+        ...resolve("whoop", whoopStatus, {
+          connected: whoopConnected,
+          configured: whoopConfigured,
+          legacyLastSyncedAt: whoopLegacyLastSyncedAt,
+        }),
       } satisfies IntegrationViewModel & WhoopExtras,
       {
         ...fitbitStatus,
-        configured:
-          !!dbUser?.fitbitClientIdEncrypted &&
-          !!dbUser?.fitbitClientSecretEncrypted,
-        connected: !!fitbitConn,
+        configured: fitbitConfigured,
+        connected: fitbitConnected,
         connectedAt: fitbitConn?.createdAt?.toISOString() ?? null,
-        legacyLastSyncedAt: fitbitConn?.lastSyncedAt?.toISOString() ?? null,
+        legacyLastSyncedAt: fitbitLegacyLastSyncedAt,
         tokenExpiresAt: fitbitConn?.tokenExpiresAt?.toISOString() ?? null,
         tokenExpired: fitbitConn
           ? fitbitConn.tokenExpiresAt.getTime() <= now
           : null,
         backfillCompleted: fitbitConn ? !!fitbitConn.backfillCompletedAt : null,
-        metricFreshness: metricFreshness.fitbit ?? [],
+        ...resolve("fitbit", fitbitStatus, {
+          connected: fitbitConnected,
+          configured: fitbitConfigured,
+          legacyLastSyncedAt: fitbitLegacyLastSyncedAt,
+        }),
       } satisfies IntegrationViewModel & FitbitExtras,
       {
         ...googleHealthStatus,
-        configured:
-          !!dbUser?.googleHealthClientIdEncrypted &&
-          !!dbUser?.googleHealthClientSecretEncrypted,
-        connected: !!googleHealthConn,
+        configured: googleHealthConfigured,
+        connected: googleHealthConnected,
         connectedAt: googleHealthConn?.createdAt?.toISOString() ?? null,
-        legacyLastSyncedAt:
-          googleHealthConn?.lastSyncedAt?.toISOString() ?? null,
+        legacyLastSyncedAt: googleHealthLegacyLastSyncedAt,
         tokenExpiresAt: googleHealthConn?.tokenExpiresAt?.toISOString() ?? null,
         tokenExpired: googleHealthConn
           ? googleHealthConn.tokenExpiresAt.getTime() <= now
@@ -251,7 +341,11 @@ export const GET = apiHandler(async () => {
         // user-revoked grant) surfaced from the connection row; the card reads it
         // to raise a distinct "Reconnect" CTA separate from parked/disconnected.
         needsReauth: googleHealthConn ? googleHealthConn.needsReauth : false,
-        metricFreshness: metricFreshness["google-health"] ?? [],
+        ...resolve("google-health", googleHealthStatus, {
+          connected: googleHealthConnected,
+          configured: googleHealthConfigured,
+          legacyLastSyncedAt: googleHealthLegacyLastSyncedAt,
+        }),
       } satisfies IntegrationViewModel & GoogleHealthExtras,
       {
         ...polarStatus,
@@ -259,36 +353,60 @@ export const GET = apiHandler(async () => {
         // OAuth card has no separate "credentials saved but disconnected" view
         // beyond `hasOwnCredentials`). The card greys out the connect button
         // when no usable credentials resolve (`available`).
-        connected: !!dbUser?.polarAccessTokenEncrypted,
-        configured: !!dbUser?.polarAccessTokenEncrypted,
+        connected: polarConnected,
+        configured: polarConnected,
         available: polarAvailable,
         hasOwnCredentials:
           !!dbUser?.polarClientIdEncrypted &&
           !!dbUser?.polarClientSecretEncrypted,
-        metricFreshness: metricFreshness.polar ?? [],
+        ...resolve("polar", polarStatus, {
+          connected: polarConnected,
+          configured: polarConnected,
+        }),
       } satisfies IntegrationViewModel & OAuthProviderExtras,
       {
         ...ouraStatus,
-        connected: !!dbUser?.ouraAccessTokenEncrypted,
-        configured: !!dbUser?.ouraAccessTokenEncrypted,
+        connected: ouraConnected,
+        configured: ouraConnected,
         available: ouraAvailable,
         hasOwnCredentials:
           !!dbUser?.ouraClientIdEncrypted &&
           !!dbUser?.ouraClientSecretEncrypted,
-        metricFreshness: metricFreshness.oura ?? [],
+        ...resolve("oura", ouraStatus, {
+          connected: ouraConnected,
+          configured: ouraConnected,
+        }),
       } satisfies IntegrationViewModel & OAuthProviderExtras,
       {
         ...stravaStatus,
-        connected: !!dbUser?.stravaAccessTokenEncrypted,
-        configured: !!dbUser?.stravaAccessTokenEncrypted,
+        connected: stravaConnected,
+        configured: stravaConnected,
         available: stravaAvailable,
         hasOwnCredentials:
           !!dbUser?.stravaClientIdEncrypted &&
           !!dbUser?.stravaClientSecretEncrypted,
-        // Strava writes Workout rows, not Measurements, so it has no
-        // per-metric measurement freshness (like moodLog).
-        metricFreshness: metricFreshness.strava ?? [],
+        // Strava writes Workout rows, not Measurements — its freshness list
+        // carries the `WORKOUTS` pseudo-entry alone.
+        ...resolve("strava", stravaStatus, {
+          connected: stravaConnected,
+          configured: stravaConnected,
+        }),
       } satisfies IntegrationViewModel & OAuthProviderExtras,
+      {
+        ...nightscoutStatus,
+        // Nightscout is a URL the self-hoster pastes once; `configured` (a
+        // stored URL) is the connect marker, and a fully-public instance has
+        // no token. The card reads these off the envelope now instead of its
+        // own status round-trip, so the whole page reads from one source.
+        connected: nightscoutConfigured,
+        configured: nightscoutConfigured,
+        hasToken: !!dbUser?.nightscoutTokenEncrypted,
+        allowPrivateHost: dbUser?.nightscoutAllowPrivateHost ?? false,
+        ...resolve("nightscout", nightscoutStatus, {
+          connected: nightscoutConfigured,
+          configured: nightscoutConfigured,
+        }),
+      } satisfies IntegrationViewModel & NightscoutExtras,
     ],
   });
 });
@@ -300,12 +418,18 @@ interface IntegrationViewModel {
   lastAttemptAt: string | null;
   lastError: string | null;
   /**
-   * F-SYNC-1 — per-metric-type last-value timestamps for the integration's
-   * synced measurements. Present on the measurement-backed integrations;
-   * omitted for moodLog (which writes MoodEntry rows, not Measurements). Lets
-   * the card flag a silently-dead metric the green integration state hides.
+   * The server-resolved liveness verdict. Present on EVERY entry, whether or
+   * not a card renders it — the unit of coverage is the envelope entry, not
+   * the card.
    */
-  metricFreshness?: MetricFreshnessEntry[];
+  syncHealth: SyncHealth;
+  /**
+   * Per-metric-type last-value timestamps for the integration's synced data,
+   * each with the server-computed `stale` flag. Empty for moodLog (which
+   * writes MoodEntry rows, not Measurements). Lets the card flag a silently
+   * dead metric the green integration state hides.
+   */
+  metricFreshness: MetricFreshnessEntry[];
 }
 
 interface WithingsExtras {
@@ -370,4 +494,14 @@ interface OAuthProviderExtras {
   configured: boolean;
   available: boolean;
   hasOwnCredentials: boolean;
+}
+
+// Nightscout folds onto the envelope so the card stops firing its own status
+// round-trip and so the provider inherits the shared verdict. `hasToken` and
+// `allowPrivateHost` are the two fields the card's form placeholders read.
+interface NightscoutExtras {
+  connected: boolean;
+  configured: boolean;
+  hasToken: boolean;
+  allowPrivateHost: boolean;
 }
