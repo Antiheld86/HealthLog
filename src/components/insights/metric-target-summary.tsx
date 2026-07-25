@@ -354,7 +354,7 @@ function TargetReferencePanel({
           }
         />
         {heading ? (
-          <p className="text-muted-foreground text-[0.6875rem] font-medium tracking-[0.06em] uppercase">
+          <p className="text-muted-foreground text-xs font-medium tracking-[0.06em] uppercase">
             {heading}
           </p>
         ) : null}

@@ -36,6 +36,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
+import { TagChip } from "@/components/ui/tag-chip";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { IntegrationStatusPill } from "@/components/settings/integration-status-pill";
@@ -204,9 +205,7 @@ export function FitbitCard({
         title={t("settings.fitbit")}
         titleAccessory={
           <>
-            <span className="bg-muted text-foreground rounded-full px-2 py-0.5 text-[0.6875rem] font-medium">
-              {t("settings.fitbitTag")}
-            </span>
+            <TagChip>{t("settings.fitbitTag")}</TagChip>
             <Badge
               variant="outline"
               data-testid="fitbit-experimental-badge"

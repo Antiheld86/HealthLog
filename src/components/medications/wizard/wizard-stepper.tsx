@@ -162,7 +162,7 @@ export function WizardStepper({
                   />
                   <span
                     className={cn(
-                      "max-w-[6rem] truncate text-[0.6875rem] leading-none",
+                      "text-2xs max-w-[6rem] truncate leading-none",
                       isActive
                         ? "text-foreground font-medium"
                         : "text-muted-foreground",
