@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [1.32.27] — 2026-07-25
+
+Target and threshold panels now follow the metric and imperial preference. The
+previous release listed this as the one place still reading in kilograms and
+Celsius: with imperial selected a weight chart read in pounds while the target
+reference right below it read in kilograms.
+
+- **Target ranges read in your unit.** On the weight insight page the target
+  band, the range bar, the status pill, and the 30 day average all read in
+  pounds when imperial is selected. Body water and bone mass follow the same
+  rule in the threshold settings.
+- **Editing a target works in the unit you see.** The target editor and the
+  threshold settings seed their fields from the stored value converted to your
+  unit, check what you type against limits expressed in that same unit, and
+  convert back before saving. A value typed at the displayed limit is accepted
+  instead of being rejected against a kilogram bound you never saw. Saving and
+  reopening shows the number you typed.
+- **Storage is unchanged.** Targets are still kept in canonical SI, and a metric
+  account's saved values are untouched by this release.
+- **Known remaining.** Height is still entered in centimetres.
+
 ## [1.32.26] — 2026-07-25
 
 The metric and imperial display preference is now applied everywhere your
