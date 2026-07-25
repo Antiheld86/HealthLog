@@ -116,6 +116,29 @@ describe("<TargetEditSheet>", () => {
     ).not.toThrow();
   });
 
+  it("mounts a weight target seeded in pounds without throwing", () => {
+    // v1.32.27 — an imperial account gets `unit="lb"` and a
+    // pound-converted seed from the panel; the sheet projects the
+    // kilogram guardrails into the same unit and inverts on save. The
+    // arithmetic itself is pinned in `target-unit-display.test.ts`
+    // (Radix portals the body, so SSR cannot read the fields back);
+    // this covers the mount path composing cleanly.
+    expect(() =>
+      renderToStaticMarkup(
+        withProviders(
+          <TargetEditSheet
+            targetType="WEIGHT"
+            targetLabel="Weight"
+            unit="lb"
+            initialRange={{ min: 132.3, max: 176.4 }}
+            open={true}
+            onOpenChange={vi.fn()}
+          />,
+        ),
+      ),
+    ).not.toThrow();
+  });
+
   it("mounts the body without throwing for a derived metric (BMI)", () => {
     // BMI is derived from weight + height — the body shows the
     // explanatory hint instead of the editable inputs.

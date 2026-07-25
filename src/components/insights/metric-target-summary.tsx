@@ -5,9 +5,11 @@ import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, Target } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
+import { useUnitDisplay } from "@/hooks/use-unit-display";
 import { queryKeys } from "@/lib/query-keys";
 import { useTranslations } from "@/lib/i18n/context";
 import { convertGlucose, resolveGlucoseUnit } from "@/lib/glucose";
+import { resolveTargetUnitAdapter } from "@/lib/targets/target-unit-display";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { RangeBar } from "@/components/targets/range-bar";
 import { ConsistencyStrip } from "@/components/targets/consistency-strip";
@@ -229,8 +231,29 @@ function TargetReferencePanel({
 }: TargetReferencePanelProps) {
   const { t } = useTranslations();
   const adjust = useTargetAdjust();
+  const { preference } = useUnitDisplay();
 
-  const { range, unit } = target;
+  // v1.32.27 — the panel renders in the user's preferred unit. The
+  // `/api/insights/targets` payload is canonical (kg for weight); the
+  // adapter converts it once, here, and everything downstream — the
+  // range bar, the status pill, the 30-day average, and the edit
+  // sheet's seed — consumes the converted pair. Glucose contexts are
+  // pre-converted by the caller above and carry no display transform,
+  // so they take the adapter's identity path and are never scaled
+  // twice. For a metric account the adapter is the exact identity, so
+  // this panel is byte-identical to the previous release.
+  const units = resolveTargetUnitAdapter(target.type, target.unit, preference);
+  const unit = units.unit;
+  const range = target.range
+    ? {
+        min: units.toDisplay(target.range.min),
+        max: units.toDisplay(target.range.max),
+      }
+    : null;
+  const currentValue =
+    target.current == null ? null : units.toDisplay(target.current);
+  const average30 =
+    target.average30 == null ? null : units.toDisplay(target.average30);
 
   // Register this metric as the header gear's edit target. The effect
   // re-runs when the seeded range / unit / label changes (e.g. a glucose
@@ -282,11 +305,11 @@ function TargetReferencePanel({
   // the exception: it has no `<MetricPrimaryTile>` (this richer panel IS
   // its primary tile), so it keeps the stitched S/D 30-day average inline.
   let averageLabel: string | null = null;
-  if (isBp && target.average30 != null) {
+  if (isBp && average30 != null) {
     const avgValue =
       bpDiastolic?.average30 != null
-        ? `${Math.round(target.average30)}/${Math.round(bpDiastolic.average30)}`
-        : String(Math.round(target.average30 * 10) / 10);
+        ? `${Math.round(average30)}/${Math.round(bpDiastolic.average30)}`
+        : String(Math.round(average30 * 10) / 10);
     averageLabel = `${t("targets.average30d")} ${avgValue} ${unit}`;
   }
 
@@ -338,9 +361,9 @@ function TargetReferencePanel({
       </CardHeader>
       <CardContent className="space-y-3">
         {/* Row 2: range bar — where today's value sits inside the band. */}
-        {target.current != null ? (
+        {currentValue != null ? (
           <RangeBar
-            value={target.current}
+            value={currentValue}
             min={range.min}
             max={range.max}
             unit={unit}

@@ -19,6 +19,8 @@ import {
   type EffectiveRange,
 } from "@/lib/analytics/effective-range";
 import { apiFetchRaw, apiGet } from "@/lib/api/api-fetch";
+import { useUnitDisplay } from "@/hooks/use-unit-display";
+import { resolveTargetUnitAdapter } from "@/lib/targets/target-unit-display";
 import { SettingsCard } from "@/components/settings/settings-card";
 
 interface ThresholdsApiResponse {
@@ -215,14 +217,35 @@ function MetricRow({
 }: MetricRowProps) {
   const { t } = useTranslations();
   const fmt = useFormatters();
-  const bounds = METRIC_BOUNDS[metric];
+  const { preference } = useUnitDisplay();
+  const canonicalBounds = METRIC_BOUNDS[metric];
+
+  // v1.32.27 — the row reads and writes in the user's preferred unit
+  // while `User.thresholdsJson` stays canonical SI. Everything the row
+  // receives (`override`, `effective.default`, `METRIC_BOUNDS`) is
+  // canonical, so it converts on the way into the fields and inverts on
+  // the way back out in `onSave`. Guardrails round inward so a value
+  // typed at the displayed limit still passes the server's canonical
+  // check. Metrics without a transform — and every metric for a metric
+  // user — take the adapter's identity path untouched.
+  const units = resolveTargetUnitAdapter(
+    metric,
+    canonicalBounds.unit,
+    preference,
+  );
+  const bounds = { ...units.bounds(canonicalBounds), unit: units.unit };
+
+  /** Canonical seed → the string the field shows, falling back to the bound. */
+  const seedString = (canonical: number | undefined, fallback: number) =>
+    String(canonical == null ? fallback : units.toDisplay(canonical));
+
   const hasOverride = override !== null;
   const [overrideMode, setOverrideMode] = useState(hasOverride);
   const [minStr, setMinStr] = useState(
-    String(override?.min ?? effective?.default?.greenMin ?? bounds.min),
+    seedString(override?.min ?? effective?.default?.greenMin, bounds.min),
   );
   const [maxStr, setMaxStr] = useState(
-    String(override?.max ?? effective?.default?.greenMax ?? bounds.max),
+    seedString(override?.max ?? effective?.default?.greenMax, bounds.max),
   );
 
   // v1.30.1 M9 — the row is keyed on the stable `metric`, so a per-row
@@ -244,10 +267,10 @@ function MetricRow({
     setSyncedIdentity(overrideIdentity);
     setOverrideMode(hasOverride);
     setMinStr(
-      String(override?.min ?? effective?.default?.greenMin ?? bounds.min),
+      seedString(override?.min ?? effective?.default?.greenMin, bounds.min),
     );
     setMaxStr(
-      String(override?.max ?? effective?.default?.greenMax ?? bounds.max),
+      seedString(override?.max ?? effective?.default?.greenMax, bounds.max),
     );
   }
 
@@ -269,7 +292,7 @@ function MetricRow({
           <p className="text-sm font-medium">{t(METRIC_LABEL_KEYS[metric])}</p>
           <p className="text-muted-foreground text-xs">
             {defaultRange
-              ? `${t("thresholds.defaultLabel")}: ${fmt.number(defaultRange.greenMin, 1)}–${fmt.number(defaultRange.greenMax, 1)} ${bounds.unit}`
+              ? `${t("thresholds.defaultLabel")}: ${fmt.number(units.toDisplay(defaultRange.greenMin), 1)}–${fmt.number(units.toDisplay(defaultRange.greenMax), 1)} ${bounds.unit}`
               : t("thresholds.unsetExplanation")}
           </p>
         </div>
@@ -316,7 +339,7 @@ function MetricRow({
                 type="number"
                 inputMode={metric === "ACTIVITY_STEPS" ? "numeric" : "decimal"}
                 enterKeyHint="next"
-                step={metric === "ACTIVITY_STEPS" ? 100 : 0.1}
+                step={units.step}
                 min={bounds.min}
                 max={bounds.max}
                 value={minStr}
@@ -334,7 +357,7 @@ function MetricRow({
                 type="number"
                 inputMode={metric === "ACTIVITY_STEPS" ? "numeric" : "decimal"}
                 enterKeyHint="done"
-                step={metric === "ACTIVITY_STEPS" ? 100 : 0.1}
+                step={units.step}
                 min={bounds.min}
                 max={bounds.max}
                 value={maxStr}
@@ -344,7 +367,13 @@ function MetricRow({
             </div>
             <div className="flex items-end gap-2">
               <Button
-                onClick={() => valid && onSave({ min: minNum, max: maxNum })}
+                onClick={() =>
+                  valid &&
+                  onSave({
+                    min: units.toCanonical(minNum),
+                    max: units.toCanonical(maxNum),
+                  })
+                }
                 disabled={busy || !valid}
                 size="sm"
                 className="min-h-11 sm:min-h-9"
