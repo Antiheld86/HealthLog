@@ -3,9 +3,9 @@
  *
  * Owns the third-party-provider sync queues — Withings (fallback / activity /
  * sleep), WHOOP (recovery / sleep / workout / cycle + backfill + OAuth-state
- * cleanup), Fitbit (sync + backfill + OAuth-state cleanup), Nightscout, Polar,
- * Oura, MoodLog, and the two one-shot backfills (sleep-timeline, lab-biomarker)
- * — plus their boot-time discovery enqueues.
+ * cleanup), Fitbit (sync + backfill + sleep repair + OAuth-state cleanup),
+ * Nightscout, Polar, Oura, MoodLog, and the two one-shot backfills
+ * (sleep-timeline, lab-biomarker) — plus their boot-time discovery enqueues.
  *
  * v1.4.37 dead-queue contract: every queue name appears in `allQueues`, its
  * cron (where it has one) appears as a `[QUEUE, CRON]` tuple in `schedules`,
@@ -42,6 +42,13 @@ import {
   enqueueBootTimeGoogleHealthSleepRepair,
   type GoogleHealthSleepRepairPayload,
 } from "@/lib/jobs/google-health-sleep-repair";
+import {
+  FITBIT_SLEEP_REPAIR_QUEUE,
+  FITBIT_SLEEP_REPAIR_CONCURRENCY,
+  runFitbitSleepRepairForUser,
+  enqueueBootTimeFitbitSleepRepair,
+  type FitbitSleepRepairPayload,
+} from "@/lib/jobs/fitbit-sleep-repair";
 import {
   STRAVA_BACKFILL_QUEUE,
   STRAVA_BACKFILL_CONCURRENCY,
@@ -285,6 +292,10 @@ const allQueues = [
   // self-converging boot backfill, and the daily OAuth-state ledger sweep.
   FITBIT_SYNC_QUEUE,
   FITBIT_BACKFILL_QUEUE,
+  // One-shot Fitbit sleep duplicate repair. Discovery enqueues one bounded
+  // sleep re-read per connection not yet repaired; the replace-by-window write
+  // path collapses each night's leftovers. Idempotent across reboots.
+  FITBIT_SLEEP_REPAIR_QUEUE,
   FITBIT_OAUTH_STATE_CLEANUP_QUEUE,
   // v1.26.0 — Google Health poll-only sync (no webhook at launch),
   // self-converging boot backfill, and the daily OAuth-state ledger sweep.
@@ -411,6 +422,11 @@ const queuePolicies: QueuePolicyTable = {
     reason:
       "Per-connection one-shot sleep re-read; discovery drops the connection once it is marked repaired.",
   },
+  [FITBIT_SLEEP_REPAIR_QUEUE]: {
+    policy: "exclusive",
+    reason:
+      "Per-connection one-shot sleep re-read; discovery drops the connection once it is marked repaired.",
+  },
   [SLEEP_TIMELINE_BACKFILL_QUEUE]: {
     policy: "exclusive",
     reason:
@@ -481,6 +497,15 @@ export async function registerIntegrationSyncQueues(
             workerLog(
               "info",
               `[google-health-sleep-repair] user=${userId} imported=${imported}`,
+            );
+            break;
+          }
+          case "fitbit-sleep-repair": {
+            const { imported, removed } =
+              await runFitbitSleepRepairForUser(userId);
+            workerLog(
+              "info",
+              `[fitbit-sleep-repair] user=${userId} imported=${imported} removed=${removed}`,
             );
             break;
           }
@@ -611,6 +636,21 @@ export async function registerIntegrationSyncQueues(
       for (const job of jobs) {
         await enqueueIntegrationBackfillAdmission(boss, {
           kind: "fitbit-backfill",
+          data: job.data,
+        });
+      }
+    },
+  );
+  // One-shot Fitbit sleep duplicate repair. This source queue retains the
+  // per-connection singleton and forwards the watermark-safe bounded sleep
+  // re-read to the shared drain.
+  await boss.work<FitbitSleepRepairPayload>(
+    FITBIT_SLEEP_REPAIR_QUEUE,
+    { localConcurrency: FITBIT_SLEEP_REPAIR_CONCURRENCY },
+    async (jobs) => {
+      for (const job of jobs) {
+        await enqueueIntegrationBackfillAdmission(boss, {
+          kind: "fitbit-sleep-repair",
           data: job.data,
         });
       }
@@ -920,6 +960,32 @@ export async function enqueueIntegrationSyncBootDiscovery(): Promise<void> {
     workerLog(
       "error",
       "[lab-biomarker-backfill] boot discovery threw an unexpected error",
+      err,
+    );
+  }
+
+  // One-shot Fitbit sleep duplicate repair. Finds every connection not yet
+  // repaired and enqueues one bounded sleep re-read per account; a completed
+  // pass stamps `sleepRepairedAt`.
+  try {
+    const { enqueued, skipped, error } = await enqueueBootTimeFitbitSleepRepair(
+      bootStaggerSecondsFor("fitbit-sleep-repair"),
+    );
+    if (error) {
+      workerLog(
+        "error",
+        `[fitbit-sleep-repair] boot discovery failed: ${error}`,
+      );
+    } else {
+      workerLog(
+        "info",
+        `[fitbit-sleep-repair] boot discovery: enqueued=${enqueued} skipped=${skipped}`,
+      );
+    }
+  } catch (err) {
+    workerLog(
+      "error",
+      "[fitbit-sleep-repair] boot discovery threw an unexpected error",
       err,
     );
   }

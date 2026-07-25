@@ -53,15 +53,27 @@ export function classifyFitbitResponse(
  * (message shape `Fitbit <verb> error: <status>` is preserved).
  */
 export class FitbitApiError extends IntegrationApiError {
+  /**
+   * The `Retry-After` delay (seconds) the upstream asked for on a 429, when it
+   * sent the delay-seconds form. Undefined on every other status, on a missing
+   * header, and on the HTTP-date form. `fitbitGet` waits out a value inside
+   * `FITBIT_RETRY_AFTER_WAIT_CAP_S` and retries once; anything larger fails
+   * fast and surfaces here so the wide event records what was asked.
+   */
+  readonly retryAfterSeconds: number | undefined;
+
   constructor(opts: {
     verb: string;
     classification: FitbitClassification;
     httpStatus: number | undefined;
     reason: string;
     upstreamError?: string;
+    retryAfterSeconds?: number;
   }) {
-    super({ vendor: "Fitbit", ...opts });
+    const { retryAfterSeconds, ...base } = opts;
+    super({ vendor: "Fitbit", ...base });
     this.name = "FitbitApiError";
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 

@@ -66,10 +66,14 @@ Scope: `sleep`. `/1.2/user/-/sleep/date/{s}/{e}.json` →
 row **per segment**, `measuredAt = segment START + seconds = segment END`, value =
 seconds → minutes. The 1.2 log carries a real per-segment series, so the rows lay
 each block at its true clock time (a MEASURED timeline — rows are NOT flagged
-reconstructed). externalId = `<logId>:sleep_<stage>:<i>` (indexed so several
-segments of one stage stay distinct), so a re-scored night overwrites in place.
-The segment `dateTime` is local wall-clock ISO without an offset (the night
-belongs to the user's local clock) — parsed as local time.
+reconstructed). externalId = `<logId>:sleep:<segment-start-ISO>` — the stable
+session anchor plus the segment's own start instant, so a re-scored night
+overwrites in place. The key carried a positional index and the stage label
+until 2026-07-25; both moved on a re-score, which minted parallel rows the night
+total then double-counted, so the key now carries neither and
+`replaceStaleFitbitSleep` sweeps the night's window before the fresh set
+upserts. The segment `dateTime` is local wall-clock ISO without an offset (the
+night belongs to the user's local clock) — parsed as local time.
 
 Stage map (stages logs + classic logs): `light → CORE` (Fitbit "light" ↔ Apple
 "core" shallow-NREM band), `deep → DEEP`, `rem → REM`, `wake`/`awake`/`restless →
@@ -112,6 +116,6 @@ ladder).
 `externalId = <logId>:<fieldTag>`. Daily-summary rows: `externalId =
 <YYYY-MM-DD>:<fieldTag>`. Daily cumulative activity rows: `externalId =
 stats:<fieldTag>:<YYYY-MM-DD>` (Apple-Health overwrite shape). Sleep:
-`<logId>:sleep_<stage>:<i>`. Workouts: `(userId, source: "FITBIT", externalId)`
+`<logId>:sleep:<segment-start-ISO>`. Workouts: `(userId, source: "FITBIT", externalId)`
 on the `Workout` table. A re-fetch of the same window (daily summaries settle
 after the fact, so the incremental overlap is 24 h) overwrites in place.

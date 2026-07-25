@@ -268,6 +268,43 @@ export function noteHardFailure(label: string): void {
 }
 
 /**
+ * Per-scope tally of rows the sleep replace-by-window sweep tombstoned. The
+ * count is the deploy-time signal for the one-shot sleep repair (how many
+ * re-score leftovers a pass actually cleared), and `syncUserSleep` returns only
+ * its imported count, so the number rides an ambient tracker exactly like the
+ * soft-skip / hard-fail / rollup-defer ledgers above.
+ */
+interface SleepSweepTracker {
+  removed: number;
+}
+const sleepSweepStorage = new AsyncLocalStorage<SleepSweepTracker>();
+
+/** Record swept sleep rows on the ambient tracker, if one is in scope. */
+export function noteSleepSwept(removed: number): void {
+  const tracker = sleepSweepStorage.getStore();
+  if (tracker) tracker.removed += removed;
+}
+
+/**
+ * Run `fn` inside a fresh hard-fail ledger + sleep-sweep scope and surface both.
+ * `syncUserFitbit` owns its own scopes; this export exists for the one-shot jobs
+ * (sleep repair) that drive a single resource sync directly and must still see a
+ * dead token or a hard fetch/write failure before stamping their completion
+ * marker. Ported from Google Health's `runWithGoogleHealthHardFailLedger`, with
+ * the sweep tally added for the repair's deploy signal.
+ */
+export async function runWithFitbitHardFailLedger<T>(
+  fn: () => Promise<T>,
+): Promise<{ result: T; failures: string[]; sleepRemoved: number }> {
+  const tracker: HardFailTracker = { failures: [] };
+  const sweep: SleepSweepTracker = { removed: 0 };
+  const result = await hardFailStorage.run(tracker, () =>
+    sleepSweepStorage.run(sweep, fn),
+  );
+  return { result, failures: tracker.failures, sleepRemoved: sweep.removed };
+}
+
+/**
  * Single-source the per-resource collection-fetch error handling. A 403 on one
  * data class soft-skips it (warn + return 0) so sibling resources still sync; a
  * soft-skip increments the ambient tracker so `syncUserFitbit` can refuse to
@@ -399,6 +436,66 @@ export interface FitbitMeasurementUpsert {
 /** Chunk size for the batched `createMany` insert of fresh readings. */
 const FITBIT_CREATE_CHUNK = 500;
 
+/** One just-fetched sleep session's window + the ids that must survive it. */
+export interface FitbitSleepReplaceWindow {
+  /** Earliest segment start (UTC). Null → nothing to clean for this session. */
+  windowStart: Date | null;
+  /** Latest segment end (UTC). */
+  windowEnd: Date | null;
+  /** The fresh externalIds for THIS session — never soft-deleted. */
+  keepIds: string[];
+}
+
+/**
+ * Replace-by-window cleanup for re-scored Fitbit sleep sessions.
+ *
+ * Fitbit re-scores a night after the fact. Before the stable-key fix a re-fetch
+ * minted fresh externalIds (the key carried a positional index and the stage
+ * label) and left the prior scoring's rows LIVE, so the night total silently
+ * double-counted. For each just-fetched session this soft-deletes any LIVE
+ * `FITBIT` `SLEEP_DURATION` row whose `measuredAt` falls inside the session's
+ * `[windowStart, windowEnd]` but was NOT re-produced by this fetch (`keepIds`
+ * are this session's fresh externalIds). A scan bounded to one session's window
+ * only ever touches that night's rows — a fresh row is protected by `keepIds`,
+ * and any leftover (old volatile key, or a segment Fitbit dropped) is cleared.
+ * Rows OUTSIDE every returned window are never touched, so a night Fitbit did
+ * not re-report this tick stays intact — no data loss, only stale duplicates and
+ * re-score orphans go.
+ *
+ * ORDERING IS LOAD-BEARING: the caller runs this BEFORE the upsert, so the
+ * old-keyed rows are tombstoned first and the upsert's natural-key rescue
+ * re-keys exactly those tombstones in place rather than inserting a parallel
+ * copy (or losing the insert to `skipDuplicates` against the natural unique
+ * index). Best-effort — a cleanup failure never fails the user's sync.
+ */
+export async function replaceStaleFitbitSleep(
+  userId: string,
+  sessions: FitbitSleepReplaceWindow[],
+): Promise<number> {
+  let removed = 0;
+  for (const s of sessions) {
+    if (!s.windowStart || !s.windowEnd || s.keepIds.length === 0) continue;
+    try {
+      const res = await prisma.measurement.updateMany({
+        where: {
+          userId,
+          source: "FITBIT",
+          type: "SLEEP_DURATION",
+          deletedAt: null,
+          measuredAt: { gte: s.windowStart, lte: s.windowEnd },
+          externalId: { notIn: s.keepIds },
+        },
+        data: { deletedAt: new Date() },
+      });
+      removed += res.count;
+    } catch (err) {
+      getEvent()?.addWarning(`Fitbit: sleep replace-by-window failed: ${err}`);
+    }
+  }
+  noteSleepSwept(removed);
+  return removed;
+}
+
 /**
  * Write a batch of mapped Fitbit readings for one user and (unless deferred)
  * fold the rollup tier + invalidate status-insight caches once at the end
@@ -453,7 +550,15 @@ export async function upsertFitbitMeasurements(
   // insert that `skipDuplicates` silently drops against the tombstone's key,
   // permanently wedging the key (see TOMBSTONES RESURRECT above).
   const externalIds = readings.map((r) => r.externalId);
-  let rowByKey = new Map<string, { id: string }>();
+  interface ProbedRow {
+    id: string;
+    value: number;
+    unit: string;
+    measuredAt: Date;
+    sleepStage: FitbitMeasurementUpsert["sleepStage"];
+    deletedAt: Date | null;
+  }
+  let rowByKey = new Map<string, ProbedRow>();
   try {
     const existing = await prisma.measurement.findMany({
       where: {
@@ -461,14 +566,34 @@ export async function upsertFitbitMeasurements(
         source: "FITBIT",
         externalId: { in: externalIds },
       },
-      select: { id: true, type: true, externalId: true },
+      // The payload fields ride along so the update branch can skip a no-op
+      // overwrite: the 24 h overlap re-fetches every recent row hourly, and an
+      // unconditional write would bump `syncVersion` (iOS delta churn) on rows
+      // whose values did not change.
+      select: {
+        id: true,
+        type: true,
+        externalId: true,
+        value: true,
+        unit: true,
+        measuredAt: true,
+        sleepStage: true,
+        deletedAt: true,
+      },
     });
     rowByKey = new Map(
       existing
         .filter((e) => e.externalId !== null)
         .map((e) => [
           `${e.type}${DEDUP_KEY_DELIM}${e.externalId}`,
-          { id: e.id },
+          {
+            id: e.id,
+            value: e.value,
+            unit: e.unit,
+            measuredAt: e.measuredAt,
+            sleepStage: e.sleepStage,
+            deletedAt: e.deletedAt,
+          },
         ]),
     );
   } catch (err) {
@@ -500,9 +625,20 @@ export async function upsertFitbitMeasurements(
   for (const r of readings) {
     const type = r.type as MeasurementType;
     const key = `${type}${DEDUP_KEY_DELIM}${r.externalId}`;
-    const live = rowByKey.get(key);
-    if (live) {
-      toUpdate.push({ id: live.id, r });
+    const existingRow = rowByKey.get(key);
+    if (existingRow) {
+      // Skip the no-op overwrite: a LIVE row whose payload matches the
+      // re-fetched reading exactly gains nothing from a write, and the
+      // unconditional `syncVersion` bump churned the DB + every iOS delta pull
+      // hourly for the whole 24 h overlap window. A TOMBSTONED row always
+      // updates — the write is what resurrects it (`deletedAt: null`).
+      const unchanged =
+        existingRow.deletedAt === null &&
+        existingRow.value === r.value &&
+        existingRow.unit === r.unit &&
+        existingRow.measuredAt.getTime() === r.measuredAt.getTime() &&
+        (existingRow.sleepStage ?? null) === (r.sleepStage ?? null);
+      if (!unchanged) toUpdate.push({ id: existingRow.id, r });
     } else if (!plannedCreateKeys.has(key)) {
       plannedCreateKeys.add(key);
       toCreate.push({
