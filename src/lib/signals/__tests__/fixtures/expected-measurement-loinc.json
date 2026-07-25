@@ -250,5 +250,17 @@
     "display": "Waist to height ratio",
     "unit": "1",
     "category": "vital-signs"
+  },
+  "WHO5_SCORE": {
+    "loinc": null,
+    "display": "WHO-5 well-being index total score",
+    "unit": "{score}",
+    "category": "survey"
+  },
+  "SCI_SCORE": {
+    "loinc": null,
+    "display": "Sleep Condition Indicator total score",
+    "unit": "{score}",
+    "category": "survey"
   }
 }

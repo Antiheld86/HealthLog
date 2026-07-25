@@ -13,6 +13,7 @@
  * TanStack hooks are mocked; the QR (`qrcode`) only ever renders in an effect
  * after a create, so it never runs under `renderToStaticMarkup`.
  */
+import type { ReportLeafId } from "@/lib/report-selection/catalogue";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -110,6 +111,7 @@ describe("buildShareLinkCreatePayload — scope contract", () => {
     label: "  Blood panel 2026  ",
     rangeDays: 30,
     expiryDays: 30,
+    leaves: ["WEIGHT", "LAB_RESULTS"] as ReportLeafId[],
   };
 
   it("document-only: empty report scope and the launched doc always rides along", () => {
@@ -123,7 +125,9 @@ describe("buildShareLinkCreatePayload — scope contract", () => {
     // so a share link can no longer advertise a face that was never served.
     expect(payload).not.toHaveProperty("resourceTypes");
     expect(payload).not.toHaveProperty("allowFhirApi");
-    // No report sections are ever sent for a document link.
+    // No report scope is ever sent for a document link, whatever the picker
+    // above happened to be showing.
+    expect(payload).not.toHaveProperty("selection");
     expect(payload).not.toHaveProperty("sections");
     // The launched document is always in the created link (pre-attach fix).
     expect(payload.documentIds).toEqual(["doc-1"]);
@@ -137,6 +141,11 @@ describe("buildShareLinkCreatePayload — scope contract", () => {
       documentOnly: false,
     });
     expect(payload.rangeEnd).toBeNull();
+    // A record share carries the leaves the owner chose, and nothing else.
+    expect(payload.selection).toEqual({
+      v: 2,
+      leaves: ["WEIGHT", "LAB_RESULTS"],
+    });
     expect(payload).not.toHaveProperty("resourceTypes");
     expect(payload).not.toHaveProperty("allowFhirApi");
     expect(payload).not.toHaveProperty("documentIds");

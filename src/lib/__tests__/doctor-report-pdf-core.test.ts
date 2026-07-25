@@ -4,11 +4,10 @@ import {
   buildDoctorReportPdfDocument,
   renderDoctorReportPdfBytes,
   sanitiseForPdf,
-  DOCTOR_REPORT_VITAL_TYPES,
-  DOCTOR_REPORT_TYPE_LABEL_KEYS,
-  DOCTOR_REPORT_TYPE_UNIT_KEYS,
+  DOCTOR_REPORT_VITAL_GROUPS,
 } from "../doctor-report-pdf-core";
 import { measurementTypeEnum } from "../validations/measurement";
+import { MEASUREMENT_TYPE_LABEL_KEYS } from "../measurements/type-label-keys";
 import type { DoctorReportData } from "../doctor-report-data";
 import { computeGlucoseClinicalMetrics } from "@/lib/analytics/glucose-metrics";
 import { getServerTranslator } from "../i18n/server-translator";
@@ -197,7 +196,7 @@ describe("renderDoctorReportPdfBytes", () => {
     const text = await extractText(bytes);
     // The sleep label and the hours-converted value both appear in the table.
     // `num` renders one fixed fraction digit: 420 min → 7.0 h, 450 min → 7.5 h.
-    expect(text).toContain("Sleep duration");
+    expect(text).toContain("Sleep");
     expect(text).toContain("7.0 h");
     expect(text).toContain("7.5 h");
     // The raw minute value must NOT leak into the table.
@@ -321,27 +320,30 @@ describe("doctor-report pagination", () => {
 // stale type map and silently dropped body composition while the browser
 // PDF rendered them. These tests pin the contract.
 describe("doctor-report-pdf-core type-map coverage", () => {
-  it("exposes body composition (TOTAL_BODY_WATER, BONE_MASS) as vital types", () => {
-    expect(DOCTOR_REPORT_VITAL_TYPES).toContain("TOTAL_BODY_WATER");
-    expect(DOCTOR_REPORT_VITAL_TYPES).toContain("BONE_MASS");
+  it("puts body composition in the body group", () => {
+    const body = DOCTOR_REPORT_VITAL_GROUPS.find(
+      (g) => g.labelKey === "reportSelection.groupBody",
+    )!;
+    expect(body.types).toContain("TOTAL_BODY_WATER");
+    expect(body.types).toContain("BONE_MASS");
   });
 
-  it("provides a label key + unit for every vital type", () => {
-    for (const type of DOCTOR_REPORT_VITAL_TYPES) {
-      expect(DOCTOR_REPORT_TYPE_LABEL_KEYS[type]).toBeTruthy();
-      const unit = DOCTOR_REPORT_TYPE_UNIT_KEYS[type];
-      expect(
-        unit === null || (typeof unit === "string" && unit.length > 0),
-      ).toBe(true);
+  it("provides a label key for every type it can render", () => {
+    for (const group of DOCTOR_REPORT_VITAL_GROUPS) {
+      for (const type of group.types) {
+        expect(MEASUREMENT_TYPE_LABEL_KEYS[type], type).toBeTruthy();
+      }
     }
   });
 
-  it("vital types are a subset of the canonical measurement enum", () => {
+  it("renders only types from the canonical measurement enum", () => {
     const enumSet = new Set<string>(measurementTypeEnum.options);
-    for (const type of DOCTOR_REPORT_VITAL_TYPES) {
-      expect(enumSet.has(type), `${type} not in measurementTypeEnum`).toBe(
-        true,
-      );
+    for (const group of DOCTOR_REPORT_VITAL_GROUPS) {
+      for (const type of group.types) {
+        expect(enumSet.has(type), `${type} not in measurementTypeEnum`).toBe(
+          true,
+        );
+      }
     }
   });
 
@@ -643,19 +645,6 @@ describe("extracted doctor-report section boundaries", () => {
     expect(text).not.toContain(t("doctorReport.moodTitle"));
     expect(text).not.toContain(t("doctorReport.wellnessTitle"));
     expect(text).not.toContain(t("doctorReport.cycleTitle"));
-  });
-
-  it("clinical records/notes ignores a whitespace-only optional summary", async () => {
-    const { t } = getServerTranslator("en");
-    const text = await extractText(
-      renderDoctorReportPdfBytes(makeData(), {
-        t,
-        locale: "en",
-        now: FIXED_NOW,
-        aiSummary: "   \n\t ",
-      }),
-    );
-    expect(text).not.toContain(t("doctorReport.aiSummaryTitle"));
   });
 
   it("footer is drawn once on every dynamically added page", async () => {

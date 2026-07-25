@@ -24,8 +24,15 @@ export interface FhirReference {
   display?: string;
 }
 
+/**
+ * R4 `Identifier`. `system` is REQUIRED here even though the spec marks it
+ * `0..1`: a bare value with no namespace is not resolvable by a receiver, and
+ * every identifier HealthLog emits (KVNR, IKNR, bundle id) has a real
+ * namespace. Requiring it is what stops a namespace-less identifier from
+ * type-checking.
+ */
 export interface FhirIdentifier {
-  system?: string;
+  system: string;
   value: string;
 }
 
@@ -76,6 +83,14 @@ export interface FhirObservation {
   code: FhirCodeableConcept;
   subject: FhirReference;
   effectiveDateTime?: string;
+  /**
+   * R4 `Observation.effective[x]` as a period. Carries the reporting window
+   * for an aggregate that describes a SPAN rather than an instant (a mean, a
+   * time-in-range share, an adherence rate, a period average). Pinning such a
+   * value to a single `effectiveDateTime` asserts an instant reading that was
+   * never taken.
+   */
+  effectivePeriod?: FhirPeriod;
   valueQuantity?: FhirQuantity;
   valueInteger?: number;
   valueString?: string;
@@ -177,8 +192,13 @@ export interface FhirCoverage {
   beneficiary: FhirReference;
   /** German KVNR (the subscriber's member id), when present. */
   subscriberId?: string;
-  /** Insurer(s) — Reference to the contained Organization. */
-  payor?: FhirReference[];
+  /**
+   * Insurer(s) — Reference to the contained Organization. R4 marks this `1..*`;
+   * required here so a payor-less Coverage cannot be constructed. A record that
+   * knows only a member id emits no Coverage at all (the member id rides
+   * `Patient.identifier`).
+   */
+  payor: FhirReference[];
 }
 
 export interface FhirCompositionSection {
@@ -289,8 +309,24 @@ export interface FhirFamilyMemberHistory {
   note?: FhirAnnotation[];
 }
 
+/**
+ * R4 `Device` — the software that authored the document. A `Composition.author`
+ * pointing at a Device that is not in the bundle is a dangling reference, so
+ * the document carries the Device it names. No serial number, no identifier,
+ * no owner: the only honest facts are the software name, its maker and the
+ * running version.
+ */
+export interface FhirDevice {
+  resourceType: "Device";
+  id: string;
+  manufacturer?: string;
+  deviceName?: { name: string; type: "manufacturer-name" }[];
+  version?: { value: string }[];
+}
+
 export type FhirResource =
   | FhirComposition
+  | FhirDevice
   | FhirPatient
   | FhirCoverage
   | FhirObservation
@@ -303,7 +339,12 @@ export type FhirResource =
   | FhirDiagnosticReport;
 
 export interface FhirBundleEntry {
-  fullUrl?: string;
+  /**
+   * Absolute URL identifying the entry. Required: `bdl-7` makes it the only
+   * thing an intra-bundle reference can resolve against, and an entry without
+   * one is unreachable from the Composition that names it.
+   */
+  fullUrl: string;
   resource: FhirResource;
   /** v1.11.0 — `searchset` per-entry search metadata (`mode: "match"`). */
   search?: { mode: "match" | "include" | "outcome" };
@@ -312,6 +353,12 @@ export interface FhirBundleEntry {
 export interface FhirBundle {
   resourceType: "Bundle";
   type: "document";
+  /**
+   * `bdl-9` — a document Bundle SHALL carry a persistent identifier with a
+   * system and a value. Minted fresh per build: two exports of the same
+   * record are two documents.
+   */
+  identifier: FhirIdentifier;
   timestamp: string;
   entry: FhirBundleEntry[];
 }

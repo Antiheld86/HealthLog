@@ -1,11 +1,16 @@
 /**
- * v1.7.0 — POST /api/export/health-record unit coverage.
+ * POST /api/export/health-record unit coverage.
  *
  * Mock-based (no testcontainers): pins the route contract — strict Zod
- * rejection paths (422 via returnAllZodIssues), rate-limit (429), the
- * three format outputs (PDF magic bytes, application/fhir+json valid
- * Bundle, application/zip), and that the user is narrowed from the
- * session (never the body).
+ * rejection paths (422 via returnAllZodIssues), rate-limit (429), the three
+ * format outputs (PDF magic bytes, application/fhir+json valid Bundle,
+ * application/zip), and that the user is narrowed from the session, never the
+ * body.
+ *
+ * The second half is the artefact-level proof that the selection means the
+ * same thing in every format: each case runs the real route end to end and
+ * reads what comes out, with a positive control beside each exclusion so
+ * nothing can pass on an empty fixture.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
@@ -24,6 +29,23 @@ vi.mock("@/lib/db", () => ({
     familyHistoryEntry: { findMany: vi.fn() },
     user: { findUnique: vi.fn(), update: vi.fn() },
   },
+  toJson: (value: unknown) => value,
+}));
+// The cycle summary has its own aggregation behind it; this suite is about the
+// route, so it is stubbed to a fixed shape. Whether it is CALLED at all is the
+// property that matters here, and the aggregator sweep asserts that directly.
+vi.mock("@/lib/cycle/export-data", () => ({
+  buildCycleExportSummary: vi.fn(async () => ({
+    lastPeriodStart: "2026-02-01",
+    recentCycles: [
+      { startDate: "2026-02-01", lengthDays: 28, periodLengthDays: 5 },
+    ],
+    observedCycleCount: 1,
+    averageCycleLengthDays: 28,
+    cycleLengthVariabilityDays: null,
+    averagePeriodLengthDays: 5,
+    currentPhase: "FOLLICULAR",
+  })),
 }));
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: vi.fn() }));
@@ -57,6 +79,7 @@ vi.mock("@/lib/modules/gate", async (importOriginal) => {
 });
 
 import { prisma } from "@/lib/db";
+import { ALL_LEAF_IDS } from "@/lib/report-selection/catalogue";
 import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import {
@@ -68,6 +91,16 @@ import {
 const SESSION_OK = {
   user: { id: "user-1", email: "test@example.com", role: "USER" },
 } as const;
+
+/** A selection body carrying exactly these leaves. */
+function sel(...leaves: string[]) {
+  return { v: 2, leaves };
+}
+
+/** Everything the catalogue knows — the positive-control scope. */
+function allLeaves() {
+  return { v: 2, leaves: [...ALL_LEAF_IDS] };
+}
 
 function mkReq(
   body: unknown,
@@ -129,19 +162,21 @@ beforeEach(() => {
 describe("POST /api/export/health-record — validation", () => {
   it("rejects an unknown format with 422", async () => {
     const { POST } = await import("../route");
-    const res = await POST(mkReq({ format: "xml" }));
+    const res = await POST(mkReq({ format: "xml", selection: sel() }));
     expect(res.status).toBe(422);
   });
 
   it("rejects a missing format with 422", async () => {
     const { POST } = await import("../route");
-    const res = await POST(mkReq({}));
+    const res = await POST(mkReq({ selection: sel() }));
     expect(res.status).toBe(422);
   });
 
   it("rejects a userId smuggled into the body with 422", async () => {
     const { POST } = await import("../route");
-    const res = await POST(mkReq({ format: "pdf", userId: "user-2" }));
+    const res = await POST(
+      mkReq({ format: "pdf", selection: sel(), userId: "user-2" }),
+    );
     expect(res.status).toBe(422);
   });
 
@@ -155,7 +190,7 @@ describe("POST /api/export/health-record — validation", () => {
       }),
     } as never);
     const { POST } = await import("../route");
-    const res = await POST(mkReq({ format: "fhir" }));
+    const res = await POST(mkReq({ format: "fhir", selection: sel() }));
     expect(res.status).toBe(403);
     expect(requireModuleEnabled).toHaveBeenCalledWith("user-1", "doctorReport");
   });
@@ -167,7 +202,7 @@ describe("POST /api/export/health-record — validation", () => {
       resetAt: Date.now() + 3_600_000,
     } as never);
     const { POST } = await import("../route");
-    const res = await POST(mkReq({ format: "fhir" }));
+    const res = await POST(mkReq({ format: "fhir", selection: sel() }));
     expect(res.status).toBe(429);
   });
 });
@@ -175,7 +210,7 @@ describe("POST /api/export/health-record — validation", () => {
 describe("POST /api/export/health-record — outputs", () => {
   it("format=fhir returns a valid FHIR document Bundle", async () => {
     const { POST } = await import("../route");
-    const res = await POST(mkReq({ format: "fhir" }));
+    const res = await POST(mkReq({ format: "fhir", selection: allLeaves() }));
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("application/fhir+json");
     const bundle = await res.json();
@@ -186,7 +221,7 @@ describe("POST /api/export/health-record — outputs", () => {
 
   it("format=pdf returns a PDF with the %PDF- magic bytes", async () => {
     const { POST } = await import("../route");
-    const res = await POST(mkReq({ format: "pdf" }));
+    const res = await POST(mkReq({ format: "pdf", selection: allLeaves() }));
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("application/pdf");
     const buf = Buffer.from(await res.arrayBuffer());
@@ -195,7 +230,9 @@ describe("POST /api/export/health-record — outputs", () => {
 
   it("format=package returns a zip", async () => {
     const { POST } = await import("../route");
-    const res = await POST(mkReq({ format: "package" }));
+    const res = await POST(
+      mkReq({ format: "package", selection: allLeaves() }),
+    );
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("application/zip");
     const buf = Buffer.from(await res.arrayBuffer());
@@ -206,7 +243,12 @@ describe("POST /api/export/health-record — outputs", () => {
   it("renders the PDF in the explicit selection locale", async () => {
     const { POST } = await import("../route");
     const res = await POST(
-      mkReq({ format: "pdf", locale: "de", practiceName: "Sample Practice" }),
+      mkReq({
+        format: "pdf",
+        locale: "de",
+        selection: allLeaves(),
+        practiceName: "Sample Practice",
+      }),
     );
     const text = await pdfText(res);
     // German cover label.
@@ -217,7 +259,11 @@ describe("POST /api/export/health-record — outputs", () => {
     const { POST } = await import("../route");
     const res = await POST(
       mkReq(
-        { format: "pdf", practiceName: "Sample Practice" },
+        {
+          format: "pdf",
+          selection: allLeaves(),
+          practiceName: "Sample Practice",
+        },
         {
           // Browser default English, but the in-app cookie says German — the
           // cookie must win over Accept-Language.
@@ -235,7 +281,11 @@ describe("POST /api/export/health-record — outputs", () => {
     const { POST } = await import("../route");
     const res = await POST(
       mkReq(
-        { format: "pdf", practiceName: "Sample Practice" },
+        {
+          format: "pdf",
+          selection: allLeaves(),
+          practiceName: "Sample Practice",
+        },
         { "accept-language": "en-US,en;q=0.9" },
       ),
     );
@@ -245,10 +295,12 @@ describe("POST /api/export/health-record — outputs", () => {
 
   it("scopes the aggregator measurement read to the session user", async () => {
     const { POST } = await import("../route");
-    await POST(mkReq({ format: "fhir", userId: "user-2" } as never));
+    await POST(
+      mkReq({ format: "fhir", selection: sel(), userId: "user-2" } as never),
+    );
     // userId smuggle is rejected above; here we confirm the read uses the
     // session user, not anything from the body, for a clean payload.
-    await POST(mkReq({ format: "fhir" }));
+    await POST(mkReq({ format: "fhir", selection: allLeaves() }));
     expect(prisma.measurement.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ userId: "user-1", deletedAt: null }),
@@ -335,11 +387,12 @@ describe("POST /api/export/health-record — the selection reaches every format"
   }
 
   /** Resource types present in the bundle a given selection produces. */
-  async function bundleResourceTypes(
-    sections: Record<string, unknown>,
-  ): Promise<string[]> {
+  async function bundleResourceTypes(selection: {
+    v: number;
+    leaves: string[];
+  }): Promise<string[]> {
     const { POST } = await import("../route");
-    const res = await POST(mkReq({ format: "fhir", sections }));
+    const res = await POST(mkReq({ format: "fhir", selection }));
     expect(res.status).toBe(200);
     const bundle = (await res.json()) as {
       entry: { resource: { resourceType: string; code?: unknown } }[];
@@ -348,11 +401,12 @@ describe("POST /api/export/health-record — the selection reaches every format"
   }
 
   /** The LOINC/HealthKit codes of every Observation a selection produces. */
-  async function observationCodes(
-    sections: Record<string, unknown>,
-  ): Promise<string[]> {
+  async function observationCodes(selection: {
+    v: number;
+    leaves: string[];
+  }): Promise<string[]> {
     const { POST } = await import("../route");
-    const res = await POST(mkReq({ format: "fhir", sections }));
+    const res = await POST(mkReq({ format: "fhir", selection }));
     expect(res.status).toBe(200);
     const bundle = (await res.json()) as {
       entry: {
@@ -382,36 +436,35 @@ describe("POST /api/export/health-record — the selection reaches every format"
       measurement("WALKING_RUNNING_DISTANCE", 6200),
     ] as never);
 
-    // Positive control: with every switch on, all eight are emitted. Without
-    // this the exclusion assertion below could pass on an empty bundle.
-    const on = await observationCodes({
-      vitals: { oxygenSaturation: true, bodyFat: true, bodyComposition: true },
-      cardioFitness: { restingHeartRate: true, hrv: true, vo2max: true },
-      activity: { steps: true, distance: true },
-    });
+    // Positive control: with all eight leaves chosen, all eight are emitted.
+    // Without this the exclusion assertion below could pass on an empty bundle.
+    const on = await observationCodes(
+      sel(
+        "BODY_FAT",
+        "OXYGEN_SATURATION",
+        "BONE_MASS",
+        "RESTING_HEART_RATE",
+        "HEART_RATE_VARIABILITY",
+        "VO2_MAX",
+        "ACTIVITY_STEPS",
+        "WALKING_RUNNING_DISTANCE",
+      ),
+    );
     expect(on.length).toBeGreaterThanOrEqual(8);
 
-    const off = await observationCodes({
-      vitals: {
-        oxygenSaturation: false,
-        bodyFat: false,
-        bodyComposition: false,
-      },
-      cardioFitness: { restingHeartRate: false, hrv: false, vo2max: false },
-      activity: { steps: false, distance: false },
-    });
+    // A selection naming something else entirely carries none of them —
+    // absence of a leaf is exclusion, not a default.
+    const off = await observationCodes(sel("PULSE"));
     expect(off).toEqual([]);
   });
 
   it("keeps the deselected measurement rows out of the query in the first place", async () => {
-    await bundleResourceTypes({
-      vitals: { bodyFat: false },
-      cardioFitness: { vo2max: false },
-    });
+    await bundleResourceTypes(sel("PULSE"));
     const lastCall = vi.mocked(prisma.measurement.findMany).mock.calls.at(-1)!;
     const where = lastCall[0]!.where as { type?: { notIn?: string[] } };
     expect(where.type?.notIn).toContain("BODY_FAT");
     expect(where.type?.notIn).toContain("VO2_MAX");
+    expect(where.type?.notIn).not.toContain("PULSE");
   });
 
   it("omits the deselected vitals from the PDF table", async () => {
@@ -426,22 +479,22 @@ describe("POST /api/export/health-record — the selection reaches every format"
         mkReq({
           format: "pdf",
           locale: "en",
-          sections: { vitals: { bodyFat: true, oxygenSaturation: true } },
+          selection: sel("BODY_FAT", "OXYGEN_SATURATION"),
         }),
       ),
     );
-    expect(withBoth).toContain("Body fat");
+    expect(withBoth).toContain("Body Fat");
 
     const without = await pdfText(
       await POST(
         mkReq({
           format: "pdf",
           locale: "en",
-          sections: { vitals: { bodyFat: false, oxygenSaturation: false } },
+          selection: sel("PULSE"),
         }),
       ),
     );
-    expect(without).not.toContain("Body fat");
+    expect(without).not.toContain("Body Fat");
   });
 
   it("holds the mental-health screening totals back unless they are asked for by name", async () => {
@@ -450,12 +503,13 @@ describe("POST /api/export/health-record — the selection reaches every format"
       measurement("GAD7_SCORE", 8),
     ] as never);
 
-    // The module is on (the default since v1.29.1) and the caller sends no
-    // screening key: the totals must stay in the database.
-    expect(await observationCodes({ labs: true })).toEqual([]);
-    // And an omitted `sections` object entirely — the MCP / share-link case.
+    // The module is on (the default since v1.29.1) and the caller names other
+    // leaves: the totals must stay in the database.
+    expect(await observationCodes(sel("LAB_RESULTS"))).toEqual([]);
+    // And an empty selection — the "I said nothing" case, which used to mean
+    // "give me everything".
     const { POST } = await import("../route");
-    const res = await POST(mkReq({ format: "fhir" }));
+    const res = await POST(mkReq({ format: "fhir", selection: sel() }));
     const bundle = (await res.json()) as {
       entry: { resource: { resourceType: string } }[];
     };
@@ -463,8 +517,8 @@ describe("POST /api/export/health-record — the selection reaches every format"
       bundle.entry.filter((e) => e.resource.resourceType === "Observation"),
     ).toEqual([]);
 
-    // Asked for explicitly, they are emitted — the data is withheld, not lost.
-    const asked = await observationCodes({ mentalHealthScreeners: true });
+    // Asked for by name, they are emitted — the data is withheld, not lost.
+    const asked = await observationCodes(sel("PHQ9_SCORE", "GAD7_SCORE"));
     expect(asked).toContain("44261-6");
     expect(asked).toContain("70274-6");
   });
@@ -474,11 +528,11 @@ describe("POST /api/export/health-record — the selection reaches every format"
       medicationRow(),
     ] as never);
 
+    expect(await bundleResourceTypes(sel("MEDICATION_LIST"))).toContain(
+      "MedicationStatement",
+    );
     expect(
-      await bundleResourceTypes({ medications: { list: true } }),
-    ).toContain("MedicationStatement");
-    expect(
-      await bundleResourceTypes({ medications: { list: false } }),
+      await bundleResourceTypes(sel("MEDICATION_COMPLIANCE")),
     ).not.toContain("MedicationStatement");
   });
 
@@ -490,23 +544,17 @@ describe("POST /api/export/health-record — the selection reaches every format"
       familyHistoryRow(),
     ] as never);
 
-    const on = await bundleResourceTypes({
-      allergies: true,
-      familyHistory: true,
-    });
+    const on = await bundleResourceTypes(sel("ALLERGIES", "FAMILY_HISTORY"));
     expect(on).toContain("AllergyIntolerance");
     expect(on).toContain("FamilyMemberHistory");
 
-    const off = await bundleResourceTypes({
-      allergies: false,
-      familyHistory: false,
-    });
+    const off = await bundleResourceTypes(sel("PULSE"));
     expect(off).not.toContain("AllergyIntolerance");
     expect(off).not.toContain("FamilyMemberHistory");
   });
 
   it("never reads the deselected records from the database", async () => {
-    await bundleResourceTypes({ allergies: false, familyHistory: false });
+    await bundleResourceTypes(sel("PULSE"));
     expect(prisma.allergy.findMany).not.toHaveBeenCalled();
     expect(prisma.familyHistoryEntry.findMany).not.toHaveBeenCalled();
   });
@@ -521,10 +569,7 @@ describe("POST /api/export/health-record — the selection reaches every format"
 
     const { POST } = await import("../route");
     const res = await POST(
-      mkReq({
-        format: "package",
-        sections: { allergies: false, familyHistory: false },
-      }),
+      mkReq({ format: "package", selection: sel("PULSE") }),
     );
     expect(res.status).toBe(200);
     const files = unzipSync(new Uint8Array(await res.arrayBuffer()));
@@ -539,53 +584,111 @@ describe("POST /api/export/health-record — the selection reaches every format"
 });
 
 /**
- * The practice name is a remembered preference (`User.lastReportPracticeName`),
- * so a monthly report does not ask for the clinic name again every time. The
- * write happens only once the artefact exists — a generation that throws must
- * not overwrite the remembered value with a half-typed one.
+ * What the route remembers: the practice name and the scope the owner chose,
+ * so the panel opens carrying both next time and the surfaces that cannot ask
+ * a human have a real act to replay.
  *
- * Mutation check: drop the `rememberPracticeName` call in the route and the
- * first two cases go red; move it above the generation and the
- * failed-generation case goes red.
+ * The write happens only once the artefact exists — a generation that throws
+ * must not overwrite the remembered values with a half-typed name or a scope
+ * that produced nothing.
+ *
+ * Mutation checks: drop the `rememberChoices` call and the first cases go red;
+ * move it above the generation and the failed-generation case goes red; drop
+ * `reportSelectionJson` from the update and "remembers the chosen scope" goes
+ * red.
  */
-describe("POST /api/export/health-record — remembered practice name", () => {
+describe("POST /api/export/health-record — what the route remembers", () => {
   it("persists the sanitised practice name after a PDF export", async () => {
     const { POST } = await import("../route");
     const res = await POST(
-      mkReq({ format: "pdf", practiceName: "  Sample   Practice  " }),
+      mkReq({
+        format: "pdf",
+        selection: sel("WEIGHT"),
+        practiceName: "  Sample   Practice  ",
+      }),
     );
     expect(res.status).toBe(200);
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "user-1" },
-      data: { lastReportPracticeName: "Sample Practice" },
+      data: expect.objectContaining({
+        lastReportPracticeName: "Sample Practice",
+      }),
     });
+  });
+
+  it("remembers the chosen scope, in catalogue order", async () => {
+    const { POST } = await import("../route");
+    const res = await POST(
+      mkReq({
+        format: "fhir",
+        selection: sel("LAB_RESULTS", "WEIGHT"),
+        range: { days: 180 },
+        includeCharts: false,
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: expect.objectContaining({
+        reportSelectionJson: {
+          v: 2,
+          leaves: ["WEIGHT", "LAB_RESULTS"],
+          format: "fhir",
+          rangeDays: 180,
+          includeCharts: false,
+        },
+      }),
+    });
+  });
+
+  it("refuses a leaf id this build does not know, and remembers nothing", async () => {
+    const { POST } = await import("../route");
+    const res = await POST(
+      mkReq({ format: "pdf", selection: sel("SOMETHING_NEW") }),
+    );
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain("SOMETHING_NEW");
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
   it("persists the practice name after a FHIR export", async () => {
     const { POST } = await import("../route");
     const res = await POST(
-      mkReq({ format: "fhir", practiceName: "Sample Practice" }),
+      mkReq({
+        format: "fhir",
+        selection: sel("WEIGHT"),
+        practiceName: "Sample Practice",
+      }),
     );
     expect(res.status).toBe(200);
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "user-1" },
-      data: { lastReportPracticeName: "Sample Practice" },
+      data: expect.objectContaining({
+        lastReportPracticeName: "Sample Practice",
+      }),
     });
   });
 
   it("persists null when the user cleared the practice name", async () => {
     const { POST } = await import("../route");
-    const res = await POST(mkReq({ format: "pdf" }));
+    const res = await POST(mkReq({ format: "pdf", selection: sel("WEIGHT") }));
     expect(res.status).toBe(200);
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "user-1" },
-      data: { lastReportPracticeName: null },
+      data: expect.objectContaining({ lastReportPracticeName: null }),
     });
   });
 
   it("writes nothing when the selection is rejected", async () => {
     const { POST } = await import("../route");
-    const res = await POST(mkReq({ format: "xml", practiceName: "Sample" }));
+    const res = await POST(
+      mkReq({
+        format: "xml",
+        selection: sel("WEIGHT"),
+        practiceName: "Sample",
+      }),
+    );
     expect(res.status).toBe(422);
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
@@ -596,7 +699,11 @@ describe("POST /api/export/health-record — remembered practice name", () => {
     );
     const { POST } = await import("../route");
     const res = await POST(
-      mkReq({ format: "pdf", practiceName: "Sample Practice" }),
+      mkReq({
+        format: "pdf",
+        selection: sel("WEIGHT"),
+        practiceName: "Sample Practice",
+      }),
     );
     expect(res.status).toBe(500);
     expect(prisma.user.update).not.toHaveBeenCalled();
@@ -604,7 +711,13 @@ describe("POST /api/export/health-record — remembered practice name", () => {
 
   it("narrows the update to the session user, never the body", async () => {
     const { POST } = await import("../route");
-    await POST(mkReq({ format: "fhir", practiceName: "Sample Practice" }));
+    await POST(
+      mkReq({
+        format: "fhir",
+        selection: sel("WEIGHT"),
+        practiceName: "Sample Practice",
+      }),
+    );
     expect(prisma.user.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "user-1" } }),
     );

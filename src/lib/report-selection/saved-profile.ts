@@ -40,7 +40,11 @@ export const savedReportProfileSchema = reportSelectionSchema.extend({
 
 export type SavedReportProfile = z.infer<typeof savedReportProfileSchema>;
 
-/** What the panel seeds from when the account has never saved a profile. */
+/**
+ * The render choices the panel starts from when the account has never saved a
+ * profile. Presentation only — this is deliberately NOT a scope fallback;
+ * there is no such thing here, because a scope nobody chose is the defect.
+ */
 export const SAVED_PROFILE_FALLBACK = {
   format: "pdf",
   rangeDays: 90,

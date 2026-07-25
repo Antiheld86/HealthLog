@@ -16,9 +16,9 @@ vi.mock("@/lib/modules/gate", () => ({
 vi.mock("@/lib/doctor-report-data", () => ({
   collectDoctorReportData: vi.fn(),
 }));
-// The real prefs parser is used so the "no section enabled ⇒ documents-only"
-// signal is exercised end to end (a stubbed parser would let the test lie
-// about which sectionsJson resolves to an empty report scope).
+// The real selection resolver is used so the "empty scope ⇒ documents-only"
+// signal is exercised end to end (a stubbed one would let the test lie about
+// which sectionsJson resolves to an empty report scope).
 vi.mock("@/lib/db", () => ({
   prisma: {
     clinicianShareLinkDocument: { findMany: vi.fn() },
@@ -28,7 +28,10 @@ vi.mock("@/lib/db", () => ({
 import { loadShareViewData } from "../share-view-data";
 import { isModuleEnabled } from "@/lib/modules/gate";
 import { collectDoctorReportData } from "@/lib/doctor-report-data";
-import { EMPTY_DOCTOR_REPORT_PREFS } from "@/lib/validations/doctor-report-prefs";
+import {
+  selectionToBlob,
+  selectionFromLeaves,
+} from "@/lib/report-selection/selection";
 import { prisma } from "@/lib/db";
 import type { ShareContext } from "../resolve-share-token";
 
@@ -44,7 +47,7 @@ function ctx(overrides: Partial<ShareContext> = {}): ShareContext {
     label: "Clinic",
     rangeStart: new Date("2026-01-01T00:00:00Z"),
     rangeEnd: new Date("2026-02-01T00:00:00Z"),
-    sectionsJson: { mood: false },
+    sectionsJson: selectionToBlob(selectionFromLeaves(["WEIGHT", "PULSE"])),
     expiresAt: new Date(Date.now() + 86_400_000),
     ...overrides,
   } as ShareContext;
@@ -67,14 +70,16 @@ describe("loadShareViewData — KVNR default OFF", () => {
 
   it("never requests an identifier / KVNR opt-in from the aggregator", async () => {
     await loadShareViewData(ctx());
-    const opts = collect.mock.calls[0]![2] as Record<string, unknown>;
-    // The only option ever passed is the frozen section toggles — no
-    // includeIdentifiers, no kvnr, no decrypt flag. Default-OFF by absence.
-    expect(opts).toBeDefined();
-    expect(opts).not.toHaveProperty("includeIdentifiers");
-    expect(opts).not.toHaveProperty("kvnr");
-    expect(opts).not.toHaveProperty("insuranceNumber");
-    expect(Object.keys(opts)).toEqual(["sections"]);
+    // The third argument is the link's frozen selection and nothing else — no
+    // includeIdentifiers, no kvnr, no decrypt flag, and no fourth argument at
+    // all. The insurance leaf is refused at create, so it cannot be in there.
+    const selection = collect.mock.calls[0]![2] as {
+      has: (leaf: string) => boolean;
+      leaves: string[];
+    };
+    expect(selection.leaves).toEqual(["PULSE", "WEIGHT"]);
+    expect(selection.has("INSURANCE")).toBe(false);
+    expect(collect.mock.calls[0]![3]).toBeUndefined();
   });
 
   it("returns a report payload carrying no insurance number", async () => {
@@ -187,7 +192,7 @@ describe("loadShareViewData — documents-only share exposes no health data", ()
     ]);
 
     const { report, documentOnly, documents } = await loadShareViewData(
-      ctx({ sectionsJson: EMPTY_DOCTOR_REPORT_PREFS }),
+      ctx({ sectionsJson: selectionToBlob(selectionFromLeaves([])) }),
     );
 
     // The one guarantee: the aggregator is NEVER invoked — no health data is
@@ -210,16 +215,30 @@ describe("loadShareViewData — documents-only share exposes no health data", ()
     ]);
   });
 
-  it("still aggregates for a record share (defaults resolve to an enabled scope)", async () => {
-    // `{}` / null sections resolve to the documented defaults (a full record
-    // share), so the aggregator DOES run — the empty-scope short-circuit must
-    // not swallow a normal record share.
+  it("still aggregates for a record share that names leaves", async () => {
+    // A link whose frozen scope names leaves DOES aggregate — the empty-scope
+    // short-circuit must not swallow a normal record share.
     const { report, documentOnly } = await loadShareViewData(
-      ctx({ sectionsJson: {}, documentOnly: false }),
+      ctx({ documentOnly: false }),
     );
     expect(collect).toHaveBeenCalledTimes(1);
     expect(documentOnly).toBe(false);
     expect(report).not.toBeNull();
+  });
+
+  it("serves nothing for a legacy blob this build cannot read", async () => {
+    // Every such link was revoked by migration 0273; this is the second lock
+    // behind that. A shape the server cannot read is not consent to anything,
+    // so it resolves to the empty selection rather than to a default scope.
+    const { report, documentOnly } = await loadShareViewData(
+      ctx({
+        sectionsJson: { bp: true, weight: true, pulse: true },
+        documentOnly: false,
+      }),
+    );
+    expect(collect).not.toHaveBeenCalled();
+    expect(report).toBeNull();
+    expect(documentOnly).toBe(true);
   });
 });
 
@@ -244,7 +263,7 @@ describe("loadShareViewData — documentOnly column is authoritative", () => {
     // the exact future-leak the column closes: a new section defaulting on can
     // no longer widen an old documents-only link.
     const { report, documentOnly } = await loadShareViewData(
-      ctx({ sectionsJson: { bp: true }, documentOnly: true }),
+      ctx({ documentOnly: true }),
     );
     expect(collect).not.toHaveBeenCalled();
     expect(report).toBeNull();
@@ -255,7 +274,10 @@ describe("loadShareViewData — documentOnly column is authoritative", () => {
     // A pre-column documents-only link reads `documentOnly:false` from the row
     // but still has every section off — the derived fallback keeps it closed.
     const { report, documentOnly } = await loadShareViewData(
-      ctx({ sectionsJson: EMPTY_DOCTOR_REPORT_PREFS, documentOnly: false }),
+      ctx({
+        sectionsJson: selectionToBlob(selectionFromLeaves([])),
+        documentOnly: false,
+      }),
     );
     expect(collect).not.toHaveBeenCalled();
     expect(report).toBeNull();
@@ -264,92 +286,47 @@ describe("loadShareViewData — documentOnly column is authoritative", () => {
 });
 
 /**
- * v1.28.17 — the create schema accepts the GROUPED export sections shape
- * (`{ vitals: { bp, weight, … }, activity: { sleep }, medications: { … } }`)
- * and persists it raw. The clinician-view loader MUST fold that grouped shape
- * down to the flat toggles the aggregator consumes — reading it through the
- * flat doctor-report parser silently drops every grouped toggle and re-defaults
- * the section back ON, re-widening a scope the owner explicitly narrowed. This
- * pins that a section switched OFF in the grouped shape reaches the aggregator
- * as OFF, not as a defaults-on leak.
+ * The frozen scope reaches the aggregator exactly as it was stored.
+ *
+ * The grouped/flat fold this block used to pin is gone with the shapes it
+ * folded between: the link stores the leaf list the owner chose and the
+ * aggregator reads that same list, so there is no second representation left
+ * to disagree with the first.
  */
-describe("loadShareViewData — grouped sections are folded, not silently defaulted", () => {
+describe("loadShareViewData — the frozen scope reaches the aggregator intact", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     collect.mockResolvedValue({ patient: { displayName: "Shared record" } });
     findDocs.mockResolvedValue([]);
   });
 
-  it("honours grouped OFF toggles instead of falling back to defaults-ON", async () => {
-    // Owner froze a labs-focused share: vitals OFF, but the grouped keys live
-    // under `vitals` where the flat parser cannot see them. Pre-fix, bp/weight/
-    // pulse resolved to the defaults (ON) and leaked to the clinician.
+  it("passes exactly the leaves the link froze", async () => {
     await loadShareViewData(
       ctx({
-        sectionsJson: {
-          vitals: { bp: false, weight: false, pulse: false },
-          activity: { sleep: false },
-          labs: true,
-        },
+        sectionsJson: selectionToBlob(
+          selectionFromLeaves(["LAB_RESULTS", "BLOOD_PRESSURE_SYS"]),
+        ),
         documentOnly: false,
       }),
     );
-
-    expect(collect).toHaveBeenCalledTimes(1);
-    const opts = collect.mock.calls[0]![2] as {
-      sections: Record<string, boolean>;
+    const selection = collect.mock.calls[0]![2] as {
+      has: (leaf: string) => boolean;
+      leaves: string[];
     };
-    // The grouped OFF toggles must survive the fold.
-    expect(opts.sections.bp).toBe(false);
-    expect(opts.sections.weight).toBe(false);
-    expect(opts.sections.pulse).toBe(false);
-    expect(opts.sections.sleep).toBe(false);
-    // A toggle the owner left ON stays ON.
-    expect(opts.sections.labs).toBe(true);
+    expect(selection.leaves).toEqual(["BLOOD_PRESSURE_SYS", "LAB_RESULTS"]);
+    expect(selection.has("WEIGHT")).toBe(false);
+    expect(selection.has("MOOD")).toBe(false);
   });
 
-  it("folds a grouped glucose=OFF toggle down to sections.glucose=false", async () => {
-    // A diabetic owner withholds glucose from THIS share without disabling the
-    // glucose module app-wide. The grouped `glucose` toggle must survive the
-    // fold and reach the aggregator so no glucose panel is built.
+  it("drops a leaf id this build no longer knows", async () => {
     await loadShareViewData(
       ctx({
-        sectionsJson: {
-          vitals: { bp: true },
-          glucose: false,
-        },
+        sectionsJson: { v: 2, leaves: ["WEIGHT", "SOMETHING_RETIRED"] },
         documentOnly: false,
       }),
     );
-    const opts = collect.mock.calls[0]![2] as {
-      sections: Record<string, boolean>;
-    };
-    expect(opts.sections.glucose).toBe(false);
-    // A share that leaves glucose unspecified keeps the default-ON behaviour.
-    vi.clearAllMocks();
-    collect.mockResolvedValue({ patient: { displayName: "Shared record" } });
-    findDocs.mockResolvedValue([]);
-    await loadShareViewData(
-      ctx({ sectionsJson: { vitals: { bp: true } }, documentOnly: false }),
-    );
-    const opts2 = collect.mock.calls[0]![2] as {
-      sections: Record<string, boolean>;
-    };
-    expect(opts2.sections.glucose).toBe(true);
-  });
-
-  it("still resolves a flat legacy blob through the flat parser unchanged", async () => {
-    // A flat shape has no grouped-only key, so it keeps the exact legacy path.
-    await loadShareViewData(
-      ctx({ sectionsJson: { bp: false, mood: true }, documentOnly: false }),
-    );
-    const opts = collect.mock.calls[0]![2] as {
-      sections: Record<string, boolean>;
-    };
-    expect(opts.sections.bp).toBe(false);
-    expect(opts.sections.mood).toBe(true);
-    // Unspecified flat keys fall back to the documented defaults.
-    expect(opts.sections.weight).toBe(true);
+    const selection = collect.mock.calls[0]![2] as { leaves: string[] };
+    expect(selection.leaves).toEqual(["WEIGHT"]);
   });
 });
 
@@ -380,9 +357,7 @@ describe("clinician share — owner doctorReport module gate", () => {
     collect.mockResolvedValue({ patient: { displayName: "Shared record" } });
     findDocs.mockResolvedValue([]);
 
-    const res = await loadShareViewData(
-      ctx({ sectionsJson: { bp: true }, documentOnly: false }),
-    );
+    const res = await loadShareViewData(ctx({ documentOnly: false }));
 
     expect(res.documentOnly).toBe(false);
     expect(res.report).not.toBeNull();
@@ -393,9 +368,7 @@ describe("clinician share — owner doctorReport module gate", () => {
     vi.mocked(isModuleEnabled).mockImplementation(async () => false);
     findDocs.mockResolvedValue([]);
 
-    const res = await loadShareViewData(
-      ctx({ sectionsJson: { bp: true }, documentOnly: false }),
-    );
+    const res = await loadShareViewData(ctx({ documentOnly: false }));
 
     expect(res.documentOnly).toBe(true);
     expect(res.report).toBeNull();
@@ -408,9 +381,7 @@ describe("clinician share — owner doctorReport module gate", () => {
     // The link is public; there is no viewer session. The owner id must come
     // from the frozen share context.
     findDocs.mockResolvedValue([]);
-    await loadShareViewData(
-      ctx({ sectionsJson: { bp: true }, documentOnly: false }),
-    );
+    await loadShareViewData(ctx({ documentOnly: false }));
     expect(isModuleEnabled).toHaveBeenCalledWith("owner-1", "doctorReport");
   });
 
@@ -420,9 +391,7 @@ describe("clinician share — owner doctorReport module gate", () => {
     );
     findDocs.mockResolvedValue([]);
 
-    const res = await loadShareViewData(
-      ctx({ sectionsJson: { bp: true }, documentOnly: false }),
-    );
+    const res = await loadShareViewData(ctx({ documentOnly: false }));
 
     expect(res.documentOnly).toBe(true);
     expect(collect).not.toHaveBeenCalled();

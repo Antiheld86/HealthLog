@@ -47,9 +47,12 @@ vi.mock("@/lib/fhir/rest", async (importOriginal) => {
 });
 vi.mock("@/lib/fhir/resources", () => ({
   GERMAN_ATC_DEFAULT_LOCALES: ["de"],
-  patientResource: vi.fn(() => ({ resourceType: "Patient", id: "p-1" })),
+  PATIENT_RESOURCE_ID: "patient-1",
+  patientResource: vi.fn(() => ({ resourceType: "Patient", id: "patient-1" })),
   coverageResource: vi.fn(() => null),
   observationsFromReportData: vi.fn(() => []),
+  cycleObservationsFromReportData: vi.fn(() => []),
+  conditionsFromReportData: vi.fn(() => ({ conditions: [], encounters: [] })),
   medicationStatementsFromReportData: vi.fn(() => []),
   medicationAdministrationsFromReportData: vi.fn(() => []),
 }));
@@ -63,10 +66,16 @@ vi.mock("next/headers", () => ({
 }));
 
 import { GET as patientGet } from "../Patient/route";
+import { GET as coverageGet } from "../Coverage/route";
+import { GET as patientRead } from "../Patient/[id]/route";
+import { GET as coverageRead } from "../Coverage/[id]/route";
+import { GET as observationRead } from "../Observation/[id]/route";
+import { GET as medStatementRead } from "../MedicationStatement/[id]/route";
+import { GET as medAdminRead } from "../MedicationAdministration/[id]/route";
 import { GET as observationGet } from "../Observation/route";
 import { GET as medStatementGet } from "../MedicationStatement/route";
 import { GET as medAdminGet } from "../MedicationAdministration/route";
-import { GET as everythingGet } from "../$everything/route";
+import { GET as everythingGet } from "../Patient/$everything/route";
 import { GET as metadataGet } from "../metadata/route";
 
 import { getSession } from "@/lib/auth/session";
@@ -95,15 +104,42 @@ const SESSION_OK = {
   user: { id: "user-1", username: "tester", role: "USER" as const },
 };
 
-/** Every data route under `/api/fhir`, by the path a caller would hit. */
+/**
+ * Every data route under `/api/fhir`, by the path a caller would hit. The
+ * `/{type}/{id}` reads are here too: a route that 403s on search and serves on
+ * read would leak the same record through the other door.
+ */
 const DATA_ROUTES: ReadonlyArray<
   [string, (req: NextRequest) => Promise<Response>]
 > = [
   ["Patient", patientGet],
+  ["Coverage", coverageGet],
   ["Observation", observationGet],
   ["MedicationStatement", medStatementGet],
   ["MedicationAdministration", medAdminGet],
-  ["$everything", everythingGet],
+  ["Patient/$everything", everythingGet],
+];
+
+/**
+ * The `/{type}/{id}` reads. Same gate, different success shape (a bare
+ * resource, not a Bundle) — a route that 403s on search and serves on read
+ * would leak the same record through the other door.
+ */
+function idCtx(id: string) {
+  return { params: Promise.resolve({ id }) };
+}
+
+const READ_ROUTES: ReadonlyArray<
+  [string, (req: NextRequest) => Promise<Response>]
+> = [
+  ["Patient/patient-1", (req) => patientRead(req, idCtx("patient-1"))],
+  ["Coverage/coverage-1", (req) => coverageRead(req, idCtx("coverage-1"))],
+  ["Observation/obs-1", (req) => observationRead(req, idCtx("obs-1"))],
+  ["MedicationStatement/med-1", (req) => medStatementRead(req, idCtx("med-1"))],
+  [
+    "MedicationAdministration/medadmin-1",
+    (req) => medAdminRead(req, idCtx("medadmin-1")),
+  ],
 ];
 
 function req(path: string): NextRequest {
@@ -124,9 +160,18 @@ beforeEach(() => {
     Object.fromEntries(MODULE_KEYS.map((k) => [k, true])) as never,
   );
   vi.mocked(loadFhirContext).mockResolvedValue({
-    data: {} as never,
+    data: {
+      period: {
+        days: 90,
+        since: "2026-02-02T00:00:00.000Z",
+        start: "2026-02-02T00:00:00.000Z",
+        end: "2026-05-03T00:00:00.000Z",
+      },
+      patient: {},
+    } as never,
     identity: { insuranceNumber: "A123456789" },
     germanAtc: false,
+    records: {},
   });
 });
 
@@ -168,10 +213,37 @@ describe("/api/fhir/* — doctorReport module gate", () => {
     });
   });
 
+  describe.each(READ_ROUTES)("GET /api/fhir/%s", (path, handler) => {
+    it("403s with module.disabled when the module is off", async () => {
+      setDoctorReportModule(false);
+
+      const res = await handler(req(path));
+      expect(res.status).toBe(403);
+      const body = (await res.json()) as {
+        meta?: { errorCode?: string; module?: string };
+      };
+      expect(body.meta?.errorCode).toBe(MODULE_DISABLED_ERROR_CODE);
+      expect(body.meta?.module).toBe("doctorReport");
+      expect(loadFhirContext).not.toHaveBeenCalled();
+      expect(JSON.stringify(body)).not.toContain("A123456789");
+    });
+
+    it("reaches the record when the module is on", async () => {
+      setDoctorReportModule(true);
+
+      const res = await handler(req(path));
+      // The emitters are stubbed empty here, so the honest answer is a
+      // `not-found` OperationOutcome — what matters is that the gate did not
+      // refuse and the aggregate was assembled.
+      expect(res.status).not.toBe(403);
+      expect(loadFhirContext).toHaveBeenCalledWith("user-1");
+    });
+  });
+
   it("leaves the static CapabilityStatement reachable while the module is off", async () => {
     // Server metadata, no user data — the one FHIR route that stays open.
     setDoctorReportModule(false);
-    const res = await metadataGet();
+    const res = await metadataGet(req("metadata"));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { resourceType: string };
     expect(body.resourceType).toBe("CapabilityStatement");

@@ -871,10 +871,12 @@ paths:
       tags:
         - Export
       summary: Generate a health-record export (PDF / FHIR / package)
-      description: "v1.7.0 flagship export. Returns the doctor-handover artefact in the requested `format`: `pdf` →
-        application/pdf, `fhir` → application/fhir+json (HL7 FHIR R4 document Bundle), `package` → application/zip (PDF
-        + FHIR + README). Auth via cookie or Bearer; shared `export:<userId>` rate bucket (10/h). Strict validation:
-        unknown keys 422."
+      description: "Returns the doctor-handover artefact in the requested `format`: `pdf` → application/pdf, `fhir` →
+        application/fhir+json (HL7 FHIR R4 document Bundle), `package` → application/zip (PDF + FHIR + README).
+        `selection` is REQUIRED and carries the leaf inclusion list — membership is inclusion, absence is exclusion, and
+        there is no server-side default. An unknown leaf id is a 422 that names it; the retired grouped `sections` shape
+        is a 422 too, because accepting it would mean choosing a scope the caller did not express. Auth via cookie or
+        Bearer; shared `export:<userId>` rate bucket (10/h). Strict validation: unknown keys 422."
       requestBody:
         required: true
         content:
@@ -904,65 +906,23 @@ paths:
                       minimum: 1
                       maximum: 365
                   additionalProperties: false
-                sections:
+                selection:
                   type: object
                   properties:
-                    vitals:
-                      type: object
-                      properties:
-                        weight:
-                          type: boolean
-                        bp:
-                          type: boolean
-                        pulse:
-                          type: boolean
-                        oxygenSaturation:
-                          type: boolean
-                        bodyFat:
-                          type: boolean
-                        bodyComposition:
-                          type: boolean
-                    cardioFitness:
-                      type: object
-                      properties:
-                        restingHeartRate:
-                          type: boolean
-                        hrv:
-                          type: boolean
-                        vo2max:
-                          type: boolean
-                    activity:
-                      type: object
-                      properties:
-                        steps:
-                          type: boolean
-                        distance:
-                          type: boolean
-                        sleep:
-                          type: boolean
-                    glucose:
-                      type: boolean
-                    medications:
-                      type: object
-                      properties:
-                        list:
-                          type: boolean
-                        compliance:
-                          type: boolean
-                    mood:
-                      type: boolean
-                    bmi:
-                      type: boolean
-                    cycle:
-                      type: boolean
-                    labs:
-                      type: boolean
-                    allergies:
-                      type: boolean
-                    familyHistory:
-                      type: boolean
-                    mentalHealthScreeners:
-                      type: boolean
+                    v:
+                      type: number
+                      const: 2
+                    leaves:
+                      maxItems: 90
+                      type: array
+                      items:
+                        type: string
+                        minLength: 1
+                        maxLength: 64
+                  required:
+                    - v
+                    - leaves
+                  additionalProperties: false
                 locale:
                   type: string
                   enum:
@@ -977,12 +937,11 @@ paths:
                   maxLength: 120
                 includeCharts:
                   type: boolean
-                includeAiSummary:
-                  type: boolean
                 germanAtc:
                   type: boolean
               required:
                 - format
+                - selection
               additionalProperties: false
       responses:
         "200":
@@ -1010,14 +969,13 @@ paths:
         - Export
       summary: Create a clinician share link (v1.11.0)
       description: "Owner-only. Mints an `hls_` token (192-bit), stores only its HMAC hash, and returns the raw token EXACTLY
-        ONCE in the response. v1.18.7 also mints a passphrase second factor (returned once as `passphrase`, with
-        `shareUrl` and a `qrUrl` carrying the passphrase in the URL fragment); a leaked URL without the passphrase
-        cannot open the record. Every scope column (window, sections, FHIR resource types, API toggle) is frozen
-        write-once. v1.28 accepts an optional `documentIds` array (bounded ≤50): each id is validated as the caller's
-        own live document and frozen onto the link at create (a foreign/deleted id → 422); the summary DTO then reports
-        `documentCount`. A documents-only share (empty report sections + non-empty `documentIds`) is valid. `expiresAt`
-        is required and capped at 90 days. Auth via cookie or Bearer; rate-limited (`share-link:<userId>`, 20/h).
-        Strict: unknown keys 422."
+        ONCE in the response, together with a passphrase second factor and a `qrUrl` carrying that passphrase in the URL
+        fragment; a leaked URL without the passphrase cannot open the record. The window and the `selection` are frozen
+        write-once — there is no widen path. `selection` omitted means an empty scope, not a default one, and the
+        `INSURANCE` leaf is refused with a 422 because the share view never decrypts the insurance number. An optional
+        `documentIds` array (bounded ≤50) is validated as the caller's own live documents and frozen onto the link; a
+        documents-only share (no report scope, non-empty `documentIds`) is valid. `expiresAt` is required and capped at
+        90 days. Auth via cookie or Bearer; rate-limited (`share-link:<userId>`, 20/h). Strict: unknown keys 422."
       requestBody:
         required: true
         content:
@@ -1039,65 +997,23 @@ paths:
                       format: date-time
                       pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
                     - type: "null"
-                sections:
+                selection:
                   type: object
                   properties:
-                    vitals:
-                      type: object
-                      properties:
-                        weight:
-                          type: boolean
-                        bp:
-                          type: boolean
-                        pulse:
-                          type: boolean
-                        oxygenSaturation:
-                          type: boolean
-                        bodyFat:
-                          type: boolean
-                        bodyComposition:
-                          type: boolean
-                    cardioFitness:
-                      type: object
-                      properties:
-                        restingHeartRate:
-                          type: boolean
-                        hrv:
-                          type: boolean
-                        vo2max:
-                          type: boolean
-                    activity:
-                      type: object
-                      properties:
-                        steps:
-                          type: boolean
-                        distance:
-                          type: boolean
-                        sleep:
-                          type: boolean
-                    glucose:
-                      type: boolean
-                    medications:
-                      type: object
-                      properties:
-                        list:
-                          type: boolean
-                        compliance:
-                          type: boolean
-                    mood:
-                      type: boolean
-                    bmi:
-                      type: boolean
-                    cycle:
-                      type: boolean
-                    labs:
-                      type: boolean
-                    allergies:
-                      type: boolean
-                    familyHistory:
-                      type: boolean
-                    mentalHealthScreeners:
-                      type: boolean
+                    v:
+                      type: number
+                      const: 2
+                    leaves:
+                      maxItems: 90
+                      type: array
+                      items:
+                        type: string
+                        minLength: 1
+                        maxLength: 64
+                  required:
+                    - v
+                    - leaves
+                  additionalProperties: false
                 documentIds:
                   maxItems: 50
                   type: array
@@ -1272,8 +1188,9 @@ paths:
         - FHIR
       summary: FHIR R4 CapabilityStatement (v1.11.0)
       description: "Read-only FHIR R4 capability statement for the REST face. Declares the served resource types (Patient,
-        Observation, MedicationStatement, MedicationAdministration), the `$everything` operation, and the
-        `application/fhir+json` format. Auth: `fhir:read` scope (cookie sessions also pass)."
+        Coverage, Observation, MedicationStatement, MedicationAdministration), their `read` and `search-type`
+        interactions, the `Patient/$everything` operation, and the `application/fhir+json` format. Every advertised
+        interaction has a route. Auth: `fhir:read` scope (cookie sessions also pass)."
       responses:
         "200":
           description: CapabilityStatement (application/fhir+json).
@@ -1393,14 +1310,204 @@ paths:
         "401": *a1
         "422": *a3
         "429": *a4
-  /api/fhir/$everything:
+  /api/fhir/Coverage:
+    get:
+      tags:
+        - FHIR
+      summary: FHIR R4 Coverage search
+      description: "Read-only `searchset` Bundle of the caller's own Coverage resource, when an insurer is recorded and the
+        insurance leaf is in the saved selection. Auth: `fhir:read` scope. Offset paging via `_count` (clamped ≤200) /
+        `_offset`. `userId` is narrowed from auth."
+      parameters:
+        - in: query
+          name: _count
+          schema:
+            type: number
+        - in: query
+          name: _offset
+          schema:
+            type: number
+      responses:
+        "200":
+          description: searchset Bundle (application/fhir+json).
+          content:
+            application/fhir+json:
+              schema:
+                type: string
+                format: binary
+        "401": *a1
+        "422": *a3
+        "429": *a4
+  /api/fhir/Patient/{id}:
+    get:
+      tags:
+        - FHIR
+      summary: FHIR R4 Patient read
+      description: "Read-only `Patient` by id, out of the caller's own record. An id belonging to someone else is
+        indistinguishable from one that never existed — both answer a `not-found` OperationOutcome. Auth: `fhir:read`
+        scope; `userId` is narrowed from auth."
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: The resource (application/fhir+json).
+          content:
+            application/fhir+json:
+              schema:
+                type: string
+                format: binary
+        "401": *a1
+        "404":
+          description: OperationOutcome (application/fhir+json).
+          content:
+            application/fhir+json:
+              schema:
+                type: string
+                format: binary
+        "422": *a3
+        "429": *a4
+  /api/fhir/Coverage/{id}:
+    get:
+      tags:
+        - FHIR
+      summary: FHIR R4 Coverage read
+      description: "Read-only `Coverage` by id, out of the caller's own record. An id belonging to someone else is
+        indistinguishable from one that never existed — both answer a `not-found` OperationOutcome. Auth: `fhir:read`
+        scope; `userId` is narrowed from auth."
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: The resource (application/fhir+json).
+          content:
+            application/fhir+json:
+              schema:
+                type: string
+                format: binary
+        "401": *a1
+        "404":
+          description: OperationOutcome (application/fhir+json).
+          content:
+            application/fhir+json:
+              schema:
+                type: string
+                format: binary
+        "422": *a3
+        "429": *a4
+  /api/fhir/Observation/{id}:
+    get:
+      tags:
+        - FHIR
+      summary: FHIR R4 Observation read
+      description: "Read-only `Observation` by id, out of the caller's own record. An id belonging to someone else is
+        indistinguishable from one that never existed — both answer a `not-found` OperationOutcome. Auth: `fhir:read`
+        scope; `userId` is narrowed from auth."
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: The resource (application/fhir+json).
+          content:
+            application/fhir+json:
+              schema:
+                type: string
+                format: binary
+        "401": *a1
+        "404":
+          description: OperationOutcome (application/fhir+json).
+          content:
+            application/fhir+json:
+              schema:
+                type: string
+                format: binary
+        "422": *a3
+        "429": *a4
+  /api/fhir/MedicationStatement/{id}:
+    get:
+      tags:
+        - FHIR
+      summary: FHIR R4 MedicationStatement read
+      description: "Read-only `MedicationStatement` by id, out of the caller's own record. An id belonging to someone else is
+        indistinguishable from one that never existed — both answer a `not-found` OperationOutcome. Auth: `fhir:read`
+        scope; `userId` is narrowed from auth."
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: The resource (application/fhir+json).
+          content:
+            application/fhir+json:
+              schema:
+                type: string
+                format: binary
+        "401": *a1
+        "404":
+          description: OperationOutcome (application/fhir+json).
+          content:
+            application/fhir+json:
+              schema:
+                type: string
+                format: binary
+        "422": *a3
+        "429": *a4
+  /api/fhir/MedicationAdministration/{id}:
+    get:
+      tags:
+        - FHIR
+      summary: FHIR R4 MedicationAdministration read
+      description: "Read-only `MedicationAdministration` by id, out of the caller's own record. An id belonging to someone
+        else is indistinguishable from one that never existed — both answer a `not-found` OperationOutcome. Auth:
+        `fhir:read` scope; `userId` is narrowed from auth."
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: The resource (application/fhir+json).
+          content:
+            application/fhir+json:
+              schema:
+                type: string
+                format: binary
+        "401": *a1
+        "404":
+          description: OperationOutcome (application/fhir+json).
+          content:
+            application/fhir+json:
+              schema:
+                type: string
+                format: binary
+        "422": *a3
+        "429": *a4
+  /api/fhir/Patient/$everything:
     get:
       tags:
         - FHIR
       summary: FHIR R4 $everything (v1.11.0)
-      description: "Read-only `$everything` operation: every resource in the caller's own record (Patient, Coverage,
-        Observations, MedicationStatements, MedicationAdministrations) in one `searchset` Bundle. Auth: `fhir:read`
-        scope. Offset paging via `_count` (≤200) / `_offset`."
+      description: "Read-only `Patient/$everything`: every resource the document bundle carries — Composition, Device,
+        Patient, Coverage, Observations (including the cycle ones), MedicationStatements, MedicationAdministrations,
+        Conditions, Encounters, AllergyIntolerances, FamilyMemberHistories and the DiagnosticReport — flattened into one
+        `searchset` Bundle. Scoped to the owner's SAVED report selection; an account that never saved one gets nothing.
+        Auth: `fhir:read` scope. Offset paging via `_count` (≤200) / `_offset`."
       parameters:
         - in: query
           name: _count
@@ -15670,23 +15777,35 @@ components:
               minimum: -9007199254740991
               maximum: 9007199254740991
               description: Maximum lifetime of a share link, in days. No never-expiring share.
-            resourceTypes:
+            reportDownload:
               type: array
               items:
                 type: string
-              description: FHIR resource types a share link may be scoped to serve.
-            sections:
+              description: Machine formats a share link serves as a download under its token, behind the same unlock as the page.
+            selectionVersion:
+              type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+              description: Version of the leaf-selection grammar this build speaks.
+            groups:
               type: array
               items:
                 type: string
-              description: Scopeable report sections a share link may toggle.
+              description: Selection group ids, in presentation order.
+            leaves:
+              type: array
+              items:
+                type: string
+              description: Every leaf id a report selection may carry. Membership is inclusion; absence is exclusion.
           required:
             - supported
             - maxDays
-            - resourceTypes
-            - sections
+            - reportDownload
+            - selectionVersion
+            - groups
+            - leaves
           additionalProperties: false
-          description: Clinician share-link surface descriptor (v1.11).
+          description: Clinician share-link surface descriptor.
       required:
         - apiContractVersion
         - derivedMetricIds
@@ -15719,6 +15838,14 @@ components:
               type: boolean
             documentCount:
               type: number
+            needsReselection:
+              type: boolean
+            allowFhirApi:
+              type: boolean
+            resourceTypes:
+              type: array
+              items:
+                type: string
             expiresAt:
               type: string
             createdAt:
@@ -15755,6 +15882,9 @@ components:
             - rangeEnd
             - protected
             - documentCount
+            - needsReselection
+            - allowFhirApi
+            - resourceTypes
             - expiresAt
             - createdAt
             - revokedAt
@@ -15803,6 +15933,14 @@ components:
                     type: boolean
                   documentCount:
                     type: number
+                  needsReselection:
+                    type: boolean
+                  allowFhirApi:
+                    type: boolean
+                  resourceTypes:
+                    type: array
+                    items:
+                      type: string
                   expiresAt:
                     type: string
                   createdAt:
@@ -15826,6 +15964,9 @@ components:
                   - rangeEnd
                   - protected
                   - documentCount
+                  - needsReselection
+                  - allowFhirApi
+                  - resourceTypes
                   - expiresAt
                   - createdAt
                   - revokedAt

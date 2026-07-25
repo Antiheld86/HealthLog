@@ -233,9 +233,12 @@ describe("healthlog://report/doctor-visit", () => {
       CTX,
     )) as Record<string, unknown>;
 
+    // Third argument: the owner's SAVED selection, replayed. This surface
+    // cannot ask a human, so it never invents a scope.
     expect(collectDoctorReportData).toHaveBeenCalledWith(
       "user-1",
       expect.objectContaining({ days: 90 }),
+      expect.objectContaining({ version: 2 }),
     );
     expect(result.present).toBe(true);
     expect(result).toHaveProperty("vitals");

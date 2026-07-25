@@ -11,7 +11,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { ClinicianView } from "../clinician-view";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
-import { DEFAULT_DOCTOR_REPORT_PREFS } from "@/lib/validations/doctor-report-prefs";
+import { selectionFromLeaves } from "@/lib/report-selection/selection";
+import { ALL_LEAF_IDS } from "@/lib/report-selection/catalogue";
 import type { DoctorReportData } from "@/lib/doctor-report-data";
 import { computeGlucoseClinicalMetrics } from "@/lib/analytics/glucose-metrics";
 
@@ -76,7 +77,7 @@ function render(
       label="Cardiology clinic"
       expiresAt="2026-03-01T00:00:00.000Z"
       report={report}
-      sections={{ ...DEFAULT_DOCTOR_REPORT_PREFS }}
+      selection={selectionFromLeaves(ALL_LEAF_IDS)}
       {...extra}
     />,
   );
@@ -100,10 +101,12 @@ describe("<ClinicianView>", () => {
 
   it("renders clinical vitals from the scoped report", () => {
     const html = render(makeReport());
-    expect(html).toContain("Vital signs");
-    // The measurement-type enum renders as its localised label, not the raw
-    // enum string.
-    expect(html).toContain("Body weight");
+    // The measurement rows are grouped the way the selection panel groups
+    // them, so the page reads in the same order as the PDF.
+    expect(html).toContain("Body measurements");
+    // The measurement-type enum renders as the SAME localised label the rest
+    // of the app uses, not the raw enum string and not a second vocabulary.
+    expect(html).toContain(">Weight<");
     expect(html).not.toContain("WEIGHT");
   });
 

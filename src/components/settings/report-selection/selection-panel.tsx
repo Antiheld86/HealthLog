@@ -51,8 +51,14 @@ import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import type { ReportLeafId } from "@/lib/report-selection/catalogue";
-import { parseSavedProfile } from "@/lib/report-selection/saved-profile";
-import { STANDARD_TEMPLATE_LEAVES } from "@/lib/report-selection/template";
+import {
+  parseSavedProfile,
+  SAVED_PROFILE_FALLBACK,
+} from "@/lib/report-selection/saved-profile";
+import {
+  STANDARD_TEMPLATE_LABEL_KEY,
+  STANDARD_TEMPLATE_LEAVES,
+} from "@/lib/report-selection/template";
 import { orderLeaves } from "@/lib/report-selection/selection";
 
 import { ReportScopePicker } from "./report-scope-picker";
@@ -68,13 +74,17 @@ export function HealthRecordExportPanel() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const [format, setFormat] = useState<ExportFormat>("pdf");
-  const [days, setDays] = useState<number>(90);
+  const [format, setFormat] = useState<ExportFormat>(
+    SAVED_PROFILE_FALLBACK.format,
+  );
+  const [days, setDays] = useState<number>(SAVED_PROFILE_FALLBACK.rangeDays);
   const [customRange, setCustomRange] = useState(false);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [practiceName, setPracticeName] = useState("");
-  const [includeCharts, setIncludeCharts] = useState(true);
+  const [includeCharts, setIncludeCharts] = useState(
+    SAVED_PROFILE_FALLBACK.includeCharts,
+  );
   const [selected, setSelected] = useState<ReadonlySet<ReportLeafId>>(
     () => new Set(STANDARD_TEMPLATE_LEAVES),
   );
@@ -328,7 +338,7 @@ export function HealthRecordExportPanel() {
                   data-testid="report-template-note"
                 >
                   {t("reportSelection.templateApplied", {
-                    template: t("reportSelection.templateStandard"),
+                    template: t(STANDARD_TEMPLATE_LABEL_KEY),
                   })}
                 </p>
               ) : null}

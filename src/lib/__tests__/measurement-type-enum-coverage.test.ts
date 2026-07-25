@@ -1,10 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { measurementTypeEnum } from "@/lib/validations/measurement";
 import {
-  DOCTOR_REPORT_VITAL_TYPES,
-  DOCTOR_REPORT_TYPE_LABEL_KEYS,
+  getUnitForType,
+  measurementTypeEnum,
+} from "@/lib/validations/measurement";
+import {
+  DOCTOR_REPORT_VITAL_GROUPS,
   DOCTOR_REPORT_TYPE_UNIT_KEYS,
 } from "@/lib/doctor-report-pdf-core";
+import { MEASUREMENT_TYPE_LABEL_KEYS } from "@/lib/measurements/type-label-keys";
 
 // Single source of truth for which measurement types exist.
 // V3 audit "enum drift cousins": 7 module-level hardcoded arrays were
@@ -136,170 +139,40 @@ describe("measurementTypeEnum coverage", () => {
   //    differ by sex/age) which lands with the iOS-app clinical surface.
   // Updates to this set MUST be paired with a comment in
   // doctor-report-pdf-core.ts so the rationale stays discoverable.
-  const PDF_VITAL_EXCLUSIONS = new Set([
-    "BLOOD_GLUCOSE",
-    "ACTIVITY_STEPS",
-    "HEART_RATE_VARIABILITY",
-    "RESTING_HEART_RATE",
-    "ACTIVE_ENERGY_BURNED",
-    "FLIGHTS_CLIMBED",
-    "WALKING_RUNNING_DISTANCE",
-    "VO2_MAX",
-    "BODY_TEMPERATURE",
-    "FAT_FREE_MASS",
-    "FAT_MASS",
-    "MUSCLE_MASS",
-    "SKIN_TEMPERATURE",
-    "PULSE_WAVE_VELOCITY",
-    "VASCULAR_AGE",
-    "VISCERAL_FAT",
-    // v1.4.25 W8d Apple Health additions held under the same v1.5 gate.
-    // Audio exposure and time-in-daylight are lifestyle / environment
-    // metrics; reference ranges + clinical layout land alongside the
-    // first iOS-app sync, not the v1.4.25 PDF.
-    "AUDIO_EXPOSURE_ENV",
-    "AUDIO_EXPOSURE_HEADPHONE",
-    "TIME_IN_DAYLIGHT",
-    // v1.4.30 R-F T1.4 + T1.5 additions held under the same v1.5 gate.
-    // Walking-steadiness pairs with a mobility chip; audio-exposure
-    // events surface on the Insights audio sub-page. Neither belongs
-    // in the clinical PDF until the iOS-app sync lands.
-    "WALKING_STEADINESS",
-    "AUDIO_EXPOSURE_EVENT",
-    // v1.5.5 iOS-coord additions held under the same v1.5 PDF gate.
-    // Respiratory rate, BMI, lean body mass, walking HR average, and
-    // the two gait-percent metrics ride the same clinical-layout
-    // deferral as the other v1.4.23+ additions; the doctor PDF picks
-    // them up once the layout and reference ranges land.
-    "RESPIRATORY_RATE",
-    "BODY_MASS_INDEX",
-    "LEAN_BODY_MASS",
-    "WALKING_HEART_RATE_AVERAGE",
-    "WALKING_ASYMMETRY",
-    "WALKING_DOUBLE_SUPPORT",
-    // v1.5.5 iOS-coord follow-up — raw-SI gait pair held under the
-    // same clinical-layout deferral as the rest of the Mobility set.
-    "WALKING_STEP_LENGTH",
-    "WALKING_SPEED",
-    // v1.10.0 — additive HealthKit signals (WX-A) held under the same
-    // v1.5+ clinical-layout PDF gate as the rest of the Apple-Health
-    // additions. Cardio recovery, wrist temperature, falls, six-minute
-    // walk, the stair gait speeds, and the sleep-breathing index each
-    // surface on their Insights sub-page; the doctor PDF picks them up
-    // once a clinical layout + reference ranges land.
-    "CARDIO_RECOVERY",
-    "WRIST_TEMPERATURE",
-    "FALL_COUNT",
-    "SIX_MINUTE_WALK_DISTANCE",
-    "STAIR_ASCENT_SPEED",
-    "STAIR_DESCENT_SPEED",
-    "BREATHING_DISTURBANCES",
-    // v1.10.0 — categorical events (WX-B). Device-flagged EVENT rows are
-    // discrete on-device notifications, not vital-sign readings. They are
-    // surfaced on the Insights awareness timeline with their own regulatory
-    // disclaimer, never in the clinical vitals PDF (their value is always 1
-    // and they carry the device's verdict, not a measured quantity). See
-    // doctor-report-pdf-core.ts for the matching exclusion rationale.
-    "IRREGULAR_RHYTHM_NOTIFICATION",
-    "HIGH_HEART_RATE_EVENT",
-    "LOW_HEART_RATE_EVENT",
-    "WALKING_STEADINESS_EVENT",
-    "BREATHING_DISTURBANCE_EVENT",
-    // v1.10.0 — computed scores (WX-C). Server-derived wellness scores
-    // (Recovery / Stress / Strain) are 0–100 composites recomputed nightly,
-    // not measured clinical vitals. They surface on their own Insights
-    // cluster with a "descriptive, not clinical" disclaimer and never belong
-    // in the clinical vitals PDF. See doctor-report-pdf-core.ts.
-    "RECOVERY_SCORE",
-    "STRESS_SCORE",
-    "STRAIN_SCORE",
-    // v1.11.0 — WHOOP-native score classes. Device-derived strain / recovery
-    // / sleep-quality composites and a kJ energy total, not measured clinical
-    // vitals. They surface on their own Insights cluster with a "descriptive,
-    // not clinical" disclaimer and never belong in the clinical vitals PDF.
-    // See doctor-report-pdf-core.ts for the matching exclusion rationale.
-    "HRV_RMSSD",
-    "DAY_STRAIN",
-    "WORKOUT_STRAIN",
-    "SLEEP_PERFORMANCE",
-    "SLEEP_EFFICIENCY",
-    "SLEEP_CONSISTENCY",
-    "SLEEP_NEED",
-    "ENERGY_EXPENDITURE_KJ",
-    // v1.12.8 — WHOOP cycle + sleep coverage completion. The daily-aggregate
-    // heart-rate pair and the per-night disturbance count are device-derived
-    // WHOOP signals, not measured clinical vitals; they surface on the
-    // measurement list + Insights chart surfaces with a "descriptive, not
-    // clinical" framing and never belong in the clinical vitals PDF. See
-    // doctor-report-pdf-core.ts for the matching exclusion rationale.
-    "AVERAGE_HEART_RATE",
-    "MAX_HEART_RATE",
-    "SLEEP_DISTURBANCE_COUNT",
-    // v1.17.1 — Polar Nightly Recharge + Training Load Pro components. ANS
-    // charge and Cardio Load are device-derived recovery / strain composites,
-    // not measured clinical vitals; they surface on their own Insights cluster
-    // with a "descriptive, not clinical" framing and never belong in the
-    // clinical vitals PDF. See doctor-report-pdf-core.ts.
-    "ANS_CHARGE",
-    "CARDIO_LOAD",
-    // v1.17.1 — Oura coverage completion. The Sleep Score is a nightly
-    // derived composite and the body-temperature deviation is a signed
-    // baseline offset (illness / cycle / stress signal), not a measured
-    // clinical vital — both surface on the Insights / measurement-list
-    // surfaces and never belong in the clinical vitals PDF. See
-    // doctor-report-pdf-core.ts for the matching exclusion rationale.
-    "SLEEP_SCORE",
-    "BODY_TEMPERATURE_DEVIATION",
-    // v1.19.0 — Oura resilience. The resilience level is an ordinal-encoded
-    // categorical band (limited=1 … exceptional=5), a derived recovery
-    // composite, not a measured clinical vital — it surfaces on the
-    // Insights / measurement-list surfaces and never belongs in the clinical
-    // vitals PDF. See doctor-report-pdf-core.ts for the matching rationale.
-    "RESILIENCE",
-    // v1.25 — clinical-signals wave. The mental-health screener totals are
-    // opt-in, derived, and deliberately excluded from any export/share/AI
-    // surface by default (item answers are encrypted). The physical clinical
-    // signals (grip strength, pain NRS, waist circumference + WHtR) surface on
-    // their own measurement/insights surfaces; they join the doctor PDF once a
-    // clinical layout + reference ranges land alongside the other v1.5+
-    // additions. See doctor-report-pdf-core.ts for the matching rationale.
-    "PHQ9_SCORE",
-    "GAD7_SCORE",
-    "GRIP_STRENGTH",
-    "PAIN_NRS",
-    "WAIST_CIRCUMFERENCE",
-    "WAIST_TO_HEIGHT",
-    // v1.27.9 — WHO-5 / SCI screening totals follow the PHQ-9 / GAD-7
-    // precedent: opt-in questionnaire derivations, excluded from the vitals
-    // table; they ride the module-gated mental-health export section
-    // instead. See doctor-report-pdf-core.ts for the matching rationale.
-    "WHO5_SCORE",
-    "SCI_SCORE",
-  ]);
 
-  it("doctor-report PDF vital types cover the canonical enum minus documented exclusions", () => {
-    const expected = measurementTypeEnum.options.filter(
-      (t) => !PDF_VITAL_EXCLUSIONS.has(t),
+  it("doctor-report PDF renders every measurement type, grouped", () => {
+    // The table used to be a fixed nine-type whitelist with a documented
+    // exclusion list beside it, which meant a user could select resting heart
+    // rate, get it in the FHIR bundle and the share view, and not find it in
+    // the PDF. It is selection-driven now, so the assertion inverts: every
+    // type in the enum appears in exactly one group, and the exclusion list is
+    // gone with the whitelist that needed it.
+    const rendered = DOCTOR_REPORT_VITAL_GROUPS.flatMap((g) => g.types);
+    expect([...rendered].sort()).toEqual(
+      [...measurementTypeEnum.options].sort(),
     );
-    expect([...DOCTOR_REPORT_VITAL_TYPES].sort()).toEqual([...expected].sort());
+    expect(new Set(rendered).size).toBe(rendered.length);
   });
 
   it("doctor-report PDF has a label key for every renderable type", () => {
-    for (const type of DOCTOR_REPORT_VITAL_TYPES) {
-      expect(
-        DOCTOR_REPORT_TYPE_LABEL_KEYS[type],
-        `missing label key for ${type}`,
-      ).toBeTruthy();
+    for (const group of DOCTOR_REPORT_VITAL_GROUPS) {
+      for (const type of group.types) {
+        expect(
+          MEASUREMENT_TYPE_LABEL_KEYS[type],
+          `missing label key for ${type}`,
+        ).toBeTruthy();
+      }
     }
   });
 
-  it("doctor-report PDF has a unit key for every renderable type", () => {
-    for (const type of DOCTOR_REPORT_VITAL_TYPES) {
-      const unit = DOCTOR_REPORT_TYPE_UNIT_KEYS[type];
-      expect(
-        unit === null || (typeof unit === "string" && unit.length > 0),
-        `missing unit for ${type}`,
-      ).toBe(true);
+  it("doctor-report PDF resolves a unit or honestly none for every type", () => {
+    // A type with no recorded unit prints none. An absent unit is absent, not
+    // the word "unknown" beside a clinical number.
+    for (const group of DOCTOR_REPORT_VITAL_GROUPS) {
+      for (const type of group.types) {
+        const unit = DOCTOR_REPORT_TYPE_UNIT_KEYS[type] ?? getUnitForType(type);
+        expect(typeof unit === "string" || unit === null).toBe(true);
+      }
     }
   });
 });

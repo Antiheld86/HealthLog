@@ -78,6 +78,7 @@ beforeEach(() => {
     data: {} as never,
     identity: { insuranceNumber: null },
     germanAtc: false,
+    records: {},
   });
 });
 

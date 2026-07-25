@@ -37,6 +37,10 @@ vi.mock("@/lib/modules/gate", async (importOriginal) => {
 
 import { collectDoctorReportData } from "../doctor-report-data";
 import { resolveModuleMap, MODULE_KEYS } from "@/lib/modules/gate";
+import {
+  EMPTY_REPORT_SELECTION,
+  selectionFromLeaves,
+} from "@/lib/report-selection/selection";
 
 const RANGE = {
   start: new Date("2026-01-01T00:00:00.000Z"),
@@ -61,6 +65,7 @@ describe("collectDoctorReportData — doctorReport backstop", () => {
       collectDoctorReportData(
         "u1",
         RANGE,
+        EMPTY_REPORT_SELECTION,
         // Injected rather than read, so the refusal is attributable to the
         // module state and not to a DB stub.
         {
@@ -79,9 +84,9 @@ describe("collectDoctorReportData — doctorReport backstop", () => {
       moduleMap({ doctorReport: false }) as never,
     );
 
-    await expect(collectDoctorReportData("u1", RANGE)).rejects.toThrow(
-      /doctorReport/,
-    );
+    await expect(
+      collectDoctorReportData("u1", RANGE, EMPTY_REPORT_SELECTION),
+    ).rejects.toThrow(/doctorReport/);
     expect(resolveModuleMap).toHaveBeenCalledWith("u1");
   });
 
@@ -92,7 +97,7 @@ describe("collectDoctorReportData — doctorReport backstop", () => {
     // stub, never the backstop, or the "off" assertions above would pass
     // trivially for a function that always throws.
     await expect(
-      collectDoctorReportData("u1", RANGE, {
+      collectDoctorReportData("u1", RANGE, selectionFromLeaves(["WEIGHT"]), {
         moduleMap: moduleMap() as never,
       }),
     ).rejects.toThrow("DB touched");

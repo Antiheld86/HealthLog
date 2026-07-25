@@ -75,6 +75,7 @@ function buildUser(disableCoach: boolean): AuthUser {
     insurerIkNumber: null,
     insuranceNumber: null,
     lastReportPracticeName: null,
+    reportSelection: null,
     cycleTrackingEnabled: false,
     modules: {},
   };

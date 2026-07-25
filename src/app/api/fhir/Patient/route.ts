@@ -1,10 +1,14 @@
 /**
- * GET /api/fhir/Patient — FHIR R4 `searchset` of the caller's own Patient.
+ * GET /api/fhir/Patient — FHIR R4 `searchset` of the caller's own Patient resource.
  *
- * Read-only. A FHIR `Patient` search always yields exactly the authenticated
- * user's single Patient resource (the `userId` is narrowed from `requireAuth`;
- * there is no cross-user search). Returned as a one-entry `searchset` Bundle
- * so a generic FHIR client can page it like any other resource type.
+ * A Patient search always yields exactly the authenticated user's single
+ * Patient (there is no cross-user search); it is returned as a one-entry
+ * Bundle so a generic FHIR client can page it like any other resource type.
+ *
+ * Read-only. `userId` is narrowed from `requireAuth`; the shared emitters in
+ * `@/lib/fhir/resources` are the single source of the coding, so this face and
+ * the document export can never describe the same record differently. Offset
+ * paging via `_count` (clamped ≤200) / `_offset`.
  */
 import { NextRequest } from "next/server";
 
@@ -25,18 +29,13 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const { user } = await requireAuth(FHIR_READ_SCOPE);
   annotate({ action: { name: "fhir.patient.search" } });
 
-  // v1.30 — the FHIR REST face serves the SAME whole-record aggregate as
-  // `/api/export/health-record` (the doctor-report builder), right down to
-  // the decrypted insurance number on the Patient resource. That export
-  // gates on the `doctorReport` module; this surface did not, so the module
-  // could be off and `/api/fhir/*` still handed out the full record.
-  //
-  // REFUSE, NOT OMIT — deliberately, and unlike the sync delta feed. This is
-  // a whole-record export, not an incremental feed: there is no partial
-  // answer that is still a truthful FHIR Bundle, and no background client
-  // depends on it draining to stay consistent. Mirroring the sibling export's
-  // 403 `module.disabled` envelope (rather than an OperationOutcome) keeps
-  // the errorCode the clients already branch on for a disabled module.
+  // REFUSE, NOT OMIT. The FHIR face serves the SAME whole-record aggregate as
+  // `/api/export/health-record`, right down to the decrypted insurance number
+  // on the Patient resource, so it gates on the same `doctorReport` module.
+  // There is no partial answer that is still a truthful FHIR Bundle, and no
+  // background client depends on this draining to stay consistent. The 403
+  // `module.disabled` envelope (rather than an OperationOutcome) keeps the
+  // errorCode clients already branch on for a disabled module.
   const gate = await requireModuleEnabled(user.id, "doctorReport");
   if (!gate.enabled) return gate.response;
 
@@ -44,11 +43,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
   if (!rl.allowed) {
     return operationOutcome(429, "throttled", "Rate limit exceeded");
   }
-
   const { count, offset } = parsePaging(request.nextUrl.searchParams);
-  const { data, identity } = await loadFhirContext(user.id);
+  const context = await loadFhirContext(user.id);
 
-  const all = [patientResource(data, identity)];
+  const all = [patientResource(context.data, context.identity)];
   const page = all.slice(offset, offset + count);
   annotate({ meta: { total: all.length, count, offset } });
   return searchsetResponse(request.nextUrl, page, all.length, count, offset);

@@ -1,187 +1,149 @@
 /**
- * Structural guard: a rendered export control with no gating path fails the
- * build.
+ * Structural guard: a rendered scope control with no gating path fails the
+ * build, and a gating path with no control fails it too.
  *
- * The health-record export panel shipped twenty data-selection switches, of
- * which eight changed nothing at all. `toDoctorReportPrefs` folded the grouped
- * wire shape down to twelve flat flags and dropped the rest on the floor, so a
- * user who switched off SpO₂, body fat, body composition, resting heart rate,
- * HRV, VO₂max, steps or distance exported them anyway — in the PDF, in the FHIR
- * bundle, in the package, in a clinician share link and over MCP. Nothing
- * failed; the control simply lied, and it lied for several releases because no
- * test connected "the panel renders this" to "the export honours this".
+ * The export panel once shipped twenty data switches, eight of which changed
+ * nothing at all — the wire fold read twelve of the keys it accepted and
+ * dropped the rest on the floor. Nothing failed; the control simply lied, and
+ * it lied for several releases because no test connected "the panel renders
+ * this" to "the export honours this".
  *
- * This file is that connection, in three links that each break independently:
+ * The selection model removed the fold, so the shape that defect lived in is
+ * gone. This file is the same connection retargeted at the leaf catalogue,
+ * which is now the one thing the picker, the aggregator, the PDF and the share
+ * view all read:
  *
- *   1. Every control the panel holds state for survives the wire schema. A key
- *      the schema strips can never be honoured, however carefully the fold is
- *      written.
- *   2. Flipping exactly one control changes the resolved `DoctorReportPrefs`
- *      the aggregator consumes. This is the assertion that would have caught
- *      all eight dead switches on the day they were added.
- *   3. Every flag in the resolved shape is read downstream — either as a
- *      per-measurement-type entry in the selection gates or by name in the
- *      aggregator body. A flag nothing reads is the same defect one layer down.
- *
- * It also checks the panel actually renders every control it declares, so the
- * split between the control shape and its rendering cannot quietly leave a
- * declared control with no row (or a row with no gate).
+ *   1. Every leaf the catalogue declares is reachable in the picker — the
+ *      picker renders from the catalogue, so the check is that the catalogue
+ *      places each leaf in exactly one group and the picker renders each group.
+ *   2. Flipping exactly one leaf changes the resolved selection. This is the
+ *      assertion that would have caught all eight dead switches.
+ *   3. Every leaf is honoured somewhere downstream: as a measurement type the
+ *      gate strips, or by name in the aggregator's own body.
  *
  * What it does NOT prove: that the excluded data is actually absent from a
- * rendered artefact. That is a behavioural property and it is covered where the
- * artefacts are built — `src/app/api/export/health-record/__tests__/route.test.ts`
- * asserts the PDF, the FHIR bundle and the zip for the same selections. This
- * guard is the cheap structural half that runs on every commit and cannot be
- * satisfied by writing a control that looks plausible.
+ * rendered artefact. That is behavioural and is covered where the artefacts are
+ * built — `src/app/api/export/health-record/__tests__/route.test.ts` opens the
+ * real PDF, the real bundle and the real zip. This guard is the cheap
+ * structural half that cannot be satisfied by writing a plausible-looking
+ * control.
+ *
+ * Mutation checks are recorded per assertion below.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  exportSectionsSchema,
-  toDoctorReportPrefs,
-} from "@/lib/validations/health-record-export";
-import {
-  DEFAULT_DOCTOR_REPORT_PREFS,
-  type DoctorReportPrefs,
-} from "@/lib/validations/doctor-report-prefs";
-import {
-  DEFAULT_SECTIONS,
-  buildSelectionSections,
-  type SectionState,
-} from "@/components/settings/health-record-export-controls";
-import { MEASUREMENT_TYPE_SECTION } from "@/lib/doctor-report-selection";
+  ALL_LEAF_IDS,
+  MEASUREMENT_LEAF_GROUP,
+  REPORT_GROUPS,
+  STRUCTURED_LEAF_GROUP,
+  isStructuredLeafId,
+  leafGroup,
+  type ReportLeafId,
+} from "@/lib/report-selection/catalogue";
+import { selectionFromLeaves } from "@/lib/report-selection/selection";
 
 const REPO_ROOT = join(__dirname, "..", "..");
-const PANEL_PATH = join(
+const COLLECT_PATH = join(
+  REPO_ROOT,
+  "src",
+  "lib",
+  "doctor-report",
+  "collect.ts",
+);
+const PICKER_PATH = join(
   REPO_ROOT,
   "src",
   "components",
   "settings",
-  "health-record-export-panel.tsx",
+  "report-selection",
+  "report-scope-picker.tsx",
 );
-const AGGREGATOR_PATH = join(REPO_ROOT, "src", "lib", "doctor-report-data.ts");
 
-const panelSource = readFileSync(PANEL_PATH, "utf8");
-const aggregatorSource = readFileSync(AGGREGATOR_PATH, "utf8");
+const collectSource = readFileSync(COLLECT_PATH, "utf8");
+const pickerSource = readFileSync(PICKER_PATH, "utf8");
 
-/** Strip comments so a key mentioned only in prose does not count as read. */
+/** Strip comments so a leaf named only in prose does not count as read. */
 function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 }
 
-/**
- * The control set, taken from the panel's own starting values rather than from
- * a list this test maintains — a list would drift exactly the way the fold
- * drifted. `DEFAULT_SECTIONS` is typed `SectionState`, so TypeScript already
- * forces it to name every control, and every rendered row must bind one of
- * them. "Declared here" and "rendered" are therefore the same set.
- */
-const CONTROL_KEYS = Object.keys(DEFAULT_SECTIONS) as (keyof SectionState)[];
-
-/** All controls on, as the panel's state shape. */
-function allOn(): SectionState {
-  return Object.fromEntries(
-    CONTROL_KEYS.map((k) => [k, true]),
-  ) as unknown as SectionState;
-}
-
-/**
- * The exact path a selection takes in production: panel state → grouped wire
- * shape → the route's Zod parse (which strips anything the schema does not
- * declare) → the flat prefs the aggregator consumes.
- */
-function resolve(state: SectionState): DoctorReportPrefs {
-  return toDoctorReportPrefs(
-    exportSectionsSchema.parse(buildSelectionSections(state)),
-  );
-}
-
-describe("export control gating — structural guard", () => {
-  it("reads a plausible control set", () => {
-    // Sanity floor: if the control shape silently degraded, every assertion
-    // below would pass vacuously.
-    expect(CONTROL_KEYS.length).toBeGreaterThanOrEqual(20);
-    expect(CONTROL_KEYS).toContain("bp");
-    expect(CONTROL_KEYS).toContain("mentalHealthScreeners");
+describe("report scope gating — structural guard", () => {
+  it("reads a plausible catalogue", () => {
+    // Sanity floor: a silently degraded catalogue would pass everything below
+    // vacuously.
+    expect(ALL_LEAF_IDS.length).toBe(90);
+    expect(Object.keys(MEASUREMENT_LEAF_GROUP)).toHaveLength(77);
+    expect(Object.keys(STRUCTURED_LEAF_GROUP)).toHaveLength(13);
   });
 
-  it("renders a row for every control it declares", () => {
-    const unrendered = CONTROL_KEYS.filter(
-      (key) => !panelSource.includes(`sections.${key}`),
-    );
-    expect(
-      unrendered,
-      `These controls are declared in the selection shape but the panel binds ` +
-        `no row to them, so the user has no way to reach them.`,
-    ).toEqual([]);
-  });
-
-  it("keeps every rendered control inside the wire schema", () => {
-    const wire = buildSelectionSections(allOn());
-    // A round trip through the schema must not lose anything the panel sends.
-    expect(exportSectionsSchema.parse(wire)).toEqual(wire);
-  });
-
-  it("makes flipping any single control change the resolved selection", () => {
-    const baseline = resolve(allOn());
-    const inert: string[] = [];
-
-    for (const key of CONTROL_KEYS) {
-      const flipped = resolve({ ...allOn(), [key]: false });
-      if (JSON.stringify(flipped) === JSON.stringify(baseline)) {
-        inert.push(key);
+  it("places every leaf in exactly one group", () => {
+    const seen = new Map<ReportLeafId, number>();
+    for (const group of REPORT_GROUPS) {
+      for (const leaf of group.leaves) {
+        seen.set(leaf, (seen.get(leaf) ?? 0) + 1);
       }
     }
+    const duplicated = [...seen.entries()].filter(([, n]) => n > 1);
+    const missing = ALL_LEAF_IDS.filter((leaf) => !seen.has(leaf));
+    expect(duplicated, "a leaf appears in more than one group").toEqual([]);
+    expect(missing, "a leaf is in no group and so is unreachable").toEqual([]);
+  });
 
+  it("renders every group the catalogue declares", () => {
+    // The picker maps over `REPORT_GROUPS` and splits the fenced tier out by
+    // id, so this is the check that the split cannot silently drop a group.
+    expect(pickerSource).toContain("REPORT_GROUPS.map");
+    expect(pickerSource).toContain("SENSITIVE_GROUP_ID");
+  });
+
+  it("makes flipping any single leaf change the resolved selection", () => {
+    const all = selectionFromLeaves(ALL_LEAF_IDS);
+    const inert: ReportLeafId[] = [];
+    for (const leaf of ALL_LEAF_IDS) {
+      const without = selectionFromLeaves(
+        ALL_LEAF_IDS.filter((l) => l !== leaf),
+      );
+      if (
+        without.has(leaf) ||
+        without.leaves.length !== all.leaves.length - 1
+      ) {
+        inert.push(leaf);
+      }
+    }
     expect(
       inert,
-      `These panel controls are rendered but change nothing in the resolved ` +
-        `export selection. Give each one a flag in DoctorReportPrefs and a ` +
-        `gating path in doctor-report-data.ts, or remove the control.`,
+      "these leaves cannot be individually withheld, so their control would lie",
     ).toEqual([]);
   });
 
-  it("has something downstream read every flag in the resolved selection", () => {
-    // A flag is honoured either by gating measurement types or by name in the
-    // aggregator body (the structured sections: labs, allergies, the
-    // medication block, the glucose panel).
-    const mappedFlags = new Set<string>(
-      Object.values(MEASUREMENT_TYPE_SECTION),
+  it("has something downstream read every leaf", () => {
+    // A leaf is honoured either as a measurement type — the gate strips those
+    // by set membership over the whole enum — or by name in the aggregator.
+    const body = stripComments(collectSource);
+    const unread = ALL_LEAF_IDS.filter(
+      (leaf) => isStructuredLeafId(leaf) && !body.includes(`"${leaf}"`),
     );
-    const body = stripComments(aggregatorSource);
-
-    const unread = Object.keys(DEFAULT_DOCTOR_REPORT_PREFS).filter(
-      (key) => !mappedFlags.has(key) && !body.includes(`sections.${key}`),
-    );
-
     expect(
       unread,
-      `These resolved selection flags are never read downstream, so switching ` +
-        `them off would change nothing that leaves the instance.`,
+      "these structured leaves are never read in the aggregator, so switching " +
+        "them off would change nothing that leaves the instance",
     ).toEqual([]);
   });
 
-  it("keeps the sensitive selections off unless asked for by name", () => {
-    // Mood, cycle and the screening instruments must never ride an absent key:
-    // the mental-health module went default-ON in v1.29.1 and silently made
-    // PHQ-9 and GAD-7 totals part of a default export.
-    const fromNothing = toDoctorReportPrefs(undefined);
-    expect(fromNothing.mood).toBe(false);
-    expect(fromNothing.cycle).toBe(false);
-    expect(fromNothing.mentalHealthScreeners).toBe(false);
-
-    // A partial selection that names other things must not flip them on.
-    const partial = toDoctorReportPrefs({ labs: true, vitals: { bp: true } });
-    expect(partial.mood).toBe(false);
-    expect(partial.cycle).toBe(false);
-    expect(partial.mentalHealthScreeners).toBe(false);
-
-    // Only an explicit `true` does.
-    expect(
-      toDoctorReportPrefs({ mentalHealthScreeners: true })
-        .mentalHealthScreeners,
-    ).toBe(true);
+  it("keeps every sensitive leaf in the fenced tier", () => {
+    for (const leaf of [
+      "MOOD",
+      "CYCLE",
+      "FAMILY_HISTORY",
+      "PHQ9_SCORE",
+      "GAD7_SCORE",
+      "WHO5_SCORE",
+      "SCI_SCORE",
+    ] as ReportLeafId[]) {
+      expect(leafGroup(leaf), `${leaf} must be fenced`).toBe("sensitive");
+    }
   });
 });

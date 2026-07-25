@@ -8,12 +8,13 @@
  *     (plus the frozen scope). It is NOT an `AuthContext`/session and can never
  *     stand in for one.
  *   - It never calls `getSession` / `authenticateBearer` and never sets a
- *     cookie. A share token can authenticate exactly one surface — the public
- *     clinician view (`/c/[token]`) and, when enabled, its scoped FHIR face —
- *     and nothing else.
- *   - The token arrives ONLY via the `X-HealthLog-Share` request header. It is
- *     never read from `Authorization: Bearer`; presenting it on a normal authed
- *     route does nothing (that route's `requireAuth` ignores this header).
+ *     cookie. A share token authenticates exactly one family of surfaces — the
+ *     public clinician view at `/c/[token]`, its document serve route, and its
+ *     two report downloads — and nothing else.
+ *   - The token arrives ONLY in the URL PATH of those surfaces. Nothing reads
+ *     it from a header, and presenting it as `Authorization: Bearer` on a
+ *     normal authed route does nothing: `requireAuth` refuses an `hls_` value,
+ *     which `share-token-reject-on-authed-route.test.ts` pins.
  *
  * Resolution is blunt on failure: an unknown / revoked / expired / malformed
  * token resolves to `null`, and the caller answers a flat 404 so a probe cannot
