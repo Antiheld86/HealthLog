@@ -156,7 +156,7 @@ export async function getValidToken(
     }, PROVIDER_REFRESH_TRANSACTION_OPTIONS);
   } catch (err) {
     getEvent()?.addWarning(`Token refresh failed for user ${userId}`);
-    await recordWithingsSyncFailure(userId, err);
+    await recordWithingsSyncFailure(userId, err, WITHINGS_LEG_MEASURES);
     if (options.throwOnRefreshFailure) throw err;
     return null;
   }
@@ -226,7 +226,7 @@ export async function syncUserMeasurements(
   try {
     measures = await fetchMeasurements(tokenInfo.accessToken, startDate);
   } catch (err) {
-    await recordWithingsSyncFailure(userId, err);
+    await recordWithingsSyncFailure(userId, err, WITHINGS_LEG_MEASURES);
     throw err;
   }
 
@@ -388,6 +388,7 @@ export async function syncUserMeasurements(
     await recordWithingsSyncFailure(
       userId,
       firstRowError ?? new Error("Withings measure row write failed"),
+      WITHINGS_LEG_MEASURES,
     );
     return imported;
   }
@@ -402,7 +403,9 @@ export async function syncUserMeasurements(
   // round-trip is the signal "the connection is healthy". A user who
   // doesn't weigh themselves for a week shouldn't see "error" on
   // their settings page.
-  await recordSyncSuccess(userId, "withings");
+  await recordSyncSuccess(userId, "withings", {
+    leg: WITHINGS_LEG_MEASURES,
+  });
 
   return imported;
 }
@@ -423,9 +426,23 @@ export async function syncUserMeasurements(
  * `Error` instances (e.g. a pg-boss job retry that lost the prototype
  * during the JSON round-trip).
  */
+/**
+ * The four Withings sync legs. Each runs on its own cron at its own minute and
+ * writes the SAME `(user, withings)` ledger row, so a failure has to say which
+ * leg it came from — otherwise the next sibling to succeed clears an error it
+ * did not cause, which is what kept a broken leg invisible.
+ */
+export type WithingsSyncLeg = "measures" | "activity" | "sleep" | "ecg";
+
+export const WITHINGS_LEG_MEASURES: WithingsSyncLeg = "measures";
+export const WITHINGS_LEG_ACTIVITY: WithingsSyncLeg = "activity";
+export const WITHINGS_LEG_SLEEP: WithingsSyncLeg = "sleep";
+export const WITHINGS_LEG_ECG: WithingsSyncLeg = "ecg";
+
 export async function recordWithingsSyncFailure(
   userId: string,
   err: unknown,
+  leg: WithingsSyncLeg,
 ): Promise<void> {
   const message = err instanceof Error ? err.message : String(err);
   await recordSyncFailure({
@@ -433,6 +450,7 @@ export async function recordWithingsSyncFailure(
     integration: "withings",
     kind: classificationToFailureKind(classifyError(err)),
     message,
+    leg,
     errorCode:
       err instanceof WithingsApiError
         ? err.withingsStatus?.toString()

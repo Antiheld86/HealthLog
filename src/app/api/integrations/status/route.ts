@@ -168,6 +168,7 @@ export const GET = apiHandler(async () => {
       state: string;
       lastSuccessAt: string | null;
       lastAttemptAt: string | null;
+      failingSince: string | null;
     },
     opts: {
       connected?: boolean;
@@ -181,6 +182,7 @@ export const GET = apiHandler(async () => {
       state: snapshot.state,
       lastSuccessAt: snapshot.lastSuccessAt,
       lastAttemptAt: snapshot.lastAttemptAt,
+      failingSinceAt: snapshot.failingSince,
       legacyLastSyncedAt: opts.legacyLastSyncedAt ?? null,
       cadence: INTEGRATION_CADENCE[integration],
       now,
@@ -381,6 +383,12 @@ interface IntegrationViewModel {
   lastSuccessAt: string | null;
   lastAttemptAt: string | null;
   lastError: string | null;
+  /**
+   * Start of the current unbroken failure streak, or null when the provider is
+   * not failing. `syncHealth.since` is derived from it; the raw instant rides
+   * along so a client can render the age without re-deriving the verdict.
+   */
+  failingSince: string | null;
   /**
    * The server-resolved liveness verdict. Present on EVERY entry, whether or
    * not a card renders it — the unit of coverage is the envelope entry, not

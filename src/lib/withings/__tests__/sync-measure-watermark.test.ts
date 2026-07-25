@@ -201,7 +201,9 @@ describe("syncUserMeasurements — watermark hold on hard row failure (F4)", () 
     // still healthy: stamp the watermark + success, record no failure.
     expect(imported).toBe(0);
     expect(prisma.withingsConnection.update).toHaveBeenCalledTimes(1);
-    expect(recordSyncSuccess).toHaveBeenCalledWith("user-1", "withings");
+    expect(recordSyncSuccess).toHaveBeenCalledWith("user-1", "withings", {
+      leg: "measures",
+    });
     expect(recordSyncFailure).not.toHaveBeenCalled();
   });
 
@@ -218,7 +220,9 @@ describe("syncUserMeasurements — watermark hold on hard row failure (F4)", () 
 
     expect(imported).toBe(1);
     expect(prisma.withingsConnection.update).toHaveBeenCalledTimes(1);
-    expect(recordSyncSuccess).toHaveBeenCalledWith("user-1", "withings");
+    expect(recordSyncSuccess).toHaveBeenCalledWith("user-1", "withings", {
+      leg: "measures",
+    });
     expect(recordSyncFailure).not.toHaveBeenCalled();
   });
 });

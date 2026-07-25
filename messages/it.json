@@ -5155,7 +5155,7 @@
     "integrationPill": {
       "connected": "Connesso",
       "errorReconnect": "Errore — riconnetti",
-      "warningServerError": "Connesso, problema di sincronizzazione",
+      "warningServerError": "Sincronizzazione in errore",
       "parkedReconnect": "In pausa — riconnettere manualmente",
       "notConnected": "Non connesso",
       "justNow": "proprio ora",

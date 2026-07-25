@@ -4137,6 +4137,16 @@ model IntegrationStatus {
   // sole source of truth for the alert ladder.
   consecutiveFailuresByKind  Json?     @map("consecutive_failures_by_kind") // v1.4.43 W14 — { transient, reauth_required, persistent }
   persistentFailureStartedAt DateTime? @map("persistent_failure_started_at") // v1.4.43 W14 — start of the current persistent streak (drives >24h park)
+  // Start of the current unbroken failure streak, whatever the kind. The
+  // per-kind buckets count attempts; this dates them, which is what tells a
+  // blip apart from a dead pipe. Cleared by a success that is entitled to
+  // clear it, by a reconnect, a disconnect, and a resume.
+  failingSinceAt             DateTime? @map("failing_since_at")
+  // Which sync leg owns the error currently on the row. `null` = the provider
+  // has a single leg, or the failure predates leg attribution. A success from
+  // a DIFFERENT leg may not clear an error this one did not cause — see
+  // `recordSyncSuccess`.
+  failingLeg                 String?   @map("failing_leg")
   alertedAt                  DateTime? @map("alerted_at") // last time admin Telegram alert fired (idempotency guard)
   createdAt                  DateTime  @default(now()) @map("created_at")
   updatedAt                  DateTime  @updatedAt @map("updated_at")

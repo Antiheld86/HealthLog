@@ -40,6 +40,8 @@ import { fetchExercises, mapExercise, type PolarWorkoutRow } from "./client";
 import { getPolarConnection } from "./credentials";
 import { PolarApiError, classifyPolarError } from "./response-classifier";
 
+const POLAR_LEG_WORKOUTS = "workouts";
+
 async function recordPolarWorkoutFailure(
   userId: string,
   err: unknown,
@@ -47,6 +49,9 @@ async function recordPolarWorkoutFailure(
   await recordSyncFailure({
     userId,
     integration: "polar",
+    // The workouts leg rides the same hourly tick as vitals but owns its own
+    // errors: the vitals success stamp must not clear a failure from here.
+    leg: POLAR_LEG_WORKOUTS,
     // Same classification the vitals leg uses (`classifyPolarFailure` in
     // `./sync`); resolved directly off the shared classifier so this leg does
     // not have to import the heavier vitals-sync module.

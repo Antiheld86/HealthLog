@@ -108,6 +108,8 @@ describe("recordSyncSuccess", () => {
         persistent: 0,
       },
       persistentFailureStartedAt: null,
+      failingSinceAt: null,
+      failingLeg: null,
       alertedAt: null,
     });
   });
@@ -493,6 +495,8 @@ describe("markReauthRequired / markDisconnected / markReconnected", () => {
         persistent: 0,
       },
       persistentFailureStartedAt: null,
+      failingSinceAt: null,
+      failingLeg: null,
       alertedAt: null,
     });
   });
@@ -516,6 +520,8 @@ describe("markReauthRequired / markDisconnected / markReconnected", () => {
         persistent: 0,
       },
       persistentFailureStartedAt: null,
+      failingSinceAt: null,
+      failingLeg: null,
       alertedAt: null,
     });
   });
@@ -833,6 +839,8 @@ describe("resumeIntegrationFromPark", () => {
         persistent: 0,
       },
       persistentFailureStartedAt: null,
+      failingSinceAt: null,
+      failingLeg: null,
       alertedAt: null,
     });
 

@@ -64,7 +64,11 @@ import {
   WithingsApiError,
   classifyWithingsResponse,
 } from "./response-classifier";
-import { getValidToken, recordWithingsSyncFailure } from "./sync";
+import {
+  WITHINGS_LEG_SLEEP,
+  getValidToken,
+  recordWithingsSyncFailure,
+} from "./sync";
 import {
   isReauthRequired,
   parkIntegrationAtReauth,
@@ -355,6 +359,7 @@ export async function syncUserSleep(
       message:
         "Withings connection is missing the user.activity scope. Reconnect Withings in Settings to enable sleep sync.",
       errorCode: "scope_missing",
+      leg: WITHINGS_LEG_SLEEP,
     });
     return 0;
   }
@@ -394,10 +399,11 @@ export async function syncUserSleep(
         kind: "reauth_required",
         message: err instanceof Error ? err.message : String(err),
         errorCode: "403",
+        leg: WITHINGS_LEG_SLEEP,
       });
       throw err;
     }
-    await recordWithingsSyncFailure(userId, err);
+    await recordWithingsSyncFailure(userId, err, WITHINGS_LEG_SLEEP);
     throw err;
   }
 
@@ -429,6 +435,7 @@ export async function syncUserSleep(
       message: `sleep write failed: ${
         err instanceof Error ? err.message : String(err)
       }`,
+      leg: WITHINGS_LEG_SLEEP,
     });
     throw err;
   };
@@ -581,6 +588,6 @@ export async function syncUserSleep(
     () => {},
   );
 
-  await recordSyncSuccess(userId, "withings");
+  await recordSyncSuccess(userId, "withings", { leg: WITHINGS_LEG_SLEEP });
   return imported;
 }

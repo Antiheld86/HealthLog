@@ -24,6 +24,7 @@ import {
 import {
   recordWhoopSyncFailure,
   syncWhoopResourceWithStatus,
+  type WhoopSyncLeg,
 } from "@/lib/whoop/sync-core";
 import { isSyncFailureRecorded } from "@/lib/integrations/status";
 import { enqueueReminderSatisfy } from "@/lib/jobs/reminder-satisfy";
@@ -68,6 +69,7 @@ type ByIdSync = (userId: string, resourceId: string) => Promise<number>;
  */
 export async function runWhoopResourceSync(
   taskName: string,
+  leg: WhoopSyncLeg,
   jobs: Job<WhoopSyncPayload>[],
   syncFn: CollectionSync,
   byIdFn?: ByIdSync,
@@ -101,7 +103,7 @@ export async function runWhoopResourceSync(
           // Stamp `IntegrationStatus.lastSuccessAt` on a genuine per-resource
           // import — a webhook-driven refresh advanced the cursor but used to
           // leave the sync-status ledger frozen until the next full poll.
-          const imported = await syncWhoopResourceWithStatus(userId, () =>
+          const imported = await syncWhoopResourceWithStatus(userId, leg, () =>
             resourceId && byIdFn ? byIdFn(userId, resourceId) : syncFn(userId),
           );
           measurementsImported += imported;
@@ -119,7 +121,7 @@ export async function runWhoopResourceSync(
           // marked in `handleCollectionFetchError`, so record only the UNMARKED
           // escapes here.
           if (!isSyncFailureRecorded(err)) {
-            await recordWhoopSyncFailure(userId, err);
+            await recordWhoopSyncFailure(userId, err, leg);
           }
           evt.addWarning(`${taskName} failed for user ${userId}: ${err}`);
         }
@@ -144,6 +146,7 @@ export async function runWhoopResourceSync(
 export function handleWhoopRecoverySync(jobs: Job<WhoopSyncPayload>[]) {
   return runWhoopResourceSync(
     "job.whoop_recovery_sync",
+    "recovery",
     jobs,
     syncUserRecovery,
     syncWhoopRecoveryById,
@@ -153,6 +156,7 @@ export function handleWhoopRecoverySync(jobs: Job<WhoopSyncPayload>[]) {
 export function handleWhoopSleepSync(jobs: Job<WhoopSyncPayload>[]) {
   return runWhoopResourceSync(
     "job.whoop_sleep_sync",
+    "sleep",
     jobs,
     syncWhoopSleep,
     syncWhoopSleepById,
@@ -162,6 +166,7 @@ export function handleWhoopSleepSync(jobs: Job<WhoopSyncPayload>[]) {
 export function handleWhoopWorkoutSync(jobs: Job<WhoopSyncPayload>[]) {
   return runWhoopResourceSync(
     "job.whoop_workout_sync",
+    "workout",
     jobs,
     syncUserWorkout,
     syncWhoopWorkoutById,
@@ -170,5 +175,10 @@ export function handleWhoopWorkoutSync(jobs: Job<WhoopSyncPayload>[]) {
 
 export function handleWhoopCycleSync(jobs: Job<WhoopSyncPayload>[]) {
   // Cycle has no webhook (poll-only), so no fetch-by-id path.
-  return runWhoopResourceSync("job.whoop_cycle_sync", jobs, syncUserCycle);
+  return runWhoopResourceSync(
+    "job.whoop_cycle_sync",
+    "cycle",
+    jobs,
+    syncUserCycle,
+  );
 }

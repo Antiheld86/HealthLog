@@ -1518,6 +1518,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
             state: s.state,
             lastSuccessAt: s.lastSuccessAt,
             lastAttemptAt: s.lastAttemptAt,
+            failingSinceAt: s.failingSince,
             cadence: INTEGRATION_CADENCE[s.integration],
           });
           return {

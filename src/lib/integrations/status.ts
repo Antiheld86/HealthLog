@@ -34,7 +34,7 @@
 import { prisma } from "@/lib/db";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { auditLog } from "@/lib/auth/audit";
-import { getEvent } from "@/lib/logging/context";
+import { annotate, getEvent } from "@/lib/logging/context";
 import { dispatchNotification } from "@/lib/notifications/dispatcher";
 import type { IntegrationClassification } from "@/lib/integrations/http-status-classifier";
 
@@ -194,6 +194,41 @@ const ALERT_REPEAT_WINDOW_MS = 24 * 60 * 60 * 1000;
  */
 const PARK_PERSISTENT_FAILURE_AFTER_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * How long an unbroken failure streak may keep claiming to be `transient`
+ * before the claim is treated as refuted and the failure is recorded as
+ * `persistent` instead.
+ *
+ * `transient` is a hypothesis, not an observation: the classifier defaults a
+ * timeout, a 429, a 5xx and any unrecognised response to it precisely because
+ * the wire cannot tell "the upstream is rebooting" from "this will never work
+ * again". That default is right for one attempt and wrong for a thousand — a
+ * streak that has been retried hourly for a full day without a single success
+ * has falsified the hypothesis by experiment, and continuing to call it
+ * transient is the ledger asserting a certainty the wire never gave it.
+ *
+ * 24 h is the same window the persistent park already uses. An upstream
+ * maintenance night, a rate-limit cool-off, a redeploy and a DNS wobble all
+ * fit comfortably inside it, so a genuine blip recovers and resets the streak
+ * long before this trips — nothing that heals on its own takes a day. The
+ * escalation is additionally gated on `getPersistentFailureThreshold()`
+ * consecutive failures, so a provider whose cron ticks rarely cannot escalate
+ * on its second-ever attempt just because wall-clock time passed.
+ *
+ * Escalating feeds the EXISTING ladder rather than a second one: the
+ * `persistent` bucket starts counting, `persistentFailureStartedAt` anchors,
+ * and `PARK_PERSISTENT_FAILURE_AFTER_MS` later the row parks and stops
+ * retrying — 48 h of unbroken failure end to end before anything is disabled.
+ */
+const TRANSIENT_ESCALATION_AFTER_MS = 24 * 60 * 60 * 1000;
+
+/** Row states that mean "an error is currently held on this row". */
+const ERROR_STATES: ReadonlySet<string> = new Set<IntegrationState>([
+  "error_transient",
+  "error_reauth",
+  "parked",
+]);
+
 export interface IntegrationStatusSnapshot {
   integration: IntegrationKey;
   state: IntegrationState;
@@ -205,6 +240,13 @@ export interface IntegrationStatusSnapshot {
    *  of truth now that the legacy `consecutiveFailures` column is
    *  gone. */
   consecutiveFailuresByKind: ConsecutiveFailuresByKind | null;
+  /**
+   * Start of the current unbroken failure streak, whatever the kind. The
+   * buckets count attempts; this dates them, which is what tells a blip apart
+   * from a pipe that has been dead for weeks. `null` whenever the row is not
+   * currently failing.
+   */
+  failingSince: string | null;
 }
 
 /**
@@ -271,6 +313,7 @@ export async function getIntegrationStatus(
       lastAttemptAt: null,
       lastError: null,
       consecutiveFailuresByKind: null,
+      failingSince: null,
     };
   }
   return {
@@ -280,6 +323,7 @@ export async function getIntegrationStatus(
     lastAttemptAt: row.lastAttemptAt?.toISOString() ?? null,
     lastError: row.lastError ? safeDecryptError(row.lastError) : null,
     consecutiveFailuresByKind: readBucketColumn(row.consecutiveFailuresByKind),
+    failingSince: row.failingSinceAt?.toISOString() ?? null,
   };
 }
 
@@ -305,17 +349,79 @@ export async function isReauthRequired(
   return row?.state === "error_reauth" || row?.state === "parked";
 }
 
+export interface RecordSyncSuccessOptions {
+  /**
+   * The sync leg that succeeded, for a provider whose legs run on separate
+   * schedules (Withings measures / activity / sleep / ECG, the four WHOOP
+   * resources, the two Polar legs). Omit it for a single-leg provider or for a
+   * full pass that covered every leg — an omitted leg clears the row whole,
+   * which is the pre-existing behaviour and the correct one for those callers.
+   */
+  leg?: string;
+}
+
 /**
  * Record a successful sync. Resets the failure counter, clears any
  * prior error message, and (importantly) flips state back to
  * `connected` even from `error_reauth` — the Withings flow re-enters
  * after the OAuth callback writes a new refresh token.
+ *
+ * A success only clears what it is entitled to clear. `IntegrationStatus` is
+ * keyed `(userId, integration)`, but Withings runs four legs on four crons and
+ * WHOOP runs four resources on four more — so an unconditional clear meant the
+ * ECG leg succeeding at :41 wiped the error, the buckets, the streak anchor and
+ * the state that the sleep leg had recorded at :15. The failing leg's strike
+ * ladder was reset several times an hour, so it could never reach the alert
+ * threshold or the park window, and the card painted a green "connected · 12
+ * minutes ago" over a data class that had stopped arriving. When the row holds
+ * an error owned by a DIFFERENT named leg, this success records its attempt and
+ * leaves the error standing.
+ *
+ * The partial path deliberately does NOT advance `lastSuccessAt`. That field is
+ * what the freshness arms and the card's "connected · X ago" read, and moving
+ * it forward while another leg is dead is exactly the sentence this change
+ * exists to stop the ledger from saying. `lastAttemptAt` does advance, so the
+ * row still reads as "being tried" rather than ageing into `stalled`.
  */
 export async function recordSyncSuccess(
   userId: string,
   integration: IntegrationKey,
+  options?: RecordSyncSuccessOptions,
 ): Promise<void> {
   const now = new Date();
+  const leg = options?.leg ?? null;
+
+  if (leg !== null) {
+    const existing = await prisma.integrationStatus.findUnique({
+      where: { userId_integration: { userId, integration } },
+      select: { state: true, failingLeg: true },
+    });
+    const heldByAnotherLeg =
+      existing != null &&
+      existing.failingLeg != null &&
+      existing.failingLeg !== leg &&
+      ERROR_STATES.has(existing.state);
+
+    if (heldByAnotherLeg) {
+      await prisma.integrationStatus.update({
+        where: { userId_integration: { userId, integration } },
+        data: { lastAttemptAt: now },
+      });
+      // Meta only — the enclosing wide event owns its own action name (the
+      // cron task), and overwriting it here would rename the job.
+      annotate({
+        meta: {
+          integration_partial_success: {
+            integration,
+            succeeded_leg: leg,
+            failing_leg: existing.failingLeg,
+          },
+        },
+      });
+      return;
+    }
+  }
+
   // v1.4.43 W14 — a success resets ALL per-kind buckets back to zero
   // and clears the persistent-streak start timestamp.
   // v1.4.47 W1 — the legacy `consecutiveFailures` column was dropped
@@ -337,6 +443,8 @@ export async function recordSyncSuccess(
       lastError: null,
       consecutiveFailuresByKind: zeroBuckets(),
       persistentFailureStartedAt: null,
+      failingSinceAt: null,
+      failingLeg: null,
       alertedAt: null,
     },
   });
@@ -349,6 +457,12 @@ export interface RecordSyncFailureInput {
   message: string;
   /** Optional structured error code (e.g. "invalid_grant", "401"). */
   errorCode?: string;
+  /**
+   * The sync leg that failed, for a provider whose legs run on separate
+   * schedules. Recorded on the row so a sibling leg's success cannot clear an
+   * error it did not cause. Omit it for a single-leg provider.
+   */
+  leg?: string;
 }
 
 /**
@@ -375,23 +489,35 @@ export interface RecordSyncFailureInput {
  * v1.4.47 W1 — the legacy single-column `consecutiveFailures` integer
  * was dropped (migration 0077); the bucket is now the sole counter
  * and the back-fill branch is gone.
+ *
+ * A `transient` failure whose streak has run unbroken for longer than
+ * `TRANSIENT_ESCALATION_AFTER_MS` is recorded as `persistent` instead. Before
+ * that, a `transient` streak had no exit at all: the park test read
+ * `kind === "persistent"`, `persistentFailureStartedAt` was only stamped on a
+ * persistent failure, and so a streak the classifier had bucketed as transient
+ * could run for a thousand attempts with the persistent counter at zero, the
+ * state frozen at `error_transient`, and no ladder it could ever climb. See
+ * the constant for why time, rather than count, is the honest signal.
  */
 export async function recordSyncFailure(
   input: RecordSyncFailureInput,
 ): Promise<void> {
   const { userId, integration, kind, message, errorCode } = input;
+  const leg = input.leg ?? null;
   const now = new Date();
   const encryptedError = safeEncryptError(message);
 
   // Read the current row first so we can:
   //   (a) compute the new per-kind bucket value
-  //   (b) decide whether the persistent streak has exceeded the
+  //   (b) decide whether the streak has outlived the `transient` claim
+  //   (c) decide whether the persistent streak has exceeded the
   //       park threshold
   const existing = await prisma.integrationStatus.findUnique({
     where: { userId_integration: { userId, integration } },
     select: {
       consecutiveFailuresByKind: true,
       persistentFailureStartedAt: true,
+      failingSinceAt: true,
       alertedAt: true,
     },
   });
@@ -401,6 +527,30 @@ export async function recordSyncFailure(
   //   - zero envelope for a row that has never written a bucket payload
   //     or for the first-ever write of this (user, integration) pair
   const startingBuckets = readBucketColumn(existing?.consecutiveFailuresByKind);
+
+  // Streak anchor: the first failure of the current unbroken run. Every path
+  // that resolves a failure (success entitled to clear, reconnect, disconnect,
+  // resume) nulls it, so a non-null value always dates a live streak.
+  const failingSinceAt = existing?.failingSinceAt ?? now;
+  const streakAgeMs = now.getTime() - failingSinceAt.getTime();
+
+  // The `transient` hypothesis, tested against the clock. Both conditions are
+  // required: the wall-clock window rules out a blip, and the consecutive-count
+  // gate keeps a rarely-polled provider from escalating on its second attempt
+  // just because a day of real time went by. `+ 1` because this failure has not
+  // been written into the bucket yet.
+  const transientStreakAfterThis = (startingBuckets?.transient ?? 0) + 1;
+  const escalatedFromTransient =
+    kind === "transient" &&
+    streakAgeMs >= TRANSIENT_ESCALATION_AFTER_MS &&
+    transientStreakAfterThis >= getPersistentFailureThreshold();
+
+  // Everything downstream — bucket, state mapping, park test, audit detail,
+  // alert copy — reads the effective kind, so the escalation feeds the ladder
+  // that already exists instead of growing a parallel one.
+  const effectiveKind: FailureKind = escalatedFromTransient
+    ? "persistent"
+    : kind;
 
   // Snapshot the persistent-bucket count BEFORE we increment so the
   // streak-anchor decision below can see the pre-increment value.
@@ -419,14 +569,21 @@ export async function recordSyncFailure(
   // Increment only the bucket matching this failure's kind.
   // The other two buckets stay at their current value so a persistent
   // streak isn't reset by an intervening transient hiccup.
-  buckets[kind] = (buckets[kind] ?? 0) + 1;
+  buckets[effectiveKind] = (buckets[effectiveKind] ?? 0) + 1;
 
   // Track the persistent-streak start so the >24h park check has a
   // wall-clock anchor. Only stamped on the FIRST persistent failure of
   // a streak; cleared on success or when the persistent bucket goes
   // back to zero (which today only happens via success, but the logic
   // is symmetric for future "transient drained the streak" rules).
-  const isPersistent = kind === "persistent";
+  //
+  // An escalated transient anchors here too, at the moment of escalation
+  // rather than at the streak start. That is deliberate: it dates when the
+  // failure started being treated as unrecoverable, which is what the park
+  // window measures, and it puts a full second day between "this is no longer
+  // transient" and "stop retrying" — 48 h of unbroken failure before an
+  // integration disables itself over a verdict the wire never actually gave.
+  const isPersistent = effectiveKind === "persistent";
   let persistentFailureStartedAt: Date | null =
     existing?.persistentFailureStartedAt ?? null;
   if (isPersistent && persistentStreakBefore === 0) {
@@ -455,7 +612,7 @@ export async function recordSyncFailure(
   //                     grep for contract-bug bursts)
   const newState: IntegrationState = shouldPark
     ? "parked"
-    : kind === "reauth_required"
+    : effectiveKind === "reauth_required"
       ? "error_reauth"
       : "error_transient";
 
@@ -469,6 +626,8 @@ export async function recordSyncFailure(
       lastError: encryptedError,
       consecutiveFailuresByKind: buckets,
       persistentFailureStartedAt: isPersistent ? now : null,
+      failingSinceAt,
+      failingLeg: leg,
     },
     update: {
       state: newState,
@@ -476,6 +635,8 @@ export async function recordSyncFailure(
       lastError: encryptedError,
       consecutiveFailuresByKind: buckets,
       persistentFailureStartedAt,
+      failingSinceAt,
+      failingLeg: leg,
     },
   });
 
@@ -496,11 +657,18 @@ export async function recordSyncFailure(
     userId,
     details: {
       integration,
-      kind,
+      kind: effectiveKind,
+      // Non-null only when the clock overrode the classifier, so an operator
+      // reading the trail can tell "the upstream said this was permanent" from
+      // "we concluded it was after a day of retrying".
+      escalatedFrom: escalatedFromTransient ? kind : null,
+      failingLeg: leg,
+      failingSinceAt: failingSinceAt.toISOString(),
+      streakAgeMs,
       errorCode: errorCode ?? null,
       message,
       attemptNumber: bucketTotal,
-      bucketCount: buckets[kind],
+      bucketCount: buckets[effectiveKind],
       state: newState,
     },
   });
@@ -528,7 +696,7 @@ export async function recordSyncFailure(
       await maybeAlertAdmins({
         userId,
         integration,
-        kind,
+        kind: effectiveKind,
         message,
         errorCode,
         consecutiveFailures: alertSignal,
@@ -560,6 +728,10 @@ export async function recordSyncFailure(
         persistentFailureStartedAt:
           existing.persistentFailureStartedAt.toISOString(),
         persistentStreakAgeMs,
+        // The whole streak, which for an escalated transient is a full day
+        // longer than the persistent window above.
+        failingSinceAt: failingSinceAt.toISOString(),
+        streakAgeMs,
         errorCode: errorCode ?? null,
         message,
       },
@@ -603,6 +775,8 @@ export async function resumeIntegrationFromPark(
       lastError: null,
       consecutiveFailuresByKind: zeroBuckets(),
       persistentFailureStartedAt: null,
+      failingSinceAt: null,
+      failingLeg: null,
       alertedAt: null,
     },
   });
@@ -646,8 +820,11 @@ export async function parkIntegrationAtReauth(opts: {
   integration: IntegrationKey;
   message: string;
   errorCode: string;
+  /** The leg whose scope gap forced the park, for multi-leg providers. */
+  leg?: string;
 }): Promise<void> {
   const { userId, integration, message, errorCode } = opts;
+  const leg = opts.leg ?? null;
   const now = new Date();
   const encryptedError = safeEncryptError(message);
 
@@ -656,7 +833,7 @@ export async function parkIntegrationAtReauth(opts: {
   // audit log when the state or error changes.
   const existing = await prisma.integrationStatus.findUnique({
     where: { userId_integration: { userId, integration } },
-    select: { state: true, lastError: true },
+    select: { state: true, lastError: true, failingSinceAt: true },
   });
   const isFreshPark =
     existing?.state !== "error_reauth" || existing.lastError !== encryptedError;
@@ -673,6 +850,8 @@ export async function parkIntegrationAtReauth(opts: {
       // zero so a later genuine transient burst still has the full
       // 3-strike runway before paging.
       consecutiveFailuresByKind: zeroBuckets(),
+      failingSinceAt: now,
+      failingLeg: leg,
     },
     update: {
       state: "error_reauth",
@@ -681,6 +860,8 @@ export async function parkIntegrationAtReauth(opts: {
       // Deliberately omit `consecutiveFailuresByKind` — the existing
       // bucket values are preserved exactly. This is the whole point
       // of the helper.
+      failingSinceAt: existing?.failingSinceAt ?? now,
+      failingLeg: leg,
     },
   });
 
@@ -703,6 +884,12 @@ export async function markReauthRequired(
   integration: IntegrationKey,
   message: string,
 ): Promise<void> {
+  const now = new Date();
+  const existing = await prisma.integrationStatus.findUnique({
+    where: { userId_integration: { userId, integration } },
+    select: { failingSinceAt: true },
+  });
+
   // v1.4.47 W1 — the legacy `consecutiveFailures` column was dropped
   // (migration 0077). Out-of-band reauth detection (proactive token
   // refresh) seeds the `reauth_required` bucket at 1 on a first-ever
@@ -720,11 +907,15 @@ export async function markReauthRequired(
         reauth_required: 1,
         persistent: 0,
       },
-      lastAttemptAt: new Date(),
+      lastAttemptAt: now,
+      failingSinceAt: now,
     },
     update: {
       state: "error_reauth",
       lastError: safeEncryptError(message),
+      // Never re-stamp a streak already running — the anchor dates the
+      // failure, not the detection.
+      failingSinceAt: existing?.failingSinceAt ?? now,
     },
   });
 
@@ -756,6 +947,8 @@ export async function markDisconnected(
       lastError: null,
       consecutiveFailuresByKind: zeroBuckets(),
       persistentFailureStartedAt: null,
+      failingSinceAt: null,
+      failingLeg: null,
       alertedAt: null,
     },
   });
@@ -783,6 +976,8 @@ export async function markReconnected(
       lastError: null,
       consecutiveFailuresByKind: zeroBuckets(),
       persistentFailureStartedAt: null,
+      failingSinceAt: null,
+      failingLeg: null,
       alertedAt: null,
     },
   });

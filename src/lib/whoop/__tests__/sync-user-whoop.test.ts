@@ -177,24 +177,38 @@ describe("syncUserWhoop — all-403 looks-healthy guard", () => {
 
 describe("syncWhoopResourceWithStatus — per-resource lastSuccessAt stamp", () => {
   it("stamps success when the resource imported rows", async () => {
-    const imported = await syncWhoopResourceWithStatus("user1", async () => 5);
+    const imported = await syncWhoopResourceWithStatus(
+      "user1",
+      "recovery",
+      async () => 5,
+    );
 
     expect(imported).toBe(5);
-    expect(recordSyncSuccess).toHaveBeenCalledWith("user1", "whoop");
+    expect(recordSyncSuccess).toHaveBeenCalledWith("user1", "whoop", {
+      leg: "recovery",
+    });
   });
 
   it("stamps success on a clean fetch that imported nothing new", async () => {
     // No 403 soft-skip → a genuine "nothing changed" webhook/cron tick still
     // proves the connection is alive, so `lastSuccessAt` advances.
-    const imported = await syncWhoopResourceWithStatus("user1", async () => 0);
+    const imported = await syncWhoopResourceWithStatus(
+      "user1",
+      "recovery",
+      async () => 0,
+    );
 
     expect(imported).toBe(0);
-    expect(recordSyncSuccess).toHaveBeenCalledWith("user1", "whoop");
+    expect(recordSyncSuccess).toHaveBeenCalledWith("user1", "whoop", {
+      leg: "recovery",
+    });
   });
 
   it("does NOT stamp success when the resource soft-skipped a 403 and imported nothing", async () => {
-    const imported = await syncWhoopResourceWithStatus("user1", () =>
-      softSkip403("user1"),
+    const imported = await syncWhoopResourceWithStatus(
+      "user1",
+      "recovery",
+      () => softSkip403("user1"),
     );
 
     expect(imported).toBe(0);
@@ -204,7 +218,7 @@ describe("syncWhoopResourceWithStatus — per-resource lastSuccessAt stamp", () 
 
   it("propagates a hard failure without stamping success", async () => {
     await expect(
-      syncWhoopResourceWithStatus("user1", async () => {
+      syncWhoopResourceWithStatus("user1", "recovery", async () => {
         throw new Error("boom");
       }),
     ).rejects.toThrow("boom");

@@ -572,6 +572,7 @@ describe("get_integration_status", () => {
       lastAttemptAt: "2026-06-27T00:00:00.000Z",
       lastError: "token revoked",
       consecutiveFailuresByKind: null,
+      failingSince: null,
     });
 
     const result = (await tool("get_integration_status").run(CTX, {})) as {
@@ -611,6 +612,7 @@ describe("get_integration_status", () => {
       lastAttemptAt,
       lastError: null,
       consecutiveFailuresByKind: null,
+      failingSince: null,
     });
 
     return tool("get_integration_status")

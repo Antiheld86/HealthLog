@@ -470,7 +470,9 @@ describe("syncUserSleep — segment writes + idempotency", () => {
   it("calls recordSyncSuccess after a clean round-trip", async () => {
     installFetchMock([]);
     await syncUserSleep("user-1");
-    expect(recordSyncSuccess).toHaveBeenCalledWith("user-1", "withings");
+    expect(recordSyncSuccess).toHaveBeenCalledWith("user-1", "withings", {
+      leg: "sleep",
+    });
   });
 
   it("W-3 — records a transient failure and rethrows when a sleep write throws", async () => {
@@ -580,7 +582,9 @@ describe("syncUserSleep — segment writes + idempotency", () => {
     // The one stage segment is still written; the summary failure is swallowed.
     expect(imported).toBe(1);
     expect(reconcileMock).toHaveBeenCalledTimes(1);
-    expect(recordSyncSuccess).toHaveBeenCalledWith("user-1", "withings");
+    expect(recordSyncSuccess).toHaveBeenCalledWith("user-1", "withings", {
+      leg: "sleep",
+    });
   });
 
   it("tolerates a ScanWatch night with no REM segment (no all-zeros row)", async () => {

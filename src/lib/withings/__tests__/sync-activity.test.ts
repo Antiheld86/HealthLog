@@ -370,7 +370,9 @@ describe("syncUserActivity — field mapping + idempotency", () => {
     } as never);
 
     await syncUserActivity("user-1");
-    expect(recordSyncSuccess).toHaveBeenCalledWith("user-1", "withings");
+    expect(recordSyncSuccess).toHaveBeenCalledWith("user-1", "withings", {
+      leg: "activity",
+    });
   });
 
   it("W-2 — records a transient failure and refuses the success stamp when the batch write throws", async () => {

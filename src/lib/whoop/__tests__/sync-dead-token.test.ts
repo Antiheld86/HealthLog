@@ -259,19 +259,29 @@ describe("syncWhoopResourceWithStatus — dominant per-resource cron path", () =
     // The hourly-cron arm Fitbit has no twin for: a dead token noted by
     // `getValidToken` inside `run` must block the per-resource success stamp,
     // or the release is inert on the path that runs most often.
-    const imported = await syncWhoopResourceWithStatus("user-1", async () => {
-      noteHardFailure(WHOOP_TOKEN_HARD_FAIL);
-      return 0;
-    });
+    const imported = await syncWhoopResourceWithStatus(
+      "user-1",
+      "recovery",
+      async () => {
+        noteHardFailure(WHOOP_TOKEN_HARD_FAIL);
+        return 0;
+      },
+    );
 
     expect(imported).toBe(0);
     expect(recordSyncSuccessMock).not.toHaveBeenCalled();
   });
 
   it("stamps success on a clean per-resource run (no hard failure)", async () => {
-    const imported = await syncWhoopResourceWithStatus("user-1", async () => 3);
+    const imported = await syncWhoopResourceWithStatus(
+      "user-1",
+      "recovery",
+      async () => 3,
+    );
 
     expect(imported).toBe(3);
-    expect(recordSyncSuccessMock).toHaveBeenCalledWith("user-1", "whoop");
+    expect(recordSyncSuccessMock).toHaveBeenCalledWith("user-1", "whoop", {
+      leg: "recovery",
+    });
   });
 });

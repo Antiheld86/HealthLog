@@ -110,11 +110,20 @@ const WARNING_STATES = new Set<IntegrationPillState>([
   "parked",
 ]);
 
-/** The states whose label carries an inline relative timestamp. */
+/**
+ * The states whose label carries an inline relative timestamp.
+ *
+ * `warning` is in the set because leaving it out was the whole lie: the pill
+ * said "sync issue" identically on hour one and on day seventeen, and the age
+ * — which the mapper computes and passes in — was dropped on the floor. How
+ * long it has been broken is the only part of that sentence a person can act
+ * on.
+ */
 const RELATIVE_STATES = new Set<IntegrationPillState>([
   "connected",
   "stale",
   "stalled",
+  "warning",
 ]);
 
 export function IntegrationStatusPill({
