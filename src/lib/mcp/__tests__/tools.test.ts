@@ -592,6 +592,42 @@ describe("get_integration_status", () => {
     expect(JSON.stringify(p)).not.toContain("token revoked");
   });
 
+  it("reports a month-dead pull as stalled while `connected` still reads true", () => {
+    // `connected` is `state !== "disconnected"` and carries no liveness at all.
+    // Kept for compatibility; `verdict` is what an assistant should answer
+    // "why is my data stale?" from.
+    const lastAttemptAt = new Date(
+      Date.now() - 28 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    vi.mocked(prisma.integrationStatus.findMany).mockResolvedValue([
+      { integration: "moodlog" },
+    ] as never);
+    vi.mocked(getIntegrationStatus).mockResolvedValue({
+      integration: "moodlog",
+      state: "error_transient",
+      lastSuccessAt: new Date(
+        Date.now() - 55 * 24 * 60 * 60 * 1000,
+      ).toISOString(),
+      lastAttemptAt,
+      lastError: null,
+      consecutiveFailuresByKind: null,
+    });
+
+    return tool("get_integration_status")
+      .run(CTX, {})
+      .then((raw) => {
+        const result = raw as {
+          providers: Array<Record<string, unknown>>;
+        };
+        expect(result.providers[0]).toMatchObject({
+          provider: "moodlog",
+          connected: true,
+          verdict: "stalled",
+          since: lastAttemptAt,
+        });
+      });
+  });
+
   it("returns { present: false } when nothing has ever synced", async () => {
     vi.mocked(prisma.integrationStatus.findMany).mockResolvedValue([] as never);
     const result = (await tool("get_integration_status").run(CTX, {})) as {

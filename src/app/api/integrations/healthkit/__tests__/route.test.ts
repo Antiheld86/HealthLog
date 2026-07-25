@@ -6,6 +6,9 @@ vi.mock("@/lib/db", () => ({
     user: { findUnique: vi.fn(), update: vi.fn() },
     // v1.4.43 W6 — audit-ledger breadcrumb for validation-failed paths.
     auditLog: { create: vi.fn() },
+    // Per-metric freshness for the APPLE_HEALTH source.
+    measurement: { groupBy: vi.fn() },
+    workout: { groupBy: vi.fn() },
   },
   toJson: <T>(v: T) => v,
 }));
@@ -34,6 +37,7 @@ vi.mock("next/headers", () => ({
 import { GET, PATCH } from "../route";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
+import { APPLE_HEALTH_DATA_STALE_AFTER_MS } from "@/lib/integrations/sync-verdict";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -48,6 +52,8 @@ beforeEach(() => {
   } as never);
   vi.mocked(prisma.user.update).mockResolvedValue({} as never);
   vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never);
+  vi.mocked(prisma.measurement.groupBy).mockResolvedValue([] as never);
+  vi.mocked(prisma.workout.groupBy).mockResolvedValue([] as never);
 });
 
 const callGet = GET as unknown as (req: NextRequest) => Promise<Response>;
@@ -197,5 +203,106 @@ describe("PATCH /api/integrations/healthkit — 422 multi-issue (v1.4.43 W6)", (
       patchReq({ entries: [{ id: "bodyMass", direction: "JUNK" }] }),
     );
     expect(res.status).toBe(422);
+  });
+});
+
+/**
+ * Apple Health is push-based and has no ledger row, so `lastSyncedAt` was the
+ * only signal the card had — and its mere presence painted green, whether the
+ * data arrived this morning or three weeks ago. These pin the seven-day
+ * threshold and the per-metric read that makes a silently revoked HealthKit
+ * permission visible inside an otherwise healthy connection.
+ */
+describe("GET /api/integrations/healthkit — sync health", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const ago = (ms: number) => new Date(Date.now() - ms);
+
+  type Body = {
+    lastSyncedAt: string | null;
+    syncHealth: { verdict: string; since: string | null };
+    metricFreshness: Array<{
+      type: string;
+      lastSeenAt: string;
+      stale: boolean;
+    }>;
+  };
+
+  async function read(): Promise<Body> {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    const res = await callGet(makeGetReq());
+    expect(res.status).toBe(200);
+    return ((await res.json()) as { data: Body }).data;
+  }
+
+  it("calls a recent delivery fresh", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      healthKitConfigJson: null,
+      healthKitLastSyncedAt: ago(2 * DAY),
+    } as never);
+    expect((await read()).syncHealth.verdict).toBe("fresh");
+  });
+
+  it("calls a pipe silent for over a week stale", async () => {
+    const lastSyncedAt = ago(APPLE_HEALTH_DATA_STALE_AFTER_MS + DAY);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      healthKitConfigJson: null,
+      healthKitLastSyncedAt: lastSyncedAt,
+    } as never);
+    const body = await read();
+    expect(body.syncHealth.verdict).toBe("stale");
+    expect(body.syncHealth.since).toBe(lastSyncedAt.toISOString());
+  });
+
+  it("calls an account that never delivered pending, not disconnected", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      healthKitConfigJson: null,
+      healthKitLastSyncedAt: null,
+    } as never);
+    expect((await read()).syncHealth.verdict).toBe("pending_first_sync");
+  });
+
+  it("flags one quiet metric inside an otherwise healthy connection", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      healthKitConfigJson: null,
+      healthKitLastSyncedAt: ago(60 * 60 * 1000),
+    } as never);
+    vi.mocked(prisma.measurement.groupBy).mockResolvedValue([
+      {
+        source: "APPLE_HEALTH",
+        type: "RESPIRATORY_RATE",
+        _max: { measuredAt: ago(30 * DAY) },
+      },
+      {
+        source: "APPLE_HEALTH",
+        type: "PULSE",
+        _max: { measuredAt: ago(60 * 60 * 1000) },
+      },
+    ] as never);
+
+    const body = await read();
+    // Only the Apple Health source is read.
+    const groupByArgs = vi.mocked(prisma.measurement.groupBy).mock
+      .calls[0]?.[0] as unknown as {
+      where: { source: { in: string[] } };
+    };
+    expect(groupByArgs.where.source.in).toEqual(["APPLE_HEALTH"]);
+    const byType = Object.fromEntries(
+      body.metricFreshness.map((entry) => [entry.type, entry.stale]),
+    );
+    expect(byType.RESPIRATORY_RATE).toBe(true);
+    expect(byType.PULSE).toBe(false);
+  });
+
+  it("degrades to no per-metric data rather than failing the config read", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      healthKitConfigJson: null,
+      healthKitLastSyncedAt: ago(DAY),
+    } as never);
+    vi.mocked(prisma.measurement.groupBy).mockRejectedValue(
+      new Error("groupBy hiccup"),
+    );
+    const body = await read();
+    expect(body.metricFreshness).toEqual([]);
+    expect(body.syncHealth.verdict).toBe("fresh");
   });
 });

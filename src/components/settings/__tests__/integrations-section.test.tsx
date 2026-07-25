@@ -114,27 +114,27 @@ describe("IntegrationsSection — single-status-display contract (A5)", () => {
           configured: true,
           legacyLastSyncedAt: "2026-05-09T18:00:00.000Z",
           hasActivityScope: true,
+          syncHealth: { verdict: "fresh", since: null },
         },
         {
+          // Not configured here, so this entry claims no surface. The
+          // configured, card-less case has its own coverage test — this one is
+          // about one status display per CARD.
           integration: "moodlog",
-          state: "connected",
-          lastSuccessAt: "2026-05-09T17:00:00.000Z",
-          lastAttemptAt: "2026-05-09T17:00:00.000Z",
+          state: "disconnected",
+          lastSuccessAt: null,
+          lastAttemptAt: null,
           lastError: null,
-          configured: true,
-          enabled: true,
-          legacyLastSyncedAt: "2026-05-09T17:00:00.000Z",
-          entryCount: 42,
-          webhookSecret: "secret123",
+          configured: false,
+          syncHealth: { verdict: "disconnected", since: null },
         },
       ],
     });
 
     const html = render();
-    // Exactly one pill per card → 8 pills total (Withings, WHOOP, Fitbit,
-    // Google Health, Polar, Oura, Strava, Nightscout). The moodLog integration
-    // was removed; Polar + Oura (F4) were added in v1.17.0; Google Health in
-    // v1.27.0; Strava in v1.28.x. (The Garmin info note carries no pill.)
+    // Exactly one pill per card → 8 (Withings, WHOOP, Fitbit, Google Health,
+    // Polar, Oura, Strava, Nightscout). The Garmin info note carries no pill;
+    // the Apple Health card's pill keeps its own testid.
     expect(count(html, 'data-testid="integration-status-pill"')).toBe(8);
     // The redundant banner from v1.4.15 is gone.
     expect(html).not.toContain('data-testid="integration-status-banner"');
@@ -160,6 +160,7 @@ describe("IntegrationsSection — single-status-display contract (A5)", () => {
           configured: true,
           legacyLastSyncedAt: "2026-05-09T08:00:00.000Z",
           hasActivityScope: true,
+          syncHealth: { verdict: "failing", since: "2026-05-09T08:00:00.000Z" },
         },
         {
           integration: "moodlog",
@@ -172,9 +173,10 @@ describe("IntegrationsSection — single-status-display contract (A5)", () => {
     });
 
     const html = render();
-    // Pill carries the "Error — reconnect" copy via the pill's
-    // `data-state="error"` marker.
-    expect(html).toContain('data-state="error"');
+    // A 503 is not the user's to fix, so the pill carries the warning tone —
+    // red is reserved for "reconnect actually helps".
+    expect(html).toContain('data-state="warning"');
+    expect(html).not.toContain('data-state="error"');
     // Actionable error message still surfaces (we kept it because
     // the pill can't fit "Withings refresh error: 503 - upstream").
     expect(html).toContain("Withings refresh error: 503 - upstream");
@@ -200,6 +202,10 @@ describe("IntegrationsSection — single-status-display contract (A5)", () => {
           legacyLastSyncedAt: "2026-05-08T12:00:00.000Z",
           tokenExpired: true,
           hasActivityScope: true,
+          syncHealth: {
+            verdict: "reauth_required",
+            since: "2026-05-09T18:00:00.000Z",
+          },
         },
         {
           integration: "moodlog",
@@ -228,6 +234,7 @@ describe("IntegrationsSection — single-status-display contract (A5)", () => {
           lastSuccessAt: "2026-05-08T10:00:00.000Z",
           lastAttemptAt: "2026-05-08T10:00:00.000Z",
           lastError: null,
+          syncHealth: { verdict: "disconnected", since: null },
         },
       ],
     });
@@ -258,6 +265,7 @@ describe("IntegrationsSection — single-status-display contract (A5)", () => {
           configured: true,
           legacyLastSyncedAt: "2026-05-08T12:00:00.000Z",
           hasActivityScope: true,
+          syncHealth: { verdict: "parked", since: "2026-05-09T18:00:00.000Z" },
         },
         {
           integration: "moodlog",
@@ -294,15 +302,16 @@ describe("IntegrationsSection — single-status-display contract (A5)", () => {
           configured: true,
           legacyLastSyncedAt: "2026-05-09T18:00:00.000Z",
           hasActivityScope: true,
+          syncHealth: { verdict: "fresh", since: null },
         },
       ],
     });
 
     const html = render();
     // Every integration card includes the section divider data-testid so the
-    // header → body separation is visually consistent (Withings, WHOOP,
-    // Fitbit, Google Health). The moodLog integration was removed.
-    expect(count(html, 'data-testid="integration-card-divider"')).toBe(4);
+    // header → body separation is visually consistent: the four legacy cards,
+    // Apple Health, the three OAuth cards, and Nightscout.
+    expect(count(html, 'data-testid="integration-card-divider"')).toBe(9);
   });
 
   // v1.17.1 — every integration card carries the same discreet "Setup guide"

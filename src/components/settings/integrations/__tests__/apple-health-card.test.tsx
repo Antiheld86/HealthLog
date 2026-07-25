@@ -10,7 +10,17 @@ import fr from "../../../../../messages/fr.json";
 import itMessages from "../../../../../messages/it.json";
 import pl from "../../../../../messages/pl.json";
 
-let statusPayload: { lastSyncedAt: string | null } | undefined;
+type Payload = {
+  lastSyncedAt: string | null;
+  syncHealth?: { verdict: string; since: string | null };
+  metricFreshness?: Array<{
+    type: string;
+    lastSeenAt: string;
+    stale: boolean;
+  }>;
+};
+
+let statusPayload: Payload | undefined;
 let statusLoading = false;
 let statusError = false;
 
@@ -40,8 +50,10 @@ describe("<AppleHealthCard>", () => {
   });
 
   it("explains that live sync uses the iOS app rather than OAuth", () => {
-    statusPayload = { lastSyncedAt: null };
-    statusLoading = false;
+    statusPayload = {
+      lastSyncedAt: null,
+      syncHealth: { verdict: "pending_first_sync", since: null },
+    };
 
     const html = render();
 
@@ -53,35 +65,98 @@ describe("<AppleHealthCard>", () => {
     expect(html).not.toContain(">Connected<");
   });
 
-  it("keeps the status neutral when no Apple Health data has been observed", () => {
-    statusPayload = { lastSyncedAt: null };
-    statusLoading = false;
+  /**
+   * The defect this card carried: any `lastSyncedAt` at all painted the green
+   * "data received" chip, so a pipe dead for three weeks looked exactly like
+   * one that delivered this morning. The verdict now decides.
+   */
+  it("shows a week-old delivery as stale, not as data received", () => {
+    const eightDaysAgo = new Date(
+      Date.now() - 8 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    statusPayload = {
+      lastSyncedAt: eightDaysAgo,
+      syncHealth: { verdict: "stale", since: eightDaysAgo },
+    };
 
     const html = render();
 
     expect(html).toContain('data-testid="apple-health-status"');
-    expect(html).toContain('data-state="setup"');
-    expect(html).toContain("Set up in iOS app");
+    expect(html).toContain('data-state="stale"');
+    expect(html).toContain("no recent data");
+    // And it says what to do about it.
+    expect(html).toContain('data-testid="apple-health-stale"');
     expect(html).not.toContain('data-state="connected"');
   });
 
-  it("reports only observed data freshness without claiming a connection", () => {
-    statusPayload = { lastSyncedAt: "2026-07-20T10:30:00.000Z" };
-    statusLoading = false;
+  it("shows a recent delivery as connected with its relative time", () => {
+    const anHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    statusPayload = {
+      lastSyncedAt: anHourAgo,
+      syncHealth: { verdict: "fresh", since: null },
+    };
 
     const html = render();
 
-    expect(html).toContain('data-state="recent-data"');
-    expect(html).toContain("Apple Health data received");
-    expect(html).toContain("Last Apple Health data:");
-    expect(html).toContain('dateTime="2026-07-20T10:30:00.000Z"');
-    expect(html).not.toContain(">Connected<");
+    expect(html).toContain('data-state="connected"');
+    expect(html).toMatch(/1\s+h\s+ago/);
+    expect(html).not.toContain('data-testid="apple-health-stale"');
+  });
+
+  it("waits for the first delivery rather than claiming a connection", () => {
+    statusPayload = {
+      lastSyncedAt: null,
+      syncHealth: { verdict: "pending_first_sync", since: null },
+    };
+
+    const html = render();
+
+    expect(html).toContain('data-state="pending-setup"');
+    expect(html).toContain("Waiting for first data");
     expect(html).not.toContain('data-state="connected"');
   });
 
+  it("renders per-metric freshness so one dead permission is visible", () => {
+    statusPayload = {
+      lastSyncedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      syncHealth: { verdict: "fresh", since: null },
+      metricFreshness: [
+        {
+          type: "RESPIRATORY_RATE",
+          lastSeenAt: new Date(
+            Date.now() - 30 * 24 * 60 * 60 * 1000,
+          ).toISOString(),
+          stale: true,
+        },
+        {
+          type: "PULSE",
+          lastSeenAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+          stale: false,
+        },
+      ],
+    };
+
+    const html = render();
+
+    expect(html).toContain('data-slot="metric-freshness"');
+    // The collapsed summary already names the problem — the signal must not
+    // hide behind a click.
+    expect(html).toContain("quiet");
+  });
+
+  it("carries the shared card divider like every sibling", () => {
+    statusPayload = {
+      lastSyncedAt: null,
+      syncHealth: { verdict: "pending_first_sync", since: null },
+    };
+    expect(render()).toContain('data-testid="integration-card-divider"');
+  });
+
   it("links to the existing one-shot Apple Health import fallback", () => {
-    statusPayload = { lastSyncedAt: null };
-    statusLoading = false;
+    statusPayload = {
+      lastSyncedAt: null,
+      syncHealth: { verdict: "pending_first_sync", since: null },
+    };
 
     const html = render();
 
@@ -92,24 +167,24 @@ describe("<AppleHealthCard>", () => {
     expect(html).toContain("Open one-shot import");
   });
 
-  it("uses a non-committal checking state while status is loading", () => {
+  it("claims no status at all while the read is in flight", () => {
     statusPayload = undefined;
     statusLoading = true;
 
     const html = render();
 
-    expect(html).toContain('data-state="checking"');
-    expect(html).toContain("Checking Apple Health data…");
+    expect(html).not.toContain('data-testid="apple-health-status"');
     expect(html).not.toContain("Connected");
   });
-  it("does not turn a failed status read into a setup or connection claim", () => {
+
+  it("treats a failed status read as an error line, not a status", () => {
     statusError = true;
 
     const html = render();
 
-    expect(html).toContain('data-state="unavailable"');
     expect(html).toContain("Apple Health status unavailable");
-    expect(html).not.toContain('data-state="setup"');
+    expect(html).toContain('data-testid="integration-error-message"');
+    expect(html).not.toContain('data-testid="apple-health-status"');
     expect(html).not.toContain("Connected");
   });
 
@@ -117,12 +192,12 @@ describe("<AppleHealthCard>", () => {
     const requiredKeys = [
       "title",
       "description",
-      "lastDataLabel",
       "setupTitle",
       "permissionStep",
       "backgroundStep",
       "importNote",
       "importAction",
+      "staleNote",
     ] as const;
 
     for (const catalog of [en, de, es, fr, itMessages, pl]) {
@@ -131,20 +206,19 @@ describe("<AppleHealthCard>", () => {
         expect(appleHealth[key]).toBeTypeOf("string");
         expect(appleHealth[key].length).toBeGreaterThan(0);
       }
-      expect(Object.keys(appleHealth.status).sort()).toEqual([
-        "checking",
-        "dataReceived",
-        "setup",
-        "unavailable",
-      ]);
+      // The status copy the pill now owns is gone from the catalog; only the
+      // failed-read line survives here.
+      expect(Object.keys(appleHealth.status).sort()).toEqual(["unavailable"]);
     }
   });
 
   it.each(["en", "de", "es", "fr", "it", "pl"] as const)(
     "renders localized Apple Health copy for %s without leaking keys",
     (locale) => {
-      statusPayload = { lastSyncedAt: null };
-      statusLoading = false;
+      statusPayload = {
+        lastSyncedAt: null,
+        syncHealth: { verdict: "pending_first_sync", since: null },
+      };
 
       const html = render(locale);
 

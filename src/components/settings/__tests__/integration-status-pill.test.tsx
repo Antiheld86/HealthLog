@@ -117,4 +117,82 @@ describe("IntegrationStatusPill", () => {
     expect(html).toContain("Pausiert");
     expect(html).toContain("manuell wieder verbinden");
   });
+
+  // The three states the server verdict added. `stale` and `stalled` both
+  // carry an inline timestamp, because "since when" is the whole point of
+  // them; `pending-setup` has nothing to timestamp yet.
+  it("renders the stale state in the warning tone with its timestamp", () => {
+    const html = render(
+      <IntegrationStatusPill
+        state="stale"
+        lastSyncAt={new Date(Date.now() - 9 * 24 * 60 * 60 * 1000)}
+        now={new Date()}
+      />,
+    );
+    expect(html).toContain('data-state="stale"');
+    expect(html).toContain("no recent data");
+    expect(html).toMatch(/9\s+d\s+ago/);
+    expect(html).toContain("bg-warning/15");
+  });
+
+  it("renders the stalled state as a stopped sync, not an error", () => {
+    const html = render(
+      <IntegrationStatusPill
+        state="stalled"
+        lastSyncAt={new Date(Date.now() - 28 * 24 * 60 * 60 * 1000)}
+        now={new Date()}
+      />,
+    );
+    expect(html).toContain('data-state="stalled"');
+    expect(html).toContain("Sync stopped");
+    expect(html).toMatch(/28\s+d\s+ago/);
+    // Warning tone, never destructive: the user cannot fix a cron that
+    // stopped by clicking reconnect.
+    expect(html).toContain("bg-warning/15");
+    expect(html).not.toContain('data-variant="destructive"');
+  });
+
+  it("renders the pending-setup state with no timestamp", () => {
+    const html = render(
+      <IntegrationStatusPill state="pending-setup" lastSyncAt={null} />,
+    );
+    expect(html).toContain('data-state="pending-setup"');
+    expect(html).toContain("Waiting for first data");
+    expect(html).not.toContain("bg-warning/15");
+  });
+
+  /**
+   * Red is reserved for "your action fixes this". A transient upstream failure
+   * is not that: telling the user to reconnect against a 503 sends them
+   * clicking at something they cannot repair.
+   */
+  it("keeps the destructive variant for reauth alone", () => {
+    expect(
+      render(<IntegrationStatusPill state="error" lastSyncAt={null} />),
+    ).toContain('data-variant="destructive"');
+    for (const state of [
+      "warning",
+      "stale",
+      "stalled",
+      "parked",
+      "pending-setup",
+      "connected",
+    ] as const) {
+      expect(
+        render(<IntegrationStatusPill state={state} lastSyncAt={null} />),
+        state,
+      ).not.toContain('data-variant="destructive"');
+    }
+  });
+
+  it("lets a card keep its own established testid", () => {
+    const html = render(
+      <IntegrationStatusPill
+        state="connected"
+        lastSyncAt={null}
+        testId="apple-health-status"
+      />,
+    );
+    expect(html).toContain('data-testid="apple-health-status"');
+  });
 });

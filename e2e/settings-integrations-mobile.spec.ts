@@ -53,6 +53,9 @@ test.describe("/settings/integrations Pixel-5 layout", () => {
     );
 
     const recent = new Date(Date.now() - 12 * 60 * 1000).toISOString();
+    const monthAgo = new Date(
+      Date.now() - 28 * 24 * 60 * 60 * 1000,
+    ).toISOString();
 
     await page.route("**/api/integrations/status", (route) =>
       route.fulfill({
@@ -81,6 +84,10 @@ test.describe("/settings/integrations Pixel-5 layout", () => {
                 tokenExpired: false,
                 scope: "user.info,user.metrics,user.activity",
                 hasActivityScope: true,
+                syncHealth: { verdict: "fresh", since: null },
+                metricFreshness: [
+                  { type: "WEIGHT", lastSeenAt: recent, stale: false },
+                ],
               },
               {
                 integration: "moodlog",
@@ -91,9 +98,13 @@ test.describe("/settings/integrations Pixel-5 layout", () => {
                 consecutiveFailures: 0,
                 configured: true,
                 enabled: true,
-                legacyLastSyncedAt: recent,
+                legacyLastSyncedAt: monthAgo,
                 webhookSecret: "ml_xxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 entryCount: 42,
+                // Configured, card-less, and no longer attempting: the case the
+                // fallback row exists for.
+                syncHealth: { verdict: "stalled", since: monthAgo },
+                metricFreshness: [],
               },
               // v1.28.x — Strava OAuth card reads off this consolidated
               // envelope; without a `strava` entry the new card's query key
@@ -108,6 +119,23 @@ test.describe("/settings/integrations Pixel-5 layout", () => {
                 configured: false,
                 available: false,
                 hasOwnCredentials: false,
+                syncHealth: { verdict: "disconnected", since: null },
+                metricFreshness: [],
+              },
+              // Nightscout reads the envelope too since the card dropped its
+              // own status round-trip; without an entry its pill never resolves.
+              {
+                integration: "nightscout",
+                state: "disconnected",
+                lastSuccessAt: null,
+                lastAttemptAt: null,
+                lastError: null,
+                connected: false,
+                configured: false,
+                hasToken: false,
+                allowPrivateHost: false,
+                syncHealth: { verdict: "disconnected", since: null },
+                metricFreshness: [],
               },
             ],
           },
@@ -157,10 +185,27 @@ test.describe("/settings/integrations Pixel-5 layout", () => {
 
     // Wait for the pills to mount (queries resolve after first paint).
     // One pill per card: Withings, WHOOP, Fitbit, Google Health, Polar,
-    // Oura, Strava, Nightscout. (The Garmin info note is not an OAuth card and
-    // carries no pill.)
+    // Oura, Strava, Nightscout — plus the fallback row for the configured,
+    // card-less moodLog entry. (The Garmin info note is not an OAuth card and
+    // carries no pill; the Apple Health card's pill keeps its own testid.)
     const pills = page.locator('[data-testid="integration-status-pill"]');
-    await expect(pills).toHaveCount(8, { timeout: 10_000 });
+    await expect(pills).toHaveCount(9, { timeout: 10_000 });
+
+    // The acceptance case: a configured integration with no card of its own,
+    // which has stopped even attempting, is visible on the page.
+    const fallback = page.locator(
+      '[data-testid="integration-fallback-row"][data-integration="moodlog"]',
+    );
+    await expect(fallback).toHaveCount(1);
+    await expect(
+      fallback.locator('[data-testid="integration-status-pill"]'),
+    ).toHaveAttribute("data-state", "stalled");
+
+    // Card anatomy is uniform now that Nightscout, the OAuth cards and Apple
+    // Health all carry the divider.
+    await expect(
+      page.locator('[data-testid="integration-card-divider"]'),
+    ).toHaveCount(9);
 
     // Withings is connected in this fixture; WHOOP is a BYO-keys card that
     // stays dormant until an operator adds credentials, so assert the one
@@ -210,7 +255,12 @@ test.describe("Apple Health guidance", () => {
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          data: { entries: [], lastSyncedAt: null },
+          data: {
+            entries: [],
+            lastSyncedAt: null,
+            syncHealth: { verdict: "pending_first_sync", since: null },
+            metricFreshness: [],
+          },
           error: null,
         }),
       }),
@@ -224,7 +274,7 @@ test.describe("Apple Health guidance", () => {
     await expect(card).toContainText("not a web or OAuth connection");
     await expect(page.getByTestId("apple-health-status")).toHaveAttribute(
       "data-state",
-      "setup",
+      "pending-setup",
     );
 
     const importLink = page.getByTestId("apple-health-import-link");
