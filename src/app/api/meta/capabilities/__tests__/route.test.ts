@@ -53,7 +53,6 @@ import {
   GERMAN_ATC_DEFAULT_LOCALES,
 } from "@/lib/fhir/build-bundle";
 import {
-  FHIR_READ_SCOPE,
   FHIR_REST_RESOURCE_TYPES,
   FHIR_EVERYTHING_OPERATION,
   FHIR_SEARCH_PARAMS,
@@ -87,7 +86,7 @@ type CapabilitiesBody = {
       snomedRoute: string;
       germanAtcDefaultLocales: string[];
       restBaseUrl: string;
-      readScope: string;
+      scopeMintable: boolean;
       resourceTypes: string[];
       operations: string[];
       searchParams: string[];
@@ -169,7 +168,10 @@ describe("GET /api/meta/capabilities — drift guards", () => {
     const res = await call();
     const body = (await res.json()) as CapabilitiesBody;
     expect(body.data.fhir.restBaseUrl).toBe("/api/fhir");
-    expect(body.data.fhir.readScope).toBe(FHIR_READ_SCOPE);
+    // The face checks `fhir:read`, but nothing mints a token carrying it, so
+    // advertising it as an obtainable credential would be a claim the code
+    // cannot support.
+    expect(body.data.fhir.scopeMintable).toBe(false);
     expect(body.data.fhir.resourceTypes).toEqual([...FHIR_REST_RESOURCE_TYPES]);
     expect(body.data.fhir.operations).toEqual([FHIR_EVERYTHING_OPERATION]);
     expect(body.data.fhir.searchParams).toEqual([...FHIR_SEARCH_PARAMS]);

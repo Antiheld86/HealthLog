@@ -41,7 +41,6 @@ import {
   GERMAN_ATC_DEFAULT_LOCALES,
 } from "@/lib/fhir/build-bundle";
 import {
-  FHIR_READ_SCOPE,
   FHIR_REST_RESOURCE_TYPES,
   FHIR_EVERYTHING_OPERATION,
   FHIR_SEARCH_PARAMS,
@@ -111,7 +110,13 @@ export const GET = apiHandler(async () => {
       // whole-record operation, the honoured search params and the narrow
       // Bearer scope. All sourced from the canonical `rest.ts` constants.
       restBaseUrl: "/api/fhir",
-      readScope: FHIR_READ_SCOPE,
+      // The face checks a narrow `fhir:read` scope, and NO code path mints a
+      // token carrying it — every mint grants a wildcard, the medication
+      // ingest scope, or an MCP scope. So the face is reachable by the owner's
+      // cookie session or a wildcard device token, and by nothing else. It is
+      // reported that way rather than advertising a credential a client cannot
+      // obtain.
+      scopeMintable: false,
       resourceTypes: FHIR_REST_RESOURCE_TYPES,
       operations: [FHIR_EVERYTHING_OPERATION],
       searchParams: FHIR_SEARCH_PARAMS,

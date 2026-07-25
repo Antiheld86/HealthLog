@@ -70,9 +70,11 @@ const capabilitiesResponse = z
         restBaseUrl: z
           .string()
           .describe("Base path of the read-only FHIR R4 REST face."),
-        readScope: z
-          .string()
-          .describe("Bearer scope a narrow token needs to read the FHIR face."),
+        scopeMintable: z
+          .boolean()
+          .describe(
+            "Whether a narrow Bearer token for the FHIR face can be obtained. Always false: no mint path grants the scope, so the face is reachable by the owner's cookie session or a wildcard device token only.",
+          ),
         resourceTypes: z
           .array(z.string())
           .describe(

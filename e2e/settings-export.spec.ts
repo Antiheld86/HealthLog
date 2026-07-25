@@ -53,6 +53,56 @@ test.describe("Settings → Export & Import", () => {
     });
   });
 
+  test("opens the scope picker expanded on a first run, fenced tier and all", async ({
+    page,
+  }) => {
+    // The three panel states are the release's whole point, and the first one
+    // is the only place a template is applied. It has to be VISIBLE — a
+    // template behind a collapsed disclosure is opt-out wearing a hat — so the
+    // picker, its twelve group rows and the fenced tier all render without a
+    // click.
+    await page.goto("/settings/gesundheitsakte", {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(page.getByTestId("report-scope-picker")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByTestId("report-group-row-vitals")).toBeVisible();
+    await expect(page.getByTestId("report-group-row-sensitive")).toHaveCount(0);
+    await expect(page.getByTestId("report-sensitive-tier")).toBeVisible();
+    // The fenced tier has no group control — there is no single click that
+    // turns on more than one sensitive leaf.
+    await expect(page.getByTestId("report-group-check-sensitive")).toHaveCount(
+      0,
+    );
+    await expect(page.getByTestId("report-scope-summary")).toBeVisible();
+  });
+
+  test("clears the tap floor on the group rows at 390 px", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/settings/gesundheitsakte", {
+      waitUntil: "domcontentloaded",
+    });
+    const row = page.getByTestId("report-group-row-vitals");
+    await expect(row).toBeVisible({ timeout: 10_000 });
+    const box = await row.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+  });
+
+  test("opens a group's leaf grid from its chevron", async ({ page }) => {
+    await page.goto("/settings/gesundheitsakte", {
+      waitUntil: "domcontentloaded",
+    });
+    const row = page.getByTestId("report-group-row-vitals");
+    await expect(row).toBeVisible({ timeout: 10_000 });
+    // Collapsed: the leaves are behind the disclosure, which is what makes a
+    // repeat run two interactions.
+    await expect(page.getByTestId("report-leaf-PULSE")).toHaveCount(0);
+    await row.getByRole("button", { expanded: false }).click();
+    await expect(page.getByTestId("report-leaf-PULSE")).toBeVisible();
+  });
+
   test("renders the import surfaces with stable testids", async ({ page }) => {
     await page.goto("/settings/export", { waitUntil: "domcontentloaded" });
     // v1.15.7 (issue #281) — the Apple Health and generic-JSON import
