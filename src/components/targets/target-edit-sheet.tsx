@@ -17,6 +17,8 @@ import {
   type EffectiveRange,
 } from "@/lib/analytics/effective-range";
 import { convertGlucose, toCanonicalMgdl } from "@/lib/glucose";
+import { resolveTargetUnitAdapter } from "@/lib/targets/target-unit-display";
+import { useUnitDisplay } from "@/hooks/use-unit-display";
 import { apiDelete, apiGet, apiPut } from "@/lib/api/api-fetch";
 
 /**
@@ -133,10 +135,38 @@ function TargetEditSheetBody({
   // is rejected by the 40–400 mg/dL bounds or stored verbatim as 5.5.
   const isGlucoseMmol =
     metric != null && metric.startsWith("BLOOD_GLUCOSE") && unit === "mmol/L";
-  const toDisplay = (mgdl: number) =>
-    isGlucoseMmol ? convertGlucose(mgdl, "mmol/L") : mgdl;
+
+  // v1.32.27 — the same coupled treatment now covers the metric/imperial
+  // preference. Weight-class thresholds are stored in kg; an imperial
+  // user seeds, validates, and types in lb, and the adapter inverts the
+  // typed number back to kg before the PUT. Glucose keeps its own
+  // mg/dL ↔ mmol/L dialect (it carries no display transform, so the two
+  // never compose); every other metric takes the adapter's identity
+  // path and is numerically untouched.
+  const { preference } = useUnitDisplay();
+  const units = resolveTargetUnitAdapter(
+    isBp ? "BLOOD_PRESSURE_SYS" : (metric ?? ""),
+    unit,
+    preference,
+  );
+
+  const toDisplay = (canonical: number) =>
+    isGlucoseMmol
+      ? convertGlucose(canonical, "mmol/L")
+      : units.toDisplay(canonical);
   const toCanonical = (displayValue: number) =>
-    isGlucoseMmol ? toCanonicalMgdl(displayValue, "mmol/L") : displayValue;
+    isGlucoseMmol
+      ? toCanonicalMgdl(displayValue, "mmol/L")
+      : units.toCanonical(displayValue);
+  // Guardrails the typed value is checked against, expressed in the
+  // display unit. Glucose projects its mg/dL window through the same
+  // conversion the fields use; every other metric rounds the window
+  // INWARD so a value typed at the display bound never inverts to a
+  // canonical value the server rejects.
+  const toDisplayBounds = (canonical: { min: number; max: number }) =>
+    isGlucoseMmol
+      ? { min: toDisplay(canonical.min), max: toDisplay(canonical.max) }
+      : units.bounds(canonical);
 
   // Lazy-load the thresholds payload so the dialog also catches any
   // already-persisted override even when the seeded `initialRange`
@@ -166,10 +196,7 @@ function TargetEditSheetBody({
       return { min: toDisplay(override.min), max: toDisplay(override.max) };
     }
     if (fallback) return fallback;
-    if (m) {
-      const bounds = METRIC_BOUNDS[m];
-      return { min: toDisplay(bounds.min), max: toDisplay(bounds.max) };
-    }
+    if (m) return toDisplayBounds(METRIC_BOUNDS[m]);
     return { min: 0, max: 100 };
   };
 
@@ -281,11 +308,7 @@ function TargetEditSheetBody({
   // display unit so a mmol/L glucose entry is checked against the
   // mmol/L-projected 40–400 mg/dL window, not the raw mg/dL numbers.
   const primaryBounds = canonicalPrimaryBounds
-    ? {
-        min: toDisplay(canonicalPrimaryBounds.min),
-        max: toDisplay(canonicalPrimaryBounds.max),
-        unit,
-      }
+    ? { ...toDisplayBounds(canonicalPrimaryBounds), unit }
     : null;
 
   const primaryValid =
@@ -466,7 +489,7 @@ function TargetEditSheetBody({
                   id="target-edit-min"
                   ref={firstInputRef}
                   type="number"
-                  step={targetType === "ACTIVITY_STEPS" ? 100 : 0.1}
+                  step={units.step}
                   min={primaryBounds.min}
                   max={primaryBounds.max}
                   value={displayMin}
@@ -485,7 +508,7 @@ function TargetEditSheetBody({
                 <Input
                   id="target-edit-max"
                   type="number"
-                  step={targetType === "ACTIVITY_STEPS" ? 100 : 0.1}
+                  step={units.step}
                   min={primaryBounds.min}
                   max={primaryBounds.max}
                   value={displayMax}
