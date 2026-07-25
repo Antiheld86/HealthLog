@@ -9,10 +9,12 @@
  * real per-segment series, so the rows lay each block at its true clock time (a
  * MEASURED timeline, not reconstructed). Upserts as `source = FITBIT`.
  *
- * Each segment carries the `sleepStage` axis and an indexed fieldTag so the
- * several segments of one stage stay distinct under the dedup key. externalId =
- * `<logId>:sleep_<stage>:<i>` — a re-scored night overwrites in place. A 24 h
- * overlap covers Fitbit's after-the-fact re-score.
+ * Each segment carries the `sleepStage` axis and a fieldTag keyed on the STABLE
+ * session anchor plus the segment's own start — `<logId>:sleep:<segment-start>`
+ * — so a re-scored night overwrites in place instead of minting parallel rows
+ * the night total would then double-count. A 24 h overlap covers Fitbit's
+ * after-the-fact re-score, and `replaceStaleFitbitSleep` clears anything an
+ * earlier scoring left in the night's window before the fresh set upserts.
  *
  * A per-endpoint 403 soft-skips the resource — the `sleep` scope is granted
  * independently in the consent flow.
@@ -20,18 +22,20 @@
 import {
   FITBIT_SLEEP_RANGE_DAYS,
   fetchSleepRange,
-  mapSleepSession,
+  mapSleepSessionDetailed,
   readSleepSessions,
 } from "./client";
 import {
   chunkDateRanges,
   getValidToken,
   handleCollectionFetchError,
+  replaceStaleFitbitSleep,
   upsertFitbitMeasurements,
 } from "./sync-core";
 import type {
   FitbitMeasurementUpsert,
   FitbitResourceSyncOptions,
+  FitbitSleepReplaceWindow,
 } from "./sync-core";
 import { annotate } from "@/lib/logging/context";
 import { resolveUserTimezone } from "@/lib/tz/resolver";
@@ -54,6 +58,7 @@ export async function syncUserSleep(
   const windows = chunkDateRanges(start, end, FITBIT_SLEEP_RANGE_DAYS);
 
   const readings: FitbitMeasurementUpsert[] = [];
+  const replaceWindows: FitbitSleepReplaceWindow[] = [];
   for (const w of windows) {
     let body: unknown;
     try {
@@ -62,7 +67,9 @@ export async function syncUserSleep(
       return handleCollectionFetchError("fetchSleep", userId, err);
     }
     for (const session of readSleepSessions(body)) {
-      for (const m of mapSleepSession(session, tz)) {
+      const mapped = mapSleepSessionDetailed(session, tz);
+      if (mapped.rows.length === 0) continue;
+      for (const m of mapped.rows) {
         readings.push({
           type: m.type,
           value: m.value,
@@ -72,8 +79,21 @@ export async function syncUserSleep(
           sleepStage: m.sleepStage ?? null,
         });
       }
+      // Clean any stale rows a prior scoring left in this night's window before
+      // the fresh set upserts — so a re-scored night reads its true total rather
+      // than the sum of the old and the re-scored copies.
+      replaceWindows.push({
+        windowStart: mapped.windowStart,
+        windowEnd: mapped.windowEnd,
+        keepIds: mapped.rows.map((m) => m.fieldTag),
+      });
     }
   }
+
+  // BEFORE the upsert: the sweep tombstones the old-keyed rows, and the upsert's
+  // natural-key rescue then re-keys those very tombstones in place. Reversing
+  // the order would tombstone the rows the upsert just wrote.
+  const removed = await replaceStaleFitbitSleep(userId, replaceWindows);
 
   const { imported, inserted } = await upsertFitbitMeasurements(
     userId,
@@ -93,6 +113,8 @@ export async function syncUserSleep(
       .map((r) => r.measuredAt),
   ).catch(() => {});
 
-  annotate({ action: { name: "fitbit.sleep.sync", details: { imported } } });
+  annotate({
+    action: { name: "fitbit.sleep.sync", details: { imported, removed } },
+  });
   return imported;
 }

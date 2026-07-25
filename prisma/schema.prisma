@@ -3655,6 +3655,10 @@ model FitbitConnection {
   /// Set once the self-converging history backfill walks every collection to
   /// completion. Null = backfill still in flight (or never started).
   backfillCompletedAt DateTime? @map("backfill_completed_at")
+  /// Set once the one-shot sleep repair re-reads the bounded sleep history and
+  /// collapses the duplicates the earlier volatile segment key left behind.
+  /// Null = repair pending.
+  sleepRepairedAt     DateTime? @map("sleep_repaired_at")
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 

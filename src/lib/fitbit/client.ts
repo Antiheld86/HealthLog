@@ -384,12 +384,51 @@ export function fitbitDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** GET a classic Fitbit endpoint and return the parsed JSON body. */
-async function fitbitGet(
+/**
+ * Longest `Retry-After` delay (seconds) `fitbitGet` will sit out in-process
+ * before retrying a rate-limited request.
+ *
+ * Fitbit's per-user budget resets on the hour, so a 429 raised near the reset
+ * boundary carries a small `Retry-After` that a bounded wait turns into a
+ * completed walk. A large value (an exhausted budget, up to a full hour) must
+ * NOT be slept out: the poll cohort walks users sequentially, so a long hold
+ * starves every other user in the tick, and inside a pg-boss job the default
+ * expiration would lap the wait and admit a second execution. Above the cap the
+ * request fails fast — the classified transient rides the ledger, the watermark
+ * holds, and the next scheduled tick refetches the window.
+ */
+export const FITBIT_RETRY_AFTER_WAIT_CAP_S = 120;
+
+/**
+ * Read `Retry-After` in its delay-seconds form. Fitbit sends the seconds form;
+ * the HTTP-date form is deliberately ignored (returns undefined → fail fast)
+ * rather than parsed into a wait of unknown length.
+ */
+function parseRetryAfterSeconds(res: Response): number | undefined {
+  const raw = res.headers.get("retry-after");
+  if (typeof raw !== "string") return undefined;
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) return undefined;
+  const seconds = Number.parseInt(trimmed, 10);
+  return Number.isFinite(seconds) ? seconds : undefined;
+}
+
+function waitSeconds(seconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+}
+
+interface FitbitGetAttempt {
+  json: unknown;
+  verdict: ReturnType<typeof classifyFitbitResponse>;
+  retryAfterSeconds: number | undefined;
+}
+
+/** One GET attempt against a classic Fitbit endpoint, classified but not thrown. */
+async function fitbitGetOnce(
   path: string,
   accessToken: string,
   verb: string,
-): Promise<unknown> {
+): Promise<FitbitGetAttempt> {
   const start = performance.now();
   const res = await safeFetch(`${FITBIT_API_BASE}${path}`, {
     method: "GET",
@@ -400,22 +439,58 @@ async function fitbitGet(
   });
   const json = await res.json().catch(() => null);
   const verdict = classifyFitbitResponse(res.status);
+  const retryAfterSeconds =
+    res.status === 429 ? parseRetryAfterSeconds(res) : undefined;
   getEvent()?.addExternalCall({
     service: "fitbit",
     method: verb,
     duration_ms: Math.round(performance.now() - start),
     status: res.status,
-    error: verdict.classification === "success" ? undefined : verdict.reason,
+    error:
+      verdict.classification === "success"
+        ? undefined
+        : retryAfterSeconds === undefined
+          ? verdict.reason
+          : `${verdict.reason} retry_after=${retryAfterSeconds}`,
   });
-  if (verdict.classification !== "success") {
-    throw new FitbitApiError({
+  return { json, verdict, retryAfterSeconds };
+}
+
+/**
+ * GET a classic Fitbit endpoint and return the parsed JSON body.
+ *
+ * Honours `Retry-After` on a 429 within `FITBIT_RETRY_AFTER_WAIT_CAP_S`: the
+ * request waits out the delay and retries ONCE. A missing header, a delay above
+ * the cap, or a second 429 throws exactly as an unhandled failure would — the
+ * classified error carries `retryAfterSeconds` so the wide event records what
+ * the upstream asked for.
+ */
+async function fitbitGet(
+  path: string,
+  accessToken: string,
+  verb: string,
+): Promise<unknown> {
+  const toError = (attempt: FitbitGetAttempt): FitbitApiError =>
+    new FitbitApiError({
       verb,
-      classification: verdict.classification,
-      httpStatus: verdict.httpStatus,
-      reason: verdict.reason,
+      classification: attempt.verdict.classification,
+      httpStatus: attempt.verdict.httpStatus,
+      reason: attempt.verdict.reason,
+      retryAfterSeconds: attempt.retryAfterSeconds,
     });
+
+  const first = await fitbitGetOnce(path, accessToken, verb);
+  if (first.verdict.classification === "success") return first.json;
+
+  const wait = first.retryAfterSeconds;
+  if (wait === undefined || wait > FITBIT_RETRY_AFTER_WAIT_CAP_S) {
+    throw toError(first);
   }
-  return json;
+
+  await waitSeconds(wait);
+  const second = await fitbitGetOnce(path, accessToken, verb);
+  if (second.verdict.classification === "success") return second.json;
+  throw toError(second);
 }
 
 // ─── Field → Measurement mapping ───────────────────────────────
@@ -995,27 +1070,57 @@ function parseLocalInstant(iso: string, tz?: string): Date | null {
 }
 
 /**
- * Map one Fitbit sleep session into per-SEGMENT `SLEEP_DURATION` rows. Each
- * segment's `dateTime` is its START; END = START + seconds. value = minutes.
- * Each segment carries a stage-scoped, INDEXED fieldTag so the several segments
- * of one stage stay distinct under the `(userId, type, source, externalId)`
- * dedup key. Unknown stage labels are skipped.
+ * One mapped Fitbit sleep session: the stable anchor, the session's covered time
+ * window (earliest segment start → latest segment end, both UTC), and the
+ * per-segment rows. The window drives the sync's replace-by-window cleanup of
+ * stale rows a re-score orphaned; `rows` is what gets upserted.
+ */
+export interface FitbitSleepSessionMapped {
+  /** Stable session anchor — also the `<anchor>:sleep:` externalId prefix. */
+  anchor: string;
+  /** Earliest segment start across the session (UTC), or null if none map. */
+  windowStart: Date | null;
+  /** Latest segment end across the session (UTC), or null if none map. */
+  windowEnd: Date | null;
+  rows: FitbitMappedMeasurement[];
+}
+
+/**
+ * Map one Fitbit sleep session into per-SEGMENT `SLEEP_DURATION` rows plus its
+ * covered window. Each segment's `dateTime` is its START; END = START + seconds.
+ * value = minutes. Unknown stage labels are skipped; a session with no parseable
+ * segment yields empty `rows` (and a null window).
+ *
+ * Each segment's fieldTag keys off the STABLE session anchor plus the segment's
+ * own START instant — `<anchor>:sleep:<segment-start>` — NOT a positional index
+ * and NOT the stage label. This is the fix for the re-score duplication: the
+ * index renumbered (and a stage-scoped tag changed) whenever Fitbit re-scored a
+ * night after the fact, minting fresh externalIds so the upsert created parallel
+ * rows the night total then double-counted, with no sweep to clear the strays. A
+ * segment's start instant is stable per block, and dropping the stage from the
+ * key means a mere re-classification (light→deep on the same block) UPDATES the
+ * row in place rather than orphaning it. Two segments of one session cannot
+ * share a start instant, so the key stays unique within the session; across
+ * sessions the logId anchor separates them.
  *
  * The 1.2 sleep log emits OFFSET-LESS local wall-clock timestamps, so `tz` (the
  * user's stored zone) anchors them to the correct UTC instant — without it a
  * non-UTC user's near-midnight segment END would shift by their UTC offset and
  * could land on the wrong wake-day in the night reconstruction.
  */
-export function mapSleepSession(
+export function mapSleepSessionDetailed(
   session: FitbitSleepSession,
   tz?: string,
-): FitbitMappedMeasurement[] {
-  const data = session.levels?.data;
-  if (!Array.isArray(data) || data.length === 0) return [];
-
+): FitbitSleepSessionMapped {
   const anchor = sleepSessionAnchor(session, tz);
-  const out: FitbitMappedMeasurement[] = [];
-  let segIndex = 0;
+  const data = session.levels?.data;
+  const rows: FitbitMappedMeasurement[] = [];
+  let windowStart: Date | null = null;
+  let windowEnd: Date | null = null;
+  if (!Array.isArray(data) || data.length === 0) {
+    return { anchor, windowStart, windowEnd, rows };
+  }
+
   for (const seg of data) {
     const stage = mapFitbitSleepStage(seg.level);
     if (!stage) continue;
@@ -1026,17 +1131,18 @@ export function mapSleepSession(
     if (!start) continue;
     const minutes = seg.seconds / 60;
     const end = new Date(start.getTime() + seg.seconds * 1000);
-    out.push({
+    if (!windowStart || start < windowStart) windowStart = start;
+    if (!windowEnd || end > windowEnd) windowEnd = end;
+    rows.push({
       type: "SLEEP_DURATION",
       value: round2(minutes),
       unit: "minutes",
       measuredAt: end,
-      fieldTag: `${anchor}:sleep_${stage.toLowerCase()}:${segIndex}`,
+      fieldTag: `${anchor}:sleep:${start.toISOString()}`,
       sleepStage: stage,
     });
-    segIndex += 1;
   }
-  return out;
+  return { anchor, windowStart, windowEnd, rows };
 }
 
 /** Read the sleep-session array off the 1.2 sleep-log envelope. */
