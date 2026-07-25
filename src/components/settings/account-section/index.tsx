@@ -15,8 +15,15 @@ import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { PasswordInput } from "@/components/ui/password-input";
+import { HeightFieldControl } from "@/components/profile/height-field-control";
 import { useAuth } from "@/hooks/use-auth";
 import { useMounted } from "@/hooks/use-mounted";
+import { useUnitDisplay } from "@/hooks/use-unit-display";
+import {
+  EMPTY_HEIGHT_DRAFT,
+  resolveHeightUnitAdapter,
+  type HeightDraft,
+} from "@/lib/profile/height-unit-display";
 import { locales, localeLabels, type Locale } from "@/lib/i18n/config";
 import { useTranslations } from "@/lib/i18n/context";
 import { AboutMeSection } from "@/components/settings/about-me-section";
@@ -46,6 +53,11 @@ export function AccountSection() {
   // the SSR HTML when this boundary hydrates after `/api/auth/me`
   // settled (React #418 family).
   const mounted = useMounted();
+  // v1.32.30 — height follows the metric/imperial preference like every
+  // other value the app shows. Storage stays canonical centimetres; the
+  // adapter owns both directions of the conversion.
+  const { preference } = useUnitDisplay();
+  const heightAdapter = resolveHeightUnitAdapter(preference);
   const router = useRouter();
   const navigate = useCallback(
     (target: string) => router.push(target),
@@ -53,7 +65,7 @@ export function AccountSection() {
   );
 
   const [email, setEmail] = useState("");
-  const [heightCm, setHeightCm] = useState("");
+  const [height, setHeight] = useState<HeightDraft>(EMPTY_HEIGHT_DRAFT);
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [gender, setGender] = useState<string>("");
   const [timezone, setTimezone] = useState<string>("Europe/Berlin");
@@ -63,7 +75,7 @@ export function AccountSection() {
   const [insuranceNumber, setInsuranceNumber] = useState("");
   const [profileSeed, setProfileSeed] = useState({
     email: "",
-    heightCm: "",
+    height: EMPTY_HEIGHT_DRAFT,
     dateOfBirth: "",
     gender: "",
     timezone: "Europe/Berlin",
@@ -108,7 +120,7 @@ export function AccountSection() {
   if (user && user.id !== seededUserId) {
     const seed = {
       email: user.email ?? "",
-      heightCm: user.heightCm?.toString() ?? "",
+      height: heightAdapter.toDraft(user.heightCm),
       dateOfBirth: user.dateOfBirth
         ? new Date(user.dateOfBirth).toISOString().slice(0, 10)
         : "",
@@ -120,7 +132,7 @@ export function AccountSection() {
     };
     setSeededUserId(user.id);
     setEmail(seed.email);
-    setHeightCm(seed.heightCm);
+    setHeight(seed.height);
     setDateOfBirth(seed.dateOfBirth);
     setGender(seed.gender);
     setTimezone(seed.timezone);
@@ -130,11 +142,28 @@ export function AccountSection() {
     setProfileSeed(seed);
   }
 
+  // The unit select sits on this very card, so the preference can flip
+  // while the form is open. Re-express the height draft through the new
+  // branch (round-tripped via canonical centimetres) instead of
+  // stranding an empty field; every other slot keeps its in-flight edit.
+  // Functional updaters so this composes with the seed block above when
+  // both run in the same render.
+  const [seededPreference, setSeededPreference] = useState(preference);
+  if (preference !== seededPreference) {
+    const previous = resolveHeightUnitAdapter(seededPreference);
+    setSeededPreference(preference);
+    setHeight((prev) => heightAdapter.toDraft(previous.toCanonicalCm(prev)));
+    setProfileSeed((prev) => ({
+      ...prev,
+      height: heightAdapter.toDraft(previous.toCanonicalCm(prev.height)),
+    }));
+  }
+
   const profileDismissal = useSeededFormDismissal({
     seed: profileSeed,
     value: {
       email,
-      heightCm,
+      height,
       dateOfBirth,
       gender,
       timezone,
@@ -154,7 +183,7 @@ export function AccountSection() {
     setSaveMsgType(null);
     const savedProfile = {
       email: email.trim(),
-      heightCm,
+      height,
       dateOfBirth,
       gender,
       timezone,
@@ -173,9 +202,7 @@ export function AccountSection() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: savedProfile.email || null,
-          heightCm: savedProfile.heightCm
-            ? parseFloat(savedProfile.heightCm)
-            : null,
+          heightCm: heightAdapter.toCanonicalCm(savedProfile.height),
           dateOfBirth: savedProfile.dateOfBirth || null,
           gender: savedProfile.gender || null,
           fullName: savedProfile.fullName || null,
@@ -355,18 +382,17 @@ export function AccountSection() {
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="height">{t("settings.height")}</Label>
-              <Input
-                id="height"
-                type="number"
-                inputMode="decimal"
+              <Label htmlFor="height">
+                {heightAdapter.usesFeetInches
+                  ? t("settings.heightFtIn")
+                  : t("settings.height")}
+              </Label>
+              <HeightFieldControl
+                idPrefix="height"
+                adapter={heightAdapter}
+                value={height}
+                onChange={setHeight}
                 enterKeyHint="next"
-                value={heightCm}
-                onChange={(e) => setHeightCm(e.target.value)}
-                placeholder="175"
-                min={50}
-                max={300}
-                step={0.1}
               />
             </div>
           </div>

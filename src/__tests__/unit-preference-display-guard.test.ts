@@ -47,6 +47,27 @@ const TARGET_SURFACES = [
 ];
 
 /**
+ * v1.32.30 — the profile height surfaces. Height is not a
+ * `MeasurementType`, so `display-transform.ts` never reached it and it
+ * stayed in centimetres for two releases after everything else moved.
+ * These three are the coupled entry unit: the two forms that write
+ * `User.heightCm` and the control they share. A partial wire here is
+ * the same failure the target block guards against — a converted field
+ * over a canonical save silently rewrites the stored height.
+ */
+const HEIGHT_SURFACES = [
+  join(SRC, "components", "onboarding", "baseline-form.tsx"),
+  join(SRC, "components", "settings", "account-section", "index.tsx"),
+];
+
+const HEIGHT_CONTROL = join(
+  SRC,
+  "components",
+  "profile",
+  "height-field-control.tsx",
+);
+
+/**
  * Swept surfaces: the dashboard client, every insights sub-page, and the
  * target/threshold surfaces.
  */
@@ -122,6 +143,40 @@ describe("unit-preference display guard", () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it("every height entry surface resolves through the profile adapter", () => {
+    // Same tripwire as the target block: drop the hook or the adapter
+    // from one form and it falls back to centimetres while its sibling
+    // shows feet and inches.
+    const offenders: string[] = [];
+    for (const file of HEIGHT_SURFACES) {
+      const src = readFileSync(file, "utf8");
+      if (!src.includes("useUnitDisplay()")) {
+        offenders.push(`${file}: no preference hook`);
+      }
+      if (!src.includes("resolveHeightUnitAdapter")) {
+        offenders.push(`${file}: no height adapter`);
+      }
+      if (!src.includes("HeightFieldControl")) {
+        offenders.push(`${file}: hand-rolled height input`);
+      }
+      // The canonical centimetre guardrails must come from the
+      // adapter's inward-rounded bounds, never from a literal.
+      if (/min=\{50\}|max=\{300\}/.test(src)) {
+        offenders.push(`${file}: hardcoded centimetre guardrail`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("the height control announces its units from the bundle", () => {
+    const src = readFileSync(HEIGHT_CONTROL, "utf8");
+    // A quoted "cm" / "ft" / "in" here is a hardcoded unit label; every
+    // unit string on this control resolves through `t(...)`.
+    expect(src).not.toMatch(/["'](cm|ft|in)["']/);
+    expect(src).toContain('t("common.feet")');
+    expect(src).toContain('t("common.inches")');
   });
 
   it("every transformed type carries both a metric and an imperial branch", () => {
