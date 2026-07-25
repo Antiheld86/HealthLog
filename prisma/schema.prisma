@@ -2757,7 +2757,12 @@ model MedicationIntakeEvent {
   /// nightly dedup leaves both standalone.
   attributionSource    IntakeAttributionSource @default(AUTO) @map("attribution_source")
   source               IntakeSource            @default(WEB)
-  idempotencyKey       String?                 @unique @map("idempotency_key")
+  /// v1.32.37 — client-supplied replay anchor, unique PER USER (migration
+  /// 0273). It carried a GLOBAL unique from 0001_init, which let one
+  /// user's key refuse another user's write outright and let an unscoped
+  /// lookup resolve to a stranger's row. Same grain as `(user_id,
+  /// external_id)` below: every read must key on `(userId, idempotencyKey)`.
+  idempotencyKey       String?                 @map("idempotency_key")
   createdAt            DateTime                @default(now()) @map("created_at")
   /// v1.4.25 W4d — only populated for GLP-1 intake events (the picker
   /// is the only surface that writes this column). Existing rows stay
@@ -2829,6 +2834,7 @@ model MedicationIntakeEvent {
   /// unique above, migration 0121), so the schema keeps the full
   /// `@@unique` for the `userId_externalId` compound where-key.
   @@unique([userId, externalId])
+  @@unique([userId, idempotencyKey])
   @@index([userId, medicationId, scheduledFor])
   // v1.7.0 sync — keyset support for the `/api/sync/changes` intake feed
   // (`where userId` ordered by `(updatedAt asc, id asc)`).

@@ -483,4 +483,287 @@ describe("POST /api/medications/intake/bulk (real Postgres)", () => {
     });
     expect(stored).toHaveLength(1);
   });
+
+  /**
+   * Migration 0273 — the idempotency key is unique PER USER.
+   *
+   * It carried a GLOBAL unique from 0001_init. Because the key is
+   * client-supplied, two people running the same client could mint the
+   * same one, and then the global constraint refused the second person's
+   * write outright: their dose was silently lost. The unscoped replay
+   * probe made it worse by resolving the key to the FIRST user's row and
+   * handing that stranger's row id back.
+   *
+   * These two cases are the whole contract: different users must not
+   * collide, and one user replaying their own key must still dedup.
+   */
+  it("lets two different users post the SAME idempotency key — both doses land", async () => {
+    const { POST } = await import("@/app/api/medications/intake/bulk/route");
+    const prisma = getPrismaClient();
+    const SHARED_KEY = "ios-outbox-2026-05-16T08:00";
+
+    // User A posts first.
+    const first = await POST(
+      makeRequest({
+        entries: [
+          {
+            medicationId: ownedMedId,
+            scheduledFor: "2026-05-16T08:00:00.000Z",
+            takenAt: "2026-05-16T08:02:00.000Z",
+            idempotencyKey: SHARED_KEY,
+          },
+        ],
+      }),
+    );
+    expect(first.status).toBe(200);
+    expect(
+      ((await first.json()) as { data: { inserted: number } }).data.inserted,
+    ).toBe(1);
+
+    // Now the OTHER user, with their own session and their own medication,
+    // posts the very same key.
+    const otherSession = await prisma.session.create({
+      data: {
+        userId: OTHER_USER_ID,
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      },
+    });
+    cookieJar.set("healthlog_session", otherSession.id);
+
+    const second = await POST(
+      makeRequest({
+        entries: [
+          {
+            medicationId: foreignMedId,
+            scheduledFor: "2026-05-16T08:00:00.000Z",
+            takenAt: "2026-05-16T08:03:00.000Z",
+            idempotencyKey: SHARED_KEY,
+          },
+        ],
+      }),
+    );
+    expect(second.status).toBe(200);
+    const secondJson = (await second.json()) as {
+      data: {
+        inserted: number;
+        duplicates: number;
+        entries: Array<{ status: string; id?: string }>;
+      };
+    };
+    // The second user's dose LANDS. Pre-0273 it was reported `duplicate`
+    // against the first user's row and never written.
+    expect(secondJson.data.inserted).toBe(1);
+    expect(secondJson.data.duplicates).toBe(0);
+
+    const mine = await prisma.medicationIntakeEvent.findMany({
+      where: { userId: OTHER_USER_ID },
+      select: { id: true, userId: true, idempotencyKey: true },
+    });
+    const theirs = await prisma.medicationIntakeEvent.findMany({
+      where: { userId: TEST_USER_ID },
+      select: { id: true },
+    });
+    expect(mine).toHaveLength(1);
+    expect(theirs).toHaveLength(1);
+    expect(mine[0].idempotencyKey).toBe(SHARED_KEY);
+    // And no id belonging to the first user was echoed to the second.
+    const echoed = secondJson.data.entries[0]?.id;
+    if (echoed) expect(echoed).not.toBe(theirs[0].id);
+  });
+
+  it("still dedups when the SAME user replays their own key", async () => {
+    const { POST } = await import("@/app/api/medications/intake/bulk/route");
+    const prisma = getPrismaClient();
+    const KEY = "ios-outbox-replay-001";
+    const body = {
+      entries: [
+        {
+          medicationId: ownedMedId,
+          scheduledFor: "2026-05-18T08:00:00.000Z",
+          takenAt: "2026-05-18T08:02:00.000Z",
+          idempotencyKey: KEY,
+        },
+      ],
+    };
+
+    const first = await POST(makeRequest(body));
+    expect(
+      ((await first.json()) as { data: { inserted: number } }).data.inserted,
+    ).toBe(1);
+
+    const replay = await POST(makeRequest(body));
+    const replayJson = (await replay.json()) as {
+      data: {
+        inserted: number;
+        duplicates: number;
+        entries: Array<{ status: string; id?: string }>;
+      };
+    };
+    expect(replayJson.data.inserted).toBe(0);
+    expect(replayJson.data.duplicates).toBe(1);
+
+    const stored = await prisma.medicationIntakeEvent.findMany({
+      where: { userId: TEST_USER_ID, idempotencyKey: KEY },
+      select: { id: true },
+    });
+    expect(stored).toHaveLength(1);
+    // The replay resolves to the caller's OWN row.
+    expect(replayJson.data.entries[0]?.id).toBe(stored[0].id);
+  });
+
+  it("holds the per-user unique at the database, not only in the route", async () => {
+    const prisma = getPrismaClient();
+    const KEY = "db-level-shared-key";
+
+    await prisma.medicationIntakeEvent.create({
+      data: {
+        userId: TEST_USER_ID,
+        medicationId: ownedMedId,
+        scheduledFor: new Date("2026-05-19T08:00:00.000Z"),
+        takenAt: new Date("2026-05-19T08:00:00.000Z"),
+        source: "WEB",
+        idempotencyKey: KEY,
+      },
+    });
+
+    // Same key, different user — allowed now, refused before 0273.
+    await expect(
+      prisma.medicationIntakeEvent.create({
+        data: {
+          userId: OTHER_USER_ID,
+          medicationId: foreignMedId,
+          scheduledFor: new Date("2026-05-19T08:00:00.000Z"),
+          takenAt: new Date("2026-05-19T08:00:00.000Z"),
+          source: "WEB",
+          idempotencyKey: KEY,
+        },
+      }),
+    ).resolves.toBeTruthy();
+
+    // Same key, SAME user — still refused.
+    await expect(
+      prisma.medicationIntakeEvent.create({
+        data: {
+          userId: TEST_USER_ID,
+          medicationId: ownedMedId,
+          scheduledFor: new Date("2026-05-20T08:00:00.000Z"),
+          takenAt: new Date("2026-05-20T08:00:00.000Z"),
+          source: "WEB",
+          idempotencyKey: KEY,
+        },
+      }),
+    ).rejects.toMatchObject({ code: "P2002" });
+  });
+
+  /**
+   * Migration 0273 step 1 — the reconciliation safety net.
+   *
+   * Against an intact database it can never fire: the global unique it
+   * replaces is strictly stronger than the per-user one, so no colliding
+   * pair can exist. It is there for a database whose global index was
+   * dropped by hand at some point. That means nothing else in this suite
+   * exercises it, so this case builds the collision on purpose and runs
+   * the SHIPPED SQL — read from the migration file, not a copy that could
+   * drift — against it.
+   *
+   * The whole thing runs inside a transaction that is rolled back, so the
+   * index surgery never escapes into the rest of the run.
+   */
+  it("migration 0273 reconciles a pre-existing same-user collision without losing a dose", async () => {
+    const prisma = getPrismaClient();
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+
+    const sql = readFileSync(
+      join(
+        process.cwd(),
+        "prisma",
+        "migrations",
+        "0273_scope_intake_idempotency_key_per_user",
+        "migration.sql",
+      ),
+      "utf8",
+    );
+    // Strip comments BEFORE splitting: the prose contains semicolons of
+    // its own, and splitting first would slice a statement in half.
+    const statements = sql
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("--"))
+      .join("\n")
+      .split(";")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const safetyNet = statements.find((st) => st.startsWith("UPDATE"));
+    const createIndex = statements.find((st) =>
+      st.startsWith("CREATE UNIQUE INDEX"),
+    );
+    expect(
+      safetyNet,
+      "migration must carry the reconciliation UPDATE",
+    ).toBeTruthy();
+    expect(createIndex, "migration must carry the per-user index").toBeTruthy();
+
+    const COLLIDING_KEY = "legacy-collision-key";
+    let observed: Array<{ id: string; idempotencyKey: string | null }> = [];
+
+    class Rollback extends Error {}
+    await expect(
+      prisma.$transaction(async (tx) => {
+        // Simulate the only database on which the collision is possible:
+        // one whose unique index was dropped by hand.
+        await tx.$executeRawUnsafe(
+          'DROP INDEX "medication_intake_events_user_id_idempotency_key_key"',
+        );
+
+        const earlier = await tx.medicationIntakeEvent.create({
+          data: {
+            id: "collide-earlier",
+            userId: TEST_USER_ID,
+            medicationId: ownedMedId,
+            scheduledFor: new Date("2026-05-21T08:00:00.000Z"),
+            takenAt: new Date("2026-05-21T08:00:00.000Z"),
+            source: "WEB",
+            idempotencyKey: COLLIDING_KEY,
+            createdAt: new Date("2026-05-21T08:00:00.000Z"),
+          },
+        });
+        const later = await tx.medicationIntakeEvent.create({
+          data: {
+            id: "collide-later",
+            userId: TEST_USER_ID,
+            medicationId: ownedMedId,
+            scheduledFor: new Date("2026-05-22T08:00:00.000Z"),
+            takenAt: new Date("2026-05-22T08:00:00.000Z"),
+            source: "WEB",
+            idempotencyKey: COLLIDING_KEY,
+            createdAt: new Date("2026-05-22T08:00:00.000Z"),
+          },
+        });
+
+        // Run the migration's own reconciliation, then its own index.
+        await tx.$executeRawUnsafe(safetyNet!);
+        await tx.$executeRawUnsafe(createIndex!);
+
+        observed = await tx.medicationIntakeEvent.findMany({
+          where: { id: { in: [earlier.id, later.id] } },
+          orderBy: { createdAt: "asc" },
+          select: { id: true, idempotencyKey: true },
+        });
+        throw new Rollback();
+      }),
+    ).rejects.toBeInstanceOf(Rollback);
+
+    // Both doses survive — the migration never deletes or rewrites a row.
+    expect(observed).toHaveLength(2);
+    expect(observed[0]).toEqual({
+      id: "collide-earlier",
+      idempotencyKey: COLLIDING_KEY,
+    });
+    // Only the dedup HINT on the later row is cleared, which is what makes
+    // the unique index creatable.
+    expect(observed[1]).toEqual({
+      id: "collide-later",
+      idempotencyKey: null,
+    });
+  });
 });

@@ -298,6 +298,82 @@ describe("identities derived outside a Zod schema stay inside the floor", () => 
   });
 });
 
+describe("the intake idempotency key is never read across users", () => {
+  /**
+   * `medication_intake_events.idempotency_key` carried a GLOBAL unique
+   * from 0001_init until migration 0273. Client-supplied keys on a global
+   * unique meant one user's key blocked another user's write outright,
+   * and an unscoped lookup resolved a stranger's row and handed back its
+   * id. The column is now unique per user; every read has to key on
+   * `(userId, idempotencyKey)` or the leak comes straight back.
+   */
+  function intakeQueriesFilteringOnTheKey(): Array<{
+    file: string;
+    line: number;
+    scoped: boolean;
+  }> {
+    const out: Array<{ file: string; line: number; scoped: boolean }> = [];
+    for (const rel of sourceFiles()) {
+      const source = read(rel);
+      if (!source.includes("medicationIntakeEvent.")) continue;
+      const call = /medicationIntakeEvent\.(\w+)\(\s*\{/g;
+      let m: RegExpExecArray | null;
+      while ((m = call.exec(source)) !== null) {
+        // Walk to the matching brace so the window is the call, not a
+        // fixed slice that could bleed into the next statement.
+        let depth = 0;
+        let j = source.indexOf("{", m.index);
+        for (; j < source.length; j++) {
+          if (source[j] === "{") depth++;
+          else if (source[j] === "}" && --depth === 0) break;
+        }
+        const body = source.slice(m.index, j + 1);
+        const whereAt = body.indexOf("where");
+        if (whereAt === -1) continue;
+        const where = body.slice(whereAt, whereAt + 400);
+        if (!where.includes("idempotencyKey")) continue;
+        out.push({
+          file: rel,
+          line: source.slice(0, m.index).split("\n").length,
+          // Keyed on the row's own primary id is scoped by construction —
+          // that is an update-by-id that happens to WRITE the key.
+          scoped: where.includes("userId") || /where:\s*\{\s*id:/.test(where),
+        });
+      }
+    }
+    return out;
+  }
+
+  it("finds the reads at all (the matcher still matches)", () => {
+    const found = intakeQueriesFilteringOnTheKey();
+    expect(found.length).toBeGreaterThanOrEqual(6);
+    expect(found.map((f) => f.file)).toContain(
+      "app/api/medications/intake/bulk/route.ts",
+    );
+  });
+
+  it("every query filtering on the key also narrows by userId", () => {
+    const unscoped = intakeQueriesFilteringOnTheKey().filter((f) => !f.scoped);
+    expect(
+      unscoped,
+      "a medicationIntakeEvent query filters on idempotencyKey without a userId. " +
+        "The key is client-supplied and unique per USER (migration 0273); an " +
+        "unscoped read resolves another user's row.",
+    ).toEqual([]);
+  });
+
+  it("the schema keeps the key unique per user, not globally", () => {
+    const schema = readFileSync(
+      join(process.cwd(), "prisma", "schema.prisma"),
+      "utf8",
+    );
+    expect(schema).toContain("@@unique([userId, idempotencyKey])");
+    expect(schema).not.toMatch(
+      /idempotencyKey\s+String\?\s+@unique\s+@map\("idempotency_key"\)/,
+    );
+  });
+});
+
 describe("the batch surfaces refuse per entry, never whole-batch", () => {
   // Each of these drains a client sync queue. A schema-level refusal here
   // would stop a whole batch of good rows because of one bad one, which is

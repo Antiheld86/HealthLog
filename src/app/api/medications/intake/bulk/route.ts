@@ -616,8 +616,16 @@ async function postBulk(request: NextRequest): Promise<Response> {
         //      by `source`. The partial unique index carries `source`, so it
         //      cannot catch this duplicate; the probe must.
         if (entry.idempotencyKey) {
+          // Scoped to the caller. The key is client-supplied, so an
+          // unscoped read would resolve another user's row and hand its
+          // id back here (migration 0273 made the unique per user).
           const replay = await prisma.medicationIntakeEvent.findUnique({
-            where: { idempotencyKey: entry.idempotencyKey },
+            where: {
+              userId_idempotencyKey: {
+                userId: user.id,
+                idempotencyKey: entry.idempotencyKey,
+              },
+            },
             select: { id: true },
           });
           if (replay) {
@@ -793,7 +801,12 @@ async function postBulk(request: NextRequest): Promise<Response> {
       ) {
         const existing = entry.idempotencyKey
           ? await prisma.medicationIntakeEvent.findUnique({
-              where: { idempotencyKey: entry.idempotencyKey },
+              where: {
+                userId_idempotencyKey: {
+                  userId: user.id,
+                  idempotencyKey: entry.idempotencyKey,
+                },
+              },
               select: { id: true },
             })
           : // v1.28 — an Apple entry that raced the partial
