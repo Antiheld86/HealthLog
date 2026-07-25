@@ -8,6 +8,8 @@ const {
   registerUserMock,
   getCredsMock,
   markReconnectedMock,
+  bossSend,
+  bossMock,
 } = vi.hoisted(() => ({
   stateMatchesCookieMock: vi.fn(),
   verifySignedStateMock: vi.fn(),
@@ -16,6 +18,8 @@ const {
   registerUserMock: vi.fn(),
   getCredsMock: vi.fn(),
   markReconnectedMock: vi.fn(),
+  bossSend: vi.fn(),
+  bossMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api-handler", () => ({
@@ -24,7 +28,11 @@ vi.mock("@/lib/api-handler", () => ({
 vi.mock("@/lib/db", () => ({ prisma: { user: { update: vi.fn() } } }));
 vi.mock("@/lib/logging/context", () => ({
   annotate: vi.fn(),
-  getEvent: () => ({ setAuth: vi.fn(), setError: vi.fn() }),
+  getEvent: () => ({
+    setAuth: vi.fn(),
+    setError: vi.fn(),
+    addWarning: vi.fn(),
+  }),
 }));
 vi.mock("@/lib/auth/audit", () => ({ auditLog: vi.fn() }));
 vi.mock("@/lib/crypto", () => ({ encrypt: (s: string) => `enc:${s}` }));
@@ -44,6 +52,7 @@ vi.mock("@/lib/oauth/signed-state", () => ({
 vi.mock("@/lib/integrations/status", () => ({
   markReconnected: markReconnectedMock,
 }));
+vi.mock("@/lib/jobs/boss-instance", () => ({ getGlobalBoss: bossMock }));
 
 import { GET } from "../route";
 
@@ -68,6 +77,8 @@ beforeEach(() => {
   getSessionMock.mockResolvedValue(null);
   getCredsMock.mockResolvedValue({ clientId: "c", clientSecret: "s" });
   exchangeCodeMock.mockResolvedValue({ access_token: "tok", x_user_id: 42 });
+  bossSend.mockResolvedValue("job-1");
+  bossMock.mockReturnValue({ send: bossSend });
   registerUserMock.mockResolvedValue(undefined);
 });
 
@@ -98,5 +109,37 @@ describe("GET /api/polar/callback", () => {
     const res = await run(makeReq());
     expect(res.headers.get("location")).toContain("reason=token");
     expect(registerUserMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * v1.32.28 — connecting starts a sync straight away instead of leaving the card
+ * empty until the next hourly tick. The poll handler has accepted a single-user
+ * payload since it was written; this callback is the producer that was missing.
+ */
+describe("GET /api/polar/callback — connect-time first sync", () => {
+  it("enqueues exactly one targeted polar-sync job for the connecting user", async () => {
+    const res = await run(makeReq());
+
+    expect(res.headers.get("location")).toContain("polar=connected");
+    expect(bossSend).toHaveBeenCalledTimes(1);
+    expect(bossSend).toHaveBeenCalledWith("polar-sync", { userId: "u1" });
+  });
+
+  it("still connects when no boss instance is available", async () => {
+    bossMock.mockReturnValue(null);
+
+    const res = await run(makeReq());
+
+    expect(res.headers.get("location")).toContain("polar=connected");
+    expect(bossSend).not.toHaveBeenCalled();
+  });
+
+  it("still connects when the enqueue itself rejects", async () => {
+    bossSend.mockRejectedValue(new Error("queue unreachable"));
+
+    const res = await run(makeReq());
+
+    expect(res.headers.get("location")).toContain("polar=connected");
   });
 });

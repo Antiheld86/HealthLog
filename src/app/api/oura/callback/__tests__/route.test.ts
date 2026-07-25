@@ -12,21 +12,34 @@ vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn(async () => null) }));
 
 vi.mock("@/lib/logging/context", () => ({
   annotate: vi.fn(),
-  getEvent: () => ({ setError: vi.fn(), setAuth: vi.fn() }),
+  getEvent: () => ({
+    setError: vi.fn(),
+    setAuth: vi.fn(),
+    addWarning: vi.fn(),
+  }),
 }));
 
 vi.mock("@/lib/auth/audit", () => ({ auditLog: vi.fn() }));
 vi.mock("@/lib/crypto", () => ({ encrypt: (s: string) => `enc:${s}` }));
 vi.mock("@/lib/integrations/status", () => ({ markReconnected: vi.fn() }));
 
-const { exchangeMock, getCredsMock, matchMock, verifyMock } = vi.hoisted(
-  () => ({
-    exchangeMock: vi.fn(),
-    getCredsMock: vi.fn(),
-    matchMock: vi.fn(),
-    verifyMock: vi.fn(),
-  }),
-);
+const {
+  exchangeMock,
+  getCredsMock,
+  matchMock,
+  verifyMock,
+  bossSend,
+  bossMock,
+} = vi.hoisted(() => ({
+  exchangeMock: vi.fn(),
+  getCredsMock: vi.fn(),
+  matchMock: vi.fn(),
+  verifyMock: vi.fn(),
+  bossSend: vi.fn(),
+  bossMock: vi.fn(),
+}));
+
+vi.mock("@/lib/jobs/boss-instance", () => ({ getGlobalBoss: bossMock }));
 
 vi.mock("@/lib/oura/client", () => ({ exchangeCode: exchangeMock }));
 vi.mock("@/lib/oura/credentials", () => ({
@@ -75,6 +88,8 @@ beforeEach(() => {
   exchangeMock.mockResolvedValue({ access_token: "at", refresh_token: "rt" });
   userUpdate.mockResolvedValue({});
   (getSession as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+  bossSend.mockResolvedValue("job-1");
+  bossMock.mockReturnValue({ send: bossSend });
 });
 
 describe("GET /api/oura/callback", () => {
@@ -120,6 +135,39 @@ describe("GET /api/oura/callback", () => {
     expect(data.ouraAccessTokenEncrypted).toBe("enc:at");
     expect(data.ouraRefreshTokenEncrypted).toBe("enc:rt");
     expect(auditLog).toHaveBeenCalledWith("oura.connect", { userId: "u1" });
+    expect(res.headers.get("location")).toContain("oura=connected");
+  });
+});
+
+/**
+ * v1.32.28 — connecting starts a sync straight away. The poll handler has
+ * accepted a single-user payload since it was written; this callback is the
+ * producer that was missing, and without it a fresh connection showed an empty
+ * card for up to an hour.
+ */
+describe("GET /api/oura/callback — connect-time first sync", () => {
+  it("enqueues exactly one targeted oura-sync job for the connecting user", async () => {
+    const res = await GET(makeReq({ code: "c", state: "S", cookie: "S" }));
+
+    expect(res.headers.get("location")).toContain("oura=connected");
+    expect(bossSend).toHaveBeenCalledTimes(1);
+    expect(bossSend).toHaveBeenCalledWith("oura-sync", { userId: "u1" });
+  });
+
+  it("still connects when no boss instance is available", async () => {
+    bossMock.mockReturnValue(null);
+
+    const res = await GET(makeReq({ code: "c", state: "S", cookie: "S" }));
+
+    expect(res.headers.get("location")).toContain("oura=connected");
+    expect(bossSend).not.toHaveBeenCalled();
+  });
+
+  it("still connects when the enqueue itself rejects", async () => {
+    bossSend.mockRejectedValue(new Error("queue unreachable"));
+
+    const res = await GET(makeReq({ code: "c", state: "S", cookie: "S" }));
+
     expect(res.headers.get("location")).toContain("oura=connected");
   });
 });

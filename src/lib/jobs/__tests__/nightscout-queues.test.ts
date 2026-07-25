@@ -18,7 +18,15 @@ import { describe, expect, it } from "vitest";
 // file into domain registrars; the Nightscout / Polar / Oura queues live in the
 // integration-sync registrar. The dead-queue guard follows the wiring there
 // (the handler module is still concatenated for the handler-symbol assertions).
+//
+// v1.32.28 — the four poll-queue NAMES moved again, into
+// `integration-poll-queues.ts`, so an OAuth callback can enqueue a connect-time
+// first sync without importing the registrar's handler graph. The guard follows
+// them: the name declarations are asserted against that module, everything else
+// (allQueues membership, cron schedule, handler binding) still against the
+// registrar.
 const source =
+  readFileSync(join(__dirname, "..", "integration-poll-queues.ts"), "utf8") +
   readFileSync(
     join(__dirname, "..", "reminder", "register-integration-sync.ts"),
     "utf8",

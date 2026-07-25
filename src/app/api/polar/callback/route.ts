@@ -12,6 +12,8 @@ import {
   verifySignedState,
 } from "@/lib/oauth/signed-state";
 import { markReconnected } from "@/lib/integrations/status";
+import { POLAR_SYNC_QUEUE } from "@/lib/jobs/integration-poll-queues";
+import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { NextRequest, NextResponse } from "next/server";
 
 /**
@@ -101,6 +103,19 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
     await auditLog("polar.connect", { userId });
     await markReconnected(userId, "polar");
+
+    // Start the first sync now instead of leaving the user staring at an empty
+    // card until the next hourly tick. Best-effort by design: the hourly cron
+    // remains the safety net, so a missing boss instance must never strand the
+    // redirect.
+    const boss = getGlobalBoss();
+    if (boss) {
+      await boss
+        .send(POLAR_SYNC_QUEUE, { userId })
+        .catch((err) =>
+          getEvent()?.addWarning(`polar-sync connect enqueue failed: ${err}`),
+        );
+    }
 
     const response = NextResponse.redirect(
       new URL(

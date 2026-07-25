@@ -4,10 +4,14 @@ import { NextRequest } from "next/server";
 import { SafeFetchError } from "@/lib/safe-fetch";
 import { NightscoutApiError } from "@/lib/nightscout/client";
 
-const { fetchSgvEntriesMock, rateLimitMock } = vi.hoisted(() => ({
-  fetchSgvEntriesMock: vi.fn(),
-  rateLimitMock: vi.fn(),
-}));
+const { fetchSgvEntriesMock, rateLimitMock, bossSend, bossMock } = vi.hoisted(
+  () => ({
+    fetchSgvEntriesMock: vi.fn(),
+    rateLimitMock: vi.fn(),
+    bossSend: vi.fn(),
+    bossMock: vi.fn(),
+  }),
+);
 
 vi.mock("@/lib/api-handler", () => ({
   apiHandler: <T extends (...args: unknown[]) => unknown>(fn: T) => fn,
@@ -18,10 +22,14 @@ vi.mock("@/lib/db", () => ({
   prisma: { user: { update: vi.fn() } },
 }));
 
-vi.mock("@/lib/logging/context", () => ({ annotate: vi.fn() }));
+vi.mock("@/lib/logging/context", () => ({
+  annotate: vi.fn(),
+  getEvent: () => ({ addWarning: vi.fn() }),
+}));
 vi.mock("@/lib/auth/audit", () => ({ auditLog: vi.fn() }));
 vi.mock("@/lib/crypto", () => ({ encrypt: (s: string) => `enc:${s}` }));
 vi.mock("@/lib/integrations/status", () => ({ markReconnected: vi.fn() }));
+vi.mock("@/lib/jobs/boss-instance", () => ({ getGlobalBoss: bossMock }));
 vi.mock("@/lib/nightscout/client", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/lib/nightscout/client")>();
@@ -66,6 +74,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   rateLimitMock.mockResolvedValue({ allowed: true, remaining: 9, resetAt: 0 });
   fetchSgvEntriesMock.mockResolvedValue([{ id: "x", sgv: 100, date: 1 }]);
+  bossSend.mockResolvedValue("job-1");
+  bossMock.mockReturnValue({ send: bossSend });
 });
 
 describe("POST /api/nightscout/connect", () => {
@@ -206,5 +216,49 @@ describe("POST /api/nightscout/connect", () => {
     const res = await post(req({ url: "https://ns.example.com" }));
     expect(res.status).toBe(429);
     expect(fetchSgvEntriesMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * v1.32.28 — a Nightscout connection pulls its first glucose window straight
+ * away instead of leaving the card empty until the next hourly tick.
+ */
+describe("POST /api/nightscout/connect — connect-time first sync", () => {
+  it("enqueues exactly one targeted nightscout-sync job for the connecting user", async () => {
+    const res = await post(
+      req({ url: "https://ns.example.com", token: "tok" }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(bossSend).toHaveBeenCalledTimes(1);
+    expect(bossSend).toHaveBeenCalledWith("nightscout-sync", { userId: "u1" });
+  });
+
+  it("does not enqueue when the connection was rejected", async () => {
+    const res = await post(req({ url: "not a url" }));
+
+    expect(res.status).toBe(422);
+    expect(bossSend).not.toHaveBeenCalled();
+  });
+
+  it("still connects when no boss instance is available", async () => {
+    bossMock.mockReturnValue(null);
+
+    const res = await post(
+      req({ url: "https://ns.example.com", token: "tok" }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(bossSend).not.toHaveBeenCalled();
+  });
+
+  it("still connects when the enqueue itself rejects", async () => {
+    bossSend.mockRejectedValue(new Error("queue unreachable"));
+
+    const res = await post(
+      req({ url: "https://ns.example.com", token: "tok" }),
+    );
+
+    expect(res.status).toBe(200);
   });
 });

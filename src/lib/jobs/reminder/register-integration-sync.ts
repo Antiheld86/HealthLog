@@ -78,6 +78,12 @@ import {
 } from "./registrar-shared";
 import { WITHINGS_ECG_SYNC_QUEUE } from "@/lib/jobs/withings-ecg-queue";
 import {
+  NIGHTSCOUT_SYNC_QUEUE,
+  OURA_SYNC_QUEUE,
+  POLAR_SYNC_QUEUE,
+  STRAVA_SYNC_QUEUE,
+} from "@/lib/jobs/integration-poll-queues";
+import {
   WithingsSyncPayload,
   WithingsActivitySyncPayload,
   WithingsSleepSyncPayload,
@@ -223,8 +229,11 @@ const GOOGLE_HEALTH_OAUTH_STATE_CLEANUP_CRON = "26 3 * * *";
 // pulls the recent SGV window per configured instance. :11 staggers off the
 // WHOOP (:05), Fitbit (:08), and Withings sync ticks so the hourly polls don't
 // pile up on one boss poll.
-const NIGHTSCOUT_SYNC_QUEUE = "nightscout-sync";
-
+//
+// The four poll-queue NAMES live in `@/lib/jobs/integration-poll-queues` (see
+// the import above) so an OAuth callback can enqueue a connect-time first sync
+// without importing this registrar and its whole handler graph. Creation,
+// scheduling, and handler binding stay here.
 const NIGHTSCOUT_SYNC_CRON = "11 * * * *"; // every hour at :11
 // v1.17.0 (F4) — Polar + Oura OAuth poll sync. Poll-only (one hourly tick per
 // provider re-walks every connected user). :13 / :15 stagger off the other
@@ -232,16 +241,13 @@ const NIGHTSCOUT_SYNC_CRON = "11 * * * *"; // every hour at :11
 // pile up on one boss poll. The queues MUST be registered in `allQueues` below
 // or pg-boss never provisions them and the schedule silently no-ops (the
 // v1.4.37 dead-queue class).
-const POLAR_SYNC_QUEUE = "polar-sync";
 const POLAR_SYNC_CRON = "13 * * * *"; // every hour at :13
-const OURA_SYNC_QUEUE = "oura-sync";
 const OURA_SYNC_CRON = "15 * * * *"; // every hour at :15
 // v1.28.x — Strava OAuth poll sync. Poll-only (webhook deferred): one hourly
 // tick re-walks every connected user. :17 staggers off the Polar (:13) / Oura
 // (:15) ticks so the polls don't pile up on one boss poll. The queue MUST be
 // registered in `allQueues` below or pg-boss never provisions it and the
 // schedule silently no-ops (the v1.4.37 dead-queue class).
-const STRAVA_SYNC_QUEUE = "strava-sync";
 const STRAVA_SYNC_CRON = "17 * * * *"; // every hour at :17
 // v1.30.x — daily sweep for the native OIDC handoff ledger. Handoff codes are
 // single-use + 90s-lived and expiry is enforced at read, so this is pure
