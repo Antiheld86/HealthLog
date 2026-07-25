@@ -19,7 +19,9 @@
  * The four rules that make the round-trip safe:
  *
  *   1. `toDisplay` rounds to the transform's `decimals`, so the field
- *      shows "150" and not "150.00000000000003".
+ *      shows "150" and not "150.00000000000003". Since v1.32.39 that
+ *      rounding lives in `applyDisplayTransform` itself, so this adapter
+ *      inherits it rather than re-applying it.
  *   2. `toCanonical` rounds the inverted value to 2 decimals — the same
  *      dialect the measurement entry form uses — so 150 lb persists as
  *      68.04 kg, not 68.03885550000001.
@@ -39,9 +41,11 @@
 import {
   applyDisplayTransform,
   applyDisplayTransformDelta,
+  applyDisplayTransformUnrounded,
   getDisplayTransform,
   hasDisplayTransform,
   invertDisplayTransform,
+  transformRescales,
   type UnitPreference,
 } from "@/lib/measurements/display-transform";
 
@@ -135,7 +139,7 @@ export function resolveTargetUnitAdapter(
     return identityAdapter(metric, canonicalUnit);
 
   const transform = getDisplayTransform(metric, preference);
-  const rescales = transform.factor !== 1 || (transform.offset ?? 0) !== 0;
+  const rescales = transformRescales(transform);
 
   // A transformed type on the metric branch keeps the transform's
   // DISPLAY symbol (which is the canonical symbol for every threshold
@@ -148,15 +152,26 @@ export function resolveTargetUnitAdapter(
     unit: transform.displayUnit,
     step: metric === "ACTIVITY_STEPS" ? STEP_COUNT_INPUT_STEP : 10 ** -decimals,
     rescales: true,
-    toDisplay: (canonical) =>
-      roundTo(applyDisplayTransform(canonical, transform), decimals),
+    // Both converters round to `decimals` inside the shared helper.
+    toDisplay: (canonical) => applyDisplayTransform(canonical, transform),
     toCanonical: (display) =>
       roundTo(invertDisplayTransform(display, transform), CANONICAL_DECIMALS),
     toDisplayDelta: (canonicalDelta) =>
-      roundTo(applyDisplayTransformDelta(canonicalDelta, transform), decimals),
+      applyDisplayTransformDelta(canonicalDelta, transform),
+    // A guardrail is not a rendered value — it is the window a typed
+    // number is checked against, and it has to round INWARD (rule 4).
+    // That needs the UNROUNDED edge: the shared helper would round 30 kg
+    // to 66.1 lb first and the ceiling below would then be a no-op on an
+    // edge that already inverts to 29.98 kg.
     bounds: (canonical) => ({
-      min: ceilTo(applyDisplayTransform(canonical.min, transform), decimals),
-      max: floorTo(applyDisplayTransform(canonical.max, transform), decimals),
+      min: ceilTo(
+        applyDisplayTransformUnrounded(canonical.min, transform),
+        decimals,
+      ),
+      max: floorTo(
+        applyDisplayTransformUnrounded(canonical.max, transform),
+        decimals,
+      ),
     }),
   };
 }
