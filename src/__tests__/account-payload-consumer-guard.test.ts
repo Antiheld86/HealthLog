@@ -1,0 +1,189 @@
+/**
+ * v1.32.36 — pair guard over the account payload (`GET /api/auth/me`).
+ *
+ * The recurring failure this exists to prevent: a two-ended feature whose ends
+ * ship in different releases. The column lands with the schema change, the
+ * payload field lands with the API change, and the client that was supposed to
+ * read it is "the follow-up". Nothing in the gate notices, because every other
+ * guard proves ONE end — typecheck proves the export exists, knip proves it is
+ * imported, the OpenAPI check proves the schema matches. None of them prove the
+ * pair.
+ *
+ * `/api/auth/me` is the preferences envelope: it rides every app boot and is
+ * where user-facing preference fields surface. This test reads the field names
+ * straight out of the route's response literal and asserts each one is read by
+ * at least one client module. `lastReportPracticeName` shipped as column +
+ * doc contract + payload field and sat NULL with no reader for several
+ * releases; this guard would have failed on the commit that introduced it, and
+ * the allowlist entry needed to silence it would have had no honest reason to
+ * write.
+ *
+ * ## What it deliberately does not prove
+ *
+ * - It proves a field is READ somewhere, not that it is rendered correctly, nor
+ *   that every surface that should read it does. That is what the
+ *   unit-preference display guard does for its own narrower question.
+ * - The matcher is textual (property access or destructuring position), so a
+ *   field whose name collides with an unrelated local reads as consumed. Every
+ *   such name in this payload (`id`, `email`, `role`, `gender`, `timezone`,
+ *   `modules`) is consumed ubiquitously anyway, so the over-acceptance costs
+ *   nothing here. It would cost something on a payload full of generic names,
+ *   which is why this is a per-envelope guard and not a general sweep.
+ * - It says nothing about iOS. A field consumed only by the native client must
+ *   be allowlisted with that reason written down, and the reason is an
+ *   assumption about another repository until an audit crosses over.
+ *
+ * Mutation check: append a field to the response literal in
+ * `src/app/api/auth/me/route.ts` and this goes red; delete the practice-name
+ * read in `health-record-export-panel.tsx` and it goes red too.
+ */
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+
+import { describe, it, expect } from "vitest";
+
+const SRC = join(process.cwd(), "src");
+const ME_ROUTE = join(SRC, "app", "api", "auth", "me", "route.ts");
+
+/**
+ * Where a client consumer may live. `src/app/api/**` is excluded — the server
+ * writing the field is the other end of the pair, not a consumer of it.
+ */
+const CONSUMER_ROOTS = [
+  join(SRC, "components"),
+  join(SRC, "hooks"),
+  join(SRC, "app"),
+];
+
+const SKIP_DIRS = new Set([
+  "__tests__",
+  "__mocks__",
+  "node_modules",
+  ".next",
+  "generated",
+]);
+
+/**
+ * `src/hooks/use-auth.ts` declares the `AuthUser` transport type. Naming a
+ * field in a type declaration is not consuming it — that is precisely the
+ * shape `lastReportPracticeName` had while it was dead — so the declaration
+ * file is not a consumer.
+ */
+const NOT_A_CONSUMER = new Set([
+  join(SRC, "hooks", "use-auth.ts"),
+  join(SRC, "app", "api", "auth", "me", "route.ts"),
+]);
+
+/**
+ * Fields with no client reader, each with the reason it is nonetheless
+ * correct for the payload to carry it. An entry here is a claim; write one
+ * only when the claim is true and checkable.
+ */
+const NO_CLIENT_CONSUMER: Record<string, string> = {
+  insurerIkNumber:
+    "No web surface reads or writes it — the account form offers the insurer name and the " +
+    "insurance number, not the institution number. The native client does consume it: it " +
+    "builds the FHIR Coverage payor from insurerName-or-IK, per " +
+    ".planning/ios-coord/v0.11-ios-to-server-kvnr-only-coverage.md. Server-side the stored " +
+    "value feeds the doctor-report cover and the Coverage resource in the health-record " +
+    "export. The missing web field is a real gap, deliberately not closed in a guard-only " +
+    "release; this entry is what keeps it visible.",
+};
+
+function walk(dir: string, out: string[] = []): string[] {
+  for (const name of readdirSync(dir)) {
+    if (SKIP_DIRS.has(name)) continue;
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) {
+      // The API tree is the producing end, never the consuming one.
+      if (p === join(SRC, "app", "api")) continue;
+      walk(p, out);
+    } else if (
+      (name.endsWith(".ts") || name.endsWith(".tsx")) &&
+      !NOT_A_CONSUMER.has(p) &&
+      !name.endsWith(".test.ts") &&
+      !name.endsWith(".test.tsx")
+    ) {
+      out.push(p);
+    }
+  }
+  return out;
+}
+
+/** Top-level keys of the `apiSuccess({ … })` literal the route returns. */
+function payloadFields(source: string): string[] {
+  const start = source.indexOf("return apiSuccess({");
+  expect(start).toBeGreaterThan(-1);
+  const body = source.slice(start);
+  const fields: string[] = [];
+  for (const m of body.matchAll(/^ {4}([a-zA-Z_$][\w$]*)\s*[:,]/gm)) {
+    fields.push(m[1]);
+  }
+  return [...new Set(fields)];
+}
+
+/**
+ * Comments are stripped before matching. A doc comment naming a field is a
+ * claim about a consumer, not a consumer — `lastReportPracticeName` had one of
+ * those for its whole dead life, and counting it would make this guard agree
+ * with the very prose that was wrong.
+ */
+function stripComments(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+}
+
+/**
+ * A property access (`user.glucoseUnit`) or a destructuring / object position
+ * (`{ glucoseUnit }`, `{ glucoseUnit: unit }`).
+ */
+function readsField(text: string, field: string): boolean {
+  const re = new RegExp(
+    `\\.\\s*${field}(?![\\w$])|[{,]\\s*${field}\\s*[,}:=]`,
+    "m",
+  );
+  return re.test(text);
+}
+
+describe("account payload consumer guard", () => {
+  const source = readFileSync(ME_ROUTE, "utf8");
+  const fields = payloadFields(source);
+  const consumerFiles = CONSUMER_ROOTS.flatMap((root) => walk(root));
+  const consumerText = consumerFiles.map((f) =>
+    stripComments(readFileSync(f, "utf8")),
+  );
+
+  it("reads a plausible field set out of the route", () => {
+    expect(fields.length).toBeGreaterThan(20);
+    expect(fields).toContain("lastReportPracticeName");
+    expect(fields).toContain("moduleAvailability");
+    expect(consumerFiles.length).toBeGreaterThan(200);
+  });
+
+  it("every field the account endpoint returns has a client consumer", () => {
+    const unconsumed = fields.filter(
+      (field) =>
+        !(field in NO_CLIENT_CONSUMER) &&
+        !consumerText.some((text) => readsField(text, field)),
+    );
+
+    if (unconsumed.length > 0) {
+      const report = unconsumed.map((f) => `  ❌ ${f}`).join("\n");
+      throw new Error(
+        `GET /api/auth/me returns ${unconsumed.length} field(s) no client module reads:\n${report}\n\n` +
+          "Wire the consumer in the same release, or add the field to " +
+          "NO_CLIENT_CONSUMER with the reason it is correct to ship unread. " +
+          "A field with no honest reason belongs in neither the payload nor the schema.",
+      );
+    }
+  });
+
+  it("the allowlist carries no stale entry", () => {
+    for (const [field, reason] of Object.entries(NO_CLIENT_CONSUMER)) {
+      expect(
+        fields,
+        `${field} is allowlisted but no longer returned`,
+      ).toContain(field);
+      expect(reason.length).toBeGreaterThan(20);
+    }
+  });
+});
