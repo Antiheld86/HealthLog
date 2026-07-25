@@ -76,13 +76,19 @@ reference right below it read in kilograms.
   account's saved values are untouched by this release.
 - **Known remaining.** Height is still entered in centimetres.
 
+This finishes the job @DrGithubble started in #627.
+
 ## [1.32.26] — 2026-07-25
 
 The metric and imperial display preference is now applied everywhere your
 weight, body composition, waist, and temperature readings appear. Until now the
 setting was saved but almost nothing read it, so the numbers stayed in
-kilograms and Celsius regardless of the choice. Thanks to a self-hoster who
-reported the gap and traced how the unit was being handled.
+kilograms and Celsius regardless of the choice. Thanks to @DrGithubble, who
+reported this in #627 and traced it himself, down to the hardcoded kilograms in
+the entry form and the missing imperial branch in the display transform. His
+follow-up was the more useful half: a reading genuinely tagged in another unit
+was being relabelled by any surface that printed the type's canonical unit. That
+is what turned a one-screen fix into a proper one.
 
 - **Weight and body composition follow the preference.** With imperial
   selected, weight, muscle mass, body water, bone mass, fat mass, and grip
