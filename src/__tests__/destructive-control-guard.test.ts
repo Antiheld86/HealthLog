@@ -539,7 +539,7 @@ const D2 =
   /["`]\/api\/[^"`?\s]*(?:disconnect|revoke|reset|purge|clear|wipe|bulk-delete)[^"`?\s]*/;
 /** D3 — a write payload that blanks a named field. */
 const D3 =
-  /(?:\.mutate|\.mutateAsync|apiPut|apiPatch|apiPost)[<(]?\(\s*(?:"[^"]*",\s*)?\{[^{}]*?\b\w+:\s*(?:""|null)/s;
+  /(?:\.mutate|\.mutateAsync|apiPut|apiPatch|apiPost)[<(]?\(\s*(?:"[^"]*",\s*)?\{[^{}]*?\b\w+:\s*(?:""|null)/;
 
 /**
  * Where a destructive CONTROL can live. Route handlers are the other end of

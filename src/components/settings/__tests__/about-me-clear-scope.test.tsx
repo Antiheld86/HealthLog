@@ -33,20 +33,39 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nProvider } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 
-const apiPut = vi.fn(async () => ({
-  aboutMe: null,
-  conditions: null,
-  allergies: "penicillin",
-  coachFocus: null,
-  pendingQuestions: [],
-  updatedAt: "2026-07-26T00:00:00.000Z",
-  maxChars: 4000,
-  fieldMaxChars: 500,
+type AboutMePayload = {
+  aboutMe: string | null;
+  conditions: string | null;
+  allergies: string | null;
+  coachFocus: string | null;
+  pendingQuestions: string[];
+  updatedAt: string;
+  maxChars: number;
+  fieldMaxChars: number;
+};
+
+// Hoisted, because `vi.mock`'s factory is lifted above the imports and may not
+// close over a normal top-level binding. Typed with the real two-argument
+// signature so `mock.calls[0]` is a tuple and the payload assertion below
+// reads the second argument rather than `unknown[]`.
+const { apiPut } = vi.hoisted(() => ({
+  apiPut: vi.fn<(url: string, payload: unknown) => Promise<AboutMePayload>>(
+    async () => ({
+      aboutMe: null,
+      conditions: null,
+      allergies: "penicillin",
+      coachFocus: null,
+      pendingQuestions: [],
+      updatedAt: "2026-07-26T00:00:00.000Z",
+      maxChars: 4000,
+      fieldMaxChars: 500,
+    }),
+  ),
 }));
 
 vi.mock("@/lib/api/api-fetch", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/api-fetch")>();
-  return { ...actual, apiPut: (...args: unknown[]) => apiPut(...args) };
+  return { ...actual, apiPut };
 });
 
 /** Captured props of every `<ConfirmButton>` the panel rendered. */
@@ -64,7 +83,7 @@ vi.mock("@/components/ui/confirm-button", () => ({
 
 const { AboutMeSection } = await import("../about-me-section");
 
-const STORED = {
+const STORED: AboutMePayload = {
   aboutMe: "Shift work, training for a half marathon.",
   conditions: null,
   allergies: "penicillin",
@@ -124,10 +143,8 @@ describe("the Clear control is scoped to the note", () => {
     (confirmButtons[0].onConfirm as () => void)();
     await vi.waitFor(() => expect(apiPut).toHaveBeenCalledTimes(1));
 
-    const [url, payload] = apiPut.mock.calls[0] as [
-      string,
-      Record<string, unknown>,
-    ];
+    const [url, raw] = apiPut.mock.calls[0]!;
+    const payload = raw as Record<string, unknown>;
     expect(url).toBe("/api/coach/about-me");
     expect(payload.aboutMe).toBe("");
     // Not "sent as the stored value" — absent. The route leaves an omitted
