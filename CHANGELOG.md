@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [1.32.36] — 2026-07-25
+
+Nothing here changes what you see. This release is about the checks that run
+before a release goes out.
+
+A recurring shape of mistake in this project is a half-built feature: something
+is stored, or sent to the app, and the part that was supposed to use it never
+gets written. Each end works on its own, so nothing complains. Three checks now
+run on every build and refuse that. One walks the fields the app receives about
+your account and insists each one is actually read somewhere. One compares the
+measurement table against what a backup writes out, so a new column cannot go
+missing from your backup file. The third fixes a check that had gone quiet: it
+was meant to find translation entries no screen uses any more, but one line of
+it had been waving through several thousand entries at once for a long time
+without anyone being able to tell.
+
+With that check honest again, 149 leftover translations turned out to belong to
+screens that were rebuilt or removed some time ago. They are gone from all six
+languages. Nothing that is on screen today was touched.
+
 ## [1.32.35] — 2026-07-25
 
 The doctor report stops asking for your practice name every time.
