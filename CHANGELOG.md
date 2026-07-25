@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+## [1.32.29] — 2026-07-25
+
+Fitbit re-scores a night hours after you wake up: blocks get split, merged or
+relabelled. HealthLog identified each block by its position in the list, so a
+re-score that renumbered the blocks looked like a set of brand new ones. The
+previous version stayed on file, nothing removed it, and from then on the night
+counted twice. It was quiet: the sync kept reporting success, because the sync
+was in fact working.
+
+- **A re-scored night no longer double counts.** Each sleep block is now
+  identified by the moment it starts, which does not move when Fitbit rescores
+  the night. A block that changes from light to deep updates in place instead
+  of leaving the old copy behind, and anything the new scoring dropped is
+  cleared from that night's window before the new blocks are written.
+- **Nights already affected repair themselves.** A one off pass runs once per
+  connection after the update and rereads the past year of sleep, so the
+  duplicates collapse without you doing anything. It covers 365 days, the same
+  horizon the Fitbit history import uses. Nights older than that keep whatever
+  they already hold; they cannot gain new duplicates, since Fitbit does not
+  rescore year old nights. Migration `0270_fitbit_sleep_repair_marker` records
+  which connections have been through the pass.
+- **Rate limits are handled instead of ignored.** When Fitbit asks for a short
+  wait, the request now waits and tries again once. A long wait is refused
+  outright and left to the next scheduled run, so one throttled account cannot
+  hold up everybody else's.
+- **Fewer pointless writes.** Fitbit rereads the last 24 hours every hour. Rows
+  that came back unchanged were rewritten anyway, which showed up as needless
+  traffic for the iOS app. Unchanged rows are now left alone.
+
 ## [1.32.28] — 2026-07-25
 
 Oura used to look back exactly one week and no further. If the sync had been
