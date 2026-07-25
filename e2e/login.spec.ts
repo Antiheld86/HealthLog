@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./setup/test";
 
 /**
  * Smoke checks on the login surface — must render, must wire the

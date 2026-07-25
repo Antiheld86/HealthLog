@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./setup/test";
 
 /**
  * v1.4.27 MB6 — public surfaces.

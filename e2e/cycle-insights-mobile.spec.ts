@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./setup/test";
 
 import { STORAGE_STATE_PATH } from "./setup/global-setup";
 
@@ -173,14 +173,6 @@ test.describe("cycle + insights mobile smoke", () => {
         body: JSON.stringify(INSIGHTS_BODY),
       }),
     );
-  });
-
-  // These handlers call route.fetch(), which needs a live page. Teardown can
-  // close the context while one is still in flight, and the rejected fetch
-  // then fails a test that had already passed. Drop the handlers first so
-  // nothing is left racing the close.
-  test.afterEach(async ({ page }) => {
-    await page.unrouteAll({ behavior: "ignoreErrors" });
   });
 
   test("/insights has no horizontal scroll on Pixel-5", async ({ page }) => {

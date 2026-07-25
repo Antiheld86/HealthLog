@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./setup/test";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { STORAGE_STATE_PATH } from "./setup/global-setup";

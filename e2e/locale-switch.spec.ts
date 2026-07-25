@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./setup/test";
 
 /**
  * Locale-key drift smoke check — switch the cookie between EN and DE

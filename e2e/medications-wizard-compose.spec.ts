@@ -1,4 +1,5 @@
-import { expect, test, type Route } from "@playwright/test";
+import type { Route } from "@playwright/test";
+import { expect, test } from "./setup/test";
 
 import {
   STUB_MEDICATION_ID,
