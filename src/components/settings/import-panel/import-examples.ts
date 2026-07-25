@@ -64,5 +64,9 @@ export const EXAMPLE_CSV = [
   CSV_EXAMPLE_COLUMNS.join(","),
   "WEIGHT,80.5,kg,2026-05-01T08:00:00Z,,morning,",
   "BLOOD_GLUCOSE,5.3,mmol/L,2026-05-01T08:05:00+02:00,FASTING,,meter-001",
+  // A sensor export has no fasting / post-meal answer per reading, so the
+  // context cell is blank. The example carries that shape on purpose: it is
+  // the one people copy, and it is the case that used to be refused.
+  "BLOOD_GLUCOSE,5.9,mmol/L,2026-05-01T08:20:00+02:00,,,sensor-001",
   "BLOOD_PRESSURE_SYS,120,mmHg,2026-05-01T08:05:00+02:00,,,",
 ].join("\n");
