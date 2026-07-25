@@ -6,18 +6,11 @@
  * REVERSE: every leaf in `messages/en.json` is reachable from at least one
  * call site, so orphan keys can't accumulate in the bundle unnoticed.
  *
- * "Reachable" recognises the key-construction patterns the codebase actually
- * uses:
- *   - a literal `t("a.b.c")` (hyphens allowed — admin section slugs use them);
- *   - a `t("a.b")` that returns a subtree, covering every descendant leaf;
- *   - a dynamic key built inside a `t(`…`)` template, e.g. the per-metric
- *     `${i18nPrefix}.title` insight pages, `cycle.calendar.flow${LEVEL}`, or
- *     the `medications.site${Suffix}` label keys — captured by the static
- *     leading-literal prefix and/or trailing-literal suffix of the template;
- *   - a key string assembled outside the call (`return `medications.site${s}``
- *     in `describeInjectionSite`) and passed to `t()`, recognised when the
- *     template's leading literal is rooted at a real top-level namespace;
- *   - an explicit allowlist for keys resolved through a DB column.
+ * v1.32.36 — the matcher moved to `helpers/i18n-reference.ts` (unit-tested in
+ * `helpers/__tests__/i18n-reference.test.ts`) and stopped accepting a bare
+ * top-level namespace as a subtree base. See that file's header for the
+ * recognised construction patterns and for why the bare-namespace case is a
+ * loud failure rather than a silent accept.
  *
  * Dynamic detection is scoped to `t(`…`)` and to namespace-rooted key
  * templates only — NOT to every backtick string — so a cache key or
@@ -27,10 +20,16 @@
  * If this fails after adding a key, either wire a call site, or — for a key
  * resolved through a runtime value the static scan can't see — add its prefix
  * to `DYNAMIC_ALLOWLIST_PREFIXES` with a one-line note on why.
+ *
+ * Mutation check: change any `t(`ns.sub.${x}`)` call site to `t(`ns.${x}`)`
+ * and the collector-violation assertion goes red; delete a live call site and
+ * its keys report as orphans.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+
+import { collectReferences, isReferenced } from "./helpers/i18n-reference";
 
 const ROOT = join(__dirname, "../..");
 const SRC = join(ROOT, "src");
@@ -45,7 +44,30 @@ const SKIP_DIRS = new Set(["__tests__", "node_modules", ".next", "generated"]);
  *    is built from a `MoodTag.messageKey` / `MoodTagCategory.messageKey` column,
  *    so the leaf never appears as a string literal in the tree.
  */
-const DYNAMIC_ALLOWLIST_PREFIXES = ["mood.tag", "mood.tagCategory"] as const;
+const DYNAMIC_ALLOWLIST_PREFIXES = [
+  "mood.tag",
+  "mood.tagCategory",
+  // The whole namespace is a runtime lookup table: the client resolves an
+  // error envelope's `meta.errorCode` through it (`localizedApiError`), so no
+  // leaf ever appears as a literal at a call site. Adding a key here is only
+  // useful together with a server code that emits it.
+  "apiErrors",
+] as const;
+
+/**
+ * Interpolating strings that LOOK like key templates and are not. Each entry
+ * whitelists nothing — the template still contributes no reachable keys — it
+ * only says the collector's bare-namespace complaint has been read and
+ * answered. Keep the reason checkable in one line of the cited file.
+ */
+const EXEMPT_TEMPLATES: Record<string, string> = {
+  "insights.${scope}-status.${locale}":
+    "auditLog action name for the per-metric status cache (statusCacheAction), not an i18n key",
+  "insights.${scope}.${locale}":
+    "auditLog action name for the previous-insight memory read (getPreviousInsightContext), not an i18n key",
+  "apiErrors.${errorCode}":
+    "the runtime error-code lookup; its namespace is allowlisted above",
+};
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
@@ -84,153 +106,58 @@ function nodePaths(obj: unknown, prefix: string, out: Set<string>): void {
   }
 }
 
-interface Reference {
-  /** Literal `t("…")` keys. */
-  literalKeys: Set<string>;
-  /** Dotted bases (`base.${…}` / a full string-literal node path): cover the subtree. */
-  dottedBases: Set<string>;
-  /** Dot-less concat prefixes (`medications.site${…}`): cover any leaf that string-starts with them. */
-  concatPrefixes: Set<string>;
-  /** Trailing static suffixes of a template key (`${…}.title`). */
-  dynamicSuffixes: Set<string>;
-}
-
-function collectReferences(
-  allNodes: Set<string>,
-  topNamespaces: Set<string>,
-): Reference {
-  const allText = walk(SRC)
-    .map((f) => readFileSync(f, "utf8"))
-    .join("\n");
-
-  const literalKeys = new Set<string>();
-  const literalKeyRe =
-    /(?<![a-zA-Z0-9_])t\(\s*["']([a-zA-Z][a-zA-Z0-9_.-]+)["']/g;
-  for (const m of allText.matchAll(literalKeyRe)) literalKeys.add(m[1]);
-
-  // Plural-tier composition: `tCount("dashboard.staleHintWeeks", n)` and the
-  // underlying `pluralKey("…", n, locale)` both resolve to `<base>One` /
-  // `<base>Few` / `<base>Other` at runtime, so the base literal accounts for
-  // exactly those three leaves and no others. Kept as an explicit tier list
-  // rather than a prefix match so a stray sibling key under the same base still
-  // reports as an orphan.
-  const pluralKeyRe =
-    /(?:pluralKey|tCount)\(\s*["']([a-zA-Z][a-zA-Z0-9_.-]+)["']/g;
-  for (const m of allText.matchAll(pluralKeyRe)) {
-    for (const tier of ["One", "Few", "Other"])
-      literalKeys.add(`${m[1]}${tier}`);
-  }
-
-  const dottedBases = new Set<string>();
-  const concatPrefixes = new Set<string>();
-  const dynamicSuffixes = new Set<string>();
-
-  const ingestTemplate = (content: string) => {
-    const open = content.indexOf("${");
-    if (open > 0) {
-      const lit = content.slice(0, open);
-      if (lit.includes(".")) {
-        if (lit.endsWith(".")) dottedBases.add(lit.slice(0, -1));
-        else concatPrefixes.add(lit);
-      }
-    }
-    const close = content.lastIndexOf("}");
-    if (close !== -1 && close < content.length - 1) {
-      const tail = content.slice(close + 1).replace(/^\./, "");
-      if (tail) dynamicSuffixes.add(tail);
-    }
-  };
-
-  // Templates passed directly to t(`…`).
-  const tTemplateRe = /(?<![a-zA-Z0-9_])t\(\s*`([^`]*)`/g;
-  for (const m of allText.matchAll(tTemplateRe)) ingestTemplate(m[1]);
-
-  // Key strings assembled outside the call and handed to t() (the
-  // `describeInjectionSite` pattern). Recognised only when the template's
-  // leading literal is rooted at a real top-level i18n namespace, so a cache
-  // key / action name that interpolates can't mask a dead key.
-  const assignTemplateRe = /`([a-zA-Z][a-zA-Z0-9_.-]*)\$\{/g;
-  for (const m of allText.matchAll(assignTemplateRe)) {
-    const lit = m[1];
-    if (!lit.includes(".")) continue;
-    if (!topNamespaces.has(lit.split(".")[0])) continue;
-    if (lit.endsWith(".")) dottedBases.add(lit.slice(0, -1));
-    else concatPrefixes.add(lit);
-  }
-
-  // String-concatenation prefixes: `"notifications.event" + eventType…`
-  // builds keys like `notifications.eventMoodReminder`. Recognised only when
-  // the literal is rooted at a real top-level namespace.
-  const plusConcatRe = /["']([a-zA-Z][a-zA-Z0-9_.]*)["']\s*\+/g;
-  for (const m of allText.matchAll(plusConcatRe)) {
-    const lit = m[1];
-    if (!lit.includes(".")) continue;
-    if (!topNamespaces.has(lit.split(".")[0])) continue;
-    if (lit.endsWith(".")) dottedBases.add(lit.slice(0, -1));
-    else concatPrefixes.add(lit);
-  }
-
-  // Full string-literal node paths (covers map values returned to t()).
-  const litPathRe = /["']([a-zA-Z][a-zA-Z0-9_-]*(?:\.[a-zA-Z0-9_-]+)+)["']/g;
-  for (const m of allText.matchAll(litPathRe)) {
-    if (allNodes.has(m[1])) dottedBases.add(m[1]);
-  }
-
-  return { literalKeys, dottedBases, concatPrefixes, dynamicSuffixes };
-}
-
-function isReferenced(leaf: string, ref: Reference): boolean {
-  if (ref.literalKeys.has(leaf)) return true;
-  for (const ck of ref.literalKeys) {
-    if (leaf.startsWith(`${ck}.`)) return true;
-  }
-  for (const base of ref.dottedBases) {
-    if (leaf === base || leaf.startsWith(`${base}.`)) return true;
-  }
-  for (const pre of ref.concatPrefixes) {
-    if (leaf.startsWith(pre)) return true;
-  }
-  for (const suffix of ref.dynamicSuffixes) {
-    if (leaf !== suffix && !leaf.endsWith(`.${suffix}`)) continue;
-    const base = leaf.slice(0, leaf.length - suffix.length).replace(/\.$/, "");
-    for (const b of ref.dottedBases) {
-      if (base === b || base.startsWith(`${b}.`) || b.startsWith(`${base}.`)) {
-        return true;
-      }
-    }
-    for (const ck of ref.literalKeys) {
-      if (
-        base === ck ||
-        base.startsWith(`${ck}.`) ||
-        ck.startsWith(`${base}.`)
-      ) {
-        return true;
-      }
-    }
-    for (const pre of ref.concatPrefixes) {
-      if (base.startsWith(pre)) return true;
-    }
-  }
-  return false;
-}
-
 function isAllowlisted(leaf: string): boolean {
   return DYNAMIC_ALLOWLIST_PREFIXES.some(
     (p) => leaf === p || leaf.startsWith(`${p}.`),
   );
 }
 
-describe("i18n reverse coverage", () => {
-  it("every key in messages/en.json has a call site or is allowlisted", () => {
-    const en = JSON.parse(readFileSync(EN_BUNDLE_PATH, "utf8"));
-    const leaves: string[] = [];
-    leafPaths(en, "", leaves);
-    expect(leaves.length).toBeGreaterThan(1000);
+function scan() {
+  const en = JSON.parse(readFileSync(EN_BUNDLE_PATH, "utf8"));
+  const leaves: string[] = [];
+  leafPaths(en, "", leaves);
 
-    const allNodes = new Set<string>();
-    nodePaths(en, "", allNodes);
-    const topNamespaces = new Set<string>(Object.keys(en));
-    const ref = collectReferences(allNodes, topNamespaces);
+  const allNodes = new Set<string>();
+  nodePaths(en, "", allNodes);
+  const topNamespaces = new Set<string>(Object.keys(en));
+
+  const allText = walk(SRC)
+    .map((f) => readFileSync(f, "utf8"))
+    .join("\n");
+
+  return { leaves, ...collectReferences(allText, allNodes, topNamespaces) };
+}
+
+describe("i18n reverse coverage", () => {
+  it("no key template widens to a bare top-level namespace", () => {
+    const all = scan().violations;
+    const violations = all.filter((v) => !(v.literal in EXEMPT_TEMPLATES));
+
+    for (const literal of Object.keys(EXEMPT_TEMPLATES)) {
+      expect(
+        all.map((v) => v.literal),
+        `${literal} is exempted but no longer present — drop the entry`,
+      ).toContain(literal);
+    }
+
+    if (violations.length > 0) {
+      const report = violations
+        .map((v) => `  ❌ [${v.arm}] ${v.literal}`)
+        .join("\n");
+      throw new Error(
+        `Found ${violations.length} key template(s) whose only static anchor is a bare ` +
+          `top-level namespace:\n${report}\n\n` +
+          "Such a template marks the whole namespace as reachable and turns this guard " +
+          "into a no-op for it. Either build a fully-qualified key at the call site " +
+          "(see the measurement-reminder due helpers), or give the template a literal " +
+          "suffix so both ends confine it.",
+      );
+    }
+  }, 15_000);
+
+  it("every key in messages/en.json has a call site or is allowlisted", () => {
+    const { leaves, ref } = scan();
+    expect(leaves.length).toBeGreaterThan(1000);
     // Sanity: the static scan must see the bulk of the bundle.
     expect(ref.literalKeys.size).toBeGreaterThan(1000);
 

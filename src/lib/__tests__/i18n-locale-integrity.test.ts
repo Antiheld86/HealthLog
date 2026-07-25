@@ -388,7 +388,6 @@ describe("i18n locale file integrity", () => {
   it("Health-Score provenance keys resolve in every locale", () => {
     const PROVENANCE_KEYS = [
       "insights.healthScore.provenance.toggle",
-      "insights.healthScore.provenance.weightLabel",
       "insights.healthScore.provenance.mixedBanner",
       "insights.healthScore.provenance.footnote",
       "insights.healthScore.provenance.asOfLabel",

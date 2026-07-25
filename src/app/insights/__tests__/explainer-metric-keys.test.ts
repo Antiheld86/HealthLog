@@ -11,10 +11,11 @@ import { join } from "node:path";
  *   t(`insights.subPage.explainer.${metric}Body`)   // inline definition
  *
  * v1.8.6 — the round `?` popover that also read the `<metric>Title` leaf
- * is gone; the shell now renders only the inline `Body` caption. The
- * `Title` leaf is still pinned here so the bundle keeps a stable, fully
- * populated key pair per metric (the locale-integrity guard propagates
- * it across the other five locales).
+ * is gone; the shell now renders only the inline `Body` caption. v1.32.36
+ * finished that removal: the `Title` leaves were kept as a "stable, fully
+ * populated key pair" reserve, which is translated copy no surface renders,
+ * so they were dropped from all six locales and this guard now pins the
+ * `Body` leaf alone.
  *
  * The static `i18n-call-site-coverage.test.ts` only sees literal
  * `t("…")` calls, so a typo in an `explainerMetric=` prop would resolve
@@ -22,19 +23,16 @@ import { join } from "node:path";
  * no CI signal. This test closes that gap the same way the
  * Health-Score provenance key tests pin their dynamic keys: it walks
  * every `explainerMetric="…"` value used under `src/app/insights/**`
- * (plus the shared `healthkit-metric-page` scaffold) and asserts that
- * both the `<value>Title` and `<value>Body` leaves exist in
- * `messages/en.json`. `i18n-locale-integrity.test.ts` then propagates
- * the EN guarantee across the other five locales.
+ * (plus the shared `healthkit-metric-page` scaffold) and asserts that the
+ * `<value>Body` leaf exists in `messages/en.json`.
+ * `i18n-locale-integrity.test.ts` then propagates the EN guarantee across
+ * the other five locales.
  *
  * v1.15.12 B1 — the score-anatomy detail page (`scores/[metric]/page.tsx`)
  * picks its explainer key at runtime from a closed `Record<…, string>`
  * literal (`explainerMetric={EXPLAINER_METRIC[metric]}`), one of five score
  * suffixes. That single dynamic site is resolved STATICALLY here by parsing
- * the record's string-literal values (the contract stays verifiable). Score
- * explainers render only the inline `Body` caption — there is no `?` popover
- * `Title` for them — so the resolved score values are checked for a `Body`
- * leaf only, while literal sites keep the full Title + Body pairing.
+ * the record's string-literal values (the contract stays verifiable).
  */
 
 const ROOT = join(__dirname, "../../../..");
@@ -62,8 +60,6 @@ interface PropSite {
   value: string;
   file: string;
   line: number;
-  /** Score explainers render only the inline Body caption (no `?` Title). */
-  bodyOnly?: boolean;
 }
 
 // Match `explainerMetric="someValue"` — a string-literal prop. The
@@ -116,12 +112,12 @@ function collectSites(): { sites: PropSite[]; dynamic: PropSite[] } {
       }
       if (DYNAMIC_PATTERN.test(line)) {
         // The score-anatomy record lookup is statically resolvable; every
-        // resolved value becomes a Body-only site. Any OTHER dynamic shape
-        // is unverifiable and trips the no-dynamic guard.
+        // resolved value becomes a site. Any OTHER dynamic shape is
+        // unverifiable and trips the no-dynamic guard.
         const lookup = RECORD_LOOKUP_PATTERN.exec(line);
         if (file.endsWith(SCORES_PAGE) && lookup) {
           for (const value of resolveRecordValues(source, lookup[1])) {
-            sites.push({ value, file: rel, line: i + 1, bodyOnly: true });
+            sites.push({ value, file: rel, line: i + 1 });
           }
         } else {
           dynamic.push({ value: line.trim(), file: rel, line: i + 1 });
@@ -165,15 +161,10 @@ describe("insights explainerMetric key coverage", () => {
     expect(dynamic).toEqual([]);
   });
 
-  it("every explainerMetric value resolves a Title + Body leaf in messages/en.json", () => {
+  it("every explainerMetric value resolves a Body leaf in messages/en.json", () => {
     const missing: string[] = [];
     for (const site of sites) {
-      const titleKey = `insights.subPage.explainer.${site.value}Title`;
       const bodyKey = `insights.subPage.explainer.${site.value}Body`;
-      // Score explainers (bodyOnly) carry only the inline Body caption.
-      if (!site.bodyOnly && !hasLeaf(en, titleKey)) {
-        missing.push(`  ❌ ${titleKey}  (${site.file}:${site.line})`);
-      }
       if (!hasLeaf(en, bodyKey)) {
         missing.push(`  ❌ ${bodyKey}  (${site.file}:${site.line})`);
       }
