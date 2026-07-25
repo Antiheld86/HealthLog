@@ -51,6 +51,9 @@ describe("<SleepStageStackedBar>", () => {
     const html = render(<SleepStageStackedBar breakdown={breakdown} />);
     expect(html).toContain("Stage composition");
     expect(html).toContain("Last 23 nights");
+    // The title routes through the canonical tile header rather than a
+    // hand-rolled title row (UI-STANDARDS §1 / §8).
+    expect(html).toContain('data-slot="tile-header"');
   });
 
   it("exposes an accessible label that announces the nights covered", () => {

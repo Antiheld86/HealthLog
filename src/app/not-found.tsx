@@ -49,7 +49,7 @@ export default async function NotFound() {
       </div>
       <Link
         href="/"
-        className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex min-h-11 items-center justify-center rounded-md px-5 text-sm font-medium transition-colors"
+        className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium transition-colors"
       >
         {t("notFound.backToDashboard")}
       </Link>
