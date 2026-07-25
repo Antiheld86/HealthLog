@@ -10,6 +10,7 @@ import { apiGet } from "@/lib/api/api-fetch";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 import { SectionHeading } from "@/components/insights/section-heading";
+import { InsightSectionCard } from "./insight-section-card";
 
 /**
  * v1.10.0 — device-flagged event awareness surface (categorical events,
@@ -115,10 +116,7 @@ export function RhythmEventsCard({
         icon={Activity}
         title={t("insights.rhythmEvents.sectionTitle")}
       />
-      <div
-        data-slot="rhythm-events-card"
-        className="bg-card border-border space-y-4 rounded-xl border p-4 md:p-6"
-      >
+      <InsightSectionCard slot="rhythm-events-card">
         <p className="text-muted-foreground text-sm">
           {t("insights.rhythmEvents.sectionIntro")}
         </p>
@@ -171,7 +169,7 @@ export function RhythmEventsCard({
           <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <p>{t("insights.rhythmEvents.disclaimer")}</p>
         </div>
-      </div>
+      </InsightSectionCard>
     </section>
   );
 }

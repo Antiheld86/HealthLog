@@ -14,6 +14,7 @@ import { useDerivedMetric } from "@/components/insights/derived/use-derived-metr
 // (the v1.9.0 lesson, mirrored at vitals-dashboard.tsx).
 import type { CoincidentDeviationValue } from "@/lib/insights/derived/coincident-deviation";
 import type { DerivedProvenance } from "@/lib/insights/derived/types";
+import { InsightSectionCard } from "./insight-section-card";
 
 /**
  * v1.10.3 — "Today's signal" headline card.
@@ -113,11 +114,10 @@ function CardShell({
           ) : undefined
         }
       />
-      <div
-        data-slot="coincident-deviation-card"
+      <InsightSectionCard
+        slot="coincident-deviation-card"
         data-state={state}
         className={cn(
-          "bg-card flex w-full min-w-0 flex-col gap-2 rounded-xl border p-4 md:p-6",
           // `min-h` floor only on the tallest state (fired: the named-vitals
           // body + the mandatory factors line). The calmer everyday states
           // (all-clear / watch / insufficient) carry a single short body, so
@@ -132,7 +132,7 @@ function CardShell({
         )}
       >
         {children}
-      </div>
+      </InsightSectionCard>
     </section>
   );
 }
@@ -155,14 +155,14 @@ function CardSkeleton({ className }: { className?: string }) {
         icon={Activity}
         title={t("insights.derived.coincident.cardTitle")}
       />
-      <div
-        data-slot="coincident-deviation-card-skeleton"
+      <InsightSectionCard
+        slot="coincident-deviation-card-skeleton"
         aria-hidden="true"
-        className="bg-card border-border flex min-h-32 w-full min-w-0 flex-col gap-2 rounded-xl border p-4 md:p-6"
+        className="border-border min-h-32"
       >
         <div className="bg-muted/40 h-4 w-3/4 rounded" />
         <div className="bg-muted/40 h-3 w-1/2 rounded" />
-      </div>
+      </InsightSectionCard>
     </section>
   );
 }

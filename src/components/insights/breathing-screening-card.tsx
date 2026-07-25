@@ -13,6 +13,7 @@ import type {
   BreathingClassification,
   BreathingTrend,
 } from "@/lib/insights/breathing-screening";
+import { InsightSectionCard } from "./insight-section-card";
 
 /**
  * v1.25 — sleep-breathing screening card.
@@ -83,10 +84,7 @@ export function BreathingScreeningCard({
         title={t("insights.breathingScreening.sectionTitle")}
         subtitle={t("insights.breathingScreening.subtitle")}
       />
-      <div
-        data-slot="breathing-screening-card"
-        className="bg-card flex w-full min-w-0 flex-col gap-2 rounded-xl border p-4 md:p-6"
-      >
+      <InsightSectionCard slot="breathing-screening-card">
         {classificationLabel ? (
           <p
             className="text-foreground text-sm font-medium"
@@ -131,7 +129,7 @@ export function BreathingScreeningCard({
         >
           {t("insights.breathingScreening.disclaimer")}
         </p>
-      </div>
+      </InsightSectionCard>
     </section>
   );
 }
