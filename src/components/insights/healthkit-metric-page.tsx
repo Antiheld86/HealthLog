@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ComponentProps, ComponentType, ReactNode } from "react";
 
-import { RefreshCw, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
 import { useUnitDisplay } from "@/hooks/use-unit-display";
@@ -15,6 +15,7 @@ import type { InsightMetric } from "@/lib/insights/metric-availability";
 import type { MetricStatusMetricId } from "@/lib/insights/metric-status-registry";
 import type { ChartOverlayKey } from "@/lib/dashboard-layout";
 import { Button } from "@/components/ui/button";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChartSkeleton } from "@/components/charts/chart-skeleton";
@@ -342,24 +343,12 @@ export function HealthKitMetricPage({
         description={description}
         explainerMetric={explainerMetric}
       >
-        <div
-          data-slot="healthkit-metric-error"
-          role="alert"
-          className="bg-card border-border text-muted-foreground flex flex-col items-start gap-3 rounded-xl border p-4 text-sm sm:flex-row sm:items-center sm:justify-between"
-        >
-          <span>{t("insights.subPage.loadError")}</span>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => refetch()}
-            data-slot="healthkit-metric-retry"
-            className="gap-1.5"
-          >
-            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>{t("common.retry")}</span>
-          </Button>
-        </div>
+        <QueryErrorRow
+          slot="healthkit-metric-error"
+          retrySlot="healthkit-metric-retry"
+          message={t("insights.subPage.loadError")}
+          onRetry={() => refetch()}
+        />
       </SubPageShell>
     );
   }
