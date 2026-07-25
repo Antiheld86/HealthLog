@@ -22,6 +22,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { apiFetchRaw, apiGet } from "@/lib/api/api-fetch";
@@ -180,21 +181,19 @@ export function CentralCodexSection() {
         )}
 
         {isConnected ? (
-          <Button
+          <ConfirmButton
+            slot="admin-central-codex-disconnect"
             variant="outline"
             size="sm"
             className="text-destructive min-h-11 shrink-0 sm:min-h-9"
-            onClick={handleDisconnect}
-            disabled={disconnecting}
-            data-slot="admin-central-codex-disconnect"
-          >
-            {disconnecting ? (
-              <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-            ) : (
-              <Trash2 className="h-4 w-4" />
-            )}
-            {t("admin.centralCodex.disconnectButton")}
-          </Button>
+            icon={<Trash2 className="h-4 w-4" />}
+            label={t("admin.centralCodex.disconnectButton")}
+            title={t("admin.centralCodex.disconnectTitle")}
+            body={t("admin.centralCodex.disconnectBody")}
+            confirmLabel={t("admin.centralCodex.disconnectConfirm")}
+            pending={disconnecting}
+            onConfirm={handleDisconnect}
+          />
         ) : deviceCode ? (
           <div className="border-primary bg-primary/5 space-y-3 rounded-lg border-l-4 p-4">
             <p className="text-sm font-medium">

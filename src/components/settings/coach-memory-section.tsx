@@ -34,6 +34,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatDateOrRelative } from "@/lib/format";
 import { SettingsCard } from "@/components/settings/settings-card";
@@ -243,35 +244,28 @@ export function CoachMemorySection({
                         })}
                       </p>
                     </div>
-                    <Button
-                      type="button"
+                    <ConfirmButton
+                      slot="settings-coach-memory-forget"
                       variant="ghost"
                       size="sm"
                       className="min-h-11 sm:min-h-9"
-                      data-testid="settings-coach-memory-forget"
-                      aria-label={t("settings.ai.coachMemory.forgetAria")}
+                      ariaLabel={t("settings.ai.coachMemory.forgetAria")}
+                      icon={<Trash2 className="size-4" aria-hidden />}
+                      label={t("settings.ai.coachMemory.forget")}
+                      title={t("settings.ai.coachMemory.forgetTitle")}
+                      body={t("settings.ai.coachMemory.forgetBody")}
+                      confirmLabel={t("settings.ai.coachMemory.forgetConfirm")}
+                      disabled={!isAuthenticated}
                       // v1.11.2 — per-id pending: only the row being
                       // deleted disables/spins. `forgetOne.variables` holds
                       // the id passed to the in-flight `mutate()`, so a
                       // single shared mutation no longer greys out every
                       // other row's forget button during one delete.
-                      disabled={
-                        !isAuthenticated ||
-                        (forgetOne.isPending && forgetOne.variables === fact.id)
+                      pending={
+                        forgetOne.isPending && forgetOne.variables === fact.id
                       }
-                      onClick={() => forgetOne.mutate(fact.id)}
-                    >
-                      {forgetOne.isPending &&
-                      forgetOne.variables === fact.id ? (
-                        <Loader2
-                          className="size-4 animate-spin motion-reduce:animate-none"
-                          aria-hidden
-                        />
-                      ) : (
-                        <Trash2 className="size-4" aria-hidden />
-                      )}
-                      {t("settings.ai.coachMemory.forget")}
-                    </Button>
+                      onConfirm={() => forgetOne.mutate(fact.id)}
+                    />
                   </li>
                 ))}
               </ul>

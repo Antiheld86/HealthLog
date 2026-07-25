@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { SlidersHorizontal, RotateCcw, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmButton, ConfirmDialog } from "@/components/ui/confirm-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -130,15 +131,18 @@ export function ThresholdsEditorSection({ id }: { id: string }) {
           aria-hidden="true"
         />
         {data && Object.keys(data.overrides).length > 0 && (
-          <Button
+          <ConfirmButton
+            slot="settings-thresholds-reset-all"
             variant="ghost"
             size="sm"
-            onClick={() => resetMutation.mutate(null)}
-            disabled={resetMutation.isPending}
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            {t("thresholds.resetAllAction")}
-          </Button>
+            icon={<RotateCcw className="h-3.5 w-3.5" />}
+            label={t("thresholds.resetAllAction")}
+            title={t("thresholds.resetAllTitle")}
+            body={t("thresholds.resetAllBody")}
+            confirmLabel={t("thresholds.resetAllConfirm")}
+            pending={resetMutation.isPending}
+            onConfirm={() => resetMutation.mutate(null)}
+          />
         )}
       </div>
 
@@ -241,6 +245,7 @@ function MetricRow({
 
   const hasOverride = override !== null;
   const [overrideMode, setOverrideMode] = useState(hasOverride);
+  const [confirmSwitchOff, setConfirmSwitchOff] = useState(false);
   const [minStr, setMinStr] = useState(
     seedString(override?.min ?? effective?.default?.greenMin, bounds.min),
   );
@@ -310,14 +315,34 @@ function MetricRow({
           <Label htmlFor={`override-${metric}`} className="text-xs">
             {t("thresholds.overrideToggleLabel")}
           </Label>
+          {/* Flipping this off DELETES the stored override — the same
+              irreversible write the Reset control performs, reached by a
+              control that reads as a display toggle. It gets the same
+              confirmation, and a dismissal leaves the switch on. */}
           <Switch
             id={`override-${metric}`}
             checked={overrideMode}
             onCheckedChange={(next) => {
+              if (!next && hasOverride) {
+                setConfirmSwitchOff(true);
+                return;
+              }
               setOverrideMode(next);
-              if (!next && hasOverride) onReset();
             }}
             disabled={busy}
+          />
+          <ConfirmDialog
+            slot={`settings-thresholds-override-off-${metric}`}
+            open={confirmSwitchOff}
+            onOpenChange={setConfirmSwitchOff}
+            title={t("thresholds.resetTitle")}
+            body={t("thresholds.resetBody")}
+            confirmLabel={t("thresholds.resetConfirm")}
+            pending={busy}
+            onConfirm={() => {
+              setOverrideMode(false);
+              onReset();
+            }}
           />
           {hasOverride && (
             <Badge variant="outline" className="text-xs">
@@ -381,15 +406,18 @@ function MetricRow({
                 {t("common.save")}
               </Button>
               {hasOverride && (
-                <Button
+                <ConfirmButton
+                  slot={`settings-thresholds-reset-${metric}`}
                   variant="outline"
                   size="sm"
                   className="min-h-11 sm:min-h-9"
-                  onClick={onReset}
-                  disabled={busy}
-                >
-                  {t("thresholds.resetAction")}
-                </Button>
+                  label={t("thresholds.resetAction")}
+                  title={t("thresholds.resetTitle")}
+                  body={t("thresholds.resetBody")}
+                  confirmLabel={t("thresholds.resetConfirm")}
+                  pending={busy}
+                  onConfirm={onReset}
+                />
               )}
             </div>
           </div>

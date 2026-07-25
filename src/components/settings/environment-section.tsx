@@ -27,7 +27,7 @@ import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
-import { ConfirmButton } from "@/components/settings/confirm-button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
 import { formatDateTime } from "@/lib/format";
 import { useTranslations } from "@/lib/i18n/context";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api/api-fetch";

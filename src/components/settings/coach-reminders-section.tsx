@@ -25,7 +25,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { formatDateOrRelative } from "@/lib/format";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
-import { ConfirmButton } from "@/components/settings/confirm-button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
 import { useTranslations } from "@/lib/i18n/context";
 import {
   useCoachReminders,

@@ -32,6 +32,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { ConfirmButton, ConfirmDialog } from "@/components/ui/confirm-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -687,20 +688,20 @@ export function LogDaySheet({
       footer={
         <>
           {rowId ? (
-            <Button
+            <ConfirmButton
+              slot="cycle-day-delete"
               variant="outline"
-              onClick={handleDelete}
-              disabled={busy}
               className="text-destructive hover:text-destructive mr-auto"
-              aria-label={t("cycle.sheet.delete")}
-            >
-              {deleteDay.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-              {t("cycle.sheet.delete")}
-            </Button>
+              icon={<Trash2 className="h-4 w-4" />}
+              label={t("cycle.sheet.delete")}
+              ariaLabel={t("cycle.sheet.delete")}
+              title={t("cycle.sheet.deleteTitle")}
+              body={t("cycle.sheet.deleteBody")}
+              confirmLabel={t("cycle.sheet.deleteConfirm")}
+              disabled={busy && !deleteDay.isPending}
+              pending={deleteDay.isPending}
+              onConfirm={handleDelete}
+            />
           ) : null}
           <Button
             variant="outline"
@@ -1199,6 +1200,7 @@ function SymptomChip({
 }) {
   const { t } = useTranslations();
   const deleteCustom = useDeleteCustomSymptom();
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   async function handleRemove() {
     if (!custom) return;
@@ -1222,13 +1224,25 @@ function SymptomChip({
         {custom ? (
           <button
             type="button"
-            onClick={handleRemove}
+            onClick={() => setConfirmRemove(true)}
             disabled={deleteCustom.isPending}
             aria-label={t("cycle.symptom.custom.remove", { label })}
             className="border-border bg-background text-muted-foreground hover:text-destructive hover:border-destructive focus-visible:ring-ring/50 relative -ml-1.5 grid size-4 shrink-0 place-items-center rounded-full border transition-colors before:absolute before:-inset-2 before:content-[''] focus-visible:ring-2 focus-visible:outline-none"
           >
             <X className="size-2.5" aria-hidden="true" />
           </button>
+        ) : null}
+        {custom ? (
+          <ConfirmDialog
+            slot="cycle-custom-symptom-remove"
+            open={confirmRemove}
+            onOpenChange={setConfirmRemove}
+            title={t("cycle.symptom.custom.removeTitle")}
+            body={t("cycle.symptom.custom.removeBody", { label })}
+            confirmLabel={t("cycle.symptom.custom.removeConfirm")}
+            pending={deleteCustom.isPending}
+            onConfirm={handleRemove}
+          />
         ) : null}
       </span>
       {active ? (

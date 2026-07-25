@@ -13,7 +13,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, ShieldCheck } from "lucide-react";
 
 import { SettingsCard } from "@/components/settings/settings-card";
-import { ConfirmButton } from "@/components/settings/confirm-button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
