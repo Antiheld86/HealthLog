@@ -4499,7 +4499,10 @@
             "rateLimited": "Trop d'imports cette heure-ci (limite 5). Réessayez plus tard.",
             "failed": "L'import a échoué. Veuillez réessayer.",
             "readFailed": "Impossible de lire ce fichier.",
-            "resultSummary": "{measurements} mesures et {moods} entrées d'humeur importées, {skipped} ignorées."
+            "resultSummary": "{measurements} mesures et {moods} entrées d'humeur importées, {skipped} ignorées.",
+            "resultSuccess": "{measurements} mesures et {moods} entrées d'humeur importées.",
+            "resultNothing": "Rien n'a été importé. Les {skipped} entrées ont toutes été ignorées.",
+            "resultEmpty": "Ce fichier ne contenait ni mesures ni entrées d'humeur."
           },
           "csv": {
             "title": "Fichier CSV",
@@ -4520,7 +4523,30 @@
             "readFailed": "Impossible de lire ce fichier.",
             "previewSummary": "Aperçu : {inserted} seraient importées, {skipped} ignorées.",
             "resultSummary": "{inserted} nouvelles importées et {updated} mises à jour, {skipped} ignorées.",
-            "rowError": "Ligne {line} : {reason}"
+            "rowError": "Ligne {line} : {reason}",
+            "resultSuccess": "{inserted} nouvelles importées et {updated} mises à jour.",
+            "resultNothing": "Rien n'a été importé. Les {skipped} lignes ont toutes été ignorées.",
+            "resultEmpty": "Ce fichier a un en-tête mais aucune ligne de données.",
+            "previewSuccess": "Aperçu : {inserted} seraient importées.",
+            "previewNothing": "Aperçu : rien ne serait importé. Les {skipped} lignes seraient toutes ignorées.",
+            "skipGroupOne": "{count} ligne ignorée : {reason}",
+            "skipGroupFew": "{count} lignes ignorées : {reason}",
+            "skipGroupOther": "{count} lignes ignorées : {reason}",
+            "skipDetails": "Afficher toutes les lignes ignorées",
+            "reasonUnknownType": "type de mesure inconnu",
+            "reasonInvalidValue": "la valeur n'est pas un nombre",
+            "reasonValueOutOfRange": "valeur hors de la plage plausible",
+            "reasonUnknownUnit": "unité non reconnue pour ce type",
+            "reasonMissingTimezoneOffset": "horodatage sans décalage horaire",
+            "reasonInvalidTimestamp": "horodatage illisible",
+            "reasonImplausibleTimestamp": "horodatage dans le futur ou antérieur à 1900",
+            "reasonUnexpectedGlucoseContext": "contexte glycémique sur une ligne qui n'est pas une glycémie",
+            "reasonInvalidGlucoseContext": "le contexte glycémique n'est pas une valeur autorisée",
+            "reasonNotesTooLong": "la note est trop longue",
+            "reasonExternalIdTooLong": "l'identifiant externe est trop long",
+            "reasonUnstableExternalId": "l'identifiant externe n'est pas stable d'un export à l'autre",
+            "reasonDuplicate": "déjà importée",
+            "reasonUnknown": "ignorée"
           }
         },
         "subtitle": "Exportez vos données ou importez depuis une sauvegarde."

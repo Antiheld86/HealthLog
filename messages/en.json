@@ -4485,7 +4485,10 @@
             "rateLimited": "Too many imports this hour (limit 5). Please try again later.",
             "failed": "The import failed. Please try again.",
             "readFailed": "Couldn't read that file.",
-            "resultSummary": "Imported {measurements} measurements and {moods} mood entries, {skipped} skipped."
+            "resultSummary": "Imported {measurements} measurements and {moods} mood entries, {skipped} skipped.",
+            "resultSuccess": "Imported {measurements} measurements and {moods} mood entries.",
+            "resultNothing": "Nothing was imported. All {skipped} entries were skipped.",
+            "resultEmpty": "That file carried no measurements and no mood entries."
           },
           "csv": {
             "title": "CSV file",
@@ -4506,7 +4509,30 @@
             "readFailed": "Couldn't read that file.",
             "previewSummary": "Preview: {inserted} would import, {skipped} skipped.",
             "resultSummary": "Imported {inserted} new and updated {updated}, {skipped} skipped.",
-            "rowError": "Line {line}: {reason}"
+            "rowError": "Line {line}: {reason}",
+            "resultSuccess": "Imported {inserted} new and updated {updated}.",
+            "resultNothing": "Nothing was imported. All {skipped} rows were skipped.",
+            "resultEmpty": "That file has a header but no data rows.",
+            "previewSuccess": "Preview: {inserted} would import.",
+            "previewNothing": "Preview: nothing would import. All {skipped} rows would be skipped.",
+            "skipGroupOne": "{count} row skipped: {reason}",
+            "skipGroupFew": "{count} rows skipped: {reason}",
+            "skipGroupOther": "{count} rows skipped: {reason}",
+            "skipDetails": "Show every skipped row",
+            "reasonUnknownType": "unknown measurement type",
+            "reasonInvalidValue": "value is not a number",
+            "reasonValueOutOfRange": "value outside the plausible range",
+            "reasonUnknownUnit": "unit not recognised for this type",
+            "reasonMissingTimezoneOffset": "timestamp has no timezone offset",
+            "reasonInvalidTimestamp": "timestamp could not be read",
+            "reasonImplausibleTimestamp": "timestamp is in the future or before 1900",
+            "reasonUnexpectedGlucoseContext": "glucose context set on a row that is not blood glucose",
+            "reasonInvalidGlucoseContext": "glucose context is not one of the allowed values",
+            "reasonNotesTooLong": "note is too long",
+            "reasonExternalIdTooLong": "external ID is too long",
+            "reasonUnstableExternalId": "external ID is not stable across exports",
+            "reasonDuplicate": "already imported",
+            "reasonUnknown": "skipped"
           }
         },
         "subtitle": "Export your data or import from a backup."

@@ -53,7 +53,7 @@ export const importPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Import"],
       summary: "Import measurements from CSV",
       description:
-        "Bulk-import measurements from a CSV file (web cold-start escape hatch). Body is raw `text/csv` (≤ 16 MB, ≤ 10 000 valid rows). Header (order-independent): `type,value,unit,measuredAt[,glucoseContext,notes,externalId]`. `measuredAt` must carry an explicit ISO-8601 offset and is bounded (no future beyond a 5-min skew, no instant before 1900). Glucose accepts `mmol/L` (converted to canonical `mg/dL`); weight accepts `lb` (converted to `kg`). An `externalId` column makes re-upload idempotent (upsert on `(userId, type, source=IMPORT, externalId)`); without it a re-upload duplicates. `?dryRun=1` validates + previews without writing. Shares the 5/hour `import:` rate bucket.",
+        "Bulk-import measurements from a CSV file (web cold-start escape hatch). Body is raw `text/csv` (≤ 16 MB, ≤ 10 000 valid rows). Header (order-independent): `type,value,unit,measuredAt[,glucoseContext,notes,externalId]`. `measuredAt` must carry an explicit ISO-8601 offset and is bounded (no future beyond a 5-min skew, no instant before 1900). Glucose accepts `mmol/L` (converted to canonical `mg/dL`); weight accepts `lb` (converted to `kg`). `glucoseContext` is optional on a `BLOOD_GLUCOSE` row — a blank cell stores no context, which is the normal shape of a continuous-sensor export; a non-empty value is still checked against the enum, and the column is refused on any other type. An `externalId` column makes re-upload idempotent (upsert on `(userId, type, source=IMPORT, externalId)`); without it a re-upload duplicates. `?dryRun=1` validates + previews without writing. Shares the 5/hour `import:` rate bucket.",
       parameters: [
         {
           name: "dryRun",
@@ -71,7 +71,7 @@ export const importPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             schema: {
               type: "string",
               example:
-                "type,value,unit,measuredAt,glucoseContext,notes,externalId\nWEIGHT,80.5,kg,2026-05-01T08:00:00Z,,morning,\nBLOOD_GLUCOSE,5.3,mmol/L,2026-05-01T08:05:00+02:00,FASTING,,meter-001",
+                "type,value,unit,measuredAt,glucoseContext,notes,externalId\nWEIGHT,80.5,kg,2026-05-01T08:00:00Z,,morning,\nBLOOD_GLUCOSE,5.3,mmol/L,2026-05-01T08:05:00+02:00,FASTING,,meter-001\nBLOOD_GLUCOSE,5.9,mmol/L,2026-05-01T08:20:00+02:00,,,sensor-001",
             },
           },
         },

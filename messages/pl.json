@@ -4483,7 +4483,10 @@
             "rateLimited": "Zbyt wiele importów w tej godzinie (limit 5). Spróbuj później.",
             "failed": "Import nie powiódł się. Spróbuj ponownie.",
             "readFailed": "Nie można odczytać tego pliku.",
-            "resultSummary": "Zaimportowano {measurements} pomiarów i {moods} wpisów nastroju, pominięto {skipped}."
+            "resultSummary": "Zaimportowano {measurements} pomiarów i {moods} wpisów nastroju, pominięto {skipped}.",
+            "resultSuccess": "Zaimportowano {measurements} pomiarów i {moods} wpisów nastroju.",
+            "resultNothing": "Nic nie zaimportowano. Pominięto wszystkie {skipped} wpisów.",
+            "resultEmpty": "Ten plik nie zawierał pomiarów ani wpisów nastroju."
           },
           "csv": {
             "title": "Plik CSV",
@@ -4504,7 +4507,30 @@
             "readFailed": "Nie udało się odczytać tego pliku.",
             "previewSummary": "Podgląd: {inserted} zostanie zaimportowanych, pominięto {skipped}.",
             "resultSummary": "Zaimportowano {inserted} nowych i zaktualizowano {updated}, pominięto {skipped}.",
-            "rowError": "Wiersz {line}: {reason}"
+            "rowError": "Wiersz {line}: {reason}",
+            "resultSuccess": "Zaimportowano {inserted} nowych i zaktualizowano {updated}.",
+            "resultNothing": "Nic nie zaimportowano. Pominięto wszystkie {skipped} wierszy.",
+            "resultEmpty": "Ten plik ma nagłówek, ale nie zawiera wierszy danych.",
+            "previewSuccess": "Podgląd: {inserted} zostanie zaimportowanych.",
+            "previewNothing": "Podgląd: nic nie zostanie zaimportowane. Pominięte zostaną wszystkie {skipped} wierszy.",
+            "skipGroupOne": "Pominięto {count} wiersz: {reason}",
+            "skipGroupFew": "Pominięto {count} wiersze: {reason}",
+            "skipGroupOther": "Pominięto {count} wierszy: {reason}",
+            "skipDetails": "Pokaż wszystkie pominięte wiersze",
+            "reasonUnknownType": "nieznany typ pomiaru",
+            "reasonInvalidValue": "wartość nie jest liczbą",
+            "reasonValueOutOfRange": "wartość poza wiarygodnym zakresem",
+            "reasonUnknownUnit": "jednostka nierozpoznana dla tego typu",
+            "reasonMissingTimezoneOffset": "znacznik czasu bez przesunięcia strefy czasowej",
+            "reasonInvalidTimestamp": "nie udało się odczytać znacznika czasu",
+            "reasonImplausibleTimestamp": "znacznik czasu w przyszłości lub sprzed 1900 roku",
+            "reasonUnexpectedGlucoseContext": "kontekst glukozy w wierszu, który nie jest pomiarem glukozy",
+            "reasonInvalidGlucoseContext": "kontekst glukozy nie jest dozwoloną wartością",
+            "reasonNotesTooLong": "notatka jest zbyt długa",
+            "reasonExternalIdTooLong": "identyfikator zewnętrzny jest zbyt długi",
+            "reasonUnstableExternalId": "identyfikator zewnętrzny nie jest stabilny między eksportami",
+            "reasonDuplicate": "już zaimportowano",
+            "reasonUnknown": "pominięto"
           }
         },
         "subtitle": "Wyeksportuj dane lub zaimportuj z kopii zapasowej."

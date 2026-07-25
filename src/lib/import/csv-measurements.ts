@@ -27,7 +27,11 @@
  *                     without an offset is skipped — the importer never guesses
  *                     a timezone. The instant is bounded by `validateEntryInstant`
  *                     (no future beyond a 5-min skew, no instant before 1900).
- *   - `glucoseContext` — required for BLOOD_GLUCOSE, forbidden otherwise.
+ *   - `glucoseContext` — optional on BLOOD_GLUCOSE, forbidden otherwise. A
+ *                     blank cell stores NULL: a continuous sensor export
+ *                     classifies nothing per reading, and an absent context
+ *                     must read as absent rather than as a guessed one. A
+ *                     non-empty cell is still checked against the enum.
  *   - `notes`       — free text, ≤ 200 chars.
  *   - `externalId`  — optional source-stable id. When present, the write loop
  *                     upserts on `(userId, type, source=IMPORT, externalId)` so a
@@ -64,13 +68,11 @@ export type CsvRowReason =
   | "missing_timezone_offset"
   | "invalid_timestamp"
   | "implausible_timestamp"
-  | "missing_glucose_context"
   | "unexpected_glucose_context"
   | "invalid_glucose_context"
   | "notes_too_long"
   | "external_id_too_long"
-  | "unstable_external_id"
-  | "wrong_column_count";
+  | "unstable_external_id";
 
 export type CsvRowStatus = "ok" | "skipped";
 
@@ -278,18 +280,16 @@ export function parseCsvMeasurements(
       continue;
     }
 
-    // Glucose context: required for BLOOD_GLUCOSE, forbidden otherwise.
+    // Glucose context: optional on BLOOD_GLUCOSE, forbidden otherwise. A
+    // blank cell leaves the column NULL — the row is a reading either way,
+    // and a sensor export carries no fasting / post-meal classification.
     let glucoseContext: string | undefined;
     if (type === "BLOOD_GLUCOSE") {
-      if (!rawContext) {
-        skip("missing_glucose_context");
-        continue;
-      }
-      if (!KNOWN_GLUCOSE_CONTEXTS.has(rawContext)) {
+      if (rawContext && !KNOWN_GLUCOSE_CONTEXTS.has(rawContext)) {
         skip("invalid_glucose_context");
         continue;
       }
-      glucoseContext = rawContext;
+      glucoseContext = rawContext || undefined;
     } else if (rawContext) {
       skip("unexpected_glucose_context");
       continue;

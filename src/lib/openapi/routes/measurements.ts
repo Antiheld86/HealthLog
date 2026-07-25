@@ -256,7 +256,9 @@ export const measurementResource = z
       .string()
       .nullable()
       .optional()
-      .describe("Set only on BLOOD_GLUCOSE rows."),
+      .describe(
+        "Set only on BLOOD_GLUCOSE rows, and null there too when the writer recorded no classification (a sensor export, a device sync). Never invent one.",
+      ),
     sleepStage: z
       .string()
       .nullable()

@@ -4,7 +4,6 @@ import { useId, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
-  CheckCircle2,
   Download,
   FileSpreadsheet,
   Loader2,
@@ -19,21 +18,10 @@ import { apiFetchRaw } from "@/lib/api/api-fetch";
 import { ImportCardShell } from "./import-card-shell";
 import { MAX_PASTE_CHARS } from "./constants";
 import { EXAMPLE_CSV } from "./import-examples";
-
-interface CsvRowResult {
-  line: number;
-  status: "inserted" | "updated" | "skipped";
-  reason?: string;
-}
-
-interface CsvImportResult {
-  inserted: number;
-  updated: number;
-  skipped: number;
-  total: number;
-  dryRun: boolean;
-  rows: CsvRowResult[];
-}
+import {
+  CsvImportResultView,
+  type CsvImportResult,
+} from "./import-result-view";
 
 export function CsvImportCard() {
   const { t } = useTranslations();
@@ -117,8 +105,6 @@ export function CsvImportCard() {
     }
   }
 
-  const errorRows = result?.rows.filter((r) => r.status === "skipped") ?? [];
-
   return (
     <ImportCardShell
       testId="import-card-csv"
@@ -169,40 +155,7 @@ export function CsvImportCard() {
       </p>
 
       <div aria-live="polite" className="space-y-2">
-        {result && (
-          <div data-testid="import-csv-result" className="space-y-1.5">
-            <p className="text-foreground flex items-start gap-2 text-xs">
-              <CheckCircle2
-                className="text-success mt-0.5 h-3.5 w-3.5 shrink-0"
-                aria-hidden="true"
-              />
-              <span>
-                {result.dryRun
-                  ? t("settings.sections.export.import.csv.previewSummary", {
-                      inserted: result.inserted,
-                      skipped: result.skipped,
-                    })
-                  : t("settings.sections.export.import.csv.resultSummary", {
-                      inserted: result.inserted,
-                      updated: result.updated,
-                      skipped: result.skipped,
-                    })}
-              </span>
-            </p>
-            {errorRows.length > 0 && (
-              <ul className="text-muted-foreground max-h-32 space-y-0.5 overflow-auto text-xs">
-                {errorRows.slice(0, 50).map((r) => (
-                  <li key={r.line}>
-                    {t("settings.sections.export.import.csv.rowError", {
-                      line: r.line,
-                      reason: r.reason ?? "skipped",
-                    })}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
+        {result && <CsvImportResultView result={result} />}
         {error && (
           <p
             role="alert"
