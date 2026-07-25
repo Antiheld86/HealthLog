@@ -4462,6 +4462,7 @@
             "failed": "The import failed.",
             "rowsImported": "{count} rows imported so far",
             "doneSummary": "Done — {imported} of {read} records imported, {skipped} clinical records skipped.",
+            "doneNothing": "Nothing was imported from that archive: 0 of {read} records landed.",
             "estimateWarning": "Cumulative totals for {count} day(s) were estimated from the largest export source. Native Apple Health statistics remain authoritative.",
             "phase": {
               "queued": "Queued…",

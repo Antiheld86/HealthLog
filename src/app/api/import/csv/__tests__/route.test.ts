@@ -339,3 +339,87 @@ describe("POST /api/import/csv — batched write + per-row envelope", () => {
     );
   });
 });
+
+describe("POST /api/import/csv — contextless blood glucose", () => {
+  // #640 — the reported file. A sensor export leaves `glucoseContext` blank
+  // on every row; the route must build a row with the column NULL rather
+  // than refusing the reading.
+  it("writes a contextless sensor reading with the canonical shape", async () => {
+    const res = await POST(
+      csvRequest(
+        [
+          HEADER,
+          "BLOOD_GLUCOSE,5.3,mmol/L,2024-04-03T13:15:00+1100,,Sensor,sensor-1",
+        ].join("\n"),
+      ),
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as CsvEnvelope;
+    expect(body.data?.inserted).toBe(1);
+    expect(body.data?.skipped).toBe(0);
+    expect(body.data?.rows).toEqual([{ line: 2, status: "inserted" }]);
+
+    const row = mMeasurement().createManyAndReturn.mock.calls[0][0].data[0];
+    expect(row).toMatchObject({
+      userId: "u-1",
+      type: "BLOOD_GLUCOSE",
+      unit: "mg/dL",
+      source: "IMPORT",
+      externalId: "sensor-1",
+      glucoseContext: null,
+    });
+    expect(row.value).toBeCloseTo(95.4848, 3);
+    expect((row.measuredAt as Date).toISOString()).toBe(
+      "2024-04-03T02:15:00.000Z",
+    );
+  });
+
+  it("keeps a re-upload of the same external id idempotent", async () => {
+    // The key already exists under (userId, type, source=IMPORT, externalId).
+    mMeasurement().findMany.mockResolvedValue([
+      { type: "BLOOD_GLUCOSE", externalId: "sensor-1" },
+    ]);
+
+    const res = await POST(
+      csvRequest(
+        [
+          HEADER,
+          "BLOOD_GLUCOSE,5.3,mmol/L,2024-04-03T13:15:00+1100,,Sensor,sensor-1",
+        ].join("\n"),
+      ),
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as CsvEnvelope;
+    expect(body.data?.inserted).toBe(0);
+    expect(body.data?.updated).toBe(1);
+    expect(body.data?.rows).toEqual([{ line: 2, status: "updated" }]);
+    // No second row minted — the existing one is updated in place.
+    expect(mMeasurement().createManyAndReturn).not.toHaveBeenCalled();
+    const update = mMeasurement().updateMany.mock.calls[0][0];
+    expect(update.where).toMatchObject({
+      userId: "u-1",
+      source: "IMPORT",
+      type: "BLOOD_GLUCOSE",
+      externalId: "sensor-1",
+    });
+    expect(update.data).toMatchObject({ glucoseContext: null, unit: "mg/dL" });
+  });
+
+  it("still refuses a context that is not one of the four", async () => {
+    const res = await POST(
+      csvRequest(
+        [HEADER, "BLOOD_GLUCOSE,95,mg/dL,2026-05-01T08:00:00Z,LUNCH,,"].join(
+          "\n",
+        ),
+      ),
+    );
+    const body = (await res.json()) as CsvEnvelope;
+    expect(body.data?.inserted).toBe(0);
+    expect(body.data?.rows[0]).toMatchObject({
+      status: "skipped",
+      reason: "invalid_glucose_context",
+    });
+  });
+});

@@ -4476,6 +4476,7 @@
             "failed": "L'import a échoué.",
             "rowsImported": "{count} lignes importées jusqu'ici",
             "doneSummary": "Terminé — {imported} enregistrements sur {read} importés, {skipped} enregistrements cliniques ignorés.",
+            "doneNothing": "Rien n'a été importé de cette archive : 0 enregistrement sur {read} est arrivé.",
             "estimateWarning": "Les totaux cumulés de {count} jour(s) ont été estimés à partir de la source d’export la plus élevée. Les statistiques Apple Santé natives restent la référence.",
             "phase": {
               "queued": "En file d'attente…",

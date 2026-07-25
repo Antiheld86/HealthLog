@@ -2,7 +2,7 @@
 
 import { useCallback, useId, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, CheckCircle2, Loader2, Upload } from "lucide-react";
+import { AlertCircle, Loader2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -11,6 +11,8 @@ import { useTranslations } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 import { apiFetchRaw, apiGet } from "@/lib/api/api-fetch";
 import { ImportCardShell } from "./import-card-shell";
+import { classifyImportOutcome } from "./import-result-state";
+import { ImportOutcomeLine } from "./import-result-view";
 
 /** Terminal states the status poll stops on. */
 const TERMINAL_STATES: readonly string[] = ["done", "failed"];
@@ -237,22 +239,28 @@ export function AppleHealthImportCard() {
           </div>
         )}
         {isDone && (
-          <div
-            data-testid="import-apple-health-result"
-            className="text-foreground flex items-start gap-2 text-xs"
-          >
-            <CheckCircle2
-              className="text-success mt-0.5 h-3.5 w-3.5 shrink-0"
-              aria-hidden="true"
-            />
-            <span>
-              {t("settings.sections.export.import.appleHealth.doneSummary", {
-                imported: status?.result?.totals?.rowsUpserted ?? 0,
-                read: status?.result?.totals?.recordsRead ?? 0,
-                skipped: status?.result?.clinical?.skipped ?? 0,
-              })}
-            </span>
-          </div>
+          <ImportOutcomeLine
+            outcome={classifyImportOutcome({
+              written: status?.result?.totals?.rowsUpserted ?? 0,
+              // The clinical count is a documented, deliberate exclusion
+              // (electrocardiograms, lab documents), not a refused row — it
+              // must not tip the archive into a warning. Only "nothing
+              // landed" changes the tone here.
+              skipped: 0,
+            })}
+            message={
+              (status?.result?.totals?.rowsUpserted ?? 0) > 0
+                ? t("settings.sections.export.import.appleHealth.doneSummary", {
+                    imported: status?.result?.totals?.rowsUpserted ?? 0,
+                    read: status?.result?.totals?.recordsRead ?? 0,
+                    skipped: status?.result?.clinical?.skipped ?? 0,
+                  })
+                : t("settings.sections.export.import.appleHealth.doneNothing", {
+                    read: status?.result?.totals?.recordsRead ?? 0,
+                  })
+            }
+            testId="import-apple-health-result"
+          />
         )}
         {isDone && (status?.result?.cumulativeEstimates?.days ?? 0) > 0 && (
           <AppleHealthEstimateWarning
