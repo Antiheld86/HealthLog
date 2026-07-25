@@ -5317,8 +5317,7 @@
       "rangeCustomEnd": "Al",
       "errorGeneric": "Non è stato possibile generare l'esportazione. Riprova.",
       "errorRateLimit": "Hai raggiunto il limite di esportazioni per questa ora.",
-      "errorModuleDisabled": "L'esportazione della cartella è disattivata per questo account.",
-      "errorEmptySelection": "Seleziona almeno una voce."
+      "errorModuleDisabled": "L'esportazione della cartella è disattivata per questo account."
     },
     "globalExcludedInjectionSitesLabel": "Siti di iniezione esclusi globalmente",
     "globalExcludedInjectionSitesHint": "I siti elencati qui non vengono proposti per alcun farmaco e vengono rifiutati al momento della registrazione di una dose, anche se un farmaco li preferisce.",
@@ -8888,11 +8887,12 @@
     "leafMood": "Umore",
     "leafCycle": "Ciclo mestruale",
     "templateStandard": "Referto medico standard",
-    "templateApplied": "{template} è preselezionato. Controllalo prima di generare.",
+    "applyStandard": "Applica {template}",
+    "standardHint": "Un clic compila ciò che serve di solito a una visita generale. Ogni voce resta modificabile.",
     "groupCount": "{on}/{total}",
     "groupDisclosure": "Mostra le voci di {group}",
     "sensitiveHint": "Qui non è mai preselezionato nulla. Scegli ogni voce tu stesso.",
-    "scopeNone": "Niente selezionato: il documento sarebbe vuoto.",
+    "scopeNone": "Ancora niente selezionato. Scegli cosa includere oppure applica il referto standard.",
     "scopeCount": "{count} voci da {groups} aree",
     "scopeSensitive": "incl. {names}"
   }

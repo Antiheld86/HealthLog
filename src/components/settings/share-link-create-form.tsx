@@ -21,7 +21,7 @@
  * document-launched flow seeds the document the user was looking at) and
  * `initialLabel` to pre-fill the label.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Copy, FileText, Loader2, ScanLine, X } from "lucide-react";
 
@@ -36,7 +36,6 @@ import { ReportScopePicker } from "@/components/settings/report-selection/report
 import { ScopeSummary } from "@/components/settings/report-selection/scope-summary";
 import type { ReportLeafId } from "@/lib/report-selection/catalogue";
 import { orderLeaves } from "@/lib/report-selection/selection";
-import { STANDARD_TEMPLATE_LEAVES } from "@/lib/report-selection/template";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { apiPost } from "@/lib/api/api-fetch";
@@ -205,23 +204,18 @@ export function ShareLinkCreateForm({
   const [selectedDocs, setSelectedDocs] = useState<PickedDocument[]>(
     initialDocuments ?? [],
   );
-  // The named standard template is the starting point for a record share, the
-  // same one the export panel opens with, minus the leaf a link may not carry.
+  // A new link starts with an empty scope. The picker's standard-report button
+  // fills it in one click, minus the leaf a link may not carry — but a link is
+  // handed to another person, so nothing rides on it that was not ticked.
   const [selectedLeaves, setSelectedLeaves] = useState<
     ReadonlySet<ReportLeafId>
-  >(
-    () =>
-      new Set(
-        STANDARD_TEMPLATE_LEAVES.filter(
-          (leaf) => !SHARE_HIDDEN_LEAVES.includes(leaf),
-        ),
-      ),
-  );
+  >(() => new Set<ReportLeafId>());
   const [pickerOpen, setPickerOpen] = useState(false);
   const [created, setCreated] = useState<ShareLinkCreated | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState<"link" | "passphrase" | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const scopeSummaryId = useId();
 
   // Render the QR from the `#k=` deep link once a link is created. The fragment
   // carries the passphrase, so the QR alone opens the record — it is shown
@@ -382,7 +376,12 @@ export function ShareLinkCreateForm({
               onChange={setSelectedLeaves}
               hiddenLeaves={SHARE_HIDDEN_LEAVES}
             />
-            <ScopeSummary t={t} surface="share" selected={selectedLeaves} />
+            <ScopeSummary
+              t={t}
+              id={scopeSummaryId}
+              surface="share"
+              selected={selectedLeaves}
+            />
           </div>
         ) : null}
 
@@ -458,6 +457,10 @@ export function ShareLinkCreateForm({
           </p>
         )}
 
+        {/* A record link with an empty scope cannot be minted: it would serve
+            a page with nothing on it. The scope line above says so and says
+            what to do about it, and describes the button so the disabled state
+            is not silent for a screen reader. */}
         <Button
           type="submit"
           disabled={
@@ -465,6 +468,8 @@ export function ShareLinkCreateForm({
             !label.trim() ||
             (!documentOnly && selectedLeaves.size === 0)
           }
+          aria-describedby={documentOnly ? undefined : scopeSummaryId}
+          data-testid="share-create-submit"
           className="min-h-11 sm:min-h-9"
         >
           {createMutation.isPending && (

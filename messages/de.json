@@ -5317,8 +5317,7 @@
       "rangeCustomEnd": "Bis",
       "errorGeneric": "Der Export konnte nicht erstellt werden. Bitte erneut versuchen.",
       "errorRateLimit": "Das Exportlimit für diese Stunde ist erreicht.",
-      "errorModuleDisabled": "Der Gesundheitsakten-Export ist für dieses Konto ausgeschaltet.",
-      "errorEmptySelection": "Wählen Sie mindestens einen Eintrag aus."
+      "errorModuleDisabled": "Der Gesundheitsakten-Export ist für dieses Konto ausgeschaltet."
     },
     "globalExcludedInjectionSitesLabel": "Global ausgeschlossene Injektionsstellen",
     "globalExcludedInjectionSitesHint": "Hier gelistete Stellen werden für keine Medikation angeboten und beim Erfassen einer Dosis abgelehnt — auch wenn eine Medikation sie bevorzugt.",
@@ -8888,11 +8887,12 @@
     "leafMood": "Stimmung",
     "leafCycle": "Menstruationszyklus",
     "templateStandard": "Standard-Arztbericht",
-    "templateApplied": "{template} ist vorausgewählt. Prüfen Sie ihn vor dem Erstellen.",
+    "applyStandard": "{template} übernehmen",
+    "standardHint": "Ein Klick füllt aus, was ein normaler Arztbesuch meist braucht. Jeder Eintrag bleibt änderbar.",
     "groupCount": "{on}/{total}",
     "groupDisclosure": "Einträge in {group} anzeigen",
     "sensitiveHint": "Hier ist nie etwas vorausgewählt. Wählen Sie jeden Eintrag selbst.",
-    "scopeNone": "Nichts ausgewählt — das Dokument wäre leer.",
+    "scopeNone": "Noch nichts ausgewählt. Wählen Sie aus, was enthalten sein soll, oder übernehmen Sie den Standardbericht.",
     "scopeCount": "{count} Einträge aus {groups} Bereichen",
     "scopeSensitive": "inkl. {names}"
   }

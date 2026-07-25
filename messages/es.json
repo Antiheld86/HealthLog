@@ -5317,8 +5317,7 @@
       "rangeCustomEnd": "Hasta",
       "errorGeneric": "No se pudo generar la exportación. Inténtelo de nuevo.",
       "errorRateLimit": "Ha alcanzado el límite de exportaciones de esta hora.",
-      "errorModuleDisabled": "La exportación del expediente está desactivada para esta cuenta.",
-      "errorEmptySelection": "Seleccione al menos una entrada."
+      "errorModuleDisabled": "La exportación del expediente está desactivada para esta cuenta."
     },
     "globalExcludedInjectionSitesLabel": "Sitios de inyección excluidos globalmente",
     "globalExcludedInjectionSitesHint": "Los sitios listados aquí no se ofrecen para ningún medicamento y se rechazan al registrar una dosis, aunque un medicamento los prefiera.",
@@ -8888,11 +8887,12 @@
     "leafMood": "Estado de ánimo",
     "leafCycle": "Ciclo menstrual",
     "templateStandard": "Informe médico estándar",
-    "templateApplied": "{template} está preseleccionado. Revíselo antes de generar.",
+    "applyStandard": "Aplicar {template}",
+    "standardHint": "Un clic rellena lo que suele necesitar una consulta general. Cada entrada sigue siendo editable.",
     "groupCount": "{on}/{total}",
     "groupDisclosure": "Mostrar las entradas de {group}",
     "sensitiveHint": "Aquí nunca hay nada preseleccionado. Elija cada entrada usted mismo.",
-    "scopeNone": "Nada seleccionado: el documento estaría vacío.",
+    "scopeNone": "Nada seleccionado todavía. Elija qué incluir o aplique el informe estándar.",
     "scopeCount": "{count} entradas de {groups} áreas",
     "scopeSensitive": "incl. {names}"
   }

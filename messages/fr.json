@@ -5317,8 +5317,7 @@
       "rangeCustomEnd": "Au",
       "errorGeneric": "L'export n'a pas pu être généré. Veuillez réessayer.",
       "errorRateLimit": "Vous avez atteint la limite d'exports pour cette heure.",
-      "errorModuleDisabled": "L'export du dossier est désactivé pour ce compte.",
-      "errorEmptySelection": "Sélectionnez au moins un élément."
+      "errorModuleDisabled": "L'export du dossier est désactivé pour ce compte."
     },
     "globalExcludedInjectionSitesLabel": "Sites d'injection exclus globalement",
     "globalExcludedInjectionSitesHint": "Les sites listés ici ne sont proposés pour aucun médicament et sont refusés lors de l'enregistrement d'une dose, même si un médicament les privilégie.",
@@ -8888,11 +8887,12 @@
     "leafMood": "Humeur",
     "leafCycle": "Cycle menstruel",
     "templateStandard": "Compte rendu médical standard",
-    "templateApplied": "{template} est présélectionné. Vérifiez-le avant de générer.",
+    "applyStandard": "Appliquer {template}",
+    "standardHint": "Un clic remplit ce dont une consultation générale a généralement besoin. Chaque élément reste modifiable.",
     "groupCount": "{on}/{total}",
     "groupDisclosure": "Afficher les éléments de {group}",
     "sensitiveHint": "Rien n'est jamais présélectionné ici. Choisissez chaque élément vous-même.",
-    "scopeNone": "Rien de sélectionné — le document serait vide.",
+    "scopeNone": "Rien de sélectionné pour l'instant. Choisissez ce qui doit figurer, ou appliquez le compte rendu standard.",
     "scopeCount": "{count} éléments issus de {groups} domaines",
     "scopeSensitive": "dont {names}"
   }

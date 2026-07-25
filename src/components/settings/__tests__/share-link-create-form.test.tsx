@@ -12,6 +12,12 @@
  * SSR-static render only (no jsdom), matching the sibling settings tests. The
  * TanStack hooks are mocked; the QR (`qrcode`) only ever renders in an effect
  * after a create, so it never runs under `renderToStaticMarkup`.
+ *
+ * Mutation checks (each verified red, then reverted):
+ *   - seed `selectedLeaves` from `STANDARD_TEMPLATE_LEAVES` again → "starts a
+ *     record link with an empty scope" goes red.
+ *   - drop `selectedLeaves.size === 0` from the submit `disabled` expression →
+ *     "refuses to mint a record link with an empty scope" goes red.
  */
 import type { ReportLeafId } from "@/lib/report-selection/catalogue";
 import { describe, expect, it, vi } from "vitest";
@@ -45,6 +51,15 @@ function render(
       <ShareLinkCreateForm {...props} />
     </I18nProvider>,
   );
+}
+
+/** Whether the create control refuses the press. */
+function createDisabled(html: string): boolean {
+  const button = html.match(
+    /<button[^>]*data-testid="share-create-submit"[^>]*>/,
+  )?.[0];
+  if (!button) throw new Error("the create button did not render");
+  return /\sdisabled=""/.test(button);
 }
 
 describe("<ShareLinkCreateForm> — shared create flow", () => {
@@ -85,6 +100,28 @@ describe("<ShareLinkCreateForm> — shared create flow", () => {
     expect(html).toContain("1 of 50 selected");
     // A seeded set surfaces the EXIF note the picker path also shows.
     expect(html).toContain("Camera metadata");
+  });
+
+  it("starts a record link with an empty scope and the standard-report button", () => {
+    const html = render();
+    // A link is handed to another person; nothing rides on it that was not
+    // ticked. The template is reachable in one click and applied in none.
+    expect(html).toContain("Nothing selected yet");
+    expect(html).toContain('data-testid="report-apply-standard-share"');
+    expect(html).toContain("Apply Standard doctor&#x27;s report");
+  });
+
+  it("refuses to mint a record link with an empty scope, label or not", () => {
+    const html = render({ initialLabel: "Cardiology" });
+    expect(createDisabled(html)).toBe(true);
+    // The same form in documents-only mode mints happily on the same label:
+    // the refusal comes from the empty report scope, not from the label.
+    const docOnly = render({
+      documentOnly: true,
+      initialLabel: "Cardiology",
+      initialDocuments: [{ id: "doc-1", title: "Blood panel 2026" }],
+    });
+    expect(createDisabled(docOnly)).toBe(false);
   });
 
   it("document-only mode hides every record-scope control but keeps expiry + the doc", () => {

@@ -5,6 +5,13 @@
  * export panel and the share-link create form — mount this exact component, so
  * two selection UIs cannot drift apart.
  *
+ * Nothing is ever selected for the user. A picker with an empty selection
+ * stays empty until someone ticks something, and the one shipped template is
+ * reachable only through the button at the top that carries its name. One
+ * click still gets a complete doctor's report, so nothing got slower — but the
+ * click happened, and that is the whole difference between a chosen scope and
+ * a scope somebody merely failed to untick.
+ *
  * Twelve group rows plus a fenced tier below a separator. The fenced tier has
  * NO group checkbox: there is no control anywhere in this component that can
  * turn on more than one sensitive leaf at a time, and there is no select-all.
@@ -21,6 +28,7 @@
  */
 import { useId, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useTranslations } from "@/lib/i18n/context";
 import {
@@ -35,6 +43,10 @@ import {
   toggleGroup,
   toggleLeaf,
 } from "@/lib/report-selection/panel-state";
+import {
+  STANDARD_TEMPLATE_LABEL_KEY,
+  standardTemplateFor,
+} from "@/lib/report-selection/template";
 
 import { GroupRow } from "./group-row";
 import { LeafGrid } from "./leaf-grid";
@@ -93,8 +105,37 @@ export function ReportScopePicker({
     onChange(toggleGroup(selected, group, leaves, remembered));
   };
 
+  const hintId = `${idPrefix}-standard`;
+
   return (
     <div className="space-y-3" data-testid={`report-scope-picker-${surface}`}>
+      {/* The one-click way to a complete report. An inline action row
+          (UI-STANDARDS §11): the sentence wraps, the action stays beside it.
+          It is offered, never applied — and it stays offered so a person can
+          come back to the standard set after experimenting. */}
+      <div className="flex items-start justify-between gap-3">
+        <p
+          id={hintId}
+          className="text-muted-foreground min-w-0 flex-1 text-xs"
+          data-testid={`report-standard-hint-${surface}`}
+        >
+          {t("reportSelection.standardHint")}
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="min-h-11 shrink-0 sm:min-h-9"
+          aria-describedby={hintId}
+          data-testid={`report-apply-standard-${surface}`}
+          onClick={() => onChange(new Set(standardTemplateFor(hiddenLeaves)))}
+        >
+          {t("reportSelection.applyStandard", {
+            template: t(STANDARD_TEMPLATE_LABEL_KEY),
+          })}
+        </Button>
+      </div>
+
       {plainGroups.map((group) => (
         <GroupRow
           key={group.id}

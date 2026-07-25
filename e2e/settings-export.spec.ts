@@ -101,12 +101,11 @@ test.describe("Settings → Export & Import", () => {
   test("opens the scope picker expanded on a first run, fenced tier and all", async ({
     page,
   }) => {
-    // The three panel states are the release's whole point, and the first one
-    // is the only place a template is applied. It has to be VISIBLE — a
-    // template behind a collapsed disclosure is opt-out wearing a hat — so the
-    // picker, its twelve group rows and the fenced tier all render without a
-    // click. Asserted against the export mount; the share form runs its own
-    // picker with its own defaults.
+    // The three panel states are the release's whole point, and on the first
+    // one nothing is selected at all. The picker still opens without a click,
+    // because with an empty scope the standard-report button and the named
+    // groups are exactly what the person needs in front of them. Asserted
+    // against the export mount; the share form runs its own picker.
     await openGesundheitsakte(page);
     await expect(page.getByTestId("report-scope-picker-export")).toBeVisible({
       timeout: 10_000,
@@ -126,6 +125,61 @@ test.describe("Settings → Export & Import", () => {
       page.getByTestId("report-group-check-sensitive-export"),
     ).toHaveCount(0);
     await expect(page.getByTestId("report-scope-summary-export")).toBeVisible();
+  });
+
+  test("first run selects nothing and refuses to generate until it does", async ({
+    page,
+  }) => {
+    // The rule the whole surface exists for: nothing reaches the report that
+    // was not ticked. So a first run starts empty, Generate refuses the press
+    // and says why, and the one-click action is what makes that cost nothing —
+    // it fills the standard set and the control comes alive.
+    await openGesundheitsakte(page);
+    const generate = page.getByTestId("health-record-generate");
+    await expect(generate).toBeVisible({ timeout: 10_000 });
+    await expect(generate).toBeDisabled();
+    await expect(
+      page.getByTestId("report-group-row-vitals-export"),
+    ).toContainText("0/7");
+    await expect(page.getByTestId("report-scope-summary-export")).toContainText(
+      "Nothing selected yet",
+    );
+
+    await page.getByTestId("report-apply-standard-export").click();
+
+    await expect(generate).toBeEnabled();
+    // Exactly the shipped set: the three classic vitals, weight and BMI, and
+    // nothing at all from the groups the template leaves alone.
+    await expect(
+      page.getByTestId("report-group-row-vitals-export"),
+    ).toContainText("3/7");
+    await expect(
+      page.getByTestId("report-group-row-body-export"),
+    ).toContainText("2/12");
+    await expect(
+      page.getByTestId("report-group-row-cardio-export"),
+    ).toContainText("0/14");
+    // The fenced tier is not part of any one-click set.
+    await expect(
+      page.getByTestId("report-scope-summary-export"),
+    ).not.toContainText("incl.");
+  });
+
+  test("a share link cannot be minted on an empty scope either", async ({
+    page,
+  }) => {
+    await openGesundheitsakte(page);
+    const create = page.getByTestId("share-create-submit");
+    await expect(create).toBeVisible({ timeout: 10_000 });
+    await page.locator("#share-label").fill("Cardiology");
+    // A label alone is not a scope: the link would serve a page with nothing
+    // on it, so the control stays shut until something is chosen.
+    await expect(create).toBeDisabled();
+    await expect(page.getByTestId("report-scope-summary-share")).toContainText(
+      "Nothing selected yet",
+    );
+    await page.getByTestId("report-apply-standard-share").click();
+    await expect(create).toBeEnabled();
   });
 
   test("clears the tap floor on the group rows at 390 px", async ({ page }) => {

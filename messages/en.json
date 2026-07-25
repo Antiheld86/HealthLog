@@ -5317,8 +5317,7 @@
       "rangeCustomEnd": "To",
       "errorGeneric": "The export could not be generated. Please try again.",
       "errorRateLimit": "You have reached the export limit for this hour.",
-      "errorModuleDisabled": "The health record export is switched off for this account.",
-      "errorEmptySelection": "Pick at least one entry to include."
+      "errorModuleDisabled": "The health record export is switched off for this account."
     },
     "globalExcludedInjectionSitesLabel": "Globally excluded injection sites",
     "globalExcludedInjectionSitesHint": "Sites listed here are never offered for any medication and rejected when logging a dose, even if a medication prefers them.",
@@ -8888,11 +8887,12 @@
     "leafMood": "Mood",
     "leafCycle": "Menstrual cycle",
     "templateStandard": "Standard doctor's report",
-    "templateApplied": "{template} is preselected. Check it before you generate.",
+    "applyStandard": "Apply {template}",
+    "standardHint": "One click fills in what a general visit usually needs. Every entry stays editable.",
     "groupCount": "{on}/{total}",
     "groupDisclosure": "Show the entries in {group}",
     "sensitiveHint": "Nothing here is ever preselected. Pick each entry yourself.",
-    "scopeNone": "Nothing selected — the document would be empty.",
+    "scopeNone": "Nothing selected yet. Choose what to include, or apply the standard report.",
     "scopeCount": "{count} entries from {groups} areas",
     "scopeSensitive": "incl. {names}"
   }

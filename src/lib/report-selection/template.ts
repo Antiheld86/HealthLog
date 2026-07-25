@@ -1,14 +1,15 @@
 /**
  * The one shipped template: what a general doctor's visit usually needs.
  *
- * It is applied on the FIRST run only, with the panel open, so the user
- * presses Generate having seen twelve named groups and an empty fenced tier.
- * That is consent to a named bundle, not a server-chosen default — nothing
- * here is applied to a stored selection, to a share link, or to any surface
- * that cannot ask a human.
+ * Nothing applies it on its own. It reaches a selection only when a person
+ * presses the button that carries its name, on a panel they are looking at —
+ * never on load, never on a stored selection, never on a share link, never on
+ * a surface that cannot ask a human. A set that arrives without being asked
+ * for is a preselection whatever it is called, and the one thing this release
+ * refuses is material in a report nobody ticked.
  *
  * The template intersects the fenced tier at zero leaves, and
- * `report-template-purity.test.ts` fails the build if that stops being true.
+ * `catalogue-guard.test.ts` fails the build if that stops being true.
  */
 import { SENSITIVE_LEAF_IDS, type ReportLeafId } from "./catalogue";
 
@@ -39,8 +40,23 @@ export const STANDARD_TEMPLATE_LEAVES: readonly ReportLeafId[] = [
   "ILLNESS_EPISODES",
 ];
 
-/** The template's i18n label — it is named in the panel, never anonymous. */
+/** The template's i18n label — it is named on the button, never anonymous. */
 export const STANDARD_TEMPLATE_LABEL_KEY = "reportSelection.templateStandard";
+
+/**
+ * The template as one surface can offer it: the shipped set minus the leaves
+ * that surface may not carry (the share-link form hides the insurance leaf,
+ * which the server refuses anyway).
+ *
+ * Pure, so "one click applies exactly the standard set and nothing outside it"
+ * is provable without a DOM.
+ */
+export function standardTemplateFor(
+  hiddenLeaves: readonly ReportLeafId[] = [],
+): ReportLeafId[] {
+  const hidden = new Set(hiddenLeaves);
+  return STANDARD_TEMPLATE_LEAVES.filter((leaf) => !hidden.has(leaf));
+}
 
 /** Exported so the purity guard reads the same set the panel does. */
 export const SENSITIVE_LEAVES = SENSITIVE_LEAF_IDS;

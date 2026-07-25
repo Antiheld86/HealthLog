@@ -5317,8 +5317,7 @@
       "rangeCustomEnd": "Do",
       "errorGeneric": "Nie udało się wygenerować eksportu. Spróbuj ponownie.",
       "errorRateLimit": "Osiągnięto limit eksportów w tej godzinie.",
-      "errorModuleDisabled": "Eksport dokumentacji jest wyłączony dla tego konta.",
-      "errorEmptySelection": "Wybierz co najmniej jedną pozycję."
+      "errorModuleDisabled": "Eksport dokumentacji jest wyłączony dla tego konta."
     },
     "globalExcludedInjectionSitesLabel": "Globalnie wykluczone miejsca iniekcji",
     "globalExcludedInjectionSitesHint": "Miejsca wymienione tutaj nie są proponowane dla żadnego leku i są odrzucane przy rejestrowaniu dawki, nawet jeśli lek je preferuje.",
@@ -8888,11 +8887,12 @@
     "leafMood": "Nastrój",
     "leafCycle": "Cykl menstruacyjny",
     "templateStandard": "Standardowy raport lekarski",
-    "templateApplied": "{template} jest wstępnie wybrany. Sprawdź go przed wygenerowaniem.",
+    "applyStandard": "Zastosuj {template}",
+    "standardHint": "Jedno kliknięcie wypełnia to, czego zwykle wymaga wizyta u lekarza rodzinnego. Każdą pozycję można potem zmienić.",
     "groupCount": "{on}/{total}",
     "groupDisclosure": "Pokaż pozycje w {group}",
     "sensitiveHint": "Nic tu nie jest wstępnie wybrane. Wybierz każdą pozycję samodzielnie.",
-    "scopeNone": "Nic nie wybrano — dokument byłby pusty.",
+    "scopeNone": "Nic jeszcze nie wybrano. Wybierz, co ma się znaleźć w dokumencie, albo zastosuj raport standardowy.",
     "scopeCount": "{count} pozycji z {groups} obszarów",
     "scopeSensitive": "w tym {names}"
   }

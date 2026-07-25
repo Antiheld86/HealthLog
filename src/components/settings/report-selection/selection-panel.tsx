@@ -9,10 +9,11 @@
  *
  * Three states, by design:
  *
- *   1. First run (no saved selection): the picker opens EXPANDED with the
- *      named standard template applied and the fenced tier visibly empty, so
- *      the user presses Generate having seen twelve named groups. That is
- *      consent to a named bundle, not a server-chosen default.
+ *   1. First run (no saved selection): NOTHING is selected. The picker opens
+ *      expanded so the standard-report button and the empty fenced tier are
+ *      both in view, and Generate is disabled until something is ticked. One
+ *      click on that button still produces a complete doctor's report, so the
+ *      fast path costs one interaction, not a scope nobody chose.
  *   2. Repeat run: the picker is collapsed behind its disclosure, the saved
  *      selection is loaded, and the scope line under the button says what will
  *      be in the document. Two interactions after navigation, and the reading
@@ -55,10 +56,6 @@ import {
   parseSavedProfile,
   SAVED_PROFILE_FALLBACK,
 } from "@/lib/report-selection/profile-shape";
-import {
-  STANDARD_TEMPLATE_LABEL_KEY,
-  STANDARD_TEMPLATE_LEAVES,
-} from "@/lib/report-selection/template";
 import { orderLeaves } from "@/lib/report-selection/selection";
 
 import { ReportScopePicker } from "./report-scope-picker";
@@ -85,16 +82,19 @@ export function HealthRecordExportPanel() {
   const [includeCharts, setIncludeCharts] = useState<boolean>(
     SAVED_PROFILE_FALLBACK.includeCharts,
   );
+  // Empty until a human ticks something. There is no default selection to get
+  // wrong, because there is no default selection.
   const [selected, setSelected] = useState<ReadonlySet<ReportLeafId>>(
-    () => new Set(STANDARD_TEMPLATE_LEAVES),
+    () => new Set<ReportLeafId>(),
   );
   const [seededUserId, setSeededUserId] = useState<string | null>(null);
-  // First run opens the picker so the template is seen, not merely applied.
+  // A first run opens the picker: with nothing selected, the standard-report
+  // button and the empty groups are the two things the person needs to see.
   const [pickerOpen, setPickerOpen] = useState(true);
-  const [templateApplied, setTemplateApplied] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pickerPanelId = useId();
+  const scopeSummaryId = useId();
 
   if (user && user.id !== seededUserId) {
     setSeededUserId(user.id);
@@ -106,7 +106,6 @@ export function HealthRecordExportPanel() {
       setDays(saved.rangeDays);
       setIncludeCharts(saved.includeCharts);
       setPickerOpen(false);
-      setTemplateApplied(false);
     }
   }
 
@@ -120,10 +119,6 @@ export function HealthRecordExportPanel() {
   });
 
   async function handleGenerate() {
-    if (selected.size === 0) {
-      setError(t("settings.healthRecord.errorEmptySelection"));
-      return;
-    }
     setBusy(true);
     setError(null);
     try {
@@ -171,7 +166,6 @@ export function HealthRecordExportPanel() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      setTemplateApplied(false);
       // The route just persisted the practice name and the selection, so the
       // cached `/me` payload is stale. Refresh it, or a remount would seed from
       // the previous values.
@@ -332,16 +326,6 @@ export function HealthRecordExportPanel() {
               className="animate-insight-in space-y-3"
               style={{ animationDuration: "200ms" }}
             >
-              {templateApplied ? (
-                <p
-                  className="text-muted-foreground text-xs"
-                  data-testid="report-template-note"
-                >
-                  {t("reportSelection.templateApplied", {
-                    template: t(STANDARD_TEMPLATE_LABEL_KEY),
-                  })}
-                </p>
-              ) : null}
               <ReportScopePicker
                 surface="export"
                 selected={selected}
@@ -365,17 +349,28 @@ export function HealthRecordExportPanel() {
         {/* The FHIR note and the generate action share the footer row. */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0 flex-1 space-y-1">
-            <ScopeSummary t={t} surface="export" selected={selected} />
+            <ScopeSummary
+              t={t}
+              id={scopeSummaryId}
+              surface="export"
+              selected={selected}
+            />
             {isFhirLike ? (
               <p className="text-muted-foreground max-w-md text-xs">
                 {t("settings.healthRecord.fhirNote")}
               </p>
             ) : null}
           </div>
+          {/* An empty scope cannot be generated: there is no document to make.
+              The scope line beside the button carries the reason and the way
+              out of it, and describes the button so the disabled state is not
+              silent for a screen reader. */}
           <Button
             type="button"
             onClick={handleGenerate}
-            disabled={busy}
+            disabled={busy || selected.size === 0}
+            aria-describedby={scopeSummaryId}
+            data-testid="health-record-generate"
             className="ml-auto min-h-11 shrink-0 sm:min-h-9"
           >
             {busy ? (

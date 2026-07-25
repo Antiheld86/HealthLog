@@ -29,7 +29,7 @@ import {
   STRUCTURED_LEAF_IDS,
   leafLabelKey,
 } from "../catalogue";
-import { STANDARD_TEMPLATE_LEAVES } from "../template";
+import { STANDARD_TEMPLATE_LEAVES, standardTemplateFor } from "../template";
 
 const EN = JSON.parse(
   readFileSync(
@@ -109,6 +109,40 @@ describe("template purity", () => {
         "SCI_SCORE",
         "WHO5_SCORE",
       ].sort(),
+    );
+  });
+});
+
+/**
+ * The set behind the one-click action, checked as a set.
+ *
+ * The button is the only thing that applies the template now, so what it
+ * applies has to be exactly the shipped list and nothing beside it — a leaf
+ * that crept in here would land in a document the person believes they chose
+ * from a named list.
+ *
+ * Mutation check (verified red, then reverted): make `standardTemplateFor`
+ * ignore its argument → "drops only what the surface hides" goes red.
+ */
+describe("the standard-report action", () => {
+  it("applies exactly the shipped set and nothing outside it", () => {
+    expect(standardTemplateFor()).toEqual([...STANDARD_TEMPLATE_LEAVES]);
+    const outside = standardTemplateFor().filter(
+      (leaf) => !STANDARD_TEMPLATE_LEAVES.includes(leaf),
+    );
+    expect(outside).toEqual([]);
+    // Nothing fenced, on any surface: the fence is not a matter of which
+    // button you press.
+    expect(
+      standardTemplateFor().filter((leaf) => SENSITIVE_LEAF_IDS.includes(leaf)),
+    ).toEqual([]);
+  });
+
+  it("drops only what the surface hides", () => {
+    const onShare = standardTemplateFor(["INSURANCE"]);
+    expect(onShare).not.toContain("INSURANCE");
+    expect(onShare).toEqual(
+      STANDARD_TEMPLATE_LEAVES.filter((leaf) => leaf !== "INSURANCE"),
     );
   });
 });

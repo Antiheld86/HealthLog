@@ -7,6 +7,11 @@
  * restated by name rather than folded into the count, because a number cannot
  * be checked at a glance and "incl. Mood, PHQ-9" can.
  *
+ * On an empty scope it is also the reason the generate / create control is
+ * disabled, which is why it takes an `id`: the control points its
+ * `aria-describedby` here, so "why can I not press this" has an answer in the
+ * accessibility tree as well as on screen.
+ *
  * Meta tier — one sentence about the form beside it, not content.
  *
  * One per picker, so the test id ends with the same surface its picker does.
@@ -18,10 +23,13 @@ import type { ReportScopeSurface } from "./surface";
 
 export function ScopeSummary({
   t,
+  id,
   surface,
   selected,
 }: {
   t: (key: string, vars?: Record<string, string | number>) => string;
+  /** Referenced by the control this line explains, via `aria-describedby`. */
+  id?: string;
   surface: ReportScopeSurface;
   selected: ReadonlySet<ReportLeafId>;
 }) {
@@ -29,6 +37,7 @@ export function ScopeSummary({
   if (summary.total === 0) {
     return (
       <p
+        id={id}
         className="text-muted-foreground text-xs"
         data-testid={`report-scope-summary-${surface}`}
       >
@@ -48,6 +57,7 @@ export function ScopeSummary({
       : null;
   return (
     <p
+      id={id}
       className="text-muted-foreground text-xs"
       data-testid={`report-scope-summary-${surface}`}
     >

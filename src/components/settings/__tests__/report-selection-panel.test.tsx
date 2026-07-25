@@ -7,22 +7,26 @@
  * stick, and it is gated on the user id so a late re-resolve never clobbers
  * edits in flight.
  *
- * The three panel states are the load-bearing part. First run must open the
- * picker EXPANDED with the named template applied and the fenced tier visibly
- * empty, so the user presses Generate having seen twelve named groups; a
- * repeat run must open collapsed carrying the owner's own last scope. A
- * template silently applied behind a collapsed disclosure would be opt-out
- * wearing a hat.
+ * The three panel states are the load-bearing part. A first run must select
+ * NOTHING — no template, no server default, no group half on — and must leave
+ * Generate disabled until a person ticks something, with the standard-report
+ * button one click away. A repeat run must open collapsed carrying the owner's
+ * own last scope. A set that arrives without being asked for is a
+ * preselection whatever it is called, and material nobody ticked is exactly
+ * what this surface must never send.
  *
  * SSR-only, per the project convention for this surface.
  *
- * Mutation checks:
+ * Mutation checks (each verified red, then reverted):
  *   - remove the seeding block → "pre-fills the input" and "restores the saved
  *     selection" go red.
+ *   - seed `selected` from `STANDARD_TEMPLATE_LEAVES` → "selects nothing on a
+ *     first run", "counts nothing in any group" and "disables Generate" go
+ *     red.
  *   - start `pickerOpen` at `false` → "opens expanded on the first run" goes
  *     red.
- *   - add a fenced leaf to `STANDARD_TEMPLATE_LEAVES` → "checks no fenced leaf
- *     on the first run" goes red.
+ *   - drop `selected.size === 0` from the Generate `disabled` expression →
+ *     "disables Generate while the scope is empty" goes red.
  */
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -126,6 +130,15 @@ function practiceInputValue(html: string): string | null {
   return input.match(/value="([^"]*)"/)?.[1] ?? "";
 }
 
+/** Whether the Generate control refuses the press. */
+function generateDisabled(html: string): boolean {
+  const button = html.match(
+    /<button[^>]*data-testid="health-record-generate"[^>]*>/,
+  )?.[0];
+  if (!button) throw new Error("the Generate button did not render");
+  return /\sdisabled=""/.test(button);
+}
+
 describe("<HealthRecordExportPanel> — remembered practice name", () => {
   it("pre-fills the input with the last-used practice name", () => {
     const html = renderPanel(buildUser("Sample Practice"));
@@ -144,29 +157,53 @@ describe("<HealthRecordExportPanel> — remembered practice name", () => {
 });
 
 describe("<HealthRecordExportPanel> — the first run", () => {
-  it("opens the picker expanded and names the template it applied", () => {
+  it("opens the picker expanded with the standard-report button in view", () => {
     const html = renderPanel(buildUser(null));
     expect(html).toContain('data-testid="health-record-included-data-panel"');
     expect(html).toContain('data-testid="report-scope-picker-export"');
-    expect(html).toContain("Standard doctor&#x27;s report");
+    // The template is offered by name on a button, not applied behind the
+    // user's back. One click is still one click; it just has to happen.
+    expect(html).toContain('data-testid="report-apply-standard-export"');
+    expect(html).toContain("Apply Standard doctor&#x27;s report");
   });
 
-  it("counts the template's leaves per group, and no others", () => {
+  it("selects nothing at all — no template, no default", () => {
     const html = renderPanel(buildUser(null));
-    // Identity: both leaves. Vitals: the three classic ones out of seven.
-    // Body: weight and BMI out of twelve. Nothing at all from the groups the
-    // template leaves alone.
-    expect(groupChip(html, "identity")).toBe("2/2");
-    expect(groupChip(html, "vitals")).toBe("3/7");
-    expect(groupChip(html, "body")).toBe("2/12");
-    expect(groupChip(html, "labs")).toBe("1/1");
-    expect(groupChip(html, "medications")).toBe("2/4");
-    expect(groupChip(html, "history")).toBe("2/2");
+    expect(html).toContain('data-testid="report-scope-summary-export"');
+    expect(html).toContain("Nothing selected yet");
+    // Every leaf the panel renders at all is off. Only the fenced tier renders
+    // leaf rows while every group is collapsed, and none of them is checked.
+    for (const leaf of ["MOOD", "CYCLE", "FAMILY_HISTORY", "PHQ9_SCORE"]) {
+      expect(leafChecked(html, leaf), leaf).toBe(false);
+    }
+  });
+
+  it("counts nothing in any group, the template's own groups included", () => {
+    const html = renderPanel(buildUser(null));
+    // These six carry the standard template's leaves. On a first run they read
+    // 0/n like every other group: the template is a button, not a starting
+    // state.
+    expect(groupChip(html, "identity")).toBe("0/2");
+    expect(groupChip(html, "vitals")).toBe("0/7");
+    expect(groupChip(html, "body")).toBe("0/12");
+    expect(groupChip(html, "labs")).toBe("0/1");
+    expect(groupChip(html, "medications")).toBe("0/4");
+    expect(groupChip(html, "history")).toBe("0/2");
     expect(groupChip(html, "cardio")).toBe("0/14");
     expect(groupChip(html, "activity")).toBe("0/8");
     expect(groupChip(html, "sleepRecovery")).toBe("0/16");
     expect(groupChip(html, "mobility")).toBe("0/11");
     expect(groupChip(html, "environment")).toBe("0/4");
+  });
+
+  it("disables Generate while the scope is empty, and says what to do", () => {
+    const html = renderPanel(buildUser(null));
+    expect(generateDisabled(html)).toBe(true);
+    // The reason sits beside the control and points at the way out of it,
+    // rather than telling the person off after they press.
+    expect(html).toContain(
+      "Nothing selected yet. Choose what to include, or apply the standard report.",
+    );
   });
 
   it("leaves every fenced leaf unchecked and renders the tier", () => {
@@ -192,12 +229,6 @@ describe("<HealthRecordExportPanel> — the first run", () => {
       'data-testid="report-group-check-sensitive-export"',
     );
   });
-
-  it("states the scope in one line", () => {
-    const html = renderPanel(buildUser(null));
-    expect(html).toContain('data-testid="report-scope-summary-export"');
-    expect(html).toContain("14 entries from 7 areas");
-  });
 });
 
 describe("<HealthRecordExportPanel> — a repeat run", () => {
@@ -217,6 +248,12 @@ describe("<HealthRecordExportPanel> — a repeat run", () => {
     expect(html).toContain("incl. Mood");
   });
 
+  it("enables Generate once a scope has been chosen", () => {
+    const html = renderPanel(withSavedSelection(buildUser(null), ["WEIGHT"]));
+    expect(generateDisabled(html)).toBe(false);
+    expect(html).not.toContain("Nothing selected yet");
+  });
+
   it("restores the saved format and range", () => {
     const html = renderPanel(withSavedSelection(buildUser(null), ["WEIGHT"]));
     // FHIR was saved, so the practice-name line (PDF only) is not rendered.
@@ -224,15 +261,17 @@ describe("<HealthRecordExportPanel> — a repeat run", () => {
     expect(html).toContain('<option value="180" selected=""');
   });
 
-  it("falls back to the template when the saved blob cannot be read", () => {
+  it("falls back to an empty scope when the saved blob cannot be read", () => {
     const user = {
       ...buildUser(null),
       reportSelection: { bp: true, weight: true },
     } as AuthUser;
     const html = renderPanel(user);
     // A shape the server cannot read is not consent to anything, so the panel
-    // shows the named template rather than a partial scope.
-    expect(html).toContain("Standard doctor&#x27;s report");
-    expect(groupChip(html, "body")).toBe("2/12");
+    // treats it as a first run: nothing selected, Generate refused, the
+    // standard-report button one click away.
+    expect(groupChip(html, "body")).toBe("0/12");
+    expect(generateDisabled(html)).toBe(true);
+    expect(html).toContain('data-testid="report-apply-standard-export"');
   });
 });
