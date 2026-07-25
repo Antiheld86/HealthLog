@@ -342,7 +342,11 @@ export function HealthRecordExportPanel() {
                   })}
                 </p>
               ) : null}
-              <ReportScopePicker selected={selected} onChange={setSelected} />
+              <ReportScopePicker
+                surface="export"
+                selected={selected}
+                onChange={setSelected}
+              />
               {isPdfLike ? (
                 <label className="flex min-h-11 items-center justify-between gap-3 text-sm sm:min-h-9">
                   <span className="text-foreground">
@@ -361,7 +365,7 @@ export function HealthRecordExportPanel() {
         {/* The FHIR note and the generate action share the footer row. */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0 flex-1 space-y-1">
-            <ScopeSummary t={t} selected={selected} />
+            <ScopeSummary t={t} surface="export" selected={selected} />
             {isFhirLike ? (
               <p className="text-muted-foreground max-w-md text-xs">
                 {t("settings.healthRecord.fhirNote")}

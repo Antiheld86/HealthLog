@@ -14,6 +14,10 @@
  *
  * The component is controlled: it owns no selection state, only which rows are
  * expanded and what each group looked like before it was switched off.
+ *
+ * `surface` is required because Settings → Gesundheitsakte mounts the picker
+ * twice on one page. Every test id under the picker ends with it, so each mount
+ * stays uniquely addressable no matter how many surfaces adopt the component.
  */
 import { useId, useState } from "react";
 
@@ -34,12 +38,19 @@ import {
 
 import { GroupRow } from "./group-row";
 import { LeafGrid } from "./leaf-grid";
+import type { ReportScopeSurface } from "./surface";
 
 export function ReportScopePicker({
+  surface,
   selected,
   onChange,
   hiddenLeaves,
 }: {
+  /**
+   * The mount this picker belongs to. Names every test id under it, so the two
+   * pickers that share the Gesundheitsakte page never collide.
+   */
+  surface: ReportScopeSurface;
   selected: ReadonlySet<ReportLeafId>;
   onChange: (next: Set<ReportLeafId>) => void;
   /**
@@ -83,11 +94,12 @@ export function ReportScopePicker({
   };
 
   return (
-    <div className="space-y-3" data-testid="report-scope-picker">
+    <div className="space-y-3" data-testid={`report-scope-picker-${surface}`}>
       {plainGroups.map((group) => (
         <GroupRow
           key={group.id}
           t={t}
+          surface={surface}
           id={group.id}
           labelKey={group.labelKey}
           leaves={group.leaves}
@@ -110,7 +122,7 @@ export function ReportScopePicker({
       ))}
 
       {sensitiveGroup ? (
-        <div data-testid="report-sensitive-tier">
+        <div data-testid={`report-sensitive-tier-${surface}`}>
           <Separator className="my-4" />
           <p className="text-muted-foreground mb-2 text-xs font-medium tracking-wide uppercase">
             {t(sensitiveGroup.labelKey)}
@@ -120,6 +132,7 @@ export function ReportScopePicker({
           </p>
           <LeafGrid
             t={t}
+            surface={surface}
             leaves={sensitiveGroup.leaves}
             selected={selected}
             onToggle={handleLeaf}

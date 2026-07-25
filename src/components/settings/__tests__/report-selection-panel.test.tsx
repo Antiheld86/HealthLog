@@ -95,7 +95,7 @@ function withSavedSelection(user: AuthUser, leaves: string[]): AuthUser {
  */
 function leafChecked(html: string, leaf: string): boolean {
   const row = html.match(
-    new RegExp(`data-testid="report-leaf-${leaf}"[\\s\\S]*?</label>`),
+    new RegExp(`data-testid="report-leaf-${leaf}-export"[\\s\\S]*?</label>`),
   )?.[0];
   if (!row) return false;
   return /data-state="checked"/.test(row);
@@ -104,7 +104,9 @@ function leafChecked(html: string, leaf: string): boolean {
 /** The "n/total" chip a collapsed group row carries. */
 function groupChip(html: string, group: string): string | null {
   const row = html.match(
-    new RegExp(`data-testid="report-group-row-${group}"[\\s\\S]*?</div>`),
+    new RegExp(
+      `data-testid="report-group-row-${group}-export"[\\s\\S]*?</div>`,
+    ),
   )?.[0];
   return row?.match(/data-slot="tag-chip"[^>]*>([^<]*)</)?.[1] ?? null;
 }
@@ -145,7 +147,7 @@ describe("<HealthRecordExportPanel> — the first run", () => {
   it("opens the picker expanded and names the template it applied", () => {
     const html = renderPanel(buildUser(null));
     expect(html).toContain('data-testid="health-record-included-data-panel"');
-    expect(html).toContain('data-testid="report-scope-picker"');
+    expect(html).toContain('data-testid="report-scope-picker-export"');
     expect(html).toContain("Standard doctor&#x27;s report");
   });
 
@@ -169,7 +171,7 @@ describe("<HealthRecordExportPanel> — the first run", () => {
 
   it("leaves every fenced leaf unchecked and renders the tier", () => {
     const html = renderPanel(buildUser(null));
-    expect(html).toContain('data-testid="report-sensitive-tier"');
+    expect(html).toContain('data-testid="report-sensitive-tier-export"');
     for (const leaf of [
       "MOOD",
       "CYCLE",
@@ -185,13 +187,15 @@ describe("<HealthRecordExportPanel> — the first run", () => {
 
   it("gives the fenced tier no group checkbox", () => {
     const html = renderPanel(buildUser(null));
-    expect(html).toContain('data-testid="report-group-check-vitals"');
-    expect(html).not.toContain('data-testid="report-group-check-sensitive"');
+    expect(html).toContain('data-testid="report-group-check-vitals-export"');
+    expect(html).not.toContain(
+      'data-testid="report-group-check-sensitive-export"',
+    );
   });
 
   it("states the scope in one line", () => {
     const html = renderPanel(buildUser(null));
-    expect(html).toContain('data-testid="report-scope-summary"');
+    expect(html).toContain('data-testid="report-scope-summary-export"');
     expect(html).toContain("14 entries from 7 areas");
   });
 });

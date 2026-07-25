@@ -25,9 +25,11 @@ import type {
 import type { GroupCheckState } from "@/lib/report-selection/panel-state";
 
 import { LeafGrid } from "./leaf-grid";
+import type { ReportScopeSurface } from "./surface";
 
 export function GroupRow({
   t,
+  surface,
   id,
   labelKey,
   leaves,
@@ -41,6 +43,7 @@ export function GroupRow({
   onToggleOpen,
 }: {
   t: (key: string, vars?: Record<string, string | number>) => string;
+  surface: ReportScopeSurface;
   id: ReportGroupId;
   labelKey: string;
   leaves: readonly ReportLeafId[];
@@ -55,7 +58,10 @@ export function GroupRow({
 }) {
   const label = t(labelKey);
   return (
-    <ListRow className="space-y-2" data-testid={`report-group-row-${id}`}>
+    <ListRow
+      className="space-y-2"
+      data-testid={`report-group-row-${id}-${surface}`}
+    >
       <div className="flex min-h-11 items-center gap-3 sm:min-h-9">
         <Checkbox
           checked={
@@ -67,7 +73,7 @@ export function GroupRow({
           }
           onCheckedChange={onToggleGroup}
           aria-label={label}
-          data-testid={`report-group-check-${id}`}
+          data-testid={`report-group-check-${id}-${surface}`}
         />
         <span className="text-foreground min-w-0 flex-1 text-sm">{label}</span>
         <TagChip>
@@ -94,6 +100,7 @@ export function GroupRow({
         <div id={panelId}>
           <LeafGrid
             t={t}
+            surface={surface}
             leaves={leaves}
             selected={selected}
             onToggle={onToggleLeaf}

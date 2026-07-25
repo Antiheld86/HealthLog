@@ -60,23 +60,23 @@ describe("share-link create form — re-mint seeding", () => {
 
   it("offers the scope picker, with the insurance leaf absent from it", () => {
     const html = render(<ShareLinkCreateForm />);
-    expect(html).toContain('data-testid="report-scope-picker"');
-    expect(html).toContain('data-testid="report-group-row-identity"');
+    expect(html).toContain('data-testid="report-scope-picker-share"');
+    expect(html).toContain('data-testid="report-group-row-identity-share"');
     // The server refuses the leaf with a 422; a control that cannot be
     // honoured has no business rendering, so the identity group is one leaf
     // wide here and two wide in the export panel.
     const row = html.match(
-      /data-testid="report-group-row-identity"[\s\S]*?<\/div>/,
+      /data-testid="report-group-row-identity-share"[\s\S]*?<\/div>/,
     )?.[0];
     expect(row).toBeDefined();
     expect(row).toContain(">1/1<");
     // The fenced tier renders its leaves unconditionally; none is checked.
-    expect(html).toContain('data-testid="report-leaf-MOOD"');
-    expect(html).not.toContain('data-testid="report-leaf-INSURANCE"');
+    expect(html).toContain('data-testid="report-leaf-MOOD-share"');
+    expect(html).not.toContain('data-testid="report-leaf-INSURANCE-share"');
   });
 
   it("hides the scope picker entirely for a documents-only share", () => {
     const html = render(<ShareLinkCreateForm documentOnly />);
-    expect(html).not.toContain('data-testid="report-scope-picker"');
+    expect(html).not.toContain('data-testid="report-scope-picker-share"');
   });
 });

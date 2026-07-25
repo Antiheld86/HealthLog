@@ -377,11 +377,12 @@ export function ShareLinkCreateForm({
               </p>
             </div>
             <ReportScopePicker
+              surface="share"
               selected={selectedLeaves}
               onChange={setSelectedLeaves}
               hiddenLeaves={SHARE_HIDDEN_LEAVES}
             />
-            <ScopeSummary t={t} selected={selectedLeaves} />
+            <ScopeSummary t={t} surface="share" selected={selectedLeaves} />
           </div>
         ) : null}
 
