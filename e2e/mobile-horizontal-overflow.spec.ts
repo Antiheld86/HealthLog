@@ -130,27 +130,40 @@ test.describe("content-heavy routes have no horizontal page scroll at phone widt
     await page.setViewportSize({ width: 390, height: 851 });
     await page.goto("/insights", { waitUntil: "domcontentloaded" });
 
-    const heading = page
+    // Wait on the CAPTION, not the heading: the card first paints a skeleton
+    // whose heading carries no action slot, then swaps to the resolved shell.
+    // Both render `[data-slot="section-heading"]`, so gating on the heading
+    // alone can measure the skeleton — or measure nothing at all, because the
+    // element detaches during the swap.
+    const method = page
       .locator(
-        '[data-slot="coincident-deviation-section"] [data-slot="section-heading"]',
+        '[data-slot="coincident-deviation-section"] [data-slot="provenance-explainer-method"]',
       )
       .first();
-    await expect(heading).toBeVisible();
+    await expect(method).toBeVisible();
 
-    const box = await heading.boundingBox();
-    const method = heading.locator('[data-slot="provenance-explainer-method"]');
-    const methodBox = await method.boundingBox();
-    expect(box, "heading has no box").not.toBeNull();
-    expect(methodBox, "provenance caption has no box").not.toBeNull();
+    // Read both rects in ONE evaluate so the swap cannot land between them.
+    const box = await method.evaluate((el) => {
+      const headingEl = el.closest('[data-slot="section-heading"]');
+      if (!headingEl) return null;
+      const caption = el.getBoundingClientRect();
+      const heading = headingEl.getBoundingClientRect();
+      return {
+        captionWidth: caption.width,
+        headingWidth: heading.width,
+        viewportWidth: window.innerWidth,
+      };
+    });
+    expect(box, "caption is not inside a section heading").not.toBeNull();
 
     expect(
-      Math.round(methodBox!.width),
-      `caption width ${methodBox!.width} exceeds its heading row ${box!.width} — the action slot is sizing to max-content instead of wrapping`,
-    ).toBeLessThanOrEqual(Math.round(box!.width) + 1);
+      Math.round(box!.captionWidth),
+      `caption width ${box!.captionWidth} exceeds its heading row ${box!.headingWidth} — the action slot is sizing to max-content instead of wrapping`,
+    ).toBeLessThanOrEqual(Math.round(box!.headingWidth) + 1);
     expect(
-      Math.round(box!.width),
+      Math.round(box!.headingWidth),
       "heading row is wider than the viewport",
-    ).toBeLessThanOrEqual(390);
+    ).toBeLessThanOrEqual(box!.viewportWidth);
   });
 
   /**
