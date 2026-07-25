@@ -112,19 +112,17 @@ describe("buildShareLinkCreatePayload — scope contract", () => {
     expiryDays: 30,
   };
 
-  it("document-only: empty report scope, FHIR off, and the launched doc always rides along", () => {
+  it("document-only: empty report scope and the launched doc always rides along", () => {
     const payload = buildShareLinkCreatePayload({
       ...common,
-      // Even if the caller state still holds record-scope values, they must be
-      // dropped: a document link never carries a health scope.
-      allowFhirApi: true,
-      resourceTypes: ["Patient", "Observation"],
       documentIds: ["doc-1"],
       documentOnly: true,
     });
-    expect(payload.resourceTypes).toEqual([]);
-    expect(payload.allowFhirApi).toBe(false);
     expect(payload.documentOnly).toBe(true);
+    // The retired FHIR scope keys are gone from the wire entirely,
+    // so a share link can no longer advertise a face that was never served.
+    expect(payload).not.toHaveProperty("resourceTypes");
+    expect(payload).not.toHaveProperty("allowFhirApi");
     // No report sections are ever sent for a document link.
     expect(payload).not.toHaveProperty("sections");
     // The launched document is always in the created link (pre-attach fix).
@@ -132,15 +130,15 @@ describe("buildShareLinkCreatePayload — scope contract", () => {
     expect(payload.label).toBe("Blood panel 2026");
   });
 
-  it("record share: keeps the full scope and omits documentIds when none picked", () => {
+  it("record share: keeps the window scope and omits documentIds when none picked", () => {
     const payload = buildShareLinkCreatePayload({
       ...common,
-      allowFhirApi: false,
-      resourceTypes: ["Patient", "Observation"],
       documentIds: [],
       documentOnly: false,
     });
-    expect(payload.resourceTypes).toEqual(["Patient", "Observation"]);
+    expect(payload.rangeEnd).toBeNull();
+    expect(payload).not.toHaveProperty("resourceTypes");
+    expect(payload).not.toHaveProperty("allowFhirApi");
     expect(payload).not.toHaveProperty("documentIds");
     expect(payload).not.toHaveProperty("documentOnly");
   });
@@ -148,8 +146,6 @@ describe("buildShareLinkCreatePayload — scope contract", () => {
   it("record share: attaches the picked documents when the owner chose some", () => {
     const payload = buildShareLinkCreatePayload({
       ...common,
-      allowFhirApi: false,
-      resourceTypes: ["Patient", "Observation"],
       documentIds: ["a", "b"],
       documentOnly: false,
     });

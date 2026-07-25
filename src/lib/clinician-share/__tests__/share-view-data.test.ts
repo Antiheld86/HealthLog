@@ -45,8 +45,6 @@ function ctx(overrides: Partial<ShareContext> = {}): ShareContext {
     rangeStart: new Date("2026-01-01T00:00:00Z"),
     rangeEnd: new Date("2026-02-01T00:00:00Z"),
     sectionsJson: { mood: false },
-    resourceTypes: [],
-    allowFhirApi: false,
     expiresAt: new Date(Date.now() + 86_400_000),
     ...overrides,
   } as ShareContext;

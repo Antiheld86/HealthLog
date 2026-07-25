@@ -99,10 +99,13 @@ describe("PUT /api/auth/me/doctor-report-prefs", () => {
     const res = await (PUT as (r: Request) => Promise<Response>)(mkPut(body));
     expect(res.status).toBe(200);
     const env = (await res.json()) as { data: typeof body };
-    expect(env.data).toEqual(body);
+    // The canonical shape is the full prefs object: keys the body omits fill
+    // from the defaults rather than being dropped.
+    const canonical = { ...DEFAULT_DOCTOR_REPORT_PREFS, ...body };
+    expect(env.data).toEqual(canonical);
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "user-1" },
-      data: { doctorReportPrefsJson: body },
+      data: { doctorReportPrefsJson: canonical },
     });
   });
 
@@ -134,10 +137,15 @@ describe("PUT /api/auth/me/doctor-report-prefs", () => {
     );
     expect(res.status).toBe(200);
     const env = (await res.json()) as { data: typeof current };
-    expect(env.data).toEqual({ ...current, mood: false });
+    const merged = {
+      ...DEFAULT_DOCTOR_REPORT_PREFS,
+      ...current,
+      mood: false,
+    };
+    expect(env.data).toEqual(merged);
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "user-1" },
-      data: { doctorReportPrefsJson: { ...current, mood: false } },
+      data: { doctorReportPrefsJson: merged },
     });
   });
 

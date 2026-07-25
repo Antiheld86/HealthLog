@@ -159,8 +159,6 @@ beforeEach(() => {
     rangeStart: new Date(),
     rangeEnd: null,
     sectionsJson: {},
-    resourceTypes: [],
-    allowFhirApi: false,
     expiresAt: new Date(Date.now() + 3_600_000),
   } as never);
 });

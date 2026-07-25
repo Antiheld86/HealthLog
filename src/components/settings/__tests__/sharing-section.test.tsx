@@ -33,8 +33,6 @@ const FIXTURE_LINKS = [
     label: "Cardiology referral",
     rangeStart: "2026-01-01T00:00:00.000Z",
     rangeEnd: null,
-    resourceTypes: ["Patient", "Observation"],
-    allowFhirApi: true,
     documentCount: 2,
     expiresAt: "2099-01-01T00:00:00.000Z",
     createdAt: "2026-06-01T00:00:00.000Z",
@@ -48,8 +46,6 @@ const FIXTURE_LINKS = [
     label: "Old GP link",
     rangeStart: "2026-01-01T00:00:00.000Z",
     rangeEnd: null,
-    resourceTypes: [],
-    allowFhirApi: false,
     documentCount: 0,
     expiresAt: "2099-01-01T00:00:00.000Z",
     createdAt: "2026-05-01T00:00:00.000Z",
@@ -100,8 +96,9 @@ describe("<SharingSection> — owner share-link surface (C7)", () => {
     // The list response shape carries no token; the markup must not surface
     // an `hls_` string anywhere.
     expect(html).not.toContain("hls_");
-    // The FHIR badge surfaces for the FHIR-enabled link.
-    expect(html).toContain("FHIR");
+    // No FHIR badge: the link has never served FHIR, so advertising
+    // it on the owner's list was the last place the promise still showed.
+    expect(html).not.toContain("FHIR");
   });
 
   it("folds revoked links into the inactive list (not the active list)", () => {

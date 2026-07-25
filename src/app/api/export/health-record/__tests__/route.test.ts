@@ -10,6 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 import { PDFParse } from "pdf-parse";
+import { unzipSync } from "fflate";
 
 vi.mock("@/lib/db", () => ({
   prisma: {
@@ -31,9 +32,15 @@ vi.mock("@/lib/auth/audit", () => ({
 }));
 vi.mock("@/lib/geo", () => ({ lookupIpLocation: vi.fn() }));
 vi.mock("@/lib/logging/transports", () => ({ emitStructuredLog: vi.fn() }));
-vi.mock("@/lib/tz/resolver", () => ({
-  resolveUserTimezone: vi.fn().mockResolvedValue("Europe/Berlin"),
-}));
+// Partial: the aggregator's canonical-source collapse calls `userDayKey` from
+// the same module, so a total mock breaks any fixture that carries rows.
+vi.mock("@/lib/tz/resolver", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/tz/resolver")>();
+  return {
+    ...actual,
+    resolveUserTimezone: vi.fn().mockResolvedValue("Europe/Berlin"),
+  };
+});
 
 // v1.18.0 — the health-record aggregator resolves the per-user module map
 // so a disabled data-domain module never reaches the export. Stub the gate
@@ -247,6 +254,287 @@ describe("POST /api/export/health-record — outputs", () => {
         where: expect.objectContaining({ userId: "user-1", deletedAt: null }),
       }),
     );
+  });
+});
+
+/**
+ * The selection has to mean the same thing in every artefact.
+ *
+ * Three defects met here. The export panel rendered eight measurement switches
+ * that the grouped-to-flat fold discarded, so deselecting body fat or VO₂max
+ * exported them anyway. The medication switch documented itself as excluding
+ * all medication data while the drug list and the per-dose ledger went out
+ * unconditionally. And the route fetched allergies and family history without
+ * consulting the toggles at all, so `sections.allergies = false` produced a PDF
+ * without an allergy section and a FHIR bundle carrying every one of them — in
+ * the `package` format, inside the same zip.
+ *
+ * Each case below runs the real route end to end and reads the produced
+ * artefact. Mutation check: revert any single gate and its case goes red while
+ * the positive control beside it stays green, so none of them can pass by
+ * asserting on an empty fixture.
+ */
+describe("POST /api/export/health-record — the selection reaches every format", () => {
+  const T0 = new Date("2026-02-01T08:00:00.000Z");
+
+  function measurement(type: string, value: number) {
+    return {
+      type,
+      value,
+      measuredAt: T0,
+      source: "MANUAL",
+      deviceType: null,
+      sleepStage: null,
+      glucoseContext: null,
+    };
+  }
+
+  function allergyRow() {
+    return {
+      id: "allergy-1",
+      substance: "Penicillin",
+      category: "MEDICATION",
+      type: "ALLERGY",
+      severity: "SEVERE",
+      status: "ACTIVE",
+      onsetAt: null,
+      reactionEncrypted: null,
+      notesEncrypted: null,
+      createdAt: T0,
+      updatedAt: T0,
+    };
+  }
+
+  function familyHistoryRow() {
+    return {
+      id: "fmh-1",
+      relationship: "MOTHER",
+      condition: "Hypertension",
+      ageAtOnset: 52,
+      notesEncrypted: null,
+      createdAt: T0,
+      updatedAt: T0,
+    };
+  }
+
+  function medicationRow() {
+    return {
+      id: "med-1",
+      name: "Sample medication",
+      dose: "5 mg",
+      atcCode: null,
+      rxNormCode: null,
+      deliveryForm: null,
+      active: true,
+      schedules: [],
+      scheduleRevisions: [],
+      pauseEras: [],
+      doseChanges: [],
+      intakeEvents: [],
+    };
+  }
+
+  /** Resource types present in the bundle a given selection produces. */
+  async function bundleResourceTypes(
+    sections: Record<string, unknown>,
+  ): Promise<string[]> {
+    const { POST } = await import("../route");
+    const res = await POST(mkReq({ format: "fhir", sections }));
+    expect(res.status).toBe(200);
+    const bundle = (await res.json()) as {
+      entry: { resource: { resourceType: string; code?: unknown } }[];
+    };
+    return bundle.entry.map((e) => e.resource.resourceType);
+  }
+
+  /** The LOINC/HealthKit codes of every Observation a selection produces. */
+  async function observationCodes(
+    sections: Record<string, unknown>,
+  ): Promise<string[]> {
+    const { POST } = await import("../route");
+    const res = await POST(mkReq({ format: "fhir", sections }));
+    expect(res.status).toBe(200);
+    const bundle = (await res.json()) as {
+      entry: {
+        resource: {
+          resourceType: string;
+          code?: { coding?: { code: string }[]; text?: string };
+        };
+      }[];
+    };
+    return bundle.entry
+      .filter((e) => e.resource.resourceType === "Observation")
+      .flatMap((e) => [
+        ...(e.resource.code?.coding?.map((c) => c.code) ?? []),
+        e.resource.code?.text ?? "",
+      ]);
+  }
+
+  it("honours every previously-dead measurement switch in the FHIR bundle", async () => {
+    vi.mocked(prisma.measurement.findMany).mockResolvedValue([
+      measurement("BODY_FAT", 21),
+      measurement("OXYGEN_SATURATION", 97),
+      measurement("BONE_MASS", 3.1),
+      measurement("RESTING_HEART_RATE", 54),
+      measurement("HEART_RATE_VARIABILITY", 61),
+      measurement("VO2_MAX", 44),
+      measurement("ACTIVITY_STEPS", 8400),
+      measurement("WALKING_RUNNING_DISTANCE", 6200),
+    ] as never);
+
+    // Positive control: with every switch on, all eight are emitted. Without
+    // this the exclusion assertion below could pass on an empty bundle.
+    const on = await observationCodes({
+      vitals: { oxygenSaturation: true, bodyFat: true, bodyComposition: true },
+      cardioFitness: { restingHeartRate: true, hrv: true, vo2max: true },
+      activity: { steps: true, distance: true },
+    });
+    expect(on.length).toBeGreaterThanOrEqual(8);
+
+    const off = await observationCodes({
+      vitals: {
+        oxygenSaturation: false,
+        bodyFat: false,
+        bodyComposition: false,
+      },
+      cardioFitness: { restingHeartRate: false, hrv: false, vo2max: false },
+      activity: { steps: false, distance: false },
+    });
+    expect(off).toEqual([]);
+  });
+
+  it("keeps the deselected measurement rows out of the query in the first place", async () => {
+    await bundleResourceTypes({
+      vitals: { bodyFat: false },
+      cardioFitness: { vo2max: false },
+    });
+    const lastCall = vi.mocked(prisma.measurement.findMany).mock.calls.at(-1)!;
+    const where = lastCall[0]!.where as { type?: { notIn?: string[] } };
+    expect(where.type?.notIn).toContain("BODY_FAT");
+    expect(where.type?.notIn).toContain("VO2_MAX");
+  });
+
+  it("omits the deselected vitals from the PDF table", async () => {
+    vi.mocked(prisma.measurement.findMany).mockResolvedValue([
+      measurement("BODY_FAT", 21),
+      measurement("OXYGEN_SATURATION", 97),
+    ] as never);
+    const { POST } = await import("../route");
+
+    const withBoth = await pdfText(
+      await POST(
+        mkReq({
+          format: "pdf",
+          locale: "en",
+          sections: { vitals: { bodyFat: true, oxygenSaturation: true } },
+        }),
+      ),
+    );
+    expect(withBoth).toContain("Body fat");
+
+    const without = await pdfText(
+      await POST(
+        mkReq({
+          format: "pdf",
+          locale: "en",
+          sections: { vitals: { bodyFat: false, oxygenSaturation: false } },
+        }),
+      ),
+    );
+    expect(without).not.toContain("Body fat");
+  });
+
+  it("holds the mental-health screening totals back unless they are asked for by name", async () => {
+    vi.mocked(prisma.measurement.findMany).mockResolvedValue([
+      measurement("PHQ9_SCORE", 11),
+      measurement("GAD7_SCORE", 8),
+    ] as never);
+
+    // The module is on (the default since v1.29.1) and the caller sends no
+    // screening key: the totals must stay in the database.
+    expect(await observationCodes({ labs: true })).toEqual([]);
+    // And an omitted `sections` object entirely — the MCP / share-link case.
+    const { POST } = await import("../route");
+    const res = await POST(mkReq({ format: "fhir" }));
+    const bundle = (await res.json()) as {
+      entry: { resource: { resourceType: string } }[];
+    };
+    expect(
+      bundle.entry.filter((e) => e.resource.resourceType === "Observation"),
+    ).toEqual([]);
+
+    // Asked for explicitly, they are emitted — the data is withheld, not lost.
+    const asked = await observationCodes({ mentalHealthScreeners: true });
+    expect(asked).toContain("44261-6");
+    expect(asked).toContain("70274-6");
+  });
+
+  it("lets the medication switch withhold the medication list", async () => {
+    vi.mocked(prisma.medication.findMany).mockResolvedValue([
+      medicationRow(),
+    ] as never);
+
+    expect(
+      await bundleResourceTypes({ medications: { list: true } }),
+    ).toContain("MedicationStatement");
+    expect(
+      await bundleResourceTypes({ medications: { list: false } }),
+    ).not.toContain("MedicationStatement");
+  });
+
+  it("keeps allergies and family history out of the FHIR bundle when deselected", async () => {
+    vi.mocked(prisma.allergy.findMany).mockResolvedValue([
+      allergyRow(),
+    ] as never);
+    vi.mocked(prisma.familyHistoryEntry.findMany).mockResolvedValue([
+      familyHistoryRow(),
+    ] as never);
+
+    const on = await bundleResourceTypes({
+      allergies: true,
+      familyHistory: true,
+    });
+    expect(on).toContain("AllergyIntolerance");
+    expect(on).toContain("FamilyMemberHistory");
+
+    const off = await bundleResourceTypes({
+      allergies: false,
+      familyHistory: false,
+    });
+    expect(off).not.toContain("AllergyIntolerance");
+    expect(off).not.toContain("FamilyMemberHistory");
+  });
+
+  it("never reads the deselected records from the database", async () => {
+    await bundleResourceTypes({ allergies: false, familyHistory: false });
+    expect(prisma.allergy.findMany).not.toHaveBeenCalled();
+    expect(prisma.familyHistoryEntry.findMany).not.toHaveBeenCalled();
+  });
+
+  it("ships a package whose bundle agrees with its PDF", async () => {
+    vi.mocked(prisma.allergy.findMany).mockResolvedValue([
+      allergyRow(),
+    ] as never);
+    vi.mocked(prisma.familyHistoryEntry.findMany).mockResolvedValue([
+      familyHistoryRow(),
+    ] as never);
+
+    const { POST } = await import("../route");
+    const res = await POST(
+      mkReq({
+        format: "package",
+        sections: { allergies: false, familyHistory: false },
+      }),
+    );
+    expect(res.status).toBe(200);
+    const files = unzipSync(new Uint8Array(await res.arrayBuffer()));
+    const bundle = JSON.parse(
+      new TextDecoder().decode(files["bundle.json"]!),
+    ) as { entry: { resource: { resourceType: string } }[] };
+    const types = bundle.entry.map((e) => e.resource.resourceType);
+    // The compliant PDF and the violating bundle used to travel together.
+    expect(types).not.toContain("AllergyIntolerance");
+    expect(types).not.toContain("FamilyMemberHistory");
   });
 });
 

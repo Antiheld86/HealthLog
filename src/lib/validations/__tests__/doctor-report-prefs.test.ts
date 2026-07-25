@@ -109,7 +109,14 @@ describe("resolveDoctorReportPrefs", () => {
       familyHistory: false,
     };
     const out = resolveDoctorReportPrefs(current, { mood: false });
-    expect(out).toEqual({ ...current, mood: false });
+    // Keys the persisted row predates (this change added the measurement-group,
+    // medication-list and screener flags) fill from the defaults, so the
+    // resolved shape is always complete for the aggregator.
+    expect(out).toEqual({
+      ...DEFAULT_DOCTOR_REPORT_PREFS,
+      ...current,
+      mood: false,
+    });
   });
 
   it("layers a partial update over defaults when current is null", () => {

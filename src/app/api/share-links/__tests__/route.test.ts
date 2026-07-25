@@ -64,8 +64,6 @@ function validBody(overrides: Record<string, unknown> = {}) {
     label: "Cardiology clinic",
     rangeStart: "2026-01-01T00:00:00Z",
     rangeEnd: null,
-    resourceTypes: ["Observation"],
-    allowFhirApi: true,
     expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     ...overrides,
   };
@@ -77,8 +75,6 @@ function storedRow(overrides: Record<string, unknown> = {}) {
     label: "Cardiology clinic",
     rangeStart: new Date("2026-01-01T00:00:00Z"),
     rangeEnd: null,
-    resourceTypes: ["Observation"],
-    allowFhirApi: true,
     passphraseHash: "hash(STORED)",
     expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     createdAt: new Date(),
@@ -241,22 +237,27 @@ describe("POST /api/share-links — create", () => {
     expect(prisma.clinicianShareLink.create).not.toHaveBeenCalled();
   });
 
+  it("rejects the retired FHIR scope keys with 422", async () => {
+    // The share link has never served FHIR against its token. The keys
+    // are gone from the create schema rather than accepted and ignored, so a
+    // stale client is told plainly instead of believing it scoped something.
+    const res = await POST(
+      postReq(
+        validBody({ allowFhirApi: true, resourceTypes: ["Observation"] }),
+      ),
+    );
+    expect(res.status).toBe(422);
+    expect(prisma.clinicianShareLink.create).not.toHaveBeenCalled();
+  });
+
   it("allows a documents-only share (empty report sections)", async () => {
     vi.mocked(prisma.inboundDocument.findMany).mockResolvedValue([
       { id: "doc-a" },
     ] as never);
     vi.mocked(prisma.clinicianShareLink.create).mockResolvedValue(
-      storedRow({ resourceTypes: [], _count: { documents: 1 } }) as never,
+      storedRow({ _count: { documents: 1 } }) as never,
     );
-    const res = await POST(
-      postReq(
-        validBody({
-          resourceTypes: [],
-          allowFhirApi: false,
-          documentIds: ["doc-a"],
-        }),
-      ),
-    );
+    const res = await POST(postReq(validBody({ documentIds: ["doc-a"] })));
     expect(res.status).toBe(201);
     const body = (await res.json()) as { data: { documentCount: number } };
     expect(body.data.documentCount).toBe(1);
@@ -267,18 +268,15 @@ describe("POST /api/share-links — create", () => {
       { id: "doc-a" },
     ] as never);
     vi.mocked(prisma.clinicianShareLink.create).mockResolvedValue(
-      storedRow({ resourceTypes: [], _count: { documents: 1 } }) as never,
+      storedRow({ _count: { documents: 1 } }) as never,
     );
 
     // A hostile / stale client tries to widen a document link into a record
-    // share: FHIR on, resource types set, sections requested. The server must
-    // ignore every one of them.
+    // share by requesting sections. The server must ignore them.
     const res = await POST(
       postReq(
         validBody({
           documentOnly: true,
-          allowFhirApi: true,
-          resourceTypes: ["Observation", "Patient"],
           sections: { vitals: { bp: true }, labs: true },
           documentIds: ["doc-a"],
         }),
@@ -288,9 +286,9 @@ describe("POST /api/share-links — create", () => {
 
     const createArg = vi.mocked(prisma.clinicianShareLink.create).mock
       .calls[0][0];
-    // Empty FHIR scope, FHIR API off — no health surface at all.
-    expect(createArg.data.resourceTypes).toEqual([]);
-    expect(createArg.data.allowFhirApi).toBe(false);
+    // The retired FHIR scope columns are never written at all.
+    expect(createArg.data).not.toHaveProperty("resourceTypes");
+    expect(createArg.data).not.toHaveProperty("allowFhirApi");
     // Sections persist as an explicit all-OFF blob (distinct from `{}` = full
     // record defaults). The clinician view reads this as "no report".
     expect(createArg.data.sectionsJson).toEqual(EMPTY_DOCTOR_REPORT_PREFS);
