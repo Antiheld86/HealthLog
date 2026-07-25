@@ -41,11 +41,15 @@ test("medications list refetches on client-side navigation back to the page", as
     }
   });
 
-  // Initial load — the list query mounts and fetches once.
-  await page.goto("/medications");
-  await page.waitForResponse(
+  // Initial load — the list query mounts and fetches once. Arm the waiter
+  // BEFORE navigating: `goto` resolves on load, so a response that already
+  // arrived would never be seen by a listener attached afterwards, and the
+  // wait would time out on an event that had long since happened.
+  const firstListFetch = page.waitForResponse(
     (r) => new URL(r.url()).pathname === "/api/medications",
   );
+  await page.goto("/medications");
+  await firstListFetch;
   expect(medsRequests).toBe(1);
 
   // Client-side nav AWAY (dashboard) then BACK — App Router unmounts and
@@ -56,10 +60,11 @@ test("medications list refetches on client-side navigation back to the page", as
   await page.locator('a[href="/medications"]').first().click();
   await page.waitForURL("**/medications");
 
-  // Give a returning refetch time to fire.
-  await page.waitForTimeout(1500);
-
   // Desired: the return mounts a fresh observer that refetches. Pre-fix
-  // the 5-min staleTime masks it and this stays at 1 (the bug).
-  expect(medsRequests).toBeGreaterThanOrEqual(2);
+  // the 5-min staleTime masks it and this stays at 1 (the bug). Poll rather
+  // than sleeping a fixed span: it returns the moment the refetch lands, and
+  // it does not turn a slow CI machine into a false failure.
+  await expect
+    .poll(() => medsRequests, { timeout: 10_000 })
+    .toBeGreaterThanOrEqual(2);
 });
