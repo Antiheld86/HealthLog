@@ -94,6 +94,23 @@ const OAUTH_OUTCOME_KEYS: Record<
 };
 
 /**
+ * v1.32.36 — the error-copy subtree per provider, spelled out rather than
+ * interpolated from the provider id. Building the key from the bare `settings`
+ * root left the reverse-i18n guard with no anchor deeper than the namespace,
+ * which marked every key under `settings.*` reachable and let genuinely dead
+ * copy sit in the bundle unnoticed. Written out, each base is a full node path
+ * the guard resolves on its own.
+ */
+const OAUTH_ERROR_KEY_BASE: Record<OAuthOutcomeProvider, string> = {
+  polar: "settings.polarOauthError",
+  oura: "settings.ouraOauthError",
+  whoop: "settings.whoopOauthError",
+  fitbit: "settings.fitbitOauthError",
+  googleHealth: "settings.googleHealthOauthError",
+  strava: "settings.stravaOauthError",
+};
+
+/**
  * Reason tags the four OAuth callbacks emit. Known tags resolve to a specific
  * message; anything else falls back to the provider's `generic` copy. Union of
  * the Polar/Oura set (`rate_limited`) and the WHOOP/Fitbit set (`expired`).
@@ -143,9 +160,10 @@ export function oauthReasonKey(
   provider: OAuthOutcomeProvider,
   reason: string,
 ): string {
+  const base = OAUTH_ERROR_KEY_BASE[provider];
   return OAUTH_OUTCOME_REASONS.has(reason)
-    ? `settings.${provider}OauthError.${reason}`
-    : `settings.${provider}OauthError.generic`;
+    ? `${base}.${reason}`
+    : `${base}.generic`;
 }
 
 /**

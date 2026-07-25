@@ -208,9 +208,7 @@ export function CheckInWizard({
                   >
                     {onFunctionalStep
                       ? t(`mentalHealth.functional.${v}`)
-                      : t(
-                          `mentalHealth.${optionLabelKey(instrument, questionIndex, v)}`,
-                        )}
+                      : t(optionLabelKey(instrument, questionIndex, v))}
                   </Button>
                 );
               })}

@@ -49,10 +49,12 @@ export interface InstrumentDefinition {
    */
   optionOrder: readonly number[];
   /**
-   * i18n namespace for the response-option labels under `mentalHealth.`:
-   * without `optionGroups` one shared anchor set (`<ns>.<value>`); with
+   * Fully-qualified i18n namespace for the response-option labels: without
+   * `optionGroups` one shared anchor set (`<ns>.<value>`); with
    * `optionGroups` (SCI) per-item anchor groups (`<ns>.<group>.<value>`,
-   * group = `optionGroups[itemIndex]`).
+   * group = `optionGroups[itemIndex]`). v1.32.36 — qualified rather than
+   * relative so the reverse-i18n guard resolves the subtree from the literal
+   * instead of being handed the bare `mentalHealth` namespace.
    */
   optionNamespace: string;
   optionGroups?: readonly string[];
@@ -113,7 +115,7 @@ const PHQ9: InstrumentDefinition = {
   itemCount: 9,
   itemMax: 3,
   optionOrder: [0, 1, 2, 3],
-  optionNamespace: "options",
+  optionNamespace: "mentalHealth.options",
   scoreMultiplier: 1,
   minScore: 0,
   maxScore: 27,
@@ -139,7 +141,7 @@ const GAD7: InstrumentDefinition = {
   itemCount: 7,
   itemMax: 3,
   optionOrder: [0, 1, 2, 3],
-  optionNamespace: "options",
+  optionNamespace: "mentalHealth.options",
   scoreMultiplier: 1,
   minScore: 0,
   maxScore: 21,
@@ -172,7 +174,7 @@ const WHO5: InstrumentDefinition = {
   itemCount: 5,
   itemMax: 5,
   optionOrder: [5, 4, 3, 2, 1, 0],
-  optionNamespace: "who5Options",
+  optionNamespace: "mentalHealth.who5Options",
   stemKeys: Array(5).fill("who5.period"),
   scoreMultiplier: 4,
   minScore: 0,
@@ -207,7 +209,7 @@ const SCI: InstrumentDefinition = {
   itemCount: 8,
   itemMax: 4,
   optionOrder: [4, 3, 2, 1, 0],
-  optionNamespace: "sciOptions",
+  optionNamespace: "mentalHealth.sciOptions",
   optionGroups: [
     "duration",
     "duration",

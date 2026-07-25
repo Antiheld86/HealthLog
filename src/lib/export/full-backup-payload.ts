@@ -11,7 +11,7 @@
  * artefact); an admin restore re-encrypts them on re-insert.
  */
 import { Buffer } from "node:buffer";
-import type { PrismaClient } from "@/generated/prisma/client";
+import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { readNote } from "@/lib/crypto/note-cipher";
 import { iterateMeasurementPages } from "@/lib/export/paged-measurements";
 import { BACKUP_SCHEMA_VERSION } from "@/lib/validations/backup";
@@ -42,6 +42,40 @@ export interface FullBackupOptions {
   exportedAt?: Date;
 }
 /**
+ * Every restorable `Measurement` scalar. `userId` is deliberately absent — the
+ * backup is user-scoped, so the owner is implicit in the query and restored
+ * from the target account rather than the payload.
+ *
+ * Named rather than inlined so `measurement-backup-completeness.test.ts` can
+ * compare it field-by-field against the model in `prisma/schema.prisma`. A
+ * column added to the model and forgotten here is how the aggregation
+ * provenance went missing from disaster-recovery backups for several releases.
+ */
+const MEASUREMENT_BACKUP_SELECT = {
+  id: true,
+  type: true,
+  value: true,
+  valueMin: true,
+  valueMax: true,
+  unit: true,
+  measuredAt: true,
+  source: true,
+  notes: true,
+  notesEncrypted: true,
+  externalId: true,
+  externalSourceVersion: true,
+  aggregationProvenance: true,
+  glucoseContext: true,
+  sleepStage: true,
+  rhythmClassification: true,
+  deviceType: true,
+  syncVersion: true,
+  deletedAt: true,
+  createdAt: true,
+  updatedAt: true,
+} as const satisfies Prisma.MeasurementSelect;
+
+/**
  * Build the canonical full-backup payload for `userId`. Portable exports omit
  * tombstones and document ciphertext; disaster-recovery payloads preserve
  * both so weekly and off-host snapshots share one restorable wire format.
@@ -70,29 +104,7 @@ export async function buildFullBackupPayload(
       const pages = iterateMeasurementPages(
         prisma,
         disasterRecovery ? { userId } : { userId, deletedAt: null },
-        {
-          id: true,
-          type: true,
-          value: true,
-          valueMin: true,
-          valueMax: true,
-          unit: true,
-          measuredAt: true,
-          source: true,
-          notes: true,
-          notesEncrypted: true,
-          externalId: true,
-          externalSourceVersion: true,
-          aggregationProvenance: true,
-          glucoseContext: true,
-          sleepStage: true,
-          rhythmClassification: true,
-          deviceType: true,
-          syncVersion: true,
-          deletedAt: true,
-          createdAt: true,
-          updatedAt: true,
-        },
+        MEASUREMENT_BACKUP_SELECT,
       );
       for await (const page of pages) {
         for (const measurement of page) {

@@ -165,14 +165,24 @@ describe("mental-health instruments", () => {
     });
 
     it("resolves option-label keys per scheme (shared vs SCI per-item groups)", () => {
-      expect(optionLabelKey("PHQ9", 0, 2)).toBe("options.2");
-      expect(optionLabelKey("WHO5", 4, 5)).toBe("who5Options.5");
+      expect(optionLabelKey("PHQ9", 0, 2)).toBe("mentalHealth.options.2");
+      expect(optionLabelKey("WHO5", 4, 5)).toBe("mentalHealth.who5Options.5");
       // SCI: items 1–2 duration, 3 nights, 4 quality, 5–7 impact, 8 problem duration.
-      expect(optionLabelKey("SCI", 0, 4)).toBe("sciOptions.duration.4");
-      expect(optionLabelKey("SCI", 2, 0)).toBe("sciOptions.nights.0");
-      expect(optionLabelKey("SCI", 3, 2)).toBe("sciOptions.quality.2");
-      expect(optionLabelKey("SCI", 6, 1)).toBe("sciOptions.impact.1");
-      expect(optionLabelKey("SCI", 7, 3)).toBe("sciOptions.problemDuration.3");
+      expect(optionLabelKey("SCI", 0, 4)).toBe(
+        "mentalHealth.sciOptions.duration.4",
+      );
+      expect(optionLabelKey("SCI", 2, 0)).toBe(
+        "mentalHealth.sciOptions.nights.0",
+      );
+      expect(optionLabelKey("SCI", 3, 2)).toBe(
+        "mentalHealth.sciOptions.quality.2",
+      );
+      expect(optionLabelKey("SCI", 6, 1)).toBe(
+        "mentalHealth.sciOptions.impact.1",
+      );
+      expect(optionLabelKey("SCI", 7, 3)).toBe(
+        "mentalHealth.sciOptions.problemDuration.3",
+      );
     });
 
     it("maps recall stems (WHO-5 one stem; SCI three sections; PHQ/GAD none)", () => {

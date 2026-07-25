@@ -143,13 +143,21 @@ const CADENCE_CUSTOM = "custom";
 const CADENCE_RRULE = "rrule";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * v1.32.36 — returns a FULLY-QUALIFIED i18n key, not a bare tail. A call site
+ * that interpolates the tail onto the namespace root anchors the
+ * reverse-coverage guard at that bare namespace, which marks every key under
+ * it reachable and turns the guard into a no-op for the whole namespace. The
+ * guard now refuses that shape outright, so the key is built whole here.
+ */
 function relativeDueKey(
   nextDueAt: string | null,
   now: number,
 ): { key: string; days: number } {
-  if (!nextDueAt) return { key: "nextDue.none", days: 0 };
+  if (!nextDueAt) return { key: "measurementReminders.nextDue.none", days: 0 };
   const due = new Date(nextDueAt);
-  if (Number.isNaN(due.getTime())) return { key: "nextDue.none", days: 0 };
+  if (Number.isNaN(due.getTime()))
+    return { key: "measurementReminders.nextDue.none", days: 0 };
   // v1.18.9 (recon) — compare CALENDAR-day deltas in the user's local zone,
   // not a rolling-24h delta. A reminder due at 09:00 viewed the same evening
   // at 20:00 must still read "heute", and one whose due calendar-day is before
@@ -159,10 +167,16 @@ function relativeDueKey(
   const dueDay = startOfLocalDayInTz(due, undefined).getTime();
   const nowDay = startOfLocalDayInTz(new Date(now), undefined).getTime();
   const deltaDays = Math.round((dueDay - nowDay) / DAY_MS);
-  if (deltaDays < 0) return { key: "overdueByDays", days: Math.abs(deltaDays) };
-  if (deltaDays === 0) return { key: "nextDue.today", days: 0 };
-  if (deltaDays === 1) return { key: "nextDue.tomorrow", days: 1 };
-  return { key: "nextDue.inDays", days: deltaDays };
+  if (deltaDays < 0)
+    return {
+      key: "measurementReminders.overdueByDays",
+      days: Math.abs(deltaDays),
+    };
+  if (deltaDays === 0)
+    return { key: "measurementReminders.nextDue.today", days: 0 };
+  if (deltaDays === 1)
+    return { key: "measurementReminders.nextDue.tomorrow", days: 1 };
+  return { key: "measurementReminders.nextDue.inDays", days: deltaDays };
 }
 
 /**
@@ -831,7 +845,9 @@ function VorsorgeCard({
   // v1.27.6 — a screening reminder's action is "start the check-in" (it
   // routes to the check-in page), never the numeric value-entry wording.
   const isScreening = isScreeningReminderType(reminder.measurementType);
-  const isDue = due.key === "nextDue.today" || due.key === "overdueByDays";
+  const isDue =
+    due.key === "measurementReminders.nextDue.today" ||
+    due.key === "measurementReminders.overdueByDays";
   const progress = intervalProgress(reminder, now);
 
   // Category-style header badge: the measurement label, or "self-planned"
@@ -984,7 +1000,7 @@ function VorsorgeCard({
                   metric text (no shaded pill). */}
               <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 text-xs">
                 <span className="text-foreground">
-                  {t(`measurementReminders.${due.key}`, { days: due.days })}
+                  {t(due.key, { days: due.days })}
                 </span>
                 <span>{categoryLabel}</span>
                 {cadenceText ? <span>{cadenceText}</span> : null}
@@ -1037,8 +1053,8 @@ function VorsorgeCard({
   // a card-background tint): due today → green, overdue → orange, otherwise the
   // normal muted-resolved date. The card surface stays neutral per the house
   // rule; only this inline label carries the status hue.
-  const dueIsToday = due.key === "nextDue.today";
-  const dueIsOverdue = due.key === "overdueByDays";
+  const dueIsToday = due.key === "measurementReminders.nextDue.today";
+  const dueIsOverdue = due.key === "measurementReminders.overdueByDays";
   const nextLastSlot = (
     <div className="min-h-[2.75rem] space-y-1.5 text-sm">
       <div className="text-muted-foreground flex items-baseline justify-between gap-3">
@@ -1055,7 +1071,7 @@ function VorsorgeCard({
                 : "text-foreground",
           )}
         >
-          {t(`measurementReminders.${due.key}`, { days: due.days })}
+          {t(due.key, { days: due.days })}
         </span>
       </div>
       <div className="text-muted-foreground flex items-baseline justify-between gap-3">
