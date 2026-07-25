@@ -5350,8 +5350,8 @@ model PushAttempt {
 // `ApiToken.tokenHash`, keyed by `API_TOKEN_HMAC_KEY`); the plaintext is
 // returned to the owner exactly once at creation and never persisted.
 //
-// The scope is FROZEN at creation: `rangeStart`, `sectionsJson` and
-// `resourceTypes` are write-once and a share can NEVER widen later — only
+// The scope is FROZEN at creation: `rangeStart` and `sectionsJson` are
+// write-once and a share can NEVER widen later — only
 // `revokedAt`, `lastAccessAt` and `accessCount` mutate after mint. This
 // mirrors the append-only spirit of `ConsentReceipt`. `expiresAt` is
 // mandatory (capped at `SHARE_LINK_MAX_DAYS`, default 90) — there is no
@@ -5380,10 +5380,15 @@ model ClinicianShareLink {
   rangeEnd      DateTime? @map("range_end")
   /// Section toggles (the `DoctorReportPrefs` shape the export uses). JSON.
   sectionsJson  Json      @map("sections_json")
-  /// FHIR resource types this link may serve (a subset of the catalogue),
-  /// e.g. `["Observation","MedicationStatement"]`.
+  /// RETIRED. These two columns described a scoped FHIR face for a
+  /// share link that was never built: no route ever served FHIR (or any
+  /// machine-readable format) against an `hls_` token, so the create form's
+  /// toggle, its resource-type picker, the list badge and the API description
+  /// all promised reachability that did not exist. The controls are gone, the
+  /// create path no longer writes anything but the defaults, and no read path
+  /// touches either column — the values still on rows minted earlier are inert.
+  /// Kept as columns so no data is destroyed to undo a promise.
   resourceTypes String[]  @map("resource_types")
-  /// Whether the FHIR API is reachable via this link at all (vs the view only).
   allowFhirApi  Boolean   @default(false) @map("allow_fhir_api")
   /// v1.28.16 — the authoritative "documents-only" flag, frozen write-once at
   /// create. When true the public view serves ONLY the attached documents and

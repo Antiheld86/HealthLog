@@ -45,17 +45,21 @@ const activityGroupSchema = z
   .object({
     steps: z.boolean(),
     distance: z.boolean(),
-    energy: z.boolean(),
     sleep: z.boolean(),
   })
   .partial();
 
+/**
+ * `list` gates the medication list plus the per-dose administration
+ * ledger; `compliance` gates the adherence figures and the GLP-1 therapy block.
+ * The retired `glp1` / `sideEffects` / `activity.energy` keys were accepted and
+ * discarded: no surface ever rendered them and no code read them. An unknown
+ * key inside a group is stripped, so a caller still sending one is unaffected.
+ */
 const medicationsGroupSchema = z
   .object({
     list: z.boolean(),
     compliance: z.boolean(),
-    glp1: z.boolean(),
-    sideEffects: z.boolean(),
   })
   .partial();
 
@@ -83,6 +87,9 @@ export const exportSectionsSchema = z
     allergies: z.boolean(),
     // Structured family history — ON by default, same stance as allergies.
     familyHistory: z.boolean(),
+    // PHQ-9 / GAD-7 / WHO-5 / SCI screening totals. OFF unless the
+    // caller sets it explicitly (`=== true`), like mood and cycle.
+    mentalHealthScreeners: z.boolean(),
   })
   .partial();
 
@@ -172,14 +179,23 @@ export type ExportSelection = z.infer<typeof exportSelectionSchema>;
  * Fold the grouped selection down to the flat `DoctorReportPrefs` the
  * aggregator + PDF renderer consume. A group toggle that is `true` (or
  * absent, falling back to the section default) flips the matching flat
- * flag. Mood stays privacy-default-OFF: it only flips on when the caller
- * explicitly set `sections.mood = true`.
+ * flag. Mood, cycle and the mental-health screeners stay privacy-default-OFF:
+ * they only flip on when the caller set them explicitly.
+ *
+ * The fold used to read twelve of the twenty keys the schema
+ * accepts and drop the rest on the floor, so a caller that switched off SpO₂,
+ * body fat, body composition, resting heart rate, HRV, VO₂max, steps or
+ * distance was silently overruled and the export panel rendered eight controls
+ * that changed nothing. Every accepted key now resolves to a flat flag, and
+ * `doctor-report-control-gating-guard.test.ts` fails the build if a control is
+ * ever added back without one.
  */
 export function toDoctorReportPrefs(
   sections: ExportSections | undefined,
 ): DoctorReportPrefs {
   const s = sections ?? {};
   const v = s.vitals ?? {};
+  const c = s.cardioFitness ?? {};
   const a = s.activity ?? {};
   const m = s.medications ?? {};
 
@@ -191,6 +207,10 @@ export function toDoctorReportPrefs(
     bmi: s.bmi ?? fallback.bmi,
     // Mood is opt-in: only true when explicitly requested.
     mood: s.mood === true,
+    medicationList: m.list ?? fallback.medicationList,
+    // A caller that sends only `medications.list = false` means "no medication
+    // data" — the single panel control has always driven both keys together, so
+    // the list value keeps standing in for a missing compliance value.
     compliance: m.compliance ?? m.list ?? fallback.compliance,
     sleep: a.sleep ?? fallback.sleep,
     glucose: s.glucose ?? fallback.glucose,
@@ -199,5 +219,15 @@ export function toDoctorReportPrefs(
     labs: s.labs ?? fallback.labs,
     allergies: s.allergies ?? fallback.allergies,
     familyHistory: s.familyHistory ?? fallback.familyHistory,
+    oxygenSaturation: v.oxygenSaturation ?? fallback.oxygenSaturation,
+    bodyFat: v.bodyFat ?? fallback.bodyFat,
+    bodyComposition: v.bodyComposition ?? fallback.bodyComposition,
+    restingHeartRate: c.restingHeartRate ?? fallback.restingHeartRate,
+    hrv: c.hrv ?? fallback.hrv,
+    vo2max: c.vo2max ?? fallback.vo2max,
+    steps: a.steps ?? fallback.steps,
+    distance: a.distance ?? fallback.distance,
+    // Screening totals are opt-in: only true when explicitly requested.
+    mentalHealthScreeners: s.mentalHealthScreeners === true,
   };
 }

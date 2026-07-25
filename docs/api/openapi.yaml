@@ -938,8 +938,6 @@ paths:
                           type: boolean
                         distance:
                           type: boolean
-                        energy:
-                          type: boolean
                         sleep:
                           type: boolean
                     glucose:
@@ -950,10 +948,6 @@ paths:
                         list:
                           type: boolean
                         compliance:
-                          type: boolean
-                        glp1:
-                          type: boolean
-                        sideEffects:
                           type: boolean
                     mood:
                       type: boolean
@@ -966,6 +960,8 @@ paths:
                     allergies:
                       type: boolean
                     familyHistory:
+                      type: boolean
+                    mentalHealthScreeners:
                       type: boolean
                 locale:
                   type: string
@@ -1077,8 +1073,6 @@ paths:
                           type: boolean
                         distance:
                           type: boolean
-                        energy:
-                          type: boolean
                         sleep:
                           type: boolean
                     glucose:
@@ -1089,10 +1083,6 @@ paths:
                         list:
                           type: boolean
                         compliance:
-                          type: boolean
-                        glp1:
-                          type: boolean
-                        sideEffects:
                           type: boolean
                     mood:
                       type: boolean
@@ -1106,18 +1096,8 @@ paths:
                       type: boolean
                     familyHistory:
                       type: boolean
-                resourceTypes:
-                  maxItems: 8
-                  type: array
-                  items:
-                    type: string
-                    enum:
-                      - Patient
-                      - Observation
-                      - MedicationStatement
-                      - MedicationAdministration
-                allowFhirApi:
-                  type: boolean
+                    mentalHealthScreeners:
+                      type: boolean
                 documentIds:
                   maxItems: 50
                   type: array
@@ -15735,12 +15715,6 @@ components:
               anyOf:
                 - type: string
                 - type: "null"
-            resourceTypes:
-              type: array
-              items:
-                type: string
-            allowFhirApi:
-              type: boolean
             protected:
               type: boolean
             documentCount:
@@ -15779,8 +15753,6 @@ components:
             - label
             - rangeStart
             - rangeEnd
-            - resourceTypes
-            - allowFhirApi
             - protected
             - documentCount
             - expiresAt
@@ -15827,12 +15799,6 @@ components:
                     anyOf:
                       - type: string
                       - type: "null"
-                  resourceTypes:
-                    type: array
-                    items:
-                      type: string
-                  allowFhirApi:
-                    type: boolean
                   protected:
                     type: boolean
                   documentCount:
@@ -15858,8 +15824,6 @@ components:
                   - label
                   - rangeStart
                   - rangeEnd
-                  - resourceTypes
-                  - allowFhirApi
                   - protected
                   - documentCount
                   - expiresAt

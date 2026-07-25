@@ -150,14 +150,25 @@ export const POST = apiHandler(async (request: NextRequest) => {
       // v1.25 (W-RECORDS) — structured records are always-available reference
       // data (not time-windowed), so they ride alongside the report rather
       // than through `collectDoctorReportData`. Owner-scoped, live rows only.
-      prisma.allergy.findMany({
-        where: { userId: user.id, deletedAt: null },
-        orderBy: { createdAt: "desc" },
-      }),
-      prisma.familyHistoryEntry.findMany({
-        where: { userId: user.id, deletedAt: null },
-        orderBy: { createdAt: "desc" },
-      }),
+      //
+      // Gated on the section toggles. These two reads fed ONLY the
+      // FHIR bundle, and they ran unconditionally: `sections.allergies = false`
+      // produced a PDF without an allergy section and a bundle carrying every
+      // AllergyIntolerance, and in the `package` format both shipped in the
+      // same zip. Zero DB read when off, matching how the aggregator treats
+      // mood — deselected data should not be loaded, not merely dropped later.
+      sections.allergies
+        ? prisma.allergy.findMany({
+            where: { userId: user.id, deletedAt: null },
+            orderBy: { createdAt: "desc" },
+          })
+        : Promise.resolve([]),
+      sections.familyHistory
+        ? prisma.familyHistoryEntry.findMany({
+            where: { userId: user.id, deletedAt: null },
+            orderBy: { createdAt: "desc" },
+          })
+        : Promise.resolve([]),
     ]);
 
   // FHIR records folded into every bundle format (fhir + package).

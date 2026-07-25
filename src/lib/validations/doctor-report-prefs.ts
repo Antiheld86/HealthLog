@@ -29,6 +29,7 @@ export const doctorReportPrefsSchema = z
     pulse: z.boolean(),
     bmi: z.boolean(),
     mood: z.boolean(),
+    medicationList: z.boolean(),
     compliance: z.boolean(),
     sleep: z.boolean(),
     glucose: z.boolean(),
@@ -36,6 +37,15 @@ export const doctorReportPrefsSchema = z
     labs: z.boolean(),
     allergies: z.boolean(),
     familyHistory: z.boolean(),
+    oxygenSaturation: z.boolean(),
+    bodyFat: z.boolean(),
+    bodyComposition: z.boolean(),
+    restingHeartRate: z.boolean(),
+    hrv: z.boolean(),
+    vo2max: z.boolean(),
+    steps: z.boolean(),
+    distance: z.boolean(),
+    mentalHealthScreeners: z.boolean(),
   })
   .partial();
 
@@ -52,6 +62,12 @@ export interface DoctorReportPrefs {
   pulse: boolean;
   bmi: boolean;
   mood: boolean;
+  /**
+   * The active-medication list (names, doses, schedules) and the
+   * per-dose administration ledger. Previously exported unconditionally while
+   * the only medication control folded into {@link DoctorReportPrefs.compliance}.
+   */
+  medicationList: boolean;
   compliance: boolean;
   sleep: boolean;
   glucose: boolean;
@@ -59,6 +75,26 @@ export interface DoctorReportPrefs {
   labs: boolean;
   allergies: boolean;
   familyHistory: boolean;
+  /**
+   * The measurement groups the export panel has always rendered a
+   * control for but nothing gated. Each one now drives
+   * `MEASUREMENT_TYPE_SECTION` in the aggregator, so it reaches PDF, FHIR and
+   * the package alike.
+   */
+  oxygenSaturation: boolean;
+  bodyFat: boolean;
+  bodyComposition: boolean;
+  restingHeartRate: boolean;
+  hrv: boolean;
+  vo2max: boolean;
+  steps: boolean;
+  distance: boolean;
+  /**
+   * PHQ-9 / GAD-7 / WHO-5 / SCI screening totals. Depression,
+   * anxiety, wellbeing and insomnia instruments: opt-in per artefact like
+   * mood, never carried by an absent key.
+   */
+  mentalHealthScreeners: boolean;
 }
 
 /**
@@ -73,6 +109,10 @@ export const DEFAULT_DOCTOR_REPORT_PREFS: DoctorReportPrefs = {
   pulse: true,
   bmi: true,
   mood: false, // privacy default per the maintainer
+  // The medication list has always ridden along; the flag exists so the panel's
+  // single "medications" control can actually withhold it, not to change what a
+  // caller that omits the key receives.
+  medicationList: true,
   compliance: true,
   sleep: true,
   // Glucose the user recorded to share with a clinician — ON by default,
@@ -93,6 +133,24 @@ export const DEFAULT_DOCTOR_REPORT_PREFS: DoctorReportPrefs = {
   allergies: true,
   // Structured family history — same stance as allergies.
   familyHistory: true,
+  // The measurement groups that gained a real gate here. They default ON
+  // because that is what an omitted key has always produced; the point of the
+  // flags is that a caller who switches one OFF is now obeyed. The web panel
+  // sends every one of them explicitly.
+  oxygenSaturation: true,
+  bodyFat: true,
+  bodyComposition: true,
+  restingHeartRate: true,
+  hrv: true,
+  vo2max: true,
+  steps: true,
+  distance: true,
+  // Mental-health screening totals are opt-in per artefact, same stance as
+  // mood: PHQ-9 and GAD-7 are depression and anxiety instruments and must not
+  // leave the instance because a caller omitted a key. The `mentalHealth`
+  // module gate still applies on top — it just no longer stands alone, having
+  // been default-ON since v1.29.1.
+  mentalHealthScreeners: false,
 };
 
 /**
@@ -108,6 +166,7 @@ export const EMPTY_DOCTOR_REPORT_PREFS: DoctorReportPrefs = {
   pulse: false,
   bmi: false,
   mood: false,
+  medicationList: false,
   compliance: false,
   sleep: false,
   glucose: false,
@@ -115,6 +174,15 @@ export const EMPTY_DOCTOR_REPORT_PREFS: DoctorReportPrefs = {
   labs: false,
   allergies: false,
   familyHistory: false,
+  oxygenSaturation: false,
+  bodyFat: false,
+  bodyComposition: false,
+  restingHeartRate: false,
+  hrv: false,
+  vo2max: false,
+  steps: false,
+  distance: false,
+  mentalHealthScreeners: false,
 };
 
 /**

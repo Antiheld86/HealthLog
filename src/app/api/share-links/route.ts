@@ -65,8 +65,6 @@ const shareLinkSummarySelect = {
   label: true,
   rangeStart: true,
   rangeEnd: true,
-  resourceTypes: true,
-  allowFhirApi: true,
   documentOnly: true,
   passphraseHash: true,
   expiresAt: true,
@@ -83,8 +81,6 @@ function toSummary(row: {
   label: string;
   rangeStart: Date;
   rangeEnd: Date | null;
-  resourceTypes: string[];
-  allowFhirApi: boolean;
   documentOnly: boolean;
   passphraseHash: string | null;
   expiresAt: Date;
@@ -99,8 +95,6 @@ function toSummary(row: {
     label: row.label,
     rangeStart: row.rangeStart.toISOString(),
     rangeEnd: row.rangeEnd ? row.rangeEnd.toISOString() : null,
-    resourceTypes: row.resourceTypes,
-    allowFhirApi: row.allowFhirApi,
     // v1.28.16 — the frozen documents-only flag (owner-facing; the serve path
     // gates on the column, not on "are all sections off?").
     documentOnly: row.documentOnly,
@@ -141,17 +135,14 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const input = parsed.data;
 
   // v1.28.13 — a documents-only share carries NO report scope. Force the scope
-  // columns to empty here (not just at the client) so a document link can never
-  // serve a single health metric, whatever the body tried to smuggle: no
-  // sections (an explicit all-OFF prefs blob, distinct from the `{}` that means
-  // "full record defaults"), no FHIR resource types, FHIR API off. "Share this
-  // document" means the document, not the whole record.
+  // column to empty here (not just at the client) so a document link can never
+  // serve a single health metric, whatever the body tried to smuggle: an
+  // explicit all-OFF prefs blob, distinct from the `{}` that means "full record
+  // defaults". "Share this document" means the document, not the whole record.
   const documentOnly = input.documentOnly === true;
   const sectionsJson = documentOnly
     ? EMPTY_DOCTOR_REPORT_PREFS
     : (input.sections ?? {});
-  const resourceTypes = documentOnly ? [] : (input.resourceTypes ?? []);
-  const allowFhirApi = documentOnly ? false : (input.allowFhirApi ?? false);
   annotate({ meta: { documentOnly } });
 
   // Mint the 192-bit raw token, store only its HMAC hash.
@@ -196,8 +187,6 @@ export const POST = apiHandler(async (request: NextRequest) => {
       rangeStart: new Date(input.rangeStart),
       rangeEnd: input.rangeEnd ? new Date(input.rangeEnd) : null,
       sectionsJson: sectionsJson as Prisma.InputJsonValue,
-      resourceTypes,
-      allowFhirApi,
       documentOnly,
       expiresAt: new Date(input.expiresAt),
       documents:
@@ -213,8 +202,6 @@ export const POST = apiHandler(async (request: NextRequest) => {
     ipAddress: getClientIp(request),
     details: {
       shareLinkId: created.id,
-      resourceTypes: created.resourceTypes,
-      allowFhirApi: created.allowFhirApi,
       documentCount: created._count.documents,
       expiresAt: created.expiresAt.toISOString(),
     },

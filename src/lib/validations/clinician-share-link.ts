@@ -4,32 +4,25 @@
  * The OWNER creates a time-boxed, scope-frozen share link to their own health
  * record. On create the server mints an `hls_<48 hex>` token (192-bit), stores
  * ONLY its HMAC hash, and returns the raw token exactly once. Every scope
- * column (window, sections, FHIR resource types, API toggle) is write-once at
- * creation — there is no widen/update path. `expiresAt` is REQUIRED and capped
- * at `SHARE_LINK_MAX_DAYS` so no link ever lives forever.
+ * column (window, sections) is write-once at creation — there is no
+ * widen/update path. `expiresAt` is REQUIRED and capped at
+ * `SHARE_LINK_MAX_DAYS` so no link ever lives forever.
+ *
+ * The `resourceTypes` / `allowFhirApi` keys are gone. A share link
+ * serves a rendered page and the documents frozen onto it; it has never served
+ * FHIR, and accepting a scope for a face that does not exist only made the
+ * promise look kept. An unknown key is rejected by `.strict()`, so a caller
+ * still sending them gets a 422 that names them rather than a silent no-op.
  *
  * Strict: `.strict()` rejects unknown keys; there is intentionally no `userId`
  * field (the owner is always narrowed from `requireAuth()`).
  */
 import { z } from "zod/v4";
 
-import { FHIR_REST_RESOURCE_TYPES } from "@/lib/fhir/rest";
 import { exportSectionsSchema } from "@/lib/validations/health-record-export";
 
 /** Maximum lifetime of a share link, in days. No never-expiring share. */
 export const SHARE_LINK_MAX_DAYS = 90;
-
-/**
- * The FHIR resource types a share link may be scoped to serve — exactly the
- * read-only catalogue the REST face exposes. Derived from the single canonical
- * `FHIR_REST_RESOURCE_TYPES` so a share can never be scoped to a type the REST
- * face does not actually route. A create request may select any subset; an
- * empty array means "no FHIR resources" (view-only, moot when `allowFhirApi`
- * is off).
- */
-export const SHARE_LINK_RESOURCE_TYPES = FHIR_REST_RESOURCE_TYPES;
-
-export const shareLinkResourceTypeEnum = z.enum(SHARE_LINK_RESOURCE_TYPES);
 
 const MAX_FUTURE_MS = SHARE_LINK_MAX_DAYS * 24 * 60 * 60 * 1000;
 
@@ -56,20 +49,17 @@ export const createShareLinkSchema = z
     rangeStart: z.iso.datetime({ offset: true }),
     rangeEnd: z.iso.datetime({ offset: true }).nullable().optional(),
     sections: exportSectionsSchema.optional(),
-    resourceTypes: z.array(shareLinkResourceTypeEnum).max(8).optional(),
-    allowFhirApi: z.boolean().optional(),
     documentIds: z
       .array(z.string().trim().min(1).max(64))
       .max(SHARE_LINK_MAX_DOCUMENTS)
       .optional(),
     /**
      * v1.28.13 — a documents-only share. When true the server FORCES an empty
-     * report scope (no sections, no FHIR resource types, FHIR API off) and
-     * mints a link that serves ONLY the attached documents — never a health
-     * metric. "Share this document" means the document, not the whole record.
-     * A documents-only share MUST carry at least one `documentId` (enforced
-     * below). Any `sections` / `resourceTypes` / `allowFhirApi` sent alongside
-     * are ignored server-side so a document link can never widen into a record.
+     * report scope and mints a link that serves ONLY the attached documents —
+     * never a health metric. "Share this document" means the document, not the
+     * whole record. A documents-only share MUST carry at least one
+     * `documentId` (enforced below). Any `sections` sent alongside are ignored
+     * server-side so a document link can never widen into a record.
      */
     documentOnly: z.boolean().optional(),
     expiresAt: z.iso

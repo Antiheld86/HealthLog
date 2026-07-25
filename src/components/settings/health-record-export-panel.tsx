@@ -44,86 +44,15 @@ import { useAuth } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
+import {
+  DEFAULT_SECTIONS,
+  buildSelectionSections,
+  type SectionState,
+} from "@/components/settings/health-record-export-controls";
 
 type ExportFormat = "pdf" | "fhir" | "package";
 
 const EXPORT_FORMATS: readonly ExportFormat[] = ["pdf", "fhir", "package"];
-
-interface SectionState {
-  weight: boolean;
-  bp: boolean;
-  pulse: boolean;
-  oxygenSaturation: boolean;
-  bodyFat: boolean;
-  bodyComposition: boolean;
-  restingHeartRate: boolean;
-  hrv: boolean;
-  vo2max: boolean;
-  steps: boolean;
-  distance: boolean;
-  sleep: boolean;
-  glucose: boolean;
-  medList: boolean;
-  compliance: boolean;
-  mood: boolean;
-  bmi: boolean;
-  labs: boolean;
-  allergies: boolean;
-  familyHistory: boolean;
-}
-
-const DEFAULT_SECTIONS: SectionState = {
-  weight: true,
-  bp: true,
-  pulse: true,
-  oxygenSaturation: true,
-  bodyFat: true,
-  bodyComposition: false,
-  restingHeartRate: false,
-  hrv: false,
-  vo2max: false,
-  steps: false,
-  distance: false,
-  sleep: false,
-  glucose: true,
-  medList: true,
-  compliance: true,
-  mood: false, // privacy default
-  bmi: true,
-  labs: true,
-  allergies: true,
-  familyHistory: true,
-};
-
-function buildSelectionSections(s: SectionState) {
-  return {
-    vitals: {
-      weight: s.weight,
-      bp: s.bp,
-      pulse: s.pulse,
-      oxygenSaturation: s.oxygenSaturation,
-      bodyFat: s.bodyFat,
-      bodyComposition: s.bodyComposition,
-    },
-    cardioFitness: {
-      restingHeartRate: s.restingHeartRate,
-      hrv: s.hrv,
-      vo2max: s.vo2max,
-    },
-    activity: {
-      steps: s.steps,
-      distance: s.distance,
-      sleep: s.sleep,
-    },
-    glucose: s.glucose,
-    medications: { list: s.medList, compliance: s.compliance },
-    mood: s.mood,
-    bmi: s.bmi,
-    labs: s.labs,
-    allergies: s.allergies,
-    familyHistory: s.familyHistory,
-  };
-}
 
 export function HealthRecordExportPanel() {
   const { t, locale } = useTranslations();
@@ -171,7 +100,10 @@ export function HealthRecordExportPanel() {
 
   // The single "Medikamente" control gates the whole medication block
   // (list + compliance) so unchecking it actually excludes all medication
-  // data from the export — matching the iOS five-section model.
+  // data from the export — matching the iOS five-section model. Until
+  // that was true of the compliance figures only until this change: the list
+  // names, doses and schedules, and the per-dose ledger behind it, went out
+  // regardless of the switch.
   function toggleMedications() {
     setSections((prev) => {
       const next = !(prev.medList && prev.compliance);
@@ -450,6 +382,11 @@ export function HealthRecordExportPanel() {
                   label={t("settings.healthRecord.mood")}
                   checked={sections.mood}
                   onToggle={() => toggle("mood")}
+                />
+                <ToggleRow
+                  label={t("settings.healthRecord.mentalHealthScreeners")}
+                  checked={sections.mentalHealthScreeners}
+                  onToggle={() => toggle("mentalHealthScreeners")}
                 />
                 <ToggleRow
                   label={t("settings.healthRecord.labs")}

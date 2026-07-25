@@ -20,8 +20,6 @@ const shareLinkSummary = z.object({
   label: z.string(),
   rangeStart: z.string(),
   rangeEnd: z.string().nullable(),
-  resourceTypes: z.array(z.string()),
-  allowFhirApi: z.boolean(),
   // v1.18.7 — whether a passphrase second factor guards this link. Always true
   // for links created on v1.18.7+; false only for legacy links.
   protected: z.boolean(),

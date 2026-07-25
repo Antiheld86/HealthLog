@@ -48,10 +48,6 @@ export interface ShareContext {
   rangeEnd: Date | null;
   /** Frozen section toggles (the `DoctorReportPrefs` JSON shape). */
   sectionsJson: unknown;
-  /** FHIR resource types this link may serve (a subset of the catalogue). */
-  resourceTypes: string[];
-  /** Whether the scoped FHIR API is reachable via this link at all. */
-  allowFhirApi: boolean;
   /**
    * v1.28.16 — authoritative documents-only flag, frozen at create. When true
    * the view loader serves ONLY documents and never aggregates a health report,
@@ -89,8 +85,6 @@ export async function resolveShareToken(
       rangeStart: true,
       rangeEnd: true,
       sectionsJson: true,
-      resourceTypes: true,
-      allowFhirApi: true,
       documentOnly: true,
       expiresAt: true,
       revokedAt: true,
@@ -120,8 +114,6 @@ export async function resolveShareToken(
     rangeStart: row.rangeStart,
     rangeEnd: row.rangeEnd,
     sectionsJson: row.sectionsJson,
-    resourceTypes: row.resourceTypes,
-    allowFhirApi: row.allowFhirApi,
     documentOnly: row.documentOnly,
     expiresAt: row.expiresAt,
   };

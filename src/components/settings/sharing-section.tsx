@@ -151,11 +151,6 @@ function ShareLinksCard() {
                         {link.documentCount}
                       </Badge>
                     )}
-                    {link.allowFhirApi && (
-                      <Badge variant="outline" className="text-xs">
-                        FHIR
-                      </Badge>
-                    )}
                   </div>
                 </div>
                 <p className="text-muted-foreground text-xs">

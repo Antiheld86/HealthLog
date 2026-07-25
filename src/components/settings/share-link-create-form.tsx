@@ -4,9 +4,10 @@
  * The clinician share-link CREATE flow, extracted so both surfaces mount the
  * exact same form: Settings → Sharing (the owner section) and the document
  * detail sheet's "Share" action. A share link is a time-boxed, scope-frozen,
- * read-only view of the owner's own record at `/c/<token>`, optionally
- * exposing a scoped read-only FHIR face and a hand-picked, frozen-at-create
- * document set.
+ * read-only view of the owner's own record at `/c/<token>`, plus a hand-picked,
+ * frozen-at-create document set. It serves a rendered page and those documents
+ * and nothing else. A FHIR toggle and a resource-type picker were removed
+ * that configured an endpoint no route ever served.
  *
  * The raw `hls_` token, the passphrase, and the `#k=` QR are returned EXACTLY
  * ONCE on create (the server stores only hashes); this component is the single
@@ -25,10 +26,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Copy, FileText, Loader2, ScanLine, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   ShareDocumentPicker,
   type PickedDocument,
@@ -36,15 +35,6 @@ import {
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { apiPost } from "@/lib/api/api-fetch";
-
-/** The FHIR resource types a share link may serve — mirrors C4's enum. */
-const RESOURCE_TYPES = [
-  "Patient",
-  "Observation",
-  "MedicationStatement",
-  "MedicationAdministration",
-] as const;
-type ResourceType = (typeof RESOURCE_TYPES)[number];
 
 /** Maximum lifetime, in days — mirrors `SHARE_LINK_MAX_DAYS` on the server. */
 export const MAX_DAYS = 90;
@@ -64,8 +54,6 @@ export interface ShareLinkSummary {
   label: string;
   rangeStart: string;
   rangeEnd: string | null;
-  resourceTypes: string[];
-  allowFhirApi: boolean;
   /** v1.18.7 — whether a passphrase second factor guards this link. */
   protected: boolean;
   /** v1.28 — size of the frozen document set (never the ids, never bytes). */
@@ -99,8 +87,6 @@ export interface ShareLinkCreatePayload {
   label: string;
   rangeStart: string;
   rangeEnd: null;
-  resourceTypes: ResourceType[];
-  allowFhirApi: boolean;
   documentIds?: string[];
   documentOnly?: boolean;
   expiresAt: string;
@@ -111,8 +97,8 @@ export interface ShareLinkCreatePayload {
  * function so the two surfaces' scope contract is unit-testable without a DOM.
  *
  * The `documentOnly` branch is the privacy-load-bearing one: a document-launched
- * share posts an EMPTY report scope (`resourceTypes: []`, no `sections`, FHIR
- * off) plus `documentOnly: true`, and ALWAYS carries the picked document ids —
+ * share posts an EMPTY report scope (no `sections`) plus `documentOnly: true`,
+ * and ALWAYS carries the picked document ids —
  * so the created link serves the document(s) and nothing else. The record share
  * (Settings → Sharing) keeps its full scope and only attaches documents when
  * the owner picked some.
@@ -121,8 +107,6 @@ export function buildShareLinkCreatePayload(input: {
   label: string;
   rangeDays: number;
   expiryDays: number;
-  allowFhirApi: boolean;
-  resourceTypes: ResourceType[];
   documentIds: string[];
   documentOnly: boolean;
 }): ShareLinkCreatePayload {
@@ -135,8 +119,6 @@ export function buildShareLinkCreatePayload(input: {
   if (input.documentOnly) {
     return {
       ...base,
-      resourceTypes: [],
-      allowFhirApi: false,
       documentOnly: true,
       // The launched document(s) always ride along — a documents-only share
       // with no document would be meaningless (the server 422s it).
@@ -145,8 +127,6 @@ export function buildShareLinkCreatePayload(input: {
   }
   return {
     ...base,
-    resourceTypes: input.resourceTypes,
-    allowFhirApi: input.allowFhirApi,
     // Omit the key entirely when nothing is attached (a documents-less record
     // share stays the default). The server re-validates each id as the caller's
     // own live document before minting the link.
@@ -162,10 +142,9 @@ export function ShareLinkCreateForm({
 }: {
   /**
    * Documents-only mode (the document-launched flow). Hides the record-scope
-   * controls — FHIR API toggle, FHIR resource-type checkboxes, and the
-   * history-range selector — and posts an empty report scope so the minted
-   * link serves ONLY the attached document(s). Keeps the document picker,
-   * label, expiry, and one-time passphrase reveal.
+   * control — the history-range selector — and posts an empty report scope so
+   * the minted link serves ONLY the attached document(s). Keeps the document
+   * picker, label, expiry, and one-time passphrase reveal.
    */
   documentOnly?: boolean;
   /** Documents to pre-attach — the document-launched flow seeds the one doc. */
@@ -181,11 +160,6 @@ export function ShareLinkCreateForm({
   const [label, setLabel] = useState(initialLabel ?? "");
   const [rangeDays, setRangeDays] = useState(DEFAULT_DAYS);
   const [expiryDays, setExpiryDays] = useState(DEFAULT_DAYS);
-  const [allowFhirApi, setAllowFhirApi] = useState(false);
-  const [resourceTypes, setResourceTypes] = useState<ResourceType[]>([
-    "Patient",
-    "Observation",
-  ]);
   const [selectedDocs, setSelectedDocs] = useState<PickedDocument[]>(
     initialDocuments ?? [],
   );
@@ -238,8 +212,6 @@ export function ShareLinkCreateForm({
           label,
           rangeDays,
           expiryDays,
-          allowFhirApi,
-          resourceTypes,
           documentIds: selectedDocs.map((d) => d.id),
           documentOnly,
         }),
@@ -267,12 +239,6 @@ export function ShareLinkCreateForm({
       );
     },
   });
-
-  function toggleResourceType(type: ResourceType) {
-    setResourceTypes((prev) =>
-      prev.includes(type) ? prev.filter((r) => r !== type) : [...prev, type],
-    );
-  }
 
   async function copyValue(value: string, which: "link" | "passphrase") {
     try {
@@ -343,51 +309,6 @@ export function ShareLinkCreateForm({
             </p>
           </div>
         </div>
-
-        {/* The FHIR API + its resource-type scope expose the health RECORD.
-            A documents-only link serves no record, so both are hidden and the
-            posted scope is forced empty server-side regardless. */}
-        {!documentOnly ? (
-          <div className="border-border flex items-center justify-between rounded-lg border p-3">
-            <div className="space-y-0.5 pr-3">
-              <Label htmlFor="share-fhir" className="text-sm font-medium">
-                {t("settings.sharing.fhirApi")}
-              </Label>
-              <p className="text-muted-foreground text-xs">
-                {t("settings.sharing.fhirApiHint")}
-              </p>
-            </div>
-            <Switch
-              id="share-fhir"
-              checked={allowFhirApi}
-              onCheckedChange={setAllowFhirApi}
-            />
-          </div>
-        ) : null}
-
-        {!documentOnly && allowFhirApi && (
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">
-              {t("settings.sharing.resourceTypes")}
-            </legend>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {RESOURCE_TYPES.map((type) => (
-                <label
-                  key={type}
-                  className="flex items-center gap-2 text-sm"
-                  htmlFor={`share-rt-${type}`}
-                >
-                  <Checkbox
-                    id={`share-rt-${type}`}
-                    checked={resourceTypes.includes(type)}
-                    onCheckedChange={() => toggleResourceType(type)}
-                  />
-                  <span className="font-mono text-xs">{type}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        )}
 
         {/* ── Attach documents ─────────────────────────────────────── */}
         <div className="border-border space-y-2 rounded-lg border p-3">

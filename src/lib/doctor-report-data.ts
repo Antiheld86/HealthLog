@@ -41,7 +41,11 @@ import {
   type DoctorReportPrefs,
 } from "@/lib/validations/doctor-report-prefs";
 import { buildCycleExportSummary } from "@/lib/cycle/export-data";
-import { resolveModuleMap, type ModuleKey } from "@/lib/modules/gate";
+import { resolveModuleMap } from "@/lib/modules/gate";
+import {
+  excludedMeasurementTypes as excludedMeasurementTypesForSelection,
+  filterMeasurementKeys,
+} from "@/lib/doctor-report-selection";
 import { SCHEDULE_COMPLIANCE_SELECT } from "@/lib/analytics/compliance";
 import {
   WELLNESS_SCORE_REPORT_TYPES,
@@ -448,38 +452,16 @@ export async function collectDoctorReportData(
   const recoveryEnabled = moduleMap.recovery !== false;
   const workoutsEnabled = moduleMap.workouts !== false;
 
-  // v1.28.25 — push the section / module gates INTO the measurement query.
-  // `filterMeasurementKeys` below strips gated types from the returned
-  // payload anyway, so rows of a disabled section / module were fetched only
-  // to be dropped — pure dead weight, and the heaviest series (BLOOD_GLUCOSE
-  // minute-grain CGM, gated by the glucose module) is exactly the one that
-  // runs to six figures over a 730-day window. Excluding them at the query
-  // is output-identical by construction.
-  //
-  // WEIGHT is deliberately NEVER excluded: the BMI figure (gated by
-  // `sections.bmi`, not `sections.weight`) and the GLP-1 weight-delta both
-  // read the PRE-filter `byType` / `stats` maps, so weight rows must be
-  // present even when the weight section itself is toggled off. No other
-  // gated type is read before the filter (each remaining pre-filter read —
-  // sleep nights, glucose panel, recovery summary — sits behind the same
-  // gate that drives its exclusion here).
-  //
-  // Every sparse type keeps the raw-row path. On long windows, the two
-  // sample-dense types move to one SQL row per local day/source/device/context;
-  // the canonical-source picker then works over that bounded intermediate set.
-  const excludedMeasurementTypes: MeasurementType[] = [];
-  if (sections.bp === false) {
-    excludedMeasurementTypes.push("BLOOD_PRESSURE_SYS", "BLOOD_PRESSURE_DIA");
-  }
-  if (sections.pulse === false) excludedMeasurementTypes.push("PULSE");
-  if (sections.sleep === false) excludedMeasurementTypes.push("SLEEP_DURATION");
-  if (sections.glucose === false)
-    excludedMeasurementTypes.push("BLOOD_GLUCOSE");
-  for (const [type, moduleKey] of Object.entries(MEASUREMENT_TYPE_MODULE)) {
-    if (moduleMap[moduleKey] === false) {
-      excludedMeasurementTypes.push(type as MeasurementType);
-    }
-  }
+  // v1.28.25 — the section / module gates are pushed INTO the measurement
+  // query (see `doctor-report-selection.ts` for why, and for the one type the
+  // query must keep regardless). Every sparse type keeps the raw-row path; on
+  // long windows the two sample-dense types move to one SQL row per local
+  // day/source/device/context, and the canonical-source picker then works over
+  // that bounded intermediate set.
+  const excludedMeasurementTypes = excludedMeasurementTypesForSelection(
+    sections,
+    moduleMap,
+  );
 
   const userProfile = await prisma.user.findUnique({
     where: { id: userId },
@@ -1403,22 +1385,37 @@ export async function collectDoctorReportData(
     glucoseUnit: resolveGlucoseUnit(userProfile?.glucoseUnit ?? null),
     bmi: filteredBmi,
     compliance: filteredCompliance,
-    medications: medications.map((m) => ({
-      name: m.name,
-      dose: m.dose,
-      // v1.9.0 — drug-classification codes for the coded FHIR concept.
-      atcCode: m.atcCode,
-      rxNormCode: m.rxNormCode,
-      schedules: m.schedules.map((s) => ({
-        windowStart: s.windowStart,
-        windowEnd: s.windowEnd,
-        label: s.label,
-      })),
-    })),
-    medicationAdministrations: cappedAdministrations,
-    medicationAdministrationsTruncation: medicationAdministrationsTruncated
-      ? { total: totalAdministrations, included: cappedAdministrations.length }
-      : null,
+    // The medication list and the per-dose administration ledger now
+    // ride `sections.medicationList`. Both were exported unconditionally while
+    // the panel's single medication control claimed in its own comment to
+    // exclude all medication data, so a user who switched medications off still
+    // handed over every drug name, dose, schedule, injection site and skipped
+    // dose in the FHIR bundle. The rows are still READ (compliance and the
+    // GLP-1 block are computed from them); they no longer leave the function.
+    medications: sections.medicationList
+      ? medications.map((m) => ({
+          name: m.name,
+          dose: m.dose,
+          // v1.9.0 — drug-classification codes for the coded FHIR concept.
+          atcCode: m.atcCode,
+          rxNormCode: m.rxNormCode,
+          schedules: m.schedules.map((s) => ({
+            windowStart: s.windowStart,
+            windowEnd: s.windowEnd,
+            label: s.label,
+          })),
+        }))
+      : [],
+    medicationAdministrations: sections.medicationList
+      ? cappedAdministrations
+      : [],
+    medicationAdministrationsTruncation:
+      sections.medicationList && medicationAdministrationsTruncated
+        ? {
+            total: totalAdministrations,
+            included: cappedAdministrations.length,
+          }
+        : null,
     mood,
     glp1,
     wellnessScores,
@@ -1428,83 +1425,4 @@ export async function collectDoctorReportData(
     allergies,
     familyHistory,
   };
-}
-
-/**
- * Per-measurement-type → section-toggle mapping. Keys not listed here
- * (e.g., body fat, oxygen saturation) bypass the toggles — those sections
- * have no per-report flag. Glucose DOES carry a `glucose` section toggle,
- * but `BLOOD_GLUCOSE` is gated at query-exclusion time (mirroring sleep) and
- * its panel collapses via `glucoseEnabled`, so it does not ride this map.
- */
-const MEASUREMENT_TYPE_SECTION: Record<string, keyof DoctorReportPrefs> = {
-  BLOOD_PRESSURE_SYS: "bp",
-  BLOOD_PRESSURE_DIA: "bp",
-  WEIGHT: "weight",
-  PULSE: "pulse",
-  SLEEP_DURATION: "sleep",
-};
-
-/**
- * v1.18.0 — per-measurement-type → owning module mapping for the types that
- * carry no `sections` toggle but DO belong to a toggleable module. When the
- * module is disabled, the type is stripped from `measurements` + `stats` so the
- * series never reaches the PDF tables or a FHIR Observation.
- *
- *   - `workouts` owns the activity / movement series (steps, active energy,
- *     distance, flights, the walking-gait + stair metrics) and the
- *     training-load `STRAIN_SCORE`.
- *   - `recovery` owns the readiness signals `RECOVERY_SCORE` + `STRESS_SCORE`.
- *   - `glucose` owns the raw `BLOOD_GLUCOSE` series (the glucose panel itself is
- *     gated where it is assembled; this strips the raw rows too).
- *
- * Core clinical types (BP / weight / pulse / body-composition / vitals) carry
- * no module and are never gated here. `sleep` / `mood` / `cycle` / `labs` ride
- * the `sections` mechanism instead.
- */
-const MEASUREMENT_TYPE_MODULE: Record<string, ModuleKey> = {
-  ACTIVITY_STEPS: "workouts",
-  ACTIVE_ENERGY_BURNED: "workouts",
-  FLIGHTS_CLIMBED: "workouts",
-  WALKING_RUNNING_DISTANCE: "workouts",
-  WALKING_SPEED: "workouts",
-  WALKING_ASYMMETRY: "workouts",
-  WALKING_STEP_LENGTH: "workouts",
-  WALKING_DOUBLE_SUPPORT: "workouts",
-  SIX_MINUTE_WALK_DISTANCE: "workouts",
-  STAIR_ASCENT_SPEED: "workouts",
-  STAIR_DESCENT_SPEED: "workouts",
-  STRAIN_SCORE: "workouts",
-  RECOVERY_SCORE: "recovery",
-  STRESS_SCORE: "recovery",
-  BLOOD_GLUCOSE: "glucose",
-  // v1.25.0 — the PHQ-9 / GAD-7 screener TOTALS ride the doctor-report / FHIR
-  // export only when the opt-in mental-health module is on (default OFF →
-  // excluded by default, privacy-by-default). Item-level answers are never a
-  // Measurement, so they can never leak through this path regardless. The total
-  // is the intended clinical artefact (total + band per clinical-instruments.md
-  // §4); gating it on the module keeps the export consistent with how mood /
-  // sleep / glucose are gated and avoids exporting a screener the account never
-  // opted into.
-  PHQ9_SCORE: "mentalHealth",
-  GAD7_SCORE: "mentalHealth",
-  // v1.27.9 — the WHO-5 / SCI totals ride the same module gate.
-  WHO5_SCORE: "mentalHealth",
-  SCI_SCORE: "mentalHealth",
-};
-
-function filterMeasurementKeys<T>(
-  map: Record<string, T>,
-  sections: DoctorReportPrefs,
-  moduleMap: Record<ModuleKey, boolean>,
-): Record<string, T> {
-  const out: Record<string, T> = {};
-  for (const [type, value] of Object.entries(map)) {
-    const sectionKey = MEASUREMENT_TYPE_SECTION[type];
-    if (sectionKey && sections[sectionKey] === false) continue;
-    const moduleKey = MEASUREMENT_TYPE_MODULE[type];
-    if (moduleKey && moduleMap[moduleKey] === false) continue;
-    out[type] = value;
-  }
-  return out;
 }
