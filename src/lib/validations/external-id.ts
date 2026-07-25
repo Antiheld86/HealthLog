@@ -96,19 +96,43 @@ export function isStableExternalId(value: string): boolean {
   return classifyExternalId(value) === null;
 }
 
-const SHAPE_MESSAGES: Record<UnstableExternalIdShape, string> = {
-  blank: "external identifier must not be empty",
-  pointer_address:
-    "external identifier must be stable across app restarts; received a memory address (0x…), which is a new value on every launch and mints a duplicate record on every sync",
-  object_description:
-    "external identifier must be stable across app restarts; received an object description (<Class: 0x…>), which embeds a memory address and is a new value on every launch — serialise the identity itself, not the object's description",
-};
+/**
+ * How the offending field is named back to the caller. The rule is about
+ * the VALUE, so it applies to every client-supplied string this system
+ * later matches on as an identity — not only `externalId`.
+ */
+export const EXTERNAL_ID_LABEL = "external identifier";
+export const IDEMPOTENCY_KEY_LABEL = "idempotency key";
 
 /** The 422 message a client developer reads. Names the shape received. */
 export function unstableExternalIdMessage(
   shape: UnstableExternalIdShape,
+  label: string = EXTERNAL_ID_LABEL,
 ): string {
-  return SHAPE_MESSAGES[shape];
+  switch (shape) {
+    case "blank":
+      return `${label} must not be empty`;
+    case "pointer_address":
+      return `${label} must be stable across app restarts; received a memory address (0x…), which is a new value on every launch and mints a duplicate record on every sync`;
+    case "object_description":
+      return `${label} must be stable across app restarts; received an object description (<Class: 0x…>), which embeds a memory address and is a new value on every launch — serialise the identity itself, not the object's description`;
+  }
+}
+
+function assertStableIdentityField(
+  raw: unknown,
+  ctx: z.RefinementCtx,
+  field: string,
+  label: string,
+): void {
+  if (typeof raw !== "string") return;
+  const shape = classifyExternalId(raw);
+  if (shape === null) return;
+  ctx.addIssue({
+    code: "custom",
+    path: [field],
+    message: unstableExternalIdMessage(shape, label),
+  });
 }
 
 /**
@@ -127,15 +151,42 @@ export function assertStableExternalId(
   value: { externalId?: string | null },
   ctx: z.RefinementCtx,
 ): void {
-  const raw = value.externalId;
-  if (typeof raw !== "string") return;
-  const shape = classifyExternalId(raw);
-  if (shape === null) return;
-  ctx.addIssue({
-    code: "custom",
-    path: ["externalId"],
-    message: unstableExternalIdMessage(shape),
-  });
+  assertStableIdentityField(
+    value.externalId,
+    ctx,
+    "externalId",
+    EXTERNAL_ID_LABEL,
+  );
+}
+
+/**
+ * The same floor for a client-supplied `idempotencyKey`.
+ *
+ * The HTTP `Idempotency-Key` header is a replay token inside a TTL and is
+ * deliberately out of scope — `IdempotencyKey.expiresAt` bounds it and a
+ * cron sweeps it. `MedicationIntakeEvent.idempotency_key` is NOT that: it
+ * is a `@unique` column persisted with the dose row forever, with no TTL
+ * and no sweep, matched by plain equality on the per-medication intake
+ * POST, the bulk intake ingest and the external ingest surface. That makes
+ * it an identity, and it carries the same failure mode — a value that
+ * rotates per client launch never matches its own earlier row, so every
+ * re-sync logs the dose again.
+ *
+ * The blank arm matters more here than anywhere else: the column is
+ * `@unique` across the table, so a second row carrying "" cannot exist,
+ * and an empty key would otherwise resolve to whichever unrelated row got
+ * there first.
+ */
+export function assertStableIdempotencyKey(
+  value: { idempotencyKey?: string | null },
+  ctx: z.RefinementCtx,
+): void {
+  assertStableIdentityField(
+    value.idempotencyKey,
+    ctx,
+    "idempotencyKey",
+    IDEMPOTENCY_KEY_LABEL,
+  );
 }
 
 /**
@@ -146,9 +197,10 @@ export function assertStableExternalId(
  */
 export function unstableExternalIdShape(
   body: unknown,
+  field: "externalId" | "idempotencyKey" = "externalId",
 ): UnstableExternalIdShape | null {
   if (typeof body !== "object" || body === null) return null;
-  const raw = (body as { externalId?: unknown }).externalId;
+  const raw = (body as Record<string, unknown>)[field];
   if (typeof raw !== "string") return null;
   return classifyExternalId(raw);
 }

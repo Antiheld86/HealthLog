@@ -1358,3 +1358,131 @@ describe("POST /api/medications/intake/bulk — v1.28 Apple Health dose events",
     expect("externalId" in createArgs.data).toBe(false);
   });
 });
+
+describe("POST /api/medications/intake/bulk — identity stability floor", () => {
+  /**
+   * Two dedup keys ride this route and BOTH are identities matched by
+   * equality forever: `(userId, externalId)` for the Apple dose event, and
+   * the `@unique` `idempotency_key` column for the replay probe. A value
+   * that rotates per client launch matches neither, so every re-sync logs
+   * the dose again. Refused PER ENTRY — a client draining an offline queue
+   * must not lose its good doses to one bad row.
+   */
+  beforeEach(() => {
+    vi.mocked(prisma.medication.findMany).mockResolvedValue([
+      { id: "med-1", externalSource: "APPLE_HEALTH" },
+    ] as never);
+    vi.mocked(prisma.medication.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue(
+      [] as never,
+    );
+    vi.mocked(prisma.medicationIntakeEvent.findFirst).mockResolvedValue(
+      null as never,
+    );
+    vi.mocked(prisma.medicationIntakeEvent.findUnique).mockResolvedValue(
+      null as never,
+    );
+    vi.mocked(prisma.medicationIntakeEvent.create).mockResolvedValue({
+      id: "evt-new",
+    } as never);
+  });
+
+  function entry(overrides: Record<string, unknown>) {
+    return {
+      medicationId: "med-1",
+      takenAt: "2026-06-15T05:01:00.000Z",
+      ...overrides,
+    };
+  }
+
+  it("skips the poisoned dose event and still logs the two good ones", async () => {
+    const res = await POST(
+      postReq({
+        entries: [
+          entry({
+            source: "APPLE_HEALTH",
+            externalId: "8AD2A9CB-3F0C-4E4D-9C1E-4B7E2A1D6F30",
+          }),
+          entry({
+            source: "APPLE_HEALTH",
+            externalId: "<HKHealthConceptIdentifier: 0x12568db80>",
+          }),
+          entry({
+            source: "APPLE_HEALTH",
+            externalId: "3f0c4e4d-9c1e-4b7e-2a1d-6f30ad2a9cb1",
+          }),
+        ],
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: {
+        processed: number;
+        skipped: Array<{ index: number; reason: string }>;
+        entries: Array<{ index: number; status: string; reason?: string }>;
+      };
+    };
+    expect(body.data.processed).toBe(3);
+    expect(body.data.entries[0].status).not.toBe("skipped");
+    expect(body.data.entries[1]).toMatchObject({
+      index: 1,
+      status: "skipped",
+      reason: "unstable_external_id",
+    });
+    expect(body.data.entries[2].status).not.toBe("skipped");
+    expect(body.data.skipped).toEqual([
+      { index: 1, reason: "unstable_external_id" },
+    ]);
+    expect(prisma.medicationIntakeEvent.create).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips a rotating idempotencyKey — the column is a permanent identity, not a windowed token", async () => {
+    const res = await POST(
+      postReq({
+        entries: [
+          entry({ idempotencyKey: "intake-2026-06-15T05:01:00Z-med-1" }),
+          entry({ idempotencyKey: "<NSObject: 0x600000c1a2b0>" }),
+        ],
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: {
+        entries: Array<{ index: number; status: string; reason?: string }>;
+      };
+    };
+    expect(body.data.entries[0].status).not.toBe("skipped");
+    expect(body.data.entries[1]).toMatchObject({
+      index: 1,
+      status: "skipped",
+      reason: "unstable_external_id",
+    });
+    expect(prisma.medicationIntakeEvent.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("never turns one poisoned entry into a whole-batch 422", async () => {
+    const res = await POST(
+      postReq({ entries: [entry({ idempotencyKey: "0xdeadbeef" })] }),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("accepts the HealthKit dose-event UUID the mirror really sends", async () => {
+    const res = await POST(
+      postReq({
+        entries: [
+          entry({
+            source: "APPLE_HEALTH",
+            externalId: "8AD2A9CB-3F0C-4E4D-9C1E-4B7E2A1D6F30",
+          }),
+        ],
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { entries: Array<{ status: string }> };
+    };
+    expect(body.data.entries[0].status).not.toBe("skipped");
+    expect(prisma.medicationIntakeEvent.create).toHaveBeenCalledTimes(1);
+  });
+});

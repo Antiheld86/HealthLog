@@ -14,6 +14,10 @@ import {
   intakeSchema,
   listIntakeEventsSchema,
 } from "@/lib/validations/medication";
+import {
+  unstableExternalIdMeta,
+  unstableExternalIdShape,
+} from "@/lib/validations/external-id";
 import { resolveInjectionSiteForWrite } from "@/lib/medications/injection-site-write";
 import type { InjectionSiteKey } from "@/lib/medications/injection-sites";
 import { withIdempotency } from "@/lib/idempotency";
@@ -72,9 +76,16 @@ async function postIntake(request: NextRequest, { params }: RouteParams) {
     // v1.4.43 W6 — per-med intake POST hot path; multi-issue 422 +
     // audit breadcrumb keyed `medications.intake.create.validation-failed`.
     const issues = sanitiseZodIssues(parsed.error.issues);
+    const shape = unstableExternalIdShape(body, "idempotencyKey");
     annotate({
       action: { name: "medications.intake.create.validation-failed" },
-      meta: { issue_count: issues.length, medication_id: id },
+      meta: {
+        issue_count: issues.length,
+        medication_id: id,
+        ...(shape
+          ? unstableExternalIdMeta("medication.intake.create", [shape])
+          : {}),
+      },
     });
     // v1.4.49 — strip `message` from the audit-ledger row; the
     // intake payload carries `idempotencyKey` (opaque caller string).

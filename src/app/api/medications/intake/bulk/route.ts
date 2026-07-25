@@ -101,6 +101,11 @@ const bulkEntrySchema = z
     // 5-year floor), matching the single-intake create + edit paths.
     takenAt: boundedTakenAtSchema.optional(),
     skipped: z.boolean().optional().default(false),
+    // Persisted to the `@unique` `idempotency_key` column and matched by
+    // equality forever, so it is an identity and carries the same
+    // stability floor. Checked per entry for the same reason as
+    // `externalId` above.
+    // @external-id-checked-per-entry: src/app/api/medications/intake/bulk/route.ts
     idempotencyKey: z.string().min(1).max(128).optional(),
     // v1.8.5 — optional per-entry injection site. Validated against the
     // medication's effective allowed set; a disallowed site marks the
@@ -356,16 +361,20 @@ async function postBulk(request: NextRequest): Promise<Response> {
       continue;
     }
 
-    // The `(userId, externalId)` dose-event dedup below is only
-    // idempotent while the id is STABLE across client launches. An id
-    // that rotates per process (an object description carrying a memory
-    // address) never matches its own earlier row, so every re-sync mints
-    // another intake event. Refused per entry — one bad row must not
-    // stop the rest of the batch landing.
+    // Both dedup keys on this route are only idempotent while the value
+    // is STABLE across client launches: `(userId, externalId)` for the
+    // Apple dose event, and the `@unique` `idempotency_key` column for
+    // the replay probe below. A value that rotates per process (an
+    // object description carrying a memory address) never matches its
+    // own earlier row, so every re-sync logs the dose again. Refused per
+    // entry — one bad row must not stop the rest of the batch landing.
     const unstable =
-      entry.externalId === undefined
+      (entry.externalId === undefined
         ? null
-        : classifyExternalId(entry.externalId);
+        : classifyExternalId(entry.externalId)) ??
+      (entry.idempotencyKey === undefined
+        ? null
+        : classifyExternalId(entry.idempotencyKey));
     if (unstable) {
       unstableShapes.push(unstable);
       skipped.push({ index: i, reason: UNSTABLE_EXTERNAL_ID_REASON });

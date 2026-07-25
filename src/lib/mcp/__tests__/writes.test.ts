@@ -389,3 +389,79 @@ describe("logMcpBloodPressure", () => {
     }
   });
 });
+
+describe("MCP writes — idempotency-key stability floor", () => {
+  /**
+   * The MCP key is hashed into the `externalId` half of
+   * `(userId, type, MCP, externalId)` and matched forever, so it is an
+   * identity. The hash launders the shape — a pointer address and a real
+   * key both digest to clean hex — so the check has to run on the INPUT,
+   * before `mcpExternalId`.
+   *
+   * The blank case is the live one: every tool handler falls back to `""`
+   * when the host omits the argument, and `""` digests to a CONSTANT, so
+   * without this floor every keyless write after the first would report
+   * `already_logged` and be silently dropped.
+   */
+  it.each([
+    ["blank", ""],
+    ["whitespace", "   "],
+    ["pointer address", "0x12568db80"],
+    ["object description", "<NSObject: 0x600000c1a2b0>"],
+  ])("refuses a %s measurement key before it is hashed", async (_l, key) => {
+    const result = await logMcpMeasurement({
+      userId: "u-1",
+      type: "WEIGHT",
+      value: 80,
+      idempotencyKey: key,
+    });
+    expect(result.status).toBe("unstable_idempotency_key");
+    expect(measurement.findUnique).not.toHaveBeenCalled();
+    expect(measurement.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a blank mood key instead of collapsing onto one row", async () => {
+    const result = await logMcpMood({
+      userId: "u-1",
+      score: 4,
+      idempotencyKey: "",
+    });
+    expect(result.status).toBe("unstable_idempotency_key");
+    expect(moodEntry.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a blank blood-pressure key instead of collapsing onto one row", async () => {
+    const result = await logMcpBloodPressure({
+      userId: "u-1",
+      systolic: 120,
+      diastolic: 80,
+      idempotencyKey: "",
+    });
+    expect(result.status).toBe("unstable_idempotency_key");
+    expect($transaction).not.toHaveBeenCalled();
+  });
+
+  it("carries a message naming the field a host has to fix", async () => {
+    const result = await logMcpMeasurement({
+      userId: "u-1",
+      type: "WEIGHT",
+      value: 80,
+      idempotencyKey: "<NSObject: 0x600000c1a2b0>",
+    });
+    expect(result).toMatchObject({ status: "unstable_idempotency_key" });
+    if (result.status !== "unstable_idempotency_key") return;
+    expect(result.reason).toContain("idempotency key");
+    expect(result.reason).toContain("stable across app restarts");
+  });
+
+  it("still accepts a normal host-chosen key", async () => {
+    const result = await logMcpMeasurement({
+      userId: "u-1",
+      type: "WEIGHT",
+      value: 80,
+      idempotencyKey: "weight-2026-07-25-morning",
+    });
+    expect(result.status).toBe("written");
+    expect(measurement.create).toHaveBeenCalledTimes(1);
+  });
+});

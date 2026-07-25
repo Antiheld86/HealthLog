@@ -11,6 +11,7 @@ import { NextRequest } from "next/server";
 vi.mock("@/lib/db", () => ({
   prisma: {
     auditLog: { create: vi.fn() },
+    menstrualCycle: { findMany: vi.fn().mockResolvedValue([]) },
   },
 }));
 
@@ -48,6 +49,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import { POST } from "../route";
+import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { requireCycleEnabled } from "@/lib/cycle/gate";
@@ -72,7 +74,9 @@ beforeEach(() => {
   vi.mocked(checkRateLimit).mockResolvedValue({ allowed: true } as never);
   vi.mocked(requireCycleEnabled).mockResolvedValue({
     enabled: true,
+    profile: { sensitiveCategoryEncryption: false },
   } as never);
+  vi.mocked(prisma.menstrualCycle.findMany).mockResolvedValue([] as never);
 });
 
 describe("POST /api/cycle/day-logs/bulk — body cap", () => {
@@ -92,5 +96,110 @@ describe("POST /api/cycle/day-logs/bulk — body cap", () => {
     const res = await POST(postReq({ entries }));
     expect(res.status).toBe(422);
     expect(upsertCycleDayLog).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/cycle/day-logs/bulk — external-id stability floor", () => {
+  /**
+   * The bulk drain upserts on `(userId, source, externalId)`. A per-launch
+   * id never matches its own earlier row, so every re-post mints another
+   * day log. Refused PER ENTRY — the client's other days must still land.
+   */
+  beforeEach(() => {
+    let n = 0;
+    vi.mocked(upsertCycleDayLog).mockImplementation(
+      async () =>
+        ({ id: `day-${++n}`, existed: false, changed: true }) as never,
+    );
+  });
+
+  it("skips the poisoned entry and still writes the two good ones", async () => {
+    const res = await POST(
+      postReq({
+        entries: [
+          {
+            date: "2026-01-01",
+            loggedAt: "2026-01-01T08:00:00.000Z",
+            source: "APPLE_HEALTH",
+            externalId: "hkcycle:2026-01-01",
+          },
+          {
+            date: "2026-01-02",
+            loggedAt: "2026-01-02T08:00:00.000Z",
+            source: "APPLE_HEALTH",
+            externalId: "<HKHealthConceptIdentifier: 0x12568db80>",
+          },
+          {
+            date: "2026-01-03",
+            loggedAt: "2026-01-03T08:00:00.000Z",
+            source: "APPLE_HEALTH",
+            externalId: "8AD2A9CB-3F0C-4E4D-9C1E-4B7E2A1D6F30",
+          },
+        ],
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: {
+        processed: number;
+        inserted: number;
+        skipped: number;
+        entries: Array<{
+          index: number;
+          status: string;
+          reason?: string;
+          externalId?: string;
+        }>;
+      };
+    };
+    expect(body.data.processed).toBe(3);
+    expect(body.data.inserted).toBe(2);
+    expect(body.data.skipped).toBe(1);
+    expect(body.data.entries[0].status).toBe("inserted");
+    expect(body.data.entries[1]).toMatchObject({
+      index: 1,
+      status: "skipped",
+      reason: "unstable_external_id",
+      externalId: "<HKHealthConceptIdentifier: 0x12568db80>",
+    });
+    expect(body.data.entries[2].status).toBe("inserted");
+    // Only the two good entries reached the writer.
+    expect(upsertCycleDayLog).toHaveBeenCalledTimes(2);
+  });
+
+  it("never turns one poisoned entry into a whole-batch 422", async () => {
+    const res = await POST(
+      postReq({
+        entries: [
+          {
+            date: "2026-01-01",
+            loggedAt: "2026-01-01T08:00:00.000Z",
+            externalId: "0xdeadbeef",
+          },
+        ],
+      }),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("accepts the HealthKit cycle-day id shape the mirror really sends", async () => {
+    const res = await POST(
+      postReq({
+        entries: [
+          {
+            date: "2026-01-01",
+            loggedAt: "2026-01-01T08:00:00.000Z",
+            source: "APPLE_HEALTH",
+            externalId: "hkcycle:2026-01-01",
+          },
+        ],
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { entries: Array<{ status: string }> };
+    };
+    expect(body.data.entries[0].status).toBe("inserted");
+    expect(upsertCycleDayLog).toHaveBeenCalledTimes(1);
   });
 });
