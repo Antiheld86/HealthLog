@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [1.32.34] — 2026-07-25
+
+Housekeeping on the interface. Most of it you will not see.
+
+The sections on the insights overview had each been given their own card frame
+by hand, and the copies had drifted apart on the one thing nobody thought to
+write down: how much room to leave between the blocks inside them. Some used 8
+pixels, some 12, one 16, all sitting one under the other in the same column.
+They now share a single frame with a single rhythm, so a few of those cards
+open or tighten very slightly and all of them pick up the same faint shadow
+their neighbours already had.
+
+When a metric page cannot load, the message now reads in the normal text
+colour with a warning glyph beside it, instead of the grey reserved for
+timestamps and units. A failure is what that surface has to say at that moment,
+so it should not look like a footnote.
+
+The rest is invisible from the outside. The sleep composition card uses the
+same title row as every other card, a handful of one-off text sizes and
+paddings went back onto the scale the rest of the app uses, and the spacing
+rule that was already enforced in the build now has nothing left to catch.
+
 ## [1.32.33] — 2026-07-25
 
 The moodLog integration is gone. It bridged mood entries to and from a separate
