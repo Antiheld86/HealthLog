@@ -89,10 +89,66 @@ import {
 import { OuraApiError, classifyOuraError } from "./response-classifier";
 import { syncUserOuraCyclePhases } from "./cycle-sync";
 
-/** Default lookback window (days) for an incremental sync. Oura finalises a
- * night's scores hours after wake; 7 days re-fetches a handful of records (the
- * upserts are idempotent) and closes any catch-up gap. */
+/** Floor of the lookback window (days) for an incremental sync. Oura finalises
+ * a night's scores hours after wake; 7 days re-fetches a handful of records
+ * (the upserts are idempotent) and covers the re-score tail. */
 export const OURA_SYNC_LOOKBACK_DAYS = 7;
+
+/**
+ * Ceiling of the lookback window (days). A catch-up tick may widen the window
+ * up to this many days; beyond it the missing span is history, not an outage,
+ * and belongs to a backfill rather than an hourly poll.
+ *
+ * 30 rather than the ~90 days Oura's own guidance would allow: the whole batch
+ * still rides ONE `$transaction` with a 60 s timeout (see
+ * `upsertOuraMeasurements` below), and a 30-day catch-up is roughly four times
+ * the row count of a normal tick — comfortably inside what that transaction
+ * handles. Raise it only after the batch write is chunked.
+ */
+export const OURA_SYNC_MAX_LOOKBACK_DAYS = 30;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Resolve how far back this tick should reach, anchored on the newest Oura
+ * measurement we actually hold.
+ *
+ * The fixed 7-day window lost days in two ways. A sync that failed for longer
+ * than a week resumed with a window too narrow to reach the gap, so the missing
+ * days stayed missing. And a ring left unsynced (Oura's cloud has nothing until
+ * the app is opened) produced a run of EMPTY successes — every signal green —
+ * after which the late-arriving days fell outside the window and were never
+ * imported.
+ *
+ * Anchoring on the newest imported row covers both: rows stop arriving whether
+ * the sync fails or succeeds empty, so the same watermark goes stale in either
+ * case. It is derived, never stored, so it cannot drift out of step with the
+ * data the way a persisted cursor can — the watermark IS the data.
+ *
+ * `deletedAt: null` matters: the sleep sweep soft-deletes rows a revised
+ * hypnogram orphaned, and a tombstone must not hold the watermark artificially
+ * fresh. The `+ 1` day is the overlap buffer over the last seen day. With data
+ * flowing normally the watermark is under two days old and the clamp floors at
+ * `OURA_SYNC_LOOKBACK_DAYS`, so the steady-state window and request count are
+ * exactly what they were before. No watermark at all is a fresh connection:
+ * take the full ceiling.
+ */
+export async function resolveOuraLookbackDays(userId: string): Promise<number> {
+  const newest = await prisma.measurement.findFirst({
+    where: { userId, source: "OURA", deletedAt: null },
+    orderBy: { measuredAt: "desc" },
+    select: { measuredAt: true },
+  });
+  if (!newest) return OURA_SYNC_MAX_LOOKBACK_DAYS;
+
+  const daysSince = Math.floor(
+    (Date.now() - newest.measuredAt.getTime()) / DAY_MS,
+  );
+  return Math.min(
+    OURA_SYNC_MAX_LOOKBACK_DAYS,
+    Math.max(OURA_SYNC_LOOKBACK_DAYS, daysSince + 1),
+  );
+}
 
 export function classifyOuraFailure(err: unknown): FailureKind {
   return toFailureKind(classifyOuraError(err));
@@ -366,6 +422,11 @@ export async function syncUserOura(
   const conn = await getOuraConnection(userId);
   if (!conn) return 0;
 
+  // An explicit window from the caller wins; otherwise derive it from what we
+  // already hold so a gap widens the window instead of being skipped over.
+  const lookbackDays =
+    opts.lookbackDays ?? (await resolveOuraLookbackDays(userId));
+
   let result: OuraFetchResult;
   try {
     result = await fetchAll(
@@ -373,7 +434,7 @@ export async function syncUserOura(
       conn.accessToken,
       conn.refreshToken,
       conn.refreshTokenCiphertext,
-      opts.lookbackDays ?? OURA_SYNC_LOOKBACK_DAYS,
+      lookbackDays,
     );
   } catch (err) {
     // Only a whole-connection failure (a failed token refresh → reauth) reaches
@@ -415,7 +476,7 @@ export async function syncUserOura(
       await syncUserOuraCyclePhases(
         userId,
         freshConn.accessToken,
-        opts.lookbackDays ?? OURA_SYNC_LOOKBACK_DAYS,
+        lookbackDays,
       );
     }
   } catch (err) {

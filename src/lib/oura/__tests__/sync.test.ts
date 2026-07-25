@@ -17,6 +17,7 @@ const {
   createManyAndReturnMock,
   updateMock,
   findManyMock,
+  findFirstMock,
   updateManyMock,
   emitArrivalMock,
   recordSuccessMock,
@@ -42,6 +43,7 @@ const {
   createManyAndReturnMock: vi.fn(),
   updateMock: vi.fn(),
   findManyMock: vi.fn(),
+  findFirstMock: vi.fn(),
   updateManyMock: vi.fn(),
   emitArrivalMock: vi.fn(),
   recordSuccessMock: vi.fn(),
@@ -64,6 +66,7 @@ vi.mock("@/lib/db", () => ({
       createManyAndReturn: createManyAndReturnMock,
       update: updateMock,
       findMany: findManyMock,
+      findFirst: findFirstMock,
       updateMany: updateManyMock,
     },
     $transaction: transactionMock,
@@ -112,9 +115,17 @@ vi.mock("../client", async (importOriginal) => {
   };
 });
 
-import { syncUserOura, upsertOuraMeasurements } from "../sync";
+import {
+  OURA_SYNC_LOOKBACK_DAYS,
+  OURA_SYNC_MAX_LOOKBACK_DAYS,
+  resolveOuraLookbackDays,
+  syncUserOura,
+  upsertOuraMeasurements,
+} from "../sync";
 import { OuraApiError } from "../response-classifier";
 import { isSyncFailureRecorded } from "@/lib/integrations/status";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const CONN = {
   accessToken: "acc",
@@ -178,6 +189,11 @@ beforeEach(() => {
   );
   updateMock.mockReset().mockResolvedValue({});
   findManyMock.mockReset();
+  // Watermark read: default to a fresh row (yesterday) so every pre-existing
+  // test keeps the shipped 7-day floor and asserts against an unchanged window.
+  findFirstMock
+    .mockReset()
+    .mockResolvedValue({ measuredAt: new Date(Date.now() - DAY_MS) });
   updateManyMock.mockReset().mockResolvedValue({ count: 0 });
   emitArrivalMock.mockReset().mockResolvedValue(undefined);
   recordSuccessMock.mockReset().mockResolvedValue(undefined);
@@ -704,5 +720,159 @@ describe("upsertOuraMeasurements — exact insertion results", () => {
 
     expect(findManyMock).not.toHaveBeenCalled();
     expect(emitArrivalMock).toHaveBeenCalledWith("u1", [inserted], "oura");
+  });
+});
+
+/**
+ * v1.32.28 — the lookback window is derived from the newest Oura row we hold
+ * rather than pinned at seven days.
+ *
+ * Two ways days used to be lost. A sync that stayed broken for longer than a
+ * week came back with a window too narrow to reach the gap. And a ring left
+ * unsynced produced a run of EMPTY successes, every signal green, after which
+ * the late-arriving days fell outside the window. Both leave the same
+ * fingerprint: the newest row stops moving. So one anchor closes both.
+ */
+describe("syncUserOura — window resolution", () => {
+  /** Days between the fetch window's start and today, as the query sees it. */
+  function windowDays(): number {
+    const query = fetchReadinessMock.mock.calls[0]![1] as {
+      startDate: string;
+      endDate: string;
+    };
+    const start = Date.parse(`${query.startDate}T00:00:00Z`);
+    const end = Date.parse(`${query.endDate}T00:00:00Z`);
+    return Math.round((end - start) / DAY_MS);
+  }
+
+  it("widens the window to cover a ten-day gap", async () => {
+    getConnMock.mockResolvedValue(CONN);
+    findFirstMock.mockResolvedValue({
+      measuredAt: new Date(Date.now() - 10 * DAY_MS),
+    });
+
+    await syncUserOura("u1");
+
+    // Ten days stale plus one day of overlap over the last seen day.
+    expect(windowDays()).toBe(11);
+    // Every collection shares the one widened window, not just readiness.
+    for (const fetchMock of [
+      fetchSleepMock,
+      fetchActivityMock,
+      fetchDailySleepMock,
+      fetchSpo2Mock,
+      fetchVo2MaxMock,
+      fetchCardioAgeMock,
+      fetchResilienceMock,
+    ]) {
+      expect(fetchMock.mock.calls[0]![1]).toEqual(
+        fetchReadinessMock.mock.calls[0]![1],
+      );
+    }
+  });
+
+  it("keeps the seven-day floor while data is flowing", async () => {
+    getConnMock.mockResolvedValue(CONN);
+    findFirstMock.mockResolvedValue({
+      measuredAt: new Date(Date.now() - DAY_MS),
+    });
+
+    await syncUserOura("u1");
+
+    expect(windowDays()).toBe(7);
+    // One indexed read per tick, and tombstones are excluded from it — a
+    // soft-deleted row must not pass for a live one.
+    expect(findFirstMock).toHaveBeenCalledTimes(1);
+    expect(findFirstMock).toHaveBeenCalledWith({
+      where: { userId: "u1", source: "OURA", deletedAt: null },
+      orderBy: { measuredAt: "desc" },
+      select: { measuredAt: true },
+    });
+  });
+
+  it("ignores a swept row: a tombstone cannot hold the watermark fresh", async () => {
+    getConnMock.mockResolvedValue(CONN);
+    // The sleep sweep soft-deletes rows a revised hypnogram orphaned. The
+    // resolver's `deletedAt: null` filter means such a row is simply not
+    // returned, so the newest LIVE row is what answers — here, twelve days old.
+    findFirstMock.mockImplementation(
+      async (args: { where: { deletedAt: null } }) => {
+        expect(args.where.deletedAt).toBeNull();
+        return { measuredAt: new Date(Date.now() - 12 * DAY_MS) };
+      },
+    );
+
+    await syncUserOura("u1");
+
+    expect(windowDays()).toBe(13);
+  });
+
+  it("takes the full month on a fresh connection with no rows at all", async () => {
+    getConnMock.mockResolvedValue(CONN);
+    findFirstMock.mockResolvedValue(null);
+
+    await syncUserOura("u1");
+
+    expect(windowDays()).toBe(OURA_SYNC_MAX_LOOKBACK_DAYS);
+  });
+
+  it("clamps a ninety-day gap to the month ceiling", async () => {
+    getConnMock.mockResolvedValue(CONN);
+    findFirstMock.mockResolvedValue({
+      measuredAt: new Date(Date.now() - 90 * DAY_MS),
+    });
+
+    await syncUserOura("u1");
+
+    expect(windowDays()).toBe(OURA_SYNC_MAX_LOOKBACK_DAYS);
+  });
+
+  it("lets an explicit lookback win without consulting the watermark", async () => {
+    getConnMock.mockResolvedValue(CONN);
+    findFirstMock.mockResolvedValue({
+      measuredAt: new Date(Date.now() - 10 * DAY_MS),
+    });
+
+    await syncUserOura("u1", { lookbackDays: 3 });
+
+    expect(windowDays()).toBe(3);
+    expect(findFirstMock).not.toHaveBeenCalled();
+  });
+
+  it("passes the resolved window to the cycle-phases leg too", async () => {
+    getConnMock.mockResolvedValue(CONN);
+    findFirstMock.mockResolvedValue({
+      measuredAt: new Date(Date.now() - 10 * DAY_MS),
+    });
+
+    await syncUserOura("u1");
+
+    expect(fetchCyclePhasesMock).toHaveBeenCalled();
+    const query = fetchCyclePhasesMock.mock.calls[0]![1] as {
+      startDate: string;
+      endDate: string;
+    };
+    expect(query).toEqual(fetchReadinessMock.mock.calls[0]![1]);
+  });
+});
+
+describe("resolveOuraLookbackDays", () => {
+  it("floors at the shipped week and ceilings at the month", async () => {
+    findFirstMock.mockResolvedValue({ measuredAt: new Date() });
+    expect(await resolveOuraLookbackDays("u1")).toBe(OURA_SYNC_LOOKBACK_DAYS);
+
+    findFirstMock.mockResolvedValue({
+      measuredAt: new Date(Date.now() - 400 * DAY_MS),
+    });
+    expect(await resolveOuraLookbackDays("u1")).toBe(
+      OURA_SYNC_MAX_LOOKBACK_DAYS,
+    );
+  });
+
+  it("returns the gap plus one day of overlap in between", async () => {
+    findFirstMock.mockResolvedValue({
+      measuredAt: new Date(Date.now() - 20 * DAY_MS),
+    });
+    expect(await resolveOuraLookbackDays("u1")).toBe(21);
   });
 });

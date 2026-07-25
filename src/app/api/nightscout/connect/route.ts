@@ -4,11 +4,13 @@ import { z } from "zod/v4";
 import { prisma } from "@/lib/db";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiSuccess, apiError, safeJson } from "@/lib/api-response";
-import { annotate } from "@/lib/logging/context";
+import { annotate, getEvent } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import { encrypt } from "@/lib/crypto";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { markReconnected } from "@/lib/integrations/status";
+import { NIGHTSCOUT_SYNC_QUEUE } from "@/lib/jobs/integration-poll-queues";
+import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { SafeFetchError } from "@/lib/safe-fetch";
 import { fetchSgvEntries, NightscoutApiError } from "@/lib/nightscout/client";
 import { nightscoutConnectSchema } from "@/lib/validations/nightscout";
@@ -115,6 +117,21 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   await markReconnected(user.id, "nightscout");
   await auditLog("nightscout.connect", { userId: user.id });
+
+  // Pull the first glucose window now instead of leaving the user staring at an
+  // empty card until the next hourly tick. Best-effort by design: the hourly
+  // cron remains the safety net, so a missing boss instance must never fail the
+  // connect response the user just earned.
+  const boss = getGlobalBoss();
+  if (boss) {
+    await boss
+      .send(NIGHTSCOUT_SYNC_QUEUE, { userId: user.id })
+      .catch((err) =>
+        getEvent()?.addWarning(
+          `nightscout-sync connect enqueue failed: ${err}`,
+        ),
+      );
+  }
 
   return apiSuccess({ connected: true });
 });

@@ -83,3 +83,26 @@ describe("NightscoutCard — parked + test + data-link + invalidation", () => {
     expect(invalidatedKeys).toContainEqual(queryKeys.nightscoutStatus());
   });
 });
+
+/**
+ * v1.32.28 — sync now, matching the treatment the OAuth cards get.
+ */
+describe("NightscoutCard — sync-now action", () => {
+  it("offers the sync action on a connected instance", () => {
+    statusPayload = {
+      connected: true,
+      configured: true,
+      state: "connected",
+      lastSuccessAt: null,
+      lastError: null,
+    };
+    const html = render();
+    expect(html).toContain('data-testid="nightscout-sync"');
+    expect(html).toContain("Sync now");
+  });
+
+  it("does not offer it before an instance is configured", () => {
+    statusPayload = { connected: false, configured: false };
+    expect(render()).not.toContain('data-testid="nightscout-sync"');
+  });
+});

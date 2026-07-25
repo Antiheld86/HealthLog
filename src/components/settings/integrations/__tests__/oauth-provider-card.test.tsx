@@ -178,3 +178,34 @@ describe("OAuthProviderCard — redirect-URI mini-guide (v1.29.x, UX audit H2)",
     expect(html).not.toContain('data-testid="polar-redirect-guide"');
   });
 });
+
+/**
+ * v1.32.28 — sync now. The route without the button would be an endpoint with
+ * no caller; the button is what makes the manual sync a feature rather than an
+ * API detail. Rendered only once the provider is connected, in the same action
+ * row as Test connection.
+ */
+describe("OAuthProviderCard — sync-now action", () => {
+  it("offers the sync action on a connected provider", () => {
+    statusPayload = {
+      connected: true,
+      configured: true,
+      available: true,
+      state: "connected",
+      lastSuccessAt: null,
+      lastError: null,
+    };
+    const html = render();
+    expect(html).toContain('data-testid="polar-sync"');
+    expect(html).toContain("Sync now");
+  });
+
+  it("does not offer it before the provider is connected", () => {
+    statusPayload = {
+      connected: false,
+      configured: true,
+      available: true,
+    };
+    expect(render()).not.toContain('data-testid="polar-sync"');
+  });
+});

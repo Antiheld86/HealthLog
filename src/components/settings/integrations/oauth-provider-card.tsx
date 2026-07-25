@@ -15,6 +15,7 @@ import {
   ArrowRight,
   Link2,
   Loader2,
+  RefreshCw,
   Save,
   Unlink,
   type LucideIcon,
@@ -125,6 +126,11 @@ export function OAuthProviderCard({
   const { t } = useTranslations();
   const queryClient = useQueryClient();
   const [msg, setMsg] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [syncMsgType, setSyncMsgType] = useState<"success" | "error" | null>(
+    null,
+  );
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [credsSaving, setCredsSaving] = useState(false);
@@ -144,6 +150,37 @@ export function OAuthProviderCard({
     refetchOnWindowFocus: true,
   });
   const status = viewModel ?? fetchedStatus;
+
+  // Sync now. Same shape as the WHOOP card's incremental arm, minus the
+  // full-history dialog — none of these providers has a full-sync arm to call.
+  async function handleSync() {
+    setSyncing(true);
+    setSyncMsg(null);
+    setSyncMsgType(null);
+    try {
+      const res = await apiFetchRaw(`/api/${provider}/sync`, {
+        method: "POST",
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setSyncMsg(t(`${i18nPrefix}SyncResult`, { count: json.data.imported }));
+        setSyncMsgType("success");
+        void invalidateKeys(queryClient, measurementDependentKeys);
+        queryClient.invalidateQueries({ queryKey: statusQueryKey });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.integrationsStatus(),
+        });
+      } else {
+        setSyncMsg(json.error || t(`${i18nPrefix}SyncFailed`));
+        setSyncMsgType("error");
+      }
+    } catch {
+      setSyncMsg(t(`${i18nPrefix}SyncFailed`));
+      setSyncMsgType("error");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function handleSaveCredentials(e: React.FormEvent) {
     e.preventDefault();
@@ -374,6 +411,22 @@ export function OAuthProviderCard({
         {status?.connected ? (
           <>
             <div className="flex flex-wrap items-start gap-2 [&>*]:min-w-[10rem] sm:[&>*]:min-w-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-11"
+                onClick={handleSync}
+                disabled={syncing}
+                data-testid={`${provider}-sync`}
+              >
+                {syncing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                {t(`${i18nPrefix}Sync`)}
+              </Button>
               <TestConnectionButton
                 endpoint={`/api/${provider}/test`}
                 disabled={!status?.connected}
@@ -411,6 +464,15 @@ export function OAuthProviderCard({
                 </AlertDialogContent>
               </AlertDialog>
             </div>
+            {syncMsg && (
+              <p
+                role="alert"
+                data-testid={`${provider}-sync-result`}
+                className={`text-sm ${syncMsgType === "success" ? "text-success" : "text-destructive"}`}
+              >
+                {syncMsg}
+              </p>
+            )}
             {/* connect→data loop: a discreet link to where this provider's
                 readings now surface — doubles as the "your data is richer"
                 cue. */}
