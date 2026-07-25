@@ -6,9 +6,11 @@
  * personalization signal: which dashboard tiles get promoted to the
  * top and made visible. Goals are NOT a clinical target store — the
  * targets surface (`/api/insights/targets`) is fully derived from
- * height/age/gender + clinical references. Their only leverage is
- * (a) dashboard tile pinning (here) and (b) reminder suggestions
- * (read by the reminders panel from `User.onboardingGoals`).
+ * height/age/gender + clinical references. Their only leverage is the
+ * one-time dashboard tile pinning below, applied by
+ * `/api/onboarding/step` while the layout is still unset. Nothing else
+ * reads `User.onboardingGoals` — the column is collected, seeded from
+ * once, and then inert.
  *
  * One home for the slug enum so the API validation
  * (`/api/onboarding/step`), the client picker, and the seeding all

@@ -1130,4 +1130,142 @@ describe("canonical disaster-recovery backup round-trip", () => {
     );
     expect(invalidateUserData).not.toHaveBeenCalled();
   });
+
+  /**
+   * `aggregationProvenance` is what keeps an export.xml source-day estimate
+   * from overwriting a native HealthKit statistic. A backup that drops it
+   * restores a flattened authority ladder, so it has to survive the round
+   * trip — and a backup written before it rode the payload has to land in the
+   * documented repairable state rather than reproduce the ambiguity migration
+   * 0263 already repaired once.
+   *
+   * Mutation check: drop `aggregationProvenance` from the backup select or
+   * from the restore mapping and the first case goes red; drop the
+   * Apple-Health `stats:` fallback and the second goes red.
+   */
+  it("round-trips the aggregation provenance of a stats aggregate", async () => {
+    const prisma = getPrismaClient();
+    const admin = await seedAdminSession();
+    const payload = backupPayloadSchema.parse({
+      schemaVersion: "2",
+      exportedAt: "2026-07-25T00:00:00.000Z",
+      userId: admin.id,
+      measurements: [
+        {
+          id: "provenance-native",
+          type: "ACTIVITY_STEPS",
+          value: 8_600,
+          unit: "steps",
+          measuredAt: "2026-07-20T10:00:00.000Z",
+          source: "APPLE_HEALTH",
+          externalId: "stats:HKQuantityTypeIdentifierStepCount:2026-07-20",
+          aggregationProvenance: "HEALTHKIT_STATISTICS",
+        },
+        {
+          id: "provenance-xml",
+          type: "ACTIVITY_STEPS",
+          value: 8_526,
+          unit: "steps",
+          measuredAt: "2026-07-21T10:00:00.000Z",
+          source: "APPLE_HEALTH",
+          externalId: "stats:HKQuantityTypeIdentifierStepCount:2026-07-21",
+          aggregationProvenance: "EXPORT_XML_SOURCE_MAX",
+        },
+      ],
+    });
+    const backup = await prisma.dataBackup.create({
+      data: {
+        userId: admin.id,
+        type: "PROVENANCE_ROUNDTRIP",
+        data: encrypt(JSON.stringify(payload)),
+      },
+    });
+
+    const response = await POST(
+      makeRequest(backup.id) as unknown as Parameters<typeof POST>[0],
+      { params: Promise.resolve({ id: backup.id }) },
+    );
+    expect(response.status).toBe(200);
+
+    expect(
+      await prisma.measurement.findMany({
+        where: { userId: admin.id },
+        orderBy: { measuredAt: "asc" },
+        select: { id: true, aggregationProvenance: true },
+      }),
+    ).toEqual([
+      {
+        id: "provenance-native",
+        aggregationProvenance: "HEALTHKIT_STATISTICS",
+      },
+      { id: "provenance-xml", aggregationProvenance: "EXPORT_XML_SOURCE_MAX" },
+    ]);
+  });
+
+  it("marks an unlabelled Apple Health stats aggregate as legacy-unknown on restore", async () => {
+    const prisma = getPrismaClient();
+    const admin = await seedAdminSession();
+    // A backup taken before the provenance rode the payload: no field at all.
+    const payload = backupPayloadSchema.parse({
+      schemaVersion: "2",
+      exportedAt: "2026-07-25T00:00:00.000Z",
+      userId: admin.id,
+      measurements: [
+        {
+          id: "legacy-apple-stats",
+          type: "ACTIVITY_STEPS",
+          value: 8_526,
+          unit: "steps",
+          measuredAt: "2026-07-20T10:00:00.000Z",
+          source: "APPLE_HEALTH",
+          externalId: "stats:HKQuantityTypeIdentifierStepCount:2026-07-20",
+        },
+        {
+          // Another provider's cumulative daily. It mints a `stats:` id too but
+          // has never carried provenance, so inventing one would be a lie.
+          id: "legacy-fitbit-stats",
+          type: "ACTIVITY_STEPS",
+          value: 7_100,
+          unit: "steps",
+          measuredAt: "2026-07-21T10:00:00.000Z",
+          source: "FITBIT",
+          externalId: "stats:steps",
+        },
+        {
+          // An ordinary point reading never had provenance either.
+          id: "legacy-point-row",
+          type: "PULSE",
+          value: 61,
+          unit: "bpm",
+          measuredAt: "2026-07-22T10:00:00.000Z",
+          source: "MANUAL",
+        },
+      ],
+    });
+    const backup = await prisma.dataBackup.create({
+      data: {
+        userId: admin.id,
+        type: "PROVENANCE_LEGACY",
+        data: encrypt(JSON.stringify(payload)),
+      },
+    });
+
+    const response = await POST(
+      makeRequest(backup.id) as unknown as Parameters<typeof POST>[0],
+      { params: Promise.resolve({ id: backup.id }) },
+    );
+    expect(response.status).toBe(200);
+
+    expect(
+      await prisma.measurement.findMany({
+        where: { userId: admin.id },
+        orderBy: { measuredAt: "asc" },
+        select: { id: true, aggregationProvenance: true },
+      }),
+    ).toEqual([
+      { id: "legacy-apple-stats", aggregationProvenance: "LEGACY_UNKNOWN" },
+      { id: "legacy-fitbit-stats", aggregationProvenance: null },
+      { id: "legacy-point-row", aggregationProvenance: null },
+    ]);
+  });
 });
