@@ -3,13 +3,14 @@
 // v1.17.0 — Nightscout CGM integration card. Unlike WHOOP / Fitbit (OAuth,
 // BYO-key), Nightscout is a URL + token the self-hoster pastes once: the user
 // runs their own instance and HealthLog pulls continuous glucose off it. The
-// card has its own status read (`/api/nightscout/status`) rather than the
-// consolidated envelope. Warm copy, mobile-first, the private-network opt-in
-// toggle maps to `nightscoutAllowPrivateHost`.
+// card reads the consolidated `/api/integrations/status` envelope like every
+// sibling — it was the last card firing its own status round-trip, and the
+// last place a fourth status dialect could hide. Warm copy, mobile-first, the
+// private-network opt-in toggle maps to `nightscoutAllowPrivateHost`.
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   Droplet,
@@ -38,12 +39,9 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Switch } from "@/components/ui/switch";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
-import {
-  IntegrationStatusPill,
-  type IntegrationPillState,
-} from "@/components/settings/integration-status-pill";
+import { IntegrationStatusPill } from "@/components/settings/integration-status-pill";
 import { TestConnectionButton } from "@/components/settings/test-connection-button";
-import { apiFetchRaw, apiGet, apiPost } from "@/lib/api/api-fetch";
+import { apiFetchRaw, apiPost } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
 import {
   invalidateKeys,
@@ -51,43 +49,20 @@ import {
   queryKeys,
 } from "@/lib/query-keys";
 
-import { IntegrationErrorMessage } from "./shared";
+import { MetricFreshnessDisclosure } from "./metric-freshness-disclosure";
+import {
+  IntegrationErrorMessage,
+  pillStateForVerdict,
+  pillTimestampFor,
+  type IntegrationStatusViewModel,
+} from "./shared";
 import { IntegrationCardDescription } from "./setup-guide-link";
 
-interface NightscoutStatus {
-  connected: boolean;
-  configured: boolean;
-  hasToken?: boolean;
-  allowPrivateHost?: boolean;
-  state?:
-    | "connected"
-    | "error_transient"
-    | "error_reauth"
-    | "disconnected"
-    | "parked";
-  lastSuccessAt?: string | null;
-  lastAttemptAt?: string | null;
-  lastError?: string | null;
-}
-
-/** Map the shared ledger state onto the pill's display state. */
-function pillStateFor(
-  status: NightscoutStatus | undefined,
-): IntegrationPillState {
-  if (!status?.connected) return "disconnected";
-  switch (status.state) {
-    case "parked":
-      return "parked";
-    case "error_reauth":
-      return "error";
-    case "error_transient":
-      return "warning";
-    default:
-      return "connected";
-  }
-}
-
-export function NightscoutCard({ enabled = true }: { enabled?: boolean }) {
+export function NightscoutCard({
+  viewModel,
+}: {
+  viewModel?: IntegrationStatusViewModel;
+}) {
   const { t } = useTranslations();
   const queryClient = useQueryClient();
 
@@ -103,12 +78,7 @@ export function NightscoutCard({ enabled = true }: { enabled?: boolean }) {
     null,
   );
 
-  const { data: status } = useQuery({
-    queryKey: queryKeys.nightscoutStatus(),
-    queryFn: async () => apiGet<NightscoutStatus>("/api/nightscout/status"),
-    enabled,
-    refetchOnWindowFocus: true,
-  });
+  const status = viewModel;
 
   const formRef = useRef<HTMLFormElement | null>(null);
 
@@ -120,12 +90,8 @@ export function NightscoutCard({ enabled = true }: { enabled?: boolean }) {
       setUrl("");
       setToken("");
       setAllowPrivateHost(false);
-      // The status read keys on `nightscoutStatus()`; invalidate it so the
-      // pill flips back after a disconnect (matching the Withings / WHOOP
-      // pattern), alongside the cross-integration envelope.
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.nightscoutStatus(),
-      });
+      // The card reads the consolidated envelope, so that is the one key a
+      // disconnect has to invalidate for the pill to flip back.
       queryClient.invalidateQueries({
         queryKey: queryKeys.integrationsStatus(),
       });
@@ -152,9 +118,6 @@ export function NightscoutCard({ enabled = true }: { enabled?: boolean }) {
         setMsgType("success");
         setToken("");
         void invalidateKeys(queryClient, measurementDependentKeys);
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.nightscoutStatus(),
-        });
         queryClient.invalidateQueries({
           queryKey: queryKeys.integrationsStatus(),
         });
@@ -192,9 +155,6 @@ export function NightscoutCard({ enabled = true }: { enabled?: boolean }) {
         setSyncMsgType("success");
         void invalidateKeys(queryClient, measurementDependentKeys);
         queryClient.invalidateQueries({
-          queryKey: queryKeys.nightscoutStatus(),
-        });
-        queryClient.invalidateQueries({
           queryKey: queryKeys.integrationsStatus(),
         });
       } else {
@@ -209,9 +169,15 @@ export function NightscoutCard({ enabled = true }: { enabled?: boolean }) {
     }
   }
 
-  const pillState = pillStateFor(status);
+  const pillState = pillStateForVerdict(status?.syncHealth?.verdict);
+  // `warning` joins the set now that a transient failure paints amber rather
+  // than red — the detail belongs on this line, not in a colour that tells the
+  // user to reconnect against something reconnecting cannot fix.
   const errorMessage =
-    (pillState === "error" || pillState === "parked") && status?.lastError
+    (pillState === "error" ||
+      pillState === "parked" ||
+      pillState === "warning") &&
+    status?.lastError
       ? status.lastError
       : null;
 
@@ -234,12 +200,15 @@ export function NightscoutCard({ enabled = true }: { enabled?: boolean }) {
         status={
           <IntegrationStatusPill
             state={pillState}
-            lastSyncAt={status?.lastSuccessAt ?? null}
+            lastSyncAt={pillTimestampFor(status)}
           />
         }
       />
 
-      <hr className="border-border/60 mt-4" />
+      <hr
+        data-testid="integration-card-divider"
+        className="border-border/60 mt-4"
+      />
 
       <div className="mt-4 space-y-4 pl-7">
         {errorMessage && <IntegrationErrorMessage message={errorMessage} />}
@@ -277,6 +246,13 @@ export function NightscoutCard({ enabled = true }: { enabled?: boolean }) {
               {t("settings.integrationPill.resumeCta")}
             </Button>
           </div>
+        )}
+
+        {status?.connected && (
+          <MetricFreshnessDisclosure
+            entries={status.metricFreshness}
+            idPrefix="nightscout"
+          />
         )}
 
         <form ref={formRef} onSubmit={handleConnect} className="space-y-3">

@@ -43,11 +43,10 @@ export const integrationKeys = {
   // never collides with the classic `fitbit` key.
   googleHealth: () => ["google-health"] as const,
 
-  // v1.17.0 — Nightscout CGM integration card. Self-contained status read
-  // (not the consolidated /api/integrations/status envelope), so the
-  // connect/disconnect mutations invalidate this single key.
+  // v1.17.0 — Nightscout CGM integration card. Reads status off the
+  // consolidated /api/integrations/status envelope (like Fitbit/WHOOP); this
+  // key stays for the card's other reads and invalidations.
   nightscout: () => ["nightscout"] as const,
-  nightscoutStatus: () => ["nightscout", "status"] as const,
 
   // v1.17.0 (F4) — Polar + Oura OAuth integration cards. Self-contained status
   // reads (not the consolidated /api/integrations/status envelope), so the

@@ -5269,7 +5269,7 @@
     "integrationPill": {
       "connected": "Connected",
       "errorReconnect": "Error — reconnect",
-      "warningServerError": "Connected, server error",
+      "warningServerError": "Connected, sync issue",
       "parkedReconnect": "Paused — reconnect manually",
       "notConnected": "Not connected",
       "justNow": "just now",
@@ -5279,8 +5279,26 @@
       "ariaLabel": "Integration status",
       "resumeCta": "Reconnect",
       "resumeSuccess": "Integration resumed",
-      "resumeError": "Reconnect failed"
+      "resumeError": "Reconnect failed",
+      "stale": "Connected, no recent data",
+      "stalled": "Sync stopped",
+      "pendingSetup": "Waiting for first data"
     },
+    "integrationFreshness": {
+      "title": "Data received",
+      "summary": "{count} data types · newest {relative}",
+      "quiet": "{count} quiet",
+      "workouts": "Workouts"
+    },
+    "integrationFallback": {
+      "description": "Configured on this account without a settings card of its own. This row exists so a connection cannot stop working unnoticed.",
+      "lastAttempt": "Last attempt {relative}",
+      "noAttempt": "No sync attempt recorded"
+    },
+    "withingsViewData": "View your measurements",
+    "whoopViewData": "View your recovery",
+    "fitbitViewData": "View your sleep",
+    "googleHealthViewData": "View your steps",
     "apiTokens": "API Tokens",
     "apiTokensDescription": "Review and revoke API tokens for external medication intake. Tokens are issued per medication from the medication's API endpoint toggle.",
     "tokenMintMovedDescription": "Tokens are issued per medication. Open a medication and enable its API endpoint to get a token scoped to that medication alone.",
@@ -5840,17 +5858,14 @@
       "title": "Apple Health",
       "description": "Live sync comes from the HealthLog iOS app. It is not a web or OAuth connection.",
       "status": {
-        "checking": "Checking Apple Health data…",
-        "dataReceived": "Apple Health data received",
-        "setup": "Set up in iOS app",
         "unavailable": "Apple Health status unavailable"
       },
-      "lastDataLabel": "Last Apple Health data:",
       "setupTitle": "Turn on live sync",
       "permissionStep": "In the HealthLog iOS app, open Settings → Apple Health and allow the health categories you want to share.",
       "backgroundStep": "Keep Background App Refresh enabled. The app syncs new data automatically in the foreground and when iOS grants background time.",
       "importNote": "Need older history or cannot use the iOS app? The Apple Health XML/ZIP upload is a one-shot fallback and does not enable live sync.",
-      "importAction": "Open one-shot import"
+      "importAction": "Open one-shot import",
+      "staleNote": "No Apple Health data has arrived for over a week. Open the HealthLog app on your iPhone and check the Apple Health permissions."
     },
     "garminInfo": {
       "title": "Garmin",

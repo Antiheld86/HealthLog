@@ -16,8 +16,17 @@
 // separate from the connect/disconnect state.
 
 import { useState } from "react";
+import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link2, Loader2, RefreshCw, Save, Unlink, Watch } from "lucide-react";
+import {
+  ArrowRight,
+  Link2,
+  Loader2,
+  RefreshCw,
+  Save,
+  Unlink,
+  Watch,
+} from "lucide-react";
 
 import {
   AlertDialog,
@@ -38,7 +47,6 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { IntegrationStatusPill } from "@/components/settings/integration-status-pill";
-import type { IntegrationPillState } from "@/components/settings/integration-status-pill";
 import { TestConnectionButton } from "@/components/settings/test-connection-button";
 import { apiFetchRaw, apiPost } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
@@ -51,8 +59,10 @@ import {
 import {
   IntegrationErrorMessage,
   pillStateFor,
+  pillTimestampFor,
   type IntegrationStatusViewModel,
 } from "./shared";
+import { MetricFreshnessDisclosure } from "./metric-freshness-disclosure";
 import { IntegrationCardDescription } from "./setup-guide-link";
 
 export function GoogleHealthCard({
@@ -178,13 +188,16 @@ export function GoogleHealthCard({
     setCredsSaving(false);
   }
 
-  const pillState: IntegrationPillState = status?.connected
-    ? pillStateFor(viewModel)
-    : "disconnected";
-  const pillLastSyncAt =
-    status?.legacyLastSyncedAt ?? viewModel?.lastSuccessAt ?? null;
+  // The server resolves the verdict; the card only projects it. `connected`
+  // rides into that resolution, so a disconnected provider still lands on the
+  // "Not connected" pill without a second local rule here.
+  const pillState = pillStateFor(viewModel);
+  const pillLastSyncAt = pillTimestampFor(viewModel);
   const errorMessage =
-    (pillState === "error" || pillState === "parked") && viewModel?.lastError
+    (pillState === "error" ||
+      pillState === "parked" ||
+      pillState === "warning") &&
+    viewModel?.lastError
       ? viewModel.lastError
       : null;
   // The re-consent banner only makes sense while the connection still exists —
@@ -297,6 +310,13 @@ export function GoogleHealthCard({
           >
             {t("settings.integrationPill.resumeError")}
           </p>
+        )}
+
+        {status?.connected && (
+          <MetricFreshnessDisclosure
+            entries={viewModel?.metricFreshness}
+            idPrefix="google-health"
+          />
         )}
         {resume.isSuccess && resume.data?.wasParked && (
           <p
@@ -490,6 +510,17 @@ export function GoogleHealthCard({
                 {syncMsg}
               </p>
             )}
+            {/* connect→data loop: a discreet link to where this provider's
+                readings now surface — doubles as the "your data is richer"
+                cue. */}
+            <Link
+              href="/insights/steps"
+              data-testid="google-health-data-link"
+              className="text-primary inline-flex items-center gap-1 text-xs underline-offset-2 hover:underline"
+            >
+              {t("settings.googleHealthViewData")}
+              <ArrowRight className="h-3 w-3" />
+            </Link>
           </>
         ) : status?.configured ? (
           <Button

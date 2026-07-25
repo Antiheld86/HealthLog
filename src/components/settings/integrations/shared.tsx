@@ -12,6 +12,11 @@ import { AlertCircle } from "lucide-react";
 
 import type { IntegrationPillState } from "@/components/settings/integration-status-pill";
 import { apiGet } from "@/lib/api/api-fetch";
+import type {
+  MetricFreshnessEntry,
+  SyncHealth,
+  SyncVerdict,
+} from "@/lib/integrations/sync-verdict";
 import { queryKeys } from "@/lib/query-keys";
 
 // v1.4.15 Phase B2: shared status payload for both integration cards.
@@ -28,7 +33,10 @@ export type IntegrationKey =
   // v1.27.0 — Google Health (Fitbit + Pixel Watch + Fitbit Air).
   | "google-health"
   // v1.28.x — Strava OAuth workout source.
-  | "strava";
+  | "strava"
+  // Nightscout folds onto the envelope so the card stops fetching its own
+  // status and inherits the shared verdict.
+  | "nightscout";
 export type IntegrationState =
   "connected" | "error_transient" | "error_reauth" | "disconnected" | "parked";
 
@@ -68,6 +76,16 @@ export interface IntegrationStatusViewModel {
   // drives the saved-placeholder UI.
   available?: boolean;
   hasOwnCredentials?: boolean;
+  // Nightscout: a stored token, and the private-network opt-in.
+  hasToken?: boolean;
+  allowPrivateHost?: boolean;
+  /**
+   * The server-resolved liveness verdict. Present on every envelope entry;
+   * `undefined` only while the envelope is still loading.
+   */
+  syncHealth?: SyncHealth;
+  /** Per-metric last-seen timestamps with the server-computed stale flag. */
+  metricFreshness?: MetricFreshnessEntry[];
 }
 
 export interface IntegrationStatusEnvelope {
@@ -100,42 +118,64 @@ export function pickStatus(
 }
 
 /**
- * Collapse the API's five-state machine into the four states the
- * pill UI cares about. `error_transient` and `error_reauth` both
- * surface as the same "Error — reconnect" pill, the actionable
- * difference (whether the user must reconnect vs wait for the next
- * retry) is conveyed via the inline error text underneath. `parked`
- * (v1.4.43 W14) is its own pill state — the integration has been
- * disabled after 24h of persistent failures and needs an explicit
- * "Wieder verbinden" click to resume.
+ * The one verdict→pill mapping in the tree.
+ *
+ * There used to be three of these, one per card family, and they disagreed:
+ * the same ledger state painted red on one card and orange on the next, on the
+ * same page. The server now resolves the verdict once and this projects it once
+ * — a fourth dialect cannot be minted without the structural guard noticing.
+ *
+ * `failing` deliberately lands on the warning tone, not the destructive one:
+ * **red is reserved for "your action fixes this"** (reconnect, resume). Telling
+ * a user to reconnect against a 503 sends them clicking at something they
+ * cannot repair; the streak detail survives in the inline error line and the
+ * "{n}/{threshold} consecutive failures" string the envelope single-sources.
  */
-export function pillStateFor(
-  status: IntegrationStatusViewModel | undefined,
+export function pillStateForVerdict(
+  verdict: SyncVerdict | undefined,
 ): IntegrationPillState {
-  if (!status) return "disconnected";
-  switch (status.state) {
-    case "connected":
+  switch (verdict) {
+    case "fresh":
       return "connected";
-    case "error_transient":
-      // v1.4.43 W4 H3 — a `persistent` failure-kind streak (Withings
-      // rate-limit 601 / contract-mismatch 293/294) maps to the same
-      // `error_transient` DB state as a normal retryable failure but
-      // tells the user a different story: the access token still
-      // works, the upstream is responding with a non-recoverable
-      // status. Surfacing it as a "warning" pill (orange) instead of
-      // the red "Fehler — neu verbinden" stops the user from clicking
-      // reconnect ten times when reconnect can't fix it.
-      if ((status.consecutiveFailuresByKind?.persistent ?? 0) > 0) {
-        return "warning";
-      }
-      return "error";
-    case "error_reauth":
+    case "stale":
+      return "stale";
+    case "stalled":
+      return "stalled";
+    case "failing":
+      return "warning";
+    case "reauth_required":
       return "error";
     case "parked":
       return "parked";
+    case "pending_first_sync":
+      return "pending-setup";
     case "disconnected":
+    case undefined:
       return "disconnected";
   }
+}
+
+/** Project a view-model onto its pill state. Undefined = still loading. */
+export function pillStateFor(
+  status: IntegrationStatusViewModel | undefined,
+): IntegrationPillState {
+  return pillStateForVerdict(status?.syncHealth?.verdict);
+}
+
+/**
+ * The timestamp the pill shows inline. `connected` reads the last success (a
+ * connection row's own `lastSyncedAt` wins when it is newer, which is what
+ * repaints a fresh "just now" straight after a manual sync); the two aging
+ * states read the instant that triggered the verdict.
+ */
+export function pillTimestampFor(
+  status: IntegrationStatusViewModel | undefined,
+): string | null {
+  const verdict = status?.syncHealth?.verdict;
+  if (verdict === "stale" || verdict === "stalled") {
+    return status?.syncHealth?.since ?? null;
+  }
+  return status?.legacyLastSyncedAt ?? status?.lastSuccessAt ?? null;
 }
 
 /**

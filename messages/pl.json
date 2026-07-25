@@ -5267,7 +5267,7 @@
     "integrationPill": {
       "connected": "Połączono",
       "errorReconnect": "Błąd — połącz ponownie",
-      "warningServerError": "Połączono, błąd serwera",
+      "warningServerError": "Połączono, problem z synchronizacją",
       "parkedReconnect": "Wstrzymane — połącz ręcznie",
       "notConnected": "Nie połączono",
       "justNow": "przed chwilą",
@@ -5277,8 +5277,26 @@
       "ariaLabel": "Status integracji",
       "resumeCta": "Połącz ponownie",
       "resumeSuccess": "Integracja wznowiona",
-      "resumeError": "Ponowne połączenie nieudane"
+      "resumeError": "Ponowne połączenie nieudane",
+      "stale": "Połączono, brak nowych danych",
+      "stalled": "Synchronizacja zatrzymana",
+      "pendingSetup": "Czekam na pierwsze dane"
     },
+    "integrationFreshness": {
+      "title": "Odebrane dane",
+      "summary": "{count} typów danych · najnowsze {relative}",
+      "quiet": "{count} bez danych",
+      "workouts": "Treningi"
+    },
+    "integrationFallback": {
+      "description": "Skonfigurowane na tym koncie, ale bez własnej karty ustawień. Ten wiersz istnieje po to, by przerwane połączenie nie pozostało niezauważone.",
+      "lastAttempt": "Ostatnia próba {relative}",
+      "noAttempt": "Brak zapisanej próby synchronizacji"
+    },
+    "withingsViewData": "Zobacz swoje pomiary",
+    "whoopViewData": "Zobacz swoją regenerację",
+    "fitbitViewData": "Zobacz swój sen",
+    "googleHealthViewData": "Zobacz swoje kroki",
     "apiTokens": "Tokeny API",
     "apiTokensDescription": "Przeglądaj i unieważniaj tokeny API do zewnętrznego rejestrowania przyjęć leków. Tokeny są wydawane dla pojedynczego leku z jego przełącznika punktu końcowego API.",
     "tokenMintMovedDescription": "Tokeny są wydawane dla pojedynczego leku. Otwórz lek i włącz jego punkt końcowy API, aby otrzymać token obejmujący wyłącznie ten lek.",
@@ -5838,17 +5856,14 @@
       "title": "Apple Health",
       "description": "Synchronizacja na żywo odbywa się przez aplikację HealthLog na iOS, a nie przez połączenie internetowe ani OAuth.",
       "status": {
-        "checking": "Sprawdzanie danych Apple Health…",
-        "dataReceived": "Odebrano dane Apple Health",
-        "setup": "Skonfiguruj w aplikacji iOS",
         "unavailable": "Stan Apple Health jest niedostępny"
       },
-      "lastDataLabel": "Najnowsze dane Apple Health:",
       "setupTitle": "Włącz synchronizację na żywo",
       "permissionStep": "W aplikacji HealthLog na iOS otwórz Ustawienia → Apple Health i zezwól na udostępnianie wybranych kategorii zdrowotnych.",
       "backgroundStep": "Pozostaw włączone odświeżanie aplikacji w tle. Aplikacja synchronizuje nowe dane automatycznie na pierwszym planie oraz gdy iOS przydzieli jej czas w tle.",
       "importNote": "Potrzebujesz starszej historii lub nie możesz użyć aplikacji iOS? Przesłanie pliku XML/ZIP z Apple Health jest jednorazową alternatywą i nie włącza synchronizacji na żywo.",
-      "importAction": "Otwórz jednorazowy import"
+      "importAction": "Otwórz jednorazowy import",
+      "staleNote": "Od ponad tygodnia nie napłynęły żadne dane z Apple Health. Otwórz aplikację HealthLog na iPhonie i sprawdź uprawnienia Apple Health."
     },
     "garminInfo": {
       "title": "Garmin",
