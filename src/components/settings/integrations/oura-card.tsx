@@ -12,13 +12,7 @@ import {
 } from "@/components/settings/integrations/oauth-provider-card";
 import { queryKeys } from "@/lib/query-keys";
 
-export function OuraCard({
-  enabled = true,
-  viewModel,
-}: {
-  enabled?: boolean;
-  viewModel?: OAuthProviderStatus;
-}) {
+export function OuraCard({ viewModel }: { viewModel?: OAuthProviderStatus }) {
   return (
     <OAuthProviderCard
       provider="oura"
@@ -27,7 +21,6 @@ export function OuraCard({
       icon={CircleDot}
       dataHref="/insights/sleep"
       credentials
-      enabled={enabled}
       viewModel={viewModel}
     />
   );

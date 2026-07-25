@@ -10,7 +10,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   Link2,
@@ -38,18 +38,21 @@ import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
-import {
-  IntegrationStatusPill,
-  type IntegrationPillState,
-} from "@/components/settings/integration-status-pill";
+import { IntegrationStatusPill } from "@/components/settings/integration-status-pill";
 import { TestConnectionButton } from "@/components/settings/test-connection-button";
-import { apiFetchRaw, apiGet, apiPost } from "@/lib/api/api-fetch";
+import { apiFetchRaw, apiPost } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
+import type {
+  MetricFreshnessEntry,
+  SyncHealth,
+} from "@/lib/integrations/sync-verdict";
 import {
   invalidateKeys,
   measurementDependentKeys,
   queryKeys,
 } from "@/lib/query-keys";
+import { MetricFreshnessDisclosure } from "./metric-freshness-disclosure";
+import { IntegrationErrorMessage, pillStateForVerdict } from "./shared";
 import {
   IntegrationCardDescription,
   IntegrationRedirectGuide,
@@ -71,28 +74,16 @@ export interface OAuthProviderStatus {
   lastSuccessAt?: string | null;
   lastAttemptAt?: string | null;
   lastError?: string | null;
-}
-
-function pillStateFor(
-  status: OAuthProviderStatus | undefined,
-): IntegrationPillState {
-  if (!status?.connected) return "disconnected";
-  switch (status.state) {
-    case "parked":
-      return "parked";
-    case "error_reauth":
-      return "error";
-    case "error_transient":
-      return "warning";
-    default:
-      return "connected";
-  }
+  legacyLastSyncedAt?: string | null;
+  /** The server-resolved liveness verdict; the pill is a projection of it. */
+  syncHealth?: SyncHealth;
+  metricFreshness?: MetricFreshnessEntry[];
 }
 
 export interface OAuthProviderCardProps {
   /** Lower-case provider key, used for routes + query keys + testids. */
   provider: "polar" | "oura" | "strava";
-  /** The query-key array shared by the status read + the invalidations. */
+  /** The provider's own query key, invalidated after connect / sync / save. */
   statusQueryKey: readonly unknown[];
   /** i18n key prefix (e.g. `settings.polar`). */
   i18nPrefix: string;
@@ -103,12 +94,14 @@ export interface OAuthProviderCardProps {
   /** When set, render a per-user BYO OAuth-credentials form above the connect
    * button. The endpoint is the PUT target (e.g. `/api/polar/credentials`). */
   credentials?: boolean;
-  enabled?: boolean;
   /**
-   * When provided, the card reads its status from this view-model (sourced off
-   * the consolidated `/api/integrations/status` envelope) instead of firing its
-   * own `/api/<provider>/status` round-trip. v1.17.1 folds Polar/Oura onto the
-   * same envelope WHOOP/Fitbit already use, so the page reads from one source.
+   * The card's status, sourced off the consolidated
+   * `/api/integrations/status` envelope. The card used to fall back to its own
+   * `/api/<provider>/status` round-trip when this was absent; that fallback is
+   * gone. Every mount passes a view-model, the per-provider response carries no
+   * `syncHealth` so the fallback would have painted a wrong verdict, and during
+   * envelope load it fired three redundant requests for a caller that does not
+   * exist.
    */
   viewModel?: OAuthProviderStatus;
 }
@@ -120,7 +113,6 @@ export function OAuthProviderCard({
   icon,
   dataHref,
   credentials = false,
-  enabled = true,
   viewModel,
 }: OAuthProviderCardProps) {
   const { t } = useTranslations();
@@ -139,17 +131,7 @@ export function OAuthProviderCard({
     null,
   );
 
-  // Read off the consolidated envelope when a view-model is passed; otherwise
-  // fall back to the per-card status fetch (still used by any caller that has
-  // not been migrated onto the envelope). The fetch is disabled once a
-  // view-model is supplied so the page makes one request, not one-per-card.
-  const { data: fetchedStatus } = useQuery({
-    queryKey: statusQueryKey,
-    queryFn: async () => apiGet<OAuthProviderStatus>(`/api/${provider}/status`),
-    enabled: enabled && !viewModel,
-    refetchOnWindowFocus: true,
-  });
-  const status = viewModel ?? fetchedStatus;
+  const status = viewModel;
 
   // Sync now. Same shape as the WHOOP card's incremental arm, minus the
   // full-history dialog — none of these providers has a full-sync arm to call.
@@ -235,9 +217,16 @@ export function OAuthProviderCard({
     },
   });
 
-  const pillState = pillStateFor(status);
+  const pillState = pillStateForVerdict(status?.syncHealth?.verdict);
+  // The pill says what; this line says why. `warning` joins the set now that a
+  // transient failure no longer paints red — the detail moved here from a
+  // colour that told the user to reconnect against something reconnecting
+  // cannot fix.
   const errorMessage =
-    (pillState === "error" || pillState === "parked") && status?.lastError
+    (pillState === "error" ||
+      pillState === "parked" ||
+      pillState === "warning") &&
+    status?.lastError
       ? status.lastError
       : null;
   const serverUnavailable = status && !status.available;
@@ -262,22 +251,25 @@ export function OAuthProviderCard({
         status={
           <IntegrationStatusPill
             state={pillState}
-            lastSyncAt={status?.lastSuccessAt ?? null}
+            lastSyncAt={
+              pillState === "stale" || pillState === "stalled"
+                ? (status?.syncHealth?.since ?? null)
+                : (status?.legacyLastSyncedAt ?? status?.lastSuccessAt ?? null)
+            }
           />
         }
       />
 
-      <hr className="border-border/60 mt-4" />
+      <hr
+        data-testid="integration-card-divider"
+        className="border-border/60 mt-4"
+      />
 
       <div className="mt-4 space-y-4 pl-7">
         {errorMessage && (
-          <p
-            role="alert"
-            data-testid={`${provider}-error`}
-            className="text-destructive text-sm break-words"
-          >
-            {errorMessage}
-          </p>
+          <div data-testid={`${provider}-error`}>
+            <IntegrationErrorMessage message={errorMessage} />
+          </div>
         )}
 
         {/* Parked-integration resume CTA. Surfaces only when the row state
@@ -308,6 +300,13 @@ export function OAuthProviderCard({
               {t("settings.integrationPill.resumeCta")}
             </Button>
           </div>
+        )}
+
+        {status?.connected && (
+          <MetricFreshnessDisclosure
+            entries={status.metricFreshness}
+            idPrefix={provider}
+          />
         )}
 
         {credentials && (

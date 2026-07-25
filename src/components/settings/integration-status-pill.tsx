@@ -4,6 +4,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   CircleSlash,
+  Clock,
+  Info,
   PauseCircle,
 } from "lucide-react";
 
@@ -32,20 +34,33 @@ import { cn } from "@/lib/utils";
  */
 
 /**
- * Pill states.
+ * Pill states — a thin projection of the server's sync-health verdict.
  *
  *   - connected      → happy path; relative "last sync" suffix is shown.
- *   - warning        → connected but the upstream just returned a
- *                      contract-mismatch error (v1.4.43 W4).
- *   - error          → reauth-required / persistent transient error;
- *                      "Error — reconnect" copy.
- *   - parked         → v1.4.43 W14: >24h of persistent failures put the
- *                      integration to sleep; "Pausiert — manuell wieder
- *                      verbinden" copy + reconnect CTA.
+ *   - stale          → connected, but no new data for a while; suffix shown.
+ *   - stalled        → the sync stopped even attempting; suffix shown.
+ *   - warning        → attempting and failing (a 5xx, a rate limit, an upstream
+ *                      contract mismatch). Not the user's to fix.
+ *   - error          → reauth-required; "Error — reconnect" copy.
+ *   - parked         → >24h of persistent failures put the integration to
+ *                      sleep; "Paused — reconnect manually" copy + resume CTA.
+ *   - pending-setup  → configured but nothing has arrived yet.
  *   - disconnected   → user clicked Disconnect; "Not connected" copy.
+ *
+ * **Red is reserved for "your action fixes this".** A transient upstream
+ * failure carries the warning tone, not the destructive one: telling a user to
+ * reconnect cannot help against a 503, and ten fruitless reconnect clicks are
+ * the cost of saying otherwise.
  */
 export type IntegrationPillState =
-  "connected" | "warning" | "error" | "parked" | "disconnected";
+  | "connected"
+  | "stale"
+  | "stalled"
+  | "warning"
+  | "error"
+  | "parked"
+  | "pending-setup"
+  | "disconnected";
 
 interface IntegrationStatusPillProps {
   state: IntegrationPillState;
@@ -56,6 +71,8 @@ interface IntegrationStatusPillProps {
   lastSyncAt: Date | string | null;
   /** Override "now" for deterministic testing. Defaults to `new Date()`. */
   now?: Date;
+  /** Override the testid so a card can keep its own established e2e hook. */
+  testId?: string;
   className?: string;
 }
 
@@ -68,7 +85,7 @@ function toDate(value: Date | string): Date {
  * string. We keep the buckets small and fixed (just-now / minutes /
  * hours / days) because the pill must fit on a 360 px wide card.
  */
-function formatRelative(
+export function formatRelative(
   deltaMs: number,
   t: (key: string, params?: Record<string, string | number>) => string,
 ): string {
@@ -85,26 +102,37 @@ function formatRelative(
   return t("settings.integrationPill.daysAgo", { count: days });
 }
 
+/** The states that paint the semantic warning chip rather than a variant. */
+const WARNING_STATES = new Set<IntegrationPillState>([
+  "stale",
+  "stalled",
+  "warning",
+  "parked",
+]);
+
+/** The states whose label carries an inline relative timestamp. */
+const RELATIVE_STATES = new Set<IntegrationPillState>([
+  "connected",
+  "stale",
+  "stalled",
+]);
+
 export function IntegrationStatusPill({
   state,
   lastSyncAt,
   now,
+  testId,
   className,
 }: IntegrationStatusPillProps) {
   const { t } = useTranslations();
 
-  // chipClass only applies to the `connected`, `warning`, and `parked`
-  // branches — `error` falls back to `variant="destructive"` and
-  // `disconnected` to `variant="outline"`. The warning and parked chips
-  // both carry the semantic `warning` tone (an AA-safe amber that clears
-  // contrast in light mode); their distinct labels + icons carry the
-  // meaning — "connected, but the upstream returned a contract-level error
-  // a reauth won't fix" vs "tried to keep going for 24h but the mismatch
-  // persists, manual intervention required" — distinct from the red
-  // reconnect pill (`error`).
+  // The chip classes apply to `connected` and to every warning-tone state —
+  // `error` falls back to `variant="destructive"`, `disconnected` and
+  // `pending-setup` to `variant="outline"`. The warning tone is an AA-safe
+  // amber that clears contrast in light mode; the distinct labels + icons
+  // carry which flavour of "not right" this is.
   const connectedChipClass = "border-success/30 bg-success/15 text-success";
   const warningChipClass = "border-warning/30 bg-warning/15 text-warning";
-  const parkedChipClass = "border-warning/30 bg-warning/15 text-warning";
 
   let label: string;
   let icon: React.ReactNode;
@@ -113,6 +141,14 @@ export function IntegrationStatusPill({
     case "connected":
       label = t("settings.integrationPill.connected");
       icon = <CheckCircle2 aria-hidden="true" className="h-3 w-3" />;
+      break;
+    case "stale":
+      label = t("settings.integrationPill.stale");
+      icon = <AlertTriangle aria-hidden="true" className="h-3 w-3" />;
+      break;
+    case "stalled":
+      label = t("settings.integrationPill.stalled");
+      icon = <Clock aria-hidden="true" className="h-3 w-3" />;
       break;
     case "warning":
       label = t("settings.integrationPill.warningServerError");
@@ -126,6 +162,10 @@ export function IntegrationStatusPill({
       label = t("settings.integrationPill.parkedReconnect");
       icon = <PauseCircle aria-hidden="true" className="h-3 w-3" />;
       break;
+    case "pending-setup":
+      label = t("settings.integrationPill.pendingSetup");
+      icon = <Info aria-hidden="true" className="h-3 w-3" />;
+      break;
     case "disconnected":
       label = t("settings.integrationPill.notConnected");
       icon = <CircleSlash aria-hidden="true" className="h-3 w-3" />;
@@ -134,7 +174,7 @@ export function IntegrationStatusPill({
 
   const reference = now ?? new Date();
   const relative =
-    state === "connected" && lastSyncAt
+    RELATIVE_STATES.has(state) && lastSyncAt
       ? formatRelative(
           Math.max(0, reference.getTime() - toDate(lastSyncAt).getTime()),
           t,
@@ -143,10 +183,10 @@ export function IntegrationStatusPill({
 
   return (
     <Badge
-      data-testid="integration-status-pill"
+      data-testid={testId ?? "integration-status-pill"}
       data-state={state}
       variant={
-        state === "connected" || state === "warning" || state === "parked"
+        state === "connected" || WARNING_STATES.has(state)
           ? undefined
           : state === "error"
             ? "destructive"
@@ -156,8 +196,7 @@ export function IntegrationStatusPill({
       className={cn(
         "max-w-full whitespace-nowrap",
         state === "connected" && connectedChipClass,
-        state === "warning" && warningChipClass,
-        state === "parked" && parkedChipClass,
+        WARNING_STATES.has(state) && warningChipClass,
         className,
       )}
     >

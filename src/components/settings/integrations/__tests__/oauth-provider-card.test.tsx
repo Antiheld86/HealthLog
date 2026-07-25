@@ -12,10 +12,9 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Watch } from "lucide-react";
 
-// Drive the card's own `useQuery` status read off a per-test payload.
-let statusPayload: unknown = null;
+// The card reads the consolidated envelope only — its per-card status fetch is
+// gone, so every fixture is a view-model.
 vi.mock("@tanstack/react-query", () => ({
-  useQuery: () => ({ data: statusPayload, isLoading: false }),
   useMutation: () => ({ mutate: vi.fn(), isPending: false }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
@@ -23,12 +22,14 @@ vi.mock("@tanstack/react-query", () => ({
 import { I18nProvider } from "@/lib/i18n/context";
 import { OAuthProviderCard } from "../oauth-provider-card";
 
+type ViewModel = Parameters<typeof OAuthProviderCard>[0]["viewModel"];
+
 function render({
   credentials = false,
   viewModel,
 }: {
   credentials?: boolean;
-  viewModel?: Parameters<typeof OAuthProviderCard>[0]["viewModel"];
+  viewModel?: ViewModel;
 } = {}) {
   return renderToStaticMarkup(
     <I18nProvider initialLocale="en">
@@ -47,15 +48,17 @@ function render({
 
 describe("OAuthProviderCard — parked + test + data-link parity", () => {
   it("renders the parked banner + reconnect button when state is parked", () => {
-    statusPayload = {
-      connected: true,
-      configured: true,
-      available: true,
-      state: "parked",
-      lastSuccessAt: null,
-      lastError: "Polar grant expired",
-    };
-    const html = render();
+    const html = render({
+      viewModel: {
+        connected: true,
+        configured: true,
+        available: true,
+        state: "parked",
+        lastSuccessAt: null,
+        lastError: "Polar grant expired",
+        syncHealth: { verdict: "parked", since: null },
+      },
+    });
     expect(html).toContain('data-state="parked"');
     expect(html).toContain('data-testid="polar-parked-banner"');
     expect(html).toContain('data-testid="polar-resume-button"');
@@ -65,27 +68,6 @@ describe("OAuthProviderCard — parked + test + data-link parity", () => {
   });
 
   it("renders the test-connection button + data link when connected", () => {
-    statusPayload = {
-      connected: true,
-      configured: true,
-      available: true,
-      state: "connected",
-      lastSuccessAt: "2026-06-01T00:00:00.000Z",
-      lastError: null,
-    };
-    const html = render();
-    // The shared TestConnectionButton surfaces its "Test connection" label.
-    expect(html).toContain("Test connection");
-    // connect→data link points at the provider's insight surface.
-    expect(html).toContain('data-testid="polar-data-link"');
-    expect(html).toContain('href="/insights/sleep"');
-  });
-
-  it("reads off the passed view-model instead of the per-card fetch (04-M2)", () => {
-    // The per-card useQuery mock returns null; the card must render the
-    // connected state from the supplied envelope view-model alone, proving the
-    // /api/<provider>/status round-trip is no longer the source.
-    statusPayload = null;
     const html = render({
       viewModel: {
         connected: true,
@@ -94,6 +76,29 @@ describe("OAuthProviderCard — parked + test + data-link parity", () => {
         state: "connected",
         lastSuccessAt: "2026-06-01T00:00:00.000Z",
         lastError: null,
+        syncHealth: { verdict: "fresh", since: null },
+      },
+    });
+    // The shared TestConnectionButton surfaces its "Test connection" label.
+    expect(html).toContain("Test connection");
+    // connect→data link points at the provider's insight surface.
+    expect(html).toContain('data-testid="polar-data-link"');
+    expect(html).toContain('href="/insights/sleep"');
+  });
+
+  it("reads off the passed view-model — the per-card fetch is gone", () => {
+    // There is no `useQuery` left in this component: the envelope is the only
+    // source. A per-provider status response carries no verdict, so falling
+    // back to it would have painted a status the server never resolved.
+    const html = render({
+      viewModel: {
+        connected: true,
+        configured: true,
+        available: true,
+        state: "connected",
+        lastSuccessAt: "2026-06-01T00:00:00.000Z",
+        lastError: null,
+        syncHealth: { verdict: "fresh", since: null },
       },
     });
     expect(html).toContain('data-testid="polar-data-link"');
@@ -101,12 +106,14 @@ describe("OAuthProviderCard — parked + test + data-link parity", () => {
   });
 
   it("does not render the data link or test button when disconnected", () => {
-    statusPayload = {
-      connected: false,
-      configured: false,
-      available: true,
-    };
-    const html = render();
+    const html = render({
+      viewModel: {
+        connected: false,
+        configured: false,
+        available: true,
+        syncHealth: { verdict: "disconnected", since: null },
+      },
+    });
     expect(html).not.toContain('data-testid="polar-data-link"');
     expect(html).not.toContain("Test connection");
     // The connect CTA stands in instead.
@@ -116,35 +123,39 @@ describe("OAuthProviderCard — parked + test + data-link parity", () => {
 
 describe("OAuthProviderCard — per-user BYO credentials form (v1.17.1)", () => {
   it("renders the credentials form only when the `credentials` prop is set", () => {
-    statusPayload = {
+    const viewModel: ViewModel = {
       connected: false,
       configured: false,
       available: true,
       hasOwnCredentials: false,
+      syncHealth: { verdict: "disconnected", since: null },
     };
     // Opt-in: the BYO client-id/secret form + save button appear.
-    const withForm = render({ credentials: true });
+    const withForm = render({ credentials: true, viewModel });
     expect(withForm).toContain('data-testid="polar-credentials"');
     expect(withForm).toContain('id="polar-clientid"');
     expect(withForm).toContain('id="polar-secret"');
 
     // Default: no credential inputs (env-only behaviour preserved).
-    const withoutForm = render();
+    const withoutForm = render({ viewModel });
     expect(withoutForm).not.toContain('data-testid="polar-credentials"');
     expect(withoutForm).not.toContain('id="polar-clientid"');
   });
 
   it("shows the saved-placeholder once the user has stored their own pair", () => {
-    statusPayload = {
-      connected: true,
-      configured: true,
-      available: true,
-      hasOwnCredentials: true,
-      state: "connected",
-      lastSuccessAt: null,
-      lastError: null,
-    };
-    const html = render({ credentials: true });
+    const html = render({
+      credentials: true,
+      viewModel: {
+        connected: true,
+        configured: true,
+        available: true,
+        hasOwnCredentials: true,
+        state: "connected",
+        lastSuccessAt: null,
+        lastError: null,
+        syncHealth: { verdict: "pending_first_sync", since: null },
+      },
+    });
     expect(html).toContain("Saved — enter new to replace");
   });
 });
@@ -152,29 +163,35 @@ describe("OAuthProviderCard — per-user BYO credentials form (v1.17.1)", () => 
 describe("OAuthProviderCard — redirect-URI mini-guide (v1.29.x, UX audit H2)", () => {
   it("shows the callback URL guide before the user has BYO credentials", () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://app.example";
-    statusPayload = {
-      connected: false,
-      configured: false,
-      available: true,
-      hasOwnCredentials: false,
-    };
-    const html = render({ credentials: true });
+    const html = render({
+      credentials: true,
+      viewModel: {
+        connected: false,
+        configured: false,
+        available: true,
+        hasOwnCredentials: false,
+        syncHealth: { verdict: "disconnected", since: null },
+      },
+    });
     expect(html).toContain('data-testid="polar-redirect-guide"');
     expect(html).toContain('data-testid="polar-redirect-uri"');
     expect(html).toContain("https://app.example/api/polar/callback");
   });
 
   it("hides the guide once the user has stored their own credentials", () => {
-    statusPayload = {
-      connected: true,
-      configured: true,
-      available: true,
-      hasOwnCredentials: true,
-      state: "connected",
-      lastSuccessAt: null,
-      lastError: null,
-    };
-    const html = render({ credentials: true });
+    const html = render({
+      credentials: true,
+      viewModel: {
+        connected: true,
+        configured: true,
+        available: true,
+        hasOwnCredentials: true,
+        state: "connected",
+        lastSuccessAt: null,
+        lastError: null,
+        syncHealth: { verdict: "fresh", since: null },
+      },
+    });
     expect(html).not.toContain('data-testid="polar-redirect-guide"');
   });
 });
@@ -187,25 +204,31 @@ describe("OAuthProviderCard — redirect-URI mini-guide (v1.29.x, UX audit H2)",
  */
 describe("OAuthProviderCard — sync-now action", () => {
   it("offers the sync action on a connected provider", () => {
-    statusPayload = {
-      connected: true,
-      configured: true,
-      available: true,
-      state: "connected",
-      lastSuccessAt: null,
-      lastError: null,
-    };
-    const html = render();
+    const html = render({
+      viewModel: {
+        connected: true,
+        configured: true,
+        available: true,
+        state: "connected",
+        lastSuccessAt: null,
+        lastError: null,
+        syncHealth: { verdict: "fresh", since: null },
+      },
+    });
     expect(html).toContain('data-testid="polar-sync"');
     expect(html).toContain("Sync now");
   });
 
   it("does not offer it before the provider is connected", () => {
-    statusPayload = {
-      connected: false,
-      configured: true,
-      available: true,
-    };
-    expect(render()).not.toContain('data-testid="polar-sync"');
+    expect(
+      render({
+        viewModel: {
+          connected: false,
+          configured: true,
+          available: true,
+          syncHealth: { verdict: "disconnected", since: null },
+        },
+      }),
+    ).not.toContain('data-testid="polar-sync"');
   });
 });

@@ -1,8 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link2, Loader2, RefreshCw, Save, Unlink } from "lucide-react";
+import {
+  ArrowRight,
+  Link2,
+  Loader2,
+  RefreshCw,
+  Save,
+  Unlink,
+} from "lucide-react";
 
 import {
   AlertDialog,
@@ -22,7 +30,6 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { IntegrationStatusPill } from "@/components/settings/integration-status-pill";
-import type { IntegrationPillState } from "@/components/settings/integration-status-pill";
 import { TestConnectionButton } from "@/components/settings/test-connection-button";
 import { apiFetchRaw, apiPost } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
@@ -35,8 +42,10 @@ import {
 import {
   IntegrationErrorMessage,
   pillStateFor,
+  pillTimestampFor,
   type IntegrationStatusViewModel,
 } from "./shared";
+import { MetricFreshnessDisclosure } from "./metric-freshness-disclosure";
 import {
   IntegrationCardDescription,
   IntegrationRedirectGuide,
@@ -180,21 +189,24 @@ export function WithingsCard({
   // still paints a fresh "X min ago" right after a manual sync once
   // the envelope refetches. When the envelope hasn't answered yet we
   // fall back to "disconnected" so the card never renders status-less.
-  const pillState: IntegrationPillState = status?.connected
-    ? pillStateFor(viewModel)
-    : "disconnected";
-  const pillLastSyncAt =
-    status?.legacyLastSyncedAt ?? viewModel?.lastSuccessAt ?? null;
+  // The server resolves the verdict; the card only projects it. `connected`
+  // rides into that resolution, so a disconnected provider still lands on the
+  // "Not connected" pill without a second local rule here.
+  const pillState = pillStateFor(viewModel);
+  const pillLastSyncAt = pillTimestampFor(viewModel);
   // v1.4.43 W14 — `parked` and `error` both want the underlying error
   // message surfaced under the pill (the pill says "what" — the
   // message says "why"). Other states leave the inline line off.
   const errorMessage =
-    (pillState === "error" || pillState === "parked") && viewModel?.lastError
+    (pillState === "error" ||
+      pillState === "parked" ||
+      pillState === "warning") &&
+    viewModel?.lastError
       ? viewModel.lastError
       : null;
 
   return (
-    <SettingsCard>
+    <SettingsCard data-testid="withings-card">
       <SettingsCardHeader
         icon={Link2}
         title={t("settings.withings")}
@@ -288,6 +300,13 @@ export function WithingsCard({
           >
             {t("settings.integrationPill.resumeError")}
           </p>
+        )}
+
+        {status?.connected && (
+          <MetricFreshnessDisclosure
+            entries={viewModel?.metricFreshness}
+            idPrefix="withings"
+          />
         )}
         {resume.isSuccess && resume.data?.wasParked && (
           <p
@@ -494,6 +513,17 @@ export function WithingsCard({
                 {syncMsg}
               </p>
             )}
+            {/* connect→data loop: a discreet link to where this provider's
+                readings now surface — doubles as the "your data is richer"
+                cue. */}
+            <Link
+              href="/measurements"
+              data-testid="withings-data-link"
+              className="text-primary inline-flex items-center gap-1 text-xs underline-offset-2 hover:underline"
+            >
+              {t("settings.withingsViewData")}
+              <ArrowRight className="h-3 w-3" />
+            </Link>
           </>
         ) : status?.configured ? (
           <Button

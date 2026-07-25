@@ -13,13 +13,7 @@ import {
 } from "@/components/settings/integrations/oauth-provider-card";
 import { queryKeys } from "@/lib/query-keys";
 
-export function StravaCard({
-  enabled = true,
-  viewModel,
-}: {
-  enabled?: boolean;
-  viewModel?: OAuthProviderStatus;
-}) {
+export function StravaCard({ viewModel }: { viewModel?: OAuthProviderStatus }) {
   return (
     <OAuthProviderCard
       provider="strava"
@@ -28,7 +22,6 @@ export function StravaCard({
       icon={Activity}
       dataHref="/insights/workouts"
       credentials
-      enabled={enabled}
       viewModel={viewModel}
     />
   );

@@ -5273,7 +5273,7 @@
     "integrationPill": {
       "connected": "Connesso",
       "errorReconnect": "Errore — riconnetti",
-      "warningServerError": "Connesso, errore del server",
+      "warningServerError": "Connesso, problema di sincronizzazione",
       "parkedReconnect": "In pausa — riconnettere manualmente",
       "notConnected": "Non connesso",
       "justNow": "proprio ora",
@@ -5283,8 +5283,26 @@
       "ariaLabel": "Stato dell’integrazione",
       "resumeCta": "Riconnetti",
       "resumeSuccess": "Integrazione ripresa",
-      "resumeError": "Riconnessione fallita"
+      "resumeError": "Riconnessione fallita",
+      "stale": "Connesso, nessun dato recente",
+      "stalled": "Sincronizzazione ferma",
+      "pendingSetup": "In attesa dei primi dati"
     },
+    "integrationFreshness": {
+      "title": "Dati ricevuti",
+      "summary": "{count} tipi di dati · più recente {relative}",
+      "quiet": "{count} in silenzio",
+      "workouts": "Allenamenti"
+    },
+    "integrationFallback": {
+      "description": "Configurato su questo account ma senza una scheda di impostazioni propria. Questa riga esiste perché una connessione non possa smettere di funzionare senza che nessuno se ne accorga.",
+      "lastAttempt": "Ultimo tentativo {relative}",
+      "noAttempt": "Nessun tentativo di sincronizzazione registrato"
+    },
+    "withingsViewData": "Vedi le tue misurazioni",
+    "whoopViewData": "Vedi il tuo recupero",
+    "fitbitViewData": "Vedi il tuo sonno",
+    "googleHealthViewData": "Vedi i tuoi passi",
     "apiTokens": "Token API",
     "apiTokensDescription": "Rivedi e revoca i token API per la registrazione esterna delle assunzioni di farmaci. I token vengono emessi per singolo farmaco dal relativo interruttore dell’endpoint API.",
     "tokenMintMovedDescription": "I token vengono emessi per singolo farmaco. Apri un farmaco e attiva il suo endpoint API per ottenere un token valido solo per quel farmaco.",
@@ -5844,17 +5862,14 @@
       "title": "Apple Health",
       "description": "La sincronizzazione in tempo reale avviene tramite l’app HealthLog per iOS, non tramite una connessione web o OAuth.",
       "status": {
-        "checking": "Controllo dei dati Apple Health…",
-        "dataReceived": "Dati Apple Health ricevuti",
-        "setup": "Configura nell’app iOS",
         "unavailable": "Stato di Apple Health non disponibile"
       },
-      "lastDataLabel": "Ultimi dati Apple Health:",
       "setupTitle": "Attiva la sincronizzazione in tempo reale",
       "permissionStep": "Nell’app HealthLog per iOS, apri Impostazioni → Apple Health e autorizza le categorie di salute che vuoi condividere.",
       "backgroundStep": "Mantieni attivo l’aggiornamento in background. L’app sincronizza automaticamente i nuovi dati in primo piano e quando iOS concede tempo in background.",
       "importNote": "Ti serve lo storico precedente o non puoi usare l’app iOS? Il caricamento XML/ZIP di Apple Health è un’alternativa una tantum e non attiva la sincronizzazione in tempo reale.",
-      "importAction": "Apri importazione una tantum"
+      "importAction": "Apri importazione una tantum",
+      "staleNote": "Da più di una settimana non arrivano dati da Apple Health. Apri l'app HealthLog sull'iPhone e controlla i permessi di Apple Health."
     },
     "garminInfo": {
       "title": "Garmin",

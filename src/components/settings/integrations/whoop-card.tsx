@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
+  ArrowRight,
   Link2,
   Loader2,
   RefreshCw,
@@ -29,7 +31,6 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { IntegrationStatusPill } from "@/components/settings/integration-status-pill";
-import type { IntegrationPillState } from "@/components/settings/integration-status-pill";
 import { TestConnectionButton } from "@/components/settings/test-connection-button";
 import { apiFetchRaw, apiPost } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
@@ -42,8 +43,10 @@ import {
 import {
   IntegrationErrorMessage,
   pillStateFor,
+  pillTimestampFor,
   type IntegrationStatusViewModel,
 } from "./shared";
+import { MetricFreshnessDisclosure } from "./metric-freshness-disclosure";
 import {
   IntegrationCardDescription,
   IntegrationRedirectGuide,
@@ -175,18 +178,21 @@ export function WhoopCard({
     setCredsSaving(false);
   }
 
-  const pillState: IntegrationPillState = status?.connected
-    ? pillStateFor(viewModel)
-    : "disconnected";
-  const pillLastSyncAt =
-    status?.legacyLastSyncedAt ?? viewModel?.lastSuccessAt ?? null;
+  // The server resolves the verdict; the card only projects it. `connected`
+  // rides into that resolution, so a disconnected provider still lands on the
+  // "Not connected" pill without a second local rule here.
+  const pillState = pillStateFor(viewModel);
+  const pillLastSyncAt = pillTimestampFor(viewModel);
   const errorMessage =
-    (pillState === "error" || pillState === "parked") && viewModel?.lastError
+    (pillState === "error" ||
+      pillState === "parked" ||
+      pillState === "warning") &&
+    viewModel?.lastError
       ? viewModel.lastError
       : null;
 
   return (
-    <SettingsCard>
+    <SettingsCard data-testid="whoop-card">
       <SettingsCardHeader
         icon={Activity}
         title={t("settings.whoop")}
@@ -252,6 +258,13 @@ export function WhoopCard({
           >
             {t("settings.integrationPill.resumeError")}
           </p>
+        )}
+
+        {status?.connected && (
+          <MetricFreshnessDisclosure
+            entries={viewModel?.metricFreshness}
+            idPrefix="whoop"
+          />
         )}
         {resume.isSuccess && resume.data?.wasParked && (
           <p
@@ -449,6 +462,17 @@ export function WhoopCard({
                 {syncMsg}
               </p>
             )}
+            {/* connect→data loop: a discreet link to where this provider's
+                readings now surface — doubles as the "your data is richer"
+                cue. */}
+            <Link
+              href="/insights/recovery"
+              data-testid="whoop-data-link"
+              className="text-primary inline-flex items-center gap-1 text-xs underline-offset-2 hover:underline"
+            >
+              {t("settings.whoopViewData")}
+              <ArrowRight className="h-3 w-3" />
+            </Link>
           </>
         ) : status?.configured ? (
           <Button

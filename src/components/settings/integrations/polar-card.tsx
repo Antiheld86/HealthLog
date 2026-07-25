@@ -12,13 +12,7 @@ import {
 } from "@/components/settings/integrations/oauth-provider-card";
 import { queryKeys } from "@/lib/query-keys";
 
-export function PolarCard({
-  enabled = true,
-  viewModel,
-}: {
-  enabled?: boolean;
-  viewModel?: OAuthProviderStatus;
-}) {
+export function PolarCard({ viewModel }: { viewModel?: OAuthProviderStatus }) {
   return (
     <OAuthProviderCard
       provider="polar"
@@ -27,7 +21,6 @@ export function PolarCard({
       icon={Watch}
       dataHref="/insights/sleep"
       credentials
-      enabled={enabled}
       viewModel={viewModel}
     />
   );

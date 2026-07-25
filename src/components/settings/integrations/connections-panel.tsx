@@ -20,6 +20,7 @@ import { AppleHealthCard } from "@/components/settings/integrations/apple-health
 import { FitbitCard } from "@/components/settings/integrations/fitbit-card";
 import { GarminInfoNote } from "@/components/settings/integrations/garmin-info-note";
 import { GoogleHealthCard } from "@/components/settings/integrations/google-health-card";
+import { IntegrationFallbackRow } from "@/components/settings/integrations/integration-fallback-row";
 import { NightscoutCard } from "@/components/settings/integrations/nightscout-card";
 import type { OAuthProviderStatus } from "@/components/settings/integrations/oauth-provider-card";
 import { OuraCard } from "@/components/settings/integrations/oura-card";
@@ -28,6 +29,7 @@ import { StravaCard } from "@/components/settings/integrations/strava-card";
 import {
   pickStatus,
   useIntegrationStatuses,
+  type IntegrationKey,
   type IntegrationStatusViewModel,
 } from "@/components/settings/integrations/shared";
 import { WhoopCard } from "@/components/settings/integrations/whoop-card";
@@ -164,8 +166,28 @@ function toOAuthStatus(
     lastSuccessAt: vm.lastSuccessAt,
     lastAttemptAt: vm.lastAttemptAt,
     lastError: vm.lastError,
+    legacyLastSyncedAt: vm.legacyLastSyncedAt,
+    syncHealth: vm.syncHealth,
+    metricFreshness: vm.metricFreshness,
   };
 }
+
+/**
+ * The keys a bespoke card on this panel renders. Every OTHER configured
+ * envelope entry falls through to `IntegrationFallbackRow` — the panel's unit
+ * of coverage is the envelope entry, not the card, so a provider can never
+ * again be shipped on the wire and rendered nowhere.
+ */
+const CARD_BACKED_INTEGRATIONS: ReadonlySet<IntegrationKey> = new Set([
+  "withings",
+  "whoop",
+  "fitbit",
+  "google-health",
+  "polar",
+  "oura",
+  "strava",
+  "nightscout",
+]);
 
 export function ConnectionsPanel() {
   const { t } = useTranslations();
@@ -269,6 +291,12 @@ export function ConnectionsPanel() {
   const stravaViewModel = toOAuthStatus(
     pickStatus(integrationStatus, "strava"),
   );
+  const nightscoutViewModel = pickStatus(integrationStatus, "nightscout");
+  const unclaimedIntegrations = (integrationStatus?.integrations ?? []).filter(
+    (entry) =>
+      !CARD_BACKED_INTEGRATIONS.has(entry.integration) &&
+      (entry.configured || entry.connected),
+  );
 
   return (
     <div className="space-y-6" data-slot="connections-panel">
@@ -290,17 +318,30 @@ export function ConnectionsPanel() {
         <AppleHealthCard enabled={isAuthenticated} />
       </div>
       <div id="polar" className="scroll-mt-28">
-        <PolarCard enabled={isAuthenticated} viewModel={polarViewModel} />
+        <PolarCard viewModel={polarViewModel} />
       </div>
       <div id="oura" className="scroll-mt-28">
-        <OuraCard enabled={isAuthenticated} viewModel={ouraViewModel} />
+        <OuraCard viewModel={ouraViewModel} />
       </div>
       <div id="strava" className="scroll-mt-28">
-        <StravaCard enabled={isAuthenticated} viewModel={stravaViewModel} />
+        <StravaCard viewModel={stravaViewModel} />
       </div>
       <div id="nightscout" className="scroll-mt-28">
-        <NightscoutCard enabled={isAuthenticated} />
+        <NightscoutCard viewModel={nightscoutViewModel} />
       </div>
+      {/* Every configured envelope entry no card above claims. Normally this
+          renders nothing; on an account carrying a dropped-but-still-running
+          integration it renders the honest status that provider otherwise has
+          nowhere to appear. */}
+      {unclaimedIntegrations.map((entry) => (
+        <div
+          key={entry.integration}
+          id={entry.integration}
+          className="scroll-mt-28"
+        >
+          <IntegrationFallbackRow status={entry} />
+        </div>
+      ))}
       {/* Garmin: no direct connector (business-partner-only). A quiet
           non-connector note pointing to the Apple Health / Health Connect
           path — not an OAuthProviderCard (nothing to connect). */}
