@@ -5373,7 +5373,8 @@
       "scopeTitle": "Co zawiera ten link",
       "scopeInsuranceExcluded": "Dane ubezpieczenia nigdy nie są udostępniane przez link.",
       "statusNeedsReselect": "Wybierz zawartość ponownie",
-      "reselectReason": "Ten link udostępniał zakres, którego nikt nie wybrał, więc został zamknięty. Utwórz nowy i wybierz jego zawartość."
+      "reselectReason": "Ten link udostępniał zakres, którego nikt nie wybrał, więc został zamknięty. Utwórz nowy i wybierz jego zawartość.",
+      "reselectAction": "Utwórz zamiennik"
     },
     "genderOther": "Inna",
     "cycleTracking": {

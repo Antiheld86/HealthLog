@@ -5373,7 +5373,8 @@
       "scopeTitle": "Cosa contiene questo link",
       "scopeInsuranceExcluded": "I dati assicurativi non vengono mai condivisi tramite link.",
       "statusNeedsReselect": "Scegli di nuovo il contenuto",
-      "reselectReason": "Questo link mostrava un ambito che nessuno aveva scelto, perciò è stato chiuso. Creane uno nuovo e scegli cosa deve contenere."
+      "reselectReason": "Questo link mostrava un ambito che nessuno aveva scelto, perciò è stato chiuso. Creane uno nuovo e scegli cosa deve contenere.",
+      "reselectAction": "Crea un sostituto"
     },
     "genderOther": "Altro",
     "cycleTracking": {

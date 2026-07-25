@@ -24,11 +24,16 @@ export type PanelSelection = ReadonlySet<ReportLeafId>;
 /** A group checkbox is on, off, or partly on. `mixed` is never a click target. */
 export type GroupCheckState = "all" | "none" | "mixed";
 
+/**
+ * `leaves` is the group's leaves AS THE SURFACE RENDERS THEM, which is not
+ * always the catalogue's: the share-link form hides the insurance leaf, and a
+ * count or a check state computed over the full group would then describe
+ * something the user cannot see or reach.
+ */
 export function groupCheckState(
-  group: ReportGroupId,
+  leaves: readonly ReportLeafId[],
   selected: PanelSelection,
 ): GroupCheckState {
-  const leaves = REPORT_GROUPS.find((g) => g.id === group)?.leaves ?? [];
   if (leaves.length === 0) return "none";
   const on = leaves.filter((leaf) => selected.has(leaf)).length;
   if (on === 0) return "none";
@@ -36,12 +41,11 @@ export function groupCheckState(
   return "mixed";
 }
 
-/** How many of a group's leaves are chosen, and how many there are. */
+/** How many of the rendered leaves are chosen, and how many there are. */
 export function groupCount(
-  group: ReportGroupId,
+  leaves: readonly ReportLeafId[],
   selected: PanelSelection,
 ): { on: number; total: number } {
-  const leaves = REPORT_GROUPS.find((g) => g.id === group)?.leaves ?? [];
   return {
     on: leaves.filter((leaf) => selected.has(leaf)).length,
     total: leaves.length,
@@ -75,12 +79,12 @@ export function toggleLeaf(
 export function toggleGroup(
   selected: PanelSelection,
   group: ReportGroupId,
+  leaves: readonly ReportLeafId[],
   remembered?: PanelSelection,
 ): Set<ReportLeafId> {
   if (group === SENSITIVE_GROUP_ID) return new Set(selected);
-  const leaves = REPORT_GROUPS.find((g) => g.id === group)?.leaves ?? [];
   const next = new Set(selected);
-  if (groupCheckState(group, selected) === "all") {
+  if (groupCheckState(leaves, selected) === "all") {
     for (const leaf of leaves) next.delete(leaf);
     return next;
   }

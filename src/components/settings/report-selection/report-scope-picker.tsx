@@ -74,9 +74,12 @@ export function ReportScopePicker({
     onChange(toggleLeaf(selected, leaf));
   };
 
-  const handleGroup = (group: ReportGroupId) => {
+  const handleGroup = (
+    group: ReportGroupId,
+    leaves: readonly ReportLeafId[],
+  ) => {
     setRemembered(new Set(selected));
-    onChange(toggleGroup(selected, group, remembered));
+    onChange(toggleGroup(selected, group, leaves, remembered));
   };
 
   return (
@@ -89,11 +92,11 @@ export function ReportScopePicker({
           labelKey={group.labelKey}
           leaves={group.leaves}
           selected={selected}
-          checkState={groupCheckState(group.id, selected)}
-          count={groupCount(group.id, selected)}
+          checkState={groupCheckState(group.leaves, selected)}
+          count={groupCount(group.leaves, selected)}
           open={openGroups.has(group.id)}
           panelId={`${idPrefix}-${group.id}`}
-          onToggleGroup={() => handleGroup(group.id)}
+          onToggleGroup={() => handleGroup(group.id, group.leaves)}
           onToggleLeaf={handleLeaf}
           onToggleOpen={() =>
             setOpenGroups((prev) => {

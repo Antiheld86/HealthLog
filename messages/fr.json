@@ -5373,7 +5373,8 @@
       "scopeTitle": "Ce que contient ce lien",
       "scopeInsuranceExcluded": "Les données d'assurance ne sont jamais partagées via un lien.",
       "statusNeedsReselect": "Choisir à nouveau le contenu",
-      "reselectReason": "Ce lien diffusait un périmètre que personne n'avait choisi ; il a donc été fermé. Créez-en un nouveau et choisissez son contenu."
+      "reselectReason": "Ce lien diffusait un périmètre que personne n'avait choisi ; il a donc été fermé. Créez-en un nouveau et choisissez son contenu.",
+      "reselectAction": "Créer un remplacement"
     },
     "genderOther": "Autre",
     "cycleTracking": {

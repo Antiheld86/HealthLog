@@ -5373,7 +5373,8 @@
       "scopeTitle": "Was dieser Link enthält",
       "scopeInsuranceExcluded": "Versichertendaten werden über einen Link nie geteilt.",
       "statusNeedsReselect": "Inhalt neu wählen",
-      "reselectReason": "Dieser Link lieferte einen Umfang, den niemand gewählt hatte, und wurde deshalb geschlossen. Legen Sie einen neuen an und wählen Sie den Inhalt."
+      "reselectReason": "Dieser Link lieferte einen Umfang, den niemand gewählt hatte, und wurde deshalb geschlossen. Legen Sie einen neuen an und wählen Sie den Inhalt.",
+      "reselectAction": "Ersatz anlegen"
     },
     "genderOther": "Divers",
     "cycleTracking": {

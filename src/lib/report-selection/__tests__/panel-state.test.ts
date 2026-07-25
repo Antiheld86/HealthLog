@@ -30,24 +30,45 @@ const sensitive = REPORT_GROUPS.find((g) => g.id === "sensitive")!;
 
 describe("scope picker state", () => {
   it("derives none / mixed / all from the leaves alone", () => {
-    expect(groupCheckState("vitals", new Set())).toBe("none");
-    expect(groupCheckState("vitals", new Set([vitals.leaves[0]]))).toBe(
+    expect(groupCheckState(vitals.leaves, new Set())).toBe("none");
+    expect(groupCheckState(vitals.leaves, new Set([vitals.leaves[0]]))).toBe(
       "mixed",
     );
-    expect(groupCheckState("vitals", new Set(vitals.leaves))).toBe("all");
+    expect(groupCheckState(vitals.leaves, new Set(vitals.leaves))).toBe("all");
   });
 
-  it("counts what is on against what exists", () => {
-    const count = groupCount("vitals", new Set([vitals.leaves[0]]));
+  it("counts what is on against what the surface renders", () => {
+    const count = groupCount(vitals.leaves, new Set([vitals.leaves[0]]));
     expect(count).toEqual({ on: 1, total: vitals.leaves.length });
+  });
+
+  it("counts against the RENDERED leaves, not the catalogue group", () => {
+    // The share-link form hides the insurance leaf, so the identity group is
+    // one leaf wide there. A count over the full group would tell the owner a
+    // control covers something they cannot see or reach.
+    const identity = REPORT_GROUPS.find((g) => g.id === "identity")!;
+    const rendered = identity.leaves.filter((l) => l !== "INSURANCE");
+    const selected = new Set<ReportLeafId>(["PATIENT_IDENTITY"]);
+    expect(groupCount(rendered, selected)).toEqual({ on: 1, total: 1 });
+    expect(groupCheckState(rendered, selected)).toBe("all");
+    // And the whole group, for contrast.
+    expect(groupCount(identity.leaves, selected)).toEqual({ on: 1, total: 2 });
+  });
+
+  it("never adds a leaf the surface does not render", () => {
+    const identity = REPORT_GROUPS.find((g) => g.id === "identity")!;
+    const rendered = identity.leaves.filter((l) => l !== "INSURANCE");
+    const after = toggleGroup(new Set<ReportLeafId>(), "identity", rendered);
+    expect(after.has("PATIENT_IDENTITY")).toBe(true);
+    expect(after.has("INSURANCE")).toBe(false);
   });
 
   it("turns a mixed group fully on, and a full group fully off", () => {
     const partial = new Set<ReportLeafId>([vitals.leaves[0]]);
-    const on = toggleGroup(partial, "vitals");
-    expect(groupCheckState("vitals", on)).toBe("all");
-    const off = toggleGroup(on, "vitals");
-    expect(groupCheckState("vitals", off)).toBe("none");
+    const on = toggleGroup(partial, "vitals", vitals.leaves);
+    expect(groupCheckState(vitals.leaves, on)).toBe("all");
+    const off = toggleGroup(on, "vitals", vitals.leaves);
+    expect(groupCheckState(vitals.leaves, off)).toBe("none");
   });
 
   it("restores the previous pattern when a group comes back on", () => {
@@ -55,14 +76,14 @@ describe("scope picker state", () => {
       vitals.leaves[0],
       vitals.leaves[1],
     ]);
-    const off = toggleGroup(original, "vitals", original);
-    const back = toggleGroup(off, "vitals", original);
+    const off = toggleGroup(original, "vitals", vitals.leaves, original);
+    const back = toggleGroup(off, "vitals", vitals.leaves, original);
     expect([...back].sort()).toEqual([...original].sort());
   });
 
   it("lets no group control reach a fenced leaf", () => {
     const before = new Set<ReportLeafId>();
-    const after = toggleGroup(before, "sensitive");
+    const after = toggleGroup(before, "sensitive", sensitive.leaves);
     expect([...after]).toEqual([]);
     for (const leaf of sensitive.leaves) {
       expect(after.has(leaf)).toBe(false);

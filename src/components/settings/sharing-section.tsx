@@ -42,6 +42,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import {
+  MAX_DAYS,
   ShareLinkCreateForm,
   type ShareLinkSummary,
 } from "@/components/settings/share-link-create-form";
@@ -61,12 +62,49 @@ export function SharingSection() {
   );
 }
 
+/**
+ * Carry a closed link's window and lifetime into a new create form.
+ *
+ * The window is measured from the frozen `rangeStart` to now (a rolling link
+ * has no end), the lifetime from when it was created to when it would have
+ * expired. Both are clamped into the form's own bounds so a very old link
+ * cannot seed an out-of-range value.
+ */
+function prefillFrom(link: ShareLinkSummary) {
+  const day = 86_400_000;
+  const rangeDays = Math.max(
+    1,
+    Math.round((Date.now() - new Date(link.rangeStart).getTime()) / day),
+  );
+  const expiryDays = Math.min(
+    MAX_DAYS,
+    Math.max(
+      1,
+      Math.round(
+        (new Date(link.expiresAt).getTime() -
+          new Date(link.createdAt).getTime()) /
+          day,
+      ),
+    ),
+  );
+  return { key: Date.now(), label: link.label, rangeDays, expiryDays };
+}
+
 function ShareLinksCard() {
   const { t } = useTranslations();
   const { isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
 
   const [showRevoked, setShowRevoked] = useState(false);
+  // A re-mint carries the closed link's label, window and lifetime across, so
+  // the only thing left to decide is the scope it never had. Keyed so the form
+  // remounts and picks the values up as its initial state.
+  const [prefill, setPrefill] = useState<{
+    key: number;
+    label: string;
+    rangeDays: number;
+    expiryDays: number;
+  } | null>(null);
 
   const { data: links } = useQuery({
     queryKey: queryKeys.shareLinks(),
@@ -101,7 +139,12 @@ function ShareLinksCard() {
         description={t("settings.sharing.createDescription")}
       />
 
-      <ShareLinkCreateForm />
+      <ShareLinkCreateForm
+        key={prefill?.key ?? "new"}
+        initialLabel={prefill?.label}
+        initialRangeDays={prefill?.rangeDays}
+        initialExpiryDays={prefill?.expiryDays}
+      />
 
       <div className="space-y-2">
         <h3 className="text-sm font-medium">
@@ -248,12 +291,24 @@ function ShareLinksCard() {
                       owner re-mints above with the label, window and expiry
                       still in front of them. */}
                   {link.needsReselection ? (
-                    <p
-                      className="text-muted-foreground text-xs"
+                    <div
+                      className="space-y-1.5"
                       data-testid={`share-needs-reselect-${link.id}`}
                     >
-                      {t("settings.sharing.reselectReason")}
-                    </p>
+                      <p className="text-muted-foreground text-xs">
+                        {t("settings.sharing.reselectReason")}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="min-h-11 sm:min-h-9"
+                        data-testid={`share-reselect-${link.id}`}
+                        onClick={() => setPrefill(prefillFrom(link))}
+                      >
+                        {t("settings.sharing.reselectAction")}
+                      </Button>
+                    </div>
                   ) : null}
                   <p className="text-muted-foreground text-xs">
                     <span className="font-medium">

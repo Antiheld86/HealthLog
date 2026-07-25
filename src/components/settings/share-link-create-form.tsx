@@ -168,6 +168,8 @@ export function ShareLinkCreateForm({
   documentOnly = false,
   initialDocuments,
   initialLabel,
+  initialRangeDays,
+  initialExpiryDays,
   onCreated,
 }: {
   /**
@@ -181,6 +183,14 @@ export function ShareLinkCreateForm({
   initialDocuments?: PickedDocument[];
   /** Optional pre-filled label (e.g. the document title). */
   initialLabel?: string;
+  /**
+   * Optional pre-filled window and lifetime, in days. The sharing list passes
+   * these when the owner re-mints a link the selection upgrade closed, so the
+   * only decision left in front of them is the one that link never carried:
+   * what it should contain.
+   */
+  initialRangeDays?: number;
+  initialExpiryDays?: number;
   /** Fired after a link is minted, so an outer surface can react if needed. */
   onCreated?: (created: ShareLinkCreated) => void;
 }) {
@@ -188,8 +198,10 @@ export function ShareLinkCreateForm({
   const queryClient = useQueryClient();
 
   const [label, setLabel] = useState(initialLabel ?? "");
-  const [rangeDays, setRangeDays] = useState(DEFAULT_DAYS);
-  const [expiryDays, setExpiryDays] = useState(DEFAULT_DAYS);
+  const [rangeDays, setRangeDays] = useState(initialRangeDays ?? DEFAULT_DAYS);
+  const [expiryDays, setExpiryDays] = useState(
+    initialExpiryDays ?? DEFAULT_DAYS,
+  );
   const [selectedDocs, setSelectedDocs] = useState<PickedDocument[]>(
     initialDocuments ?? [],
   );

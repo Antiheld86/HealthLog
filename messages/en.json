@@ -5373,7 +5373,8 @@
       "scopeTitle": "What this link contains",
       "scopeInsuranceExcluded": "Insurance details are never shared through a link.",
       "statusNeedsReselect": "Pick contents again",
-      "reselectReason": "This link served a scope that was never chosen, so it was closed. Create a new one and pick what it should contain."
+      "reselectReason": "This link served a scope that was never chosen, so it was closed. Create a new one and pick what it should contain.",
+      "reselectAction": "Create a replacement"
     },
     "genderOther": "Other",
     "cycleTracking": {
