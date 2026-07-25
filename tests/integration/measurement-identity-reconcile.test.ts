@@ -114,8 +114,6 @@ describe("external measurement identity reconciliation (real Postgres)", () => {
             measuredAt: new Date("2026-07-20T09:00:00.000Z"),
             sleepStage: null,
             aggregationProvenance: "EXPORT_XML_SOURCE_MAX",
-            aggregationContributorCount: 2,
-            aggregationSelectedSourceHash: "xml-source-hash",
           },
         ),
       },
@@ -132,8 +130,6 @@ describe("external measurement identity reconciliation (real Postgres)", () => {
           externalSourceVersion: "native-v1",
           deviceType: "Apple Watch",
           aggregationProvenance: "HEALTHKIT_STATISTICS",
-          aggregationContributorCount: null,
-          aggregationSelectedSourceHash: null,
         }),
       },
     });
@@ -147,8 +143,6 @@ describe("external measurement identity reconciliation (real Postgres)", () => {
         measuredAt: nativeMeasuredAt,
         sleepStage: null,
         aggregationProvenance: "EXPORT_XML_SOURCE_MAX",
-        aggregationContributorCount: 2,
-        aggregationSelectedSourceHash: "xml-source-hash",
       }),
       { exactExternalMatch: "update" },
     );
@@ -171,8 +165,6 @@ describe("external measurement identity reconciliation (real Postgres)", () => {
       externalSourceVersion: "native-v1",
       deviceType: "Apple Watch",
       aggregationProvenance: "HEALTHKIT_STATISTICS",
-      aggregationContributorCount: null,
-      aggregationSelectedSourceHash: null,
     });
     expect(
       await prisma.measurement.findUniqueOrThrow({
@@ -194,8 +186,6 @@ describe("external measurement identity reconciliation (real Postgres)", () => {
         externalSourceVersion: "native-v2",
         deviceType: "Apple Watch",
         aggregationProvenance: "HEALTHKIT_STATISTICS",
-        aggregationContributorCount: null,
-        aggregationSelectedSourceHash: null,
       }),
       { exactExternalMatch: "update" },
     );

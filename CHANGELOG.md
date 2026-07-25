@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+## [1.32.35] — 2026-07-25
+
+The doctor report stops asking for your practice name every time.
+
+You type a clinic or practice name onto the cover of a health record export,
+and until now that was all it did. The field emptied itself again the moment
+you left the panel, so next month's report started from a blank line. The name
+you used last time is now kept and filled in for you. Clearing the line works
+the same way and is remembered too, so a cover without a practice line stays
+without one. The name is saved only once the report has actually been
+produced, which means an export that fails partway leaves the previous value
+alone.
+
+A backup now carries the origin of your daily totals. Steps, distance and
+similar figures that arrive from Apple Health as one number per day are stored
+with a note of where that number came from, so a rough estimate read out of an
+archive can never overwrite a total the phone measured itself. That note was
+missing from the backup file, so a restore brought the figures back without it
+and the protection went quiet. It rides the backup now. Restoring an older
+backup written before this fix marks the affected daily totals as unclassified
+instead of leaving them ambiguous, which is the state a later sync knows how
+to repair.
+
+Migration 0272 drops two columns that were written and never read. They held a
+contributor count and a source fingerprint for archive derived daily totals,
+and no screen, export or repair path has ever looked at either. The figures
+themselves and the origin note above are untouched.
+
 ## [1.32.34] — 2026-07-25
 
 Housekeeping on the interface. Most of it you will not see.

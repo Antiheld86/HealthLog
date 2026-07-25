@@ -204,6 +204,7 @@ function installSectionMocks() {
     notesEncrypted: measurementNote,
     externalId: "oura-stage-deep",
     externalSourceVersion: "oura-v3",
+    aggregationProvenance: "HEALTHKIT_STATISTICS",
     glucoseContext: null,
     sleepStage: "DEEP",
     rhythmClassification: null,
@@ -297,6 +298,7 @@ describe("buildFullBackupPayload disaster-recovery mode", () => {
           notesEncrypted: Buffer.from(measurementNote).toString("base64"),
           externalId: "oura-stage-deep",
           externalSourceVersion: "oura-v3",
+          aggregationProvenance: "HEALTHKIT_STATISTICS",
           glucoseContext: null,
           sleepStage: "DEEP",
           rhythmClassification: null,
@@ -369,5 +371,74 @@ describe("buildFullBackupPayload disaster-recovery mode", () => {
         purpose: "disaster-recovery",
       }),
     ).rejects.toBe(failure);
+  });
+});
+
+/**
+ * `aggregationProvenance` is what stops an export.xml source-day estimate from
+ * overwriting a native HealthKit statistic. A disaster-recovery backup that
+ * drops it restores a flattened authority ladder, so it rides the select and
+ * the disaster-recovery serialization the same way `externalSourceVersion`
+ * does — and stays out of the reduced portable shape, also like
+ * `externalSourceVersion`.
+ *
+ * Mutation check: drop `aggregationProvenance: true` from the select, or drop
+ * the field from the disaster-recovery arm, and the first two cases go red.
+ */
+describe("buildFullBackupPayload — aggregation provenance", () => {
+  it("selects the provenance column", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+
+    await buildFullBackupPayload(prisma as never, "user-1", {
+      purpose: "disaster-recovery",
+      exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+    });
+
+    expect(mocks.iterateMeasurementPages).toHaveBeenCalledWith(
+      prisma,
+      expect.anything(),
+      expect.objectContaining({ aggregationProvenance: true }),
+    );
+  });
+
+  it("carries the provenance into the disaster-recovery payload", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+
+    const { payload } = await buildFullBackupPayload(
+      prisma as never,
+      "user-1",
+      {
+        purpose: "disaster-recovery",
+        exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+      },
+    );
+
+    const rows = payload.measurements as Array<Record<string, unknown>>;
+    expect(rows[0]).toHaveProperty(
+      "aggregationProvenance",
+      "HEALTHKIT_STATISTICS",
+    );
+  });
+
+  it("leaves the provenance out of the reduced portable shape", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+
+    const { payload } = await buildFullBackupPayload(
+      prisma as never,
+      "user-1",
+      {
+        purpose: "portable-export",
+        exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+      },
+    );
+
+    const rows = payload.measurements as Array<Record<string, unknown>>;
+    // The portable arm carries the human-readable subset only — no
+    // externalSourceVersion, no glucoseContext, and no provenance either.
+    expect(rows[0]).not.toHaveProperty("aggregationProvenance");
+    expect(rows[0]).not.toHaveProperty("externalSourceVersion");
   });
 });

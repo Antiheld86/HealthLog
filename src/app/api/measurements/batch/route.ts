@@ -544,8 +544,6 @@ async function postBatch(request: NextRequest): Promise<Response> {
               .rhythmClassification as Prisma.MeasurementUncheckedCreateInput["rhythmClassification"],
             deviceType: p.row.deviceType as string | null,
             aggregationProvenance: statsRow ? "HEALTHKIT_STATISTICS" : null,
-            aggregationContributorCount: null,
-            aggregationSelectedSourceHash: null,
           },
           { exactExternalMatch: statsRow ? "update" : "duplicate" },
         ),

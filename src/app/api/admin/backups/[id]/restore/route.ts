@@ -407,6 +407,25 @@ const handler = apiHandler(
                 : decodeEncryptedBytes(measurement.notesEncrypted),
             externalId: measurement.externalId ?? null,
             externalSourceVersion: measurement.externalSourceVersion ?? null,
+            // Authority of an Apple Health `stats:` aggregate. A backup
+            // written before this field rode the payload carries nothing, and
+            // restoring NULL would flatten the authority ladder: an export.xml
+            // source-day estimate could then overwrite a native HealthKit
+            // statistic, which is the ambiguity migration 0263 already
+            // repaired once. Such a row is exactly the case LEGACY_UNKNOWN
+            // exists for, so it comes back repairable instead of ambiguous.
+            //
+            // The gate is scoped exactly as 0263 scoped its backfill and as
+            // the cumulative drain scopes its own LEGACY_UNKNOWN writes:
+            // Apple Health rows only. Other providers mint `stats:` ids for
+            // their cumulative dailies too (Fitbit, Google Health) and have
+            // never carried provenance — marking those would invent a state
+            // they were never in. Ordinary point rows keep NULL honestly.
+            aggregationProvenance: (measurement.aggregationProvenance ??
+              (measurement.source === "APPLE_HEALTH" &&
+              measurement.externalId?.startsWith("stats:")
+                ? "LEGACY_UNKNOWN"
+                : null)) as never,
             glucoseContext: (measurement.glucoseContext ?? null) as never,
             sleepStage: (measurement.sleepStage ?? null) as never,
             rhythmClassification: (measurement.rhythmClassification ??

@@ -249,3 +249,76 @@ describe("POST /api/export/health-record — outputs", () => {
     );
   });
 });
+
+/**
+ * The practice name is a remembered preference (`User.lastReportPracticeName`),
+ * so a monthly report does not ask for the clinic name again every time. The
+ * write happens only once the artefact exists — a generation that throws must
+ * not overwrite the remembered value with a half-typed one.
+ *
+ * Mutation check: drop the `rememberPracticeName` call in the route and the
+ * first two cases go red; move it above the generation and the
+ * failed-generation case goes red.
+ */
+describe("POST /api/export/health-record — remembered practice name", () => {
+  it("persists the sanitised practice name after a PDF export", async () => {
+    const { POST } = await import("../route");
+    const res = await POST(
+      mkReq({ format: "pdf", practiceName: "  Sample   Practice  " }),
+    );
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: { lastReportPracticeName: "Sample Practice" },
+    });
+  });
+
+  it("persists the practice name after a FHIR export", async () => {
+    const { POST } = await import("../route");
+    const res = await POST(
+      mkReq({ format: "fhir", practiceName: "Sample Practice" }),
+    );
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: { lastReportPracticeName: "Sample Practice" },
+    });
+  });
+
+  it("persists null when the user cleared the practice name", async () => {
+    const { POST } = await import("../route");
+    const res = await POST(mkReq({ format: "pdf" }));
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: { lastReportPracticeName: null },
+    });
+  });
+
+  it("writes nothing when the selection is rejected", async () => {
+    const { POST } = await import("../route");
+    const res = await POST(mkReq({ format: "xml", practiceName: "Sample" }));
+    expect(res.status).toBe(422);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("writes nothing when the generation fails", async () => {
+    vi.mocked(prisma.measurement.findMany).mockRejectedValue(
+      new Error("read failed"),
+    );
+    const { POST } = await import("../route");
+    const res = await POST(
+      mkReq({ format: "pdf", practiceName: "Sample Practice" }),
+    );
+    expect(res.status).toBe(500);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("narrows the update to the session user, never the body", async () => {
+    const { POST } = await import("../route");
+    await POST(mkReq({ format: "fhir", practiceName: "Sample Practice" }));
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "user-1" } }),
+    );
+  });
+});

@@ -107,6 +107,7 @@ function buildUser(
     insurerName: null,
     insurerIkNumber: null,
     insuranceNumber: null,
+    lastReportPracticeName: null,
     cycleTrackingEnabled: false,
     modules,
     moduleAvailability: {},

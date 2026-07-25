@@ -43,6 +43,7 @@ import {
   InjectionSite,
   IntakeAttributionSource,
   IntakeSource,
+  MeasurementAggregationProvenance,
   MeasurementSource,
   MeasurementType,
   MedicationCategory,
@@ -86,6 +87,12 @@ const measurementSchema = z
     notesEncrypted: base64BytesSchema.nullable().optional(),
     externalId: z.string().nullable().optional(),
     externalSourceVersion: z.string().nullable().optional(),
+    // Authority of a `stats:` aggregate. `.optional()` keeps every backup
+    // written before this field rode the payload parseable.
+    aggregationProvenance: z
+      .enum(MeasurementAggregationProvenance)
+      .nullable()
+      .optional(),
     glucoseContext: z.enum(GlucoseContext).nullable().optional(),
     sleepStage: z.enum(SleepStage).nullable().optional(),
     rhythmClassification: z.enum(RhythmClassification).nullable().optional(),

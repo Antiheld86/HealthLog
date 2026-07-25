@@ -22,6 +22,7 @@
 
 import Link from "next/link";
 import { useId, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
   Download,
@@ -41,6 +42,7 @@ import { useRovingRadioGroup } from "@/hooks/use-roving-radio-group";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 
 type ExportFormat = "pdf" | "fhir" | "package";
@@ -126,9 +128,13 @@ function buildSelectionSections(s: SectionState) {
 export function HealthRecordExportPanel() {
   const { t, locale } = useTranslations();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [format, setFormat] = useState<ExportFormat>("pdf");
   const [days, setDays] = useState<number>(90);
   const [practiceName, setPracticeName] = useState("");
+  const [practiceNameSeededUserId, setPracticeNameSeededUserId] = useState<
+    string | null
+  >(null);
   const [includeCharts, setIncludeCharts] = useState(true);
   const [includeAiSummary, setIncludeAiSummary] = useState(false);
   const [sections, setSections] = useState<SectionState>(DEFAULT_SECTIONS);
@@ -138,6 +144,17 @@ export function HealthRecordExportPanel() {
   // the panel opens compact instead of as a long always-expanded list.
   const [includedDataOpen, setIncludedDataOpen] = useState(false);
   const includedDataPanelId = useId();
+
+  // Seed the practice name from the last export once the auth payload lands.
+  // `useAuth` resolves asynchronously, so a `useState` initializer would read
+  // `undefined` and stick at empty. Store-the-id-alongside-the-state (the same
+  // pattern the account form uses) syncs during render instead of in an
+  // effect, and the per-user gate means a late re-resolve never clobbers a
+  // field the user is already typing into.
+  if (user && user.id !== practiceNameSeededUserId) {
+    setPracticeNameSeededUserId(user.id);
+    setPracticeName(user.lastReportPracticeName ?? "");
+  }
 
   const isPdfLike = format === "pdf" || format === "package";
   const isFhirLike = format === "fhir" || format === "package";
@@ -199,6 +216,10 @@ export function HealthRecordExportPanel() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      // The route just persisted the practice name, so the cached `/me`
+      // payload is stale. Refresh it, or a remount of this panel would seed
+      // from the previous value.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.authMe() });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

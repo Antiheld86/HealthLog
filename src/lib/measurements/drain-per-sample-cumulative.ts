@@ -352,8 +352,6 @@ export async function drainPerSampleCumulative(
                   externalId,
                   deletedAt: null,
                   aggregationProvenance: "LEGACY_UNKNOWN",
-                  aggregationContributorCount: null,
-                  aggregationSelectedSourceHash: null,
                   syncVersion: { increment: 1 },
                   ...(slotIsFreeForTarget
                     ? { measuredAt: canonicalTimestamp }

@@ -54,6 +54,28 @@ import { parseLocaleFromAcceptLanguage } from "@/lib/format-locale";
 import { locales, type Locale } from "@/lib/i18n/config";
 import { resolveUserTimezone } from "@/lib/tz/resolver";
 
+/**
+ * Remember the practice / clinic name for the next report, so the user does
+ * not retype it every time (`User.lastReportPracticeName`, the preference the
+ * doctor-report contract has always promised).
+ *
+ * Called only once the requested artefact has actually been produced: a
+ * generation that throws must not overwrite the remembered name with a
+ * half-typed one. `null` is a legitimate value — the user cleared the line and
+ * the next cover should stay cleared. The value is the already-sanitised one
+ * (`sanitisePracticeName`, 120-char cap), and the update names its single
+ * field explicitly rather than spreading the parsed selection.
+ */
+async function rememberPracticeName(
+  userId: string,
+  practiceName: string | null,
+) {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { lastReportPracticeName: practiceName },
+  });
+}
+
 export const POST = apiHandler(async (request: NextRequest) => {
   const { user } = await requireAuth();
   annotate({ action: { name: "export.health-record.build" } });
@@ -189,6 +211,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       fhirRecords,
     );
     const json = JSON.stringify(bundle);
+    await rememberPracticeName(user.id, practiceName);
     annotate({
       meta: { format: "fhir", bytes: json.length, days: range.days },
     });
@@ -212,6 +235,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
     includeCharts,
     aiSummary,
   });
+  // Both remaining formats (`pdf`, `package`) carry the rendered PDF, so the
+  // artefact exists from here on.
+  await rememberPracticeName(user.id, practiceName);
 
   if (selection.format === "pdf") {
     annotate({
