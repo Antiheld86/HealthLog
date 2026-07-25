@@ -43,6 +43,12 @@ import {
   moodLevelEnum,
   moodSourceEnum,
 } from "@/lib/validations/mood";
+import {
+  classifyExternalId,
+  unstableExternalIdMeta,
+  UNSTABLE_EXTERNAL_ID_REASON,
+  type UnstableExternalIdShape,
+} from "@/lib/validations/external-id";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
 import { encryptNote } from "@/lib/crypto/note-cipher";
 import { invalidateUserMood } from "@/lib/cache/invalidate";
@@ -95,6 +101,10 @@ const bulkEntrySchema = z.object({
    * the measurements batch endpoint. NULL = no dedup hint; the
    * existing `(userId, date, moodLoggedAt)` unique index still
    * protects against straight-up duplicates.
+   *
+   * Stability is enforced per entry in the loop below, not at the field:
+   * a schema-level refusal would fail the whole batch on one bad row.
+   * @external-id-checked-per-entry: src/app/api/mood-entries/bulk/route.ts
    */
   externalId: z.string().min(1).max(120).optional(),
 });
@@ -187,6 +197,7 @@ async function postBulk(request: NextRequest): Promise<Response> {
   let inserted = 0;
   let duplicates = 0;
   const skipped: Array<{ index: number; reason: string }> = [];
+  const unstableShapes: UnstableExternalIdShape[] = [];
 
   // Perf — a single indexed existence read replaces the per-entry
   // `findUnique` probe (up to 500 sequential round trips pre-fix). Every
@@ -241,6 +252,27 @@ async function postBulk(request: NextRequest): Promise<Response> {
 
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
+
+    // The `(userId, source, externalId)` dedup key only holds while the
+    // id is STABLE across client launches; a per-process value (an object
+    // description carrying a memory address) mints a fresh entry on every
+    // re-post. Per-entry refusal, never a whole-batch 422.
+    const unstable =
+      entry.externalId === undefined
+        ? null
+        : classifyExternalId(entry.externalId);
+    if (unstable) {
+      unstableShapes.push(unstable);
+      skipped.push({ index: i, reason: UNSTABLE_EXTERNAL_ID_REASON });
+      results.push({
+        index: i,
+        status: "skipped",
+        reason: UNSTABLE_EXTERNAL_ID_REASON,
+        externalId: entry.externalId,
+      });
+      continue;
+    }
+
     const date = moodDateKey(entry.moodLoggedAt, tz);
     const score = getScoreForMood(entry.mood);
 
@@ -415,6 +447,9 @@ async function postBulk(request: NextRequest): Promise<Response> {
       inserted,
       duplicates,
       skipped: skipped.length,
+      ...(unstableShapes.length > 0
+        ? unstableExternalIdMeta("mood.bulk", unstableShapes)
+        : {}),
     },
   });
 

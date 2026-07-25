@@ -37,6 +37,10 @@ import {
   listAssessmentsSchema,
 } from "@/lib/validations/mental-health";
 import {
+  unstableExternalIdMeta,
+  unstableExternalIdShape,
+} from "@/lib/validations/external-id";
+import {
   INSTRUMENTS,
   INSTRUMENT_MEASUREMENT_TYPE,
   isSafetyFlagged,
@@ -183,9 +187,15 @@ async function postAssessment(request: NextRequest): Promise<Response> {
 
   const parsed = createAssessmentSchema.safeParse(body);
   if (!parsed.success) {
+    const shape = unstableExternalIdShape(body);
     annotate({
       action: { name: "mental-health.create.validation-failed" },
-      meta: { issue_count: sanitiseZodIssues(parsed.error.issues).length },
+      meta: {
+        issue_count: sanitiseZodIssues(parsed.error.issues).length,
+        ...(shape
+          ? unstableExternalIdMeta("mental_health.assessment.create", [shape])
+          : {}),
+      },
     });
     return returnAllZodIssues(parsed.error, 422);
   }

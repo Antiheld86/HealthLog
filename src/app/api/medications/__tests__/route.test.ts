@@ -622,6 +622,65 @@ describe("POST /api/medications — Apple Health mirror (v1.28)", () => {
     expect(prisma.medication.create).not.toHaveBeenCalled();
   });
 
+  /**
+   * The mirror's idempotency is only as good as the stability of the
+   * concept id. A client that serialised an opaque platform object with
+   * its default description sent `<HKHealthConceptIdentifier: 0x…>` — a
+   * memory address that changes on every launch — and a live instance
+   * grew 23 phantom medications in a day, one per sync sweep, none of
+   * which could ever collect a dose. The create refuses that shape now.
+   */
+  it("422s on an object-description externalId instead of minting a phantom mirror", async () => {
+    vi.mocked(prisma.medication.findFirst).mockResolvedValue(null as never);
+    const res = await POST(
+      postReq({
+        ...MIRROR_BODY,
+        externalId: "<HKHealthConceptIdentifier: 0x12568db80>",
+      }),
+    );
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as {
+      details: { issues: Array<{ path: string; message: string }> };
+    };
+    const issue = body.details.issues.find((i) => i.path === "externalId");
+    expect(issue).toBeDefined();
+    // The client developer has to be able to act on this without asking.
+    expect(issue!.message).toContain("stable across app restarts");
+    expect(issue!.message).toContain("object description");
+    expect(prisma.medication.create).not.toHaveBeenCalled();
+  });
+
+  it("422s on a bare memory-address externalId", async () => {
+    vi.mocked(prisma.medication.findFirst).mockResolvedValue(null as never);
+    const res = await POST(
+      postReq({ ...MIRROR_BODY, externalId: "0xdeadbeef" }),
+    );
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as {
+      details: { issues: Array<{ path: string; message: string }> };
+    };
+    expect(
+      body.details.issues.some(
+        (i) => i.path === "externalId" && i.message.includes("memory address"),
+      ),
+    ).toBe(true);
+    expect(prisma.medication.create).not.toHaveBeenCalled();
+  });
+
+  it("still accepts the stable concept-id shapes the mirror really sends", async () => {
+    for (const externalId of [
+      "hk-concept-1",
+      "8AD2A9CB-3F0C-4E4D-9C1E-4B7E2A1D6F30",
+      "a3f5c9e1b7d2486fa0c3e5b7d9f1a2c4e6b8d0f2a4c6e8b0d2f4a6c8e0b2d4f6",
+    ]) {
+      vi.mocked(prisma.medication.create).mockClear();
+      vi.mocked(prisma.medication.findFirst).mockResolvedValue(null as never);
+      const res = await POST(postReq({ ...MIRROR_BODY, externalId }));
+      expect(res.status).toBe(201);
+      expect(lastCreateData().externalId).toBe(externalId);
+    }
+  });
+
   it("a plain create keeps today's behavior — no external columns forwarded", async () => {
     const res = await POST(
       postReq({

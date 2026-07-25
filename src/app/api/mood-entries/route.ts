@@ -13,6 +13,10 @@ import {
   listMoodEntriesSchema,
   getScoreForMood,
 } from "@/lib/validations/mood";
+import {
+  unstableExternalIdMeta,
+  unstableExternalIdShape,
+} from "@/lib/validations/external-id";
 import { NextRequest } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
@@ -160,9 +164,13 @@ async function postMoodEntry(request: NextRequest) {
     // v1.4.43 W6 — iOS mood log hot path; multi-issue 422 + audit
     // breadcrumb keyed `mood-entries.create.validation-failed`.
     const issues = sanitiseZodIssues(parsed.error.issues);
+    const shape = unstableExternalIdShape(body);
     annotate({
       action: { name: "mood-entries.create.validation-failed" },
-      meta: { issue_count: issues.length },
+      meta: {
+        issue_count: issues.length,
+        ...(shape ? unstableExternalIdMeta("mood.create", [shape]) : {}),
+      },
     });
     // v1.4.49 — strip `message` from the audit-ledger row; the
     // mood-create schema's free-text `note` + `tags` could land in a

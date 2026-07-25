@@ -40,6 +40,7 @@ import {
   MEASUREMENT_NOTES_MAX_LENGTH,
 } from "@/lib/validations/measurement";
 import { isPlausibleEntryInstant } from "@/lib/validations/entry-instant";
+import { isStableExternalId } from "@/lib/validations/external-id";
 import { resolveToCanonicalUnit } from "@/lib/measurements/unit-aliases";
 
 /** A normalised, write-ready row in the `/api/import` measurement shape. */
@@ -68,6 +69,7 @@ export type CsvRowReason =
   | "invalid_glucose_context"
   | "notes_too_long"
   | "external_id_too_long"
+  | "unstable_external_id"
   | "wrong_column_count";
 
 export type CsvRowStatus = "ok" | "skipped";
@@ -301,6 +303,14 @@ export function parseCsvMeasurements(
 
     if (rawExternalId.length > 120) {
       skip("external_id_too_long");
+      continue;
+    }
+
+    // The import upserts on `(userId, type, source, externalId)`, so an
+    // id that cannot be stable across exports re-imports as a fresh row
+    // every time instead of converging on the one it already wrote.
+    if (rawExternalId.length > 0 && !isStableExternalId(rawExternalId)) {
+      skip("unstable_external_id");
       continue;
     }
 

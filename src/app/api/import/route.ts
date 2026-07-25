@@ -23,6 +23,11 @@ import {
   isPlausibleEntryInstant,
   validateEntryInstant,
 } from "@/lib/validations/entry-instant";
+import {
+  classifyExternalId,
+  unstableExternalIdMeta,
+  type UnstableExternalIdShape,
+} from "@/lib/validations/external-id";
 import { encryptNote } from "@/lib/crypto/note-cipher";
 import { recomputeUserMoodRollups } from "@/lib/rollups/mood-rollups";
 import {
@@ -60,6 +65,10 @@ const measurementSchema = z
     // export is idempotent rather than minting a duplicate set — mirrors the
     // mood path. Absent → first-write-wins create with a NULL externalId
     // (distinct in the unique key), which DOES duplicate on re-import.
+    // Stability is enforced per entry in the import loop, not at the
+    // field: a schema-level refusal would fail the whole file on one bad
+    // row.
+    // @external-id-checked-per-entry: src/app/api/import/route.ts
     externalId: z.string().min(1).max(120).optional(),
   })
   .refine(
@@ -92,6 +101,10 @@ const moodEntrySchema = z
     // present, the import upserts on `(userId, source, externalId)` so a
     // re-import of the same export is idempotent rather than minting a
     // duplicate; absent → the legacy first-write-wins create path.
+    // Stability is enforced per entry in the import loop, not at the
+    // field: a schema-level refusal would fail the whole file on one bad
+    // row.
+    // @external-id-checked-per-entry: src/app/api/import/route.ts
     externalId: z.string().min(1).max(120).optional(),
   })
   .superRefine((entry, ctx) => {
@@ -170,6 +183,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const userId = user.id;
   const data = parsed.data;
   const stats = { measurements: 0, moodEntries: 0, skipped: 0 };
+  const unstableShapes: UnstableExternalIdShape[] = [];
   let writeFailed = false;
 
   // Import measurements
@@ -189,6 +203,17 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }> = [];
   if (data.measurements?.length) {
     for (const m of data.measurements) {
+      // The `(userId, type, source, externalId)` upsert key is only
+      // idempotent while the id is STABLE; an id that rotates between
+      // exports re-imports as a fresh row every time. Skipped per entry,
+      // like every other rejected row in this importer.
+      const unstable =
+        m.externalId === undefined ? null : classifyExternalId(m.externalId);
+      if (unstable) {
+        unstableShapes.push(unstable);
+        stats.skipped++;
+        continue;
+      }
       try {
         // `measuredAt` is already a `Date` (validateEntryInstant transform).
         const measuredAt = m.measuredAt;
@@ -299,6 +324,15 @@ export const POST = apiHandler(async (request: NextRequest) => {
     const fallbackOccurrences = new Map<string, number>();
     const reservedFallbackInstants = new Set<number>();
     for (const e of data.moodEntries) {
+      // Same stability floor as the measurement loop above — the mood
+      // upsert keys on `(userId, source, externalId)`.
+      const unstableMood =
+        e.externalId === undefined ? null : classifyExternalId(e.externalId);
+      if (unstableMood) {
+        unstableShapes.push(unstableMood);
+        stats.skipped++;
+        continue;
+      }
       const identity = e.loggedAt ? null : fallbackMoodIdentity(e);
       const occurrence =
         identity === null ? 0 : (fallbackOccurrences.get(identity) ?? 0);
@@ -455,7 +489,14 @@ export const POST = apiHandler(async (request: NextRequest) => {
     }
   }
 
-  annotate({ meta: { import_stats: stats } });
+  annotate({
+    meta: {
+      import_stats: stats,
+      ...(unstableShapes.length > 0
+        ? unstableExternalIdMeta("import.json", unstableShapes)
+        : {}),
+    },
+  });
 
   try {
     await auditLog("import.upload", {

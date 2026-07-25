@@ -11,6 +11,10 @@ import {
 } from "@/lib/api-response";
 import { createMedicationSchema } from "@/lib/validations/medication";
 import {
+  unstableExternalIdMeta,
+  unstableExternalIdShape,
+} from "@/lib/validations/external-id";
+import {
   getMedicationCategories,
   setMedicationCategory,
 } from "@/lib/medication-category";
@@ -98,6 +102,16 @@ export const POST = apiHandler(async (request: NextRequest) => {
   if (jsonError) return jsonError;
   const parsed = createMedicationSchema.safeParse(body);
   if (!parsed.success) {
+    // Surface an unstable concept id as its own wide event: the refusal
+    // is the visible half of the phantom-mirror class, and a silent 422
+    // in the generic bucket is how it stayed invisible the first time.
+    const shape = unstableExternalIdShape(body);
+    if (shape) {
+      annotate({
+        action: { name: "medication.external_id.rejected" },
+        meta: unstableExternalIdMeta("medication.create", [shape]),
+      });
+    }
     // v1.4.43 W6 — multi-issue 422.
     return returnAllZodIssues(parsed.error, 422);
   }

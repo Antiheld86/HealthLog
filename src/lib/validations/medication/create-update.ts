@@ -12,6 +12,7 @@ import {
   rxNormCodeField,
 } from "./base";
 import { scheduleSchema } from "./schedule";
+import { assertStableExternalId } from "@/lib/validations/external-id";
 
 /**
  * v1.5 — medication-level course window + one-shot flag. The fields
@@ -187,7 +188,7 @@ export const createMedicationSchema = z
       .max(128)
       .optional()
       .describe(
-        "Stable external identifier of the mirrored medication (the HealthKit `medicationConceptIdentifier`, max 128 chars). Must be supplied together with `externalSource`. Idempotent: re-posting the same pair returns the existing medication with status 200 instead of minting a duplicate.",
+        "Stable external identifier of the mirrored medication (the HealthKit `medicationConceptIdentifier`, max 128 chars). Must be supplied together with `externalSource`. Idempotent: re-posting the same pair returns the existing medication with status 200 instead of minting a duplicate. The value MUST be identical across app restarts: an object description or memory address (`<Class: 0x…>`, `0x12ab34cd`) is a new value on every launch, never matches its own earlier row, and is refused with 422 rather than minting a duplicate mirror.",
       ),
     ...courseWindowFields,
     /**
@@ -206,6 +207,10 @@ export const createMedicationSchema = z
       path: ["externalId"],
     },
   )
+  // The concept id has to be STABLE across client launches or the
+  // idempotent-mirror pre-query above never matches its own earlier row
+  // and every sync sweep mints another phantom medication.
+  .superRefine(assertStableExternalId)
   .refine((b) => b.oneShot !== true || !!b.startsOn, {
     message: "startsOn is required when oneShot is true",
     path: ["startsOn"],

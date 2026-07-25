@@ -32,6 +32,12 @@ import {
   cycleBulkSchema,
   MAX_CYCLE_BULK_ENTRIES,
 } from "@/lib/validations/cycle";
+import {
+  classifyExternalId,
+  unstableExternalIdMeta,
+  UNSTABLE_EXTERNAL_ID_REASON,
+  type UnstableExternalIdShape,
+} from "@/lib/validations/external-id";
 import { upsertCycleDayLog } from "@/lib/cycle/day-log-write";
 import { DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
 
@@ -121,9 +127,33 @@ async function postBulk(request: NextRequest): Promise<Response> {
   let updated = 0;
   let duplicates = 0;
   let skipped = 0;
+  const unstableShapes: UnstableExternalIdShape[] = [];
 
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
+
+    // The `(userId, source, externalId)` upsert key is only idempotent
+    // while the id is STABLE across client launches. An id that rotates
+    // per process (an object description carrying a memory address)
+    // never matches its own earlier row, so every re-post mints another
+    // day log. Refused per entry — one bad row must not stop the rest of
+    // the batch landing.
+    const unstable =
+      entry.externalId === undefined
+        ? null
+        : classifyExternalId(entry.externalId);
+    if (unstable) {
+      unstableShapes.push(unstable);
+      skipped += 1;
+      results.push({
+        index: i,
+        status: "skipped",
+        reason: UNSTABLE_EXTERNAL_ID_REASON,
+        externalId: entry.externalId,
+      });
+      continue;
+    }
+
     try {
       const cycleId = owningCycleId(entry.date);
       const r = await upsertCycleDayLog(
@@ -206,6 +236,9 @@ async function postBulk(request: NextRequest): Promise<Response> {
       updated,
       duplicates,
       skipped,
+      ...(unstableShapes.length > 0
+        ? unstableExternalIdMeta("cycle.day_log.bulk", unstableShapes)
+        : {}),
     },
   });
 

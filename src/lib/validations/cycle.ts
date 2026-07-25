@@ -11,6 +11,7 @@
  */
 import { z } from "zod/v4";
 import { isPlausibleEntryInstant } from "@/lib/validations/entry-instant";
+import { assertStableExternalId } from "@/lib/validations/external-id";
 
 /**
  * v1.17 W1b — `loggedAt` instant on the cycle wire stays a string (the iOS
@@ -138,10 +139,27 @@ export const cycleDayLogInputSchema = z.object({
   note: z.string().max(500).optional(),
   loggedAt: boundedLoggedAt,
   source: cycleSourceEnum.optional().default("MANUAL"),
+  // Shared with the bulk ingest, which enforces external-id stability per
+  // entry rather than at the field (a schema-level refusal would fail the
+  // whole batch on one bad row). The single-entry POST parses through
+  // `cycleDayLogCreateSchema` below, which adds the field check.
+  // @external-id-checked-per-entry: src/app/api/cycle/day-logs/bulk/route.ts
   externalId: z.string().min(1).max(120).optional(),
 });
 
 export type CycleDayLogInput = z.infer<typeof cycleDayLogInputSchema>;
+
+/**
+ * Single-entry POST body. Same shape as the bulk entry plus the
+ * external-id stability floor: a rotating id defeats the
+ * `(userId, source, externalId)` upsert and mints a fresh day log on every
+ * re-post. The bulk path deliberately keeps the permissive entry schema —
+ * it reports the offending entry as `skipped` rather than failing the
+ * whole batch — and applies the same rule per entry in the route.
+ */
+export const cycleDayLogCreateSchema = cycleDayLogInputSchema.superRefine(
+  assertStableExternalId,
+);
 
 /** PATCH body — every field optional; `date`/`source`/`externalId` are immutable on update. */
 export const cycleDayLogPatchSchema = z.object({
@@ -180,12 +198,14 @@ export const cycleBulkSchema = z.object({
 
 /* ── period-boundary shortcut ────────────────────────────────────── */
 
-export const cyclePeriodSchema = z.object({
-  action: z.enum(["start", "end"]),
-  date: dateString,
-  externalId: z.string().min(1).max(120).optional(),
-  loggedAt: boundedLoggedAt,
-});
+export const cyclePeriodSchema = z
+  .object({
+    action: z.enum(["start", "end"]),
+    date: dateString,
+    externalId: z.string().min(1).max(120).optional(),
+    loggedAt: boundedLoggedAt,
+  })
+  .superRefine(assertStableExternalId);
 
 /* ── calendar + history queries ──────────────────────────────────── */
 

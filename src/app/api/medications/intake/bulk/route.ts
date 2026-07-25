@@ -75,6 +75,12 @@ import {
   injectionSiteEnum,
   type InjectionSiteValue,
 } from "@/lib/validations/medication";
+import {
+  classifyExternalId,
+  unstableExternalIdMeta,
+  UNSTABLE_EXTERNAL_ID_REASON,
+  type UnstableExternalIdShape,
+} from "@/lib/validations/external-id";
 import type { InjectionSiteKey } from "@/lib/medications/injection-sites";
 import { queueMedicationIntakeSync } from "@/lib/notifications/medication-intake-sync";
 import { dispatchMedicationIntakeWebClearBulk } from "@/lib/notifications/web-push-clear";
@@ -128,6 +134,10 @@ const bulkEntrySchema = z
     // v1.28 — the HealthKit `HKMedicationDoseEvent` UUID. Drives the
     // idempotent re-sync: an entry whose `(userId, externalId)` already
     // exists live reports `duplicate` (first-write-wins per Apple dose).
+    // Stability is enforced per entry in the loop below, not at the
+    // field: a schema-level refusal would fail the whole batch on one
+    // bad row.
+    // @external-id-checked-per-entry: src/app/api/medications/intake/bulk/route.ts
     externalId: z.string().trim().min(1).max(128).optional(),
   })
   .refine(
@@ -318,6 +328,7 @@ async function postBulk(request: NextRequest): Promise<Response> {
   let updated = 0;
   let duplicates = 0;
   const skipped: Array<{ index: number; reason: string }> = [];
+  const unstableShapes: UnstableExternalIdShape[] = [];
   // v1.4.39 W-MED — collect distinct `(medicationId, dayKey)` pairs
   // touched by the batch so one rollup recompute fires per pair after
   // all inserts complete. Per-row recompute would balloon a 500-entry
@@ -342,6 +353,27 @@ async function postBulk(request: NextRequest): Promise<Response> {
       const reason = "medication_not_found";
       skipped.push({ index: i, reason });
       results.push({ index: i, status: "skipped", reason });
+      continue;
+    }
+
+    // The `(userId, externalId)` dose-event dedup below is only
+    // idempotent while the id is STABLE across client launches. An id
+    // that rotates per process (an object description carrying a memory
+    // address) never matches its own earlier row, so every re-sync mints
+    // another intake event. Refused per entry — one bad row must not
+    // stop the rest of the batch landing.
+    const unstable =
+      entry.externalId === undefined
+        ? null
+        : classifyExternalId(entry.externalId);
+    if (unstable) {
+      unstableShapes.push(unstable);
+      skipped.push({ index: i, reason: UNSTABLE_EXTERNAL_ID_REASON });
+      results.push({
+        index: i,
+        status: "skipped",
+        reason: UNSTABLE_EXTERNAL_ID_REASON,
+      });
       continue;
     }
 
@@ -803,6 +835,9 @@ async function postBulk(request: NextRequest): Promise<Response> {
       updated,
       duplicates,
       skipped: skipped.length,
+      ...(unstableShapes.length > 0
+        ? unstableExternalIdMeta("medication.intake.bulk", unstableShapes)
+        : {}),
     },
   });
 

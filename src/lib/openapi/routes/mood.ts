@@ -221,7 +221,7 @@ const bulkMoodEntry = z
       .max(120)
       .optional()
       .describe(
-        "iOS-side source-stable id for idempotent dedup on the `(userId, source, externalId)` key.",
+        "iOS-side source-stable id for idempotent dedup on the `(userId, source, externalId)` key. Must be stable across app restarts — an object description or memory address (`<Class: 0x…>`, `0x12ab34cd`) is a new value on every launch; such an entry is `skipped` with reason `unstable_external_id` while the rest of the batch still lands.",
       ),
   })
   .meta({
