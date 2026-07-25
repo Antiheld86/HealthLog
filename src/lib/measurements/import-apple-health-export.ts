@@ -680,7 +680,10 @@ export async function streamParseExportXml(
           }
         }
         if (!selected) continue;
-        const [selectedSourceHash, selectedSubtotal] = selected;
+        // Only the subtotal is carried forward. The source hash stays an
+        // in-memory map key — it is what makes the max-subtotal selection
+        // above deterministic on a tie, and it is not persisted.
+        const [, selectedSubtotal] = selected;
         if (validateMeasurementRange(type, selectedSubtotal) !== null) {
           unknown[`${type}::aggregate_out_of_range`] =
             (unknown[`${type}::aggregate_out_of_range`] ?? 0) + 1;
@@ -704,8 +707,6 @@ export async function streamParseExportXml(
               sleepStage: null,
               deviceType: null,
               aggregationProvenance: "EXPORT_XML_SOURCE_MAX",
-              aggregationContributorCount: bySource.size,
-              aggregationSelectedSourceHash: selectedSourceHash,
             },
             { exactExternalMatch: "update" },
           ),

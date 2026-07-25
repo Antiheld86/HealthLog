@@ -601,8 +601,6 @@ describe("POST /api/measurements/batch (real Postgres)", () => {
       expect(stored[0]!.value).toBeCloseTo(5200, 5);
       expect(stored[0]).toMatchObject({
         aggregationProvenance: "HEALTHKIT_STATISTICS",
-        aggregationContributorCount: null,
-        aggregationSelectedSourceHash: null,
         syncVersion: 2,
       });
     });
@@ -1217,7 +1215,6 @@ describe("POST /api/measurements/batch (real Postgres)", () => {
       expect(estimated[0]).toMatchObject({
         value: 8_526,
         aggregationProvenance: "EXPORT_XML_SOURCE_MAX",
-        aggregationContributorCount: 2,
         syncVersion: 1,
       });
 
@@ -1235,8 +1232,6 @@ describe("POST /api/measurements/batch (real Postgres)", () => {
       expect(canonical[0]).toMatchObject({
         value: 8_600,
         aggregationProvenance: "HEALTHKIT_STATISTICS",
-        aggregationContributorCount: null,
-        aggregationSelectedSourceHash: null,
         syncVersion: 2,
       });
     });
@@ -1297,7 +1292,6 @@ describe("POST /api/measurements/batch (real Postgres)", () => {
       expect(rows[0]).toMatchObject({
         value: 8_526,
         aggregationProvenance: "EXPORT_XML_SOURCE_MAX",
-        aggregationContributorCount: 2,
         syncVersion: 2,
       });
     });

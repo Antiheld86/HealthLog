@@ -652,11 +652,7 @@ describe("streamParseExportXml — cumulative source-day estimates", () => {
     expect(prisma._measurements[0]).toMatchObject({
       value: 8_526,
       aggregationProvenance: "EXPORT_XML_SOURCE_MAX",
-      aggregationContributorCount: 2,
     });
-    expect(prisma._measurements[0]?.aggregationSelectedSourceHash).toMatch(
-      /^[a-f0-9]{64}$/,
-    );
     expect(result.cumulativeEstimates).toEqual({ days: 1, rows: 1 });
   });
 
@@ -675,7 +671,6 @@ describe("streamParseExportXml — cumulative source-day estimates", () => {
         type: mapping.measurementType,
         value: 30,
         aggregationProvenance: "EXPORT_XML_SOURCE_MAX",
-        aggregationContributorCount: 2,
       });
     },
   );
@@ -694,7 +689,6 @@ describe("streamParseExportXml — cumulative source-day estimates", () => {
       expect(prisma._measurements[0]).toMatchObject({
         type: mapping.measurementType,
         value: 50,
-        aggregationContributorCount: 1,
       });
     },
   );
@@ -712,7 +706,6 @@ describe("streamParseExportXml — cumulative source-day estimates", () => {
     expect(prisma._measurements).toHaveLength(1);
     expect(prisma._measurements[0]).toMatchObject({
       value: 100,
-      aggregationContributorCount: 1,
     });
   });
 
@@ -1171,7 +1164,6 @@ describe("streamParseExportXml — memory ceiling", () => {
     expect(prisma._measurements).toHaveLength(1);
     expect(prisma._measurements[0]).toMatchObject({
       value: 10_000,
-      aggregationContributorCount: 1,
     });
 
     // Heap delta should be modest — we tolerate a generous 100 MB so a

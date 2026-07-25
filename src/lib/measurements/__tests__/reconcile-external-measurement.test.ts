@@ -40,8 +40,6 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     externalId: "sleep:new",
     externalSourceVersion: null,
     aggregationProvenance: null,
-    aggregationContributorCount: null,
-    aggregationSelectedSourceHash: null,
     glucoseContext: null,
     sleepStage: "DEEP",
     rhythmClassification: null,
@@ -224,8 +222,6 @@ describe("reconcileExternalMeasurement", () => {
       sleepStage: null,
       externalId: "stats:HKQuantityTypeIdentifierStepCount:2026-07-20",
       aggregationProvenance: "HEALTHKIT_STATISTICS",
-      aggregationContributorCount: null,
-      aggregationSelectedSourceHash: null,
     });
     const { tx, measurement } = transaction([native]);
 
@@ -240,8 +236,6 @@ describe("reconcileExternalMeasurement", () => {
         sleepStage: null,
         externalId: "stats:HKQuantityTypeIdentifierStepCount:2026-07-20",
         aggregationProvenance: "EXPORT_XML_SOURCE_MAX",
-        aggregationContributorCount: 2,
-        aggregationSelectedSourceHash: "source-hash",
       }),
       { exactExternalMatch: "update" },
     );
@@ -350,8 +344,6 @@ describe("reconcileExternalMeasurement", () => {
         sleepStage: null,
         externalId: "stats:HKQuantityTypeIdentifierStepCount:2026-07-20",
         aggregationProvenance: "HEALTHKIT_STATISTICS",
-        aggregationContributorCount: null,
-        aggregationSelectedSourceHash: null,
       }),
       { exactExternalMatch: "update" },
     );
@@ -366,8 +358,6 @@ describe("reconcileExternalMeasurement", () => {
         data: expect.objectContaining({
           value: 8_600,
           aggregationProvenance: "HEALTHKIT_STATISTICS",
-          aggregationContributorCount: null,
-          aggregationSelectedSourceHash: null,
           syncVersion: { increment: 1 },
         }),
       }),
