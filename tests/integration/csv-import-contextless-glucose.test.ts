@@ -189,10 +189,11 @@ describe("measurements.glucose_context — surviving CHECK half", () => {
 
   it("accepts the contextless shape the device writers build", async () => {
     await signIn();
-    // The Nightscout SGV upsert and the MCP / Telegram single-value capture
-    // both build a BLOOD_GLUCOSE row with no context. Under the old
-    // constraint every one of those inserts was refused by the database.
-    const sources = ["NIGHTSCOUT", "MCP", "TELEGRAM"] as const;
+    // The Nightscout SGV upsert, the HealthKit batch mapping, and the MCP /
+    // Telegram single-value captures all build a BLOOD_GLUCOSE row with no
+    // context. Under the old constraint every one of those inserts was
+    // refused by the database.
+    const sources = ["NIGHTSCOUT", "APPLE_HEALTH", "MCP", "TELEGRAM"] as const;
     for (const [index, source] of sources.entries()) {
       await getPrismaClient().measurement.create({
         data: {
@@ -209,7 +210,7 @@ describe("measurements.glucose_context — surviving CHECK half", () => {
     const rows = await getPrismaClient().measurement.findMany({
       where: { userId: USER, type: "BLOOD_GLUCOSE" },
     });
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(sources.length);
     expect(rows.every((row) => row.glucoseContext === null)).toBe(true);
   });
 });
