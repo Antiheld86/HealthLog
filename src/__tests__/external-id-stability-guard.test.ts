@@ -45,6 +45,19 @@ function read(rel: string): string {
 }
 
 /**
+ * The file with its `import … from "…";` statements removed.
+ *
+ * A guard that greps the raw source cannot tell "this file APPLIES the
+ * check" from "this file merely imports it" — deleting the call while
+ * leaving the import would slip straight through. Every usage assertion
+ * below therefore runs against the body, and the module import is
+ * asserted separately where it matters.
+ */
+function body(rel: string): string {
+  return read(rel).replace(/import\s+[\s\S]*?from\s+"[^"]+";/g, "");
+}
+
+/**
  * A REQUEST-side declaration of a client-supplied external identifier:
  * `externalId: z.…` / `externalSourceId: z.…` in a Zod object shape.
  *
@@ -106,11 +119,10 @@ describe("every client-supplied external id routes through the stability floor",
         return;
       }
 
-      const source = read(rel);
       const usesFieldCheck =
-        source.includes(VALIDATOR_MODULE) &&
-        source.includes("assertStableExternalId");
-      const marksPerEntry = MARKER.test(source);
+        read(rel).includes(VALIDATOR_MODULE) &&
+        body(rel).includes("assertStableExternalId");
+      const marksPerEntry = MARKER.test(read(rel));
       expect(
         usesFieldCheck || marksPerEntry,
         `${rel} declares a client-supplied external id but neither applies ` +
@@ -134,7 +146,7 @@ describe("every client-supplied external id routes through the stability floor",
           target.startsWith("src/"),
           `${rel}: marker target "${target}" must be a repo-root-relative src/ path`,
         ).toBe(true);
-        const checker = read(target.replace(/^src\//, ""));
+        const checker = body(target.replace(/^src\//, ""));
         expect(
           checker.includes("classifyExternalId"),
           `${rel} points its per-entry marker at ${target}, but that file never calls classifyExternalId.`,
@@ -158,7 +170,7 @@ describe("the batch surfaces refuse per entry, never whole-batch", () => {
   ];
 
   it.each(BATCH_ROUTES)("%s classifies each entry itself", (rel) => {
-    const source = read(rel);
+    const source = body(rel);
     expect(source).toContain("classifyExternalId");
     expect(source).toContain("unstableExternalIdMeta");
   });
@@ -168,7 +180,7 @@ describe("the batch surfaces refuse per entry, never whole-batch", () => {
     (rel) => {
       // The JSON importer has no per-entry status envelope — it reports a
       // skipped COUNT — so it is the one batch surface without the code.
-      expect(read(rel)).toContain("UNSTABLE_EXTERNAL_ID_REASON");
+      expect(body(rel)).toContain("UNSTABLE_EXTERNAL_ID_REASON");
     },
   );
 });
