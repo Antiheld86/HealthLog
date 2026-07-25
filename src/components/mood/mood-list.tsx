@@ -72,7 +72,7 @@ import {
   queryKeys,
   refetchInactiveDailyReads,
 } from "@/lib/query-keys";
-import { moodSourceEnum } from "@/lib/validations/moodlog";
+import { moodSourceEnum } from "@/lib/validations/mood";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   SortableHead,

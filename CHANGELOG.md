@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+## [1.32.33] — 2026-07-25
+
+The moodLog integration is gone. It bridged mood entries to and from a separate
+self-hosted mood app back when HealthLog had no real mood module of its own.
+That stopped being true a long time ago: mood is tracked natively here now,
+with tags, rated factors and notes, and the bridge had nothing left to add. Its
+settings card was withdrawn a while back and the rest of it kept running in
+the background against an upstream nobody was pointing at any more. This
+finishes the job properly.
+
+- **Your mood entries are untouched.** Every entry stays exactly where it is,
+  including the ones that originally arrived through moodLog. They keep their
+  source label, they still show up in the mood list, the filters, the charts,
+  the correlations and the doctor report. Nothing was deleted and nothing was
+  relabelled. Removing the pipe does not remove what came through it.
+- **What was removed.** The hourly pull, the inbound webhook, the outbound
+  push, the per-account credentials and webhook secret, the admin toggle, the
+  entry on the integrations status feed, and the message strings behind the old
+  card. Migration `0271_drop_moodlog_integration` drops the six columns those
+  surfaces used and clears the retired sync schedule. It names no mood table.
+- **One less admin switch that did more than it said.** The instance-wide
+  toggle was described as controlling mood-log reminders. It actually shut off
+  the whole integration, quietly, with no other visible effect. It is gone
+  along with the thing it gated.
+
+If you were still relying on the bridge, export your mood data from the other
+app and import it once; the entries land in the same place they always did.
+
 ## [1.32.31] — 2026-07-25
 
 The integrations page could tell you a connection was failing. It could not

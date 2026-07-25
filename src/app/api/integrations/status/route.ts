@@ -5,13 +5,12 @@
  *   - the IntegrationStatus row (state, last-success, last-attempt,
  *     decrypted last-error, per-kind failure buckets, threshold)
  *   - integration-specific extras the UI already shows (Withings:
- *     credentials configured, token expiry, OAuth-connected; moodLog:
- *     credentials configured, enabled flag)
+ *     credentials configured, token expiry, OAuth-connected)
  *
  * This is the single fetch the Settings → Integrations cards read off
- * — it carries every field the four cards render (Withings activity
- * scope, WHOOP/Fitbit backfill state, moodLog webhook secret + entry
- * count) so the per-card /api/<provider>/status round-trips are gone
+ * — it carries every field the cards render (Withings activity scope,
+ * WHOOP/Fitbit backfill state) so the per-card /api/<provider>/status
+ * round-trips are gone
  * from the web. The legacy per-provider routes stay for the iOS/test
  * callers; the web cards no longer hit them.
  */
@@ -39,7 +38,6 @@ import { getOuraClientCredentials } from "@/lib/oura/credentials";
 import { getPolarClientCredentials } from "@/lib/polar/credentials";
 import { getStravaClientCredentials } from "@/lib/strava/credentials";
 import { hasActivityScope } from "@/lib/withings/client";
-import { readMoodLogSecret } from "@/lib/moodlog-secret";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +47,6 @@ export const GET = apiHandler(async () => {
 
   const [
     withingsStatus,
-    moodLogStatus,
     whoopStatus,
     fitbitStatus,
     googleHealthStatus,
@@ -62,7 +59,6 @@ export const GET = apiHandler(async () => {
     whoopConn,
     fitbitConn,
     googleHealthConn,
-    moodLogEntryCount,
     // v1.17.1 — `available` reports whether usable OAuth credentials resolve
     // (per-user BYO first, then the shared env app), mirroring the per-card
     // /api/<provider>/status the consolidated envelope now replaces.
@@ -71,7 +67,6 @@ export const GET = apiHandler(async () => {
     stravaAvailable,
   ] = await Promise.all([
     getIntegrationStatus(user.id, "withings"),
-    getIntegrationStatus(user.id, "moodlog"),
     getIntegrationStatus(user.id, "whoop"),
     getIntegrationStatus(user.id, "fitbit"),
     getIntegrationStatus(user.id, "google-health"),
@@ -99,11 +94,6 @@ export const GET = apiHandler(async () => {
         stravaAccessTokenEncrypted: true,
         stravaClientIdEncrypted: true,
         stravaClientSecretEncrypted: true,
-        moodLogUrlEncrypted: true,
-        moodLogApiKeyEncrypted: true,
-        moodLogEnabled: true,
-        moodLogLastSyncedAt: true,
-        moodLogWebhookSecret: true,
         // Nightscout folds onto the envelope; the card reads these three off
         // it instead of its own /api/nightscout/status round-trip.
         nightscoutUrlEncrypted: true,
@@ -148,10 +138,6 @@ export const GET = apiHandler(async () => {
         backfillCompletedAt: true,
         needsReauth: true,
       },
-    }),
-    // v1.7.0 sync — exclude tombstoned rows from the entry count.
-    prisma.moodEntry.count({
-      where: { userId: user.id, deletedAt: null },
     }),
     getPolarClientCredentials(user.id).then((c) => !!c),
     getOuraClientCredentials(user.id).then((c) => !!c),
@@ -214,9 +200,6 @@ export const GET = apiHandler(async () => {
     !!dbUser?.withingsClientSecretEncrypted;
   const withingsLegacyLastSyncedAt =
     withingsConn?.lastSyncedAt?.toISOString() ?? null;
-  const moodLogConfigured = !!dbUser?.moodLogUrlEncrypted;
-  const moodLogLegacyLastSyncedAt =
-    dbUser?.moodLogLastSyncedAt?.toISOString() ?? null;
   const whoopConfigured =
     !!dbUser?.whoopClientIdEncrypted && !!dbUser?.whoopClientSecretEncrypted;
   const whoopLegacyLastSyncedAt = whoopConnected
@@ -265,25 +248,6 @@ export const GET = apiHandler(async () => {
           legacyLastSyncedAt: withingsLegacyLastSyncedAt,
         }),
       } satisfies IntegrationViewModel & WithingsExtras,
-      {
-        ...moodLogStatus,
-        // moodLog "configured" tracks the URL alone (the API key is
-        // optional for the webhook-only path), matching the legacy
-        // /api/integrations/moodlog/status contract the card relied on.
-        configured: moodLogConfigured,
-        enabled: dbUser?.moodLogEnabled ?? false,
-        legacyLastSyncedAt: moodLogLegacyLastSyncedAt,
-        // V3 audit STILL-V2-C-2: stored secret is AES-GCM encrypted at rest;
-        // decrypt for the settings page (legacy plaintext is also handled).
-        webhookSecret: readMoodLogSecret(dbUser?.moodLogWebhookSecret ?? null),
-        entryCount: moodLogEntryCount,
-        // moodLog has no connection row — `configured` alone decides whether it
-        // is meant to be running, so the verdict gets no `connected` hint.
-        ...resolve("moodlog", moodLogStatus, {
-          configured: moodLogConfigured,
-          legacyLastSyncedAt: moodLogLegacyLastSyncedAt,
-        }),
-      } satisfies IntegrationViewModel & MoodLogExtras,
       {
         ...whoopStatus,
         configured: whoopConfigured,
@@ -425,8 +389,7 @@ interface IntegrationViewModel {
   syncHealth: SyncHealth;
   /**
    * Per-metric-type last-value timestamps for the integration's synced data,
-   * each with the server-computed `stale` flag. Empty for moodLog (which
-   * writes MoodEntry rows, not Measurements). Lets the card flag a silently
+   * each with the server-computed `stale` flag. Lets the card flag a silently
    * dead metric the green integration state hides.
    */
   metricFreshness: MetricFreshnessEntry[];
@@ -441,14 +404,6 @@ interface WithingsExtras {
   tokenExpired: boolean | null;
   scope: string | null;
   hasActivityScope: boolean;
-}
-
-interface MoodLogExtras {
-  configured: boolean;
-  enabled: boolean;
-  legacyLastSyncedAt: string | null;
-  webhookSecret: string | null;
-  entryCount: number;
 }
 
 interface WhoopExtras {

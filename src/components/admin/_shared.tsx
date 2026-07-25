@@ -90,7 +90,6 @@ export interface AdminSettings {
   reminderMissedMinutes: number;
   // v1.4.25 W7 — null means "fall back to Europe/Berlin in the resolver".
   defaultUserTimezone: string | null;
-  moodLogGlobal?: boolean;
   // Document vault — the two admin-tunable limits (bytes on the wire; the
   // UI edits them as MB / GB). The per-file cap clamps to the hard 100 MiB
   // ceiling server-side.

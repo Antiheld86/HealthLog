@@ -66,7 +66,6 @@ export const adminSettingsSchema = z
     glitchtipEnvironment: z.string().optional(),
     reminderLateMinutes: z.number().int().min(15).max(480).optional(),
     reminderMissedMinutes: z.number().int().min(30).max(720).optional(),
-    moodLogGlobal: z.boolean().optional(),
     // Document vault — the two admin-tunable limits. The per-file cap is
     // bounded by the hard 100 MiB ceiling (single-shot GCM + bounded
     // in-memory reads are load-bearing past that; the runtime resolver

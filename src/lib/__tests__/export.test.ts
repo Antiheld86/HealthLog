@@ -50,8 +50,8 @@ describe("toCSV", () => {
 
   // Spreadsheet formula injection (OWASP CSV injection): text cells
   // starting with a formula trigger are neutralised with a leading `'`.
-  // Third-party text reaches these cells (mood notes via the moodLog
-  // webhook), so a crafted payload must open as literal text.
+  // Third-party text reaches these cells (notes carried in on an import),
+  // so a crafted payload must open as literal text.
   it("neutralises formula prefixes in text cells", () => {
     const records = [
       { note: '=HYPERLINK("http://evil","x")' },

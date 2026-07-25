@@ -2,7 +2,7 @@
  * Reminder-worker boot lifecycle helpers.
  *
  * These run once per worker process around the queue/schedule/handler wiring
- * in `reminder-worker.ts`: a graceful-shutdown signal binding plus three
+ * in `reminder-worker.ts`: a graceful-shutdown signal binding plus two
  * fire-and-forget boot maintenance passes. None of them touch the pg-boss
  * queue declarations, the `allQueues` array, the `schedules` table, or the
  * `boss.work` bindings — those stay co-located in `reminder-worker.ts` so the
@@ -11,7 +11,6 @@
 import type { PgBoss } from "pg-boss";
 
 import { reconcileOrphanImportJobs } from "@/lib/jobs/apple-health-import-worker";
-import { rotateLegacyMoodLogSecrets } from "@/lib/moodlog-secret";
 import { probeIntegrationStatusNullBuckets } from "@/lib/jobs/integration-status-null-probe";
 import { withBackgroundEvent } from "@/lib/logging/background";
 
@@ -41,39 +40,6 @@ export function registerShutdownHandlers(boss: PgBoss): void {
   };
   process.once("SIGTERM", () => void onSignal("SIGTERM"));
   process.once("SIGINT", () => void onSignal("SIGINT"));
-}
-
-/**
- * V3 audit STILL-V2-C-2: encrypt-at-rest one-shot migration. Rotates any rows
- * that still hold a plaintext mood_log_webhook_secret to the AES-256-GCM
- * envelope. Idempotent — encrypted rows are skipped. Never throws; a failure
- * is logged and boot continues.
- */
-export async function rotateLegacyMoodLogSecretsAtBoot(): Promise<void> {
-  try {
-    const p = getWorkerPrisma();
-    const rotated = await rotateLegacyMoodLogSecrets({
-      findLegacy: () =>
-        p.user.findMany({
-          where: { moodLogWebhookSecret: { not: null } },
-          select: { id: true, moodLogWebhookSecret: true },
-        }),
-      rotate: async (id, encryptedSecret) => {
-        await p.user.update({
-          where: { id },
-          data: { moodLogWebhookSecret: encryptedSecret },
-        });
-      },
-    });
-    if (rotated > 0) {
-      workerLog(
-        "error",
-        `moodlog-secret-migration: rotated ${rotated} legacy plaintext secret(s)`,
-      );
-    }
-  } catch (err) {
-    workerLog("error", `moodlog-secret-migration failed: ${err}`);
-  }
 }
 
 /**

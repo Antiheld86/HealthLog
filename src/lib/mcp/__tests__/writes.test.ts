@@ -29,10 +29,6 @@ vi.mock("@/lib/rollups/mood-rollups", () => ({
   recomputeMoodBucketsForEntry: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("@/lib/moodlog/push", () => ({
-  pushMoodEntriesToMoodLog: vi.fn().mockResolvedValue(undefined),
-}));
-
 const auditLog = vi.fn().mockResolvedValue(undefined);
 vi.mock("@/lib/auth/audit", () => ({
   auditLog: (...args: unknown[]) => auditLog(...args),

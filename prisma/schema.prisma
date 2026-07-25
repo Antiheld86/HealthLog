@@ -233,13 +233,6 @@ model User {
   // predicate `strava_backfill_completed_at IS NULL`), mirroring WHOOP/Fitbit.
   stravaBackfillCompletedAt   DateTime? @map("strava_backfill_completed_at")
 
-  // moodLog integration (per-user, encrypted)
-  moodLogUrlEncrypted    String?   @map("mood_log_url_encrypted")
-  moodLogApiKeyEncrypted String?   @map("mood_log_api_key_encrypted")
-  moodLogEnabled         Boolean   @default(false) @map("mood_log_enabled")
-  moodLogLastSyncedAt    DateTime? @map("mood_log_last_synced_at")
-  moodLogWebhookSecret   String?   @map("mood_log_webhook_secret")
-
   // Locale (null = use system/admin default)
   locale String? @map("locale") // "de" | "en" | null
 
@@ -3755,7 +3748,7 @@ model GoogleHealthOAuthState {
   @@map("google_health_oauth_states")
 }
 
-// ─── Mood Entries (moodLog) ───────────────────────────────────
+// ─── Mood Entries ─────────────────────────────────────────────
 
 model MoodEntry {
   id            String    @id @default(cuid())
@@ -3781,11 +3774,15 @@ model MoodEntry {
   /// IllnessDayLog / CycleDayLog / LabResult note convention). Registered in
   /// ENCRYPTED_COLUMNS + the rotation script.
   noteEncrypted Bytes?    @map("note_encrypted")
-  source        String    @default("MOODLOG") // WEB, TELEGRAM, DAYLIO
+  // Provenance. MANUAL / WEB / TELEGRAM / DAYLIO / MCP, plus the legacy
+  // MOODLOG value carried by rows the retired moodLog bridge imported —
+  // those rows are user history and keep their label. The column default
+  // is legacy too; every writer sets `source` explicitly.
+  source        String    @default("MOODLOG")
   // v1.12.1 — stable per-source dedup id. NULL for native / MANUAL
   // entries (those dedup on the legacy `(userId, date, moodLoggedAt)`
-  // key). When an importer receives a source-stable id (the moodLog
-  // upstream entry id, a Daylio row id) it writes it here and upserts on
+  // key). When an importer receives a source-stable id (an iOS row
+  // UUID, a Daylio row id) it writes it here and upserts on
   // `@@unique([userId, source, externalId])`, so a re-import is
   // idempotent even when `moodLoggedAt` re-rounds / re-zones. Postgres
   // treats NULLs as distinct in that unique, so MANUAL rows never
@@ -3859,7 +3856,7 @@ model MoodEntry {
 //
 // Backward-compat: this is purely ADDITIVE. The legacy flat
 // `MoodEntry.tags` (a JSON string array of free-text keys) keeps working
-// unchanged — the GLP-1 quick-tag chips, the Telegram/MoodLog sync, and
+// unchanged — the GLP-1 quick-tag chips, the Telegram capture, and
 // every existing row stay on the flat axis. The structured taxonomy is a
 // second, richer capture surface that the tag-frequency / lift breakdown
 // folds in next to the flat tags (`mood-aggregates.ts`).
@@ -4095,12 +4092,12 @@ model MedicationComplianceRollup {
 // (the sync entry-points consult this row before doing any external
 // work).
 //
-// `integration` values are bare strings ("withings", "moodlog") rather
+// `integration` values are bare strings ("withings", "whoop") rather
 // than an enum so future integrations don't require a migration.
 model IntegrationStatus {
   id                         String    @id @default(cuid())
   userId                     String    @map("user_id")
-  integration                String // "withings" | "moodlog"
+  integration                String // "withings" | "whoop" | "fitbit" | …
   state                      String    @default("connected") // "connected" | "error_reauth" | "error_transient" | "disconnected" | "parked"
   lastSuccessAt              DateTime? @map("last_success_at")
   lastAttemptAt              DateTime? @map("last_attempt_at")
@@ -4143,7 +4140,6 @@ model AppSettings {
   webPushVapidPrivateKeyEncrypted String? @map("web_push_vapid_private_key_encrypted")
   webPushVapidSubject             String? @map("web_push_vapid_subject")
   apiGlobal                       Boolean @default(true) @map("api_global") // global toggle
-  moodLogGlobal                   Boolean @default(true) @map("mood_log_global")
   umamiEnabled                    Boolean @default(false) @map("umami_enabled")
   umamiScriptUrl                  String? @map("umami_script_url")
   umamiWebsiteId                  String? @map("umami_website_id")

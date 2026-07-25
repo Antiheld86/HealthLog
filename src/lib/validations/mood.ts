@@ -1,70 +1,13 @@
-import { z } from "zod/v4";
-import { isPublicUrl } from "@/lib/validations/notifications";
-import { validateEntryInstant } from "@/lib/validations/entry-instant";
-
 /**
- * @deprecated The standalone moodLog integration is superseded by native
- * mood entries plus structured tags and rated factors — mood is tracked
- * fully inside HealthLog now. These schemas remain only to keep the
- * existing webhook + sync paths functional; the surface is slated for
- * removal in a future major release. The native mood schemas
- * (`createMoodEntrySchema` etc.) below are the supported path.
+ * Mood-entry validation schemas.
+ *
+ * v1.32.33 — the file previously also carried the credential, webhook and
+ * pull-response schemas of the retired moodLog bridge. Mood is tracked
+ * natively, so only the entry schemas remain and the module is named for
+ * what it validates.
  */
-export const moodLogCredentialsSchema = z.object({
-  url: z
-    .string()
-    .url()
-    .max(500)
-    // SSRF guard: stored URL must point at a public host. The sync
-    // worker fetches from this URL with the user's apiKey in the
-    // Authorization header, so a stored RFC1918 / link-local target
-    // would let any user pull cloud-metadata or local-network data
-    // back through their account.
-    .refine((u) => isPublicUrl(u), {
-      message: "URL must point at a public host (no RFC1918 / link-local)",
-    }),
-  apiKey: z.string().min(1).max(200),
-});
-
-export const moodLogWebhookPayloadSchema = z.object({
-  event: z.enum(["mood.created", "mood.updated", "mood.deleted"]),
-  timestamp: z.string().datetime(),
-  entry: z.object({
-    // v1.12.1 — optional source-stable entry id. When present, the
-    // webhook dedups on `(userId, source, externalId)` so a re-emit with
-    // a re-rounded / re-zoned `time` is idempotent instead of minting a
-    // second row. Absent → the legacy `(userId, date, moodLoggedAt)`
-    // path. Bounded so a malformed upstream id can't bloat the column.
-    id: z.string().min(1).max(120).optional(),
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    time: z.string().datetime(),
-    mood: z.enum(["SUPER_GUT", "GUT", "OKAY", "SCHLECHT", "LAUSIG"]),
-    score: z.number().int().min(1).max(5),
-    tags: z.array(z.string()).max(50).optional(),
-    loggedVia: z.enum(["WEB", "TELEGRAM", "DAYLIO"]).optional(),
-  }),
-});
-
-export const moodLogSyncResponseSchema = z.object({
-  version: z.string(),
-  entries: z.array(
-    z.object({
-      // v1.12.1 — optional source-stable id, mirrors the webhook entry.
-      // Carried into `externalId` for idempotent re-import.
-      id: z.string().min(1).max(120).optional(),
-      date: z.string(),
-      time: z.string(),
-      mood: z.string(),
-      score: z.number(),
-      tags: z.array(z.string()).optional(),
-      loggedVia: z.string().optional(),
-    }),
-  ),
-});
-
-export type MoodLogCredentials = z.infer<typeof moodLogCredentialsSchema>;
-export type MoodLogWebhookPayload = z.infer<typeof moodLogWebhookPayloadSchema>;
-export type MoodLogSyncResponse = z.infer<typeof moodLogSyncResponseSchema>;
+import { z } from "zod/v4";
+import { validateEntryInstant } from "@/lib/validations/entry-instant";
 
 // --- CRUD schemas for mood entries ---
 
@@ -76,6 +19,12 @@ export const moodLevelEnum = z.enum([
   "LAUSIG",
 ]);
 
+/**
+ * Provenance of a stored mood entry. `MOODLOG` is a legacy value: the bridge
+ * that wrote it was removed in v1.32.33, but rows it created are the user's
+ * own history and keep their label, so the list filter and the source badge
+ * must keep resolving it. Nothing mints new `MOODLOG` rows.
+ */
 export const moodSourceEnum = z.enum([
   "MANUAL",
   "MOODLOG",

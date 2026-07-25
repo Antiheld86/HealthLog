@@ -35,7 +35,7 @@
  *    counting it as good control.
  *
  * 3. **No fallback when timestamps don't pair (v1.4.15 fix).** Withings
- *    imports and moodLog.app imports each write sys + dia as separate
+ *    imports each write sys + dia as separate
  *    Measurement rows that ought to share a `measuredAt` to the second
  *    — but rounding through different timezones can drift them by
  *    minutes. The 5-minute window was tight; data imported with

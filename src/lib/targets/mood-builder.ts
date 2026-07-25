@@ -113,7 +113,7 @@ export function buildMoodTargets({
               ? { category: "Moderate", color: "var(--dracula-yellow)" }
               : { category: "Low", color: "var(--destructive)" }
           : null,
-      source: "moodLog",
+      source: "Mood entries",
       ...consistency,
     },
   ];
@@ -137,7 +137,7 @@ export function buildMoodTargets({
           : standardDeviation <= 1
             ? { category: "Stable", color: "var(--dracula-yellow)" }
             : { category: "Fluctuating", color: "var(--destructive)" },
-      source: "moodLog",
+      source: "Mood entries",
       ...consistency,
     });
   }

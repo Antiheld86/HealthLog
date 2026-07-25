@@ -324,7 +324,7 @@ The 1.4 release splits the legacy 3150-LOC settings monolith into one
 route per top-level section:
 
 - `/settings/account` — profile, password, passkeys, account deletion.
-- `/settings/integrations` — Withings, moodLog, Telegram, ntfy, Web Push.
+- `/settings/integrations` — Withings, Nightscout, Telegram, ntfy, Web Push.
 - `/settings/notifications` — channel matrix + quiet hours + reminders.
 - `/settings/dashboard` — tile layout editor, default ranges, threshold
   overrides.
@@ -426,7 +426,7 @@ control. Behavior:
 - **History**: each test writes a row to a tiny per-integration log
   visible in the section. Last 5 tests, timestamp + result.
 - **Coverage**: required for Telegram, ntfy, Web Push, AI provider,
-  Withings, moodLog, GlitchTip, Umami, email (when wired), backup
+  Withings, Nightscout, GlitchTip, Umami, email (when wired), backup
   target. Headless E2E asserts presence + working call for each.
 
 ### 4.6 Server actions and mutations

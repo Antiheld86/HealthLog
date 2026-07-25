@@ -50,7 +50,6 @@ export const GET = apiHandler(async () => {
     glitchtipEnvironment: settings?.glitchtipEnvironment ?? "production",
     reminderLateMinutes: settings?.reminderLateMinutes ?? 120,
     reminderMissedMinutes: settings?.reminderMissedMinutes ?? 240,
-    moodLogGlobal: settings?.moodLogGlobal ?? true,
     // Document vault limits (per-file cap + per-user quota default). BigInt
     // column → Number for the JSON envelope (values are far below 2^53).
     documentMaxFileBytes: settings?.documentMaxFileBytes ?? 26_214_400,
@@ -94,7 +93,6 @@ export const PUT = apiHandler(async (request: NextRequest) => {
     "apiGlobal",
     "umamiEnabled",
     "glitchtipEnabled",
-    "moodLogGlobal",
   ] as const;
   for (const field of booleanFields) {
     if (data[field] !== undefined) {
@@ -257,7 +255,6 @@ export const PUT = apiHandler(async (request: NextRequest) => {
     glitchtipEnvironment: settings.glitchtipEnvironment ?? "production",
     reminderLateMinutes: settings.reminderLateMinutes,
     reminderMissedMinutes: settings.reminderMissedMinutes,
-    moodLogGlobal: settings.moodLogGlobal,
     documentMaxFileBytes: settings.documentMaxFileBytes,
     documentQuotaBytes: Number(settings.documentQuotaBytes),
     defaultUserTimezone: settings.defaultUserTimezone,

@@ -223,9 +223,9 @@ describe("recordSyncFailure — at threshold", () => {
     } as never);
     await recordSyncFailure({
       userId: "u1",
-      integration: "moodlog",
+      integration: "nightscout",
       kind: "transient",
-      message: "moodLog sync HTTP 502",
+      message: "Nightscout sync HTTP 502",
     });
     expect(dispatchNotification).not.toHaveBeenCalled();
   });
@@ -479,7 +479,7 @@ describe("markReauthRequired / markDisconnected / markReconnected", () => {
     vi.mocked(prisma.integrationStatus.upsert).mockResolvedValueOnce(
       {} as never,
     );
-    await markDisconnected("u1", "moodlog");
+    await markDisconnected("u1", "nightscout");
     const args = vi.mocked(prisma.integrationStatus.upsert).mock.calls[0][0];
     expect(args.update).toEqual({
       state: "disconnected",

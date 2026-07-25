@@ -48,7 +48,6 @@ const appSettings = {
   webPushVapidPrivateKeyEncrypted: "encrypted-private-key",
   webPushVapidSubject: "mailto:ops@example.test",
   apiGlobal: false,
-  moodLogGlobal: false,
   umamiEnabled: true,
   umamiScriptUrl: "https://analytics.example.test/script.js",
   umamiWebsiteId: "website-id",

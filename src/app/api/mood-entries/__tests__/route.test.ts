@@ -66,9 +66,6 @@ vi.mock("@/lib/cache/invalidate", () => ({
 vi.mock("@/lib/rollups/mood-rollups", () => ({
   recomputeMoodBucketsForEntry: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@/lib/moodlog/push", () => ({
-  pushMoodEntriesToMoodLog: vi.fn().mockResolvedValue(undefined),
-}));
 vi.mock("@/lib/logging/transports", () => ({ emitIfSampled: vi.fn() }));
 vi.mock("@/lib/db-compat", () => ({
   ensureDbCompatibility: vi.fn().mockResolvedValue(undefined),
@@ -87,7 +84,6 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { createTagLinks } from "@/lib/mood/tag-links";
 import { recomputeMoodBucketsForEntry } from "@/lib/rollups/mood-rollups";
-import { pushMoodEntriesToMoodLog } from "@/lib/moodlog/push";
 import { Prisma } from "@/generated/prisma/client";
 
 const SESSION_OK = {
@@ -117,14 +113,9 @@ beforeEach(() => {
   );
   txClient.moodEntryTagLink.findMany.mockResolvedValue([]);
   vi.mocked(createTagLinks).mockResolvedValue(undefined);
-  // `reset` blanks the post-commit best-effort mocks; restore the promise
-  // returns so `recompute(...)` awaits and `push(...).catch()` is callable.
+  // `reset` blanks the post-commit best-effort mock; restore the promise
+  // return so `recompute(...)` awaits.
   vi.mocked(recomputeMoodBucketsForEntry).mockResolvedValue(undefined);
-  vi.mocked(pushMoodEntriesToMoodLog).mockResolvedValue({
-    pushed: 0,
-    skipped: 0,
-    status: "ok",
-  });
 });
 
 describe("GET /api/mood-entries — 422 multi-issue (v1.4.43 W6)", () => {

@@ -645,7 +645,7 @@ describe("GET /api/insights/targets — mood-rollup tier swap", () => {
               category: "Good",
               color: "var(--success)",
             },
-            source: "moodLog",
+            source: "Mood entries",
             ...fiveDaysInRange,
           },
           {
@@ -660,7 +660,7 @@ describe("GET /api/insights/targets — mood-rollup tier swap", () => {
               category: "Very stable",
               color: "var(--success)",
             },
-            source: "moodLog",
+            source: "Mood entries",
             ...fiveDaysInRange,
           },
           {

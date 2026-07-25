@@ -51,7 +51,7 @@ export const GEO_BACKFILL_WINDOW_DAYS = 30;
 /**
  * v1.4.37 — pg-boss queue name + cron expression for the recurring
  * backfill. Offset to :40 every hour so the schedule does not collide
- * with the existing :00 / :15 / :30 Withings + moodlog crons that
+ * with the existing :00 / :15 / :30 Withings crons that
  * already crowd the top of the hour. The helper is idempotent + the
  * batch cap is per-call, so an hourly cadence is the right balance
  * between freshness of the admin sign-in "Standort" column and the

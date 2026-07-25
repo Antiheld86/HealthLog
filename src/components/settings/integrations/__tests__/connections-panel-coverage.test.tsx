@@ -11,6 +11,10 @@
  * This is the acceptance test in executable form: render the panel with an
  * envelope carrying every integration key, and require that each configured
  * one surfaces either as a bespoke card or as a fallback row.
+ *
+ * That provider was retired in v1.32.33, so the card-less case no longer has a
+ * live instance. It keeps a synthetic one — the fallback row has to be proven
+ * working before the next card is dropped, not after.
  */
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -48,22 +52,35 @@ import { INTEGRATION_DISPLAY_NAMES } from "../integration-fallback-row";
 
 const MONTH_AGO = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString();
 
+/**
+ * A provider the server ships on the envelope that no card on the panel
+ * claims. Every provider currently has a card, so the card-less case has to be
+ * constructed — which is the point: the row must keep working before the next
+ * card is dropped, not after. Deleting this fixture would retire the fallback
+ * mechanism's only coverage.
+ */
+const CARD_LESS_KEY = "example-provider";
+
+function entry(integration: string) {
+  return {
+    integration,
+    state: "error_transient",
+    lastSuccessAt: MONTH_AGO,
+    lastAttemptAt: MONTH_AGO,
+    lastError: null,
+    configured: true,
+    connected: true,
+    available: true,
+    syncHealth: { verdict: "stalled", since: MONTH_AGO },
+    metricFreshness: [],
+  };
+}
+
 /** Every key the server can ship, all configured, all a month silent. */
 function fullEnvelope() {
   return {
     threshold: 3,
-    integrations: Object.keys(INTEGRATION_DISPLAY_NAMES).map((integration) => ({
-      integration,
-      state: "error_transient",
-      lastSuccessAt: MONTH_AGO,
-      lastAttemptAt: MONTH_AGO,
-      lastError: null,
-      configured: true,
-      connected: true,
-      available: true,
-      syncHealth: { verdict: "stalled", since: MONTH_AGO },
-      metricFreshness: [],
-    })),
+    integrations: Object.keys(INTEGRATION_DISPLAY_NAMES).map(entry),
   };
 }
 
@@ -90,35 +107,44 @@ describe("ConnectionsPanel — every envelope entry surfaces", () => {
     }
   });
 
-  it("gives the card-less provider a fallback row with the stalled pill", () => {
-    // moodLog is the live case: no card since its removal, still on the wire,
-    // still running an hourly cron against an upstream that stopped answering.
-    envelope = fullEnvelope();
+  it("gives a card-less provider a fallback row with the stalled pill", () => {
+    // The shape the mechanism exists for. With no display name registered the
+    // row falls back to the raw key, which is still an honest surface — far
+    // better than the provider rendering nowhere at all.
+    envelope = {
+      threshold: 3,
+      integrations: [...fullEnvelope().integrations, entry(CARD_LESS_KEY)],
+    };
     const html = render();
 
     expect(html).toContain('data-testid="integration-fallback-row"');
-    expect(html).toContain('data-integration="moodlog"');
-    expect(html).toContain("moodLog");
+    expect(html).toContain(`data-integration="${CARD_LESS_KEY}"`);
+    expect(html).toContain(CARD_LESS_KEY);
     expect(html).toContain('data-state="stalled"');
     expect(html).toContain("Sync stopped");
     expect(html).toContain("Last attempt");
   });
 
-  it("renders no fallback row for a provider that is not configured", () => {
+  it("renders no fallback row when every entry is card-backed", () => {
+    // The steady state: nothing unclaimed, so the panel adds no catch-all row.
+    envelope = fullEnvelope();
+    expect(render()).not.toContain('data-testid="integration-fallback-row"');
+  });
+
+  it("renders no fallback row for a card-less provider that is not configured", () => {
     // Absence stays absence: an unconfigured provider is not a problem to
     // report, so the panel says nothing about it.
     envelope = {
       threshold: 3,
       integrations: [
         {
-          integration: "moodlog",
+          ...entry(CARD_LESS_KEY),
           state: "disconnected",
           lastSuccessAt: null,
           lastAttemptAt: null,
-          lastError: null,
           configured: false,
+          connected: false,
           syncHealth: { verdict: "disconnected", since: null },
-          metricFreshness: [],
         },
       ],
     };

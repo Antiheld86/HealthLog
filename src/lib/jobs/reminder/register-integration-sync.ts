@@ -4,7 +4,7 @@
  * Owns the third-party-provider sync queues — Withings (fallback / activity /
  * sleep), WHOOP (recovery / sleep / workout / cycle + backfill + OAuth-state
  * cleanup), Fitbit (sync + backfill + sleep repair + OAuth-state cleanup),
- * Nightscout, Polar, Oura, MoodLog, and the two one-shot backfills
+ * Nightscout, Polar, Oura, and the two one-shot backfills
  * (sleep-timeline, lab-biomarker) — plus their boot-time discovery enqueues.
  *
  * v1.4.37 dead-queue contract: every queue name appears in `allQueues`, its
@@ -107,7 +107,6 @@ import {
   handleWhoopWorkoutSync,
   handleWhoopCycleSync,
 } from "./whoop-sync";
-import { MoodLogSyncPayload, handleMoodLogSync } from "./moodlog-sync";
 import {
   WithingsOAuthStateCleanupPayload,
   handleWithingsOAuthStateCleanup,
@@ -159,9 +158,6 @@ const WITHINGS_SLEEP_CRON = "15 * * * *"; // every hour at :15
 // 20,30,35,50) staggered off every other hourly sync tick.
 const WITHINGS_ECG_SYNC_CRON = "41 * * * *"; // every hour at :41
 
-const MOODLOG_SYNC_QUEUE = "moodlog-sync";
-
-const MOODLOG_SYNC_CRON = "30 * * * *"; // every hour at :30
 // v1.4.47 W6 — daily sweep for the Withings OAuth state ledger. Slots
 // at :20 between the audit-log cleanup (:15) and the mood-reminder
 // cleanup (:25), inside the existing 02:xx-03:xx maintenance window.
@@ -274,7 +270,6 @@ const allQueues = [
   WITHINGS_ACTIVITY_QUEUE,
   WITHINGS_SLEEP_QUEUE,
   WITHINGS_ECG_SYNC_QUEUE,
-  MOODLOG_SYNC_QUEUE,
   WITHINGS_OAUTH_STATE_CLEANUP_QUEUE,
   // v1.11.0 — WHOOP sync queues. Webhook-primary + cron-safety-net for
   // recovery / sleep / workout; cycle is poll-only (no WHOOP webhook).
@@ -338,7 +333,6 @@ const schedules: ScheduleEntry[] = [
   // v1.32.23 — hourly ECG catch-net (:41) so watch-only accounts pull their
   // strips without a webhook or a scale.
   [WITHINGS_ECG_SYNC_QUEUE, WITHINGS_ECG_SYNC_CRON],
-  [MOODLOG_SYNC_QUEUE, MOODLOG_SYNC_CRON],
   [WITHINGS_OAUTH_STATE_CLEANUP_QUEUE, WITHINGS_OAUTH_STATE_CLEANUP_CRON],
   // v1.11.0 — WHOOP poll-fallback crons. Recovery/sleep/workout catch
   // dropped webhooks; cycle is the sole driver (no webhook). Staggered off
@@ -775,12 +769,6 @@ export async function registerIntegrationSyncQueues(
       }
     },
   );
-  await boss.work<MoodLogSyncPayload>(
-    MOODLOG_SYNC_QUEUE,
-    { localConcurrency: 1 },
-    handleMoodLogSync,
-  );
-
   return allQueues;
 }
 

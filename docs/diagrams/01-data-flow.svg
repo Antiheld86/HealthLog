@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 620" font-family="ui-sans-serif, -apple-system, Segoe UI, Roboto, sans-serif" role="img" aria-labelledby="title desc">
   <title id="title">HealthLog data flow — device to insight</title>
-  <desc id="desc">Five-stage pipeline: sources (Withings, Apple Health export, iPhone HealthKit, manual entry, moodLog.app) feed ingest endpoints, which write to Postgres Measurement and MeasurementRollup tables, then surface on Dashboard tiles, Insights cards, the AI Coach, and the Doctor PDF.</desc>
+  <desc id="desc">Five-stage pipeline: sources (Withings, Apple Health export, iPhone HealthKit, manual entry, Nightscout) feed ingest endpoints, which write to Postgres Measurement and MeasurementRollup tables, then surface on Dashboard tiles, Insights cards, the AI Coach, and the Doctor PDF.</desc>
 
   <!-- Dracula background -->
   <rect x="0" y="0" width="1200" height="620" fill="#282a36" />
@@ -45,8 +45,8 @@
     <text x="120" y="411" text-anchor="middle" fill="#bd93f9" font-size="11">PWA · iOS Shortcuts</text>
 
     <rect x="30" y="444" width="180" height="56" rx="10" fill="#44475a" stroke="#8be9fd" stroke-width="1.5" />
-    <text x="120" y="469" text-anchor="middle" font-weight="600">moodLog.app</text>
-    <text x="120" y="487" text-anchor="middle" fill="#bd93f9" font-size="11">webhook</text>
+    <text x="120" y="469" text-anchor="middle" font-weight="600">Nightscout</text>
+    <text x="120" y="487" text-anchor="middle" fill="#bd93f9" font-size="11">pull sync</text>
   </g>
 
   <!-- INGEST (orange #ffb86c) -->

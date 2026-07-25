@@ -32,9 +32,8 @@ const NON_SUFFIX_ENCRYPTED: ReadonlySet<string> = new Set([
   "lastError",
   // CoachMessage / InsightNarrative
   "encryptedContent",
-  // User (Telegram + moodLog)
+  // User (Telegram)
   "telegramBotToken",
-  "moodLogWebhookSecret",
 ]);
 
 /**

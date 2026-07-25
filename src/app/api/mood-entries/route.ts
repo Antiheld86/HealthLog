@@ -12,17 +12,16 @@ import {
   createMoodEntrySchema,
   listMoodEntriesSchema,
   getScoreForMood,
-} from "@/lib/validations/moodlog";
+} from "@/lib/validations/mood";
 import { NextRequest } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { withIdempotency } from "@/lib/idempotency";
-import { encryptNote, readNote, shapeMoodNote } from "@/lib/crypto/note-cipher";
+import { encryptNote, shapeMoodNote } from "@/lib/crypto/note-cipher";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
 import { invalidateUserMood } from "@/lib/cache/invalidate";
 import { recomputeMoodBucketsForEntry } from "@/lib/rollups/mood-rollups";
-import { pushMoodEntriesToMoodLog } from "@/lib/moodlog/push";
 import {
   createTagLinks,
   RatedFactorOutOfRangeError,
@@ -344,30 +343,6 @@ async function postMoodEntry(request: NextRequest) {
         },
       });
     }
-
-    // v1.4.50 — reverse-sync push to MoodLog. Fire-and-forget; the
-    // helper itself is best-effort and never throws, so a 502 from
-    // MoodLog or a transient network blip can never bubble back to
-    // the user's create. The pull side (15-min cron) backfills any
-    // entry that fails the push window. Entries with `source ===
-    // "MOODLOG"` skip inside the helper to avoid an echo loop.
-    void pushMoodEntriesToMoodLog(user.id, [
-      {
-        date: entry.date,
-        moodLoggedAt: entry.moodLoggedAt,
-        mood: entry.mood,
-        note: readNote(entry.noteEncrypted, entry.note),
-        tags: entry.tags,
-        source: entry.source,
-      },
-    ]).catch(() => {
-      // The helper already wraps its own errors in wide-event
-      // warnings. The void + .catch is defence-in-depth so a
-      // synchronous throw inside the helper's promise chain (e.g. a
-      // future refactor that adds an await on a rejected promise
-      // before the first try/catch) can't surface as an unhandled
-      // rejection in the Next.js runtime.
-    });
 
     return apiSuccess(
       {

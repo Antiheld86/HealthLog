@@ -150,7 +150,7 @@ const EXEMPT_ROUTES: ReadonlyArray<string> = [
   // ── DATA LAYER (mood) ─────────────────────────────────────────────
   // Raw MoodEntry CRUD. The module gate governs whether mood SURFACES
   // (nav, dashboard tile, analysis, doctor report), not whether the row
-  // store accepts writes. An importer / the moodLog sync / the user's
+  // store accepts writes. An importer / the user's
   // ability to delete or restore entries must keep working while the
   // module is off, and re-enabling must find the rows intact.
   "src/app/api/mood-entries/route.ts",

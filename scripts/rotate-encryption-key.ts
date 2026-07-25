@@ -159,8 +159,7 @@ async function main() {
 
   // ───── User — integration credentials + AI keys + KVNR (String) ─────
   // Columns: "codexAccessTokenEncrypted" "codexRefreshTokenEncrypted"
-  // "telegramBotToken" "moodLogWebhookSecret" "moodLogUrlEncrypted"
-  // "moodLogApiKeyEncrypted" "withingsClientIdEncrypted"
+  // "telegramBotToken" "withingsClientIdEncrypted"
   // "withingsClientSecretEncrypted" "whoopClientIdEncrypted"
   // "whoopClientSecretEncrypted" "fitbitClientIdEncrypted"
   // "fitbitClientSecretEncrypted" "nightscoutUrlEncrypted"
@@ -176,9 +175,6 @@ async function main() {
     "codexAccessTokenEncrypted",
     "codexRefreshTokenEncrypted",
     "telegramBotToken",
-    "moodLogWebhookSecret",
-    "moodLogUrlEncrypted",
-    "moodLogApiKeyEncrypted",
     "withingsClientIdEncrypted",
     "withingsClientSecretEncrypted",
     "whoopClientIdEncrypted",

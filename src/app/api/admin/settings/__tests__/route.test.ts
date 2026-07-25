@@ -122,7 +122,6 @@ describe("GET /api/admin/settings", () => {
       glitchtipEnvironment: "production",
       reminderLateMinutes: 120,
       reminderMissedMinutes: 240,
-      moodLogGlobal: true,
     } as never);
 
     const res = await GET();
@@ -182,7 +181,6 @@ describe("PUT /api/admin/settings", () => {
       glitchtipEnvironment: "production",
       reminderLateMinutes: 120,
       reminderMissedMinutes: 240,
-      moodLogGlobal: true,
     } as never);
 
     const res = await PUT(jsonReq({ webPushVapidPrivateKey: "plain-private" }));
@@ -222,7 +220,6 @@ describe("PUT /api/admin/settings", () => {
       glitchtipEnvironment: null,
       reminderLateMinutes: 120,
       reminderMissedMinutes: 240,
-      moodLogGlobal: true,
     } as never);
     const res = await PUT(jsonReq({ clearWebPushVapidPrivateKey: true }));
     expect(res.status).toBe(200);
@@ -250,7 +247,6 @@ describe("PUT /api/admin/settings", () => {
       glitchtipEnvironment: null,
       reminderLateMinutes: 120,
       reminderMissedMinutes: 240,
-      moodLogGlobal: true,
     } as never);
 
     const res = await PUT(
@@ -283,7 +279,6 @@ describe("PUT /api/admin/settings", () => {
       glitchtipEnvironment: "staging",
       reminderLateMinutes: 30,
       reminderMissedMinutes: 90,
-      moodLogGlobal: false,
     } as never);
 
     const res = await PUT(
@@ -295,7 +290,6 @@ describe("PUT /api/admin/settings", () => {
         webPushGlobal: false,
         apiGlobal: false,
         umamiEnabled: true,
-        moodLogGlobal: false,
         glitchtipEnabled: true,
         webPushVapidPublicKey: "vapid-pub",
         webPushVapidSubject: "mailto:ops@healthlog.dev",
@@ -350,7 +344,6 @@ describe("PUT /api/admin/settings", () => {
       glitchtipEnvironment: null,
       reminderLateMinutes: 120,
       reminderMissedMinutes: 240,
-      moodLogGlobal: true,
     } as never);
 
     await PUT(
@@ -405,7 +398,6 @@ describe("PUT /api/admin/settings", () => {
       glitchtipEnvironment: null,
       reminderLateMinutes: 120,
       reminderMissedMinutes: 240,
-      moodLogGlobal: true,
       defaultUserTimezone: "Pacific/Auckland",
     } as never);
     const res = await PUT(jsonReq({ defaultUserTimezone: "Pacific/Auckland" }));
@@ -434,7 +426,6 @@ describe("PUT /api/admin/settings", () => {
       glitchtipEnvironment: null,
       reminderLateMinutes: 120,
       reminderMissedMinutes: 240,
-      moodLogGlobal: true,
       defaultUserTimezone: null,
     } as never);
     const res = await PUT(jsonReq({ defaultUserTimezone: "" }));

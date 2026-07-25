@@ -49,7 +49,6 @@ export const INTEGRATION_DISPLAY_NAMES: Record<IntegrationKey, string> = {
   oura: "Oura",
   "google-health": "Google Health",
   strava: "Strava",
-  moodlog: "moodLog",
 };
 
 export function IntegrationFallbackRow({

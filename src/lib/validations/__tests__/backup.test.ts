@@ -10,7 +10,7 @@
  *
  * We accept three shapes:
  *   - `null` (and omitted/undefined): "no tags on this entry"
- *   - empty string `""`: legacy moodLog wire format (handled as null)
+ *   - empty string `""`: legacy wire format (handled as null)
  *   - a JSON-string that parses to an array of strings.
  *
  * Anything else (object, JSON-with-numbers, garbage) is rejected at
@@ -51,7 +51,7 @@ describe("moodEntrySchema.tags strict validation", () => {
     expect(r.success).toBe(true);
   });
 
-  it("accepts an empty string (legacy moodLog wire format)", () => {
+  it("accepts an empty string (legacy wire format)", () => {
     const r = parseWithMoodTags("");
     expect(r.success).toBe(true);
   });

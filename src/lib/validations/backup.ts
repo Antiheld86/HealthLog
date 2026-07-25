@@ -320,7 +320,6 @@ const appSettingsBackupSchema = z
     webPushVapidPrivateKeyEncrypted: z.string().nullable(),
     webPushVapidSubject: z.string().nullable(),
     apiGlobal: z.boolean(),
-    moodLogGlobal: z.boolean(),
     umamiEnabled: z.boolean(),
     umamiScriptUrl: z.string().nullable(),
     umamiWebsiteId: z.string().nullable(),

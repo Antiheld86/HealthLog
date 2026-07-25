@@ -7,7 +7,7 @@
  * entry still resolves its own "inserted" / "duplicate" state through the
  * exact key its dedup contract uses (externalId when carried, else the
  * legacy date+moodLoggedAt key). The per-entry `upsert` + tombstone check +
- * tag links + reverse push are unchanged. Tests below drive `findMany`
+ * tag links are unchanged. Tests below drive `findMany`
  * instead of `findUnique`.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -52,10 +52,6 @@ vi.mock("@/lib/mood/tag-links", async () => {
   };
 });
 
-vi.mock("@/lib/moodlog/push", () => ({
-  pushMoodEntriesToMoodLog: vi.fn().mockResolvedValue(undefined),
-}));
-
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/auth/audit", () => ({
   auditLog: vi.fn().mockResolvedValue(undefined),
@@ -94,7 +90,6 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { createTagLinks } from "@/lib/mood/tag-links";
-import { pushMoodEntriesToMoodLog } from "@/lib/moodlog/push";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -138,14 +133,6 @@ beforeEach(() => {
   vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never);
   vi.mocked(checkRateLimit).mockResolvedValue({ allowed: true } as never);
   vi.mocked(createTagLinks).mockResolvedValue(undefined);
-  // `vi.resetAllMocks()` above wipes the factory default, so the
-  // best-effort reverse-sync push must be re-stubbed to a resolved
-  // promise — the route calls `.catch()` on its return value.
-  vi.mocked(pushMoodEntriesToMoodLog).mockResolvedValue({
-    pushed: 0,
-    skipped: 0,
-    status: "skipped",
-  });
 });
 
 describe("POST /api/mood-entries/bulk — 422 multi-issue (v1.4.43 W6)", () => {

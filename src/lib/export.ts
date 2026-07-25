@@ -48,7 +48,7 @@ export interface ExportableRecord {
  * (measurement values, mood scores) stay typed `number` all the way to
  * this function, so a negative reading exports as `-5.2`, never
  * `'-5.2`. The text columns are where third-party content can land —
- * mood `note` originates from the moodLog webhook, measurement `notes`
+ * mood `note` originates from user input, measurement `notes`
  * from arbitrary clients — and a crafted `=HYPERLINK(...)` /
  * `=cmd|...` there must not execute when an operator opens the export.
  */

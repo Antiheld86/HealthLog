@@ -4,7 +4,7 @@ Instructions for AI coding agents (OpenAI Codex, Claude Code, Cursor, etc.) work
 
 ## Project
 
-**HealthLog** — a personal health-tracking web app (weight, blood pressure, pulse, mood, medication compliance) with Withings integration, moodLog.app sync, Dracula-themed UI, mobile-first PWA design.
+**HealthLog** — a personal health-tracking web app (weight, blood pressure, pulse, mood, medication compliance) with Withings integration, Dracula-themed UI, mobile-first PWA design.
 
 **Status**: v1.4.0 (released) → v1.4.1 in progress. v1.4.0 shipped
 the UI guidelines + Skeleton/EmptyState primitives, medical-citations
@@ -102,7 +102,6 @@ src/
 │       ├── import/               # JSON data import
 │       ├── doctor-report/        # Doctor report data aggregation
 │       ├── gamification/         # Achievements (persistent)
-│       ├── integrations/moodlog/ # moodLog.app webhook + sync + status
 │       └── ...
 ├── components/
 │   ├── ui/                       # shadcn/ui primitives
@@ -135,7 +134,6 @@ src/
 │   ├── gamification/             # Achievement definitions + progress
 │   ├── insights/                 # Insight pipeline + prompts
 │   ├── logging/                  # Wide Events: builder, context, sampler, transports, background
-│   ├── moodlog/                  # moodLog.app webhook + sync
 │   ├── monitoring/               # Umami / GlitchTip server-side hooks
 │   └── withings/                 # Withings OAuth client + sync service
 ├── hooks/

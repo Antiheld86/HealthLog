@@ -302,7 +302,7 @@ fi
 #
 # users — explicit ordered list. Secret/credential columns are NULLed in the
 # SELECT (literal NULL in the right position). role forced to 'ADMIN'.
-# telegram_enabled / mood_log_enabled forced false. Kept: password_hash,
+# telegram_enabled forced false. Kept: password_hash,
 # avatar_*, all display/prefs/layout JSON, unit prefs, profile fields.
 #
 # The SELECT projects literals for the NULLed/forced columns and the real
@@ -318,8 +318,6 @@ readonly USERS_COLS="id, username, email, password_hash, role, created_at, updat
   withings_client_id_encrypted, withings_client_secret_encrypted,
   whoop_client_id_encrypted, whoop_client_secret_encrypted,
   fitbit_client_id_encrypted, fitbit_client_secret_encrypted,
-  mood_log_url_encrypted, mood_log_api_key_encrypted, mood_log_enabled,
-  mood_log_last_synced_at, mood_log_webhook_secret,
   locale, thresholds_json, dashboard_widgets_json, insights_layout_json,
   glucose_unit, unit_preference,
   ai_provider, ai_model, ai_base_url, ai_anthropic_key_encrypted, ai_local_key_encrypted,
@@ -358,11 +356,6 @@ readonly USERS_SELECT="id, username, email, password_hash,
   NULL::text  AS whoop_client_secret_encrypted,
   NULL::text  AS fitbit_client_id_encrypted,
   NULL::text  AS fitbit_client_secret_encrypted,
-  NULL::text  AS mood_log_url_encrypted,
-  NULL::text  AS mood_log_api_key_encrypted,
-  false       AS mood_log_enabled,
-  NULL::timestamptz AS mood_log_last_synced_at,
-  NULL::text  AS mood_log_webhook_secret,
   locale, thresholds_json, dashboard_widgets_json, insights_layout_json,
   glucose_unit, unit_preference,
   ai_provider, ai_model, ai_base_url,
@@ -651,7 +644,7 @@ fi
 
 echo
 echo "HARD assertion 3: the demo user exists on edge01 with role=ADMIN and the apps01 id."
-psql_dst "-c \"SELECT id, username, role, telegram_enabled, mood_log_enabled FROM users WHERE id = '$DEMO_USER_ID';\""
+psql_dst "-c \"SELECT id, username, role, telegram_enabled FROM users WHERE id = '$DEMO_USER_ID';\""
 
 echo
 echo "=============================================================="
