@@ -2,6 +2,47 @@
 
 ## [Unreleased]
 
+## [1.32.31] — 2026-07-25
+
+The integrations page could tell you a connection was failing. It could not
+tell you a connection had stopped trying. Those look the same from the outside:
+the page keeps showing whatever error was recorded last, and it keeps showing
+it for as long as nobody looks, because nothing anywhere read how old the last
+attempt actually was. This release adds that reading, and every status on the
+page now comes from it.
+
+- **A sync that has stopped running is labelled as stopped.** When a connection
+  has not even attempted to sync for a day, it says so, with how long it has
+  been. Previously it kept displaying the last error it managed to record, which
+  reads like something that is still retrying.
+- **Per data type, when a value last arrived.** Each connected card now opens a
+  short list: every data type that connection has ever delivered, and how long
+  ago the newest one came in. A type that has gone quiet for two weeks while the
+  rest of the connection is healthy is called out, which is the shape a single
+  broken pipe takes: one revoked permission, one endpoint that started returning
+  nothing, while the sync itself keeps reporting success. Types the connection
+  has never delivered are simply not listed. Nothing is invented.
+- **Apple Health has a staleness threshold.** Any timestamp at all used to paint
+  the green "data received" badge, so a phone that stopped delivering three
+  weeks ago looked exactly like one that delivered this morning. After a week of
+  silence the card now says so and points you at the app's Apple Health
+  permissions. It also lists the same per data type detail as the others.
+- **A configured connection with no card of its own now appears.** If your
+  account has a connection set up that the page has no card for, it gets a plain
+  status row instead of being left off entirely. That is a structural fix: a
+  connection can no longer be running, failing and invisible at the same time.
+- **The status colours mean one consistent thing.** Red is now reserved for the
+  cases your own action fixes, which is reconnecting or resuming. An upstream
+  outage or a rate limit carries the amber tone instead, because clicking
+  reconnect against a server error has never helped anyone. Every card uses the
+  same mapping. Three of them used to disagree with each other on the same page.
+- **Nightscout reads the same status source as everything else.** It was the
+  last card fetching its own status separately, which is why it could show a
+  different colour for the same condition.
+
+The assistant tools report the new verdict too, so asking why your data looks
+stale gets the real answer instead of "connected".
+
 ## [1.32.30] — 2026-07-25
 
 Height was the last value still asked for in centimetres regardless of the

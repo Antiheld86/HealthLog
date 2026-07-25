@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HealthLog API
-  version: 1.32.30
+  version: 1.32.31
   description: >-
     Self-hosted personal-health-tracking PWA — public API surface for the iOS native client and external ingest.
 
@@ -32471,12 +32471,21 @@ components:
               pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
             - type: "null"
           description: When HealthKit last synced for this user; null when never (and always null on the PATCH echo).
+        syncHealth:
+          description: Present on the GET read; omitted from the PATCH echo.
+          $ref: "#/components/schemas/SyncHealth"
+        metricFreshness:
+          description: Per-metric-type freshness for the `APPLE_HEALTH` source. Present on the GET read; omitted from the PATCH
+            echo.
+          type: array
+          items:
+            $ref: "#/components/schemas/MetricFreshnessEntry"
       required:
         - entries
         - lastSyncedAt
       additionalProperties: false
       description: "The resolved HealthKit integration config: the default metric set merged with the user's stored per-metric
-        overrides."
+        overrides, plus the sync-health verdict and per-metric freshness."
     HealthKitEntry:
       type: object
       properties:
@@ -32503,6 +32512,57 @@ components:
         - enabled
       additionalProperties: false
       description: One resolved HealthKit metric mapping (defaults merged with the user's stored overrides).
+    SyncHealth:
+      type: object
+      properties:
+        verdict:
+          type: string
+          enum:
+            - fresh
+            - stale
+            - stalled
+            - failing
+            - reauth_required
+            - parked
+            - pending_first_sync
+            - disconnected
+          description: "Liveness verdict. For Apple Health: `fresh` when data arrived within the last 7 days, `stale` when it did
+            not, `pending_first_sync` when none ever arrived."
+        since:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+          description: The instant that triggered the verdict; null when none did.
+      required:
+        - verdict
+        - since
+      additionalProperties: false
+      description: Server-resolved sync-health verdict. The single source of liveness truth — `lastSyncedAt` alone cannot
+        express 'this pipe stopped delivering'.
+    MetricFreshnessEntry:
+      type: object
+      properties:
+        type:
+          type: string
+          description: The measurement type (e.g. `RESPIRATORY_RATE`), or `WORKOUTS` for the workout leg.
+        lastSeenAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: Newest recorded reading for this type from this source.
+        stale:
+          type: boolean
+          description: This type has gone quiet while the source around it reads healthy — the dead-pipe signature (e.g. a single
+            revoked HealthKit permission). Only ever true when the verdict is `fresh`.
+      required:
+        - type
+        - lastSeenAt
+        - stale
+      additionalProperties: false
+      description: Per-metric-type last-seen timestamp with the server-computed staleness flag. Only types that have actually
+        delivered appear — absence is absence, never an invented row.
     HealthKitConfigPatchEnvelope:
       type: object
       properties:
