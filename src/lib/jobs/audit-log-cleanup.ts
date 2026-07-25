@@ -11,6 +11,7 @@
  * `deleteMany`; runs daily via pg-boss.
  */
 import type { PrismaClient } from "@/generated/prisma/client";
+import { purgeInBatches, type PurgeOutcome } from "@/lib/jobs/purge-batch";
 
 export const DEFAULT_AUDIT_LOG_RETENTION_DAYS = 365;
 
@@ -27,14 +28,34 @@ export function getAuditLogRetentionDays(): number {
   return parsed;
 }
 
+/**
+ * Delete audit rows past the retention horizon, in bounded batches.
+ *
+ * Until v1.32.40 this was one unbounded `deleteMany` on `created_at < cutoff`.
+ * Every index on the table leads with `user_id` or `action`, so the predicate
+ * had none and the statement planned a sequential scan plus index maintenance
+ * on every removed row. Past the 60-second `statement_timeout` that aborts and
+ * rolls back, and the next night repeats it against the same rows — a
+ * retention window that can never close on an instance that has accumulated
+ * enough of them. Migration 0277 adds the `created_at` index; the batching
+ * keeps any single statement bounded regardless.
+ */
 export async function cleanupOldAuditLogs(
   prisma: PrismaClient,
   now: Date = new Date(),
-): Promise<number> {
+): Promise<PurgeOutcome> {
   const days = getAuditLogRetentionDays();
   const cutoff = new Date(now.getTime() - days * 86_400_000);
-  const { count } = await prisma.auditLog.deleteMany({
-    where: { createdAt: { lt: cutoff } },
+  return purgeInBatches({
+    findIds: async (take) =>
+      (
+        await prisma.auditLog.findMany({
+          where: { createdAt: { lt: cutoff } },
+          select: { id: true },
+          take,
+        })
+      ).map((row) => row.id),
+    deleteIds: async (ids) =>
+      (await prisma.auditLog.deleteMany({ where: { id: { in: ids } } })).count,
   });
-  return count;
 }

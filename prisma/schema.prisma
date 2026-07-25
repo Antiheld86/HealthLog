@@ -1763,6 +1763,13 @@ model Measurement {
   // (v1.28.46 H4). It makes the note-encryption boot-discovery `SELECT DISTINCT
   // user_id` an index-only scan that converges to empty. Same partial-predicate
   // reason it is omitted here.
+  // `measurements_tombstone_purge_idx` is a partial index over `(deleted_at)
+  // WHERE deleted_at IS NOT NULL` — see migration 0277 (v1.32.40). Every
+  // other deleted_at index here is partial on IS NULL, which is the live-rows
+  // predicate and the opposite of what the nightly tombstone purge asks for;
+  // without this one the purge planned a sequential scan and could not finish
+  // inside statement_timeout. Raw SQL only (partial predicate not expressible
+  // in Prisma).
   @@map("measurements")
 }
 
@@ -2854,6 +2861,13 @@ model MedicationIntakeEvent {
   // scanned the whole intake history. These two let both index-seek instead.
   @@index([userId, scheduledFor])
   @@index([userId, medicationId, takenAt])
+  // `medication_intake_events_tombstone_purge_idx` is a partial index over `(deleted_at)
+  // WHERE deleted_at IS NOT NULL` — see migration 0277 (v1.32.40). Every
+  // other deleted_at index here is partial on IS NULL, which is the live-rows
+  // predicate and the opposite of what the nightly tombstone purge asks for;
+  // without this one the purge planned a sequential scan and could not finish
+  // inside statement_timeout. Raw SQL only (partial predicate not expressible
+  // in Prisma).
   @@map("medication_intake_events")
 }
 
@@ -3852,6 +3866,13 @@ model MoodEntry {
   // WHERE note IS NOT NULL AND note_encrypted IS NULL` — see migration 0243
   // (v1.28.46 H4), serving the note-encryption boot-discovery scan. Raw SQL
   // only (partial predicate not expressible in Prisma).
+  // `mood_entries_tombstone_purge_idx` is a partial index over `(deleted_at)
+  // WHERE deleted_at IS NOT NULL` — see migration 0277 (v1.32.40). Every
+  // other deleted_at index here is partial on IS NULL, which is the live-rows
+  // predicate and the opposite of what the nightly tombstone purge asks for;
+  // without this one the purge planned a sequential scan and could not finish
+  // inside statement_timeout. Raw SQL only (partial predicate not expressible
+  // in Prisma).
   @@map("mood_entries")
 }
 
@@ -4277,6 +4298,11 @@ model AuditLog {
   // this three-column index serves both the findFirst and the take:5 as
   // an index range scan over the highest-churn table. See migration 0123.
   @@index([userId, action, createdAt(sort: Desc)])
+  // v1.32.40 — the retention purge filters on `createdAt` alone. Every index
+  // above leads with `userId` or `action`, so the purge planned a sequential
+  // scan and could not finish inside statement_timeout on an instance with
+  // enough history. See migration 0277.
+  @@index([createdAt])
   @@map("audit_logs")
 }
 

@@ -184,16 +184,36 @@ export async function handleMeasurementTombstoneCleanup(
       try {
         // v1.7.0 sync — prune tombstones across all three sync domains on
         // the same retention horizon.
-        const [measurements, mood, intakes] = await Promise.all([
-          cleanupExpiredMeasurementTombstones(p),
-          cleanupExpiredMoodTombstones(p),
-          cleanupExpiredIntakeTombstones(p),
-        ]);
-        evt.addMeta("measurement_tombstone_cleanup_pruned", measurements);
-        evt.addMeta("mood_tombstone_cleanup_pruned", mood);
-        evt.addMeta("intake_tombstone_cleanup_pruned", intakes);
+        //
+        // v1.32.40 — sequential rather than parallel. Each leg now walks its
+        // backlog in batches, and three concurrent walks against the three
+        // densest tables competed for the worker pool for no gain: the job has
+        // the whole night.
+        const measurements = await cleanupExpiredMeasurementTombstones(p);
+        const mood = await cleanupExpiredMoodTombstones(p);
+        const intakes = await cleanupExpiredIntakeTombstones(p);
+        evt.addMeta(
+          "measurement_tombstone_cleanup_pruned",
+          measurements.deleted,
+        );
+        evt.addMeta("mood_tombstone_cleanup_pruned", mood.deleted);
+        evt.addMeta("intake_tombstone_cleanup_pruned", intakes.deleted);
+        // A run that stopped at the batch cap has a backlog left. Without this
+        // flag a partial run and a complete one are indistinguishable from
+        // outside, which is how a purge that never finished stayed invisible.
+        const drained = measurements.drained && mood.drained && intakes.drained;
+        evt.addMeta("tombstone_cleanup_drained", drained);
+        if (!drained) {
+          evt.addWarning(
+            "tombstone-cleanup stopped at the batch cap; a backlog remains for the next run",
+          );
+        }
       } catch (err) {
+        // Rethrow. A retention purge that fails silently every night looks
+        // exactly like one that has nothing to do; pg-boss recording a failed
+        // job is the only signal an operator can act on.
         evt.addWarning(`tombstone-cleanup failed: ${err}`);
+        throw err;
       }
     },
   );
@@ -268,10 +288,19 @@ export async function handleAuditLogCleanup(
   await withBackgroundEvent("job.audit_log_cleanup", async (evt) => {
     const p = getWorkerPrisma();
     try {
-      const deleted = await cleanupOldAuditLogs(p);
-      evt.addMeta("audit_log_cleanup_deleted", deleted);
+      const outcome = await cleanupOldAuditLogs(p);
+      evt.addMeta("audit_log_cleanup_deleted", outcome.deleted);
+      evt.addMeta("audit_log_cleanup_drained", outcome.drained);
+      if (!outcome.drained) {
+        evt.addWarning(
+          "audit-log-cleanup stopped at the batch cap; a backlog remains for the next run",
+        );
+      }
     } catch (err) {
+      // Rethrow — see the tombstone handler. Storage-limitation retention that
+      // fails quietly is retention that is not happening.
       evt.addWarning(`audit-log-cleanup failed: ${err}`);
+      throw err;
     }
   });
 }

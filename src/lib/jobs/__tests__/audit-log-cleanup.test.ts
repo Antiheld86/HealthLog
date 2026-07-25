@@ -1,14 +1,28 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from "vitest";
 import type { PrismaClient } from "@/generated/prisma/client";
 import {
   cleanupOldAuditLogs,
   getAuditLogRetentionDays,
   DEFAULT_AUDIT_LOG_RETENTION_DAYS,
 } from "../audit-log-cleanup";
+import { PURGE_BATCH_SIZE, PURGE_MAX_BATCHES } from "../purge-batch";
 
 function makePrismaMock(deletedCount: number) {
   return {
     auditLog: {
+      findMany: vi
+        .fn()
+        .mockResolvedValue(
+          Array.from({ length: deletedCount }, (_, i) => ({ id: `row-${i}` })),
+        ),
       deleteMany: vi.fn().mockResolvedValue({ count: deletedCount }),
     },
   } as unknown as PrismaClient;
@@ -56,14 +70,23 @@ describe("cleanupOldAuditLogs", () => {
   it("deletes audit log rows older than 365 days by default", async () => {
     const prisma = makePrismaMock(42);
     const now = new Date("2026-05-04T00:00:00Z");
-    const deleted = await cleanupOldAuditLogs(prisma, now);
+    const outcome = await cleanupOldAuditLogs(prisma, now);
 
-    expect(deleted).toBe(42);
-    expect(prisma.auditLog.deleteMany).toHaveBeenCalledTimes(1);
+    expect(outcome).toEqual({ deleted: 42, drained: true });
+    // The predicate is applied on the bounded lookup; the delete itself is by
+    // primary key so no statement is on the hook for the whole backlog.
+    expect(prisma.auditLog.findMany).toHaveBeenCalledTimes(1);
     const cutoff = new Date(now.getTime() - 365 * 86_400_000);
-    expect(prisma.auditLog.deleteMany).toHaveBeenCalledWith({
+    expect(prisma.auditLog.findMany).toHaveBeenCalledWith({
       where: { createdAt: { lt: cutoff } },
+      select: { id: true },
+      take: PURGE_BATCH_SIZE,
     });
+    expect(prisma.auditLog.deleteMany).toHaveBeenCalledTimes(1);
+    expect(
+      (prisma.auditLog.deleteMany as unknown as Mock).mock.calls[0][0].where.id
+        .in,
+    ).toHaveLength(42);
   });
 
   it("uses the configured retention", async () => {
@@ -73,8 +96,22 @@ describe("cleanupOldAuditLogs", () => {
     await cleanupOldAuditLogs(prisma, now);
 
     const cutoff = new Date(now.getTime() - 90 * 86_400_000);
-    expect(prisma.auditLog.deleteMany).toHaveBeenCalledWith({
+    expect(prisma.auditLog.findMany).toHaveBeenCalledWith({
       where: { createdAt: { lt: cutoff } },
+      select: { id: true },
+      take: PURGE_BATCH_SIZE,
     });
+  });
+
+  it("stops at the batch cap and says the backlog is not drained", async () => {
+    const prisma = makePrismaMock(PURGE_BATCH_SIZE);
+    const outcome = await cleanupOldAuditLogs(
+      prisma,
+      new Date("2026-05-04T00:00:00Z"),
+    );
+
+    expect(prisma.auditLog.findMany).toHaveBeenCalledTimes(PURGE_MAX_BATCHES);
+    expect(outcome.drained).toBe(false);
+    expect(outcome.deleted).toBe(PURGE_BATCH_SIZE * PURGE_MAX_BATCHES);
   });
 });
