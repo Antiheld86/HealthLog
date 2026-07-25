@@ -98,6 +98,11 @@ describe("upsertFitbitMeasurements — tombstones resurrect", () => {
         id: "row-1",
         type: "ACTIVITY_STEPS",
         externalId: "stats:steps:2026-07-08",
+        value: 8123,
+        unit: "steps",
+        measuredAt: new Date("2026-07-08T00:00:00.000Z"),
+        sleepStage: null,
+        deletedAt: new Date("2026-07-09T00:00:00.000Z"),
       },
     ]);
 
@@ -132,6 +137,127 @@ describe("upsertFitbitMeasurements — tombstones resurrect", () => {
     );
     expect(updateMock).not.toHaveBeenCalled();
     expect(createManyMock).toHaveBeenCalledTimes(1);
+    expect(imported).toBe(1);
+  });
+});
+
+describe("upsertFitbitMeasurements — no-op overwrite skip", () => {
+  it("skips the update entirely for an identical LIVE row (no syncVersion churn)", async () => {
+    findManyMock.mockResolvedValue([
+      {
+        id: "row-1",
+        type: "ACTIVITY_STEPS",
+        externalId: "stats:steps:2026-07-08",
+        value: 8123,
+        unit: "steps",
+        measuredAt: new Date("2026-07-08T00:00:00.000Z"),
+        sleepStage: null,
+        deletedAt: null,
+      },
+    ]);
+
+    const { imported } = await upsertFitbitMeasurements(
+      "user-1",
+      [STEPS_READING],
+      { deferRollup: true },
+    );
+
+    // The 24 h overlap re-fetches this row hourly; an unchanged live row must
+    // not be rewritten (the unconditional syncVersion bump churned the DB and
+    // every iOS delta pull).
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(createManyMock).not.toHaveBeenCalled();
+    expect(imported).toBe(0);
+  });
+
+  it("still writes when any payload field differs on a live row", async () => {
+    findManyMock.mockResolvedValue([
+      {
+        id: "row-1",
+        type: "ACTIVITY_STEPS",
+        externalId: "stats:steps:2026-07-08",
+        value: 7999, // stale daily total — Fitbit re-rolled the day upward
+        unit: "steps",
+        measuredAt: new Date("2026-07-08T00:00:00.000Z"),
+        sleepStage: null,
+        deletedAt: null,
+      },
+    ]);
+
+    const { imported } = await upsertFitbitMeasurements(
+      "user-1",
+      [STEPS_READING],
+      { deferRollup: true },
+    );
+
+    expect(updateMock).toHaveBeenCalledTimes(1);
+    expect(imported).toBe(1);
+  });
+
+  it("writes when only the sleep stage differs (a re-classified segment)", async () => {
+    // The stable segment key deliberately drops the stage, so a re-label
+    // arrives on the SAME externalId — the skip must not swallow it.
+    findManyMock.mockResolvedValue([
+      {
+        id: "row-1",
+        type: "SLEEP_DURATION",
+        externalId: "777:sleep:2026-07-08T05:45:00.000Z",
+        value: 45,
+        unit: "minutes",
+        measuredAt: new Date("2026-07-08T06:30:00.000Z"),
+        sleepStage: "CORE",
+        deletedAt: null,
+      },
+    ]);
+
+    const { imported } = await upsertFitbitMeasurements(
+      "user-1",
+      [
+        {
+          type: "SLEEP_DURATION",
+          value: 45,
+          unit: "minutes",
+          measuredAt: new Date("2026-07-08T06:30:00.000Z"),
+          externalId: "777:sleep:2026-07-08T05:45:00.000Z",
+          sleepStage: "DEEP" as const,
+        },
+      ],
+      { deferRollup: true },
+    );
+
+    expect(updateMock).toHaveBeenCalledTimes(1);
+    const upd = (updateMock.mock.calls[0] as unknown[])[0] as {
+      data: Record<string, unknown>;
+    };
+    expect(upd.data.sleepStage).toBe("DEEP");
+    expect(imported).toBe(1);
+  });
+
+  it("an identical TOMBSTONED row ALWAYS updates — the write is the resurrection", async () => {
+    findManyMock.mockResolvedValue([
+      {
+        id: "row-1",
+        type: "ACTIVITY_STEPS",
+        externalId: "stats:steps:2026-07-08",
+        value: 8123,
+        unit: "steps",
+        measuredAt: new Date("2026-07-08T00:00:00.000Z"),
+        sleepStage: null,
+        deletedAt: new Date("2026-07-09T00:00:00.000Z"),
+      },
+    ]);
+
+    const { imported } = await upsertFitbitMeasurements(
+      "user-1",
+      [STEPS_READING],
+      { deferRollup: true },
+    );
+
+    expect(updateMock).toHaveBeenCalledTimes(1);
+    const upd = (updateMock.mock.calls[0] as unknown[])[0] as {
+      data: Record<string, unknown>;
+    };
+    expect(upd.data.deletedAt).toBeNull();
     expect(imported).toBe(1);
   });
 });

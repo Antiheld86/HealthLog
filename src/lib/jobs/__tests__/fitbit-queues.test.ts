@@ -34,6 +34,7 @@ const source =
 const FITBIT_QUEUE_CONSTS = [
   "FITBIT_SYNC_QUEUE",
   "FITBIT_BACKFILL_QUEUE",
+  "FITBIT_SLEEP_REPAIR_QUEUE",
   "FITBIT_OAUTH_STATE_CLEANUP_QUEUE",
 ] as const;
 
@@ -69,6 +70,9 @@ describe("reminder-worker — Fitbit sync queues", () => {
       /boss\.work[\s\S]{0,200}FITBIT_BACKFILL_QUEUE[\s\S]{0,260}enqueueIntegrationBackfillAdmission/,
     );
     expect(source).toMatch(
+      /boss\.work[\s\S]{0,200}FITBIT_SLEEP_REPAIR_QUEUE[\s\S]{0,260}enqueueIntegrationBackfillAdmission/,
+    );
+    expect(source).toMatch(
       /boss\.work[\s\S]{0,160}FITBIT_OAUTH_STATE_CLEANUP_QUEUE[\s\S]{0,160}handleFitbitOAuthStateCleanup/,
     );
   });
@@ -77,6 +81,13 @@ describe("reminder-worker — Fitbit sync queues", () => {
     expect(source).toMatch(
       /enqueueBootTimeFitbitBackfill\(\s*bootStaggerSecondsFor\("fitbit-backfill"\)/,
     );
+  });
+
+  it("wires the one-shot Fitbit sleep-repair boot discovery", () => {
+    expect(source).toMatch(
+      /enqueueBootTimeFitbitSleepRepair\(\s*bootStaggerSecondsFor\("fitbit-sleep-repair"\)/,
+    );
+    expect(source).toMatch(/from\s*["']@\/lib\/jobs\/fitbit-sleep-repair["']/);
   });
 
   it("imports the Fitbit sync driver + backfill exports", () => {

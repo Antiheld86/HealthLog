@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   FITBIT_API_BASE,
+  FITBIT_RETRY_AFTER_WAIT_CAP_S,
   FITBIT_FIELD_MAP,
   FITBIT_OAUTH_SCOPE,
   exchangeCode,
@@ -20,7 +21,7 @@ import {
   mapOxygenSaturation,
   mapRespiratoryRate,
   mapRestingHeartRate,
-  mapSleepSession,
+  mapSleepSessionDetailed,
   mapSteps,
   mapVo2Max,
   mapWeight,
@@ -35,13 +36,20 @@ import {
 const CREDS = { clientId: "cid", clientSecret: "csecret" };
 
 /** Stub global fetch with a queue of `{ status, body }` responses. */
-function installFetchMock(pages: Array<{ status: number; body: unknown }>) {
+function installFetchMock(
+  pages: Array<{
+    status: number;
+    body: unknown;
+    headers?: Record<string, string>;
+  }>,
+) {
   let i = 0;
   const fetchMock = vi.fn(async () => {
     const page = pages[Math.min(i, pages.length - 1)]!;
     i += 1;
     return {
       status: page.status,
+      headers: new Headers(page.headers ?? {}),
       json: async () => page.body,
     };
   });
@@ -487,7 +495,8 @@ describe("sleep mapping (1.2 levels.data)", () => {
       ],
     });
     expect(sessions).toHaveLength(1);
-    const out = mapSleepSession(sessions[0]!);
+    const mapped = mapSleepSessionDetailed(sessions[0]!);
+    const out = mapped.rows;
 
     // One row per segment.
     expect(out).toHaveLength(3);
@@ -505,15 +514,123 @@ describe("sleep mapping (1.2 levels.data)", () => {
     const rem = out.find((m) => m.sleepStage === "REM")!;
     expect(rem.value).toBe(45);
 
-    // Every fieldTag distinct (logId anchor + stage + segment index).
+    // Every fieldTag distinct: the logId anchor plus the segment's own START
+    // instant — no positional index, no stage label.
     const tags = out.map((m) => m.fieldTag);
     expect(new Set(tags).size).toBe(tags.length);
-    expect(deep.fieldTag).toBe("999:sleep_deep:1");
+    expect(deep.fieldTag).toBe(
+      `999:sleep:${new Date("2026-05-10T22:30:00.000").toISOString()}`,
+    );
+
+    // The session window spans the earliest segment start → the latest end.
+    expect(mapped.windowStart!.getTime()).toBe(
+      new Date("2026-05-10T22:00:00.000").getTime(),
+    );
+    expect(mapped.windowEnd!.getTime()).toBe(
+      new Date("2026-05-11T00:15:00.000").getTime(),
+    );
+  });
+
+  it("keeps stable per-segment externalIds across a re-score (anchor = logId)", () => {
+    // Two fetches of the SAME night. On the re-score Fitbit RE-CLASSIFIES the
+    // first block (light→deep), SPLITS the second, and thereby renumbers every
+    // following segment — the old positional, stage-scoped key minted fresh
+    // externalIds for unchanged blocks, so the upsert inserted parallel rows
+    // the night total then double-counted. The anchor + segment-start key must
+    // yield the SAME externalIds for the blocks that did not move.
+    const night = (
+      data: Array<{ dateTime: string; level: string; seconds: number }>,
+    ) =>
+      mapSleepSessionDetailed({
+        logId: 777,
+        startTime: "2026-05-10T22:00:00.000",
+        endTime: "2026-05-11T06:00:00.000",
+        levels: { data },
+      });
+
+    const first = night([
+      { dateTime: "2026-05-10T22:00:00.000", level: "light", seconds: 1800 },
+      { dateTime: "2026-05-10T22:30:00.000", level: "rem", seconds: 3600 },
+      { dateTime: "2026-05-10T23:30:00.000", level: "deep", seconds: 1800 },
+    ]);
+    const rescored = night([
+      // Same start, re-classified → same key, stage updates in place.
+      { dateTime: "2026-05-10T22:00:00.000", level: "deep", seconds: 1800 },
+      // Split into two halves: the first keeps the block's start key, the
+      // second is a genuinely new segment. Everything after it renumbers.
+      { dateTime: "2026-05-10T22:30:00.000", level: "rem", seconds: 1800 },
+      { dateTime: "2026-05-10T23:00:00.000", level: "light", seconds: 1800 },
+      { dateTime: "2026-05-10T23:30:00.000", level: "deep", seconds: 1800 },
+    ]);
+
+    const startKey = (iso: string) =>
+      `777:sleep:${new Date(iso).toISOString()}`;
+    expect(first.rows.map((r) => r.fieldTag)).toEqual([
+      startKey("2026-05-10T22:00:00.000"),
+      startKey("2026-05-10T22:30:00.000"),
+      startKey("2026-05-10T23:30:00.000"),
+    ]);
+    // The unchanged blocks keep their keys across the re-score — overwrite,
+    // never a parallel duplicate. Only the genuinely new split half is new.
+    expect(rescored.rows.map((r) => r.fieldTag)).toEqual([
+      startKey("2026-05-10T22:00:00.000"),
+      startKey("2026-05-10T22:30:00.000"),
+      startKey("2026-05-10T23:00:00.000"),
+      startKey("2026-05-10T23:30:00.000"),
+    ]);
+    // The re-classification rides the stage axis (an in-place update).
+    expect(first.rows[0]!.sleepStage).toBe("CORE"); // light → shallow-NREM band
+    expect(rescored.rows[0]!.sleepStage).toBe("DEEP");
+  });
+
+  it("keys a classic (asleep / restless / in_bed) log identically", () => {
+    const mapped = mapSleepSessionDetailed({
+      logId: 555,
+      levels: {
+        data: [
+          {
+            dateTime: "2026-05-10T22:00:00.000",
+            level: "asleep",
+            seconds: 600,
+          },
+          {
+            dateTime: "2026-05-10T22:10:00.000",
+            level: "restless",
+            seconds: 300,
+          },
+          {
+            dateTime: "2026-05-10T22:15:00.000",
+            level: "in_bed",
+            seconds: 300,
+          },
+          // Unknown label — skipped, and it must not shift the other keys.
+          {
+            dateTime: "2026-05-10T22:20:00.000",
+            level: "snoring",
+            seconds: 300,
+          },
+        ],
+      },
+    });
+    expect(mapped.rows.map((r) => r.fieldTag)).toEqual([
+      `555:sleep:${new Date("2026-05-10T22:00:00.000").toISOString()}`,
+      `555:sleep:${new Date("2026-05-10T22:10:00.000").toISOString()}`,
+      `555:sleep:${new Date("2026-05-10T22:15:00.000").toISOString()}`,
+    ]);
+    expect(mapped.rows.map((r) => r.sleepStage)).toEqual([
+      "ASLEEP",
+      "AWAKE",
+      "IN_BED",
+    ]);
   });
 
   it("yields nothing for a session with no parseable segments", () => {
-    expect(mapSleepSession({ levels: { data: [] } })).toHaveLength(0);
-    expect(mapSleepSession({})).toHaveLength(0);
+    const empty = mapSleepSessionDetailed({ levels: { data: [] } });
+    expect(empty.rows).toHaveLength(0);
+    // A null window is what stops the sweep from issuing an unbounded delete.
+    expect(empty.windowStart).toBeNull();
+    expect(empty.windowEnd).toBeNull();
+    expect(mapSleepSessionDetailed({}).rows).toHaveLength(0);
   });
 
   it("anchors a near-midnight segment END to the user's timezone, not the process zone", () => {
@@ -540,7 +657,7 @@ describe("sleep mapping (1.2 levels.data)", () => {
       ],
     });
 
-    const out = mapSleepSession(sessions[0]!, "Europe/Berlin");
+    const out = mapSleepSessionDetailed(sessions[0]!, "Europe/Berlin").rows;
     expect(out).toHaveLength(1);
     // 00:30 CEST (UTC+2) → 22:30 UTC on the PRIOR civil day.
     expect(out[0]!.measuredAt.toISOString()).toBe("2026-05-10T22:30:00.000Z");
@@ -569,10 +686,119 @@ describe("sleep mapping (1.2 levels.data)", () => {
       ],
     });
 
-    const out = mapSleepSession(sessions[0]!, "Europe/Berlin");
+    const out = mapSleepSessionDetailed(sessions[0]!, "Europe/Berlin").rows;
     expect(out).toHaveLength(1);
     // anchor = start instant ISO (UTC) → fieldTag starts with that instant.
-    expect(out[0]!.fieldTag).toBe("2026-05-10T21:00:00.000Z:sleep_rem:0");
+    expect(out[0]!.fieldTag).toBe(
+      "2026-05-10T21:00:00.000Z:sleep:2026-05-10T22:00:00.000Z",
+    );
+  });
+});
+
+describe("fitbitGet — Retry-After on a 429", () => {
+  const S = new Date("2026-05-01T00:00:00.000Z");
+  const E = new Date("2026-05-10T00:00:00.000Z");
+
+  it("waits out a Retry-After inside the cap and retries the request once", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    try {
+      const fetchMock = installFetchMock([
+        { status: 429, headers: { "retry-after": "5" }, body: {} },
+        { status: 200, body: { sleep: [] } },
+      ]);
+
+      const pending = fetchSleepRange("tok", S, E);
+
+      // Still parked on the delay the upstream asked for — the retry must not
+      // fire early (an immediate re-request would just burn the next 429).
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(pending).resolves.toEqual({ sleep: [] });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fails fast without waiting when the delay exceeds the cap", async () => {
+    // An exhausted hourly budget asks for the better part of an hour. Sitting
+    // that out inside a worker slot starves every other user in the tick (and
+    // a pg-boss job would be lapped by its own expiration), so the request
+    // throws immediately and the next scheduled tick refetches the window.
+    const fetchMock = installFetchMock([
+      {
+        status: 429,
+        headers: { "retry-after": String(FITBIT_RETRY_AFTER_WAIT_CAP_S + 1) },
+        body: {},
+      },
+      { status: 200, body: { sleep: [] } },
+    ]);
+
+    await expect(fetchSleepRange("tok", S, E)).rejects.toMatchObject({
+      name: "FitbitApiError",
+      classification: "transient",
+      httpStatus: 429,
+      retryAfterSeconds: FITBIT_RETRY_AFTER_WAIT_CAP_S + 1,
+    });
+    // No second attempt — and no wait.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws without retrying when the header is missing", async () => {
+    const fetchMock = installFetchMock([
+      { status: 429, body: {} },
+      { status: 200, body: { sleep: [] } },
+    ]);
+
+    await expect(fetchSleepRange("tok", S, E)).rejects.toMatchObject({
+      name: "FitbitApiError",
+      httpStatus: 429,
+      retryAfterSeconds: undefined,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores the HTTP-date form of Retry-After (unknown wait → fail fast)", async () => {
+    const fetchMock = installFetchMock([
+      {
+        status: 429,
+        headers: { "retry-after": "Wed, 21 Oct 2026 07:28:00 GMT" },
+        body: {},
+      },
+      { status: 200, body: { sleep: [] } },
+    ]);
+
+    await expect(fetchSleepRange("tok", S, E)).rejects.toMatchObject({
+      httpStatus: 429,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives up after a second 429 (one retry, never a loop)", async () => {
+    const fetchMock = installFetchMock([
+      { status: 429, headers: { "retry-after": "0" }, body: {} },
+      { status: 429, headers: { "retry-after": "0" }, body: {} },
+      { status: 200, body: { sleep: [] } },
+    ]);
+
+    await expect(fetchSleepRange("tok", S, E)).rejects.toMatchObject({
+      httpStatus: 429,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry a non-429 failure", async () => {
+    const fetchMock = installFetchMock([
+      { status: 500, body: {} },
+      { status: 200, body: { sleep: [] } },
+    ]);
+
+    await expect(fetchSleepRange("tok", S, E)).rejects.toMatchObject({
+      httpStatus: 500,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

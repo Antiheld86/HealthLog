@@ -26,6 +26,7 @@ const providerSources = [
   "sleep-timeline-backfill.ts",
   "lab-biomarker-backfill.ts",
   "strava-backfill.ts",
+  "fitbit-sleep-repair.ts",
 ].map((file) => readFileSync(join(__dirname, "..", file), "utf8"));
 
 describe("shared full-history backfill admission", () => {
@@ -38,9 +39,10 @@ describe("shared full-history backfill admission", () => {
       "sleep-timeline-backfill",
       "lab-biomarker-backfill",
       "strava-backfill",
+      "fitbit-sleep-repair",
     ]);
     expect(INTEGRATION_BACKFILL_BOOT_ORDER.map(bootStaggerSecondsFor)).toEqual([
-      30, 60, 90, 120, 150, 180, 210,
+      30, 60, 90, 120, 150, 180, 210, 240,
     ]);
     expect(INTEGRATION_BACKFILL_STAGGER_SECONDS).toBe(30);
 
@@ -57,6 +59,7 @@ describe("shared full-history backfill admission", () => {
       "sleep-timeline-backfill": "enqueueBootTimeSleepTimelineBackfill",
       "lab-biomarker-backfill": "enqueueBootTimeLabBiomarkerBackfill",
       "strava-backfill": "enqueueBootTimeStravaBackfill",
+      "fitbit-sleep-repair": "enqueueBootTimeFitbitSleepRepair",
     } as const;
     for (const kind of INTEGRATION_BACKFILL_BOOT_ORDER) {
       expect(registrarSource).toMatch(
@@ -140,6 +143,7 @@ describe("shared full-history backfill admission", () => {
       "SLEEP_TIMELINE_BACKFILL_QUEUE",
       "LAB_BIOMARKER_BACKFILL_QUEUE",
       "STRAVA_BACKFILL_QUEUE",
+      "FITBIT_SLEEP_REPAIR_QUEUE",
     ]) {
       expect(registrarSource).toMatch(
         new RegExp(
