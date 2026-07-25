@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## [1.32.28] — 2026-07-25
+
+Oura used to look back exactly one week and no further. If the sync had been
+broken for longer than that, or if the ring sat unused and the older nights
+only reached Oura's cloud later, those days fell outside the window and were
+never imported. Nothing said so, because a sync that finds nothing still counts
+as a sync that worked.
+
+- **Oura catches up after a gap.** The window is now measured from the newest
+  Oura reading actually on file rather than from a fixed week. A ten day gap
+  pulls eleven days on the next run and closes itself; a month is the ceiling.
+  When data is arriving normally the window stays at a week and nothing about
+  the hourly run changes.
+- **A fresh Oura connection imports a month** instead of a week. Deeper history
+  is a separate question and is not part of this release.
+- **Sync now for Oura, Polar, Strava and Nightscout.** These four had no way to
+  ask for a sync; they only ever ran on their scheduled pass. Each connected
+  card gets the same button WHOOP and Fitbit already had, limited to a few runs
+  per minute.
+- **Connecting starts the first sync straight away.** Oura, Polar and
+  Nightscout used to sit empty for up to an hour after connecting, waiting for
+  the next scheduled pass. The first pull now runs on connect, and the schedule
+  stays as the fallback.
+
 ## [1.32.27] — 2026-07-25
 
 Target and threshold panels now follow the metric and imperial preference. The
