@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+## [1.32.30] — 2026-07-25
+
+Height was the last value still asked for in centimetres regardless of the
+setting. Both previous releases closed with a note saying so. It sat outside
+the fix because height is not a measurement at all: it is a field on your
+profile, so the conversion the reading surfaces go through never reached it.
+
+- **Height is entered in the unit you use.** With imperial selected, the
+  profile card and the onboarding step ask for feet and inches in two boxes,
+  the way a person actually states a height. With metric selected the single
+  centimetre box is exactly what it was.
+- **The value you type comes back.** Feet and inches are kept to the nearest
+  whole inch, which converts to centimetres without a remainder, so saving
+  5 ft 11 in and reopening the page shows 5 ft 11 in again. The limits the
+  fields offer are the imperial equivalents of the ones the server enforces,
+  rounded inward, so a height you are allowed to type is never refused on save.
+- **Storage is unchanged.** Height is still kept in centimetres, the API still
+  sends and receives centimetres, and BMI and the weight bands still work from
+  that same value. A metric account's stored height is untouched by this
+  release.
+- **Switching the unit keeps what you were typing.** The unit selector sits on
+  the same card as the height field, so flipping it re-expresses whatever is in
+  the field rather than clearing it.
+
+With this the preference reported in #627 reaches every value the app shows you
+or asks you for.
+
 ## [1.32.29] — 2026-07-25
 
 Fitbit re-scores a night hours after you wake up: blocks get split, merged or
