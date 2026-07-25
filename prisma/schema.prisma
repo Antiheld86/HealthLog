@@ -1637,7 +1637,13 @@ model Measurement {
   // explicitly LEGACY_UNKNOWN until a native sync or archive reprocess repairs
   // them.
   aggregationProvenance MeasurementAggregationProvenance? @map("aggregation_provenance")
-  // Only set for BLOOD_GLUCOSE measurements. NULL for all others.
+  // Only set for BLOOD_GLUCOSE measurements. NULL for all others, and NULL
+  // for a BLOOD_GLUCOSE row whose writer has no classification to record —
+  // a sensor export, the Nightscout pull, the MCP tool, the Telegram capture.
+  // A CHECK constraint (migrations 0021 + 0274) enforces the type pairing in
+  // one direction only: a non-glucose row can never carry a context. Every
+  // per-context reader selects by equality against the four enum members, so
+  // a NULL context stays absent rather than reading as a classification.
   glucoseContext        GlucoseContext?       @map("glucose_context")
   // v1.4.23 — per-stage sleep label. NULL for non-sleep rows; non-NULL
   // only for `type = SLEEP_DURATION`. Mirrors the glucoseContext

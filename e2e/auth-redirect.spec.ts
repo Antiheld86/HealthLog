@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./setup/test";
 
 /**
  * The proxy at src/proxy.ts is the single gate enforcing auth on every

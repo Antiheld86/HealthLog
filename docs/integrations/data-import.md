@@ -1,6 +1,6 @@
 # Data import
 
-HealthLog has two ways to bring data in, both reachable from
+HealthLog has three ways to bring data in, all reachable from
 **Settings → Export & Import**:
 
 1. An **Apple Health `export.zip`** upload — the full archive from the
@@ -10,9 +10,17 @@ HealthLog has two ways to bring data in, both reachable from
 2. A **generic JSON import** — a small, explicit payload of measurements
    and mood entries, useful for restoring a partial export or migrating
    from another tracker. This page documents that format.
+3. A **CSV import** — one measurement per row, for a spreadsheet or a
+   meter / sensor export. Documented in section 3 below.
 
-Both paths skip rows that already exist, so re-running an import is
+All three paths skip rows that already exist, so re-running an import is
 safe — it merges rather than duplicating.
+
+Every import reports what it actually wrote. A file where nothing was
+written is shown as a failure, a file where some rows landed and some
+were refused is shown as a partial result, and the refused rows are
+grouped by reason so one bad column reads as one line rather than a
+scroll.
 
 ## 1. Apple Health `export.zip`
 
@@ -56,7 +64,28 @@ skipped and counted under `skipped` in the response.
 | `measuredAt`     | yes      | string | ISO-8601 datetime, e.g. `2026-05-01T08:00:00.000Z`.                               |
 | `source`         | no       | string | Free-text origin label. Imported rows are tagged `IMPORT` server-side regardless. |
 | `notes`          | no       | string | Optional free text.                                                               |
-| `glucoseContext` | no       | enum   | Only for `BLOOD_GLUCOSE` (e.g. fasting / post-meal).                              |
+| `glucoseContext` | no       | enum   | Only for `BLOOD_GLUCOSE`. See [Glucose context](#glucose-context).                |
+
+### Glucose context
+
+`glucoseContext` is one of `FASTING`, `POSTPRANDIAL`, `RANDOM`,
+`BEDTIME`, and it is genuinely optional on a `BLOOD_GLUCOSE` row. Leave
+it out (JSON) or leave the cell blank (CSV) and the reading is stored
+with no context.
+
+That is the normal case for a continuous sensor or meter export, which
+records a value and a timestamp per reading and classifies nothing. A
+reading with no context still counts everywhere a reading counts: the
+chart, the all-time summary, and the trailing-30-day clinical panel
+(time in range, GMI, CV%, estimated A1c) are all context-agnostic. It is
+left out only of the per-context breakdowns — the doctor report's
+fasting / post-meal rows, the matching FHIR observations, the per-context
+targets — because no classification was recorded and none is invented.
+
+Setting the column on any type other than `BLOOD_GLUCOSE` is rejected.
+Setting it to a value outside the four above is rejected. Entering a
+reading by hand in the app still asks for a context, because at that
+moment you know it.
 
 ### Mood entry
 
@@ -195,7 +224,47 @@ The response is a count envelope:
 }
 ```
 
+## 3. CSV import
+
+`POST /api/import/csv` takes the raw file as `text/csv` — one measurement
+per row, no JSON wrapper. The **CSV file** control in
+**Settings → Export & Import** posts to it, and **Download example**
+mints a file with the right header.
+
+A header row is required; column order does not matter and header
+matching is case-insensitive.
+
+| Column           | Required | Notes                                                                                                     |
+| ---------------- | -------- | --------------------------------------------------------------------------------------------------------- |
+| `type`           | yes      | A `MeasurementType` from the table above.                                                                 |
+| `value`          | yes      | A number, in the row's `unit`.                                                                            |
+| `unit`           | yes      | The canonical unit, or a recognised alias: `mmol/L` → `mg/dL`, `lb` → `kg`, `in` → `cm`, `°F` → `°C`.     |
+| `measuredAt`     | yes      | ISO-8601 **with an explicit offset** (`Z` or `±HH:MM`, and `±HHMM` is accepted). No offset, no import.    |
+| `glucoseContext` | no       | Only for `BLOOD_GLUCOSE`; blank means no context. See [Glucose context](#glucose-context).                |
+| `notes`          | no       | Free text, up to 200 characters.                                                                          |
+| `externalId`     | no       | A source-stable id. With it, a re-upload updates the same row; without it, a re-upload creates a new one. |
+
+A sensor export therefore needs no glucose column at all:
+
+```csv
+type,value,unit,measuredAt,glucoseContext,notes,externalId
+BLOOD_GLUCOSE,5.3,mmol/L,2024-04-03T13:15:00+1100,,,sensor-1
+BLOOD_GLUCOSE,5.9,mmol/L,2024-04-03T13:30:00+1100,,,sensor-2
+```
+
+Limits: 16 MB per upload, 10 000 valid rows per import, 5 imports per
+hour (shared with the JSON import). `?dryRun=1` validates and previews
+without writing anything — the **Preview** button uses it.
+
+The response carries per-row outcomes alongside the counts, and the card
+renders the counts, not the status code: rows written and none skipped is
+a success, a mixed result is a warning, and nothing written is a failure
+with the reasons grouped by count.
+
 ## Converting a CSV into the import JSON
+
+The CSV import above covers measurements. Mood entries have no CSV
+route, so a mood history still goes through the JSON payload.
 
 A spreadsheet export is the most common starting point. The shape is
 small enough to convert by hand for a few rows, or with a one-off script

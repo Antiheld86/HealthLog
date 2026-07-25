@@ -4466,6 +4466,7 @@
             "failed": "L'importazione non è riuscita.",
             "rowsImported": "{count} righe importate finora",
             "doneSummary": "Fatto: {imported} di {read} record importati, {skipped} record clinici saltati.",
+            "doneNothing": "Da questo archivio non è stato importato nulla: sono arrivati 0 record su {read}.",
             "estimateWarning": "I totali cumulativi di {count} giorno/i sono stati stimati dalla fonte di esportazione più alta. Le statistiche native di Apple Salute restano autorevoli.",
             "phase": {
               "queued": "In coda…",
@@ -4489,7 +4490,10 @@
             "rateLimited": "Troppe importazioni in questa ora (limite 5). Riprova più tardi.",
             "failed": "L'importazione non è riuscita. Riprova.",
             "readFailed": "Impossibile leggere il file.",
-            "resultSummary": "{measurements} misurazioni e {moods} voci dell'umore importate, {skipped} saltate."
+            "resultSummary": "{measurements} misurazioni e {moods} voci dell'umore importate, {skipped} saltate.",
+            "resultSuccess": "{measurements} misurazioni e {moods} voci dell'umore importate.",
+            "resultNothing": "Non è stato importato nulla. Tutte le {skipped} voci sono state saltate.",
+            "resultEmpty": "Questo file non conteneva né misurazioni né voci dell'umore."
           },
           "csv": {
             "title": "File CSV",
@@ -4510,7 +4514,30 @@
             "readFailed": "Impossibile leggere questo file.",
             "previewSummary": "Anteprima: {inserted} verrebbero importate, {skipped} saltate.",
             "resultSummary": "{inserted} nuove importate e {updated} aggiornate, {skipped} saltate.",
-            "rowError": "Riga {line}: {reason}"
+            "rowError": "Riga {line}: {reason}",
+            "resultSuccess": "{inserted} nuove importate e {updated} aggiornate.",
+            "resultNothing": "Non è stato importato nulla. Tutte le {skipped} righe sono state saltate.",
+            "resultEmpty": "Questo file ha un'intestazione ma nessuna riga di dati.",
+            "previewSuccess": "Anteprima: {inserted} verrebbero importate.",
+            "previewNothing": "Anteprima: non verrebbe importato nulla. Tutte le {skipped} righe verrebbero saltate.",
+            "skipGroupOne": "{count} riga saltata: {reason}",
+            "skipGroupFew": "{count} righe saltate: {reason}",
+            "skipGroupOther": "{count} righe saltate: {reason}",
+            "skipDetails": "Mostra tutte le righe saltate",
+            "reasonUnknownType": "tipo di misurazione sconosciuto",
+            "reasonInvalidValue": "il valore non è un numero",
+            "reasonValueOutOfRange": "valore fuori dall'intervallo plausibile",
+            "reasonUnknownUnit": "unità non riconosciuta per questo tipo",
+            "reasonMissingTimezoneOffset": "marca temporale senza offset del fuso orario",
+            "reasonInvalidTimestamp": "marca temporale illeggibile",
+            "reasonImplausibleTimestamp": "marca temporale nel futuro o precedente al 1900",
+            "reasonUnexpectedGlucoseContext": "contesto glicemico su una riga che non è glicemia",
+            "reasonInvalidGlucoseContext": "il contesto glicemico non è un valore consentito",
+            "reasonNotesTooLong": "la nota è troppo lunga",
+            "reasonExternalIdTooLong": "l'ID esterno è troppo lungo",
+            "reasonUnstableExternalId": "l'ID esterno non è stabile tra un export e l'altro",
+            "reasonDuplicate": "già importata",
+            "reasonUnknown": "saltata"
           }
         },
         "subtitle": "Esporta i tuoi dati o importa da un backup."

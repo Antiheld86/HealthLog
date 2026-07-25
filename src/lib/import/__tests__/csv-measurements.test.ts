@@ -157,12 +157,47 @@ describe("parseCsvMeasurements — timezone + entry-instant bound", () => {
 });
 
 describe("parseCsvMeasurements — glucose context", () => {
-  it("requires a context for BLOOD_GLUCOSE", () => {
+  // #640 — a continuous-sensor export carries a value and a timestamp per
+  // reading and classifies nothing. Refusing those rows rejected the normal
+  // case; the reading is accepted and the context stays absent.
+  it("accepts a BLOOD_GLUCOSE row with no context", () => {
     const out = parse(["BLOOD_GLUCOSE,95,mg/dL,2026-05-01T08:00:00Z,,,"]);
-    expect(out.rows[0]).toMatchObject({
-      status: "skipped",
-      reason: "missing_glucose_context",
-    });
+    expect(out.rows[0]).toMatchObject({ status: "ok" });
+    expect(out.rows[0].row).toBeDefined();
+    expect(out.rows[0].row).not.toHaveProperty("glucoseContext");
+  });
+
+  it("accepts a contextless mmol/L reading at a +HHMM offset", () => {
+    const out = parse([
+      "BLOOD_GLUCOSE,5.3,mmol/L,2024-04-03T13:15:00+1100,,Sensor,sensor-1",
+      "BLOOD_GLUCOSE,5.3,mmol/L,2024-04-17T08:06:00+1000,,Sensor,sensor-2",
+    ]);
+    expect(out.rows.map((r) => r.status)).toEqual(["ok", "ok"]);
+    for (const result of out.rows) {
+      expect(result.row).not.toHaveProperty("glucoseContext");
+      expect(result.row?.unit).toBe("mg/dL");
+      expect(result.row?.value).toBeCloseTo(95.4848, 3);
+    }
+    expect(out.rows[0].row?.measuredAt.toISOString()).toBe(
+      "2024-04-03T02:15:00.000Z",
+    );
+    expect(out.rows[1].row?.measuredAt.toISOString()).toBe(
+      "2024-04-16T22:06:00.000Z",
+    );
+  });
+
+  it("still accepts every enum context", () => {
+    const out = parse(
+      ["FASTING", "POSTPRANDIAL", "RANDOM", "BEDTIME"].map(
+        (ctx) => `BLOOD_GLUCOSE,95,mg/dL,2026-05-01T08:00:00Z,${ctx},,`,
+      ),
+    );
+    expect(out.rows.map((r) => r.row?.glucoseContext)).toEqual([
+      "FASTING",
+      "POSTPRANDIAL",
+      "RANDOM",
+      "BEDTIME",
+    ]);
   });
 
   it("rejects a context on a non-glucose row", () => {

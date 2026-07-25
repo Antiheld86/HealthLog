@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./setup/test";
 import pg from "pg";
 
 import { E2E_USER, STORAGE_STATE_PATH } from "./setup/global-setup";

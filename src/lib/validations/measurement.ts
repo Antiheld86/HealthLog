@@ -648,8 +648,10 @@ export const createMeasurementSchema = z
     // `APPLE_HEALTH`; `WITHINGS` / `IMPORT` / `COMPUTED` are server-owned and
     // forging them would pollute the per-source canonical picker.
     source: writableMeasurementSourceEnum.optional().default("MANUAL"),
-    // Only applies when type === BLOOD_GLUCOSE. Mirrored by a CHECK
-    // constraint in Postgres (see migration 0021).
+    // Only applies when type === BLOOD_GLUCOSE. The "not on any other type"
+    // half is mirrored by a CHECK constraint in Postgres (migrations 0021 +
+    // 0274). The "required on a glucose row" half below is a rule of THIS
+    // schema only — see the refine.
     glucoseContext: glucoseContextEnum.optional(),
     // v1.4.25 W10 reconcile (code-review M4): the single-entry POST
     // dropped `deviceType` silently because the column existed on
@@ -669,6 +671,14 @@ export const createMeasurementSchema = z
   .refine((data) => validateMeasurementRange(data.type, data.value) === null, {
     message: "Value out of plausible range",
   })
+  // Deliberately asymmetric with the bulk ingest paths. This schema backs the
+  // hand-entry surface, where a person is present at the reading and knows
+  // whether it was fasting, after a meal, random or at bedtime — the form
+  // always offers the choice, so requiring it costs nothing and keeps the
+  // per-context breakdowns meaningful. A sensor or meter export has no such
+  // answer per sample, so the CSV import, the JSON import and the device sync
+  // paths accept a contextless reading and store NULL rather than guessing.
+  // Absence stays absence; it is never widened into a classification.
   .refine(
     (data) =>
       (data.type === "BLOOD_GLUCOSE" && data.glucoseContext !== undefined) ||

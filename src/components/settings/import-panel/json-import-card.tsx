@@ -2,14 +2,7 @@
 
 import { useId, useRef, useState } from "react";
 import Link from "next/link";
-import {
-  AlertCircle,
-  CheckCircle2,
-  Download,
-  FileJson,
-  Loader2,
-  Upload,
-} from "lucide-react";
+import { AlertCircle, Download, FileJson, Loader2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -19,6 +12,8 @@ import { apiFetchRaw } from "@/lib/api/api-fetch";
 import { ImportCardShell } from "./import-card-shell";
 import { MAX_PASTE_CHARS } from "./constants";
 import { EXAMPLE_IMPORT, parseImportJson } from "./import-examples";
+import { classifyImportOutcome } from "./import-result-state";
+import { ImportOutcomeLine } from "./import-result-view";
 
 interface JsonImportResult {
   measurements: number;
@@ -28,6 +23,38 @@ interface JsonImportResult {
 
 export function JsonImportCard() {
   const { t } = useTranslations();
+
+  // Same reasoning as the CSV card: the JSON route answers 200 with a per-
+  // concept count envelope, so a payload where every entry was refused used
+  // to render the success tick. The counts decide the tone.
+  const jsonOutcome = (r: JsonImportResult) =>
+    classifyImportOutcome({
+      written: r.measurements + r.moodEntries,
+      skipped: r.skipped,
+    });
+  const jsonMessage = (r: JsonImportResult) => {
+    const outcome = jsonOutcome(r);
+    if (outcome === "empty") {
+      return t("settings.sections.export.import.json.resultEmpty");
+    }
+    if (outcome === "failed") {
+      return t("settings.sections.export.import.json.resultNothing", {
+        skipped: r.skipped,
+      });
+    }
+    if (outcome === "partial") {
+      return t("settings.sections.export.import.json.resultSummary", {
+        measurements: r.measurements,
+        moods: r.moodEntries,
+        skipped: r.skipped,
+      });
+    }
+    return t("settings.sections.export.import.json.resultSuccess", {
+      measurements: r.measurements,
+      moods: r.moodEntries,
+    });
+  };
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -164,22 +191,11 @@ export function JsonImportCard() {
 
       <div aria-live="polite" className="space-y-2">
         {result && (
-          <p
-            data-testid="import-json-result"
-            className="text-foreground flex items-start gap-2 text-xs"
-          >
-            <CheckCircle2
-              className="text-success mt-0.5 h-3.5 w-3.5 shrink-0"
-              aria-hidden="true"
-            />
-            <span>
-              {t("settings.sections.export.import.json.resultSummary", {
-                measurements: result.measurements,
-                moods: result.moodEntries,
-                skipped: result.skipped,
-              })}
-            </span>
-          </p>
+          <ImportOutcomeLine
+            outcome={jsonOutcome(result)}
+            message={jsonMessage(result)}
+            testId="import-json-result"
+          />
         )}
         {error && (
           <p

@@ -1,11 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
-import {
-  expect,
-  test,
-  type Locator,
-  type Page,
-  type Route,
-} from "@playwright/test";
+import type { Locator, Page, Route } from "@playwright/test";
+import { expect, test } from "./setup/test";
 
 import { STORAGE_STATE_PATH } from "./setup/global-setup";
 import { POPULATED_SUMMARIES } from "./utils/mock-dashboard-snapshot";

@@ -152,6 +152,18 @@ describe("EXAMPLE_CSV", () => {
     expect(out.rows.length).toBeGreaterThan(0);
     expect(out.rows.every((r) => r.status === "ok")).toBe(true);
   });
+
+  it("carries a contextless glucose reading, the shape a sensor export has", () => {
+    const out = parseCsvMeasurements(EXAMPLE_CSV, {
+      now: new Date("2026-06-01T00:00:00Z").getTime(),
+    });
+    const glucose = out.rows
+      .map((r) => r.row)
+      .filter((row) => row?.type === "BLOOD_GLUCOSE");
+    expect(glucose.length).toBeGreaterThanOrEqual(2);
+    expect(glucose.some((row) => row?.glucoseContext === undefined)).toBe(true);
+    expect(glucose.some((row) => row?.glucoseContext === "FASTING")).toBe(true);
+  });
 });
 
 describe("parseImportJson guard", () => {

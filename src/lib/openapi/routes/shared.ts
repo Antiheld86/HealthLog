@@ -70,7 +70,7 @@ loginPasswordSchema.meta({
 createMeasurementSchema.meta({
   id: "CreateMeasurementRequest",
   description:
-    "Single-measurement ingest body. Plausibility-range guard runs server-side; out-of-range values fail 422.",
+    "Single-measurement ingest body. Plausibility-range guard runs server-side; out-of-range values fail 422. `glucoseContext` stays REQUIRED on a `BLOOD_GLUCOSE` row here: this is the hand-entry surface, where the person taking the reading knows whether it was fasting or after a meal. The bulk ingest paths (CSV import, JSON import, device sync) accept a contextless reading, because a sensor export classifies nothing per sample.",
 });
 
 listMeasurementsSchema.meta({

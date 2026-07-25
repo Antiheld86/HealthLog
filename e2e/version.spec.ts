@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./setup/test";
 
 /**
  * /api/version is the public, unauthenticated endpoint that drives

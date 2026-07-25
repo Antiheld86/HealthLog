@@ -22,7 +22,8 @@
  * the specs time out. The seeded demo user has no AI provider, so the
  * no-provider state is the default.
  */
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./setup/test";
 
 import { STORAGE_STATE_PATH } from "./setup/global-setup";
 import {

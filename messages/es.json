@@ -4474,6 +4474,7 @@
             "failed": "La importación falló.",
             "rowsImported": "{count} filas importadas hasta ahora",
             "doneSummary": "Listo: {imported} de {read} registros importados, {skipped} registros clínicos omitidos.",
+            "doneNothing": "No se importó nada de ese archivo: llegaron 0 de {read} registros.",
             "estimateWarning": "Los totales acumulados de {count} día(s) se estimaron a partir de la mayor fuente de la exportación. Las estadísticas nativas de Apple Health siguen siendo la referencia.",
             "phase": {
               "queued": "En cola…",
@@ -4497,7 +4498,10 @@
             "rateLimited": "Demasiadas importaciones esta hora (límite 5). Inténtalo más tarde.",
             "failed": "La importación falló. Inténtalo de nuevo.",
             "readFailed": "No se pudo leer ese archivo.",
-            "resultSummary": "{measurements} mediciones y {moods} entradas de ánimo importadas, {skipped} omitidas."
+            "resultSummary": "{measurements} mediciones y {moods} entradas de ánimo importadas, {skipped} omitidas.",
+            "resultSuccess": "{measurements} mediciones y {moods} entradas de ánimo importadas.",
+            "resultNothing": "No se importó nada. Se omitieron las {skipped} entradas.",
+            "resultEmpty": "Ese archivo no contenía mediciones ni entradas de ánimo."
           },
           "csv": {
             "title": "Archivo CSV",
@@ -4518,7 +4522,30 @@
             "readFailed": "No se pudo leer ese archivo.",
             "previewSummary": "Vista previa: {inserted} se importarían, {skipped} omitidas.",
             "resultSummary": "{inserted} nuevas importadas y {updated} actualizadas, {skipped} omitidas.",
-            "rowError": "Línea {line}: {reason}"
+            "rowError": "Línea {line}: {reason}",
+            "resultSuccess": "{inserted} nuevas importadas y {updated} actualizadas.",
+            "resultNothing": "No se importó nada. Se omitieron las {skipped} filas.",
+            "resultEmpty": "Ese archivo tiene encabezado pero ninguna fila de datos.",
+            "previewSuccess": "Vista previa: {inserted} se importarían.",
+            "previewNothing": "Vista previa: no se importaría nada. Se omitirían las {skipped} filas.",
+            "skipGroupOne": "{count} fila omitida: {reason}",
+            "skipGroupFew": "{count} filas omitidas: {reason}",
+            "skipGroupOther": "{count} filas omitidas: {reason}",
+            "skipDetails": "Mostrar todas las filas omitidas",
+            "reasonUnknownType": "tipo de medición desconocido",
+            "reasonInvalidValue": "el valor no es un número",
+            "reasonValueOutOfRange": "valor fuera del rango plausible",
+            "reasonUnknownUnit": "unidad no reconocida para este tipo",
+            "reasonMissingTimezoneOffset": "marca de tiempo sin desfase de zona horaria",
+            "reasonInvalidTimestamp": "no se pudo leer la marca de tiempo",
+            "reasonImplausibleTimestamp": "la marca de tiempo está en el futuro o es anterior a 1900",
+            "reasonUnexpectedGlucoseContext": "contexto de glucosa en una fila que no es de glucosa en sangre",
+            "reasonInvalidGlucoseContext": "el contexto de glucosa no es un valor permitido",
+            "reasonNotesTooLong": "la nota es demasiado larga",
+            "reasonExternalIdTooLong": "el ID externo es demasiado largo",
+            "reasonUnstableExternalId": "el ID externo no es estable entre exportaciones",
+            "reasonDuplicate": "ya importada",
+            "reasonUnknown": "omitida"
           }
         },
         "subtitle": "Exporta tus datos o importa desde una copia de seguridad."

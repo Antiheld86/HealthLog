@@ -4472,6 +4472,7 @@
             "failed": "Der Import ist fehlgeschlagen.",
             "rowsImported": "Bisher {count} Einträge importiert",
             "doneSummary": "Fertig — {imported} von {read} Datensätzen importiert, {skipped} klinische Datensätze übersprungen.",
+            "doneNothing": "Aus diesem Archiv wurde nichts importiert: 0 von {read} Datensätzen sind angekommen.",
             "estimateWarning": "Kumulative Summen für {count} Tag(e) wurden anhand der größten Exportquelle geschätzt. Native Apple-Health-Statistiken bleiben maßgeblich.",
             "phase": {
               "queued": "In Warteschlange…",
@@ -4495,7 +4496,10 @@
             "rateLimited": "Zu viele Importe in dieser Stunde (Grenze 5). Bitte später erneut versuchen.",
             "failed": "Der Import ist fehlgeschlagen. Bitte erneut versuchen.",
             "readFailed": "Diese Datei konnte nicht gelesen werden.",
-            "resultSummary": "{measurements} Messwerte und {moods} Stimmungseinträge importiert, {skipped} übersprungen."
+            "resultSummary": "{measurements} Messwerte und {moods} Stimmungseinträge importiert, {skipped} übersprungen.",
+            "resultSuccess": "{measurements} Messwerte und {moods} Stimmungseinträge importiert.",
+            "resultNothing": "Nichts importiert. Alle {skipped} Einträge wurden übersprungen.",
+            "resultEmpty": "Diese Datei enthielt weder Messwerte noch Stimmungseinträge."
           },
           "csv": {
             "title": "CSV-Datei",
@@ -4516,7 +4520,30 @@
             "readFailed": "Diese Datei konnte nicht gelesen werden.",
             "previewSummary": "Vorschau: {inserted} würden importiert, {skipped} übersprungen.",
             "resultSummary": "{inserted} neu importiert und {updated} aktualisiert, {skipped} übersprungen.",
-            "rowError": "Zeile {line}: {reason}"
+            "rowError": "Zeile {line}: {reason}",
+            "resultSuccess": "{inserted} neu importiert und {updated} aktualisiert.",
+            "resultNothing": "Nichts importiert. Alle {skipped} Zeilen wurden übersprungen.",
+            "resultEmpty": "Diese Datei hat eine Kopfzeile, aber keine Datenzeilen.",
+            "previewSuccess": "Vorschau: {inserted} würden importiert.",
+            "previewNothing": "Vorschau: nichts würde importiert. Alle {skipped} Zeilen würden übersprungen.",
+            "skipGroupOne": "{count} Zeile übersprungen: {reason}",
+            "skipGroupFew": "{count} Zeilen übersprungen: {reason}",
+            "skipGroupOther": "{count} Zeilen übersprungen: {reason}",
+            "skipDetails": "Alle übersprungenen Zeilen anzeigen",
+            "reasonUnknownType": "unbekannter Messwerttyp",
+            "reasonInvalidValue": "Wert ist keine Zahl",
+            "reasonValueOutOfRange": "Wert außerhalb des plausiblen Bereichs",
+            "reasonUnknownUnit": "Einheit für diesen Typ nicht erkannt",
+            "reasonMissingTimezoneOffset": "Zeitstempel ohne Zeitzonen-Offset",
+            "reasonInvalidTimestamp": "Zeitstempel nicht lesbar",
+            "reasonImplausibleTimestamp": "Zeitstempel liegt in der Zukunft oder vor 1900",
+            "reasonUnexpectedGlucoseContext": "Glukose-Kontext in einer Zeile, die kein Blutzucker ist",
+            "reasonInvalidGlucoseContext": "Glukose-Kontext ist kein zulässiger Wert",
+            "reasonNotesTooLong": "Notiz ist zu lang",
+            "reasonExternalIdTooLong": "Externe ID ist zu lang",
+            "reasonUnstableExternalId": "Externe ID ist über Exporte hinweg nicht stabil",
+            "reasonDuplicate": "bereits importiert",
+            "reasonUnknown": "übersprungen"
           }
         },
         "subtitle": "Exportiere deine Daten oder importiere aus einer Sicherung."

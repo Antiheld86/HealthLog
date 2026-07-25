@@ -2,6 +2,47 @@
 
 ## [Unreleased]
 
+## [1.32.38] — 2026-07-25
+
+Blood-glucose readings from anything other than the manual entry form were
+never saved.
+
+A rule added years ago required every blood-glucose reading to carry a
+context: fasting, after a meal, random, or bedtime. That is a fair thing to
+ask of someone typing a reading in by hand. It is impossible for a sensor,
+which measures every few minutes and cannot know what you were doing.
+
+So every automated path failed. A CSV import reported the rows as skipped and
+still showed a green tick. Nightscout counted them as failed rows and carried
+on. Apple Health has no context field at all, so not one of its readings could
+ever have been stored. The same for readings written through the automation
+interface, through Telegram, and through the JSON importer. None of it was
+visible: no error reached anyone, and the affected charts and panels simply
+stayed empty as though nothing had been measured.
+
+A reading with no context is now stored with no context, which is what it is.
+Where a context is given it is still checked. Manual entry still asks for one,
+because the form offers the choices and nothing is lost by asking.
+
+Absence is now shown as absence: a reading without a context is left out of the
+per-context breakdowns rather than being counted as one of them.
+
+**Imports no longer claim to have worked when they did not.** A run that wrote
+nothing is shown as a failure. A run that wrote some rows and skipped others is
+shown as a partial result. Only a run that actually landed something shows as
+done. Skipped rows are grouped by reason with a count instead of listing the
+first fifty identical lines, and the per-row detail is still there behind a
+disclosure. This covers the CSV, JSON and Apple Health cards alike.
+
+Reported by @lutzkind, who traced it to the parser, ran it in isolation to rule
+out the timestamp and unit handling, and checked the database afterwards to
+prove nothing had been written. Files that were rejected can simply be imported
+again.
+
+**For operators.** Migration `0274` relaxes the constraint. It adds no column
+and rewrites no row. Readings that were refused in the past were never stored,
+so they need a fresh import from the source.
+
 ## [1.32.37] — 2026-07-25
 
 Two ways a record could quietly lose data, both closed.

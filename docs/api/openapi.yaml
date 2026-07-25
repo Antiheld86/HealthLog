@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HealthLog API
-  version: 1.32.37
+  version: 1.32.38
   description: >-
     Self-hosted personal-health-tracking PWA — public API surface for the iOS native client and external ingest.
 
@@ -8004,9 +8004,11 @@ paths:
         10 000 valid rows). Header (order-independent): `type,value,unit,measuredAt[,glucoseContext,notes,externalId]`.
         `measuredAt` must carry an explicit ISO-8601 offset and is bounded (no future beyond a 5-min skew, no instant
         before 1900). Glucose accepts `mmol/L` (converted to canonical `mg/dL`); weight accepts `lb` (converted to
-        `kg`). An `externalId` column makes re-upload idempotent (upsert on `(userId, type, source=IMPORT,
-        externalId)`); without it a re-upload duplicates. `?dryRun=1` validates + previews without writing. Shares the
-        5/hour `import:` rate bucket."
+        `kg`). `glucoseContext` is optional on a `BLOOD_GLUCOSE` row — a blank cell stores no context, which is the
+        normal shape of a continuous-sensor export; a non-empty value is still checked against the enum, and the column
+        is refused on any other type. An `externalId` column makes re-upload idempotent (upsert on `(userId, type,
+        source=IMPORT, externalId)`); without it a re-upload duplicates. `?dryRun=1` validates + previews without
+        writing. Shares the 5/hour `import:` rate bucket."
       parameters:
         - name: dryRun
           in: query
@@ -8027,6 +8029,7 @@ paths:
                 type,value,unit,measuredAt,glucoseContext,notes,externalId
                 WEIGHT,80.5,kg,2026-05-01T08:00:00Z,,morning,
                 BLOOD_GLUCOSE,5.3,mmol/L,2026-05-01T08:05:00+02:00,FASTING,,meter-001
+                BLOOD_GLUCOSE,5.9,mmol/L,2026-05-01T08:20:00+02:00,,,sensor-001
       responses:
         "200":
           description: Per-row import outcome.
@@ -17199,7 +17202,8 @@ components:
             - type: string
             - type: "null"
         glucoseContext:
-          description: Set only on BLOOD_GLUCOSE rows.
+          description: Set only on BLOOD_GLUCOSE rows, and null there too when the writer recorded no classification (a sensor
+            export, a device sync). Never invent one.
           anyOf:
             - type: string
             - type: "null"
@@ -18015,7 +18019,8 @@ components:
             - type: string
             - type: "null"
         glucoseContext:
-          description: Set only on BLOOD_GLUCOSE rows.
+          description: Set only on BLOOD_GLUCOSE rows, and null there too when the writer recorded no classification (a sensor
+            export, a device sync). Never invent one.
           anyOf:
             - type: string
             - type: "null"
