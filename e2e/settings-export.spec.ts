@@ -12,9 +12,11 @@ import { STORAGE_STATE_PATH } from "./setup/global-setup";
  *      and generic-JSON cards.
  *   3. The full health-record export panel lives on its own top-level
  *      `/settings/gesundheitsakte` section (v1.18.0 S5) — including the
- *      "included data" checklist, a disclosure collapsed by default that
- *      expands on demand.
- *   4. Clicking the Measurements CSV download button fires a real
+ *      "included data" disclosure, which a first run opens and which stays
+ *      operable in both directions.
+ *   4. The scope picker mounts twice on that page (the export panel and the
+ *      share-link create form) and each mount is separately addressable.
+ *   5. Clicking the Measurements CSV download button fires a real
  *      browser download — proving the `/api/export/measurements`
  *      endpoint is reachable from the browser end-to-end.
  *
@@ -53,6 +55,27 @@ test.describe("Settings → Export & Import", () => {
     });
   });
 
+  test("gives each scope-picker mount its own test ids", async ({ page }) => {
+    // The Gesundheitsakte page carries two mounts of the same picker: the
+    // export panel at the top and the share-link create form under `#sharing`.
+    // Every id inside the picker ends with the surface that mounts it, so an
+    // assertion binds to one mount instead of resolving to both.
+    await page.goto("/settings/gesundheitsakte", {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(page.getByTestId("report-scope-picker-export")).toHaveCount(1);
+    await expect(page.getByTestId("report-scope-picker-share")).toHaveCount(1);
+    for (const id of [
+      "report-group-row-vitals",
+      "report-group-check-vitals",
+      "report-sensitive-tier",
+      "report-scope-summary",
+    ]) {
+      await expect(page.getByTestId(`${id}-export`)).toHaveCount(1);
+      await expect(page.getByTestId(`${id}-share`)).toHaveCount(1);
+    }
+  });
+
   test("opens the scope picker expanded on a first run, fenced tier and all", async ({
     page,
   }) => {
@@ -60,22 +83,29 @@ test.describe("Settings → Export & Import", () => {
     // is the only place a template is applied. It has to be VISIBLE — a
     // template behind a collapsed disclosure is opt-out wearing a hat — so the
     // picker, its twelve group rows and the fenced tier all render without a
-    // click.
+    // click. Asserted against the export mount; the share form runs its own
+    // picker with its own defaults.
     await page.goto("/settings/gesundheitsakte", {
       waitUntil: "domcontentloaded",
     });
-    await expect(page.getByTestId("report-scope-picker")).toBeVisible({
+    await expect(page.getByTestId("report-scope-picker-export")).toBeVisible({
       timeout: 10_000,
     });
-    await expect(page.getByTestId("report-group-row-vitals")).toBeVisible();
-    await expect(page.getByTestId("report-group-row-sensitive")).toHaveCount(0);
-    await expect(page.getByTestId("report-sensitive-tier")).toBeVisible();
+    await expect(
+      page.getByTestId("report-group-row-vitals-export"),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId("report-group-row-sensitive-export"),
+    ).toHaveCount(0);
+    await expect(
+      page.getByTestId("report-sensitive-tier-export"),
+    ).toBeVisible();
     // The fenced tier has no group control — there is no single click that
     // turns on more than one sensitive leaf.
-    await expect(page.getByTestId("report-group-check-sensitive")).toHaveCount(
-      0,
-    );
-    await expect(page.getByTestId("report-scope-summary")).toBeVisible();
+    await expect(
+      page.getByTestId("report-group-check-sensitive-export"),
+    ).toHaveCount(0);
+    await expect(page.getByTestId("report-scope-summary-export")).toBeVisible();
   });
 
   test("clears the tap floor on the group rows at 390 px", async ({ page }) => {
@@ -83,7 +113,7 @@ test.describe("Settings → Export & Import", () => {
     await page.goto("/settings/gesundheitsakte", {
       waitUntil: "domcontentloaded",
     });
-    const row = page.getByTestId("report-group-row-vitals");
+    const row = page.getByTestId("report-group-row-vitals-export");
     await expect(row).toBeVisible({ timeout: 10_000 });
     const box = await row.boundingBox();
     expect(box).not.toBeNull();
@@ -94,13 +124,13 @@ test.describe("Settings → Export & Import", () => {
     await page.goto("/settings/gesundheitsakte", {
       waitUntil: "domcontentloaded",
     });
-    const row = page.getByTestId("report-group-row-vitals");
+    const row = page.getByTestId("report-group-row-vitals-export");
     await expect(row).toBeVisible({ timeout: 10_000 });
     // Collapsed: the leaves are behind the disclosure, which is what makes a
     // repeat run two interactions.
-    await expect(page.getByTestId("report-leaf-PULSE")).toHaveCount(0);
+    await expect(page.getByTestId("report-leaf-PULSE-export")).toHaveCount(0);
     await row.getByRole("button", { expanded: false }).click();
-    await expect(page.getByTestId("report-leaf-PULSE")).toBeVisible();
+    await expect(page.getByTestId("report-leaf-PULSE-export")).toBeVisible();
   });
 
   test("renders the import surfaces with stable testids", async ({ page }) => {
@@ -139,11 +169,18 @@ test.describe("Settings → Export & Import", () => {
     expect(Array.isArray(parsed.moodEntries)).toBe(true);
   });
 
-  test("included-data checklist is collapsed by default and expands on demand", async ({
+  test("included-data disclosure opens on a first run and still collapses", async ({
     page,
   }) => {
-    // v1.18.0 (S5) — the panel (and its disclosure) live on the
-    // dedicated Gesundheitsakte section now.
+    // The disclosure that fronts the scope picker on
+    // `/settings/gesundheitsakte`. An account with no saved selection is a
+    // first run, and a first run opens it: that is the only place the standard
+    // template is applied, and a template hidden behind a closed disclosure
+    // would be opt-out wearing a hat.
+    //
+    // Opening by default must not turn the disclosure into decoration, so the
+    // operable part is asserted in both directions — it closes, taking the
+    // panel with it, and it reopens.
     await page.route("**/api/share-links", async (route) => {
       if (route.request().method() !== "GET") {
         await route.continue();
@@ -166,18 +203,19 @@ test.describe("Settings → Export & Import", () => {
     });
     await sharingDataReady;
     const toggle = page.getByTestId("health-record-included-data-toggle");
+    const panel = page.getByTestId("health-record-included-data-panel");
     await expect(toggle).toBeVisible({ timeout: 10_000 });
-    // Collapsed on first render — the checklist panel is absent.
+    // Open on first render, with the checklist panel behind it.
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(panel).toBeVisible();
+    // Collapses on demand, and the panel goes with it.
+    await toggle.click();
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
-    await expect(
-      page.getByTestId("health-record-included-data-panel"),
-    ).toHaveCount(0);
-    // Expands on demand.
+    await expect(panel).toHaveCount(0);
+    // And back — the disclosure stays a disclosure.
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
-    await expect(
-      page.getByTestId("health-record-included-data-panel"),
-    ).toBeVisible();
+    await expect(panel).toBeVisible();
   });
 
   test("Measurements CSV download fires a real download event", async ({
