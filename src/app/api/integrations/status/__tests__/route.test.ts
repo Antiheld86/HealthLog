@@ -29,6 +29,7 @@ const ledger: Record<string, unknown> = {
   lastSuccessAt: null,
   lastAttemptAt: null,
   lastError: null,
+  failingSince: null,
 };
 vi.mock("@/lib/integrations/status", () => ({
   getIntegrationStatus: vi.fn(async (_u: string, integration: string) => ({
@@ -237,5 +238,42 @@ describe("/api/integrations/status — sync-health verdict on every entry", () =
     expect(nightscout!.hasToken).toBe(true);
     expect(nightscout!.allowPrivateHost).toBe(true);
     expect(nightscout!.syncHealth).toBeDefined();
+  });
+});
+
+describe("/api/integrations/status — a provider that has delivered nothing for weeks", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const key of Object.keys(perIntegrationLedger)) {
+      delete perIntegrationLedger[key];
+    }
+    userFind.mockResolvedValue({});
+    whoopFind.mockResolvedValue(null);
+    polarAvailable.mockResolvedValue(true);
+    ouraAvailable.mockResolvedValue(false);
+  });
+
+  it("reports it as failing and dates the verdict from the streak, not the retry", async () => {
+    const failingSince = new Date(
+      Date.now() - 17 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    perIntegrationLedger.nightscout = {
+      state: "error_transient",
+      // The hourly cron is still running and a sibling leg can still stamp a
+      // success, so neither of these tells the user anything.
+      lastSuccessAt: new Date(Date.now() - 20 * 60_000).toISOString(),
+      lastAttemptAt: new Date(Date.now() - 4 * 60_000).toISOString(),
+      failingSince,
+      lastError: "Nightscout sync HTTP 502",
+    };
+    userFind.mockResolvedValue({ nightscoutUrlEncrypted: "enc" });
+
+    const nightscout = (await fetchEntries()).find(
+      (entry) => entry.integration === "nightscout",
+    )!;
+    expect(nightscout.syncHealth).toEqual({
+      verdict: "failing",
+      since: failingSince,
+    });
   });
 });

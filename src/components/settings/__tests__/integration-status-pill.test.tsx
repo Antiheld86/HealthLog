@@ -196,3 +196,37 @@ describe("IntegrationStatusPill", () => {
     expect(html).toContain('data-testid="apple-health-status"');
   });
 });
+
+describe("IntegrationStatusPill — a failing provider states its age", () => {
+  it("renders the failing state with how long it has been failing", () => {
+    const seventeenDaysAgo = new Date(Date.now() - 17 * 24 * 60 * 60 * 1000);
+    const html = render(
+      <IntegrationStatusPill
+        state="warning"
+        lastSyncAt={seventeenDaysAgo}
+        now={new Date()}
+      />,
+    );
+    // The label must not open with a claim of connection: the pipe has
+    // delivered nothing for a fortnight.
+    expect(html).not.toContain("Connected");
+    expect(html).toContain("Sync failing");
+    // And the age has to be on the pill. Without it, hour one and day
+    // seventeen render identically, which is how a dead sync stayed quiet.
+    expect(html).toMatch(/17\s*d\s+ago/);
+    expect(html).toContain('data-state="warning"');
+  });
+
+  it("keeps the German label free of a connection claim too", () => {
+    const html = render(
+      <IntegrationStatusPill
+        state="warning"
+        lastSyncAt={new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)}
+        now={new Date()}
+      />,
+      "de",
+    );
+    expect(html).not.toContain("Verbunden");
+    expect(html).toContain("Sync fehlgeschlagen");
+  });
+});

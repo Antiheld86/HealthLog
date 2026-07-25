@@ -22,7 +22,8 @@ import {
 const NOW = new Date("2026-07-25T12:00:00.000Z");
 const nowMs = NOW.getTime();
 const ago = (ms: number) => new Date(nowMs - ms).toISOString();
-const HOUR = 60 * 60 * 1000;
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
 describe("resolveSyncVerdict — the ladder", () => {
@@ -203,5 +204,69 @@ describe("resolveSyncVerdict — the ladder", () => {
     for (const cadence of Object.values(INTEGRATION_CADENCE)) {
       expect(cadence.attemptStaleAfterMs).toBe(24 * HOUR);
     }
+  });
+});
+
+describe("resolveSyncVerdict — the error verdicts date the streak", () => {
+  it("dates a failing provider from the streak start, not the last retry", () => {
+    // The shape that hid a fortnight of silence: the hourly retry keeps
+    // `lastAttemptAt` fresh, and a multi-leg provider can keep advancing
+    // `lastSuccessAt` from a healthy leg while another one is dead.
+    const failingSinceAt = ago(17 * DAY);
+    expect(
+      resolveSyncVerdict({
+        connected: true,
+        state: "error_transient",
+        lastSuccessAt: ago(30 * MINUTE),
+        lastAttemptAt: ago(4 * MINUTE),
+        failingSinceAt,
+        cadence: POLLED_CADENCE,
+        now: NOW,
+      }),
+    ).toEqual({ verdict: "failing", since: failingSinceAt });
+  });
+
+  it("falls back to the last success when the ledger has no streak anchor", () => {
+    // Rows written before the anchor existed, and never re-failed since.
+    const lastSuccessAt = ago(3 * DAY);
+    expect(
+      resolveSyncVerdict({
+        connected: true,
+        state: "error_transient",
+        lastSuccessAt,
+        lastAttemptAt: ago(2 * HOUR),
+        failingSinceAt: null,
+        cadence: POLLED_CADENCE,
+        now: NOW,
+      }),
+    ).toEqual({ verdict: "failing", since: lastSuccessAt });
+  });
+
+  it("dates a parked provider from the streak start", () => {
+    const failingSinceAt = ago(6 * DAY);
+    expect(
+      resolveSyncVerdict({
+        connected: true,
+        state: "parked",
+        lastAttemptAt: ago(10 * MINUTE),
+        failingSinceAt,
+        cadence: POLLED_CADENCE,
+        now: NOW,
+      }),
+    ).toEqual({ verdict: "parked", since: failingSinceAt });
+  });
+
+  it("dates a reauth-required provider from the streak start", () => {
+    const failingSinceAt = ago(9 * DAY);
+    expect(
+      resolveSyncVerdict({
+        connected: true,
+        state: "error_reauth",
+        lastAttemptAt: ago(10 * MINUTE),
+        failingSinceAt,
+        cadence: POLLED_CADENCE,
+        now: NOW,
+      }),
+    ).toEqual({ verdict: "reauth_required", since: failingSinceAt });
   });
 });

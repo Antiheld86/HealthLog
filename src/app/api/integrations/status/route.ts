@@ -22,6 +22,7 @@ import {
   getIntegrationStatus,
   getPersistentFailureThreshold,
   type IntegrationKey,
+  type IntegrationStatusSnapshot,
 } from "@/lib/integrations/status";
 import {
   getSourceMetricFreshness,
@@ -156,6 +157,25 @@ export const GET = apiHandler(async () => {
   const whoopConnected = !!whoopConn?.whoopUserId;
 
   /**
+   * The ledger fields the envelope publishes, named one by one.
+   *
+   * `failingSince` is deliberately not among them. It is the input to
+   * `syncHealth.since`, which every consumer already reads, and putting both on
+   * the wire would be two names for one fact — the second of which nothing
+   * renders.
+   */
+  function publish(snapshot: IntegrationStatusSnapshot) {
+    return {
+      integration: snapshot.integration,
+      state: snapshot.state,
+      lastSuccessAt: snapshot.lastSuccessAt,
+      lastAttemptAt: snapshot.lastAttemptAt,
+      lastError: snapshot.lastError,
+      consecutiveFailuresByKind: snapshot.consecutiveFailuresByKind,
+    };
+  }
+
+  /**
    * The sync-health verdict + the per-metric staleness flags, resolved from
    * data already in hand — no additional query. Every entry carries it,
    * whether or not a card exists for the provider: a card-level verdict misses
@@ -227,7 +247,7 @@ export const GET = apiHandler(async () => {
     threshold: getPersistentFailureThreshold(),
     integrations: [
       {
-        ...withingsStatus,
+        ...publish(withingsStatus),
         configured: withingsConfigured,
         connected: !!withingsConn,
         connectedAt: withingsConn?.createdAt?.toISOString() ?? null,
@@ -251,7 +271,7 @@ export const GET = apiHandler(async () => {
         }),
       } satisfies IntegrationViewModel & WithingsExtras,
       {
-        ...whoopStatus,
+        ...publish(whoopStatus),
         configured: whoopConfigured,
         connected: whoopConnected,
         connectedAt: whoopConnected
@@ -274,7 +294,7 @@ export const GET = apiHandler(async () => {
         }),
       } satisfies IntegrationViewModel & WhoopExtras,
       {
-        ...fitbitStatus,
+        ...publish(fitbitStatus),
         configured: fitbitConfigured,
         connected: fitbitConnected,
         connectedAt: fitbitConn?.createdAt?.toISOString() ?? null,
@@ -291,7 +311,7 @@ export const GET = apiHandler(async () => {
         }),
       } satisfies IntegrationViewModel & FitbitExtras,
       {
-        ...googleHealthStatus,
+        ...publish(googleHealthStatus),
         configured: googleHealthConfigured,
         connected: googleHealthConnected,
         connectedAt: googleHealthConn?.createdAt?.toISOString() ?? null,
@@ -314,7 +334,7 @@ export const GET = apiHandler(async () => {
         }),
       } satisfies IntegrationViewModel & GoogleHealthExtras,
       {
-        ...polarStatus,
+        ...publish(polarStatus),
         // `connected` = a stored access token; `configured` mirrors it (the
         // OAuth card has no separate "credentials saved but disconnected" view
         // beyond `hasOwnCredentials`). The card greys out the connect button
@@ -331,7 +351,7 @@ export const GET = apiHandler(async () => {
         }),
       } satisfies IntegrationViewModel & OAuthProviderExtras,
       {
-        ...ouraStatus,
+        ...publish(ouraStatus),
         connected: ouraConnected,
         configured: ouraConnected,
         available: ouraAvailable,
@@ -344,7 +364,7 @@ export const GET = apiHandler(async () => {
         }),
       } satisfies IntegrationViewModel & OAuthProviderExtras,
       {
-        ...stravaStatus,
+        ...publish(stravaStatus),
         connected: stravaConnected,
         configured: stravaConnected,
         available: stravaAvailable,
@@ -359,7 +379,7 @@ export const GET = apiHandler(async () => {
         }),
       } satisfies IntegrationViewModel & OAuthProviderExtras,
       {
-        ...nightscoutStatus,
+        ...publish(nightscoutStatus),
         // Nightscout is a URL the self-hoster pastes once; `configured` (a
         // stored URL) is the connect marker, and a fully-public instance has
         // no token. The card reads these off the envelope now instead of its
@@ -383,12 +403,6 @@ interface IntegrationViewModel {
   lastSuccessAt: string | null;
   lastAttemptAt: string | null;
   lastError: string | null;
-  /**
-   * Start of the current unbroken failure streak, or null when the provider is
-   * not failing. `syncHealth.since` is derived from it; the raw instant rides
-   * along so a client can render the age without re-deriving the verdict.
-   */
-  failingSince: string | null;
   /**
    * The server-resolved liveness verdict. Present on EVERY entry, whether or
    * not a card renders it — the unit of coverage is the envelope entry, not
