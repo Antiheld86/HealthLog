@@ -1,0 +1,283 @@
+/**
+ * The Observation orchestrator: one array, one continuous `obs-N` sequence,
+ * in the canonical order — one latest reading per measurement type, the
+ * blood-pressure panel, the computed BMI, glucose per context, the clinical
+ * glucose panel, labs, medication adherence, the opt-in mood average, then the
+ * descriptive wellness composites under `survey`.
+ *
+ * The per-domain blocks (glucose, labs) live in their own modules and draw ids
+ * from the SAME allocator, so a document builder's references stay stable and a
+ * `searchset` caller can filter the array by `category` / `code` without
+ * re-numbering.
+ */
+import {
+  adherenceRatePercent,
+  type DoctorReportData,
+} from "@/lib/doctor-report-data";
+import {
+  LOINC_SYSTEM,
+  MEASUREMENT_LOINC,
+  BP_PANEL_LOINC,
+  BP_SYS_LOINC,
+  BP_DIA_LOINC,
+  BP_UNIT,
+  MEDICATION_ADHERENCE_LOINC,
+  MOOD_LOINC,
+} from "@/lib/fhir/loinc-map";
+import { ucumQuantity } from "@/lib/fhir/ucum";
+import type { FhirObservation } from "@/lib/fhir/types";
+import {
+  categoryConcept,
+  codeableFromMapping,
+  latestReading,
+  observationIdSequence,
+  patientRef,
+  reportingPeriod,
+} from "@/lib/fhir/resources/common";
+import {
+  glucoseClinicalObservations,
+  glucoseContextObservations,
+} from "@/lib/fhir/resources/glucose";
+import { labObservations } from "@/lib/fhir/resources/labs";
+
+/** v1.10.0 — English display per persisted wellness-score type (FHIR
+ *  text-only concept; the score has no published LOINC term). */
+const WELLNESS_SCORE_DISPLAY: Record<string, string> = {
+  RECOVERY_SCORE: "Recovery score",
+  STRESS_SCORE: "Stress score",
+  STRAIN_SCORE: "Strain score",
+};
+
+/** One latest reading per single-value measurement type. */
+function measurementObservations(
+  data: DoctorReportData,
+  nextId: () => string,
+): FhirObservation[] {
+  const observations: FhirObservation[] = [];
+  for (const [type, mapping] of Object.entries(MEASUREMENT_LOINC)) {
+    // BMI is emitted once by the computed-BMI block below (matching the PDF's
+    // BMI line); skip the stored BODY_MASS_INDEX series here to avoid a
+    // duplicate Observation.
+    if (type === "BODY_MASS_INDEX") continue;
+    const reading = latestReading(data, type);
+    if (!reading) continue;
+    // SLEEP_DURATION is stored in MINUTES; the iOS-locked UCUM unit is `h`, so
+    // emit the value in hours to keep value and unit consistent. The PDF reads
+    // the raw series independently and is unaffected.
+    const value =
+      type === "SLEEP_DURATION"
+        ? Math.round((reading.value / 60) * 100) / 100
+        : reading.value;
+    observations.push({
+      resourceType: "Observation",
+      id: nextId(),
+      status: "final",
+      category: [categoryConcept(mapping.category)],
+      code: codeableFromMapping(mapping),
+      subject: patientRef,
+      effectiveDateTime: reading.measuredAt,
+      // The registry's display unit is only stamped as a UCUM `code` when it
+      // IS one — `dB[A]` reads as decibels to a person and as nothing to a
+      // UCUM parser.
+      valueQuantity: ucumQuantity(value, mapping.unit),
+    });
+  }
+  return observations;
+}
+
+/** The blood-pressure panel, present only when both components have a reading. */
+function bloodPressureObservation(
+  data: DoctorReportData,
+  nextId: () => string,
+): FhirObservation[] {
+  const sys = latestReading(data, "BLOOD_PRESSURE_SYS");
+  const dia = latestReading(data, "BLOOD_PRESSURE_DIA");
+  if (!sys || !dia) return [];
+  return [
+    {
+      resourceType: "Observation",
+      id: nextId(),
+      status: "final",
+      category: [categoryConcept("vital-signs")],
+      code: {
+        coding: [
+          {
+            system: LOINC_SYSTEM,
+            code: BP_PANEL_LOINC,
+            display: "Blood pressure panel",
+          },
+        ],
+        text: "Blood pressure",
+      },
+      subject: patientRef,
+      // Use the systolic reading's timestamp as the panel effective time.
+      effectiveDateTime: sys.measuredAt,
+      component: [
+        {
+          code: {
+            coding: [
+              { system: LOINC_SYSTEM, code: BP_SYS_LOINC, display: "Systolic" },
+            ],
+          },
+          valueQuantity: ucumQuantity(sys.value, BP_UNIT),
+        },
+        {
+          code: {
+            coding: [
+              {
+                system: LOINC_SYSTEM,
+                code: BP_DIA_LOINC,
+                display: "Diastolic",
+              },
+            ],
+          },
+          valueQuantity: ucumQuantity(dia.value, BP_UNIT),
+        },
+      ],
+    },
+  ];
+}
+
+/** The computed BMI, matching the PDF's BMI line. */
+function bmiObservation(
+  data: DoctorReportData,
+  nextId: () => string,
+): FhirObservation[] {
+  if (data.bmi === null || data.bmi === undefined) return [];
+  return [
+    {
+      resourceType: "Observation",
+      id: nextId(),
+      status: "final",
+      category: [categoryConcept("vital-signs")],
+      code: {
+        coding: [
+          {
+            system: LOINC_SYSTEM,
+            code: "39156-5",
+            display: "Body mass index (BMI) [Ratio]",
+          },
+        ],
+        text: "Body mass index (BMI) [Ratio]",
+      },
+      subject: patientRef,
+      effectivePeriod: reportingPeriod(data),
+      valueQuantity: ucumQuantity(data.bmi, "kg/m2"),
+    },
+  ];
+}
+
+/** One adherence rate per medication with a scheduled dose in the window. */
+function adherenceObservations(
+  data: DoctorReportData,
+  nextId: () => string,
+): FhirObservation[] {
+  const observations: FhirObservation[] = [];
+  const period = reportingPeriod(data);
+  for (const [name, comp] of Object.entries(data.compliance)) {
+    if (comp.total <= 0) continue;
+    // Integer percent — the one canonical rounding the app card + PDF use, so
+    // a clinician sees the same adherence figure on every surface.
+    const rate = adherenceRatePercent(comp.taken, comp.total) ?? 0;
+    observations.push({
+      resourceType: "Observation",
+      id: nextId(),
+      status: "final",
+      category: [categoryConcept("activity")],
+      code: {
+        coding: [
+          {
+            system: LOINC_SYSTEM,
+            code: MEDICATION_ADHERENCE_LOINC,
+            display: "Medication adherence",
+          },
+        ],
+        text: `Medication adherence — ${name}`,
+      },
+      subject: patientRef,
+      effectivePeriod: period,
+      valueQuantity: ucumQuantity(rate, "%"),
+    });
+  }
+  return observations;
+}
+
+/** The opt-in mood average; absent when the toggle is off. */
+function moodObservation(
+  data: DoctorReportData,
+  nextId: () => string,
+): FhirObservation[] {
+  if (!data.mood) return [];
+  return [
+    {
+      resourceType: "Observation",
+      id: nextId(),
+      status: "final",
+      category: [categoryConcept("vital-signs")],
+      code: {
+        coding: [{ system: LOINC_SYSTEM, code: MOOD_LOINC, display: "Mood" }],
+        text: "Mood (average over period)",
+      },
+      subject: patientRef,
+      effectivePeriod: reportingPeriod(data),
+      valueQuantity: ucumQuantity(
+        Math.round(data.mood.avg * 10) / 10,
+        "{score}",
+      ),
+    },
+  ];
+}
+
+/**
+ * v1.10.0 — the server-derived nightly scores (recovery / stress / strain).
+ * They have no published LOINC term and are NOT clinical findings, so each is
+ * emitted under the `survey` category with a text-only concept and an explicit
+ * "descriptive, not a clinical assessment" note — a physician's FHIR viewer
+ * never mistakes a band for a diagnosis. Absent when the aggregator emitted no
+ * scores.
+ */
+function wellnessObservations(
+  data: DoctorReportData,
+  nextId: () => string,
+): FhirObservation[] {
+  const observations: FhirObservation[] = [];
+  for (const s of data.wellnessScores ?? []) {
+    observations.push({
+      resourceType: "Observation",
+      id: nextId(),
+      status: "final",
+      category: [categoryConcept("survey")],
+      code: { text: WELLNESS_SCORE_DISPLAY[s.type] ?? "Wellness score" },
+      subject: patientRef,
+      effectiveDateTime: s.latestAt,
+      valueQuantity: ucumQuantity(s.latest, "{score}"),
+      note: [
+        {
+          text: "Descriptive wellness score (0–100) computed from tracked signals; not a clinical assessment or diagnosis.",
+        },
+      ],
+    });
+  }
+  return observations;
+}
+
+/**
+ * Emit every `Observation` from the aggregated report data, in the canonical
+ * order.
+ */
+export function observationsFromReportData(
+  data: DoctorReportData,
+): FhirObservation[] {
+  const nextId = observationIdSequence();
+  return [
+    ...measurementObservations(data, nextId),
+    ...bloodPressureObservation(data, nextId),
+    ...bmiObservation(data, nextId),
+    ...glucoseContextObservations(data, nextId),
+    ...glucoseClinicalObservations(data, nextId),
+    ...labObservations(data, nextId),
+    ...adherenceObservations(data, nextId),
+    ...moodObservation(data, nextId),
+    ...wellnessObservations(data, nextId),
+  ];
+}

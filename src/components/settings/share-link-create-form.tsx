@@ -4,9 +4,10 @@
  * The clinician share-link CREATE flow, extracted so both surfaces mount the
  * exact same form: Settings → Sharing (the owner section) and the document
  * detail sheet's "Share" action. A share link is a time-boxed, scope-frozen,
- * read-only view of the owner's own record at `/c/<token>`, optionally
- * exposing a scoped read-only FHIR face and a hand-picked, frozen-at-create
- * document set.
+ * read-only view of the owner's own record at `/c/<token>`, plus a hand-picked,
+ * frozen-at-create document set. It serves a rendered page and those documents
+ * and nothing else. A FHIR toggle and a resource-type picker were removed
+ * that configured an endpoint no route ever served.
  *
  * The raw `hls_` token, the passphrase, and the `#k=` QR are returned EXACTLY
  * ONCE on create (the server stores only hashes); this component is the single
@@ -20,31 +21,24 @@
  * document-launched flow seeds the document the user was looking at) and
  * `initialLabel` to pre-fill the label.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Copy, FileText, Loader2, ScanLine, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   ShareDocumentPicker,
   type PickedDocument,
 } from "@/components/settings/share-document-picker";
+import { ReportScopePicker } from "@/components/settings/report-selection/report-scope-picker";
+import { ScopeSummary } from "@/components/settings/report-selection/scope-summary";
+import type { ReportLeafId } from "@/lib/report-selection/catalogue";
+import { orderLeaves } from "@/lib/report-selection/selection";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { apiPost } from "@/lib/api/api-fetch";
-
-/** The FHIR resource types a share link may serve — mirrors C4's enum. */
-const RESOURCE_TYPES = [
-  "Patient",
-  "Observation",
-  "MedicationStatement",
-  "MedicationAdministration",
-] as const;
-type ResourceType = (typeof RESOURCE_TYPES)[number];
 
 /** Maximum lifetime, in days — mirrors `SHARE_LINK_MAX_DAYS` on the server. */
 export const MAX_DAYS = 90;
@@ -64,12 +58,17 @@ export interface ShareLinkSummary {
   label: string;
   rangeStart: string;
   rangeEnd: string | null;
-  resourceTypes: string[];
-  allowFhirApi: boolean;
   /** v1.18.7 — whether a passphrase second factor guards this link. */
   protected: boolean;
   /** v1.28 — size of the frozen document set (never the ids, never bytes). */
   documentCount: number;
+  /**
+   * Whether this link's frozen scope predates the selection model. Such links
+   * were revoked on upgrade — their scope was "everything except mood and
+   * cycle", which nobody chose — and the sharing list says so, so the owner
+   * re-mints rather than wondering why a working link stopped.
+   */
+  needsReselection: boolean;
   expiresAt: string;
   createdAt: string;
   revokedAt: string | null;
@@ -84,6 +83,14 @@ export interface ShareLinkSummary {
  * hashes). `qrUrl` carries the passphrase in the URL fragment (`#k=`).
  */
 export interface ShareLinkCreated extends ShareLinkSummary {
+  /**
+   * RETIRED, response-only. They configured a FHIR face that was never built;
+   * the request refuses them and the columns are gone. They stay here because
+   * the native client was given this shape and a missing non-optional key
+   * fails a whole Swift decode — see #70 in the native repository.
+   */
+  allowFhirApi: boolean;
+  resourceTypes: string[];
   token: string;
   passphrase: string;
   shareUrl: string;
@@ -99,20 +106,26 @@ export interface ShareLinkCreatePayload {
   label: string;
   rangeStart: string;
   rangeEnd: null;
-  resourceTypes: ResourceType[];
-  allowFhirApi: boolean;
+  selection?: { v: 2; leaves: readonly string[] };
   documentIds?: string[];
   documentOnly?: boolean;
   expiresAt: string;
 }
 
 /**
+ * The one leaf a share link may never carry — mirrored from the server, which
+ * refuses it with a 422. The picker hides it rather than rendering a control
+ * that cannot be honoured.
+ */
+const SHARE_HIDDEN_LEAVES: readonly ReportLeafId[] = ["INSURANCE"];
+
+/**
  * Build the create payload from the resolved form state. Extracted as a pure
  * function so the two surfaces' scope contract is unit-testable without a DOM.
  *
  * The `documentOnly` branch is the privacy-load-bearing one: a document-launched
- * share posts an EMPTY report scope (`resourceTypes: []`, no `sections`, FHIR
- * off) plus `documentOnly: true`, and ALWAYS carries the picked document ids —
+ * share posts NO report scope at all plus `documentOnly: true`,
+ * and ALWAYS carries the picked document ids —
  * so the created link serves the document(s) and nothing else. The record share
  * (Settings → Sharing) keeps its full scope and only attaches documents when
  * the owner picked some.
@@ -121,8 +134,7 @@ export function buildShareLinkCreatePayload(input: {
   label: string;
   rangeDays: number;
   expiryDays: number;
-  allowFhirApi: boolean;
-  resourceTypes: ResourceType[];
+  leaves: readonly ReportLeafId[];
   documentIds: string[];
   documentOnly: boolean;
 }): ShareLinkCreatePayload {
@@ -135,8 +147,6 @@ export function buildShareLinkCreatePayload(input: {
   if (input.documentOnly) {
     return {
       ...base,
-      resourceTypes: [],
-      allowFhirApi: false,
       documentOnly: true,
       // The launched document(s) always ride along — a documents-only share
       // with no document would be meaningless (the server 422s it).
@@ -145,8 +155,7 @@ export function buildShareLinkCreatePayload(input: {
   }
   return {
     ...base,
-    resourceTypes: input.resourceTypes,
-    allowFhirApi: input.allowFhirApi,
+    selection: { v: 2, leaves: input.leaves },
     // Omit the key entirely when nothing is attached (a documents-less record
     // share stays the default). The server re-validates each id as the caller's
     // own live document before minting the link.
@@ -158,20 +167,29 @@ export function ShareLinkCreateForm({
   documentOnly = false,
   initialDocuments,
   initialLabel,
+  initialRangeDays,
+  initialExpiryDays,
   onCreated,
 }: {
   /**
    * Documents-only mode (the document-launched flow). Hides the record-scope
-   * controls — FHIR API toggle, FHIR resource-type checkboxes, and the
-   * history-range selector — and posts an empty report scope so the minted
-   * link serves ONLY the attached document(s). Keeps the document picker,
-   * label, expiry, and one-time passphrase reveal.
+   * control — the history-range selector — and posts an empty report scope so
+   * the minted link serves ONLY the attached document(s). Keeps the document
+   * picker, label, expiry, and one-time passphrase reveal.
    */
   documentOnly?: boolean;
   /** Documents to pre-attach — the document-launched flow seeds the one doc. */
   initialDocuments?: PickedDocument[];
   /** Optional pre-filled label (e.g. the document title). */
   initialLabel?: string;
+  /**
+   * Optional pre-filled window and lifetime, in days. The sharing list passes
+   * these when the owner re-mints a link the selection upgrade closed, so the
+   * only decision left in front of them is the one that link never carried:
+   * what it should contain.
+   */
+  initialRangeDays?: number;
+  initialExpiryDays?: number;
   /** Fired after a link is minted, so an outer surface can react if needed. */
   onCreated?: (created: ShareLinkCreated) => void;
 }) {
@@ -179,21 +197,25 @@ export function ShareLinkCreateForm({
   const queryClient = useQueryClient();
 
   const [label, setLabel] = useState(initialLabel ?? "");
-  const [rangeDays, setRangeDays] = useState(DEFAULT_DAYS);
-  const [expiryDays, setExpiryDays] = useState(DEFAULT_DAYS);
-  const [allowFhirApi, setAllowFhirApi] = useState(false);
-  const [resourceTypes, setResourceTypes] = useState<ResourceType[]>([
-    "Patient",
-    "Observation",
-  ]);
+  const [rangeDays, setRangeDays] = useState(initialRangeDays ?? DEFAULT_DAYS);
+  const [expiryDays, setExpiryDays] = useState(
+    initialExpiryDays ?? DEFAULT_DAYS,
+  );
   const [selectedDocs, setSelectedDocs] = useState<PickedDocument[]>(
     initialDocuments ?? [],
   );
+  // A new link starts with an empty scope. The picker's standard-report button
+  // fills it in one click, minus the leaf a link may not carry — but a link is
+  // handed to another person, so nothing rides on it that was not ticked.
+  const [selectedLeaves, setSelectedLeaves] = useState<
+    ReadonlySet<ReportLeafId>
+  >(() => new Set<ReportLeafId>());
   const [pickerOpen, setPickerOpen] = useState(false);
   const [created, setCreated] = useState<ShareLinkCreated | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState<"link" | "passphrase" | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const scopeSummaryId = useId();
 
   // Render the QR from the `#k=` deep link once a link is created. The fragment
   // carries the passphrase, so the QR alone opens the record — it is shown
@@ -238,8 +260,7 @@ export function ShareLinkCreateForm({
           label,
           rangeDays,
           expiryDays,
-          allowFhirApi,
-          resourceTypes,
+          leaves: orderLeaves(selectedLeaves),
           documentIds: selectedDocs.map((d) => d.id),
           documentOnly,
         }),
@@ -267,12 +288,6 @@ export function ShareLinkCreateForm({
       );
     },
   });
-
-  function toggleResourceType(type: ResourceType) {
-    setResourceTypes((prev) =>
-      prev.includes(type) ? prev.filter((r) => r !== type) : [...prev, type],
-    );
-  }
 
   async function copyValue(value: string, which: "link" | "passphrase") {
     try {
@@ -344,50 +359,31 @@ export function ShareLinkCreateForm({
           </div>
         </div>
 
-        {/* The FHIR API + its resource-type scope expose the health RECORD.
-            A documents-only link serves no record, so both are hidden and the
-            posted scope is forced empty server-side regardless. */}
+        {/* ── What the link contains ───────────────────────────────── */}
         {!documentOnly ? (
-          <div className="border-border flex items-center justify-between rounded-lg border p-3">
-            <div className="space-y-0.5 pr-3">
-              <Label htmlFor="share-fhir" className="text-sm font-medium">
-                {t("settings.sharing.fhirApi")}
+          <div className="space-y-3">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">
+                {t("settings.sharing.scopeTitle")}
               </Label>
               <p className="text-muted-foreground text-xs">
-                {t("settings.sharing.fhirApiHint")}
+                {t("settings.sharing.scopeInsuranceExcluded")}
               </p>
             </div>
-            <Switch
-              id="share-fhir"
-              checked={allowFhirApi}
-              onCheckedChange={setAllowFhirApi}
+            <ReportScopePicker
+              surface="share"
+              selected={selectedLeaves}
+              onChange={setSelectedLeaves}
+              hiddenLeaves={SHARE_HIDDEN_LEAVES}
+            />
+            <ScopeSummary
+              t={t}
+              id={scopeSummaryId}
+              surface="share"
+              selected={selectedLeaves}
             />
           </div>
         ) : null}
-
-        {!documentOnly && allowFhirApi && (
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">
-              {t("settings.sharing.resourceTypes")}
-            </legend>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {RESOURCE_TYPES.map((type) => (
-                <label
-                  key={type}
-                  className="flex items-center gap-2 text-sm"
-                  htmlFor={`share-rt-${type}`}
-                >
-                  <Checkbox
-                    id={`share-rt-${type}`}
-                    checked={resourceTypes.includes(type)}
-                    onCheckedChange={() => toggleResourceType(type)}
-                  />
-                  <span className="font-mono text-xs">{type}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        )}
 
         {/* ── Attach documents ─────────────────────────────────────── */}
         <div className="border-border space-y-2 rounded-lg border p-3">
@@ -461,9 +457,19 @@ export function ShareLinkCreateForm({
           </p>
         )}
 
+        {/* A record link with an empty scope cannot be minted: it would serve
+            a page with nothing on it. The scope line above says so and says
+            what to do about it, and describes the button so the disabled state
+            is not silent for a screen reader. */}
         <Button
           type="submit"
-          disabled={createMutation.isPending || !label.trim()}
+          disabled={
+            createMutation.isPending ||
+            !label.trim() ||
+            (!documentOnly && selectedLeaves.size === 0)
+          }
+          aria-describedby={documentOnly ? undefined : scopeSummaryId}
+          data-testid="share-create-submit"
           className="min-h-11 sm:min-h-9"
         >
           {createMutation.isPending && (

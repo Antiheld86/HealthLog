@@ -62,8 +62,12 @@
       "list": {
         "invalid": "Les filtres de la liste d’humeur ne sont pas valides."
       },
-      "create": { "invalid": "Vérifiez l’entrée d’humeur et réessayez." },
-      "update": { "invalid": "Vérifiez l’entrée d’humeur et réessayez." },
+      "create": {
+        "invalid": "Vérifiez l’entrée d’humeur et réessayez."
+      },
+      "update": {
+        "invalid": "Vérifiez l’entrée d’humeur et réessayez."
+      },
       "duplicate_timestamp": "Une entrée d’humeur existe déjà pour cette heure.",
       "not_found": "Cette entrée d’humeur n’est plus disponible.",
       "ratedFactor": {
@@ -106,7 +110,9 @@
       "complete": {
         "invalid": "Vérifiez les informations du profil et réessayez."
       },
-      "user": { "notFound": "Votre compte est introuvable." },
+      "user": {
+        "notFound": "Votre compte est introuvable."
+      },
       "step": {
         "rateLimited": "Trop de tentatives. Patientez puis réessayez.",
         "invalid": "Cette étape d’accueil n’a pas pu être enregistrée.",
@@ -164,16 +170,6 @@
     "footerDisclaimer1": "Ce rapport a été généré automatiquement à partir de données auto-déclarées et vise à soutenir",
     "footerDisclaimer2": "la conversation médecin-patient. Il ne remplace pas un diagnostic médical. Les corrélations n'impliquent pas la causalité.",
     "footerSource": "Source : HealthLog | Fuseau horaire : {timezone} | Créé : {timestamp}",
-    "typeWeight": "Poids corporel",
-    "typeBpSys": "Tension artérielle systolique",
-    "typeBpDia": "Tension artérielle diastolique",
-    "typePulse": "Pouls au repos",
-    "typeBodyFat": "Masse grasse",
-    "typeSleep": "Durée du sommeil",
-    "typeSteps": "Activité (pas)",
-    "typeTotalBodyWater": "Eau corporelle totale",
-    "typeBoneMass": "Masse osseuse",
-    "typeOxygenSaturation": "Saturation en oxygène",
     "unitSteps": "Pas",
     "bmiUnderweight": "Insuffisance pondérale",
     "bmiNormal": "Poids normal",
@@ -209,8 +205,6 @@
     "summaryTrend": "{label} : dernier {latest} {arrow}",
     "summaryAdherence": "Observance médicamenteuse : {rate}% (moyenne pondérée).",
     "chartsTitle": "Graphiques de tendance",
-    "aiSummaryTitle": "Résumé IA — non validé cliniquement",
-    "aiSummaryDisclaimer": "Cette section a été générée automatiquement par un modèle d’IA et n’est pas validée cliniquement. Elle ne remplace pas une évaluation médicale.",
     "packageReadme": "Dossier de santé HealthLog\n\nCe paquet contient :\n- report.pdf : le rapport de santé pour votre médecin.\n- bundle.json : les mêmes données sous forme de Bundle document HL7 FHIR R4, compatible ePA.\n\nGénéré avec HealthLog.",
     "wellnessTitle": "Résumé de bien-être",
     "wellnessDisclaimer": "Ce sont des scores de bien-être descriptifs calculés à partir de vos signaux suivis (0–100). Ce ne sont pas des évaluations cliniques ni des diagnostics.",
@@ -4451,10 +4445,6 @@
             "passphraseHelp": "Dérive la clé de l'archive avec Argon2id et la scelle avec AES-256-GCM. Enregistrez le fichier avec l'extension .hlx.",
             "noRecoveryWarning": "Aucune récupération possible : si vous perdez cette phrase secrète, l'archive ne pourra pas être ouverte. Conservez-la en lieu sûr.",
             "stepUpNeeded": "Confirmez votre second facteur, puis réessayez."
-          },
-          "cycle": {
-            "title": "Cycle",
-            "description": "Données de cycle et de santé reproductive sous forme de document FHIR : dernières règles, durée moyenne du cycle et des règles, phase actuelle."
           }
         },
         "import": {
@@ -5317,34 +5307,17 @@
       "practiceName": "Cabinet (facultatif)",
       "practiceNamePlaceholder": "p. ex. Dr Dupont",
       "includedData": "Données incluses",
-      "groupVitals": "Signes vitaux",
-      "groupCardio": "Cœur & forme",
-      "groupActivity": "Activité & sommeil",
-      "weight": "Poids",
-      "bp": "Tension artérielle",
-      "pulse": "Pouls",
-      "oxygenSaturation": "Saturation en oxygène",
-      "bodyFat": "Masse grasse",
-      "bodyComposition": "Composition corporelle",
-      "restingHeartRate": "Pouls au repos",
-      "hrv": "Variabilité de la fréquence cardiaque",
-      "vo2max": "VO₂max",
-      "steps": "Pas",
-      "distance": "Distance",
-      "sleep": "Sommeil",
-      "glucose": "Glycémie",
-      "medications": "Médicaments & observance",
-      "mood": "Humeur (désactivé par défaut — données sensibles)",
-      "bmi": "IMC",
       "includeCharts": "Intégrer les graphiques de tendance (PDF uniquement)",
-      "includeAiSummary": "Ajouter le résumé IA (non validé cliniquement)",
       "fhirNote": "La sortie structurée suit la norme FHIR R4 (compatible ePA).",
       "generate": "Générer",
-      "error": "Échec de l’export ({code}).",
-      "labs": "Résultats d'analyses",
-      "allergies": "Allergies et intolérances",
-      "familyHistory": "Antécédents familiaux",
-      "documentsLink": "Documents de la période"
+      "documentsLink": "Documents de la période",
+      "range30": "30 derniers jours",
+      "rangeCustom": "Période personnalisée",
+      "rangeCustomStart": "Du",
+      "rangeCustomEnd": "Au",
+      "errorGeneric": "L'export n'a pas pu être généré. Veuillez réessayer.",
+      "errorRateLimit": "Vous avez atteint la limite d'exports pour cette heure.",
+      "errorModuleDisabled": "L'export du dossier est désactivé pour ce compte."
     },
     "globalExcludedInjectionSitesLabel": "Sites d'injection exclus globalement",
     "globalExcludedInjectionSitesHint": "Les sites listés ici ne sont proposés pour aucun médicament et sont refusés lors de l'enregistrement d'une dose, même si un médicament les privilégie.",
@@ -5358,9 +5331,6 @@
       "expiry": "Expire dans (jours)",
       "expiryHint": "Au plus {max} jours.",
       "expiryInvalid": "L'expiration doit être comprise entre 1 et {max} jours.",
-      "fhirApi": "Autoriser l'API FHIR restreinte",
-      "fhirApiHint": "Laissez le lien servir un point d'accès FHIR en lecture seule en plus de la vue page.",
-      "resourceTypes": "Types de ressource FHIR",
       "create": "Créer le lien",
       "tokenCreated": "Lien de partage créé",
       "copied": "Copié dans le presse-papiers.",
@@ -5398,7 +5368,12 @@
       "pickerEmpty": "Aucun document trouvé.",
       "pickerDone": "Terminé",
       "pickerSelectedCount": "{count} sur {max} sélectionnés",
-      "pickerMaxReached": "Vous avez atteint le maximum de {max} documents."
+      "pickerMaxReached": "Vous avez atteint le maximum de {max} documents.",
+      "scopeTitle": "Ce que contient ce lien",
+      "scopeInsuranceExcluded": "Les données d'assurance ne sont jamais partagées via un lien.",
+      "statusNeedsReselect": "Choisir à nouveau le contenu",
+      "reselectReason": "Ce lien diffusait un périmètre que personne n'avait choisi ; il a donc été fermé. Créez-en un nouveau et choisissez son contenu.",
+      "reselectAction": "Créer un remplacement"
     },
     "genderOther": "Autre",
     "cycleTracking": {
@@ -6934,7 +6909,6 @@
     "period": "Période couverte : {start} – {end}",
     "expires": "Ce lien expire le {date}.",
     "provenance": "Il s'agit d'un résumé en lecture seule partagé par la personne concernée, exporté de ses données HealthLog auto-enregistrées. Les valeurs sont auto-déclarées et peuvent inclure des mesures synchronisées depuis des appareils ; à considérer comme rapportées par le patient, non comme un examen clinique.",
-    "vitals": "Signes vitaux",
     "labs": "Valeurs de laboratoire",
     "medications": "Médicaments et observance",
     "bmi": "Indice de masse corporelle (IMC)",
@@ -6974,7 +6948,10 @@
       "download": "Télécharger",
       "attachmentHint": "Ce fichier se télécharge sur votre appareil (pas d'aperçu dans la page).",
       "exifNote": "Les métadonnées de l'appareil photo (EXIF/GPS) ont été supprimées des images JPEG, PNG et WebP partagées."
-    }
+    },
+    "downloadPdf": "Télécharger en PDF",
+    "downloadFhir": "Télécharger en FHIR",
+    "bmiSection": "Indice de masse corporelle"
   },
   "cycle": {
     "symptomCategory": {
@@ -8881,5 +8858,42 @@
         }
       }
     }
+  },
+  "reportSelection": {
+    "groupIdentity": "Données personnelles",
+    "groupVitals": "Signes vitaux",
+    "groupCardio": "Cœur et circulation",
+    "groupBody": "Mensurations",
+    "groupSleepRecovery": "Sommeil et récupération",
+    "groupActivity": "Activité",
+    "groupMobility": "Mobilité et marche",
+    "groupEnvironment": "Environnement",
+    "groupGlucose": "Glycémie",
+    "groupLabs": "Résultats de laboratoire",
+    "groupMedications": "Médicaments",
+    "groupHistory": "Antécédents et allergies",
+    "groupSensitive": "Données sensibles",
+    "leafPatientIdentity": "Nom, date de naissance, sexe, taille",
+    "leafInsurance": "Assurance et numéro d'assuré",
+    "leafGlucosePanel": "Bilan glycémique (temps dans la cible, GMI, variabilité)",
+    "leafLabResults": "Résultats de laboratoire",
+    "leafMedicationList": "Liste des médicaments",
+    "leafMedicationAdministrations": "Chaque prise enregistrée",
+    "leafMedicationCompliance": "Observance",
+    "leafGlp1Therapy": "Traitement GLP-1 (historique des doses, effets indésirables)",
+    "leafAllergies": "Allergies et intolérances",
+    "leafIllnessEpisodes": "Épisodes de maladie",
+    "leafFamilyHistory": "Antécédents familiaux",
+    "leafMood": "Humeur",
+    "leafCycle": "Cycle menstruel",
+    "templateStandard": "Compte rendu médical standard",
+    "applyStandard": "Appliquer {template}",
+    "standardHint": "Un clic remplit ce dont une consultation générale a généralement besoin. Chaque élément reste modifiable.",
+    "groupCount": "{on}/{total}",
+    "groupDisclosure": "Afficher les éléments de {group}",
+    "sensitiveHint": "Rien n'est jamais présélectionné ici. Choisissez chaque élément vous-même.",
+    "scopeNone": "Rien de sélectionné pour l'instant. Choisissez ce qui doit figurer, ou appliquez le compte rendu standard.",
+    "scopeCount": "{count} éléments issus de {groups} domaines",
+    "scopeSensitive": "dont {names}"
   }
 }

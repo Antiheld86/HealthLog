@@ -1,26 +1,34 @@
 /**
- * v1.11.0 — clinician-view presentation (Epic C, C5).
+ * The public clinician view.
  *
  * A pure server component: it receives an already-resolved, owner-scoped
  * {@link DoctorReportData} plus a server-side translator and renders a
- * read-only clinical summary. NO client hooks, NO session, NO AI/coach, NO
+ * read-only clinical summary. NO client hooks, NO session, NO AI or coach, NO
  * markdown — every value renders as escaped React text.
  *
- * Layout: provenance header → clinical vitals/labs → medications + adherence →
- * a FENCED, muted wellness card carrying the load-bearing "descriptive, not a
- * clinical assessment / not a diagnosis" disclaimer.
+ * Layout: provenance header (with the two machine-format downloads) → the
+ * measurement groups in selection order → glucose → medications and adherence
+ * → a FENCED, muted wellness card carrying the load-bearing "descriptive, not
+ * a clinical assessment" disclaimer → the attached documents.
+ *
+ * The section components live in `./report-sections`, the document list in
+ * `./documents-list`, the downloads in `./download-actions`.
  */
-import { Download } from "lucide-react";
-
-import { DOCUMENT_KIND_ICONS } from "@/components/documents/document-kind-meta";
-import { formatBytes } from "@/components/documents/vault-utils";
-import type { ShareViewDocument } from "@/lib/clinician-share/share-view-data";
-import { DOCTOR_REPORT_TYPE_LABEL_KEYS } from "@/lib/doctor-report/type-label-keys";
 import type { DoctorReportData } from "@/lib/doctor-report-data";
 import { makeFormatters } from "@/lib/format-locale";
 import type { Locale } from "@/lib/i18n/config";
-import type { InboundDocumentKindValue } from "@/lib/validations/inbound-documents";
-import type { DoctorReportPrefs } from "@/lib/validations/doctor-report-prefs";
+import type { ShareViewDocument } from "@/lib/clinician-share/share-view-data";
+import type { ReportSelection } from "@/lib/report-selection/selection";
+import { DocumentEntry } from "./documents-list";
+import { ShareDownloadActions } from "./download-actions";
+import {
+  GlucoseSection,
+  MeasurementGroups,
+  MedicationsSection,
+  Section,
+  StatRow,
+  WellnessSection,
+} from "./report-sections";
 
 type Translate = (
   key: string,
@@ -34,22 +42,22 @@ interface ClinicianViewProps {
   /** ISO expiry instant — surfaced so the clinician knows the link lifetime. */
   expiresAt: string;
   /**
-   * The owner-scoped report payload, or `null` for a documents-only share
-   * (no report section enabled). When `null` NO health metric is rendered —
-   * only the header, disclaimer, and the attached documents.
+   * The owner-scoped report payload, or `null` for a documents-only share.
+   * When `null` NO health metric is rendered — only the header, the
+   * disclaimer, and the attached documents.
    */
   report: DoctorReportData | null;
-  sections: DoctorReportPrefs;
+  /** The link's frozen selection, resolved. */
+  selection: ReportSelection;
   /**
-   * v1.28.13 — a documents-only link. Hides the reporting-period line (there is
-   * no report) and, together with a `null` report, keeps every health section
-   * off the page. "Share this document" means the document, not the record.
+   * A documents-only link. Hides the reporting-period line (there is no
+   * report) and, together with a `null` report, keeps every health section off
+   * the page.
    */
   documentOnly?: boolean;
   /**
    * The frozen document set on this link (metadata only — never bytes). Each
-   * entry points at the token-scoped serve route (`/c/<token>/d/<id>`), the
-   * one decrypt path. Empty when the owner shared no documents.
+   * entry points at the token-scoped serve route, the one decrypt path.
    */
   documents?: ShareViewDocument[];
   /** The raw share token from the path — used to build serve-route URLs. */
@@ -57,146 +65,11 @@ interface ClinicianViewProps {
   /** Viewer locale (byte formatting only). Defaults to English. */
   locale?: Locale;
   /**
-   * Issue #490 — the share OWNER's (patient's) profile timezone. Period
-   * start/end and the expiry date render in this zone so the dates agree
-   * with the patient-tz aggregation behind the stats (and with the
-   * doctor-report PDF). Pre-fix the dates rendered via a bare
-   * `toLocaleDateString()` — the server CONTAINER's zone (≈ UTC), neither
-   * the patient's nor the viewer's, with US-English field order regardless
-   * of the resolved page locale.
+   * Issue #490 — the share OWNER's profile timezone. Period start/end and the
+   * expiry date render in this zone so the dates agree with the patient-tz
+   * aggregation behind the stats (and with the doctor-report PDF).
    */
   timezone?: string;
-}
-
-/** Human-readable display per persisted wellness-score type (i18n key suffix). */
-const WELLNESS_KEY: Record<string, string> = {
-  RECOVERY_SCORE: "recovery",
-  STRESS_SCORE: "stress",
-  STRAIN_SCORE: "strain",
-};
-
-/**
- * Localised label for a measurement-type enum, reusing the doctor-report type
- * key map so the clinician view reads in the viewer's locale alongside the rest
- * of the page. A type with no key falls back to a humanised enum form
- * (`BLOOD_PRESSURE_SYS` → "Blood pressure sys").
- */
-function typeLabel(type: string, t: Translate): string {
-  const key = DOCTOR_REPORT_TYPE_LABEL_KEYS[type];
-  if (key) return t(key);
-  const lower = type.replace(/_/g, " ").toLowerCase();
-  return lower.charAt(0).toUpperCase() + lower.slice(1);
-}
-
-/** Render a single labelled stat row. */
-function StatRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="border-border/40 flex items-baseline justify-between gap-4 border-b py-2 last:border-0">
-      <span className="text-muted-foreground text-sm">{label}</span>
-      <span className="text-sm font-medium tabular-nums">{value}</span>
-    </div>
-  );
-}
-
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="border-border bg-card rounded-lg border p-4 md:p-6">
-      <h2 className="mb-3 text-base font-semibold">{title}</h2>
-      {children}
-    </section>
-  );
-}
-
-/**
- * One shared document. Class A (inline) renders a preview straight at the
- * token-scoped serve route — an `<img>` for raster images, a framed PDF
- * otherwise; the proxy's share-serve CSP (`default-src 'none';
- * frame-ancestors 'self'`) fences the framed context. Class B (attachment)
- * offers a plain download link — the serve route answers it as an opaque
- * `application/octet-stream` attachment. No bytes reach this component; only
- * the metadata and the URL.
- */
-function DocumentEntry({
-  t,
-  doc,
-  token,
-  locale,
-}: {
-  t: Translate;
-  doc: ShareViewDocument;
-  token: string;
-  locale: string;
-}) {
-  const serveUrl = `/c/${encodeURIComponent(token)}/d/${encodeURIComponent(doc.id)}`;
-  const title = doc.title ?? t("clinicianView.documents.untitled");
-  const Icon =
-    DOCUMENT_KIND_ICONS[doc.kind as InboundDocumentKindValue] ?? undefined;
-  const meta = [doc.documentDate, formatBytes(doc.byteSize, locale)].filter(
-    Boolean,
-  ) as string[];
-  const isImage = doc.mimeType.startsWith("image/");
-  const isInline = doc.servingClass === "inline";
-
-  return (
-    <li className="border-border bg-card rounded-lg border p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-2.5">
-          {Icon ? (
-            <Icon className="text-foreground mt-0.5 size-5 shrink-0" />
-          ) : null}
-          <div className="min-w-0">
-            <p className="text-sm font-medium break-words">{title}</p>
-            {meta.length > 0 ? (
-              <p className="text-muted-foreground mt-0.5 text-xs">
-                {meta.join(" · ")}
-              </p>
-            ) : null}
-          </div>
-        </div>
-        {/* Download is always available (inline or attachment) so the recipient
-            can keep a copy; the anchor hits the same token-scoped serve route. */}
-        <a
-          href={serveUrl}
-          download
-          className="border-border hover:bg-muted focus-visible:ring-ring/50 inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md border px-3 text-xs font-medium focus-visible:ring-[3px] focus-visible:outline-none"
-        >
-          <Download className="size-3.5" aria-hidden />
-          {t("clinicianView.documents.download")}
-        </a>
-      </div>
-
-      {isInline ? (
-        <div className="mt-3">
-          {isImage ? (
-            // The served image is the frozen original with EXIF/GPS stripped on
-            // egress; it renders inline within the Class A carve-out.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={serveUrl}
-              alt={title}
-              className="border-border mx-auto max-h-[70vh] w-auto max-w-full rounded-md border"
-            />
-          ) : (
-            <iframe
-              src={serveUrl}
-              title={title}
-              className="border-border h-[70vh] max-h-[80vh] w-full rounded-md border"
-            />
-          )}
-        </div>
-      ) : (
-        <p className="text-muted-foreground mt-2 text-xs">
-          {t("clinicianView.documents.attachmentHint")}
-        </p>
-      )}
-    </li>
-  );
 }
 
 export function ClinicianView({
@@ -204,7 +77,7 @@ export function ClinicianView({
   label,
   expiresAt,
   report,
-  sections,
+  selection,
   documents = [],
   documentOnly = false,
   token = "",
@@ -216,22 +89,6 @@ export function ClinicianView({
   const fmt = makeFormatters(locale, timezone);
   const fmtDate = (iso: string) => fmt.date(new Date(iso));
   const fmtNum = (n: number) => Math.round(n * 100) / 100;
-
-  // A documents-only share carries no report — the aggregator is never called
-  // server-side, so `report` is null. Every health-derived list below stays
-  // empty by construction and only the attached documents render.
-  const measurementEntries = report
-    ? Object.entries(report.stats).filter(([, s]) => s.count > 0)
-    : [];
-  const glucoseEntries = report
-    ? Object.entries(report.glucoseStats).filter(([, s]) => s.count > 0)
-    : [];
-  const complianceEntries =
-    report && sections.compliance
-      ? Object.entries(report.compliance).filter(([, c]) => c.total > 0)
-      : [];
-  const wellness = report?.wellnessScores?.filter((s) => s.count > 0) ?? [];
-  const medications = report?.medications ?? [];
 
   return (
     <main
@@ -257,118 +114,30 @@ export function ClinicianView({
         <p className="text-muted-foreground mt-1 text-xs">
           {t("clinicianView.expires", { date: fmtDate(expiresAt) })}
         </p>
+        {report && !documentOnly && token ? (
+          <ShareDownloadActions t={t} token={token} />
+        ) : null}
         <p className="border-border bg-muted/40 text-muted-foreground mt-3 rounded-md border p-3 text-xs">
           {t("clinicianView.provenance")}
         </p>
       </header>
 
       <div className="space-y-4">
-        {/* ── Clinical vitals ─────────────────────────────────────── */}
-        {measurementEntries.length > 0 ? (
-          <Section title={t("clinicianView.vitals")}>
-            {measurementEntries.map(([type, s]) => (
-              <StatRow
-                key={type}
-                label={typeLabel(type, t)}
-                value={t("clinicianView.statSummary", {
-                  latest: fmtNum(s.latest),
-                  avg: fmtNum(s.avg),
-                  min: fmtNum(s.min),
-                  max: fmtNum(s.max),
-                })}
-              />
-            ))}
-            {report &&
-            report.bmi !== null &&
-            report.bmi !== undefined &&
-            sections.bmi ? (
-              <StatRow
-                label={t("clinicianView.bmi")}
-                value={String(fmtNum(report.bmi))}
-              />
+        {report ? (
+          <>
+            <MeasurementGroups t={t} report={report} fmtNum={fmtNum} />
+            {report.bmi !== null && report.bmi !== undefined ? (
+              <Section title={t("clinicianView.bmiSection")}>
+                <StatRow
+                  label={t("clinicianView.bmi")}
+                  value={String(fmtNum(report.bmi))}
+                />
+              </Section>
             ) : null}
-          </Section>
-        ) : null}
-
-        {/* ── Labs (glucose) ──────────────────────────────────────── */}
-        {glucoseEntries.length > 0 ? (
-          <Section title={t("clinicianView.labs")}>
-            {glucoseEntries.map(([ctx, s]) => (
-              <StatRow
-                key={ctx}
-                label={t(`clinicianView.glucose.${ctx}`)}
-                value={t("clinicianView.statSummary", {
-                  latest: fmtNum(s.latest),
-                  avg: fmtNum(s.avg),
-                  min: fmtNum(s.min),
-                  max: fmtNum(s.max),
-                })}
-              />
-            ))}
-          </Section>
-        ) : null}
-
-        {/* ── Medications + adherence ─────────────────────────────── */}
-        {medications.length > 0 ? (
-          <Section title={t("clinicianView.medications")}>
-            {medications.map((med) => {
-              const comp = report?.compliance[med.name];
-              const rate =
-                sections.compliance && comp && comp.total > 0
-                  ? `${Math.round((comp.taken / comp.total) * 100)}%`
-                  : null;
-              return (
-                <StatRow
-                  key={med.name}
-                  label={med.dose ? `${med.name} — ${med.dose}` : med.name}
-                  value={
-                    rate
-                      ? t("clinicianView.adherence", { rate })
-                      : t("clinicianView.noAdherence")
-                  }
-                />
-              );
-            })}
-            {complianceEntries
-              .filter(([name]) => !medications.some((m) => m.name === name))
-              .map(([name, c]) => (
-                <StatRow
-                  key={name}
-                  label={name}
-                  value={t("clinicianView.adherence", {
-                    rate: `${Math.round((c.taken / c.total) * 100)}%`,
-                  })}
-                />
-              ))}
-          </Section>
-        ) : null}
-
-        {/* ── Fenced wellness card (descriptive, NOT clinical) ────── */}
-        {wellness.length > 0 ? (
-          <section className="border-warning/50 bg-warning/5 rounded-lg border border-dashed p-4 md:p-6">
-            <h2 className="text-muted-foreground mb-1 text-base font-semibold">
-              {t("clinicianView.wellness.title")}
-            </h2>
-            <p className="text-muted-foreground mb-3 text-xs">
-              {t("clinicianView.wellness.disclaimer")}
-            </p>
-            <div>
-              {wellness.map((s) => (
-                <StatRow
-                  key={s.type}
-                  label={t(
-                    `clinicianView.wellness.${WELLNESS_KEY[s.type] ?? "score"}`,
-                  )}
-                  value={t("clinicianView.statSummary", {
-                    latest: fmtNum(s.latest),
-                    avg: fmtNum(s.avg),
-                    min: fmtNum(s.min),
-                    max: fmtNum(s.max),
-                  })}
-                />
-              ))}
-            </div>
-          </section>
+            <GlucoseSection t={t} report={report} fmtNum={fmtNum} />
+            <MedicationsSection t={t} report={report} selection={selection} />
+            <WellnessSection t={t} report={report} fmtNum={fmtNum} />
+          </>
         ) : null}
 
         {/* ── Shared documents ────────────────────────────────────── */}

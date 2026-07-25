@@ -50,22 +50,32 @@ export default function InsightsGewichtPage() {
   const weightTransform = unitDisplay.transformFor("WEIGHT");
   const weightUnit = weightTransform.displayUnit;
   const weightScale = weightTransform.factor;
+  // v1.32.39 — the strip + band values convert through `toDisplay`, which
+  // rounds to the transform's own decimals. `weightScale` stays for the chart
+  // alone: it folds the factor into its series and formats at its own
+  // precision, so it needs the raw multiplier rather than a rounded value.
+  const toDisplayWeight = (value: number) =>
+    unitDisplay.toDisplay("WEIGHT", value);
   const displaySummary =
     weightSummary && weightScale !== 1
       ? {
           ...weightSummary,
           min:
-            weightSummary.min === null ? null : weightSummary.min * weightScale,
+            weightSummary.min === null
+              ? null
+              : toDisplayWeight(weightSummary.min),
           max:
-            weightSummary.max === null ? null : weightSummary.max * weightScale,
+            weightSummary.max === null
+              ? null
+              : toDisplayWeight(weightSummary.max),
           mean:
             weightSummary.mean === null
               ? null
-              : weightSummary.mean * weightScale,
+              : toDisplayWeight(weightSummary.mean),
           median:
             weightSummary.median === null
               ? null
-              : weightSummary.median * weightScale,
+              : toDisplayWeight(weightSummary.median),
         }
       : weightSummary;
 
@@ -108,8 +118,8 @@ export default function InsightsGewichtPage() {
     weightBands && weightScale !== 1
       ? weightBands.map((band) => ({
           ...band,
-          min: band.min * weightScale,
-          max: band.max * weightScale,
+          min: toDisplayWeight(band.min),
+          max: toDisplayWeight(band.max),
         }))
       : weightBands;
 
@@ -122,6 +132,7 @@ export default function InsightsGewichtPage() {
         <MetricStatStrip
           summary={displaySummary}
           unit={weightUnit}
+          fractionDigits={weightTransform.decimals}
           seriesLabel={t("insights.weightSectionTitle")}
           icon={Scale}
           windowStats={statsByType?.WEIGHT ?? null}

@@ -129,9 +129,12 @@ describe("doctor_visit_summary — grounding + structure", () => {
     const text = res.messages[0].content.text;
 
     // The window threads through to the data path (trailing 90 days).
+    // Third argument: the owner's SAVED selection, replayed. This surface
+    // cannot ask a human, so it never invents a scope.
     expect(collectDoctorReportData).toHaveBeenCalledWith(
       "user-1",
       expect.objectContaining({ days: 90 }),
+      expect.objectContaining({ version: 2 }),
     );
 
     const data = parseData(text);

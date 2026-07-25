@@ -30,6 +30,34 @@
  * expressed. The offset applies to ABSOLUTE values only; deltas, slopes,
  * standard deviations, and band widths take the factor alone — use
  * `applyDisplayTransformDelta` for those.
+ *
+ * v1.32.39 — the conversion helpers ROUND to the transform's own
+ * `decimals`. Every transform has always declared how many decimals its
+ * unit is read at, but the number was handed to the render layer and
+ * only one screen ever asked for it, so everywhere else the raw product
+ * of a kilogram and 2.20462262185 went straight to the surface
+ * ("185.18790000000001 lb"). Rounding at the conversion means a surface
+ * gets a correctly-scaled number whether or not it remembers to ask, and
+ * a new converted-value surface cannot reintroduce the class.
+ *
+ * Two boundaries are deliberately exempt:
+ *
+ *   - A transform that does NOT rescale (`factor === 1`, no offset) is
+ *     the exact identity, never rounded. That covers every untransformed
+ *     type and the whole metric branch of the mass / length /
+ *     temperature registry, whose numbers are the stored values
+ *     themselves — a stored 78.45 kg is not conversion noise and must
+ *     keep rendering as 78.45. `transformRescales()` is the predicate.
+ *   - `invertDisplayTransform` — the ENTRY boundary — stays at full
+ *     precision. A value rounded on the way out and inverted on the way
+ *     back would drift the stored canonical number; the entry surfaces
+ *     quantise the inverted value to their own canonical dialect.
+ *
+ * `applyDisplayTransformUnrounded` is the single documented escape
+ * hatch, for arithmetic whose result is NOT rendered (the target
+ * adapter's inward-rounded guardrails, which need the unrounded edge to
+ * round the right way). Its call sites are frozen by
+ * `src/__tests__/display-transform-rounding-guard.test.ts`.
  */
 import type { MeasurementType } from "@/generated/prisma/client";
 
@@ -186,12 +214,35 @@ export function rawDisplayFractionDigits(type: string): number | undefined {
 }
 
 /**
- * Apply a transform to a raw canonical ABSOLUTE value:
- * `display = raw * factor + offset`. Pure helper — keeps the arithmetic
- * in one place so the chart, list cell, tooltip, and entry form all
- * scale identically.
+ * True when a transform actually rescales the number it is applied to
+ * (as opposed to only relabelling the unit symbol). False for the
+ * identity transform of an untransformed type and for the metric branch
+ * of every mass / length / temperature entry, where the displayed number
+ * IS the stored number.
  */
-export function applyDisplayTransform(
+export function transformRescales(transform: DisplayTransform): boolean {
+  return transform.factor !== 1 || (transform.offset ?? 0) !== 0;
+}
+
+/** Round to `decimals` fraction digits. Non-finite input passes through. */
+function roundToDecimals(value: number, decimals: number): number {
+  if (!Number.isFinite(value)) return value;
+  const scale = 10 ** decimals;
+  return Math.round(value * scale) / scale;
+}
+
+/**
+ * The raw affine arithmetic — `raw * factor + offset`, NO rounding.
+ *
+ * Escape hatch, not the default. Use it only where the result is a
+ * computation input rather than something a surface renders: the target
+ * adapter needs the unrounded pound edge of the 30 kg guardrail to round
+ * it INWARD (rounding it to the nearest tenth first gives 66.1 lb, which
+ * inverts to 29.98 kg and the server rejects it). Anything that reaches
+ * a screen takes `applyDisplayTransform`. The call sites of this export
+ * are frozen by the rounding guard test.
+ */
+export function applyDisplayTransformUnrounded(
   rawValue: number,
   transform: DisplayTransform,
 ): number {
@@ -199,21 +250,60 @@ export function applyDisplayTransform(
 }
 
 /**
+ * Apply a transform to a raw canonical ABSOLUTE value:
+ * `display = round(raw * factor + offset, decimals)`. Pure helper —
+ * keeps the arithmetic in one place so the chart, list cell, tooltip,
+ * and entry form all scale identically, and rounds to the transform's
+ * declared `decimals` so no surface can render a converted value at
+ * more precision than its unit is read at.
+ *
+ * A transform that does not rescale returns the raw value untouched —
+ * the metric branch stays byte-identical to storage.
+ */
+export function applyDisplayTransform(
+  rawValue: number,
+  transform: DisplayTransform,
+): number {
+  if (!transformRescales(transform)) return rawValue;
+  return roundToDecimals(
+    applyDisplayTransformUnrounded(rawValue, transform),
+    transform.decimals,
+  );
+}
+
+/**
  * Apply a transform to a DELTA / slope / standard-deviation / band-width
  * — factor only, NEVER the offset. A 1 °C change is a 1.8 °F change; it
  * must not pick up the +32 absolute-scale shift.
+ *
+ * Rounded to the same `decimals` as an absolute value: every consumer of
+ * a converted delta in the tree renders it (the dashboard 7-day trend,
+ * the cycle and mood crosstab rows, the target range bar), and a delta
+ * shown at a finer grain than the readings it was computed from is the
+ * same defect in a different place. Comparisons in the tree are made on
+ * canonical values, never on a converted delta; a future one that needs
+ * the unrounded difference takes `applyDisplayTransformUnrounded`.
+ *
+ * A factor of 1 returns the delta untouched (the offset is irrelevant to
+ * a difference, so the metric branch is the exact identity here too).
  */
 export function applyDisplayTransformDelta(
   deltaValue: number,
   transform: DisplayTransform,
 ): number {
-  return deltaValue * transform.factor;
+  if (transform.factor === 1) return deltaValue;
+  return roundToDecimals(deltaValue * transform.factor, transform.decimals);
 }
 
 /**
  * Invert an absolute display value back to the canonical stored value:
  * `raw = (display - offset) / factor`. Used at the entry boundary so an
  * imperial user's typed number persists in canonical SI.
+ *
+ * Deliberately NOT rounded — this is the write path. Rounding here would
+ * quantise the stored canonical value to the display unit's grain and
+ * drift it a little further on every save. The entry surfaces round the
+ * result to their own canonical dialect (two decimals) instead.
  */
 export function invertDisplayTransform(
   displayValue: number,

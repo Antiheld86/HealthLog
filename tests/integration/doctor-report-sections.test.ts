@@ -16,6 +16,11 @@ process.env.ENCRYPTION_KEY ??=
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 import { collectDoctorReportData } from "@/lib/doctor-report-data";
+import { ALL_LEAF_IDS } from "@/lib/report-selection/catalogue";
+import {
+  EMPTY_REPORT_SELECTION,
+  selectionFromLeaves,
+} from "@/lib/report-selection/selection";
 import { renderDoctorReportPdfBytes } from "@/lib/doctor-report-pdf-core";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 
@@ -217,20 +222,22 @@ function pdfContainsText(bytes: Uint8Array, needle: string): boolean {
 }
 
 describe("doctor-report — per-section toggles", () => {
-  it("drops mood data entirely when sections.mood = false", async () => {
+  it("drops mood data entirely when the mood leaf is not chosen", async () => {
     const userId = await seedUserWithEveryDataType("dr-sections-mood-off");
 
-    const data = await collectDoctorReportData(userId, RANGE, {
-      sections: {
-        bp: true,
-        weight: true,
-        pulse: true,
-        bmi: true,
-        mood: false, // ← the privacy default
-        compliance: true,
-        sleep: true,
-      },
-    });
+    const data = await collectDoctorReportData(
+      userId,
+      RANGE,
+      selectionFromLeaves([
+        "BLOOD_PRESSURE_SYS",
+        "BLOOD_PRESSURE_DIA",
+        "WEIGHT",
+        "PULSE",
+        "BODY_MASS_INDEX",
+        "MEDICATION_COMPLIANCE",
+        "SLEEP_DURATION",
+      ]),
+    );
 
     // The aggregator must NOT return mood data when the toggle is off.
     // The contract: the data never leaves the DB row, so the JSON
@@ -249,31 +256,27 @@ describe("doctor-report — per-section toggles", () => {
     expect(pdfContainsText(pdfEn, "Mood")).toBe(false);
   });
 
-  it("includes mood data when sections.mood = true (opt-in)", async () => {
+  it("includes mood data when the mood leaf is chosen by name", async () => {
     const userId = await seedUserWithEveryDataType("dr-sections-mood-on");
 
-    const data = await collectDoctorReportData(userId, RANGE, {
-      sections: { mood: true },
-    });
+    const data = await collectDoctorReportData(
+      userId,
+      RANGE,
+      selectionFromLeaves(["MOOD"]),
+    );
 
     expect(data.mood).not.toBeNull();
     expect(data.mood?.count).toBe(1);
   });
 
-  it("strips BP / weight / pulse / compliance when their toggles are off", async () => {
+  it("strips BP / weight / pulse / compliance when their leaves are not chosen", async () => {
     const userId = await seedUserWithEveryDataType("dr-sections-others-off");
 
-    const data = await collectDoctorReportData(userId, RANGE, {
-      sections: {
-        bp: false,
-        weight: false,
-        pulse: false,
-        bmi: false,
-        mood: false,
-        compliance: false,
-        sleep: false,
-      },
-    });
+    const data = await collectDoctorReportData(
+      userId,
+      RANGE,
+      selectionFromLeaves(["LAB_RESULTS"]),
+    );
 
     expect(data.stats.BLOOD_PRESSURE_SYS).toBeUndefined();
     expect(data.stats.BLOOD_PRESSURE_DIA).toBeUndefined();
@@ -284,19 +287,29 @@ describe("doctor-report — per-section toggles", () => {
     expect(data.mood).toBeNull();
   });
 
-  it("applies documented defaults when sections is omitted (mood OFF, others ON)", async () => {
+  it("serves nothing at all for an empty selection", async () => {
+    // The case the release exists for. An account with data in every domain
+    // and a caller that named no leaf gets an empty record — not the
+    // "everything except mood and cycle" the old defaults produced.
     const userId = await seedUserWithEveryDataType("dr-sections-defaults");
 
-    const data = await collectDoctorReportData(userId, RANGE);
+    const data = await collectDoctorReportData(
+      userId,
+      RANGE,
+      EMPTY_REPORT_SELECTION,
+    );
 
-    // Privacy default per the maintainer — mood is opt-in, not opt-out.
     expect(data.mood).toBeNull();
-    // Every other section keeps its data.
-    expect(data.stats.WEIGHT).toBeDefined();
-    expect(data.stats.BLOOD_PRESSURE_SYS).toBeDefined();
-    expect(data.stats.PULSE).toBeDefined();
-    expect(data.bmi).not.toBeNull();
-    expect(Object.keys(data.compliance).length).toBeGreaterThan(0);
+    expect(data.stats).toEqual({});
+    expect(data.measurements).toEqual({});
+    expect(data.bmi).toBeNull();
+    expect(data.compliance).toEqual({});
+    expect(data.medications).toEqual([]);
+    expect(data.labResults).toBeNull();
+    expect(data.allergies).toBeNull();
+    expect(data.familyHistory).toBeNull();
+    expect(data.patient.username).toBeNull();
+    expect(data.patient.insurerName).toBeNull();
   });
 });
 
@@ -327,11 +340,12 @@ describe("doctor-report — module enable/disable gating", () => {
   it("includes every module's data when all modules are enabled", async () => {
     const userId = await seedUserWithEveryDataType("dr-modules-all-on");
 
-    const data = await collectDoctorReportData(userId, RANGE, {
-      // Opt mood in so the present-case asserts the full surface.
-      sections: { mood: true },
-      moduleMap: { ...ALL_ON },
-    });
+    const data = await collectDoctorReportData(
+      userId,
+      RANGE,
+      selectionFromLeaves(ALL_LEAF_IDS),
+      { moduleMap: { ...ALL_ON } },
+    );
 
     expect(Object.keys(data.glucoseStats).length).toBeGreaterThan(0);
     expect(data.measurements.ACTIVITY_STEPS).toBeDefined();
@@ -351,20 +365,24 @@ describe("doctor-report — module enable/disable gating", () => {
   it("excludes a disabled module's section/resources from the payload", async () => {
     const userId = await seedUserWithEveryDataType("dr-modules-off");
 
-    const data = await collectDoctorReportData(userId, RANGE, {
-      // The user opted mood in at the report level, but turned the modules off
-      // — the module gate wins, so none of these surface.
-      sections: { mood: true, sleep: true, labs: true },
-      moduleMap: {
-        ...ALL_ON,
-        glucose: false,
-        sleep: false,
-        workouts: false,
-        recovery: false,
-        labs: false,
-        mood: false,
+    const data = await collectDoctorReportData(
+      userId,
+      RANGE,
+      // Every leaf chosen at the report level, but the modules are off — the
+      // module gate wins, so none of these surface.
+      selectionFromLeaves(ALL_LEAF_IDS),
+      {
+        moduleMap: {
+          ...ALL_ON,
+          glucose: false,
+          sleep: false,
+          workouts: false,
+          recovery: false,
+          labs: false,
+          mood: false,
+        },
       },
-    });
+    );
 
     // Glucose panel collapses entirely (stats + raw series).
     expect(data.glucoseStats).toEqual({});
@@ -394,9 +412,12 @@ describe("doctor-report — module enable/disable gating", () => {
   it("gates recovery and workouts independently (recovery off, workouts on)", async () => {
     const userId = await seedUserWithEveryDataType("dr-modules-recovery-off");
 
-    const data = await collectDoctorReportData(userId, RANGE, {
-      moduleMap: { ...ALL_ON, recovery: false },
-    });
+    const data = await collectDoctorReportData(
+      userId,
+      RANGE,
+      selectionFromLeaves(ALL_LEAF_IDS),
+      { moduleMap: { ...ALL_ON, recovery: false } },
+    );
 
     const scoreTypes = (data.wellnessScores ?? []).map((s) => s.type);
     // Recovery readiness scores gone…
@@ -447,7 +468,11 @@ describe("doctor-report — MedicationAdministration export cap", () => {
     });
     await prisma.medicationIntakeEvent.createMany({ data: rows });
 
-    const data = await collectDoctorReportData(user.id, RANGE);
+    const data = await collectDoctorReportData(
+      user.id,
+      RANGE,
+      selectionFromLeaves(["MEDICATION_ADMINISTRATIONS"]),
+    );
 
     expect(data.medicationAdministrations).toBeDefined();
     expect(data.medicationAdministrations?.length).toBe(1000);
@@ -466,7 +491,11 @@ describe("doctor-report — MedicationAdministration export cap", () => {
   it("leaves the set untouched (no truncation flag) below the cap", async () => {
     const userId = await seedUserWithEveryDataType("dr-admin-no-cap");
 
-    const data = await collectDoctorReportData(userId, RANGE);
+    const data = await collectDoctorReportData(
+      userId,
+      RANGE,
+      selectionFromLeaves(["MEDICATION_ADMINISTRATIONS"]),
+    );
 
     expect(data.medicationAdministrations?.length).toBe(1);
     expect(data.medicationAdministrationsTruncation ?? null).toBeNull();

@@ -110,6 +110,11 @@ export const GET = apiHandler(async () => {
     // formatters and the <DateField> primitive.
     dateFormat: user.dateFormat ?? "AUTO",
     lastReportPracticeName: user.lastReportPracticeName ?? null,
+    // The owner's saved report selection — the leaf inclusion list plus the
+    // format / range / charts choices the export panel restores. `null` when
+    // the account has never saved one, which is what makes the panel show the
+    // named template on the first run rather than a silent server default.
+    reportSelection: user.reportSelectionJson ?? null,
     // v1.4.47 W3 — per-user Coach opt-out. Default `false` if the
     // column is absent (partial-deploy rollback safety, see migration
     // 0078 commentary). Every Coach mount point on the client checks

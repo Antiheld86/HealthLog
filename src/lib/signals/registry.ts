@@ -1275,9 +1275,12 @@ export const SIGNALS: Record<string, SignalDefinition> = {
   // ── v1.27.9 — WHO-5 well-being + Sleep Condition Indicator totals ───────
   // Same privacy posture as PHQ-9 / GAD-7 (off Coach snapshot + MCP; item
   // content never rides a Measurement row). Direction inverts: HIGHER is
-  // better for both. No verified total-score LOINC exists for either, so no
-  // FHIR coding is attached (the export skips uncoded signals rather than
-  // shipping an invented code).
+  // better for both. No verified total-score LOINC exists for either, so both
+  // carry the `loinc: null` text-only survey concept the physical signals
+  // already use — an uncoded finding a clinician can read, never an invented
+  // code. Without a `fhir` facet the FHIR adapter drops a signal entirely,
+  // which is how a total the PDF and the share view show went missing from
+  // every FHIR output.
   WHO5_SCORE: {
     key: "WHO5_SCORE",
     kind: "score",
@@ -1295,6 +1298,13 @@ export const SIGNALS: Record<string, SignalDefinition> = {
       coachSnapshot: false,
       mcp: false,
     },
+    fhir: {
+      // No verified total-score LOINC — local text concept, `{score}` UCUM.
+      loinc: null,
+      display: "WHO-5 well-being index total score",
+      unit: "{score}",
+      category: "survey",
+    },
   },
   SCI_SCORE: {
     key: "SCI_SCORE",
@@ -1311,6 +1321,13 @@ export const SIGNALS: Record<string, SignalDefinition> = {
       correlationEligible: false,
       coachSnapshot: false,
       mcp: false,
+    },
+    fhir: {
+      // No verified total-score LOINC — local text concept, `{score}` UCUM.
+      loinc: null,
+      display: "Sleep Condition Indicator total score",
+      unit: "{score}",
+      category: "survey",
     },
   },
   // ── v1.25 clinical-signals wave — physical / clinical measurements ──────

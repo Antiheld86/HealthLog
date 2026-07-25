@@ -29,12 +29,20 @@ vi.mock("@/lib/doctor-report-data", () => ({
   normaliseDateRange: vi.fn(() => ({ from: new Date(0), to: new Date() })),
 }));
 vi.mock("@/lib/crypto", () => ({ decrypt: vi.fn(() => "A123456789") }));
+// The REST face replays the owner's saved selection; this test is about the
+// module backstop, so the selection is fixed to one that names the insurance
+// leaf — otherwise the identity assertion below would be testing the
+// selection resolver instead.
+vi.mock("@/lib/report-selection/saved-profile", () => ({
+  resolveSavedSelection: vi.fn(async () => selectionFromLeaves(["INSURANCE"])),
+}));
 
 import { loadFhirContext } from "@/lib/fhir/rest";
 import { MODULE_KEYS } from "@/lib/modules/gate";
 import { getOperatorModuleAvailability } from "@/lib/modules/operator-availability";
 import { collectDoctorReportData } from "@/lib/doctor-report-data";
 import { prisma } from "@/lib/db";
+import { selectionFromLeaves } from "@/lib/report-selection/selection";
 
 function setDoctorReportModule(enabled: boolean): void {
   vi.mocked(prisma.user.findUnique).mockImplementation((async (args: {

@@ -1,7 +1,8 @@
 import type { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { convertGlucose, resolveGlucoseUnit } from "../glucose";
-import { DOCTOR_REPORT_TYPE_LABEL_KEYS } from "../doctor-report/type-label-keys";
+import type { MeasurementType } from "@/generated/prisma/client";
+import { MEASUREMENT_TYPE_LABEL_KEYS } from "../measurements/type-label-keys";
 import {
   getBmiClassificationKey,
   getBpClassificationKey,
@@ -148,6 +149,30 @@ function drawSparkline(
   return chartBottom + axisLabelHeight + 2;
 }
 
+/** A body row: either six cells, or a full-width group sub-heading. */
+type VitalTableRow =
+  | string[]
+  | [{ content: string; colSpan: number; styles: Record<string, unknown> }];
+
+/**
+ * A full-width sub-heading row naming the group the rows under it belong to.
+ * Bold on a light fill, no colour beyond the table's own greys — the heading
+ * carries meaning, not decoration.
+ */
+function groupSubHeadRow(label: string): VitalTableRow {
+  return [
+    {
+      content: label,
+      colSpan: 6,
+      styles: {
+        fontStyle: "bold",
+        fillColor: [242, 242, 242],
+        textColor: [30, 30, 30],
+      },
+    },
+  ];
+}
+
 export function buildMeasurementsChartsSection(
   context: DoctorReportPdfRenderContext,
   state: DoctorReportPdfCursorState,
@@ -165,7 +190,7 @@ export function buildMeasurementsChartsSection(
     tableBottomMargin,
     ensureSpace,
     unitFor,
-    vitalTypes,
+    vitalGroups,
   } = context;
   let y = state.y;
 
@@ -177,37 +202,22 @@ export function buildMeasurementsChartsSection(
   doc.text(t("doctorReport.vitalsTitle"), margin, y);
   y += 6;
 
-  const vitalRows: string[][] = [];
-
-  for (const type of vitalTypes) {
-    const s = data.stats[type];
-    if (!s) continue;
-    const unit = unitFor(type);
-    // SLEEP_DURATION stats are per-night asleep totals in MINUTES (the data
-    // layer reconstructs them for exactly this row); the vitals unit is hours
-    // (`h`), so convert to keep value and unit consistent — the same hours
-    // value the FHIR sleep Observation emits.
-    const conv =
-      type === "SLEEP_DURATION" ? (v: number) => v / 60 : (v: number) => v;
-    vitalRows.push([
-      t(DOCTOR_REPORT_TYPE_LABEL_KEYS[type] ?? ""),
-      `${num(conv(s.latest))} ${unit}`.trim(),
-      `${num(conv(s.avg))} ${unit}`.trim(),
-      num(conv(s.min)),
-      num(conv(s.max)),
-      String(s.count),
-    ]);
-  }
+  // One sub-headed block per selection group, in the same order the panel
+  // shows them, carrying every selected leaf that has data. The aggregator has
+  // already applied the selection, so a leaf missing from `data.stats` is a
+  // leaf that was withheld or has no reading — the table cannot over-serve.
+  const vitalRows: VitalTableRow[] = [];
 
   // Per-context glucose rows. Values stored canonically in mg/dL — convert to
-  // the user's display unit. Reference ranges come from the server-side
-  // `getEffectiveRange()` (already baked into `data.glucoseRanges`).
+  // the user's display unit. They belong under the glucose group heading with
+  // the raw series, not appended after the whole table.
   const glucoseUnit = resolveGlucoseUnit(data.glucoseUnit ?? null);
+  const glucoseContextRows: string[][] = [];
   for (const ctx of GLUCOSE_CONTEXTS) {
     const s = data.glucoseStats?.[ctx];
     if (!s) continue;
     const conv = (v: number) => convertGlucose(v, glucoseUnit);
-    vitalRows.push([
+    glucoseContextRows.push([
       t(GLUCOSE_LABEL_KEYS[ctx]),
       `${num(conv(s.latest))} ${glucoseUnit}`.trim(),
       `${num(conv(s.avg))} ${glucoseUnit}`.trim(),
@@ -215,6 +225,33 @@ export function buildMeasurementsChartsSection(
       num(conv(s.max)),
       String(s.count),
     ]);
+  }
+
+  for (const group of vitalGroups) {
+    const groupRows: string[][] = [];
+    for (const type of group.types) {
+      const s = data.stats[type];
+      if (!s) continue;
+      const unit = unitFor(type);
+      // SLEEP_DURATION stats are per-night asleep totals in MINUTES (the data
+      // layer reconstructs them for exactly this row); the vitals unit is
+      // hours (`h`), so convert to keep value and unit consistent — the same
+      // hours value the FHIR sleep Observation emits.
+      const conv =
+        type === "SLEEP_DURATION" ? (v: number) => v / 60 : (v: number) => v;
+      groupRows.push([
+        t(MEASUREMENT_TYPE_LABEL_KEYS[type as MeasurementType] ?? ""),
+        `${num(conv(s.latest))} ${unit}`.trim(),
+        `${num(conv(s.avg))} ${unit}`.trim(),
+        num(conv(s.min)),
+        num(conv(s.max)),
+        String(s.count),
+      ]);
+    }
+    if (group.id === "glucose") groupRows.push(...glucoseContextRows);
+    if (groupRows.length === 0) continue;
+    vitalRows.push(groupSubHeadRow(t(group.labelKey)));
+    vitalRows.push(...groupRows);
   }
 
   if (vitalRows.length > 0) {
@@ -394,7 +431,9 @@ export function buildMeasurementsChartsSection(
         // A chart never tears across a page boundary — break before drawing
         // it whole.
         y = ensureSpace(y, SPARKLINE_HEIGHT + 4);
-        const label = t(DOCTOR_REPORT_TYPE_LABEL_KEYS[type] ?? "");
+        const label = t(
+          MEASUREMENT_TYPE_LABEL_KEYS[type as MeasurementType] ?? "",
+        );
         y = drawSparkline(doc, {
           x: margin,
           y,

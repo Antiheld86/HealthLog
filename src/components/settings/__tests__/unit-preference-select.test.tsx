@@ -56,6 +56,7 @@ function buildUser(unitPreference: "metric" | "imperial"): AuthUser {
     insurerIkNumber: null,
     insuranceNumber: null,
     lastReportPracticeName: null,
+    reportSelection: null,
     cycleTrackingEnabled: false,
     modules: {},
   };

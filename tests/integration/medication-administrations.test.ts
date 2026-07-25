@@ -17,6 +17,7 @@ process.env.ENCRYPTION_KEY ??=
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 import { collectDoctorReportData } from "@/lib/doctor-report-data";
+import { selectionFromLeaves } from "@/lib/report-selection/selection";
 
 import { getPrismaClient, truncateAllTables } from "./setup";
 
@@ -106,7 +107,15 @@ describe("medicationAdministrations aggregation (v1.9.0)", () => {
       },
     });
 
-    const data = await collectDoctorReportData(user.id, RANGE);
+    const data = await collectDoctorReportData(
+      user.id,
+      RANGE,
+      selectionFromLeaves([
+        "MEDICATION_LIST",
+        "MEDICATION_ADMINISTRATIONS",
+        "MEDICATION_COMPLIANCE",
+      ]),
+    );
 
     // Drug codes carried onto the medication concept source.
     expect(data.medications[0].atcCode).toBe("A10BX10");

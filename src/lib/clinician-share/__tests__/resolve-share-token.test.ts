@@ -39,8 +39,6 @@ function liveRow(overrides: Record<string, unknown> = {}) {
     rangeStart: new Date("2026-01-01T00:00:00.000Z"),
     rangeEnd: null,
     sectionsJson: { bp: true },
-    resourceTypes: ["Observation"],
-    allowFhirApi: false,
     expiresAt: new Date(Date.now() + 86_400_000),
     revokedAt: null,
     ...overrides,
@@ -59,7 +57,9 @@ describe("resolveShareToken", () => {
     expect(ctx).not.toBeNull();
     expect(ctx?.ownerUserId).toBe("owner-1");
     expect(ctx?.shareLinkId).toBe("link-1");
-    expect(ctx?.resourceTypes).toEqual(["Observation"]);
+    // The retired FHIR scope no longer rides the resolved context.
+    expect(ctx).not.toHaveProperty("resourceTypes");
+    expect(ctx).not.toHaveProperty("allowFhirApi");
     // The context must carry ONLY the owner scope — never a session/user/role.
     expect(ctx).not.toHaveProperty("session");
     expect(ctx).not.toHaveProperty("user");

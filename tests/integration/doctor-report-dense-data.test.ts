@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { collectDoctorReportData } from "@/lib/doctor-report-data";
+import { selectionFromLeaves } from "@/lib/report-selection/selection";
 
 import { getPrismaClient, truncateAllTables } from "./setup";
 
@@ -32,20 +33,13 @@ const MODULES = {
   nutrients: true,
 } as const;
 
-const SECTIONS = {
-  bp: false,
-  weight: true,
-  pulse: true,
-  bmi: false,
-  mood: false,
-  compliance: false,
-  sleep: false,
-  glucose: true,
-  cycle: false,
-  labs: false,
-  allergies: false,
-  familyHistory: false,
-} as const;
+/** The dense path is about pulse and glucose; nothing else is in scope here. */
+const SELECTION = selectionFromLeaves([
+  "WEIGHT",
+  "PULSE",
+  "BLOOD_GLUCOSE",
+  "GLUCOSE_PANEL",
+]);
 
 beforeEach(async () => {
   await truncateAllTables(getPrismaClient());
@@ -138,8 +132,7 @@ describe("doctor report — bounded dense measurement reads", () => {
     await seedDenseBatch(0, 4);
     const findManySpy = vi.spyOn(prisma.measurement, "findMany");
 
-    const initial = await collectDoctorReportData(user.id, RANGE, {
-      sections: { ...SECTIONS },
+    const initial = await collectDoctorReportData(user.id, RANGE, SELECTION, {
       moduleMap: { ...MODULES },
     });
 
@@ -168,8 +161,7 @@ describe("doctor report — bounded dense measurement reads", () => {
     expect(rawRows.map((row) => row.type)).toEqual(["WEIGHT", "WEIGHT"]);
 
     await seedDenseBatch(10, 300);
-    const grown = await collectDoctorReportData(user.id, RANGE, {
-      sections: { ...SECTIONS },
+    const grown = await collectDoctorReportData(user.id, RANGE, SELECTION, {
       moduleMap: { ...MODULES },
     });
 

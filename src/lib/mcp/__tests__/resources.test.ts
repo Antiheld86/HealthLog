@@ -233,9 +233,12 @@ describe("healthlog://report/doctor-visit", () => {
       CTX,
     )) as Record<string, unknown>;
 
+    // Third argument: the owner's SAVED selection, replayed. This surface
+    // cannot ask a human, so it never invents a scope.
     expect(collectDoctorReportData).toHaveBeenCalledWith(
       "user-1",
       expect.objectContaining({ days: 90 }),
+      expect.objectContaining({ version: 2 }),
     );
     expect(result.present).toBe(true);
     expect(result).toHaveProperty("vitals");
@@ -253,7 +256,9 @@ describe("healthlog://report/doctor-visit", () => {
     vi.mocked(collectDoctorReportData).mockResolvedValue({
       period: { days: 90, since: "", start: "", end: "" },
       patient: { dateOfBirth: "1990-01-01", gender: "female", heightCm: 170 },
-      stats: {},
+      // One metric survived the gate, so the record is present; everything
+      // else is absent and must stay absent rather than being zero-filled.
+      stats: { WEIGHT: { avg: 80, min: 78, max: 82, count: 4, latest: 79 } },
       glucoseClinical: { stillLearning: true },
       bmi: null,
       compliance: {},

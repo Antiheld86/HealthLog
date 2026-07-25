@@ -491,19 +491,22 @@ model User {
   // `MoodReminderDispatch` table (one row per user + local date).
   moodReminderEnabled Boolean @default(false) @map("mood_reminder_enabled")
 
-  // v1.4.25 W6c — Doctor-report section toggles.
-  // Shape:
-  //   { "bp": boolean,
-  //     "weight": boolean,
-  //     "pulse": boolean,
-  //     "bmi": boolean,
-  //     "mood": boolean,          // privacy-sensitive; default OFF
-  //     "compliance": boolean,
-  //     "sleep": boolean }
-  // Null = documented defaults (every section ON except mood). Mood is
-  // opt-in by default — the API layer drops mood entirely from the
-  // payload when the toggle is off so the data never leaves the DB row.
-  doctorReportPrefsJson Json? @map("doctor_report_prefs_json")
+  // The owner's saved report selection: the leaf-id inclusion list plus the
+  // format / range / charts choices the export panel restores. Shape:
+  //   { "v": 2,
+  //     "leaves": ["WEIGHT", "BLOOD_PRESSURE_SYS", "LAB_RESULTS", …],
+  //     "format": "pdf" | "fhir" | "package",
+  //     "rangeDays": number,
+  //     "includeCharts": boolean }
+  // Null = never saved, which resolves to the EMPTY selection everywhere.
+  // Read by the export panel, the share-link create form, the FHIR REST face
+  // and the MCP doctor-visit surfaces.
+  //
+  // Replaces `doctorReportPrefsJson`, whose flat opt-out shape could not
+  // express "not chosen": an absent key resolved to included, so a caller who
+  // said nothing received the whole record. Membership is the whole contract
+  // here — absence is exclusion, and there is no defaults constant to drift.
+  reportSelectionJson Json? @map("report_selection_json")
 
   // v1.4.49 M-DOUBLE-REMINDER — per-user notification preferences blob.
   //
@@ -5350,8 +5353,8 @@ model PushAttempt {
 // `ApiToken.tokenHash`, keyed by `API_TOKEN_HMAC_KEY`); the plaintext is
 // returned to the owner exactly once at creation and never persisted.
 //
-// The scope is FROZEN at creation: `rangeStart`, `sectionsJson` and
-// `resourceTypes` are write-once and a share can NEVER widen later — only
+// The scope is FROZEN at creation: `rangeStart` and `sectionsJson` are
+// write-once and a share can NEVER widen later — only
 // `revokedAt`, `lastAccessAt` and `accessCount` mutate after mint. This
 // mirrors the append-only spirit of `ConsentReceipt`. `expiresAt` is
 // mandatory (capped at `SHARE_LINK_MAX_DAYS`, default 90) — there is no
@@ -5378,13 +5381,10 @@ model ClinicianShareLink {
   rangeStart    DateTime  @map("range_start")
   /// Window end. Null = rolling ("up to now"); set = frozen snapshot window.
   rangeEnd      DateTime? @map("range_end")
-  /// Section toggles (the `DoctorReportPrefs` shape the export uses). JSON.
+  /// The frozen report scope: `{ "v": 2, "leaves": [...] }`. Write-once at
+  /// mint, never widened. A blob this build cannot read resolves to the empty
+  /// selection, so a drifted row serves nothing rather than defaulting open.
   sectionsJson  Json      @map("sections_json")
-  /// FHIR resource types this link may serve (a subset of the catalogue),
-  /// e.g. `["Observation","MedicationStatement"]`.
-  resourceTypes String[]  @map("resource_types")
-  /// Whether the FHIR API is reachable via this link at all (vs the view only).
-  allowFhirApi  Boolean   @default(false) @map("allow_fhir_api")
   /// v1.28.16 — the authoritative "documents-only" flag, frozen write-once at
   /// create. When true the public view serves ONLY the attached documents and
   /// the aggregator is never called, INDEPENDENT of `sectionsJson`. Decoupling

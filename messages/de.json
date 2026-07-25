@@ -53,11 +53,15 @@
   },
   "apiErrors": {
     "measurement": {
-      "create": { "invalid": "Prüfe die Messdaten und versuche es erneut." },
+      "create": {
+        "invalid": "Prüfe die Messdaten und versuche es erneut."
+      },
       "duplicate_timestamp": "Für diesen Zeitpunkt ist bereits eine Messung vorhanden."
     },
     "mood": {
-      "list": { "invalid": "Die Filter der Stimmungsliste sind ungültig." },
+      "list": {
+        "invalid": "Die Filter der Stimmungsliste sind ungültig."
+      },
       "create": {
         "invalid": "Prüfe den Stimmungseintrag und versuche es erneut."
       },
@@ -71,8 +75,12 @@
       }
     },
     "labs": {
-      "create": { "invalid": "Prüfe den Laborwert und versuche es erneut." },
-      "result": { "notFound": "Dieser Laborwert ist nicht mehr verfügbar." },
+      "create": {
+        "invalid": "Prüfe den Laborwert und versuche es erneut."
+      },
+      "result": {
+        "notFound": "Dieser Laborwert ist nicht mehr verfügbar."
+      },
       "biomarker": {
         "notFound": "Dieser Biomarker ist nicht mehr verfügbar.",
         "duplicate": "Ein Biomarker mit diesem Namen ist bereits vorhanden.",
@@ -102,7 +110,9 @@
       "complete": {
         "invalid": "Prüfe die Profildaten und versuche es erneut."
       },
-      "user": { "notFound": "Dein Konto wurde nicht gefunden." },
+      "user": {
+        "notFound": "Dein Konto wurde nicht gefunden."
+      },
       "step": {
         "rateLimited": "Zu viele Versuche. Warte kurz und versuche es erneut.",
         "invalid": "Dieser Onboarding-Schritt konnte nicht gespeichert werden.",
@@ -160,16 +170,6 @@
     "footerDisclaimer1": "Dieser Bericht wurde automatisch aus selbst erfassten Daten generiert und dient ausschließlich zur Unterstützung",
     "footerDisclaimer2": "des Arzt-Patienten-Gesprächs. Er ersetzt keine ärztliche Diagnose. Korrelationen implizieren keine Kausalität.",
     "footerSource": "Quelle: HealthLog | Zeitzone: {timezone} | Erstellt: {timestamp}",
-    "typeWeight": "Körpergewicht",
-    "typeBpSys": "Systolischer Blutdruck",
-    "typeBpDia": "Diastolischer Blutdruck",
-    "typePulse": "Ruhepuls",
-    "typeBodyFat": "Körperfettanteil",
-    "typeSleep": "Schlafdauer",
-    "typeSteps": "Aktivität (Schritte)",
-    "typeTotalBodyWater": "Gesamtkörperwasser",
-    "typeBoneMass": "Knochenmasse",
-    "typeOxygenSaturation": "Sauerstoffsättigung",
     "unitSteps": "Schritte",
     "bmiUnderweight": "Untergewicht",
     "bmiNormal": "Normalgewicht",
@@ -205,8 +205,6 @@
     "summaryTrend": "{label}: zuletzt {latest} {arrow}",
     "summaryAdherence": "Medikamenten-Therapietreue: {rate}% (gewichteter Mittelwert).",
     "chartsTitle": "Trend-Diagramme",
-    "aiSummaryTitle": "KI-Zusammenfassung — nicht klinisch validiert",
-    "aiSummaryDisclaimer": "Dieser Abschnitt wurde automatisch von einem KI-Modell erzeugt und ist nicht klinisch validiert. Er ersetzt keine ärztliche Beurteilung.",
     "packageReadme": "HealthLog Gesundheitsakte\n\nDieses Paket enthält:\n- report.pdf: den Gesundheitsbericht für die ärztliche Vorlage.\n- bundle.json: dieselben Daten als HL7-FHIR-R4-Dokument (Bundle), ePA-kompatibel.\n\nErstellt mit HealthLog.",
     "wellnessTitle": "Wellness-Zusammenfassung",
     "wellnessDisclaimer": "Dies sind beschreibende Wellness-Werte, die aus den erfassten Signalen berechnet werden (0–100). Sie sind keine klinischen Beurteilungen oder Diagnosen.",
@@ -4447,10 +4445,6 @@
             "passphraseHelp": "Leitet den Archivschlüssel per Argon2id ab und versiegelt ihn mit AES-256-GCM. Speichere die Datei mit der Endung .hlx.",
             "noRecoveryWarning": "Es gibt keine Wiederherstellung — geht diese Passphrase verloren, lässt sich das Archiv nicht mehr öffnen. Bewahre sie sicher auf.",
             "stepUpNeeded": "Bestätige deinen zweiten Faktor und versuche es erneut."
-          },
-          "cycle": {
-            "title": "Zyklus",
-            "description": "Zyklus- und Reproduktionsdaten als FHIR-Dokument — letzte Periode, durchschnittliche Zyklus- und Periodenlänge, aktuelle Phase."
           }
         },
         "import": {
@@ -5313,34 +5307,17 @@
       "practiceName": "Praxis (optional)",
       "practiceNamePlaceholder": "z. B. Dr. med. Mustermann",
       "includedData": "Enthaltene Daten",
-      "groupVitals": "Vitalwerte",
-      "groupCardio": "Herz & Fitness",
-      "groupActivity": "Aktivität & Schlaf",
-      "weight": "Gewicht",
-      "bp": "Blutdruck",
-      "pulse": "Puls",
-      "oxygenSaturation": "Sauerstoffsättigung",
-      "bodyFat": "Körperfett",
-      "bodyComposition": "Körperzusammensetzung",
-      "restingHeartRate": "Ruhepuls",
-      "hrv": "Herzfrequenzvariabilität",
-      "vo2max": "VO₂max",
-      "steps": "Schritte",
-      "distance": "Distanz",
-      "sleep": "Schlaf",
-      "glucose": "Blutzucker",
-      "medications": "Medikamente & Therapietreue",
-      "mood": "Stimmung (standardmäßig aus — sensible Daten)",
-      "bmi": "BMI",
       "includeCharts": "Trend-Diagramme einbetten (nur PDF)",
-      "includeAiSummary": "KI-Zusammenfassung anhängen (nicht klinisch validiert)",
       "fhirNote": "Die strukturierte Ausgabe folgt dem FHIR-R4-Standard (ePA-kompatibel).",
       "generate": "Erstellen",
-      "error": "Export fehlgeschlagen ({code}).",
-      "labs": "Laborwerte",
-      "allergies": "Allergien & Unverträglichkeiten",
-      "familyHistory": "Familienanamnese",
-      "documentsLink": "Dokumente zum Zeitraum"
+      "documentsLink": "Dokumente zum Zeitraum",
+      "range30": "Letzte 30 Tage",
+      "rangeCustom": "Eigener Zeitraum",
+      "rangeCustomStart": "Von",
+      "rangeCustomEnd": "Bis",
+      "errorGeneric": "Der Export konnte nicht erstellt werden. Bitte erneut versuchen.",
+      "errorRateLimit": "Das Exportlimit für diese Stunde ist erreicht.",
+      "errorModuleDisabled": "Der Gesundheitsakten-Export ist für dieses Konto ausgeschaltet."
     },
     "globalExcludedInjectionSitesLabel": "Global ausgeschlossene Injektionsstellen",
     "globalExcludedInjectionSitesHint": "Hier gelistete Stellen werden für keine Medikation angeboten und beim Erfassen einer Dosis abgelehnt — auch wenn eine Medikation sie bevorzugt.",
@@ -5354,9 +5331,6 @@
       "expiry": "Läuft ab in (Tagen)",
       "expiryHint": "Höchstens {max} Tage.",
       "expiryInvalid": "Die Gültigkeit muss zwischen 1 und {max} Tagen liegen.",
-      "fhirApi": "Eingegrenzte FHIR-API erlauben",
-      "fhirApiHint": "Lasse den Link zusätzlich zur Seitenansicht einen schreibgeschützten FHIR-Endpunkt bereitstellen.",
-      "resourceTypes": "FHIR-Ressourcentypen",
       "create": "Link erstellen",
       "tokenCreated": "Freigabe-Link erstellt",
       "copied": "In die Zwischenablage kopiert.",
@@ -5394,7 +5368,12 @@
       "pickerEmpty": "Keine Dokumente gefunden.",
       "pickerDone": "Fertig",
       "pickerSelectedCount": "{count} von {max} ausgewählt",
-      "pickerMaxReached": "Maximum von {max} Dokumenten erreicht."
+      "pickerMaxReached": "Maximum von {max} Dokumenten erreicht.",
+      "scopeTitle": "Was dieser Link enthält",
+      "scopeInsuranceExcluded": "Versichertendaten werden über einen Link nie geteilt.",
+      "statusNeedsReselect": "Inhalt neu wählen",
+      "reselectReason": "Dieser Link lieferte einen Umfang, den niemand gewählt hatte, und wurde deshalb geschlossen. Legen Sie einen neuen an und wählen Sie den Inhalt.",
+      "reselectAction": "Ersatz anlegen"
     },
     "genderOther": "Divers",
     "cycleTracking": {
@@ -6930,7 +6909,6 @@
     "period": "Berichtszeitraum: {start} – {end}",
     "expires": "Dieser Link läuft am {date} ab.",
     "provenance": "Dies ist eine schreibgeschützte Zusammenfassung, die von der betreffenden Person geteilt wurde, exportiert aus ihren selbst erfassten HealthLog-Daten. Die Werte sind selbst erhoben und können geräteübertragene Messwerte enthalten; behandeln Sie sie als von der Patientin/dem Patienten berichtet, nicht als klinische Untersuchung.",
-    "vitals": "Vitalwerte",
     "labs": "Laborwerte",
     "medications": "Medikamente & Therapietreue",
     "bmi": "Body-Mass-Index (BMI)",
@@ -6970,7 +6948,10 @@
       "download": "Herunterladen",
       "attachmentHint": "Diese Datei wird auf Ihr Gerät heruntergeladen (keine Vorschau in der Seite).",
       "exifNote": "Kamera-Metadaten (EXIF/GPS) wurden aus geteilten JPEG-, PNG- und WebP-Bildern entfernt."
-    }
+    },
+    "downloadPdf": "Als PDF herunterladen",
+    "downloadFhir": "Als FHIR herunterladen",
+    "bmiSection": "Body-Mass-Index"
   },
   "cycle": {
     "symptomCategory": {
@@ -8877,5 +8858,42 @@
         }
       }
     }
+  },
+  "reportSelection": {
+    "groupIdentity": "Stammdaten",
+    "groupVitals": "Vitalwerte",
+    "groupCardio": "Herz & Kreislauf",
+    "groupBody": "Körpermaße",
+    "groupSleepRecovery": "Schlaf & Erholung",
+    "groupActivity": "Aktivität",
+    "groupMobility": "Mobilität & Gang",
+    "groupEnvironment": "Umgebung",
+    "groupGlucose": "Blutzucker",
+    "groupLabs": "Laborwerte",
+    "groupMedications": "Medikamente",
+    "groupHistory": "Vorerkrankungen & Allergien",
+    "groupSensitive": "Sensible Daten",
+    "leafPatientIdentity": "Name, Geburtsdatum, Geschlecht, Größe",
+    "leafInsurance": "Krankenkasse und Versichertennummer",
+    "leafGlucosePanel": "Blutzucker-Panel (Zeit im Zielbereich, GMI, Variabilität)",
+    "leafLabResults": "Laborwerte",
+    "leafMedicationList": "Medikamentenliste",
+    "leafMedicationAdministrations": "Jede erfasste Einnahme",
+    "leafMedicationCompliance": "Einnahmetreue",
+    "leafGlp1Therapy": "GLP-1-Therapie (Dosisverlauf, Nebenwirkungen)",
+    "leafAllergies": "Allergien und Unverträglichkeiten",
+    "leafIllnessEpisodes": "Krankheitsepisoden",
+    "leafFamilyHistory": "Familienanamnese",
+    "leafMood": "Stimmung",
+    "leafCycle": "Menstruationszyklus",
+    "templateStandard": "Standard-Arztbericht",
+    "applyStandard": "{template} übernehmen",
+    "standardHint": "Ein Klick füllt aus, was ein normaler Arztbesuch meist braucht. Jeder Eintrag bleibt änderbar.",
+    "groupCount": "{on}/{total}",
+    "groupDisclosure": "Einträge in {group} anzeigen",
+    "sensitiveHint": "Hier ist nie etwas vorausgewählt. Wählen Sie jeden Eintrag selbst.",
+    "scopeNone": "Noch nichts ausgewählt. Wählen Sie aus, was enthalten sein soll, oder übernehmen Sie den Standardbericht.",
+    "scopeCount": "{count} Einträge aus {groups} Bereichen",
+    "scopeSensitive": "inkl. {names}"
   }
 }

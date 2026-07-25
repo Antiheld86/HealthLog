@@ -51,9 +51,10 @@ interface CreatedShare {
 }
 
 /**
- * Drive the owner create flow: open the picker, isolate the share-fixture trio
- * by search, select all three, create the link, and read the one-time token +
- * passphrase off the reveal card. Also asserts the QR promotion.
+ * Drive the owner create flow: name the link, choose a record scope, open the
+ * picker, isolate the share-fixture trio by search, select all three, create
+ * the link, and read the one-time token + passphrase off the reveal card. Also
+ * asserts the QR promotion.
  */
 async function createShareWithDocs(page: Page): Promise<CreatedShare> {
   const label = `${SHARE_DOC_PREFIX} ${Date.now()}`;
@@ -67,6 +68,10 @@ async function createShareWithDocs(page: Page): Promise<CreatedShare> {
   await page.goto("/settings/sharing");
   await sharingDataReady;
   await page.locator("#share-label").fill(label);
+  // A record link starts with an empty scope and cannot be minted on one, so
+  // the scope is chosen here the way an owner chooses it: one click on the
+  // named standard set.
+  await page.getByTestId("report-apply-standard-share").click();
 
   // Open the document picker and isolate the seeded trio.
   await page.getByTestId("share-attach-open").click();

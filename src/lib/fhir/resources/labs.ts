@@ -1,0 +1,113 @@
+/**
+ * Lab-result Observations (v1.17.1; LOINC + UCUM v1.18.8).
+ *
+ * One `laboratory` Observation per recorded analyte. `analyte` + `unit` are
+ * user-recorded free text (no closed LOINC enum). A curated analyte→LOINC map
+ * (`resolveLabCoding`) adds a real LOINC `coding` ALONGSIDE the user's
+ * `code.text` for the common biomarkers, and stamps the canonical UCUM `code`
+ * on the value WHEN the recorded unit matches the mapped canonical symbol. An
+ * analyte that does NOT resolve keeps the honest text-only `code` +
+ * display-only `unit` (no fabricated terminology). The lab's reference bounds
+ * map onto R4 `referenceRange`.
+ */
+import type { DoctorReportData } from "@/lib/doctor-report-data";
+import { LOINC_SYSTEM, UCUM_SYSTEM } from "@/lib/fhir/loinc-map";
+import { resolveLabCoding } from "@/lib/fhir/lab-loinc";
+import { qualitativeValueConcept } from "@/lib/fhir/lab-qualitative";
+
+import type {
+  FhirObservation,
+  FhirObservationReferenceRange,
+} from "@/lib/fhir/types";
+import { categoryConcept, patientRef } from "@/lib/fhir/resources/common";
+
+export function labObservations(
+  data: DoctorReportData,
+  nextId: () => string,
+): FhirObservation[] {
+  const observations: FhirObservation[] = [];
+
+  for (const lab of data.labResults ?? []) {
+    // Forward-compat: when the DTO carries a resolved canonical analyte name,
+    // thread it as the third arg so the catalog name wins over the free-text
+    // `analyte`. Absent today.
+    const coding = resolveLabCoding(lab.analyte, lab.unit);
+    const text = lab.panel ? `${lab.analyte} (${lab.panel})` : lab.analyte;
+    const code = coding
+      ? {
+          coding: [
+            {
+              system: LOINC_SYSTEM,
+              code: coding.loinc,
+              display: coding.display,
+            },
+          ],
+          text,
+        }
+      : { text };
+
+    // v1.18.9 — a qualitative result (`value === null`) emits a
+    // `valueCodeableConcept` (SNOMED qualifier value when confidently known,
+    // else text-only) and NO `valueQuantity` / `referenceRange` — bounds are
+    // meaningless for it. A numeric result keeps the established
+    // valueQuantity + LOINC/UCUM path.
+    if (lab.value === null) {
+      const valueText = lab.valueText?.trim() ?? "";
+      // A row with neither a number nor a result term states nothing. An
+      // Observation whose only value is an empty concept is worse than no
+      // Observation: it asserts a result was recorded and then withholds it.
+      if (valueText === "") continue;
+      observations.push({
+        resourceType: "Observation",
+        id: nextId(),
+        status: "final",
+        category: [categoryConcept("laboratory")],
+        code,
+        subject: patientRef,
+        effectiveDateTime: lab.takenAt,
+        valueCodeableConcept: qualitativeValueConcept(valueText),
+      });
+      continue;
+    }
+
+    // A lab quantity: the recorded `unit` is always the display string, and
+    // the canonical UCUM `code` is stamped only when the analyte map resolved
+    // one for exactly that unit (no coerced symbol).
+    const quantity = (value: number) => ({
+      value,
+      unit: lab.unit,
+      system: UCUM_SYSTEM,
+      ...(coding?.ucum ? { code: coding.ucum } : {}),
+    });
+    // The bounds are stated in the SAME unit as the value, so they carry the
+    // SAME coding — a bare unit beside a coded value leaves a receiver unable
+    // to compare the two.
+    const referenceRange: FhirObservationReferenceRange[] | undefined =
+      lab.referenceLow !== null || lab.referenceHigh !== null
+        ? [
+            {
+              ...(lab.referenceLow !== null
+                ? { low: quantity(lab.referenceLow) }
+                : {}),
+              ...(lab.referenceHigh !== null
+                ? { high: quantity(lab.referenceHigh) }
+                : {}),
+            },
+          ]
+        : undefined;
+
+    observations.push({
+      resourceType: "Observation",
+      id: nextId(),
+      status: "final",
+      category: [categoryConcept("laboratory")],
+      code,
+      subject: patientRef,
+      effectiveDateTime: lab.takenAt,
+      valueQuantity: quantity(lab.value),
+      ...(referenceRange ? { referenceRange } : {}),
+    });
+  }
+
+  return observations;
+}

@@ -12,7 +12,14 @@
  * SSR-static render only (no jsdom), matching the sibling settings tests. The
  * TanStack hooks are mocked; the QR (`qrcode`) only ever renders in an effect
  * after a create, so it never runs under `renderToStaticMarkup`.
+ *
+ * Mutation checks (each verified red, then reverted):
+ *   - seed `selectedLeaves` from `STANDARD_TEMPLATE_LEAVES` again → "starts a
+ *     record link with an empty scope" goes red.
+ *   - drop `selectedLeaves.size === 0` from the submit `disabled` expression →
+ *     "refuses to mint a record link with an empty scope" goes red.
  */
+import type { ReportLeafId } from "@/lib/report-selection/catalogue";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -44,6 +51,15 @@ function render(
       <ShareLinkCreateForm {...props} />
     </I18nProvider>,
   );
+}
+
+/** Whether the create control refuses the press. */
+function createDisabled(html: string): boolean {
+  const button = html.match(
+    /<button[^>]*data-testid="share-create-submit"[^>]*>/,
+  )?.[0];
+  if (!button) throw new Error("the create button did not render");
+  return /\sdisabled=""/.test(button);
 }
 
 describe("<ShareLinkCreateForm> — shared create flow", () => {
@@ -86,6 +102,28 @@ describe("<ShareLinkCreateForm> — shared create flow", () => {
     expect(html).toContain("Camera metadata");
   });
 
+  it("starts a record link with an empty scope and the standard-report button", () => {
+    const html = render();
+    // A link is handed to another person; nothing rides on it that was not
+    // ticked. The template is reachable in one click and applied in none.
+    expect(html).toContain("Nothing selected yet");
+    expect(html).toContain('data-testid="report-apply-standard-share"');
+    expect(html).toContain("Apply Standard doctor&#x27;s report");
+  });
+
+  it("refuses to mint a record link with an empty scope, label or not", () => {
+    const html = render({ initialLabel: "Cardiology" });
+    expect(createDisabled(html)).toBe(true);
+    // The same form in documents-only mode mints happily on the same label:
+    // the refusal comes from the empty report scope, not from the label.
+    const docOnly = render({
+      documentOnly: true,
+      initialLabel: "Cardiology",
+      initialDocuments: [{ id: "doc-1", title: "Blood panel 2026" }],
+    });
+    expect(createDisabled(docOnly)).toBe(false);
+  });
+
   it("document-only mode hides every record-scope control but keeps expiry + the doc", () => {
     const html = render({
       documentOnly: true,
@@ -110,37 +148,43 @@ describe("buildShareLinkCreatePayload — scope contract", () => {
     label: "  Blood panel 2026  ",
     rangeDays: 30,
     expiryDays: 30,
+    leaves: ["WEIGHT", "LAB_RESULTS"] as ReportLeafId[],
   };
 
-  it("document-only: empty report scope, FHIR off, and the launched doc always rides along", () => {
+  it("document-only: empty report scope and the launched doc always rides along", () => {
     const payload = buildShareLinkCreatePayload({
       ...common,
-      // Even if the caller state still holds record-scope values, they must be
-      // dropped: a document link never carries a health scope.
-      allowFhirApi: true,
-      resourceTypes: ["Patient", "Observation"],
       documentIds: ["doc-1"],
       documentOnly: true,
     });
-    expect(payload.resourceTypes).toEqual([]);
-    expect(payload.allowFhirApi).toBe(false);
     expect(payload.documentOnly).toBe(true);
-    // No report sections are ever sent for a document link.
+    // The retired FHIR scope keys are gone from the wire entirely,
+    // so a share link can no longer advertise a face that was never served.
+    expect(payload).not.toHaveProperty("resourceTypes");
+    expect(payload).not.toHaveProperty("allowFhirApi");
+    // No report scope is ever sent for a document link, whatever the picker
+    // above happened to be showing.
+    expect(payload).not.toHaveProperty("selection");
     expect(payload).not.toHaveProperty("sections");
     // The launched document is always in the created link (pre-attach fix).
     expect(payload.documentIds).toEqual(["doc-1"]);
     expect(payload.label).toBe("Blood panel 2026");
   });
 
-  it("record share: keeps the full scope and omits documentIds when none picked", () => {
+  it("record share: keeps the window scope and omits documentIds when none picked", () => {
     const payload = buildShareLinkCreatePayload({
       ...common,
-      allowFhirApi: false,
-      resourceTypes: ["Patient", "Observation"],
       documentIds: [],
       documentOnly: false,
     });
-    expect(payload.resourceTypes).toEqual(["Patient", "Observation"]);
+    expect(payload.rangeEnd).toBeNull();
+    // A record share carries the leaves the owner chose, and nothing else.
+    expect(payload.selection).toEqual({
+      v: 2,
+      leaves: ["WEIGHT", "LAB_RESULTS"],
+    });
+    expect(payload).not.toHaveProperty("resourceTypes");
+    expect(payload).not.toHaveProperty("allowFhirApi");
     expect(payload).not.toHaveProperty("documentIds");
     expect(payload).not.toHaveProperty("documentOnly");
   });
@@ -148,8 +192,6 @@ describe("buildShareLinkCreatePayload — scope contract", () => {
   it("record share: attaches the picked documents when the owner chose some", () => {
     const payload = buildShareLinkCreatePayload({
       ...common,
-      allowFhirApi: false,
-      resourceTypes: ["Patient", "Observation"],
       documentIds: ["a", "b"],
       documentOnly: false,
     });

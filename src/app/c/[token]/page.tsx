@@ -16,7 +16,7 @@
  * string renders as escaped React text children (XSS posture).
  */
 import type { Metadata } from "next";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 
 import {
@@ -29,8 +29,7 @@ import {
   verifyUnlockValue,
 } from "@/lib/clinician-share/unlock-cookie";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
-import { defaultLocale, locales, type Locale } from "@/lib/i18n/config";
-import { parseLocaleFromAcceptLanguage } from "@/lib/format-locale";
+import { resolveShareViewLocale } from "@/lib/clinician-share/request-locale";
 import { resolveUserTimezone } from "@/lib/tz/resolver";
 import { ClinicianView } from "@/components/clinician/clinician-view";
 import { ShareUnlockGate } from "@/components/clinician/share-unlock-gate";
@@ -44,20 +43,6 @@ export const metadata: Metadata = {
   title: "Shared health record",
   robots: { index: false, follow: false },
 };
-
-async function resolveLocale(): Promise<Locale> {
-  try {
-    const cookieStore = await cookies();
-    const cookieLocale = cookieStore.get("healthlog-locale")?.value;
-    if (cookieLocale && (locales as readonly string[]).includes(cookieLocale)) {
-      return cookieLocale as Locale;
-    }
-    const headerList = await headers();
-    return parseLocaleFromAcceptLanguage(headerList.get("accept-language"));
-  } catch {
-    return defaultLocale;
-  }
-}
 
 export default async function ClinicianSharePage({
   params,
@@ -81,7 +66,7 @@ export default async function ClinicianSharePage({
       unlockCookieName(gate.tokenHash),
     )?.value;
     if (!verifyUnlockValue(unlockValue, gate.tokenHash)) {
-      const locale = await resolveLocale();
+      const locale = await resolveShareViewLocale();
       const { t } = getServerTranslator(locale);
       // Resolve the gate copy on the server (it owns the locale) into a plain,
       // serializable object. A `t` function cannot cross the RSC boundary into
@@ -107,12 +92,15 @@ export default async function ClinicianSharePage({
   // Issue #490 — period/expiry dates render in the share OWNER's (patient's)
   // profile timezone so they agree with the patient-tz aggregation behind the
   // stats and with the doctor-report PDF (never the container's zone).
-  const [{ report, sections, documents, documentOnly }, locale, ownerTimezone] =
-    await Promise.all([
-      loadShareViewData(context),
-      resolveLocale(),
-      resolveUserTimezone(context.ownerUserId),
-    ]);
+  const [
+    { report, selection, documents, documentOnly },
+    locale,
+    ownerTimezone,
+  ] = await Promise.all([
+    loadShareViewData(context),
+    resolveShareViewLocale(),
+    resolveUserTimezone(context.ownerUserId),
+  ]);
   const { t } = getServerTranslator(locale);
 
   return (
@@ -121,7 +109,7 @@ export default async function ClinicianSharePage({
       label={context.label}
       expiresAt={context.expiresAt.toISOString()}
       report={report}
-      sections={sections}
+      selection={selection}
       documents={documents}
       documentOnly={documentOnly}
       token={token}

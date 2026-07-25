@@ -36,6 +36,27 @@ function observationsOf(bundle: ReturnType<typeof buildFhirDocumentBundle>) {
     .filter((r): r is FhirObservation => r.resourceType === "Observation");
 }
 
+/**
+ * Follow an intra-document reference the way a receiver does: match it against
+ * `Bundle.entry.fullUrl`. Every internal reference is a `urn:uuid`, so
+ * asserting the literal string would only pin the UUID generator.
+ */
+function resolveRef(
+  bundle: ReturnType<typeof buildFhirDocumentBundle>,
+  reference: string | undefined,
+) {
+  return bundle.entry.find((e) => e.fullUrl === reference)?.resource;
+}
+
+/** `"Patient/patient-1"` for whatever entry the reference resolves to. */
+function refTarget(
+  bundle: ReturnType<typeof buildFhirDocumentBundle>,
+  reference: string | undefined,
+): string | undefined {
+  const resource = resolveRef(bundle, reference);
+  return resource ? `${resource.resourceType}/${resource.id}` : undefined;
+}
+
 const FIXED_NOW = new Date("2026-05-03T12:00:00.000Z");
 
 function makeData(overrides?: Partial<DoctorReportData>): DoctorReportData {
@@ -167,7 +188,9 @@ describe("buildFhirDocumentBundle", () => {
     const coverage = coverageOf(bundle);
     expect(coverage).toBeDefined();
     expect(coverage?.status).toBe("active");
-    expect(coverage?.beneficiary.reference).toBe("Patient/patient-1");
+    expect(refTarget(bundle, coverage?.beneficiary.reference)).toBe(
+      "Patient/patient-1",
+    );
     expect(coverage?.subscriberId).toBe("A123456780");
     // Payor references the contained Organization via a local #-ref.
     const payorRef = coverage?.payor?.[0].reference;
@@ -268,7 +291,7 @@ describe("buildFhirDocumentBundle", () => {
     expect(coverageOf(bundle)).toBeUndefined();
   });
 
-  it("emits a KVNR-only Coverage (no insurer) to align with the iOS exporter", () => {
+  it("emits no Coverage for a bare KVNR — a Coverage needs a payor", () => {
     const bundle = buildFhirDocumentBundle(
       makeData({
         patient: {
@@ -283,15 +306,10 @@ describe("buildFhirDocumentBundle", () => {
       { insuranceNumber: "A123456780" },
       FIXED_NOW,
     );
-    const coverage = coverageOf(bundle);
-    expect(coverage).toBeDefined();
-    expect(coverage?.status).toBe("active");
-    expect(coverage?.beneficiary.reference).toBe("Patient/patient-1");
-    expect(coverage?.subscriberId).toBe("A123456780");
-    // No insurer known → no contained payor Organization, no payor[].
-    expect(coverage?.contained).toBeUndefined();
-    expect(coverage?.payor).toBeUndefined();
-    // KVNR still rides on Patient.identifier too.
+    // R4 marks `Coverage.payor` 1..*: with no insurer name and no IKNR there
+    // is nobody to name, and a Coverage that names no payor is not one.
+    expect(coverageOf(bundle)).toBeUndefined();
+    // Nothing is lost — the member id rides Patient.identifier.
     const patient = bundle.entry.find(
       (e) => e.resource.resourceType === "Patient",
     )?.resource as FhirPatient;
@@ -656,7 +674,9 @@ describe("buildFhirDocumentBundle", () => {
       composition.resourceType === "Composition"
         ? composition.section?.find((s) => s.title === "Medications")
         : undefined;
-    const refs = medSection?.entry?.map((e) => e.reference) ?? [];
+    const refs = (medSection?.entry ?? []).map((e) =>
+      refTarget(bundle, e.reference),
+    );
     expect(refs).toContain("MedicationAdministration/medadmin-1");
   });
 
@@ -1062,7 +1082,11 @@ describe("buildFhirDocumentBundle", () => {
         (c) => c.code === "HKQuantityTypeIdentifierFlightsClimbed",
       ),
     );
-    expect(audio?.valueQuantity?.code).toBe("dB[A]");
+    // `dB[A]` is a readable label, not a UCUM expression — it stays on the
+    // display `unit` and is never stamped as a coded UCUM symbol.
+    expect(audio?.valueQuantity?.unit).toBe("dB[A]");
+    expect(audio?.valueQuantity?.code).toBeUndefined();
+    expect(audio?.valueQuantity?.system).toBeUndefined();
     expect(flights?.valueQuantity?.code).toBe("{flights}");
   });
 
@@ -1160,9 +1184,19 @@ describe("buildFhirDocumentBundle", () => {
     expect(report.code.coding?.[0].code).toBe("85353-1");
     expect(report.effectivePeriod?.start).toBe("2026-02-02T00:00:00.000Z");
     expect(report.effectivePeriod?.end).toBe("2026-05-03T12:00:00.000Z");
-    const obsCount = observationsOf(bundle).length;
-    expect(report.result).toHaveLength(obsCount);
-    expect(obsCount).toBeGreaterThan(0);
+    // A vital-signs panel reports vital signs, not labs / adherence / surveys.
+    const vitals = observationsOf(bundle).filter((o) =>
+      (o.category ?? []).some((c) =>
+        (c.coding ?? []).some((coding) => coding.code === "vital-signs"),
+      ),
+    );
+    expect(vitals.length).toBeGreaterThan(0);
+    expect(vitals.length).toBeLessThan(observationsOf(bundle).length);
+    expect(report.result).toHaveLength(vitals.length);
+    const referenced = (report.result ?? []).map((r) =>
+      refTarget(bundle, r.reference),
+    );
+    expect(referenced).toEqual(vitals.map((o) => `Observation/${o.id}`));
   });
 
   it("uses 'Vital signs' + 'Medications' Composition sections", () => {
@@ -1250,7 +1284,9 @@ describe("buildFhirDocumentBundle — illness episodes (v1.18.1 P4)", () => {
     expect(enc.status).toBe("finished");
     expect(enc.period?.start).toBe("2026-04-01T00:00:00.000Z");
     expect(enc.period?.end).toBe("2026-04-10T00:00:00.000Z");
-    expect(enc.reasonReference?.[0].reference).toBe(`Condition/${c.id}`);
+    expect(refTarget(bundle, enc.reasonReference?.[0].reference)).toBe(
+      `Condition/${c.id}`,
+    );
 
     const composition = bundle.entry[0].resource;
     const titles =

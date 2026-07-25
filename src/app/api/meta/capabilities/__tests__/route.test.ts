@@ -53,13 +53,15 @@ import {
   GERMAN_ATC_DEFAULT_LOCALES,
 } from "@/lib/fhir/build-bundle";
 import {
-  FHIR_READ_SCOPE,
   FHIR_REST_RESOURCE_TYPES,
   FHIR_EVERYTHING_OPERATION,
   FHIR_SEARCH_PARAMS,
 } from "@/lib/fhir/rest";
 import { SHARE_LINK_MAX_DAYS } from "@/lib/validations/clinician-share-link";
-import { exportSectionsSchema } from "@/lib/validations/health-record-export";
+import {
+  ALL_LEAF_IDS,
+  REPORT_GROUP_ORDER,
+} from "@/lib/report-selection/catalogue";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -84,7 +86,7 @@ type CapabilitiesBody = {
       snomedRoute: string;
       germanAtcDefaultLocales: string[];
       restBaseUrl: string;
-      readScope: string;
+      scopeMintable: boolean;
       resourceTypes: string[];
       operations: string[];
       searchParams: string[];
@@ -92,8 +94,10 @@ type CapabilitiesBody = {
     share: {
       supported: boolean;
       maxDays: number;
-      fhirApi: boolean;
-      sections: string[];
+      reportDownload: string[];
+      selectionVersion: number;
+      groups: string[];
+      leaves: string[];
     };
   };
 };
@@ -164,7 +168,10 @@ describe("GET /api/meta/capabilities — drift guards", () => {
     const res = await call();
     const body = (await res.json()) as CapabilitiesBody;
     expect(body.data.fhir.restBaseUrl).toBe("/api/fhir");
-    expect(body.data.fhir.readScope).toBe(FHIR_READ_SCOPE);
+    // The face checks `fhir:read`, but nothing mints a token carrying it, so
+    // advertising it as an obtainable credential would be a claim the code
+    // cannot support.
+    expect(body.data.fhir.scopeMintable).toBe(false);
     expect(body.data.fhir.resourceTypes).toEqual([...FHIR_REST_RESOURCE_TYPES]);
     expect(body.data.fhir.operations).toEqual([FHIR_EVERYTHING_OPERATION]);
     expect(body.data.fhir.searchParams).toEqual([...FHIR_SEARCH_PARAMS]);
@@ -175,11 +182,14 @@ describe("GET /api/meta/capabilities — drift guards", () => {
     const body = (await res.json()) as CapabilitiesBody;
     expect(body.data.share.supported).toBe(true);
     expect(body.data.share.maxDays).toBe(SHARE_LINK_MAX_DAYS);
-    // The share serves the rendered record view only; no `/api/fhir/*` route
-    // honours a share token yet, so the share→FHIR face is advertised off.
-    expect(body.data.share.fhirApi).toBe(false);
-    expect([...body.data.share.sections].sort()).toEqual(
-      Object.keys(exportSectionsSchema.shape).sort(),
+    // The record IS reachable in machine form now — as a download under the
+    // token, not as a bearer API. The old `fhirApi: false` described a face
+    // that was never built.
+    expect(body.data.share.reportDownload).toEqual(["fhir", "pdf"]);
+    expect(body.data.share.selectionVersion).toBe(2);
+    expect(body.data.share.groups).toEqual([...REPORT_GROUP_ORDER]);
+    expect([...body.data.share.leaves].sort()).toEqual(
+      [...ALL_LEAF_IDS].sort(),
     );
   });
 

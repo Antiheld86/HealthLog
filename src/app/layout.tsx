@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { headers } from "next/headers";
+import Script from "next/script";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { AuthShell } from "@/components/layout/auth-shell";
@@ -102,18 +103,31 @@ export default async function RootLayout({
           scripts/generate-i18n-boot.mjs, a prebuild/predev step).
           Replaces the former RSC-prop handoff that inlined the whole
           active catalog into every document's flight payload (392 KB of a
-          505 KB dashboard HTML). `defer` keeps it off the parse/paint
-          critical path while still executing before Next's hydration
-          module scripts (both ride the after-parse in-order queue, and
-          this tag comes first), so `load-locale.ts` finds `self.__HL_I18N`
-          set when the client bundle initializes — SSR text and first
-          client render stay identical. Served as a static asset: ETag
+          505 KB dashboard HTML). Served as a static asset: ETag
           revalidation (304 on repeat loads) + SW cache-first on the
           versioned URL replace the per-document payload.
+
+          `beforeInteractive` is load-bearing, not a preference. The
+          catalog has to be in hand when the client bundle takes its FIRST
+          render, or `t()` resolves raw keys against an empty bundle while
+          the server HTML carries real text — React tears the tree down
+          with hydration error #418 and the user watches a frame of
+          `nav.skipToContent` before the provider's backfill lands. A plain
+          `<script defer>` cannot promise that: Next emits its own chunks
+          as `async` tags AHEAD of this element in `<head>`, and an `async`
+          script runs the moment its fetch settles, so the 370 KB catalog
+          was simply racing the app bundle — and lost about a third of the
+          time on a cold load. `beforeInteractive` hands the URL to Next's
+          own bootstrap, which awaits it before requiring a single app
+          module (`next/dist/client/app-bootstrap.js`), and pairs it with a
+          `<link rel=preload>` so the download still starts with the
+          document rather than after it.
         */}
-        <script
+        <Script
+          id="healthlog-i18n-boot"
+          strategy="beforeInteractive"
+          nonce={nonce}
           src={`/i18n/${initialLocale}.js?v=${process.env.NEXT_PUBLIC_APP_VERSION ?? "dev"}`}
-          defer
         />
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>

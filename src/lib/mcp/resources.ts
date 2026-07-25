@@ -34,6 +34,7 @@ import {
   BIOMARKER_PANELS,
 } from "@/lib/labs/biomarker-catalog";
 import { collectDoctorReportData } from "@/lib/doctor-report-data";
+import { resolveSavedSelection } from "@/lib/report-selection/saved-profile";
 import { isModuleEnabled } from "@/lib/modules/gate";
 import { NUTRIENT_CODES, type NutrientCode } from "@/lib/nutrients/catalog";
 import { getNutrients, NUTRIENT_LABELS } from "@/lib/mcp/nutrients-read";
@@ -306,7 +307,17 @@ async function readDoctorVisit(
   const days = WINDOW_DAYS[window] ?? 90;
   const end = new Date();
   const start = new Date(end.getTime() - days * MS_PER_DAY);
-  const data = await collectDoctorReportData(ctx.userId, { start, end, days });
+  // The assistant cannot ask a human, so this replays the owner's SAVED
+  // selection — the same object reviewed in Settings. An account that never
+  // saved one resolves to the empty selection and this surface says so,
+  // rather than inventing a scope. It used to assemble the full record at
+  // server defaults, on the one wire that egresses to a third party.
+  const selection = await resolveSavedSelection(ctx.userId);
+  const data = await collectDoctorReportData(
+    ctx.userId,
+    { start, end, days },
+    selection,
+  );
   annotate({
     action: { name: "mcp.resource.read" },
     meta: { resource: "doctor-visit-report", days },

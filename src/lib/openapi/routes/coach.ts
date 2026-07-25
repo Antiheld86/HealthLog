@@ -231,7 +231,7 @@ const insightsLayoutResult = insightsLayoutSchema
 createShareLinkSchema.meta({
   id: "CreateShareLinkRequest",
   description:
-    "v1.11.0 — owner request to mint a clinician share link to their own health record. `expiresAt` is required (absolute ISO instant) and capped at 90 days. `rangeStart`/`rangeEnd` freeze the reporting window (rangeEnd null = rolling). `resourceTypes` scopes the FHIR resources the link may serve; `allowFhirApi` toggles REST reachability. Strict: unknown keys 422.",
+    "v1.11.0 — owner request to mint a clinician share link to their own health record. `expiresAt` is required (absolute ISO instant) and capped at 90 days. `rangeStart`/`rangeEnd` freeze the reporting window (rangeEnd null = rolling). `sections` freezes which record domains the link may serve. A share link serves the rendered page and the documents frozen onto it — there is no FHIR or other machine-readable face behind a share token. Strict: unknown keys 422.",
 });
 
 exportSelectionSchema.meta({

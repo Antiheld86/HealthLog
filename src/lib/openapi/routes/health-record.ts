@@ -20,14 +20,22 @@ const shareLinkSummary = z.object({
   label: z.string(),
   rangeStart: z.string(),
   rangeEnd: z.string().nullable(),
-  resourceTypes: z.array(z.string()),
-  allowFhirApi: z.boolean(),
   // v1.18.7 — whether a passphrase second factor guards this link. Always true
   // for links created on v1.18.7+; false only for legacy links.
   protected: z.boolean(),
   // v1.28 — how many documents this share carries. Never the ids, never the
   // bytes; the share serve route is the only decrypt path.
   documentCount: z.number(),
+  // Whether this link's frozen scope predates the selection model. Every such
+  // link was revoked on upgrade; the sharing list surfaces this so the owner
+  // knows to re-mint rather than wondering why a working link stopped.
+  needsReselection: z.boolean(),
+  // RETIRED, response-only, serving the constants `false` and `[]`. They
+  // configured a FHIR face that was never built; the request refuses them and
+  // their columns are gone. They stay on the response until the native client
+  // confirms it does not decode them.
+  allowFhirApi: z.boolean(),
+  resourceTypes: z.array(z.string()),
   expiresAt: z.string(),
   createdAt: z.string(),
   revokedAt: z.string().nullable(),
@@ -74,7 +82,7 @@ export const healthRecordPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Export"],
       summary: "Generate a health-record export (PDF / FHIR / package)",
       description:
-        "v1.7.0 flagship export. Returns the doctor-handover artefact in the requested `format`: `pdf` → application/pdf, `fhir` → application/fhir+json (HL7 FHIR R4 document Bundle), `package` → application/zip (PDF + FHIR + README). Auth via cookie or Bearer; shared `export:<userId>` rate bucket (10/h). Strict validation: unknown keys 422.",
+        "Returns the doctor-handover artefact in the requested `format`: `pdf` → application/pdf, `fhir` → application/fhir+json (HL7 FHIR R4 document Bundle), `package` → application/zip (PDF + FHIR + README). `selection` is REQUIRED and carries the leaf inclusion list — membership is inclusion, absence is exclusion, and there is no server-side default. An unknown leaf id is a 422 that names it; the retired grouped `sections` shape is a 422 too, because accepting it would mean choosing a scope the caller did not express. Auth via cookie or Bearer; shared `export:<userId>` rate bucket (10/h). Strict validation: unknown keys 422.",
       requestBody: {
         required: true,
         content: {
@@ -106,7 +114,7 @@ export const healthRecordPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Export"],
       summary: "Create a clinician share link (v1.11.0)",
       description:
-        "Owner-only. Mints an `hls_` token (192-bit), stores only its HMAC hash, and returns the raw token EXACTLY ONCE in the response. v1.18.7 also mints a passphrase second factor (returned once as `passphrase`, with `shareUrl` and a `qrUrl` carrying the passphrase in the URL fragment); a leaked URL without the passphrase cannot open the record. Every scope column (window, sections, FHIR resource types, API toggle) is frozen write-once. v1.28 accepts an optional `documentIds` array (bounded ≤50): each id is validated as the caller's own live document and frozen onto the link at create (a foreign/deleted id → 422); the summary DTO then reports `documentCount`. A documents-only share (empty report sections + non-empty `documentIds`) is valid. `expiresAt` is required and capped at 90 days. Auth via cookie or Bearer; rate-limited (`share-link:<userId>`, 20/h). Strict: unknown keys 422.",
+        "Owner-only. Mints an `hls_` token (192-bit), stores only its HMAC hash, and returns the raw token EXACTLY ONCE in the response, together with a passphrase second factor and a `qrUrl` carrying that passphrase in the URL fragment; a leaked URL without the passphrase cannot open the record. The window and the `selection` are frozen write-once — there is no widen path. `selection` omitted means an empty scope, not a default one, and the `INSURANCE` leaf is refused with a 422 because the share view never decrypts the insurance number. An optional `documentIds` array (bounded ≤50) is validated as the caller's own live documents and frozen onto the link; a documents-only share (no report scope, non-empty `documentIds`) is valid. `expiresAt` is required and capped at 90 days. Auth via cookie or Bearer; rate-limited (`share-link:<userId>`, 20/h). Strict: unknown keys 422.",
       requestBody: {
         required: true,
         content: {
@@ -246,7 +254,7 @@ export const healthRecordPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["FHIR"],
       summary: "FHIR R4 CapabilityStatement (v1.11.0)",
       description:
-        "Read-only FHIR R4 capability statement for the REST face. Declares the served resource types (Patient, Observation, MedicationStatement, MedicationAdministration), the `$everything` operation, and the `application/fhir+json` format. Auth: `fhir:read` scope (cookie sessions also pass).",
+        "Read-only FHIR R4 capability statement for the REST face. Declares the served resource types (Patient, Coverage, Observation, MedicationStatement, MedicationAdministration), their `read` and `search-type` interactions, the `Patient/$everything` operation, and the `application/fhir+json` format. Every advertised interaction has a route. Auth: `fhir:read` scope (cookie sessions also pass).",
       responses: {
         "200": {
           description: "CapabilityStatement (application/fhir+json).",
@@ -360,12 +368,187 @@ export const healthRecordPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       },
     },
   },
-  "/api/fhir/$everything": {
+  "/api/fhir/Coverage": {
+    get: {
+      tags: ["FHIR"],
+      summary: "FHIR R4 Coverage search",
+      description:
+        "Read-only `searchset` Bundle of the caller's own Coverage resource, when an insurer is recorded and the insurance leaf is in the saved selection. Auth: `fhir:read` scope. Offset paging via `_count` (clamped ≤200) / `_offset`. `userId` is narrowed from auth.",
+      requestParams: {
+        query: z.object({
+          _count: z.coerce.number().optional(),
+          _offset: z.coerce.number().optional(),
+        }),
+      },
+      responses: {
+        "200": {
+          description: "searchset Bundle (application/fhir+json).",
+          content: {
+            "application/fhir+json": {
+              schema: z.string().meta({ format: "binary" }),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/fhir/Patient/{id}": {
+    get: {
+      tags: ["FHIR"],
+      summary: "FHIR R4 Patient read",
+      description:
+        "Read-only `Patient` by id, out of the caller's own record. An id belonging to someone else is indistinguishable from one that never existed — both answer a `not-found` OperationOutcome. Auth: `fhir:read` scope; `userId` is narrowed from auth.",
+      requestParams: {
+        path: z.object({ id: z.string() }),
+      },
+      responses: {
+        "200": {
+          description: "The resource (application/fhir+json).",
+          content: {
+            "application/fhir+json": {
+              schema: z.string().meta({ format: "binary" }),
+            },
+          },
+        },
+        "404": {
+          description: "OperationOutcome (application/fhir+json).",
+          content: {
+            "application/fhir+json": {
+              schema: z.string().meta({ format: "binary" }),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/fhir/Coverage/{id}": {
+    get: {
+      tags: ["FHIR"],
+      summary: "FHIR R4 Coverage read",
+      description:
+        "Read-only `Coverage` by id, out of the caller's own record. An id belonging to someone else is indistinguishable from one that never existed — both answer a `not-found` OperationOutcome. Auth: `fhir:read` scope; `userId` is narrowed from auth.",
+      requestParams: {
+        path: z.object({ id: z.string() }),
+      },
+      responses: {
+        "200": {
+          description: "The resource (application/fhir+json).",
+          content: {
+            "application/fhir+json": {
+              schema: z.string().meta({ format: "binary" }),
+            },
+          },
+        },
+        "404": {
+          description: "OperationOutcome (application/fhir+json).",
+          content: {
+            "application/fhir+json": {
+              schema: z.string().meta({ format: "binary" }),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/fhir/Observation/{id}": {
+    get: {
+      tags: ["FHIR"],
+      summary: "FHIR R4 Observation read",
+      description:
+        "Read-only `Observation` by id, out of the caller's own record. An id belonging to someone else is indistinguishable from one that never existed — both answer a `not-found` OperationOutcome. Auth: `fhir:read` scope; `userId` is narrowed from auth.",
+      requestParams: {
+        path: z.object({ id: z.string() }),
+      },
+      responses: {
+        "200": {
+          description: "The resource (application/fhir+json).",
+          content: {
+            "application/fhir+json": {
+              schema: z.string().meta({ format: "binary" }),
+            },
+          },
+        },
+        "404": {
+          description: "OperationOutcome (application/fhir+json).",
+          content: {
+            "application/fhir+json": {
+              schema: z.string().meta({ format: "binary" }),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/fhir/MedicationStatement/{id}": {
+    get: {
+      tags: ["FHIR"],
+      summary: "FHIR R4 MedicationStatement read",
+      description:
+        "Read-only `MedicationStatement` by id, out of the caller's own record. An id belonging to someone else is indistinguishable from one that never existed — both answer a `not-found` OperationOutcome. Auth: `fhir:read` scope; `userId` is narrowed from auth.",
+      requestParams: {
+        path: z.object({ id: z.string() }),
+      },
+      responses: {
+        "200": {
+          description: "The resource (application/fhir+json).",
+          content: {
+            "application/fhir+json": {
+              schema: z.string().meta({ format: "binary" }),
+            },
+          },
+        },
+        "404": {
+          description: "OperationOutcome (application/fhir+json).",
+          content: {
+            "application/fhir+json": {
+              schema: z.string().meta({ format: "binary" }),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/fhir/MedicationAdministration/{id}": {
+    get: {
+      tags: ["FHIR"],
+      summary: "FHIR R4 MedicationAdministration read",
+      description:
+        "Read-only `MedicationAdministration` by id, out of the caller's own record. An id belonging to someone else is indistinguishable from one that never existed — both answer a `not-found` OperationOutcome. Auth: `fhir:read` scope; `userId` is narrowed from auth.",
+      requestParams: {
+        path: z.object({ id: z.string() }),
+      },
+      responses: {
+        "200": {
+          description: "The resource (application/fhir+json).",
+          content: {
+            "application/fhir+json": {
+              schema: z.string().meta({ format: "binary" }),
+            },
+          },
+        },
+        "404": {
+          description: "OperationOutcome (application/fhir+json).",
+          content: {
+            "application/fhir+json": {
+              schema: z.string().meta({ format: "binary" }),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/fhir/Patient/$everything": {
     get: {
       tags: ["FHIR"],
       summary: "FHIR R4 $everything (v1.11.0)",
       description:
-        "Read-only `$everything` operation: every resource in the caller's own record (Patient, Coverage, Observations, MedicationStatements, MedicationAdministrations) in one `searchset` Bundle. Auth: `fhir:read` scope. Offset paging via `_count` (≤200) / `_offset`.",
+        "Read-only `Patient/$everything`: every resource the document bundle carries — Composition, Device, Patient, Coverage, Observations (including the cycle ones), MedicationStatements, MedicationAdministrations, Conditions, Encounters, AllergyIntolerances, FamilyMemberHistories and the DiagnosticReport — flattened into one `searchset` Bundle. Scoped to the owner's SAVED report selection; an account that never saved one gets nothing. Auth: `fhir:read` scope. Offset paging via `_count` (≤200) / `_offset`.",
       requestParams: {
         query: z.object({
           _count: z.coerce.number().optional(),

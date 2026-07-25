@@ -27,14 +27,22 @@ export interface DoctorReportPdfRenderContext {
   now: Date;
   insuranceNumber: string | null;
   includeCharts: boolean;
-  aiSummary: string | null;
   footerTz: string;
   margin: number;
   pageWidth: number;
   pageHeight: number;
   contentMaxY: number;
   tableBottomMargin: number;
-  vitalTypes: readonly string[];
+  /**
+   * The measurement table's groups, in selection order. Each carries the
+   * group's label key and its measurement types; a group whose types produced
+   * no rows is skipped at render time.
+   */
+  vitalGroups: ReadonlyArray<{
+    id: string;
+    labelKey: string;
+    types: readonly string[];
+  }>;
   unitFor: (type: string) => string;
   ensureSpace: (current: number, needed: number) => number;
 }

@@ -14,19 +14,8 @@ export function buildClinicalRecordsNotesSection(
   context: DoctorReportPdfRenderContext,
   state: DoctorReportPdfCursorState,
 ): DoctorReportPdfCursorState {
-  const {
-    doc,
-    data,
-    t,
-    num,
-    fmtDate,
-    aiSummary,
-    margin,
-    pageWidth,
-    contentMaxY,
-    tableBottomMargin,
-    ensureSpace,
-  } = context;
+  const { doc, data, t, num, fmtDate, margin, tableBottomMargin, ensureSpace } =
+    context;
   let y = state.y;
 
   // v1.17.1 — structured lab-results section. Populated when the `labs`
@@ -296,50 +285,6 @@ export function buildClinicalRecordsNotesSection(
     y =
       (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable
         .finalY + 8;
-  }
-
-  // v1.7.0 — optional AI summary. OUT of the clinical PDF by default;
-  // rendered ONLY when the user explicitly opted in. Clearly labelled and
-  // flagged as not clinically validated so a physician never mistakes it
-  // for a machine-generated diagnosis.
-  const aiText = typeof aiSummary === "string" ? aiSummary.trim() : "";
-  if (aiText.length > 0) {
-    // Keep the heading + the first disclaimer line together.
-    y = ensureSpace(y, 5 + 4 + 4.5);
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(120, 80, 0);
-    doc.text(t("doctorReport.aiSummaryTitle"), margin, y);
-    y += 5;
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "italic");
-    doc.setTextColor(150, 110, 40);
-    const disclaimer = doc.splitTextToSize(
-      t("doctorReport.aiSummaryDisclaimer"),
-      pageWidth - 2 * margin,
-    );
-    for (const line of disclaimer) {
-      if (y + 4 > contentMaxY) {
-        doc.addPage();
-        y = margin;
-      }
-      doc.text(line, margin, y);
-      y += 4;
-    }
-    y += 2;
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(60, 60, 60);
-    const wrapped = doc.splitTextToSize(aiText, pageWidth - 2 * margin);
-    for (const line of wrapped) {
-      if (y + 4.5 > contentMaxY) {
-        doc.addPage();
-        y = margin;
-      }
-      doc.text(line, margin, y);
-      y += 4.5;
-    }
-    y += 4;
   }
 
   return pdfCursorState(doc, y);

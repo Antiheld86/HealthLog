@@ -2,7 +2,8 @@ import {
   adherenceRatePercent,
   type DoctorReportData,
 } from "../doctor-report-data";
-import { DOCTOR_REPORT_TYPE_LABEL_KEYS } from "../doctor-report/type-label-keys";
+import type { MeasurementType } from "@/generated/prisma/client";
+import { MEASUREMENT_TYPE_LABEL_KEYS } from "../measurements/type-label-keys";
 import type {
   DoctorReportNumberFormatter,
   DoctorReportTranslator,
@@ -76,7 +77,7 @@ export function buildClinicalSummaryLines(
     const arrow = trendArrow(series.map((point) => point.value));
     lines.push(
       t("doctorReport.summaryTrend", {
-        label: t(DOCTOR_REPORT_TYPE_LABEL_KEYS[type] ?? ""),
+        label: t(MEASUREMENT_TYPE_LABEL_KEYS[type as MeasurementType] ?? ""),
         latest: num(stat.latest, 1),
         arrow,
       }),

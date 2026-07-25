@@ -2,6 +2,72 @@
 
 ## [Unreleased]
 
+## [1.32.39] — 2026-07-26
+
+The doctor report now carries what you chose, and nothing else.
+
+**Ten of the twenty switches did nothing.** The panel offered controls for
+oxygen saturation, body fat, body composition, resting heart rate, heart-rate
+variability, VO2 max, steps and distance. Switching them off changed nothing:
+the value was folded away before it reached the report. Two more claimed less
+than they did, and the medication switch left the dose-by-dose record in place
+while appearing to remove the drug list.
+
+**Allergies and family history went out regardless.** They were read straight
+from the database in the export route, so a report could exclude them and the
+structured file in the same download would still contain them.
+
+**The mental-health questionnaires went out without being asked for.** The
+depression, anxiety, wellbeing and sleep scores reached the structured export,
+the automation interface and a shared link, gated only by a module that had
+been switched on by default some releases ago. They now have their own entry
+and are off unless you pick them.
+
+**The cycle export shipped ten other things.** The card that promised to export
+only cycle data sent an empty request, and an empty request fell back to the
+defaults, so it also carried weight, blood pressure, pulse, oxygen saturation,
+body fat, the medication list, adherence, lab results, allergies and family
+history. The comment above that code said every other section was off.
+
+**What replaces all of it.** One picker, on both surfaces that choose a scope.
+Twelve groups, each releasable or excludable as a whole and openable down to
+the individual value. All 77 measurement types and 13 record sections are in
+it, each in exactly one group. Sensitive material sits below a divider with no
+group control, so no single click can turn on more than one of those at a time.
+
+Nothing is preselected. A new report starts empty and one button fills in what
+a general visit usually needs, which you can then change. Generating is not
+possible while nothing is chosen.
+
+A metric added to the app in future cannot appear in a scope you saved
+earlier. That is not a promise, it is a compile error: a new measurement type
+without a group breaks the build, and every path that produces a report has to
+name where its scope came from.
+
+**Share links.** A link can now be fetched as a PDF or as a structured file
+behind the same passphrase that already protects the view, which is what a
+practice actually does with one. The old promise of an interface that never
+existed is gone. Links created before this release carry no explicit choice
+and are therefore closed; each one can be reissued in a click with its label,
+period and expiry carried over.
+
+**The written summary has left the report.** It could not be checked against
+what you chose, and prose whose scope cannot be shown has no place on a
+document whose value is exactly that.
+
+**Structured export corrections.** Someone who records their gender as
+something other than female or male was exported as female. FHIR has a code
+for it and it is now used, and an unrecognised value is left out rather than
+guessed. The capability document described a resource twice and omitted
+another that was actually served; both corrected.
+
+**Also in this release.** Roughly one page load in three showed raw text keys
+for a moment instead of words, because the language file was racing the
+application bundle and losing. It is now loaded before the first render.
+
+**For operators.** Migration `0275` stores the new scope and removes the old
+preferences. Existing share links are closed by it and need reissuing.
+
 ## [1.32.38] — 2026-07-25
 
 Blood-glucose readings from anything other than the manual entry form were

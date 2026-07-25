@@ -41,7 +41,10 @@ vi.mock("next/headers", () => ({
 
 import { POST, GET } from "../route";
 import { DELETE } from "../[id]/route";
-import { EMPTY_DOCTOR_REPORT_PREFS } from "@/lib/validations/doctor-report-prefs";
+import {
+  selectionToBlob,
+  selectionFromLeaves,
+} from "@/lib/report-selection/selection";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -64,8 +67,6 @@ function validBody(overrides: Record<string, unknown> = {}) {
     label: "Cardiology clinic",
     rangeStart: "2026-01-01T00:00:00Z",
     rangeEnd: null,
-    resourceTypes: ["Observation"],
-    allowFhirApi: true,
     expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     ...overrides,
   };
@@ -77,14 +78,14 @@ function storedRow(overrides: Record<string, unknown> = {}) {
     label: "Cardiology clinic",
     rangeStart: new Date("2026-01-01T00:00:00Z"),
     rangeEnd: null,
-    resourceTypes: ["Observation"],
-    allowFhirApi: true,
     passphraseHash: "hash(STORED)",
     expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     createdAt: new Date(),
     revokedAt: null,
     lastAccessAt: null,
     accessCount: 0,
+    documentOnly: false,
+    sectionsJson: selectionToBlob(selectionFromLeaves(["WEIGHT"])),
     _count: { documents: 0 },
     ...overrides,
   };
@@ -241,22 +242,27 @@ describe("POST /api/share-links — create", () => {
     expect(prisma.clinicianShareLink.create).not.toHaveBeenCalled();
   });
 
+  it("rejects the retired FHIR scope keys with 422", async () => {
+    // The share link has never served FHIR against its token. The keys
+    // are gone from the create schema rather than accepted and ignored, so a
+    // stale client is told plainly instead of believing it scoped something.
+    const res = await POST(
+      postReq(
+        validBody({ allowFhirApi: true, resourceTypes: ["Observation"] }),
+      ),
+    );
+    expect(res.status).toBe(422);
+    expect(prisma.clinicianShareLink.create).not.toHaveBeenCalled();
+  });
+
   it("allows a documents-only share (empty report sections)", async () => {
     vi.mocked(prisma.inboundDocument.findMany).mockResolvedValue([
       { id: "doc-a" },
     ] as never);
     vi.mocked(prisma.clinicianShareLink.create).mockResolvedValue(
-      storedRow({ resourceTypes: [], _count: { documents: 1 } }) as never,
+      storedRow({ _count: { documents: 1 } }) as never,
     );
-    const res = await POST(
-      postReq(
-        validBody({
-          resourceTypes: [],
-          allowFhirApi: false,
-          documentIds: ["doc-a"],
-        }),
-      ),
-    );
+    const res = await POST(postReq(validBody({ documentIds: ["doc-a"] })));
     expect(res.status).toBe(201);
     const body = (await res.json()) as { data: { documentCount: number } };
     expect(body.data.documentCount).toBe(1);
@@ -267,19 +273,16 @@ describe("POST /api/share-links — create", () => {
       { id: "doc-a" },
     ] as never);
     vi.mocked(prisma.clinicianShareLink.create).mockResolvedValue(
-      storedRow({ resourceTypes: [], _count: { documents: 1 } }) as never,
+      storedRow({ _count: { documents: 1 } }) as never,
     );
 
     // A hostile / stale client tries to widen a document link into a record
-    // share: FHIR on, resource types set, sections requested. The server must
-    // ignore every one of them.
+    // share by requesting sections. The server must ignore them.
     const res = await POST(
       postReq(
         validBody({
           documentOnly: true,
-          allowFhirApi: true,
-          resourceTypes: ["Observation", "Patient"],
-          sections: { vitals: { bp: true }, labs: true },
+          selection: { v: 2, leaves: ["BLOOD_PRESSURE_SYS", "LAB_RESULTS"] },
           documentIds: ["doc-a"],
         }),
       ),
@@ -288,12 +291,12 @@ describe("POST /api/share-links — create", () => {
 
     const createArg = vi.mocked(prisma.clinicianShareLink.create).mock
       .calls[0][0];
-    // Empty FHIR scope, FHIR API off — no health surface at all.
-    expect(createArg.data.resourceTypes).toEqual([]);
-    expect(createArg.data.allowFhirApi).toBe(false);
-    // Sections persist as an explicit all-OFF blob (distinct from `{}` = full
-    // record defaults). The clinician view reads this as "no report".
-    expect(createArg.data.sectionsJson).toEqual(EMPTY_DOCTOR_REPORT_PREFS);
+    // The retired FHIR scope columns are never written at all.
+    expect(createArg.data).not.toHaveProperty("resourceTypes");
+    expect(createArg.data).not.toHaveProperty("allowFhirApi");
+    // The scope persists as an explicit EMPTY leaf list. The clinician view
+    // reads that as "no report" and never calls the aggregator.
+    expect(createArg.data.sectionsJson).toEqual({ v: 2, leaves: [] });
     // v1.28.16 — the frozen documents-only flag is persisted so the view path
     // gates on the column, not on inferring "all sections off". This is what a
     // future report section can never re-open.
@@ -362,5 +365,122 @@ describe("DELETE /api/share-links/[id] — revoke", () => {
       params: Promise.resolve({ id: "someone-elses" }),
     });
     expect(res.status).toBe(404);
+  });
+});
+
+/**
+ * The frozen scope, and the two things a share link may never carry.
+ *
+ * Mutation checks:
+ *   - drop the `SHARE_LINK_FORBIDDEN_LEAVES` check in the route → "refuses the
+ *     insurance leaf by name" goes red.
+ *   - drop `RETIRED_FHIR_SCOPE_FIELDS` from the create response → "keeps the
+ *     retired scope fields on the response" goes red.
+ *   - make `needsReselection` always false → "flags a link whose frozen scope
+ *     predates the selection model" goes red.
+ */
+describe("POST /api/share-links — the frozen scope", () => {
+  it("persists exactly the leaves the owner chose", async () => {
+    vi.mocked(prisma.clinicianShareLink.create).mockResolvedValue(
+      storedRow() as never,
+    );
+    const res = await POST(
+      postReq(
+        validBody({
+          selection: { v: 2, leaves: ["LAB_RESULTS", "WEIGHT"] },
+        }),
+      ),
+    );
+    expect(res.status).toBe(201);
+    const createArg = vi.mocked(prisma.clinicianShareLink.create).mock
+      .calls[0][0];
+    // Canonical order, not the caller's.
+    expect(createArg.data.sectionsJson).toEqual({
+      v: 2,
+      leaves: ["WEIGHT", "LAB_RESULTS"],
+    });
+  });
+
+  it("refuses the insurance leaf by name", async () => {
+    // The share view has never decrypted the insurance number. Refusing the
+    // leaf at create makes that structural: there is no path by which a link
+    // could later carry it.
+    const res = await POST(
+      postReq(validBody({ selection: { v: 2, leaves: ["INSURANCE"] } })),
+    );
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain("INSURANCE");
+    expect(prisma.clinicianShareLink.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a leaf id this build does not know", async () => {
+    const res = await POST(
+      postReq(validBody({ selection: { v: 2, leaves: ["SOMETHING_NEW"] } })),
+    );
+    expect(res.status).toBe(422);
+    expect(prisma.clinicianShareLink.create).not.toHaveBeenCalled();
+  });
+
+  it("mints an empty scope when the body names none", async () => {
+    vi.mocked(prisma.clinicianShareLink.create).mockResolvedValue(
+      storedRow() as never,
+    );
+    const res = await POST(postReq(validBody()));
+    expect(res.status).toBe(201);
+    const createArg = vi.mocked(prisma.clinicianShareLink.create).mock
+      .calls[0][0];
+    expect(createArg.data.sectionsJson).toEqual({ v: 2, leaves: [] });
+  });
+
+  it("keeps the retired scope fields on the response", async () => {
+    // Response-only, serving constants. The request refuses them and the
+    // columns are gone; they stay here until the native client confirms it
+    // does not decode them.
+    vi.mocked(prisma.clinicianShareLink.create).mockResolvedValue(
+      storedRow() as never,
+    );
+    const res = await POST(
+      postReq(validBody({ selection: { v: 2, leaves: ["WEIGHT"] } })),
+    );
+    const body = (await res.json()) as {
+      data: { allowFhirApi: boolean; resourceTypes: string[] };
+    };
+    expect(body.data.allowFhirApi).toBe(false);
+    expect(body.data.resourceTypes).toEqual([]);
+  });
+});
+
+describe("GET /api/share-links — the pick-again state", () => {
+  it("flags a link whose frozen scope predates the selection model", async () => {
+    vi.mocked(prisma.clinicianShareLink.findMany).mockResolvedValue([
+      storedRow({
+        id: "legacy",
+        revokedAt: new Date(),
+        sectionsJson: { bp: true, weight: true, pulse: true },
+      }),
+      storedRow({ id: "current" }),
+      storedRow({ id: "docs", documentOnly: true, sectionsJson: {} }),
+    ] as never);
+    const res = await GET();
+    const body = (await res.json()) as {
+      data: {
+        shareLinks: Array<{
+          id: string;
+          needsReselection: boolean;
+          allowFhirApi: boolean;
+          resourceTypes: string[];
+        }>;
+      };
+    };
+    const byId = new Map(body.data.shareLinks.map((l) => [l.id, l]));
+    expect(byId.get("legacy")!.needsReselection).toBe(true);
+    expect(byId.get("current")!.needsReselection).toBe(false);
+    // A documents-only link carried no report scope to begin with, so it was
+    // never revoked and is not asked to pick again.
+    expect(byId.get("docs")!.needsReselection).toBe(false);
+    // The retired fields ride the list response too.
+    expect(byId.get("current")!.allowFhirApi).toBe(false);
+    expect(byId.get("current")!.resourceTypes).toEqual([]);
   });
 });
