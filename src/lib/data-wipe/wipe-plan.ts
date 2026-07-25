@@ -1,0 +1,403 @@
+/**
+ * The one declaration of what "Delete All Data" means.
+ *
+ * The route this feeds used to carry its delete calls inline. That list was
+ * correct on the day it was written and then stopped being correct, silently,
+ * every time a model was added to `prisma/schema.prisma` — a new table is
+ * user-scoped from birth and outside the wipe by default, and nothing anywhere
+ * noticed. Sixty-odd tables accumulated on the wrong side of a confirmation
+ * dialog that says "permanently delete all your health data".
+ *
+ * So the list lives here, next to its own exemption list, and
+ * `src/__tests__/data-wipe-completeness.test.ts` enumerates the schema and
+ * fails when a model belongs to neither. Adding a model to the schema now
+ * forces a decision instead of granting a default.
+ *
+ * ── The boundary ───────────────────────────────────────────────────────────
+ *
+ * This action erases everything the account owns EXCEPT what is needed to sign
+ * in again. Removing the sign-in credentials too would not be data deletion,
+ * it would be account deletion — and that has its own route
+ * (`src/app/api/settings/account/route.ts`, which deletes the `User` row and
+ * lets the schema's `onDelete: Cascade` do the rest).
+ *
+ * Everything in {@link WIPE_MODELS} is hard-deleted, including rows that were
+ * only soft-deleted before: `deleteMany({ where: { userId } })` carries no
+ * `deletedAt` filter, so a tombstone goes with the record.
+ *
+ * ── Why the list is ordered ────────────────────────────────────────────────
+ *
+ * Correctness does not depend on the order — every child of a wiped model
+ * cascades at the database level. The order exists so the per-model counts in
+ * the audit row are truthful: delete a parent first and its children are gone
+ * before their own `deleteMany` runs, which would report 0 for rows that did
+ * exist. Children therefore come before their parents, and the completeness
+ * test asserts that property rather than trusting the author.
+ */
+import { Prisma } from "@/generated/prisma/client";
+
+/**
+ * Every user-scoped model this action deletes, children before parents.
+ *
+ * Names are Prisma model names; {@link wipeDelegateKey} maps each to its
+ * client delegate. Keeping model names (not delegate keys) is what lets the
+ * completeness test compare this list against `schema.prisma` literally.
+ */
+export const WIPE_MODELS = [
+  // ── Measurements and their derived tiers ────────────────────────────────
+  "Measurement",
+  // The rollup tier is a per-day, per-metric reconstruction of the same
+  // history. A wipe that leaves it behind is not a wipe.
+  "MeasurementRollup",
+  "MeasurementReminder",
+
+  // ── Medication ──────────────────────────────────────────────────────────
+  "MedicationIntakeEvent",
+  "MedicationPauseEra",
+  "MedicationSideEffect",
+  "MedicationInventoryItem",
+  "MedicationIntakeImportJob",
+  "MedicationComplianceRollup",
+
+  // ── Mood ────────────────────────────────────────────────────────────────
+  "MoodEntry",
+  "MoodEntryRollup",
+  "MoodReminderDispatch",
+  "MoodTagHidden",
+
+  // ── Clinical record ─────────────────────────────────────────────────────
+  "MentalHealthAssessment",
+  "LabResult",
+  "Biomarker",
+  "CustomMetricEntry",
+  "MenstrualCycle",
+  "CycleDayLog",
+  "CycleSymptom",
+  "CycleProfile",
+  "CyclePrediction",
+  "Allergy",
+  "FamilyHistoryEntry",
+  "IllnessDayLog",
+  "EcgRecording",
+  "NutrientIntakeDay",
+
+  // ── Activity ────────────────────────────────────────────────────────────
+  "WorkoutInsight",
+  "WorkoutInsightGenerationClaim",
+  "PersonalRecord",
+  "StrainTrimpCache",
+
+  // ── Context and engagement ──────────────────────────────────────────────
+  "EnvironmentContext",
+  "EnvironmentTravelLocation",
+  "UserHealthProfile",
+  "UserAchievement",
+  "ArrivalReaction",
+  "DismissedPriorityItem",
+  "RecommendationFeedback",
+
+  // ── Documents ───────────────────────────────────────────────────────────
+  "DocumentContentIndex",
+  "DocumentThumbnail",
+  "DocumentConditionLink",
+  "ExtractedFact",
+  "ImportJob",
+
+  // ── AI ──────────────────────────────────────────────────────────────────
+  "CoachConversation",
+  "CoachFact",
+  "CoachPlan",
+  "CoachReminder",
+  "CoachUsage",
+  "InsightNarrative",
+  "ProviderHealth",
+
+  // ── Sharing ─────────────────────────────────────────────────────────────
+  // Deleting the row is the revocation: `resolveShareToken` /
+  // `resolveShareGateState` both resolve an unknown `tokenHash` to `null`, and
+  // null is the same blunt 404 a revoked link gets.
+  "ClinicianShareLink",
+
+  // ── Integrations ────────────────────────────────────────────────────────
+  "WithingsConnection",
+  "WithingsOAuthState",
+  "WhoopConnection",
+  "WhoopOAuthState",
+  "WhoopConnectTicket",
+  "FitbitConnection",
+  "FitbitOAuthState",
+  "GoogleHealthConnection",
+  "GoogleHealthOAuthState",
+  "McpOAuthConnection",
+  "IntegrationStatus",
+
+  // ── Notification transports ─────────────────────────────────────────────
+  "NotificationChannel",
+  "PushSubscription",
+  "PushAttempt",
+  "Device",
+  "TelegramScheduledDeletion",
+  "TelegramPromptContext",
+
+  // ── API surface and operational trails ──────────────────────────────────
+  "StepUpElevation",
+  // Cached response envelopes — the bodies are the health payloads the API
+  // just returned.
+  "IdempotencyKey",
+  "DataBackup",
+  "AuditLog",
+  "ConsentReceipt",
+  "UserKnownDevice",
+
+  // ── Parents, last ───────────────────────────────────────────────────────
+  "Medication",
+  "MoodTag",
+  "MoodTagCategory",
+  "CustomMetric",
+  "IllnessEpisode",
+  "Workout",
+  "InboundDocument",
+  "ApiToken",
+] as const;
+
+export type WipeModel = (typeof WIPE_MODELS)[number];
+
+/**
+ * User-scoped models this action deliberately keeps, each with the reason.
+ *
+ * The rule is narrow and stated in the confirmation copy: what the account
+ * needs to sign in again survives. Anything added here that is not a sign-in
+ * credential needs a reason that survives being read aloud to the person who
+ * typed the confirmation.
+ */
+export const WIPE_EXEMPT: Readonly<Record<string, string>> = {
+  Session:
+    "the signed-in session performing the wipe; deleting it signs the person out mid-action and the account is preserved",
+  RefreshToken:
+    "per-device sign-in continuity; deleting it signs every paired device out and is account deletion by another name",
+  Passkey: "a sign-in credential — without it the account may be unreachable",
+  WebauthnMfaCredential:
+    "a second-factor credential; removing it weakens the account rather than clearing data",
+  MfaRecoveryCode:
+    "the second-factor recovery path; removing it can lock the account out permanently",
+  MfaChallenge:
+    "an in-flight authentication challenge, seconds-lived and swept by its own expiry",
+  AuthChallenge:
+    "an in-flight WebAuthn challenge, seconds-lived and swept by its own expiry",
+  TrustedDevice:
+    "the remember-this-device grant that suppresses a second-factor prompt; a sign-in credential",
+  OidcNativeHandoff:
+    "an in-flight one-time sign-in code, minutes-lived and swept by its own expiry",
+  InviteRedemption:
+    "the instance's registration ledger, not the person's record; even account deletion only detaches it (onDelete: SetNull) rather than removing it",
+};
+
+/**
+ * Models that carry no `userId` and belong to the instance rather than to any
+ * account, so no wipe of a single account may touch them.
+ *
+ * Everything else without a `userId` reaches a wiped or exempt model through a
+ * chain of `onDelete: Cascade` relations and needs no entry here; the
+ * completeness test proves that reachability rather than assuming it.
+ */
+export const INSTANCE_SCOPED: Readonly<Record<string, string>> = {
+  AppSettings: "instance-wide configuration singleton",
+  RateLimit: "instance-wide rate-limit buckets, keyed by string, self-expiring",
+  HostMetric: "instance-wide host telemetry, not attributable to an account",
+  CycleSymptomCategory:
+    "seeded catalogue shared by every account; a user's custom symptoms live on CycleSymptom",
+  IllnessSymptom: "seeded symptom catalogue shared by every account",
+  InviteToken:
+    "the instance's invite ledger; the creator relation cascades on account deletion, and a data wipe keeps the account",
+  User: "the account itself — preserved by definition; its columns are handled by USER_RESET / USER_KEPT_FIELDS",
+};
+
+/**
+ * The `User` columns this action clears, and the value each is reset to.
+ *
+ * The same rot applies here: a column added to `User` is personal data from
+ * birth and outside the reset by default. The completeness test compares these
+ * keys against the model's scalar columns, so a new column has to be
+ * classified.
+ *
+ * `Prisma.DbNull` rather than `null` for the JSON columns — on a nullable JSON
+ * field `null` is the JSON value `null`, not SQL NULL.
+ */
+export const USER_RESET = {
+  // Body and identity-of-the-record
+  heightCm: null,
+  dateOfBirth: null,
+  gender: null,
+  hasDiabetes: false,
+  fullName: null,
+  displayName: null,
+  insurerName: null,
+  insuranceNumberEncrypted: null,
+  insurerIkNumber: null,
+  lastReportPracticeName: null,
+  avatarBytes: null,
+  avatarContentType: null,
+  avatarUpdatedAt: null,
+
+  // Where the person lives — an environment-context input, and a location
+  homeLat: null,
+  homeLon: null,
+  homeLabel: null,
+  homeTimezone: null,
+  homeSince: null,
+
+  // Derived AI output cached on the row
+  insightsPrivacyMode: "aggregated",
+  insightsCachedAt: null,
+  insightsCachedText: null,
+  insightsSnapshotHash: null,
+  insightsWarmFailedAt: null,
+  insightsBriefingRerollDate: null,
+  morningDigestRefreshedOn: null,
+  insightsExcludeMetrics: [],
+  insightsLayoutJson: Prisma.DbNull,
+
+  // AI provider configuration and keys
+  aiProvider: null,
+  aiModel: null,
+  aiBaseUrl: null,
+  aiAnthropicKeyEncrypted: null,
+  aiLocalKeyEncrypted: null,
+  aiOpenaiKeyEncrypted: null,
+  aiProviderChain: Prisma.DbNull,
+  aiResponseTimeoutSeconds: null,
+  disableCoach: false,
+  coachPrefsJson: Prisma.DbNull,
+  coachLastSeenAt: null,
+  documentsAutoAiRead: false,
+  labsLocalOcrEnabled: false,
+  codexAccessTokenEncrypted: null,
+  codexRefreshTokenEncrypted: null,
+  codexTokenExpiresAt: null,
+  codexConnectedAt: null,
+  codexConnectionStatus: "disconnected",
+  useCentralCodex: false,
+
+  // Integration credentials and per-integration state
+  telegramBotToken: null,
+  telegramChatId: null,
+  telegramEnabled: false,
+  withingsClientIdEncrypted: null,
+  withingsClientSecretEncrypted: null,
+  whoopClientIdEncrypted: null,
+  whoopClientSecretEncrypted: null,
+  fitbitClientIdEncrypted: null,
+  fitbitClientSecretEncrypted: null,
+  googleHealthClientIdEncrypted: null,
+  googleHealthClientSecretEncrypted: null,
+  nightscoutUrlEncrypted: null,
+  nightscoutTokenEncrypted: null,
+  nightscoutAllowPrivateHost: false,
+  polarAccessTokenEncrypted: null,
+  polarUserIdEncrypted: null,
+  polarClientIdEncrypted: null,
+  polarClientSecretEncrypted: null,
+  ouraAccessTokenEncrypted: null,
+  ouraRefreshTokenEncrypted: null,
+  ouraClientIdEncrypted: null,
+  ouraClientSecretEncrypted: null,
+  stravaClientIdEncrypted: null,
+  stravaClientSecretEncrypted: null,
+  stravaAccessTokenEncrypted: null,
+  stravaRefreshTokenEncrypted: null,
+  stravaAthleteId: null,
+  stravaLastActivityAt: null,
+  stravaBackfillCompletedAt: null,
+  healthKitConfigJson: Prisma.DbNull,
+  healthKitLastSyncedAt: null,
+  lastSyncedAt: null,
+  sourcePriorityJson: Prisma.DbNull,
+
+  // Choices that describe the record rather than the interface
+  thresholdsJson: Prisma.DbNull,
+  dashboardWidgetsJson: Prisma.DbNull,
+  medicationListLayoutJson: Prisma.DbNull,
+  moodTagLayoutJson: Prisma.DbNull,
+  reportSelectionJson: Prisma.DbNull,
+  modulePreferencesJson: Prisma.DbNull,
+  globalExcludedInjectionSites: [],
+  moodReminderEnabled: false,
+  notificationPrefs: Prisma.DbNull,
+  researchModeEnabled: false,
+  researchModeAcknowledgedAt: null,
+  researchModeAcknowledgedVersion: null,
+
+  // Back to the start of the tour — the record it was built around is gone
+  onboardingCompletedAt: null,
+  onboardingStep: 0,
+  onboardingGoals: [],
+  onboardingTourCompleted: false,
+  onboardingTourProgressJson: Prisma.DbNull,
+} satisfies Prisma.UserUpdateInput;
+
+/**
+ * `User` columns the wipe leaves alone, each with the reason. Same contract as
+ * {@link WIPE_EXEMPT}: sign-in, identity, and how the interface is rendered.
+ */
+export const USER_KEPT_FIELDS: Readonly<Record<string, string>> = {
+  id: "the account's primary key",
+  username: "the account's sign-in identity",
+  email: "the account's sign-in identity and recovery address",
+  passwordHash: "a sign-in credential — the account password",
+  role: "the account's authorisation level, set by the operator",
+  oidcIssuer: "a sign-in credential — the external identity binding",
+  oidcSub: "a sign-in credential — the external identity binding",
+  createdAt: "when the account was created; the account is preserved",
+  updatedAt: "row bookkeeping maintained by Prisma",
+  totpSecretEncrypted: "a second-factor credential",
+  totpConfirmedAt: "second-factor enrolment state",
+  totpLastStep:
+    "second-factor replay guard; clearing it re-opens a replay window",
+  mfaEnforced: "the operator's per-account second-factor policy",
+  passkeyUpgradeNudgeDismissed:
+    "an interface nudge the person already dismissed",
+  timezone: "an interface preference — how dates and times are rendered",
+  locale: "an interface preference — which language the interface speaks",
+  unitPreference: "an interface preference — metric or imperial rendering",
+  timeFormat: "an interface preference — 12- or 24-hour rendering",
+  dateFormat: "an interface preference — date-order rendering",
+  glucoseUnit: "an interface preference — mg/dL or mmol/L rendering",
+  disclaimerAcknowledgedAt:
+    "the account's acknowledgement of the medical disclaimer, which is about the app and not about the record",
+  disclaimerAcknowledgedVersion:
+    "the version of the medical disclaimer the account acknowledged",
+  documentQuotaBytes:
+    "a per-account storage quota set by the operator, not by the person",
+};
+
+/** Prisma client delegate key for a model name (`MoodEntry` → `moodEntry`). */
+export function wipeDelegateKey(model: string): string {
+  return model.charAt(0).toLowerCase() + model.slice(1);
+}
+
+/** The narrow slice of a Prisma delegate the wipe loop uses. */
+export interface UserScopedDeleteDelegate {
+  deleteMany(args: { where: { userId: string } }): Promise<{ count: number }>;
+}
+
+/**
+ * Resolve a model name to its delegate on a client or transaction handle.
+ *
+ * One documented cast: `WIPE_MODELS` is a literal list of model names checked
+ * against `schema.prisma` by the completeness test, and every entry indexes a
+ * delegate that exposes `deleteMany` over a `userId`. The test also asserts
+ * every entry resolves, so an unresolvable name fails the build rather than
+ * the request.
+ */
+export function resolveWipeDelegate(
+  client: object,
+  model: string,
+): UserScopedDeleteDelegate {
+  const delegate = (client as Record<string, UserScopedDeleteDelegate>)[
+    wipeDelegateKey(model)
+  ];
+  if (!delegate || typeof delegate.deleteMany !== "function") {
+    throw new Error(`No Prisma delegate for wipe model "${model}"`);
+  }
+  return delegate;
+}

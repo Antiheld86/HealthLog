@@ -117,23 +117,25 @@ export const DELETE = apiHandler(
     const { id } = await params;
     const existing = await prisma.allergy.findUnique({
       where: { id },
-      select: { id: true, userId: true, deletedAt: true },
+      select: { id: true, userId: true },
     });
     if (!existing || existing.userId !== user.id) {
       return apiError("Allergy not found", 404);
     }
 
-    if (existing.deletedAt === null) {
-      await prisma.allergy.update({
-        where: { id },
-        data: { deletedAt: new Date() },
-      });
-      await auditLog("allergy.delete", {
-        userId: user.id,
-        ipAddress: getClientIp(request),
-        details: { allergyId: id },
-      });
-    }
+    // Hard delete. The confirmation says it can't be undone, and nothing here
+    // needs a tombstone: no restore route reaches an allergy, no other table
+    // references one, it is absent from the `/api/sync/changes` delta feed,
+    // and every read already filters `deletedAt: null`. A row already carrying
+    // a tombstone from before this changed is removed too, so the record
+    // converges on what the dialog promised.
+    await prisma.allergy.delete({ where: { id } });
+
+    await auditLog("allergy.delete", {
+      userId: user.id,
+      ipAddress: getClientIp(request),
+      details: { allergyId: id },
+    });
 
     annotate({
       action: { name: "allergy.delete", entity_type: "allergy", entity_id: id },
