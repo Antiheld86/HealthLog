@@ -20,7 +20,6 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ListRow } from "@/components/ui/list-row";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -39,6 +38,7 @@ import type {
   DailyBriefingSignal,
 } from "@/lib/ai/schema";
 import type { BriefingFailureClass } from "@/lib/insights/briefing-failure-marker";
+import { InsightSectionCard } from "./insight-section-card";
 
 /**
  * v1.4.27 MB7 / CF-68 — per-metric routing target for the briefing
@@ -416,223 +416,216 @@ export function DailyBriefing({
           ) : undefined
         }
       />
-      <Card data-slot="daily-briefing" className="overflow-hidden">
-        <CardContent>
-          {loading ? (
-            <>
-              <span className="sr-only" aria-live="polite">
-                {t("insights.dailyBriefing.loadingLabel")}
-              </span>
-              <BriefingSkeleton />
-            </>
-          ) : briefing ? (
-            // v1.18.10 — body block rhythm matches the sibling insights cards
-            // (`correlation-card` uses `space-y-3` between its chart /
-            // interpretation / source blocks). The briefing card carried a
-            // looser `space-y-4`, which read as taller than its neighbours on
-            // the overview. One token, no new spacing scale.
-            <div className="space-y-3">
-              {/* The v1.21.2 recall/forward-look block is gone: the card
+      <InsightSectionCard slot="daily-briefing" className="overflow-hidden">
+        {loading ? (
+          <>
+            <span className="sr-only" aria-live="polite">
+              {t("insights.dailyBriefing.loadingLabel")}
+            </span>
+            <BriefingSkeleton />
+          </>
+        ) : briefing ? (
+          // v1.18.10 — body block rhythm matches the sibling insights cards
+          // (`correlation-card` uses `space-y-3` between its chart /
+          // interpretation / source blocks). The briefing card carried a
+          // looser `space-y-4`, which read as taller than its neighbours on
+          // the overview. One token, no new spacing scale.
+          <div className="space-y-3">
+            {/* The v1.21.2 recall/forward-look block is gone: the card
                   opens straight on "signals of the day". The narrative
                   memory read as a second briefing paragraph above the
                   structured list and pulled the card down; the server
                   still resolves `briefingMemory` for other consumers. */}
-              {/* v1.4.27 B1 — the leading narrative paragraph dropped.
+            {/* v1.4.27 B1 — the leading narrative paragraph dropped.
                 The hero strip subtitle on `/insights` already renders
                 the same `briefing.paragraph` text directly above this
                 card, so the user used to read the same string twice
                 within 200 px. The card now opens straight on the
                 structured signals + key-findings list, which is the part
                 the hero subtitle cannot surface. */}
-              {/* v1.18.7 — "Signals of the day": the present-focused lead.
+            {/* v1.18.7 — "Signals of the day": the present-focused lead.
                 Renders above the longer-horizon key-findings list when the
                 briefing carries fresh now-signals. */}
-              {briefing.signalsOfDay && briefing.signalsOfDay.length > 0 && (
-                <div className="space-y-2">
-                  <p
-                    data-slot="daily-briefing-signals-title"
-                    className="text-foreground text-xs font-semibold tracking-wide uppercase"
-                  >
-                    {t("insights.dailyBriefing.signalsTitle")}
-                  </p>
-                  <div data-slot="daily-briefing-signals" className="space-y-2">
-                    {briefing.signalsOfDay.map((signal, index) => (
-                      <SignalRow
-                        key={`${signal.sourceMetric}-${index}`}
-                        signal={signal}
-                      />
-                    ))}
-                  </div>
+            {briefing.signalsOfDay && briefing.signalsOfDay.length > 0 && (
+              <div className="space-y-2">
+                <p
+                  data-slot="daily-briefing-signals-title"
+                  className="text-foreground text-xs font-semibold tracking-wide uppercase"
+                >
+                  {t("insights.dailyBriefing.signalsTitle")}
+                </p>
+                <div data-slot="daily-briefing-signals" className="space-y-2">
+                  {briefing.signalsOfDay.map((signal, index) => (
+                    <SignalRow
+                      key={`${signal.sourceMetric}-${index}`}
+                      signal={signal}
+                    />
+                  ))}
                 </div>
-              )}
-              {briefing.keyFindings.length > 0 && (
-                <div className="space-y-2">
-                  <p
-                    data-slot="daily-briefing-findings-title"
-                    className="text-foreground text-xs font-semibold tracking-wide uppercase"
-                  >
-                    {t("insights.dailyBriefing.keyFindingsTitle")}
-                  </p>
-                  <div
-                    data-slot="daily-briefing-findings"
-                    className="space-y-2"
-                  >
-                    {briefing.keyFindings.map((finding, index) => (
-                      <KeyFindingRow
-                        key={`${finding.sourceMetric}-${index}`}
-                        finding={finding}
-                      />
-                    ))}
-                  </div>
+              </div>
+            )}
+            {briefing.keyFindings.length > 0 && (
+              <div className="space-y-2">
+                <p
+                  data-slot="daily-briefing-findings-title"
+                  className="text-foreground text-xs font-semibold tracking-wide uppercase"
+                >
+                  {t("insights.dailyBriefing.keyFindingsTitle")}
+                </p>
+                <div data-slot="daily-briefing-findings" className="space-y-2">
+                  {briefing.keyFindings.map((finding, index) => (
+                    <KeyFindingRow
+                      key={`${finding.sourceMetric}-${index}`}
+                      finding={finding}
+                    />
+                  ))}
                 </div>
-              )}
-              {(updatedAt || noProviderStale || generationFailed) && (
-                <div className="border-border/60 space-y-1.5 border-t pt-3">
-                  {updatedAt && (
-                    <p
-                      data-slot="daily-briefing-updated"
-                      className="text-muted-foreground text-right text-xs"
-                    >
-                      {formatUpdatedLabel(
-                        updatedAt,
-                        t,
-                        fmt.dateShort,
-                        fmt.time,
-                        displayTz,
-                      )}
-                    </p>
-                  )}
-                  {/* v1.18.9 (#4) — a stale briefing that can never refresh
+              </div>
+            )}
+            {(updatedAt || noProviderStale || generationFailed) && (
+              <div className="border-border/60 space-y-1.5 border-t pt-3">
+                {updatedAt && (
+                  <p
+                    data-slot="daily-briefing-updated"
+                    className="text-muted-foreground text-right text-xs"
+                  >
+                    {formatUpdatedLabel(
+                      updatedAt,
+                      t,
+                      fmt.dateShort,
+                      fmt.time,
+                      displayTz,
+                    )}
+                  </p>
+                )}
+                {/* v1.18.9 (#4) — a stale briefing that can never refresh
                       because no AI provider is connected. State that plainly
                       and point at Settings → AI, so the days-old read is
                       understood as held, not presented as current. */}
-                  {noProviderStale && (
-                    <p
-                      data-slot="daily-briefing-stale-no-provider"
-                      className="text-muted-foreground flex flex-wrap items-center justify-end gap-x-1.5 gap-y-1 text-right text-xs"
+                {noProviderStale && (
+                  <p
+                    data-slot="daily-briefing-stale-no-provider"
+                    className="text-muted-foreground flex flex-wrap items-center justify-end gap-x-1.5 gap-y-1 text-right text-xs"
+                  >
+                    <span>
+                      {t("insights.dailyBriefing.staleNoProviderHint")}
+                    </span>
+                    <Link
+                      href="/settings/ai"
+                      data-slot="daily-briefing-stale-no-provider-link"
+                      className="text-foreground/80 hover:text-foreground underline underline-offset-2"
                     >
-                      <span>
-                        {t("insights.dailyBriefing.staleNoProviderHint")}
-                      </span>
-                      <Link
-                        href="/settings/ai"
-                        data-slot="daily-briefing-stale-no-provider-link"
-                        className="text-foreground/80 hover:text-foreground underline underline-offset-2"
-                      >
-                        {t("insights.dailyBriefing.noProviderAction")}
-                      </Link>
-                    </p>
-                  )}
-                  {/* v1.25 — the held briefing is shown, but the last refresh
+                      {t("insights.dailyBriefing.noProviderAction")}
+                    </Link>
+                  </p>
+                )}
+                {/* v1.25 — the held briefing is shown, but the last refresh
                       attempt failed (provider timeout / error). State it plainly
                       and offer a retry so the staleness reads as held, not
                       current. Suppressed when no provider is configured (that
                       hint owns the footer) — a retry would be futile there. */}
-                  {generationFailed && !noProviderStale && (
-                    <p
-                      data-slot="daily-briefing-refresh-failed"
-                      className="text-muted-foreground flex flex-wrap items-center justify-end gap-x-1.5 gap-y-1 text-right text-xs"
-                    >
-                      <span>
-                        {t("insights.dailyBriefing.refreshFailedHint")}
-                      </span>
-                      {onRegenerate && (
-                        <button
-                          type="button"
-                          onClick={onRegenerate}
-                          disabled={regenerating}
-                          data-slot="daily-briefing-refresh-failed-retry"
-                          className="text-foreground/80 hover:text-foreground underline underline-offset-2 disabled:opacity-60"
-                        >
-                          {t("insights.dailyBriefing.retryAction")}
-                        </button>
-                      )}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          ) : noProvider ? (
-            // v1.15.20 — no provider configured anywhere: a regenerate CTA
-            // would 422 forever, so point at Settings → AI instead.
-            <EmptyState
-              data-slot="daily-briefing-no-provider"
-              variant="plain"
-              icon={<Sparkles className="size-5" />}
-              title={t("insights.dailyBriefing.noProviderTitle")}
-              description={t("insights.dailyBriefing.noProviderDescription")}
-              action={
+                {generationFailed && !noProviderStale && (
+                  <p
+                    data-slot="daily-briefing-refresh-failed"
+                    className="text-muted-foreground flex flex-wrap items-center justify-end gap-x-1.5 gap-y-1 text-right text-xs"
+                  >
+                    <span>{t("insights.dailyBriefing.refreshFailedHint")}</span>
+                    {onRegenerate && (
+                      <button
+                        type="button"
+                        onClick={onRegenerate}
+                        disabled={regenerating}
+                        data-slot="daily-briefing-refresh-failed-retry"
+                        className="text-foreground/80 hover:text-foreground underline underline-offset-2 disabled:opacity-60"
+                      >
+                        {t("insights.dailyBriefing.retryAction")}
+                      </button>
+                    )}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        ) : noProvider ? (
+          // v1.15.20 — no provider configured anywhere: a regenerate CTA
+          // would 422 forever, so point at Settings → AI instead.
+          <EmptyState
+            data-slot="daily-briefing-no-provider"
+            variant="plain"
+            icon={<Sparkles className="size-5" />}
+            title={t("insights.dailyBriefing.noProviderTitle")}
+            description={t("insights.dailyBriefing.noProviderDescription")}
+            action={
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                asChild
+                data-slot="daily-briefing-no-provider-cta"
+              >
+                <Link href="/settings/ai">
+                  {t("insights.dailyBriefing.noProviderAction")}
+                </Link>
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState
+            data-slot="daily-briefing-empty"
+            variant="plain"
+            icon={<FileText className="size-5" />}
+            // v1.25 — when the last attempt FAILED and there is no last good
+            // text to fall back on, say so honestly ("couldn't generate")
+            // rather than the generic "no briefing yet". The CTA below is the
+            // same explicit regenerate — it retries the failed generation.
+            // v1.28.28 (#470) — a grounding-gate omission gets its own calm
+            // wording: the generation SUCCEEDED but restated an unverifiable
+            // figure, so the briefing was withheld. Without this the card
+            // read "no briefing yet" and the button looked like a no-op.
+            title={
+              omittedReason === "ungrounded"
+                ? t("insights.dailyBriefing.omittedTitle")
+                : generationFailed
+                  ? t("insights.dailyBriefing.failedTitle")
+                  : t("insights.dailyBriefing.emptyTitle")
+            }
+            description={
+              omittedReason === "ungrounded"
+                ? t("insights.dailyBriefing.omittedUngroundedDescription")
+                : generationFailed
+                  ? t(failedDescriptionKey)
+                  : t("insights.dailyBriefing.emptyDescription")
+            }
+            action={
+              onRegenerate ? (
+                // v1.4.28 BK-M2 — switch the empty-state CTA from
+                // `variant="outline"` to the default (filled) variant
+                // so the briefing card matches the dashboard
+                // empty-state CTA shape. Empty-state actions on a card
+                // surface read as the single primary affordance and
+                // earn the filled chip across surfaces in v1.4.28.
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
-                  asChild
-                  data-slot="daily-briefing-no-provider-cta"
+                  onClick={onRegenerate}
+                  disabled={regenerating}
+                  data-slot="daily-briefing-empty-cta"
+                  className="gap-1.5"
                 >
-                  <Link href="/settings/ai">
-                    {t("insights.dailyBriefing.noProviderAction")}
-                  </Link>
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>
+                    {regenerating
+                      ? t("insights.heroRegenerating")
+                      : generationFailed || omittedReason === "ungrounded"
+                        ? t("insights.dailyBriefing.retryAction")
+                        : t("insights.dailyBriefing.emptyAction")}
+                  </span>
                 </Button>
-              }
-            />
-          ) : (
-            <EmptyState
-              data-slot="daily-briefing-empty"
-              variant="plain"
-              icon={<FileText className="size-5" />}
-              // v1.25 — when the last attempt FAILED and there is no last good
-              // text to fall back on, say so honestly ("couldn't generate")
-              // rather than the generic "no briefing yet". The CTA below is the
-              // same explicit regenerate — it retries the failed generation.
-              // v1.28.28 (#470) — a grounding-gate omission gets its own calm
-              // wording: the generation SUCCEEDED but restated an unverifiable
-              // figure, so the briefing was withheld. Without this the card
-              // read "no briefing yet" and the button looked like a no-op.
-              title={
-                omittedReason === "ungrounded"
-                  ? t("insights.dailyBriefing.omittedTitle")
-                  : generationFailed
-                    ? t("insights.dailyBriefing.failedTitle")
-                    : t("insights.dailyBriefing.emptyTitle")
-              }
-              description={
-                omittedReason === "ungrounded"
-                  ? t("insights.dailyBriefing.omittedUngroundedDescription")
-                  : generationFailed
-                    ? t(failedDescriptionKey)
-                    : t("insights.dailyBriefing.emptyDescription")
-              }
-              action={
-                onRegenerate ? (
-                  // v1.4.28 BK-M2 — switch the empty-state CTA from
-                  // `variant="outline"` to the default (filled) variant
-                  // so the briefing card matches the dashboard
-                  // empty-state CTA shape. Empty-state actions on a card
-                  // surface read as the single primary affordance and
-                  // earn the filled chip across surfaces in v1.4.28.
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={onRegenerate}
-                    disabled={regenerating}
-                    data-slot="daily-briefing-empty-cta"
-                    className="gap-1.5"
-                  >
-                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>
-                      {regenerating
-                        ? t("insights.heroRegenerating")
-                        : generationFailed || omittedReason === "ungrounded"
-                          ? t("insights.dailyBriefing.retryAction")
-                          : t("insights.dailyBriefing.emptyAction")}
-                    </span>
-                  </Button>
-                ) : null
-              }
-            />
-          )}
-        </CardContent>
-      </Card>
+              ) : null
+            }
+          />
+        )}
+      </InsightSectionCard>
     </section>
   );
 }

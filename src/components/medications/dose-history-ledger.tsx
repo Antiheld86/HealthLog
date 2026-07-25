@@ -623,7 +623,7 @@ function LedgerRowItem({
             {t(`medications.detail.verlauf.status.${row.status}`)}
           </span>
           {row.kind === "ad_hoc" && (
-            <Badge variant="outline" className="text-[0.65rem]">
+            <Badge variant="outline" className="text-2xs">
               {t("medications.detail.verlauf.adHocTag")}
             </Badge>
           )}
@@ -634,7 +634,7 @@ function LedgerRowItem({
           {row.kind === "slot" && row.pinned && (
             <Badge
               variant="outline"
-              className="text-[0.65rem]"
+              className="text-2xs"
               data-slot="ledger-pinned-badge"
             >
               {t("medications.detail.verlauf.pin.pinnedTag")}
@@ -862,7 +862,7 @@ function LedgerSummaryChart({
           style={{ width: `${pct(missed)}%` }}
         />
       </div>
-      <div className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5 text-[0.7rem]">
+      <div className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
         <span className="text-success">
           {t("medications.detail.verlauf.status.taken_on_time")}: {takenOnTime}
         </span>

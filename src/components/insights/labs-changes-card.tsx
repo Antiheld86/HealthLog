@@ -10,6 +10,7 @@ import { apiGet } from "@/lib/api/api-fetch";
 import { queryKeys } from "@/lib/query-keys";
 import { SectionHeading } from "@/components/insights/section-heading";
 import type { LabChange } from "@/lib/insights/labs-changes";
+import { InsightSectionCard } from "./insight-section-card";
 
 /**
  * v1.25 — "what changed since your last panel" card.
@@ -74,10 +75,7 @@ export function LabsChangesCard({
         title={t("insights.labsChanges.sectionTitle")}
         subtitle={t("insights.labsChanges.subtitle")}
       />
-      <div
-        data-slot="labs-changes-card"
-        className="bg-card flex w-full min-w-0 flex-col divide-y rounded-xl border"
-      >
+      <InsightSectionCard slot="labs-changes-card" flush className="divide-y">
         {data.changes.map((c) => {
           const labelKey = statusLabelKey(c.status);
           const signedDelta =
@@ -108,7 +106,7 @@ export function LabsChangesCard({
             </div>
           );
         })}
-      </div>
+      </InsightSectionCard>
     </section>
   );
 }

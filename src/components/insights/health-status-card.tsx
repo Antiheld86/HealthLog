@@ -14,6 +14,7 @@ import type {
   HealthStatusDeviation,
   HealthStatusShift,
 } from "@/lib/insights/health-status";
+import { InsightSectionCard } from "./insight-section-card";
 
 /**
  * v1.25 — baseline-drift card.
@@ -70,10 +71,7 @@ export function HealthStatusCard({
         title={t("insights.healthStatus.sectionTitle")}
         subtitle={t("insights.healthStatus.subtitle")}
       />
-      <div
-        data-slot="health-status-card"
-        className="bg-card flex w-full min-w-0 flex-col gap-3 rounded-xl border p-4 md:p-6"
-      >
+      <InsightSectionCard slot="health-status-card">
         {data.deviations.map((d) => (
           <div
             key={`dev-${d.type}`}
@@ -146,7 +144,7 @@ export function HealthStatusCard({
             </div>
           </div>
         ))}
-      </div>
+      </InsightSectionCard>
     </section>
   );
 }

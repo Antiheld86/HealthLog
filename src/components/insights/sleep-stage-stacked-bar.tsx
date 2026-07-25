@@ -14,7 +14,8 @@ import {
 } from "recharts";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { TileHeader } from "@/components/insights/tile-header";
 import { useTranslations } from "@/lib/i18n/context";
 import { formatDurationMinutes } from "@/lib/i18n/duration";
 import { resolveIntlLocale } from "@/lib/format-locale";
@@ -205,10 +206,14 @@ export function SleepStageStackedBar({ breakdown }: SleepStageStackedBarProps) {
     <Card data-slot="sleep-stage-stacked-bar">
       <CardHeader>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-0.5">
-            <CardTitle className="text-base font-semibold">
-              {t("insights.sleep.compositionTitle")}
-            </CardTitle>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            {/* The canonical tile header — the title used to be a bare
+                `CardTitle` in a hand-rolled row. The window toggles stay a
+                sibling of the title+subtitle pair rather than riding the
+                header's `right` slot: the subtitle belongs under the title,
+                and the toggles need to drop to their own row below `sm`
+                (the sanctioned inline-action-row shape). */}
+            <TileHeader title={t("insights.sleep.compositionTitle")} />
             <span className="text-muted-foreground text-xs">
               {t("insights.sleep.compositionSubtitle", {
                 nights: breakdown.nights,

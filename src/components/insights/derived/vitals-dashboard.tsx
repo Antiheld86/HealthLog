@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
-import { Footprints, Gauge, HeartPulse, RefreshCw, Scale } from "lucide-react";
+import { Footprints, Gauge, HeartPulse, Scale } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
 import { getUnitForType } from "@/lib/validations/measurement";
@@ -744,24 +744,12 @@ export function VitalsDashboard({ batch, layout, className }: DashboardProps) {
             title={t("insights.derived.vitals.sectionTitle")}
             subtitle={t("insights.derived.vitals.sectionSubtitle")}
           />
-          <div
-            data-slot="vitals-dashboard-error"
-            role="alert"
-            className="bg-card border-border text-muted-foreground flex flex-col items-start gap-3 rounded-xl border p-4 text-sm sm:flex-row sm:items-center sm:justify-between"
-          >
-            <span>{t("insights.derived.vitals.loadError")}</span>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => refetch()}
-              data-slot="vitals-dashboard-retry"
-              className="gap-1.5"
-            >
-              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>{t("common.retry")}</span>
-            </Button>
-          </div>
+          <QueryErrorRow
+            slot="vitals-dashboard-error"
+            retrySlot="vitals-dashboard-retry"
+            message={t("insights.derived.vitals.loadError")}
+            onRetry={() => refetch()}
+          />
         </section>
       </div>
     );

@@ -11,6 +11,7 @@ import { useTranslations, useFormatters } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 import { SectionHeading } from "@/components/insights/section-heading";
 import { EcgWaveform } from "@/components/insights/ecg-waveform";
+import { InsightSectionCard } from "./insight-section-card";
 
 /**
  * v1.28.50 — ECG recording surface (list → detail).
@@ -141,10 +142,7 @@ export function EcgSection({
           title={t("insights.ecg.sectionTitle")}
         />
       )}
-      <div
-        data-slot="ecg-card"
-        className="bg-card border-border space-y-4 rounded-xl border p-4 md:p-6"
-      >
+      <InsightSectionCard slot="ecg-card" className="border-border">
         {selected ? (
           <EcgDetail
             recording={selected}
@@ -214,7 +212,7 @@ export function EcgSection({
             <EcgDisclaimer />
           </>
         )}
-      </div>
+      </InsightSectionCard>
     </section>
   );
 }

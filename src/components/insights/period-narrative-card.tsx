@@ -17,6 +17,7 @@ import { SectionHeading } from "@/components/insights/section-heading";
 import { AskCoachIconButton } from "@/components/insights/ask-coach-action";
 import { ProseBlocks } from "@/components/insights/prose-blocks";
 import { apiGet } from "@/lib/api/api-fetch";
+import { InsightSectionCard } from "./insight-section-card";
 
 /**
  * v1.11.0 W3 — period-narrative card (Pillar P1).
@@ -66,13 +67,11 @@ async function fetchNarrative(
   return apiGet<NarrativeResponse>(`/api/insights/narrative?period=${period}`);
 }
 
-const SHELL =
-  "bg-card border-border flex w-full min-w-0 flex-col gap-3 rounded-xl border p-4 md:p-6";
 // The in-flight skeleton keeps a `min-h` floor so the initial paint reserves the
 // row (CLS-safe). The resolved card drops the floor and sizes to its content —
 // a short narrative used to leave a large empty tail under the prose, widened by
 // the footer's `mt-auto` pinning it to the bottom of the floored height.
-const SKELETON_SHELL = `${SHELL} min-h-40`;
+const SKELETON_FLOOR = "border-border min-h-40";
 
 export function PeriodNarrativeCard({
   enabled = true,
@@ -109,15 +108,15 @@ export function PeriodNarrativeCard({
           icon={CalendarRange}
           title={t("insights.narrativeTitle")}
         />
-        <div
-          data-slot="period-narrative-card-skeleton"
+        <InsightSectionCard
+          slot="period-narrative-card-skeleton"
           aria-hidden="true"
-          className={SKELETON_SHELL}
+          className={SKELETON_FLOOR}
         >
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-5/6" />
           <Skeleton className="h-4 w-2/3" />
-        </div>
+        </InsightSectionCard>
       </section>
     );
   }
@@ -142,10 +141,10 @@ export function PeriodNarrativeCard({
         icon={CalendarRange}
         title={t("insights.narrativeTitle")}
       />
-      <div
-        data-slot="period-narrative-card"
+      <InsightSectionCard
+        slot="period-narrative-card"
         data-period={period}
-        className={SHELL}
+        className="border-border"
       >
         {/* Header row: week / month toggle on the left, the icon-only Coach
             hand-off pinned top-right. Matches the assessment cards, which carry
@@ -205,7 +204,7 @@ export function PeriodNarrativeCard({
                 displayTz,
               )}
         </p>
-      </div>
+      </InsightSectionCard>
     </section>
   );
 }
