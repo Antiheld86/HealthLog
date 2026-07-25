@@ -16,12 +16,14 @@
  *      correct with nothing serialized into the flight payload (the
  *      previous RSC-prop handoff inlined the whole active catalog into
  *      EVERY document: 392 KB of a 505 KB dashboard HTML).
- *   2. First client paint: the root layout emits a deferred, versioned,
- *      immutable-cacheable `<script src="/i18n/<locale>?v=…">` that
- *      assigns `self.__HL_I18N` before Next's hydration scripts run.
- *      The initializer below reads it — the first client render holds
- *      the same bundle the server rendered with (no EN→DE hydration
- *      flash), and repeat visits serve the catalog from HTTP/SW cache
+ *   2. First client paint: the root layout registers a versioned,
+ *      immutable-cacheable `<script src="/i18n/<locale>?v=…">` through
+ *      `next/script` at `beforeInteractive`, so Next's own bootstrap
+ *      awaits it before requiring any app module. It assigns
+ *      `self.__HL_I18N`, which `adoptBootBundle()` below folds into the
+ *      cache on first read — the first client render holds the same
+ *      bundle the server rendered with (no raw-key flash, no hydration
+ *      mismatch), and repeat visits serve the catalog from HTTP/SW cache
  *      instead of re-downloading it inside each document.
  *   3. Locale switch / EN fallback: `loadMessages()` dynamic-imports
  *      the target bundle on demand; each locale becomes its own async
@@ -67,8 +69,32 @@ function initialCache(): Partial<Record<Locale, MessageBundle>> {
       return {};
     }
   }
-  // Browser: the deferred boot script (emitted by the root layout ahead of
-  // the hydration scripts) has already assigned the active locale's bundle.
+  return {};
+}
+
+const cache: Partial<Record<Locale, MessageBundle>> = initialCache();
+
+/**
+ * Whether the boot global has already been folded into the cache. The
+ * adoption is idempotent and one-way: once a bundle is in, a later call
+ * must not re-copy it over a locale switch or a `primeMessages` seed.
+ */
+let bootAdopted = typeof window === "undefined";
+
+/**
+ * Fold `self.__HL_I18N` (assigned by the layout's boot script) into the
+ * cache, at most once.
+ *
+ * Deliberately LAZY rather than a module-evaluation snapshot. The snapshot
+ * form made correctness depend on this module being evaluated after the boot
+ * script had run — an ordering that lives outside this file and, before the
+ * layout moved the tag to `beforeInteractive`, did not actually hold. Reading
+ * the global on demand means a boot script that lands a moment late still
+ * counts, and the invariant reduces to something local and testable: whatever
+ * the boot script assigns is visible to the first `t()` that asks.
+ */
+function adoptBootBundle(): void {
+  if (bootAdopted) return;
   const boot = (self as { __HL_I18N?: I18nBootGlobal }).__HL_I18N;
   if (
     boot &&
@@ -76,14 +102,13 @@ function initialCache(): Partial<Record<Locale, MessageBundle>> {
     boot.messages &&
     typeof boot.messages === "object"
   ) {
-    return { [boot.locale as Locale]: boot.messages };
+    bootAdopted = true;
+    cache[boot.locale as Locale] ??= boot.messages;
   }
-  return {};
 }
 
-const cache: Partial<Record<Locale, MessageBundle>> = initialCache();
-
 export function getCachedMessages(locale: Locale): MessageBundle | undefined {
+  adoptBootBundle();
   return cache[locale];
 }
 
@@ -94,6 +119,7 @@ export function getCachedMessages(locale: Locale): MessageBundle | undefined {
  * callers kick off the async load and re-render when it lands.
  */
 export function getFallbackMessages(): MessageBundle | undefined {
+  adoptBootBundle();
   return cache.en;
 }
 
@@ -103,6 +129,7 @@ export function primeMessages(locale: Locale, messages: MessageBundle): void {
 }
 
 export async function loadMessages(locale: Locale): Promise<MessageBundle> {
+  adoptBootBundle();
   const cached = cache[locale];
   if (cached) return cached;
   const mod = await loaders[locale]();
