@@ -18,6 +18,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { HeightFieldControl } from "@/components/profile/height-field-control";
+import { useUnitDisplay } from "@/hooks/use-unit-display";
+import {
+  EMPTY_HEIGHT_DRAFT,
+  resolveHeightUnitAdapter,
+  type HeightDraft,
+} from "@/lib/profile/height-unit-display";
 import { useTranslations } from "@/lib/i18n/context";
 import { apiGet, apiPost, apiPut } from "@/lib/api/api-fetch";
 import { localizedApiError } from "@/lib/api/localized-error";
@@ -56,14 +63,19 @@ import {
 
 interface BaselineFormState {
   displayName: string;
-  heightCm: string;
+  /**
+   * v1.32.30 — the height draft in the user's ENTRY unit (centimetres,
+   * or the feet + inches pair). Converted to canonical centimetres by
+   * the adapter right before the PUT; the wire stays cm.
+   */
+  height: HeightDraft;
   dateOfBirth: string;
   gender: string;
 }
 
 const EMPTY_FORM: BaselineFormState = {
   displayName: "",
-  heightCm: "",
+  height: EMPTY_HEIGHT_DRAFT,
   dateOfBirth: "",
   gender: "",
 };
@@ -72,6 +84,8 @@ export function BaselineForm() {
   const { t } = useTranslations();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { preference } = useUnitDisplay();
+  const heightAdapter = resolveHeightUnitAdapter(preference);
 
   const [form, setForm] = useState<BaselineFormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -122,10 +136,8 @@ export function BaselineForm() {
         const profileBody: Record<string, unknown> = {};
         if (form.displayName.trim())
           profileBody.displayName = form.displayName.trim();
-        if (form.heightCm) {
-          const n = Number.parseFloat(form.heightCm);
-          if (Number.isFinite(n)) profileBody.heightCm = n;
-        }
+        const heightCm = heightAdapter.toCanonicalCm(form.height);
+        if (heightCm !== null) profileBody.heightCm = heightCm;
         if (form.dateOfBirth) profileBody.dateOfBirth = form.dateOfBirth;
         if (form.gender === "MALE" || form.gender === "FEMALE") {
           profileBody.gender = form.gender;
@@ -187,18 +199,17 @@ export function BaselineForm() {
         <div className="grid gap-4 sm:grid-cols-2">
           <FieldGroup
             htmlFor="ob-baseline-height"
-            label={t("onboarding.baseline.heightLabel")}
+            label={
+              heightAdapter.usesFeetInches
+                ? t("onboarding.baseline.heightLabelFtIn")
+                : t("onboarding.baseline.heightLabel")
+            }
           >
-            <Input
-              id="ob-baseline-height"
-              type="number"
-              inputMode="decimal"
-              value={form.heightCm}
-              onChange={(e) => patch("heightCm", e.target.value)}
-              placeholder="175"
-              min={50}
-              max={300}
-              step={0.1}
+            <HeightFieldControl
+              idPrefix="ob-baseline-height"
+              adapter={heightAdapter}
+              value={form.height}
+              onChange={(next) => patch("height", next)}
               autoComplete="off"
             />
           </FieldGroup>
