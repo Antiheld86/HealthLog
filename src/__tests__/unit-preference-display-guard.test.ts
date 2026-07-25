@@ -31,13 +31,32 @@ const TRANSFORMED_UNITS: ReadonlySet<string> = new Set(
   ]),
 );
 
-/** Swept surfaces: the dashboard client + every insights sub-page. */
+/**
+ * v1.32.27 — the target/threshold subsystem. These three files are the
+ * coupled display+edit unit: the reference panel that RENDERS a target
+ * band, the sheet that EDITS it, and the settings editor that edits the
+ * same thresholds from the other end. A partial wire here is worse than
+ * none — a converted display over a canonical save silently rewrites
+ * the user's stored target — so they are swept for hardcoded units AND
+ * asserted to route through the preference hook.
+ */
+const TARGET_SURFACES = [
+  join(SRC, "components", "insights", "metric-target-summary.tsx"),
+  join(SRC, "components", "targets", "target-edit-sheet.tsx"),
+  join(SRC, "components", "settings", "thresholds-editor-section.tsx"),
+];
+
+/**
+ * Swept surfaces: the dashboard client, every insights sub-page, and the
+ * target/threshold surfaces.
+ */
 function sweptFiles(): string[] {
   return [
     join(SRC, "app", "page-client.tsx"),
     ...globSync("app/insights/**/page.tsx", { cwd: SRC }).map((rel) =>
       join(SRC, rel),
     ),
+    ...TARGET_SURFACES,
   ];
 }
 
@@ -71,6 +90,37 @@ describe("unit-preference display guard", () => {
     const offenders = sweptFiles().filter((file) =>
       literal.test(readFileSync(file, "utf8")),
     );
+    expect(offenders).toEqual([]);
+  });
+
+  it("every target/threshold surface resolves its unit from the preference", () => {
+    // The tripwire for a silent un-wire: delete the hook import from any
+    // of the three and the surface falls back to canonical kilograms
+    // while its sibling still shows pounds.
+    // The call site, not the import — swapping the hook out for a
+    // hardcoded "metric" literal while leaving the import behind is
+    // exactly the un-wire this has to catch.
+    const offenders = TARGET_SURFACES.filter(
+      (file) => !readFileSync(file, "utf8").includes("useUnitDisplay()"),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("every target/threshold surface converts through the shared adapter", () => {
+    // One adapter owns seed, guardrail, save, and unit label for all
+    // three surfaces. A surface that hand-rolls its own conversion (or
+    // announces `METRIC_BOUNDS[metric].unit`, the canonical symbol)
+    // is how the display and the edit halves drift apart.
+    const offenders: string[] = [];
+    for (const file of TARGET_SURFACES) {
+      const src = readFileSync(file, "utf8");
+      if (!src.includes("resolveTargetUnitAdapter")) {
+        offenders.push(`${file}: no adapter`);
+      }
+      if (/METRIC_BOUNDS\[[^\]]+\]\.unit/.test(src)) {
+        offenders.push(`${file}: canonical bound unit rendered`);
+      }
+    }
     expect(offenders).toEqual([]);
   });
 
