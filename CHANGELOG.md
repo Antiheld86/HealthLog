@@ -70,7 +70,7 @@ coefficients, and the doctor report labelled any unrecognised value as
 non-binary. Every place the field is read, written, documented or displayed was
 gone through.
 
-### Two additions
+### Four additions
 
 Medication history from a widely used iOS export tool can now be read directly,
 as the file actually is, rather than converted by hand. The scheduled time and
@@ -88,6 +88,22 @@ changed the subject, because one reason code covered both situations and the
 instruction to move on fired on both. It now says what is actually true and
 offers to look further back.
 
+A mood tag can now be paired against the next morning's resting heart rate and
+heart-rate variability. Until now a tag such as alcohol had three channels to
+land in, and the only one that looked at the following day needed a wearable
+recovery score that plenty of accounts never record, so the question of what a
+tagged evening does overnight had no path at all. The difference is printed
+without a colour verdict, because a rise reads as worse on one row and better
+on the next, and an association cannot carry that judgement.
+
+Every chart on the metric pages now carries the points it drew as a table
+underneath, collapsed by default with the count in the button. It is handed the
+same points the chart draws and the same formatter the tooltip uses, so a cell
+and a tooltip cannot print two different numbers for one reading. The caption
+names the grain, so a weekly row says it is a weekly average, and units sit in
+the header rather than in every cell, which is what you want when the rows go
+into a spreadsheet.
+
 ### For operators
 
 Four migrations. `0276` adds retention indexes, `0277` adds failure-streak
@@ -97,13 +113,11 @@ inventory that was wrongly expired. None deletes or rewrites a measurement.
 ### Credit
 
 Reported by @lutzkind (sleep double-counting, the gender contract, the
-Environment enum, the Coach retrieval window, and a run of earlier reports),
-@Nazza01 (the intake import, plus the export file and the format documentation
-that made reading it possible) and @DrGithubble (the unit and precision work
-that led here).
-
-@doenke's measurement table is not in this release. An earlier draft of these
-notes said it was and credited him for it, which was wrong on both counts.
+Environment enum, the Coach retrieval window, the next-day pairing for mood tags
+in #616, and a run of earlier reports), @Nazza01 (the intake import, plus the
+export file and the format documentation that made reading it possible),
+@doenke (#636, the table under the chart) and @DrGithubble (the unit and
+precision work that led here).
 
 Two of these defects were found because someone outside this project read the
 code and said what was wrong. The Environment module had been broken for every
