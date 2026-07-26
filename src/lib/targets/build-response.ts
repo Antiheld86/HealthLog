@@ -18,6 +18,7 @@ import pLimit from "p-limit";
 import type { MeasurementType } from "@/generated/prisma/client";
 import type { ThresholdOverridesJson } from "@/lib/analytics/effective-range";
 import { resolveGlucoseUnit } from "@/lib/glucose";
+import { toProfileSex } from "@/lib/profile/sex";
 import {
   ensureUserMoodRollupsFresh,
   readMoodDayRollups,
@@ -234,7 +235,7 @@ export async function buildTargetsResponse(user: AuthedUser) {
   const now = new Date();
 
   const age = dbUser?.dateOfBirth ? getAge(new Date(dbUser.dateOfBirth)) : null;
-  const gender = (dbUser?.gender as "MALE" | "FEMALE" | null) ?? null;
+  const gender = toProfileSex(dbUser?.gender);
   const heightCm = dbUser?.heightCm ?? null;
   const latestByType: TargetValueByType = {};
   const average30ByType: TargetValueByType = {};

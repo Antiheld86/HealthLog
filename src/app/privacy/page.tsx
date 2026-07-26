@@ -754,8 +754,9 @@ export default function PrivacyPage() {
                 </li>
                 <li>
                   Profile metadata: locale, timezone, date of birth (optional),
-                  biological sex (optional), height (optional) — used to compute
-                  age-adjusted target ranges and BMI.
+                  gender (optional, one of male, female or other), height
+                  (optional) — used to compute age-adjusted target ranges and
+                  BMI.
                 </li>
               </ul>
               <h3 className="text-foreground pt-2 text-base font-semibold">

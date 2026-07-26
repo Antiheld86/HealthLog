@@ -139,7 +139,11 @@ export function BaselineForm() {
         const heightCm = heightAdapter.toCanonicalCm(form.height);
         if (heightCm !== null) profileBody.heightCm = heightCm;
         if (form.dateOfBirth) profileBody.dateOfBirth = form.dateOfBirth;
-        if (form.gender === "MALE" || form.gender === "FEMALE") {
+        if (
+          form.gender === "MALE" ||
+          form.gender === "FEMALE" ||
+          form.gender === "OTHER"
+        ) {
           profileBody.gender = form.gender;
         }
         if (Object.keys(profileBody).length > 0) {
@@ -240,6 +244,9 @@ export function BaselineForm() {
                 </SelectItem>
                 <SelectItem value="FEMALE">
                   {t("onboarding.baseline.genderFemale")}
+                </SelectItem>
+                <SelectItem value="OTHER">
+                  {t("onboarding.baseline.genderOther")}
                 </SelectItem>
               </SelectContent>
             </Select>

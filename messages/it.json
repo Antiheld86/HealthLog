@@ -4145,6 +4145,7 @@
       "genderNone": "Preferisco non specificare",
       "genderMale": "Maschile",
       "genderFemale": "Femminile",
+      "genderOther": "Altro",
       "dateOfBirthLabel": "Data di nascita",
       "dateOfBirthHint": "Usata solo per le analisi che tengono conto dell'età.",
       "saveCta": "Salva e continua"

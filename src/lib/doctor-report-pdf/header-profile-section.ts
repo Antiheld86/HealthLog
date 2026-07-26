@@ -74,13 +74,18 @@ export function buildHeaderProfileSection(
     );
   }
   if (data.patient.gender) {
+    // Only the three stored values get a label. A row on a clinical
+    // document is a positive claim, so an unrecognised string leaves the
+    // line out rather than asserting a third value the account never chose.
     const genderKeys: Record<string, string> = {
       MALE: "doctorReport.genderMale",
       FEMALE: "doctorReport.genderFemale",
+      OTHER: "doctorReport.genderOther",
     };
-    const genderKey =
-      genderKeys[data.patient.gender] ?? "doctorReport.genderOther";
-    patientInfo.push(`${t("doctorReport.gender")}: ${t(genderKey)}`);
+    const genderKey = genderKeys[data.patient.gender];
+    if (genderKey) {
+      patientInfo.push(`${t("doctorReport.gender")}: ${t(genderKey)}`);
+    }
   }
   if (data.patient.heightCm) {
     patientInfo.push(

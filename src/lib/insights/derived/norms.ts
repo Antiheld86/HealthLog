@@ -49,9 +49,10 @@
  * Client-safe — pure data + a pure lookup, no server imports.
  */
 import type { MetricStatusMetricId } from "@/lib/insights/metric-status-registry";
+import type { ProfileSex } from "@/lib/profile/sex";
 
-/** Profile sex as stored on `User.gender` ("MALE" | "FEMALE" | null). */
-export type NormSex = "MALE" | "FEMALE" | null | undefined;
+/** Profile sex as a reference-table lookup key; `undefined` = unknown. */
+export type NormSex = ProfileSex | undefined;
 
 /** A reference band — same shape as `MetricNormalRange`. */
 export interface NormRange {

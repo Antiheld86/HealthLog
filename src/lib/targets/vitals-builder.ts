@@ -15,6 +15,7 @@ import {
 } from "@/lib/analytics/pulse-targets";
 import { resolveRestingPulseSeries } from "@/lib/analytics/resting-pulse";
 import { getBodyFatTargetRange } from "@/lib/analytics/value-bands";
+import { binaryReferenceSex, type ProfileSex } from "@/lib/profile/sex";
 import { userDayKey } from "@/lib/tz/resolver";
 import {
   makeRangeClassifier,
@@ -42,7 +43,8 @@ interface VitalTargetsInput {
   average30ByType: TargetValueByType;
   heightCm: number | null;
   age: number | null;
-  gender: "MALE" | "FEMALE" | null;
+  /** Sex as stored, `OTHER` included; narrowed per formula below. */
+  gender: ProfileSex;
   timezone: string;
   now: Date;
 }
@@ -141,6 +143,10 @@ export function buildVitalTargets({
 }: VitalTargetsInput): VitalTargetsResult {
   const targets: TargetItem[] = [];
   const consistencyClock = { timezone, now };
+  // The BP / pulse / body-fat tables are published for two groups and have
+  // no third row. Narrow once, here, where that is true — each helper
+  // answers a null with a neutral value, never with one of the two sides.
+  const referenceSex = binaryReferenceSex(gender);
 
   const weightRange = heightCm ? getWeightRange(heightCm) : null;
   let weightClassification: TargetItem["classification"] = null;
@@ -173,7 +179,7 @@ export function buildVitalTargets({
     }),
   });
 
-  const bpRange = age != null ? getBpTargetsByAge(age, gender) : null;
+  const bpRange = age != null ? getBpTargetsByAge(age, referenceSex) : null;
   const bpPairsByDay = buildBpPairsByDay(recentMeasurements, bpRange, timezone);
   let bpClassification: TargetItem["classification"] = null;
   if (
@@ -254,7 +260,7 @@ export function buildVitalTargets({
     });
   }
 
-  const pulseTarget = getPersonalizedPulseTarget(age, gender);
+  const pulseTarget = getPersonalizedPulseTarget(age, referenceSex);
   const restingResolved = resolveRestingPulseSeries({
     restingSamples: recentMeasurements
       .filter((measurement) => measurement.type === "RESTING_HEART_RATE")
@@ -385,13 +391,17 @@ export function buildVitalTargets({
 
   let bodyFatClassification: TargetItem["classification"] = null;
   if (latestByType.BODY_FAT != null && age != null) {
-    const classification = classifyBodyFat(latestByType.BODY_FAT, gender, age);
+    const classification = classifyBodyFat(
+      latestByType.BODY_FAT,
+      referenceSex,
+      age,
+    );
     bodyFatClassification = {
       category: classification.category,
       color: classification.color,
     };
   }
-  const bodyFatRange = age != null ? getBodyFatTargetRange(gender) : null;
+  const bodyFatRange = age != null ? getBodyFatTargetRange(referenceSex) : null;
   targets.push({
     type: "BODY_FAT",
     label: "Body fat",

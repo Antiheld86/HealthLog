@@ -64,6 +64,7 @@
  */
 import type { MeasurementType, PrismaClient } from "@/generated/prisma/client";
 import { loadBaselineProfile } from "@/lib/insights/derived/baseline";
+import type { ProfileSex } from "@/lib/profile/sex";
 import {
   scoreDayKey,
   scoreExternalId,
@@ -187,14 +188,24 @@ export function banisterTrimp(
   samples: readonly HrSample[],
   hrRest: number,
   hrMax: number,
-  sex: "MALE" | "FEMALE" | null,
+  sex: ProfileSex,
 ): number {
   if (hrMax <= hrRest) return 0;
-  // Morton/Fitz-Clarke/Banister gender weights; the unisex default uses the
-  // male coefficients (the more common watch-cohort assumption) when sex is
-  // unknown.
-  const a = sex === "FEMALE" ? 0.86 : 0.64;
-  const b = sex === "FEMALE" ? 1.67 : 1.92;
+  // Morton/Fitz-Clarke/Banister weights. The published pair covers two
+  // groups and nothing else, so an account that is neither (OTHER, or no
+  // answer at all) is scored on the MIDPOINT of the two models rather than
+  // silently on the male one — the same neutral fallback every other
+  // sex-split formula in the repo uses (`value-bands`, `classifications`,
+  // `pulse-targets`). Picking a side for someone who did not pick one is a
+  // guess dressed as a measurement.
+  const MALE_WEIGHTS = { a: 0.64, b: 1.92 } as const;
+  const FEMALE_WEIGHTS = { a: 0.86, b: 1.67 } as const;
+  const weights =
+    sex === "MALE"
+      ? [MALE_WEIGHTS]
+      : sex === "FEMALE"
+        ? [FEMALE_WEIGHTS]
+        : [MALE_WEIGHTS, FEMALE_WEIGHTS];
 
   const usable = samples
     .filter((s) => typeof s.hr === "number" && Number.isFinite(s.hr))
@@ -213,7 +224,10 @@ export function banisterTrimp(
     if (!Number.isFinite(hrr)) continue;
     if (hrr <= 0) continue; // below resting → no training impulse.
     if (hrr > 1) hrr = 1; // clamp a spurious over-max sample.
-    trimp += dtMin * hrr * a * Math.exp(b * hrr);
+    // One model for a known sex; the mean of both when there is none.
+    let impulse = 0;
+    for (const { a, b } of weights) impulse += a * Math.exp(b * hrr);
+    trimp += (dtMin * hrr * impulse) / weights.length;
   }
   return trimp;
 }
@@ -359,7 +373,7 @@ export interface StrainComputeResult {
 
 export interface StrainProfile {
   ageYears: number | null;
-  sex: "MALE" | "FEMALE" | null;
+  sex: ProfileSex;
 }
 
 /**

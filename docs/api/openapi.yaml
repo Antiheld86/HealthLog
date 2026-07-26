@@ -13272,11 +13272,13 @@ components:
             - type: string
             - type: "null"
         gender:
+          description: Stored gender. Null or an empty string clears it; an omitted field is left untouched.
           anyOf:
             - type: string
               enum:
                 - MALE
                 - FEMALE
+                - OTHER
             - type: "null"
         displayName:
           anyOf:
@@ -24028,6 +24030,7 @@ components:
               enum:
                 - MALE
                 - FEMALE
+                - OTHER
             - type: "null"
         heightCm:
           anyOf:
@@ -24139,6 +24142,7 @@ components:
               enum:
                 - MALE
                 - FEMALE
+                - OTHER
             - type: "null"
         heightCm:
           anyOf:
@@ -26037,6 +26041,7 @@ components:
                   enum:
                     - MALE
                     - FEMALE
+                    - OTHER
                 - type: "null"
             glucoseUnit:
               anyOf:

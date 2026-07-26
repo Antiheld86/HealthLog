@@ -800,7 +800,7 @@ export const dashboardSnapshotResponse = z
       timezone: z.string(),
       heightCm: z.number().nullable(),
       dateOfBirth: z.string().nullable(),
-      gender: z.enum(["MALE", "FEMALE"]).nullable(),
+      gender: z.enum(["MALE", "FEMALE", "OTHER"]).nullable(),
       glucoseUnit: z.string().nullable(),
       onboardingTourCompleted: z.boolean(),
       greetingHour: z.number().int(),

@@ -4145,6 +4145,7 @@
       "genderNone": "Keine Angabe",
       "genderMale": "Männlich",
       "genderFemale": "Weiblich",
+      "genderOther": "Divers",
       "dateOfBirthLabel": "Geburtsdatum",
       "dateOfBirthHint": "Wird ausschließlich für altersbezogene Auswertungen genutzt.",
       "saveCta": "Speichern und weiter"
