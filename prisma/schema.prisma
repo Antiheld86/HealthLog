@@ -919,6 +919,16 @@ enum EnvironmentLocationSource {
   HOME
   TRAVEL
   DEVICE
+
+  /// Migration 0217 created the physical type as `environment_location_source`,
+  /// like every other enum in this schema. This declaration carried no `@@map`,
+  /// so the client compiled every write against `public."EnvironmentLocationSource"`
+  /// — a type no database has ever had — and each insert into `environment_contexts`
+  /// died on `42704` before a row could commit. The map names the type that
+  /// exists; no migration follows, because the database was never the side that
+  /// drifted. `prisma-enum-mapping-guard.test.ts` now holds the whole schema to
+  /// this rule.
+  @@map("environment_location_source")
 }
 
 /// A per-day environmental observation (daily weather / daylight) for the
