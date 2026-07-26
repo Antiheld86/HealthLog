@@ -505,6 +505,7 @@ export function InventorySection({
                       })}
                     </span>
                   )}
+                  {item.firstUseAt && item.printedExpiry && <span>·</span>}
                   {item.printedExpiry && (
                     <span>
                       {t("medications.detail.bestand.expiresOn", {

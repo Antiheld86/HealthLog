@@ -124,6 +124,22 @@ describe("<InventorySection> — item-row dates", () => {
     expect(html).toContain("Haltbar bis 01.06.2027");
   });
 
+  it("separates the two dates when the row carries both", () => {
+    seedItems([
+      {
+        ...BASE,
+        firstUseAt: "2026-06-12T00:00:00.000Z",
+        printedExpiry: "2027-06-01T00:00:00.000Z",
+      },
+    ]);
+    const html = render(
+      <InventorySection medicationId="med-1" unitsPerDose={1} />,
+    );
+    expect(html).toContain("Geöffnet 12.06.2026");
+    expect(html).toContain("Haltbar bis 01.06.2027");
+    expect(html).toContain("<span>·</span>");
+  });
+
   it("shows no date line when neither date is recorded", () => {
     // Absence reads as absence — no placeholder, no invented date.
     seedItems([{ ...BASE, firstUseAt: null, printedExpiry: null }]);

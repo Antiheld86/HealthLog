@@ -37,7 +37,12 @@
  *   - AMPOULE — the member a punctured injectable reservoir (ampoule or
  *     multi-dose vial) lands on; there is no separate VIAL member. Same
  *     physical fact as the pen: the barrier is broken and the contents
- *     are exposed.
+ *     are exposed. The enum cannot tell that reservoir apart from a
+ *     carton of single-use glass ampoules, where the clock would be
+ *     wrong for the same reason it was wrong on a blister; the kind is
+ *     never auto-selected, so choosing it is a deliberate statement
+ *     about a container that was opened, and the opening date is
+ *     editable when it turns out not to be.
  *   - BLISTER — every tablet sits in its own sealed foil cavity.
  *     Pressing out tablet 1 does nothing to tablets 2..n. The carton
  *     expiry is the only expiry.
