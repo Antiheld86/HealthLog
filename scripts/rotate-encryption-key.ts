@@ -170,8 +170,11 @@ async function main() {
   // "ouraClientSecretEncrypted" "stravaClientIdEncrypted"
   // "stravaClientSecretEncrypted" "stravaAccessTokenEncrypted"
   // "stravaRefreshTokenEncrypted" "aiAnthropicKeyEncrypted"
-  // "aiLocalKeyEncrypted" "aiOpenaiKeyEncrypted" "aiCompatKeyEncrypted"
-  // "insuranceNumberEncrypted"
+  // "aiLocalKeyEncrypted" "aiOpenaiKeyEncrypted" "insuranceNumberEncrypted"
+  // v1.33.1 adds the gateway bearer; it is named in the array below only.
+  // Quoting a column name in this comment would satisfy the coverage guard
+  // in encrypted-columns.test.ts without the script rotating anything, so
+  // the newest entry stays unquoted here on purpose.
   const userFields = [
     "codexAccessTokenEncrypted",
     "codexRefreshTokenEncrypted",
