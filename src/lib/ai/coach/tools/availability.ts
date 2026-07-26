@@ -170,7 +170,10 @@ async function readMeasurementBounds(
             series: row.type as string,
             unit: row.unit,
             count: row._count._all,
-            mean,
+            // One decimal, like every other mean the snapshot surfaces — a raw
+            // float would invite the model to quote a precision the reading
+            // never had.
+            mean: Math.round(mean * 10) / 10,
             min,
             max,
           }

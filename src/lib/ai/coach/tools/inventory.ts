@@ -15,6 +15,7 @@
  * Cost: the manifest is ~0.3–0.5k tokens vs the ~6–15k-token snapshot JSON it
  * replaces — the figures move out of the prompt and into on-demand tool results.
  */
+import { annotate } from "@/lib/logging/context";
 import { isCycleAvailableForUser } from "@/lib/cycle/gate";
 import { buildCoachSnapshot } from "@/lib/ai/coach/snapshot";
 import type {
@@ -274,10 +275,21 @@ async function attachAvailability(
   let probed: Map<string, CoachDomainAvailability>;
   try {
     probed = await probeCoachAvailability(userId, subjects);
-  } catch {
-    // Annotated at the probe; nothing to attach.
+  } catch (err) {
+    // The manifest degrades to the pre-fix precision (every unreached domain
+    // reads "absent"), which is why this is a catch and not a throw — but a
+    // silent one would be the very class of failure this change exists to end.
+    const reason = err instanceof Error ? err.name : "unknown";
+    annotate({
+      action: { name: "coach.inventory.availability_failed" },
+      meta: { probed: subjects.size, reason },
+    });
     return;
   }
+  annotate({
+    action: { name: "coach.inventory.availability" },
+    meta: { probed: subjects.size, stored: probed.size },
+  });
   for (const [key, available] of probed) {
     const entry = keyed.get(key);
     if (!entry) continue;
