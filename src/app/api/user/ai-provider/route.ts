@@ -10,7 +10,15 @@ import { annotate } from "@/lib/logging/context";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED = new Set(["OPENAI", "ANTHROPIC", "LOCAL", "CHATGPT_OAUTH"]);
+const ALLOWED = new Set([
+  "OPENAI",
+  "ANTHROPIC",
+  "LOCAL",
+  // v1.33.1 (#470) — the OpenAI-compatible gateway (LiteLLM / OpenRouter /
+  // vLLM). Its base URL, key and model live in their own three columns.
+  "OPENAI_COMPATIBLE",
+  "CHATGPT_OAUTH",
+]);
 
 export const GET = apiHandler(async () => {
   const { user } = await requireAuth();
@@ -25,6 +33,10 @@ export const GET = apiHandler(async () => {
       aiAnthropicKeyEncrypted: true,
       aiLocalKeyEncrypted: true,
       aiOpenaiKeyEncrypted: true,
+      // v1.33.1 (#470) — the OpenAI-compatible gateway.
+      aiCompatBaseUrl: true,
+      aiCompatKeyEncrypted: true,
+      aiCompatModel: true,
       // v1.22 (#89)
       aiResponseTimeoutSeconds: true,
     },
@@ -52,6 +64,11 @@ export const GET = apiHandler(async () => {
     openaiKeyPreview: u?.aiOpenaiKeyEncrypted
       ? `...${decrypt(u.aiOpenaiKeyEncrypted).slice(-4)}`
       : null,
+    // v1.33.1 (#470) — the gateway's own configuration. The key is reported
+    // as presence only, like every other credential on this surface.
+    compatBaseUrl: u?.aiCompatBaseUrl ?? null,
+    compatModel: u?.aiCompatModel ?? null,
+    hasCompatKey: Boolean(u?.aiCompatKeyEncrypted),
     // v1.22 (#89) — per-user response timeout, in seconds (null = default).
     responseTimeoutSeconds: u?.aiResponseTimeoutSeconds ?? null,
   });
@@ -109,6 +126,46 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
         );
       }
       updates.aiBaseUrl = trimmed;
+    }
+  }
+
+  // ── v1.33.1 (#470) — the OpenAI-compatible gateway's three fields ──
+  // Deliberately a separate block from `baseUrl` above: that column is shared
+  // with LOCAL and is cleared when the provider switches away from it. This
+  // one belongs to a single provider and to no other, which is what keeps the
+  // OpenAI key from ever being sendable to a user-supplied host.
+  if (body.compatBaseUrl !== undefined) {
+    if (body.compatBaseUrl === null || body.compatBaseUrl === "") {
+      updates.aiCompatBaseUrl = null;
+    } else if (typeof body.compatBaseUrl === "string") {
+      const trimmed = body.compatBaseUrl.trim();
+      // Same SSRF floor as the Local provider: a public host always, a
+      // private one only when the operator allowlisted it. Gateways on a LAN
+      // are the normal case for LiteLLM / vLLM, so the escape hatch matters
+      // here as much as it does for Ollama.
+      if (!isLocalAiHostAllowed(trimmed) && !isPublicUrl(trimmed)) {
+        return apiError(
+          "Base URL points to an internal/private host. Ops must allow it on this instance via ALLOW_LOCAL_AI_PRIVATE_HOSTS — set it to the exact host (e.g. litellm.lan) or to true for any private host (intended for a self-hosted gateway).",
+          422,
+        );
+      }
+      updates.aiCompatBaseUrl = trimmed;
+    }
+  }
+
+  if (body.compatModel !== undefined) {
+    if (body.compatModel === null || body.compatModel === "") {
+      updates.aiCompatModel = null;
+    } else if (typeof body.compatModel === "string") {
+      updates.aiCompatModel = body.compatModel.trim() || null;
+    }
+  }
+
+  if (body.compatKey !== undefined) {
+    if (body.compatKey === null || body.compatKey === "") {
+      updates.aiCompatKeyEncrypted = null;
+    } else if (typeof body.compatKey === "string") {
+      updates.aiCompatKeyEncrypted = encrypt(body.compatKey.trim());
     }
   }
 

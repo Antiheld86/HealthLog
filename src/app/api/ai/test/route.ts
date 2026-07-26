@@ -42,7 +42,13 @@ export const dynamic = "force-dynamic";
 const overrideSchema = z
   .object({
     provider: z
-      .enum(["OPENAI", "ANTHROPIC", "LOCAL", "CHATGPT_OAUTH"])
+      .enum([
+        "OPENAI",
+        "ANTHROPIC",
+        "LOCAL",
+        "OPENAI_COMPATIBLE",
+        "CHATGPT_OAUTH",
+      ])
       .optional()
       .nullable(),
     model: z.string().min(1).max(120).optional().nullable(),
@@ -50,6 +56,12 @@ const overrideSchema = z
     anthropicKey: z.string().min(1).max(500).optional().nullable(),
     localKey: z.string().min(1).max(500).optional().nullable(),
     openaiKey: z.string().min(1).max(500).optional().nullable(),
+    // v1.33.1 (#470) — the OpenAI-compatible gateway's own fields, kept
+    // separate from `baseUrl` / `openaiKey` so testing an unsaved gateway
+    // config can never reach the pinned OpenAI arm and vice versa.
+    compatBaseUrl: z.string().url().max(2048).optional().nullable(),
+    compatKey: z.string().min(1).max(500).optional().nullable(),
+    compatModel: z.string().min(1).max(120).optional().nullable(),
   })
   .strict();
 

@@ -36,7 +36,47 @@ type UserAIRow = {
   aiAnthropicKeyEncrypted: string | null;
   aiLocalKeyEncrypted: string | null;
   aiOpenaiKeyEncrypted: string | null;
+  aiCompatBaseUrl: string | null;
+  aiCompatKeyEncrypted: string | null;
+  aiCompatModel: string | null;
 };
+
+/**
+ * v1.33.1 (#470) — build the OpenAI-compatible gateway client from the user's
+ * three dedicated columns. The signature names every column this provider is
+ * allowed to read: the OpenAI key and `aiBaseUrl` are absent on purpose, so a
+ * future edit that wants to hand it either has to widen this shape first and
+ * answer for it.
+ *
+ * Returns null when the gateway cannot be addressed — no base URL, or no
+ * model anywhere. An unconfigured entry is SKIPPED by the chain runner rather
+ * than erroring, exactly like an `anthropic` entry with no key.
+ *
+ * Model resolution: `aiCompatModel` is the override; absent, the shared
+ * `aiModel` applies (a gateway usually routes the same model name the user
+ * already types for their other providers). Nothing is invented — with
+ * neither set there is no model to send, so the entry does not resolve.
+ *
+ * The key is OPTIONAL: a LAN LiteLLM without a master key needs no bearer,
+ * and the client omits the header entirely for an empty string. The base URL
+ * passed the SSRF floor at write time (`/api/user/ai-provider`); the client
+ * re-applies the Local provider's host policy at call time.
+ */
+function buildCompatProvider(row: {
+  aiModel: string | null;
+  aiCompatBaseUrl: string | null;
+  aiCompatKeyEncrypted: string | null;
+  aiCompatModel: string | null;
+}): AIProvider | null {
+  const model = row.aiCompatModel?.trim() || row.aiModel?.trim() || null;
+  if (!row.aiCompatBaseUrl || !model) return null;
+  return new OpenAIClient({
+    apiKey: row.aiCompatKeyEncrypted ? decrypt(row.aiCompatKeyEncrypted) : "",
+    model,
+    baseUrl: row.aiCompatBaseUrl,
+    providerType: "openai-compatible",
+  });
+}
 
 /**
  * Build a provider from a user-level config row. Returns null if the row does
@@ -67,6 +107,11 @@ function buildUserProvider(row: UserAIRow): AIProvider | null {
         model: row.aiModel ?? "local-model",
         baseUrl: row.aiBaseUrl,
       });
+    }
+    case "OPENAI_COMPATIBLE": {
+      // v1.33.1 (#470) — the gateway provider. Reads its own three columns
+      // and nothing else; the OpenAI arm below stays pinned.
+      return buildCompatProvider(row);
     }
     case "OPENAI": {
       // v1.4.3: user-level OpenAI key gets first crack — only fall back
@@ -364,6 +409,9 @@ export async function resolveProvider(userId: string): Promise<AIProvider> {
       aiAnthropicKeyEncrypted: true,
       aiLocalKeyEncrypted: true,
       aiOpenaiKeyEncrypted: true,
+      aiCompatBaseUrl: true,
+      aiCompatKeyEncrypted: true,
+      aiCompatModel: true,
     },
   });
 
@@ -420,6 +468,9 @@ export async function resolveProviderChain(
       aiAnthropicKeyEncrypted: true,
       aiLocalKeyEncrypted: true,
       aiOpenaiKeyEncrypted: true,
+      aiCompatBaseUrl: true,
+      aiCompatKeyEncrypted: true,
+      aiCompatModel: true,
       aiProviderChain: true,
       useCentralCodex: true,
     },
@@ -468,6 +519,9 @@ export interface ProviderCredentialRow {
   aiLocalKeyEncrypted: string | null;
   aiOpenaiKeyEncrypted: string | null;
   aiBaseUrl: string | null;
+  aiModel: string | null;
+  aiCompatBaseUrl: string | null;
+  aiCompatModel: string | null;
   codexConnectionStatus: string | null;
   codexAccessTokenEncrypted: string | null;
   codexRefreshTokenEncrypted: string | null;
@@ -514,6 +568,13 @@ export function userRowHasProviderCredential(
       case "local":
         if (row.aiBaseUrl) return true;
         break;
+      case "openai-compatible":
+        // Presence mirrors `buildCompatProvider`: a gateway needs an address
+        // AND a model name; the key is optional.
+        if (row.aiCompatBaseUrl && (row.aiCompatModel || row.aiModel)) {
+          return true;
+        }
+        break;
       case "admin-openai":
         if (adminKeyConfigured) return true;
         break;
@@ -525,6 +586,13 @@ export function userRowHasProviderCredential(
   const choice = row.aiProvider?.toUpperCase();
   if (choice === "ANTHROPIC" && row.aiAnthropicKeyEncrypted) return true;
   if (choice === "LOCAL" && row.aiBaseUrl) return true;
+  if (
+    choice === "OPENAI_COMPATIBLE" &&
+    row.aiCompatBaseUrl &&
+    (row.aiCompatModel || row.aiModel)
+  ) {
+    return true;
+  }
   if (choice === "OPENAI" && row.aiOpenaiKeyEncrypted) return true;
   if ((choice === "CHATGPT_OAUTH" || !choice) && codexConnected) return true;
   return adminKeyConfigured;
@@ -549,6 +617,9 @@ export async function hasAnyConfiguredProvider(
       aiLocalKeyEncrypted: true,
       aiOpenaiKeyEncrypted: true,
       aiBaseUrl: true,
+      aiCompatBaseUrl: true,
+      aiCompatModel: true,
+      aiModel: true,
       codexConnectionStatus: true,
       codexAccessTokenEncrypted: true,
       codexRefreshTokenEncrypted: true,
@@ -637,6 +708,14 @@ function resolveManagedByFromRow(
       case "local":
         if (row.aiBaseUrl) return "local";
         break;
+      case "openai-compatible":
+        // The gateway is the user's own egress to an endpoint they chose,
+        // like a BYO key — not the operator's, and not presumed on-host
+        // (LiteLLM / OpenRouter are usually remote).
+        if (row.aiCompatBaseUrl && (row.aiCompatModel || row.aiModel)) {
+          return "user";
+        }
+        break;
       case "admin-openai":
         if (adminKeyConfigured) return "server";
         break;
@@ -648,6 +727,13 @@ function resolveManagedByFromRow(
   const choice = row.aiProvider?.toUpperCase();
   if (choice === "ANTHROPIC" && row.aiAnthropicKeyEncrypted) return "user";
   if (choice === "LOCAL" && row.aiBaseUrl) return "local";
+  if (
+    choice === "OPENAI_COMPATIBLE" &&
+    row.aiCompatBaseUrl &&
+    (row.aiCompatModel || row.aiModel)
+  ) {
+    return "user";
+  }
   if (choice === "OPENAI" && row.aiOpenaiKeyEncrypted) return "user";
   if ((choice === "CHATGPT_OAUTH" || !choice) && codexConnected) return "user";
   return adminKeyConfigured ? "server" : null;
@@ -672,6 +758,9 @@ export async function resolveProviderAvailability(
       aiLocalKeyEncrypted: true,
       aiOpenaiKeyEncrypted: true,
       aiBaseUrl: true,
+      aiCompatBaseUrl: true,
+      aiCompatModel: true,
+      aiModel: true,
       codexConnectionStatus: true,
       codexAccessTokenEncrypted: true,
       codexRefreshTokenEncrypted: true,
@@ -715,6 +804,9 @@ async function resolveProviderForType(
       aiOpenaiKeyEncrypted: string | null;
       aiBaseUrl: string | null;
       aiModel: string | null;
+      aiCompatBaseUrl: string | null;
+      aiCompatKeyEncrypted: string | null;
+      aiCompatModel: string | null;
     } | null;
   },
 ): Promise<AIProvider | null> {
@@ -749,6 +841,13 @@ async function resolveProviderForType(
         baseUrl: ctx.userRow.aiBaseUrl,
       });
     }
+    case "openai-compatible": {
+      // v1.33.1 (#470) — the user's gateway. Note what is NOT read here:
+      // `aiOpenaiKeyEncrypted` and `aiBaseUrl`. The gateway gets the
+      // credential the user issued for it, or none at all.
+      if (!ctx.userRow) return null;
+      return buildCompatProvider(ctx.userRow);
+    }
     case "admin-openai": {
       const admin = await resolveAdminProvider();
       return admin.type === "none" ? null : admin;
@@ -776,6 +875,13 @@ export type AITestOverride = {
   anthropicKey?: string | null;
   localKey?: string | null;
   openaiKey?: string | null;
+  // v1.33.1 (#470) — the gateway's own fields. Dedicated rather than shared
+  // with `baseUrl` / `openaiKey` for the same reason the columns are: the
+  // pinned OpenAI arm must not be able to see a user-supplied host, and the
+  // gateway must not be able to see the OpenAI key.
+  compatBaseUrl?: string | null;
+  compatKey?: string | null;
+  compatModel?: string | null;
 };
 
 export class AITestConfigError extends Error {
@@ -806,6 +912,9 @@ export async function resolveProviderForTest(
       aiAnthropicKeyEncrypted: true,
       aiLocalKeyEncrypted: true,
       aiOpenaiKeyEncrypted: true,
+      aiCompatBaseUrl: true,
+      aiCompatKeyEncrypted: true,
+      aiCompatModel: true,
     },
   });
 
@@ -875,6 +984,52 @@ export async function resolveProviderForTest(
         apiKey,
         model: model || "local-model",
         baseUrl,
+      });
+    }
+    case "OPENAI_COMPATIBLE": {
+      // v1.33.1 (#470) — the gateway. Reads `aiCompatBaseUrl`, never the
+      // merged `baseUrl` above (which can carry a stale LOCAL URL) and never
+      // the OpenAI key. Same host policy as LOCAL: public always, private
+      // only when the operator allowlisted it.
+      const compatBaseUrl = (
+        override.compatBaseUrl ??
+        stored?.aiCompatBaseUrl ??
+        ""
+      )
+        .toString()
+        .trim();
+      if (!compatBaseUrl) {
+        throw new AITestConfigError(
+          422,
+          "OpenAI-compatible provider requires a base URL",
+        );
+      }
+      if (!isLocalAiHostAllowed(compatBaseUrl) && !isPublicUrl(compatBaseUrl)) {
+        throw new AITestConfigError(
+          422,
+          "Base URL points to an internal/private host",
+        );
+      }
+      const compatModel =
+        (override.compatModel ?? stored?.aiCompatModel ?? "")
+          .toString()
+          .trim() || model;
+      if (!compatModel) {
+        throw new AITestConfigError(
+          422,
+          "OpenAI-compatible provider requires a model name",
+        );
+      }
+      const apiKey =
+        override.compatKey?.trim() ||
+        (stored?.aiCompatKeyEncrypted
+          ? decrypt(stored.aiCompatKeyEncrypted)
+          : "");
+      return new OpenAIClient({
+        apiKey,
+        model: compatModel,
+        baseUrl: compatBaseUrl,
+        providerType: "openai-compatible",
       });
     }
     case "CHATGPT_OAUTH": {

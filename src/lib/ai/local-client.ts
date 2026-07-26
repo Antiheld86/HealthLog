@@ -8,6 +8,14 @@ import type {
   CompletionResult,
 } from "./types";
 import { buildOpenAIMessages, mapFinishReason } from "./openai-wire";
+import {
+  hasLearnedJsonModeDialect,
+  isResponseFormatRejection,
+  jsonModeDialectFor,
+  rememberJsonModeDialect,
+  resetJsonModeDialectCache,
+  type JsonModeDialect,
+} from "./json-dialect";
 
 interface LocalClientConfig {
   apiKey?: string | null;
@@ -20,51 +28,18 @@ const STRICT_JSON_PREFIX =
 
 /**
  * v1.28.28 (#470) — per-endpoint JSON-mode dialect, learned at runtime.
- *
- *  - `"response_format"` (the default): send the standard OpenAI
- *    `response_format: { type: "json_object" }`. Strict OpenAI-compatible
- *    gateways (LiteLLM, OpenRouter, vLLM) and Ollama's own `/v1` shim all
- *    accept it.
- *  - `"none"`: send no structured-output flag at all. The strict-JSON
- *    instruction prepended to the first user turn remains the only JSON
- *    steering — which is what this client shipped for years and what local
- *    model templates respect. (Ollama's NATIVE `format: "json"` field never
- *    belonged on the OpenAI-compatible `/chat/completions` wire; it was
- *    tolerated by Ollama but 400s on strict gateways, so the fallback stays
- *    minimal instead of resurrecting it.)
- *
- * The dialect is cached per baseUrl for the process lifetime: the first
- * JSON-mode request that 4xxes with an error body referencing
- * `response_format` / an unknown parameter flips the endpoint to `"none"`
- * and is retried once without the flag (self-healing, mirroring the
- * google-health dateFilter self-heal posture). Unrelated 4xx errors are
- * NOT retried — they surface as the structured error they always were.
+ * v1.33.1 — the machinery moved to `json-dialect.ts` when the
+ * OpenAI-compatible gateway provider needed the same learning; the two
+ * clients share one cache keyed by base URL. The names below stay exported
+ * from here because this client's tests and call sites were the first
+ * consumers.
  */
-type LocalJsonDialect = "response_format" | "none";
-const jsonDialectByBaseUrl = new Map<string, LocalJsonDialect>();
+type LocalJsonDialect = JsonModeDialect;
 
 /** Test hook — clears the learned per-endpoint dialect cache. */
-export function resetLocalJsonDialectCache(): void {
-  jsonDialectByBaseUrl.clear();
-}
+export const resetLocalJsonDialectCache = resetJsonModeDialectCache;
 
-/**
- * True when a 4xx error body reads as "this endpoint rejects the
- * `response_format` field" — either it names the field outright or it
- * complains about an unknown/unexpected parameter.
- */
-export function isResponseFormatRejection(
-  status: number,
-  bodyExcerpt: string,
-): boolean {
-  if (status < 400 || status >= 500) return false;
-  return (
-    /response_format/i.test(bodyExcerpt) ||
-    /(unknown|unexpected|unrecognized|unsupported|extra)[\s_-]*(parameter|field|argument|property|key)/i.test(
-      bodyExcerpt,
-    )
-  );
-}
+export { isResponseFormatRejection };
 
 /**
  * v1.22 (#89) — absolute backstop for the streaming path. The real ceiling is
@@ -141,9 +116,8 @@ export class LocalOpenAICompatibleClient implements AIProvider {
     jsonDialect: LocalJsonDialect;
   } {
     const url = `${this.config.baseUrl.replace(/\/$/, "")}/chat/completions`;
-    // v1.28.28 (#470) — per-endpoint JSON dialect (see LocalJsonDialect).
-    const jsonDialect =
-      jsonDialectByBaseUrl.get(this.config.baseUrl) ?? "response_format";
+    // v1.28.28 (#470) — per-endpoint JSON dialect (see json-dialect.ts).
+    const jsonDialect = jsonModeDialectFor(this.config.baseUrl);
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -255,7 +229,7 @@ export class LocalOpenAICompatibleClient implements AIProvider {
         jsonDialect === "response_format" &&
         isResponseFormatRejection(res.status, bodyExcerpt)
       ) {
-        jsonDialectByBaseUrl.set(this.config.baseUrl, "none");
+        rememberJsonModeDialect(this.config.baseUrl, "none");
         annotate({
           action: { name: "ai.local.jsonDialect" },
           meta: { dialect: "none", httpStatus: res.status },
@@ -279,9 +253,9 @@ export class LocalOpenAICompatibleClient implements AIProvider {
     if (
       params.responseFormat === "json" &&
       jsonDialect === "response_format" &&
-      !jsonDialectByBaseUrl.has(this.config.baseUrl)
+      !hasLearnedJsonModeDialect(this.config.baseUrl)
     ) {
-      jsonDialectByBaseUrl.set(this.config.baseUrl, "response_format");
+      rememberJsonModeDialect(this.config.baseUrl, "response_format");
       annotate({
         action: { name: "ai.local.jsonDialect" },
         meta: { dialect: "response_format" },

@@ -102,8 +102,13 @@ export type InsightResult = z.infer<typeof insightResultSchema>;
 
 // ─── Provider Types ────────────────────────────────────────
 
+// v1.33.1 (#470) — `openai-compatible` is the user-configured gateway
+// (LiteLLM / OpenRouter / vLLM). It runs the OpenAI client against a base URL
+// the user owns, so it is a distinct runtime tag from `admin-key`: logs,
+// analytics and the budget classifier must be able to tell "the operator's
+// OpenAI key" from "an endpoint someone pointed us at".
 export type ProviderType =
-  "codex" | "admin-key" | "anthropic" | "local" | "none";
+  "codex" | "admin-key" | "openai-compatible" | "anthropic" | "local" | "none";
 
 export interface AIProvider {
   type: ProviderType;

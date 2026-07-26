@@ -1,6 +1,14 @@
 import { safeFetch } from "@/lib/safe-fetch";
+import { annotate } from "@/lib/logging/context";
 import type { AIProvider, CompletionParams, CompletionResult } from "./types";
 import { selectOpenAIChatCompletionsCapabilities } from "./openai-capabilities";
+import {
+  hasLearnedJsonModeDialect,
+  isResponseFormatRejection,
+  jsonModeDialectFor,
+  rememberJsonModeDialect,
+} from "./json-dialect";
+import { requirePublicHostFor } from "./local-host-allowlist";
 import {
   buildOpenAIMessages,
   buildOpenAITools,
@@ -11,6 +19,11 @@ import {
 } from "./openai-wire";
 
 interface OpenAIClientConfig {
+  /**
+   * Bearer credential. Empty string means "no bearer" — only the
+   * `openai-compatible` tag ever constructs that way (a LAN gateway with no
+   * auth); every OpenAI-keyed call site checks the key's presence first.
+   */
   apiKey: string;
   model: string;
   baseUrl: string;
@@ -20,11 +33,18 @@ interface OpenAIClientConfig {
    * was obtained via the token-exchange grant against a ChatGPT
    * subscription — for billing and observability we want that path
    * to log as "codex" instead.
+   *
+   * v1.33.1 (#470) — `openai-compatible` is the user-configured gateway
+   * (LiteLLM / OpenRouter / vLLM). It is the ONLY tag whose `baseUrl` is not
+   * a HealthLog-pinned constant, and the two behaviours below hang off it:
+   * the operator's private-host allowlist may apply, and the JSON-mode
+   * dialect is learned per endpoint instead of assumed. Every other tag
+   * keeps the pinned `api.openai.com` posture unchanged.
    */
-  providerType?: "admin-key" | "codex";
+  providerType?: OpenAIProviderType;
 }
 
-type OpenAIProviderType = "admin-key" | "codex";
+type OpenAIProviderType = "admin-key" | "codex" | "openai-compatible";
 
 export class OpenAIClient implements AIProvider {
   readonly type: OpenAIProviderType;
@@ -33,6 +53,15 @@ export class OpenAIClient implements AIProvider {
   constructor(config: OpenAIClientConfig) {
     this.config = config;
     this.type = config.providerType ?? "admin-key";
+  }
+
+  /**
+   * True only for the user-configured gateway. Read it as "the base URL came
+   * from a person, not from this repository" — every behaviour that must not
+   * change for `api.openai.com` is gated on it.
+   */
+  private get isGateway(): boolean {
+    return this.type === "openai-compatible";
   }
 
   async generateCompletion(
@@ -61,6 +90,14 @@ export class OpenAIClient implements AIProvider {
     // therefore stay out of JSON mode, and every tool round is non-JSON by
     // construction. Insight/extraction callers opt in with `responseFormat:"json"`.
     const useJsonFormat = params.responseFormat === "json" && !hasTools;
+    // v1.33.1 (#470) — a gateway may reject the standard `response_format`
+    // field. Learn that per endpoint (shared cache with the Local client) and
+    // retry once without the flag below. `api.openai.com` defines the field,
+    // so the pinned tags never consult the dialect and never retry.
+    const jsonDialect = this.isGateway
+      ? jsonModeDialectFor(this.config.baseUrl)
+      : "response_format";
+    const sendJsonFormat = useJsonFormat && jsonDialect === "response_format";
     const capabilities = selectOpenAIChatCompletionsCapabilities(
       this.config.baseUrl,
       this.config.model,
@@ -74,19 +111,27 @@ export class OpenAIClient implements AIProvider {
         }
       : { [capabilities.tokenBudgetField]: tokenBudget };
 
+    // A gateway that needs no bearer (a LAN LiteLLM without a master key)
+    // gets no `Authorization` header at all rather than an empty one — an
+    // empty bearer is a 401 on some proxies. Every OpenAI-keyed construction
+    // site checks the key's presence, so this branch is gateway-only in
+    // practice.
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    const trimmedKey = this.config.apiKey?.trim();
+    if (trimmedKey) headers.Authorization = `Bearer ${trimmedKey}`;
+
     const res = await safeFetch(
       url,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.config.apiKey}`,
-        },
+        headers,
         body: JSON.stringify({
           model: this.config.model,
           messages,
           ...capabilityParams,
-          ...(useJsonFormat
+          ...(sendJsonFormat
             ? { response_format: { type: "json_object" } }
             : {}),
           ...(tools ? { tools } : {}),
@@ -101,9 +146,16 @@ export class OpenAIClient implements AIProvider {
       // v1.20.1 — compose the caller's cancel signal (Coach SSE disconnect) so
       // a mid-generation abort tears the upstream call down early.
       // v1.21.5 — honour the caller's per-request timeout override; default 60 s.
+      // v1.33.1 (#470) — the gateway tag reuses the Local provider's host
+      // policy verbatim: public hosts always; a private host only when the
+      // operator allowlisted it via ALLOW_LOCAL_AI_PRIVATE_HOSTS. Every other
+      // tag stays pinned to `requirePublicHost: true` — `api.openai.com` is
+      // public and there is nothing to opt into.
       {
         timeoutMs: params.timeoutMs ?? 60_000,
-        requirePublicHost: true,
+        requirePublicHost: this.isGateway
+          ? requirePublicHostFor(this.config.baseUrl)
+          : true,
         signal: params.signal,
       },
     );
@@ -118,17 +170,52 @@ export class OpenAIClient implements AIProvider {
         .slice(0, 500)
         .replace(/sk-[A-Za-z0-9_-]{8,}/g, "sk-***redacted***")
         .replace(/Bearer\s+[A-Za-z0-9_.-]+/gi, "Bearer ***redacted***");
-      const err = new Error(`OpenAI request failed (${res.status})`);
+      // v1.33.1 (#470) — dialect self-heal, gateway only. A 4xx whose body
+      // names `response_format` (or an unknown parameter) means this endpoint
+      // rejects the standard JSON flag: learn the no-flag dialect for the base
+      // URL and retry ONCE without it. The recursion terminates because the
+      // cached dialect is now "none". Unrelated 4xx/5xx errors are not retried
+      // and surface as the structured error they always were.
+      if (
+        this.isGateway &&
+        sendJsonFormat &&
+        isResponseFormatRejection(res.status, bodyExcerpt)
+      ) {
+        rememberJsonModeDialect(this.config.baseUrl, "none");
+        annotate({
+          action: { name: "ai.compat.jsonDialect" },
+          meta: { dialect: "none", httpStatus: res.status },
+        });
+        return this.generateCompletion(params);
+      }
+      const err = new Error(
+        `${this.isGateway ? "OpenAI-compatible gateway" : "OpenAI"} request failed (${res.status})`,
+      );
       // Keep the body in a structured field rather than the message so
       // Error.message stays short and the excerpt lands in dedicated log
       // fields (bodyExcerpt) that can be filtered/truncated centrally.
       Object.assign(err, {
         httpStatus: res.status,
-        upstream: "openai",
+        upstream: this.isGateway ? "openai-compatible" : "openai",
         model: this.config.model,
         bodyExcerpt,
       });
       throw err;
+    }
+
+    // v1.33.1 (#470) — the standard `response_format` request succeeded: pin
+    // the dialect for this endpoint so a later transient 4xx can never
+    // silently degrade it.
+    if (
+      this.isGateway &&
+      sendJsonFormat &&
+      !hasLearnedJsonModeDialect(this.config.baseUrl)
+    ) {
+      rememberJsonModeDialect(this.config.baseUrl, "response_format");
+      annotate({
+        action: { name: "ai.compat.jsonDialect" },
+        meta: { dialect: "response_format" },
+      });
     }
 
     const json = (await res.json()) as OpenAIResponseJson;
@@ -163,11 +250,13 @@ export class OpenAIClient implements AIProvider {
       // observability. The cascade is unchanged: `isHardProviderFailure`
       // already treats `status <= 0` as a hard failure and walks to the next
       // provider.
-      const err = new Error("OpenAI returned empty content");
+      const err = new Error(
+        `${this.isGateway ? "OpenAI-compatible gateway" : "OpenAI"} returned empty content`,
+      );
       Object.assign(err, {
         httpStatus: 0,
         kind: "empty_response",
-        upstream: "openai",
+        upstream: this.isGateway ? "openai-compatible" : "openai",
       });
       throw err;
     }
