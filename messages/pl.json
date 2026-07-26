@@ -2026,6 +2026,14 @@
     "loadErrorTitle": "Nie udało się załadować wykresu",
     "loadErrorReload": "Załaduj ponownie",
     "sparseDataCaption": "Więcej dni dopełni trend.",
+    "dataTable": {
+      "toggle": "Punkty danych ({count})",
+      "columnDate": "Data",
+      "noValue": "Brak wartości",
+      "captionDay": "Jeden wiersz na dzień dla {metric} — dokładnie te punkty, które rysuje wykres.",
+      "captionWeek": "Jeden wiersz na tydzień dla {metric}, średnia z dni tego tygodnia — dokładnie te punkty, które rysuje wykres.",
+      "captionMonth": "Jeden wiersz na miesiąc dla {metric}, średnia z dni tego miesiąca — dokładnie te punkty, które rysuje wykres."
+    },
     "personalBaseline": "Twoja średnia",
     "deltaVsBaseline": "{delta} vs. twoja średnia",
     "deltaUnchanged": "odpowiada twojej średniej",

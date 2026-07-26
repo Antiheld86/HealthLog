@@ -2026,6 +2026,14 @@
     "loadErrorTitle": "Impossibile caricare il grafico",
     "loadErrorReload": "Ricarica",
     "sparseDataCaption": "Più giorni completeranno il trend.",
+    "dataTable": {
+      "toggle": "Punti dati ({count})",
+      "columnDate": "Data",
+      "noValue": "Nessun valore",
+      "captionDay": "Una riga per giorno di {metric}: gli stessi punti disegnati dal grafico.",
+      "captionWeek": "Una riga per settimana di {metric}, la media dei giorni di quella settimana: gli stessi punti disegnati dal grafico.",
+      "captionMonth": "Una riga per mese di {metric}, la media dei giorni di quel mese: gli stessi punti disegnati dal grafico."
+    },
     "personalBaseline": "La tua media",
     "deltaVsBaseline": "{delta} vs. la tua media",
     "deltaUnchanged": "corrisponde alla tua media",

@@ -54,6 +54,7 @@ import type {
 import { CUMULATIVE_HK_TYPES } from "@/lib/measurements/apple-health-mapping";
 import type { MeasurementType } from "@/generated/prisma/client";
 import { ChartOverlayControls } from "./chart-overlay-controls";
+import { ChartDataTable, type ChartDataTableColumn } from "./chart-data-table";
 import { useChartOverlayPrefs } from "@/hooks/use-chart-overlay-prefs";
 import { useViewportWidth } from "@/hooks/use-viewport-width";
 import { computeTickPositions } from "@/lib/charts/x-axis-density";
@@ -290,6 +291,14 @@ interface HealthChartProps {
    * days). Omitted on self-fetching mounts.
    */
   preloadedCoverageDays?: number;
+  /**
+   * Render the drawn points as a table beneath the chart, behind a
+   * collapsed disclosure. Opt-in: the metric sub-pages want it (a chart
+   * shows the shape and hides the numbers, and an appointment needs the
+   * numbers), the dashboard tiles do not — a table under every tile would
+   * bury the dashboard it is meant to summarise.
+   */
+  showDataTable?: boolean;
 }
 
 interface ChartDataPoint {
@@ -601,6 +610,7 @@ export function HealthChart({
   onDataReady,
   preloadedSeries,
   preloadedCoverageDays,
+  showDataTable = false,
 }: HealthChartProps) {
   const { isAuthenticated, user } = useAuth();
   const { t, locale } = useTranslations();
@@ -1082,16 +1092,19 @@ export function HealthChart({
     onDataReadyRef.current?.();
   }, [isLoading]);
 
-  const chartData = useMemo(() => {
-    if (!data?.length) return data;
-
+  // v1.4.6: aggregate to weekly / monthly when the visible range is
+  // long enough that drawing every daily point would clutter the
+  // chart. Picking the bucket from the *visible* range, not the
+  // total dataset, so a "30 days" toggle still shows daily even on
+  // a five-year-old account.
+  //
+  // Held in its own memo so the grain has ONE source. `chartData` bucket
+  // by it, and the data table below the chart captions its rows with it —
+  // a table that said "daily" over a weekly mean would be a lie, and
+  // recomputing the decision separately is how that lie starts.
+  const visibleSlice = useMemo(() => {
+    if (!data?.length) return null;
     const sliced = rangePoints > 0 ? data.slice(-rangePoints) : [...data];
-
-    // v1.4.6: aggregate to weekly / monthly when the visible range is
-    // long enough that drawing every daily point would clutter the
-    // chart. Picking the bucket from the *visible* range, not the
-    // total dataset, so a "30 days" toggle still shows daily even on
-    // a five-year-old account.
     const rangeDays =
       sliced.length < 2
         ? 0
@@ -1099,7 +1112,13 @@ export function HealthChart({
             (sliced[sliced.length - 1].timestamp - sliced[0].timestamp) /
               (24 * 60 * 60 * 1000),
           );
-    const bucketType = pickBucket(rangeDays);
+    return { sliced, bucketType: pickBucket(rangeDays) };
+  }, [data, rangePoints]);
+
+  const chartData = useMemo(() => {
+    if (!data?.length || !visibleSlice) return data;
+
+    const { sliced, bucketType } = visibleSlice;
 
     const bucketed =
       bucketType === "day"
@@ -1180,7 +1199,7 @@ export function HealthChart({
     }
 
     return enriched;
-  }, [data, rangePoints, showMA, showTrend, types, tzFmt]);
+  }, [data, visibleSlice, showMA, showTrend, types, tzFmt]);
 
   // v1.12.8 — chart-reactive metric statistics.
   //
@@ -1465,6 +1484,34 @@ export function HealthChart({
     chartData,
     visibleStatsByType,
     fmt,
+  ]);
+
+  // Columns for the data table below the chart: one per series the chart
+  // actually drew a value for, labelled by the SAME helper that names the
+  // Recharts <Line>, so a header and a legend entry can never disagree. A
+  // type with no value anywhere in the visible window gets no column — a
+  // column of dashes states nothing the chart's own empty line does not.
+  const dataTableColumns = useMemo<ChartDataTableColumn[]>(() => {
+    if (!showDataTable || mini) return [];
+    const source = chartDataWithCompare ?? chartData;
+    if (!source?.length) return [];
+    return types
+      .filter((type) =>
+        source.some(
+          (point) =>
+            typeof point[type] === "number" &&
+            Number.isFinite(point[type] as number),
+        ),
+      )
+      .map((type) => ({ key: type, label: getTypeLabel(type, valueMode, t) }));
+  }, [
+    showDataTable,
+    mini,
+    chartDataWithCompare,
+    chartData,
+    types,
+    valueMode,
+    t,
   ]);
 
   const trendInfo = useMemo(() => {
@@ -1791,213 +1838,215 @@ export function HealthChart({
           description={t("charts.noDataInRangeDescription")}
         />
       ) : (
-        <div className={`relative ${chartHeightClass}`}>
-          {visibleBands.length > 0 ? (
-            // v1.4.27 R3d MB2 — band overlay positioning fix. The
-            // overlay used to inset `right: 18px` while the chart
-            // margin is `right: 8`, so the band rectangle drifted left
-            // of the plotted line by 10 px on every viewport. Pin the
-            // overlay to the same right edge the ComposedChart uses so
-            // the band tracks the line exactly.
-            <div
-              className="pointer-events-none absolute"
-              style={{
-                left: `${8 + yAxisWidth}px`,
-                right: "8px",
-                top: "10px",
-                bottom: "32px",
-                zIndex: 0,
-              }}
-            >
-              {visibleBands.map((band) => (
-                <div
-                  key={band.key}
-                  className="absolute right-0 left-0"
-                  style={{
-                    top: `${band.topPct}%`,
-                    height: `${band.heightPct}%`,
-                    backgroundColor: band.color,
-                    opacity: band.opacity,
-                    borderTop: `1px solid ${band.color}`,
-                    borderBottom: `1px solid ${band.color}`,
-                  }}
-                />
-              ))}
-            </div>
-          ) : null}
-
-          <div
-            className="relative z-10 h-full touch-pan-y"
-            role="img"
-            aria-label={chartAriaLabel}
-          >
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart
-                data={chartDataWithCompare ?? chartData}
-                margin={{ top: 10, right: 8, bottom: 8, left: 8 }}
-                accessibilityLayer
+        <>
+          <div className={`relative ${chartHeightClass}`}>
+            {visibleBands.length > 0 ? (
+              // v1.4.27 R3d MB2 — band overlay positioning fix. The
+              // overlay used to inset `right: 18px` while the chart
+              // margin is `right: 8`, so the band rectangle drifted left
+              // of the plotted line by 10 px on every viewport. Pin the
+              // overlay to the same right edge the ComposedChart uses so
+              // the band tracks the line exactly.
+              <div
+                className="pointer-events-none absolute"
+                style={{
+                  left: `${8 + yAxisWidth}px`,
+                  right: "8px",
+                  top: "10px",
+                  bottom: "32px",
+                  zIndex: 0,
+                }}
               >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="var(--border)"
-                  opacity={0.5}
-                />
-                <XAxis
-                  type="number"
-                  dataKey="pointIndex"
-                  domain={[0, maxPointIndex]}
-                  allowDecimals={false}
-                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(value) =>
-                    tzFmt.date(
-                      new Date(
-                        chartData?.[Math.round(value)]?.timestamp ?? Date.now(),
-                      ),
-                    )
-                  }
-                  // v1.4.29 — Recharts ignores `interval` on numeric
-                  // axes (`type="number"`). Hand explicit tick
-                  // positions through the `ticks` prop so the legacy
-                  // day-aware density policy stays effective on the
-                  // pulse chart.
-                  ticks={computeTickPositions(chartData ?? [], viewportWidth)}
-                  padding={{ left: 10, right: 10 }}
-                  tickMargin={10}
-                />
-                <YAxis
-                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                  tickLine={false}
-                  axisLine={false}
-                  width={yAxisWidth}
-                  tickMargin={10}
-                  domain={yDomain}
-                  tickFormatter={(value) =>
-                    typeof value === "number"
-                      ? formatAxisValue(
-                          useDecimalAxis ? value : Math.round(value),
-                        )
-                      : String(value)
-                  }
-                  unit={
-                    showYAxisUnit && (yAxisUnit ?? unit)
-                      ? ` ${yAxisUnit ?? unit}`
-                      : undefined
-                  }
-                />
-                {visibleTargetZones.map((zone) => (
-                  <ReferenceArea
-                    key={`${zone.key}-fill`}
-                    x1={0}
-                    x2={maxPointIndex}
-                    y1={zone.low}
-                    y2={zone.high}
-                    fill={zone.color}
-                    fillOpacity={zone.opacity}
-                    strokeOpacity={0}
-                    ifOverflow="discard"
+                {visibleBands.map((band) => (
+                  <div
+                    key={band.key}
+                    className="absolute right-0 left-0"
+                    style={{
+                      top: `${band.topPct}%`,
+                      height: `${band.heightPct}%`,
+                      backgroundColor: band.color,
+                      opacity: band.opacity,
+                      borderTop: `1px solid ${band.color}`,
+                      borderBottom: `1px solid ${band.color}`,
+                    }}
                   />
                 ))}
-                {visibleTargetZones.map((zone) => (
-                  <ReferenceLine
-                    key={`${zone.key}-low`}
-                    y={zone.low}
-                    stroke={zone.color}
-                    strokeDasharray="6 4"
-                    strokeWidth={1.75}
-                    strokeOpacity={zone.lineOpacity}
+              </div>
+            ) : null}
+
+            <div
+              className="relative z-10 h-full touch-pan-y"
+              role="img"
+              aria-label={chartAriaLabel}
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart
+                  data={chartDataWithCompare ?? chartData}
+                  margin={{ top: 10, right: 8, bottom: 8, left: 8 }}
+                  accessibilityLayer
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="var(--border)"
+                    opacity={0.5}
                   />
-                ))}
-                {visibleTargetZones.map((zone) => (
-                  <ReferenceLine
-                    key={`${zone.key}-high`}
-                    y={zone.high}
-                    stroke={zone.color}
-                    strokeDasharray="6 4"
-                    strokeWidth={1.75}
-                    strokeOpacity={zone.lineOpacity}
-                    label={
-                      zone.label
-                        ? {
-                            value: zone.label,
-                            position: "right",
-                            fill: zone.textColor ?? zone.color,
-                            fontSize: 10,
-                          }
+                  <XAxis
+                    type="number"
+                    dataKey="pointIndex"
+                    domain={[0, maxPointIndex]}
+                    allowDecimals={false}
+                    tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) =>
+                      tzFmt.date(
+                        new Date(
+                          chartData?.[Math.round(value)]?.timestamp ??
+                            Date.now(),
+                        ),
+                      )
+                    }
+                    // v1.4.29 — Recharts ignores `interval` on numeric
+                    // axes (`type="number"`). Hand explicit tick
+                    // positions through the `ticks` prop so the legacy
+                    // day-aware density policy stays effective on the
+                    // pulse chart.
+                    ticks={computeTickPositions(chartData ?? [], viewportWidth)}
+                    padding={{ left: 10, right: 10 }}
+                    tickMargin={10}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={yAxisWidth}
+                    tickMargin={10}
+                    domain={yDomain}
+                    tickFormatter={(value) =>
+                      typeof value === "number"
+                        ? formatAxisValue(
+                            useDecimalAxis ? value : Math.round(value),
+                          )
+                        : String(value)
+                    }
+                    unit={
+                      showYAxisUnit && (yAxisUnit ?? unit)
+                        ? ` ${yAxisUnit ?? unit}`
                         : undefined
                     }
                   />
-                ))}
-                {/* v1.4.20 phase B4 — storyboard annotations.
+                  {visibleTargetZones.map((zone) => (
+                    <ReferenceArea
+                      key={`${zone.key}-fill`}
+                      x1={0}
+                      x2={maxPointIndex}
+                      y1={zone.low}
+                      y2={zone.high}
+                      fill={zone.color}
+                      fillOpacity={zone.opacity}
+                      strokeOpacity={0}
+                      ifOverflow="discard"
+                    />
+                  ))}
+                  {visibleTargetZones.map((zone) => (
+                    <ReferenceLine
+                      key={`${zone.key}-low`}
+                      y={zone.low}
+                      stroke={zone.color}
+                      strokeDasharray="6 4"
+                      strokeWidth={1.75}
+                      strokeOpacity={zone.lineOpacity}
+                    />
+                  ))}
+                  {visibleTargetZones.map((zone) => (
+                    <ReferenceLine
+                      key={`${zone.key}-high`}
+                      y={zone.high}
+                      stroke={zone.color}
+                      strokeDasharray="6 4"
+                      strokeWidth={1.75}
+                      strokeOpacity={zone.lineOpacity}
+                      label={
+                        zone.label
+                          ? {
+                              value: zone.label,
+                              position: "right",
+                              fill: zone.textColor ?? zone.color,
+                              fontSize: 10,
+                            }
+                          : undefined
+                      }
+                    />
+                  ))}
+                  {/* v1.4.20 phase B4 — storyboard annotations.
                     Vertical reference lines pinned to a specific
                     visible pointIndex; the label sits above with a
                     short truncation on `<sm` (24 chars) and the full
                     label on >=sm. Annotations off-window silently
                     drop via `ifOverflow="discard"`. */}
-                {annotationPositions.map((annotation, i) => (
-                  <ReferenceLine
-                    key={`storyboard-${i}-${annotation.pointIndex}`}
-                    x={annotation.pointIndex}
-                    stroke={annotation.color}
-                    strokeDasharray="4 4"
-                    strokeWidth={1.25}
-                    strokeOpacity={0.7}
-                    ifOverflow="discard"
-                    label={{
-                      value:
-                        viewportWidth < 640
-                          ? annotation.truncatedLabel
-                          : annotation.label,
-                      position: "insideTopRight",
-                      fill: annotation.color,
-                      fontSize: 10,
-                      fontWeight: 500,
-                    }}
-                  />
-                ))}
-                {/* v1.4.25 W6 — GLP-1 injection-day vertical markers.
+                  {annotationPositions.map((annotation, i) => (
+                    <ReferenceLine
+                      key={`storyboard-${i}-${annotation.pointIndex}`}
+                      x={annotation.pointIndex}
+                      stroke={annotation.color}
+                      strokeDasharray="4 4"
+                      strokeWidth={1.25}
+                      strokeOpacity={0.7}
+                      ifOverflow="discard"
+                      label={{
+                        value:
+                          viewportWidth < 640
+                            ? annotation.truncatedLabel
+                            : annotation.label,
+                        position: "insideTopRight",
+                        fill: annotation.color,
+                        fontSize: 10,
+                        fontWeight: 500,
+                      }}
+                    />
+                  ))}
+                  {/* v1.4.25 W6 — GLP-1 injection-day vertical markers.
                     Thin dashed line + a small filled dot at the x-axis
                     intersection so a row of markers reads as "injection
                     cadence" without crowding the canvas. Optional label
                     rendered only when the caller passed one; the
                     dashboard tile leaves it undefined (the date is
                     redundant — the chart's x-axis already shows it). */}
-                {verticalMarkerPositions.map((marker, i) => (
-                  <ReferenceLine
-                    key={`vmarker-${i}-${marker.pointIndex}`}
-                    x={marker.pointIndex}
-                    stroke={marker.color}
-                    strokeDasharray="3 3"
-                    strokeWidth={1.1}
-                    strokeOpacity={0.55}
-                    ifOverflow="discard"
-                    label={
-                      marker.label
-                        ? {
-                            value: marker.label,
-                            position: "insideTopRight",
-                            fill: marker.color,
-                            fontSize: 10,
-                            fontWeight: 500,
-                          }
-                        : undefined
-                    }
-                  />
-                ))}
-                {yDomain &&
-                  verticalMarkerPositions.map((marker, i) => (
-                    <ReferenceDot
-                      key={`vmarker-dot-${i}-${marker.pointIndex}`}
+                  {verticalMarkerPositions.map((marker, i) => (
+                    <ReferenceLine
+                      key={`vmarker-${i}-${marker.pointIndex}`}
                       x={marker.pointIndex}
-                      y={yDomain[0]}
-                      r={3}
-                      fill={marker.color}
-                      stroke="none"
+                      stroke={marker.color}
+                      strokeDasharray="3 3"
+                      strokeWidth={1.1}
+                      strokeOpacity={0.55}
                       ifOverflow="discard"
+                      label={
+                        marker.label
+                          ? {
+                              value: marker.label,
+                              position: "insideTopRight",
+                              fill: marker.color,
+                              fontSize: 10,
+                              fontWeight: 500,
+                            }
+                          : undefined
+                      }
                     />
                   ))}
-                {/* v1.4.18 — personal-baseline reference line is now
+                  {yDomain &&
+                    verticalMarkerPositions.map((marker, i) => (
+                      <ReferenceDot
+                        key={`vmarker-dot-${i}-${marker.pointIndex}`}
+                        x={marker.pointIndex}
+                        y={yDomain[0]}
+                        r={3}
+                        fill={marker.color}
+                        stroke="none"
+                        ifOverflow="discard"
+                      />
+                    ))}
+                  {/* v1.4.18 — personal-baseline reference line is now
                     opt-in via the Trend toggle. the maintainer rejected the
                     always-on dashed mean line; it now only paints when
                     the user actively shows the trend overlay (matching
@@ -2005,177 +2054,181 @@ export function HealthChart({
                     90-day rolling median per type, faint dashed line,
                     only the first type gets the inline label so
                     multi-type charts don't paint duplicate labels. */}
-                {showTrend &&
-                  types.map((type, i) => {
-                    const baseline = personalBaselines.get(type);
-                    if (baseline == null) return null;
-                    return (
-                      <ReferenceLine
-                        key={`baseline-${type}`}
-                        y={baseline}
-                        stroke={colors[i % colors.length]}
-                        strokeDasharray="2 4"
-                        strokeOpacity={0.4}
-                        strokeWidth={1}
-                        ifOverflow="discard"
-                        label={
-                          i === 0
-                            ? {
-                                value: t("charts.personalBaseline"),
-                                position: "insideTopLeft",
-                                fill: "var(--muted-foreground)",
-                                fontSize: 10,
-                                opacity: 0.7,
-                              }
-                            : undefined
+                  {showTrend &&
+                    types.map((type, i) => {
+                      const baseline = personalBaselines.get(type);
+                      if (baseline == null) return null;
+                      return (
+                        <ReferenceLine
+                          key={`baseline-${type}`}
+                          y={baseline}
+                          stroke={colors[i % colors.length]}
+                          strokeDasharray="2 4"
+                          strokeOpacity={0.4}
+                          strokeWidth={1}
+                          ifOverflow="discard"
+                          label={
+                            i === 0
+                              ? {
+                                  value: t("charts.personalBaseline"),
+                                  position: "insideTopLeft",
+                                  fill: "var(--muted-foreground)",
+                                  fontSize: 10,
+                                  opacity: 0.7,
+                                }
+                              : undefined
+                          }
+                        />
+                      );
+                    })}
+                  <Tooltip
+                    filterNull={false}
+                    cursor={{
+                      stroke: "var(--muted-foreground)",
+                      strokeOpacity: 0.3,
+                      strokeDasharray: "3 3",
+                    }}
+                    content={(props) => {
+                      const {
+                        active,
+                        payload,
+                        label: rechartsLabel,
+                      } = props as unknown as {
+                        active?: boolean;
+                        payload?: Array<{
+                          name?: string;
+                          value?: number;
+                          color?: string;
+                          dataKey?: string;
+                          payload?: ChartDataPoint;
+                        }>;
+                        label?: number;
+                      };
+                      if (!active || !payload?.length) return null;
+                      const ts =
+                        payload[0]?.payload?.timestamp ??
+                        (typeof rechartsLabel === "number"
+                          ? chartData?.[Math.round(rechartsLabel)]?.timestamp
+                          : undefined);
+                      const dateLabel = ts ? tzFmt.date(new Date(ts)) : "";
+                      const rows: RichTooltipRow[] = [];
+                      // Build a quick lookup of compare values for this
+                      // hover-day so the current-period row can attach
+                      // a "vs. last month / year" delta inline. Same-day
+                      // current ↔ compare values come from the SAME
+                      // payload object.
+                      const hoverPoint = payload[0]?.payload as
+                        ChartDataPoint | undefined;
+                      for (const item of payload) {
+                        if (typeof item.value !== "number") continue;
+                        const dataKey = String(item.dataKey ?? "");
+                        // Skip auxiliary lines (`*_ma`, `*_trend`,
+                        // `*_compare`) — the comparison value is rendered
+                        // inline as the delta on the current-period row,
+                        // and ma / trend already appear as dashed overlays
+                        // on the chart itself.
+                        if (
+                          dataKey.endsWith("_ma") ||
+                          dataKey.endsWith("_trend") ||
+                          dataKey.endsWith("_compare")
+                        )
+                          continue;
+                        const baseline = personalBaselines.get(dataKey);
+                        let delta: string | undefined;
+                        // v1.4.16 phase B8 — prefer the comparison delta
+                        // ("Δ −7 vs. last month") over the personal
+                        // baseline delta when comparison is active and we
+                        // have a prior value for this day. Otherwise fall
+                        // back to the existing baseline-delta path.
+                        const compareValue =
+                          effectiveCompareBaseline !== "none" && hoverPoint
+                            ? (hoverPoint[`${dataKey}_compare`] as
+                                number | undefined)
+                            : undefined;
+                        if (
+                          effectiveCompareBaseline !== "none" &&
+                          typeof compareValue === "number" &&
+                          Number.isFinite(compareValue)
+                        ) {
+                          const diff = item.value - compareValue;
+                          if (Math.abs(diff) < 0.05) {
+                            delta = t("charts.deltaUnchanged");
+                          } else {
+                            const sign = diff > 0 ? "+" : "−";
+                            const formatted = `${sign}${fmt.number(
+                              Math.abs(diff),
+                              1,
+                            )}${unit ? ` ${unit}` : ""}`;
+                            delta = t(
+                              effectiveCompareBaseline === "lastMonth"
+                                ? "comparison.deltaVs.lastMonth"
+                                : "comparison.deltaVs.lastYear",
+                            ).replace("{delta}", formatted);
+                          }
+                        } else if (baseline != null) {
+                          const diff = item.value - baseline;
+                          if (Math.abs(diff) < 0.05) {
+                            delta = t("charts.deltaUnchanged");
+                          } else {
+                            const sign = diff > 0 ? "+" : "−";
+                            const formatted = `${sign}${fmt.number(
+                              Math.abs(diff),
+                              1,
+                            )}${unit ? ` ${unit}` : ""}`;
+                            delta = t("charts.deltaVsBaseline").replace(
+                              "{delta}",
+                              formatted,
+                            );
+                          }
                         }
-                      />
-                    );
-                  })}
-                <Tooltip
-                  filterNull={false}
-                  cursor={{
-                    stroke: "var(--muted-foreground)",
-                    strokeOpacity: 0.3,
-                    strokeDasharray: "3 3",
-                  }}
-                  content={(props) => {
-                    const {
-                      active,
-                      payload,
-                      label: rechartsLabel,
-                    } = props as unknown as {
-                      active?: boolean;
-                      payload?: Array<{
-                        name?: string;
-                        value?: number;
-                        color?: string;
-                        dataKey?: string;
-                        payload?: ChartDataPoint;
-                      }>;
-                      label?: number;
-                    };
-                    if (!active || !payload?.length) return null;
-                    const ts =
-                      payload[0]?.payload?.timestamp ??
-                      (typeof rechartsLabel === "number"
-                        ? chartData?.[Math.round(rechartsLabel)]?.timestamp
-                        : undefined);
-                    const dateLabel = ts ? tzFmt.date(new Date(ts)) : "";
-                    const rows: RichTooltipRow[] = [];
-                    // Build a quick lookup of compare values for this
-                    // hover-day so the current-period row can attach
-                    // a "vs. last month / year" delta inline. Same-day
-                    // current ↔ compare values come from the SAME
-                    // payload object.
-                    const hoverPoint = payload[0]?.payload as
-                      ChartDataPoint | undefined;
-                    for (const item of payload) {
-                      if (typeof item.value !== "number") continue;
-                      const dataKey = String(item.dataKey ?? "");
-                      // Skip auxiliary lines (`*_ma`, `*_trend`,
-                      // `*_compare`) — the comparison value is rendered
-                      // inline as the delta on the current-period row,
-                      // and ma / trend already appear as dashed overlays
-                      // on the chart itself.
-                      if (
-                        dataKey.endsWith("_ma") ||
-                        dataKey.endsWith("_trend") ||
-                        dataKey.endsWith("_compare")
-                      )
-                        continue;
-                      const baseline = personalBaselines.get(dataKey);
-                      let delta: string | undefined;
-                      // v1.4.16 phase B8 — prefer the comparison delta
-                      // ("Δ −7 vs. last month") over the personal
-                      // baseline delta when comparison is active and we
-                      // have a prior value for this day. Otherwise fall
-                      // back to the existing baseline-delta path.
-                      const compareValue =
-                        effectiveCompareBaseline !== "none" && hoverPoint
-                          ? (hoverPoint[`${dataKey}_compare`] as
-                              number | undefined)
-                          : undefined;
-                      if (
-                        effectiveCompareBaseline !== "none" &&
-                        typeof compareValue === "number" &&
-                        Number.isFinite(compareValue)
-                      ) {
-                        const diff = item.value - compareValue;
-                        if (Math.abs(diff) < 0.05) {
-                          delta = t("charts.deltaUnchanged");
-                        } else {
-                          const sign = diff > 0 ? "+" : "−";
-                          const formatted = `${sign}${fmt.number(
-                            Math.abs(diff),
-                            1,
-                          )}${unit ? ` ${unit}` : ""}`;
-                          delta = t(
-                            effectiveCompareBaseline === "lastMonth"
-                              ? "comparison.deltaVs.lastMonth"
-                              : "comparison.deltaVs.lastYear",
-                          ).replace("{delta}", formatted);
-                        }
-                      } else if (baseline != null) {
-                        const diff = item.value - baseline;
-                        if (Math.abs(diff) < 0.05) {
-                          delta = t("charts.deltaUnchanged");
-                        } else {
-                          const sign = diff > 0 ? "+" : "−";
-                          const formatted = `${sign}${fmt.number(
-                            Math.abs(diff),
-                            1,
-                          )}${unit ? ` ${unit}` : ""}`;
-                          delta = t("charts.deltaVsBaseline").replace(
-                            "{delta}",
-                            formatted,
-                          );
-                        }
-                      }
-                      rows.push({
-                        name: item.name ?? dataKey,
-                        value: `${formatTooltipValue(item.value)}${
-                          unit ? ` ${unit}` : ""
-                        }`,
-                        color: item.color ?? "var(--dracula-purple)",
-                        delta,
-                      });
-                      // v1.4.16 phase B8 — also surface the prior-period
-                      // value as its own row so the user reads both
-                      // numbers (current AND last-month / last-year)
-                      // alongside the delta.
-                      if (
-                        effectiveCompareBaseline !== "none" &&
-                        typeof compareValue === "number" &&
-                        Number.isFinite(compareValue)
-                      ) {
                         rows.push({
-                          name: `${item.name ?? dataKey} · ${t(
-                            "comparison.tooltipPrior",
-                          )}`,
-                          value: `${formatTooltipValue(compareValue)}${
+                          name: item.name ?? dataKey,
+                          value: `${formatTooltipValue(item.value)}${
                             unit ? ` ${unit}` : ""
                           }`,
                           color: item.color ?? "var(--dracula-purple)",
+                          delta,
                         });
+                        // v1.4.16 phase B8 — also surface the prior-period
+                        // value as its own row so the user reads both
+                        // numbers (current AND last-month / last-year)
+                        // alongside the delta.
+                        if (
+                          effectiveCompareBaseline !== "none" &&
+                          typeof compareValue === "number" &&
+                          Number.isFinite(compareValue)
+                        ) {
+                          rows.push({
+                            name: `${item.name ?? dataKey} · ${t(
+                              "comparison.tooltipPrior",
+                            )}`,
+                            value: `${formatTooltipValue(compareValue)}${
+                              unit ? ` ${unit}` : ""
+                            }`,
+                            color: item.color ?? "var(--dracula-purple)",
+                          });
+                        }
                       }
-                    }
-                    if (rows.length === 0) return null;
-                    return (
-                      <RichChartTooltip active label={dateLabel} rows={rows} />
-                    );
-                  }}
-                />
-                {showContextDetails && (
-                  <Legend
-                    wrapperStyle={{
-                      fontSize: "0.875rem",
-                      fontFamily: "inherit",
-                      fontWeight: "normal",
+                      if (rows.length === 0) return null;
+                      return (
+                        <RichChartTooltip
+                          active
+                          label={dateLabel}
+                          rows={rows}
+                        />
+                      );
                     }}
                   />
-                )}
-                {/* v1.8.5 — min–max range band. An Apple-Health-style
+                  {showContextDetails && (
+                    <Legend
+                      wrapperStyle={{
+                        fontSize: "0.875rem",
+                        fontFamily: "inherit",
+                        fontWeight: "normal",
+                      }}
+                    />
+                  )}
+                  {/* v1.8.5 — min–max range band. An Apple-Health-style
                     shaded area between each day's min and max, painted
                     behind the mean line so it reads as context, not a
                     second series. Gated on `!mini` (the dashboard
@@ -2185,69 +2238,69 @@ export function HealthChart({
                     weight, glucose, BP). The toggle rides the existing
                     target-range pref so the user controls both bands
                     from one switch. */}
-                {!mini &&
-                  showBands &&
-                  types.map((type, i) => (
-                    <Area
-                      key={`${type}__range`}
+                  {!mini &&
+                    showBands &&
+                    types.map((type, i) => (
+                      <Area
+                        key={`${type}__range`}
+                        type="monotone"
+                        dataKey={`${type}__range`}
+                        name={`${getTypeLabel(type, valueMode, t)} (${t("charts.rangeBand")})`}
+                        stroke="none"
+                        fill={colors[i % colors.length]}
+                        fillOpacity={0.12}
+                        connectNulls
+                        isAnimationActive={animationsEnabled}
+                        legendType="none"
+                        tooltipType="none"
+                      />
+                    ))}
+                  {types.map((type, i) => (
+                    <Line
+                      key={type}
                       type="monotone"
-                      dataKey={`${type}__range`}
-                      name={`${getTypeLabel(type, valueMode, t)} (${t("charts.rangeBand")})`}
-                      stroke="none"
-                      fill={colors[i % colors.length]}
-                      fillOpacity={0.12}
+                      dataKey={type}
+                      name={getTypeLabel(type, valueMode, t)}
+                      stroke={colors[i % colors.length]}
+                      strokeWidth={2}
+                      dot={{ r: 3, fill: colors[i % colors.length] }}
+                      activeDot={{ r: 5 }}
                       connectNulls
                       isAnimationActive={animationsEnabled}
-                      legendType="none"
-                      tooltipType="none"
+                      animationDuration={animationsEnabled ? 600 : 0}
+                      animationEasing="ease-out"
                     />
                   ))}
-                {types.map((type, i) => (
-                  <Line
-                    key={type}
-                    type="monotone"
-                    dataKey={type}
-                    name={getTypeLabel(type, valueMode, t)}
-                    stroke={colors[i % colors.length]}
-                    strokeWidth={2}
-                    dot={{ r: 3, fill: colors[i % colors.length] }}
-                    activeDot={{ r: 5 }}
-                    connectNulls
-                    isAnimationActive={animationsEnabled}
-                    animationDuration={animationsEnabled ? 600 : 0}
-                    animationEasing="ease-out"
-                  />
-                ))}
-                {showMA &&
-                  types.map((type, i) => (
-                    <Line
-                      key={`${type}_ma`}
-                      type="monotone"
-                      dataKey={`${type}_ma`}
-                      name={`${getTypeLabel(type, valueMode, t)} (${t("charts.movingAverage7d")})`}
-                      stroke={colors[i % colors.length]}
-                      strokeWidth={1.5}
-                      strokeDasharray="5 5"
-                      strokeOpacity={0.7}
-                      dot={false}
-                      connectNulls
-                    />
-                  ))}
-                {showTrend &&
-                  types.map((type) => (
-                    <Line
-                      key={`${type}_trend`}
-                      type="linear"
-                      dataKey={`${type}_trend`}
-                      name={`${getTypeLabel(type, valueMode, t)} (${t("charts.trend")})`}
-                      stroke="var(--muted-foreground)"
-                      strokeWidth={1}
-                      strokeDasharray="8 4"
-                      dot={false}
-                      connectNulls
-                    />
-                  ))}
-                {/* v1.4.16 phase B8 — comparison overlay.
+                  {showMA &&
+                    types.map((type, i) => (
+                      <Line
+                        key={`${type}_ma`}
+                        type="monotone"
+                        dataKey={`${type}_ma`}
+                        name={`${getTypeLabel(type, valueMode, t)} (${t("charts.movingAverage7d")})`}
+                        stroke={colors[i % colors.length]}
+                        strokeWidth={1.5}
+                        strokeDasharray="5 5"
+                        strokeOpacity={0.7}
+                        dot={false}
+                        connectNulls
+                      />
+                    ))}
+                  {showTrend &&
+                    types.map((type) => (
+                      <Line
+                        key={`${type}_trend`}
+                        type="linear"
+                        dataKey={`${type}_trend`}
+                        name={`${getTypeLabel(type, valueMode, t)} (${t("charts.trend")})`}
+                        stroke="var(--muted-foreground)"
+                        strokeWidth={1}
+                        strokeDasharray="8 4"
+                        dot={false}
+                        connectNulls
+                      />
+                    ))}
+                  {/* v1.4.16 phase B8 — comparison overlay.
                     A dimmed dashed line per type for the prior period
                     (lastMonth / lastYear), painted BENEATH the current
                     series via Recharts' source-order layering. Same
@@ -2255,48 +2308,66 @@ export function HealthChart({
                     stroke opacity (45%) and a thinner stroke (1.25)
                     so the user reads the current line first and the
                     overlay as orientation. */}
-                {effectiveCompareBaseline !== "none" &&
-                  hasComparisonData &&
-                  types.map((type, i) => (
-                    <Line
-                      key={`${type}_compare`}
-                      type="monotone"
-                      dataKey={`${type}_compare`}
-                      name={`${getTypeLabel(type, valueMode, t)} (${t(
-                        effectiveCompareBaseline === "lastMonth"
-                          ? "comparison.captionLastMonth"
-                          : "comparison.captionLastYear",
-                      )})`}
-                      stroke={colors[i % colors.length]}
-                      strokeWidth={1.25}
-                      strokeDasharray="4 3"
-                      strokeOpacity={0.45}
-                      dot={false}
-                      connectNulls
-                      isAnimationActive={animationsEnabled}
-                      animationDuration={animationsEnabled ? 600 : 0}
-                      animationEasing="ease-out"
-                      legendType="none"
-                      data-slot={`chart-compare-line-${type}`}
-                    />
-                  ))}
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-          {/* Sparse-data caption. With fewer than three daily points the
+                  {effectiveCompareBaseline !== "none" &&
+                    hasComparisonData &&
+                    types.map((type, i) => (
+                      <Line
+                        key={`${type}_compare`}
+                        type="monotone"
+                        dataKey={`${type}_compare`}
+                        name={`${getTypeLabel(type, valueMode, t)} (${t(
+                          effectiveCompareBaseline === "lastMonth"
+                            ? "comparison.captionLastMonth"
+                            : "comparison.captionLastYear",
+                        )})`}
+                        stroke={colors[i % colors.length]}
+                        strokeWidth={1.25}
+                        strokeDasharray="4 3"
+                        strokeOpacity={0.45}
+                        dot={false}
+                        connectNulls
+                        isAnimationActive={animationsEnabled}
+                        animationDuration={animationsEnabled ? 600 : 0}
+                        animationEasing="ease-out"
+                        legendType="none"
+                        data-slot={`chart-compare-line-${type}`}
+                      />
+                    ))}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+            {/* Sparse-data caption. With fewer than three daily points the
               chart still paints every reading (a single marker for one
               day, a line for two), and this subtle note sets the
               expectation that more days fill out the trend — rather than
               withholding the data behind a placeholder card. */}
-          {!mini && (chartData?.length ?? 0) < 3 ? (
-            <p
-              className="text-muted-foreground mt-2 text-center text-xs"
-              data-slot="chart-sparse-caption"
-            >
-              {t("charts.sparseDataCaption")}
-            </p>
+            {!mini && (chartData?.length ?? 0) < 3 ? (
+              <p
+                className="text-muted-foreground mt-2 text-center text-xs"
+                data-slot="chart-sparse-caption"
+              >
+                {t("charts.sparseDataCaption")}
+              </p>
+            ) : null}
+          </div>
+          {/* The points the chart just drew, as a table. Reads the SAME
+              expression `<ComposedChart data>` is handed above, so the two
+              cannot disagree. Sits inside this branch on purpose: an empty
+              window paints the empty state and no table at all, because
+              `<ChartEmptyState>` already says there is nothing here and a
+              disclosure opening onto nothing would say it twice. */}
+          {showDataTable && !mini && dataTableColumns.length > 0 ? (
+            <ChartDataTable
+              points={chartDataWithCompare ?? chartData ?? []}
+              columns={dataTableColumns}
+              unit={unit}
+              formatValue={formatTooltipValue}
+              formatDate={tzFmt.date}
+              bucket={visibleSlice?.bucketType ?? "day"}
+              metricLabel={getTypeLabel(primaryType, valueMode, t)}
+            />
           ) : null}
-        </div>
+        </>
       )}
     </div>
   );

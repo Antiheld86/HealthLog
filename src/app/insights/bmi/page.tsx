@@ -123,6 +123,7 @@ export default function InsightsBmiPage() {
         valueBands={BMI_BANDS}
         compareBaseline={compareBaseline}
         userTimezone={user?.timezone}
+        showDataTable
       />
 
       <MetricTargetSummary slug="bmi" />

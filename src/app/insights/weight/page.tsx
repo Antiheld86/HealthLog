@@ -162,6 +162,7 @@ export default function InsightsGewichtPage() {
         userTimezone={user?.timezone}
         valueScale={weightScale}
         onVisibleStats={onVisibleStats}
+        showDataTable
       />
 
       <MetricTargetSummary slug="weight" />
