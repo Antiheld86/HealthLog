@@ -16,6 +16,9 @@ import { bucketTimeSeries } from "../bucket-time-series";
 import { makeBucketLabelFormatters } from "../bucket-label";
 import { makeFormatters } from "@/lib/format-locale";
 
+// Berlin was the module's hard-coded calendar, so these expectations were
+// always Berlin's. Naming it here keeps that visible now it is a parameter.
+const BERLIN = "Europe/Berlin";
 describe("makeBucketLabelFormatters (#490)", () => {
   // Two July instants (Berlin summer) forced into a month bucket.
   const monthBucket = bucketTimeSeries(
@@ -23,7 +26,7 @@ describe("makeBucketLabelFormatters (#490)", () => {
       { timestamp: new Date("2026-07-05T10:00:00Z"), values: { WEIGHT: 80 } },
       { timestamp: new Date("2026-07-20T10:00:00Z"), values: { WEIGHT: 82 } },
     ],
-    { bucket: "month" },
+    { bucket: "month", timeZone: BERLIN },
   );
 
   it("labels a Berlin July month bucket as July for every profile", () => {
@@ -65,7 +68,7 @@ describe("makeBucketLabelFormatters (#490)", () => {
           values: { WEIGHT: 80 },
         },
       ],
-      { bucket: "week" },
+      { bucket: "week", timeZone: BERLIN },
     );
     const ts = weekBucket.points[0].timestamp;
     expect(ts).toBe(Date.UTC(2026, 6, 13));

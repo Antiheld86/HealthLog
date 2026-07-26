@@ -35,35 +35,45 @@ export interface BucketedChartSeries {
   points: ChartBucketPoint[];
 }
 
-const BERLIN_TZ = "Europe/Berlin";
-
-const BERLIN_FMT = new Intl.DateTimeFormat("en-US", {
-  timeZone: BERLIN_TZ,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-interface BerlinYmd {
+/**
+ * One formatter per timezone. Building an `Intl.DateTimeFormat` is expensive
+ * enough that doing it per point matters on a two-year monthly chart.
+ */
+const ymdFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function ymdFormatter(timeZone: string): Intl.DateTimeFormat {
+  const cached = ymdFormatters.get(timeZone);
+  if (cached) return cached;
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  ymdFormatters.set(timeZone, fmt);
+  return fmt;
+}
+
+interface ZonedYmd {
   year: number;
   month: number;
   day: number;
 }
 
-function toBerlinYmd(date: Date): BerlinYmd {
-  const parts = BERLIN_FMT.formatToParts(date);
+function toZonedYmd(date: Date, timeZone: string): ZonedYmd {
+  const parts = ymdFormatter(timeZone).formatToParts(date);
   const year = Number(parts.find((p) => p.type === "year")?.value);
   const month = Number(parts.find((p) => p.type === "month")?.value);
   const day = Number(parts.find((p) => p.type === "day")?.value);
   if (!year || !month || !day) {
-    throw new Error("Could not derive Berlin Y-M-D");
+    throw new Error(`Could not derive Y-M-D in ${timeZone}`);
   }
   return { year, month, day };
 }
 
-function utcMidnight({ year, month, day }: BerlinYmd): number {
+function utcMidnight({ year, month, day }: ZonedYmd): number {
   return Date.UTC(year, month - 1, day);
 }
 
@@ -72,21 +82,21 @@ function utcMidnight({ year, month, day }: BerlinYmd): number {
  * containing the first Thursday of that year. Returns the UTC
  * midnight of the Monday of the week containing `date`.
  */
-function isoWeekStartUtc(date: Date): number {
-  const ymd = toBerlinYmd(date);
+function isoWeekStartUtc(date: Date, timeZone: string): number {
+  const ymd = toZonedYmd(date, timeZone);
   const utc = utcMidnight(ymd);
   // Day of week, 1=Mon..7=Sun (ISO).
   const dow = ((new Date(utc).getUTCDay() + 6) % 7) + 1;
   return utc - (dow - 1) * MS_PER_DAY;
 }
 
-function monthStartUtc(date: Date): number {
-  const { year, month } = toBerlinYmd(date);
+function monthStartUtc(date: Date, timeZone: string): number {
+  const { year, month } = toZonedYmd(date, timeZone);
   return Date.UTC(year, month - 1, 1);
 }
 
-function dayStartUtc(date: Date): number {
-  return utcMidnight(toBerlinYmd(date));
+function dayStartUtc(date: Date, timeZone: string): number {
+  return utcMidnight(toZonedYmd(date, timeZone));
 }
 
 export interface BucketInputPoint {
@@ -103,6 +113,16 @@ export interface BucketInputPoint {
 export interface BucketTimeSeriesOptions {
   /** Override the bucketer when the caller already knows it. */
   bucket?: ChartBucketType;
+  /**
+   * The calendar the day / week / month boundaries are drawn in.
+   *
+   * Deliberately required rather than defaulted. This module used to hard-code
+   * Europe/Berlin, which meant a reading late on the last evening of a month
+   * fell into the wrong month's bar for anyone who does not live there — and a
+   * default would have left every caller that forgets to pass one still wrong,
+   * silently. Required turns that into a compile error instead.
+   */
+  timeZone: string;
 }
 
 /**
@@ -116,14 +136,15 @@ export function pickBucket(rangeDays: number): ChartBucketType {
 
 /**
  * Bucket a daily-aggregated chart series into day/week/month groups.
- * Weeks use ISO 8601 (Monday start); months use Berlin calendar.
- * Empty buckets are skipped so a sparse user does not get a flat zero
- * baseline.
+ * Weeks use ISO 8601 (Monday start); every boundary is drawn in the caller's
+ * `timeZone`. Empty buckets are skipped so a sparse user does not get a flat
+ * zero baseline.
  */
 export function bucketTimeSeries(
   points: BucketInputPoint[],
-  options: BucketTimeSeriesOptions = {},
+  options: BucketTimeSeriesOptions,
 ): BucketedChartSeries {
+  const { timeZone } = options;
   const sorted = [...points].sort(
     (a, b) => toMs(a.timestamp) - toMs(b.timestamp),
   );
@@ -144,14 +165,18 @@ export function bucketTimeSeries(
     // Day-granularity is the upstream's native shape, but we still go
     // through aggregation so the output shape is consistent and so
     // duplicate-day callers (raw API mode) collapse cleanly.
-    return aggregate(sorted, bucket, (ts) => dayStartUtc(new Date(toMs(ts))));
+    return aggregate(sorted, bucket, (ts) =>
+      dayStartUtc(new Date(toMs(ts)), timeZone),
+    );
   }
   if (bucket === "week") {
     return aggregate(sorted, bucket, (ts) =>
-      isoWeekStartUtc(new Date(toMs(ts))),
+      isoWeekStartUtc(new Date(toMs(ts)), timeZone),
     );
   }
-  return aggregate(sorted, bucket, (ts) => monthStartUtc(new Date(toMs(ts))));
+  return aggregate(sorted, bucket, (ts) =>
+    monthStartUtc(new Date(toMs(ts)), timeZone),
+  );
 }
 
 function toMs(ts: number | Date): number {

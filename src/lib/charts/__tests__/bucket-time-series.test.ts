@@ -30,12 +30,73 @@ describe("pickBucket()", () => {
   });
 });
 
+// These expectations were always Berlin's — the module used to hard-code it,
+// so the tests read as timezone-agnostic while quietly depending on one. Now
+// that the boundary calendar is a parameter, the assumption is written down
+// rather than implied.
+const BERLIN = "Europe/Berlin";
+
+describe("the boundary calendar is the caller's, not Berlin's", () => {
+  // 2025-03-31T16:00Z is 18:00 on 31 March in Berlin (UTC+2, summer time is
+  // already in force) and 01:00 on 1 April in Tokyo (UTC+9). Which month bar
+  // this reading lands in is decided by the calendar the caller names, and
+  // until now the caller could not name one: every chart bucketed everyone's
+  // readings into Berlin's months.
+  const lateEvening = new Date("2025-03-31T16:00:00Z");
+  const points = [{ timestamp: lateEvening, values: { v: 1 } }];
+
+  it("puts a late-evening reading in March for Berlin", () => {
+    const out = bucketTimeSeries(points, {
+      bucket: "month",
+      timeZone: "Europe/Berlin",
+    });
+    expect(new Date(out.points[0].timestamp).toISOString()).toBe(
+      "2025-03-01T00:00:00.000Z",
+    );
+  });
+
+  it("puts the same instant in April for Tokyo", () => {
+    const out = bucketTimeSeries(points, {
+      bucket: "month",
+      timeZone: "Asia/Tokyo",
+    });
+    expect(new Date(out.points[0].timestamp).toISOString()).toBe(
+      "2025-04-01T00:00:00.000Z",
+    );
+  });
+
+  it("moves the ISO week too, not only the month", () => {
+    // A separate instant, because the month fixture above does not serve
+    // here: 31 March 2025 is a Monday in Berlin and 1 April a Tuesday in
+    // Tokyo, which is the SAME ISO week. The week boundary only moves when
+    // one side is still Sunday while the other is already Monday.
+    // 2025-03-30T16:00Z is Sunday 18:00 in Berlin and Monday 01:00 in Tokyo.
+    const sundayEvening = [
+      { timestamp: new Date("2025-03-30T16:00:00Z"), values: { v: 1 } },
+    ];
+    const berlin = bucketTimeSeries(sundayEvening, {
+      bucket: "week",
+      timeZone: "Europe/Berlin",
+    });
+    const tokyo = bucketTimeSeries(sundayEvening, {
+      bucket: "week",
+      timeZone: "Asia/Tokyo",
+    });
+    expect(new Date(berlin.points[0].timestamp).toISOString()).toBe(
+      "2025-03-24T00:00:00.000Z",
+    );
+    expect(new Date(tokyo.points[0].timestamp).toISOString()).toBe(
+      "2025-03-31T00:00:00.000Z",
+    );
+  });
+});
+
 describe("bucketTimeSeries()", () => {
   const start = new Date("2025-01-06T00:00:00Z"); // Monday
 
   it("preserves daily granularity for ranges <= 90 days", () => {
     const points = [0, 1, 2, 30, 89].map((d) => dailyAt(start, d, 80 + d));
-    const result = bucketTimeSeries(points);
+    const result = bucketTimeSeries(points, { timeZone: BERLIN });
     expect(result.bucket).toBe("day");
     expect(result.points).toHaveLength(5);
   });
@@ -45,7 +106,7 @@ describe("bucketTimeSeries()", () => {
     const points = Array.from({ length: 200 }, (_, i) =>
       dailyAt(start, i, 80 + (i % 5)),
     );
-    const result = bucketTimeSeries(points);
+    const result = bucketTimeSeries(points, { timeZone: BERLIN });
     expect(result.bucket).toBe("week");
     // 200 / 7 ≈ 28.5 — first/last weeks may be partial → 29 distinct keys.
     expect(result.points.length).toBeGreaterThanOrEqual(28);
@@ -61,7 +122,7 @@ describe("bucketTimeSeries()", () => {
     const points = Array.from({ length: 800 }, (_, i) =>
       dailyAt(start, i, 100),
     );
-    const result = bucketTimeSeries(points);
+    const result = bucketTimeSeries(points, { timeZone: BERLIN });
     expect(result.bucket).toBe("month");
     // ~26 calendar months
     expect(result.points.length).toBeGreaterThanOrEqual(25);
@@ -79,7 +140,10 @@ describe("bucketTimeSeries()", () => {
       { timestamp: start.getTime(), values: { weight: 80 } },
       { timestamp: start.getTime() + 200 * dayMs, values: { weight: 90 } },
     ];
-    const result = bucketTimeSeries(points, { bucket: "week" });
+    const result = bucketTimeSeries(points, {
+      bucket: "week",
+      timeZone: BERLIN,
+    });
     expect(result.points).toHaveLength(2);
     expect(result.points.map((p) => p.values.weight)).toEqual([80, 90]);
   });
@@ -90,7 +154,10 @@ describe("bucketTimeSeries()", () => {
       { timestamp: start.getTime() + dayMs, values: { sys: 140 } }, // dia missing
       { timestamp: start.getTime() + 2 * dayMs, values: { dia: 78 } }, // sys missing
     ];
-    const result = bucketTimeSeries(points, { bucket: "week" });
+    const result = bucketTimeSeries(points, {
+      bucket: "week",
+      timeZone: BERLIN,
+    });
     expect(result.points).toHaveLength(1);
     const point = result.points[0];
     expect(point.counts.sys).toBe(2);
@@ -101,7 +168,10 @@ describe("bucketTimeSeries()", () => {
 
   it("respects the explicit bucket override", () => {
     const points = [0, 1, 2].map((d) => dailyAt(start, d, 80));
-    const result = bucketTimeSeries(points, { bucket: "month" });
+    const result = bucketTimeSeries(points, {
+      bucket: "month",
+      timeZone: BERLIN,
+    });
     expect(result.bucket).toBe("month");
     expect(result.points).toHaveLength(1);
   });

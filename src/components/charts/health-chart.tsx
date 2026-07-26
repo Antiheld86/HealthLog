@@ -1130,7 +1130,7 @@ export function HealthChart({
                 types.map((type) => [type, p[type] as number | undefined]),
               ),
             })),
-            { bucket: bucketType },
+            { bucket: bucketType, timeZone: userTimezone },
           ).points.map<ChartDataPoint>((point) => {
             const date = new Date(point.timestamp);
             const out: ChartDataPoint = {
@@ -1199,7 +1199,7 @@ export function HealthChart({
     }
 
     return enriched;
-  }, [data, visibleSlice, showMA, showTrend, types, tzFmt]);
+  }, [data, visibleSlice, showMA, showTrend, types, tzFmt, userTimezone]);
 
   // v1.12.8 — chart-reactive metric statistics.
   //
