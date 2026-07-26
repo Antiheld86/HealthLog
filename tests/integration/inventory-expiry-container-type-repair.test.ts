@@ -1,5 +1,5 @@
 /**
- * Integration coverage for `0276_inventory_expiry_container_type_repair`.
+ * Integration coverage for `0279_inventory_expiry_container_type_repair`.
  *
  * The repair reverses the rows the in-use clock wrote off although their
  * container never carried one. A unit test cannot prove it: the predicate is
@@ -26,7 +26,7 @@ import type {
 const REPAIR_SQL = readFileSync(
   resolve(
     process.cwd(),
-    "prisma/migrations/0276_inventory_expiry_container_type_repair/migration.sql",
+    "prisma/migrations/0279_inventory_expiry_container_type_repair/migration.sql",
   ),
   "utf8",
 );
