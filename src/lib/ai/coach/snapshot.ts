@@ -53,6 +53,7 @@ import { resolveModuleMap, type ModuleKey } from "@/lib/modules/gate";
 import { MODULE_SCOPED_SOURCES } from "@/lib/modules/measurement-scope";
 import { SCHEDULE_COMPLIANCE_SELECT } from "@/lib/analytics/compliance";
 import type { BaselineProfile } from "@/lib/insights/derived";
+import { toProfileSex } from "@/lib/profile/sex";
 import {
   CLUSTER_PRIORITY,
   clusterSourcesFromPrefs,
@@ -691,10 +692,7 @@ async function buildCoachSnapshotImpl(
   const derivedCtx = features.context;
   const derivedProfile: BaselineProfile = {
     ageYears: derivedCtx?.ageYears ?? null,
-    sex:
-      derivedCtx?.gender === "MALE" || derivedCtx?.gender === "FEMALE"
-        ? (derivedCtx.gender as "MALE" | "FEMALE")
-        : null,
+    sex: toProfileSex(derivedCtx?.gender),
     heightCm: derivedCtx?.heightCm ?? null,
   };
   // v1.18.0 — the derived block + WHOOP-native dayStrain + trajectory are

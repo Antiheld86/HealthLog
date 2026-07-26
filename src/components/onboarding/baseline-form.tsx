@@ -29,6 +29,7 @@ import { useTranslations } from "@/lib/i18n/context";
 import { apiGet, apiPost, apiPut } from "@/lib/api/api-fetch";
 import { localizedApiError } from "@/lib/api/localized-error";
 import { queryKeys } from "@/lib/query-keys";
+import { toProfileSex } from "@/lib/profile/sex";
 import {
   AnamnesisCard,
   buildAnamnesisAboutMeBody,
@@ -139,13 +140,11 @@ export function BaselineForm() {
         const heightCm = heightAdapter.toCanonicalCm(form.height);
         if (heightCm !== null) profileBody.heightCm = heightCm;
         if (form.dateOfBirth) profileBody.dateOfBirth = form.dateOfBirth;
-        if (
-          form.gender === "MALE" ||
-          form.gender === "FEMALE" ||
-          form.gender === "OTHER"
-        ) {
-          profileBody.gender = form.gender;
-        }
+        // Every value the profile stores travels; the guard drops only the
+        // "prefer not to say" placeholder. It used to list two of the three
+        // by hand, so a third-value answer vanished on submit without a word.
+        const gender = toProfileSex(form.gender);
+        if (gender) profileBody.gender = gender;
         if (Object.keys(profileBody).length > 0) {
           await apiPut("/api/auth/profile", profileBody);
         }
