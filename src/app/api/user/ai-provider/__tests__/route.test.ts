@@ -46,6 +46,8 @@ vi.mock("@/lib/logging/context", () => ({
 import { GET, PATCH } from "../route";
 import { prisma } from "@/lib/db";
 import { resolveProviderAvailability } from "@/lib/ai/provider";
+import { isPublicUrl } from "@/lib/validations/notifications";
+import { isLocalAiHostAllowed } from "@/lib/ai/local-host-allowlist";
 
 function patchRequest(body: unknown): Request {
   return new Request("http://localhost/api/user/ai-provider", {
@@ -190,5 +192,112 @@ describe("PATCH /api/user/ai-provider — v1.22 fields", () => {
         data: expect.objectContaining({ aiResponseTimeoutSeconds: null }),
       }),
     );
+  });
+});
+
+// v1.33.1 (#470) — the OpenAI-compatible gateway writes three columns of its
+// own. What matters at this layer: the SSRF floor applies to the gateway's
+// base URL exactly as it does to the Local one, and the column is nobody
+// else's — switching the active provider away must not hand a stale URL to a
+// key-carrying provider, and must not silently discard the user's gateway
+// either.
+describe("PATCH /api/user/ai-provider — the gateway's own columns (#470)", () => {
+  const patch = PATCH as (req: Request) => Promise<Response>;
+
+  it("persists base URL, model and encrypted key", async () => {
+    vi.mocked(isPublicUrl).mockReturnValue(true);
+    const res = await patch(
+      patchRequest({
+        provider: "OPENAI_COMPATIBLE",
+        compatBaseUrl: "https://litellm.example.com/v1",
+        compatModel: "anthropic/claude-sonnet-4-6",
+        compatKey: "gateway-secret",
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(vi.mocked(prisma.user.update)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          aiProvider: "OPENAI_COMPATIBLE",
+          aiCompatBaseUrl: "https://litellm.example.com/v1",
+          aiCompatModel: "anthropic/claude-sonnet-4-6",
+          aiCompatKeyEncrypted: "enc:gateway-secret",
+        }),
+      }),
+    );
+  });
+
+  it("refuses a private base URL the operator has not allowlisted", async () => {
+    vi.mocked(isPublicUrl).mockReturnValue(false);
+    vi.mocked(isLocalAiHostAllowed).mockReturnValue(false);
+    const res = await patch(
+      patchRequest({ compatBaseUrl: "http://169.254.169.254/v1" }),
+    );
+    expect(res.status).toBe(422);
+    expect(vi.mocked(prisma.user.update)).not.toHaveBeenCalled();
+  });
+
+  it("accepts a private base URL the operator allowlisted", async () => {
+    vi.mocked(isPublicUrl).mockReturnValue(false);
+    vi.mocked(isLocalAiHostAllowed).mockReturnValue(true);
+    const res = await patch(
+      patchRequest({ compatBaseUrl: "http://litellm.lan:4000/v1" }),
+    );
+    expect(res.status).toBe(200);
+    expect(vi.mocked(prisma.user.update)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          aiCompatBaseUrl: "http://litellm.lan:4000/v1",
+        }),
+      }),
+    );
+  });
+
+  it("leaves the gateway URL alone when the provider switches to OpenAI", async () => {
+    vi.mocked(isPublicUrl).mockReturnValue(true);
+    await patch(patchRequest({ provider: "OPENAI" }));
+    const data = vi.mocked(prisma.user.update).mock.calls[0][0].data as Record<
+      string,
+      unknown
+    >;
+    // `aiBaseUrl` is the shared LOCAL column and IS cleared. The gateway's is
+    // untouched — it belongs to one provider, and that provider is not this
+    // one, so there is nothing for a stale value to redirect.
+    expect(data.aiBaseUrl).toBeNull();
+    expect(data).not.toHaveProperty("aiCompatBaseUrl");
+  });
+});
+
+describe("GET /api/user/ai-provider — the gateway's fields (#470)", () => {
+  it("reports the base URL and model, and the key as presence only", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      aiProvider: "OPENAI_COMPATIBLE",
+      aiModel: null,
+      aiBaseUrl: null,
+      aiAnthropicKeyEncrypted: null,
+      aiLocalKeyEncrypted: null,
+      aiOpenaiKeyEncrypted: null,
+      aiCompatBaseUrl: "https://litellm.example.com/v1",
+      aiCompatKeyEncrypted: "enc-gateway",
+      aiCompatModel: "anthropic/claude-sonnet-4-6",
+      aiResponseTimeoutSeconds: null,
+    } as never);
+    vi.mocked(resolveProviderAvailability).mockResolvedValue({
+      aiAvailable: true,
+      managedBy: "user",
+    });
+
+    const res = await (GET as () => Promise<Response>)();
+    const body = (await res.json()) as {
+      data: {
+        compatBaseUrl: string | null;
+        compatModel: string | null;
+        hasCompatKey: boolean;
+      };
+    };
+    expect(body.data.compatBaseUrl).toBe("https://litellm.example.com/v1");
+    expect(body.data.compatModel).toBe("anthropic/claude-sonnet-4-6");
+    expect(body.data.hasCompatKey).toBe(true);
+    expect(JSON.stringify(body)).not.toContain("enc-gateway");
   });
 });
