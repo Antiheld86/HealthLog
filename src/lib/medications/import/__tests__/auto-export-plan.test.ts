@@ -72,7 +72,7 @@ describe("planAutoExportImport — the reported export", () => {
     expect(
       plan.entries.length + totalMedicationImportSkips(plan.skippedByReason),
     ).toBe(plan.rowsRead);
-    expect(plan.skippedByReason).toEqual({ status_not_recorded: 8 });
+    expect(plan.skippedByReason).toEqual({ status_no_dose_information: 8 });
   });
 
   it("names the medications it could not match instead of reporting a number", () => {

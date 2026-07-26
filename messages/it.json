@@ -1921,7 +1921,6 @@
       "reasonMedicationNotFound": "nessun farmaco registrato corrisponde al nome nel file",
       "reasonMedicationAmbiguous": "il nome nel file corrisponde a più di un farmaco",
       "reasonMedicationIsMirrored": "il farmaco è una copia in sola lettura da un'altra app",
-      "reasonStatusNotRecorded": "il file non registra alcuna decisione su quella dose",
       "reasonStatusUnknown": "lo stato nel file non è uno di quelli definiti dal formato",
       "reasonMissingTimestamp": "la riga non indica alcun orario",
       "reasonMissingOffset": "l'orario non porta un offset UTC, quindi l'istante è ignoto",
@@ -1929,7 +1928,10 @@
       "reasonImplausibleTimestamp": "l'orario non indica un istante reale, o è nel futuro",
       "reasonMissingMedication": "la riga non nomina alcun farmaco",
       "reasonUnreadableDosage": "il dosaggio non è un numero",
-      "reasonUnreadableRow": "la riga ha meno colonne dell'intestazione"
+      "reasonUnreadableRow": "la riga ha meno colonne dell'intestazione",
+      "reasonStatusNoDoseInformation": "il file non registra nulla su quella dose: nessuno ha risposto e niente è stato annotato",
+      "reasonStatusReminderEvent": "la riga riguarda un promemoria postposto, che non dice nulla sulla dose",
+      "reasonStatusNotificationNotSent": "la riga registra che non è stata inviata alcuna notifica, il che riguarda l'app e non la dose"
     }
   },
   "charts": {

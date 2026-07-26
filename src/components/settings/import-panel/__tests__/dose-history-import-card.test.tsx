@@ -91,7 +91,7 @@ describe("<DoseHistoryVerdictView>", () => {
     rowsRead: 3395,
     queued: 3387,
     refused: 8,
-    refusedByReason: [{ reason: "status_not_recorded", count: 8 }],
+    refusedByReason: [{ reason: "status_no_dose_information", count: 8 }],
     unmatchedMedications: [],
     ambiguousMedications: [],
     mirroredMedications: [],

@@ -127,7 +127,7 @@ describe("POST /api/medications/intake/dose-history-import", () => {
         rowsRead: 3,
         queued: 2,
         refused: 1,
-        refusedByReason: [{ reason: "status_not_recorded", count: 1 }],
+        refusedByReason: [{ reason: "status_no_dose_information", count: 1 }],
         unmatchedMedications: [],
         ambiguousMedications: [],
         mirroredMedications: [],
@@ -170,7 +170,7 @@ describe("POST /api/medications/intake/dose-history-import", () => {
           total: 2,
           imported: 0,
           // Seeded, so the count at the end of the run covers the whole file.
-          skippedByReason: { status_not_recorded: 1 },
+          skippedByReason: { status_no_dose_information: 1 },
           touchedDays: [],
           rollupProcessed: 0,
         },

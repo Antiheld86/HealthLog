@@ -58,7 +58,9 @@ describe("parseAutoExportCsv — the reported export", () => {
     // The file holds `Taken`, `Skipped` and `Not Interacted`. The first two are
     // decisions the person made; the eight `Not Interacted` rows are the absence
     // of one, and there is no honest dose to write for them.
-    expect(reasonCounts(parseFixture())).toEqual({ status_not_recorded: 8 });
+    expect(reasonCounts(parseFixture())).toEqual({
+      status_no_dose_information: 8,
+    });
   });
 
   it("keeps the scheduled slot and the time taken apart", () => {

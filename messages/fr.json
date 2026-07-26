@@ -1921,7 +1921,6 @@
       "reasonMedicationNotFound": "aucun médicament enregistré ne correspond au nom du fichier",
       "reasonMedicationAmbiguous": "le nom du fichier correspond à plusieurs médicaments",
       "reasonMedicationIsMirrored": "le médicament est une copie en lecture seule provenant d'une autre application",
-      "reasonStatusNotRecorded": "le fichier ne consigne aucune décision sur cette dose",
       "reasonStatusUnknown": "le statut du fichier ne fait pas partie de ceux que définit le format",
       "reasonMissingTimestamp": "la ligne n'indique aucune heure",
       "reasonMissingOffset": "l'heure ne porte pas de décalage UTC, l'instant est donc inconnu",
@@ -1929,7 +1928,10 @@
       "reasonImplausibleTimestamp": "l'heure ne désigne aucun instant réel, ou se situe dans le futur",
       "reasonMissingMedication": "la ligne ne nomme aucun médicament",
       "reasonUnreadableDosage": "la dose n'est pas un nombre",
-      "reasonUnreadableRow": "la ligne a moins de colonnes que l'en-tête"
+      "reasonUnreadableRow": "la ligne a moins de colonnes que l'en-tête",
+      "reasonStatusNoDoseInformation": "le fichier ne consigne rien sur cette dose : personne n'a répondu et rien n'a été noté",
+      "reasonStatusReminderEvent": "la ligne concerne un rappel reporté, ce qui ne dit rien de la dose",
+      "reasonStatusNotificationNotSent": "la ligne consigne qu'aucune notification n'a été envoyée, ce qui parle de l'application et non de la dose"
     }
   },
   "charts": {

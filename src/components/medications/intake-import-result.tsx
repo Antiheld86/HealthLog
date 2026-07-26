@@ -58,7 +58,13 @@ function useSkipReasonLabel(): (reason: string) => string {
     medication_not_found: t("medications.import.reasonMedicationNotFound"),
     medication_ambiguous: t("medications.import.reasonMedicationAmbiguous"),
     medication_is_mirrored: t("medications.import.reasonMedicationIsMirrored"),
-    status_not_recorded: t("medications.import.reasonStatusNotRecorded"),
+    status_no_dose_information: t(
+      "medications.import.reasonStatusNoDoseInformation",
+    ),
+    status_reminder_event: t("medications.import.reasonStatusReminderEvent"),
+    status_notification_not_sent: t(
+      "medications.import.reasonStatusNotificationNotSent",
+    ),
     status_unknown: t("medications.import.reasonStatusUnknown"),
     missing_timestamp: t("medications.import.reasonMissingTimestamp"),
     missing_timezone_offset: t("medications.import.reasonMissingOffset"),

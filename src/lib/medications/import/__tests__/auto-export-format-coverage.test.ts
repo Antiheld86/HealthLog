@@ -21,9 +21,12 @@ import {
   AUTO_EXPORT_CSV_COLUMNS,
   AUTO_EXPORT_JSON_FIELDS,
   AUTO_EXPORT_STATUSES,
-  AUTO_EXPORT_ACTIONABLE_STATUSES,
+  AUTO_EXPORT_STATUS_DISPOSITIONS,
 } from "../auto-export-format";
-import { AUTO_EXPORT_REFUSAL_REASONS } from "../auto-export-parse";
+import {
+  AUTO_EXPORT_REFUSAL_REASONS,
+  parseAutoExportCsv,
+} from "../auto-export-parse";
 
 describe("export column rulings", () => {
   /**
@@ -106,14 +109,70 @@ describe("export column rulings", () => {
 });
 
 describe("status vocabulary", () => {
-  it("treats only a recorded decision as actionable", () => {
-    for (const status of AUTO_EXPORT_ACTIONABLE_STATUSES) {
-      expect(AUTO_EXPORT_STATUSES).toContain(status);
+  /**
+   * The ruling per documented status, written out.
+   *
+   * The file that prompted this work contains three of the seven, so the other
+   * four are documented-but-unobserved — and an unobserved status is exactly the
+   * one a later edit can quietly promote into a dose, because no fixture would
+   * notice. Restating all seven means promoting any of them has to be typed
+   * twice.
+   */
+  const EXPECTED: Record<string, string> = {
+    Taken: "dose_taken",
+    Skipped: "dose_skipped",
+    "Not Interacted": "no_dose_information",
+    "Not Logged": "no_dose_information",
+    Unspecified: "no_dose_information",
+    Snoozed: "reminder_event",
+    "Notification Not Sent": "app_event",
+  };
+
+  it("holds the ruling each documented status was decided to have", () => {
+    expect({ ...AUTO_EXPORT_STATUS_DISPOSITIONS }).toEqual(EXPECTED);
+  });
+
+  it("rules on every documented status, and on nothing else", () => {
+    expect(Object.keys(AUTO_EXPORT_STATUS_DISPOSITIONS).sort()).toEqual(
+      [...AUTO_EXPORT_STATUSES].sort(),
+    );
+  });
+
+  it("writes a row for exactly the two statuses that state a decision", () => {
+    const header =
+      "Date,Scheduled Date,Medication,Nickname,Dosage,Scheduled Dosage,Unit,Status,Archived,Codings\n";
+    const now = Date.parse("2026-07-01T00:00:00.000Z");
+    // One row per documented status, so every status is exercised — including
+    // the four the reported file never contained.
+    for (const status of AUTO_EXPORT_STATUSES) {
+      const outcome = parseAutoExportCsv(
+        `${header}2025-01-01 08:00:00 +1030,2025-01-01 08:00:00 +1030,Med,Med,1.0,1.0,count,${status},No,\n`,
+        { now },
+      );
+      const expectsDose =
+        EXPECTED[status] === "dose_taken" ||
+        EXPECTED[status] === "dose_skipped";
+      expect(outcome.doses.length, `${status} → dose`).toBe(
+        expectsDose ? 1 : 0,
+      );
+      if (expectsDose) {
+        // A skip is a dose not taken; only `Taken` carries a take time. Neither
+        // is inferred from the other.
+        expect(outcome.doses[0].takenAt === null).toBe(
+          EXPECTED[status] === "dose_skipped",
+        );
+      } else {
+        // Refused, and under a reason of its own rather than a shared total.
+        expect(outcome.refusals, `${status} → refusal`).toHaveLength(1);
+        expect(outcome.refusals[0].reason).toBe(
+          {
+            no_dose_information: "status_no_dose_information",
+            reminder_event: "status_reminder_event",
+            app_event: "status_notification_not_sent",
+          }[EXPECTED[status]],
+        );
+      }
     }
-    // The other five documented values name the absence of a decision. Widening
-    // this set means deciding what row to write for "nobody acted", which is a
-    // compliance judgement the export never made.
-    expect(AUTO_EXPORT_ACTIONABLE_STATUSES).toEqual(["Taken", "Skipped"]);
   });
 });
 

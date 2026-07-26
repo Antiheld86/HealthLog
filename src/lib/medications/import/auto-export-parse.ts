@@ -19,8 +19,8 @@ import { splitCsvRows } from "@/lib/import/csv-measurements";
 
 import {
   AUTO_EXPORT_CSV_COLUMNS,
+  autoExportStatusDisposition,
   formatAutoExportDose,
-  isActionableAutoExportStatus,
   isAutoExportStatus,
 } from "./auto-export-format";
 import {
@@ -60,8 +60,12 @@ export interface AutoExportDose {
  * none of them is a silent drop.
  */
 export const AUTO_EXPORT_REFUSAL_REASONS = [
-  /** Status names no decision about the dose (`Not Interacted`, `Snoozed`, …). */
-  "status_not_recorded",
+  /** `Not Interacted` / `Not Logged` / `Unspecified` — an absence, not a dose. */
+  "status_no_dose_information",
+  /** `Snoozed` — something that happened to a reminder, not to a dose. */
+  "status_reminder_event",
+  /** `Notification Not Sent` — a fact about the app, not about the person. */
+  "status_notification_not_sent",
   /** Status is not a value the format documents at all. */
   "status_unknown",
   /** `Date` is blank — there is no dose without an instant. */
@@ -214,8 +218,19 @@ function readRow(input: RowInput, now: number): RowOutcome {
   if (!isAutoExportStatus(status)) {
     return { ok: false, reason: "status_unknown" };
   }
-  if (!isActionableAutoExportStatus(status)) {
-    return { ok: false, reason: "status_not_recorded" };
+  // Four kinds, four answers. Only the two that state a decision about a dose
+  // become a row; the others are refused under the name of what they actually
+  // are, so the person is told "this row is about a reminder" rather than being
+  // left to read a total.
+  const disposition = autoExportStatusDisposition(status);
+  if (disposition === "no_dose_information") {
+    return { ok: false, reason: "status_no_dose_information" };
+  }
+  if (disposition === "reminder_event") {
+    return { ok: false, reason: "status_reminder_event" };
+  }
+  if (disposition === "app_event") {
+    return { ok: false, reason: "status_notification_not_sent" };
   }
 
   const medicationName = input.medication.trim();
@@ -262,7 +277,7 @@ function readRow(input: RowInput, now: number): RowOutcome {
   const scheduledDosage = readDosage(input.scheduledDosage);
   if (!scheduledDosage.ok) return { ok: false, reason: scheduledDosage.reason };
 
-  const skipped = status === "Skipped";
+  const skipped = disposition === "dose_skipped";
   return {
     ok: true,
     dose: {

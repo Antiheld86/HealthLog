@@ -1921,7 +1921,6 @@
       "reasonMedicationNotFound": "kein Medikament im Bestand passt zum Namen in der Datei",
       "reasonMedicationAmbiguous": "der Name in der Datei passt auf mehr als ein Medikament",
       "reasonMedicationIsMirrored": "das Medikament ist eine schreibgeschützte Kopie aus einer anderen App",
-      "reasonStatusNotRecorded": "die Datei hält zu dieser Dosis keine Entscheidung fest",
       "reasonStatusUnknown": "der Status in der Datei gehört nicht zum dokumentierten Format",
       "reasonMissingTimestamp": "die Zeile nennt keine Zeit",
       "reasonMissingOffset": "die Zeit trägt keinen UTC-Offset, der Zeitpunkt ist damit unbekannt",
@@ -1929,7 +1928,10 @@
       "reasonImplausibleTimestamp": "die Zeit nennt keinen echten Zeitpunkt oder liegt in der Zukunft",
       "reasonMissingMedication": "die Zeile nennt kein Medikament",
       "reasonUnreadableDosage": "die Dosis ist keine Zahl",
-      "reasonUnreadableRow": "die Zeile hat weniger Spalten als die Kopfzeile"
+      "reasonUnreadableRow": "die Zeile hat weniger Spalten als die Kopfzeile",
+      "reasonStatusNoDoseInformation": "die Datei hält zu dieser Dosis nichts fest — niemand hat reagiert und nichts wurde eingetragen",
+      "reasonStatusReminderEvent": "die Zeile betrifft eine verschobene Erinnerung und sagt nichts über die Dosis",
+      "reasonStatusNotificationNotSent": "die Zeile hält fest, dass keine Benachrichtigung gesendet wurde — das betrifft die App, nicht die Dosis"
     }
   },
   "charts": {

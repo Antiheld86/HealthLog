@@ -1921,7 +1921,6 @@
       "reasonMedicationNotFound": "żaden zapisany lek nie odpowiada nazwie z pliku",
       "reasonMedicationAmbiguous": "nazwa z pliku odpowiada więcej niż jednemu lekowi",
       "reasonMedicationIsMirrored": "lek jest kopią tylko do odczytu z innej aplikacji",
-      "reasonStatusNotRecorded": "plik nie zapisuje żadnej decyzji o tej dawce",
       "reasonStatusUnknown": "status w pliku nie należy do tych, które definiuje format",
       "reasonMissingTimestamp": "wiersz nie podaje godziny",
       "reasonMissingOffset": "godzina nie ma przesunięcia UTC, więc moment jest nieznany",
@@ -1929,7 +1928,10 @@
       "reasonImplausibleTimestamp": "godzina nie wskazuje rzeczywistego momentu albo leży w przyszłości",
       "reasonMissingMedication": "wiersz nie nazywa żadnego leku",
       "reasonUnreadableDosage": "dawka nie jest liczbą",
-      "reasonUnreadableRow": "wiersz ma mniej kolumn niż nagłówek"
+      "reasonUnreadableRow": "wiersz ma mniej kolumn niż nagłówek",
+      "reasonStatusNoDoseInformation": "plik nie zapisuje nic o tej dawce — nikt nie odpowiedział i nic nie zostało zanotowane",
+      "reasonStatusReminderEvent": "wiersz dotyczy odłożonego przypomnienia, co nic nie mówi o dawce",
+      "reasonStatusNotificationNotSent": "wiersz zapisuje, że nie wysłano powiadomienia, co dotyczy aplikacji, a nie dawki"
     }
   },
   "charts": {

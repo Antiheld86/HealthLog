@@ -167,7 +167,13 @@ describe("medication intake import job — concurrent retry", () => {
       total: 4,
       imported: 3,
       skippedByReason: { duplicate_in_file: 1 },
-      touchedDays: ["2026-07-20", "2026-07-21"],
+      // A job can now cover a whole regimen, so a day whose rollup needs
+      // re-folding is addressed by medication AND day — two medications touched
+      // on one day are two rollup rows, which a bare day key cannot name.
+      touchedDays: [
+        `${medication.id} 2026-07-20`,
+        `${medication.id} 2026-07-21`,
+      ],
       rollupProcessed: 2,
     });
     expect(audits).toHaveLength(1);

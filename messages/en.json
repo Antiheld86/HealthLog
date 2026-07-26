@@ -1921,7 +1921,6 @@
       "reasonMedicationNotFound": "no medication on record matches the name in the file",
       "reasonMedicationAmbiguous": "the name in the file matches more than one medication on record",
       "reasonMedicationIsMirrored": "the medication is a read-only copy of another app's list",
-      "reasonStatusNotRecorded": "the file records no decision about that dose",
       "reasonStatusUnknown": "the status in the file is not one the format defines",
       "reasonMissingTimestamp": "the row states no time",
       "reasonMissingOffset": "the time carries no UTC offset, so the instant is unknown",
@@ -1929,7 +1928,10 @@
       "reasonImplausibleTimestamp": "the time names no real instant, or lies in the future",
       "reasonMissingMedication": "the row names no medication",
       "reasonUnreadableDosage": "the dosage is not a number",
-      "reasonUnreadableRow": "the row has fewer columns than the header"
+      "reasonUnreadableRow": "the row has fewer columns than the header",
+      "reasonStatusNoDoseInformation": "the file records nothing about that dose — nobody answered and nothing was logged",
+      "reasonStatusReminderEvent": "the row is about a snoozed reminder, which says nothing about the dose",
+      "reasonStatusNotificationNotSent": "the row records that no notification was sent, which is about the app rather than the dose"
     }
   },
   "charts": {

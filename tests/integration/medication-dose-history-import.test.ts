@@ -129,7 +129,7 @@ describe("dose-history import — the reported export end to end", () => {
       skipped: 8,
       // The eight `Not Interacted` rows: the file states no decision about those
       // doses, so there is nothing honest to write, and the count says which.
-      skipReasons: [{ reason: "status_not_recorded", count: 8 }],
+      skipReasons: [{ reason: "status_no_dose_information", count: 8 }],
     });
     // Every row of the file is accounted for by one of the two numbers.
     expect(result!.imported + result!.skipped).toBe(3395);
@@ -223,7 +223,7 @@ describe("dose-history import — the reported export end to end", () => {
       skipped: 3395,
       skipReasons: [
         { reason: "already_recorded", count: 3387 },
-        { reason: "status_not_recorded", count: 8 },
+        { reason: "status_no_dose_information", count: 8 },
       ],
     });
     await expect(
@@ -250,6 +250,29 @@ describe("dose-history import — the reported export end to end", () => {
     await expect(
       prisma.medication.count({ where: { userId: user.id } }),
     ).resolves.toBe(2);
+  }, 240_000);
+
+  it("imports an inactive medication's history without putting it back on the active list", async () => {
+    const prisma = getPrismaClient();
+    const user = await seedRegimen();
+    // Standing in for a medication archived in the source app: the person has
+    // stopped taking it here too. Importing the history it names is one act;
+    // making the medication current again is a different one, and only the first
+    // was asked for. Someone re-adding it later should find the history waiting,
+    // not find it already re-added on their behalf.
+    await prisma.medication.updateMany({
+      where: { userId: user.id },
+      data: { active: false },
+    });
+
+    const { jobId } = await enqueue(user.id);
+    const result = await processMedicationIntakeImportJob(jobId);
+
+    expect(result!.imported).toBe(3387);
+    const stillInactive = await prisma.medication.count({
+      where: { userId: user.id, active: false },
+    });
+    expect(stillInactive).toBe(16);
   }, 240_000);
 
   it("re-folds the compliance rollup for every medication and day it touched", async () => {

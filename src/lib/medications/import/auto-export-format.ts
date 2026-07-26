@@ -98,37 +98,76 @@ export const AUTO_EXPORT_JSON_FIELDS = [
 ] as const;
 
 /**
- * Every status the format documents.
+ * What each documented status is, and therefore what the importer does with it.
  *
- * `Taken` and `Skipped` each name a decision the person made about a dose, and
- * HealthLog already models both — a taken row and a deliberate skip. The rest
- * name the absence of a decision: nobody acted, or the app never asked. There
- * is no honest row to write for those. Turning "nobody acted" into a missed
- * dose would be the importer inventing a compliance fact the export never
- * asserted, and writing them as still-pending would put outstanding doses from
- * 2023 back in front of the person today.
+ * Seven values, and they are not seven shades of one thing — they divide into
+ * four kinds, so they get four rulings rather than one blanket rule.
+ *
+ * `dose_taken` / `dose_skipped` — the two that state a decision the person made
+ * about a dose. Both map one-to-one onto something HealthLog already records: a
+ * row with a `takenAt`, and a row with `skipped = true`. That second mapping was
+ * checked rather than assumed — `skipped` is documented as a deliberate user
+ * skip, held apart from `autoMissed`, which is the marker for a dose nobody ever
+ * acted on. So a deliberate skip in the export lands as a deliberate skip here,
+ * and not as a miss.
+ *
+ * `no_dose_information` — `Not Interacted`, `Not Logged`, `Unspecified`. These
+ * are absences, not statements. Nobody answered, or nothing was written down.
+ * Writing them as taken would invent a dose; writing them as skipped would
+ * invent a decision, because "did not answer the notification" is not "chose not
+ * to take it"; writing them as still-pending would put outstanding doses from
+ * years ago back in front of the person today. So they are counted, reported,
+ * and not written. Absence reads as absence.
+ *
+ * `reminder_event` — `Snoozed` describes what happened to a reminder. A snoozed
+ * reminder says nothing at all about whether the medication was taken.
+ *
+ * `app_event` — `Notification Not Sent` is a fact about the software, not about
+ * the person. It belongs to no dose.
+ *
+ * The three non-dose kinds are all refused, but each under its own name, because
+ * "the file says nothing about this dose" and "this row is about a reminder" are
+ * different things and a person reading the result acts on them differently.
  */
+export const AUTO_EXPORT_STATUS_DISPOSITIONS = {
+  Taken: "dose_taken",
+  Skipped: "dose_skipped",
+  "Not Interacted": "no_dose_information",
+  "Not Logged": "no_dose_information",
+  Unspecified: "no_dose_information",
+  Snoozed: "reminder_event",
+  "Notification Not Sent": "app_event",
+} as const satisfies Record<string, AutoExportStatusDisposition>;
+
+export type AutoExportStatusDisposition =
+  | "dose_taken"
+  | "dose_skipped"
+  | "no_dose_information"
+  | "reminder_event"
+  | "app_event";
+
+/** Every status the format documents, in the order the documentation lists it. */
 export const AUTO_EXPORT_STATUSES = [
-  "Taken",
-  "Skipped",
   "Not Interacted",
   "Notification Not Sent",
   "Snoozed",
+  "Taken",
+  "Skipped",
   "Not Logged",
   "Unspecified",
 ] as const;
 
 export type AutoExportStatus = (typeof AUTO_EXPORT_STATUSES)[number];
 
-/** The two statuses that become a row. */
-export const AUTO_EXPORT_ACTIONABLE_STATUSES = ["Taken", "Skipped"] as const;
-
 export function isAutoExportStatus(value: string): value is AutoExportStatus {
   return (AUTO_EXPORT_STATUSES as readonly string[]).includes(value);
 }
 
-export function isActionableAutoExportStatus(value: string): boolean {
-  return (AUTO_EXPORT_ACTIONABLE_STATUSES as readonly string[]).includes(value);
+/** The ruling for a documented status. */
+export function autoExportStatusDisposition(
+  status: AutoExportStatus,
+): AutoExportStatusDisposition {
+  return AUTO_EXPORT_STATUS_DISPOSITIONS[status];
 }
 
 /**
