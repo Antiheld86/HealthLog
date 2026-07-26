@@ -1017,6 +1017,16 @@ export function reconstructSleepSessions(
     let awake = 0;
     let sawAwake = false;
     const stages: Partial<Record<SleepStage, number>> = {};
+    // In-bed: union envelope across ALL writers in the RAW session — the
+    // canonical (winning) writer often carries no IN_BED row at all (a
+    // watch's stage export) while the losing writer holds the night's
+    // only in-bed window (the phone's bedtime detection). ONE quantity,
+    // ONE computation: `stages.IN_BED` IS that envelope, so the legend can
+    // never contradict the headline — which is why the per-stage loop
+    // below must skip IN_BED instead of adding the winner's own spans on
+    // top of it. The hypnogram `segments` stay winner-only.
+    const inBedEnvelope = inBedEnvelopeMinutes(session);
+    if (inBedEnvelope !== null) stages.IN_BED = inBedEnvelope;
     let earliest = segments[0].start;
     let latest = segments[0].end;
     for (const seg of segments) {
@@ -1033,13 +1043,6 @@ export function reconstructSleepSessions(
         sawAwake = true;
       }
     }
-    // In-bed: union envelope across ALL writers in the RAW session — the
-    // canonical (winning) writer often carries no IN_BED row at all (a
-    // watch's stage export) while the losing writer holds the night's
-    // only in-bed window (the phone's bedtime detection). The hypnogram
-    // `segments` + `stages` stay winner-only.
-    const inBedEnvelope = inBedEnvelopeMinutes(session);
-    if (inBedEnvelope !== null) stages.IN_BED = inBedEnvelope;
     const asleep = asleepMinutesOf(pool);
     const canonicalSource = sourceOfWriterKey(canonical);
     sessions.push({
