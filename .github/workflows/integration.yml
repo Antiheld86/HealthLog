@@ -12,7 +12,16 @@ permissions:
 jobs:
   integration:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # This guard exists to kill a hung testcontainer or a deadlocked query, not
+    # to hold the suite to a performance budget. At 15 it had stopped telling
+    # those apart: the suite itself takes around 13 minutes of job time (128
+    # files against a real Postgres), so two consecutive runs of the SAME
+    # commit range came in at 12m50s and then over 15m, and the second was
+    # killed mid-run with every test to that point green. A cap that a healthy
+    # run clears only on a fast runner reports runner weather, not health.
+    # 25 leaves real headroom and still catches a hang inside one CI cycle.
+    # If the suite ever approaches this number, split it rather than raise it.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
