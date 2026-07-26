@@ -19,7 +19,11 @@ vi.mock("@/lib/logging/context", () => ({
 
 import { Prisma } from "@/generated/prisma/client";
 import { annotate } from "@/lib/logging/context";
-import { consumeForIntake, restoreForIntake } from "../consumption";
+import {
+  consumeForIntake,
+  consumeImportedIntakesBatch,
+  restoreForIntake,
+} from "../consumption";
 
 const NOW = new Date("2026-06-10T12:00:00.000Z");
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -98,7 +102,9 @@ function makeClient(state: FakeState) {
       updateMany: vi.fn(
         async (args: {
           where: {
-            id?: string;
+            // The single-event hook narrows by one id; the import batch
+            // claims a whole chunk with `id: { in: [...] }`.
+            id?: string | { in: string[] };
             userId?: string;
             medicationId?: string;
             deletedAt?: null;
@@ -110,7 +116,13 @@ function makeClient(state: FakeState) {
         }) => {
           const w = args.where;
           const matches = state.events.filter((e) => {
-            if (w.id !== undefined && e.id !== w.id) return false;
+            if (typeof w.id === "string" && e.id !== w.id) return false;
+            if (
+              w.id !== undefined &&
+              typeof w.id === "object" &&
+              !w.id.in.includes(e.id)
+            )
+              return false;
             if (w.userId !== undefined && e.userId !== w.userId) return false;
             if (
               w.medicationId !== undefined &&
@@ -633,6 +645,56 @@ describe("consumeForIntake", () => {
   });
 });
 
+describe("consumeImportedIntakesBatch", () => {
+  // The import worker's batch path derives state through the same state
+  // machine as the request-time hook, so it has to read the container
+  // kind too — a back-dated import chunk against a tablet pack must not
+  // write the pack off.
+  it("leaves a back-dated import auto-open of a blister IN_USE", async () => {
+    const backdated = new Date(NOW.getTime() - 40 * MS_PER_DAY);
+    const state: FakeState = {
+      unitsPerDose: 1,
+      events: [takenEvent({ takenAt: backdated })],
+      items: [item({ id: "sealed", containerType: "BLISTER" })],
+    };
+    const client = makeClient(state);
+    await consumeImportedIntakesBatch({
+      client: client as never,
+      userId: "user-1",
+      medicationId: "med-1",
+      events: [{ eventId: "evt-1", intakeAt: backdated }],
+    });
+
+    const opened = state.items[0];
+    expect(opened.firstUseAt).toEqual(backdated);
+    expect(opened.state).toBe("IN_USE");
+    expect(opened.expiresAt).toBeNull();
+    expect(opened.unitsRemaining).toBe(9);
+  });
+
+  it("still expires a back-dated import auto-open of a pen", async () => {
+    const backdated = new Date(NOW.getTime() - 40 * MS_PER_DAY);
+    const state: FakeState = {
+      unitsPerDose: 1,
+      events: [takenEvent({ takenAt: backdated })],
+      items: [item({ id: "sealed", containerType: "PEN" })],
+    };
+    const client = makeClient(state);
+    await consumeImportedIntakesBatch({
+      client: client as never,
+      userId: "user-1",
+      medicationId: "med-1",
+      events: [{ eventId: "evt-1", intakeAt: backdated }],
+    });
+
+    const opened = state.items[0];
+    expect(opened.state).toBe("EXPIRED");
+    expect(opened.expiresAt).toEqual(
+      new Date(backdated.getTime() + 30 * MS_PER_DAY),
+    );
+  });
+});
+
 describe("restoreForIntake", () => {
   function restoreArgs(client: ReturnType<typeof makeClient>) {
     return { client: client as never, userId: "user-1", eventId: "evt-1" };
@@ -723,6 +785,35 @@ describe("restoreForIntake", () => {
 
     expect(state.items[0].unitsRemaining).toBe(1);
     expect(state.items[0].state).toBe("EXPIRED");
+  });
+
+  it("re-derives IN_USE for a refunded blister whose opening is long past", async () => {
+    // Same refund against a tablet pack: the units come back and the
+    // pack is usable again. There is no post-opening window to have
+    // lapsed, so EXPIRED would be wrong.
+    const state: FakeState = {
+      unitsPerDose: 1,
+      events: [
+        takenEvent({
+          inventoryConsumption: [{ itemId: "open", units: 1 }],
+        }),
+      ],
+      items: [
+        item({
+          id: "open",
+          containerType: "BLISTER",
+          state: "USED_UP",
+          unitsTotal: 4,
+          unitsRemaining: 0,
+          firstUseAt: new Date(NOW.getTime() - 35 * MS_PER_DAY),
+        }),
+      ],
+    };
+    const client = makeClient(state);
+    await restoreForIntake(restoreArgs(client));
+
+    expect(state.items[0].unitsRemaining).toBe(1);
+    expect(state.items[0].state).toBe("IN_USE");
   });
 
   it("is a no-op when the row carries no stamp", async () => {

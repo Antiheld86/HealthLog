@@ -76,7 +76,14 @@ describe("evaluateMedicationRunway", () => {
   });
 
   it("derives NO runway for a schedule-less medication", () => {
-    expect(evaluateMedicationRunway([item(2)], 1, []).runwayDays).toBe(null);
+    const out = evaluateMedicationRunway(
+      [item(2), { state: "EXPIRED", unitsTotal: 30, unitsRemaining: 7 }],
+      1,
+      [],
+    );
+    expect(out.runwayDays).toBe(null);
+    // The no-runway arm still reports the written-off stock.
+    expect(out.expiredUnits).toBe(7);
   });
 });
 
