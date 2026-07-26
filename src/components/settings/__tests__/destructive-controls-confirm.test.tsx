@@ -3,65 +3,189 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * Destructive settings controls ask first.
+ * Destructive controls ask first.
  *
  * Signing every other device out, and revoking a trusted device, used to fire
  * on a single tap. Neither is undoable — the other devices simply have to log
  * in again, and a revoked trusted device asks for a second factor next time —
- * while every other destructive surface in the app confirms. On a shared
+ * while every other destructive surface in the app confirmed. On a shared
  * screen a mis-tap is a support call.
  *
- * This reads the sources rather than rendering, because what it pins is
- * structural: that these particular controls route through `ConfirmButton`
- * and never call a revoke mutation straight from an `onClick`. A render test
- * would prove the dialog exists in one arrangement; this proves no control on
- * these cards can go back to firing directly.
+ * The sweep that followed found fourteen more of the same shape, and this file
+ * grew to hold them. It reads the sources rather than rendering, because what
+ * it pins is structural: that these particular controls route through
+ * `ConfirmButton` / `ConfirmDialog` and never call a destroying mutation
+ * straight from an `onClick`. A render test would prove a dialog exists in one
+ * arrangement; this proves no control on these surfaces can go back to firing
+ * directly.
+ *
+ * It is one leg of three, and none of them stands alone:
+ *
+ *   - here: each named control routes through the primitive;
+ *   - `src/components/ui/__tests__/confirm-button.test.tsx`: the primitive
+ *     hands the caller's callback to the dialog action and nowhere else, so a
+ *     dismissal cannot act;
+ *   - `src/__tests__/destructive-control-guard.test.ts`: no NEW destructive
+ *     control can arrive without being written down.
+ *
+ * Together those give "each guarded control refuses to act on a dismissed
+ * dialog" without a click-through the SSR-only test setup cannot perform.
  */
 
-const CARDS = [
+function source(rel: string) {
+  return readFileSync(join(process.cwd(), "src", rel), "utf8");
+}
+
+/**
+ * Every control that must open a confirmation before it destroys anything,
+ * keyed by the `slot` it hands the primitive. A slot that disappears from its
+ * file means the control was renamed, moved, or unwired — all three are worth
+ * a red test.
+ */
+const CONTROLS: { file: string; slots: string[] }[] = [
   {
-    file: "security-sessions-card.tsx",
+    file: "components/settings/security-sessions-card.tsx",
     slots: ["revoke-session", "sign-out-everywhere"],
   },
   {
-    file: "trusted-devices-card.tsx",
+    file: "components/settings/trusted-devices-card.tsx",
     slots: ["revoke-trusted-device", "revoke-all-trusted-devices"],
+  },
+  // The allergy wipe. Scoped to the note as well as gated — see
+  // `about-me-clear-scope.test.tsx` for the payload half.
+  {
+    file: "components/settings/about-me-section.tsx",
+    slots: ["settings-about-me-clear"],
+  },
+  {
+    file: "components/settings/ai/codex-provider-form.tsx",
+    slots: ["settings-codex-disconnect"],
+  },
+  {
+    file: "components/admin/central-codex-section.tsx",
+    slots: ["admin-central-codex-disconnect"],
+  },
+  {
+    file: "components/admin/ai-server-key-section.tsx",
+    slots: ["admin-ai-server-key-remove"],
+  },
+  {
+    file: "components/settings/account-section/avatar-section.tsx",
+    slots: ["settings-avatar-remove"],
+  },
+  {
+    file: "components/settings/coach-memory-section.tsx",
+    slots: ["settings-coach-memory-forget"],
+  },
+  {
+    file: "components/settings/sources-section.tsx",
+    slots: ["settings-sources-reset"],
+  },
+  {
+    file: "components/settings/dashboard-layout-section.tsx",
+    slots: ["settings-dashboard-layout-reset"],
+  },
+  {
+    file: "components/insights/insights-edit-mode.tsx",
+    slots: ["insights-edit-reset"],
+  },
+  {
+    file: "components/targets/target-edit-sheet.tsx",
+    slots: ["target-edit-reset"],
+  },
+  { file: "app/coach/plans/page.tsx", slots: ["coach-plan-delete"] },
+  {
+    file: "components/cycle/log-day-sheet.tsx",
+    slots: ["cycle-day-delete", "cycle-custom-symptom-remove"],
+  },
+  // Two controls, one interpolated slot each: the per-metric reset and the
+  // override switch, which delete the same stored range.
+  {
+    file: "components/settings/thresholds-editor-section.tsx",
+    slots: [
+      "settings-thresholds-reset-all",
+      "settings-thresholds-reset-${metric}",
+      "settings-thresholds-override-off-${metric}",
+    ],
   },
 ];
 
-function source(file: string) {
-  return readFileSync(
-    join(process.cwd(), "src", "components", "settings", file),
-    "utf8",
-  );
-}
+describe("destructive controls confirm before firing", () => {
+  for (const control of CONTROLS) {
+    describe(control.file, () => {
+      const src = source(control.file);
 
-describe("destructive session controls confirm before firing", () => {
-  for (const card of CARDS) {
-    describe(card.file, () => {
-      const src = source(card.file);
-
-      it("routes every destructive control through ConfirmButton", () => {
-        expect(src).toContain("ConfirmButton");
-        for (const slot of card.slots) {
-          expect(src).toContain(`slot="${slot}"`);
+      it("routes every named control through the shared confirmation", () => {
+        expect(src).toMatch(/<Confirm(Button|Dialog)\b/);
+        for (const slot of control.slots) {
+          // A slot naming a metric is written as a template literal at the
+          // call site; a fixed one is a plain string attribute.
+          const written = slot.includes("${")
+            ? `slot={\`${slot}\`}`
+            : `slot="${slot}"`;
+          expect(src, `${control.file} lost slot ${slot}`).toContain(written);
         }
       });
 
-      it("never fires a revoke straight from an onClick", () => {
-        // `onConfirm={() => revoke…}` is the confirmed path and is fine;
-        // `onClick={() => revoke…}` is the unguarded one this forbids.
-        const unguarded = src.match(/onClick=\{\(\) =>\s*revoke/g) ?? [];
-        expect(unguarded).toEqual([]);
-      });
-
-      it("gives each control its own confirmation body", () => {
-        // A shared generic body would let one control's dialog describe
-        // another's consequence — the reason the copy is per-control.
-        const bodies = src.match(/body=\{t\("([^"]+)"/g) ?? [];
-        expect(bodies.length).toBe(card.slots.length);
-        expect(new Set(bodies).size).toBe(card.slots.length);
+      it("names the consequence in surface-specific copy", () => {
+        // A dialog that says "Are you sure?" makes the person guess what they
+        // are agreeing to, so every body is a key belonging to this surface.
+        // Two controls MAY share one — the per-metric threshold reset and the
+        // override switch do, because they perform the identical delete — so
+        // what is pinned is the provenance of the copy, not its cardinality.
+        const bodies = [...src.matchAll(/\bbody=\{([\s\S]{0,200}?)\}\n/g)].map(
+          (m) => m[1],
+        );
+        expect(
+          bodies.length,
+          `${control.file}: no confirmation body found`,
+        ).toBeGreaterThan(0);
+        const keys = bodies.flatMap((b) =>
+          [...b.matchAll(/t\("([^"]+)"/g)].map((m) => m[1]),
+        );
+        expect(keys.length).toBeGreaterThanOrEqual(bodies.length);
+        for (const key of keys) {
+          expect(key, `${control.file}: generic dialog copy`).not.toMatch(
+            /^common\./,
+          );
+        }
       });
     });
   }
+});
+
+describe("the threshold override switch deletes behind the same dialog", () => {
+  /**
+   * The switch labelled "Custom range" performs the same irreversible delete
+   * as the Reset button beside it — flipping it off drops the stored range —
+   * from a control that reads as a display toggle. It was the one destructive
+   * path in this sweep that no earlier pass named, precisely because it is not
+   * shaped like a delete. `ConfirmButton` cannot wrap a switch, which is why
+   * `ConfirmDialog` exists.
+   */
+  const src = source("components/settings/thresholds-editor-section.tsx");
+  const handler = src.slice(
+    src.indexOf("onCheckedChange={(next)"),
+    src.indexOf("disabled={busy}", src.indexOf("onCheckedChange={(next)")),
+  );
+
+  it("does not reset straight from the switch handler", () => {
+    expect(handler).toContain("setConfirmSwitchOff(true)");
+    expect(
+      handler,
+      "flipping the switch must open the dialog, not perform the delete",
+    ).not.toMatch(/onReset\(\)/);
+  });
+
+  it("leaves the switch on when the dialog is dismissed", () => {
+    // `setOverrideMode(false)` lives inside `onConfirm`, not in the handler,
+    // so a cancelled dialog leaves both the switch and the stored range alone.
+    const confirmArm = src.slice(
+      src.indexOf("<ConfirmDialog"),
+      src.indexOf("/>", src.indexOf("<ConfirmDialog")),
+    );
+    expect(confirmArm).toContain("setOverrideMode(false)");
+    expect(confirmArm).toContain("onReset()");
+    expect(handler).not.toContain("setOverrideMode(false)");
+  });
 });

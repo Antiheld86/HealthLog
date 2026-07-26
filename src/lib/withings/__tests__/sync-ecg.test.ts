@@ -216,7 +216,9 @@ describe("syncUserEcg", () => {
       rhythmClassification: "IRREGULAR",
       externalId: "withings:ecg:user-1:111",
     });
-    expect(recordSyncSuccess).toHaveBeenCalledWith("user-1", "withings");
+    expect(recordSyncSuccess).toHaveBeenCalledWith("user-1", "withings", {
+      leg: "ecg",
+    });
   });
 
   it("never narrows the broad catch-up to an ordinary webhook window", async () => {
@@ -384,6 +386,7 @@ describe("syncUserEcg", () => {
     expect(recordWithingsSyncFailure).toHaveBeenCalledWith(
       "user-1",
       expect.objectContaining({ message: "source write failed" }),
+      "ecg",
     );
   });
 
@@ -405,7 +408,11 @@ describe("syncUserEcg", () => {
       "IRREGULAR_RHYTHM_NOTIFICATION",
       new Date("2024-05-06T00:00:00.000Z"),
     );
-    expect(recordWithingsSyncFailure).toHaveBeenCalledWith("user-1", poison);
+    expect(recordWithingsSyncFailure).toHaveBeenCalledWith(
+      "user-1",
+      poison,
+      "ecg",
+    );
     expect(recordSyncSuccess).not.toHaveBeenCalled();
   });
 
@@ -435,6 +442,8 @@ describe("syncUserEcg", () => {
     expect(imported).toBe(1);
     expect(prisma.measurement.upsert).toHaveBeenCalledTimes(1);
     expect(prisma.ecgRecording.upsert).not.toHaveBeenCalled();
-    expect(recordSyncSuccess).toHaveBeenCalledWith("user-1", "withings");
+    expect(recordSyncSuccess).toHaveBeenCalledWith("user-1", "withings", {
+      leg: "ecg",
+    });
   });
 });

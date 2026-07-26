@@ -66,6 +66,25 @@ describe("banisterTrimp", () => {
     ).toBe(0);
   });
 
+  it("scores an unanswered or OTHER sex on the midpoint of both models, not on the male one", () => {
+    // The published Banister weights cover two groups. Defaulting the rest
+    // to the male pair scored people on an assumption they never made; the
+    // neutral answer is the mean of the two models, matching every other
+    // sex-split formula in the repo.
+    const samples = [
+      { t: "2026-06-02T08:00:00.000Z", hr: 150 },
+      { t: "2026-06-02T09:00:00.000Z", hr: 150 },
+    ];
+    const male = banisterTrimp(samples, hrRest, hrMax, "MALE");
+    const female = banisterTrimp(samples, hrRest, hrMax, "FEMALE");
+    const other = banisterTrimp(samples, hrRest, hrMax, "OTHER");
+    const unanswered = banisterTrimp(samples, hrRest, hrMax, null);
+    expect(male).not.toBeCloseTo(female, 6);
+    expect(other).toBeCloseTo((male + female) / 2, 10);
+    expect(unanswered).toBeCloseTo(other, 10);
+    expect(other).not.toBeCloseTo(male, 6);
+  });
+
   it("accumulates a positive TRIMP for a sustained elevated series", () => {
     const samples = [
       { t: "2026-06-02T08:00:00.000Z", hr: 150 },

@@ -132,6 +132,14 @@ export interface SyncVerdictInput {
   lastAttemptAt?: string | Date | null;
   /** A connection row's own `lastSyncedAt`, for rows predating the ledger. */
   legacyLastSyncedAt?: string | Date | null;
+  /**
+   * Start of the current unbroken failure streak, from the ledger. This is what
+   * the error verdicts date themselves by. `lastAttemptAt` is the wrong anchor
+   * — it is refreshed every hour by the retry itself, so a connection dead for
+   * a fortnight reported "failing, just now". `lastSuccessAt` is nearly right
+   * but a multi-leg provider can advance it while one leg stays broken.
+   */
+  failingSinceAt?: string | Date | null;
   /** Newest observed data instant, when the caller knows it (Apple Health). */
   lastDataAt?: string | Date | null;
   cadence: SyncCadence;
@@ -183,6 +191,7 @@ export function resolveSyncVerdict(input: SyncVerdictInput): SyncHealth {
   const lastAttempt = toMillis(input.lastAttemptAt);
   const legacy = toMillis(input.legacyLastSyncedAt);
   const lastData = toMillis(input.lastDataAt);
+  const failingSince = toMillis(input.failingSinceAt);
 
   // 1. No live connection, or one the user explicitly ended.
   if (input.connected === false)
@@ -196,10 +205,13 @@ export function resolveSyncVerdict(input: SyncVerdictInput): SyncHealth {
 
   // 2. States the user has to act on, in order of specificity.
   if (input.state === "parked") {
-    return { verdict: "parked", since: iso(lastAttempt) };
+    return { verdict: "parked", since: iso(failingSince ?? lastAttempt) };
   }
   if (input.state === "error_reauth") {
-    return { verdict: "reauth_required", since: iso(lastAttempt) };
+    return {
+      verdict: "reauth_required",
+      since: iso(failingSince ?? lastAttempt),
+    };
   }
 
   // 3. Nothing has ever run and nothing has ever arrived — the honest reading
@@ -218,9 +230,12 @@ export function resolveSyncVerdict(input: SyncVerdictInput): SyncHealth {
     }
   }
 
-  // 5. Trying and erroring.
+  // 5. Trying and erroring. `since` dates the streak, not the last retry: this
+  //    is the field the card renders, and "failing since a minute ago" on a
+  //    connection that last delivered a fortnight back is the sentence this
+  //    whole path exists to stop.
   if (input.state === "error_transient") {
-    return { verdict: "failing", since: iso(lastSuccess) };
+    return { verdict: "failing", since: iso(failingSince ?? lastSuccess) };
   }
 
   // 6. Running, but nothing new is arriving. The primary arm for push sources.

@@ -50,6 +50,7 @@ import {
   type StatusCardResult,
 } from "@/lib/insights/status-card-generation";
 import { annotate } from "@/lib/logging/context";
+import { binaryReferenceSex } from "@/lib/profile/sex";
 import { resolveUserTimezone, userDayKey } from "@/lib/tz/resolver";
 
 /**
@@ -263,7 +264,7 @@ export async function preparePulseStatusForUser(
   const pulseAge = getAgeFromDateOfBirth(user?.dateOfBirth ?? null);
   const pulseTarget = getPersonalizedPulseTarget(
     pulseAge,
-    (user?.gender as "MALE" | "FEMALE" | null | undefined) ?? null,
+    binaryReferenceSex(user?.gender),
   );
 
   // v1.15.12 A2 — resting-target in-target % over the RESTING series

@@ -82,7 +82,20 @@ export function SectionHeading({
         </div>
       </div>
       {action ? (
-        <div className="flex shrink-0 items-center gap-2">{action}</div>
+        // The action slot must be able to SHRINK. It was `shrink-0`, which
+        // pins a flex item at its max-content width — fine for the compact
+        // control the slot was designed for, wrong for the prose every real
+        // caller passes today (the provenance method caption, the
+        // device-score subtitle, the sleep-quality subtitle). A sentence at
+        // max-content is ~1.2-1.5k px, and because the row sits inside the
+        // AuthShell `<main>` — whose `overflow-y:auto` makes `overflow-x`
+        // compute to `auto` — that width became a horizontally scrollable
+        // page at every phone width, growing with the locale's string length.
+        // `min-w-0` lifts the flex `min-width:auto` floor so the text can wrap
+        // to the row width instead. The parent's `flex-wrap` still moves the
+        // slot onto its own line before anything is squeezed, so a compact
+        // control keeps its size.
+        <div className="flex min-w-0 items-center gap-2">{action}</div>
       ) : null}
     </div>
   );

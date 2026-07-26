@@ -45,6 +45,14 @@ export interface WorkerStatus {
   errors: number;
 }
 
+/** One queue with exhausted-retry failures, as `/api/admin/status` reports it. */
+export interface FailingQueue {
+  queue: string;
+  failures: number;
+  lastFailedAt: string;
+  lastError: string;
+}
+
 export interface SystemStatus {
   version: string;
   nodeVersion: string;
@@ -53,6 +61,13 @@ export interface SystemStatus {
   startTime: string;
   database: string;
   worker: WorkerStatus;
+  /**
+   * Queues whose jobs exhausted their retries recently. `null` means the
+   * deployment has no pg-boss schema to ask (web-only); an empty `queues`
+   * array means it was asked and nothing is failing. The two are rendered
+   * differently on purpose — absence is not health.
+   */
+  failingJobs: { windowHours: number; queues: FailingQueue[] } | null;
   counts: {
     users: number;
     measurements: number;

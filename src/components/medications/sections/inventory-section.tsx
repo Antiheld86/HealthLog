@@ -10,11 +10,15 @@
  *     `POST /api/medications/[id]/inventory` — quantity in units,
  *     optional printed expiry. The quantity prefills from the
  *     medication's `dosesPerUnit` when configured.
- *   - CORRECT: a per-item adjust flow (`PATCH …/inventory/[itemId]` with
- *     `unitsRemaining`) for stock corrections and manual withdrawals —
- *     the count is set absolutely, clamped server-side to the item's
- *     capacity, and the canonical state machine derives the next state
- *     (0 ⇒ used up).
+ *   - CORRECT: a per-item adjust flow (`PATCH …/inventory/[itemId]`) for
+ *     stock corrections and manual withdrawals — the count is set
+ *     absolutely, clamped server-side to the item's capacity, and the
+ *     canonical state machine derives the next state (0 ⇒ used up). The
+ *     same flow edits the two dates that decide the state: the
+ *     carton-printed expiry and the date the container was opened. The
+ *     opening date is written by the intake consumption hook without the
+ *     user typing it, so it needs a correction path more than any other
+ *     field on the row.
  *   - DELETE: a per-item trash affordance behind a destructive confirm
  *     (`DELETE …/inventory/[itemId]`). Consumption stamps on intake
  *     events that referenced the container stay in place; a later
@@ -60,7 +64,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SettingsGroup } from "@/components/medications/settings-group";
-import { useTranslations } from "@/lib/i18n/context";
+import { useDateFormatPreference, useTranslations } from "@/lib/i18n/context";
+import { formatDate } from "@/lib/date-format";
 import { queryKeys } from "@/lib/query-keys";
 import { formatUnitCount } from "@/components/medications/units-per-dose";
 import {
@@ -117,6 +122,31 @@ interface InventoryItem {
   // the UI renders "—" instead of a fabricated 0.
   unitsTotal: number | null;
   unitsRemaining: number | null;
+  /** ISO instant. The carton-printed expiry; null when none was recorded. */
+  printedExpiry: string | null;
+  /** ISO instant. When the container was opened; null while sealed. */
+  firstUseAt: string | null;
+}
+
+/**
+ * Both dates the row carries are entered — and were always stored — as a
+ * calendar day at the browser's local midnight. Reading them back in the
+ * same zone is what makes the value the user typed the value they see;
+ * pinning to UTC would slide the day for anyone east of Greenwich.
+ */
+function toLocalDayInput(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** The inverse: a `yyyy-MM-dd` day back to the instant the API stores. */
+function fromLocalDayInput(day: string): string | null {
+  if (!day) return null;
+  const at = new Date(`${day}T00:00:00`);
+  return Number.isNaN(at.getTime()) ? null : at.toISOString();
 }
 
 interface InventoryResponse {
@@ -139,6 +169,15 @@ const STATE_BADGE: Record<
   USED_UP: "outline",
 };
 
+/**
+ * Container kinds whose first opening starts a 30-day degradation clock.
+ * Mirrors `IN_USE_CLOCK_CONTAINER_TYPES` in
+ * `src/lib/medications/inventory/state-machine.ts` — the server owns the
+ * transition; the client only needs to know which helper text to show
+ * beside the opening date.
+ */
+const CLOCK_CONTAINER_TYPES: readonly ContainerType[] = ["PEN", "AMPOULE"];
+
 /** Default container kind for the register flow, from the delivery form. */
 function defaultContainerType(deliveryForm: string | undefined): ContainerType {
   if (deliveryForm === "INJECTION") return "PEN";
@@ -160,7 +199,8 @@ export function InventorySection({
   /** Defaults the register flow's container type. */
   deliveryForm?: string;
 }) {
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations();
+  const dateFormatPref = useDateFormatPreference();
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
   const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null);
@@ -244,6 +284,10 @@ export function InventorySection({
   const remaining = summary?.dosesRemaining ?? 0;
   const total = summary?.dosesTotal ?? 0;
   const expiredUnits = summary?.expiredUnits ?? 0;
+  // Nothing available, but stock is sitting in containers that were
+  // declared unusable. That is a different statement from "no supply
+  // recorded" and the headline has to make the difference.
+  const allExpired = totalUnits === 0 && expiredUnits > 0;
 
   const dialogs = (
     <>
@@ -302,8 +346,17 @@ export function InventorySection({
       >
         <div className="flex items-center justify-between gap-3 py-3">
           <p className="text-foreground text-sm font-medium">
-            {t("medications.detail.bestand.summary", { remaining, total })}
-            {perDose !== 1 && (
+            {/* "0 of 0 doses" beside "+ 54 units expired" read as two
+                contradicting statements — the first says nothing was ever
+                configured, the second says stock was written off. When the
+                available pool is empty and expired stock is all that is
+                left, say that instead. */}
+            {allExpired
+              ? t("medications.detail.bestand.summaryAllExpired", {
+                  units: expiredUnits,
+                })
+              : t("medications.detail.bestand.summary", { remaining, total })}
+            {perDose !== 1 && !allExpired && (
               <span className="text-muted-foreground block text-xs font-normal">
                 {t("medications.detail.bestand.unitsDetail", {
                   remaining: formatUnitCount(remainingUnits),
@@ -311,7 +364,7 @@ export function InventorySection({
                 })}
               </span>
             )}
-            {expiredUnits > 0 && (
+            {expiredUnits > 0 && !allExpired && (
               <span
                 className="text-muted-foreground block text-xs font-normal"
                 data-slot="inventory-expired-suffix"
@@ -432,6 +485,40 @@ export function InventorySection({
                   {t(`medications.detail.bestand.state.${item.state}`)}
                 </Badge>
               </span>
+              {/* The two dates that decide the row's state. They used to
+                  be invisible here — a container could read EXPIRED with
+                  nothing on screen to explain why, and no way to correct
+                  the value that caused it. */}
+              {(item.firstUseAt || item.printedExpiry) && (
+                <span
+                  className="text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs"
+                  data-slot="inventory-item-dates"
+                >
+                  {item.firstUseAt && (
+                    <span>
+                      {t("medications.detail.bestand.openedOn", {
+                        date: formatDate(
+                          toLocalDayInput(item.firstUseAt),
+                          dateFormatPref,
+                          locale,
+                        ),
+                      })}
+                    </span>
+                  )}
+                  {item.firstUseAt && item.printedExpiry && <span>·</span>}
+                  {item.printedExpiry && (
+                    <span>
+                      {t("medications.detail.bestand.expiresOn", {
+                        date: formatDate(
+                          toLocalDayInput(item.printedExpiry),
+                          dateFormatPref,
+                          locale,
+                        ),
+                      })}
+                    </span>
+                  )}
+                </span>
+              )}
             </span>
             <span className="flex shrink-0 items-center gap-1">
               <Button
@@ -714,12 +801,20 @@ export function AddInventoryDialog({
 }
 
 /**
- * Stock correction for one item: sets the remaining-unit count
- * absolutely (covers both "I miscounted" and a manual withdrawal). The
- * server clamps to the item's capacity and re-derives the state; 0
- * marks the item used up.
+ * Correct one container: the remaining-unit count (covers both "I
+ * miscounted" and a manual withdrawal), the carton-printed expiry, and
+ * the date it was opened. The server clamps the count to the item's
+ * capacity and re-derives the state from the two dates; 0 units marks
+ * the item used up.
+ *
+ * Both dates are editable because both decide the state — and the
+ * opening date in particular is written by the intake consumption hook
+ * without the user ever typing it, so an auto-open on a back-dated dose
+ * needs a way back. Each field is sent only when it actually changed,
+ * so saving a unit correction never rewrites a date the user did not
+ * touch.
  */
-function AdjustInventoryDialog({
+export function AdjustInventoryDialog({
   medicationId,
   item,
   onClose,
@@ -735,6 +830,10 @@ function AdjustInventoryDialog({
   const [value, setValue] = useState(
     item.unitsRemaining == null ? "" : String(item.unitsRemaining),
   );
+  const initialExpiry = toLocalDayInput(item.printedExpiry);
+  const initialOpened = toLocalDayInput(item.firstUseAt);
+  const [expiry, setExpiry] = useState(initialExpiry);
+  const [opened, setOpened] = useState(initialOpened);
   const [busy, setBusy] = useState(false);
   const formId = useId();
 
@@ -755,6 +854,15 @@ function AdjustInventoryDialog({
       await apiPatch(`/api/medications/${medicationId}/inventory/${item.id}`, {
         // The wire field carries UNITS (v1.16.10 symmetric naming).
         unitsRemaining: parsed,
+        // Absent means untouched on the server, so only changed fields
+        // ride along. A cleared field sends null, which is a deliberate
+        // "there is no such date" — not the same as leaving it alone.
+        ...(expiry !== initialExpiry && {
+          printedExpiry: fromLocalDayInput(expiry),
+        }),
+        ...(opened !== initialOpened && {
+          markAsFirstUseAt: fromLocalDayInput(opened),
+        }),
       });
       await invalidateSupplyQueries(queryClient, medicationId);
       toast.success(t("medications.detail.bestand.adjustSuccess"));
@@ -822,6 +930,50 @@ function AdjustInventoryDialog({
             {t("medications.detail.bestand.adjustHelper", {
               total: item.unitsTotal ?? t("medications.detail.bestand.unknown"),
             })}
+          </p>
+        </div>
+        <div className="space-y-2">
+          <label
+            htmlFor="inventory-edit-expiry"
+            className="text-sm font-medium"
+          >
+            {t("medications.detail.bestand.editExpiryLabel")}
+          </label>
+          <DateField
+            id="inventory-edit-expiry"
+            value={expiry}
+            onChange={setExpiry}
+            aria-describedby="inventory-edit-expiry-helper"
+            data-testid="inventory-edit-expiry"
+          />
+          <p
+            id="inventory-edit-expiry-helper"
+            className="text-muted-foreground text-xs"
+          >
+            {t("medications.detail.bestand.editExpiryHelper")}
+          </p>
+        </div>
+        <div className="space-y-2">
+          <label
+            htmlFor="inventory-edit-opened"
+            className="text-sm font-medium"
+          >
+            {t("medications.detail.bestand.editOpenedLabel")}
+          </label>
+          <DateField
+            id="inventory-edit-opened"
+            value={opened}
+            onChange={setOpened}
+            aria-describedby="inventory-edit-opened-helper"
+            data-testid="inventory-edit-opened"
+          />
+          <p
+            id="inventory-edit-opened-helper"
+            className="text-muted-foreground text-xs"
+          >
+            {CLOCK_CONTAINER_TYPES.includes(item.containerType)
+              ? t("medications.detail.bestand.editOpenedHelperClock")
+              : t("medications.detail.bestand.editOpenedHelper")}
           </p>
         </div>
       </form>

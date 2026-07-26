@@ -147,6 +147,9 @@ describe("runWhoopResourceSync — WH-4 write-path ledger honesty", () => {
     expect(recordWhoopSyncFailureMock).toHaveBeenCalledWith(
       "u1",
       expect.objectContaining({ message: "write failed" }),
+      // Attributed to the leg it came from, so the recovery leg's success at
+      // :05 cannot clear it.
+      "workout",
     );
   });
 

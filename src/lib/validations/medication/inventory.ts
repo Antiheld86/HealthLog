@@ -11,7 +11,10 @@ import { z } from "zod/v4";
  */
 /**
  * v1.16.10 — container kinds, mirrored from the Prisma
- * `MedicationContainerType` enum. Display-level classification only.
+ * `MedicationContainerType` enum. Beyond labelling the row, the kind
+ * decides whether opening the container starts a post-opening clock —
+ * see `IN_USE_CLOCK_CONTAINER_TYPES` in
+ * `src/lib/medications/inventory/state-machine.ts`.
  */
 export const MEDICATION_CONTAINER_TYPE_VALUES = [
   "PEN",
@@ -42,7 +45,7 @@ export const createInventoryItemSchema = z
       .enum(MEDICATION_CONTAINER_TYPE_VALUES)
       .optional()
       .describe(
-        "Kind of physical container (PEN / AMPOULE / BLISTER / INHALER / BOTTLE / OTHER). Display-level only; defaults to OTHER.",
+        "Kind of physical container (PEN / AMPOULE / BLISTER / INHALER / BOTTLE / OTHER). Defaults to OTHER. PEN and AMPOULE are the sealed reservoirs the first dose breaches, so they carry a 30-day post-opening window; every other kind expires only on its printed date.",
       ),
     printedExpiry: z.iso
       .datetime({ offset: true })
@@ -85,9 +88,10 @@ export const updateInventoryItemSchema = z
     markAsFirstUseAt: z.iso
       .datetime({ offset: true })
       .transform((s) => new Date(s))
+      .nullable()
       .optional()
       .describe(
-        "Manually start the 30-day in-use clock (the user opened the container without logging an intake). ACTIVE flips to IN_USE; a backdated instant whose window already lapsed lands EXPIRED.",
+        "Opening date of the container (the user opened it without logging an intake). ACTIVE flips to IN_USE. `null` clears it — the container reads as unopened again, which is how a wrongly auto-opened row is corrected. For a PEN or an AMPOULE this also starts / stops the 30-day in-use clock; other container kinds carry no such clock and expire only on their printed date.",
       ),
     markAsUsedUp: z
       .boolean()

@@ -4,6 +4,9 @@
  * The request process validates and persists the complete payload, then
  * returns a polling handle without performing intake writes itself.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
@@ -233,14 +236,23 @@ describe("POST /api/medications/[id]/intake/import — durable kickoff", () => {
         userId: "user-1",
         medicationId: "m1",
         status: "queued",
+        // A legacy `zaehler` on the first row rides along and decides nothing:
+        // both keys come from the instant, so two different times can never
+        // collapse onto one key again.
+        // This body carries one time per row and nothing to say which slot it
+        // belonged to, so `scheduledFor` mirrors the take: every dose it
+        // describes is ad-hoc, anchored on itself. The export-reading route is
+        // the one with two facts to write.
         payload: {
           entries: [
             {
-              idempotencyKey: "import-m1-41",
+              idempotencyKey: `import-m1-${Date.parse("2026-01-01T07:00:00")}`,
+              scheduledFor: expect.any(String),
               takenAt: expect.any(String),
             },
             {
-              idempotencyKey: expect.stringMatching(/^import-m1-\d+$/),
+              idempotencyKey: `import-m1-${Date.parse("2026-01-01T19:00:00")}`,
+              scheduledFor: expect.any(String),
               takenAt: expect.any(String),
             },
           ],
@@ -248,7 +260,7 @@ describe("POST /api/medications/[id]/intake/import — durable kickoff", () => {
         progress: expect.objectContaining({
           processed: 0,
           imported: 0,
-          skippedDuplicates: 0,
+          skippedByReason: {},
           total: 2,
         }),
       }),
@@ -410,5 +422,71 @@ describe("POST /api/medications/[id]/intake/import — future bound and limiter"
       expect.any(Number),
       expect.any(Number),
     );
+  });
+});
+
+describe("POST /api/medications/[id]/intake/import — the reported export (#650)", () => {
+  // The file attached to the report: 28 doses, one per day, all at 08:30, and
+  // `"zaehler": 1.0` on every single row — a dose quantity, not a row counter.
+  // The old key derivation used that field verbatim, so all 28 entries queued
+  // under `import-m1-1`, one row was written and 27 were reported back as
+  // duplicates of each other.
+  const REPORTED_EXPORT = JSON.parse(
+    readFileSync(
+      join(__dirname, "fixtures", "reported-intake-export.json"),
+      "utf8",
+    ),
+  ) as Array<{ datum: string; uhrzeit: string; zaehler: number }>;
+
+  it("is the reported shape (a fixture that drifted would prove nothing)", () => {
+    expect(REPORTED_EXPORT).toHaveLength(28);
+    expect(new Set(REPORTED_EXPORT.map((row) => row.zaehler)).size).toBe(1);
+    expect(
+      new Set(REPORTED_EXPORT.map((row) => `${row.datum}T${row.uhrzeit}`)).size,
+    ).toBe(28);
+  });
+
+  it("queues 28 distinct doses instead of collapsing them onto one key", async () => {
+    const res = await POST(postReq(REPORTED_EXPORT), ROUTE_CTX);
+
+    expect(res.status).toBe(202);
+    const created = vi.mocked(prisma.medicationIntakeImportJob.create).mock
+      .calls[0][0] as unknown as {
+      data: {
+        payload: {
+          entries: Array<{ takenAt: string; idempotencyKey: string }>;
+        };
+      };
+    };
+    const entries = created.data.payload.entries;
+    expect(entries).toHaveLength(28);
+    expect(new Set(entries.map((entry) => entry.idempotencyKey)).size).toBe(28);
+    expect(new Set(entries.map((entry) => entry.takenAt)).size).toBe(28);
+    // The key is a function of the instant and nothing else.
+    for (const [index, entry] of entries.entries()) {
+      const row = REPORTED_EXPORT[index];
+      const instant = Date.parse(`${row.datum}T${row.uhrzeit}`);
+      expect(entry.idempotencyKey).toBe(`import-m1-${instant}`);
+      expect(entry.takenAt).toBe(new Date(instant).toISOString());
+    }
+  });
+
+  it("keys two rows at the same instant identically, whatever else they carry", async () => {
+    await POST(
+      postReq([
+        { datum: "2026-03-01", uhrzeit: "08:00:00", zaehler: 7 },
+        { datum: "2026-03-01", uhrzeit: "08:00:00", zaehler: 9 },
+      ]),
+      ROUTE_CTX,
+    );
+
+    const created = vi.mocked(prisma.medicationIntakeImportJob.create).mock
+      .calls[0][0] as unknown as {
+      data: { payload: { entries: Array<{ idempotencyKey: string }> } };
+    };
+    const keys = created.data.payload.entries.map(
+      (entry) => entry.idempotencyKey,
+    );
+    expect(keys[0]).toBe(keys[1]);
   });
 });

@@ -9,11 +9,37 @@ import {
 } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { invalidateUserData } from "@/lib/cache/invalidate";
+import {
+  resolveWipeDelegate,
+  USER_RESET,
+  wipeDelegateKey,
+  WIPE_MODELS,
+} from "@/lib/data-wipe/wipe-plan";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Delete all user-owned health/integration data while keeping the account.
+ * Budget for the wipe transaction.
+ *
+ * Prisma's default interactive-transaction timeout is 5 s, which was already
+ * optimistic for thirteen `deleteMany` statements and is not survivable for
+ * the full user-scoped set on an account with a large import behind it. The
+ * whole action is one transaction on purpose — a half-applied wipe is worse
+ * than none, because the person is told it succeeded either way.
+ */
+const WIPE_TRANSACTION_TIMEOUT_MS = 120_000;
+const WIPE_TRANSACTION_MAX_WAIT_MS = 15_000;
+
+/**
+ * Delete every row this account owns, keeping the account and the credentials
+ * that sign into it.
+ *
+ * The set of tables is not written here. It is declared once in
+ * `@/lib/data-wipe/wipe-plan` and held against `prisma/schema.prisma` by
+ * `src/__tests__/data-wipe-completeness.test.ts`, so a model added to the
+ * schema cannot quietly land outside the wipe — which is exactly how this
+ * route came to delete thirteen tables out of eighty-odd while telling people
+ * it had deleted all of them.
  *
  * v1.23 — gated by a fresh step-up for MFA-enrolled accounts (see the account
  * deletion route); single-factor accounts keep the typed-confirmation-only
@@ -40,92 +66,53 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
 
   const userId = user.id;
 
-  const result = await prisma.$transaction(async (tx) => {
-    const measurements = await tx.measurement.deleteMany({
-      where: { userId },
-    });
-    const intakeEvents = await tx.medicationIntakeEvent.deleteMany({
-      where: { userId },
-    });
-    const medications = await tx.medication.deleteMany({
-      where: { userId },
-    });
-    const moodEntries = await tx.moodEntry.deleteMany({
-      where: { userId },
-    });
-    // v1.4.39 W-MOOD — wipe the persisted rollup partition for this
-    // user so the next analytics read returns an empty envelope.
-    await tx.moodEntryRollup.deleteMany({ where: { userId } });
-    const apiTokens = await tx.apiToken.deleteMany({
-      where: { userId },
-    });
-    const withingsConnections = await tx.withingsConnection.deleteMany({
-      where: { userId },
-    });
-    const notificationChannels = await tx.notificationChannel.deleteMany({
-      where: { userId },
-    });
-    const pushSubscriptions = await tx.pushSubscription.deleteMany({
-      where: { userId },
-    });
-    const dataBackups = await tx.dataBackup.deleteMany({
-      where: { userId },
-    });
-    const achievements = await tx.userAchievement.deleteMany({
-      where: { userId },
-    });
-    const telegramDeletions = await tx.telegramScheduledDeletion.deleteMany({
-      where: { userId },
-    });
-    const auditLogs = await tx.auditLog.deleteMany({
-      where: { userId },
-    });
+  const counts = await prisma.$transaction(
+    async (tx) => {
+      const perModel: Record<string, number> = {};
+      for (const model of WIPE_MODELS) {
+        const { count } = await resolveWipeDelegate(tx, model).deleteMany({
+          where: { userId },
+        });
+        if (count > 0) perModel[wipeDelegateKey(model)] = count;
+      }
 
-    await tx.user.update({
-      where: { id: userId },
-      data: {
-        heightCm: null,
-        dateOfBirth: null,
-        gender: null,
-        insightsPrivacyMode: "aggregated",
-        insightsCachedAt: null,
-        insightsCachedText: null,
-        telegramBotToken: null,
-        telegramChatId: null,
-        telegramEnabled: false,
-        withingsClientIdEncrypted: null,
-        withingsClientSecretEncrypted: null,
-        onboardingCompletedAt: null,
-      },
-    });
+      // The account row survives; the personal data carried on its own columns
+      // does not. Same classification contract as the model list.
+      await tx.user.update({ where: { id: userId }, data: USER_RESET });
 
-    return {
-      measurements: measurements.count,
-      intakeEvents: intakeEvents.count,
-      medications: medications.count,
-      moodEntries: moodEntries.count,
-      apiTokens: apiTokens.count,
-      withingsConnections: withingsConnections.count,
-      notificationChannels: notificationChannels.count,
-      pushSubscriptions: pushSubscriptions.count,
-      dataBackups: dataBackups.count,
-      achievements: achievements.count,
-      telegramDeletions: telegramDeletions.count,
-      auditLogs: auditLogs.count,
-    };
-  });
+      return perModel;
+    },
+    {
+      timeout: WIPE_TRANSACTION_TIMEOUT_MS,
+      maxWait: WIPE_TRANSACTION_MAX_WAIT_MS,
+    },
+  );
 
+  const deletedRows = Object.values(counts).reduce((sum, n) => sum + n, 0);
+
+  // Written after the transaction commits, so the row cannot be removed by the
+  // AuditLog delete inside it. The person's whole audit history goes; this one
+  // row stays as the receipt for the erasure they asked for. Account deletion
+  // takes the other branch and purges even this, because there is no longer an
+  // account for it to belong to.
   await auditLog("user.data.clear", {
     userId,
     ipAddress: getClientIp(request),
-    details: result,
+    details: { deletedRows, models: counts },
   });
 
-  annotate({ action: { name: "settings.data.clear" }, meta: result });
+  annotate({
+    action: { name: "settings.data.clear" },
+    meta: {
+      deleted_rows: deletedRows,
+      models_wiped: WIPE_MODELS.length,
+      models_with_rows: Object.keys(counts).length,
+    },
+  });
 
   // v1.16.9 — every cached payload was built on the rows just deleted;
   // hard-evict the user's buckets so no surface serves pre-wipe data.
   invalidateUserData(userId);
 
-  return apiSuccess({ cleared: true, ...result });
+  return apiSuccess({ cleared: true, deletedRows, models: counts });
 });

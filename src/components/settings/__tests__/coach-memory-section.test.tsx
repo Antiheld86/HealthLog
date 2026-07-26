@@ -122,11 +122,13 @@ describe("Settings — CoachMemorySection", () => {
 
   it("renders a per-fact forget control and the bulk forget-all action", () => {
     const html = render(buildFacts());
-    expect(html).toContain('data-testid="settings-coach-memory-forget"');
+    // The per-row control routes through `ConfirmButton`, which identifies
+    // itself with `data-slot`; the bulk one is still a local dialog.
+    expect(html).toContain('data-slot="settings-coach-memory-forget"');
     expect(html).toContain('data-testid="settings-coach-memory-forget-all"');
     // One forget button per fact (3 seeded).
     const forgetButtons = html.match(
-      /data-testid="settings-coach-memory-forget"/g,
+      /data-slot="settings-coach-memory-forget"/g,
     );
     expect(forgetButtons).toHaveLength(3);
   });

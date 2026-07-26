@@ -14,7 +14,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Loader2, MonitorSmartphone } from "lucide-react";
 
 import { SettingsCard } from "@/components/settings/settings-card";
-import { ConfirmButton } from "@/components/settings/confirm-button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";

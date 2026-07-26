@@ -69,11 +69,12 @@ const FINALITY_PHRASES: Record<string, readonly string[]> = {
   ],
   it: [
     "non può essere annullata",
+    "non può essere annullato",
     "definitivamente",
     "definitiva",
     "permanente",
   ],
-  pl: ["nie można cofnąć", "trwale", "nieodwracaln"],
+  pl: ["nie można cofnąć", "nie można tego cofnąć", "trwale", "nieodwracaln"],
 };
 
 /** Per-locale phrase that promises the short undo window. */
@@ -108,6 +109,12 @@ const PERMANENT_CONFIRM_KEYS = [
   "mood.manage.purgeBody",
   // GDPR Art. 17 account purge
   "settings.deleteAccountConfirmDescription",
+  // hard delete of every user-scoped row except the sign-in credentials
+  "settings.dangerZoneConfirmDescription",
+  // hard delete since v1.32.40 — the tombstone served nothing and the
+  // dialog already promised permanence
+  "measurementReminders.deleteConfirmDescription",
+  "records.allergies.deleteConfirmDescription",
 ] as const;
 
 describe("delete confirmations describe what the surface actually does", () => {

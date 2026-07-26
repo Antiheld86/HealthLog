@@ -3,6 +3,10 @@ import { apiHandler, requireAdmin } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { getWorkerStatus } from "@/lib/jobs/worker-status";
+import {
+  JOB_FAILURE_WINDOW_HOURS,
+  readFailingQueues,
+} from "@/lib/jobs/job-failures";
 import { readFileSync } from "node:fs";
 
 // Build timestamp (set at build time via next.config)
@@ -57,6 +61,12 @@ export const GET = apiHandler(async () => {
     appSettings?.webPushVapidSubject,
   );
   const workerStatus = getWorkerStatus();
+  // `worker.errors` is one unnamed counter, which is how a queue that failed on
+  // every run for months could sit behind a number nobody could act on. The
+  // queue itself knows which job broke and why, so that is what the status
+  // reports. `null` = no queue schema to ask (web-only deployment); an empty
+  // array = asked, nothing is failing.
+  const failingJobs = await readFailingQueues();
 
   return apiSuccess({
     version: process.env.npm_package_version ?? "0.1.0",
@@ -66,6 +76,10 @@ export const GET = apiHandler(async () => {
     startTime: START_TIME,
     database: "connected",
     worker: workerStatus,
+    failingJobs:
+      failingJobs === null
+        ? null
+        : { windowHours: JOB_FAILURE_WINDOW_HOURS, queues: failingJobs },
     counts: {
       users: userCount,
       measurements: measurementCount,

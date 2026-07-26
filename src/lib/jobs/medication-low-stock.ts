@@ -105,6 +105,13 @@ export interface LowStockEvaluation {
   runwayDays: number | null;
   dosesRemaining: number;
   unitsRemaining: number;
+  /**
+   * Units sitting in containers that were declared unusable. Never part
+   * of the runway — but "you have nothing left" and "everything you have
+   * left is written off" are different errands, so the push has to be
+   * able to tell them apart.
+   */
+  expiredUnits: number;
 }
 
 /**
@@ -141,6 +148,7 @@ export function evaluateMedicationRunway(
       runwayDays: null,
       dosesRemaining: supply.dosesRemaining,
       unitsRemaining: supply.unitsRemaining,
+      expiredUnits: supply.expiredUnits,
     };
   }
   const runwayDays =
@@ -151,6 +159,7 @@ export function evaluateMedicationRunway(
     runwayDays,
     dosesRemaining: supply.dosesRemaining,
     unitsRemaining: supply.unitsRemaining,
+    expiredUnits: supply.expiredUnits,
   };
 }
 
@@ -234,6 +243,7 @@ export function buildLowStockPayload(input: {
   medName: string;
   runwayDays: number;
   unitsRemaining: number;
+  expiredUnits: number;
   leadDays: number;
   triggerDays: number;
   schedules: RunwaySchedule[];
@@ -243,6 +253,19 @@ export function buildLowStockPayload(input: {
   const title = t("lowStockReminders.title", { medName: input.medName });
 
   if (input.runwayDays < 1) {
+    // Nothing usable left. Whether that means the packs are empty or
+    // that every remaining unit was written off is the difference
+    // between "reorder" and "check whether that really is unusable", so
+    // the two get different copy.
+    if (input.unitsRemaining <= 0 && input.expiredUnits > 0) {
+      return {
+        title,
+        body: t("lowStockReminders.bodyExpired", {
+          medName: input.medName,
+          units: input.expiredUnits,
+        }),
+      };
+    }
     return {
       title,
       body: t("lowStockReminders.bodyToday", {
@@ -305,6 +328,7 @@ interface LowStockEventMeta {
   threshold_days: number;
   doses_remaining: number;
   units_remaining: number;
+  expired_units: number;
   reason?: "already_notified" | "no_runway" | "no_channel";
 }
 
@@ -436,6 +460,7 @@ export async function runMedicationLowStockTick(
           threshold_days: triggerDays,
           doses_remaining: evaluation.dosesRemaining,
           units_remaining: evaluation.unitsRemaining,
+          expired_units: evaluation.expiredUnits,
         };
 
         switch (decision) {
@@ -466,6 +491,7 @@ export async function runMedicationLowStockTick(
               medName: med.name,
               runwayDays: evaluation.runwayDays ?? 0,
               unitsRemaining: evaluation.unitsRemaining,
+              expiredUnits: evaluation.expiredUnits,
               leadDays,
               triggerDays,
               schedules: med.schedules,
@@ -487,6 +513,10 @@ export async function runMedicationLowStockTick(
                 leadDays,
                 unitsRemaining: evaluation.unitsRemaining,
                 dosesRemaining: evaluation.dosesRemaining,
+                // Stock the user physically holds but that was declared
+                // unusable. The client shows it so "0 left" never reads
+                // as "you never had any".
+                expiredUnits: evaluation.expiredUnits,
                 // Deep link — the web-push sender threads this into
                 // the service-worker payload's click target. Lands on
                 // the detail page's Bestand (supply) tab, the surface

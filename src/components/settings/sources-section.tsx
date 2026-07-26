@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SettingsCard } from "@/components/settings/settings-card";
@@ -297,15 +298,19 @@ export function SourcesSection() {
           title={t("settings.sections.sources.cardTitle")}
           description={t("settings.sections.sources.help")}
           status={
-            <Button
+            <ConfirmButton
+              slot="settings-sources-reset"
               variant="ghost"
               size="sm"
-              onClick={() => resetMutation.mutate()}
-              disabled={resetMutation.isPending || saveMutation.isPending}
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              {t("settings.sections.sources.resetDefaults")}
-            </Button>
+              icon={<RotateCcw className="h-3.5 w-3.5" />}
+              label={t("settings.sections.sources.resetDefaults")}
+              title={t("settings.sections.sources.resetDefaultsTitle")}
+              body={t("settings.sections.sources.resetDefaultsBody")}
+              confirmLabel={t("settings.sections.sources.resetDefaultsConfirm")}
+              disabled={saveMutation.isPending}
+              pending={resetMutation.isPending}
+              onConfirm={() => resetMutation.mutate()}
+            />
           }
         />
 

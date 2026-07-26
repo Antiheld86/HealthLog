@@ -26,6 +26,16 @@
  *
  * Plain text only — every value renders exclusively through inputs and
  * React text children; no markdown anywhere.
+ *
+ * The "Clear" control writes `aboutMe: ""` and nothing else. It used to send
+ * `allergies: ""` alongside, so one untargeted tap wiped the allergy line as
+ * well — while the toast it raised said "About-me note cleared", which is what
+ * the control looks like it does and what a person reading it expects. The
+ * allergy line is the entry a clinician reads first, so the control is scoped
+ * rather than merely gated: the field is omitted from the payload, and the PUT
+ * leaves an omitted field untouched by contract. Clearing allergies is done in
+ * the allergies field itself, which is a deliberate act on the thing being
+ * emptied. The confirmation on top of that guards the note.
  */
 import { useState } from "react";
 import Link from "next/link";
@@ -40,6 +50,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { ConfirmButton } from "@/components/ui/confirm-button";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations } from "@/lib/i18n/context";
@@ -103,7 +114,9 @@ export function AboutMeSection({
   };
   const dirty =
     value.aboutMe !== saved.aboutMe || value.allergies !== saved.allergies;
-  const hasAnyContent = saved.aboutMe.length > 0 || saved.allergies.length > 0;
+  // The clear control only ever touches the note, so it only appears when
+  // there is a note to clear.
+  const hasNote = saved.aboutMe.length > 0;
 
   // Quiet completeness meter: one segment per answered field. Reads
   // the SAVED state (not the draft) so it only moves on persistence.
@@ -118,14 +131,16 @@ export function AboutMeSection({
     // v1.32.21 (R5a) — echo the base token this edit was based on so a
     // concurrent write to the same self-context (another tab, or Coach adopt)
     // 409s instead of silently overwriting the newer state.
-    mutationFn: async (input: { aboutMe: string; allergies: string }) => {
+    // `allergies` is optional on purpose: the clear control omits it so the
+    // stored allergy line survives, per the PUT's omitted-field contract.
+    mutationFn: async (input: { aboutMe: string; allergies?: string }) => {
       return apiPut<AboutMeData>(
         "/api/coach/about-me",
         withBaseToken(input, query.data?.updatedAt ?? undefined),
       );
     },
     onSuccess: (next) => {
-      const cleared = !next.aboutMe && !next.allergies;
+      const cleared = !next.aboutMe;
       toast.success(
         cleared
           ? t("settings.ai.aboutMe.clearedToast")
@@ -251,19 +266,21 @@ export function AboutMeSection({
           })}
         </p>
         <div className="flex items-center gap-2">
-          {hasAnyContent && (
-            <Button
-              type="button"
+          {hasNote && (
+            <ConfirmButton
+              slot="settings-about-me-clear"
+              label={t("settings.ai.aboutMe.clear")}
+              icon={<Trash2 className="size-4" aria-hidden />}
               variant="outline"
               size="sm"
               className="min-h-11 sm:min-h-9"
-              data-testid="settings-about-me-clear"
-              disabled={!isAuthenticated || save.isPending}
-              onClick={() => save.mutate({ aboutMe: "", allergies: "" })}
-            >
-              <Trash2 className="size-4" aria-hidden />
-              {t("settings.ai.aboutMe.clear")}
-            </Button>
+              title={t("settings.ai.aboutMe.clearTitle")}
+              body={t("settings.ai.aboutMe.clearBody")}
+              confirmLabel={t("settings.ai.aboutMe.clearConfirm")}
+              disabled={!isAuthenticated}
+              pending={save.isPending}
+              onConfirm={() => save.mutate({ aboutMe: "" })}
+            />
           )}
           <Button
             type="button"

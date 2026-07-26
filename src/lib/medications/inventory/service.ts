@@ -22,8 +22,14 @@ import {
 } from "./summary";
 
 /**
- * Daily cron pass — flip any IN_USE rows whose 30-day window has
- * elapsed into EXPIRED. Returns the count of transitions for logging.
+ * Daily cron pass — flip any IN_USE row whose persisted `expiresAt` has
+ * lapsed into EXPIRED. Returns the count of transitions for logging.
+ *
+ * `expiresAt` is written by `computeExpiresAt`, so the deadline is the
+ * printed expiry, the post-opening window, or the earlier of the two —
+ * and a container kind with no post-opening clock and no printed expiry
+ * carries no `expiresAt` at all, which is exactly how it stays out of
+ * this scan.
  *
  * Optionally scoped to a single user — useful for the per-user
  * trigger path. Cron with `userId: null` sweeps every user.
@@ -158,7 +164,10 @@ export function buildCreateInventoryInput(input: {
     firstUseAt: null,
     printedExpiry: input.printedExpiry,
     purchasedAt: input.purchasedAt,
-    expiresAt: computeExpiresAt(null, input.printedExpiry),
+    // A freshly registered container is unopened, so the only deadline
+    // it can carry is the printed one — but pass the kind anyway so the
+    // helper stays the single place that decides.
+    expiresAt: computeExpiresAt(null, input.printedExpiry, input.containerType),
     manufacturer: input.manufacturer,
     doseStrength: input.doseStrength,
     // Encrypt the free-text note at rest; the plaintext column stays null.

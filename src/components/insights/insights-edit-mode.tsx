@@ -23,6 +23,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
 import { cn } from "@/lib/utils";
 import { prefersReducedMotion } from "@/lib/charts/reduced-motion";
 import { useTranslations } from "@/lib/i18n/context";
@@ -230,20 +231,19 @@ export function InsightsEditMode({
           </p>
         </div>
         <div className="flex items-center gap-2 self-end sm:self-auto">
-          <Button
+          <ConfirmButton
+            slot="insights-edit-reset"
             variant="ghost"
             size="sm"
-            onClick={() => resetMutation.mutate()}
-            disabled={busy}
-            data-slot="insights-edit-reset"
-          >
-            {resetMutation.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-            ) : (
-              <RotateCcw className="h-3.5 w-3.5" />
-            )}
-            {t("insights.editMode.reset")}
-          </Button>
+            icon={<RotateCcw className="h-3.5 w-3.5" />}
+            label={t("insights.editMode.reset")}
+            title={t("insights.editMode.resetTitle")}
+            body={t("insights.editMode.resetBody")}
+            confirmLabel={t("insights.editMode.resetConfirm")}
+            disabled={busy && !resetMutation.isPending}
+            pending={resetMutation.isPending}
+            onConfirm={() => resetMutation.mutate()}
+          />
           <Button
             size="sm"
             onClick={() => saveMutation.mutate(draft)}

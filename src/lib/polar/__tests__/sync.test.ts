@@ -196,7 +196,9 @@ describe("syncUserPolar", () => {
       externalId: "recharge:2026-06-10:recovery",
       value: 100,
     });
-    expect(recordSuccessMock).toHaveBeenCalledWith("u1", "polar");
+    expect(recordSuccessMock).toHaveBeenCalledWith("u1", "polar", {
+      leg: "vitals",
+    });
   });
 
   it("maps a cardio-load row with source POLAR + stable externalId", async () => {
@@ -482,7 +484,9 @@ describe("syncUserPolar", () => {
 
     expect(recordFailureMock).not.toHaveBeenCalled();
     expect(recordSuccessMock).toHaveBeenCalledTimes(1);
-    expect(recordSuccessMock).toHaveBeenCalledWith("u1", "polar");
+    expect(recordSuccessMock).toHaveBeenCalledWith("u1", "polar", {
+      leg: "vitals",
+    });
   });
 
   it.each([

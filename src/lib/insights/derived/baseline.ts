@@ -31,6 +31,8 @@
 import type { MeasurementType, PrismaClient } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { getAgeFromDateOfBirth } from "@/lib/analytics/pulse-targets";
+import { toProfileSex } from "@/lib/profile/sex";
+import type { ProfileSex } from "@/lib/profile/sex";
 import {
   probeRollupCoverage,
   type RollupCoverageMap,
@@ -82,7 +84,14 @@ export interface VitalsBaselineValue {
 /** Caller-supplied profile (read once per request, never re-fetched here). */
 export interface BaselineProfile {
   ageYears: number | null;
-  sex: "MALE" | "FEMALE" | null;
+  /**
+   * Sex as stored, `OTHER` included. The sex-split reference tables have
+   * no `OTHER` row, so `resolveSexRows` falls through to the sex-agnostic
+   * band or reports none — an honest omission. Narrowing the value away
+   * HERE instead would hand every consumer a `null` it cannot tell apart
+   * from "no answer".
+   */
+  sex: ProfileSex;
   /**
    * Height in cm from `User.heightCm`, when set. Consumed by the BMI
    * metric (weight ÷ height²); `null` when the profile has no height.
@@ -108,8 +117,7 @@ export async function loadBaselineProfile(
     where: { id: userId },
     select: { dateOfBirth: true, gender: true, heightCm: true },
   });
-  const sex =
-    user?.gender === "MALE" || user?.gender === "FEMALE" ? user.gender : null;
+  const sex = toProfileSex(user?.gender);
   return {
     ageYears: getAgeFromDateOfBirth(user?.dateOfBirth ?? null),
     sex,

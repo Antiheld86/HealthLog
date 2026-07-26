@@ -21,6 +21,7 @@ import { useTranslations } from "@/lib/i18n/context";
 import { AppleHealthImportCard } from "./apple-health-import-card";
 import { JsonImportCard } from "./json-import-card";
 import { CsvImportCard } from "./csv-import-card";
+import { DoseHistoryImportCard } from "./dose-history-import-card";
 
 export {
   EXAMPLE_IMPORT,
@@ -50,6 +51,7 @@ export function ImportPanel() {
         <AppleHealthImportCard />
         <JsonImportCard />
         <CsvImportCard />
+        <DoseHistoryImportCard />
       </div>
     </section>
   );

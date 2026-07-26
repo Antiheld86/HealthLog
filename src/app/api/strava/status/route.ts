@@ -4,6 +4,10 @@ import { annotate } from "@/lib/logging/context";
 import { apiSuccess } from "@/lib/api-response";
 import { getStravaClientCredentials } from "@/lib/strava/credentials";
 import { getIntegrationStatus } from "@/lib/integrations/status";
+import {
+  INTEGRATION_CADENCE,
+  resolveSyncVerdict,
+} from "@/lib/integrations/sync-verdict";
 
 /**
  * v1.28.x — Strava connection status for the current user.
@@ -53,5 +57,18 @@ export const GET = apiHandler(async () => {
     lastSuccessAt: status.lastSuccessAt,
     lastAttemptAt: status.lastAttemptAt,
     lastError: status.lastError,
+    // `connected: true` here means "a connection exists", not "it is working"
+    // — a pipe dead for a fortnight still answers true. The verdict is the
+    // liveness truth, resolved by the same rule the Settings envelope uses so
+    // this route cannot drift into a second opinion.
+    syncHealth: resolveSyncVerdict({
+      connected: true,
+      configured: true,
+      state: status.state,
+      lastSuccessAt: status.lastSuccessAt,
+      lastAttemptAt: status.lastAttemptAt,
+      failingSinceAt: status.failingSince,
+      cadence: INTEGRATION_CADENCE["strava"],
+    }),
   });
 });

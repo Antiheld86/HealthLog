@@ -91,6 +91,8 @@ export function classifyPolarFailure(err: unknown): FailureKind {
  * record a future escape with the SAME provider-owned classification the inline
  * catch already applies.
  */
+export const POLAR_LEG_VITALS = "vitals";
+
 export async function recordPolarSyncFailure(
   userId: string,
   err: unknown,
@@ -98,6 +100,7 @@ export async function recordPolarSyncFailure(
   await recordSyncFailure({
     userId,
     integration: "polar",
+    leg: POLAR_LEG_VITALS,
     kind: classifyPolarFailure(err),
     message: err instanceof Error ? err.message : String(err),
     errorCode:
@@ -288,6 +291,7 @@ export async function syncUserPolar(userId: string): Promise<number> {
     await recordSyncFailure({
       userId,
       integration: "polar",
+      leg: POLAR_LEG_VITALS,
       kind: classifyPolarFailure(firstErr),
       message: `partial sync failure (${names}): ${
         firstErr instanceof Error ? firstErr.message : String(firstErr)
@@ -300,7 +304,7 @@ export async function syncUserPolar(userId: string): Promise<number> {
     return imported;
   }
 
-  await recordSyncSuccess(userId, "polar");
+  await recordSyncSuccess(userId, "polar", { leg: POLAR_LEG_VITALS });
   return imported;
 }
 

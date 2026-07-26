@@ -6,6 +6,7 @@ import { ImageUp, Loader2, Trash2 } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
 import { SettingsCard } from "@/components/settings/settings-card";
@@ -146,23 +147,23 @@ export function AvatarSection() {
               : t("settings.avatar.upload")}
           </Button>
           {avatarUrl && (
-            <Button
+            <ConfirmButton
+              slot="settings-avatar-remove"
               variant="ghost"
               className="text-destructive min-h-11 sm:min-h-9"
-              disabled={busy}
-              onClick={() => {
+              icon={<Trash2 className="h-4 w-4" />}
+              label={t("settings.avatar.remove")}
+              title={t("settings.avatar.removeTitle")}
+              body={t("settings.avatar.removeBody")}
+              confirmLabel={t("settings.avatar.removeConfirm")}
+              disabled={busy && !remove.isPending}
+              pending={remove.isPending}
+              onConfirm={() => {
                 setMsg(null);
                 setMsgType(null);
                 remove.mutate();
               }}
-            >
-              {remove.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-              {t("settings.avatar.remove")}
-            </Button>
+            />
           )}
         </div>
       </div>

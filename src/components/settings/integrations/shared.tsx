@@ -161,14 +161,19 @@ export function pillStateFor(
 /**
  * The timestamp the pill shows inline. `connected` reads the last success (a
  * connection row's own `lastSyncedAt` wins when it is newer, which is what
- * repaints a fresh "just now" straight after a manual sync); the two aging
- * states read the instant that triggered the verdict.
+ * repaints a fresh "just now" straight after a manual sync); the aging and
+ * failing states read the instant that triggered the verdict.
+ *
+ * `failing` must NOT fall through to the `legacyLastSyncedAt` arm below. That
+ * field is a connection row's own clock, kept fresh by the very sync that is
+ * erroring, so a provider that had delivered nothing for a fortnight painted a
+ * "just now" beside its warning.
  */
 export function pillTimestampFor(
   status: IntegrationStatusViewModel | undefined,
 ): string | null {
   const verdict = status?.syncHealth?.verdict;
-  if (verdict === "stale" || verdict === "stalled") {
+  if (verdict === "stale" || verdict === "stalled" || verdict === "failing") {
     return status?.syncHealth?.since ?? null;
   }
   return status?.legacyLastSyncedAt ?? status?.lastSuccessAt ?? null;

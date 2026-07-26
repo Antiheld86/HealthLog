@@ -377,8 +377,10 @@ describe("GET /api/sync/changes (real Postgres)", () => {
 
     const pruned = await cleanupExpiredMeasurementTombstones(prisma);
     // Only the ancient row (deletedAt past the retention horizon) is
-    // pruned; the recent reachable tombstone survives.
-    expect(pruned).toBe(1);
+    // pruned; the recent reachable tombstone survives. `drained` says the
+    // batched walk reached the end of the backlog rather than stopping at
+    // its per-run cap.
+    expect(pruned).toEqual({ deleted: 1, drained: true });
     const survivors = await prisma.measurement.findMany({
       where: { userId: TEST_USER_ID },
       select: { externalId: true },

@@ -94,7 +94,11 @@ test.describe("Settings mobile consistency (Pixel 5)", () => {
     page,
   }) => {
     await page.goto("/settings/account", { waitUntil: "networkidle" });
-    await page.waitForLoadState("networkidle");
+    // Same reason as the grid test below: gate on the element, not the
+    // network, because the read underneath it happens exactly once.
+    await expect(
+      page.getByRole("button", { name: /change password/i }),
+    ).toBeVisible();
 
     // The account page's action button(s) must live within (or above the
     // bottom of) the parent card. Since v1.18.1 the "restart onboarding"
@@ -146,7 +150,13 @@ test.describe("Settings mobile consistency (Pixel 5)", () => {
     page,
   }) => {
     await page.goto("/settings/account", { waitUntil: "networkidle" });
-    await page.waitForLoadState("networkidle");
+    // Gate on the two elements this test is about, not on the network. An idle
+    // network says nothing about whether React has rendered the profile form,
+    // and the single `evaluate` below does not retry — so without this the
+    // test reads an empty document and reports "language + dob fields must
+    // exist", which sounds like a missing feature and is really a race.
+    await expect(page.locator("#language-select")).toBeAttached();
+    await expect(page.locator("#dob")).toBeAttached();
 
     // The v1.4.27 R1 settings audit pairs date-of-birth with language
     // in a single `grid sm:grid-cols-2` row so the profile form keeps
@@ -186,7 +196,10 @@ test.describe("Settings mobile consistency (Pixel 5)", () => {
     page,
   }) => {
     await page.goto("/settings/ai", { waitUntil: "networkidle" });
-    await page.waitForLoadState("networkidle");
+    // `evaluateAll` over an empty match set returns an empty array rather than
+    // waiting, so the count assertion below would be the thing that fails and
+    // it would blame the page for having no selects. Wait for the first one.
+    await expect(page.locator("section select").first()).toBeVisible();
 
     const heights = await page
       .locator("section select")

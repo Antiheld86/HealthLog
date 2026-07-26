@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -189,18 +190,20 @@ function CoachPlansBody() {
             </>
           )}
           {group === "past" && (
-            <Button
-              type="button"
+            <ConfirmButton
+              slot="coach-plan-delete"
               variant="ghost"
               size="sm"
               className="min-h-9"
-              disabled={busy}
-              data-slot="coach-plan-delete"
-              onClick={() => remove.mutate(plan.id)}
-            >
-              <Trash2 className="size-3.5" aria-hidden="true" />
-              {t("coach.plans.remove")}
-            </Button>
+              icon={<Trash2 className="size-3.5" aria-hidden="true" />}
+              label={t("coach.plans.remove")}
+              title={t("coach.plans.removeTitle")}
+              body={t("coach.plans.removeBody")}
+              confirmLabel={t("coach.plans.removeConfirm")}
+              disabled={busy && !remove.isPending}
+              pending={remove.isPending}
+              onConfirm={() => remove.mutate(plan.id)}
+            />
           )}
         </div>
       </li>

@@ -695,7 +695,9 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
         // ("you've logged 42 BP readings") stays grounded.
         const presentToolPayloads = [
           ...(workoutEvidence === null ? [] : [workoutEvidence]),
-          ...(loop.toolResults ?? []).map((r) => r.data),
+          // A miss carries no `data` but may carry `available` — the bounded
+          // out-of-window aggregate rule 3 lets the model cite. Ground it.
+          ...(loop.toolResults ?? []).map((r) => r.data ?? r.available),
         ];
         toolResultPayloads =
           presentToolPayloads.length > 0

@@ -53,7 +53,8 @@ import type { MeasurementSource } from "@/generated/prisma/client";
  *    sleep tag × SLEEP_DURATION).
  *  - "nextDay" — the metric on the day AFTER the tag (D → D+1 lag join, the
  *    same lag the correlation-discovery engine uses). Used for an
- *    alcohol/food tag × next-day recovery/readiness (RECOVERY_SCORE),
+ *    alcohol/food tag × the overnight-recovery channels — readiness
+ *    (RECOVERY_SCORE), resting heart rate and heart-rate variability —
  *    where the plausible direction is "tonight's choice → tomorrow's
  *    recovery".
  *
@@ -89,7 +90,7 @@ export const CROSSTAB_METRICS: Record<
   {
     type: MeasurementType;
     mode: CrosstabMode;
-    display: "hours" | "kcal" | "score";
+    display: "hours" | "kcal" | "score" | "bpm" | "ms";
   }
 > = {
   // A workout / active tag × same-day active energy.
@@ -106,9 +107,30 @@ export const CROSSTAB_METRICS: Record<
     mode: "nextDay",
     display: "score",
   },
+  // The two overnight-recovery vitals, same D → D+1 lag as recovery. A
+  // recovery score is a wearable composite that many accounts never record,
+  // and resting heart rate / HRV are the channels that carry the same
+  // "last night's body" signal on a plain phone or scale sync. The rated-factor
+  // board (`FACTOR_CROSSTAB_METRICS`) already tests both at this lag; the tag
+  // board did not, so a BINARY evening tag — alcohol, a late meal, a nightcap —
+  // had no path to either vital. Same engine, same floors, same BH family.
+  nextDayRestingHeartRate: {
+    type: "RESTING_HEART_RATE",
+    mode: "nextDay",
+    display: "bpm",
+  },
+  nextDayHeartRateVariability: {
+    type: "HEART_RATE_VARIABILITY",
+    mode: "nextDay",
+    display: "ms",
+  },
 } as const;
 
 export type CrosstabMetricKey = keyof typeof CROSSTAB_METRICS;
+
+/** Display units the tag crosstab emits — derived so the row can't drift. */
+export type CrosstabMetricDisplay =
+  (typeof CROSSTAB_METRICS)[CrosstabMetricKey]["display"];
 
 /** Distinct measurement types the crosstab reads — single-sourced. */
 export const CROSSTAB_METRIC_TYPES: MeasurementType[] = Array.from(
@@ -129,7 +151,7 @@ export interface TagMetricCrosstabRow {
   /** Which metric channel this row compares against. */
   metricKey: CrosstabMetricKey;
   /** Display unit hint for the client formatter. */
-  display: "hours" | "kcal" | "score";
+  display: CrosstabMetricDisplay;
   /** Pairing mode used (echoed so the UI can caption "next-day"). */
   mode: CrosstabMode;
   /** Days the tag was present that had a paired metric value. */
@@ -237,10 +259,7 @@ export function shiftDayKey(day: string, lagDays: number): string {
 }
 
 /** Convert a raw metric value to the row's display unit. */
-function toDisplayUnit(
-  value: number,
-  display: "hours" | "kcal" | "score",
-): number {
+function toDisplayUnit(value: number, display: CrosstabMetricDisplay): number {
   return display === "hours" ? value / 60 : value;
 }
 

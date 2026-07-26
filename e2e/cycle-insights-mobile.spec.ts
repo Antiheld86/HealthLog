@@ -1,19 +1,28 @@
 import { expect, test } from "./setup/test";
 
 import { STORAGE_STATE_PATH } from "./setup/global-setup";
+import {
+  expectNoHorizontalOverflow,
+  PHONE_WIDTHS,
+  settleForOverflowMeasurement,
+} from "./utils/horizontal-overflow";
 
 /**
- * Pixel-5 mobile smoke for the Insights overview + the cycle vertical
- * (v1.15.10). Mirrors `mobile-viewport.spec.ts`. Asserts:
+ * Mobile smoke for the cycle vertical (v1.15.10). Asserts:
  *
- *   1. `/insights` has no horizontal page scroll on the Pixel-5 width — the
- *      core guarantee behind the cycle-ring-width fix (the 120 px ring tile
- *      used to overflow narrow grid cells).
- *   2. `/cycle` has no horizontal page scroll on the Pixel-5 width — covers
+ *   1. `/cycle` has no horizontal page scroll at any phone width — covers
  *      the tab-strip-overflow fix (the four long German labels used to force
  *      a horizontal scroll at 375 px) and the responsive cycle ring.
- *   3. The cycle-calendar day cells clear the WCAG 2.5.5 mobile tap-target
+ *   2. The cycle-calendar day cells clear the WCAG 2.5.5 mobile tap-target
  *      height floor (44 CSS px) — the `min-h-10` → `min-h-11` bump.
+ *
+ * The `/insights` width case that used to live here has moved to
+ * `mobile-horizontal-overflow.spec.ts`. It asserted against an EMPTY insights
+ * payload and against `documentElement.scrollWidth`, so it was green through a
+ * populated page that really did pan sideways inside the `AuthShell` `<main>`
+ * scroll container. The replacement runs populated fixtures at several phone
+ * widths and measures the scroll container the app actually uses. The cycle
+ * fixture below is populated for the same reason.
  *
  * The cycle feature gate is enabled by rewriting the real `/api/auth/me`
  * response with `cycleTrackingEnabled: true` (every other field stays
@@ -108,22 +117,48 @@ const HISTORY_BODY = {
 };
 
 const INSIGHTS_BODY = {
-  data: { rows: [], headline: null, symptomPatterns: [] },
+  data: {
+    rows: buildInsightRows(),
+    headline: {
+      symptom: "HEADACHE",
+      phase: "LUTEAL",
+      rate: 0.3,
+      confidence: "high",
+    },
+    symptomPatterns: buildInsightRows(),
+  },
   error: null,
 };
 
-async function assertNoHorizontalScroll(page: import("@playwright/test").Page) {
-  const dims = await page.evaluate(() => ({
-    scrollWidth: document.documentElement.scrollWidth,
-    innerWidth: window.innerWidth,
+/**
+ * A populated cycle-insights payload. The previous fixture was
+ * `{ rows: [], headline: null, symptomPatterns: [] }` — an empty page, which
+ * fits any viewport by construction and proved nothing about the width
+ * guarantee it was written for. Long labels are deliberate: the tab strip and
+ * the summary rows are where narrow-width text pressure shows up.
+ */
+function buildInsightRows(): Array<Record<string, unknown>> {
+  const symptoms = [
+    "HEADACHE",
+    "CRAMPS",
+    "BLOATING",
+    "FATIGUE",
+    "MOOD_SWINGS",
+    "BREAST_TENDERNESS",
+    "BACK_PAIN",
+    "ACNE",
+  ];
+  return symptoms.map((symptom, i) => ({
+    symptom,
+    phase: ["MENSTRUAL", "FOLLICULAR", "OVULATORY", "LUTEAL"][i % 4],
+    occurrences: 12 - i,
+    totalDays: 40,
+    rate: (12 - i) / 40,
+    confidence: i < 4 ? "high" : "low",
   }));
-  expect(
-    dims.scrollWidth,
-    `scrollWidth=${dims.scrollWidth}, innerWidth=${dims.innerWidth}`,
-  ).toBeLessThanOrEqual(dims.innerWidth + 1);
 }
 
-test.describe("cycle + insights mobile smoke", () => {
+test.describe("cycle mobile smoke", () => {
   test.use({ storageState: STORAGE_STATE_PATH });
 
   test.beforeEach(async ({ page }, testInfo) => {
@@ -175,24 +210,26 @@ test.describe("cycle + insights mobile smoke", () => {
     );
   });
 
-  test("/insights has no horizontal scroll on Pixel-5", async ({ page }) => {
-    await page.goto("/insights", { waitUntil: "domcontentloaded" });
-    await page.waitForLoadState("networkidle");
-    await assertNoHorizontalScroll(page);
-  });
-
-  test("/cycle has no horizontal scroll and the calendar cells clear the 44 px tap floor", async ({
+  test("/cycle has no horizontal scroll at any phone width and the calendar cells clear the 44 px tap floor", async ({
     page,
   }) => {
+    for (const width of PHONE_WIDTHS) {
+      await page.setViewportSize({ width, height: 851 });
+      await page.goto("/cycle", { waitUntil: "domcontentloaded" });
+
+      // The cycle vertical mounted (the page redirects home if the gate is off).
+      const wheel = page.locator('[data-slot="cycle-wheel-tile"]');
+      await expect(wheel).toBeVisible();
+
+      await settleForOverflowMeasurement(page);
+      await expectNoHorizontalOverflow(page, `/cycle @${width}px`);
+    }
+
+    // Back to the Pixel-5 width for the tap-target measurement.
+    await page.setViewportSize({ width: 393, height: 851 });
     await page.goto("/cycle", { waitUntil: "domcontentloaded" });
-    await page.waitForLoadState("networkidle");
-
-    // The cycle vertical mounted (the page redirects home if the gate is off).
-    const wheel = page.locator('[data-slot="cycle-wheel-tile"]');
-    await expect(wheel).toBeVisible();
-
-    // 1) No horizontal page scroll at the Pixel-5 width.
-    await assertNoHorizontalScroll(page);
+    await expect(page.locator('[data-slot="cycle-wheel-tile"]')).toBeVisible();
+    await page.waitForLoadState("networkidle").catch(() => {});
 
     // 2) Calendar day cells clear the 44 px tap-target height floor.
     const cells = await page.locator('[role="gridcell"]').all();

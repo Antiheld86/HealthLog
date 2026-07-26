@@ -16,9 +16,15 @@ import type { MoodInfluenceConfidence } from "./mood-tag-influence";
  * relations surface uses; only FDR-surviving rows reach here. Observational
  * only: the generic "associations, not causes" caveat lives once in the
  * page-level Insights footer, so this card no longer repeats it.
+ *
+ * The delta read-out is NEUTRAL, matching the rated-factor board. Once the
+ * board carries next-day resting heart rate alongside sleep and active energy,
+ * a positive delta is good on one row and bad on the next, so a green/red
+ * sign would assert a health verdict the association does not support. The
+ * sign prefix and `data-direction` carry the direction instead.
  */
 
-export type MoodCrosstabDisplay = "hours" | "kcal" | "score";
+export type MoodCrosstabDisplay = "hours" | "kcal" | "score" | "bpm" | "ms";
 export type MoodCrosstabMode = "sameDay" | "nextDay";
 
 export interface MoodTagMetricCrosstabRow {
@@ -49,12 +55,16 @@ const METRIC_LABEL_KEY: Record<string, string> = {
   activeEnergy: "insights.mood.crosstab.metricActiveEnergy",
   sleepDuration: "insights.mood.crosstab.metricSleepDuration",
   nextDayRecovery: "insights.mood.crosstab.metricNextDayRecovery",
+  nextDayRestingHeartRate: "insights.mood.crosstab.metricNextDayRestingHr",
+  nextDayHeartRateVariability: "insights.mood.crosstab.metricNextDayHrv",
 };
 
 const UNIT_KEY: Record<MoodCrosstabDisplay, string> = {
   hours: "insights.mood.crosstab.unitHours",
   kcal: "insights.mood.crosstab.unitKcal",
   score: "insights.mood.crosstab.unitScore",
+  bpm: "insights.mood.crosstab.unitBpm",
+  ms: "insights.mood.crosstab.unitMs",
 };
 
 const CONFIDENCE_KEY: Record<MoodInfluenceConfidence, string> = {
@@ -101,9 +111,6 @@ export function MoodTagMetricCrosstab({
           const unit = t(UNIT_KEY[row.display]);
           const up = row.delta >= 0;
           const deltaText = `${up ? "+" : ""}${fmt(row.delta, row.display)} ${unit}`;
-          // Semantic feedback tokens (not raw `--dracula-*`): the delta read-out
-          // is COLORED TEXT, so it needs the Alucard light-mode override for AA.
-          const deltaColor = up ? "var(--success)" : "var(--destructive)";
           return (
             <li
               key={`${row.metricKey}:${row.tag}`}
@@ -129,10 +136,7 @@ export function MoodTagMetricCrosstab({
                     metric: metricLabel,
                   })}
                 </span>
-                <span
-                  className="shrink-0 text-sm font-semibold tabular-nums"
-                  style={{ color: deltaColor }}
-                >
+                <span className="text-foreground shrink-0 text-sm font-semibold tabular-nums">
                   {deltaText}
                 </span>
                 <span

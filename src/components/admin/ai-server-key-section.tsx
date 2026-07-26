@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SettingsCard } from "@/components/settings/settings-card";
@@ -170,14 +171,16 @@ export function AiServerKeySection() {
             {t("admin.aiServerKey.save")}
           </Button>
           {configured && (
-            <Button
+            <ConfirmButton
+              slot="admin-ai-server-key-remove"
               variant="outline"
-              onClick={handleRemove}
-              disabled={save.isPending}
-              data-slot="admin-ai-server-key-remove"
-            >
-              {t("admin.aiServerKey.remove")}
-            </Button>
+              label={t("admin.aiServerKey.remove")}
+              title={t("admin.aiServerKey.removeTitle")}
+              body={t("admin.aiServerKey.removeBody")}
+              confirmLabel={t("admin.aiServerKey.removeConfirm")}
+              pending={save.isPending}
+              onConfirm={handleRemove}
+            />
           )}
         </div>
       </div>

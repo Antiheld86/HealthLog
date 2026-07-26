@@ -8,6 +8,7 @@ import {
   POPULATED_SUMMARIES,
 } from "./utils/mock-dashboard-snapshot";
 import { mockMoodInsights } from "./utils/mock-mood-insights";
+import { expectNoHorizontalOverflow } from "./utils/horizontal-overflow";
 
 /**
  * Phone-width density guard (390×844 iPhone class, 360×780 small
@@ -17,8 +18,12 @@ import { mockMoodInsights } from "./utils/mock-mood-insights";
  * squeezed into a one-word-per-line column beside a wide delta, the
  * delta spilling past the tile edge at 360 px):
  *
- *   1. No horizontal page overflow — `scrollWidth` never exceeds the
- *      viewport width (1 px sub-pixel tolerance).
+ *   1. No horizontal page overflow — neither the document nor the `AuthShell`
+ *      `<main>` scroll container exceeds the viewport width (1 px sub-pixel
+ *      tolerance). The `<main>` half is load-bearing: this guard measured only
+ *      the document until a report of sideways scroll on a populated Insights
+ *      page showed the document never widens, because `<main>` absorbs the
+ *      overflow into its own scrollable area.
  *   2. Nothing escapes its tile — for every card / Today hero / list
  *      row, no descendant's visible box crosses the tile's left or
  *      right edge (clip-aware: content genuinely hidden by an inner
@@ -181,19 +186,24 @@ test.describe("phone-width density guard", () => {
           ).toBeVisible();
         }
 
-        const dims = await page.evaluate(() => ({
-          scrollWidth: document.documentElement.scrollWidth,
-          bodyScrollWidth: document.body.scrollWidth,
-          innerWidth: window.innerWidth,
-        }));
+        // The document/body pair alone cannot see the app's sideways scroll:
+        // `AuthShell` scrolls inside `<main id="main-content">`, whose
+        // `overflow-y:auto` makes `overflow-x` compute to `auto`, so an
+        // over-wide child grows `main.scrollWidth` while the document stays
+        // exactly viewport-wide. The shared helper asserts both areas and
+        // names the offending element.
+        await expectNoHorizontalOverflow(
+          page,
+          `${route} @${viewport.width}x${viewport.height}`,
+        );
+        const bodyScrollWidth = await page.evaluate(
+          () => document.body.scrollWidth,
+        );
+        const innerWidth = await page.evaluate(() => window.innerWidth);
         expect(
-          dims.scrollWidth,
-          `page scrollWidth=${dims.scrollWidth}, innerWidth=${dims.innerWidth}`,
-        ).toBeLessThanOrEqual(dims.innerWidth + 1);
-        expect(
-          dims.bodyScrollWidth,
-          `body scrollWidth=${dims.bodyScrollWidth}`,
-        ).toBeLessThanOrEqual(dims.innerWidth + 1);
+          bodyScrollWidth,
+          `body scrollWidth=${bodyScrollWidth}`,
+        ).toBeLessThanOrEqual(innerWidth + 1);
 
         const escapes = await page.evaluate(collectTileEscapes);
         expect(

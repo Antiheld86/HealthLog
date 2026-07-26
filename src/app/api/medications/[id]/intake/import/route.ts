@@ -21,14 +21,36 @@ import {
   type MedicationImportProgress,
 } from "@/lib/jobs/medication-intake-import";
 import { annotate } from "@/lib/logging/context";
+import { buildMedicationImportEntries } from "@/lib/medications/intake-import-payload";
 import { assertMedicationOwnership } from "@/lib/medications/route-guards";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isPlausibleEntryInstant } from "@/lib/validations/entry-instant";
 
+// The entry shape carried a third field, `zaehler`, and the replay key was
+// built from it whenever it was present. That reads as a per-row counter,
+// which is what the example beside this dialog showed — but the field was
+// optional, its uniqueness was never stated and never checked, and nothing
+// told anyone it carried identity. A submission that repeated one value down
+// the column collapsed a month of history onto one key: the first row
+// imported, every later one lost the `(userId, idempotencyKey)` unique and
+// came back reported as a duplicate of a dose it had nothing to do with.
+//
+// The reported file repeated `1.0` because it was modelled on the example this
+// dialog itself displayed, which counted upward and explained nothing. So the
+// fault was never in the submission; it was in a field that decided identity
+// while presenting itself as a quantity.
+//
+// `zaehler` is gone from the contract rather than accepted-and-ignored. A
+// payload that still carries it imports unchanged — `z.object` drops
+// unrecognised keys — it simply no longer decides anything. The key now comes
+// from the instant (`buildMedicationImportEntries`), which is also the grain
+// the database already enforces: the live-row unique on
+// `(user_id, medication_id, scheduled_for, source)` makes an imported dose
+// unique per instant whatever the key says, so a re-import of a file first
+// imported under the old key still dedups.
 const importEntrySchema = z.object({
   datum: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   uhrzeit: z.string().regex(/^\d{2}:\d{2}:\d{2}$/),
-  zaehler: z.union([z.number().int(), z.string()]).optional(),
 });
 
 function isValidImportTimestamp(datum: string, uhrzeit: string): boolean {
@@ -149,19 +171,13 @@ export const POST = apiHandler(
 
     const entries = parsed.data;
     const normalized: MedicationImportPayload = {
-      entries: entries.map((entry) => {
-        const takenAt = new Date(`${entry.datum}T${entry.uhrzeit}`);
-        const idempotencyKey = entry.zaehler
-          ? `import-${id}-${String(entry.zaehler)}`
-          : `import-${id}-${takenAt.getTime()}`;
-        return { takenAt: takenAt.toISOString(), idempotencyKey };
-      }),
+      entries: buildMedicationImportEntries(id, entries),
     };
     const progress: MedicationImportProgress = {
       processed: 0,
       total: normalized.entries.length,
       imported: 0,
-      skippedDuplicates: 0,
+      skippedByReason: {},
       touchedDays: [],
       rollupProcessed: 0,
     };

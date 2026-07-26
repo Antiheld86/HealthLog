@@ -68,6 +68,7 @@ import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { requireAssistantSurface } from "@/lib/feature-flags";
 import { invalidateUserInsights } from "@/lib/cache/invalidate";
 import { annotate } from "@/lib/logging/context";
+import { toProfileSex } from "@/lib/profile/sex";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
 import { normalizeLocale } from "@/lib/insights/status-shared";
 import { hasUsableStatusProvider } from "@/lib/insights/status-provider";
@@ -597,10 +598,7 @@ export const POST = apiHandler((request: NextRequest) =>
     // v1.10.0 — fold a notable derived wellness signal (readiness / recovery
     // shift, confidence-gated) into the briefing as a SYSTEM CONTEXT block.
     // Reads the one derived contract; null (the common case) costs nothing.
-    const derivedSex =
-      dbUser?.gender === "MALE" || dbUser?.gender === "FEMALE"
-        ? (dbUser.gender as "MALE" | "FEMALE")
-        : null;
+    const derivedSex = toProfileSex(dbUser?.gender);
     const derivedBriefing = await detectDerivedBriefingSignals(userId, {
       ageYears: getAgeFromDateOfBirth(dbUser?.dateOfBirth ?? null),
       sex: derivedSex,

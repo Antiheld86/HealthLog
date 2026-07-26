@@ -1276,3 +1276,32 @@ describe("buildDashboardSnapshot — scoreRings wire", () => {
     expect(snap.tiles.summaries.WEIGHT).toBeDefined();
   });
 });
+
+describe("buildDashboardSnapshot — the wire carries the stored gender", () => {
+  beforeEach(() => {
+    // Prime only what the user block needs; this suite must not inherit
+    // another test's mock state.
+    probeRollupCoverage.mockResolvedValue(new Map());
+    isFullyCovered.mockReturnValue(false);
+    computeBpInTargetFastPath.mockResolvedValue(null);
+  });
+
+  it("emits OTHER rather than flattening it to no answer", async () => {
+    // Narrowing to two values on the wire made an account that answered
+    // OTHER indistinguishable from one that answered nothing, on every
+    // client reading this payload.
+    const snap = await buildDashboardSnapshot(
+      fakePrisma,
+      baseUser({ gender: "OTHER" }),
+    );
+    expect(snap.user.gender).toBe("OTHER");
+  });
+
+  it("still reports no answer as null", async () => {
+    const snap = await buildDashboardSnapshot(
+      fakePrisma,
+      baseUser({ gender: null }),
+    );
+    expect(snap.user.gender).toBeNull();
+  });
+});

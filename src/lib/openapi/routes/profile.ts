@@ -211,7 +211,13 @@ const profileUpdateRequest = z
     email: z.email().nullable().optional(),
     heightCm: z.number().min(50).max(300).nullable().optional(),
     dateOfBirth: z.string().nullable().optional(),
-    gender: z.enum(["MALE", "FEMALE"]).nullable().optional(),
+    gender: z
+      .enum(["MALE", "FEMALE", "OTHER"])
+      .nullable()
+      .optional()
+      .describe(
+        "Stored gender. Null or an empty string clears it; an omitted field is left untouched.",
+      ),
     displayName: z.string().min(1).max(80).nullable().optional(),
     locale: z.enum(["de", "en"]).nullable().optional(),
     timezone: z.string().min(1).max(64).optional(),
@@ -246,7 +252,7 @@ const profileUpdateRequest = z
   .meta({
     id: "ProfileUpdateRequest",
     description:
-      "Partial profile update. Every field is optional; an omitted field is left untouched, an explicit null (or empty string) clears it. `userId` is never accepted — it is narrowed from the session/token.",
+      "Partial profile update. Every field is optional and an omitted field is left untouched. An explicit null clears any nullable field; an empty string also clears `displayName`, `dateOfBirth`, `gender`, `fullName`, `insurerName`, `insuranceNumber` and `insurerIkNumber`. `email` is not among them — it is validated as an address, so send null to clear it. `locale`, `timezone`, `timeFormat` and `dateFormat` are not clearable. `userId` is never accepted — it is narrowed from the session/token.",
   });
 
 const profileResponse = z
@@ -255,7 +261,7 @@ const profileResponse = z
     displayName: z.string().nullable().optional(),
     email: z.string().nullable(),
     dateOfBirth: z.iso.datetime({ offset: true }).nullable(),
-    gender: z.enum(["MALE", "FEMALE"]).nullable(),
+    gender: z.enum(["MALE", "FEMALE", "OTHER"]).nullable(),
     heightCm: z.number().nullable(),
     locale: z.string().nullable(),
     timezone: z.string(),
@@ -299,7 +305,7 @@ const profileUpdateResponse = z
     displayName: z.string().nullable().optional(),
     email: z.string().nullable(),
     dateOfBirth: z.iso.datetime({ offset: true }).nullable(),
-    gender: z.enum(["MALE", "FEMALE"]).nullable(),
+    gender: z.enum(["MALE", "FEMALE", "OTHER"]).nullable(),
     heightCm: z.number().nullable(),
     locale: z.string().nullable(),
     timezone: z.string(),

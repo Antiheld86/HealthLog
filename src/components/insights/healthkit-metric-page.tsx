@@ -433,6 +433,7 @@ export function HealthKitMetricPage({
         valueScale={resolvedScale}
         valueOffset={resolvedOffset}
         onVisibleStats={onVisibleStats}
+        showDataTable
       />
       {targetSummarySlug ? (
         <MetricTargetSummary slug={targetSummarySlug} />

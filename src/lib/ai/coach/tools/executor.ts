@@ -11,6 +11,13 @@
  *     carries no data — or the user opted out of the owning module — the result
  *     is `{ present: false, reason }`. It NEVER throws and NEVER returns an
  *     ambiguous `[]`, so the model can always tell "no data" from "data".
+ *   - An empty WINDOW read is never reported as absence on its own. Every
+ *     `present: false` that comes from a missing snapshot section routes through
+ *     `resolveEmptyRead`, which probes whether the record holds rows outside the
+ *     window and returns `outside_window` (with the range + a bounded aggregate)
+ *     rather than `no_data`. One reason code for "never recorded" and "recorded,
+ *     outside the window I searched" is what made the Coach deny data the app
+ *     was displaying on the next screen.
  *   - Module / cycle gates are enforced AT THE BUILDER (`buildCoachSnapshot`
  *     applies `MODULE_EXCLUDED_SOURCES` + the cycle gate before any row is
  *     read), so an opted-out domain is structurally unfetchable here — the
@@ -55,6 +62,12 @@ import {
   METRIC_SERIES_EXCLUDED_SOURCES,
 } from "./source-keys";
 import { readCoachCorrelations } from "./correlations-read";
+import {
+  resolveEmptyRead,
+  subjectForTool,
+  type CoachAvailabilitySubject,
+  type CoachDomainAvailability,
+} from "./availability";
 import { buildIllnessScores } from "@/lib/ai/coach/illness-snapshot";
 
 /** A read-only structured tool result. Serialised to a `role:"tool"` turn. */
@@ -69,6 +82,16 @@ export interface CoachToolResult {
    * published population bands + the user's placement, general guidance only.
    */
   grounding?: string;
+  /** The window an empty read searched, so a miss describes its own scope. */
+  searchedWindow?: string;
+  /**
+   * On a `present: false` result whose reason is `outside_window` /
+   * `unavailable_in_scope`: what the record holds for this domain over its whole
+   * history — count, date range, and a bounded per-series aggregate. These are
+   * server-computed figures the model MAY cite; they ride the authoritative set
+   * for the prose number-verifier exactly like a present result's payload.
+   */
+  available?: CoachDomainAvailability;
 }
 
 /** What the route persists onto provenance: which tools ran, did data exist. */
@@ -227,6 +250,20 @@ function badArgs(name: string, error: z.ZodError): CoachToolResult {
   return { present: false, reason: "invalid_arguments" };
 }
 
+/**
+ * The one exit for "the window read produced no section". Never returns a bare
+ * `no_data` without the probe having confirmed the record is empty — see
+ * `availability.ts` for the four states it can resolve to.
+ */
+function emptyRead(
+  userId: string,
+  domain: string,
+  subject: CoachAvailabilitySubject | null,
+  searchedWindow: CoachScopeWindow | undefined,
+): Promise<CoachToolResult> {
+  return resolveEmptyRead({ userId, domain, subject, searchedWindow });
+}
+
 async function getMetricSeries(
   userId: string,
   rawArgs: unknown,
@@ -263,7 +300,12 @@ async function getMetricSeries(
   );
   const section = pickSection(snapshot.sections, sectionKey);
   if (section === undefined) {
-    return { present: false, reason: "no_data" };
+    return emptyRead(
+      userId,
+      metric,
+      subjectForTool("get_metric_series", metric),
+      window ?? fallbackWindow,
+    );
   }
   return {
     present: true,
@@ -285,7 +327,14 @@ async function getGlucosePanel(
     scopeFor(["glucose"], parsed.data.window, fallbackWindow, sharedScope),
   );
   const section = pickSection(snapshot.sections, "glucose");
-  if (section === undefined) return { present: false, reason: "no_data" };
+  if (section === undefined) {
+    return emptyRead(
+      userId,
+      "glucose",
+      subjectForTool("get_glucose_panel"),
+      parsed.data.window ?? fallbackWindow,
+    );
+  }
   return {
     present: true,
     data: section,
@@ -308,7 +357,12 @@ async function getSleep(
   const nights = pickSection(snapshot.sections, "sleep");
   const rhythm = pickSection(snapshot.sections, "sleepRhythm");
   if (nights === undefined && rhythm === undefined) {
-    return { present: false, reason: "no_data" };
+    return emptyRead(
+      userId,
+      "sleep",
+      subjectForTool("get_sleep"),
+      parsed.data.window ?? fallbackWindow,
+    );
   }
   return {
     present: true,
@@ -340,7 +394,12 @@ async function getMedicationCompliance(
     { glp1?: unknown } | undefined;
   const glp1 = weeklyContext?.glp1;
   if (compliance === undefined && glp1 === undefined) {
-    return { present: false, reason: "no_data" };
+    return emptyRead(
+      userId,
+      "compliance",
+      subjectForTool("get_medication_compliance"),
+      parsed.data.window ?? fallbackWindow,
+    );
   }
   return {
     present: true,
@@ -377,7 +436,12 @@ async function getLabs(
   );
   const labs = pickSection(snapshot.sections, "labs") as
     { recent?: Array<{ name?: string; analyte?: string }> } | undefined;
-  if (labs === undefined) return { present: false, reason: "no_data" };
+  if (labs === undefined) {
+    // The labs read is window-AGNOSTIC: a fixed trailing-12-month cutoff. So the
+    // window it "searched" is a year regardless of the conversation's scope —
+    // a panel from 2023 is outside it and must not read as "no labs on file".
+    return emptyRead(userId, "labs", subjectForTool("get_labs"), "lastYear");
+  }
 
   const analyte = parsed.data.analyte?.trim().toLowerCase();
   if (analyte && Array.isArray(labs.recent)) {
@@ -439,7 +503,15 @@ async function getIllnessRecovery(
     trajectory === undefined &&
     illnessScores === null
   ) {
-    return { present: false, reason: "no_data" };
+    // No row-backed subject: illness episodes + the recovery composites are
+    // computed / module-gated, not a window slice of one table, so there is
+    // nothing an availability probe could establish. Honest absence.
+    return emptyRead(
+      userId,
+      "illness_recovery",
+      subjectForTool("get_illness_recovery"),
+      fallbackWindow,
+    );
   }
   return {
     present: true,
@@ -468,7 +540,14 @@ async function getWorkouts(
     scopeFor(["workouts"], parsed.data.window, fallbackWindow, sharedScope),
   );
   const workouts = pickSection(snapshot.sections, "workouts");
-  if (workouts === undefined) return { present: false, reason: "no_data" };
+  if (workouts === undefined) {
+    return emptyRead(
+      userId,
+      "workouts",
+      subjectForTool("get_workouts"),
+      parsed.data.window ?? fallbackWindow,
+    );
+  }
   return { present: true, data: workouts };
 }
 
@@ -492,7 +571,17 @@ async function getCycle(
     sharedScope ?? { sources: [] },
   );
   const cycle = pickSection(snapshot.sections, "cycle");
-  if (cycle === undefined) return { present: false, reason: "no_data" };
+  if (cycle === undefined) {
+    // No row-backed subject: the cycle block is gated by the per-user toggle
+    // AND the operator switch inside the builder, so an absent block is a gate
+    // verdict rather than a window artefact.
+    return emptyRead(
+      userId,
+      "cycle",
+      subjectForTool("get_cycle"),
+      sharedScope?.window,
+    );
+  }
   return { present: true, data: cycle };
 }
 
@@ -504,9 +593,15 @@ async function getCorrelations(
   if (!parsed.success) return badArgs("get_correlations", parsed.error);
   // Reads the deterministic FDR discovery + coincident-deviation flag; returns
   // a clean `{ present: false }` when too little paired data exists.
+  //
+  // No availability probe here, and no window either: a discovered pattern is
+  // not a slice of one table — it needs two channels paired over overlapping
+  // days, and the reader already reports WHY nothing survived (its own reason
+  // code). "No pattern survived the correction" is an honest absence of a
+  // finding, not an absence of data, and nothing older would change it.
   const result = await readCoachCorrelations(userId);
   if (!result.present) {
-    return { present: false, reason: result.reason ?? "no_data" };
+    return { present: false, reason: result.reason ?? "no_pattern" };
   }
   return {
     present: true,

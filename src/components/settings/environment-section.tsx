@@ -27,7 +27,8 @@ import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
-import { ConfirmButton } from "@/components/settings/confirm-button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
+import { formatDateTime } from "@/lib/format";
 import { useTranslations } from "@/lib/i18n/context";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api/api-fetch";
 import { queryKeys } from "@/lib/query-keys";
@@ -64,6 +65,10 @@ interface EnvironmentOverview {
     latestDate: string | null;
     latestFetchedAt: string | null;
   };
+  /** Set when the background weather fetch for this account recently gave up.
+   * A zero day count alone cannot distinguish "nothing to store yet" from
+   * "every run failed", so the count is never rendered on its own. */
+  lastFetchFailure: { lastFailedAt: string; failures: number } | null;
   attribution: string;
 }
 
@@ -72,7 +77,7 @@ function todayKey(): string {
 }
 
 export function EnvironmentSection() {
-  const { t } = useTranslations();
+  const { t, tCount } = useTranslations();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -498,6 +503,22 @@ export function EnvironmentSection() {
             {t("settings.sections.environment.storedDays", {
               count: data.context.days,
             })}
+          </p>
+        )}
+        {data?.lastFetchFailure && (
+          <p
+            role="status"
+            data-testid="environment-fetch-failed"
+            className="text-destructive mt-1 pl-7 text-xs"
+          >
+            {tCount(
+              "settings.sections.environment.fetchFailed",
+              data.lastFetchFailure.failures,
+              {
+                count: data.lastFetchFailure.failures,
+                when: formatDateTime(data.lastFetchFailure.lastFailedAt),
+              },
+            )}
           </p>
         )}
       </SettingsCard>

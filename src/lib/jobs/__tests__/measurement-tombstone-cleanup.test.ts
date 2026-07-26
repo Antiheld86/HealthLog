@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { cleanupExpiredMeasurementTombstones } from "../measurement-tombstone-cleanup";
+import { PURGE_BATCH_SIZE, PURGE_MAX_BATCHES } from "../purge-batch";
 import { TOMBSTONE_RETENTION_DAYS } from "@/lib/auth/native-client";
 
 const DAY_MS = 86_400_000;
@@ -23,16 +24,19 @@ const DAY_MS = 86_400_000;
 describe("cleanupExpiredMeasurementTombstones", () => {
   it("prunes only tombstones older than the retention horizon", async () => {
     const now = new Date("2026-06-01T00:00:00.000Z");
+    const findMany = vi
+      .fn()
+      .mockResolvedValueOnce([{ id: "a" }, { id: "b" }, { id: "c" }]);
     const deleteMany = vi.fn().mockResolvedValue({ count: 3 });
     const prisma = {
-      measurement: { deleteMany },
+      measurement: { findMany, deleteMany },
     } as unknown as Parameters<typeof cleanupExpiredMeasurementTombstones>[0];
 
-    const pruned = await cleanupExpiredMeasurementTombstones(prisma, now);
-    expect(pruned).toBe(3);
+    const outcome = await cleanupExpiredMeasurementTombstones(prisma, now);
+    expect(outcome).toEqual({ deleted: 3, drained: true });
 
-    expect(deleteMany).toHaveBeenCalledTimes(1);
-    const where = deleteMany.mock.calls[0][0].where as {
+    expect(findMany).toHaveBeenCalledTimes(1);
+    const where = findMany.mock.calls[0][0].where as {
       deletedAt: { not: null; lt: Date };
     };
     // Only soft-deleted rows are eligible …
@@ -42,6 +46,38 @@ describe("cleanupExpiredMeasurementTombstones", () => {
       now.getTime() - TOMBSTONE_RETENTION_DAYS * DAY_MS,
     );
     expect(where.deletedAt.lt.getTime()).toBe(expectedCutoff.getTime());
+
+    // The delete is by primary key, so no single statement is on the hook for
+    // the whole backlog.
+    expect(deleteMany).toHaveBeenCalledTimes(1);
+    expect(deleteMany.mock.calls[0][0].where).toEqual({
+      id: { in: ["a", "b", "c"] },
+    });
+  });
+
+  it("keeps walking a backlog that exceeds one batch, and reports when it stops short", async () => {
+    const now = new Date("2026-06-01T00:00:00.000Z");
+    // Always a full batch back — the predicate never exhausts, so the run has
+    // to stop at the cap rather than loop forever.
+    const fullBatch = Array.from({ length: PURGE_BATCH_SIZE }, (_, i) => ({
+      id: `row-${i}`,
+    }));
+    const findMany = vi.fn().mockResolvedValue(fullBatch);
+    const deleteMany = vi.fn().mockResolvedValue({ count: PURGE_BATCH_SIZE });
+    const prisma = {
+      measurement: { findMany, deleteMany },
+    } as unknown as Parameters<typeof cleanupExpiredMeasurementTombstones>[0];
+
+    const outcome = await cleanupExpiredMeasurementTombstones(prisma, now);
+
+    expect(findMany).toHaveBeenCalledTimes(PURGE_MAX_BATCHES);
+    expect(outcome.deleted).toBe(PURGE_BATCH_SIZE * PURGE_MAX_BATCHES);
+    expect(outcome.drained).toBe(false);
+    // Every lookup is bounded — an unbounded one is the shape that could not
+    // finish inside statement_timeout.
+    for (const call of findMany.mock.calls) {
+      expect(call[0].take).toBe(PURGE_BATCH_SIZE);
+    }
   });
 });
 

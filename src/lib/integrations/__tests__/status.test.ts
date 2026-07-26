@@ -108,6 +108,8 @@ describe("recordSyncSuccess", () => {
         persistent: 0,
       },
       persistentFailureStartedAt: null,
+      failingSinceAt: null,
+      failingLeg: null,
       alertedAt: null,
     });
   });
@@ -493,6 +495,8 @@ describe("markReauthRequired / markDisconnected / markReconnected", () => {
         persistent: 0,
       },
       persistentFailureStartedAt: null,
+      failingSinceAt: null,
+      failingLeg: null,
       alertedAt: null,
     });
   });
@@ -516,6 +520,8 @@ describe("markReauthRequired / markDisconnected / markReconnected", () => {
         persistent: 0,
       },
       persistentFailureStartedAt: null,
+      failingSinceAt: null,
+      failingLeg: null,
       alertedAt: null,
     });
   });
@@ -833,6 +839,8 @@ describe("resumeIntegrationFromPark", () => {
         persistent: 0,
       },
       persistentFailureStartedAt: null,
+      failingSinceAt: null,
+      failingLeg: null,
       alertedAt: null,
     });
 
@@ -889,5 +897,214 @@ describe("sync-failure-recorded marker (§5)", () => {
     expect(() => markSyncFailureRecorded(frozen)).not.toThrow();
     // Frozen can't carry the marker, so the boundary records it once — safe.
     expect(isSyncFailureRecorded(frozen)).toBe(false);
+  });
+});
+
+describe("transient-streak escalation", () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  /** Seed the row the escalation reads: a streak of `transient` of a given age. */
+  function seedStreak(opts: { transient: number; ageMs: number }) {
+    vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
+      consecutiveFailuresByKind: {
+        transient: opts.transient,
+        reauth_required: 0,
+        persistent: 0,
+      },
+      persistentFailureStartedAt: null,
+      failingSinceAt: new Date(Date.now() - opts.ageMs),
+      alertedAt: null,
+    } as never);
+    vi.mocked(prisma.integrationStatus.upsert).mockResolvedValueOnce({
+      alertedAt: new Date(),
+    } as never);
+    vi.mocked(prisma.user.findMany).mockResolvedValue([] as never);
+  }
+
+  function upsertUpdate() {
+    return vi.mocked(prisma.integrationStatus.upsert).mock.calls[0]![0]!
+      .update as Record<string, unknown>;
+  }
+
+  it("records a transient failure as persistent once the streak outlives the window", async () => {
+    seedStreak({ transient: 3, ageMs: DAY_MS + 60_000 });
+
+    await recordSyncFailure({
+      userId: "u1",
+      integration: "withings",
+      kind: "transient",
+      message: "Withings measure error: 503 - upstream",
+    });
+
+    // The transient bucket is frozen where the window closed; the persistent
+    // bucket — the only one the park ladder reads — starts counting.
+    expect(upsertUpdate().consecutiveFailuresByKind).toEqual({
+      transient: 3,
+      reauth_required: 0,
+      persistent: 1,
+    });
+    expect(upsertUpdate().persistentFailureStartedAt).toBeInstanceOf(Date);
+    expect(auditLog).toHaveBeenCalledWith(
+      "integrations.sync.failed",
+      expect.objectContaining({
+        details: expect.objectContaining({
+          kind: "persistent",
+          escalatedFrom: "transient",
+        }),
+      }),
+    );
+  });
+
+  it("leaves a streak inside the window alone", async () => {
+    seedStreak({ transient: 9, ageMs: DAY_MS - 60_000 });
+
+    await recordSyncFailure({
+      userId: "u1",
+      integration: "withings",
+      kind: "transient",
+      message: "Withings measure error: 503 - upstream",
+    });
+
+    expect(upsertUpdate().consecutiveFailuresByKind).toEqual({
+      transient: 10,
+      reauth_required: 0,
+      persistent: 0,
+    });
+    expect(upsertUpdate().persistentFailureStartedAt).toBeNull();
+    expect(auditLog).toHaveBeenCalledWith(
+      "integrations.sync.failed",
+      expect.objectContaining({
+        details: expect.objectContaining({
+          kind: "transient",
+          escalatedFrom: null,
+        }),
+      }),
+    );
+  });
+
+  it("needs the consecutive-failure threshold as well as the clock", async () => {
+    // A provider polled once a day: old streak, but only two attempts in it.
+    seedStreak({ transient: 1, ageMs: 5 * DAY_MS });
+
+    await recordSyncFailure({
+      userId: "u1",
+      integration: "nightscout",
+      kind: "transient",
+      message: "Nightscout sync HTTP 502",
+    });
+
+    expect(upsertUpdate().consecutiveFailuresByKind).toEqual({
+      transient: 2,
+      reauth_required: 0,
+      persistent: 0,
+    });
+    expect(upsertUpdate().persistentFailureStartedAt).toBeNull();
+  });
+
+  it("dates a fresh streak from this failure and never re-dates a running one", async () => {
+    const anchor = new Date(Date.now() - 3 * DAY_MS);
+    vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
+      consecutiveFailuresByKind: {
+        transient: 1,
+        reauth_required: 0,
+        persistent: 0,
+      },
+      persistentFailureStartedAt: null,
+      failingSinceAt: anchor,
+      alertedAt: new Date(),
+    } as never);
+    vi.mocked(prisma.integrationStatus.upsert).mockResolvedValueOnce({
+      alertedAt: new Date(),
+    } as never);
+
+    await recordSyncFailure({
+      userId: "u1",
+      integration: "withings",
+      kind: "transient",
+      message: "Withings measure error: 503 - upstream",
+    });
+
+    expect(upsertUpdate().failingSinceAt).toEqual(anchor);
+  });
+});
+
+describe("recordSyncSuccess — leg scoping", () => {
+  it("leaves a sibling leg's error standing and only records the attempt", async () => {
+    vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
+      state: "error_transient",
+      failingLeg: "sleep",
+    } as never);
+    vi.mocked(prisma.integrationStatus.update).mockResolvedValueOnce(
+      {} as never,
+    );
+
+    await recordSyncSuccess("u1", "withings", { leg: "ecg" });
+
+    expect(prisma.integrationStatus.upsert).not.toHaveBeenCalled();
+    const args = vi.mocked(prisma.integrationStatus.update).mock.calls[0]![0]!;
+    // `lastSuccessAt` deliberately absent: it is what the card's
+    // "connected · X ago" reads, and the sleep pipe has delivered nothing.
+    expect(args.data).toEqual({ lastAttemptAt: expect.any(Date) });
+  });
+
+  it("clears the row whole when the failing leg is the one that succeeded", async () => {
+    vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
+      state: "error_transient",
+      failingLeg: "sleep",
+    } as never);
+    vi.mocked(prisma.integrationStatus.upsert).mockResolvedValueOnce(
+      {} as never,
+    );
+
+    await recordSyncSuccess("u1", "withings", { leg: "sleep" });
+
+    expect(prisma.integrationStatus.update).not.toHaveBeenCalled();
+    const args = vi.mocked(prisma.integrationStatus.upsert).mock.calls[0]![0]!;
+    expect(args.update).toMatchObject({
+      state: "connected",
+      lastError: null,
+      failingSinceAt: null,
+      failingLeg: null,
+    });
+  });
+
+  it("clears the row whole when the failure was never attributed to a leg", async () => {
+    vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
+      state: "error_transient",
+      failingLeg: null,
+    } as never);
+    vi.mocked(prisma.integrationStatus.upsert).mockResolvedValueOnce(
+      {} as never,
+    );
+
+    await recordSyncSuccess("u1", "oura", { leg: "vitals" });
+
+    expect(prisma.integrationStatus.upsert).toHaveBeenCalledOnce();
+  });
+
+  it("clears the row whole when the caller names no leg (a full pass)", async () => {
+    vi.mocked(prisma.integrationStatus.upsert).mockResolvedValueOnce(
+      {} as never,
+    );
+
+    await recordSyncSuccess("u1", "whoop");
+
+    // No probe read at all — an unnamed success is entitled to clear.
+    expect(prisma.integrationStatus.findUnique).not.toHaveBeenCalled();
+    expect(prisma.integrationStatus.upsert).toHaveBeenCalledOnce();
+  });
+
+  it("does not treat a healthy row's stale leg marker as a held error", async () => {
+    vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
+      state: "connected",
+      failingLeg: "sleep",
+    } as never);
+    vi.mocked(prisma.integrationStatus.upsert).mockResolvedValueOnce(
+      {} as never,
+    );
+
+    await recordSyncSuccess("u1", "withings", { leg: "ecg" });
+
+    expect(prisma.integrationStatus.upsert).toHaveBeenCalledOnce();
   });
 });

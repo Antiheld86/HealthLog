@@ -3,6 +3,10 @@ import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { apiSuccess } from "@/lib/api-response";
 import { getIntegrationStatus } from "@/lib/integrations/status";
+import {
+  INTEGRATION_CADENCE,
+  resolveSyncVerdict,
+} from "@/lib/integrations/sync-verdict";
 
 /**
  * Nightscout connection status for the current user (v1.17.0).
@@ -45,5 +49,18 @@ export const GET = apiHandler(async () => {
     lastSuccessAt: status.lastSuccessAt,
     lastAttemptAt: status.lastAttemptAt,
     lastError: status.lastError,
+    // `connected: true` here means "a connection exists", not "it is working"
+    // — a pipe dead for a fortnight still answers true. The verdict is the
+    // liveness truth, resolved by the same rule the Settings envelope uses so
+    // this route cannot drift into a second opinion.
+    syncHealth: resolveSyncVerdict({
+      connected: true,
+      configured: true,
+      state: status.state,
+      lastSuccessAt: status.lastSuccessAt,
+      lastAttemptAt: status.lastAttemptAt,
+      failingSinceAt: status.failingSince,
+      cadence: INTEGRATION_CADENCE["nightscout"],
+    }),
   });
 });

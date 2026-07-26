@@ -134,6 +134,29 @@ describe("buildTargetBands — server/client parity", () => {
     });
   }
 
+  it("gives OTHER the neutral bands, identical to an unanswered profile", () => {
+    // OTHER has no row in the percentile / body-fat tables. It must land on
+    // the same neutral fallback an unanswered profile gets, never on one of
+    // the two sides — and the type must be able to carry it here at all.
+    const other = buildTargetBands({
+      dateOfBirth: new Date("1985-06-15T00:00:00.000Z"),
+      gender: "OTHER",
+      heightCm: 180,
+    });
+    const unanswered = buildTargetBands({
+      dateOfBirth: new Date("1985-06-15T00:00:00.000Z"),
+      gender: null,
+      heightCm: 180,
+    });
+    expect(other).toEqual(unanswered);
+    const male = buildTargetBands({
+      dateOfBirth: new Date("1985-06-15T00:00:00.000Z"),
+      gender: "MALE",
+      heightCm: 180,
+    });
+    expect(other.bodyFatBands).not.toEqual(male.bodyFatBands);
+  });
+
   it("nulls the profile-derived bands when no DOB / height", () => {
     const bands = buildTargetBands({
       dateOfBirth: null,

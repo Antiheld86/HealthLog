@@ -158,6 +158,7 @@ export default function InsightsPulsPage() {
         compareBaseline={compareBaseline}
         userTimezone={user?.timezone}
         onVisibleStats={onVisibleStats}
+        showDataTable
       />
 
       {/* S11 — the intraday "shape of the day" layer: 10-minute mean heart

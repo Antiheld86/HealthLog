@@ -29,6 +29,7 @@ import {
   getAgeFromDateOfBirth,
   getPersonalizedPulseTarget,
 } from "@/lib/analytics/pulse-targets";
+import { binaryReferenceSex, type ProfileSex } from "@/lib/profile/sex";
 
 export interface DashboardTargetBands {
   /** Personalised BP target numbers (null when no DOB). */
@@ -63,15 +64,18 @@ export interface DashboardTargetBands {
  */
 export function buildDashboardBands(profile: {
   dateOfBirth: Date | null;
-  gender: "MALE" | "FEMALE" | null;
+  gender: ProfileSex;
   heightCm: number | null;
 }): DashboardTargetBands {
   const bpTargets = profile.dateOfBirth
     ? getBpTargets(profile.dateOfBirth)
     : null;
   const pulseAge = getAgeFromDateOfBirth(profile.dateOfBirth);
-  const pulseTarget = getPersonalizedPulseTarget(pulseAge, profile.gender);
-  const bodyFatRange = getBodyFatTargetRange(profile.gender);
+  // The percentile and body-fat tables carry two sexes and no third row;
+  // both helpers answer a null with a neutral midpoint rather than a side.
+  const referenceSex = binaryReferenceSex(profile.gender);
+  const pulseTarget = getPersonalizedPulseTarget(pulseAge, referenceSex);
+  const bodyFatRange = getBodyFatTargetRange(referenceSex);
   const weightRange = profile.heightCm
     ? buildWeightRangeFromHeight(profile.heightCm)
     : null;

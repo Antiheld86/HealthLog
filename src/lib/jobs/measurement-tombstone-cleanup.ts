@@ -20,50 +20,90 @@
  */
 import type { PrismaClient } from "@/generated/prisma/client";
 import { TOMBSTONE_RETENTION_DAYS } from "@/lib/auth/native-client";
+import { purgeInBatches, type PurgeOutcome } from "@/lib/jobs/purge-batch";
 
 const DAY_MS = 86_400_000;
 
+function tombstoneCutoff(now: Date): Date {
+  return new Date(now.getTime() - TOMBSTONE_RETENTION_DAYS * DAY_MS);
+}
+
 /**
- * Hard-delete soft-deleted measurement rows whose `deletedAt` is older
- * than the retention horizon. Returns the number of rows pruned.
+ * Hard-delete soft-deleted measurement rows whose `deletedAt` is older than
+ * the retention horizon.
+ *
+ * Batched. Until v1.33.0 this was one unbounded `deleteMany` over a predicate
+ * that no index supported, which meant a backlog large enough to exceed the
+ * 60-second `statement_timeout` could never be drained: the statement aborted,
+ * the transaction rolled back, and the next night ran the identical statement
+ * against the same rows. `measurements` is the densest table in the schema and
+ * a bulk source delete can tombstone a six-figure row count in one action, so
+ * this is the one most likely to have been stuck. Migration 0277 adds the
+ * partial index the predicate needs.
  */
 export async function cleanupExpiredMeasurementTombstones(
   prisma: PrismaClient,
   now: Date = new Date(),
-): Promise<number> {
-  const cutoff = new Date(now.getTime() - TOMBSTONE_RETENTION_DAYS * DAY_MS);
-  const { count } = await prisma.measurement.deleteMany({
-    where: { deletedAt: { not: null, lt: cutoff } },
+): Promise<PurgeOutcome> {
+  const cutoff = tombstoneCutoff(now);
+  return purgeInBatches({
+    findIds: async (take) =>
+      (
+        await prisma.measurement.findMany({
+          where: { deletedAt: { not: null, lt: cutoff } },
+          select: { id: true },
+          take,
+        })
+      ).map((row) => row.id),
+    deleteIds: async (ids) =>
+      (await prisma.measurement.deleteMany({ where: { id: { in: ids } } }))
+        .count,
   });
-  return count;
 }
 
-/**
- * Hard-delete soft-deleted mood-entry rows past the retention horizon.
- * Returns the number of rows pruned.
- */
+/** Hard-delete soft-deleted mood-entry rows past the retention horizon. */
 export async function cleanupExpiredMoodTombstones(
   prisma: PrismaClient,
   now: Date = new Date(),
-): Promise<number> {
-  const cutoff = new Date(now.getTime() - TOMBSTONE_RETENTION_DAYS * DAY_MS);
-  const { count } = await prisma.moodEntry.deleteMany({
-    where: { deletedAt: { not: null, lt: cutoff } },
+): Promise<PurgeOutcome> {
+  const cutoff = tombstoneCutoff(now);
+  return purgeInBatches({
+    findIds: async (take) =>
+      (
+        await prisma.moodEntry.findMany({
+          where: { deletedAt: { not: null, lt: cutoff } },
+          select: { id: true },
+          take,
+        })
+      ).map((row) => row.id),
+    deleteIds: async (ids) =>
+      (await prisma.moodEntry.deleteMany({ where: { id: { in: ids } } })).count,
   });
-  return count;
 }
 
 /**
  * Hard-delete soft-deleted medication-intake-event rows past the retention
- * horizon. Returns the number of rows pruned.
+ * horizon.
  */
 export async function cleanupExpiredIntakeTombstones(
   prisma: PrismaClient,
   now: Date = new Date(),
-): Promise<number> {
-  const cutoff = new Date(now.getTime() - TOMBSTONE_RETENTION_DAYS * DAY_MS);
-  const { count } = await prisma.medicationIntakeEvent.deleteMany({
-    where: { deletedAt: { not: null, lt: cutoff } },
+): Promise<PurgeOutcome> {
+  const cutoff = tombstoneCutoff(now);
+  return purgeInBatches({
+    findIds: async (take) =>
+      (
+        await prisma.medicationIntakeEvent.findMany({
+          where: { deletedAt: { not: null, lt: cutoff } },
+          select: { id: true },
+          take,
+        })
+      ).map((row) => row.id),
+    deleteIds: async (ids) =>
+      (
+        await prisma.medicationIntakeEvent.deleteMany({
+          where: { id: { in: ids } },
+        })
+      ).count,
   });
-  return count;
 }

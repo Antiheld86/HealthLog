@@ -21,6 +21,11 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, MoreHorizontal, RotateCcw, Upload } from "lucide-react";
 
+import {
+  IntakeImportResultView,
+  type IntakeImportResultState,
+} from "@/components/medications/intake-import-result";
+
 import { Button } from "@/components/ui/button";
 import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
 import {
@@ -51,10 +56,7 @@ export function IntakeImportDialog({
   const { t } = useTranslations();
   const [jsonText, setJsonText] = useState("");
   const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-  const [resultType, setResultType] = useState<"success" | "error" | null>(
-    null,
-  );
+  const [result, setResult] = useState<IntakeImportResultState | null>(null);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
   const queryClient = useQueryClient();
@@ -62,7 +64,6 @@ export function IntakeImportDialog({
   function resetImportForm() {
     setJsonText("");
     setResult(null);
-    setResultType(null);
     setSelectedFileName(null);
     setFileInputKey((prev) => prev + 1);
   }
@@ -77,18 +78,25 @@ export function IntakeImportDialog({
     if (!file) return;
 
     setResult(null);
-    setResultType(null);
 
     try {
       const content = await file.text();
       JSON.parse(content);
       setJsonText(content);
       setSelectedFileName(file.name);
-      setResult(t("medications.importFileLoaded", { name: file.name }));
-      setResultType("success");
+      // A readable file is a step, not an import. It says so in neutral tone —
+      // the success affordance belongs to a run that actually wrote rows.
+      setResult({
+        kind: "notice",
+        tone: "info",
+        text: t("medications.importFileLoaded", { name: file.name }),
+      });
     } catch {
-      setResult(t("medications.importInvalidJson"));
-      setResultType("error");
+      setResult({
+        kind: "notice",
+        tone: "error",
+        text: t("medications.importInvalidJson"),
+      });
     }
   }
 
@@ -96,7 +104,6 @@ export function IntakeImportDialog({
     if (!medicationId || !jsonText.trim()) return;
     setImporting(true);
     setResult(null);
-    setResultType(null);
 
     try {
       let data = JSON.parse(jsonText.trim());
@@ -114,37 +121,41 @@ export function IntakeImportDialog({
           statusUrl: string;
         }>(`/api/medications/${medicationId}/intake/import`, data);
         const d = await waitForMedicationIntakeImport(kickoff.statusUrl);
-        setResult(
-          t("medications.importResult", { imported: d.imported }) +
-            (d.skippedDuplicates > 0
-              ? `, ${t("medications.importDuplicatesSkipped", { count: d.skippedDuplicates })}`
-              : "") +
-            (d.skippedInvalid > 0
-              ? `, ${t("medications.importInvalidSkipped", { count: d.skippedInvalid })}`
-              : ""),
-        );
-        setResultType("success");
+        setResult({
+          kind: "outcome",
+          imported: d.imported,
+          skipped: d.skipped,
+          skipReasons: d.skipReasons,
+        });
         // An import can land today-dated doses, so clear the Today hero +
         // dashboard through the blessed helper (they are unmounted behind the
         // import dialog on the detail page).
         void invalidateMedicationReads(queryClient);
       } catch (err) {
         if (err instanceof MedicationIntakeImportError) {
-          setResult(t("medications.importFailed"));
-          setResultType("error");
+          setResult({
+            kind: "notice",
+            tone: "error",
+            text: t("medications.importFailed"),
+          });
           return;
         }
         if (!(err instanceof ApiError)) throw err;
-        setResult(err.message || t("medications.importFailed"));
-        setResultType("error");
+        setResult({
+          kind: "notice",
+          tone: "error",
+          text: err.message || t("medications.importFailed"),
+        });
       }
     } catch (err) {
-      setResult(
-        err instanceof SyntaxError
-          ? t("medications.importInvalidFormat")
-          : (err as Error).message || t("medications.importFailed"),
-      );
-      setResultType("error");
+      setResult({
+        kind: "notice",
+        tone: "error",
+        text:
+          err instanceof SyntaxError
+            ? t("medications.importInvalidFormat")
+            : (err as Error).message || t("medications.importFailed"),
+      });
     } finally {
       setImporting(false);
     }
@@ -226,8 +237,8 @@ export function IntakeImportDialog({
         </div>
         <pre className="bg-muted text-muted-foreground rounded-lg p-3 text-xs">
           {`[
-  {"datum": "2026-02-14", "uhrzeit": "10:27:43", "zaehler": 523},
-  {"datum": "2026-02-14", "uhrzeit": "23:33:42", "zaehler": 524}
+  {"datum": "2026-02-14", "uhrzeit": "10:27:43"},
+  {"datum": "2026-02-14", "uhrzeit": "23:33:42"}
 ]`}
         </pre>
         <Textarea
@@ -239,15 +250,9 @@ export function IntakeImportDialog({
           spellCheck={false}
           className="font-mono"
         />
-        {result && (
-          <p
-            className={`text-sm ${resultType === "success" ? "text-success" : "text-destructive"}`}
-            role="status"
-            aria-live="polite"
-          >
-            {result}
-          </p>
-        )}
+        <div role="status" aria-live="polite">
+          {result && <IntakeImportResultView result={result} />}
+        </div>
       </div>
     </ResponsiveSheet>
   );

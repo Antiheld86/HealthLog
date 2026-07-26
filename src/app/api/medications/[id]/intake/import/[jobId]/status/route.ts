@@ -2,8 +2,8 @@ import type { NextRequest } from "next/server";
 
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiError, apiSuccess } from "@/lib/api-response";
-import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
+import { readMedicationIntakeImportJob } from "@/lib/medications/intake-import-job-status";
 
 interface RouteContext {
   params: Promise<{ id: string; jobId: string }>;
@@ -20,20 +20,12 @@ export const GET = apiHandler(
       meta: { job_id: jobId, medication_id: medicationId },
     });
 
-    const row = await prisma.medicationIntakeImportJob.findFirst({
-      where: { id: jobId, medicationId, userId: user.id },
-    });
-    if (!row) return apiError("Import job not found", 404);
-
-    return apiSuccess({
-      jobId: row.id,
-      status: row.status,
-      progress: row.progress,
-      result: row.result,
-      failureReason: row.failureReason,
-      createdAt: row.createdAt.toISOString(),
-      startedAt: row.startedAt?.toISOString() ?? null,
-      completedAt: row.completedAt?.toISOString() ?? null,
-    });
+    const job = await readMedicationIntakeImportJob(
+      user.id,
+      jobId,
+      medicationId,
+    );
+    if (!job) return apiError("Import job not found", 404);
+    return apiSuccess(job);
   },
 );

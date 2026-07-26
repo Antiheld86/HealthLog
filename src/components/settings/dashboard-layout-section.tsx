@@ -28,6 +28,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
 import { Switch } from "@/components/ui/switch";
 import { prefersReducedMotion } from "@/lib/charts/reduced-motion";
 import { useTranslations } from "@/lib/i18n/context";
@@ -607,16 +608,19 @@ export function DashboardLayoutSection({ id }: { id: string }) {
         icon={LayoutDashboard}
         title={t("dashboard.customizeTitle")}
         status={
-          <Button
+          <ConfirmButton
+            slot="settings-dashboard-layout-reset"
             variant="ghost"
             size="sm"
-            onClick={() => resetMutation.mutate()}
-            disabled={resetMutation.isPending}
             className="min-h-11 self-end sm:min-h-9 sm:self-auto"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            {t("dashboard.layoutReset")}
-          </Button>
+            icon={<RotateCcw className="h-3.5 w-3.5" />}
+            label={t("dashboard.layoutReset")}
+            title={t("dashboard.layoutResetTitle")}
+            body={t("dashboard.layoutResetBody")}
+            confirmLabel={t("dashboard.layoutResetConfirm")}
+            pending={resetMutation.isPending}
+            onConfirm={() => resetMutation.mutate()}
+          />
         }
       />
       {/*

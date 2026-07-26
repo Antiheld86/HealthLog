@@ -154,6 +154,7 @@ import type { DataSummary } from "@/lib/analytics/trends";
 import { mergeSlimAndThickAnalytics } from "@/lib/analytics/merge-slim-thick";
 import { isWindowSufficient } from "@/lib/analytics/window-confidence";
 import { buildDashboardBands } from "@/lib/dashboard/bands";
+import { toProfileSex } from "@/lib/profile/sex";
 import { apiGet } from "@/lib/api/api-fetch";
 
 // v1.18.6 — the pure first-paint / skeleton-reservation gates moved to
@@ -718,7 +719,7 @@ export default function DashboardPageClient({
     () =>
       buildDashboardBands({
         dateOfBirth: user?.dateOfBirth ? new Date(user.dateOfBirth) : null,
-        gender: (user?.gender as "MALE" | "FEMALE" | null | undefined) ?? null,
+        gender: toProfileSex(user?.gender),
         heightCm: user?.heightCm ?? null,
       }),
     [user],

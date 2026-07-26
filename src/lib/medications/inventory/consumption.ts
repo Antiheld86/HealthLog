@@ -250,10 +250,12 @@ export async function consumeForIntake(input: {
         const nextExpiresAt = computeExpiresAt(
           nextFirstUseAt,
           item.printedExpiry,
+          item.containerType,
         );
         const nextState = computeInventoryState(
           {
             state: item.state,
+            containerType: item.containerType,
             unitsTotal: Number(item.unitsTotal),
             unitsRemaining: nextUnitsRemaining,
             firstUseAt: nextFirstUseAt,
@@ -418,10 +420,15 @@ export async function consumeImportedIntakesBatch(input: {
         const nextFirstUseAt = item.firstUseAt ?? event.intakeAt;
         item.unitsRemaining -= take;
         item.firstUseAt = nextFirstUseAt;
-        item.expiresAt = computeExpiresAt(nextFirstUseAt, item.printedExpiry);
+        item.expiresAt = computeExpiresAt(
+          nextFirstUseAt,
+          item.printedExpiry,
+          item.containerType,
+        );
         item.state = computeInventoryState(
           {
             state: item.state,
+            containerType: item.containerType,
             unitsTotal: Number(item.unitsTotal),
             unitsRemaining: item.unitsRemaining,
             firstUseAt: nextFirstUseAt,
@@ -545,6 +552,7 @@ export async function restoreForIntake(input: {
         const nextState = computeInventoryState(
           {
             state: item.state,
+            containerType: item.containerType,
             unitsTotal: Number(item.unitsTotal),
             unitsRemaining: nextUnitsRemaining,
             firstUseAt: item.firstUseAt,

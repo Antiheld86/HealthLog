@@ -2,8 +2,9 @@
  * v1.17.1 — Vorsorge (measurement) reminder by id: get + patch + delete.
  *
  * PATCH re-derives the server-authoritative `nextDueAt` after applying
- * the (mutually-exclusive cadence) edit. DELETE soft-deletes (tombstone)
- * for parity with the rest of the tree.
+ * the (mutually-exclusive cadence) edit. DELETE removes the row; the
+ * confirmation dialog says the reminder is permanently deleted, and nothing
+ * here needs a tombstone to keep that promise honest.
  */
 import { NextRequest } from "next/server";
 
@@ -206,12 +207,13 @@ export const DELETE = apiHandler(
       return apiError("Measurement reminder not found", 404);
     }
 
-    // Soft-delete (tombstone) parity with the rest of the tree. A
-    // re-delete of an already-tombstoned row is idempotent.
-    await prisma.measurementReminder.update({
-      where: { id },
-      data: { deletedAt: new Date() },
-    });
+    // Hard delete. The confirmation says "permanently deleted", and this row
+    // has nothing that a tombstone would serve: it is not in the
+    // `/api/sync/changes` delta feed, no restore route reaches it, no other
+    // table references it, and every read already filters `deletedAt: null`.
+    // The tombstone bought parity with tables that need one and cost the
+    // dialog its accuracy, so the row goes.
+    await prisma.measurementReminder.delete({ where: { id } });
 
     await auditLog("measurementReminder.delete", {
       userId: user.id,

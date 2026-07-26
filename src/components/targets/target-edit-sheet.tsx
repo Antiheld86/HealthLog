@@ -7,6 +7,7 @@ import { RotateCcw } from "lucide-react";
 
 import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
 import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useTranslations } from "@/lib/i18n/context";
@@ -422,16 +423,23 @@ function TargetEditSheetBody({
       footer={
         <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           {hasOverride ? (
-            <Button
+            <ConfirmButton
+              slot="target-edit-reset"
               variant="ghost"
               size="sm"
-              onClick={() => resetMutation.mutate()}
-              disabled={busy}
-              data-slot="target-edit-reset"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              {t("targets.edit.resetToDefault")}
-            </Button>
+              icon={<RotateCcw className="h-3.5 w-3.5" />}
+              label={t("targets.edit.resetToDefault")}
+              title={t("targets.edit.resetTitle")}
+              body={
+                isBp
+                  ? t("targets.edit.resetBodyBp")
+                  : t("targets.edit.resetBody")
+              }
+              confirmLabel={t("targets.edit.resetConfirm")}
+              disabled={busy && !resetMutation.isPending}
+              pending={resetMutation.isPending}
+              onConfirm={() => resetMutation.mutate()}
+            />
           ) : (
             <span aria-hidden="true" />
           )}

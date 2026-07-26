@@ -45,7 +45,23 @@ export const profileSchema = z.object({
   email: z.email("Invalid email address").nullable().optional(),
   heightCm: z.number().min(50).max(300).nullable().optional(),
   dateOfBirth: z.string().nullable().optional(), // ISO date string
-  gender: z.enum(["MALE", "FEMALE", "OTHER"]).nullable().optional(),
+  // Three stored values, and the same clearing contract every other
+  // profile field honours: null OR an empty string clears it. A client
+  // that renders "no answer" as "" was otherwise 422'd on a field the
+  // person never touched, and because the whole profile PATCH is one
+  // transaction that rejection took every sibling change with it. The
+  // message names the field and the accepted values — a person should
+  // never read the validator's own prose off a form.
+  gender: z.preprocess(
+    (v) => (v === "" ? null : v),
+    z
+      .enum(["MALE", "FEMALE", "OTHER"], {
+        error:
+          "Gender must be MALE, FEMALE or OTHER. Send null or an empty string to clear it.",
+      })
+      .nullable()
+      .optional(),
+  ),
   // v1.7.0 — optional patient-identity fields for the health-record
   // export cover + FHIR Patient resource. All optional, never required.
   fullName: z.string().trim().max(120).nullable().optional(),

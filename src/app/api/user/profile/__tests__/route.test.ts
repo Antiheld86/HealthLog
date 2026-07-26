@@ -297,4 +297,84 @@ describe("PATCH /api/user/profile", () => {
     expect(res.status).toBe(422);
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
+  /**
+   * The whole profile PATCH is one write, so a rejected gender took every
+   * sibling change down with it — someone switching their time format lost
+   * the save over a field they never touched.
+   */
+  it("clears gender on an empty string and still persists the sibling change", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
+    vi.mocked(prisma.user.update).mockResolvedValue({
+      id: "user-1",
+      username: "testuser",
+      displayName: null,
+      email: null,
+      role: "USER",
+      heightCm: null,
+      dateOfBirth: null,
+      gender: null,
+      timezone: "Europe/Berlin",
+      locale: null,
+      timeFormat: "H24",
+      dateFormat: "AUTO",
+      moodReminderEnabled: false,
+      fullName: null,
+      insurerName: null,
+      insurerIkNumber: null,
+      insuranceNumberEncrypted: null,
+    } as never);
+
+    const res = await PATCH(req({ timeFormat: "H24", gender: "" }));
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ timeFormat: "H24", gender: null }),
+      }),
+    );
+  });
+
+  it("accepts OTHER and writes it through", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
+    vi.mocked(prisma.user.update).mockResolvedValue({
+      id: "user-1",
+      username: "testuser",
+      displayName: null,
+      email: null,
+      role: "USER",
+      heightCm: null,
+      dateOfBirth: null,
+      gender: "OTHER",
+      timezone: "Europe/Berlin",
+      locale: null,
+      timeFormat: "AUTO",
+      dateFormat: "AUTO",
+      moodReminderEnabled: false,
+      fullName: null,
+      insurerName: null,
+      insurerIkNumber: null,
+      insuranceNumberEncrypted: null,
+    } as never);
+
+    const res = await PATCH(req({ gender: "OTHER" }));
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ gender: "OTHER" }),
+      }),
+    );
+    const body = (await res.json()) as { data: { gender: string | null } };
+    expect(body.data.gender).toBe("OTHER");
+  });
+
+  it("still refuses an unsupported gender, with a message that names the field", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    const res = await PATCH(req({ timeFormat: "H24", gender: "diverse" }));
+    expect(res.status).toBe(422);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain("Gender must be MALE, FEMALE or OTHER");
+    expect(body.error).not.toContain("Invalid option");
+  });
 });

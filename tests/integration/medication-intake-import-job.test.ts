@@ -61,18 +61,22 @@ describe("medication intake import job — concurrent retry", () => {
     const payload: MedicationImportPayload = {
       entries: [
         {
+          scheduledFor: "2026-07-20T05:00:00.000Z",
           takenAt: "2026-07-20T05:00:00.000Z",
           idempotencyKey: `import-${medication.id}-1`,
         },
         {
+          scheduledFor: "2026-07-20T05:00:00.000Z",
           takenAt: "2026-07-20T05:00:00.000Z",
           idempotencyKey: `import-${medication.id}-1`,
         },
         {
+          scheduledFor: "2026-07-20T17:00:00.000Z",
           takenAt: "2026-07-20T17:00:00.000Z",
           idempotencyKey: `import-${medication.id}-2`,
         },
         {
+          scheduledFor: "2026-07-21T05:00:00.000Z",
           takenAt: "2026-07-21T05:00:00.000Z",
           idempotencyKey: `import-${medication.id}-3`,
         },
@@ -82,7 +86,7 @@ describe("medication intake import job — concurrent retry", () => {
       processed: 0,
       total: payload.entries.length,
       imported: 0,
-      skippedDuplicates: 0,
+      skippedByReason: {},
       touchedDays: [],
       rollupProcessed: 0,
     };
@@ -150,17 +154,26 @@ describe("medication intake import job — concurrent retry", () => {
       { day: "2026-07-21", scheduled: 1, taken: 1 },
     ]);
     expect(refreshedJob.status).toBe("done");
+    // The two entries sharing an instant collapse inside the submission; that
+    // is `duplicate_in_file`, and it is reported under its own name rather
+    // than as an undifferentiated "duplicate".
     expect(refreshedJob.result).toEqual({
       imported: 3,
-      skippedDuplicates: 1,
-      skippedInvalid: 0,
+      skipped: 1,
+      skipReasons: [{ reason: "duplicate_in_file", count: 1 }],
     });
     expect(refreshedJob.progress).toEqual({
       processed: 4,
       total: 4,
       imported: 3,
-      skippedDuplicates: 1,
-      touchedDays: ["2026-07-20", "2026-07-21"],
+      skippedByReason: { duplicate_in_file: 1 },
+      // A job can now cover a whole regimen, so a day whose rollup needs
+      // re-folding is addressed by medication AND day — two medications touched
+      // on one day are two rollup rows, which a bare day key cannot name.
+      touchedDays: [
+        `${medication.id} 2026-07-20`,
+        `${medication.id} 2026-07-21`,
+      ],
       rollupProcessed: 2,
     });
     expect(audits).toHaveLength(1);
@@ -189,6 +202,7 @@ describe("medication intake import job — concurrent retry", () => {
     const payload: MedicationImportPayload = {
       entries: [
         {
+          scheduledFor: "2026-07-20T05:00:00.000Z",
           takenAt: "2026-07-20T05:00:00.000Z",
           idempotencyKey: `import-${medication.id}-final`,
         },
@@ -198,7 +212,7 @@ describe("medication intake import job — concurrent retry", () => {
       processed: 0,
       total: 1,
       imported: 0,
-      skippedDuplicates: 0,
+      skippedByReason: {},
       touchedDays: [],
       rollupProcessed: 0,
     };

@@ -591,8 +591,11 @@ export async function markResourceSynced(
  * a genuine import clears the error state; a 403 soft-skip leaves the
  * "looks-healthy" window closed.
  */
+export type WhoopSyncLeg = "recovery" | "sleep" | "workout" | "cycle";
+
 export async function syncWhoopResourceWithStatus(
   userId: string,
+  leg: WhoopSyncLeg,
   run: () => Promise<number>,
 ): Promise<number> {
   // Run under BOTH trackers: soft-skip (a 403 scope gate) and hard-fail (a dead
@@ -607,7 +610,10 @@ export async function syncWhoopResourceWithStatus(
     );
   const softSkippedOnly = softSkipCount > 0 && imported === 0;
   if (!softSkippedOnly && hardFailTracker.failures.length === 0) {
-    await recordSyncSuccess(userId, "whoop");
+    // Leg-scoped: WHOOP runs four resource crons against one ledger row, so a
+    // healthy recovery tick at :05 must not clear the error the workout tick
+    // recorded at :35 the hour before.
+    await recordSyncSuccess(userId, "whoop", { leg });
   }
   return imported;
 }
@@ -619,6 +625,7 @@ export async function syncWhoopResourceWithStatus(
 export async function recordWhoopSyncFailure(
   userId: string,
   err: unknown,
+  leg?: WhoopSyncLeg,
 ): Promise<void> {
   const message = err instanceof Error ? err.message : String(err);
   await recordSyncFailure({
@@ -626,6 +633,7 @@ export async function recordWhoopSyncFailure(
     integration: "whoop",
     kind: classificationToFailureKind(classifyWhoopError(err)),
     message,
+    leg,
     errorCode:
       err instanceof WhoopApiError ? err.httpStatus?.toString() : undefined,
   });

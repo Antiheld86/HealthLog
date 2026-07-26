@@ -64,7 +64,11 @@ import {
   WithingsApiError,
   classifyWithingsResponse,
 } from "./response-classifier";
-import { getValidToken, recordWithingsSyncFailure } from "./sync";
+import {
+  WITHINGS_LEG_ECG,
+  getValidToken,
+  recordWithingsSyncFailure,
+} from "./sync";
 import {
   isReauthRequired,
   recordSyncFailure,
@@ -408,10 +412,11 @@ export async function syncUserEcg(
         kind: "reauth_required",
         message: err instanceof Error ? err.message : String(err),
         errorCode: "403",
+        leg: WITHINGS_LEG_ECG,
       });
       throw err;
     }
-    await recordWithingsSyncFailure(userId, err);
+    await recordWithingsSyncFailure(userId, err, WITHINGS_LEG_ECG);
     throw err;
   }
 
@@ -526,10 +531,14 @@ export async function syncUserEcg(
   }
 
   if (sourceWriteError) {
-    await recordWithingsSyncFailure(userId, sourceWriteError.cause);
+    await recordWithingsSyncFailure(
+      userId,
+      sourceWriteError.cause,
+      WITHINGS_LEG_ECG,
+    );
     throw sourceWriteError.cause;
   }
 
-  await recordSyncSuccess(userId, "withings");
+  await recordSyncSuccess(userId, "withings", { leg: WITHINGS_LEG_ECG });
   return imported;
 }

@@ -101,6 +101,7 @@ import {
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 import type { Locale } from "@/lib/i18n/config";
 import { getAgeFromDateOfBirth } from "@/lib/analytics/pulse-targets";
+import { toProfileSex, type ProfileSex } from "@/lib/profile/sex";
 
 /** Briefing freshness window — mirrors the 24 h TTL on the advisor cache. */
 const BRIEFING_TTL_MS = 24 * 60 * 60 * 1000;
@@ -203,7 +204,12 @@ export interface DashboardSnapshotUser {
   timezone: string;
   heightCm: number | null;
   dateOfBirth: string | null;
-  gender: "MALE" | "FEMALE" | null;
+  /**
+   * Sex as stored, `OTHER` included. Emitting `null` for an account that
+   * answered `OTHER` made the value indistinguishable from no answer at
+   * all on every client reading this payload.
+   */
+  gender: ProfileSex;
   glucoseUnit: string | null;
   onboardingTourCompleted: boolean;
   /**
@@ -1277,8 +1283,7 @@ export async function buildDashboardSnapshot(
   ]);
   const briefingMemory = mapBriefingMemory(coachMemoryBlock, locale);
 
-  const gender =
-    user.gender === "MALE" || user.gender === "FEMALE" ? user.gender : null;
+  const gender = toProfileSex(user.gender);
 
   return {
     user: {

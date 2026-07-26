@@ -10,6 +10,7 @@ import { Loader2, Sparkles, Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
 import { formatDateTime } from "@/lib/format";
 import { useTranslations } from "@/lib/i18n/context";
@@ -205,20 +206,19 @@ export function CodexProviderForm({
           {t("settings.ai.oauthNotConfigured")}
         </p>
       ) : isConnected ? (
-        <Button
+        <ConfirmButton
+          slot="settings-codex-disconnect"
           variant="outline"
           size="sm"
           className="text-destructive min-h-11 shrink-0 sm:min-h-9"
-          onClick={handleDisconnect}
-          disabled={disconnecting}
-        >
-          {disconnecting ? (
-            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-          ) : (
-            <Trash2 className="h-4 w-4" />
-          )}
-          {t("settings.ai.codex.disconnectButton")}
-        </Button>
+          icon={<Trash2 className="h-4 w-4" />}
+          label={t("settings.ai.codex.disconnectButton")}
+          title={t("settings.ai.codex.disconnectTitle")}
+          body={t("settings.ai.codex.disconnectBody")}
+          confirmLabel={t("settings.ai.codex.disconnectConfirm")}
+          pending={disconnecting}
+          onConfirm={handleDisconnect}
+        />
       ) : deviceCode ? (
         <div className="border-primary bg-primary/5 space-y-3 rounded-lg border-l-4 p-4">
           <p className="text-sm font-medium">

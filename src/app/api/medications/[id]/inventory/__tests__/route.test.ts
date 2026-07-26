@@ -269,6 +269,8 @@ describe("PATCH /api/medications/[id]/inventory/[itemId]", () => {
     userId: "user-1",
     medicationId: "med-1",
     state: "ACTIVE" as const,
+    // A pen — the container kind that carries the post-opening clock.
+    containerType: "PEN" as const,
     unitsTotal: 4,
     unitsRemaining: 4,
     firstUseAt: null,
@@ -381,6 +383,78 @@ describe("PATCH /api/medications/[id]/inventory/[itemId]", () => {
     expect(updateCall.data).toMatchObject({
       state: "EXPIRED",
       firstUseAt: new Date(backdated),
+    });
+  });
+
+  it("leaves a back-dated first use on a blister IN_USE with no expiresAt", async () => {
+    // The same back-dated stamp on a tablet pack must not write the
+    // remaining tablets off: a blister carries no post-opening clock,
+    // so the only deadline it could have is a printed one, and this row
+    // has none.
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    vi.mocked(prisma.medicationInventoryItem.findUnique).mockResolvedValue({
+      ...existingActive,
+      containerType: "BLISTER",
+      unitsTotal: 60,
+      unitsRemaining: 54,
+    } as never);
+    vi.mocked(prisma.medicationInventoryItem.update).mockResolvedValue({
+      ...existingActive,
+      state: "IN_USE",
+    } as never);
+
+    const backdated = new Date(
+      Date.now() - 45 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    const res = await PATCH(
+      jsonReq(
+        "http://localhost/api/medications/med-1/inventory/inv-1",
+        { markAsFirstUseAt: backdated },
+        "PATCH",
+      ),
+      { params: Promise.resolve({ id: "med-1", itemId: "inv-1" }) },
+    );
+    expect(res.status).toBe(200);
+    const updateCall = vi.mocked(prisma.medicationInventoryItem.update).mock
+      .calls[0][0];
+    expect(updateCall.data).toMatchObject({
+      state: "IN_USE",
+      firstUseAt: new Date(backdated),
+      expiresAt: null,
+    });
+  });
+
+  it("clears the opening date when markAsFirstUseAt is null", async () => {
+    // The correction path for a container the consumption hook
+    // auto-opened by mistake: unsetting the date returns the row to
+    // ACTIVE and drops any in-use deadline with it.
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    vi.mocked(prisma.medicationInventoryItem.findUnique).mockResolvedValue({
+      ...existingActive,
+      state: "IN_USE",
+      firstUseAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000),
+    } as never);
+    vi.mocked(prisma.medicationInventoryItem.update).mockResolvedValue({
+      ...existingActive,
+      state: "ACTIVE",
+    } as never);
+
+    const res = await PATCH(
+      jsonReq(
+        "http://localhost/api/medications/med-1/inventory/inv-1",
+        { markAsFirstUseAt: null },
+        "PATCH",
+      ),
+      { params: Promise.resolve({ id: "med-1", itemId: "inv-1" }) },
+    );
+    expect(res.status).toBe(200);
+    const updateCall = vi.mocked(prisma.medicationInventoryItem.update).mock
+      .calls[0][0];
+    expect(updateCall.data).toMatchObject({
+      state: "ACTIVE",
+      firstUseAt: null,
+      expiresAt: null,
     });
   });
 
