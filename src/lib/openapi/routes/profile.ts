@@ -252,7 +252,7 @@ const profileUpdateRequest = z
   .meta({
     id: "ProfileUpdateRequest",
     description:
-      "Partial profile update. Every field is optional; an omitted field is left untouched, an explicit null (or empty string) clears it. `userId` is never accepted — it is narrowed from the session/token.",
+      "Partial profile update. Every field is optional and an omitted field is left untouched. An explicit null clears any nullable field; an empty string also clears `displayName`, `dateOfBirth`, `gender`, `fullName`, `insurerName`, `insuranceNumber` and `insurerIkNumber`. `email` is not among them — it is validated as an address, so send null to clear it. `locale`, `timezone`, `timeFormat` and `dateFormat` are not clearable. `userId` is never accepted — it is narrowed from the session/token.",
   });
 
 const profileResponse = z
