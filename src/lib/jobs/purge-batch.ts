@@ -13,7 +13,7 @@
  * it, and the job that was supposed to make deletion real never completes.
  *
  * The fix has three parts and this file is one of them:
- *   - the predicates get indexes that match them (migration 0277);
+ *   - the predicates get indexes that match them (migration 0276);
  *   - the delete runs in bounded batches, so no single statement is on the
  *     hook for the whole backlog;
  *   - a run that stops at the cap says so, so "still draining" and "nothing

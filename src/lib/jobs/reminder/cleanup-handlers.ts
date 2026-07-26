@@ -185,7 +185,7 @@ export async function handleMeasurementTombstoneCleanup(
         // v1.7.0 sync — prune tombstones across all three sync domains on
         // the same retention horizon.
         //
-        // v1.32.40 — sequential rather than parallel. Each leg now walks its
+        // v1.33.0 — sequential rather than parallel. Each leg now walks its
         // backlog in batches, and three concurrent walks against the three
         // densest tables competed for the worker pool for no gain: the job has
         // the whole night.

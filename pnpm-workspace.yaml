@@ -21,3 +21,7 @@ allowBuilds:
   ssh2: false
   tesseract.js: false
   unrs-resolver: false
+
+minimumReleaseAgeExclude:
+  - "@next/bundle-analyzer@16.2.12"
+  - lucide-react@1.27.0

@@ -363,7 +363,7 @@ const REGISTRY: DestructiveEntry[] = [
   {
     file: "components/records/allergy-manager.tsx",
     destroys: "one allergy record",
-    recovery: "tombstoned-no-restore",
+    recovery: "permanent",
     confirm: ["DeleteButton"],
   },
   {

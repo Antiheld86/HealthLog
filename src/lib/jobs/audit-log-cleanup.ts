@@ -31,7 +31,7 @@ export function getAuditLogRetentionDays(): number {
 /**
  * Delete audit rows past the retention horizon, in bounded batches.
  *
- * Until v1.32.40 this was one unbounded `deleteMany` on `created_at < cutoff`.
+ * Until v1.33.0 this was one unbounded `deleteMany` on `created_at < cutoff`.
  * Every index on the table leads with `user_id` or `action`, so the predicate
  * had none and the statement planned a sequential scan plus index maintenance
  * on every removed row. Past the 60-second `statement_timeout` that aborts and

@@ -1,5 +1,5 @@
 /**
- * v1.32.40 — the retention purges have to be able to fail out loud.
+ * v1.33.0 — the retention purges have to be able to fail out loud.
  *
  * Both handlers used to catch every error into a wide-event warning and return
  * normally. pg-boss then recorded a successful job, so a purge that aborted on

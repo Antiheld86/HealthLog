@@ -25,6 +25,11 @@ including a connection that had already been parked for a dead credential. A
 failing connection now shows how long it has been failing, escalates after a
 day, and stops retrying after two with a reconnect button.
 
+One limit worth naming rather than leaving to be discovered: the ledger
+remembers a single failing part per provider. If two parts fail at overlapping
+times, the recovery of the later one still clears the error of the earlier. That
+is narrower than the case this fixes, and it is not closed.
+
 **The Environment module had never once saved a row, for anyone.** One
 declaration in 49 was missing the line that maps it to the database, so every
 write referred to a type that does not exist. The job failed every night and
@@ -38,8 +43,7 @@ backfill button covers the rest.
 left two overlapping in-bed periods, and both were added. One night read ten
 hours in the headline and twenty in the legend. The same fault inflated the
 time-asleep figure itself. Every stage total is now the measure of its own
-period rather than the sum of overlapping ones. Naps are also now told apart
-from the main sleep everywhere a person reads them, not just in the export.
+period rather than the sum of overlapping ones.
 
 **Twenty-two controls could destroy something without asking.** Among them a
 single tap that cleared the allergy list along with a text note, and a switch
@@ -77,8 +81,12 @@ see which before you import. Seven status values are ruled on individually: only
 notification is counted and named rather than turned into a decision you never
 made.
 
-Behavioural patterns now cover alcohol against next-day recovery and resting
-heart rate. The statistics for it were already in the app.
+The Coach can tell "you never recorded this" apart from "you recorded it, but
+outside the range I looked at". Someone with 1,597 imported glucose readings
+from April 2024 was told there was no glucose data at all, and the Coach then
+changed the subject, because one reason code covered both situations and the
+instruction to move on fired on both. It now says what is actually true and
+offers to look further back.
 
 ### For operators
 
@@ -89,10 +97,13 @@ inventory that was wrongly expired. None deletes or rewrites a measurement.
 ### Credit
 
 Reported by @lutzkind (sleep double-counting, the gender contract, the
-Environment enum, and a run of earlier reports), @Nazza01 (the intake import,
-plus the export file and the format documentation that made reading it
-possible), @DrGithubble (the unit and precision work that led here) and @doenke
-(the measurement table, narrowed by the reporter into something buildable).
+Environment enum, the Coach retrieval window, and a run of earlier reports),
+@Nazza01 (the intake import, plus the export file and the format documentation
+that made reading it possible) and @DrGithubble (the unit and precision work
+that led here).
+
+@doenke's measurement table is not in this release. An earlier draft of these
+notes said it was and credited him for it, which was wrong on both counts.
 
 Two of these defects were found because someone outside this project read the
 code and said what was wrong. The Environment module had been broken for every

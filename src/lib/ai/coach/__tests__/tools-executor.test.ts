@@ -16,7 +16,7 @@ vi.mock("@/lib/ai/coach/snapshot", () => ({
     buildCoachSnapshot(userId, scope),
 }));
 
-// v1.32.40 (#648) — an empty window read is no longer reported as absence until
+// v1.33.0 (#648) — an empty window read is no longer reported as absence until
 // the availability probe has confirmed the record is empty. Stub the probe's
 // reads to "nothing stored", which is what these dispatch assertions mean by an
 // absent section; `coach-availability-window-honesty.test.ts` owns the other

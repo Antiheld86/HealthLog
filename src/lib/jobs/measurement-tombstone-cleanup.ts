@@ -32,7 +32,7 @@ function tombstoneCutoff(now: Date): Date {
  * Hard-delete soft-deleted measurement rows whose `deletedAt` is older than
  * the retention horizon.
  *
- * Batched. Until v1.32.40 this was one unbounded `deleteMany` over a predicate
+ * Batched. Until v1.33.0 this was one unbounded `deleteMany` over a predicate
  * that no index supported, which meant a backlog large enough to exceed the
  * 60-second `statement_timeout` could never be drained: the statement aborted,
  * the transaction rolled back, and the next night ran the identical statement
