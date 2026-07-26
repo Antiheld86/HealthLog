@@ -11,10 +11,20 @@
  *
  * Project convention is SSR-only component tests (`renderToStaticMarkup`).
  */
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { I18nProvider } from "@/lib/i18n/context";
+
+const src = readFileSync(
+  resolve(
+    process.cwd(),
+    "src/components/medications/sections/inventory-section.tsx",
+  ),
+  "utf8",
+);
 
 // The Radix Dialog / Select portal at runtime, so their bodies never
 // materialise in static markup. Collapse the primitives to plain
@@ -203,6 +213,27 @@ describe("<AdjustInventoryDialog> — editable dates", () => {
   it("keeps the remaining-units correction alongside the dates", () => {
     const html = renderDialog();
     expect(html).toContain('id="inventory-adjust-remaining"');
+  });
+
+  // Submitting is out of SSR reach, so the wire contract is pinned
+  // against the source (same approach as the register-dialog suite).
+  it("sends each date only when it actually changed", () => {
+    // Absent means untouched on the server: saving a unit correction
+    // must not rewrite a date the user never opened.
+    expect(src).toMatch(
+      /\.\.\.\(expiry !== initialExpiry && \{\s*\n?\s*printedExpiry: fromLocalDayInput\(expiry\),/,
+    );
+    expect(src).toMatch(
+      /\.\.\.\(opened !== initialOpened && \{\s*\n?\s*markAsFirstUseAt: fromLocalDayInput\(opened\),/,
+    );
+  });
+
+  it("sends a cleared date as null, not as an empty string", () => {
+    // null is the deliberate "there is no such date"; the route reads it
+    // as a clear, which is the way back out of a wrong auto-open.
+    expect(src).toMatch(
+      /function fromLocalDayInput\(day: string\): string \| null \{\s*\n\s*if \(!day\) return null;/,
+    );
   });
 });
 
