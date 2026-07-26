@@ -497,6 +497,13 @@ describe("the two instructions that told the model to move on", () => {
   for (const locale of ["en", "de"] as const) {
     it(`the tool-mode addendum (${locale}) branches on the reason code`, () => {
       const addendum = buildToolModeAddendum(locale);
+      // The instruction that produced the report: one sentence covering every
+      // present:false, telling the model to declare absence and move on.
+      const oldPivotRule =
+        locale === "en"
+          ? /say plainly that you have no data for that metric and pivot/i
+          : /sage klar, dass dazu keine Daten vorliegen, und lenke um/i;
+      expect(addendum).not.toMatch(oldPivotRule);
       expect(addendum).toContain("outside_window");
       expect(addendum).toContain("no_data_unconfirmed");
       expect(addendum).toContain("unavailable_in_scope");
@@ -533,24 +540,20 @@ describe("a failed narration block is counted, not silently absent", () => {
 
   it("routes every cross-cutting block failure through the annotator", () => {
     for (const block of [
-      "buildAdherenceStoryline",
-      "buildChangepointSignals",
-      "buildSignalTrust",
-      "buildExperimentOutcomeBlock",
+      "adherenceStoryline",
+      "changepoints",
+      "signalTrust",
+      "experimentOutcomes",
     ]) {
-      const at = source.indexOf(block + "(");
-      expect(at, `${block} call site`).toBeGreaterThan(-1);
-      const tail = source.slice(at, at + 260);
-      expect(tail, `${block} swallows its failure`).toContain("blockFailed(");
+      expect(source, `${block} is not annotated on failure`).toContain(
+        `blockFailed("${block}")`,
+      );
     }
   });
 
-  it("keeps no bare catch-to-null on those blocks", () => {
-    expect(source).not.toMatch(
-      /buildSignalTrust\([^)]*\)\.catch\(\(\) => null\)/,
-    );
-    expect(source).not.toMatch(
-      /buildChangepointSignals\([^)]*\)\.catch\(\(\) => null\)/,
-    );
+  it("leaves no bare catch-to-null in the builder", () => {
+    // The shape the finding named: a builder that throws becomes `null`, which
+    // is byte-identical to a user who has nothing to report.
+    expect(source).not.toContain(".catch(() => null)");
   });
 });
