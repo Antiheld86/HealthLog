@@ -239,14 +239,20 @@ describe("POST /api/medications/[id]/intake/import — durable kickoff", () => {
         // A legacy `zaehler` on the first row rides along and decides nothing:
         // both keys come from the instant, so two different times can never
         // collapse onto one key again.
+        // This body carries one time per row and nothing to say which slot it
+        // belonged to, so `scheduledFor` mirrors the take: every dose it
+        // describes is ad-hoc, anchored on itself. The export-reading route is
+        // the one with two facts to write.
         payload: {
           entries: [
             {
               idempotencyKey: `import-m1-${Date.parse("2026-01-01T07:00:00")}`,
+              scheduledFor: expect.any(String),
               takenAt: expect.any(String),
             },
             {
               idempotencyKey: `import-m1-${Date.parse("2026-01-01T19:00:00")}`,
+              scheduledFor: expect.any(String),
               takenAt: expect.any(String),
             },
           ],

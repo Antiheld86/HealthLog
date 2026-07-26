@@ -1917,7 +1917,19 @@
       "skipGroupOther": "{count} voci ignorate: {reason}",
       "reasonDuplicateInFile": "un’altra voce dello stesso file ha la stessa data e la stessa ora",
       "reasonAlreadyRecorded": "per quella data e ora è già registrata un’assunzione",
-      "reasonUnknown": "motivo non registrato"
+      "reasonUnknown": "motivo non registrato",
+      "reasonMedicationNotFound": "nessun farmaco registrato corrisponde al nome nel file",
+      "reasonMedicationAmbiguous": "il nome nel file corrisponde a più di un farmaco",
+      "reasonMedicationIsMirrored": "il farmaco è una copia in sola lettura da un'altra app",
+      "reasonStatusNotRecorded": "il file non registra alcuna decisione su quella dose",
+      "reasonStatusUnknown": "lo stato nel file non è uno di quelli definiti dal formato",
+      "reasonMissingTimestamp": "la riga non indica alcun orario",
+      "reasonMissingOffset": "l'orario non porta un offset UTC, quindi l'istante è ignoto",
+      "reasonUnreadableTimestamp": "l'orario non è nel formato documentato dall'esportazione",
+      "reasonImplausibleTimestamp": "l'orario non indica un istante reale, o è nel futuro",
+      "reasonMissingMedication": "la riga non nomina alcun farmaco",
+      "reasonUnreadableDosage": "il dosaggio non è un numero",
+      "reasonUnreadableRow": "la riga ha meno colonne dell'intestazione"
     }
   },
   "charts": {
@@ -4547,6 +4559,60 @@
             "reasonUnstableExternalId": "l'ID esterno non è stabile tra un export e l'altro",
             "reasonDuplicate": "già importata",
             "reasonUnknown": "saltata"
+          },
+          "doseHistory": {
+            "title": "Storico delle assunzioni",
+            "description": "Uno storico di assunzioni esportato da un'altra app di monitoraggio, letto così com'è. Un file copre tutti i farmaci che contiene.",
+            "pasteLabel": "Incolla l'esportazione",
+            "fileInputLabel": "Scegli un file con lo storico delle assunzioni",
+            "uploadFile": "Scegli file",
+            "preview": "Anteprima",
+            "import": "Importa",
+            "empty": "Prima incolla l'esportazione o scegli un file.",
+            "readFailed": "Non è stato possibile leggere quel file.",
+            "rateLimited": "Massimo 5 importazioni all'ora. Riprova più tardi.",
+            "tooLarge": "Quel file supera il limite di 16 MB.",
+            "inProgress": "Un'importazione dello storico è già in corso. Attendi che finisca.",
+            "workerUnavailable": "Il processo in background non è disponibile, quindi non è stato importato nulla.",
+            "failed": "L'importazione è fallita. Non è stato scritto nulla.",
+            "columnsHeading": "Cosa fa ogni colonna",
+            "jsonOnly": "solo JSON",
+            "previewLine": "Righe lette: {rows} · da importare: {queued} · rifiutate: {refused}",
+            "submittedLine": "Righe lette: {rows} · in coda per l'importazione: {queued}",
+            "unmatched": "Nessun farmaco registrato corrisponde a: {names}",
+            "ambiguous": "Corrisponde a più di un farmaco: {names}",
+            "mirrored": "Copiato da un'altra app, quindi non si può aggiungere alcuna dose: {names}",
+            "unknownColumns": "Colonne senza regola nell'importatore, non lette: {names}",
+            "codingsNotRead": "Righe con un valore Codings non letto: {count}",
+            "archivedRows": "Righe di un farmaco archiviato nell'app di origine, importate comunque: {count}",
+            "verdict": {
+              "honoured": "usata",
+              "reported": "segnalata",
+              "ignored": "non letta"
+            },
+            "column": {
+              "date": "L'ora in cui la dose è stata effettivamente assunta. Il suo offset UTC viene letto esattamente come è scritto.",
+              "scheduledDate": "La fascia a cui la dose apparteneva, tenuta distinta dall'ora di assunzione. Vuoto significa che non apparteneva a nessuna fascia.",
+              "medication": "Abbinato a un farmaco già presente nella tua scheda. Dal file non viene creato nulla.",
+              "nickname": "Provato come secondo nome quando il primo non corrisponde a niente.",
+              "dosage": "Registrato sulla dose solo quando differisce dalla quantità prevista.",
+              "scheduledDosage": "Confrontato con la quantità effettiva per stabilire se quella dose si è discostata. Mai salvato da solo.",
+              "unit": "Scritto con la quantità, come lo scrive il file. \"count\" indica multipli della dose configurata.",
+              "status": "\"Taken\" diventa una dose e \"Skipped\" un'omissione deliberata. Qualsiasi altro valore non registra alcuna decisione e la riga viene rifiutata.",
+              "archived": "Contato e segnalato. Una dose che è avvenuta non si annulla archiviando il farmaco dopo.",
+              "codings": "Il CSV non documenta alcuna codifica per questa colonna, quindi viene lasciata stare invece di essere indovinata. Le celle piene vengono contate.",
+              "form": "Descrive il farmaco, non la dose.",
+              "start": "La data in cui hai iniziato il farmaco, non l'ora di questa dose.",
+              "end": "La data in cui hai smesso il farmaco, non l'ora di questa dose."
+            },
+            "fatal": {
+              "emptyFile": "Quel file non contiene righe.",
+              "missingColumns": "A quel file manca una colonna che serve all'importatore: Date, Medication o Status.",
+              "unreadableJson": "Quel file non è JSON valido.",
+              "jsonNotAnArray": "Quel JSON non contiene alcun elenco di dosi.",
+              "jsonNoIntakeTime": "L'esportazione JSON registra quando una dose era prevista, non quando è stata assunta, e un orario previsto non verrà scritto come se fosse l'assunzione. Esporta il CSV, che porta entrambi.",
+              "tooManyRows": "Quel file contiene più righe di quante un'importazione possa accoglierne. Dividilo e importa le parti."
+            }
           }
         },
         "subtitle": "Esporta i tuoi dati o importa da un backup."

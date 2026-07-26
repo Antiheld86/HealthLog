@@ -1917,7 +1917,19 @@
       "skipGroupOther": "{count} entradas omitidas: {reason}",
       "reasonDuplicateInFile": "otra entrada del mismo archivo tiene la misma fecha y hora",
       "reasonAlreadyRecorded": "ya hay una toma registrada para esa fecha y hora",
-      "reasonUnknown": "motivo no registrado"
+      "reasonUnknown": "motivo no registrado",
+      "reasonMedicationNotFound": "ningún medicamento registrado coincide con el nombre del archivo",
+      "reasonMedicationAmbiguous": "el nombre del archivo coincide con más de un medicamento",
+      "reasonMedicationIsMirrored": "el medicamento es una copia de solo lectura de otra aplicación",
+      "reasonStatusNotRecorded": "el archivo no registra ninguna decisión sobre esa dosis",
+      "reasonStatusUnknown": "el estado del archivo no es uno de los que define el formato",
+      "reasonMissingTimestamp": "la fila no indica ninguna hora",
+      "reasonMissingOffset": "la hora no lleva desplazamiento UTC, así que el instante es desconocido",
+      "reasonUnreadableTimestamp": "la hora no tiene el formato que documenta la exportación",
+      "reasonImplausibleTimestamp": "la hora no nombra un instante real, o está en el futuro",
+      "reasonMissingMedication": "la fila no nombra ningún medicamento",
+      "reasonUnreadableDosage": "la dosis no es un número",
+      "reasonUnreadableRow": "la fila tiene menos columnas que la cabecera"
     }
   },
   "charts": {
@@ -4547,6 +4559,60 @@
             "reasonUnstableExternalId": "el ID externo no es estable entre exportaciones",
             "reasonDuplicate": "ya importada",
             "reasonUnknown": "omitida"
+          },
+          "doseHistory": {
+            "title": "Historial de dosis",
+            "description": "Un historial de dosis exportado desde otra aplicación de seguimiento, leído tal cual. Un archivo abarca todos los medicamentos que contiene.",
+            "pasteLabel": "Pega la exportación",
+            "fileInputLabel": "Elegir un archivo de historial de dosis",
+            "uploadFile": "Elegir archivo",
+            "preview": "Previsualizar",
+            "import": "Importar",
+            "empty": "Pega la exportación o elige un archivo primero.",
+            "readFailed": "No se pudo leer ese archivo.",
+            "rateLimited": "Máximo 5 importaciones por hora. Inténtalo más tarde.",
+            "tooLarge": "Ese archivo supera el límite de 16 MB.",
+            "inProgress": "Ya hay una importación de historial en curso. Espera a que termine.",
+            "workerUnavailable": "El proceso en segundo plano no está disponible, así que no se importó nada.",
+            "failed": "La importación falló. No se escribió nada.",
+            "columnsHeading": "Qué hace cada columna",
+            "jsonOnly": "solo JSON",
+            "previewLine": "Filas leídas: {rows} · se importarían: {queued} · rechazadas: {refused}",
+            "submittedLine": "Filas leídas: {rows} · en cola para importar: {queued}",
+            "unmatched": "Ningún medicamento registrado coincide con: {names}",
+            "ambiguous": "Coincide con más de un medicamento: {names}",
+            "mirrored": "Copiado de otra aplicación, así que no se puede añadir ninguna dosis: {names}",
+            "unknownColumns": "Columnas sin regla en el importador, no leídas: {names}",
+            "codingsNotRead": "Filas con un valor de Codings no leído: {count}",
+            "archivedRows": "Filas de un medicamento archivado en la aplicación de origen, importadas igualmente: {count}",
+            "verdict": {
+              "honoured": "usada",
+              "reported": "informada",
+              "ignored": "no leída"
+            },
+            "column": {
+              "date": "La hora en que se tomó realmente la dosis. Su desplazamiento UTC se lee tal como está escrito.",
+              "scheduledDate": "La franja a la que pertenecía la dosis, separada de la hora en que se tomó. Vacío significa que no pertenecía a ninguna franja.",
+              "medication": "Se empareja con un medicamento que ya está en tu registro. Nada se crea a partir del archivo.",
+              "nickname": "Se prueba como segundo nombre cuando el primero no coincide con nada.",
+              "dosage": "Se registra en la dosis solo cuando difiere de la cantidad prevista.",
+              "scheduledDosage": "Se compara con la cantidad real para decidir si esa dosis se desvió. Nunca se guarda por sí sola.",
+              "unit": "Se escribe con la cantidad, tal como la escribe el archivo. \"count\" significa múltiplos de la dosis configurada.",
+              "status": "\"Taken\" se convierte en una dosis y \"Skipped\" en una omisión deliberada. Cualquier otro valor no registra decisión alguna y la fila se rechaza.",
+              "archived": "Se cuenta y se informa. Una dosis que ocurrió no se deshace al archivar el medicamento después.",
+              "codings": "El CSV no documenta ninguna codificación para esta columna, así que se deja intacta en vez de adivinarla. Las celdas con contenido se cuentan.",
+              "form": "Describe el medicamento, no la dosis.",
+              "start": "La fecha en que empezaste el medicamento, no la hora de esta dosis.",
+              "end": "La fecha en que dejaste el medicamento, no la hora de esta dosis."
+            },
+            "fatal": {
+              "emptyFile": "Ese archivo no contiene filas.",
+              "missingColumns": "A ese archivo le falta una columna que el importador necesita: Date, Medication o Status.",
+              "unreadableJson": "Ese archivo no es JSON válido.",
+              "jsonNotAnArray": "Ese JSON no contiene ninguna lista de dosis.",
+              "jsonNoIntakeTime": "La exportación JSON registra cuándo tocaba una dosis pero no cuándo se tomó, y una hora prevista no se escribirá como si fuera la toma. Exporta el CSV, que lleva ambas.",
+              "tooManyRows": "Ese archivo tiene más filas de las que admite una importación. Divídelo e importa las partes."
+            }
           }
         },
         "subtitle": "Exporta tus datos o importa desde una copia de seguridad."

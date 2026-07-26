@@ -1917,7 +1917,19 @@
       "skipGroupOther": "{count} entries skipped: {reason}",
       "reasonDuplicateInFile": "another entry in the same file has the same date and time",
       "reasonAlreadyRecorded": "an intake is already recorded for that date and time",
-      "reasonUnknown": "reason not recorded"
+      "reasonUnknown": "reason not recorded",
+      "reasonMedicationNotFound": "no medication on record matches the name in the file",
+      "reasonMedicationAmbiguous": "the name in the file matches more than one medication on record",
+      "reasonMedicationIsMirrored": "the medication is a read-only copy of another app's list",
+      "reasonStatusNotRecorded": "the file records no decision about that dose",
+      "reasonStatusUnknown": "the status in the file is not one the format defines",
+      "reasonMissingTimestamp": "the row states no time",
+      "reasonMissingOffset": "the time carries no UTC offset, so the instant is unknown",
+      "reasonUnreadableTimestamp": "the time is not in the format the export documents",
+      "reasonImplausibleTimestamp": "the time names no real instant, or lies in the future",
+      "reasonMissingMedication": "the row names no medication",
+      "reasonUnreadableDosage": "the dosage is not a number",
+      "reasonUnreadableRow": "the row has fewer columns than the header"
     }
   },
   "charts": {
@@ -4547,6 +4559,60 @@
             "reasonUnstableExternalId": "external ID is not stable across exports",
             "reasonDuplicate": "already imported",
             "reasonUnknown": "skipped"
+          },
+          "doseHistory": {
+            "title": "Medication dose history",
+            "description": "A dose history exported from another medication tracker, read as it comes. One file covers every medication in it.",
+            "pasteLabel": "Paste the export",
+            "fileInputLabel": "Choose a dose-history export file",
+            "uploadFile": "Choose file",
+            "preview": "Preview",
+            "import": "Import",
+            "empty": "Paste the export or choose a file first.",
+            "readFailed": "That file could not be read.",
+            "rateLimited": "Maximum 5 imports per hour. Try again later.",
+            "tooLarge": "That file is over the 16 MB limit.",
+            "inProgress": "A dose-history import is already running. Wait for it to finish.",
+            "workerUnavailable": "The background worker is not available, so nothing was imported.",
+            "failed": "The import failed. Nothing was written.",
+            "columnsHeading": "What each column does",
+            "jsonOnly": "JSON only",
+            "previewLine": "Rows read: {rows} · would import: {queued} · refused: {refused}",
+            "submittedLine": "Rows read: {rows} · queued for import: {queued}",
+            "unmatched": "No medication on record matches: {names}",
+            "ambiguous": "Matches more than one medication: {names}",
+            "mirrored": "Mirrored from another app, so no dose can be added: {names}",
+            "unknownColumns": "Columns the importer has no rule for, left unread: {names}",
+            "codingsNotRead": "Rows carrying a Codings value that was not read: {count}",
+            "archivedRows": "Rows from a medication archived in the source app, imported anyway: {count}",
+            "verdict": {
+              "honoured": "used",
+              "reported": "reported",
+              "ignored": "not read"
+            },
+            "column": {
+              "date": "The time the dose was actually taken. Its UTC offset is read exactly as written.",
+              "scheduledDate": "The slot the dose belonged to, kept apart from the time it was taken. Empty means the dose belonged to no slot.",
+              "medication": "Matched against a medication already on your record. Nothing is created from the file.",
+              "nickname": "Tried as a second name when the first one matches nothing.",
+              "dosage": "Recorded on the dose only where it differs from the scheduled amount.",
+              "scheduledDosage": "Compared against the actual amount to decide whether that dose deviated. Never stored on its own.",
+              "unit": "Written with the amount, spelled as the file spells it. \"count\" means multiples of the configured dose.",
+              "status": "\"Taken\" becomes a dose and \"Skipped\" a deliberate skip. Any other value records no decision and the row is refused.",
+              "archived": "Counted and reported back. A dose that happened is not undone by archiving the medication afterwards.",
+              "codings": "The CSV gives this column no documented encoding, so it is left alone rather than guessed at. Populated cells are counted.",
+              "form": "Describes the medication, not the dose.",
+              "start": "The date you started the medication, not the time of this dose.",
+              "end": "The date you stopped the medication, not the time of this dose."
+            },
+            "fatal": {
+              "emptyFile": "That file holds no rows.",
+              "missingColumns": "That file is missing a column the importer needs: Date, Medication or Status.",
+              "unreadableJson": "That file is not valid JSON.",
+              "jsonNotAnArray": "That JSON holds no list of doses.",
+              "jsonNoIntakeTime": "The JSON export records when a dose was due but not when it was taken, and a scheduled time will not be written as if it were the take. Export the CSV instead, which carries both.",
+              "tooManyRows": "That file holds more rows than one import can take. Split it and import the parts."
+            }
           }
         },
         "subtitle": "Export your data or import from a backup."

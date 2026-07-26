@@ -48,6 +48,10 @@ const IMPORT_SURFACES: ReadonlyArray<{ path: string; through: RegExp }> = [
     path: "src/components/medications/intake-import-dialog.tsx",
     through: /IntakeImportResultView/,
   },
+  {
+    path: "src/components/settings/import-panel/dose-history-import-card.tsx",
+    through: /IntakeImportResultView/,
+  },
 ];
 
 /** The success affordance: the tick component and the success colour token. */

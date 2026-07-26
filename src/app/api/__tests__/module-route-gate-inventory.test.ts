@@ -212,6 +212,10 @@ const EXEMPT_ROUTES: ReadonlyArray<string> = [
   "src/app/api/medications/compliance/route.ts",
   "src/app/api/medications/intake/route.ts",
   "src/app/api/medications/intake/bulk/route.ts",
+  // The account-wide dose-history import is the same class as the
+  // per-medication importer below: it writes intake rows and reads its own job.
+  "src/app/api/medications/intake/dose-history-import/route.ts",
+  "src/app/api/medications/intake/dose-history-import/[jobId]/status/route.ts",
   // NB: `medications/extract` is NOT exempt — it gates on
   // `requireAssistantSurface("coach")` (the NL-extraction is an assistant
   // surface), so the inventory already counts it as a delegated gate.

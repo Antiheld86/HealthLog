@@ -365,9 +365,9 @@ interface ProcessChunkOutcome {
  * what to recompute — two medications touched on the same day are two rollup
  * rows. The medication is folded in ahead of a single space, which occurs in
  * neither a cuid nor a `YYYY-MM-DD` key. Not a NUL byte: this value is persisted
- * in the progress blob and Postgres rejects ` ` inside a jsonb string.
+ * in the progress blob and Postgres rejects a NUL byte inside a jsonb string.
  */
-const TOUCHED_DAY_SEPARATOR = " ";
+const TOUCHED_DAY_SEPARATOR = " ";
 
 function encodeTouchedDay(medicationId: string, dayKey: string): string {
   return `${medicationId}${TOUCHED_DAY_SEPARATOR}${dayKey}`;

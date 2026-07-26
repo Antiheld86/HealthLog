@@ -1917,7 +1917,19 @@
       "skipGroupOther": "{count} entrées ignorées : {reason}",
       "reasonDuplicateInFile": "une autre entrée du même fichier porte les mêmes date et heure",
       "reasonAlreadyRecorded": "une prise est déjà enregistrée pour cette date et cette heure",
-      "reasonUnknown": "motif non enregistré"
+      "reasonUnknown": "motif non enregistré",
+      "reasonMedicationNotFound": "aucun médicament enregistré ne correspond au nom du fichier",
+      "reasonMedicationAmbiguous": "le nom du fichier correspond à plusieurs médicaments",
+      "reasonMedicationIsMirrored": "le médicament est une copie en lecture seule provenant d'une autre application",
+      "reasonStatusNotRecorded": "le fichier ne consigne aucune décision sur cette dose",
+      "reasonStatusUnknown": "le statut du fichier ne fait pas partie de ceux que définit le format",
+      "reasonMissingTimestamp": "la ligne n'indique aucune heure",
+      "reasonMissingOffset": "l'heure ne porte pas de décalage UTC, l'instant est donc inconnu",
+      "reasonUnreadableTimestamp": "l'heure n'est pas au format documenté par l'export",
+      "reasonImplausibleTimestamp": "l'heure ne désigne aucun instant réel, ou se situe dans le futur",
+      "reasonMissingMedication": "la ligne ne nomme aucun médicament",
+      "reasonUnreadableDosage": "la dose n'est pas un nombre",
+      "reasonUnreadableRow": "la ligne a moins de colonnes que l'en-tête"
     }
   },
   "charts": {
@@ -4547,6 +4559,60 @@
             "reasonUnstableExternalId": "l'identifiant externe n'est pas stable d'un export à l'autre",
             "reasonDuplicate": "déjà importée",
             "reasonUnknown": "ignorée"
+          },
+          "doseHistory": {
+            "title": "Historique des prises",
+            "description": "Un historique de prises exporté depuis une autre application de suivi, lu tel quel. Un fichier couvre tous les médicaments qu'il contient.",
+            "pasteLabel": "Coller l'export",
+            "fileInputLabel": "Choisir un fichier d'historique des prises",
+            "uploadFile": "Choisir un fichier",
+            "preview": "Aperçu",
+            "import": "Importer",
+            "empty": "Collez d'abord l'export ou choisissez un fichier.",
+            "readFailed": "Ce fichier n'a pas pu être lu.",
+            "rateLimited": "Maximum 5 imports par heure. Réessayez plus tard.",
+            "tooLarge": "Ce fichier dépasse la limite de 16 Mo.",
+            "inProgress": "Un import d'historique est déjà en cours. Attendez qu'il se termine.",
+            "workerUnavailable": "Le service d'arrière-plan est indisponible, rien n'a été importé.",
+            "failed": "L'import a échoué. Rien n'a été écrit.",
+            "columnsHeading": "Ce que devient chaque colonne",
+            "jsonOnly": "JSON uniquement",
+            "previewLine": "Lignes lues : {rows} · seraient importées : {queued} · refusées : {refused}",
+            "submittedLine": "Lignes lues : {rows} · en file d'import : {queued}",
+            "unmatched": "Aucun médicament enregistré ne correspond à : {names}",
+            "ambiguous": "Correspond à plusieurs médicaments : {names}",
+            "mirrored": "Copié depuis une autre application, aucune prise ne peut y être ajoutée : {names}",
+            "unknownColumns": "Colonnes sans règle dans l'importeur, non lues : {names}",
+            "codingsNotRead": "Lignes portant une valeur Codings non lue : {count}",
+            "archivedRows": "Lignes d'un médicament archivé dans l'application source, importées quand même : {count}",
+            "verdict": {
+              "honoured": "utilisée",
+              "reported": "signalée",
+              "ignored": "non lue"
+            },
+            "column": {
+              "date": "L'heure à laquelle la dose a réellement été prise. Son décalage UTC est lu exactement tel qu'il est écrit.",
+              "scheduledDate": "Le créneau auquel la dose appartenait, distinct de l'heure de prise. Vide signifie qu'elle n'appartenait à aucun créneau.",
+              "medication": "Rapproché d'un médicament déjà présent dans votre dossier. Rien n'est créé à partir du fichier.",
+              "nickname": "Essayé comme second nom lorsque le premier ne correspond à rien.",
+              "dosage": "Consigné sur la dose uniquement lorsqu'il diffère de la quantité prévue.",
+              "scheduledDosage": "Comparé à la quantité réelle pour décider s'il y a eu écart. Jamais conservé seul.",
+              "unit": "Écrit avec la quantité, orthographié comme dans le fichier. « count » signifie des multiples de la dose configurée.",
+              "status": "« Taken » devient une prise et « Skipped » une omission délibérée. Toute autre valeur ne consigne aucune décision et la ligne est refusée.",
+              "archived": "Compté et signalé. Une prise qui a eu lieu n'est pas annulée parce que le médicament a été archivé ensuite.",
+              "codings": "Le CSV ne documente aucun encodage pour cette colonne, elle est donc laissée telle quelle plutôt que devinée. Les cellules remplies sont comptées.",
+              "form": "Décrit le médicament, pas la prise.",
+              "start": "La date de début du traitement, pas l'heure de cette prise.",
+              "end": "La date d'arrêt du traitement, pas l'heure de cette prise."
+            },
+            "fatal": {
+              "emptyFile": "Ce fichier ne contient aucune ligne.",
+              "missingColumns": "Il manque à ce fichier une colonne dont l'importeur a besoin : Date, Medication ou Status.",
+              "unreadableJson": "Ce fichier n'est pas du JSON valide.",
+              "jsonNotAnArray": "Ce JSON ne contient aucune liste de prises.",
+              "jsonNoIntakeTime": "L'export JSON consigne le moment où une dose était due, pas celui où elle a été prise, et une heure prévue ne sera pas écrite comme si c'était la prise. Exportez le CSV, qui porte les deux.",
+              "tooManyRows": "Ce fichier contient plus de lignes qu'un import peut en prendre. Découpez-le et importez les parties."
+            }
           }
         },
         "subtitle": "Exportez vos données ou importez depuis une sauvegarde."

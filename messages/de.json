@@ -1917,7 +1917,19 @@
       "skipGroupOther": "{count} Einträge übersprungen: {reason}",
       "reasonDuplicateInFile": "ein anderer Eintrag derselben Datei hat dasselbe Datum und dieselbe Uhrzeit",
       "reasonAlreadyRecorded": "für dieses Datum und diese Uhrzeit ist bereits eine Einnahme erfasst",
-      "reasonUnknown": "Grund nicht erfasst"
+      "reasonUnknown": "Grund nicht erfasst",
+      "reasonMedicationNotFound": "kein Medikament im Bestand passt zum Namen in der Datei",
+      "reasonMedicationAmbiguous": "der Name in der Datei passt auf mehr als ein Medikament",
+      "reasonMedicationIsMirrored": "das Medikament ist eine schreibgeschützte Kopie aus einer anderen App",
+      "reasonStatusNotRecorded": "die Datei hält zu dieser Dosis keine Entscheidung fest",
+      "reasonStatusUnknown": "der Status in der Datei gehört nicht zum dokumentierten Format",
+      "reasonMissingTimestamp": "die Zeile nennt keine Zeit",
+      "reasonMissingOffset": "die Zeit trägt keinen UTC-Offset, der Zeitpunkt ist damit unbekannt",
+      "reasonUnreadableTimestamp": "die Zeit entspricht nicht dem dokumentierten Format",
+      "reasonImplausibleTimestamp": "die Zeit nennt keinen echten Zeitpunkt oder liegt in der Zukunft",
+      "reasonMissingMedication": "die Zeile nennt kein Medikament",
+      "reasonUnreadableDosage": "die Dosis ist keine Zahl",
+      "reasonUnreadableRow": "die Zeile hat weniger Spalten als die Kopfzeile"
     }
   },
   "charts": {
@@ -4547,6 +4559,60 @@
             "reasonUnstableExternalId": "Externe ID ist über Exporte hinweg nicht stabil",
             "reasonDuplicate": "bereits importiert",
             "reasonUnknown": "übersprungen"
+          },
+          "doseHistory": {
+            "title": "Einnahmeverlauf",
+            "description": "Ein Einnahmeverlauf, wie ihn ein anderer Medikamenten-Tracker exportiert, direkt gelesen. Eine Datei deckt alle Medikamente darin ab.",
+            "pasteLabel": "Export einfügen",
+            "fileInputLabel": "Datei mit Einnahmeverlauf wählen",
+            "uploadFile": "Datei wählen",
+            "preview": "Vorschau",
+            "import": "Importieren",
+            "empty": "Erst den Export einfügen oder eine Datei wählen.",
+            "readFailed": "Diese Datei konnte nicht gelesen werden.",
+            "rateLimited": "Höchstens 5 Importe pro Stunde. Später erneut versuchen.",
+            "tooLarge": "Diese Datei überschreitet das Limit von 16 MB.",
+            "inProgress": "Ein Import des Einnahmeverlaufs läuft bereits. Auf sein Ende warten.",
+            "workerUnavailable": "Der Hintergrunddienst ist nicht verfügbar, es wurde nichts importiert.",
+            "failed": "Der Import ist fehlgeschlagen. Es wurde nichts geschrieben.",
+            "columnsHeading": "Was mit jeder Spalte passiert",
+            "jsonOnly": "nur JSON",
+            "previewLine": "Zeilen gelesen: {rows} · würde importieren: {queued} · abgewiesen: {refused}",
+            "submittedLine": "Zeilen gelesen: {rows} · zum Import eingereiht: {queued}",
+            "unmatched": "Kein Medikament im Bestand passt zu: {names}",
+            "ambiguous": "Passt auf mehr als ein Medikament: {names}",
+            "mirrored": "Aus einer anderen App gespiegelt, daher keine Dosis ergänzbar: {names}",
+            "unknownColumns": "Spalten ohne Regel im Importer, ungelesen: {names}",
+            "codingsNotRead": "Zeilen mit einem nicht gelesenen Codings-Wert: {count}",
+            "archivedRows": "Zeilen von einem in der Quell-App archivierten Medikament, trotzdem importiert: {count}",
+            "verdict": {
+              "honoured": "verwendet",
+              "reported": "gemeldet",
+              "ignored": "nicht gelesen"
+            },
+            "column": {
+              "date": "Der Zeitpunkt der tatsächlichen Einnahme. Sein UTC-Offset wird genau so gelesen, wie er dasteht.",
+              "scheduledDate": "Der Slot, zu dem die Dosis gehörte, getrennt vom Zeitpunkt der Einnahme. Leer heißt: die Dosis gehörte zu keinem Slot.",
+              "medication": "Wird einem Medikament zugeordnet, das es im Bestand schon gibt. Aus der Datei wird nichts angelegt.",
+              "nickname": "Wird als zweiter Name versucht, wenn der erste zu nichts passt.",
+              "dosage": "Wird nur dann an der Dosis festgehalten, wenn sie von der geplanten Menge abweicht.",
+              "scheduledDosage": "Wird mit der tatsächlichen Menge verglichen, um eine Abweichung zu erkennen. Nie eigenständig gespeichert.",
+              "unit": "Wird mit der Menge geschrieben, geschrieben wie in der Datei. „count“ heißt Vielfache der konfigurierten Dosis.",
+              "status": "„Taken“ wird eine Dosis, „Skipped“ ein bewusstes Auslassen. Jeder andere Wert hält keine Entscheidung fest und die Zeile wird abgewiesen.",
+              "archived": "Wird gezählt und zurückgemeldet. Eine erfolgte Einnahme wird nicht dadurch ungültig, dass das Medikament später archiviert wurde.",
+              "codings": "Die CSV dokumentiert für diese Spalte keine Kodierung, also bleibt sie unberührt statt geraten. Gefüllte Zellen werden gezählt.",
+              "form": "Beschreibt das Medikament, nicht die Dosis.",
+              "start": "Das Datum des Behandlungsbeginns, nicht der Zeitpunkt dieser Dosis.",
+              "end": "Das Datum des Behandlungsendes, nicht der Zeitpunkt dieser Dosis."
+            },
+            "fatal": {
+              "emptyFile": "Diese Datei enthält keine Zeilen.",
+              "missingColumns": "Dieser Datei fehlt eine Spalte, die der Importer braucht: Date, Medication oder Status.",
+              "unreadableJson": "Diese Datei ist kein gültiges JSON.",
+              "jsonNotAnArray": "Dieses JSON enthält keine Liste von Dosen.",
+              "jsonNoIntakeTime": "Der JSON-Export hält fest, wann eine Dosis fällig war, nicht wann sie genommen wurde, und eine geplante Zeit wird nicht als Einnahmezeit geschrieben. Stattdessen die CSV exportieren, die beides trägt.",
+              "tooManyRows": "Diese Datei enthält mehr Zeilen, als ein Import aufnehmen kann. Teilen und in Teilen importieren."
+            }
           }
         },
         "subtitle": "Exportiere deine Daten oder importiere aus einer Sicherung."

@@ -1917,7 +1917,19 @@
       "skipGroupOther": "Pominięto {count} wpisów: {reason}",
       "reasonDuplicateInFile": "inny wpis w tym samym pliku ma tę samą datę i godzinę",
       "reasonAlreadyRecorded": "przyjęcie o tej dacie i godzinie jest już zapisane",
-      "reasonUnknown": "powód nieodnotowany"
+      "reasonUnknown": "powód nieodnotowany",
+      "reasonMedicationNotFound": "żaden zapisany lek nie odpowiada nazwie z pliku",
+      "reasonMedicationAmbiguous": "nazwa z pliku odpowiada więcej niż jednemu lekowi",
+      "reasonMedicationIsMirrored": "lek jest kopią tylko do odczytu z innej aplikacji",
+      "reasonStatusNotRecorded": "plik nie zapisuje żadnej decyzji o tej dawce",
+      "reasonStatusUnknown": "status w pliku nie należy do tych, które definiuje format",
+      "reasonMissingTimestamp": "wiersz nie podaje godziny",
+      "reasonMissingOffset": "godzina nie ma przesunięcia UTC, więc moment jest nieznany",
+      "reasonUnreadableTimestamp": "godzina nie ma formatu opisanego w dokumentacji eksportu",
+      "reasonImplausibleTimestamp": "godzina nie wskazuje rzeczywistego momentu albo leży w przyszłości",
+      "reasonMissingMedication": "wiersz nie nazywa żadnego leku",
+      "reasonUnreadableDosage": "dawka nie jest liczbą",
+      "reasonUnreadableRow": "wiersz ma mniej kolumn niż nagłówek"
     }
   },
   "charts": {
@@ -4547,6 +4559,60 @@
             "reasonUnstableExternalId": "identyfikator zewnętrzny nie jest stabilny między eksportami",
             "reasonDuplicate": "już zaimportowano",
             "reasonUnknown": "pominięto"
+          },
+          "doseHistory": {
+            "title": "Historia dawek",
+            "description": "Historia dawek wyeksportowana z innej aplikacji, czytana wprost. Jeden plik obejmuje wszystkie leki, które zawiera.",
+            "pasteLabel": "Wklej eksport",
+            "fileInputLabel": "Wybierz plik z historią dawek",
+            "uploadFile": "Wybierz plik",
+            "preview": "Podgląd",
+            "import": "Importuj",
+            "empty": "Najpierw wklej eksport albo wybierz plik.",
+            "readFailed": "Nie udało się odczytać tego pliku.",
+            "rateLimited": "Maksymalnie 5 importów na godzinę. Spróbuj później.",
+            "tooLarge": "Ten plik przekracza limit 16 MB.",
+            "inProgress": "Import historii dawek już trwa. Poczekaj, aż się zakończy.",
+            "workerUnavailable": "Proces w tle jest niedostępny, więc nic nie zostało zaimportowane.",
+            "failed": "Import nie udał się. Nic nie zostało zapisane.",
+            "columnsHeading": "Co się dzieje z każdą kolumną",
+            "jsonOnly": "tylko JSON",
+            "previewLine": "Odczytane wiersze: {rows} · do zaimportowania: {queued} · odrzucone: {refused}",
+            "submittedLine": "Odczytane wiersze: {rows} · w kolejce do importu: {queued}",
+            "unmatched": "Żaden zapisany lek nie odpowiada: {names}",
+            "ambiguous": "Odpowiada więcej niż jednemu lekowi: {names}",
+            "mirrored": "Skopiowany z innej aplikacji, więc nie można dodać dawki: {names}",
+            "unknownColumns": "Kolumny bez reguły w importerze, nieodczytane: {names}",
+            "codingsNotRead": "Wiersze z nieodczytaną wartością Codings: {count}",
+            "archivedRows": "Wiersze leku zarchiwizowanego w aplikacji źródłowej, zaimportowane mimo to: {count}",
+            "verdict": {
+              "honoured": "użyta",
+              "reported": "zgłoszona",
+              "ignored": "nieodczytana"
+            },
+            "column": {
+              "date": "Godzina rzeczywistego przyjęcia dawki. Jej przesunięcie UTC czytane jest dokładnie tak, jak zapisane.",
+              "scheduledDate": "Okno, do którego należała dawka, trzymane osobno od godziny przyjęcia. Puste znaczy, że dawka nie należała do żadnego okna.",
+              "medication": "Dopasowane do leku, który już jest w Twojej kartotece. Z pliku nic nie jest tworzone.",
+              "nickname": "Próbowane jako druga nazwa, gdy pierwsza do niczego nie pasuje.",
+              "dosage": "Zapisywane przy dawce tylko wtedy, gdy różni się od zaplanowanej ilości.",
+              "scheduledDosage": "Porównywane z rzeczywistą ilością, by rozstrzygnąć, czy dawka odbiegła od planu. Nigdy nie zapisywane samo.",
+              "unit": "Zapisywana razem z ilością, dokładnie tak, jak w pliku. „count” oznacza wielokrotności skonfigurowanej dawki.",
+              "status": "„Taken” staje się dawką, a „Skipped” świadomym pominięciem. Każda inna wartość nie zapisuje żadnej decyzji i wiersz zostaje odrzucony.",
+              "archived": "Liczone i zgłaszane. Dawka, która się odbyła, nie znika przez późniejsze zarchiwizowanie leku.",
+              "codings": "CSV nie dokumentuje dla tej kolumny żadnego kodowania, więc zostaje nietknięta zamiast zgadywana. Wypełnione komórki są liczone.",
+              "form": "Opisuje lek, nie dawkę.",
+              "start": "Data rozpoczęcia leku, nie godzina tej dawki.",
+              "end": "Data zakończenia leku, nie godzina tej dawki."
+            },
+            "fatal": {
+              "emptyFile": "Ten plik nie zawiera wierszy.",
+              "missingColumns": "W tym pliku brakuje kolumny, której potrzebuje importer: Date, Medication albo Status.",
+              "unreadableJson": "Ten plik nie jest poprawnym JSON-em.",
+              "jsonNotAnArray": "Ten JSON nie zawiera listy dawek.",
+              "jsonNoIntakeTime": "Eksport JSON zapisuje, kiedy dawka była zaplanowana, a nie kiedy została przyjęta, i zaplanowana godzina nie zostanie zapisana jako godzina przyjęcia. Wyeksportuj CSV, który zawiera obie.",
+              "tooManyRows": "Ten plik ma więcej wierszy, niż może przyjąć jeden import. Podziel go i zaimportuj części."
+            }
           }
         },
         "subtitle": "Wyeksportuj dane lub zaimportuj z kopii zapasowej."

@@ -55,9 +55,56 @@ function useSkipReasonLabel(): (reason: string) => string {
   const labels: Record<string, string> = {
     duplicate_in_file: t("medications.import.reasonDuplicateInFile"),
     already_recorded: t("medications.import.reasonAlreadyRecorded"),
+    medication_not_found: t("medications.import.reasonMedicationNotFound"),
+    medication_ambiguous: t("medications.import.reasonMedicationAmbiguous"),
+    medication_is_mirrored: t("medications.import.reasonMedicationIsMirrored"),
+    status_not_recorded: t("medications.import.reasonStatusNotRecorded"),
+    status_unknown: t("medications.import.reasonStatusUnknown"),
+    missing_timestamp: t("medications.import.reasonMissingTimestamp"),
+    missing_timezone_offset: t("medications.import.reasonMissingOffset"),
+    unreadable_timestamp: t("medications.import.reasonUnreadableTimestamp"),
+    implausible_timestamp: t("medications.import.reasonImplausibleTimestamp"),
+    missing_medication: t("medications.import.reasonMissingMedication"),
+    unreadable_dosage: t("medications.import.reasonUnreadableDosage"),
+    unreadable_row: t("medications.import.reasonUnreadableRow"),
   };
   const fallback = t("medications.import.reasonUnknown");
   return (reason: string) => labels[reason] ?? fallback;
+}
+
+/**
+ * The grouped skip lines on their own, without the outcome sentence above them.
+ *
+ * Split out because a dry-run preview needs exactly these lines and must NOT
+ * borrow the outcome sentence: a preview has written nothing, so classifying it
+ * by the counts it WOULD produce would put a success tick on a run that never
+ * happened. The reason vocabulary is shared; the verdict is not.
+ */
+export function IntakeImportSkipGroups({
+  groups,
+  testId = "intake-import-skip-groups",
+}: {
+  groups: readonly IntakeImportSkipGroup[];
+  testId?: string;
+}) {
+  const { tCount } = useTranslations();
+  const labelFor = useSkipReasonLabel();
+  if (groups.length === 0) return null;
+  return (
+    <ul
+      data-testid={testId}
+      className="text-muted-foreground space-y-0.5 text-xs"
+    >
+      {groups.map((group) => (
+        <li key={group.reason}>
+          {tCount("medications.import.skipGroup", group.count, {
+            count: group.count,
+            reason: labelFor(group.reason),
+          })}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export function IntakeImportResultView({
@@ -65,8 +112,7 @@ export function IntakeImportResultView({
 }: {
   result: IntakeImportResultState;
 }) {
-  const { t, tCount } = useTranslations();
-  const labelFor = useSkipReasonLabel();
+  const { t } = useTranslations();
 
   if (result.kind === "notice") {
     return (
@@ -106,21 +152,7 @@ export function IntakeImportResultView({
         message={message}
         testId="intake-import-outcome"
       />
-      {result.skipReasons.length > 0 && (
-        <ul
-          data-testid="intake-import-skip-groups"
-          className="text-muted-foreground space-y-0.5 text-xs"
-        >
-          {result.skipReasons.map((group) => (
-            <li key={group.reason}>
-              {tCount("medications.import.skipGroup", group.count, {
-                count: group.count,
-                reason: labelFor(group.reason),
-              })}
-            </li>
-          ))}
-        </ul>
-      )}
+      <IntakeImportSkipGroups groups={result.skipReasons} />
     </div>
   );
 }
