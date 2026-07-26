@@ -1,6 +1,7 @@
 import { expect, test } from "./setup/test";
 
 import { STORAGE_STATE_PATH } from "./setup/global-setup";
+import { settleBeforeMeasure } from "./utils/settle";
 import {
   LONG_HEADLINE_BRIEFING,
   MOCK_SCORE_RINGS,
@@ -162,7 +163,16 @@ test.describe("phone-width density guard", () => {
           await mockMoodInsights(page);
         }
         await page.goto(route, { waitUntil: "domcontentloaded" });
-        await page.waitForLoadState("networkidle");
+
+        if (route === "/insights") {
+          // The one route here that had no readiness signal, while its two
+          // siblings below both have one. An overflow guard against a page
+          // that has not finished rendering passes for the same reason an
+          // empty page passes: there is nothing wide on it yet.
+          await expect(
+            page.locator('[data-slot="section-heading"]').first(),
+          ).toBeVisible();
+        }
 
         if (route === "/") {
           // The guard must not pass vacuously — the Today hero and its
@@ -185,6 +195,8 @@ test.describe("phone-width density guard", () => {
             page.locator('[data-slot="mood-discovered-relations"]'),
           ).toBeVisible();
         }
+
+        await settleBeforeMeasure(page, page.locator("main#main-content"));
 
         // The document/body pair alone cannot see the app's sideways scroll:
         // `AuthShell` scrolls inside `<main id="main-content">`, whose

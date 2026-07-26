@@ -1,6 +1,7 @@
 import { expect, test } from "./setup/test";
 
 import { STORAGE_STATE_PATH } from "./setup/global-setup";
+import { settleBeforeMeasure } from "./utils/settle";
 import {
   mockDashboardSnapshot,
   WEIGHT_ONLY_SUMMARIES,
@@ -78,7 +79,10 @@ test.describe("mobile-viewport smoke", () => {
     );
 
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await page.waitForLoadState("networkidle");
+    // Gate on the dashboard's own content, not on the network. Every read
+    // below is geometric and happens exactly once, so measuring a tree that
+    // is still mounting reports a layout nobody will ever see.
+    await settleBeforeMeasure(page, page.locator("main#main-content"));
 
     // 1) No horizontal scroll
     const dims = await page.evaluate(() => ({

@@ -1,6 +1,7 @@
 import { expect, test } from "./setup/test";
 
 import { STORAGE_STATE_PATH } from "./setup/global-setup";
+import { settleBeforeMeasure } from "./utils/settle";
 
 /**
  * Vertical over-scroll regression guard (the recurring class behind the
@@ -63,9 +64,11 @@ test.describe("settings + admin vertical over-scroll guard", () => {
       test(`no over-scroll on ${route} (${vp.name})`, async ({ page }) => {
         await page.setViewportSize({ width: vp.width, height: vp.height });
         await page.goto(route, { waitUntil: "domcontentloaded" });
-        await page.waitForLoadState("networkidle");
-        // Let entry transitions / late queries settle before measuring.
-        await page.waitForTimeout(500);
+        // Was a fixed 500 ms sleep, which is the wrong shape twice over: too
+        // long when the page is ready and too short on a loaded runner, and
+        // it never says what it is waiting for. Gate on the element the
+        // measurement reads instead.
+        await settleBeforeMeasure(page, page.locator("#main-content"));
 
         const dims = await page.evaluate(() => {
           const main = document.getElementById("main-content");
