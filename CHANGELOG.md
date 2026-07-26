@@ -65,6 +65,20 @@ another that was actually served; both corrected.
 for a moment instead of words, because the language file was racing the
 application bundle and losing. It is now loaded before the first render.
 
+**Converted values were shown with more precision than they have.** A weight in
+pounds could read 207.896 where the conversion declares one decimal place. The
+rounding was defined for every conversion and read by exactly one screen out of
+all the ones that display a converted value, so everywhere else the raw result
+of the multiplication went straight through. It now happens where the
+conversion happens, so a surface cannot render an unrounded value even if it
+forgets to ask. Metric values are deliberately untouched, because the metric
+render is meant to be exactly what is stored, and the entry path keeps full
+precision so a saved value cannot drift a little further each time.
+
+Thanks to @DrGithubble, who reported this on #627 after confirming the earlier
+unit fix. It turned out to be the second half of the same defect they had found
+the first time.
+
 **For operators.** Migration `0275` stores the new scope and removes the old
 preferences. Existing share links are closed by it and need reissuing.
 
