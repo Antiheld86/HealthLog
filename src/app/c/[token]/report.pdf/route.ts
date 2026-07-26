@@ -34,6 +34,14 @@ export const GET = apiHandler(
     const bytes = renderDoctorReportPdfBytes(resolved.report, {
       t,
       locale,
+      // The locale above is the reader's; these two are the OWNER's, and they
+      // have to be. A reading belongs to the day it was that day where the
+      // person was, so the date beside it cannot follow whoever opens the
+      // link. Without these the renderer fell back to the display default,
+      // which meant a practice west of Berlin could file a PDF dated one day
+      // off from the page it was downloaded from.
+      userTz: resolved.ownerTz,
+      timeFormat: resolved.ownerTimeFormat,
       insuranceNumber: null,
       includeCharts: true,
     });

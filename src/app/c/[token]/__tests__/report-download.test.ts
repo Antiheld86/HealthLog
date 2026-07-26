@@ -43,6 +43,27 @@ vi.mock("@/lib/auth/audit", () => ({
   auditLog: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/lib/geo", () => ({ lookupIpLocation: vi.fn() }));
+vi.mock("@/lib/db", () => ({
+  prisma: { user: { findUnique: vi.fn() } },
+}));
+vi.mock("@/lib/tz/resolver", () => ({ resolveUserTimezone: vi.fn() }));
+// Wraps rather than replaces: the real renderer still runs, so the route is
+// exercised end to end, and the options it was handed stay observable.
+const pdfOptionsSeen: Array<Record<string, unknown>> = [];
+vi.mock("@/lib/doctor-report-pdf-core", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/doctor-report-pdf-core")>();
+  return {
+    ...actual,
+    renderDoctorReportPdfBytes: (
+      data: Parameters<typeof actual.renderDoctorReportPdfBytes>[0],
+      options: Parameters<typeof actual.renderDoctorReportPdfBytes>[1],
+    ) => {
+      pdfOptionsSeen.push(options as unknown as Record<string, unknown>);
+      return actual.renderDoctorReportPdfBytes(data, options);
+    },
+  };
+});
 vi.mock("@/lib/logging/transports", () => ({ emitStructuredLog: vi.fn() }));
 vi.mock("@/lib/i18n/server-translator", async (importOriginal) => {
   const actual =
@@ -60,6 +81,8 @@ import { loadShareViewData } from "@/lib/clinician-share/share-view-data";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { auditLog } from "@/lib/auth/audit";
 import { computeGlucoseClinicalMetrics } from "@/lib/analytics/glucose-metrics";
+import { prisma } from "@/lib/db";
+import { resolveUserTimezone } from "@/lib/tz/resolver";
 import { selectionFromLeaves } from "@/lib/report-selection/selection";
 import type { DoctorReportData } from "@/lib/doctor-report-data";
 
@@ -126,6 +149,12 @@ beforeEach(() => {
     selection: selectionFromLeaves(["WEIGHT"]),
     documents: [],
     documentOnly: false,
+  } as never);
+  // West of UTC on purpose. Berlin is the display fallback, so a Berlin
+  // fixture cannot tell a resolved timezone apart from a forgotten one.
+  vi.mocked(resolveUserTimezone).mockResolvedValue("America/Los_Angeles");
+  vi.mocked(prisma.user.findUnique).mockResolvedValue({
+    timeFormat: "H24",
   } as never);
 });
 
@@ -253,6 +282,38 @@ describe("GET /c/{token}/report.pdf", () => {
     expect(res.headers.get("content-disposition")).toContain("attachment");
     const buf = Buffer.from(await res.arrayBuffer());
     expect(buf.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+  });
+
+  it("prints the owner's day, not the display default", async () => {
+    // The defect: the route handed the renderer no timezone at all, so it fell
+    // back to the display default. A reading is dated by the day it was where
+    // the person lives, and a practice filing the PDF beside the page it came
+    // from must not find two different dates for one reading.
+    pdfOptionsSeen.length = 0;
+    const { GET } = await import("../report.pdf/route");
+    await GET(new Request(`http://localhost/c/${TOKEN}/report.pdf`), params);
+
+    expect(pdfOptionsSeen).toHaveLength(1);
+    expect(
+      pdfOptionsSeen[0].userTz,
+      "the renderer was handed no owner timezone — it will fall back to the display default",
+    ).toBe("America/Los_Angeles");
+    expect(
+      pdfOptionsSeen[0].timeFormat,
+      "the owner's clock preference did not reach the renderer",
+    ).toBe("H24");
+  });
+
+  it("falls back to AUTO when the owner row carries no clock preference", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(null as never);
+    pdfOptionsSeen.length = 0;
+    const { GET } = await import("../report.pdf/route");
+    const res = await GET(
+      new Request(`http://localhost/c/${TOKEN}/report.pdf`),
+      params,
+    );
+    expect(res.status).toBe(200);
+    expect(pdfOptionsSeen[0].timeFormat).toBe("AUTO");
   });
 
   it("runs the same gate as the bundle beside it", async () => {
