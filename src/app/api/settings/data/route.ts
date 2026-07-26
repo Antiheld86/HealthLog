@@ -91,7 +91,10 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
   const deletedRows = Object.values(counts).reduce((sum, n) => sum + n, 0);
 
   // Written after the transaction commits, so the row cannot be removed by the
-  // AuditLog delete inside it.
+  // AuditLog delete inside it. The person's whole audit history goes; this one
+  // row stays as the receipt for the erasure they asked for. Account deletion
+  // takes the other branch and purges even this, because there is no longer an
+  // account for it to belong to.
   await auditLog("user.data.clear", {
     userId,
     ipAddress: getClientIp(request),

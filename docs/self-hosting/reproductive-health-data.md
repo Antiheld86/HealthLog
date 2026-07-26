@@ -81,6 +81,31 @@ These are cited as factual public record to explain _why_ the
 "who holds the data" question is the one that matters for this category.
 HealthLog makes no claim about any other product's current practices.
 
+## What deleting actually does
+
+Worth knowing before you rely on it, because "deleted" means two
+different things depending on which button you press.
+
+- **Deleting one cycle or day-log entry** hides it. Every read filters
+  it out and it is gone from the app, from exports, and from the doctor
+  report. The row itself stays in PostgreSQL as a tombstone, which is
+  what lets a phone that was offline at delete time learn that the entry
+  went away. No job removes cycle tombstones on a schedule, so the row
+  stays until one of the two actions below.
+- **Settings → Delete All Data** removes the rows outright, tombstones
+  included. Everything the account owns goes except what you sign in
+  with; the confirmation dialog lists it.
+- **Deleting the account** removes the account row, and the database
+  cascades every record with it.
+
+Two consequences follow, and they matter for the seizure threat model
+above. A host imaged while a per-entry deletion is the only deletion you
+have performed still holds that entry. And a backup taken before any of
+these actions still holds whatever it captured, because a backup is a
+copy of a moment. If your reason for deleting is that the data must not
+be recoverable from the machine, use one of the two whole-record actions
+and rotate your backups.
+
 ## Practical hardening
 
 If reproductive-health privacy is the reason you self-host, the

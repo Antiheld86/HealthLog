@@ -2,8 +2,9 @@
  * v1.17.1 — Vorsorge (measurement) reminder by id: get + patch + delete.
  *
  * PATCH re-derives the server-authoritative `nextDueAt` after applying
- * the (mutually-exclusive cadence) edit. DELETE soft-deletes (tombstone)
- * for parity with the rest of the tree.
+ * the (mutually-exclusive cadence) edit. DELETE removes the row; the
+ * confirmation dialog says the reminder is permanently deleted, and nothing
+ * here needs a tombstone to keep that promise honest.
  */
 import { NextRequest } from "next/server";
 

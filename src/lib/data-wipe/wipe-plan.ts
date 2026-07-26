@@ -160,8 +160,6 @@ export const WIPE_MODELS = [
   "ApiToken",
 ] as const;
 
-export type WipeModel = (typeof WIPE_MODELS)[number];
-
 /**
  * User-scoped models this action deliberately keeps, each with the reason.
  *

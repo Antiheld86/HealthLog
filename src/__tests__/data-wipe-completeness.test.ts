@@ -169,7 +169,7 @@ describe("data-wipe completeness", () => {
     }
 
     const orphans = [...models]
-      .filter(([name, shape]) => !shape.scalars.includes("userId"))
+      .filter(([, shape]) => !shape.scalars.includes("userId"))
       .map(([name]) => name)
       .filter(
         (name) =>

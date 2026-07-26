@@ -1,7 +1,9 @@
 /**
  * `GET    /api/allergies/{id}` — one owned, live allergy record.
  * `PATCH  /api/allergies/{id}` — edit it (partial; field-by-field).
- * `DELETE /api/allergies/{id}` — soft-delete it (idempotent; `{ deleted: true }`).
+ * `DELETE /api/allergies/{id}` — delete it outright (`{ deleted: true }`; 404
+ *   once it is gone). The confirmation dialog promises it cannot be undone, and
+ *   nothing here needs a tombstone to keep that promise honest.
  *
  * Owner-scoped. `userId` is narrowed from auth and fed to the Prisma `where`;
  * the body never carries it. The free-text `reaction` + `note` are encrypted
