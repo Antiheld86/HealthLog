@@ -69,10 +69,16 @@ export interface CoachToolLoopResult {
   /** Which tools ran + whether each found data (persisted onto provenance). */
   toolTrace: CoachToolTrace[];
   /**
-   * v1.21.0 (P6) — the structured payloads of every PRESENT tool result this
-   * turn, in call order. The post-hoc prose number-verifier extracts the
-   * numeric leaves from these to cross-check the figures the model cited. Empty
-   * on a no-tools answer.
+   * v1.21.0 (P6) — the structured payloads of every tool result this turn that
+   * DELIVERED figures, in call order. The post-hoc prose number-verifier
+   * extracts the numeric leaves from these to cross-check the figures the model
+   * cited. Empty on a no-tools answer.
+   *
+   * "Delivered figures" is present results plus the availability payload an
+   * `outside_window` miss carries: that payload is server-computed (count, date
+   * range, per-series aggregate) and rule 3 tells the model it MAY cite it, so it
+   * has to ride the authoritative set — otherwise the verifier would elide the
+   * one honest sentence the fix exists to make sayable.
    */
   toolResults: CoachToolResult[];
 }
@@ -197,10 +203,13 @@ export async function runCoachToolLoop(args: {
           sharedScope,
         });
         toolTrace.push({ name: call.name, present: toolResult.present });
-        // v1.21.0 (P6) — retain the present results' payloads for the post-hoc
-        // prose number-verifier (the union of numeric leaves grounds the
-        // figures the model may cite).
-        if (toolResult.present) toolResults.push(toolResult);
+        // v1.21.0 (P6) — retain the payloads that carried figures for the
+        // post-hoc prose number-verifier (the union of numeric leaves grounds
+        // the figures the model may cite): a present result's `data`, or the
+        // `available` block an out-of-window miss reports.
+        if (toolResult.present || toolResult.available !== undefined) {
+          toolResults.push(toolResult);
+        }
         return { call, toolResult };
       }),
     );

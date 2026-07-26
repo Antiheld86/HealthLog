@@ -121,7 +121,7 @@ export const COACH_TOOL_DEFS: AiToolDef[] = [
   {
     name: "get_metric_series",
     description:
-      "Fetch the user's own time series for ONE metric: blood pressure (bp), weight, pulse, or any synced series (hrv, resting_hr, steps, sleep duration, body composition, gait, audio exposure, vo2_max, …). Returns an aggregate plus a recent-daily and weekly timeline. Call once per metric you need; call several in parallel for a multi-metric question. Returns { present: false } when the user has no data for that metric.",
+      "Fetch the user's own time series for ONE metric: blood pressure (bp), weight, pulse, or any synced series (hrv, resting_hr, steps, sleep duration, body composition, gait, audio exposure, vo2_max, …). Returns an aggregate plus a recent-daily and weekly timeline. Call once per metric you need; call several in parallel for a multi-metric question. Returns { present: false } with a reason when nothing came back: no_data (never recorded), outside_window (recorded, but older than the window searched — the result carries the count, date range and aggregate, and the window to re-call with), unavailable_in_scope, or no_data_unconfirmed.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -143,7 +143,7 @@ export const COACH_TOOL_DEFS: AiToolDef[] = [
   {
     name: "get_glucose_panel",
     description:
-      "Fetch the user's glucose data: per-context daily means plus the trailing-30-day clinical panel (time-in-range, GMI, CV%, estimated A1c). Returns { present: false } when the user logs no glucose.",
+      "Fetch the user's glucose data: per-context daily means plus the trailing-30-day clinical panel (time-in-range, GMI, CV%, estimated A1c). Returns { present: false } with a reason when nothing came back — no_data means no glucose was ever logged, outside_window means it was and lies older than the window searched (the result carries the count, date range and aggregate).",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -161,7 +161,7 @@ export const COACH_TOOL_DEFS: AiToolDef[] = [
   {
     name: "get_sleep",
     description:
-      "Fetch the user's sleep: per-night asleep + stage minutes plus the sleep-rhythm summary (sleep debt + chronotype). Returns { present: false } when no sleep is tracked.",
+      "Fetch the user's sleep: per-night asleep + stage minutes plus the sleep-rhythm summary (sleep debt + chronotype). Returns { present: false } with a reason — no_data means no sleep was ever tracked, outside_window means it was and lies older than the window searched.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -178,7 +178,7 @@ export const COACH_TOOL_DEFS: AiToolDef[] = [
   {
     name: "get_medication_compliance",
     description:
-      "Fetch the user's medication compliance: the dose-weighted adherence rate plus a recent timeline, and any GLP-1 titration context. Returns { present: false } when no medications are tracked.",
+      "Fetch the user's medication compliance: the dose-weighted adherence rate plus a recent timeline, and any GLP-1 titration context. Returns { present: false } with a reason — no_data means no doses were ever logged, outside_window means they were and lie older than the window searched.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -195,7 +195,7 @@ export const COACH_TOOL_DEFS: AiToolDef[] = [
   {
     name: "get_labs",
     description:
-      "Fetch the user's most recent lab results — the latest reading per biomarker over the last 12 months, or one named analyte. Returns { present: false } when no labs are on file.",
+      "Fetch the user's most recent lab results — the latest reading per biomarker over the last 12 months, or one named analyte. Returns { present: false } with a reason — no_data means no labs are on file, outside_window means panels exist but are older than the twelve months this tool reads.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -223,7 +223,7 @@ export const COACH_TOOL_DEFS: AiToolDef[] = [
   {
     name: "get_workouts",
     description:
-      "Fetch the user's workouts: the most recent sessions (sport, duration, energy, distance, avg/max HR) plus a per-sport rollup over the window. Use for training-load and 'how were my runs / am I overtraining?' questions. Returns { present: false } when no workouts are tracked.",
+      "Fetch the user's workouts: the most recent sessions (sport, duration, energy, distance, avg/max HR) plus a per-sport rollup over the window. Use for training-load and 'how were my runs / am I overtraining?' questions. Returns { present: false } with a reason — no_data means no workouts were ever tracked, outside_window means they were and lie older than the window searched.",
     parameters: {
       type: "object",
       additionalProperties: false,

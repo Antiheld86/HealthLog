@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Progress } from "@/components/ui/progress";
+import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { ComplianceHeatmap } from "@/components/charts/compliance-heatmap";
 import { CoachLaunchButton } from "@/components/insights/coach-launch-button";
 import { InsightStatusCard } from "@/components/insights/insight-status-card";
@@ -93,7 +94,12 @@ export default function InsightsMedikamentePage() {
   const { isAuthenticated } = useAuth();
   const { t, locale } = useTranslations();
 
-  const { data: comprehensive, isLoading: isComprehensiveLoading } = useQuery({
+  const {
+    data: comprehensive,
+    isLoading: isComprehensiveLoading,
+    isError: isComprehensiveError,
+    refetch: refetchComprehensive,
+  } = useQuery({
     queryKey: queryKeys.insightsComprehensive(),
     queryFn: async () => {
       return apiGet<ComprehensiveMedicationData>("/api/insights/comprehensive");
@@ -149,6 +155,25 @@ export default function InsightsMedikamentePage() {
         <div className="flex items-center justify-center py-12">
           <Loader2 className="text-primary h-6 w-6 animate-spin motion-reduce:animate-none" />
         </div>
+      </SubPageShell>
+    );
+  }
+
+  // A failed comprehensive read leaves `medications` empty, which is
+  // indistinguishable from an account that tracks none — and the empty state
+  // then invites someone on five daily medications to add the medications the
+  // app already holds. A read failure gets its own branch, before the length
+  // check, mirroring the sibling overview at `/insights`.
+  if (isComprehensiveError) {
+    return (
+      <SubPageShell
+        title={t("insights.medicationCompliance")}
+        explainerMetric="medications"
+      >
+        <QueryErrorCard
+          description={t("insights.loadError")}
+          onRetry={() => refetchComprehensive()}
+        />
       </SubPageShell>
     );
   }

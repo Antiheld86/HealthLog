@@ -47,6 +47,7 @@ import {
   type GroundingMetricInput,
 } from "./reference-grounding";
 import type { MeasurementType } from "@/generated/prisma/client";
+import { COACH_SOURCE_MEASUREMENT_TYPES } from "@/lib/ai/coach/source-measurement-types";
 import type { ReferenceMetric } from "@/lib/reference-ranges";
 import { isCycleAvailableForUser } from "@/lib/cycle/gate";
 import { resolveModuleMap, type ModuleKey } from "@/lib/modules/gate";
@@ -269,6 +270,29 @@ export async function buildCoachSnapshot(
   const result = await buildCoachSnapshotImpl(userId, scope);
   writeSnapshotCache(key, result);
   return result;
+}
+
+/**
+ * A cross-cutting narration block that throws must not vanish silently. Each of
+ * these builders is additive — the snapshot is still valid without it — so the
+ * catch stays, but the failure is now countable: `signalTrust` is the block that
+ * tells the model HOW MUCH to trust the numbers it is about to narrate, and a
+ * builder that fails to `null` is indistinguishable from a user who simply has
+ * no trust caveats. Absence and failure are different things and the wide event
+ * now says which one happened.
+ */
+function blockFailed(block: string): (err: unknown) => null {
+  return (err: unknown) => {
+    // Resolved before the annotate call, not inline: the free-text guard in
+    // `snapshot.test.ts` reads three lines around a `name:` key and an inline
+    // `err.name` there looks like an un-sanitised user string to it.
+    const reason = err instanceof Error ? err.name : "unknown";
+    annotate({
+      action: { name: "coach.snapshot.block_failed" },
+      meta: { block, reason },
+    });
+    return null;
+  };
 }
 
 async function buildCoachSnapshotImpl(
@@ -545,81 +569,15 @@ async function buildCoachSnapshotImpl(
     coarseTailPromises.pulse ?? Promise.resolve(undefined),
   ]);
 
-  // v1.4.23 W6 (S-04) — single source of truth for the
-  // CoachScopeSource → MeasurementType[] mapping. Drives both the
-  // SQL `WHERE type IN (…)` build below and the Apple-Health timeline
-  // block table downstream, so adding a new metric is one entry
-  // instead of three (boolean + push + appleHealthBlocks row).
-  // Default Coach scope leaves the Apple Health rows off; non-iOS
-  // accounts never pay the type-IN overhead because their `sources`
-  // set never enables them.
-  // v1.7.0 — extended with the full clustered taxonomy. `mood`,
-  // `compliance`, and `workouts` map to no `MeasurementType` because
-  // they read separate models (MoodEntry / MedicationIntakeEvent /
-  // Workout) and are handled by their own branches below. `glucose`
-  // also reads `Measurement` but needs the `glucoseContext` column, so
-  // its block is built separately rather than from the shared
-  // `byType()` rows.
-  const METRIC_TYPES: Record<CoachScopeSource, string[]> = {
-    bp: ["BLOOD_PRESSURE_SYS", "BLOOD_PRESSURE_DIA"],
-    weight: ["WEIGHT"],
-    pulse: ["PULSE"],
-    mood: [],
-    compliance: [],
-    // v1.30.4 (HRV union) — Oura / Polar / WHOOP write nightly HRV as RMSSD
-    // (`HRV_RMSSD`), never SDNN (`HEART_RATE_VARIABILITY`, Apple / Fitbit).
-    // The app's HRV surface already unions both (`sub-page-metric.ts`);
-    // resolving SDNN alone here made a ring/strap-only user's Coach context
-    // + the `get_metric_series`/rich-read MCP paths report a false
-    // `{present:false}` for HRV even though the app charts it.
-    hrv: ["HEART_RATE_VARIABILITY", "HRV_RMSSD"],
-    sleep: ["SLEEP_DURATION"],
-    resting_hr: ["RESTING_HEART_RATE"],
-    steps: ["ACTIVITY_STEPS"],
-    active_energy: ["ACTIVE_ENERGY_BURNED"],
-    flights: ["FLIGHTS_CLIMBED"],
-    distance: ["WALKING_RUNNING_DISTANCE"],
-    vo2_max: ["VO2_MAX"],
-    body_temp: ["BODY_TEMPERATURE"],
-    // ── cardio composition / vascular ──
-    walking_hr: ["WALKING_HEART_RATE_AVERAGE"],
-    respiratory_rate: ["RESPIRATORY_RATE"],
-    spo2: ["OXYGEN_SATURATION"],
-    pulse_wave_velocity: ["PULSE_WAVE_VELOCITY"],
-    vascular_age: ["VASCULAR_AGE"],
-    // ── body composition ──
-    body_fat: ["BODY_FAT"],
-    fat_mass: ["FAT_MASS"],
-    fat_free_mass: ["FAT_FREE_MASS"],
-    muscle_mass: ["MUSCLE_MASS"],
-    lean_body_mass: ["LEAN_BODY_MASS"],
-    bone_mass: ["BONE_MASS"],
-    total_body_water: ["TOTAL_BODY_WATER"],
-    bmi: ["BODY_MASS_INDEX"],
-    visceral_fat: ["VISCERAL_FAT"],
-    // ── metabolic — built via the dedicated glucose branch ──
-    glucose: ["BLOOD_GLUCOSE"],
-    // ── mobility & gait ──
-    walking_steadiness: ["WALKING_STEADINESS"],
-    walking_asymmetry: ["WALKING_ASYMMETRY"],
-    walking_double_support: ["WALKING_DOUBLE_SUPPORT"],
-    walking_step_length: ["WALKING_STEP_LENGTH"],
-    walking_speed: ["WALKING_SPEED"],
-    // ── environment / exposure ──
-    audio_env: ["AUDIO_EXPOSURE_ENV"],
-    audio_headphone: ["AUDIO_EXPOSURE_HEADPHONE"],
-    audio_event: ["AUDIO_EXPOSURE_EVENT"],
-    daylight: ["TIME_IN_DAYLIGHT"],
-    skin_temp: ["SKIN_TEMPERATURE"],
-    // ── workouts — read from the Workout model, not Measurement ──
-    workouts: [],
-  };
-
   // Single fetch for all measurement types — Prisma's filter pushes
   // the type list into one SQL `WHERE type IN (…)` so we don't pay
-  // per-metric round-trips.
+  // per-metric round-trips. The CoachScopeSource → MeasurementType[] table
+  // lives in `source-measurement-types.ts` (v1.4.23 W6 / S-04 kept it a single
+  // source of truth; it is hoisted out of this function so the availability
+  // probe that answers "does this domain exist OUTSIDE the window?" resolves
+  // its types from the same table this windowed read filters on).
   const wantedTypes = Array.from(sources).flatMap(
-    (source) => METRIC_TYPES[source] ?? [],
+    (source) => COACH_SOURCE_MEASUREMENT_TYPES[source] ?? [],
   );
 
   const measurementRowsPromise =
@@ -628,7 +586,7 @@ async function buildCoachSnapshotImpl(
           .findMany({
             where: {
               userId,
-              type: { in: wantedTypes as never[] },
+              type: { in: wantedTypes },
               measuredAt: { gte: cutoff },
               deletedAt: null,
             },
@@ -1206,11 +1164,19 @@ async function buildCoachSnapshotImpl(
       : await Promise.all([
           excludesMedications
             ? Promise.resolve(null)
-            : buildAdherenceStoryline(userId, userTz, now).catch(() => null),
-          buildChangepointSignals(userId, now).catch(() => null),
-          buildSignalTrust(userId, userTz, now).catch(() => null),
+            : buildAdherenceStoryline(userId, userTz, now).catch(
+                blockFailed("adherenceStoryline"),
+              ),
+          buildChangepointSignals(userId, now).catch(
+            blockFailed("changepoints"),
+          ),
+          buildSignalTrust(userId, userTz, now).catch(
+            blockFailed("signalTrust"),
+          ),
           experimentVerdictEnabled()
-            ? buildExperimentOutcomeBlock(userId, { now }).catch(() => null)
+            ? buildExperimentOutcomeBlock(userId, { now }).catch(
+                blockFailed("experimentOutcomes"),
+              )
             : Promise.resolve(null),
         ]);
   if (adherenceStoryline) snapshot.adherenceStoryline = adherenceStoryline;

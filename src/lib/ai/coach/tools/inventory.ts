@@ -21,6 +21,7 @@ import type {
   CoachProvenanceMetric,
   CoachScope,
   CoachScopeSource,
+  CoachScopeWindow,
 } from "@/lib/ai/coach/types";
 import {
   COACH_SOURCE_SNAPSHOT_KEY,
@@ -28,6 +29,29 @@ import {
   METRIC_SERIES_INVENTORY_SOURCES,
   FULL_INVENTORY_SOURCE_SET,
 } from "./source-keys";
+import {
+  classifyAvailability,
+  probeCoachAvailability,
+  subjectForTool,
+  type CoachAvailabilitySubject,
+  type CoachDomainAvailability,
+} from "./availability";
+import { isCoachToolName } from "./definitions";
+
+/**
+ * What the record holds for a domain the WINDOW read found nothing for. Absent
+ * on a present row and on a genuinely empty domain; set only when rows exist
+ * that this window could not reach. Model-facing only — no i18n.
+ */
+export interface InventoryAvailability {
+  /** `outside_window` or `unavailable_in_scope` — see `availability.ts`. */
+  state: string;
+  count: number;
+  firstDate: string;
+  lastDate: string;
+  /** A window the model may re-call with to reach the rows, or null. */
+  reachableWithWindow: string | null;
+}
 
 /** One row of the inventory: a domain + whether the user has data for it. */
 export interface InventoryEntry {
@@ -40,6 +64,13 @@ export interface InventoryEntry {
   count?: number;
   /** For get_metric_series rows: the `metric` argument to pass. */
   metric?: string;
+  /**
+   * Set when `present` is false and the record nevertheless holds rows for this
+   * domain. Without it a history the window cannot reach is indistinguishable
+   * from a metric that was never recorded, and the model is told to move on from
+   * a topic the record can answer.
+   */
+  availability?: InventoryAvailability;
 }
 
 export interface CoachDataInventory {
@@ -185,6 +216,14 @@ export async function buildCoachDataInventory(
     });
   }
 
+  // Every row that came back absent gets checked against the record before the
+  // manifest says "absent". A domain whose whole history predates the window —
+  // an imported year of readings, a device that stopped syncing — is otherwise
+  // advertised as if it had never been recorded, and rule 2 then tells the model
+  // not to fetch it at all. That is the reported defect: the tool never even
+  // runs, so nothing downstream can recover the distinction.
+  await attachAvailability(userId, entries, scope?.window);
+
   // restMode rides the illness section.
   const illness = sections.illness as { restMode?: boolean } | undefined;
   const restMode = illness?.restMode === true;
@@ -198,6 +237,58 @@ export async function buildCoachDataInventory(
     window: scopeBlock?.window ?? scope?.window ?? "last30days",
     probeScope,
   };
+}
+
+/**
+ * Fill `entry.availability` for every absent row the record actually holds rows
+ * for. One batched probe: a single grouped aggregate over `Measurement` for the
+ * union of the absent measurement-backed domains, plus at most one `aggregate()`
+ * per other table asked for. Runs after the snapshot, so a domain that DID
+ * report data is never probed.
+ *
+ * A probe failure leaves every `availability` unset — which reads as "absent",
+ * the pre-existing behaviour — so an unavailable probe degrades the manifest's
+ * precision and never its correctness. The per-tool result path is the one that
+ * must distinguish an unconfirmed absence, and it does (`no_data_unconfirmed`).
+ */
+async function attachAvailability(
+  userId: string,
+  entries: InventoryEntry[],
+  window: CoachScopeWindow | undefined,
+): Promise<void> {
+  const subjects = new Map<string, CoachAvailabilitySubject>();
+  const keyed = new Map<string, InventoryEntry>();
+  for (const entry of entries) {
+    if (entry.present) continue;
+    if (!isCoachToolName(entry.tool)) continue;
+    const subject = subjectForTool(
+      entry.tool,
+      entry.metric as CoachScopeSource | undefined,
+    );
+    if (subject === null) continue;
+    const key = `${entry.tool}:${entry.metric ?? entry.domain}`;
+    subjects.set(key, subject);
+    keyed.set(key, entry);
+  }
+  if (subjects.size === 0) return;
+  let probed: Map<string, CoachDomainAvailability>;
+  try {
+    probed = await probeCoachAvailability(userId, subjects);
+  } catch {
+    // Annotated at the probe; nothing to attach.
+    return;
+  }
+  for (const [key, available] of probed) {
+    const entry = keyed.get(key);
+    if (!entry) continue;
+    entry.availability = {
+      state: classifyAvailability(available, window),
+      count: available.count,
+      firstDate: available.firstDate,
+      lastDate: available.lastDate,
+      reachableWithWindow: available.reachableWithWindow,
+    };
+  }
 }
 
 /**
@@ -245,7 +336,7 @@ export function renderDataInventory(inventory: CoachDataInventory): string {
   const lines: string[] = [];
   lines.push("DATA INVENTORY");
   lines.push(
-    "This lists which of the user's data exists and how to fetch it. Call the named tool ONLY for a domain marked present. Never cite a figure you did not fetch with a tool this turn; when a tool returns present:false, say plainly you have no data for it and pivot.",
+    'This lists which of the user\'s data exists and how to fetch it. Never cite a figure you did not fetch with a tool this turn. Three states per domain: "present" — fetch it with the named tool. "absent" — the record holds nothing for it, ever. "outside window" / "not in scope" — the record DOES hold readings, listed with their count and date range; that is not absence, so never say the user has no data for it, and call its tool anyway (the result reports what the record holds and, when a window would reach it, which one to re-call with).',
   );
   lines.push(`Window: ${inventory.window}.`);
   if (inventory.restMode) {
@@ -256,10 +347,28 @@ export function renderDataInventory(inventory: CoachDataInventory): string {
   for (const e of inventory.entries) {
     const arg = e.metric ? ` (metric:"${e.metric}")` : "";
     lines.push(
-      `- ${e.domain}: ${e.present ? "present" : "absent"} → ${e.tool}${arg}${
+      `- ${e.domain}: ${renderState(e)} → ${e.tool}${arg}${
         e.present && typeof e.count === "number" ? ` [~${e.count} samples]` : ""
       }`,
     );
   }
   return lines.join("\n");
+}
+
+/**
+ * The state word (or clause) for one inventory row. An absent row whose record
+ * is NOT empty renders the count + range it holds, so the manifest can never
+ * again advertise a stored history as nothing.
+ */
+function renderState(entry: InventoryEntry): string {
+  if (entry.present) return "present";
+  const a = entry.availability;
+  if (!a) return "absent";
+  const range = `${a.count} readings, ${a.firstDate} to ${a.lastDate}`;
+  if (a.state === "unavailable_in_scope") {
+    return `NOT IN SCOPE — the record holds ${range}, inside the current window, but this domain is not available in this conversation (its module may be switched off). Do NOT call it absent`;
+  }
+  return a.reachableWithWindow
+    ? `OUTSIDE WINDOW — the record holds ${range}; re-call with window:"${a.reachableWithWindow}" to read it`
+    : `OUTSIDE WINDOW — the record holds ${range}, older than any window reaches. Say so; do NOT call it absent`;
 }
