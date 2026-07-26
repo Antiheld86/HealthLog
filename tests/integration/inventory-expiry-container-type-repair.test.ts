@@ -74,6 +74,9 @@ async function readItem(prisma: PrismaClient, id: string) {
       printedExpiry: true,
       firstUseAt: true,
       unitsRemaining: true,
+      // Part of the read so the idempotency assertion below can see a
+      // second application touching a row it should have skipped.
+      updatedAt: true,
     },
   });
   return row;
@@ -280,7 +283,10 @@ describe("0276 inventory expiry container-type repair — integration", () => {
     expect(row.expiresAt).toEqual(expiresAt);
   });
 
-  it("is idempotent — a second application changes nothing", async () => {
+  it("is idempotent — a second application touches nothing", async () => {
+    // `updatedAt` is part of the compared shape, so a second pass that
+    // rewrites an already-correct row is visible even when the value it
+    // writes is the same one.
     const prisma = getPrismaClient();
     const id = await seedItem(prisma, medicationId, {
       containerType: "BLISTER",
