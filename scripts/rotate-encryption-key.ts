@@ -170,7 +170,8 @@ async function main() {
   // "ouraClientSecretEncrypted" "stravaClientIdEncrypted"
   // "stravaClientSecretEncrypted" "stravaAccessTokenEncrypted"
   // "stravaRefreshTokenEncrypted" "aiAnthropicKeyEncrypted"
-  // "aiLocalKeyEncrypted" "aiOpenaiKeyEncrypted" "insuranceNumberEncrypted"
+  // "aiLocalKeyEncrypted" "aiOpenaiKeyEncrypted" "aiCompatKeyEncrypted"
+  // "insuranceNumberEncrypted"
   const userFields = [
     "codexAccessTokenEncrypted",
     "codexRefreshTokenEncrypted",
@@ -200,6 +201,8 @@ async function main() {
     "aiAnthropicKeyEncrypted",
     "aiLocalKeyEncrypted",
     "aiOpenaiKeyEncrypted",
+    // v1.33.1 (#470) — the OpenAI-compatible gateway's optional bearer.
+    "aiCompatKeyEncrypted",
     "insuranceNumberEncrypted",
     // v1.23 — TOTP shared secret (second factor).
     "totpSecretEncrypted",

@@ -311,6 +311,18 @@ model User {
   // before storage.
   aiOpenaiKeyEncrypted     String?              @map("ai_openai_key_encrypted")
 
+  // v1.33.1 (#470) — the OpenAI-compatible gateway provider (LiteLLM,
+  // OpenRouter, vLLM, any endpoint speaking `/v1/chat/completions`).
+  // Three DEDICATED columns rather than a reuse of `aiBaseUrl` /
+  // `aiOpenaiKeyEncrypted`: the OpenAI arm pins `api.openai.com` and must
+  // never be able to read a user-supplied host, and the gateway credential
+  // must never be the OpenAI key. Separate columns make that structural
+  // instead of a comment. The base URL passes the same SSRF floor as the
+  // Local provider (`isPublicUrl` unless the operator allowlisted the host).
+  aiCompatBaseUrl          String?              @map("ai_compat_base_url")
+  aiCompatKeyEncrypted     String?              @map("ai_compat_key_encrypted")
+  aiCompatModel            String?              @map("ai_compat_model")
+
   // v1.4.16 phase B5b — ordered fallback chain for multi-provider AI
   // redundancy. Each entry is `{ providerType, priority, enabled }`,
   // sorted by ascending priority at runtime. Credentials live in the
