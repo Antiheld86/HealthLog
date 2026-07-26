@@ -911,9 +911,6 @@
     "importFileLoaded": "Fichier « {name} » chargé",
     "importInvalidJson": "Le fichier ne contient pas de JSON valide",
     "importNoArray": "Aucun tableau trouvé",
-    "importResult": "{imported} prises importées",
-    "importDuplicatesSkipped": "{count} doublons ignorés",
-    "importInvalidSkipped": "{count} entrées non valides ignorées",
     "importFailed": "Échec de l’importation",
     "importInvalidFormat": "Format JSON non valide",
     "requestExample": "Exemple de requête",
@@ -1909,6 +1906,18 @@
       "scaleAbsolute": "Absolu",
       "scalePercentSinceStart": "% depuis le début",
       "scaleToggleLabel": "Échelle du graphique"
+    },
+    "import": {
+      "resultSuccess": "{imported} prises importées.",
+      "resultPartial": "{imported} importées, {skipped} ignorées.",
+      "resultNothing": "Rien n’a été importé : les {skipped} entrées ont été ignorées.",
+      "resultEmpty": "Ce fichier ne contenait aucune prise.",
+      "skipGroupOne": "{count} entrée ignorée : {reason}",
+      "skipGroupFew": "{count} entrées ignorées : {reason}",
+      "skipGroupOther": "{count} entrées ignorées : {reason}",
+      "reasonDuplicateInFile": "une autre entrée du même fichier porte les mêmes date et heure",
+      "reasonAlreadyRecorded": "une prise est déjà enregistrée pour cette date et cette heure",
+      "reasonUnknown": "motif non enregistré"
     }
   },
   "charts": {
@@ -4661,7 +4670,10 @@
           "description": "Récupérez et enregistrez la météo d'une plage de dates passée pour que les jours anciens rejoignent les corrélations. Le début reprend par défaut la date d'effet de votre domicile ; pour remonter plus loin, ajoutez d'abord une période de localisation pour cette plage.",
           "run": "Récupérer"
         },
-        "noResults": "Aucun lieu correspondant trouvé."
+        "noResults": "Aucun lieu correspondant trouvé.",
+        "fetchFailedOne": "La dernière mise à jour météo en arrière-plan a échoué ({when}).",
+        "fetchFailedFew": "Les {count} dernières mises à jour météo en arrière-plan ont échoué, la plus récente {when}.",
+        "fetchFailedOther": "Les {count} dernières mises à jour météo en arrière-plan ont échoué, la plus récente {when}."
       }
     },
     "profile": "Profil",
@@ -6289,6 +6301,16 @@
       "connected": "Connexion IA partagée reliée",
       "disconnected": "Connexion IA partagée supprimée",
       "error": "Une erreur s'est produite — veuillez réessayer"
+    },
+    "failingJobs": {
+      "title": "Tâches en arrière-plan",
+      "description": "Files dont les tâches ont abandonné après avoir épuisé leurs tentatives.",
+      "none": "Aucune tâche n’a échoué au cours des {hours} dernières heures.",
+      "unavailable": "Aucune file à consulter : ce déploiement fonctionne sans le worker en arrière-plan.",
+      "countOne": "{count} échec",
+      "countFew": "{count} échecs",
+      "countOther": "{count} échecs",
+      "lastFailed": "Dernier échec {when}"
     }
   },
   "achievements": {

@@ -911,9 +911,6 @@
     "importFileLoaded": "File \"{name}\" caricato",
     "importInvalidJson": "Il file non contiene un JSON valido",
     "importNoArray": "Nessun array trovato",
-    "importResult": "{imported} assunzioni importate",
-    "importDuplicatesSkipped": "{count} duplicati ignorati",
-    "importInvalidSkipped": "{count} voci non valide ignorate",
     "importFailed": "Importazione non riuscita",
     "importInvalidFormat": "Formato JSON non valido",
     "requestExample": "Esempio di richiesta",
@@ -1909,6 +1906,18 @@
       "scaleAbsolute": "Assoluto",
       "scalePercentSinceStart": "% dall'inizio",
       "scaleToggleLabel": "Scala del grafico"
+    },
+    "import": {
+      "resultSuccess": "{imported} assunzioni importate.",
+      "resultPartial": "{imported} importate, {skipped} ignorate.",
+      "resultNothing": "Non è stato importato nulla: tutte le {skipped} voci sono state ignorate.",
+      "resultEmpty": "Questo file non conteneva assunzioni.",
+      "skipGroupOne": "{count} voce ignorata: {reason}",
+      "skipGroupFew": "{count} voci ignorate: {reason}",
+      "skipGroupOther": "{count} voci ignorate: {reason}",
+      "reasonDuplicateInFile": "un’altra voce dello stesso file ha la stessa data e la stessa ora",
+      "reasonAlreadyRecorded": "per quella data e ora è già registrata un’assunzione",
+      "reasonUnknown": "motivo non registrato"
     }
   },
   "charts": {
@@ -4661,7 +4670,10 @@
           "description": "Recupera e salva il meteo di un intervallo di date passato così i giorni più vecchi entrano nelle correlazioni. L'inizio è impostato in modo predefinito sulla data di validità della tua residenza; per andare più indietro, aggiungi prima un periodo di posizione per quell'intervallo.",
           "run": "Recupera"
         },
-        "noResults": "Nessun luogo corrispondente trovato."
+        "noResults": "Nessun luogo corrispondente trovato.",
+        "fetchFailedOne": "L’ultimo aggiornamento meteo in background non è riuscito ({when}).",
+        "fetchFailedFew": "Gli ultimi {count} aggiornamenti meteo in background non sono riusciti, il più recente {when}.",
+        "fetchFailedOther": "Gli ultimi {count} aggiornamenti meteo in background non sono riusciti, il più recente {when}."
       }
     },
     "profile": "Profilo",
@@ -6289,6 +6301,16 @@
       "connected": "Connessione IA condivisa collegata",
       "disconnected": "Connessione IA condivisa rimossa",
       "error": "Qualcosa è andato storto — riprova"
+    },
+    "failingJobs": {
+      "title": "Processi in background",
+      "description": "Code i cui processi hanno rinunciato dopo aver esaurito i tentativi.",
+      "none": "Nessun processo è fallito nelle ultime {hours} ore.",
+      "unavailable": "Nessuna coda da leggere: questo deployment funziona senza il worker in background.",
+      "countOne": "{count} errore",
+      "countFew": "{count} errori",
+      "countOther": "{count} errori",
+      "lastFailed": "Ultimo errore {when}"
     }
   },
   "achievements": {

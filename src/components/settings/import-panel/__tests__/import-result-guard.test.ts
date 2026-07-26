@@ -7,6 +7,13 @@
  * exactly one key of the outcome table, and no card reaches for them
  * directly. A future card that hand-rolls a green tick fails here rather than
  * shipping and lying to a self-hoster about their sensor history.
+ *
+ * #650 widened it. The medication intake import is a third import surface, in
+ * another directory, and it was not covered when the rule landed — it kept its
+ * own success/error tone and reported a run that wrote one row out of
+ * twenty-eight as a success. "Every import surface" now means every one of
+ * them, listed by path, so a fourth surface has to be added here deliberately
+ * rather than inheriting the old behaviour by being somewhere else.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
@@ -14,6 +21,34 @@ import { join } from "node:path";
 
 const PANEL_DIR = join(__dirname, "..");
 const PRESENTATION_FILE = "import-result-view.tsx";
+const REPO_ROOT = join(__dirname, "..", "..", "..", "..", "..");
+
+/**
+ * Every surface that reports an import result, and the module each one must
+ * render its outcome through. Paths from the repository root.
+ */
+const IMPORT_SURFACES: ReadonlyArray<{ path: string; through: RegExp }> = [
+  {
+    path: "src/components/settings/import-panel/csv-import-card.tsx",
+    through: /CsvImportResultView|ImportOutcomeLine/,
+  },
+  {
+    path: "src/components/settings/import-panel/json-import-card.tsx",
+    through: /CsvImportResultView|ImportOutcomeLine/,
+  },
+  {
+    path: "src/components/settings/import-panel/apple-health-import-card.tsx",
+    through: /CsvImportResultView|ImportOutcomeLine/,
+  },
+  {
+    path: "src/components/medications/intake-import-result.tsx",
+    through: /ImportOutcomeLine/,
+  },
+  {
+    path: "src/components/medications/intake-import-dialog.tsx",
+    through: /IntakeImportResultView/,
+  },
+];
 
 /** The success affordance: the tick component and the success colour token. */
 const SUCCESS_MARKERS = ["CheckCircle2", "text-success"] as const;
@@ -25,10 +60,16 @@ function panelSourceFiles(): string[] {
 }
 
 /** Code only — a comment naming the marker is prose, not an affordance. */
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+}
+
 function readCode(name: string): string {
-  return readFileSync(join(PANEL_DIR, name), "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^\s*\/\/.*$/gm, "");
+  return stripComments(readFileSync(join(PANEL_DIR, name), "utf8"));
+}
+
+function readRepoCode(relativePath: string): string {
+  return stripComments(readFileSync(join(REPO_ROOT, relativePath), "utf8"));
 }
 
 describe("import panel — success affordance is owned by the outcome table", () => {
@@ -63,13 +104,27 @@ describe("import panel — success affordance is owned by the outcome table", ()
     }
   });
 
-  it("routes every card's result line through the shared outcome line", () => {
-    for (const name of [
-      "csv-import-card.tsx",
-      "json-import-card.tsx",
-      "apple-health-import-card.tsx",
-    ]) {
-      expect(readCode(name)).toMatch(/CsvImportResultView|ImportOutcomeLine/);
+  it("routes every import surface's result line through the shared outcome line", () => {
+    for (const surface of IMPORT_SURFACES) {
+      expect(
+        readRepoCode(surface.path),
+        `${surface.path} must render its outcome through the shared line`,
+      ).toMatch(surface.through);
     }
+  });
+
+  it("keeps the success markers out of every import surface", () => {
+    const offenders = IMPORT_SURFACES.filter((surface) =>
+      SUCCESS_MARKERS.some((marker) =>
+        readRepoCode(surface.path).includes(marker),
+      ),
+    ).map((surface) => surface.path);
+    expect(
+      offenders,
+      offenders.length > 0
+        ? `Import surface(s) hand-rolling the success affordance instead of ` +
+            `classifying the counts: ${offenders.join(", ")}`
+        : undefined,
+    ).toEqual([]);
   });
 });

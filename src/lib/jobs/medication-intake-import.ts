@@ -32,19 +32,78 @@ export interface MedicationImportPayload {
   entries: MedicationImportEntry[];
 }
 
+/**
+ * Why a submitted entry did not become a row. Machine-readable; the client
+ * turns each into a sentence.
+ *
+ * `duplicate_in_file` — two entries in the same submission resolve to the same
+ * instant, so only one can be written.
+ * `already_recorded` — the dose is already on the ledger for that instant, from
+ * an earlier import or from any other intake surface.
+ *
+ * They used to be one `skippedDuplicates` number, which is how a file whose
+ * every row collapsed onto one key could report "27 duplicates skipped" about
+ * 27 doses that had no duplicate anywhere. Naming the reason is what makes the
+ * count checkable against what the person actually submitted.
+ */
+export const MEDICATION_IMPORT_SKIP_REASONS = [
+  "duplicate_in_file",
+  "already_recorded",
+] as const;
+
+export type MedicationImportSkipReason =
+  (typeof MEDICATION_IMPORT_SKIP_REASONS)[number];
+
+/** Skip counts keyed by reason. A reason with no skips is absent, not zero. */
+export type MedicationImportSkipCounts = Partial<
+  Record<MedicationImportSkipReason, number>
+>;
+
 export interface MedicationImportProgress {
   processed: number;
   total: number;
   imported: number;
-  skippedDuplicates: number;
+  skippedByReason: MedicationImportSkipCounts;
   touchedDays: string[];
   rollupProcessed: number;
 }
 
+export interface MedicationImportSkipGroup {
+  reason: MedicationImportSkipReason;
+  count: number;
+}
+
 export interface MedicationImportResult {
   imported: number;
-  skippedDuplicates: number;
-  skippedInvalid: number;
+  /** Total entries that did not become a row. */
+  skipped: number;
+  /**
+   * One entry per reason, count descending then reason — never the same
+   * sentence repeated per row. Empty when nothing was skipped.
+   */
+  skipReasons: MedicationImportSkipGroup[];
+}
+
+/** Collapse the running counts into the wire shape, in a stable order. */
+export function groupMedicationImportSkips(
+  counts: MedicationImportSkipCounts,
+): MedicationImportSkipGroup[] {
+  return MEDICATION_IMPORT_SKIP_REASONS.map((reason) => ({
+    reason,
+    count: counts[reason] ?? 0,
+  }))
+    .filter((group) => group.count > 0)
+    .sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason));
+}
+
+/** Total skipped across every reason. */
+export function totalMedicationImportSkips(
+  counts: MedicationImportSkipCounts,
+): number {
+  return MEDICATION_IMPORT_SKIP_REASONS.reduce(
+    (sum, reason) => sum + (counts[reason] ?? 0),
+    0,
+  );
 }
 
 export interface MedicationIntakeImportQueuePayload {
@@ -55,7 +114,7 @@ export interface MedicationImportChunkResult {
   from: number;
   processed: number;
   imported: number;
-  skippedDuplicates: number;
+  skippedByReason: MedicationImportSkipCounts;
   touchedDays: string[];
 }
 
@@ -98,13 +157,20 @@ export function advanceMedicationImportProgress(
     }
   }
 
+  const skippedByReason: MedicationImportSkipCounts = {
+    ...previous.skippedByReason,
+  };
+  for (const reason of MEDICATION_IMPORT_SKIP_REASONS) {
+    const added = Math.max(0, Math.trunc(chunk.skippedByReason[reason] ?? 0));
+    if (added === 0) continue;
+    skippedByReason[reason] = (skippedByReason[reason] ?? 0) + added;
+  }
+
   return {
     processed,
     total: previous.total,
     imported: previous.imported + Math.max(0, Math.trunc(chunk.imported)),
-    skippedDuplicates:
-      previous.skippedDuplicates +
-      Math.max(0, Math.trunc(chunk.skippedDuplicates)),
+    skippedByReason,
     rollupProcessed: previous.rollupProcessed,
     touchedDays,
   };
@@ -146,6 +212,32 @@ function parsePayload(value: Prisma.JsonValue): MedicationImportPayload {
   return { entries };
 }
 
+/**
+ * Read the persisted skip counts. Strict, like every other field of the
+ * progress blob: an unknown reason key or a non-integer count means the row was
+ * not written by this code, and the job fails rather than reporting a number it
+ * cannot stand behind. Returns null on anything malformed.
+ */
+function parseSkipCounts(
+  value: Prisma.JsonValue | undefined,
+): MedicationImportSkipCounts | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "object" || Array.isArray(value)) return null;
+  const counts: MedicationImportSkipCounts = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (
+      !(MEDICATION_IMPORT_SKIP_REASONS as readonly string[]).includes(key) ||
+      typeof raw !== "number" ||
+      !Number.isInteger(raw) ||
+      raw < 0
+    ) {
+      return null;
+    }
+    counts[key as MedicationImportSkipReason] = raw;
+  }
+  return counts;
+}
+
 function parseProgress(
   value: Prisma.JsonValue,
   total: number,
@@ -155,7 +247,7 @@ function parseProgress(
   }
   const processed = Number(value.processed);
   const imported = Number(value.imported);
-  const skippedDuplicates = Number(value.skippedDuplicates);
+  const skippedByReason = parseSkipCounts(value.skippedByReason);
   const rawTouchedDays = value.touchedDays;
   const touchedDays =
     Array.isArray(rawTouchedDays) &&
@@ -170,8 +262,7 @@ function parseProgress(
     processed > total ||
     !Number.isInteger(imported) ||
     imported < 0 ||
-    !Number.isInteger(skippedDuplicates) ||
-    skippedDuplicates < 0 ||
+    skippedByReason === null ||
     touchedDays === null ||
     !Number.isInteger(rollupProcessed) ||
     rollupProcessed < 0 ||
@@ -183,7 +274,7 @@ function parseProgress(
     processed,
     total,
     imported,
-    skippedDuplicates,
+    skippedByReason,
     touchedDays,
     rollupProcessed,
   };
@@ -289,8 +380,8 @@ async function processNextChunk(
         }
         const result: MedicationImportResult = {
           imported: progress.imported,
-          skippedDuplicates: progress.skippedDuplicates,
-          skippedInvalid: 0,
+          skipped: totalMedicationImportSkips(progress.skippedByReason),
+          skipReasons: groupMedicationImportSkips(progress.skippedByReason),
         };
         const completedAt = new Date();
         await tx.auditLog.create({
@@ -301,8 +392,8 @@ async function processNextChunk(
               jobId: row.id,
               medicationId: row.medicationId,
               imported: result.imported,
-              skippedDuplicates: result.skippedDuplicates,
-              skippedInvalid: 0,
+              skipped: result.skipped,
+              skipReasons: result.skipReasons,
               total: progress.total,
             }),
           },
@@ -365,11 +456,20 @@ async function processNextChunk(
       const touchedDays = created.map((event) =>
         dayKeyForScheduledFor(event.scheduledFor, row.user.timezone),
       );
+      // Two different facts, counted apart. The Map collapse above is entries
+      // of this submission that resolve to the same instant; `skipDuplicates`
+      // then drops whatever the ledger already holds for that instant, from an
+      // earlier import or any other intake surface. Reporting both as one
+      // "duplicates" number is what let a whole month of distinct doses read
+      // as duplicates of each other.
       const nextProgress = advanceMedicationImportProgress(progress, {
         from: progress.processed,
         processed: entries.length,
         imported: created.length,
-        skippedDuplicates: entries.length - created.length,
+        skippedByReason: {
+          duplicate_in_file: entries.length - uniqueEntries.length,
+          already_recorded: uniqueEntries.length - created.length,
+        },
         touchedDays,
       });
       const heartbeatAt = new Date();

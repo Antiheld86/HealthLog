@@ -2,8 +2,9 @@ import { apiGet } from "@/lib/api/api-fetch";
 
 export interface MedicationIntakeImportResult {
   imported: number;
-  skippedDuplicates: number;
-  skippedInvalid: number;
+  skipped: number;
+  /** One entry per reason with its count — never the same line per row. */
+  skipReasons: Array<{ reason: string; count: number }>;
 }
 
 interface MedicationIntakeImportStatus {

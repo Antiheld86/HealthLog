@@ -911,9 +911,6 @@
     "importFileLoaded": "Datei \"{name}\" geladen",
     "importInvalidJson": "Datei enthält kein gültiges JSON",
     "importNoArray": "Kein Array gefunden",
-    "importResult": "{imported} Einnahmen importiert",
-    "importDuplicatesSkipped": "{count} Duplikate übersprungen",
-    "importInvalidSkipped": "{count} ungültige Einträge übersprungen",
     "importFailed": "Import fehlgeschlagen",
     "importInvalidFormat": "Ungültiges JSON-Format",
     "requestExample": "Request-Beispiel",
@@ -1909,6 +1906,18 @@
       "scaleAbsolute": "Absolut",
       "scalePercentSinceStart": "% seit Start",
       "scaleToggleLabel": "Diagrammskala"
+    },
+    "import": {
+      "resultSuccess": "{imported} Einnahmen importiert.",
+      "resultPartial": "{imported} importiert, {skipped} übersprungen.",
+      "resultNothing": "Nichts importiert: alle {skipped} Einträge wurden übersprungen.",
+      "resultEmpty": "Diese Datei enthielt keine Einnahmen.",
+      "skipGroupOne": "{count} Eintrag übersprungen: {reason}",
+      "skipGroupFew": "{count} Einträge übersprungen: {reason}",
+      "skipGroupOther": "{count} Einträge übersprungen: {reason}",
+      "reasonDuplicateInFile": "ein anderer Eintrag derselben Datei hat dasselbe Datum und dieselbe Uhrzeit",
+      "reasonAlreadyRecorded": "für dieses Datum und diese Uhrzeit ist bereits eine Einnahme erfasst",
+      "reasonUnknown": "Grund nicht erfasst"
     }
   },
   "charts": {
@@ -4661,7 +4670,10 @@
           "description": "Rufe Wetter für einen vergangenen Zeitraum ab und speichere es, damit ältere Tage in die Korrelationen einfließen. Der Start steht standardmäßig auf dem Gültigkeitsdatum deines Wohnorts; um weiter zurückzureichen, füge zuerst einen Ortszeitraum für diesen Bereich hinzu.",
           "run": "Nacherfassen"
         },
-        "noResults": "Keine passenden Orte gefunden."
+        "noResults": "Keine passenden Orte gefunden.",
+        "fetchFailedOne": "Die letzte Wetteraktualisierung im Hintergrund ist fehlgeschlagen ({when}).",
+        "fetchFailedFew": "Die letzten {count} Wetteraktualisierungen im Hintergrund sind fehlgeschlagen, zuletzt {when}.",
+        "fetchFailedOther": "Die letzten {count} Wetteraktualisierungen im Hintergrund sind fehlgeschlagen, zuletzt {when}."
       }
     },
     "profile": "Profil",
@@ -6289,6 +6301,16 @@
       "connected": "Gemeinsame KI-Verbindung verknüpft",
       "disconnected": "Gemeinsame KI-Verbindung entfernt",
       "error": "Etwas ist schiefgelaufen — bitte erneut versuchen"
+    },
+    "failingJobs": {
+      "title": "Hintergrundjobs",
+      "description": "Queues, deren Jobs nach allen Wiederholungen aufgegeben haben.",
+      "none": "In den letzten {hours} Stunden ist kein Job fehlgeschlagen.",
+      "unavailable": "Keine Job-Queue lesbar — dieses Deployment läuft ohne Hintergrund-Worker.",
+      "countOne": "{count} Fehlschlag",
+      "countFew": "{count} Fehlschläge",
+      "countOther": "{count} Fehlschläge",
+      "lastFailed": "Letzter Fehlschlag {when}"
     }
   },
   "achievements": {

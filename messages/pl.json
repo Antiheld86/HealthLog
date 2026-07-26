@@ -911,9 +911,6 @@
     "importFileLoaded": "Plik „{name}” wczytany",
     "importInvalidJson": "Plik nie zawiera prawidłowego JSON",
     "importNoArray": "Nie znaleziono tablicy",
-    "importResult": "{imported} przyjęć zaimportowano",
-    "importDuplicatesSkipped": "{count} duplikatów pominięto",
-    "importInvalidSkipped": "{count} nieprawidłowych wpisów pominięto",
     "importFailed": "Import nie powiódł się",
     "importInvalidFormat": "Nieprawidłowy format JSON",
     "requestExample": "Przykład żądania",
@@ -1909,6 +1906,18 @@
       "scaleAbsolute": "Bezwzględne",
       "scalePercentSinceStart": "% od początku",
       "scaleToggleLabel": "Skala wykresu"
+    },
+    "import": {
+      "resultSuccess": "Zaimportowano przyjęcia: {imported}.",
+      "resultPartial": "Zaimportowano {imported}, pominięto {skipped}.",
+      "resultNothing": "Nic nie zaimportowano: pominięto wszystkie wpisy ({skipped}).",
+      "resultEmpty": "Ten plik nie zawierał żadnych przyjęć.",
+      "skipGroupOne": "Pominięto {count} wpis: {reason}",
+      "skipGroupFew": "Pominięto {count} wpisy: {reason}",
+      "skipGroupOther": "Pominięto {count} wpisów: {reason}",
+      "reasonDuplicateInFile": "inny wpis w tym samym pliku ma tę samą datę i godzinę",
+      "reasonAlreadyRecorded": "przyjęcie o tej dacie i godzinie jest już zapisane",
+      "reasonUnknown": "powód nieodnotowany"
     }
   },
   "charts": {
@@ -4661,7 +4670,10 @@
           "description": "Pobierz i zapisz pogodę dla minionego zakresu dat, aby starsze dni weszły do korelacji. Początek domyślnie przyjmuje datę obowiązywania Twojego domu; aby sięgnąć dalej wstecz, najpierw dodaj okres lokalizacji dla tego zakresu.",
           "run": "Uzupełnij"
         },
-        "noResults": "Nie znaleziono pasujących miejsc."
+        "noResults": "Nie znaleziono pasujących miejsc.",
+        "fetchFailedOne": "Ostatnia aktualizacja pogody w tle nie powiodła się ({when}).",
+        "fetchFailedFew": "Ostatnie {count} aktualizacje pogody w tle nie powiodły się, najnowsza {when}.",
+        "fetchFailedOther": "Ostatnich {count} aktualizacji pogody w tle nie powiodło się, najnowsza {when}."
       }
     },
     "profile": "Profil",
@@ -6289,6 +6301,16 @@
       "connected": "Wspólne połączenie AI podłączone",
       "disconnected": "Wspólne połączenie AI usunięte",
       "error": "Coś poszło nie tak — spróbuj ponownie"
+    },
+    "failingJobs": {
+      "title": "Zadania w tle",
+      "description": "Kolejki, których zadania poddały się po wyczerpaniu ponowień.",
+      "none": "W ciągu ostatnich {hours} godzin żadne zadanie nie zawiodło.",
+      "unavailable": "Brak kolejki zadań do odczytu — to wdrożenie działa bez workera w tle.",
+      "countOne": "{count} niepowodzenie",
+      "countFew": "{count} niepowodzenia",
+      "countOther": "{count} niepowodzeń",
+      "lastFailed": "Ostatnie niepowodzenie {when}"
     }
   },
   "achievements": {

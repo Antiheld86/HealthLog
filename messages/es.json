@@ -911,9 +911,6 @@
     "importFileLoaded": "Archivo \"{name}\" cargado",
     "importInvalidJson": "El archivo no contiene un JSON válido",
     "importNoArray": "No se encontró ningún array",
-    "importResult": "{imported} tomas importadas",
-    "importDuplicatesSkipped": "{count} duplicados omitidos",
-    "importInvalidSkipped": "{count} entradas no válidas omitidas",
     "importFailed": "Falló la importación",
     "importInvalidFormat": "Formato JSON no válido",
     "requestExample": "Ejemplo de solicitud",
@@ -1909,6 +1906,18 @@
       "scaleAbsolute": "Absoluto",
       "scalePercentSinceStart": "% desde el inicio",
       "scaleToggleLabel": "Escala del gráfico"
+    },
+    "import": {
+      "resultSuccess": "{imported} tomas importadas.",
+      "resultPartial": "{imported} importadas, {skipped} omitidas.",
+      "resultNothing": "No se importó nada: se omitieron las {skipped} entradas.",
+      "resultEmpty": "Ese archivo no contenía ninguna toma.",
+      "skipGroupOne": "{count} entrada omitida: {reason}",
+      "skipGroupFew": "{count} entradas omitidas: {reason}",
+      "skipGroupOther": "{count} entradas omitidas: {reason}",
+      "reasonDuplicateInFile": "otra entrada del mismo archivo tiene la misma fecha y hora",
+      "reasonAlreadyRecorded": "ya hay una toma registrada para esa fecha y hora",
+      "reasonUnknown": "motivo no registrado"
     }
   },
   "charts": {
@@ -4661,7 +4670,10 @@
           "description": "Obtén y guarda el tiempo de un rango de fechas pasado para que los días antiguos entren en las correlaciones. El inicio toma por defecto la fecha de vigencia de tu hogar; para llegar más atrás, añade primero un periodo de ubicación para ese rango.",
           "run": "Rellenar"
         },
-        "noResults": "No se encontraron lugares coincidentes."
+        "noResults": "No se encontraron lugares coincidentes.",
+        "fetchFailedOne": "La última actualización meteorológica en segundo plano falló ({when}).",
+        "fetchFailedFew": "Las últimas {count} actualizaciones meteorológicas en segundo plano fallaron, la más reciente {when}.",
+        "fetchFailedOther": "Las últimas {count} actualizaciones meteorológicas en segundo plano fallaron, la más reciente {when}."
       }
     },
     "profile": "Perfil",
@@ -6289,6 +6301,16 @@
       "connected": "Conexión de IA compartida vinculada",
       "disconnected": "Conexión de IA compartida eliminada",
       "error": "Algo salió mal: inténtalo de nuevo"
+    },
+    "failingJobs": {
+      "title": "Trabajos en segundo plano",
+      "description": "Colas cuyos trabajos se rindieron tras agotar sus reintentos.",
+      "none": "Ningún trabajo ha fallado en las últimas {hours} horas.",
+      "unavailable": "No hay ninguna cola que consultar: este despliegue funciona sin el worker en segundo plano.",
+      "countOne": "{count} fallo",
+      "countFew": "{count} fallos",
+      "countOther": "{count} fallos",
+      "lastFailed": "Último fallo {when}"
     }
   },
   "achievements": {

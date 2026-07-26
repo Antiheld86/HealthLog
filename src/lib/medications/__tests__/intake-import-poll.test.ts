@@ -12,8 +12,8 @@ describe("waitForMedicationIntakeImport", () => {
         status: "done",
         result: {
           imported: 3,
-          skippedDuplicates: 1,
-          skippedInvalid: 0,
+          skipped: 1,
+          skipReasons: [{ reason: "already_recorded", count: 1 }],
         },
       });
     const wait = vi.fn().mockResolvedValue(undefined);
@@ -25,8 +25,8 @@ describe("waitForMedicationIntakeImport", () => {
       }),
     ).resolves.toEqual({
       imported: 3,
-      skippedDuplicates: 1,
-      skippedInvalid: 0,
+      skipped: 1,
+      skipReasons: [{ reason: "already_recorded", count: 1 }],
     });
     expect(readStatus).toHaveBeenCalledTimes(3);
     expect(wait).toHaveBeenCalledTimes(2);

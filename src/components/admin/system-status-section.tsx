@@ -23,7 +23,12 @@ import { formatDateTime } from "@/lib/format";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
-import { StatusItem, usePublicVersion, useSystemStatus } from "./_shared";
+import {
+  StatusItem,
+  usePublicVersion,
+  useSystemStatus,
+  type FailingQueue,
+} from "./_shared";
 
 // v1.4.16 phase B3: Recharts is ~108 KiB Brotli — defer-load the host
 // metrics chart so the system-status page only ships it when an admin
@@ -42,6 +47,83 @@ const HostMetricsChart = dynamic(
     ),
   },
 );
+
+/**
+ * The queues whose jobs gave up, named.
+ *
+ * Before this, a background job that threw on every single run showed up as one
+ * digit in an unnamed `errors` counter, and the module it fed rendered an empty
+ * screen as if empty were the answer. A broken queue has to say its own name,
+ * so this card is rendered whenever there is anything to report and stays
+ * silent otherwise — an operator should be able to trust that a quiet card
+ * means quiet queues, which is why the "cannot ask" case renders its own line
+ * rather than looking identical to health.
+ */
+function FailingJobsCard({
+  failingJobs,
+}: {
+  failingJobs: { windowHours: number; queues: FailingQueue[] } | null;
+}) {
+  const { t, tCount } = useTranslations();
+
+  if (failingJobs === null) {
+    return (
+      <SettingsCard>
+        <SettingsCardHeader
+          icon={AlertTriangle}
+          title={t("admin.failingJobs.title")}
+          description={t("admin.failingJobs.description")}
+        />
+        <p className="text-muted-foreground mt-4 pl-7 text-sm">
+          {t("admin.failingJobs.unavailable")}
+        </p>
+      </SettingsCard>
+    );
+  }
+
+  return (
+    <SettingsCard>
+      <SettingsCardHeader
+        icon={AlertTriangle}
+        title={t("admin.failingJobs.title")}
+        description={t("admin.failingJobs.description")}
+      />
+      {failingJobs.queues.length === 0 ? (
+        <p
+          data-testid="failing-jobs-none"
+          className="text-muted-foreground mt-4 pl-7 text-sm"
+        >
+          {t("admin.failingJobs.none", { hours: failingJobs.windowHours })}
+        </p>
+      ) : (
+        <ul data-testid="failing-jobs-list" className="mt-4 space-y-3 pl-7">
+          {failingJobs.queues.map((queue) => (
+            <li key={queue.queue} className="text-sm">
+              <p className="text-foreground font-medium">
+                <span className="font-mono">{queue.queue}</span>{" "}
+                <span className="text-destructive font-normal">
+                  {tCount("admin.failingJobs.count", queue.failures, {
+                    count: queue.failures,
+                  })}
+                </span>
+              </p>
+              <p className="text-muted-foreground text-xs">
+                {t("admin.failingJobs.lastFailed", {
+                  when: formatDateTime(queue.lastFailedAt),
+                })}
+              </p>
+              {queue.lastError.length > 0 && (
+                <p className="text-muted-foreground mt-0.5 font-mono text-xs break-all">
+                  {queue.lastError}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </SettingsCard>
+  );
+}
 
 export function SystemStatusSection() {
   const { t } = useTranslations();
@@ -216,6 +298,7 @@ export function SystemStatusSection() {
           </div>
         )}
       </SettingsCard>
+      {status && <FailingJobsCard failingJobs={status.failingJobs} />}
     </div>
   );
 }

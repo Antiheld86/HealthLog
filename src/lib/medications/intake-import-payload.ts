@@ -1,0 +1,42 @@
+/**
+ * The one derivation from a submitted intake-import row to the queued entry.
+ *
+ * It lives here rather than inline in the route so the test that proves a
+ * reported export lands 28 rows can drive the real derivation instead of
+ * restating it. A test that mirrors the production formula proves the mirror.
+ */
+
+/** A validated row of the import body: a local date and a local wall time. */
+export interface MedicationImportRow {
+  datum: string;
+  uhrzeit: string;
+}
+
+export interface MedicationImportQueueEntry {
+  takenAt: string;
+  idempotencyKey: string;
+}
+
+/**
+ * An imported dose is identified by when it was taken, and by nothing else.
+ *
+ * The key used to be built from the row's optional `zaehler` field whenever it
+ * was present. That reads as a per-row counter, but nothing required it to be
+ * one, and an export that put the dose quantity there — 1 tablet, on every row
+ * — collapsed a month of distinct doses onto a single key. Deriving from the
+ * instant makes the key a function of the fact it identifies, and matches the
+ * live-row unique on `(user_id, medication_id, scheduled_for, source)` that the
+ * database enforces regardless.
+ */
+export function buildMedicationImportEntries(
+  medicationId: string,
+  rows: readonly MedicationImportRow[],
+): MedicationImportQueueEntry[] {
+  return rows.map((row) => {
+    const takenAt = new Date(`${row.datum}T${row.uhrzeit}`);
+    return {
+      takenAt: takenAt.toISOString(),
+      idempotencyKey: `import-${medicationId}-${takenAt.getTime()}`,
+    };
+  });
+}

@@ -82,7 +82,7 @@ describe("medication intake import job — concurrent retry", () => {
       processed: 0,
       total: payload.entries.length,
       imported: 0,
-      skippedDuplicates: 0,
+      skippedByReason: {},
       touchedDays: [],
       rollupProcessed: 0,
     };
@@ -150,16 +150,19 @@ describe("medication intake import job — concurrent retry", () => {
       { day: "2026-07-21", scheduled: 1, taken: 1 },
     ]);
     expect(refreshedJob.status).toBe("done");
+    // The two entries sharing an instant collapse inside the submission; that
+    // is `duplicate_in_file`, and it is reported under its own name rather
+    // than as an undifferentiated "duplicate".
     expect(refreshedJob.result).toEqual({
       imported: 3,
-      skippedDuplicates: 1,
-      skippedInvalid: 0,
+      skipped: 1,
+      skipReasons: [{ reason: "duplicate_in_file", count: 1 }],
     });
     expect(refreshedJob.progress).toEqual({
       processed: 4,
       total: 4,
       imported: 3,
-      skippedDuplicates: 1,
+      skippedByReason: { duplicate_in_file: 1 },
       touchedDays: ["2026-07-20", "2026-07-21"],
       rollupProcessed: 2,
     });
@@ -198,7 +201,7 @@ describe("medication intake import job — concurrent retry", () => {
       processed: 0,
       total: 1,
       imported: 0,
-      skippedDuplicates: 0,
+      skippedByReason: {},
       touchedDays: [],
       rollupProcessed: 0,
     };
