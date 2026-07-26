@@ -179,7 +179,22 @@ test.describe("content-heavy routes have no horizontal page scroll at phone widt
     await mockPopulatedInsights(page);
     await page.setViewportSize({ width: 390, height: 851 });
     await page.goto("/insights", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("main#main-content")).toBeVisible();
+    // Wait for the same readiness signal and settle step every route case
+    // above uses. This was the one test in the file that measured and injected
+    // straight after `domcontentloaded`, against a tree that was still
+    // mounting, and it is the one that went flaky on CI: `main.scrollWidth`
+    // came back at exactly `clientWidth` with a 1500px child supposedly in it.
+    //
+    // Two candidate mechanisms were checked against a local run rather than
+    // assumed. A render swapping `main`'s children and taking the canary with
+    // it does NOT happen: the node survives the skeleton-to-content swap
+    // (12/12 runs, canary attached, scrollWidth 1500). That leaves `main` not
+    // yet BEING the scroll container at injection time, which is what settling
+    // rules out and what the assertions below now report on if it recurs.
+    await expect(
+      page.locator('[data-slot="coincident-deviation-section"]').first(),
+    ).toBeVisible();
+    await settleForOverflowMeasurement(page);
 
     const clean = await measureHorizontalOverflow(page);
     expect(clean.mainScrollWidth).toBeLessThanOrEqual(
@@ -194,10 +209,35 @@ test.describe("content-heavy routes have no horizontal page scroll at phone widt
       document.querySelector("main#main-content")!.appendChild(probe);
     });
 
+    // Separate the fixture's own failure from the helper's. If the canary is
+    // not inside the CURRENT `main`, the measurement below proves nothing
+    // either way, and a failure that says so is a diagnosis rather than an
+    // accusation.
+    await expect(
+      page.locator("main#main-content #overflow-canary"),
+      "the canary is not inside the current <main> — the fixture failed, not the helper",
+    ).toBeAttached();
+
+    // Captured so that a recurrence names its own cause instead of costing
+    // another round of guessing. `overflowX: clip` or a `main` that is not a
+    // scroll container both produce the observed "scrollWidth === clientWidth
+    // with a 1500px child" and are indistinguishable without this.
+    const state = await page.evaluate(() => {
+      const main = document.querySelector<HTMLElement>("main#main-content")!;
+      const canary = document.getElementById("overflow-canary");
+      const style = getComputedStyle(main);
+      return {
+        overflowX: style.overflowX,
+        overflowY: style.overflowY,
+        canaryWidth: canary?.getBoundingClientRect().width ?? null,
+        canaryInMain: canary ? main.contains(canary) : false,
+      };
+    });
+
     const dirty = await measureHorizontalOverflow(page);
     expect(
       dirty.mainScrollWidth,
-      "an intentionally 1500px-wide block did not widen main's scroll area — the helper is measuring the wrong element",
+      `an intentionally 1500px-wide block did not widen main's scroll area — main overflow-x:${state.overflowX} overflow-y:${state.overflowY}, canary width ${state.canaryWidth}, inside main: ${state.canaryInMain}`,
     ).toBeGreaterThan((dirty.mainClientWidth ?? 0) + 1);
     expect(
       dirty.offenders.some((o) => o.selector.includes("overflow-canary")),
