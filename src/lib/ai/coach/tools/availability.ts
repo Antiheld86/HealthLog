@@ -63,7 +63,7 @@ export type CoachAvailabilitySubject =
   | { kind: "lab" };
 
 /** Per-series aggregate over the whole recorded history of one series. */
-export interface CoachAvailabilitySeries {
+interface CoachAvailabilitySeries {
   /** The measurement type, verbatim — unambiguous for the model. */
   series: string;
   /** The unit every row of this series carries, when they all agree. */
@@ -347,7 +347,7 @@ export async function probeCoachAvailability(
  * an empty window read. Frozen so a future reader (a test, a dashboard) can
  * assert the three states stay three.
  */
-export const EMPTY_READ_REASONS = {
+const EMPTY_READ_REASONS = {
   /** Probe confirmed: the record holds nothing for this domain, ever. */
   none: "no_data",
   /** Rows exist, all of them outside the window that was searched. */
@@ -382,7 +382,7 @@ export function classifyAvailability(
 }
 
 /** A `present: false` result with the window/history discriminant resolved. */
-export interface EmptyReadResult {
+interface EmptyReadResult {
   present: false;
   reason: string;
   /** The window the empty read searched, so the miss is self-describing. */
@@ -453,7 +453,7 @@ export async function resolveEmptyRead(args: {
  * The subject a `get_metric_series` metric is checked against. `mood` reads
  * MoodEntry; every other series-backed source reads `Measurement`.
  */
-export function subjectForMetricSource(
+function subjectForMetricSource(
   metric: CoachScopeSource,
 ): CoachAvailabilitySubject | null {
   if (metric === "mood") return { kind: "mood" };

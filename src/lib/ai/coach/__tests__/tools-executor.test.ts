@@ -16,6 +16,44 @@ vi.mock("@/lib/ai/coach/snapshot", () => ({
     buildCoachSnapshot(userId, scope),
 }));
 
+// v1.32.40 (#648) — an empty window read is no longer reported as absence until
+// the availability probe has confirmed the record is empty. Stub the probe's
+// reads to "nothing stored", which is what these dispatch assertions mean by an
+// absent section; `coach-availability-window-honesty.test.ts` owns the other
+// three states.
+vi.mock("@/lib/db", () => ({
+  prisma: {
+    measurement: { groupBy: () => Promise.resolve([]) },
+    workout: { aggregate: () => Promise.resolve(emptyAggregate()) },
+    moodEntry: { aggregate: () => Promise.resolve(emptyAggregate()) },
+    medicationIntakeEvent: {
+      aggregate: () => Promise.resolve(emptyAggregate()),
+    },
+    labResult: { aggregate: () => Promise.resolve(emptyAggregate()) },
+  },
+}));
+vi.mock("@/lib/tz/resolver", () => ({
+  resolveUserTimezone: () => Promise.resolve("UTC"),
+}));
+
+function emptyAggregate() {
+  return {
+    _count: { _all: 0 },
+    _min: {
+      startedAt: null,
+      moodLoggedAt: null,
+      scheduledFor: null,
+      takenAt: null,
+    },
+    _max: {
+      startedAt: null,
+      moodLoggedAt: null,
+      scheduledFor: null,
+      takenAt: null,
+    },
+  };
+}
+
 const readCoachCorrelations = vi.fn();
 vi.mock("@/lib/ai/coach/tools/correlations-read", () => ({
   readCoachCorrelations: (userId: string) => readCoachCorrelations(userId),

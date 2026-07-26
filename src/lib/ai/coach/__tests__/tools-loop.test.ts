@@ -248,6 +248,58 @@ describe("round bounds (D5)", () => {
 // v1.21.0 (D5-1) — the loop threads the turn's shared snapshot scope to every
 // tool so each per-tool read lands one cache key (one snapshot build per turn).
 describe("shared snapshot scope threading (D5-1)", () => {
+  it("retains an out-of-window miss's availability payload for grounding", async () => {
+    // A miss carries no `data`, so the pre-#648 filter (`if (present)`) dropped
+    // it — and the figures the model is now told it MAY cite would have been
+    // absent from the authoritative set, which is how a true sentence gets
+    // elided as a hallucination. The miss rides `toolResults` when, and only
+    // when, it actually delivered figures.
+    executeCoachTool.mockResolvedValueOnce({
+      present: false,
+      reason: "outside_window",
+      searchedWindow: "allTime",
+      available: {
+        count: 1597,
+        firstDate: "2024-04-03",
+        lastDate: "2024-04-17",
+        reachableWithWindow: null,
+      },
+    });
+    runRawCompletionWithFallback
+      .mockResolvedValueOnce(
+        completion({
+          content: "",
+          finishReason: "tool_calls",
+          toolCalls: [{ id: "c1", name: "get_glucose_panel", arguments: "{}" }],
+        }),
+      )
+      .mockResolvedValueOnce(completion({ content: "done" }));
+    const out = await runCoachToolLoop(baseArgs);
+    expect(out.toolResults).toHaveLength(1);
+    expect(out.toolResults[0].available).toMatchObject({ count: 1597 });
+    expect(out.toolTrace).toEqual([
+      { name: "get_glucose_panel", present: false },
+    ]);
+  });
+
+  it("still drops a miss that delivered no figures", async () => {
+    executeCoachTool.mockResolvedValueOnce({
+      present: false,
+      reason: "no_data",
+    });
+    runRawCompletionWithFallback
+      .mockResolvedValueOnce(
+        completion({
+          content: "",
+          finishReason: "tool_calls",
+          toolCalls: [{ id: "c1", name: "get_glucose_panel", arguments: "{}" }],
+        }),
+      )
+      .mockResolvedValueOnce(completion({ content: "done" }));
+    const out = await runCoachToolLoop(baseArgs);
+    expect(out.toolResults).toEqual([]);
+  });
+
   it("passes sharedScope through to executeCoachTool", async () => {
     executeCoachTool.mockResolvedValue({ present: true, data: { x: 1 } });
     const shared = {

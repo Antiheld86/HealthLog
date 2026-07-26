@@ -155,6 +155,10 @@ describe("read-failure branch is wired on every swept surface", () => {
     "src/components/custom-metrics/custom-metric-values-list.tsx",
     "src/app/achievements/page.tsx",
     "src/components/insights/nutrients/micronutrients-card.tsx",
+    // A failed comprehensive read used to fall through to "you haven't added
+    // any medications yet" — with a CTA inviting someone on a full daily
+    // regimen to re-enter what the app already holds.
+    "src/app/insights/medications/page.tsx",
     // The three sleep-rhythm cards share one read, so the PAGE owns the single
     // error notice rather than each card painting its own copy of it.
     "src/app/insights/sleep/page.tsx",
