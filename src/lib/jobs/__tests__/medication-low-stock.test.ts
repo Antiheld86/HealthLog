@@ -48,6 +48,7 @@ describe("evaluateMedicationRunway", () => {
       runwayDays: 6,
       dosesRemaining: 6,
       unitsRemaining: 6,
+      expiredUnits: 0,
     });
   });
 
@@ -65,6 +66,8 @@ describe("evaluateMedicationRunway", () => {
     );
     expect(out.dosesRemaining).toBe(2);
     expect(out.runwayDays).toBe(2);
+    // Written-off stock is surfaced alongside, never folded into supply.
+    expect(out.expiredUnits).toBe(10);
   });
 
   it("returns runway 0 for an exhausted supply with a consuming schedule", () => {
@@ -146,6 +149,7 @@ const payloadArgs = (
     medName: "Metformin",
     runwayDays: 5,
     unitsRemaining: 10,
+    expiredUnits: 0,
     leadDays: 0,
     triggerDays: 7,
     schedules: [dailySchedule],
@@ -171,6 +175,28 @@ describe("buildLowStockPayload", () => {
 
   it("switches to the depleted line at runway 0", () => {
     const out = payloadArgs({ runwayDays: 0, unitsRemaining: 1 });
+    expect(out.body).toContain("less than one day");
+  });
+
+  it("names the written-off stock when nothing usable is left but expired units are", () => {
+    // "0 units left" and "everything you have left is written off" are
+    // different errands; the second must not read as the first.
+    const out = payloadArgs({
+      runwayDays: 0,
+      unitsRemaining: 0,
+      expiredUnits: 54,
+    });
+    expect(out.body).toContain("no usable supply left");
+    expect(out.body).toContain("54 units are marked expired");
+    expect(out.body).not.toContain("less than one day");
+  });
+
+  it("keeps the depleted line when nothing expired either", () => {
+    const out = payloadArgs({
+      runwayDays: 0,
+      unitsRemaining: 0,
+      expiredUnits: 0,
+    });
     expect(out.body).toContain("less than one day");
   });
 

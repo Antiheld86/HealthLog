@@ -1716,8 +1716,8 @@
         "addSuccess": "Existencias registradas.",
         "addFailed": "No se pudieron registrar las existencias.",
         "adjustButton": "Ajustar",
-        "adjustTitle": "Corregir existencias",
-        "adjustDescription": "Establece las unidades restantes — para correcciones o una retirada. 0 marca el envase como agotado.",
+        "adjustTitle": "Corregir envase",
+        "adjustDescription": "Ajusta las unidades restantes y corrige las fechas de este envase. 0 unidades lo marca como agotado.",
         "adjustQuantityLabel": "Unidades restantes",
         "adjustHelper": "Capacidad: {total} unidades.",
         "adjustSubmit": "Guardar",
@@ -1757,7 +1757,15 @@
         "packagingFailed": "Error al guardar",
         "addManufacturerLabel": "Fabricante",
         "addDoseStrengthLabel": "Concentración",
-        "addDoseStrengthHint": "Tal como aparece impreso en el envase, p. ej. 5 mg/0,5 ml."
+        "addDoseStrengthHint": "Tal como aparece impreso en el envase, p. ej. 5 mg/0,5 ml.",
+        "openedOn": "Abierto el {date}",
+        "expiresOn": "Caduca el {date}",
+        "summaryAllExpired": "Sin existencias utilizables: {units} unidades marcadas como caducadas",
+        "editExpiryLabel": "Fecha de caducidad impresa",
+        "editExpiryHelper": "La fecha impresa en el envase. Déjalo vacío si no hay ninguna registrada.",
+        "editOpenedLabel": "Abierto el",
+        "editOpenedHelper": "Déjalo vacío si el envase sigue cerrado.",
+        "editOpenedHelperClock": "Una pluma o una ampolla caduca 30 días después de abrirse. Déjalo vacío si sigue cerrada."
       },
       "erweitert": {
         "group": {
@@ -7008,7 +7016,8 @@
     "title": "Quedan pocas existencias: {medName}",
     "bodyToday": "{medName}: quedan {units} unidades — menos de un día de suministro.",
     "bodyReorder": "{medName}: quedan {units} unidades. Las existencias se agotan hacia el {runsOutOn} — vuelve a pedir antes del {reorderBy}.",
-    "bodyLastDose": "{medName}: quedan {units} unidades — alrededor de tu última dosis. Las existencias se agotan hacia el {runsOutOn}."
+    "bodyLastDose": "{medName}: quedan {units} unidades — alrededor de tu última dosis. Las existencias se agotan hacia el {runsOutOn}.",
+    "bodyExpired": "{medName}: no quedan existencias utilizables. {units} unidades están marcadas como caducadas."
   },
   "moodReminders": {
     "dailyTitle": "Registrar el ánimo",

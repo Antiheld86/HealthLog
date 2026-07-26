@@ -1716,8 +1716,8 @@
         "addSuccess": "Stock enregistré.",
         "addFailed": "Le stock n'a pas pu être enregistré.",
         "adjustButton": "Ajuster",
-        "adjustTitle": "Corriger le stock",
-        "adjustDescription": "Définissez les unités restantes — pour une correction ou un prélèvement. 0 marque l'article comme épuisé.",
+        "adjustTitle": "Corriger le contenant",
+        "adjustDescription": "Ajustez les unités restantes et corrigez les dates de ce contenant. 0 unité le marque comme épuisé.",
         "adjustQuantityLabel": "Unités restantes",
         "adjustHelper": "Capacité : {total} unités.",
         "adjustSubmit": "Enregistrer",
@@ -1757,7 +1757,15 @@
         "packagingFailed": "Échec de l’enregistrement",
         "addManufacturerLabel": "Fabricant",
         "addDoseStrengthLabel": "Dosage",
-        "addDoseStrengthHint": "Tel qu'imprimé sur le contenant, par ex. 5 mg/0,5 ml."
+        "addDoseStrengthHint": "Tel qu'imprimé sur le contenant, par ex. 5 mg/0,5 ml.",
+        "openedOn": "Ouvert le {date}",
+        "expiresOn": "Périme le {date}",
+        "summaryAllExpired": "Aucun stock utilisable : {units} unités marquées périmées",
+        "editExpiryLabel": "Date de péremption imprimée",
+        "editExpiryHelper": "La date imprimée sur la boîte. Laissez vide si aucune n'est enregistrée.",
+        "editOpenedLabel": "Ouvert le",
+        "editOpenedHelper": "Laissez vide si le contenant est encore scellé.",
+        "editOpenedHelperClock": "Un stylo ou une ampoule périme 30 jours après ouverture. Laissez vide s'il est encore scellé."
       },
       "erweitert": {
         "group": {
@@ -7008,7 +7016,8 @@
     "title": "Stock faible : {medName}",
     "bodyToday": "{medName} : {units} unités restantes — moins d’un jour de réserve.",
     "bodyReorder": "{medName} : {units} unités restantes. Le stock sera épuisé vers le {runsOutOn} — recommandez avant le {reorderBy}.",
-    "bodyLastDose": "{medName} : {units} unités restantes — environ votre dernière dose. Le stock sera épuisé vers le {runsOutOn}."
+    "bodyLastDose": "{medName} : {units} unités restantes — environ votre dernière dose. Le stock sera épuisé vers le {runsOutOn}.",
+    "bodyExpired": "{medName} : plus de stock utilisable. {units} unités sont marquées périmées."
   },
   "moodReminders": {
     "dailyTitle": "Enregistrer votre humeur",

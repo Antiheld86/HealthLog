@@ -1,0 +1,208 @@
+/**
+ * Bestand item-row dates: visible on the row, editable in the correction
+ * dialog.
+ *
+ * Both dates decide the container's state — the printed expiry directly,
+ * the opening date through the post-opening window on a pen or an
+ * ampoule — and the opening date is written by the intake consumption
+ * hook without the user ever typing it. Until now neither was rendered
+ * anywhere and neither could be corrected, so a container could read
+ * EXPIRED with nothing on screen to explain why.
+ *
+ * Project convention is SSR-only component tests (`renderToStaticMarkup`).
+ */
+import { describe, expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+
+import { I18nProvider } from "@/lib/i18n/context";
+
+// The Radix Dialog / Select portal at runtime, so their bodies never
+// materialise in static markup. Collapse the primitives to plain
+// wrappers (same trick as the AddInventoryDialog suite).
+vi.mock("@/components/ui/dialog", () => {
+  const Pass = ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  );
+  return {
+    Dialog: ({ children }: { children?: React.ReactNode }) => (
+      <div data-slot="mock-dialog">{children}</div>
+    ),
+    DialogContent: Pass,
+    DialogDescription: Pass,
+    DialogFooter: Pass,
+    DialogHeader: Pass,
+    DialogTitle: Pass,
+  };
+});
+
+vi.mock("@/components/ui/select", () => {
+  const Pass = ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  );
+  return {
+    Select: ({
+      value,
+      children,
+    }: {
+      value: string;
+      children?: React.ReactNode;
+    }) => <div data-mock-select-value={value}>{children}</div>,
+    SelectContent: Pass,
+    SelectItem: ({ children }: { children?: React.ReactNode }) => (
+      <div data-slot="mock-select-item">{children}</div>
+    ),
+    SelectTrigger: Pass,
+    SelectValue: () => null,
+  };
+});
+
+const useQueryMock = vi.fn();
+
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: (...args: unknown[]) => useQueryMock(...args),
+  useQueryClient: () => ({
+    invalidateQueries: vi.fn().mockResolvedValue(undefined),
+  }),
+}));
+
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
+const { InventorySection, AddInventoryDialog, AdjustInventoryDialog } =
+  await import("../sections/inventory-section");
+
+function render(node: React.ReactNode): string {
+  return renderToStaticMarkup(
+    <I18nProvider initialLocale="de">{node}</I18nProvider>,
+  );
+}
+
+function seedItems(items: unknown[]) {
+  useQueryMock.mockReturnValue({
+    data: { items, meta: { total: items.length } },
+    isLoading: false,
+  });
+}
+
+const BASE = {
+  id: "i1",
+  state: "IN_USE" as const,
+  containerType: "BLISTER" as const,
+  unitsTotal: 60,
+  unitsRemaining: 54,
+};
+
+describe("<InventorySection> — item-row dates", () => {
+  it("renders the opening date on the row", () => {
+    seedItems([
+      {
+        ...BASE,
+        firstUseAt: "2026-06-12T00:00:00.000Z",
+        printedExpiry: null,
+      },
+    ]);
+    const html = render(
+      <InventorySection medicationId="med-1" unitsPerDose={1} />,
+    );
+    expect(html).toContain('data-slot="inventory-item-dates"');
+    expect(html).toContain("Geöffnet 12.06.2026");
+  });
+
+  it("renders the printed expiry on the row", () => {
+    seedItems([
+      {
+        ...BASE,
+        state: "ACTIVE",
+        firstUseAt: null,
+        printedExpiry: "2027-06-01T00:00:00.000Z",
+      },
+    ]);
+    const html = render(
+      <InventorySection medicationId="med-1" unitsPerDose={1} />,
+    );
+    expect(html).toContain("Haltbar bis 01.06.2027");
+  });
+
+  it("shows no date line when neither date is recorded", () => {
+    // Absence reads as absence — no placeholder, no invented date.
+    seedItems([{ ...BASE, firstUseAt: null, printedExpiry: null }]);
+    const html = render(
+      <InventorySection medicationId="med-1" unitsPerDose={1} />,
+    );
+    expect(html).not.toContain('data-slot="inventory-item-dates"');
+  });
+});
+
+describe("<AdjustInventoryDialog> — editable dates", () => {
+  const item = {
+    ...BASE,
+    firstUseAt: "2026-06-12T00:00:00.000Z",
+    printedExpiry: "2027-06-01T00:00:00.000Z",
+  };
+
+  function renderDialog(over: Partial<typeof item> = {}): string {
+    return render(
+      <AdjustInventoryDialog
+        medicationId="med-1"
+        item={{ ...item, ...over }}
+        onClose={() => {}}
+      />,
+    );
+  }
+
+  it("offers a printed-expiry field prefilled from the item", () => {
+    const html = renderDialog();
+    expect(html).toContain('id="inventory-edit-expiry"');
+    expect(html).toContain("Aufgedrucktes Haltbarkeitsdatum");
+    expect(html).toContain('value="2027-06-01"');
+  });
+
+  it("offers an opening-date field prefilled from the item", () => {
+    const html = renderDialog();
+    expect(html).toContain('id="inventory-edit-opened"');
+    expect(html).toContain("Geöffnet am");
+    expect(html).toContain('value="2026-06-12"');
+  });
+
+  it("leaves both date fields empty when the item records neither", () => {
+    const html = renderDialog({ firstUseAt: null, printedExpiry: null });
+    expect(html).toContain('id="inventory-edit-expiry"');
+    expect(html).toContain('id="inventory-edit-opened"');
+    expect(html).not.toContain("2027-06-01");
+    expect(html).not.toContain("2026-06-12");
+  });
+
+  it("explains the 30-day window beside the opening date on a pen", () => {
+    const html = renderDialog({ containerType: "PEN" });
+    expect(html).toContain("30 Tage nach dem Öffnen");
+  });
+
+  it("omits the window explanation for a container that has none", () => {
+    const html = renderDialog({ containerType: "BLISTER" });
+    expect(html).not.toContain("30 Tage nach dem Öffnen");
+    expect(html).toContain("noch verschlossen");
+  });
+
+  it("keeps the remaining-units correction alongside the dates", () => {
+    const html = renderDialog();
+    expect(html).toContain('id="inventory-adjust-remaining"');
+  });
+});
+
+describe("<AddInventoryDialog> — printed expiry on create", () => {
+  it("still offers the expiry field", () => {
+    // Regression guard: the create path always offered the printed
+    // expiry; the correction path is the addition.
+    const html = render(
+      <AddInventoryDialog
+        medicationId="med-1"
+        defaultUnitsTotal={30}
+        unitsPerDose={1}
+        initialContainerType="BLISTER"
+        onClose={() => {}}
+      />,
+    );
+    expect(html).toContain('id="inventory-add-expiry"');
+  });
+});

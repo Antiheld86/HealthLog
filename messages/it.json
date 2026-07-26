@@ -1716,8 +1716,8 @@
         "addSuccess": "Scorta registrata.",
         "addFailed": "Impossibile registrare la scorta.",
         "adjustButton": "Correggi",
-        "adjustTitle": "Correggi la scorta",
-        "adjustDescription": "Imposta le unità rimanenti — per correzioni o un prelievo. 0 segna la scorta come esaurita.",
+        "adjustTitle": "Correggi il contenitore",
+        "adjustDescription": "Imposta le unità rimanenti e correggi le date di questo contenitore. 0 unità lo segna come esaurito.",
         "adjustQuantityLabel": "Unità rimanenti",
         "adjustHelper": "Capacità: {total} unità.",
         "adjustSubmit": "Salva",
@@ -1757,7 +1757,15 @@
         "packagingFailed": "Salvataggio non riuscito",
         "addManufacturerLabel": "Produttore",
         "addDoseStrengthLabel": "Dosaggio",
-        "addDoseStrengthHint": "Come stampato sul contenitore, ad es. 5 mg/0,5 ml."
+        "addDoseStrengthHint": "Come stampato sul contenitore, ad es. 5 mg/0,5 ml.",
+        "openedOn": "Aperto il {date}",
+        "expiresOn": "Scade il {date}",
+        "summaryAllExpired": "Nessuna scorta utilizzabile: {units} unità contrassegnate come scadute",
+        "editExpiryLabel": "Data di scadenza stampata",
+        "editExpiryHelper": "La data stampata sulla confezione. Lascia vuoto se non ne è registrata nessuna.",
+        "editOpenedLabel": "Aperto il",
+        "editOpenedHelper": "Lascia vuoto se il contenitore è ancora sigillato.",
+        "editOpenedHelperClock": "Una penna o una fiala scade 30 giorni dopo l'apertura. Lascia vuoto se è ancora sigillata."
       },
       "erweitert": {
         "group": {
@@ -7008,7 +7016,8 @@
     "title": "Scorte in esaurimento: {medName}",
     "bodyToday": "{medName}: {units} unità rimaste — meno di un giorno di scorta.",
     "bodyReorder": "{medName}: {units} unità rimaste. Le scorte finiscono intorno al {runsOutOn} — riordina entro il {reorderBy}.",
-    "bodyLastDose": "{medName}: {units} unità rimaste — circa la tua ultima dose. Le scorte finiscono intorno al {runsOutOn}."
+    "bodyLastDose": "{medName}: {units} unità rimaste — circa la tua ultima dose. Le scorte finiscono intorno al {runsOutOn}.",
+    "bodyExpired": "{medName}: nessuna scorta utilizzabile. {units} unità sono contrassegnate come scadute."
   },
   "moodReminders": {
     "dailyTitle": "Registra il tuo umore",

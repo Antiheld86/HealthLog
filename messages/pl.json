@@ -1716,8 +1716,8 @@
         "addSuccess": "Zapas zarejestrowany.",
         "addFailed": "Nie udało się zarejestrować zapasu.",
         "adjustButton": "Skoryguj",
-        "adjustTitle": "Skoryguj zapas",
-        "adjustDescription": "Ustaw pozostałe jednostki — przy korekcie lub pobraniu. 0 oznacza zapas jako zużyty.",
+        "adjustTitle": "Popraw opakowanie",
+        "adjustDescription": "Ustaw pozostałe jednostki i popraw daty tego opakowania. 0 jednostek oznacza je jako zużyte.",
         "adjustQuantityLabel": "Pozostałe jednostki",
         "adjustHelper": "Pojemność: {total} jednostek.",
         "adjustSubmit": "Zapisz",
@@ -1757,7 +1757,15 @@
         "packagingFailed": "Zapis nie powiódł się",
         "addManufacturerLabel": "Producent",
         "addDoseStrengthLabel": "Moc",
-        "addDoseStrengthHint": "Zgodnie z nadrukiem na opakowaniu, np. 5 mg/0,5 ml."
+        "addDoseStrengthHint": "Zgodnie z nadrukiem na opakowaniu, np. 5 mg/0,5 ml.",
+        "openedOn": "Otwarto {date}",
+        "expiresOn": "Ważne do {date}",
+        "summaryAllExpired": "Brak zapasu do użycia: {units} jednostek oznaczono jako przeterminowane",
+        "editExpiryLabel": "Data ważności z opakowania",
+        "editExpiryHelper": "Data nadrukowana na opakowaniu. Zostaw puste, jeśli nie została zapisana.",
+        "editOpenedLabel": "Data otwarcia",
+        "editOpenedHelper": "Zostaw puste, jeśli opakowanie jest jeszcze zamknięte.",
+        "editOpenedHelperClock": "Pen lub ampułka traci ważność 30 dni po otwarciu. Zostaw puste, jeśli jest jeszcze zamknięta."
       },
       "erweitert": {
         "group": {
@@ -7008,7 +7016,8 @@
     "title": "Niski zapas: {medName}",
     "bodyToday": "{medName}: pozostało {units} jednostek — mniej niż jeden dzień zapasu.",
     "bodyReorder": "{medName}: pozostało {units} jednostek. Zapas skończy się około {runsOutOn} — zamów ponownie do {reorderBy}.",
-    "bodyLastDose": "{medName}: pozostało {units} jednostek — to mniej więcej Twoja ostatnia dawka. Zapas skończy się około {runsOutOn}."
+    "bodyLastDose": "{medName}: pozostało {units} jednostek — to mniej więcej Twoja ostatnia dawka. Zapas skończy się około {runsOutOn}.",
+    "bodyExpired": "{medName}: brak zapasu do użycia. {units} jednostek oznaczono jako przeterminowane."
   },
   "moodReminders": {
     "dailyTitle": "Zapisz nastrój",

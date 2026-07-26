@@ -68,7 +68,11 @@ function seedItems(
 }
 
 describe("<InventorySection> — summary availability", () => {
-  it("one expired pen with units ⇒ headline 0, expired units as muted suffix", () => {
+  it("only expired stock ⇒ the headline says so instead of '0 of 0'", () => {
+    // "0 von 0 Dosen übrig" beside "+ 4 Einheiten abgelaufen" reads as
+    // two contradicting statements: the first says nothing was ever
+    // recorded, the second says stock was written off. One honest line
+    // replaces both.
     seedItems([
       {
         id: "i1",
@@ -81,9 +85,9 @@ describe("<InventorySection> — summary availability", () => {
     const html = render(
       <InventorySection medicationId="med-1" unitsPerDose={1} />,
     );
-    expect(html).toContain("0 von 0 Dosen übrig");
-    expect(html).toContain('data-slot="inventory-expired-suffix"');
-    expect(html).toContain("+ 4 Einheiten abgelaufen");
+    expect(html).toContain("Kein nutzbarer Bestand: 4 Einheiten");
+    expect(html).not.toContain("0 von 0 Dosen übrig");
+    expect(html).not.toContain('data-slot="inventory-expired-suffix"');
     // The item row itself stays visible with its state badge.
     expect(html).toContain("Abgelaufen");
   });
@@ -134,5 +138,25 @@ describe("<InventorySection> — summary availability", () => {
     );
     expect(html).toContain("2 von 4 Dosen übrig");
     expect(html).toContain("+ 3 Einheiten abgelaufen");
+    expect(html).not.toContain("Kein nutzbarer Bestand");
+  });
+
+  it("keeps the plain empty-supply reading when nothing was written off", () => {
+    // Every container drained: zero available AND zero expired. That is
+    // the honest "0 of 0", and it must not be replaced.
+    seedItems([
+      {
+        id: "i1",
+        state: "USED_UP",
+        containerType: "PEN",
+        unitsTotal: 4,
+        unitsRemaining: 0,
+      },
+    ]);
+    const html = render(
+      <InventorySection medicationId="med-1" unitsPerDose={1} />,
+    );
+    expect(html).toContain("0 von 0 Dosen übrig");
+    expect(html).not.toContain("Kein nutzbarer Bestand");
   });
 });

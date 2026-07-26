@@ -1716,8 +1716,8 @@
         "addSuccess": "Supply registered.",
         "addFailed": "The supply could not be registered.",
         "adjustButton": "Adjust",
-        "adjustTitle": "Correct stock",
-        "adjustDescription": "Set the remaining units — for corrections or a withdrawal. 0 marks the item as used up.",
+        "adjustTitle": "Correct container",
+        "adjustDescription": "Set the remaining units and correct the dates printed on or recorded for this container. 0 units marks it as used up.",
         "adjustQuantityLabel": "Remaining units",
         "adjustHelper": "Capacity: {total} units.",
         "adjustSubmit": "Save",
@@ -1757,7 +1757,15 @@
         "packagingFailed": "Saving failed",
         "addManufacturerLabel": "Manufacturer",
         "addDoseStrengthLabel": "Strength",
-        "addDoseStrengthHint": "As printed on the container, e.g. 5 mg/0.5 ml."
+        "addDoseStrengthHint": "As printed on the container, e.g. 5 mg/0.5 ml.",
+        "openedOn": "Opened {date}",
+        "expiresOn": "Expires {date}",
+        "summaryAllExpired": "No usable supply: {units} units marked expired",
+        "editExpiryLabel": "Printed expiry date",
+        "editExpiryHelper": "The date printed on the carton. Leave empty if none is recorded.",
+        "editOpenedLabel": "Opened on",
+        "editOpenedHelper": "Leave empty if the container is still sealed.",
+        "editOpenedHelperClock": "A pen or ampoule expires 30 days after it is opened. Leave empty if it is still sealed."
       },
       "erweitert": {
         "group": {
@@ -7008,7 +7016,8 @@
     "title": "Low supply: {medName}",
     "bodyToday": "{medName}: {units} units left — less than one day of supply.",
     "bodyReorder": "{medName}: {units} units left. Supply runs out around {runsOutOn} — reorder by {reorderBy}.",
-    "bodyLastDose": "{medName}: {units} units left — about your final dose. Supply runs out around {runsOutOn}."
+    "bodyLastDose": "{medName}: {units} units left — about your final dose. Supply runs out around {runsOutOn}.",
+    "bodyExpired": "{medName}: no usable supply left. {units} units are marked expired."
   },
   "moodReminders": {
     "dailyTitle": "Log your mood",

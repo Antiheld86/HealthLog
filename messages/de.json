@@ -1716,8 +1716,8 @@
         "addSuccess": "Bestand erfasst.",
         "addFailed": "Bestand konnte nicht erfasst werden.",
         "adjustButton": "Anpassen",
-        "adjustTitle": "Bestand korrigieren",
-        "adjustDescription": "Setze die verbleibenden Einheiten neu — für Korrekturen oder eine Entnahme. 0 markiert den Vorrat als aufgebraucht.",
+        "adjustTitle": "Behälter korrigieren",
+        "adjustDescription": "Verbleibende Einheiten setzen und die Daten dieses Behälters korrigieren. 0 Einheiten markiert ihn als aufgebraucht.",
         "adjustQuantityLabel": "Verbleibende Einheiten",
         "adjustHelper": "Kapazität: {total} Einheiten.",
         "adjustSubmit": "Speichern",
@@ -1757,7 +1757,15 @@
         "packagingFailed": "Speichern fehlgeschlagen",
         "addManufacturerLabel": "Hersteller",
         "addDoseStrengthLabel": "Wirkstärke",
-        "addDoseStrengthHint": "Wie auf dem Behälter aufgedruckt, z. B. 5 mg/0,5 ml."
+        "addDoseStrengthHint": "Wie auf dem Behälter aufgedruckt, z. B. 5 mg/0,5 ml.",
+        "openedOn": "Geöffnet {date}",
+        "expiresOn": "Haltbar bis {date}",
+        "summaryAllExpired": "Kein nutzbarer Bestand: {units} Einheiten als abgelaufen markiert",
+        "editExpiryLabel": "Aufgedrucktes Haltbarkeitsdatum",
+        "editExpiryHelper": "Das Datum auf der Packung. Leer lassen, wenn keines erfasst ist.",
+        "editOpenedLabel": "Geöffnet am",
+        "editOpenedHelper": "Leer lassen, wenn der Behälter noch verschlossen ist.",
+        "editOpenedHelperClock": "Ein Pen oder eine Ampulle läuft 30 Tage nach dem Öffnen ab. Leer lassen, wenn noch verschlossen."
       },
       "erweitert": {
         "group": {
@@ -7008,7 +7016,8 @@
     "title": "Vorrat niedrig: {medName}",
     "bodyToday": "Dein Vorrat an {medName} reicht keinen ganzen Tag mehr ({units} Einheiten übrig).",
     "bodyReorder": "Dein Vorrat an {medName} ({units} Einheiten) ist um den {runsOutOn} aufgebraucht — bestelle bis zum {reorderBy} nach.",
-    "bodyLastDose": "Dein Vorrat an {medName} ({units} Einheiten) reicht noch etwa für die letzte Dosis. Aufgebraucht um den {runsOutOn}."
+    "bodyLastDose": "Dein Vorrat an {medName} ({units} Einheiten) reicht noch etwa für die letzte Dosis. Aufgebraucht um den {runsOutOn}.",
+    "bodyExpired": "{medName}: kein nutzbarer Bestand mehr. {units} Einheiten sind als abgelaufen markiert."
   },
   "moodReminders": {
     "dailyTitle": "Stimmung erfassen",
