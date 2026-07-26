@@ -3432,9 +3432,13 @@
         "metricActiveEnergy": "Aktywna energia",
         "metricSleepDuration": "Sen",
         "metricNextDayRecovery": "Regeneracja następnego dnia",
+        "metricNextDayRestingHr": "Tętno spoczynkowe następnego dnia",
+        "metricNextDayHrv": "Zmienność rytmu serca następnego dnia",
         "unitHours": "godz.",
         "unitKcal": "kcal",
         "unitScore": "pkt",
+        "unitBpm": "bpm",
+        "unitMs": "ms",
         "detailSameDay": "Średnio {withAvg} {unit} w {withDays} dniach z tym tagiem wobec {withoutAvg} {unit} bez niego.",
         "detailNextDay": "Średnio {withAvg} {unit} dzień po {withDays} dniach z tym tagiem wobec {withoutAvg} {unit} w pozostałe dni."
       },

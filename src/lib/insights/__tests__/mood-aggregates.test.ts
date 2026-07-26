@@ -21,6 +21,9 @@ import {
   CROSSTAB_MIN_PRESENT_DAYS,
   CROSSTAB_MIN_ABSENT_DAYS,
   CROSSTAB_MAX_ROWS,
+  CROSSTAB_METRICS,
+  CROSSTAB_METRIC_TYPES,
+  CROSSTAB_FDR_Q,
   influenceConfidence,
   computeTimeOfDayAverages,
   computeWeekdayAverages,
@@ -1067,6 +1070,92 @@ describe("computeTagMetricCrosstab", () => {
     expect(row!.withAvg).toBeCloseTo(40, 0);
     expect(row!.withoutAvg).toBeCloseTo(80, 0);
     expect(row!.delta).toBeLessThan(0);
+  });
+
+  // The alcohol question the tag board could not answer before: a binary
+  // evening tag against the two overnight-recovery VITALS, at the same
+  // D → D+1 lag the recovery channel already used.
+  const ALCOHOL_TAG: StructuredTagRef = {
+    key: "alcohol",
+    categoryKey: "consumption",
+    labelKey: "mood.tag.alcohol",
+    icon: "Wine",
+  };
+
+  /**
+   * 24 consecutive days: the tag on days 1..12 paired to `presentValue` on
+   * the following day, no tag on days 13..24 paired to `absentValue`.
+   */
+  function nextDayFixture(
+    type: string,
+    presentValue: number,
+    absentValue: number,
+  ) {
+    const entries: MoodAggregateEntry[] = [];
+    const measurements: CrossMetricMeasurement[] = [];
+    for (let i = 1; i <= 12; i++) {
+      entries.push(structuredEntry(i, 3, [ALCOHOL_TAG]));
+      measurements.push(
+        meas(i - 1, type, presentValue + (i % 2 === 0 ? 2 : -2)),
+      );
+    }
+    for (let i = 13; i <= 24; i++) {
+      entries.push(structuredEntry(i, 4, []));
+      measurements.push(
+        meas(i - 1, type, absentValue + (i % 2 === 0 ? 2 : -2)),
+      );
+    }
+    return { entries, measurements };
+  }
+
+  it("pairs a tag against the NEXT day's resting heart rate (D → D+1 lag)", () => {
+    const { entries, measurements } = nextDayFixture(
+      "RESTING_HEART_RATE",
+      62,
+      54,
+    );
+    const rows = computeTagMetricCrosstab({ entries, measurements, now: NOW });
+    const row = rows.find(
+      (r) => r.tag === "alcohol" && r.metricKey === "nextDayRestingHeartRate",
+    );
+    expect(row).toBeDefined();
+    expect(row!.mode).toBe("nextDay");
+    expect(row!.display).toBe("bpm");
+    expect(row!.withDays).toBe(12);
+    expect(row!.withoutDays).toBe(12);
+    // bpm passes through un-scaled — only SLEEP_DURATION divides by 60.
+    expect(row!.withAvg).toBeCloseTo(62, 0);
+    expect(row!.withoutAvg).toBeCloseTo(54, 0);
+    expect(row!.delta).toBeCloseTo(8, 0);
+    expect(row!.qValue).toBeLessThanOrEqual(CROSSTAB_FDR_Q);
+  });
+
+  it("pairs a tag against the NEXT day's heart-rate variability (D → D+1 lag)", () => {
+    const { entries, measurements } = nextDayFixture(
+      "HEART_RATE_VARIABILITY",
+      38,
+      55,
+    );
+    const rows = computeTagMetricCrosstab({ entries, measurements, now: NOW });
+    const row = rows.find(
+      (r) =>
+        r.tag === "alcohol" && r.metricKey === "nextDayHeartRateVariability",
+    );
+    expect(row).toBeDefined();
+    expect(row!.mode).toBe("nextDay");
+    expect(row!.display).toBe("ms");
+    expect(row!.withAvg).toBeCloseTo(38, 0);
+    expect(row!.withoutAvg).toBeCloseTo(55, 0);
+    expect(row!.delta).toBeCloseTo(-17, 0);
+  });
+
+  it("reads both overnight vitals from the fetched channel set", () => {
+    // The fetch filter is derived from the map, so a metric added to
+    // CROSSTAB_METRICS without a channel to read it from is impossible.
+    expect(CROSSTAB_METRIC_TYPES).toContain("RESTING_HEART_RATE");
+    expect(CROSSTAB_METRIC_TYPES).toContain("HEART_RATE_VARIABILITY");
+    expect(CROSSTAB_METRICS.nextDayRestingHeartRate.mode).toBe("nextDay");
+    expect(CROSSTAB_METRICS.nextDayHeartRateVariability.mode).toBe("nextDay");
   });
 
   it("drops a tag below the per-side day floors", () => {

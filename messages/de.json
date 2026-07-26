@@ -3432,9 +3432,13 @@
         "metricActiveEnergy": "Aktive Energie",
         "metricSleepDuration": "Schlaf",
         "metricNextDayRecovery": "Erholung am Folgetag",
+        "metricNextDayRestingHr": "Ruhepuls am Folgetag",
+        "metricNextDayHrv": "Herzfrequenzvariabilität am Folgetag",
         "unitHours": "Std.",
         "unitKcal": "kcal",
         "unitScore": "Pkt.",
+        "unitBpm": "bpm",
+        "unitMs": "ms",
         "detailSameDay": "Durchschnittlich {withAvg} {unit} an den {withDays} Tagen mit diesem Tag gegenüber {withoutAvg} {unit} ohne.",
         "detailNextDay": "Durchschnittlich {withAvg} {unit} am Tag nach den {withDays} Tagen mit diesem Tag gegenüber {withoutAvg} {unit} sonst."
       },

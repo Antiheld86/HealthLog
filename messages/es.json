@@ -3432,9 +3432,13 @@
         "metricActiveEnergy": "Energía activa",
         "metricSleepDuration": "Sueño",
         "metricNextDayRecovery": "Recuperación al día siguiente",
+        "metricNextDayRestingHr": "Frecuencia cardíaca en reposo al día siguiente",
+        "metricNextDayHrv": "Variabilidad de la frecuencia cardíaca al día siguiente",
         "unitHours": "h",
         "unitKcal": "kcal",
         "unitScore": "pts",
+        "unitBpm": "ppm",
+        "unitMs": "ms",
         "detailSameDay": "Promedia {withAvg} {unit} en los {withDays} días que lo etiquetaste frente a {withoutAvg} {unit} sin él.",
         "detailNextDay": "Promedia {withAvg} {unit} el día después de los {withDays} días que lo etiquetaste frente a {withoutAvg} {unit} el resto."
       },

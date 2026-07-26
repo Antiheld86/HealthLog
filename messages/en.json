@@ -3432,9 +3432,13 @@
         "metricActiveEnergy": "Active energy",
         "metricSleepDuration": "Sleep",
         "metricNextDayRecovery": "Next-day recovery",
+        "metricNextDayRestingHr": "Next-day resting heart rate",
+        "metricNextDayHrv": "Next-day heart-rate variability",
         "unitHours": "h",
         "unitKcal": "kcal",
         "unitScore": "pts",
+        "unitBpm": "bpm",
+        "unitMs": "ms",
         "detailSameDay": "Averages {withAvg} {unit} on the {withDays} days you tagged this vs {withoutAvg} {unit} without it.",
         "detailNextDay": "Averages {withAvg} {unit} the day after the {withDays} days you tagged this vs {withoutAvg} {unit} otherwise."
       },

@@ -3432,9 +3432,13 @@
         "metricActiveEnergy": "Energia attiva",
         "metricSleepDuration": "Sonno",
         "metricNextDayRecovery": "Recupero il giorno dopo",
+        "metricNextDayRestingHr": "Frequenza cardiaca a riposo il giorno dopo",
+        "metricNextDayHrv": "Variabilità della frequenza cardiaca il giorno dopo",
         "unitHours": "h",
         "unitKcal": "kcal",
         "unitScore": "pt",
+        "unitBpm": "bpm",
+        "unitMs": "ms",
         "detailSameDay": "In media {withAvg} {unit} nei {withDays} giorni con questo tag contro {withoutAvg} {unit} senza.",
         "detailNextDay": "In media {withAvg} {unit} il giorno dopo i {withDays} giorni con questo tag contro {withoutAvg} {unit} altrimenti."
       },
