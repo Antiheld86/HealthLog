@@ -376,11 +376,14 @@ function renderState(entry: InventoryEntry): string {
   if (entry.present) return "present";
   const a = entry.availability;
   if (!a) return "absent";
+  // Terse by design: the preamble states once what these two states mean and
+  // that neither is absence. Repeating that per row would double a manifest
+  // that rides every single turn.
   const range = `${a.count} readings, ${a.firstDate} to ${a.lastDate}`;
   if (a.state === "unavailable_in_scope") {
-    return `NOT IN SCOPE — the record holds ${range}, inside the current window, but this domain is not available in this conversation (its module may be switched off). Do NOT call it absent`;
+    return `NOT IN SCOPE [${range}, inside the window — module may be off]`;
   }
   return a.reachableWithWindow
-    ? `OUTSIDE WINDOW — the record holds ${range}; re-call with window:"${a.reachableWithWindow}" to read it`
-    : `OUTSIDE WINDOW — the record holds ${range}, older than any window reaches. Say so; do NOT call it absent`;
+    ? `OUTSIDE WINDOW [${range}, re-call with window:"${a.reachableWithWindow}"]`
+    : `OUTSIDE WINDOW [${range}, older than any window reaches]`;
 }
