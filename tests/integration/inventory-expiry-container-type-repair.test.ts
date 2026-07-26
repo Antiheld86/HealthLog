@@ -224,24 +224,61 @@ describe("0276 inventory expiry container-type repair — integration", () => {
   });
 
   it.each(["ACTIVE", "IN_USE", "USED_UP"] as const)(
-    "leaves a %s row untouched",
+    "leaves the state of a %s row alone",
     async (state) => {
       const prisma = getPrismaClient();
-      const expiresAt = new Date(Date.now() + 10 * DAY_MS);
       const id = await seedItem(prisma, medicationId, {
         containerType: "BLISTER",
         state,
         unitsRemaining: state === "USED_UP" ? 0 : 54,
-        expiresAt,
+        expiresAt: new Date(Date.now() + 10 * DAY_MS),
       });
 
       await prisma.$executeRawUnsafe(REPAIR_SQL);
 
-      const row = await readItem(prisma, id);
-      expect(row.state).toBe(state);
-      expect(row.expiresAt).toEqual(expiresAt);
+      expect((await readItem(prisma, id)).state).toBe(state);
     },
   );
+
+  it("clears the pending clock deadline on a still-IN_USE blister", async () => {
+    // The rows the flip has not reached yet. Their `expires_at` is the
+    // old firstUseAt + 30 days, still in the future, and the daily
+    // expire scan would have written them off on schedule.
+    const prisma = getPrismaClient();
+    const openedAt = new Date(Date.now() - 10 * DAY_MS);
+    const id = await seedItem(prisma, medicationId, {
+      containerType: "BLISTER",
+      state: "IN_USE",
+      firstUseAt: openedAt,
+      printedExpiry: null,
+      expiresAt: new Date(openedAt.getTime() + 30 * DAY_MS),
+    });
+
+    await prisma.$executeRawUnsafe(REPAIR_SQL);
+
+    const row = await readItem(prisma, id);
+    expect(row.state).toBe("IN_USE");
+    expect(row.expiresAt).toBeNull();
+  });
+
+  it("leaves a pen's pending clock deadline in place", async () => {
+    const prisma = getPrismaClient();
+    const openedAt = new Date(Date.now() - 10 * DAY_MS);
+    const expiresAt = new Date(openedAt.getTime() + 30 * DAY_MS);
+    const id = await seedItem(prisma, medicationId, {
+      containerType: "PEN",
+      state: "IN_USE",
+      firstUseAt: openedAt,
+      printedExpiry: null,
+      expiresAt,
+    });
+
+    await prisma.$executeRawUnsafe(REPAIR_SQL);
+
+    const row = await readItem(prisma, id);
+    expect(row.state).toBe("IN_USE");
+    expect(row.expiresAt).toEqual(expiresAt);
+  });
 
   it("is idempotent — a second application changes nothing", async () => {
     const prisma = getPrismaClient();
