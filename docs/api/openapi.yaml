@@ -4477,10 +4477,10 @@ paths:
       tags:
         - Auth
       summary: Read the calling user's AI-provider configuration
-      description: "Returns the user's selected provider/model/baseUrl plus the effective availability: `aiAvailable` is true
-        when any provider can serve the user (BYOK, self-hosted, or the operator's server-managed key), and `managedBy`
-        reports which. iOS gates Coach visibility off these two fields. Key material is reported as presence + a 4-char
-        masked preview only."
+      description: "Returns the user's selected provider/model/baseUrl (plus the OpenAI-compatible gateway's own base URL and
+        model) and the effective availability: `aiAvailable` is true when any provider can serve the user (BYOK,
+        self-hosted, or the operator's server-managed key), and `managedBy` reports which. iOS gates Coach visibility
+        off these two fields. Key material is reported as presence + a 4-char masked preview only."
       responses:
         "200":
           description: Resolved AI-provider configuration.
@@ -21942,6 +21942,7 @@ components:
                 - OPENAI
                 - ANTHROPIC
                 - LOCAL
+                - OPENAI_COMPATIBLE
                 - CHATGPT_OAUTH
             - type: "null"
           description: The user's selected provider, or null when none is set.
@@ -21984,6 +21985,21 @@ components:
             - type: string
             - type: "null"
           description: "`...` + last 4 chars of the stored OpenAI key, or null."
+        compatBaseUrl:
+          anyOf:
+            - type: string
+            - type: "null"
+          description: "v1.33.1 (#470) — base URL of the OpenAI-compatible gateway (LiteLLM / OpenRouter / vLLM). Its own column:
+            the OpenAI provider stays pinned to api.openai.com and never reads it."
+        compatModel:
+          anyOf:
+            - type: string
+            - type: "null"
+          description: Model the gateway should route. Null falls back to `model`; with neither set the gateway entry does not
+            resolve.
+        hasCompatKey:
+          type: boolean
+          description: Whether a bearer is stored for the gateway. The bearer is optional — a gateway without auth needs none.
         responseTimeoutSeconds:
           anyOf:
             - type: integer
@@ -22003,6 +22019,9 @@ components:
         - hasLocalKey
         - hasOpenaiKey
         - openaiKeyPreview
+        - compatBaseUrl
+        - compatModel
+        - hasCompatKey
         - responseTimeoutSeconds
       additionalProperties: false
       description: The calling user's AI-provider configuration plus the effective availability (`aiAvailable` + `managedBy`).

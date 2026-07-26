@@ -4937,6 +4937,7 @@
           "openai": "OpenAI (la tua chiave)",
           "anthropic": "Anthropic (Claude)",
           "local": "Modello locale",
+          "openai-compatible": "Gateway compatibile con OpenAI",
           "admin-openai": "OpenAI amministratore"
         },
         "title": "Catena di fallback",
@@ -4963,7 +4964,13 @@
         "openai": "OpenAI (la tua chiave API)",
         "anthropic": "Anthropic (Claude)",
         "local": "Modello locale (compatibile con OpenAI)",
+        "openai-compatible": "Gateway compatibile con OpenAI",
         "admin-openai": "OpenAI fornito dall’amministratore"
+      },
+      "compat": {
+        "description": "Un provider a pieno titolo per qualsiasi endpoint che parli l'API /v1/chat/completions di OpenAI: LiteLLM, OpenRouter, vLLM o un altro gateway. L'URL di base termina con /v1, la chiave API è facoltativa e il modello è quello instradato dal gateway. La tua chiave OpenAI non raggiunge mai questo endpoint: questo provider ha la propria.",
+        "keyLabel": "Chiave API (facoltativa)",
+        "modelHint": "Il nome del modello che il gateway si aspetta. Se lasci il campo vuoto viene usato il modello salvato per gli altri provider; se non è impostato nessuno dei due, questo provider viene saltato."
       },
       "openai": {
         "modelSelect": "Modello",

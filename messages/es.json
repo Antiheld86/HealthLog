@@ -4937,6 +4937,7 @@
           "openai": "OpenAI (tu clave)",
           "anthropic": "Anthropic (Claude)",
           "local": "Modelo local",
+          "openai-compatible": "Pasarela compatible con OpenAI",
           "admin-openai": "OpenAI de administrador"
         },
         "title": "Cadena de respaldo",
@@ -4963,7 +4964,13 @@
         "openai": "OpenAI (tu clave de API)",
         "anthropic": "Anthropic (Claude)",
         "local": "Modelo local (compatible con OpenAI)",
+        "openai-compatible": "Pasarela compatible con OpenAI",
         "admin-openai": "OpenAI proporcionado por el administrador"
+      },
+      "compat": {
+        "description": "Un proveedor de pleno derecho para cualquier endpoint que hable la API /v1/chat/completions de OpenAI: LiteLLM, OpenRouter, vLLM u otra pasarela. La URL base termina en /v1, la clave de API es opcional y el modelo es el que enrute tu pasarela. Tu clave de OpenAI nunca llega a este endpoint: este proveedor tiene la suya.",
+        "keyLabel": "Clave de API (opcional)",
+        "modelHint": "El nombre de modelo que espera tu pasarela. Si lo dejas vacío, se usa el modelo guardado para tus otros proveedores; si tampoco hay uno, este proveedor se omite."
       },
       "openai": {
         "modelSelect": "Modelo",

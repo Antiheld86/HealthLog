@@ -4937,6 +4937,7 @@
           "openai": "OpenAI (Twój klucz)",
           "anthropic": "Anthropic (Claude)",
           "local": "Model lokalny",
+          "openai-compatible": "Brama zgodna z OpenAI",
           "admin-openai": "OpenAI administratora"
         },
         "title": "Łańcuch zapasowy",
@@ -4963,7 +4964,13 @@
         "openai": "OpenAI (Twój klucz API)",
         "anthropic": "Anthropic (Claude)",
         "local": "Model lokalny (zgodny z OpenAI)",
+        "openai-compatible": "Brama zgodna z OpenAI",
         "admin-openai": "OpenAI udostępniony przez administratora"
+      },
+      "compat": {
+        "description": "Pełnoprawny dostawca dla każdego punktu końcowego mówiącego API /v1/chat/completions OpenAI: LiteLLM, OpenRouter, vLLM lub inna brama. Adres bazowy kończy się na /v1, klucz API jest opcjonalny, a model to ten, który kieruje twoja brama. Twój klucz OpenAI nigdy nie trafia do tego punktu końcowego — ten dostawca ma własny.",
+        "keyLabel": "Klucz API (opcjonalny)",
+        "modelHint": "Nazwa modelu, której oczekuje twoja brama. Pozostawione puste, użyty zostanie model zapisany dla pozostałych dostawców; gdy nie ustawiono żadnego, ten dostawca jest pomijany."
       },
       "openai": {
         "modelSelect": "Model",

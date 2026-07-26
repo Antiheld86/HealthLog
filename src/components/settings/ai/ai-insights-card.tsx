@@ -35,6 +35,7 @@ import { AnthropicProviderForm } from "./anthropic-provider-form";
 import { AutoReadCard } from "./auto-read-card";
 import { CentralCodexSwitch } from "./central-codex-switch";
 import { CodexProviderForm } from "./codex-provider-form";
+import { CompatProviderForm } from "./compat-provider-form";
 import { FallbackChainCard } from "./fallback-chain-card";
 import { LocalProviderForm } from "./local-provider-form";
 import { OpenAIProviderForm } from "./openai-provider-form";
@@ -343,6 +344,9 @@ function ProviderConfigCard({
       )}
       {provider === "local" && (
         <LocalProviderForm userProvider={userProvider} />
+      )}
+      {provider === "openai-compatible" && (
+        <CompatProviderForm userProvider={userProvider} />
       )}
       {provider === "admin-openai" && (
         <AdminOpenAIProviderForm hasAdminKey={insightsSettings?.hasAdminKey} />

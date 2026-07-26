@@ -32,6 +32,12 @@ export interface UserAIProvider {
   hasLocalKey: boolean;
   hasOpenaiKey: boolean;
   openaiKeyPreview: string | null;
+  // v1.33.1 (#470) — the OpenAI-compatible gateway's own configuration. Its
+  // own fields, because its own columns: the OpenAI provider is pinned to
+  // api.openai.com and shares nothing with a user-supplied host.
+  compatBaseUrl: string | null;
+  compatModel: string | null;
+  hasCompatKey: boolean;
   // v1.22 (#89) — per-user response timeout, in seconds (null = default).
   responseTimeoutSeconds: number | null;
 }
@@ -46,6 +52,7 @@ export const PROVIDER_TYPES = [
   "openai",
   "anthropic",
   "local",
+  "openai-compatible",
   "admin-openai",
 ] as const;
 export type ProviderType = (typeof PROVIDER_TYPES)[number];
@@ -65,6 +72,12 @@ export interface ProviderChainData {
   }[];
 }
 
+/**
+ * The chain a user starts with and returns to on reset. `openai-compatible`
+ * is deliberately absent: it resolves only against a base URL somebody
+ * configured, so a default entry would be dead weight for everyone else.
+ * Users add it from the chain editor once their gateway is saved.
+ */
 export const DEFAULT_CHAIN: readonly ChainEntry[] = [
   { providerType: "codex", enabled: true },
   { providerType: "openai", enabled: true },
@@ -114,6 +127,8 @@ export function uiToLegacyProviderEnum(p: ProviderType): string | null {
       return "ANTHROPIC";
     case "local":
       return "LOCAL";
+    case "openai-compatible":
+      return "OPENAI_COMPATIBLE";
     case "codex":
     case "admin-openai":
     default:

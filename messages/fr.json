@@ -4937,6 +4937,7 @@
           "openai": "OpenAI (votre clé)",
           "anthropic": "Anthropic (Claude)",
           "local": "Modèle local",
+          "openai-compatible": "Passerelle compatible OpenAI",
           "admin-openai": "OpenAI administrateur"
         },
         "title": "Chaîne de secours",
@@ -4963,7 +4964,13 @@
         "openai": "OpenAI (votre clé API)",
         "anthropic": "Anthropic (Claude)",
         "local": "Modèle local (compatible OpenAI)",
+        "openai-compatible": "Passerelle compatible OpenAI",
         "admin-openai": "OpenAI fourni par l’administrateur"
+      },
+      "compat": {
+        "description": "Un fournisseur à part entière pour tout point de terminaison qui parle l'API /v1/chat/completions d'OpenAI : LiteLLM, OpenRouter, vLLM ou une autre passerelle. L'URL de base se termine par /v1, la clé API est facultative et le modèle est celui que votre passerelle achemine. Votre clé OpenAI n'atteint jamais ce point de terminaison — ce fournisseur a la sienne.",
+        "keyLabel": "Clé API (facultative)",
+        "modelHint": "Le nom de modèle attendu par votre passerelle. Laissé vide, le modèle enregistré pour vos autres fournisseurs est utilisé ; si aucun n'est défini, ce fournisseur est ignoré."
       },
       "openai": {
         "modelSelect": "Modèle",

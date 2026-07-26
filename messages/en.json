@@ -4937,6 +4937,7 @@
           "openai": "OpenAI (your key)",
           "anthropic": "Anthropic (Claude)",
           "local": "Local model",
+          "openai-compatible": "OpenAI-compatible gateway",
           "admin-openai": "Admin OpenAI"
         },
         "title": "Fallback chain",
@@ -4963,7 +4964,13 @@
         "openai": "OpenAI (your API key)",
         "anthropic": "Anthropic (Claude)",
         "local": "Local model (OpenAI-compatible)",
+        "openai-compatible": "OpenAI-compatible gateway",
         "admin-openai": "Admin-provided OpenAI"
+      },
+      "compat": {
+        "description": "A first-class provider for any endpoint that speaks the OpenAI /v1/chat/completions API: LiteLLM, OpenRouter, vLLM or another gateway. The base URL ends with /v1, the API key is optional, and the model is whatever your gateway routes. Your OpenAI key never reaches this endpoint — this provider has its own.",
+        "keyLabel": "API key (optional)",
+        "modelHint": "The model name your gateway expects. Left blank, the model saved for your other providers is used; with neither set, this provider is skipped."
       },
       "openai": {
         "modelSelect": "Model",
