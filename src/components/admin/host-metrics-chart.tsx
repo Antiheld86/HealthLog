@@ -41,6 +41,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { apiGet } from "@/lib/api/api-fetch";
+import { readStoredTimezone } from "@/lib/timezone-mirror";
 
 interface HostMetricsApiSample {
   capturedAt: string;
@@ -94,10 +95,15 @@ export function buildChartRows(samples: HostMetricsApiSample[]): {
     if (total > peakDiskBps) peakDiskBps = total;
   }
 
+  // The profile's timezone, not the browser's. These are real instants (host
+  // samples), and an operator reading their own instance should see the same
+  // clock here as on every other timestamp in the admin area — a spike at
+  // "14:20" must not be 14:20 here and 15:20 two screens away.
   const formatter = new Intl.DateTimeFormat(undefined, {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    timeZone: readStoredTimezone() || undefined,
   });
 
   let hasDiskData = false;
