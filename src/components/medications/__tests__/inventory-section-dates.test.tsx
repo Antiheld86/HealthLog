@@ -95,13 +95,23 @@ function seedItems(items: unknown[]) {
   });
 }
 
+interface Row {
+  id: string;
+  state: "ACTIVE" | "IN_USE" | "EXPIRED" | "USED_UP";
+  containerType: "PEN" | "AMPOULE" | "BLISTER" | "INHALER" | "BOTTLE" | "OTHER";
+  unitsTotal: number | null;
+  unitsRemaining: number | null;
+  printedExpiry: string | null;
+  firstUseAt: string | null;
+}
+
 const BASE = {
   id: "i1",
-  state: "IN_USE" as const,
-  containerType: "BLISTER" as const,
+  state: "IN_USE",
+  containerType: "BLISTER",
   unitsTotal: 60,
   unitsRemaining: 54,
-};
+} satisfies Omit<Row, "printedExpiry" | "firstUseAt">;
 
 describe("<InventorySection> — item-row dates", () => {
   it("renders the opening date on the row", () => {
@@ -161,13 +171,13 @@ describe("<InventorySection> — item-row dates", () => {
 });
 
 describe("<AdjustInventoryDialog> — editable dates", () => {
-  const item = {
+  const item: Row = {
     ...BASE,
     firstUseAt: "2026-06-12T00:00:00.000Z",
     printedExpiry: "2027-06-01T00:00:00.000Z",
   };
 
-  function renderDialog(over: Partial<typeof item> = {}): string {
+  function renderDialog(over: Partial<Row> = {}): string {
     return render(
       <AdjustInventoryDialog
         medicationId="med-1"
