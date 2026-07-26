@@ -2,6 +2,102 @@
 
 ## [Unreleased]
 
+## [1.33.0] — 2026-07-26
+
+Eight defects, and every one of them had the same shape: something failed
+reliably, the code recorded it precisely, and no person ever found out.
+
+**"Delete All Data" deleted 13 tables out of 92 and reported success.** What
+survived included mental-health questionnaires, lab results, the menstrual
+record, allergies, family history, the whole document vault, every AI
+conversation, and clinician share links that kept working. On the account row
+itself, 11 of 119 columns were cleared, so name, insurer, insurance number, home
+coordinates, profile photo and every integration credential stayed. The wipe now
+covers everything the account owns except what is needed to sign in again, the
+list is derived from the schema so a newly added table cannot quietly survive,
+and the confirmation says what will go before you agree rather than after.
+
+**A device sync failed 1149 times without anyone being told.** The escalation
+had no rung above "temporary", so a connection could fail hourly for weeks while
+the card read "connected". Worse, providers that sync several things separately
+had one healthy part erase the error recorded by a broken one, twice an hour,
+including a connection that had already been parked for a dead credential. A
+failing connection now shows how long it has been failing, escalates after a
+day, and stops retrying after two with a reconnect button.
+
+**The Environment module had never once saved a row, for anyone.** One
+declaration in 49 was missing the line that maps it to the database, so every
+write referred to a type that does not exist. The job failed every night and
+recorded that failure faithfully, and no code anywhere reads a failed job. Both
+halves are fixed: the module writes, and a failing background job now names
+itself on the admin page and on the affected screen. Past days can be fetched
+from the weather source; the nightly job fills the last week by itself and the
+backfill button covers the rest.
+
+**Sleep was counted twice.** A device that re-exports a night it already sent
+left two overlapping in-bed periods, and both were added. One night read ten
+hours in the headline and twenty in the legend. The same fault inflated the
+time-asleep figure itself. Every stage total is now the measure of its own
+period rather than the sum of overlapping ones. Naps are also now told apart
+from the main sleep everywhere a person reads them, not just in the export.
+
+**Twenty-two controls could destroy something without asking.** Among them a
+single tap that cleared the allergy list along with a text note, and a switch
+labelled "Custom range" that deleted the stored range when switched off. Every
+destructive control is now registered, and a new one cannot ship without being
+classified.
+
+**Medication stock was written off that had not expired.** The thirty-day clock
+that applies to an opened injection pen was being applied to a blister of
+tablets, so pressing out the first tablet started a countdown and a month later
+the rest were declared unusable. The container kind was recorded and never read.
+Pens and ampoules keep the clock; blisters, bottles and inhalers do not. A
+repair returns stock that was written off, and the dates that drive it can now
+be seen and corrected on the item itself.
+
+**Insights scrolled sideways on every phone.** Two guards were watching for
+exactly that and both measured the document, while the app scrolls inside an
+inner area that absorbed the overflow. They now measure what actually moves.
+
+**A third value for gender was accepted by the app and missing from the
+published contract in five places, and dropped or coerced in nine more.** A
+fitness calculation scored anyone without a recorded gender using the male
+coefficients, and the doctor report labelled any unrecognised value as
+non-binary. Every place the field is read, written, documented or displayed was
+gone through.
+
+### Two additions
+
+Medication history from a widely used iOS export tool can now be read directly,
+as the file actually is, rather than converted by hand. The scheduled time and
+the time taken stay two separate facts, which is what a hand-mapped file
+destroys. Every column is either used, reported, or named as not read, and you
+see which before you import. Seven status values are ruled on individually: only
+"taken" and "skipped" become doses, and a snoozed reminder or an unanswered
+notification is counted and named rather than turned into a decision you never
+made.
+
+Behavioural patterns now cover alcohol against next-day recovery and resting
+heart rate. The statistics for it were already in the app.
+
+### For operators
+
+Four migrations. `0276` adds retention indexes, `0277` adds failure-streak
+tracking, `0278` scopes the intake import key per account, `0279` repairs
+inventory that was wrongly expired. None deletes or rewrites a measurement.
+
+### Credit
+
+Reported by @lutzkind (sleep double-counting, the gender contract, the
+Environment enum, and a run of earlier reports), @Nazza01 (the intake import,
+plus the export file and the format documentation that made reading it
+possible), @DrGithubble (the unit and precision work that led here) and @doenke
+(the measurement table, narrowed by the reporter into something buildable).
+
+Two of these defects were found because someone outside this project read the
+code and said what was wrong. The Environment module had been broken for every
+user since it shipped and nobody inside noticed.
+
 ## [1.32.39] — 2026-07-26
 
 The doctor report now carries what you chose, and nothing else.
