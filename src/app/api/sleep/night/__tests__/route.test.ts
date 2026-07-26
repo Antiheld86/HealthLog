@@ -201,4 +201,31 @@ describe("GET /api/sleep/night", () => {
     const res = await GET(req("date=2026-06-04"));
     expect(res.status).toBe(200); // never 500 on the reconstruction edge
   });
+  it("cannot serve an in-bed headline that contradicts its stage legend", async () => {
+    // A device wrote the same night twice: an envelope 16:06 -> 02:09:59 and
+    // a corrected one 16:06 -> 02:18:59. Raw-summing them served a 613-minute
+    // headline next to a 1217-minute legend on the same screen.
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    vi.mocked(prisma.measurement.findMany).mockResolvedValue([
+      stage("2026-07-25T02:09:59.000Z", "IN_BED", 603 + 59 / 60),
+      stage("2026-07-25T02:18:59.000Z", "IN_BED", 612 + 59 / 60),
+      stage("2026-07-24T21:55:42.000Z", "CORE", 319.7),
+      stage("2026-07-24T23:30:36.000Z", "DEEP", 94.9),
+      stage("2026-07-24T23:37:31.200Z", "AWAKE", 6.92),
+      stage("2026-07-25T01:53:25.200Z", "REM", 135.9),
+    ] as never);
+    const res = await GET(req("date=2026-07-25"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.main.inBedMinutes).toBe(613);
+    expect(body.data.main.stages.IN_BED).toBe(613);
+    // One in-bed bar on the hypnogram, not the night drawn twice over.
+    expect(
+      body.data.main.segments.filter(
+        (seg: { stage: string }) => seg.stage === "IN_BED",
+      ),
+    ).toHaveLength(1);
+    expect(body.data.main.stages.CORE).toBe(320);
+    expect(body.data.main.asleepMinutes).toBe(551);
+  });
 });

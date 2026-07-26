@@ -93,10 +93,28 @@
  * the long IN_BED window — the watch wins the night on richness, and a
  * winner-only in-bed figure would shrink to nothing exactly when the
  * stage data is best. Overlapping spans from two writers are merged
- * interval-union style so a doubled export never double-counts. The
- * asleep total, the `stages` map, and `awakeMinutes` stay winner-only —
- * blending the phone's coarse AWAKE blocks into the watch's night was
- * the original inflated-awake bug this collapse exists to prevent.
+ * interval-union style so a doubled export never double-counts.
+ * `stages.IN_BED` IS that same number — one quantity, one computation —
+ * so the stage legend can never contradict the headline. The asleep
+ * total, `awakeMinutes` and every OTHER entry of the `stages` map stay
+ * winner-only — blending the phone's coarse AWAKE blocks into the
+ * watch's night was the original inflated-awake bug this collapse
+ * exists to prevent.
+ *
+ * Overlap within one writer
+ * -------------------------
+ * A device can write the SAME period twice: an original envelope and a
+ * corrected one, same start, later end, distinct external ids. Both rows
+ * survive the writer collapse (they ARE the same writer), and adding both
+ * minute counts reports the night twice — the shape that made one night's
+ * in-bed legend read 20 h against a 10 h headline. Every per-stage total
+ * is therefore the measure of the UNION of that stage's spans, not the sum
+ * of the rows (`mergeOverlappingSegments`). Stages merge independently: a
+ * CORE span overlapping a DEEP span is a contest over what the minute WAS,
+ * and the writer collapse above is this file's one mechanism for that
+ * contest. The invariant that falls out and holds for every session: no
+ * stage total can exceed the union envelope of that stage's own spans, so
+ * none can exceed the session's envelope either.
  *
  * Unit
  * ----
@@ -166,21 +184,25 @@ function isRedundantBareAsleep(
  * bare `ASLEEP` aggregate against the granular CORE/DEEP/REM rows it overlaps.
  * IN_BED + AWAKE are never asleep; a stage-less (`null`) row is the night's
  * total only when no granular stage is present.
+ *
+ * Each stage contributes the measure of the UNION of its own spans
+ * (`mergeOverlappingSegments`), so a period a device re-exported under a
+ * corrected row is counted once — the headline cannot drift away from the
+ * per-stage legend that sums the same merged spans.
  */
 function asleepMinutesOf(rows: readonly SleepStageRow[]): number {
   let granular = 0;
   let fallback = 0;
   let sawGranular = false;
-  for (const r of rows) {
-    const minutes = Number.isFinite(r.value) ? r.value : 0;
-    const stage = r.sleepStage;
+  for (const seg of mergeOverlappingSegments(rows.map(segmentOf))) {
+    const stage = seg.stage;
     if (stage != null && GRANULAR_ASLEEP_STAGES.has(stage)) {
-      granular += minutes;
+      granular += seg.minutes;
       sawGranular = true;
     } else if (stage === "ASLEEP" || stage == null) {
       // Bare unspecified aggregate (`ASLEEP`) or a stage-less legacy/manual
       // row — only used when no granular stage carries the night.
-      fallback += minutes;
+      fallback += seg.minutes;
     }
     // IN_BED / AWAKE never count toward asleep.
   }
@@ -274,7 +296,13 @@ export interface SleepNight {
   inBedMinutes: number | null;
   /** Awake-in-bed minutes when an AWAKE row exists, else null. */
   awakeMinutes: number | null;
-  /** Per-stage minutes for the night (only stages the winning writer reported). */
+  /**
+   * Per-stage minutes for the night. Every entry is the measure of the
+   * UNION of that stage's spans, never the raw row sum, so a re-exported
+   * period is counted once. Stages other than IN_BED come from the winning
+   * writer only; `stages.IN_BED` is the all-writer envelope and therefore
+   * always equals `inBedMinutes`.
+   */
   stages: Partial<Record<SleepStage, number>>;
   /**
    * Non-null when two writer buckets reported clearly different asleep
@@ -633,6 +661,10 @@ export function reconstructSleepNights(
       if (envelope !== null) {
         inBed += envelope;
         sawInBed = true;
+        // ONE quantity, ONE computation: `stages.IN_BED` IS the in-bed
+        // envelope, so the legend can never contradict the headline. The
+        // per-stage loop below skips IN_BED entirely for that reason.
+        stages.IN_BED = (stages.IN_BED ?? 0) + envelope;
       }
       // v1.11.5 — decide the granular-over-bare gate PER SESSION. A granular
       // overnight does not strip a bare-only nap's minutes, and the per-stage
@@ -645,20 +677,28 @@ export function reconstructSleepNights(
       asleep += sessionAsleep;
       let sessionEnd = Number.NEGATIVE_INFINITY;
       for (const r of sessionRows) {
-        const minutes = Number.isFinite(r.value) ? r.value : 0;
         if (r.measuredAt.getTime() > latest.getTime()) latest = r.measuredAt;
         if (r.measuredAt.getTime() > sessionEnd)
           sessionEnd = r.measuredAt.getTime();
-        const stage = r.sleepStage;
-        // Drop the redundant bare ASLEEP aggregate (and stage-less rows) from
-        // the per-stage breakdown when this session has the granular partition,
-        // so `stages` is never the granular set PLUS its ~equal bare twin.
-        if (isRedundantBareAsleep(stage, sawGranular)) continue;
-        if (stage) {
-          stages[stage] = (stages[stage] ?? 0) + minutes;
-        }
+      }
+      // Per-stage totals come from the OVERLAP-MERGED spans, never from the
+      // raw row sum: a device that re-exports a period it already wrote (a
+      // corrected envelope — same start, later end, fresh external id) would
+      // otherwise have both rows added and report the period twice. The
+      // granular-over-bare filter runs first, so `stages` is never the
+      // granular set PLUS its ~equal bare twin. IN_BED is skipped — it is the
+      // envelope, already carried above from the same union as `inBedMinutes`.
+      const merged = mergeOverlappingSegments(
+        sessionRows
+          .filter((r) => !isRedundantBareAsleep(r.sleepStage, sawGranular))
+          .map(segmentOf),
+      );
+      for (const seg of merged) {
+        const stage = seg.stage;
+        if (stage == null || stage === "IN_BED") continue;
+        stages[stage] = (stages[stage] ?? 0) + seg.minutes;
         if (stage === "AWAKE") {
-          awake += minutes;
+          awake += seg.minutes;
           sawAwake = true;
         }
       }
@@ -730,7 +770,13 @@ export interface SleepSession {
   inBedMinutes: number | null;
   /** Awake-in-bed minutes when an AWAKE segment exists, else null. */
   awakeMinutes: number | null;
-  /** Per-stage minutes for the session (only stages the device reported). */
+  /**
+   * Per-stage minutes for the session. Every entry is the measure of the
+   * UNION of that stage's spans, never the raw row sum, so a corrected
+   * re-export of a period is counted once. Stages other than IN_BED come
+   * from the canonical writer only; `stages.IN_BED` is the all-writer
+   * envelope and therefore always equals `inBedMinutes`.
+   */
   stages: Partial<Record<SleepStage, number>>;
   /**
    * Count of AWAKE segments between the first and last asleep segment —
@@ -739,7 +785,11 @@ export interface SleepSession {
    * canonical source's segments only.
    */
   awakenings: number;
-  /** The canonical source's segments, sorted by start, for the hypnogram. */
+  /**
+   * The canonical source's segments, sorted by start, for the hypnogram.
+   * Overlapping spans of the same stage are merged, so a corrected
+   * re-export never draws a second bar across the night it revises.
+   */
   segments: SleepSegment[];
   /**
    * `true` when the winning writer's stage ORDER is synthesised rather than
@@ -768,6 +818,96 @@ function segmentOf(r: SleepStageRow): SleepSegment {
   const end = r.measuredAt;
   const start = new Date(end.getTime() - minutes * 60_000);
   return { stage: r.sleepStage, start, end, minutes };
+}
+
+/** Map key for stage-less (`null`) spans — they group among themselves. */
+const NULL_STAGE_KEY = "__null_stage__";
+
+/**
+ * Merge the spans of ONE stage that genuinely OVERLAP into their interval
+ * union. A device re-exporting a period it already wrote (a corrected
+ * envelope: same start, later end, fresh external id) lands as a SECOND row
+ * describing the SAME minutes, and adding both minute counts reports the
+ * night twice. The union is the only defensible total for two spans that
+ * describe one period, and it needs no arbitration — both rows say the same
+ * thing about the contested minute.
+ *
+ * Overlap is STRICT (`start < runningEnd`): two spans that merely TOUCH
+ * (`start === runningEnd`) describe consecutive periods, so they stay two
+ * segments — their union already equals their sum, and coalescing them would
+ * silently drop one mid-sleep awakening from `countAwakenings`.
+ *
+ * A group of exactly one span is returned VERBATIM, so a well-formed night
+ * (no overlap anywhere) keeps the stored per-row minutes bit-for-bit and only
+ * a genuinely doubled export is rewritten.
+ */
+function mergeStageSpans(spans: readonly SleepSegment[]): SleepSegment[] {
+  if (spans.length <= 1) return [...spans];
+  const sorted = [...spans].sort(
+    (a, b) =>
+      a.start.getTime() - b.start.getTime() ||
+      a.end.getTime() - b.end.getTime(),
+  );
+  const out: SleepSegment[] = [];
+  let group: SleepSegment[] = [sorted[0]];
+  let groupEnd = sorted[0].end.getTime();
+  const flush = (): void => {
+    if (group.length === 1) {
+      out.push(group[0]);
+      return;
+    }
+    const start = group[0].start;
+    out.push({
+      stage: group[0].stage,
+      start,
+      end: new Date(groupEnd),
+      minutes: (groupEnd - start.getTime()) / 60_000,
+    });
+  };
+  for (let i = 1; i < sorted.length; i++) {
+    const span = sorted[i];
+    if (span.start.getTime() < groupEnd) {
+      group.push(span);
+      if (span.end.getTime() > groupEnd) groupEnd = span.end.getTime();
+    } else {
+      flush();
+      group = [span];
+      groupEnd = span.end.getTime();
+    }
+  }
+  flush();
+  return out;
+}
+
+/**
+ * Collapse a segment list so no two segments of the SAME stage overlap,
+ * returning the result sorted by start. Stages are merged INDEPENDENTLY —
+ * a CORE span overlapping a DEEP span is left alone, because that is not a
+ * doubled export but a contest over what the minute WAS, and the file already
+ * owns one mechanism for that contest: `pickSessionWriter` collapses the
+ * session to a single writer before anything is summed. Arbitrating across
+ * stages here would also destroy the summary-shaped writers on purpose:
+ * WHOOP / Polar stamp every stage total on the sleep END instant, so their
+ * stage spans nest inside one another by design and their union is one
+ * stage's length, not the night.
+ *
+ * The consequence is the invariant this function exists to guarantee: every
+ * stage total is the MEASURE OF THE UNION of that stage's spans, so no stage
+ * total can exceed the session's own envelope.
+ */
+function mergeOverlappingSegments(
+  segments: readonly SleepSegment[],
+): SleepSegment[] {
+  const byStage = new Map<string, SleepSegment[]>();
+  for (const seg of segments) {
+    const key = seg.stage ?? NULL_STAGE_KEY;
+    const list = byStage.get(key) ?? [];
+    list.push(seg);
+    byStage.set(key, list);
+  }
+  const out: SleepSegment[] = [];
+  for (const list of byStage.values()) out.push(...mergeStageSpans(list));
+  return out.sort((a, b) => a.start.getTime() - b.start.getTime());
 }
 
 /**
@@ -854,10 +994,16 @@ export function reconstructSleepSessions(
     // granular stages and the `stages` map is the granular set OR the bare
     // aggregate, never both.
     const sawGranular = sawGranularStage(pool);
-    const segments = pool
-      .filter((r) => !isRedundantBareAsleep(r.sleepStage, sawGranular))
-      .map(segmentOf)
-      .sort((a, b) => a.start.getTime() - b.start.getTime());
+    // Overlapping spans of ONE stage merge into their union before anything
+    // is drawn or summed: a corrected re-export (same start, later end, fresh
+    // external id) must not paint a second bar over the night it revises, nor
+    // add its minutes on top of the row it supersedes. Returned sorted by
+    // start, as the hypnogram expects.
+    const segments = mergeOverlappingSegments(
+      pool
+        .filter((r) => !isRedundantBareAsleep(r.sleepStage, sawGranular))
+        .map(segmentOf),
+    );
 
     // The granular-over-bare filter can empty a non-empty pool (a session whose
     // only rows are the redundant bare ASLEEP aggregate / stage-less twins of a
@@ -877,7 +1023,11 @@ export function reconstructSleepSessions(
       if (seg.start.getTime() < earliest.getTime()) earliest = seg.start;
       if (seg.end.getTime() > latest.getTime()) latest = seg.end;
       const stage = seg.stage;
-      if (stage) stages[stage] = (stages[stage] ?? 0) + seg.minutes;
+      // IN_BED is skipped here — it is the session ENVELOPE, filled in below
+      // from the very computation `inBedMinutes` reports, so the two can never
+      // disagree.
+      if (stage == null || stage === "IN_BED") continue;
+      stages[stage] = (stages[stage] ?? 0) + seg.minutes;
       if (stage === "AWAKE") {
         awake += seg.minutes;
         sawAwake = true;
@@ -889,6 +1039,7 @@ export function reconstructSleepSessions(
     // only in-bed window (the phone's bedtime detection). The hypnogram
     // `segments` + `stages` stay winner-only.
     const inBedEnvelope = inBedEnvelopeMinutes(session);
+    if (inBedEnvelope !== null) stages.IN_BED = inBedEnvelope;
     const asleep = asleepMinutesOf(pool);
     const canonicalSource = sourceOfWriterKey(canonical);
     sessions.push({
