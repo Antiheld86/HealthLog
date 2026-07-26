@@ -31,8 +31,6 @@ export const AUTO_EXPORT_CSV_COLUMNS = [
   "Codings",
 ] as const;
 
-export type AutoExportCsvColumn = (typeof AUTO_EXPORT_CSV_COLUMNS)[number];
-
 /**
  * What the importer does with a column.
  *
