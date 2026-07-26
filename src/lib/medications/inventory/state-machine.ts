@@ -1,5 +1,5 @@
 /**
- * v1.4.25 W19b — pen / vial inventory state machine.
+ * v1.4.25 W19b — container inventory state machine.
  *
  * Pure functions over a minimal `InventoryItemView` shape — no DB
  * access, no Prisma imports. The route handlers, the consumption hook
@@ -9,7 +9,8 @@
  * Decision tree (in evaluation order):
  *   1. unitsRemaining === 0           → USED_UP   (terminal)
  *   2. printedExpiry  && now > expiry → EXPIRED   (printed label trumps clock)
- *   3. firstUseAt && now > firstUseAt + IN_USE_WINDOW_MS → EXPIRED
+ *   3. firstUseAt && the container carries a post-opening clock &&
+ *      now > firstUseAt + IN_USE_WINDOW_MS               → EXPIRED
  *   4. firstUseAt is set              → IN_USE
  *   5. otherwise                      → ACTIVE
  *
@@ -18,21 +19,84 @@
  * machine is unit-agnostic — it only cares whether the count reached
  * zero.
  *
- * The window length is fixed at 30 days per EMA EPAR §6.3 for
- * Mounjaro KwikPen / Saxenda / Trulicity. Ozempic ships with a 56-day
- * window per its own EPAR — that drug-specific override is *not*
- * encoded here yet. The W19b scope deliberately uses the
- * conservative 30-day default; a follow-up can read the
- * drug-knowledge layer (`glp1-knowledge.ts`) and parametrise the
- * window per Glp1DrugId. The state machine itself remains
- * window-agnostic — it accepts the window length as input.
+ * ## Which containers carry a post-opening clock
+ *
+ * Clause 3 exists because breaching a sealed multi-dose reservoir
+ * exposes its contents: an injection pen's septum is punctured on the
+ * first dose and the product information caps how long the remainder
+ * stays usable (EMA EPAR §6.3). That fact is a property of the
+ * CONTAINER, not of every supply row, and applying it blindly wrote off
+ * good stock: pressing the first tablet out of a blister started a
+ * 30-day clock and a month later the untouched remainder was EXPIRED.
+ *
+ * So the clock now keys off `containerType`
+ * ({@link IN_USE_CLOCK_CONTAINER_TYPES}):
+ *
+ *   - PEN — one sealed multi-dose reservoir, punctured on first use.
+ *     The clock is the reason clause 3 exists.
+ *   - AMPOULE — the member a punctured injectable reservoir (ampoule or
+ *     multi-dose vial) lands on; there is no separate VIAL member. Same
+ *     physical fact as the pen: the barrier is broken and the contents
+ *     are exposed.
+ *   - BLISTER — every tablet sits in its own sealed foil cavity.
+ *     Pressing out tablet 1 does nothing to tablets 2..n. The carton
+ *     expiry is the only expiry.
+ *   - INHALER — a pressurised canister has no in-use limit at all, and
+ *     the dry-powder devices that do state months, not 30 days. Any
+ *     fixed default here would be a fabricated number.
+ *   - BOTTLE — a bottle of tablets has no in-use limit. A bottle of
+ *     suspension or drops does, but it is product-specific and the enum
+ *     cannot tell the two apart.
+ *   - OTHER — the backfill default for every row that never chose a
+ *     kind. Nothing about it says a limit exists, so none is invented.
+ *
+ * For every clock-less kind the printed expiry (clause 2) still applies
+ * in full — an unknown container is not an unbounded one. What it does
+ * not get is a deadline nobody entered, because writing stock off on a
+ * guess hides supply the user physically holds and mutes the low-stock
+ * signal that would have told them to reorder.
+ *
+ * ## Window length
+ *
+ * The window is fixed at 30 days per EMA EPAR §6.3 for Mounjaro
+ * KwikPen / Saxenda. The per-product window is NOT read from the
+ * drug-knowledge layer (`glp1-knowledge.ts`) even though it carries one
+ * (`inUse.maxDays`: 14 for Trulicity, 56 for Ozempic): the only bridge
+ * from an inventory row to a `Glp1DrugId` is a fuzzy match on the
+ * free-text `Medication.name` (`findDrugIdByBrand`), and a mismatch
+ * there would shorten a window and write stock off — the exact failure
+ * this module just removed. The state machine stays window-agnostic:
+ * it accepts the window length as input, so a caller that can name the
+ * product with certainty can pass its own.
  */
 
-import type { MedicationInventoryState } from "@/generated/prisma/client";
+import type {
+  MedicationContainerType,
+  MedicationInventoryState,
+} from "@/generated/prisma/client";
 
 /** Default in-use window per EMA EPAR §6.3 for the strictest GLP-1
- *  agonists (Mounjaro, Saxenda, Trulicity). 30 days. */
+ *  agonists (Mounjaro, Saxenda). 30 days. */
 export const DEFAULT_IN_USE_WINDOW_DAYS = 30;
+
+/**
+ * Container kinds whose first opening starts a degradation clock — the
+ * ones that are a single sealed reservoir breached by the first dose.
+ * Every other kind holds individually sealed units (or an unknown
+ * arrangement) and expires only on its printed date. See the module
+ * docblock for the per-member reasoning.
+ */
+export const IN_USE_CLOCK_CONTAINER_TYPES = [
+  "PEN",
+  "AMPOULE",
+] as const satisfies readonly MedicationContainerType[];
+
+/** Does opening this container start the in-use window? */
+export function hasInUseClock(containerType: MedicationContainerType): boolean {
+  return (IN_USE_CLOCK_CONTAINER_TYPES as readonly string[]).includes(
+    containerType,
+  );
+}
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -44,6 +108,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  */
 export interface InventoryItemView {
   state: MedicationInventoryState;
+  containerType: MedicationContainerType;
   unitsTotal: number;
   unitsRemaining: number;
   firstUseAt: Date | null;
@@ -51,7 +116,7 @@ export interface InventoryItemView {
 }
 
 /**
- * Resolve the canonical state for a pen / vial given the wall clock.
+ * Resolve the canonical state for a container given the wall clock.
  *
  * The function is pure — given the same input it always returns the
  * same state — so the caller can re-evaluate as often as it wants
@@ -75,40 +140,52 @@ export function computeInventoryState(
 
   // (2) Printed expiry trumps the in-use clock. A container whose
   // carton expiry has lapsed is EXPIRED even if it was never opened.
+  // This clause applies to EVERY container kind.
   if (item.printedExpiry && nowMs > item.printedExpiry.getTime()) {
     return "EXPIRED";
   }
 
-  // (3) In-use clock blew. firstUseAt + window < now ⇒ EXPIRED.
+  // (3) In-use clock blew — only for the kinds that have one.
+  // firstUseAt + window < now ⇒ EXPIRED.
   if (item.firstUseAt) {
-    const inUseDeadlineMs =
-      item.firstUseAt.getTime() + inUseWindowDays * MS_PER_DAY;
-    if (nowMs > inUseDeadlineMs) {
-      return "EXPIRED";
+    if (hasInUseClock(item.containerType)) {
+      const inUseDeadlineMs =
+        item.firstUseAt.getTime() + inUseWindowDays * MS_PER_DAY;
+      if (nowMs > inUseDeadlineMs) {
+        return "EXPIRED";
+      }
     }
-    // (4) Has been opened but still inside the window.
+    // (4) Has been opened. A clock-less container stays IN_USE for as
+    // long as it holds units — "opened" is a true statement about it,
+    // it just carries no deadline of its own.
     return "IN_USE";
   }
 
-  // (5) Refrigerated, unopened.
+  // (5) Sealed, unopened.
   return "ACTIVE";
 }
 
 /**
- * Compute the `expiresAt` column. It's the min of the in-use
- * deadline (firstUseAt + window) and the printed expiry — whichever
- * lands first. If the container has never been opened we fall back to
- * the printed expiry alone (in-use clock hasn't started). If neither
- * is set we return null so the daily expire-cron has nothing to scan.
+ * Compute the `expiresAt` column — the instant the daily expire-cron
+ * scans for.
+ *
+ * For a container with a post-opening clock it is the min of the in-use
+ * deadline (firstUseAt + window) and the printed expiry, whichever
+ * lands first. For every other kind the printed expiry is the only
+ * deadline there is, so an opened blister with no printed date carries
+ * no `expiresAt` at all and the cron never sees it. If neither applies
+ * we return null.
  */
 export function computeExpiresAt(
   firstUseAt: Date | null,
   printedExpiry: Date | null,
+  containerType: MedicationContainerType,
   inUseWindowDays: number = DEFAULT_IN_USE_WINDOW_DAYS,
 ): Date | null {
-  const inUseDeadline = firstUseAt
-    ? new Date(firstUseAt.getTime() + inUseWindowDays * MS_PER_DAY)
-    : null;
+  const inUseDeadline =
+    firstUseAt && hasInUseClock(containerType)
+      ? new Date(firstUseAt.getTime() + inUseWindowDays * MS_PER_DAY)
+      : null;
 
   if (inUseDeadline && printedExpiry) {
     return inUseDeadline.getTime() < printedExpiry.getTime()
@@ -116,52 +193,4 @@ export function computeExpiresAt(
       : printedExpiry;
   }
   return inUseDeadline ?? printedExpiry ?? null;
-}
-
-/**
- * Whole-days remaining in the 30-day in-use window, rounded toward
- * zero. Returns null when the container is not currently IN_USE (the
- * UI surface for ACTIVE / EXPIRED / USED_UP shows a different label).
- *
- * The day count is computed against the in-use deadline only —
- * the printed expiry is its own separate countdown surfaced as the
- * "Carton expires {date}" label. This split avoids the UI lying to
- * the user when the printed expiry is more imminent than the
- * in-use deadline (the EXPIRED transition is still correct via
- * `computeInventoryState`, but the day-count chip shows the
- * 30-day-clock number).
- *
- * v1.4.25 W21 Fix-N — widened to accept either the full
- * `InventoryItemView` (server-side path: state-machine-gated, returns
- * null for non-IN_USE) OR a thin `{ firstUseAt }` shape (caller
- * already knows state is IN_USE so the gate is a no-op). The widening
- * collapsed an earlier reimplementation in the now-retired web
- * inventory surface; the helper stays because the GLP-1 details
- * endpoint still computes weeksOfSupply for iOS.
- */
-export function daysRemainingInUse(
-  item: InventoryItemView | { firstUseAt: Date | string | null },
-  nowMs: number,
-  inUseWindowDays: number = DEFAULT_IN_USE_WINDOW_DAYS,
-): number | null {
-  const firstUseRaw = item.firstUseAt;
-  if (!firstUseRaw) return null;
-  const firstUseAt =
-    firstUseRaw instanceof Date ? firstUseRaw : new Date(firstUseRaw);
-  // Only the full view triggers the state-machine gate; thin callers
-  // (the inventory disclosure UI on the medication card) supply just
-  // `firstUseAt` and have already filtered on state === "IN_USE" before
-  // reaching here. The gate is silently skipped for the thin form.
-  if ("state" in item && "unitsRemaining" in item) {
-    const state = computeInventoryState(
-      { ...item, firstUseAt },
-      nowMs,
-      inUseWindowDays,
-    );
-    if (state !== "IN_USE") return null;
-  }
-  const deadlineMs = firstUseAt.getTime() + inUseWindowDays * MS_PER_DAY;
-  const remainingMs = deadlineMs - nowMs;
-  if (remainingMs <= 0) return 0;
-  return Math.floor(remainingMs / MS_PER_DAY);
 }

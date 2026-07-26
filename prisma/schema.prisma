@@ -2955,9 +2955,17 @@ enum MedicationInventoryState {
 }
 
 /// v1.16.10 — what kind of physical container an inventory item is.
-/// Display-level only (no state-machine behaviour hangs off it); the
-/// register dialog defaults it from the medication's delivery form
+/// The register dialog defaults it from the medication's delivery form
 /// (INJECTION → PEN, ORAL → BLISTER, else OTHER).
+///
+/// The kind decides whether opening the container starts a
+/// post-opening degradation clock: PEN and AMPOULE are one sealed
+/// reservoir that the first dose breaches, so they carry the 30-day
+/// in-use window; BLISTER / INHALER / BOTTLE / OTHER hold individually
+/// sealed units (or an unidentified arrangement) and expire only on
+/// their printed date. See `IN_USE_CLOCK_CONTAINER_TYPES` in
+/// `src/lib/medications/inventory/state-machine.ts` for the per-member
+/// reasoning.
 enum MedicationContainerType {
   PEN
   AMPOULE
@@ -2976,6 +2984,8 @@ model MedicationInventoryItem {
   state          MedicationInventoryState @default(ACTIVE)
   /// v1.16.10 — container kind (pen / ampoule / blister pack / …).
   /// Backfilled PEN for items on INJECTION medications, OTHER otherwise.
+  /// Read by the state machine: PEN / AMPOULE carry the post-opening
+  /// clock, the rest expire only on `printedExpiry`.
   containerType  MedicationContainerType  @default(OTHER) @map("container_type")
   /// Units the container shipped with (v1.16.10 — renamed from
   /// `dosesTotal`; the DB column stays `doses_total`). A unit is one
@@ -2989,10 +2999,12 @@ model MedicationInventoryItem {
   /// (v1.16.10 — renamed from `dosesRemaining`; column stays
   /// `doses_remaining`). v1.16.12 (#316) — Decimal for fractional dosing.
   unitsRemaining Decimal                  @map("doses_remaining") @db.Decimal(12, 4)
-  /// NULL until the pen is first opened. Sets the 30-day in-use
-  /// clock per EMA EPAR §6.3.
+  /// NULL until the container is first opened. On a PEN / AMPOULE it
+  /// also sets the 30-day in-use clock per EMA EPAR §6.3; on the other
+  /// kinds it records that the pack is open and nothing more.
   firstUseAt     DateTime?                @map("first_use_at")
-  /// Persisted = MIN(firstUseAt + 30 days, printedExpiry). Persisting
+  /// Persisted = MIN(firstUseAt + 30 days, printedExpiry) for a
+  /// clock-bearing container, else printedExpiry alone. Persisting
   /// rather than deriving keeps the daily "expire-stale" cron a
   /// single indexed scan.
   expiresAt      DateTime?                @map("expires_at")

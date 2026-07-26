@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  IN_USE_CLOCK_CONTAINER_TYPES,
   computeExpiresAt,
   computeInventoryState,
-  daysRemainingInUse,
+  hasInUseClock,
   type InventoryItemView,
 } from "../state-machine";
+import { MEDICATION_CONTAINER_TYPE_VALUES } from "@/lib/validations/medication/inventory";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const NOW = new Date("2026-05-14T12:00:00Z");
@@ -16,6 +18,7 @@ function makeItem(
 ): InventoryItemView {
   return {
     state: "ACTIVE",
+    containerType: "PEN",
     unitsTotal: 4,
     unitsRemaining: 4,
     firstUseAt: null,
@@ -23,6 +26,20 @@ function makeItem(
     ...overrides,
   };
 }
+
+describe("hasInUseClock", () => {
+  it("covers every container kind the enum declares", () => {
+    // A new enum member must be classified deliberately, not inherit a
+    // default. This pins the full partition.
+    const withClock = MEDICATION_CONTAINER_TYPE_VALUES.filter(hasInUseClock);
+    const withoutClock = MEDICATION_CONTAINER_TYPE_VALUES.filter(
+      (ct) => !hasInUseClock(ct),
+    );
+    expect(withClock).toEqual(["PEN", "AMPOULE"]);
+    expect(withoutClock).toEqual(["BLISTER", "INHALER", "BOTTLE", "OTHER"]);
+    expect([...IN_USE_CLOCK_CONTAINER_TYPES]).toEqual(withClock);
+  });
+});
 
 describe("computeInventoryState", () => {
   it("returns ACTIVE for a fresh refrigerated pen", () => {
@@ -36,8 +53,16 @@ describe("computeInventoryState", () => {
     expect(computeInventoryState(item, NOW_MS)).toBe("IN_USE");
   });
 
-  it("returns EXPIRED when the in-use clock blew past 30 days", () => {
+  it("returns EXPIRED when the in-use clock blew past 30 days on a pen", () => {
     const item = makeItem({
+      firstUseAt: new Date(NOW_MS - 31 * MS_PER_DAY),
+    });
+    expect(computeInventoryState(item, NOW_MS)).toBe("EXPIRED");
+  });
+
+  it("returns EXPIRED when the in-use clock blew past 30 days on an ampoule", () => {
+    const item = makeItem({
+      containerType: "AMPOULE",
       firstUseAt: new Date(NOW_MS - 31 * MS_PER_DAY),
     });
     expect(computeInventoryState(item, NOW_MS)).toBe("EXPIRED");
@@ -89,99 +114,104 @@ describe("computeInventoryState", () => {
     });
     expect(computeInventoryState(item, NOW_MS)).toBe("IN_USE");
   });
+
+  describe("containers without a post-opening clock", () => {
+    // The reported defect: a blister of 54 tablets, no printed expiry,
+    // opened well over 30 days ago. Pressing out the first tablet must
+    // not write the other 53 off.
+    it("keeps a long-opened blister with no printed expiry IN_USE", () => {
+      const item = makeItem({
+        containerType: "BLISTER",
+        unitsTotal: 60,
+        unitsRemaining: 54,
+        firstUseAt: new Date(NOW_MS - 45 * MS_PER_DAY),
+        printedExpiry: null,
+      });
+      expect(computeInventoryState(item, NOW_MS)).toBe("IN_USE");
+    });
+
+    // The counterpart the same fix must not weaken.
+    it("still expires an opened pen past its window", () => {
+      const item = makeItem({
+        containerType: "PEN",
+        unitsTotal: 60,
+        unitsRemaining: 54,
+        firstUseAt: new Date(NOW_MS - 45 * MS_PER_DAY),
+        printedExpiry: null,
+      });
+      expect(computeInventoryState(item, NOW_MS)).toBe("EXPIRED");
+    });
+
+    it.each(["BLISTER", "INHALER", "BOTTLE", "OTHER"] as const)(
+      "keeps a long-opened %s IN_USE",
+      (containerType) => {
+        const item = makeItem({
+          containerType,
+          firstUseAt: new Date(NOW_MS - 400 * MS_PER_DAY),
+        });
+        expect(computeInventoryState(item, NOW_MS)).toBe("IN_USE");
+      },
+    );
+
+    it("still honours the printed expiry on a clock-less container", () => {
+      const item = makeItem({
+        containerType: "BLISTER",
+        firstUseAt: new Date(NOW_MS - 45 * MS_PER_DAY),
+        printedExpiry: new Date(NOW_MS - 1 * MS_PER_DAY),
+      });
+      expect(computeInventoryState(item, NOW_MS)).toBe("EXPIRED");
+    });
+
+    it("keeps a clock-less container ACTIVE while its printed expiry is ahead", () => {
+      const item = makeItem({
+        containerType: "BOTTLE",
+        printedExpiry: new Date(NOW_MS + 200 * MS_PER_DAY),
+      });
+      expect(computeInventoryState(item, NOW_MS)).toBe("ACTIVE");
+    });
+  });
 });
 
 describe("computeExpiresAt", () => {
   it("returns null when neither firstUseAt nor printedExpiry is set", () => {
-    expect(computeExpiresAt(null, null)).toBeNull();
+    expect(computeExpiresAt(null, null, "PEN")).toBeNull();
   });
 
   it("returns the printed expiry when only printedExpiry is set", () => {
     const printed = new Date("2027-01-15T00:00:00Z");
-    expect(computeExpiresAt(null, printed)).toEqual(printed);
+    expect(computeExpiresAt(null, printed, "PEN")).toEqual(printed);
   });
 
-  it("returns firstUseAt + 30 days when only firstUseAt is set", () => {
+  it("returns firstUseAt + 30 days when only firstUseAt is set on a pen", () => {
     const firstUse = new Date("2026-05-01T00:00:00Z");
-    const result = computeExpiresAt(firstUse, null);
+    const result = computeExpiresAt(firstUse, null, "PEN");
     expect(result?.getTime()).toBe(firstUse.getTime() + 30 * MS_PER_DAY);
   });
 
   it("returns the in-use deadline when it lands before printed expiry", () => {
     const firstUse = new Date("2026-05-01T00:00:00Z");
     const printed = new Date("2027-01-15T00:00:00Z");
-    const result = computeExpiresAt(firstUse, printed);
+    const result = computeExpiresAt(firstUse, printed, "PEN");
     expect(result?.getTime()).toBe(firstUse.getTime() + 30 * MS_PER_DAY);
   });
 
   it("returns the printed expiry when it lands before the in-use deadline", () => {
     const firstUse = new Date("2026-05-01T00:00:00Z");
     const printed = new Date("2026-05-10T00:00:00Z");
-    const result = computeExpiresAt(firstUse, printed);
+    const result = computeExpiresAt(firstUse, printed, "PEN");
     expect(result).toEqual(printed);
   });
-});
 
-describe("daysRemainingInUse", () => {
-  it("returns null for an ACTIVE (unopened) pen", () => {
-    expect(daysRemainingInUse(makeItem(), NOW_MS)).toBeNull();
+  it("returns null for an opened blister with no printed expiry", () => {
+    // Nothing for the daily expire-cron's indexed scan to find — which
+    // is the point: there is no deadline to scan for.
+    const firstUse = new Date("2026-05-01T00:00:00Z");
+    expect(computeExpiresAt(firstUse, null, "BLISTER")).toBeNull();
   });
 
-  it("returns null for an EXPIRED pen (clock blew)", () => {
-    const item = makeItem({
-      firstUseAt: new Date(NOW_MS - 31 * MS_PER_DAY),
-    });
-    expect(daysRemainingInUse(item, NOW_MS)).toBeNull();
-  });
-
-  it("returns null for a USED_UP pen", () => {
-    const item = makeItem({
-      unitsRemaining: 0,
-      firstUseAt: new Date(NOW_MS - 5 * MS_PER_DAY),
-    });
-    expect(daysRemainingInUse(item, NOW_MS)).toBeNull();
-  });
-
-  it("returns 25 days when the pen was opened 5 days ago", () => {
-    const item = makeItem({
-      firstUseAt: new Date(NOW_MS - 5 * MS_PER_DAY),
-    });
-    expect(daysRemainingInUse(item, NOW_MS)).toBe(25);
-  });
-
-  it("returns 0 on the last day of the window (still IN_USE)", () => {
-    // 29 days + 23h59m elapsed — under one day left, floor → 0.
-    const item = makeItem({
-      firstUseAt: new Date(NOW_MS - 30 * MS_PER_DAY + 60_000),
-    });
-    expect(daysRemainingInUse(item, NOW_MS)).toBe(0);
-  });
-
-  describe("thin-shape overload (v1.4.25 W21 Fix-N)", () => {
-    // The medication-detail card calls this with just `{ firstUseAt }`
-    // because it has already filtered the list to state === "IN_USE"
-    // before reaching the helper. The thin overload skips the
-    // state-machine gate.
-    it("accepts a thin `{ firstUseAt: Date }` shape", () => {
-      const firstUseAt = new Date(NOW_MS - 5 * MS_PER_DAY);
-      expect(daysRemainingInUse({ firstUseAt }, NOW_MS)).toBe(25);
-    });
-
-    it("accepts a thin `{ firstUseAt: string }` ISO shape", () => {
-      const firstUseAt = new Date(NOW_MS - 10 * MS_PER_DAY).toISOString();
-      expect(daysRemainingInUse({ firstUseAt }, NOW_MS)).toBe(20);
-    });
-
-    it("returns null when the thin firstUseAt is null", () => {
-      expect(daysRemainingInUse({ firstUseAt: null }, NOW_MS)).toBeNull();
-    });
-
-    it("skips the state-machine gate for the thin form", () => {
-      // 31 days past the window — the full-view path would return
-      // null here (state ≠ IN_USE). The thin form returns 0 because
-      // the caller has already gated on IN_USE.
-      const firstUseAt = new Date(NOW_MS - 31 * MS_PER_DAY);
-      expect(daysRemainingInUse({ firstUseAt }, NOW_MS)).toBe(0);
-    });
+  it("returns the printed expiry alone for an opened blister that has one", () => {
+    const firstUse = new Date("2026-05-01T00:00:00Z");
+    const printed = new Date("2027-01-15T00:00:00Z");
+    expect(computeExpiresAt(firstUse, printed, "BLISTER")).toEqual(printed);
   });
 });

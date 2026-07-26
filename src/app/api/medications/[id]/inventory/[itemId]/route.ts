@@ -2,7 +2,8 @@
  * v1.4.25 W19b — per-pen inventory item operations.
  *
  *   PATCH  /api/medications/[id]/inventory/[itemId]
- *     - mark-as-first-use (starts the 30-day clock manually)
+ *     - set or clear the opening date (`markAsFirstUseAt`); for a pen
+ *       or an ampoule it also starts / stops the in-use clock
  *     - mark-as-used-up (terminal — operator override when a pen is
  *       physically discarded but the dose ledger hasn't reached zero)
  *     - update printed expiry (e.g. carton label correction)
@@ -117,11 +118,17 @@ export const PATCH = apiHandler(
       let nextUnitsRemaining: number = Number(existing.unitsRemaining);
       let nextPrintedExpiry = existing.printedExpiry;
 
-      if (markAsFirstUseAt) {
-        // The clock can be set manually if the user opened the pen
-        // without logging an intake event.
+      if (markAsFirstUseAt !== undefined) {
+        // The opening date can be set manually if the user opened the
+        // container without logging an intake event — and cleared
+        // (null) when it was never opened at all. An auto-open the
+        // consumption hook wrote from a back-dated intake is the one
+        // the user most often has to take back, and until now nothing
+        // could unset it.
         nextFirstUseAt = markAsFirstUseAt;
-        if (nextState === "ACTIVE") nextState = "IN_USE";
+        if (nextState === "ACTIVE" && markAsFirstUseAt !== null) {
+          nextState = "IN_USE";
+        }
       }
 
       if (printedExpiry !== undefined) {
@@ -145,7 +152,11 @@ export const PATCH = apiHandler(
         nextState = "USED_UP";
       }
 
-      const nextExpiresAt = computeExpiresAt(nextFirstUseAt, nextPrintedExpiry);
+      const nextExpiresAt = computeExpiresAt(
+        nextFirstUseAt,
+        nextPrintedExpiry,
+        existing.containerType,
+      );
 
       // Re-run the canonical state machine over the composed next-row
       // view. The clause-by-clause updates above set the state ad-hoc
@@ -160,6 +171,7 @@ export const PATCH = apiHandler(
       nextState = computeInventoryState(
         {
           state: nextState,
+          containerType: existing.containerType,
           unitsTotal: Number(existing.unitsTotal),
           unitsRemaining: nextUnitsRemaining,
           firstUseAt: nextFirstUseAt,

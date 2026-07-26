@@ -290,12 +290,12 @@ export const medicationInventoryItemResource = z
     state: z
       .enum(["ACTIVE", "IN_USE", "EXPIRED", "USED_UP"])
       .describe(
-        "Container lifecycle state. ACTIVE = unopened; IN_USE = opened (30-day in-use clock running); EXPIRED = printed expiry or in-use window lapsed with units left; USED_UP = drained (terminal).",
+        "Container lifecycle state. ACTIVE = unopened; IN_USE = opened (on a PEN / AMPOULE the 30-day in-use clock is running); EXPIRED = printed expiry lapsed, or the in-use window lapsed on a clock-bearing container, with units left; USED_UP = drained (terminal).",
       ),
     containerType: z
       .enum(MEDICATION_CONTAINER_TYPE_VALUES)
       .describe(
-        "Kind of physical container (PEN / AMPOULE / BLISTER / INHALER / BOTTLE / OTHER). Display-level classification; defaults to OTHER.",
+        "Kind of physical container (PEN / AMPOULE / BLISTER / INHALER / BOTTLE / OTHER); defaults to OTHER. PEN and AMPOULE are the sealed reservoirs the first dose breaches, so opening one starts a 30-day post-opening window; BLISTER / INHALER / BOTTLE / OTHER hold individually sealed units and expire only on their printed date.",
       ),
     unitsTotal: z
       .number()
@@ -313,13 +313,13 @@ export const medicationInventoryItemResource = z
       .datetime({ offset: true })
       .nullable()
       .describe(
-        "Instant the container was first used. NULL until opened; starts the 30-day in-use clock.",
+        "Instant the container was first used. NULL until opened. On a PEN / AMPOULE it starts the 30-day in-use clock; on the other kinds it only records that the pack is open.",
       ),
     expiresAt: z.iso
       .datetime({ offset: true })
       .nullable()
       .describe(
-        "Persisted MIN(firstUseAt + 30 days, printedExpiry). NULL when neither clock has started.",
+        "Persisted MIN(firstUseAt + 30 days, printedExpiry) for a clock-bearing container (PEN / AMPOULE), else printedExpiry alone. NULL when no deadline applies — an opened blister with no printed date has none.",
       ),
     printedExpiry: z.iso.datetime({ offset: true }).nullable(),
     purchasedAt: z.iso.datetime({ offset: true }).nullable(),

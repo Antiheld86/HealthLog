@@ -39,6 +39,7 @@ interface FakeItem {
   userId: string;
   medicationId: string;
   state: "ACTIVE" | "IN_USE" | "EXPIRED" | "USED_UP";
+  containerType: "PEN" | "AMPOULE" | "BLISTER" | "INHALER" | "BOTTLE" | "OTHER";
   unitsTotal: number;
   unitsRemaining: number;
   firstUseAt: Date | null;
@@ -217,6 +218,9 @@ function item(overrides: Partial<FakeItem> = {}): FakeItem {
     userId: "user-1",
     medicationId: "med-1",
     state: "ACTIVE",
+    // These fixtures model the pen case — the kind that carries the
+    // post-opening clock. The clock-less kinds get their own scenarios.
+    containerType: "PEN",
     unitsTotal: 10,
     unitsRemaining: 10,
     firstUseAt: null,
@@ -417,6 +421,29 @@ describe("consumeForIntake", () => {
     expect(state.events[0].inventoryConsumption).toEqual([
       { itemId: "sealed", units: 1 },
     ]);
+  });
+
+  it("leaves a backdated auto-open of a blister IN_USE with no expiresAt", async () => {
+    // Same backdated take against a tablet pack: every remaining
+    // tablet is still in its own sealed cavity, so opening the pack
+    // starts no clock and the cron gets no deadline to scan for.
+    const backdated = new Date(NOW.getTime() - 40 * MS_PER_DAY);
+    const state: FakeState = {
+      unitsPerDose: 1,
+      events: [takenEvent({ takenAt: backdated })],
+      items: [item({ id: "sealed", containerType: "BLISTER" })],
+    };
+    const client = makeClient(state);
+    await consumeForIntake({
+      ...consumeArgs(client),
+      intakeAt: backdated,
+    });
+
+    const opened = state.items[0];
+    expect(opened.firstUseAt).toEqual(backdated);
+    expect(opened.state).toBe("IN_USE");
+    expect(opened.expiresAt).toBeNull();
+    expect(opened.unitsRemaining).toBe(9);
   });
 
   it("spills across containers when the open one runs dry", async () => {

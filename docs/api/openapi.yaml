@@ -12943,8 +12943,9 @@ components:
           description: Units the container ships with (tablets / ampoules / puffs; 1–1000, fractional allowed for split-pill
             packs). Dose-derived readouts divide by the medication's `unitsPerDose`.
         containerType:
-          description: Kind of physical container (PEN / AMPOULE / BLISTER / INHALER / BOTTLE / OTHER). Display-level only;
-            defaults to OTHER.
+          description: Kind of physical container (PEN / AMPOULE / BLISTER / INHALER / BOTTLE / OTHER). Defaults to OTHER. PEN and
+            AMPOULE are the sealed reservoirs the first dose breaches, so they carry a 30-day post-opening window; every
+            other kind expires only on its printed date.
           type: string
           enum:
             - PEN
@@ -12991,11 +12992,15 @@ components:
       type: object
       properties:
         markAsFirstUseAt:
-          description: Manually start the 30-day in-use clock (the user opened the container without logging an intake). ACTIVE
-            flips to IN_USE; a backdated instant whose window already lapsed lands EXPIRED.
-          type: string
-          format: date-time
-          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: Opening date of the container (the user opened it without logging an intake). ACTIVE flips to IN_USE.
+            `null` clears it — the container reads as unopened again, which is how a wrongly auto-opened row is
+            corrected. For a PEN or an AMPOULE this also starts / stops the 30-day in-use clock; other container kinds
+            carry no such clock and expire only on their printed date.
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
         markAsUsedUp:
           description: "Terminal override: zero the remaining units and mark the container USED_UP (physically discarded)."
           type: boolean
@@ -20474,8 +20479,9 @@ components:
             - IN_USE
             - EXPIRED
             - USED_UP
-          description: Container lifecycle state. ACTIVE = unopened; IN_USE = opened (30-day in-use clock running); EXPIRED =
-            printed expiry or in-use window lapsed with units left; USED_UP = drained (terminal).
+          description: Container lifecycle state. ACTIVE = unopened; IN_USE = opened (on a PEN / AMPOULE the 30-day in-use clock
+            is running); EXPIRED = printed expiry lapsed, or the in-use window lapsed on a clock-bearing container, with
+            units left; USED_UP = drained (terminal).
         containerType:
           type: string
           enum:
@@ -20485,8 +20491,10 @@ components:
             - INHALER
             - BOTTLE
             - OTHER
-          description: Kind of physical container (PEN / AMPOULE / BLISTER / INHALER / BOTTLE / OTHER). Display-level
-            classification; defaults to OTHER.
+          description: Kind of physical container (PEN / AMPOULE / BLISTER / INHALER / BOTTLE / OTHER); defaults to OTHER. PEN and
+            AMPOULE are the sealed reservoirs the first dose breaches, so opening one starts a 30-day post-opening
+            window; BLISTER / INHALER / BOTTLE / OTHER hold individually sealed units and expire only on their printed
+            date.
         unitsTotal:
           anyOf:
             - type: number
@@ -20509,14 +20517,16 @@ components:
               format: date-time
               pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
             - type: "null"
-          description: Instant the container was first used. NULL until opened; starts the 30-day in-use clock.
+          description: Instant the container was first used. NULL until opened. On a PEN / AMPOULE it starts the 30-day in-use
+            clock; on the other kinds it only records that the pack is open.
         expiresAt:
           anyOf:
             - type: string
               format: date-time
               pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
             - type: "null"
-          description: Persisted MIN(firstUseAt + 30 days, printedExpiry). NULL when neither clock has started.
+          description: Persisted MIN(firstUseAt + 30 days, printedExpiry) for a clock-bearing container (PEN / AMPOULE), else
+            printedExpiry alone. NULL when no deadline applies — an opened blister with no printed date has none.
         printedExpiry:
           anyOf:
             - type: string
