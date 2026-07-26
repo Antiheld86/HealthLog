@@ -13,6 +13,7 @@ export interface MedicationImportRow {
 }
 
 export interface MedicationImportQueueEntry {
+  scheduledFor: string;
   takenAt: string;
   idempotencyKey: string;
 }
@@ -35,6 +36,11 @@ export function buildMedicationImportEntries(
   return rows.map((row) => {
     const takenAt = new Date(`${row.datum}T${row.uhrzeit}`);
     return {
+      // This body carries one time per row and nothing to say which slot it
+      // belonged to, so every dose it describes is ad-hoc: anchored on itself,
+      // which is how HealthLog already records a dose that belongs to no slot.
+      // The export-reading route is the one that has both facts to give.
+      scheduledFor: takenAt.toISOString(),
       takenAt: takenAt.toISOString(),
       idempotencyKey: `import-${medicationId}-${takenAt.getTime()}`,
     };

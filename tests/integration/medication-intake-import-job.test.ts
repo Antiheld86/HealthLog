@@ -61,18 +61,22 @@ describe("medication intake import job — concurrent retry", () => {
     const payload: MedicationImportPayload = {
       entries: [
         {
+          scheduledFor: "2026-07-20T05:00:00.000Z",
           takenAt: "2026-07-20T05:00:00.000Z",
           idempotencyKey: `import-${medication.id}-1`,
         },
         {
+          scheduledFor: "2026-07-20T05:00:00.000Z",
           takenAt: "2026-07-20T05:00:00.000Z",
           idempotencyKey: `import-${medication.id}-1`,
         },
         {
+          scheduledFor: "2026-07-20T17:00:00.000Z",
           takenAt: "2026-07-20T17:00:00.000Z",
           idempotencyKey: `import-${medication.id}-2`,
         },
         {
+          scheduledFor: "2026-07-21T05:00:00.000Z",
           takenAt: "2026-07-21T05:00:00.000Z",
           idempotencyKey: `import-${medication.id}-3`,
         },
@@ -192,6 +196,7 @@ describe("medication intake import job — concurrent retry", () => {
     const payload: MedicationImportPayload = {
       entries: [
         {
+          scheduledFor: "2026-07-20T05:00:00.000Z",
           takenAt: "2026-07-20T05:00:00.000Z",
           idempotencyKey: `import-${medication.id}-final`,
         },

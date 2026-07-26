@@ -640,104 +640,104 @@ model User {
   passkeyUpgradeNudgeDismissed Boolean   @default(false) @map("passkey_upgrade_nudge_dismissed")
 
   // Relations
-  passkeys                    Passkey[]
-  sessions                    Session[]
-  challenges                  AuthChallenge[]
+  passkeys                       Passkey[]
+  sessions                       Session[]
+  challenges                     AuthChallenge[]
   // v1.23 — second-factor stores (kept separate from `passkeys`, which is the
   // passwordless-primary credential set; an MFA credential is meaningless
   // without the password).
-  mfaChallenges               MfaChallenge[]
-  mfaRecoveryCodes            MfaRecoveryCode[]
-  webauthnMfaCredentials      WebauthnMfaCredential[]
-  knownDevices                UserKnownDevice[]
+  mfaChallenges                  MfaChallenge[]
+  mfaRecoveryCodes               MfaRecoveryCode[]
+  webauthnMfaCredentials         WebauthnMfaCredential[]
+  knownDevices                   UserKnownDevice[]
   // v1.23 — "remember this device" trusted-device tokens. A trusted device
   // skips the second factor (factor 2 only) within the window; the password
   // is still required. Revoked when the second factor is removed.
-  trustedDevices              TrustedDevice[]
+  trustedDevices                 TrustedDevice[]
   // v1.30.34 — short-lived, token-bound step-up elevations. The Bearer-transport
   // equivalent of `Session.mfaVerifiedAt`: a token client re-proves a factor and
   // receives one single-use elevation good for one MFA-management call.
-  stepUpElevations            StepUpElevation[]
-  measurements                Measurement[]
-  medications                 Medication[]
-  intakeEvents                MedicationIntakeEvent[]
-  medicationPauseEras         MedicationPauseEra[]
-  apiTokens                   ApiToken[]
+  stepUpElevations               StepUpElevation[]
+  measurements                   Measurement[]
+  medications                    Medication[]
+  intakeEvents                   MedicationIntakeEvent[]
+  medicationPauseEras            MedicationPauseEra[]
+  apiTokens                      ApiToken[]
   // v1.24 — MCP remote OAuth 2.1 connections (1:N). Each row is a granted
   // authorization for an MCP client, audience-bound to health:read/health:write.
-  mcpOAuthConnections         McpOAuthConnection[]
-  refreshTokens               RefreshToken[]
+  mcpOAuthConnections            McpOAuthConnection[]
+  refreshTokens                  RefreshToken[]
   // v1.30.x — one-time native OIDC SSO handoff codes. Each row bridges the
   // browser-context OIDC callback to the cookie-less native token exchange.
-  oidcNativeHandoffs          OidcNativeHandoff[]
-  auditLogs                   AuditLog[]
-  withingsConnection          WithingsConnection?
+  oidcNativeHandoffs             OidcNativeHandoff[]
+  auditLogs                      AuditLog[]
+  withingsConnection             WithingsConnection?
   // v1.4.47 W6 — short-lived `(nonce → userId)` ledger backing the
   // Withings OAuth state check. The connect route mints a row with a
   // 10-minute TTL; the callback resolves the user via this relation
   // instead of parsing the cookie value, closing the L-1 audit gap
   // where the legacy `${user.id}:${nonce}` shape leaked the user id
   // into request logs / network captures.
-  withingsOAuthStates         WithingsOAuthState[]
+  withingsOAuthStates            WithingsOAuthState[]
   // v1.11.0 — WHOOP integration. Mirrors the Withings connection (1:1) +
   // OAuth-state ledger (1:N) relations.
-  whoopConnection             WhoopConnection?
-  whoopOAuthStates            WhoopOAuthState[]
-  whoopConnectTickets         WhoopConnectTicket[]
+  whoopConnection                WhoopConnection?
+  whoopOAuthStates               WhoopOAuthState[]
+  whoopConnectTickets            WhoopConnectTicket[]
   // v1.12.0 — Fitbit/Pixel integration. Mirrors the WHOOP connection (1:1) +
   // OAuth-state ledger (1:N) relations.
-  fitbitConnection            FitbitConnection?
-  fitbitOAuthStates           FitbitOAuthState[]
+  fitbitConnection               FitbitConnection?
+  fitbitOAuthStates              FitbitOAuthState[]
   // v1.27.0 — Google Health API integration (separate provider from the classic
   // Fitbit Web API above). Mirrors the connection (1:1) + OAuth-state ledger
   // (1:N) relations.
-  googleHealthConnection      GoogleHealthConnection?
-  googleHealthOAuthStates     GoogleHealthOAuthState[]
-  moodEntries                 MoodEntry[]
-  mentalHealthAssessments     MentalHealthAssessment[]
-  moodTagsCustom              MoodTag[]                    @relation("UserMoodTags")
-  moodTagCategoriesCustom     MoodTagCategory[]            @relation("UserMoodTagCategories")
-  moodTagsHidden              MoodTagHidden[]
-  notificationChannels        NotificationChannel[]
-  pushSubscriptions           PushSubscription[]
-  dataBackups                 DataBackup[]
-  achievements                UserAchievement[]
-  recommendationFeedback      RecommendationFeedback[]
-  idempotencyKeys             IdempotencyKey[]
-  devices                     Device[]
-  integrationStatuses         IntegrationStatus[]
-  coachConversations          CoachConversation[]
-  coachFacts                  CoachFact[]
-  coachPlans                  CoachPlan[]
-  coachReminders              CoachReminder[]
-  coachUsage                  CoachUsage[]
+  googleHealthConnection         GoogleHealthConnection?
+  googleHealthOAuthStates        GoogleHealthOAuthState[]
+  moodEntries                    MoodEntry[]
+  mentalHealthAssessments        MentalHealthAssessment[]
+  moodTagsCustom                 MoodTag[]                       @relation("UserMoodTags")
+  moodTagCategoriesCustom        MoodTagCategory[]               @relation("UserMoodTagCategories")
+  moodTagsHidden                 MoodTagHidden[]
+  notificationChannels           NotificationChannel[]
+  pushSubscriptions              PushSubscription[]
+  dataBackups                    DataBackup[]
+  achievements                   UserAchievement[]
+  recommendationFeedback         RecommendationFeedback[]
+  idempotencyKeys                IdempotencyKey[]
+  devices                        Device[]
+  integrationStatuses            IntegrationStatus[]
+  coachConversations             CoachConversation[]
+  coachFacts                     CoachFact[]
+  coachPlans                     CoachPlan[]
+  coachReminders                 CoachReminder[]
+  coachUsage                     CoachUsage[]
   // v1.4.25 W8d — workout passthrough (Apple HKWorkout / Withings
   // getworkouts / future Strava). Schema lands now so the v1.5 iOS
   // session can build against a stable DTO. Routes hang off Workout
   // (1:1), not User — the User → WorkoutRoute path is two hops by
   // design.
-  workouts                    Workout[]
+  workouts                       Workout[]
   // v1.4.25 W8d — personal records (schema only; detection worker
   // lands in a later release). The GET /api/personal-records route
   // ships with v1.4.25 so the iOS app can build its query path
   // against a stable contract.
-  personalRecords             PersonalRecord[]
+  personalRecords                PersonalRecord[]
   // Today rail dismiss ledger — observational PriorityItem kinds only.
-  dismissedPriorityItems      DismissedPriorityItem[]
+  dismissedPriorityItems         DismissedPriorityItem[]
   // v1.4.25 W19b — per-pen / per-vial inventory entities, the
   // companion to the running-sum MedicationInventoryEvent ledger.
   // Carries the EMA §6.3 30-day in-use clock per opened pen.
-  inventoryItems              MedicationInventoryItem[]
+  inventoryItems                 MedicationInventoryItem[]
   // v1.4.25 W19d — GLP-1 side-effect logbook. 21-entry × 5-category
   // EMA EPAR §4.8-derived taxonomy with 1-5 Likert severity. Daily
   // capture (not per-shot) so delayed-onset symptoms map to their
   // actual occurrence time.
-  medicationSideEffects       MedicationSideEffect[]
+  medicationSideEffects          MedicationSideEffect[]
   // v1.4.34 — Apple Health `export.zip` import jobs. Mirrors the
   // pg-boss job state so the polling endpoint can read live per-
   // phase progress without round-tripping through pg-boss internals.
-  importJobs                  ImportJob[]
-  medicationIntakeImportJobs MedicationIntakeImportJob[]
+  importJobs                     ImportJob[]
+  medicationIntakeImportJobs     MedicationIntakeImportJob[]
   // v1.5.0 — persistent measurement rollup table. Carries the
   // count/min/max/mean/sd/slope/r2 stats per (type, granularity,
   // bucketStart) so the analytics + comprehensive read paths bypass
@@ -745,112 +745,112 @@ model User {
   // multi-instance fan-out. Populated synchronously on the DAY
   // granularity from the measurement write hooks; WEEK/MONTH/YEAR
   // are enqueued through pg-boss for the worker to fold.
-  measurementRollups          MeasurementRollup[]
+  measurementRollups             MeasurementRollup[]
   // v0.5.4 ios-coord — per-day dedup ledger for MOOD_REMINDER pushes.
   // One row per (user, local date) the worker has nudged. Prevents
   // a second push when the cron rechecks the same hour later in the
   // 22:00 window (the cron fires every 15 min — without the ledger
   // a user could see three pushes back-to-back).
-  moodReminderDispatches      MoodReminderDispatch[]
+  moodReminderDispatches         MoodReminderDispatch[]
   // v1.4.39 W-MOOD — per-(user, granularity, bucket) mood rollup. New
   // tier behind the mood-analytics read path; per-write hooks fold
   // MoodEntry mutations into the DAY granularity inline so the next
   // read serves from this table instead of the unbounded
   // MoodEntry.findMany walk.
-  moodEntryRollups            MoodEntryRollup[]
+  moodEntryRollups               MoodEntryRollup[]
   // v1.4.39 W-MED — per-(user, medication, day) compliance rollup.
   // Per-write hook on MedicationIntakeEvent mutations + the scheduler
   // keep the row in sync so `/api/medications/intake?scope=compliance`
   // and `computeUserHealthScoreFastPath` skip the per-event findMany.
-  medicationComplianceRollups MedicationComplianceRollup[]
+  medicationComplianceRollups    MedicationComplianceRollup[]
   // v1.4.40 SB-10 — AI consent receipts the iOS app POSTs when the user
   // grants AI processing during onboarding. Persisted audit trail
   // covers App-Store Guideline 5.1.2(i) ("data-collection consent must
   // be verifiable") plus the operator's GDPR Art. 7 documentation
   // burden. Append-only — a user revoking + re-granting consent mints
   // a fresh row so the timeline reads chronologically.
-  consentReceipts             ConsentReceipt[]
+  consentReceipts                ConsentReceipt[]
   // v1.4.49 — per-attempt push-delivery ledger. Every sender (APNS,
   // WEB_PUSH, TELEGRAM, NTFY) writes one fire-and-forget row per
   // dispatch so the admin diagnostic endpoint can return the trailing
   // 20 attempts ordered by recency. Daily prune at 03:35 Europe/Berlin
   // retires rows older than 90 days (see `handlePushAttemptCleanup` in
   // `reminder-worker.ts`).
-  pushAttempts                PushAttempt[]
+  pushAttempts                   PushAttempt[]
   // v1.10.3 — per-(user, day) Strain personal-anchor cache (day-total
   // TRIMP + running EWMA reference) so the nightly Strain engine anchors
   // the 0–100 map to the user's own training load without re-integrating
   // the 42-day chronic window of HR series each night.
-  strainTrimpCache            StrainTrimpCache[]
+  strainTrimpCache               StrainTrimpCache[]
   // v1.11.0 — owner-minted clinician share links. Each row grants a
   // scoped, time-limited, revocable read view of the health record to a
   // clinician holding the raw `hls_` token (stored only as an HMAC hash).
-  clinicianShareLinks         ClinicianShareLink[]
+  clinicianShareLinks            ClinicianShareLink[]
   // v1.11.0 W1 — durable per-provider AI-health ledger (one row per
   // provider chain entry) so a known-bad credential is negatively cached
   // across workers instead of re-burning a 401 every generation.
-  providerHealth              ProviderHealth[]
+  providerHealth                 ProviderHealth[]
   // v1.11.0 W3 — one durable period-narrative row per (period, locale).
   // Delete/regenerate-clean; the generated prose is AES-256-GCM at rest.
-  insightNarratives           InsightNarrative[]
+  insightNarratives              InsightNarrative[]
   // v1.31.0 — the data-arrival spine's durable per-day reaction marker. One
   // row per (kind, local day); the unique index IS the once-per-kind-per-day
   // claim every reaction surface reads. Retained 14 days.
-  arrivalReactions            ArrivalReaction[]
-  workoutInsights             WorkoutInsight[]
+  arrivalReactions               ArrivalReaction[]
+  workoutInsights                WorkoutInsight[]
   workoutInsightGenerationClaims WorkoutInsightGenerationClaim[]
   // v1.17.1 — preventive-care / measurement (Vorsorge) reminders. One row
   // per user-created reminder ("BP every 7 days", "annual blood panel").
   // Server computes the canonical `nextDueAt`; the cron fires through the
   // existing notification dispatcher. Soft-deleted.
-  measurementReminders        MeasurementReminder[]
+  measurementReminders           MeasurementReminder[]
   // v1.17.1 — minimal structured lab store (LDL, HbA1c, ferritin, TSH, …)
   // that pairs with the Vorsorge "annual blood panel" reminder so a result
   // has somewhere to land. Soft-deleted.
-  labResults                  LabResult[]
+  labResults                     LabResult[]
   // v1.19.0 — user-scoped biomarker catalog (canonical name/unit/range per
   // marker); LabResult rows link to a Biomarker for the resolved range/unit.
-  biomarkers                  Biomarker[]
+  biomarkers                     Biomarker[]
   // v1.25.5 — user-defined custom metrics. A separate generic store
   // (catalog + values), fully isolated from the closed MeasurementType
   // system: not synced, not in FHIR, not in AI insights — log + chart only.
-  customMetrics               CustomMetric[]
-  customMetricEntries         CustomMetricEntry[]
+  customMetrics                  CustomMetric[]
+  customMetricEntries            CustomMetricEntry[]
   // v1.19.0 — illness / condition journal (born-gated by the module system).
   // IllnessEpisode is the soft-deleted episode row; IllnessDayLog is the
   // per-day timeline mirroring the CycleDayLog shape.
-  illnessEpisodes             IllnessEpisode[]
-  illnessDayLogs              IllnessDayLog[]
+  illnessEpisodes                IllnessEpisode[]
+  illnessDayLogs                 IllnessDayLog[]
   // v1.25 (W-RECORDS) — structured health-record entries. Allergies map to
   // FHIR AllergyIntolerance; family-history entries map to FHIR
   // FamilyMemberHistory. Reference records (not time-series signals); the
   // sensitive free-text fields are encrypted at rest.
-  allergies                   Allergy[]
-  familyHistory               FamilyHistoryEntry[]
+  allergies                      Allergy[]
+  familyHistory                  FamilyHistoryEntry[]
   // v1.25 (W-ENV) — opt-in environmental-context module. `EnvironmentContext`
   // is the per-day weather/daylight observation keyed to the resolved location;
   // `EnvironmentTravelLocation` holds the manual date-range travel overrides
   // that win over the home location for the days they cover.
-  environmentContexts         EnvironmentContext[]
-  environmentTravelLocations  EnvironmentTravelLocation[]
+  environmentContexts            EnvironmentContext[]
+  environmentTravelLocations     EnvironmentTravelLocation[]
   // v1.28 — micronutrient intake daily totals synced from Apple Health
   // (vitamins, minerals, water, caffeine). Opt-in `nutrients` module, off
   // by default; the ingest route refuses while the module is off.
-  nutrientIntakeDays          NutrientIntakeDay[]
+  nutrientIntakeDays             NutrientIntakeDay[]
   // v1.25 (W-DOCS-IN) — inbound clinical documents (doctor reports /
   // discharge letters) the user uploads. The raw document is encrypted at
   // rest; extracted facts land in a review-then-confirm staging area
   // (ExtractedFact) and only reach the structured stores on explicit
   // approval. Opt-in module, off by default.
-  inboundDocuments            InboundDocument[]
-  extractedFacts              ExtractedFact[]
-  documentConditionLinks      DocumentConditionLink[]
-  documentContentIndexes      DocumentContentIndex[]
-  documentThumbnails          DocumentThumbnail[]
+  inboundDocuments               InboundDocument[]
+  extractedFacts                 ExtractedFact[]
+  documentConditionLinks         DocumentConditionLink[]
+  documentContentIndexes         DocumentContentIndex[]
+  documentThumbnails             DocumentThumbnail[]
   // v1.19.0 — full Withings ECG waveform recordings (encrypted at rest).
   // The paired AFib verdict still lands as an IRREGULAR_RHYTHM_NOTIFICATION
   // Measurement EVENT row (v1.18.11); this holds the raw signal samples.
-  ecgRecordings               EcgRecording[]
+  ecgRecordings                  EcgRecording[]
 
   // v1.7.0 profile — optional patient-identity fields surfaced on the
   // health-record export cover (PDF) and the FHIR `Patient` resource.
@@ -1612,8 +1612,8 @@ enum MeasurementAggregationProvenance {
 }
 
 model Measurement {
-  id                    String                @id @default(cuid())
-  userId                String                @map("user_id")
+  id                    String                            @id @default(cuid())
+  userId                String                            @map("user_id")
   type                  MeasurementType
   value                 Float
   // v1.19.2 (iOS #34 extension) — per-bucket spread for an aggregated row.
@@ -1624,26 +1624,26 @@ model Measurement {
   // samples. NULL for every other row (per-sample readings, per-day
   // cumulative `stats:` totals, manual entries) — the series reader hands
   // them through only for the heart-rate kind.
-  valueMin              Float?                @map("value_min")
-  valueMax              Float?                @map("value_max")
+  valueMin              Float?                            @map("value_min")
+  valueMax              Float?                            @map("value_max")
   unit                  String // kg, mmHg, bpm, %, minutes (sleep), steps, mg/dL, kcal, m, ms, mL/(kg·min), celsius
-  source                MeasurementSource     @default(MANUAL)
-  measuredAt            DateTime              @map("measured_at")
+  source                MeasurementSource                 @default(MANUAL)
+  measuredAt            DateTime                          @map("measured_at")
   notes                 String? // LEGACY plaintext — superseded by `notesEncrypted` (v1.23). New writes go to the encrypted column and null this; the boot-time backfill migrates the remaining rows. Column drop is a follow-up release once the backfill reports zero remaining.
   // v1.23 — free-text measurement note, AES-256-GCM at rest (Bytes, matching
   // the IllnessDayLog / CycleDayLog / LabResult note convention). Registered
   // in ENCRYPTED_COLUMNS + the rotation script.
-  notesEncrypted        Bytes?                @map("notes_encrypted")
+  notesEncrypted        Bytes?                            @map("notes_encrypted")
   // External-system dedup key. Withings used `grpid` (numeric); v1.4.23
   // adds Apple Health which uses `HKSample.uuid` (string). NULL for
   // manual entries — Postgres treats NULLs as distinct in unique
   // indexes, so two manual rows with the same (user, type, source) are
   // still allowed.
-  externalId            String?               @map("external_id")
+  externalId            String?                           @map("external_id")
   // v1.4.23 — opaque marker for the source's schema version (HealthKit
   // sample's `metadata.HKWasUserEntered`, Withings model code, …).
   // Stored as a string so the ingest path can replay it back unchanged.
-  externalSourceVersion String?               @map("external_source_version")
+  externalSourceVersion String?                           @map("external_source_version")
   // Authority of an aggregate stored under a `stats:*` identity. NULL for
   // ordinary point/sample rows. Native HealthKit statistics outrank the
   // source-day estimate derived from export.xml; migrated ambiguous rows are
@@ -1657,11 +1657,11 @@ model Measurement {
   // one direction only: a non-glucose row can never carry a context. Every
   // per-context reader selects by equality against the four enum members, so
   // a NULL context stays absent rather than reading as a classification.
-  glucoseContext        GlucoseContext?       @map("glucose_context")
+  glucoseContext        GlucoseContext?                   @map("glucose_context")
   // v1.4.23 — per-stage sleep label. NULL for non-sleep rows; non-NULL
   // only for `type = SLEEP_DURATION`. Mirrors the glucoseContext
   // pattern. A single night produces ~5 rows (one per stage).
-  sleepStage            SleepStage?           @map("sleep_stage")
+  sleepStage            SleepStage?                       @map("sleep_stage")
   // v1.10.0 — categorical events (WX-B). The device's own classification
   // verdict / severity for an EVENT row. NULL for every continuous
   // measurement; non-NULL only for the categorical EVENT `MeasurementType`s.
@@ -1670,7 +1670,7 @@ model Measurement {
   // continuous row can never carry a classification. NOT part of any unique
   // index — dedup stays on `(userId, type, source, externalId)` keyed by the
   // device's `HKSample.uuid`, so a re-posted event collapses to a duplicate.
-  rhythmClassification  RhythmClassification? @map("rhythm_classification")
+  rhythmClassification  RhythmClassification?             @map("rhythm_classification")
   // v1.4.25 W8c — device-type tag for the cross-source canonical
   // picker. Stored as a free-text string (kept simple — Prisma enum
   // would require coordinated client + server bumps every time we
@@ -1681,7 +1681,7 @@ model Measurement {
   // NULL as `unknown`. Unique constraints intentionally do not
   // include `deviceType` so two ingest paths from the same source
   // still dedup on (type, source, externalId).
-  deviceType            String?               @map("device_type")
+  deviceType            String?                           @map("device_type")
   // v1.4.30 — iOS SyncMode foundation (R-E C-2). Monotonically
   // incremented on every server-side mutation of the row. iOS uses
   // it for last-writer-wins reconciliation when two devices write
@@ -1689,16 +1689,16 @@ model Measurement {
   // update path is responsible for bumping it. Existing rows
   // start at the default after the additive migration so legacy
   // ingest keeps round-tripping unchanged.
-  syncVersion           Int                   @default(1) @map("sync_version")
+  syncVersion           Int                               @default(1) @map("sync_version")
   // v1.4.30 — soft-delete column. The DELETE path on the
   // by-external-ids endpoint flips this rather than removing the row
   // so paired iOS clients can reconcile deletions without losing the
   // audit trail. NULL = live row; non-NULL = tombstoned at the
   // recorded instant. The unique-by-externalId index keeps both
   // states distinguishable for the bulk-backfill UPSERT path.
-  deletedAt             DateTime?             @map("deleted_at")
-  createdAt             DateTime              @default(now()) @map("created_at")
-  updatedAt             DateTime              @updatedAt @map("updated_at")
+  deletedAt             DateTime?                         @map("deleted_at")
+  createdAt             DateTime                          @default(now()) @map("created_at")
+  updatedAt             DateTime                          @updatedAt @map("updated_at")
 
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   // v1.19.0 — optional back-relation to the full ECG waveform recording(s)
@@ -1976,10 +1976,10 @@ model Workout {
   createdAt             DateTime          @default(now()) @map("created_at")
   updatedAt             DateTime          @updatedAt @map("updated_at")
 
-  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  route   WorkoutRoute?
-  samples WorkoutSamples?
-  insight WorkoutInsight?
+  user                   User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  route                  WorkoutRoute?
+  samples                WorkoutSamples?
+  insight                WorkoutInsight?
   insightGenerationClaim WorkoutInsightGenerationClaim?
 
   /// Ingest dedup. NULL externalId is distinct so two manual
@@ -2086,7 +2086,6 @@ model WorkoutSamples {
 // ever creates one: a workout with no row renders no card, and that includes
 // every workout that predates this model.
 model WorkoutInsight {
-
   id                 String   @id @default(cuid())
   userId             String   @map("user_id")
   workoutId          String   @unique @map("workout_id")
@@ -2437,7 +2436,7 @@ model Medication {
 
   schedules         MedicationSchedule[]
   intakeEvents      MedicationIntakeEvent[]
-  intakeImportJobs MedicationIntakeImportJob[]
+  intakeImportJobs  MedicationIntakeImportJob[]
   phaseConfig       ReminderPhaseConfig?
   telegramMessages  TelegramReminderMessage[]
   doseChanges       MedicationDoseChange[]
@@ -3242,8 +3241,8 @@ model ApiToken {
   // 60-minute access rows so it does not flood (M2).
   mcpConnectionId String?   @map("mcp_connection_id")
 
-  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  mcpConnection McpOAuthConnection? @relation(fields: [mcpConnectionId], references: [id], onDelete: SetNull)
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mcpConnection    McpOAuthConnection? @relation(fields: [mcpConnectionId], references: [id], onDelete: SetNull)
   // v1.30.34 — step-up elevations bound to this token. Cascade-deleted with it.
   stepUpElevations StepUpElevation[]
 
@@ -3479,13 +3478,13 @@ model OidcNativeHandoff {
 // ─── Withings ──────────────────────────────────────────────
 
 model WithingsConnection {
-  id                      String    @id @default(cuid())
-  userId                  String    @unique @map("user_id")
-  withingsUserId          String    @map("withings_user_id")
-  accessToken             String    @map("access_token") // encrypted at app level
-  refreshToken            String    @map("refresh_token") // encrypted at app level
-  tokenExpiresAt          DateTime  @map("token_expires_at")
-  lastSyncedAt            DateTime? @map("last_synced_at")
+  id                         String    @id @default(cuid())
+  userId                     String    @unique @map("user_id")
+  withingsUserId             String    @map("withings_user_id")
+  accessToken                String    @map("access_token") // encrypted at app level
+  refreshToken               String    @map("refresh_token") // encrypted at app level
+  tokenExpiresAt             DateTime  @map("token_expires_at")
+  lastSyncedAt               DateTime? @map("last_synced_at")
   /// v1.4.25 W5d — comma-separated OAuth scope string returned by the
   /// Withings authorisation flow. Legacy v1.4.24- connections sit on
   /// `user.metrics` only; v1.4.25 starts requesting
@@ -3493,21 +3492,21 @@ model WithingsConnection {
   /// activity / sleep endpoints unlock. Null = legacy connection that
   /// has never re-authed since v1.4.25 — the UI surfaces a banner
   /// inviting them to reconnect.
-  scope                   String?   @map("scope")
+  scope                      String?   @map("scope")
   /// v1.17.1 — one-shot marker for the sleep-stamp backfill. Pre-fix Withings
   /// sleep rows were stamped with the segment START; the reader treats
   /// `measuredAt` as the END, shifting every night one segment-length earlier.
   /// The boot-time backfill deletes the affected WITHINGS / SLEEP_DURATION rows
   /// and re-syncs with the corrected END stamp, then sets this so the discovery
   /// query drops the connection. Null = backfill not yet run.
-  sleepTimelineBackfillAt DateTime? @map("sleep_timeline_backfill_at")
+  sleepTimelineBackfillAt    DateTime? @map("sleep_timeline_backfill_at")
   /// v1.32 — durable per-category webhook subscription outcomes. The JSON
   /// payload is versioned and validated before use; the timestamp mirrors the
   /// earliest transient/pending category retry for indexed hourly discovery.
   webhookSubscriptionState   Json?     @map("webhook_subscription_state")
   webhookSubscriptionRetryAt DateTime? @map("webhook_subscription_retry_at")
-  createdAt               DateTime  @default(now()) @map("created_at")
-  updatedAt               DateTime  @updatedAt @map("updated_at")
+  createdAt                  DateTime  @default(now()) @map("created_at")
+  updatedAt                  DateTime  @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -4476,7 +4475,14 @@ model ImportJob {
 model MedicationIntakeImportJob {
   id            String    @id @default(cuid())
   userId        String    @map("user_id")
-  medicationId  String    @map("medication_id")
+  /// v1.32.40 (migration 0276) — nullable. The per-medication import route
+  /// scopes its job to one medication and names it here. A dose history
+  /// exported from another tracker covers a whole regimen in one file — the
+  /// reported export named sixteen medications across 3,395 rows — so that job
+  /// belongs to the account and each payload entry names its own medication
+  /// instead. NULL therefore means "account-wide", not "unknown": the worker
+  /// reads `entry.medicationId` and refuses a payload that names neither.
+  medicationId  String?   @map("medication_id")
   pgBossJobId   String?   @unique @map("pg_boss_job_id")
   status        String    @default("queued")
   payload       Json
@@ -4489,8 +4495,8 @@ model MedicationIntakeImportJob {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  medication Medication @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medication Medication? @relation(fields: [medicationId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([medicationId, createdAt])
@@ -5424,13 +5430,13 @@ model ClinicianShareLink {
   // ── Frozen scope (write-once at creation; never widened) ──
   /// Reporting-window start (absolute, not "last N days"). Frozen so a
   /// rolling share can never reach data older than the owner chose.
-  rangeStart    DateTime  @map("range_start")
+  rangeStart   DateTime  @map("range_start")
   /// Window end. Null = rolling ("up to now"); set = frozen snapshot window.
-  rangeEnd      DateTime? @map("range_end")
+  rangeEnd     DateTime? @map("range_end")
   /// The frozen report scope: `{ "v": 2, "leaves": [...] }`. Write-once at
   /// mint, never widened. A blob this build cannot read resolves to the empty
   /// selection, so a drifted row serves nothing rather than defaulting open.
-  sectionsJson  Json      @map("sections_json")
+  sectionsJson Json      @map("sections_json")
   /// v1.28.16 — the authoritative "documents-only" flag, frozen write-once at
   /// create. When true the public view serves ONLY the attached documents and
   /// the aggregator is never called, INDEPENDENT of `sectionsJson`. Decoupling
@@ -5439,7 +5445,7 @@ model ClinicianShareLink {
   /// documents-only link (the previous derived check would have leaked it once
   /// the new key defaulted on). Legacy links (pre-column) keep the derived
   /// all-off fallback in the view loader.
-  documentOnly  Boolean   @default(false) @map("document_only")
+  documentOnly Boolean   @default(false) @map("document_only")
 
   /// REQUIRED — no never-expiring share (capped at `SHARE_LINK_MAX_DAYS`).
   expiresAt DateTime @map("expires_at")
@@ -5543,38 +5549,38 @@ model InsightNarrative {
 // revision owns generation. A strictly newer arrival atomically invalidates
 // stale generation state; equal or older deliveries are deduplicated.
 model ArrivalReaction {
-  id            String    @id @default(cuid())
-  userId        String    @map("user_id")
+  id                          String    @id @default(cuid())
+  userId                      String    @map("user_id")
   /// One of `ARRIVAL_KINDS` (`@/lib/arrivals/types`).
-  kind          String
+  kind                        String
   /// The user's PROFILE-timezone YYYY-MM-DD this reaction is filed under.
-  localDate     String    @map("local_date")
+  localDate                   String    @map("local_date")
   /// Timestamp of the newest sample that triggered it.
-  occurredAt    DateTime  @map("occurred_at")
+  occurredAt                  DateTime  @map("occurred_at")
   /// When the newest sample actually reached HealthLog. Unlike `createdAt`,
   /// this advances when a later same-kind arrival refreshes the daily marker.
-  arrivedAt      DateTime  @default(now()) @map("arrived_at")
+  arrivedAt                   DateTime  @default(now()) @map("arrived_at")
   /// Kind-scoped referent: the workout id for `workout`, the panel day for labs.
-  refId         String?   @map("ref_id")
+  refId                       String?   @map("ref_id")
   /// AES-256-GCM ciphertext of the generated reaction line. Null until — and
   /// unless — a line is generated: the marker is the feature, the sentence is
   /// garnish, and a provider-less install never fills this in. Follows the
   /// `InsightNarrative.encryptedContent` precedent, NOT the plaintext pattern
   /// the status cards use. Registered in `scripts/rotate-encryption-key.ts`.
-  lineEncrypted Bytes?    @map("line_encrypted")
-  generatedAt   DateTime? @map("generated_at")
+  lineEncrypted               Bytes?    @map("line_encrypted")
+  generatedAt                 DateTime? @map("generated_at")
   /// Opaque owner token and lease for pre-provider setup. A stale worker may
   /// reclaim only while `generationProviderInvokedAt` is null.
-  generationClaimId              String?   @map("generation_claim_id")
-  generationClaimedAt            DateTime? @map("generation_claimed_at")
+  generationClaimId           String?   @map("generation_claim_id")
+  generationClaimedAt         DateTime? @map("generation_claimed_at")
   /// The token reservation is written in the same transaction as the
   /// `coach_usage` increment. A reclaimed pre-provider attempt reuses it.
-  generationReservedTokens       Int?      @map("generation_reserved_tokens")
-  generationBudgetDateKey        String?   @map("generation_budget_date_key")
+  generationReservedTokens    Int?      @map("generation_reserved_tokens")
+  generationBudgetDateKey     String?   @map("generation_budget_date_key")
   /// Durable provider boundary. Once set, this marker is terminal unless the
   /// encrypted line is committed; no retry may invoke a provider again.
-  generationProviderInvokedAt    DateTime? @map("generation_provider_invoked_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
+  generationProviderInvokedAt DateTime? @map("generation_provider_invoked_at")
+  createdAt                   DateTime  @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

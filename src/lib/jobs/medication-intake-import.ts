@@ -24,8 +24,28 @@ export const MEDICATION_INTAKE_IMPORT_SEND_OPTIONS = {
 } as const;
 
 export interface MedicationImportEntry {
-  takenAt: string;
+  /**
+   * The slot instant this dose belongs to, and the fact it is identified by.
+   * Equals `takenAt` for an ad-hoc dose that belongs to no slot.
+   */
+  scheduledFor: string;
+  /** When the dose was actually taken. `null` for a deliberate skip. */
+  takenAt: string | null;
   idempotencyKey: string;
+  /**
+   * The medication this dose attaches to. Carried per entry because a dose
+   * history exported from another app covers a whole regimen in one file, so the
+   * job cannot be scoped to a single medication the way the per-medication
+   * import route's job is. Absent on that route's jobs, where the job row names
+   * the medication instead.
+   */
+  medicationId?: string;
+  /**
+   * Per-dose override, free text, mirroring `Medication.dose`. Absent when the
+   * configured schedule dose applies — which is the overwhelming majority, and
+   * absence is how `MedicationIntakeEvent.doseTaken` already says so.
+   */
+  doseTaken?: string;
 }
 
 export interface MedicationImportPayload {
@@ -33,22 +53,40 @@ export interface MedicationImportPayload {
 }
 
 /**
- * Why a submitted entry did not become a row. Machine-readable; the client
- * turns each into a sentence.
+ * Why a submitted row did not become a row on the ledger. Machine-readable; the
+ * client turns each into a sentence.
  *
- * `duplicate_in_file` — two entries in the same submission resolve to the same
- * instant, so only one can be written.
- * `already_recorded` — the dose is already on the ledger for that instant, from
- * an earlier import or from any other intake surface.
+ * `duplicate_in_file` — two rows of the same submission resolve to the same
+ * medication and slot, so only one can be written.
+ * `already_recorded` — the dose is already on the ledger for that slot, from an
+ * earlier import or from any other intake surface.
  *
- * They used to be one `skippedDuplicates` number, which is how a file whose
- * every row collapsed onto one key could report "27 duplicates skipped" about
- * 27 doses that had no duplicate anywhere. Naming the reason is what makes the
- * count checkable against what the person actually submitted.
+ * Those two used to be one `skippedDuplicates` number, which is how a file whose
+ * every row collapsed onto one key could report "27 duplicates skipped" about 27
+ * doses that had no duplicate anywhere. Naming the reason is what makes the count
+ * checkable against what the person actually submitted.
+ *
+ * The rest are decided before the queue, when a whole export file is parsed and
+ * matched against the record. They are seeded into the job's progress so the
+ * final count covers the entire file rather than only the part that reached the
+ * database — a row refused at the door is still a row the person needs told
+ * about, by name.
  */
 export const MEDICATION_IMPORT_SKIP_REASONS = [
   "duplicate_in_file",
   "already_recorded",
+  "medication_not_found",
+  "medication_ambiguous",
+  "medication_is_mirrored",
+  "status_not_recorded",
+  "status_unknown",
+  "missing_timestamp",
+  "missing_timezone_offset",
+  "unreadable_timestamp",
+  "implausible_timestamp",
+  "missing_medication",
+  "unreadable_dosage",
+  "unreadable_row",
 ] as const;
 
 export type MedicationImportSkipReason =
@@ -197,16 +235,49 @@ function parsePayload(value: Prisma.JsonValue): MedicationImportPayload {
       typeof entry !== "object" ||
       entry === null ||
       Array.isArray(entry) ||
-      typeof entry.takenAt !== "string" ||
-      !Number.isFinite(Date.parse(entry.takenAt)) ||
       typeof entry.idempotencyKey !== "string" ||
       entry.idempotencyKey.length === 0
     ) {
       throw new Error("Medication intake import entry is malformed");
     }
+    const takenAt = entry.takenAt;
+    if (
+      takenAt !== null &&
+      (typeof takenAt !== "string" || !Number.isFinite(Date.parse(takenAt)))
+    ) {
+      throw new Error("Medication intake import entry is malformed");
+    }
+    // `scheduledFor` was added when the importer learnt to read an export that
+    // states the scheduled time and the time taken as two separate facts. A job
+    // row enqueued before that carries only `takenAt`, and such a row is an
+    // ad-hoc dose anchored on itself — which is what the absence means. This is
+    // for rows already in the database, not for a caller.
+    const rawScheduledFor =
+      entry.scheduledFor === undefined ? takenAt : entry.scheduledFor;
+    if (
+      typeof rawScheduledFor !== "string" ||
+      !Number.isFinite(Date.parse(rawScheduledFor))
+    ) {
+      throw new Error("Medication intake import entry is malformed");
+    }
+    if (
+      entry.medicationId !== undefined &&
+      (typeof entry.medicationId !== "string" ||
+        entry.medicationId.length === 0)
+    ) {
+      throw new Error("Medication intake import entry is malformed");
+    }
+    if (entry.doseTaken !== undefined && typeof entry.doseTaken !== "string") {
+      throw new Error("Medication intake import entry is malformed");
+    }
     return {
-      takenAt: entry.takenAt,
+      scheduledFor: rawScheduledFor,
+      takenAt: takenAt as string | null,
       idempotencyKey: entry.idempotencyKey,
+      ...(entry.medicationId === undefined
+        ? {}
+        : { medicationId: entry.medicationId }),
+      ...(entry.doseTaken === undefined ? {} : { doseTaken: entry.doseTaken }),
     };
   });
   return { entries };
@@ -287,23 +358,64 @@ interface ProcessChunkOutcome {
   userId: string | null;
 }
 
+/**
+ * A day whose compliance rollup an import invalidated, as one string.
+ *
+ * A job can now span a whole regimen, so a bare day key no longer identifies
+ * what to recompute — two medications touched on the same day are two rollup
+ * rows. The medication is folded in ahead of a single space, which occurs in
+ * neither a cuid nor a `YYYY-MM-DD` key. Not a NUL byte: this value is persisted
+ * in the progress blob and Postgres rejects ` ` inside a jsonb string.
+ */
+const TOUCHED_DAY_SEPARATOR = " ";
+
+function encodeTouchedDay(medicationId: string, dayKey: string): string {
+  return `${medicationId}${TOUCHED_DAY_SEPARATOR}${dayKey}`;
+}
+
+/**
+ * Split a stored touched-day back into its parts.
+ *
+ * A value with no separator was written before a job could span more than one
+ * medication, so it is a bare day key belonging to the job's own medication.
+ * Returns null when neither reading yields a medication — a per-medication job
+ * that lost its medication cannot be resolved and the day is left alone rather
+ * than recomputed against a guess.
+ */
+function decodeTouchedDay(
+  value: string,
+  fallbackMedicationId: string | null,
+): { medicationId: string; dayKey: string } | null {
+  const separator = value.indexOf(TOUCHED_DAY_SEPARATOR);
+  if (separator === -1) {
+    if (!fallbackMedicationId) return null;
+    return { medicationId: fallbackMedicationId, dayKey: value };
+  }
+  const medicationId = value.slice(0, separator);
+  const dayKey = value.slice(separator + 1);
+  if (medicationId.length === 0 || dayKey.length === 0) return null;
+  return { medicationId, dayKey };
+}
+
 async function recomputeTouchedDays(
   client: Pick<PrismaClient, "$executeRaw">,
   userId: string,
-  medicationId: string,
+  jobMedicationId: string | null,
   timezone: string,
   days: readonly string[],
 ): Promise<void> {
   await Promise.all(
-    days.map((day) =>
-      recomputeMedicationComplianceForDay(
+    days.map((day) => {
+      const decoded = decodeTouchedDay(day, jobMedicationId);
+      if (!decoded) return Promise.resolve();
+      return recomputeMedicationComplianceForDay(
         userId,
-        medicationId,
-        day,
+        decoded.medicationId,
+        decoded.dayKey,
         timezone,
         client,
-      ),
-    ),
+      );
+    }),
   );
 }
 
@@ -426,35 +538,81 @@ async function processNextChunk(
           entries.map((entry) => [entry.idempotencyKey, entry]),
         ).values(),
       ];
+      // An entry names its own medication when the job came from an export file
+      // covering a whole regimen; the per-medication route's jobs name it on the
+      // job row instead. One of the two must be there, and a payload with
+      // neither is a malformed job rather than a row to write against a guess.
+      const resolveMedicationId = (entry: MedicationImportEntry): string => {
+        const medicationId = entry.medicationId ?? row.medicationId;
+        if (!medicationId) {
+          throw new Error("Medication intake import entry names no medication");
+        }
+        return medicationId;
+      };
+
       const created = await tx.medicationIntakeEvent.createManyAndReturn({
         data: uniqueEntries.map((entry) => {
-          const takenAt = new Date(entry.takenAt);
+          const scheduledFor = new Date(entry.scheduledFor);
+          const takenAt =
+            entry.takenAt === null ? null : new Date(entry.takenAt);
           return {
             userId: row.userId,
-            medicationId: row.medicationId,
-            scheduledFor: takenAt,
+            medicationId: resolveMedicationId(entry),
+            // The scheduled slot and the time taken are two separate facts, and
+            // the export states both. Writing the take into both columns — which
+            // is all the old two-field payload could express — asserts every
+            // dose landed exactly on time, and no later edit recovers what that
+            // overwrote.
+            scheduledFor,
             takenAt,
-            skipped: false,
+            // A null take on an imported row is a deliberate skip: the source
+            // recorded that the person chose not to take that dose.
+            skipped: takenAt === null,
             source: "IMPORT" as const,
             idempotencyKey: entry.idempotencyKey,
+            ...(entry.doseTaken === undefined
+              ? {}
+              : { doseTaken: entry.doseTaken }),
           };
         }),
         skipDuplicates: true,
-        select: { id: true, takenAt: true, scheduledFor: true },
+        select: {
+          id: true,
+          medicationId: true,
+          takenAt: true,
+          scheduledFor: true,
+        },
       });
 
-      await consumeImportedIntakesBatch({
-        client: tx,
-        userId: row.userId,
-        medicationId: row.medicationId,
-        events: created.map((event) => ({
-          eventId: event.id,
-          intakeAt: event.takenAt ?? event.scheduledFor,
-        })),
-      });
+      // Inventory is per medication and a skip consumes nothing, so the created
+      // rows are grouped and the skips left out. `consumeImportedIntakesBatch`
+      // asserts it claimed every event handed to it, which only holds for rows
+      // that actually carry a take.
+      const consumedByMedication = new Map<
+        string,
+        Array<{ eventId: string; intakeAt: Date }>
+      >();
+      for (const event of created) {
+        if (event.takenAt === null) continue;
+        const bucket = consumedByMedication.get(event.medicationId);
+        const entry = { eventId: event.id, intakeAt: event.takenAt };
+        if (bucket) bucket.push(entry);
+        else consumedByMedication.set(event.medicationId, [entry]);
+      }
+      for (const [medicationId, events] of consumedByMedication) {
+        await consumeImportedIntakesBatch({
+          client: tx,
+          userId: row.userId,
+          medicationId,
+          events,
+        });
+      }
 
       const touchedDays = created.map((event) =>
-        dayKeyForScheduledFor(event.scheduledFor, row.user.timezone),
+        encodeTouchedDay(
+          event.medicationId,
+          dayKeyForScheduledFor(event.scheduledFor, row.user.timezone),
+        ),
       );
       // Two different facts, counted apart. The Map collapse above is entries
       // of this submission that resolve to the same instant; `skipDuplicates`
