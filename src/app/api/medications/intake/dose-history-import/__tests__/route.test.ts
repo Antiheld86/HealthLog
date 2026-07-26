@@ -241,6 +241,30 @@ describe("POST /api/medications/intake/dose-history-import", () => {
     expect(prisma.medicationIntakeImportJob.create).not.toHaveBeenCalled();
   });
 
+  it("looks only at account-wide work when deciding whether one is already running", async () => {
+    await POST(postReq(CSV));
+    // The in-progress check and the stale sweep both narrow on
+    // `medicationId: null`. Without that narrowing, an import running on a
+    // single medication's own page would refuse this one — and the sweep would
+    // reach across and fail it.
+    expect(prisma.medicationIntakeImportJob.findFirst).toHaveBeenCalledWith({
+      where: {
+        userId: "user-1",
+        medicationId: null,
+        status: { in: ["queued", "running"] },
+      },
+      select: { id: true },
+    });
+    expect(prisma.medicationIntakeImportJob.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: "user-1",
+          medicationId: null,
+        }),
+      }),
+    );
+  });
+
   it("fails the job and answers 503 when the worker cannot take it", async () => {
     vi.mocked(getGlobalBoss).mockReturnValue(null as never);
     const res = await POST(postReq(CSV));

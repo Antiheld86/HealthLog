@@ -19,15 +19,19 @@ export interface MedicationImportQueueEntry {
 }
 
 /**
- * An imported dose is identified by when it was taken, and by nothing else.
+ * An imported dose is identified by its medication and its instant, and by
+ * nothing else.
  *
  * The key used to be built from the row's optional `zaehler` field whenever it
  * was present. That reads as a per-row counter, but nothing required it to be
- * one, and an export that put the dose quantity there — 1 tablet, on every row
- * — collapsed a month of distinct doses onto a single key. Deriving from the
- * instant makes the key a function of the fact it identifies, and matches the
- * live-row unique on `(user_id, medication_id, scheduled_for, source)` that the
- * database enforces regardless.
+ * one and nothing checked. The file that surfaced this repeated `1.0` down the
+ * column because it was modelled on the example the import dialog itself
+ * displayed — so the value came from us, and a field we presented as a quantity
+ * silently decided identity. A month of distinct doses collapsed onto one key.
+ *
+ * Deriving from the instant makes the key a function of the fact it identifies,
+ * and matches the live-row unique on `(user_id, medication_id, scheduled_for,
+ * source)` that the database enforces regardless.
  */
 export function buildMedicationImportEntries(
   medicationId: string,

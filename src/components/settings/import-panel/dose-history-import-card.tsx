@@ -23,7 +23,6 @@ import { AlertCircle, Loader2, PillBottle, Upload } from "lucide-react";
 
 import {
   IntakeImportResultView,
-  IntakeImportSkipGroups,
   type IntakeImportResultState,
 } from "@/components/medications/intake-import-result";
 import { Button } from "@/components/ui/button";
@@ -38,22 +37,12 @@ import {
 import { invalidateMedicationReads } from "@/lib/query-keys";
 
 import { DoseHistoryColumnRulings } from "./dose-history-columns";
+import {
+  DoseHistoryVerdictView,
+  type DoseHistoryFileVerdict,
+} from "./dose-history-verdict";
 import { ImportCardShell } from "./import-card-shell";
 import { MAX_PASTE_CHARS } from "./constants";
-
-/** The file-level verdict, exactly as the route returns it. */
-interface DoseHistoryFileVerdict {
-  rowsRead: number;
-  queued: number;
-  refused: number;
-  refusedByReason: Array<{ reason: string; count: number }>;
-  unmatchedMedications: string[];
-  ambiguousMedications: string[];
-  mirroredMedications: string[];
-  unknownColumns: string[];
-  codingsNotRead: number;
-  fromArchivedMedications: number;
-}
 
 interface DoseHistoryKickoff {
   dryRun: boolean;
@@ -255,86 +244,7 @@ export function DoseHistoryImportCard() {
 
       <div aria-live="polite" className="space-y-2">
         {verdict && (
-          <div
-            data-testid="dose-history-verdict"
-            className="space-y-1 text-xs"
-            data-preview={previewOnly ? "true" : "false"}
-          >
-            <p className="text-foreground">
-              {previewOnly
-                ? t("settings.sections.export.import.doseHistory.previewLine", {
-                    rows: verdict.rowsRead,
-                    queued: verdict.queued,
-                    refused: verdict.refused,
-                  })
-                : t(
-                    "settings.sections.export.import.doseHistory.submittedLine",
-                    {
-                      rows: verdict.rowsRead,
-                      queued: verdict.queued,
-                    },
-                  )}
-            </p>
-            {/* The reason lines, never the outcome sentence: a preview has
-                written nothing, and classifying it by the counts it would
-                produce would put a success tick on a run that never ran. */}
-            <IntakeImportSkipGroups
-              groups={verdict.refusedByReason}
-              testId="dose-history-refusal-groups"
-            />
-            {verdict.unmatchedMedications.length > 0 && (
-              <p
-                className="text-muted-foreground"
-                data-testid="dose-history-unmatched"
-              >
-                {t("settings.sections.export.import.doseHistory.unmatched", {
-                  names: verdict.unmatchedMedications.join(", "),
-                })}
-              </p>
-            )}
-            {verdict.ambiguousMedications.length > 0 && (
-              <p className="text-muted-foreground">
-                {t("settings.sections.export.import.doseHistory.ambiguous", {
-                  names: verdict.ambiguousMedications.join(", "),
-                })}
-              </p>
-            )}
-            {verdict.mirroredMedications.length > 0 && (
-              <p className="text-muted-foreground">
-                {t("settings.sections.export.import.doseHistory.mirrored", {
-                  names: verdict.mirroredMedications.join(", "),
-                })}
-              </p>
-            )}
-            {verdict.unknownColumns.length > 0 && (
-              <p className="text-muted-foreground">
-                {t(
-                  "settings.sections.export.import.doseHistory.unknownColumns",
-                  { names: verdict.unknownColumns.join(", ") },
-                )}
-              </p>
-            )}
-            {verdict.codingsNotRead > 0 && (
-              <p className="text-muted-foreground">
-                {t(
-                  "settings.sections.export.import.doseHistory.codingsNotRead",
-                  {
-                    count: verdict.codingsNotRead,
-                  },
-                )}
-              </p>
-            )}
-            {verdict.fromArchivedMedications > 0 && (
-              <p
-                className="text-muted-foreground"
-                data-testid="dose-history-archived"
-              >
-                {t("settings.sections.export.import.doseHistory.archivedRows", {
-                  count: verdict.fromArchivedMedications,
-                })}
-              </p>
-            )}
-          </div>
+          <DoseHistoryVerdictView verdict={verdict} previewOnly={previewOnly} />
         )}
         {outcome && <IntakeImportResultView result={outcome} />}
         {error && (

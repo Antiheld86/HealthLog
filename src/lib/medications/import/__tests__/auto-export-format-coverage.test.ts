@@ -26,6 +26,43 @@ import {
 import { AUTO_EXPORT_REFUSAL_REASONS } from "../auto-export-parse";
 
 describe("export column rulings", () => {
+  /**
+   * The verdicts, spelled out.
+   *
+   * Every other assertion here reads the verdict off the same table it is
+   * checking, so a column flipped from `honoured` to `ignored` would move both
+   * sides of the comparison and pass — the importer would quietly stop using a
+   * column and the card would quietly say so, with nothing failing in between.
+   * Restating them as literals is what makes such a flip a decision somebody has
+   * to write down twice.
+   */
+  const EXPECTED_VERDICTS: Record<string, string> = {
+    Date: "honoured",
+    "Scheduled Date": "honoured",
+    Medication: "honoured",
+    Nickname: "honoured",
+    Dosage: "honoured",
+    "Scheduled Dosage": "honoured",
+    Unit: "honoured",
+    Status: "honoured",
+    Archived: "reported",
+    Codings: "ignored",
+    form: "ignored",
+    start: "ignored",
+    end: "ignored",
+  };
+
+  it("holds the verdict each column was decided to have", () => {
+    expect(
+      Object.fromEntries(
+        AUTO_EXPORT_COLUMN_RULINGS.map((ruling) => [
+          ruling.column,
+          ruling.verdict,
+        ]),
+      ),
+    ).toEqual(EXPECTED_VERDICTS);
+  });
+
   it("rules on every CSV column exactly once", () => {
     const ruled = AUTO_EXPORT_COLUMN_RULINGS.filter(
       (ruling) => !ruling.jsonOnly,

@@ -28,12 +28,17 @@ import { isPlausibleEntryInstant } from "@/lib/validations/entry-instant";
 
 // The entry shape carried a third field, `zaehler`, and the replay key was
 // built from it whenever it was present. That reads as a per-row counter,
-// which is what the documented example showed — but the field was optional,
-// its uniqueness was never stated and never checked, and an export that puts
-// the dose quantity there (1 tablet, on every row) collapsed a month of
-// history onto one key: the first row imported, every later one lost the
-// `(userId, idempotencyKey)` unique and came back reported as a duplicate of
-// a dose it had nothing to do with.
+// which is what the example beside this dialog showed — but the field was
+// optional, its uniqueness was never stated and never checked, and nothing
+// told anyone it carried identity. A submission that repeated one value down
+// the column collapsed a month of history onto one key: the first row
+// imported, every later one lost the `(userId, idempotencyKey)` unique and
+// came back reported as a duplicate of a dose it had nothing to do with.
+//
+// The reported file repeated `1.0` because it was modelled on the example this
+// dialog itself displayed, which counted upward and explained nothing. So the
+// fault was never in the submission; it was in a field that decided identity
+// while presenting itself as a quantity.
 //
 // `zaehler` is gone from the contract rather than accepted-and-ignored. A
 // payload that still carries it imports unchanged — `z.object` drops
