@@ -15,11 +15,15 @@ import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { readNote } from "@/lib/crypto/note-cipher";
 import { iterateMeasurementPages } from "@/lib/export/paged-measurements";
 import { BACKUP_SCHEMA_VERSION } from "@/lib/validations/backup";
-import { buildCycleBackupSection } from "@/lib/cycle/backup";
+import {
+  buildCycleBackupSection,
+  type CycleBackupSection,
+} from "@/lib/cycle/backup";
 import {
   buildRecordsBackupSection,
   countRecordsBackupSection,
   type RecordsBackupCounts,
+  type RecordsBackupSection,
 } from "@/lib/export/records-backup";
 
 export interface FullBackupCounts extends RecordsBackupCounts {
@@ -210,6 +214,11 @@ export async function buildFullBackupPayload(
     }),
   ]);
 
+  // Pinned to the section interfaces so the spreads below cannot quietly widen
+  // (or narrow) what reaches the wire.
+  const cycleSection: CycleBackupSection = cycle;
+  const recordsSection: RecordsBackupSection = records;
+
   const payload = {
     schemaVersion: BACKUP_SCHEMA_VERSION,
     exportedAt: (options.exportedAt ?? new Date()).toISOString(),
@@ -335,20 +344,24 @@ export async function buildFullBackupPayload(
       scaleMax: tag.scaleMax,
       inverse: tag.inverse,
     })),
-    cycleProfile: cycle.cycleProfile,
-    cycles: cycle.cycles,
-    cycleDayLogs: cycle.cycleDayLogs,
-    // v1.28 backup-completeness — the domains the pre-existing shape never
-    // covered. `manifest` discloses the two deliberate exclusions (document
-    // binaries, workout GPS/sample time series) inline in the file itself,
-    // not just in the export UI copy.
-    labResults: records.labResults,
-    biomarkers: records.biomarkers,
-    illnessEpisodes: records.illnessEpisodes,
-    allergies: records.allergies,
-    familyHistory: records.familyHistory,
-    workouts: records.workouts,
-    documents: records.documents,
+    // Both sections are SPREAD, not hand-picked key by key.
+    //
+    // Hand-picking is what lost the custom cycle symptoms. `buildCycleBackupSection`
+    // returned them, the wire schema declared them, `restoreCycleData` read them
+    // and — since v1.33.1 — THREW on a key it could not resolve. The list of keys
+    // copied out here was simply never extended, so every backup written carried
+    // `customSymptoms: []`. An account with one custom symptom did not get the
+    // silent drop that release removed; it got a restore that failed outright on
+    // a key nothing had written back, and the fix was inert in production.
+    //
+    // Spreading makes the section interface the single declaration of what rides
+    // the wire: a field added to `CycleBackupSection` / `RecordsBackupSection`
+    // reaches the payload by construction rather than by someone remembering.
+    // `manifest` (from the records section) discloses the two deliberate
+    // exclusions — document binaries, workout GPS/sample series — in the file
+    // itself, not just in the export UI copy.
+    ...cycleSection,
+    ...recordsSection,
     nutrientDays: nutrientDays.map((n) => ({
       day: n.day,
       nutrient: n.nutrient,

@@ -108,6 +108,16 @@ export interface CycleBackupSection {
     icon: string | null;
     sortOrder: number;
     isActive: boolean;
+    /**
+     * The user's own words for the symptom, carried as ciphertext verbatim.
+     *
+     * The builder has always emitted it and this interface did not declare it,
+     * which held while the payload was assembled key by key and stopped holding
+     * the moment the section is spread onto the wire: an undeclared field is a
+     * field the wire type says is not there. Declared, so the type describes
+     * the file.
+     */
+    labelEncrypted: string | null;
   }>;
 }
 
