@@ -164,7 +164,7 @@ function createdRows() {
 describe("syncUserPolar", () => {
   it("no-ops cleanly for an unconnected user", async () => {
     getConnMock.mockResolvedValue(null);
-    expect(await syncUserPolar("u1")).toBe(0);
+    expect(await syncUserPolar("u1")).toEqual({ imported: 0, failed: false });
     expect(createManyAndReturnMock).not.toHaveBeenCalled();
     expect(recordSuccessMock).not.toHaveBeenCalled();
   });
@@ -186,7 +186,7 @@ describe("syncUserPolar", () => {
     fetchRechargesMock.mockResolvedValue([
       { date: "2026-06-10", nightly_recharge_status: 6 },
     ]);
-    const imported = await syncUserPolar("u1");
+    const { imported } = await syncUserPolar("u1");
     expect(imported).toBe(1);
     const row = createdRows()[0];
     expect(row).toMatchObject({
@@ -206,7 +206,7 @@ describe("syncUserPolar", () => {
     fetchCardioLoadsMock.mockResolvedValue([
       { date: "2026-06-10", cardio_load: 123.45 },
     ]);
-    const imported = await syncUserPolar("u1");
+    const { imported } = await syncUserPolar("u1");
     expect(imported).toBe(1);
     const row = createdRows()[0];
     expect(row).toMatchObject({
@@ -348,7 +348,7 @@ describe("syncUserPolar", () => {
       { date: "2026-06-10", cardio_load: 42 },
     ]);
 
-    const imported = await syncUserPolar("u1");
+    const { imported } = await syncUserPolar("u1");
 
     // No rethrow now — a fetch failure is isolated per-collection.
     expect(imported).toBe(1);
@@ -397,8 +397,11 @@ describe("syncUserPolar", () => {
       { date: "2026-06-10", cardio_load: 55 },
     ]);
 
-    const imported = await syncUserPolar("u1");
+    const result = await syncUserPolar("u1");
+    const imported = result.imported;
 
+    // The partial rides back with the count rather than being narrowed away.
+    expect(result.failed).toBe(true);
     // The healthy four still wrote their rows — the source is not blanked.
     const written = createdRows().map((row) => row.type);
     expect(written).toContain("RECOVERY_SCORE");
@@ -438,7 +441,7 @@ describe("syncUserPolar", () => {
       { date: "2026-06-10", cardio_load: 77 },
     ]);
 
-    const imported = await syncUserPolar("u1");
+    const { imported } = await syncUserPolar("u1");
 
     expect(imported).toBe(1);
     expect(createdRows().map((row) => row.type)).toContain("CARDIO_LOAD");
@@ -463,7 +466,7 @@ describe("syncUserPolar", () => {
       { start_time: "2026-06-10T00:00:00", steps: 8000 },
     ]);
 
-    const imported = await syncUserPolar("u1");
+    const { imported } = await syncUserPolar("u1");
 
     // The sweep never ran — a failed sleep collection pushes no sweep entries.
     expect(updateManyMock).not.toHaveBeenCalled();

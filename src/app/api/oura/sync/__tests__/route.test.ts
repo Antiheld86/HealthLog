@@ -53,17 +53,28 @@ beforeEach(() => {
 
 describe("POST /api/oura/sync", () => {
   it("syncs the session user and answers with the imported count", async () => {
-    vi.mocked(syncUserOura).mockResolvedValue(12);
+    vi.mocked(syncUserOura).mockResolvedValue({ imported: 12, failed: false });
 
     const response = await post(request());
 
     expect(response.status).toBe(200);
     expect(await envelope(response)).toEqual({
-      data: { imported: 12 },
+      data: { imported: 12, failed: false, outcome: "success" },
       error: null,
     });
     // The id comes from the session, never from the request.
     expect(syncUserOura).toHaveBeenCalledWith("u1");
+  });
+
+  it("does not call a run whose every collection failed a success", async () => {
+    vi.mocked(syncUserOura).mockResolvedValue({ imported: 0, failed: true });
+
+    const response = await post(request());
+
+    expect(response.status).toBe(200);
+    expect((await envelope(response)).data).toMatchObject({
+      outcome: "failed",
+    });
   });
 
   it("refuses an unauthenticated caller before syncing anything", async () => {

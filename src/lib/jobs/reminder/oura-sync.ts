@@ -21,7 +21,9 @@ export const handleOuraSync = makePollCohortHandler({
     });
     return users.map((u) => u.id);
   },
-  syncUser: syncUserOura,
+  // The cohort accounts in rows imported; the failure half of the result is
+  // recorded on the `oura` ledger by the sync itself.
+  syncUser: async (userId) => (await syncUserOura(userId)).imported,
   // Catches an UNMARKED escape — today the `upsertOuraMeasurements` write-path
   // throw (the fetch/refresh path already records + marks its own failures).
   recordFailure: recordOuraSyncFailure,

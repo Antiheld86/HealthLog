@@ -17,15 +17,18 @@ import { syncUserPolarLegs } from "../polar-sync";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  syncUserPolar.mockResolvedValue(0);
+  syncUserPolar.mockResolvedValue({ imported: 0, failed: false });
   syncUserPolarWorkouts.mockResolvedValue(0);
 });
 
 describe("syncUserPolarLegs — composite independence on the shared polar ledger", () => {
   it("runs both legs and returns the summed count when both pass", async () => {
-    syncUserPolar.mockResolvedValue(5);
+    syncUserPolar.mockResolvedValue({ imported: 5, failed: false });
     syncUserPolarWorkouts.mockResolvedValue(2);
-    await expect(syncUserPolarLegs("u1")).resolves.toBe(7);
+    await expect(syncUserPolarLegs("u1")).resolves.toEqual({
+      imported: 7,
+      failed: false,
+    });
     expect(syncUserPolar).toHaveBeenCalledWith("u1");
     expect(syncUserPolarWorkouts).toHaveBeenCalledWith("u1");
   });
@@ -35,9 +38,15 @@ describe("syncUserPolarLegs — composite independence on the shared polar ledge
     // its healthy-collections import count rather than throwing. The wrapper
     // must sum it with the workout leg and complete cleanly — a partial vitals
     // failure never starves the user's success accounting at the cohort level.
-    syncUserPolar.mockResolvedValue(4);
+    syncUserPolar.mockResolvedValue({ imported: 4, failed: true });
     syncUserPolarWorkouts.mockResolvedValue(2);
-    await expect(syncUserPolarLegs("u1")).resolves.toBe(6);
+    // The partial is carried, not swallowed: the wrapper completes with the
+    // summed count AND says a leg did not settle, so the card cannot paint a
+    // run in which four of five collections failed as a clean one.
+    await expect(syncUserPolarLegs("u1")).resolves.toEqual({
+      imported: 6,
+      failed: true,
+    });
     expect(syncUserPolar).toHaveBeenCalledWith("u1");
     expect(syncUserPolarWorkouts).toHaveBeenCalledWith("u1");
   });
@@ -52,7 +61,7 @@ describe("syncUserPolarLegs — composite independence on the shared polar ledge
   });
 
   it("leaves the vitals leg's result intact when the workout leg fails", async () => {
-    syncUserPolar.mockResolvedValue(4);
+    syncUserPolar.mockResolvedValue({ imported: 4, failed: false });
     syncUserPolarWorkouts.mockRejectedValue(new Error("workouts down"));
     // The vitals leg ran to completion (its own success already recorded on
     // the shared ledger); the workout error is surfaced without undoing it.

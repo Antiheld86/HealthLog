@@ -3,12 +3,15 @@ import { apiSuccess, apiError } from "@/lib/api-response";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { annotate } from "@/lib/logging/context";
 import { syncUserNightscout } from "@/lib/nightscout/sync";
+import { resolveSyncOutcome } from "@/lib/outcome/written-outcome";
 
 /**
  * Manually trigger a Nightscout sync for the current user (v1.32.28).
  *
  * Pulls the recent SGV window from the configured instance; `imported` counts
- * the readings that were genuinely new this run, not the ones re-confirmed.
+ * the readings that were genuinely new this run, not the ones re-confirmed,
+ * and `outcome` says how that count reads — a window in which every row was
+ * refused by a constraint imports 0 and must not answer like a quiet night.
  *
  * No body and no `fullSync` flag: there is no full-history arm to call.
  *
@@ -34,8 +37,8 @@ export const POST = apiHandler(async () => {
   }
 
   try {
-    const imported = await syncUserNightscout(user.id);
-    return apiSuccess({ imported });
+    const result = await syncUserNightscout(user.id);
+    return apiSuccess(resolveSyncOutcome(result));
   } catch {
     return apiError("Nightscout sync failed", 502);
   }

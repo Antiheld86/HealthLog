@@ -2,6 +2,7 @@ import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiSuccess, apiError } from "@/lib/api-response";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { annotate } from "@/lib/logging/context";
+import { resolveSyncOutcome } from "@/lib/outcome/written-outcome";
 import { syncUserOura } from "@/lib/oura/sync";
 
 /**
@@ -31,8 +32,8 @@ export const POST = apiHandler(async () => {
   }
 
   try {
-    const imported = await syncUserOura(user.id);
-    return apiSuccess({ imported });
+    const result = await syncUserOura(user.id);
+    return apiSuccess(resolveSyncOutcome(result));
   } catch {
     // The failure is already on the `oura` ledger, classified by the provider
     // that owns the error shape. Answer generically — an upstream message can

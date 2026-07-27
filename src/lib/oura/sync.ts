@@ -52,6 +52,7 @@ import {
   type InsertedMeasurementArrivalRow,
 } from "@/lib/arrivals/measurement-emit";
 import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
+import type { SyncWriteResult } from "@/lib/outcome/written-outcome";
 import { maybeEnqueueMorningRefresh } from "@/lib/daily/morning-refresh-trigger";
 import {
   sweepStaleSleepSegments,
@@ -411,16 +412,21 @@ async function fetchAll(
 }
 
 /**
- * Sync one user's Oura data. Returns the count of measurement rows written.
- * A user with no Oura connection is a clean no-op (returns 0, touches no
- * status row).
+ * Sync one user's Oura data.
+ *
+ * `imported` is the count of measurement rows written; `failed` is true when a
+ * collection did not settle. The count used to be the whole return value,
+ * which hid the partial: a run where every collection failed answered `0`, the
+ * same as a run that found nothing new, and the settings card reported both as
+ * a success. A user with no Oura connection is a clean no-op (nothing
+ * imported, nothing failed, no status row touched).
  */
 export async function syncUserOura(
   userId: string,
   opts: { lookbackDays?: number } = {},
-): Promise<number> {
+): Promise<SyncWriteResult> {
   const conn = await getOuraConnection(userId);
-  if (!conn) return 0;
+  if (!conn) return { imported: 0, failed: false };
 
   // An explicit window from the caller wins; otherwise derive it from what we
   // already hold so a gap widens the window instead of being skipped over.
@@ -516,11 +522,11 @@ export async function syncUserOura(
           ? String(firstErr.httpStatus)
           : undefined,
     });
-    return imported;
+    return { imported, failed: true };
   }
 
   await recordSyncSuccess(userId, "oura");
-  return imported;
+  return { imported, failed: false };
 }
 
 export async function upsertOuraMeasurements(

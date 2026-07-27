@@ -29688,11 +29688,22 @@ components:
               - analyte
               - reason
             additionalProperties: false
+        outcome:
+          type: string
+          enum:
+            - empty
+            - failed
+            - partial
+            - success
+          description: How the commit reads, resolved from the counts rather than the status code. `success` only when every
+            confirmed row was written; `partial` when some were skipped; `failed` when nothing was written and at least
+            one row was skipped; `empty` when there was nothing to write.
       required:
         - inserted
         - skipped
+        - outcome
       additionalProperties: false
-      description: 'The rows written (`source: "OCR"`) and those skipped as commit-time duplicates.'
+      description: 'The rows written (`source: "OCR"`), those skipped as commit-time duplicates, and the resolved outcome.'
     OcrCommittedLabResult:
       type: object
       properties:

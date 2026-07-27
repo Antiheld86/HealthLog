@@ -27,7 +27,9 @@ export const handleNightscoutSync = makePollCohortHandler({
     });
     return users.map((u) => u.id);
   },
-  syncUser: syncUserNightscout,
+  // The cohort accounts in rows imported; the failure half of the result is
+  // recorded on the `nightscout` ledger by the sync itself.
+  syncUser: async (userId) => (await syncUserNightscout(userId)).imported,
   // The fetch path already records + marks its own failure (token-redacted), so
   // this fires only for a future UNMARKED escape — and redacts the token before
   // the message reaches the ledger.

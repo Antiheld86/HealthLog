@@ -9,6 +9,11 @@
  *
  * `userId` is always narrowed from the session — never a body field. The write
  * `data` object is built field-by-field (no mass assignment).
+ *
+ * The response carries the resolved `outcome` alongside the two lists. The
+ * dialog used to raise a green toast on any 200, so a re-scan in which every
+ * confirmed row turned out to be a duplicate reported "saved 0 readings" under
+ * a tick. The verdict is the server's to compute; the dialog only renders it.
  */
 import { NextRequest } from "next/server";
 import { fireAndForget } from "@/lib/logging/fire-and-forget";
@@ -33,6 +38,7 @@ import {
   type InsertedLabForLink,
 } from "@/lib/labs/vault-link";
 import { annotate } from "@/lib/logging/context";
+import { classifyWrittenOutcome } from "@/lib/outcome/written-outcome";
 import {
   ocrCommitSchema,
   type OcrCommitRow,
@@ -235,5 +241,12 @@ async function commitOcrRows(request: NextRequest) {
     }
   }
 
-  return apiSuccess({ inserted, skipped });
+  return apiSuccess({
+    inserted,
+    skipped,
+    outcome: classifyWrittenOutcome({
+      written: inserted.length,
+      skipped: skipped.length,
+    }),
+  });
 }

@@ -1,6 +1,7 @@
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiSuccess, apiError } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
+import { resolveSyncOutcome } from "@/lib/outcome/written-outcome";
 import { syncUserWhoop } from "@/lib/whoop/sync";
 import { NextRequest } from "next/server";
 
@@ -27,6 +28,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
     // no body provided -> default incremental sync
   }
 
-  const { imported } = await syncUserWhoop(user.id, { fullSync });
-  return apiSuccess({ imported, fullSync });
+  // Resolved server-side so the card and the native client cannot disagree on
+  // how the same run reads.
+  const result = await syncUserWhoop(user.id, { fullSync });
+  return apiSuccess({ ...resolveSyncOutcome(result), fullSync });
 });

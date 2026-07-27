@@ -220,7 +220,7 @@ function createdRows() {
 describe("syncUserOura", () => {
   it("no-ops cleanly when unconnected", async () => {
     getConnMock.mockResolvedValue(null);
-    expect(await syncUserOura("u1")).toBe(0);
+    expect(await syncUserOura("u1")).toEqual({ imported: 0, failed: false });
     expect(recordSuccessMock).not.toHaveBeenCalled();
   });
 
@@ -229,7 +229,7 @@ describe("syncUserOura", () => {
     fetchReadinessMock.mockResolvedValue([
       { id: "x", day: "2026-06-10", score: 84 },
     ]);
-    const imported = await syncUserOura("u1");
+    const { imported } = await syncUserOura("u1");
     expect(imported).toBe(1);
     const row = createdRows()[0];
     expect(row).toMatchObject({
@@ -253,7 +253,7 @@ describe("syncUserOura", () => {
       refresh_token: "newRef",
       expires_in: 86400,
     });
-    const imported = await syncUserOura("u1");
+    const { imported } = await syncUserOura("u1");
     expect(refreshMock).toHaveBeenCalledWith("ref", expect.anything());
     expect(storeTokensMock).toHaveBeenCalledWith(
       "u1",
@@ -278,7 +278,7 @@ describe("syncUserOura", () => {
     // A concurrent sync rotated first → the persist returns the PEER's token.
     storeTokensMock.mockResolvedValue("peerAcc");
 
-    const imported = await syncUserOura("u1");
+    const { imported } = await syncUserOura("u1");
 
     // The retry runs with the peer's token rather than the invalidated one.
     expect(fetchReadinessMock).toHaveBeenLastCalledWith(
@@ -461,7 +461,7 @@ describe("syncUserOura", () => {
     fetchResilienceMock.mockResolvedValue([
       { id: "r", day: "2026-06-10", level: "strong" },
     ]);
-    const imported = await syncUserOura("u1");
+    const { imported } = await syncUserOura("u1");
     expect(imported).toBe(1);
     const row = createdRows()[0];
     expect(row).toMatchObject({
@@ -478,7 +478,7 @@ describe("syncUserOura", () => {
     fetchResilienceMock.mockResolvedValue([
       { id: "r", day: "2026-06-10", level: "godlike" },
     ]);
-    const imported = await syncUserOura("u1");
+    const { imported } = await syncUserOura("u1");
     expect(imported).toBe(0);
     expect(reconcileMock).not.toHaveBeenCalled();
   });
@@ -561,10 +561,13 @@ describe("syncUserOura", () => {
       { id: "o", day: "2026-06-10", spo2_percentage: { average: 97 } },
     ]);
 
-    const imported = await syncUserOura("u1");
+    const result = await syncUserOura("u1");
 
-    // The healthy collections still wrote their rows — the source is not blanked.
-    expect(imported).toBe(2);
+    // The healthy collections still wrote their rows — the source is not
+    // blanked — and the partial rides back with the count, so the card can
+    // report a warning rather than a tick over a run that lost a collection.
+    expect(result).toEqual({ imported: 2, failed: true });
+    const imported = result.imported;
     const written = createdRows().map((row) => row.type);
     expect(written).toContain("SLEEP_SCORE");
     expect(written).toContain("OXYGEN_SATURATION");
@@ -596,7 +599,7 @@ describe("syncUserOura", () => {
       { id: "o", day: "2026-06-10", spo2_percentage: { average: 96 } },
     ]);
 
-    const imported = await syncUserOura("u1");
+    const { imported } = await syncUserOura("u1");
 
     expect(imported).toBe(1);
     const written = createdRows().map((row) => row.type);
@@ -620,7 +623,7 @@ describe("syncUserOura", () => {
         reason: "http_403",
       }),
     );
-    const imported = await syncUserOura("u1");
+    const { imported } = await syncUserOura("u1");
     expect(imported).toBe(1);
     expect(recordSuccessMock).toHaveBeenCalledWith("u1", "oura");
     expect(recordFailureMock).not.toHaveBeenCalled();
@@ -647,7 +650,7 @@ describe("syncUserOura", () => {
       { id: "s", day: "2026-06-10", score: 80 },
     ]);
     fetchCyclePhasesMock.mockRejectedValue(new Error("boom"));
-    const imported = await syncUserOura("u1");
+    const { imported } = await syncUserOura("u1");
     expect(imported).toBe(1);
     expect(recordSuccessMock).toHaveBeenCalledWith("u1", "oura");
   });

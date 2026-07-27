@@ -30,6 +30,7 @@ import {
   type FailureKind,
 } from "@/lib/integrations/status";
 import type { IntegrationClassification } from "@/lib/integrations/http-status-classifier";
+import type { SyncWriteResult } from "@/lib/outcome/written-outcome";
 import {
   collapseToTypeDayKeys,
   recomputeBucketsForMeasurement,
@@ -122,19 +123,28 @@ export function classifyNightscoutFailure(err: unknown): FailureKind {
 }
 
 /**
- * Sync one user's recent SGV entries. Returns the count of rows FRESHLY
- * INSERTED this tick (re-confirmed rows the upsert merely touched are not
- * counted — the old insert+reconfirm total inflated the cohort's
- * `measurements_imported` and fired the reminder-satisfy trigger every tick
- * regardless of whether new glucose actually arrived). A user with no
- * configured instance is a clean no-op (returns 0, touches no status row).
+ * Sync one user's recent SGV entries.
+ *
+ * `imported` counts the rows FRESHLY INSERTED this tick (re-confirmed rows the
+ * upsert merely touched are not counted — the old insert+reconfirm total
+ * inflated the cohort's `measurements_imported` and fired the reminder-satisfy
+ * trigger every tick regardless of whether new glucose actually arrived).
+ * `failed` is true when any SGV row did not write.
+ *
+ * The count used to be the whole return value, which narrowed the failures
+ * away: a tick where every row was refused answered the same `0` as a tick
+ * that found nothing new, and the settings card rendered both as a green tick
+ * with a count. The caller now gets both halves and decides.
+ *
+ * A user with no configured instance is a clean no-op (nothing imported,
+ * nothing failed, no status row touched).
  */
 export async function syncUserNightscout(
   userId: string,
   opts: { count?: number } = {},
-): Promise<number> {
+): Promise<SyncWriteResult> {
   const creds = await getUserNightscoutCredentials(userId);
-  if (!creds) return 0;
+  if (!creds) return { imported: 0, failed: false };
 
   let entries: ParsedSgvEntry[];
   try {
@@ -168,11 +178,11 @@ export async function syncUserNightscout(
       kind: "transient",
       message: `${failedRows} of ${entries.length} SGV rows failed to write`,
     });
-    return inserted;
+    return { imported: inserted, failed: true };
   }
 
   await recordSyncSuccess(userId, "nightscout");
-  return inserted;
+  return { imported: inserted, failed: false };
 }
 
 /**

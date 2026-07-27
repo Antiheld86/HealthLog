@@ -3,6 +3,7 @@ import { apiSuccess, apiError } from "@/lib/api-response";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { annotate } from "@/lib/logging/context";
 import { syncUserPolarLegs } from "@/lib/jobs/reminder/polar-sync";
+import { resolveSyncOutcome } from "@/lib/outcome/written-outcome";
 
 /**
  * Manually trigger a Polar sync for the current user (v1.32.28).
@@ -31,8 +32,8 @@ export const POST = apiHandler(async () => {
   }
 
   try {
-    const imported = await syncUserPolarLegs(user.id);
-    return apiSuccess({ imported });
+    const result = await syncUserPolarLegs(user.id);
+    return apiSuccess(resolveSyncOutcome(result));
   } catch {
     // Both legs record their own classified failure on the `polar` ledger.
     // Answer generically so no upstream detail rides the response body.

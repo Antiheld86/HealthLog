@@ -56,6 +56,28 @@ describe("POST /api/google-health/sync", () => {
     expect(envelope.error).toBe("Google Health sync failed");
   });
 
+  it("reports a run that failed after writing some resources as a partial", async () => {
+    // A 502 threw the honest half away: rows DID land, and the card showed the
+    // generic error instead of "imported N, some data is behind".
+    vi.mocked(syncUserGoogleHealth).mockResolvedValue({
+      imported: 7,
+      failed: true,
+    });
+
+    const response = await POST(request());
+    const envelope = (await response.json()) as {
+      data: { imported: number; failed: boolean; outcome: string };
+      error: string | null;
+    };
+
+    expect(response.status).toBe(200);
+    expect(envelope.data).toMatchObject({
+      imported: 7,
+      failed: true,
+      outcome: "partial",
+    });
+  });
+
   it("keeps the successful imported-count response unchanged", async () => {
     vi.mocked(syncUserGoogleHealth).mockResolvedValue({
       imported: 7,
@@ -70,7 +92,7 @@ describe("POST /api/google-health/sync", () => {
 
     expect(response.status).toBe(200);
     expect(envelope).toEqual({
-      data: { imported: 7, fullSync: false },
+      data: { imported: 7, failed: false, outcome: "success", fullSync: false },
       error: null,
     });
     expect(syncUserGoogleHealth).toHaveBeenCalledWith("u1", {

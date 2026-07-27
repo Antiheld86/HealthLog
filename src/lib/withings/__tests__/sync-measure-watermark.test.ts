@@ -171,10 +171,10 @@ describe("syncUserMeasurements — watermark hold on hard row failure (F4)", () 
       .mockRejectedValueOnce(new Error("connection reset by peer"))
       .mockResolvedValue({} as never);
 
-    const imported = await syncUserMeasurements("user-1");
+    const result = await syncUserMeasurements("user-1");
 
-    // Only the second row persisted.
-    expect(imported).toBe(1);
+    // Only the second row persisted, and the caller is told the run lost one.
+    expect(result).toEqual({ imported: 1, failed: true });
     // The watermark is HELD — no stamp — so the next tick refetches the window.
     expect(prisma.withingsConnection.update).not.toHaveBeenCalled();
     expect(recordSyncSuccess).not.toHaveBeenCalled();
@@ -195,7 +195,7 @@ describe("syncUserMeasurements — watermark hold on hard row failure (F4)", () 
     ] as never);
     vi.mocked(prisma.measurement.create).mockRejectedValueOnce(P2002);
 
-    const imported = await syncUserMeasurements("user-1");
+    const { imported } = await syncUserMeasurements("user-1");
 
     // P2002 means the row is already present — nothing lost — so the cycle is
     // still healthy: stamp the watermark + success, record no failure.
@@ -216,7 +216,7 @@ describe("syncUserMeasurements — watermark hold on hard row failure (F4)", () 
       },
     ] as never);
 
-    const imported = await syncUserMeasurements("user-1");
+    const { imported } = await syncUserMeasurements("user-1");
 
     expect(imported).toBe(1);
     expect(prisma.withingsConnection.update).toHaveBeenCalledTimes(1);

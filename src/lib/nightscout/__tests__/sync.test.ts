@@ -90,18 +90,18 @@ afterEach(() => {
 });
 
 describe("syncUserNightscout", () => {
-  it("returns 0 and records nothing when the user is not configured", async () => {
+  it("returns an empty result and records nothing when the user is not configured", async () => {
     getCredsMock.mockResolvedValue(null);
-    const n = await syncUserNightscout("u1");
-    expect(n).toBe(0);
+    const result = await syncUserNightscout("u1");
+    expect(result).toEqual({ imported: 0, failed: false });
     expect(fetchSgvEntriesMock).not.toHaveBeenCalled();
     expect(recordSuccessMock).not.toHaveBeenCalled();
   });
 
   it("writes each SGV entry as a BLOOD_GLUCOSE mg/dL measurement", async () => {
     fetchSgvEntriesMock.mockResolvedValue([ENTRY_A, ENTRY_B]);
-    const n = await syncUserNightscout("u1");
-    expect(n).toBe(2);
+    const result = await syncUserNightscout("u1");
+    expect(result).toEqual({ imported: 2, failed: false });
     expect(upsertMock).toHaveBeenCalledTimes(2);
     const first = upsertMock.mock.calls[0]![0];
     expect(first.create.type).toBe("BLOOD_GLUCOSE");
@@ -146,11 +146,11 @@ describe("syncUserNightscout", () => {
     // ENTRY_A already exists (a re-confirm); ENTRY_B is genuinely new.
     findManyMock.mockResolvedValue([{ externalId: "ns:abc" }]);
 
-    const n = await syncUserNightscout("u1");
+    const result = await syncUserNightscout("u1");
 
     // The inflated insert+reconfirm count used to fire the reminder-satisfy
     // trigger every tick; the honest count is the single fresh insert.
-    expect(n).toBe(1);
+    expect(result).toEqual({ imported: 1, failed: false });
     // Both rows are still written (idempotent), but only the fresh one emits.
     expect(upsertMock).toHaveBeenCalledTimes(2);
     expect(emitArrivalsMock).toHaveBeenCalledTimes(1);
@@ -172,10 +172,12 @@ describe("syncUserNightscout", () => {
       .mockResolvedValueOnce({ id: "r1" })
       .mockRejectedValueOnce(new Error("bad row"));
 
-    const n = await syncUserNightscout("u1");
+    const result = await syncUserNightscout("u1");
 
-    // The one good row still landed; the tick is honest about the failed row.
-    expect(n).toBe(1);
+    // The one good row still landed; the tick is honest about the failed row —
+    // the count alone used to narrow that away, so the card called a window in
+    // which nothing wrote a success.
+    expect(result).toEqual({ imported: 1, failed: true });
     expect(recordSuccessMock).not.toHaveBeenCalled();
     expect(recordFailureMock).toHaveBeenCalledWith(
       expect.objectContaining({

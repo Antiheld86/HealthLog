@@ -57,16 +57,63 @@ beforeEach(() => {
 
 describe("POST /api/nightscout/sync", () => {
   it("syncs the session user and answers with the freshly inserted count", async () => {
-    vi.mocked(syncUserNightscout).mockResolvedValue(36);
+    vi.mocked(syncUserNightscout).mockResolvedValue({
+      imported: 36,
+      failed: false,
+    });
 
     const response = await post(request());
 
     expect(response.status).toBe(200);
     expect(await envelope(response)).toEqual({
-      data: { imported: 36 },
+      data: { imported: 36, failed: false, outcome: "success" },
       error: null,
     });
     expect(syncUserNightscout).toHaveBeenCalledWith("u1");
+  });
+
+  it("does not call a window whose every row was refused a success", async () => {
+    // The defect: 200 + `imported: 0` rendered as a green tick with a count,
+    // when in fact not one SGV row reached the database.
+    vi.mocked(syncUserNightscout).mockResolvedValue({
+      imported: 0,
+      failed: true,
+    });
+
+    const response = await post(request());
+
+    expect(response.status).toBe(200);
+    expect((await envelope(response)).data).toEqual({
+      imported: 0,
+      failed: true,
+      outcome: "failed",
+    });
+  });
+
+  it("calls a window that wrote some rows and lost others a partial", async () => {
+    vi.mocked(syncUserNightscout).mockResolvedValue({
+      imported: 30,
+      failed: true,
+    });
+
+    const response = await post(request());
+
+    expect((await envelope(response)).data).toMatchObject({
+      outcome: "partial",
+    });
+  });
+
+  it("calls a window that found nothing new empty, not a success", async () => {
+    vi.mocked(syncUserNightscout).mockResolvedValue({
+      imported: 0,
+      failed: false,
+    });
+
+    const response = await post(request());
+
+    expect((await envelope(response)).data).toMatchObject({
+      outcome: "empty",
+    });
   });
 
   it("refuses an unauthenticated caller before syncing anything", async () => {
