@@ -5297,7 +5297,6 @@
       "minutesAgo": "{count} min ago",
       "hoursAgo": "{count} h ago",
       "daysAgo": "{count} d ago",
-      "ariaLabel": "Integration status",
       "resumeCta": "Reconnect",
       "resumeSuccess": "Integration resumed",
       "resumeError": "Reconnect failed",
@@ -5841,7 +5840,20 @@
       "backgroundStep": "Keep Background App Refresh enabled. The app syncs new data automatically in the foreground and when iOS grants background time.",
       "importNote": "Need older history or cannot use the iOS app? The Apple Health XML/ZIP upload is a one-shot fallback and does not enable live sync.",
       "importAction": "Open one-shot import",
-      "staleNote": "No Apple Health data has arrived for over a week. Open the HealthLog app on your iPhone and check the Apple Health permissions."
+      "staleNote": "No Apple Health data has arrived for over a week. Open the HealthLog app on your iPhone and check the Apple Health permissions.",
+      "delivery": {
+        "title": "Delivery",
+        "lastTriggerLabel": "Latest sync arrived",
+        "lastBackgroundLabel": "Last background sync",
+        "backgroundNever": "Never — every sync so far arrived with the app open",
+        "noSyncYet": "No sync has arrived yet, so there is nothing to report here.",
+        "trigger": {
+          "foreground": "with the app open",
+          "background": "in the background",
+          "push": "from a push wake",
+          "unknown": "trigger not reported by the app"
+        }
+      }
     },
     "garminInfo": {
       "title": "Garmin",

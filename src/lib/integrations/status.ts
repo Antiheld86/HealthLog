@@ -229,6 +229,32 @@ const ERROR_STATES: ReadonlySet<string> = new Set<IntegrationState>([
   "parked",
 ]);
 
+/**
+ * Read the `failingLegs` JSON column into an ordered list of leg names.
+ *
+ * Anything that is not an array of strings — a legacy `null`, a hand-edited
+ * row, a shape from a future schema — reads as the empty set, which is the
+ * pre-existing "unattributed failure" semantics under which any success clears
+ * the row. Non-string members are dropped rather than coerced: a leg name is an
+ * identifier the caller passes, and inventing one from a number would let a
+ * success match a leg nobody ever recorded.
+ */
+function readFailingLegs(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === "string");
+}
+
+/**
+ * Append `leg` as the most recent failure, moving it to the end if it is
+ * already in the set. Ordering is load-bearing: the last element is the leg
+ * that wrote the message `lastError` currently holds, which is what lets a
+ * partial recovery tell "this message still describes a failing leg" from
+ * "this message belongs to a leg that has since recovered".
+ */
+function withLegRecorded(current: readonly string[], leg: string): string[] {
+  return [...current.filter((entry) => entry !== leg), leg];
+}
+
 export interface IntegrationStatusSnapshot {
   integration: IntegrationKey;
   state: IntegrationState;
@@ -373,15 +399,26 @@ export interface RecordSyncSuccessOptions {
  * the state that the sleep leg had recorded at :15. The failing leg's strike
  * ladder was reset several times an hour, so it could never reach the alert
  * threshold or the park window, and the card painted a green "connected · 12
- * minutes ago" over a data class that had stopped arriving. When the row holds
- * an error owned by a DIFFERENT named leg, this success records its attempt and
- * leaves the error standing.
+ * minutes ago" over a data class that had stopped arriving.
+ *
+ * This success removes its OWN leg from the failing set and clears the row only
+ * once that set is empty. The set matters because the previous single slot
+ * could remember one leg at a time: with sleep and activity both failing, the
+ * second failure overwrote the first, and the second leg recovering then wiped
+ * an error the first was still causing. The ledger forgot a live failure and
+ * went green over it — the exact case this set exists to hold.
  *
  * The partial path deliberately does NOT advance `lastSuccessAt`. That field is
  * what the freshness arms and the card's "connected · X ago" read, and moving
  * it forward while another leg is dead is exactly the sentence this change
  * exists to stop the ledger from saying. `lastAttemptAt` does advance, so the
  * row still reads as "being tried" rather than ageing into `stalled`.
+ *
+ * `lastError` is cleared on the partial path when the recovering leg is the one
+ * that wrote it. The message then describes a leg that is now healthy, and a
+ * row that keeps showing it is describing the wrong failure; the next attempt
+ * by a still-failing leg writes its own. No message is honest here — a guessed
+ * one would not be.
  */
 export async function recordSyncSuccess(
   userId: string,
@@ -394,18 +431,28 @@ export async function recordSyncSuccess(
   if (leg !== null) {
     const existing = await prisma.integrationStatus.findUnique({
       where: { userId_integration: { userId, integration } },
-      select: { state: true, failingLeg: true },
+      select: { state: true, failingLegs: true },
     });
+    const failingLegs = readFailingLegs(existing?.failingLegs);
+    const remaining = failingLegs.filter((entry) => entry !== leg);
     const heldByAnotherLeg =
       existing != null &&
-      existing.failingLeg != null &&
-      existing.failingLeg !== leg &&
+      remaining.length > 0 &&
       ERROR_STATES.has(existing.state);
 
     if (heldByAnotherLeg) {
+      // The recovering leg owned `lastError` iff it was the most recent
+      // failure, i.e. the last element. Dropping it leaves the row without a
+      // message for any leg that is still failing, which is the honest state
+      // until one of them fails again and writes its own.
+      const ownedLastError = failingLegs[failingLegs.length - 1] === leg;
       await prisma.integrationStatus.update({
         where: { userId_integration: { userId, integration } },
-        data: { lastAttemptAt: now },
+        data: {
+          lastAttemptAt: now,
+          failingLegs: remaining,
+          ...(ownedLastError ? { lastError: null } : {}),
+        },
       });
       // Meta only — the enclosing wide event owns its own action name (the
       // cron task), and overwriting it here would rename the job.
@@ -414,7 +461,7 @@ export async function recordSyncSuccess(
           integration_partial_success: {
             integration,
             succeeded_leg: leg,
-            failing_leg: existing.failingLeg,
+            failing_legs: remaining,
           },
         },
       });
@@ -435,6 +482,7 @@ export async function recordSyncSuccess(
       lastSuccessAt: now,
       lastAttemptAt: now,
       consecutiveFailuresByKind: zeroBuckets(),
+      failingLegs: [],
     },
     update: {
       state: "connected",
@@ -444,7 +492,7 @@ export async function recordSyncSuccess(
       consecutiveFailuresByKind: zeroBuckets(),
       persistentFailureStartedAt: null,
       failingSinceAt: null,
-      failingLeg: null,
+      failingLegs: [],
       alertedAt: null,
     },
   });
@@ -518,9 +566,19 @@ export async function recordSyncFailure(
       consecutiveFailuresByKind: true,
       persistentFailureStartedAt: true,
       failingSinceAt: true,
+      failingLegs: true,
       alertedAt: true,
     },
   });
+
+  // The failing set, with this leg appended as the most recent failure. An
+  // unattributed failure (no leg — a single-leg provider, or a recorder that
+  // does not know which leg it caught) adds nothing and removes nothing: it
+  // carries no attribution to record, and erasing what other legs already
+  // reported would let one of their successes clear an error it did not fix.
+  const existingLegs = readFailingLegs(existing?.failingLegs);
+  const failingLegs =
+    leg !== null ? withLegRecorded(existingLegs, leg) : existingLegs;
 
   // Resolve the starting bucket envelope:
   //   - existing JSON value if present
@@ -627,7 +685,7 @@ export async function recordSyncFailure(
       consecutiveFailuresByKind: buckets,
       persistentFailureStartedAt: isPersistent ? now : null,
       failingSinceAt,
-      failingLeg: leg,
+      failingLegs,
     },
     update: {
       state: newState,
@@ -636,7 +694,7 @@ export async function recordSyncFailure(
       consecutiveFailuresByKind: buckets,
       persistentFailureStartedAt,
       failingSinceAt,
-      failingLeg: leg,
+      failingLegs,
     },
   });
 
@@ -663,6 +721,10 @@ export async function recordSyncFailure(
       // "we concluded it was after a day of retrying".
       escalatedFrom: escalatedFromTransient ? kind : null,
       failingLeg: leg,
+      // Every leg the row currently holds an error for, not just this one —
+      // the audit trail is where an operator reconstructs an overlapping
+      // outage, and one leg per row was never enough to do it.
+      failingLegs,
       failingSinceAt: failingSinceAt.toISOString(),
       streakAgeMs,
       errorCode: errorCode ?? null,
@@ -776,7 +838,7 @@ export async function resumeIntegrationFromPark(
       consecutiveFailuresByKind: zeroBuckets(),
       persistentFailureStartedAt: null,
       failingSinceAt: null,
-      failingLeg: null,
+      failingLegs: [],
       alertedAt: null,
     },
   });
@@ -833,10 +895,22 @@ export async function parkIntegrationAtReauth(opts: {
   // audit log when the state or error changes.
   const existing = await prisma.integrationStatus.findUnique({
     where: { userId_integration: { userId, integration } },
-    select: { state: true, lastError: true, failingSinceAt: true },
+    select: {
+      state: true,
+      lastError: true,
+      failingSinceAt: true,
+      failingLegs: true,
+    },
   });
   const isFreshPark =
     existing?.state !== "error_reauth" || existing.lastError !== encryptedError;
+
+  // Same set semantics as `recordSyncFailure`: a scope-skip park adds its leg
+  // to whatever the row already holds rather than replacing it, so a sibling
+  // leg's independent failure survives the park.
+  const existingLegs = readFailingLegs(existing?.failingLegs);
+  const failingLegs =
+    leg !== null ? withLegRecorded(existingLegs, leg) : existingLegs;
 
   await prisma.integrationStatus.upsert({
     where: { userId_integration: { userId, integration } },
@@ -851,7 +925,7 @@ export async function parkIntegrationAtReauth(opts: {
       // 3-strike runway before paging.
       consecutiveFailuresByKind: zeroBuckets(),
       failingSinceAt: now,
-      failingLeg: leg,
+      failingLegs,
     },
     update: {
       state: "error_reauth",
@@ -861,7 +935,7 @@ export async function parkIntegrationAtReauth(opts: {
       // bucket values are preserved exactly. This is the whole point
       // of the helper.
       failingSinceAt: existing?.failingSinceAt ?? now,
-      failingLeg: leg,
+      failingLegs,
     },
   });
 
@@ -948,7 +1022,7 @@ export async function markDisconnected(
       consecutiveFailuresByKind: zeroBuckets(),
       persistentFailureStartedAt: null,
       failingSinceAt: null,
-      failingLeg: null,
+      failingLegs: [],
       alertedAt: null,
     },
   });
@@ -977,7 +1051,7 @@ export async function markReconnected(
       consecutiveFailuresByKind: zeroBuckets(),
       persistentFailureStartedAt: null,
       failingSinceAt: null,
-      failingLeg: null,
+      failingLegs: [],
       alertedAt: null,
     },
   });

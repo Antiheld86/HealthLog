@@ -18,7 +18,10 @@ import { HeartPulse, Upload } from "lucide-react";
 
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { SettingsCard } from "@/components/settings/settings-card";
-import { IntegrationStatusPill } from "@/components/settings/integration-status-pill";
+import {
+  formatRelative,
+  IntegrationStatusPill,
+} from "@/components/settings/integration-status-pill";
 import { Button } from "@/components/ui/button";
 import { apiGet } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
@@ -31,10 +34,82 @@ import { queryKeys } from "@/lib/query-keys";
 import { MetricFreshnessDisclosure } from "./metric-freshness-disclosure";
 import { IntegrationErrorMessage, pillStateForVerdict } from "./shared";
 
+type SyncTrigger = "foreground" | "background" | "push";
+
 interface HealthKitStatus {
   lastSyncedAt: string | null;
+  /** What the client said woke it for the most recent accepted batch. */
+  lastSyncTrigger?: SyncTrigger | null;
+  /** When data last arrived without the app being opened. */
+  lastBackgroundSyncAt?: string | null;
   syncHealth?: SyncHealth;
   metricFreshness?: MetricFreshnessEntry[];
+}
+
+const TRIGGER_KEYS: Record<SyncTrigger, string> = {
+  foreground: "settings.appleHealth.delivery.trigger.foreground",
+  background: "settings.appleHealth.delivery.trigger.background",
+  push: "settings.appleHealth.delivery.trigger.push",
+};
+
+/**
+ * Whether the phone is delivering on its own, or only while someone is looking
+ * at it. `lastSyncedAt` cannot tell those apart — a card that reports nothing
+ * but "last sync 10 minutes ago" reads identically in both cases, which is why
+ * "is background delivery working?" was unanswerable from either side. The
+ * trigger of the most recent batch and the date of the last background arrival
+ * are the two facts that settle it, and each is shown only when it exists: a
+ * client that reports no trigger says so rather than being guessed at.
+ */
+function DeliveryDiagnostic({
+  status,
+  t,
+}: {
+  status: HealthKitStatus;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  const trigger = status.lastSyncTrigger ?? null;
+  const triggerLabel = t(
+    trigger
+      ? TRIGGER_KEYS[trigger]
+      : "settings.appleHealth.delivery.trigger.unknown",
+  );
+  const backgroundAt = status.lastBackgroundSyncAt;
+
+  return (
+    <div className="space-y-2" data-testid="apple-health-delivery">
+      <h3 className="text-sm font-semibold">
+        {t("settings.appleHealth.delivery.title")}
+      </h3>
+      {status.lastSyncedAt ? (
+        <dl className="space-y-1 text-sm">
+          <div className="flex flex-wrap gap-x-2">
+            <dt className="text-muted-foreground">
+              {t("settings.appleHealth.delivery.lastTriggerLabel")}
+            </dt>
+            <dd data-testid="apple-health-last-trigger">{triggerLabel}</dd>
+          </div>
+          <div className="flex flex-wrap gap-x-2">
+            <dt className="text-muted-foreground">
+              {t("settings.appleHealth.delivery.lastBackgroundLabel")}
+            </dt>
+            <dd data-testid="apple-health-last-background">
+              {backgroundAt
+                ? formatRelative(
+                    Math.max(0, Date.now() - new Date(backgroundAt).getTime()),
+                    t,
+                  )
+                : t("settings.appleHealth.delivery.backgroundNever")}
+            </dd>
+          </div>
+        </dl>
+      ) : (
+        <p className="text-muted-foreground text-sm">
+          {t("settings.appleHealth.delivery.noSyncYet")}
+        </p>
+      )}
+    </div>
+  );
 }
 
 export function AppleHealthCard({ enabled }: { enabled: boolean }) {
@@ -95,6 +170,8 @@ export function AppleHealthCard({ enabled }: { enabled: boolean }) {
             {t("settings.appleHealth.staleNote")}
           </p>
         )}
+
+        {showPill && <DeliveryDiagnostic status={status} t={t} />}
 
         <MetricFreshnessDisclosure
           entries={status?.metricFreshness}

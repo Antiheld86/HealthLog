@@ -319,9 +319,9 @@ model User {
   // must never be the OpenAI key. Separate columns make that structural
   // instead of a comment. The base URL passes the same SSRF floor as the
   // Local provider (`isPublicUrl` unless the operator allowlisted the host).
-  aiCompatBaseUrl          String?              @map("ai_compat_base_url")
-  aiCompatKeyEncrypted     String?              @map("ai_compat_key_encrypted")
-  aiCompatModel            String?              @map("ai_compat_model")
+  aiCompatBaseUrl      String? @map("ai_compat_base_url")
+  aiCompatKeyEncrypted String? @map("ai_compat_key_encrypted")
+  aiCompatModel        String? @map("ai_compat_model")
 
   // v1.4.16 phase B5b — ordered fallback chain for multi-provider AI
   // redundancy. Each entry is `{ providerType, priority, enabled }`,
@@ -415,8 +415,20 @@ model User {
 
   // HealthKit (iOS) integration config — list of per-metric direction toggles.
   // Shape: { entries: [{ id, kind, direction, enabled }], lastSyncedAt }
-  healthKitConfigJson   Json?     @map("healthkit_config_json")
-  healthKitLastSyncedAt DateTime? @map("healthkit_last_synced_at")
+  healthKitConfigJson           Json?     @map("healthkit_config_json")
+  healthKitLastSyncedAt         DateTime? @map("healthkit_last_synced_at")
+  // What triggered the most recent accepted HealthKit batch — "foreground",
+  // "background" or "push", exactly as the client declared it on the write.
+  // Null when the client sent no trigger (an older build, or a batch that
+  // predates the field).
+  //
+  // `healthKitLastBackgroundSyncAt` dates the most recent batch that arrived
+  // WITHOUT the app being opened. It is the one instrument that tells "the
+  // phone is delivering on its own" apart from "every arrival happened while
+  // the app was on screen", which is otherwise indistinguishable from the
+  // outside — `healthKitLastSyncedAt` alone looks identical either way.
+  healthKitLastSyncTrigger      String?   @map("healthkit_last_sync_trigger")
+  healthKitLastBackgroundSyncAt DateTime? @map("healthkit_last_background_sync_at")
 
   // Display name (optional override of username for greetings).
   displayName String? @map("display_name")
@@ -4175,11 +4187,21 @@ model IntegrationStatus {
   // blip apart from a dead pipe. Cleared by a success that is entitled to
   // clear it, by a reconnect, a disconnect, and a resume.
   failingSinceAt             DateTime? @map("failing_since_at")
-  // Which sync leg owns the error currently on the row. `null` = the provider
-  // has a single leg, or the failure predates leg attribution. A success from
-  // a DIFFERENT leg may not clear an error this one did not cause — see
-  // `recordSyncSuccess`.
-  failingLeg                 String?   @map("failing_leg")
+  // Every sync leg currently known to be failing, oldest failure first, as a
+  // JSON string array. A single slot could only ever remember one leg, so two
+  // legs of the same provider failing in overlapping windows erased each other
+  // and the row forgot one of them. A failure adds its leg; a success removes
+  // its own; the error state, the buckets and `failingSinceAt` clear only when
+  // the array is empty — see `recordSyncSuccess`.
+  //
+  // The LAST element is the leg that failed most recently and therefore owns
+  // whatever message `lastError` holds. When that leg recovers while others are
+  // still failing, `lastError` is cleared rather than left describing a leg that
+  // is now healthy.
+  //
+  // An empty array means "failing, but unattributed" (a single-leg provider, or
+  // a failure recorded without a leg), under which any success clears the row.
+  failingLegs                Json?     @map("failing_legs")
   alertedAt                  DateTime? @map("alerted_at") // last time admin Telegram alert fired (idempotency guard)
   createdAt                  DateTime  @default(now()) @map("created_at")
   updatedAt                  DateTime  @updatedAt @map("updated_at")

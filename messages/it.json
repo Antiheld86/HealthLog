@@ -5297,7 +5297,6 @@
       "minutesAgo": "{count} min fa",
       "hoursAgo": "{count} h fa",
       "daysAgo": "{count} g fa",
-      "ariaLabel": "Stato dell’integrazione",
       "resumeCta": "Riconnetti",
       "resumeSuccess": "Integrazione ripresa",
       "resumeError": "Riconnessione fallita",
@@ -5841,7 +5840,20 @@
       "backgroundStep": "Mantieni attivo l’aggiornamento in background. L’app sincronizza automaticamente i nuovi dati in primo piano e quando iOS concede tempo in background.",
       "importNote": "Ti serve lo storico precedente o non puoi usare l’app iOS? Il caricamento XML/ZIP di Apple Health è un’alternativa una tantum e non attiva la sincronizzazione in tempo reale.",
       "importAction": "Apri importazione una tantum",
-      "staleNote": "Da più di una settimana non arrivano dati da Apple Health. Apri l'app HealthLog sull'iPhone e controlla i permessi di Apple Health."
+      "staleNote": "Da più di una settimana non arrivano dati da Apple Health. Apri l'app HealthLog sull'iPhone e controlla i permessi di Apple Health.",
+      "delivery": {
+        "title": "Consegna",
+        "lastTriggerLabel": "L'ultima sincronizzazione è arrivata",
+        "lastBackgroundLabel": "Ultima sincronizzazione in background",
+        "backgroundNever": "Mai — finora ogni sincronizzazione è arrivata con l'app aperta",
+        "noSyncYet": "Non è ancora arrivata alcuna sincronizzazione, quindi qui non c'è nulla da riferire.",
+        "trigger": {
+          "foreground": "con l'app aperta",
+          "background": "in background",
+          "push": "da una sveglia push",
+          "unknown": "trigger non segnalato dall'app"
+        }
+      }
     },
     "garminInfo": {
       "title": "Garmin",

@@ -15,6 +15,11 @@ const healthKitDirectionEnum = z
   .enum(["bidirectional", "readOnly", "writeOnly", "disabled"])
   .describe("Per-metric sync direction.");
 
+// Mirror the batch route's `syncTriggerEnum` — what woke the client for a sync.
+const healthKitSyncTriggerEnum = z
+  .enum(["foreground", "background", "push"])
+  .describe("What triggered a HealthKit batch.");
+
 // Resolved entry (defaults merged): `kind` + `enabled` are always present.
 const healthKitEntry = z
   .object({
@@ -88,6 +93,19 @@ const healthKitConfigResponse = z
       .nullable()
       .describe(
         "When HealthKit last synced for this user; null when never (and always null on the PATCH echo).",
+      ),
+    lastSyncTrigger: healthKitSyncTriggerEnum
+      .nullable()
+      .optional()
+      .describe(
+        "What the client declared triggered the most recent accepted batch. Null when the client sent no trigger — an older build, or a batch that predates the field. Present on the GET read; omitted from the PATCH echo.",
+      ),
+    lastBackgroundSyncAt: z.iso
+      .datetime({ offset: true })
+      .nullable()
+      .optional()
+      .describe(
+        "When a batch last arrived without the app being opened (a `background` or `push` trigger). Null when that has never happened. `lastSyncedAt` alone cannot separate a phone that delivers on its own from one that only delivers while the app is open; this field is what does. Present on the GET read; omitted from the PATCH echo.",
       ),
     syncHealth: syncHealth
       .optional()

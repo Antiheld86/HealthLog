@@ -169,12 +169,14 @@ const batchEntrySchema = z.object({
 });
 
 // v1.32.8 (iOS #66) — optional per-REQUEST diagnostic tag naming what woke the
-// client for this sync. Purely observational: it flows into the
-// `measurement.batch.ingest` wide event and NOTHING else — never persisted,
-// never part of the dedup key, never an input to attribution or how a sample is
-// stored. Only the client knows its own wake reason, so it is client-asserted
-// by necessity; being diagnostic-only, that carries no trust surface. Optional
-// so every pre-#66 caller stays byte-for-byte unchanged.
+// client for this sync. Purely diagnostic: it flows into the
+// `measurement.batch.ingest` wide event and onto the account's HealthKit
+// diagnostic columns, which the Apple Health card reads. It is never part of
+// the dedup key and never an input to attribution or how a sample is stored —
+// sending it or omitting it produces byte-identical row outcomes. Only the
+// client knows its own wake reason, so it is client-asserted by necessity;
+// being diagnostic-only, that carries no trust surface. Optional so every
+// pre-#66 caller stays byte-for-byte unchanged.
 const syncTriggerEnum = z.enum(["foreground", "background", "push"]);
 
 const batchPayloadSchema = z.object({
@@ -644,10 +646,28 @@ async function postBatch(request: NextRequest): Promise<Response> {
   // This batch route is the native HealthKit ingestion boundary. Stamp only
   // after every attempted write has reached a durable, non-failed verdict;
   // MANUAL-only and skipped-only batches are not HealthKit syncs.
+  //
+  // The trigger the client declared is stamped alongside, and a background- or
+  // push-triggered batch additionally dates `healthKitLastBackgroundSyncAt`.
+  // Without that second timestamp there is no way to tell a phone that delivers
+  // on its own from one that only ever delivers while the app is open — both
+  // look like a moving `healthKitLastSyncedAt`. A batch that declares no
+  // trigger writes null over the previous value rather than leaving a stale one
+  // standing: the field describes THIS sync, and an older build's silence is
+  // not evidence about it.
   if (healthKitSyncSucceeded) {
+    const syncedAt = new Date();
+    const deliveredWithoutTheApp =
+      syncTrigger === "background" || syncTrigger === "push";
     await prisma.user.update({
       where: { id: user.id },
-      data: { healthKitLastSyncedAt: new Date() },
+      data: {
+        healthKitLastSyncedAt: syncedAt,
+        healthKitLastSyncTrigger: syncTrigger ?? null,
+        ...(deliveredWithoutTheApp
+          ? { healthKitLastBackgroundSyncAt: syncedAt }
+          : {}),
+      },
     });
   }
 

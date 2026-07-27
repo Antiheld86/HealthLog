@@ -5297,7 +5297,6 @@
       "minutesAgo": "{count} min temu",
       "hoursAgo": "{count} godz. temu",
       "daysAgo": "{count} dni temu",
-      "ariaLabel": "Status integracji",
       "resumeCta": "Połącz ponownie",
       "resumeSuccess": "Integracja wznowiona",
       "resumeError": "Ponowne połączenie nieudane",
@@ -5841,7 +5840,20 @@
       "backgroundStep": "Pozostaw włączone odświeżanie aplikacji w tle. Aplikacja synchronizuje nowe dane automatycznie na pierwszym planie oraz gdy iOS przydzieli jej czas w tle.",
       "importNote": "Potrzebujesz starszej historii lub nie możesz użyć aplikacji iOS? Przesłanie pliku XML/ZIP z Apple Health jest jednorazową alternatywą i nie włącza synchronizacji na żywo.",
       "importAction": "Otwórz jednorazowy import",
-      "staleNote": "Od ponad tygodnia nie napłynęły żadne dane z Apple Health. Otwórz aplikację HealthLog na iPhonie i sprawdź uprawnienia Apple Health."
+      "staleNote": "Od ponad tygodnia nie napłynęły żadne dane z Apple Health. Otwórz aplikację HealthLog na iPhonie i sprawdź uprawnienia Apple Health.",
+      "delivery": {
+        "title": "Dostarczanie",
+        "lastTriggerLabel": "Ostatnia synchronizacja dotarła",
+        "lastBackgroundLabel": "Ostatnia synchronizacja w tle",
+        "backgroundNever": "Nigdy — jak dotąd każda synchronizacja dotarła przy otwartej aplikacji",
+        "noSyncYet": "Żadna synchronizacja jeszcze nie dotarła, więc nie ma tu nic do zgłoszenia.",
+        "trigger": {
+          "foreground": "przy otwartej aplikacji",
+          "background": "w tle",
+          "push": "z wybudzenia push",
+          "unknown": "aplikacja nie zgłosiła wyzwalacza"
+        }
+      }
     },
     "garminInfo": {
       "title": "Garmin",

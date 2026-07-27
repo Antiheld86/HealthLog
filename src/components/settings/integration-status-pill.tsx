@@ -201,7 +201,13 @@ export function IntegrationStatusPill({
             ? "destructive"
             : "outline"
       }
-      aria-label={t("settings.integrationPill.ariaLabel")}
+      // No `aria-label` here. One used to sit on the badge and, being a
+      // generic string, it REPLACED the accessible name with itself — a screen
+      // reader announced the same words for "connected · 4 minutes ago" as for
+      // "error", which is the one distinction the pill exists to make. The
+      // visible label is the accessible name; the relative time stays
+      // `aria-hidden` because it is decoration on top of a state that already
+      // reads.
       className={cn(
         "max-w-full whitespace-nowrap",
         state === "connected" && connectedChipClass,

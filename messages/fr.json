@@ -5297,7 +5297,6 @@
       "minutesAgo": "il y a {count} min",
       "hoursAgo": "il y a {count} h",
       "daysAgo": "il y a {count} j",
-      "ariaLabel": "Statut de l’intégration",
       "resumeCta": "Reconnecter",
       "resumeSuccess": "Intégration reprise",
       "resumeError": "Échec de la reconnexion",
@@ -5841,7 +5840,20 @@
       "backgroundStep": "Laisse l’actualisation en arrière-plan activée. L’app synchronise automatiquement les nouvelles données au premier plan et lorsque iOS lui accorde du temps en arrière-plan.",
       "importNote": "Besoin d’un ancien historique ou impossible d’utiliser l’app iOS ? L’envoi XML/ZIP Apple Health est une solution ponctuelle et n’active pas la synchronisation en direct.",
       "importAction": "Ouvrir l’import ponctuel",
-      "staleNote": "Aucune donnée Apple Health n'est arrivée depuis plus d'une semaine. Ouvrez l'app HealthLog sur votre iPhone et vérifiez les autorisations Apple Health."
+      "staleNote": "Aucune donnée Apple Health n'est arrivée depuis plus d'une semaine. Ouvrez l'app HealthLog sur votre iPhone et vérifiez les autorisations Apple Health.",
+      "delivery": {
+        "title": "Livraison",
+        "lastTriggerLabel": "La dernière synchronisation est arrivée",
+        "lastBackgroundLabel": "Dernière synchronisation en arrière-plan",
+        "backgroundNever": "Jamais — jusqu'ici chaque synchronisation est arrivée avec l'app ouverte",
+        "noSyncYet": "Aucune synchronisation n'est encore arrivée, il n'y a donc rien à signaler ici.",
+        "trigger": {
+          "foreground": "avec l'app ouverte",
+          "background": "en arrière-plan",
+          "push": "depuis un réveil push",
+          "unknown": "déclencheur non signalé par l'app"
+        }
+      }
     },
     "garminInfo": {
       "title": "Garmin",

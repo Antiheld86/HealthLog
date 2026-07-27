@@ -112,15 +112,16 @@ const batchPayloadSchema = z
   .object({
     entries: z.array(batchEntrySchema).min(1).max(500),
     // v1.32.8 (iOS #66) — optional per-request diagnostic tag naming what woke
-    // the client for this sync. Observability only: it is recorded on the
-    // ingest wide event and NEVER persisted, deduped on, or used in
-    // attribution — sending it or omitting it produces byte-identical row
-    // outcomes. Omit on any client that does not track its wake reason.
+    // the client for this sync. Diagnostic only: it is recorded on the ingest
+    // wide event and on the account's HealthKit diagnostic fields, which
+    // `GET /api/integrations/healthkit` publishes. It is never deduped on or
+    // used in attribution — sending it or omitting it produces byte-identical
+    // row outcomes. Omit on any client that does not track its wake reason.
     syncTrigger: z
       .enum(["foreground", "background", "push"])
       .optional()
       .describe(
-        "Diagnostic-only. Names what triggered this sync (foreground app open, background refresh, or a push wake) so an operator can see, per batch, which trigger produced it. Recorded on the ingest wide event and nowhere else — it does not affect dedup, attribution, or how any sample is stored. Optional and backward-compatible: pre-#66 clients omit it.",
+        "Diagnostic-only. Names what triggered this sync (foreground app open, background refresh, or a push wake). Recorded on the ingest wide event and kept on the account as `lastSyncTrigger` — plus `lastBackgroundSyncAt` for a `background` or `push` trigger — both readable from `GET /api/integrations/healthkit`. It does not affect dedup, attribution, or how any sample is stored. Optional and backward-compatible: pre-#66 clients omit it.",
       ),
   })
   .meta({
