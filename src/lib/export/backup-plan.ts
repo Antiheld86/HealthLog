@@ -154,7 +154,7 @@ export const DERIVED_MODELS: Readonly<Record<string, string>> = {
   DocumentContentIndex:
     "A search index over `InboundDocument` text; rebuilt by the indexer.",
   DocumentThumbnail:
-    "Rendered from the stored document bytes on demand, and those bytes are carried, so the picture rebuilds itself on first view.",
+    "Rendered from the stored document bytes on demand. Those bytes travel in a disaster-recovery payload, so the picture rebuilds itself on first view; a portable export carries metadata only, and there the thumbnail has nothing to rebuild from — but neither does the document, so nothing is lost that the export did not already disclose.",
   ArrivalReaction:
     "Derived from what changed since the last visit; recomputed per visit.",
   DismissedPriorityItem:
@@ -206,7 +206,7 @@ export const NOT_IN_BACKUP_MODELS: Readonly<Record<string, string>> = {
 
   // Ledgers whose meaning is local to the deployment.
   PushAttempt:
-    "A 90-day delivery ledger for this host's sends. It documents what happened here.",
+    "A 90-day delivery ledger for this host's sends, and since v1.33.1 also the anchor rows the reminder dedup writes under a sentinel channel. Both describe what this instance did; restoring either onto another host would assert sends it never made, and the dedup anchors would suppress reminders that host still owes.",
   AuditLog:
     "An append-only record of actions taken on this instance. Merging one instance's audit trail into another's would make the trail untrue.",
   CoachUsage:

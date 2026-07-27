@@ -93,7 +93,18 @@ function bareFormatterSites(): Array<{ file: string; line: number }> {
       pattern.lastIndex = 0;
       for (let m = pattern.exec(source); m !== null; m = pattern.exec(source)) {
         const args = argumentList(source, m.index + m[0].length - 1);
-        if (args.includes("timeZone")) continue;
+        // The property, not the substring, and both ways of writing it.
+        //
+        // `timeZoneName: "short"` is a DISPLAY option — it appends "GMT+1" to
+        // the output and leaves the zone as the browser's. A plain substring
+        // check waves it through, and the result then looks MORE
+        // timezone-aware than a bare formatter while being exactly as wrong.
+        //
+        // The shorthand `{ timeZone }` is the common form in this tree (nine
+        // correct call sites use it), so a colon-only check would report all
+        // of them and the honest response would be to allowlist them — which
+        // is how a guard stops guarding.
+        if (/\btimeZone\s*(?::|,|\}|$)/m.test(args)) continue;
         hits.push({
           file,
           line: source.slice(0, m.index).split("\n").length,
@@ -142,6 +153,23 @@ describe("date formatters name the calendar they render in", () => {
           "instant, add the file to ALLOWLIST in this test with the reason.",
       );
     }
+  });
+
+  it("does not accept timeZoneName as a substitute for timeZone", () => {
+    // `timeZoneName: "short"` appends "GMT+1" to the output and leaves the
+    // zone as the browser's. The first version of this guard tested for the
+    // substring "timeZone", which that satisfies — so a formatter that LOOKS
+    // more timezone-aware than a bare one sailed through while being exactly
+    // as wrong. An independent read found it; this pins it.
+    const property = /\btimeZone\s*(?::|,|\}|$)/m;
+    expect(property.test('{ hour: "2-digit", timeZoneName: "short" }')).toBe(
+      false,
+    );
+    expect(property.test('{ hour: "2-digit", timeZone: tz }')).toBe(true);
+    expect(property.test("{ timeZone : tz }")).toBe(true);
+    // The shorthand forms, which are what most of this tree actually writes.
+    expect(property.test("{ timeZone, year: 'numeric' }")).toBe(true);
+    expect(property.test("{ ...options, timeZone }")).toBe(true);
   });
 
   it("carries no allowlist entry that no longer has a bare formatter", () => {
