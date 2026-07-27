@@ -669,6 +669,78 @@ describe("sendViaApns — dispatcher fan-out", () => {
     expect(note.priority).toBe(10);
   });
 
+  it("collapses on the per-slot tag so one dose never replaces another", async () => {
+    // `apns-collapse-id` is a REPLACE directive. Every medication reminder
+    // used to carry the literal event type, so three medications due at
+    // 08:00 arrived as one notification naming one of them and the user
+    // missed the other two. The per-slot tag the Web Push sender already
+    // uses keys the collapse per dose; grouping stays on the thread id.
+    vi.mocked(prisma.device.findMany).mockResolvedValueOnce([
+      { id: "d1", apnsToken: "tok-a", apnsEnvironment: "sandbox" },
+    ] as never);
+    sendMock.mockResolvedValueOnce({ sent: [{ device: "tok-a" }], failed: [] });
+    await sendViaApns("u-1", {
+      title: "t",
+      message: "m",
+      eventType: "MEDICATION_REMINDER",
+      metadata: {
+        medicationId: "med-1",
+        webPushTag: "med:med-1:2026-06-15T08:00:00.000Z",
+      },
+    });
+    const note = sendMock.mock.calls[0][0];
+    expect(note.collapseId).toBe("med:med-1:2026-06-15T08:00:00.000Z");
+    expect(note.threadId).toBe("MEDICATION_REMINDER");
+  });
+
+  it("falls back to the event type when the payload carries no per-slot tag", async () => {
+    vi.mocked(prisma.device.findMany).mockResolvedValueOnce([
+      { id: "d1", apnsToken: "tok-a", apnsEnvironment: "sandbox" },
+    ] as never);
+    sendMock.mockResolvedValueOnce({ sent: [{ device: "tok-a" }], failed: [] });
+    await sendViaApns("u-1", {
+      title: "t",
+      message: "m",
+      eventType: "MOOD_REMINDER",
+    });
+    expect(sendMock.mock.calls[0][0].collapseId).toBe("MOOD_REMINDER");
+  });
+
+  it("ignores a per-slot tag that would exceed the APNs collapse-id limit", async () => {
+    // Apple caps `apns-collapse-id` at 64 bytes and rejects the push
+    // outright above it. A reminder that never arrives is worse than one
+    // that collapses too eagerly, so an oversized tag falls back.
+    vi.mocked(prisma.device.findMany).mockResolvedValueOnce([
+      { id: "d1", apnsToken: "tok-a", apnsEnvironment: "sandbox" },
+    ] as never);
+    sendMock.mockResolvedValueOnce({ sent: [{ device: "tok-a" }], failed: [] });
+    await sendViaApns("u-1", {
+      title: "t",
+      message: "m",
+      eventType: "MEDICATION_REMINDER",
+      metadata: { webPushTag: `med:${"x".repeat(70)}` },
+    });
+    expect(sendMock.mock.calls[0][0].collapseId).toBe("MEDICATION_REMINDER");
+  });
+
+  it("discreet mode keeps the generic collapse id even with a per-slot tag", async () => {
+    // The lock-screen-visible routing metadata must not name the event or
+    // the record it belongs to; discreet wins over the per-slot tag, the
+    // same precedence the Web Push sender applies.
+    vi.mocked(prisma.device.findMany).mockResolvedValueOnce([
+      { id: "d1", apnsToken: "tok-a", apnsEnvironment: "sandbox" },
+    ] as never);
+    sendMock.mockResolvedValueOnce({ sent: [{ device: "tok-a" }], failed: [] });
+    await sendViaApns("u-1", {
+      title: "t",
+      message: "m",
+      eventType: "CYCLE_PERIOD_SOON",
+      discreet: true,
+      metadata: { webPushTag: "cycle:period-soon:2026-06-15" },
+    });
+    expect(sendMock.mock.calls[0][0].collapseId).toBe("REMINDER");
+  });
+
   it("urgent payload sets time-sensitive + priority=10 on a non-medication event", async () => {
     // v1.18.4 — an explicitly urgent event (e.g. an illness red-flag
     // escalation) reaches APNs's strongest no-entitlement tier:

@@ -139,6 +139,12 @@ const PERMANENT_APNS_REASONS = new Set<string>([
   "DeviceTokenNotForTopic",
 ]);
 
+/**
+ * Apple's documented ceiling for the `apns-collapse-id` header. A longer
+ * value is rejected with `BadCollapseId`, i.e. the push is lost.
+ */
+const APNS_COLLAPSE_ID_MAX_BYTES = 64;
+
 let cachedConfig: ApnsConfig | null | undefined;
 const providers = new Map<"sandbox" | "production", apn.Provider>();
 
@@ -626,6 +632,24 @@ export async function sendViaApns(
     // CYCLE_PERIOD_SOON never surfaces on the lock screen.
     const GENERIC_EVENT = "REMINDER";
     const routingEvent = payload.discreet ? GENERIC_EVENT : payload.eventType;
+    // `apns-collapse-id` REPLACES an earlier undelivered push carrying the
+    // same id. Keyed on the event type it made every medication reminder
+    // replace the last one, so three medications due at 08:00 arrived as a
+    // single notification naming a single medication. Key it on the
+    // per-slot tag the Web Push sender already coalesces on
+    // (`medicationDoseTag`), and keep grouping — `threadId` — on the event.
+    // Discreet mode wins: no record-identifying string on the lock screen.
+    // Apple caps the header at 64 bytes and rejects anything longer, so an
+    // oversized tag falls back rather than costing the send.
+    const slotTag =
+      typeof payload.metadata?.webPushTag === "string" &&
+      Buffer.byteLength(payload.metadata.webPushTag, "utf8") <=
+        APNS_COLLAPSE_ID_MAX_BYTES
+        ? payload.metadata.webPushTag
+        : undefined;
+    const collapseId = payload.discreet
+      ? routingEvent
+      : (slotTag ?? routingEvent);
     let workingEnv: "production" | "sandbox" | null = null;
     for (const attemptEnv of envSequence) {
       result = await sendApnsPush({
@@ -668,7 +692,7 @@ export async function sendViaApns(
               }
             : {}),
         },
-        collapseId: routingEvent,
+        collapseId,
       });
 
       if (result.ok) {
