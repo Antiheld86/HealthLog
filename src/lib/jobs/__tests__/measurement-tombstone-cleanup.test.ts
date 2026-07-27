@@ -7,7 +7,7 @@
  *      recently-tombstoned rows untouched.
  *   2. Source-grep wiring (same approach as the drain-cumulative guard):
  *      the queue is registered in `allQueues`, scheduled, and bound to a
- *      `boss.work` handler — a missing `allQueues` entry silently no-ops
+ *      `createAndWork` handler — a missing `allQueues` entry silently no-ops
  *      the schedule under pg-boss v12.
  */
 import { readFileSync } from "node:fs";
@@ -114,9 +114,9 @@ describe("reminder-worker — measurement-tombstone-cleanup schedule", () => {
     );
   });
 
-  it("binds a boss.work handler to the queue", () => {
+  it("binds a createAndWork handler to the queue", () => {
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,200}MEASUREMENT_TOMBSTONE_CLEANUP_QUEUE[\s\S]{0,200}handleMeasurementTombstoneCleanup/,
+      /createAndWork[\s\S]{0,200}MEASUREMENT_TOMBSTONE_CLEANUP_QUEUE[\s\S]{0,200}handleMeasurementTombstoneCleanup/,
     );
   });
 });

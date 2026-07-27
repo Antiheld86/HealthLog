@@ -1181,9 +1181,9 @@ describe("queue registration", () => {
     );
   });
 
-  it("registers a boss.work handler for the queue", () => {
+  it("registers a createAndWork handler for the queue", () => {
     expect(workerSrc).toMatch(
-      /boss\.work[\s\S]{0,80}INSIGHT_PREGENERATE_QUEUE/,
+      /createAndWork[\s\S]{0,80}INSIGHT_PREGENERATE_QUEUE/,
     );
   });
 

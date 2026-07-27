@@ -8,6 +8,7 @@ import { type Job } from "pg-boss";
 import { recordError, recordReminderCheck } from "@/lib/jobs/worker-status";
 import { recomputeMedicationComplianceForEvent } from "@/lib/rollups/medication-compliance-rollups";
 import { decrypt } from "@/lib/crypto";
+import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import { dispatchNotification } from "@/lib/notifications/dispatcher";
 import { medicationDoseTag } from "@/lib/notifications/dose-tag";
@@ -137,9 +138,11 @@ export async function cleanupScheduledTelegramDeletions(): Promise<void> {
  * Uses phase-based logic (GREEN/YELLOW/ORANGE/RED) to send one notification
  * per phase transition rather than every 15 minutes.
  */
-export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
+export async function handleReminderCheck(
+  jobs: Job<ReminderCheckPayload>[],
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.medication_reminder", async (evt) => {
+  return withBackgroundEvent("job.medication_reminder", async (evt) => {
     const prisma = getWorkerPrisma();
     try {
       recordReminderCheck();
@@ -175,6 +178,12 @@ export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
           },
         },
       });
+
+      // The per-slot facts the tick already emits as wide-event meta, counted
+      // so the run's outcome carries them as scalars.
+      let missedDosesMinted = 0;
+      let notificationsDispatched = 0;
+      let notificationsFailed = 0;
 
       for (const med of medications) {
         const userTz = med.user.timezone || "Europe/Berlin";
@@ -440,6 +449,7 @@ export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
                   },
                 });
 
+                missedDosesMinted++;
                 evt.addMeta("missed_dose", `${med.name}:${slotTime}`);
 
                 // v1.4.39 W-MED — refresh the compliance rollup so the
@@ -521,7 +531,12 @@ export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
                     url: `/medications/${med.id}`,
                   },
                 });
+                notificationsDispatched++;
               } catch (notifErr) {
+                // One user's channel failing must not fail the tick — the
+                // dedup anchor is already stamped, so the count is the only
+                // trace this slot's notice never left the host.
+                notificationsFailed++;
                 evt.addWarning(
                   `Notification dispatch failed for ${currentPhase} phase ${med.name}: ${notifErr}`,
                 );
@@ -530,6 +545,13 @@ export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
           }
         }
       }
+
+      return jobDone({
+        medications: medications.length,
+        missed_doses_minted: missedDosesMinted,
+        notifications_dispatched: notificationsDispatched,
+        notifications_failed: notificationsFailed,
+      });
     } catch (err) {
       evt.setError(err);
       recordError();

@@ -21,6 +21,7 @@ import { type Job } from "pg-boss";
 import { fireAndForget } from "@/lib/logging/fire-and-forget";
 
 import { recordError } from "@/lib/jobs/worker-status";
+import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import { enqueueReminderSatisfy } from "@/lib/jobs/reminder-satisfy";
 import { isSyncFailureRecorded } from "@/lib/integrations/status";
@@ -58,6 +59,13 @@ export interface PollCohortConfig {
  * handler resolves its targets from the batch payloads (single-user enqueue) or
  * the cohort query (cron tick), then re-syncs each sequentially with per-user
  * error isolation so one revoked grant / outage never starves the cohort.
+ *
+ * Outcome semantics for a fan-out pass: the JOB succeeded if the pass ran.
+ * One user's revoked grant is that user's problem — it belongs on their
+ * integration ledger, not in a queue-wide failure that retries the whole
+ * cohort — so per-user failures ride out as the `users_failed` count. Only a
+ * failure of the pass itself (cohort discovery, the wide-event scope) fails
+ * the job, and that path already throws.
  */
 export function makePollCohortHandler({
   taskName,
@@ -65,8 +73,10 @@ export function makePollCohortHandler({
   syncUser,
   recordFailure,
 }: PollCohortConfig) {
-  return async function handlePollCohort(jobs: Job<PollCohortPayload>[]) {
-    await withBackgroundEvent(taskName, async (evt) => {
+  return async function handlePollCohort(
+    jobs: Job<PollCohortPayload>[],
+  ): Promise<JobOutcome> {
+    return withBackgroundEvent(taskName, async (evt) => {
       const prisma = getWorkerPrisma();
       try {
         const targets: Array<{ userId: string }> = [];
@@ -77,9 +87,12 @@ export function makePollCohortHandler({
           const ids = await findCohort(prisma);
           targets.push(...ids.map((userId) => ({ userId })));
         }
-        if (targets.length === 0) return;
+        if (targets.length === 0) {
+          return jobDone({ total: 0, users_synced: 0, users_failed: 0 });
+        }
 
         let usersSynced = 0;
+        let usersFailed = 0;
         let measurementsImported = 0;
         for (const { userId } of targets) {
           try {
@@ -106,6 +119,7 @@ export function makePollCohortHandler({
                 );
               });
             }
+            usersFailed++;
             evt.addWarning(`${taskName} failed for user ${userId}: ${err}`);
           }
         }
@@ -114,9 +128,16 @@ export function makePollCohortHandler({
           task_name: taskName,
           result: {
             users_synced: usersSynced,
+            users_failed: usersFailed,
             total: targets.length,
             measurements_imported: measurementsImported,
           },
+        });
+        return jobDone({
+          total: targets.length,
+          users_synced: usersSynced,
+          users_failed: usersFailed,
+          measurements_imported: measurementsImported,
         });
       } catch (err) {
         evt.setError(err);

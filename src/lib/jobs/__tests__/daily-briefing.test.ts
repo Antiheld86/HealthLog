@@ -98,9 +98,9 @@ describe("reminder-worker — daily-briefing wiring", () => {
     );
   });
 
-  it("wires a boss.work handler that runs the tick", () => {
+  it("wires a createAndWork handler that runs the tick", () => {
     expect(registrar).toMatch(
-      /boss\.work[\s\S]{0,200}DAILY_BRIEFING_QUEUE[\s\S]{0,400}runDailyBriefingTick/,
+      /createAndWork[\s\S]{0,200}DAILY_BRIEFING_QUEUE[\s\S]{0,400}runDailyBriefingTick/,
     );
   });
 

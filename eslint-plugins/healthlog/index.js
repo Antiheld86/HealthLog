@@ -8,6 +8,8 @@
  *   - `no-raw-palette-color` — ban raw Tailwind palette utilities in app UI.
  *   - `spacing-scale`        — no pt-/pb- overrides on gap-based Card slots,
  *                              and no off-scale `5` step on a bg-card shell.
+ *   - `job-handler-outcome`  — pg-boss bindings route through createAndWork,
+ *                              whose handler returns a JobOutcome.
  */
 
 "use strict";
@@ -17,6 +19,7 @@ const safeFetchRequired = require("./safe-fetch-required.js");
 const apiFetchRequired = require("./api-fetch-required.js");
 const noRawPaletteColor = require("./no-raw-palette-color.js");
 const spacingScale = require("./spacing-scale.js");
+const jobHandlerOutcome = require("./job-handler-outcome.js");
 
 module.exports = {
   rules: {
@@ -30,5 +33,6 @@ module.exports = {
     // named rule (now error-level too; the staged warn phase ended with
     // the semantic sweep). See the rule header.
     "no-dracula-utility": noRawPaletteColor,
+    "job-handler-outcome": jobHandlerOutcome,
   },
 };

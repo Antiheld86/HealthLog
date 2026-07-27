@@ -7,6 +7,7 @@
 import { type Job } from "pg-boss";
 import { fireAndForget } from "@/lib/logging/fire-and-forget";
 import { recordError } from "@/lib/jobs/worker-status";
+import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import {
   syncUserRecovery,
@@ -66,6 +67,10 @@ type ByIdSync = (userId: string, resourceId: string) => Promise<number>;
  *   - A cron tick (no `userId` on any job) walks every connection's collection.
  *
  * One user's parked-at-reauth state never starves the rest of the cohort.
+ *
+ * The pass is what the outcome judges: a per-user failure is that user's
+ * problem, recorded on their integration ledger and counted as `users_failed`,
+ * not a queue-wide failure that would retry the whole cohort.
  */
 export async function runWhoopResourceSync(
   taskName: string,
@@ -73,8 +78,8 @@ export async function runWhoopResourceSync(
   jobs: Job<WhoopSyncPayload>[],
   syncFn: CollectionSync,
   byIdFn?: ByIdSync,
-): Promise<void> {
-  await withBackgroundEvent(taskName, async (evt) => {
+): Promise<JobOutcome> {
+  return withBackgroundEvent(taskName, async (evt) => {
     const prisma = getWorkerPrisma();
     try {
       // (userId, optional resourceId) work items from the webhook payloads.
@@ -94,9 +99,17 @@ export async function runWhoopResourceSync(
         });
         targets.push(...connections);
       }
-      if (targets.length === 0) return;
+      if (targets.length === 0) {
+        return jobDone({
+          total: 0,
+          users_synced: 0,
+          users_failed: 0,
+          measurements_imported: 0,
+        });
+      }
 
       let usersSynced = 0;
+      let usersFailed = 0;
       let measurementsImported = 0;
       for (const { userId, resourceId } of targets) {
         try {
@@ -123,6 +136,7 @@ export async function runWhoopResourceSync(
           if (!isSyncFailureRecorded(err)) {
             await recordWhoopSyncFailure(userId, err, leg);
           }
+          usersFailed++;
           evt.addWarning(`${taskName} failed for user ${userId}: ${err}`);
         }
       }
@@ -135,6 +149,12 @@ export async function runWhoopResourceSync(
           measurements_imported: measurementsImported,
         },
       });
+      return jobDone({
+        total: targets.length,
+        users_synced: usersSynced,
+        users_failed: usersFailed,
+        measurements_imported: measurementsImported,
+      });
     } catch (err) {
       evt.setError(err);
       recordError();
@@ -143,7 +163,9 @@ export async function runWhoopResourceSync(
   });
 }
 
-export function handleWhoopRecoverySync(jobs: Job<WhoopSyncPayload>[]) {
+export function handleWhoopRecoverySync(
+  jobs: Job<WhoopSyncPayload>[],
+): Promise<JobOutcome> {
   return runWhoopResourceSync(
     "job.whoop_recovery_sync",
     "recovery",
@@ -153,7 +175,9 @@ export function handleWhoopRecoverySync(jobs: Job<WhoopSyncPayload>[]) {
   );
 }
 
-export function handleWhoopSleepSync(jobs: Job<WhoopSyncPayload>[]) {
+export function handleWhoopSleepSync(
+  jobs: Job<WhoopSyncPayload>[],
+): Promise<JobOutcome> {
   return runWhoopResourceSync(
     "job.whoop_sleep_sync",
     "sleep",
@@ -163,7 +187,9 @@ export function handleWhoopSleepSync(jobs: Job<WhoopSyncPayload>[]) {
   );
 }
 
-export function handleWhoopWorkoutSync(jobs: Job<WhoopSyncPayload>[]) {
+export function handleWhoopWorkoutSync(
+  jobs: Job<WhoopSyncPayload>[],
+): Promise<JobOutcome> {
   return runWhoopResourceSync(
     "job.whoop_workout_sync",
     "workout",
@@ -173,7 +199,9 @@ export function handleWhoopWorkoutSync(jobs: Job<WhoopSyncPayload>[]) {
   );
 }
 
-export function handleWhoopCycleSync(jobs: Job<WhoopSyncPayload>[]) {
+export function handleWhoopCycleSync(
+  jobs: Job<WhoopSyncPayload>[],
+): Promise<JobOutcome> {
   // Cycle has no webhook (poll-only), so no fetch-by-id path.
   return runWhoopResourceSync(
     "job.whoop_cycle_sync",

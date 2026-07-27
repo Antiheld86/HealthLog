@@ -39,9 +39,9 @@ describe("data-arrival queue wiring", () => {
     expect(allQueues![1]).toMatch(/\bDATA_ARRIVAL_QUEUE\b/);
   });
 
-  it("binds a boss.work handler that drains it", () => {
+  it("binds a createAndWork handler that drains it", () => {
     expect(statusRegistrar).toMatch(
-      /boss\.work[\s\S]{0,200}DATA_ARRIVAL_QUEUE[\s\S]{0,200}handleDataArrival/,
+      /createAndWork[\s\S]{0,200}DATA_ARRIVAL_QUEUE[\s\S]{0,200}handleDataArrival/,
     );
   });
 
@@ -61,7 +61,11 @@ describe("data-arrival queue wiring", () => {
   });
 
   it("has no cron schedule — it is send-only, driven by ingest", () => {
-    expect(statusRegistrar).not.toMatch(/\[DATA_ARRIVAL_QUEUE,\s*\w+_CRON\]/);
+    // Tolerates the optional third schedule element, so a cron sneaking in
+    // with send options still trips this.
+    expect(statusRegistrar).not.toMatch(
+      /\[\s*DATA_ARRIVAL_QUEUE,\s*\w+_CRON\s*[,\]]/,
+    );
   });
 
   it("registers the retention job that prunes the markers", () => {
@@ -71,10 +75,10 @@ describe("data-arrival queue wiring", () => {
     expect(allQueues).not.toBeNull();
     expect(allQueues![1]).toMatch(/\bARRIVAL_REACTION_CLEANUP_QUEUE\b/);
     expect(maintenanceSource).toMatch(
-      /\[ARRIVAL_REACTION_CLEANUP_QUEUE,\s*ARRIVAL_REACTION_CLEANUP_CRON\]/,
+      /\[\s*ARRIVAL_REACTION_CLEANUP_QUEUE,\s*ARRIVAL_REACTION_CLEANUP_CRON,\s*cronIsTheRetry,?\s*\]/,
     );
     expect(maintenanceSource).toMatch(
-      /boss\.work[\s\S]{0,200}ARRIVAL_REACTION_CLEANUP_QUEUE[\s\S]{0,200}handleArrivalReactionCleanup/,
+      /createAndWork[\s\S]{0,200}ARRIVAL_REACTION_CLEANUP_QUEUE[\s\S]{0,200}handleArrivalReactionCleanup/,
     );
   });
 

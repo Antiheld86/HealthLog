@@ -50,14 +50,14 @@ describe("reminder-worker — Withings activity + sleep v2 queues", () => {
   it("registers the activity-sync handler against pg-boss", () => {
     expect(source).toMatch(/handleWithingsActivitySync\b/);
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,200}WITHINGS_ACTIVITY_QUEUE[\s\S]{0,200}handleWithingsActivitySync/,
+      /createAndWork[\s\S]{0,200}WITHINGS_ACTIVITY_QUEUE[\s\S]{0,200}handleWithingsActivitySync/,
     );
   });
 
   it("registers the sleep-sync handler against pg-boss", () => {
     expect(source).toMatch(/handleWithingsSleepSync\b/);
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,200}WITHINGS_SLEEP_QUEUE[\s\S]{0,200}handleWithingsSleepSync/,
+      /createAndWork[\s\S]{0,200}WITHINGS_SLEEP_QUEUE[\s\S]{0,200}handleWithingsSleepSync/,
     );
   });
 
@@ -78,7 +78,7 @@ describe("reminder-worker — Withings activity + sleep v2 queues", () => {
   });
 
   it("schedules the ECG catch-net cron at :41 so watch-only accounts pull strips", () => {
-    // The queue is already in allQueues + boss.work-bound; W-1 adds the missing
+    // The queue is already in allQueues + createAndWork-bound; W-1 adds the missing
     // schedule entry so a payload-less cron tick walks the connection cohort.
     expect(source).toMatch(
       /WITHINGS_ECG_SYNC_CRON\s*=\s*["']41 \* \* \* \*["']/,

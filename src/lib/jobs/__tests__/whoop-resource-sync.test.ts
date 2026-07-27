@@ -128,7 +128,18 @@ describe("runWhoopResourceSync dispatch", () => {
     findManyMock.mockResolvedValue([{ userId: "a" }, { userId: "b" }]);
     syncUserWorkout.mockRejectedValueOnce(new Error("boom for a"));
 
-    await expect(handleWhoopWorkoutSync([job({})])).resolves.toBeUndefined();
+    // The pass is what the outcome judges: the sweep ran, so the job is
+    // done. The revoked-grant user rides out as `users_failed` rather than
+    // failing the queue and retrying the whole cohort over one account.
+    await expect(handleWhoopWorkoutSync([job({})])).resolves.toEqual({
+      ok: true,
+      did: {
+        total: 2,
+        users_synced: 1,
+        users_failed: 1,
+        measurements_imported: 0,
+      },
+    });
     // Both users were attempted despite the first throwing.
     expect(syncUserWorkout).toHaveBeenCalledTimes(2);
   });

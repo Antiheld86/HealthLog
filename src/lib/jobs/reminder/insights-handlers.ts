@@ -19,6 +19,7 @@ import {
   type InsightStatusGeneratePayload,
   runInsightStatusGenerate,
 } from "@/lib/jobs/insight-status-generate";
+import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import { generateBloodPressureStatusForUser } from "@/lib/insights/blood-pressure-status";
 import { generateWeightStatusForUser } from "@/lib/insights/weight-status";
@@ -69,6 +70,10 @@ export interface MedicationComplianceStatusPayload {
  * `status-cron-candidates.ts` for the full division of nightly labour).
  * The generators normalise `locale` themselves (de stays de, everything
  * else gets English prose).
+ *
+ * The pass is what succeeds or fails. One user whose generation threw is that
+ * user's cold card, reported as the `failed` count; failing the job would
+ * re-run the whole cohort over it.
  */
 export async function runStatusCronGenerate(
   taskName: string,
@@ -76,13 +81,15 @@ export async function runStatusCronGenerate(
     userId: string,
     options: { locale: string | null; force: boolean },
   ) => Promise<unknown>,
-): Promise<void> {
-  await withBackgroundEvent(taskName, async (evt) => {
+): Promise<JobOutcome> {
+  return withBackgroundEvent(taskName, async (evt) => {
     const prisma = getWorkerPrisma();
     try {
       const users = await findStatusCronCandidates(prisma);
 
-      if (users.length === 0) return;
+      if (users.length === 0) {
+        return jobDone({ total: 0, generated: 0, failed: 0 });
+      }
 
       let generated = 0;
       let failed = 0;
@@ -103,6 +110,7 @@ export async function runStatusCronGenerate(
         task_name: taskName,
         result: { generated, failed, total: users.length },
       });
+      return jobDone({ total: users.length, generated, failed });
     } catch (err) {
       evt.setError(err);
       recordError();
@@ -129,13 +137,15 @@ export async function runStatusCronGenerate(
  * inside the batch itself). Net effect: the nightly ladder pays one call per
  * user instead of seven, with no queue/registry churn.
  */
-async function runStatusBatchCron(taskName: string): Promise<void> {
-  await withBackgroundEvent(taskName, async (evt) => {
+async function runStatusBatchCron(taskName: string): Promise<JobOutcome> {
+  return withBackgroundEvent(taskName, async (evt) => {
     const prisma = getWorkerPrisma();
     try {
       recordInsightsRun();
       const users = await findStatusCronCandidates(prisma);
-      if (users.length === 0) return;
+      if (users.length === 0) {
+        return jobDone({ total: 0, generated: 0, served: 0, failed: 0 });
+      }
 
       let generated = 0;
       let served = 0;
@@ -167,6 +177,10 @@ async function runStatusBatchCron(taskName: string): Promise<void> {
         task_name: taskName,
         result: { generated, served, failed, total: users.length },
       });
+      // A user whose batch call threw already fell back to the single-card
+      // path inside the batch, and the six later per-metric crons cover what
+      // is still cold. The batch pass ran, so it reports the count.
+      return jobDone({ total: users.length, generated, served, failed });
     } catch (err) {
       evt.setError(err);
       recordError();
@@ -176,14 +190,16 @@ async function runStatusBatchCron(taskName: string): Promise<void> {
   });
 }
 
-export function handleGeneralStatusGenerate(jobs: Job<GeneralStatusPayload>[]) {
+export function handleGeneralStatusGenerate(
+  jobs: Job<GeneralStatusPayload>[],
+): Promise<JobOutcome> {
   void jobs;
   return runStatusBatchCron("job.insights.batch");
 }
 
 export function handleBloodPressureStatusGenerate(
   jobs: Job<BloodPressureStatusPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
   return runStatusCronGenerate(
     "job.insights.blood_pressure",
@@ -191,7 +207,9 @@ export function handleBloodPressureStatusGenerate(
   );
 }
 
-export function handleWeightStatusGenerate(jobs: Job<WeightStatusPayload>[]) {
+export function handleWeightStatusGenerate(
+  jobs: Job<WeightStatusPayload>[],
+): Promise<JobOutcome> {
   void jobs;
   return runStatusCronGenerate(
     "job.insights.weight",
@@ -199,7 +217,9 @@ export function handleWeightStatusGenerate(jobs: Job<WeightStatusPayload>[]) {
   );
 }
 
-export function handlePulseStatusGenerate(jobs: Job<PulseStatusPayload>[]) {
+export function handlePulseStatusGenerate(
+  jobs: Job<PulseStatusPayload>[],
+): Promise<JobOutcome> {
   void jobs;
   return runStatusCronGenerate(
     "job.insights.pulse",
@@ -207,19 +227,23 @@ export function handlePulseStatusGenerate(jobs: Job<PulseStatusPayload>[]) {
   );
 }
 
-export function handleBmiStatusGenerate(jobs: Job<BmiStatusPayload>[]) {
+export function handleBmiStatusGenerate(
+  jobs: Job<BmiStatusPayload>[],
+): Promise<JobOutcome> {
   void jobs;
   return runStatusCronGenerate("job.insights.bmi", generateBmiStatusForUser);
 }
 
-export function handleMoodStatusGenerate(jobs: Job<MoodStatusPayload>[]) {
+export function handleMoodStatusGenerate(
+  jobs: Job<MoodStatusPayload>[],
+): Promise<JobOutcome> {
   void jobs;
   return runStatusCronGenerate("job.insights.mood", generateMoodStatusForUser);
 }
 
 export function handleMedicationComplianceStatusGenerate(
   jobs: Job<MedicationComplianceStatusPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
   return runStatusCronGenerate(
     "job.insights.medication_compliance",
@@ -229,8 +253,8 @@ export function handleMedicationComplianceStatusGenerate(
 
 export async function handleInsightPregenerateJob(
   jobs: Job<InsightPregeneratePayload>[],
-) {
-  await withBackgroundEvent("job.insight_pregenerate", async (evt) => {
+): Promise<JobOutcome> {
+  return withBackgroundEvent("job.insight_pregenerate", async (evt) => {
     // v1.8.7.1 — a forced single-user warm carries `{ userId, force }`;
     // the scheduled tick carries neither. Route each job individually so a
     // batch that mixes a cron tick with on-demand warms (it never does in
@@ -265,12 +289,29 @@ export async function handleInsightPregenerateJob(
       }
     }
 
-    if (scheduled.length === 0) return;
+    // A batch of forced warms only is a complete run: every warm either landed
+    // or threw out of the loop above.
+    if (scheduled.length === 0) {
+      return jobDone({ forced: forced.length, scheduled: 0 });
+    }
     try {
       const summary = await runInsightPregenerate(getWorkerPrisma());
       evt.setBackground({
         task_name: "job.insight_pregenerate",
         result: { ...summary },
+      });
+      return jobDone({
+        forced: forced.length,
+        scheduled: scheduled.length,
+        total: summary.total,
+        generated: summary.generated,
+        cached: summary.cached,
+        unchanged: summary.unchanged,
+        skipped: summary.skipped,
+        failed: summary.failed,
+        budget_blocked: summary.budgetBlocked,
+        assessments_warmed: summary.assessmentsWarmed,
+        metric_assessments_warmed: summary.metricAssessmentsWarmed,
       });
     } catch (err) {
       evt.addWarning(
@@ -296,12 +337,18 @@ export async function handleInsightPregenerateJob(
  */
 export async function handleInsightStatusGenerate(
   jobs: Job<InsightStatusGeneratePayload>[],
-) {
-  await withBackgroundEvent("job.insight_status_generate", async (evt) => {
+): Promise<JobOutcome> {
+  return withBackgroundEvent("job.insight_status_generate", async (evt) => {
+    let generated = 0;
+    let malformed = 0;
     for (const job of jobs) {
-      if (!job.data?.userId || !job.data?.metric) continue;
+      if (!job.data?.userId || !job.data?.metric) {
+        malformed++;
+        continue;
+      }
       try {
         await runInsightStatusGenerate(job.data);
+        generated++;
         evt.addMeta(
           "status_generated",
           `${job.data.metric}:${job.data.locale}`,
@@ -321,5 +368,8 @@ export async function handleInsightStatusGenerate(
         throw err;
       }
     }
+    // Every job in the batch either generated a card or carried no metric to
+    // generate; a generation that failed left through the rethrow above.
+    return jobDone({ generated, malformed });
   });
 }

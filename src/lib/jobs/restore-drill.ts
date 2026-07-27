@@ -30,6 +30,7 @@ import {
   type S3Like,
 } from "@/lib/jobs/offhost-backup";
 import { reportWorkerError } from "@/lib/jobs/report-worker-error";
+import { jobDone, jobFailed, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { withBackgroundEvent } from "@/lib/logging/background";
 
 export const RESTORE_DRILL_QUEUE = "data-restore-drill";
@@ -149,9 +150,11 @@ export async function runRestoreDrill(
  * page); every other failure goes through `reportWorkerError` so the
  * operator hears about a rotting backup chain.
  */
-export async function handleRestoreDrill(jobs: Job<object>[]): Promise<void> {
+export async function handleRestoreDrill(
+  jobs: Job<object>[],
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.restore_drill", async (evt) => {
+  return withBackgroundEvent("job.restore_drill", async (evt) => {
     try {
       const report = await runRestoreDrill();
       evt.addMeta("restore_drill_object_key", report.objectKey);
@@ -181,13 +184,31 @@ export async function handleRestoreDrill(jobs: Job<object>[]): Promise<void> {
           { objectKey: report.objectKey, ageDays: report.ageDays },
         );
       }
+      // A stale chain is a verdict about the uploader, not a failure of the
+      // drill: the artefact was fetched, decrypted and parsed, and the page
+      // above already reached the operator. Failing the job here would retry a
+      // reading that cannot change until the next upload lands.
+      return jobDone({
+        restore_drill_object_key: report.objectKey,
+        restore_drill_age_days: report.ageDays,
+        restore_drill_ciphertext_bytes: report.ciphertextBytes,
+        restore_drill_plaintext_bytes: report.plaintextBytes,
+        restore_drill_measurements: report.recordCounts.measurements,
+        restore_drill_medications: report.recordCounts.medications,
+        restore_drill_intake_events: report.recordCounts.intakeEvents,
+        restore_drill_mood_entries: report.recordCounts.moodEntries,
+        restore_drill_stale: report.stale,
+      });
     } catch (err) {
       if (err instanceof OffhostBackupNotConfiguredError) {
         evt.addWarning(`restore-drill skipped: ${err.message}`);
-        return;
+        // Most self-hosters never set the S3 vars. Nothing to verify is not a
+        // failed verification, and a monthly failed job would be noise.
+        return jobDone({ skipped: "offhost backup not configured" });
       }
       evt.addWarning(`restore-drill failed: ${err}`);
       await reportWorkerError(RESTORE_DRILL_QUEUE, err);
+      return jobFailed("restore drill failed", err);
     }
   });
 }

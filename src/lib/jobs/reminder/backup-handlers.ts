@@ -8,8 +8,12 @@ import { type Job } from "pg-boss";
 import { recordError } from "@/lib/jobs/worker-status";
 import { buildFullBackupPayload } from "@/lib/export/full-backup-payload";
 import { encrypt } from "@/lib/crypto";
+import { jobDone, jobFailed, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { withBackgroundEvent } from "@/lib/logging/background";
-import { runOffhostBackup } from "@/lib/jobs/offhost-backup";
+import {
+  OffhostBackupNotConfiguredError,
+  runOffhostBackup,
+} from "@/lib/jobs/offhost-backup";
 import { getWorkerPrisma } from "./shared";
 
 export interface DataBackupPayload {
@@ -20,9 +24,11 @@ export interface OffhostBackupPayload {
   triggeredAt: string;
 }
 
-export async function handleOffhostBackup(jobs: Job<OffhostBackupPayload>[]) {
+export async function handleOffhostBackup(
+  jobs: Job<OffhostBackupPayload>[],
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.offhost_backup", async (evt) => {
+  return withBackgroundEvent("job.offhost_backup", async (evt) => {
     const p = getWorkerPrisma();
     try {
       const report = await runOffhostBackup(p);
@@ -39,16 +45,34 @@ export async function handleOffhostBackup(jobs: Job<OffhostBackupPayload>[]) {
           JSON.stringify(report.failures.slice(0, 10)),
         );
       }
+      // Per-user upload failures ride out as `offhost_backup_failed`: the run
+      // itself uploaded what it could, and failing the queue over one user's
+      // object would re-upload the whole cohort on every retry.
+      return jobDone({
+        offhost_backup_uploaded: report.uploaded,
+        offhost_backup_failed: report.failed,
+        offhost_backup_total_users: report.totalUsers,
+        offhost_backup_endpoint: report.config.endpoint,
+        offhost_backup_bucket: report.config.bucket,
+      });
     } catch (err) {
-      // Not configured ⇒ skip silently with a warning, not an error.
+      // Not configured ⇒ skip silently with a warning, not an error: most
+      // self-hosts never set the S3 credentials, and a nightly failed job on
+      // every one of them buries the runs that genuinely could not upload.
       evt.addWarning(`offhost-backup skipped/failed: ${err}`);
+      if (err instanceof OffhostBackupNotConfiguredError) {
+        return jobDone({ offhost_backup_configured: false });
+      }
+      return jobFailed("offhost backup failed", err);
     }
   });
 }
 
-export async function handleDataBackup(jobs: Job<DataBackupPayload>[]) {
+export async function handleDataBackup(
+  jobs: Job<DataBackupPayload>[],
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.data_backup", async (evt) => {
+  return withBackgroundEvent("job.data_backup", async (evt) => {
     const prisma = getWorkerPrisma();
     try {
       const users = await prisma.user.findMany({
@@ -56,6 +80,7 @@ export async function handleDataBackup(jobs: Job<DataBackupPayload>[]) {
       });
 
       let backed = 0;
+      let usersFailed = 0;
       for (const user of users) {
         try {
           const { payload } = await buildFullBackupPayload(prisma, user.id, {
@@ -82,6 +107,10 @@ export async function handleDataBackup(jobs: Job<DataBackupPayload>[]) {
           });
           backed++;
         } catch (err) {
+          // One user's payload failing is that user's problem, not the pass's:
+          // it rides out as a count so the weekly run is not retried for the
+          // whole cohort.
+          usersFailed++;
           evt.addWarning(`Failed for user ${user.id}: ${err}`);
         }
       }
@@ -89,6 +118,11 @@ export async function handleDataBackup(jobs: Job<DataBackupPayload>[]) {
       evt.setBackground({
         task_name: "job.data_backup",
         result: { backed, total: users.length },
+      });
+      return jobDone({
+        backed,
+        total: users.length,
+        users_failed: usersFailed,
       });
     } catch (err) {
       evt.setError(err);

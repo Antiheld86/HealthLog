@@ -4,7 +4,7 @@
  *
  * Same source-text-grep approach as the period-narrative / stress-strain
  * guards: assert the queue is imported, registered in `allQueues`, and wired
- * to a `boss.work` handler that runs the refresh pipeline — without booting
+ * to a `createAndWork` handler that runs the refresh pipeline — without booting
  * pg-boss + Prisma. An unregistered queue silently never runs (the recurring
  * past bug this guards against; v1.4.37 W10 caught exactly this class).
  */
@@ -41,9 +41,9 @@ describe("reminder-worker — coach-memory-refresh wiring", () => {
     expect(allQueuesBlock()).toMatch(/\bCOACH_MEMORY_REFRESH_QUEUE\b/);
   });
 
-  it("registers a boss.work handler that runs the refresh pipeline", () => {
+  it("registers a createAndWork handler that runs the refresh pipeline", () => {
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,200}COACH_MEMORY_REFRESH_QUEUE[\s\S]{0,400}runCoachMemoryRefresh/,
+      /createAndWork[\s\S]{0,200}COACH_MEMORY_REFRESH_QUEUE[\s\S]{0,600}runCoachMemoryRefresh/,
     );
   });
 });

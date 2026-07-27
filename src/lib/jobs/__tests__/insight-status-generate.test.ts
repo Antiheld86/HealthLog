@@ -6,7 +6,7 @@
  *   - an unknown metric is annotated and skipped, not thrown;
  *   - the enqueue helper no-ops without a global boss instance and de-dupes
  *     with a singletonKey when one is present;
- *   - the queue is registered in `allQueues` AND wired to a `boss.work`
+ *   - the queue is registered in `allQueues` AND wired to a `createAndWork`
  *     handler in reminder-worker.ts (the v1.4.37 W10 unregistered-queue
  *     catch — a queue built but never registered silently never drains).
  */
@@ -171,9 +171,9 @@ describe("queue registration", () => {
     expect(match![1]).toMatch(/\bINSIGHT_STATUS_GENERATE_QUEUE\b/);
   });
 
-  it("registers a boss.work handler for the queue", () => {
+  it("registers a createAndWork handler for the queue", () => {
     expect(workerSrc).toMatch(
-      /boss\.work[\s\S]{0,120}INSIGHT_STATUS_GENERATE_QUEUE/,
+      /createAndWork[\s\S]{0,120}INSIGHT_STATUS_GENERATE_QUEUE/,
     );
   });
 

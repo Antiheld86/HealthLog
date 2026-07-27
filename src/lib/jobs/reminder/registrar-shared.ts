@@ -16,13 +16,18 @@
  * assert a single aggregate `allQueues` (defence in depth: the per-registrar
  * arrays AND the boot-level union both have to agree).
  */
-import { PgBoss } from "pg-boss";
+import { PgBoss, type WorkOptions } from "pg-boss";
 
 import { prisma } from "@/lib/db";
 
 import { workerLog } from "./shared";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import { annotate } from "@/lib/logging/context";
+import {
+  runJob,
+  type JobHandler,
+  type JobWithMetadataHandler,
+} from "@/lib/jobs/run-job";
 
 /**
  * Cron schedule tuple: `[queueName, cronExpression, sendOptions?]`. The
@@ -163,6 +168,32 @@ export const insightRetryOptions = {
 } as const;
 
 /**
+ * Retry policy for a cron-driven pass whose failure mode is deterministic.
+ *
+ * Handlers now return a `JobOutcome`, and the retention cleanups that used to
+ * warn-and-return fail their job instead. That is the point — but it walks
+ * into pg-boss's queue default of `retryLimit: 2` with no delay and no
+ * backoff, so a bulk DELETE that timed out against a large trailing edge
+ * would run twice more, immediately, against the same rows. Three doomed
+ * sequential scans a night is a worse outcome than the silence it replaced.
+ *
+ * For this class the next cron tick IS the retry, and it arrives with the
+ * whole gap as backoff. So the schedule declares zero retries: the failure is
+ * recorded once, reaches the operator once, and the pass tries again on its
+ * own cadence.
+ *
+ * It rides on the SCHEDULE rather than on `createQueue`, deliberately.
+ * pg-boss's `create_queue()` ends in ON CONFLICT DO NOTHING, so a queue-level
+ * default would be inert on every already-running instance — the same trap
+ * `reconcileQueuePolicies` above exists to work around. Send options apply to
+ * every job the cron mints, new database or old.
+ *
+ * Use it only where the failure genuinely repeats. A transient failure (a TLS
+ * probe, an S3 fetch, a provider call) wants the default retries, not this.
+ */
+export const cronIsTheRetry = { retryLimit: 0 } as const;
+
+/**
  * Create every queue in `queues`, then schedule every cron in `schedules`.
  * Centralised so each registrar provisions before it schedules in the exact
  * order the monolith did, and the `Europe/Berlin` tz default stays in one
@@ -197,4 +228,42 @@ export async function createAndSchedule(
       },
     );
   }
+}
+
+/**
+ * Bind a handler to a queue. The one legal way to reach `boss.work` in this
+ * tree — the `healthlog/job-handler-outcome` lint rule refuses a bare
+ * `boss.work(` anywhere else.
+ *
+ * The point of routing every binding through here is the handler type:
+ * `JobHandler<T>` resolves to `Promise<JobOutcome>`, so a handler cannot be
+ * bound unless it returns a value declaring what it did. `runJob` then fails
+ * the pg-boss job on `ok: false` instead of completing it. Falling off the
+ * end of a handler, which used to read as success, is now a type error.
+ *
+ * Argument order matches `boss.work(queue, options, handler)` so a binding
+ * reads the same as it did before, with `boss` moved to the front.
+ */
+export async function createAndWork<T>(
+  boss: PgBoss,
+  queue: string,
+  options: WorkOptions & { includeMetadata: true },
+  handler: JobWithMetadataHandler<T>,
+): Promise<void>;
+export async function createAndWork<T>(
+  boss: PgBoss,
+  queue: string,
+  options: WorkOptions,
+  handler: JobHandler<T>,
+): Promise<void>;
+export async function createAndWork<T>(
+  boss: PgBoss,
+  queue: string,
+  options: WorkOptions,
+  handler: JobHandler<T> | JobWithMetadataHandler<T>,
+): Promise<void> {
+  // `JobWithMetadata<T>` extends `Job<T>`, so the metadata handler accepts
+  // everything the plain one does; the overloads above are what keeps the
+  // call sites honest about which shape they asked pg-boss for.
+  await boss.work<T>(queue, options, runJob(queue, handler as JobHandler<T>));
 }

@@ -87,11 +87,14 @@ describe("apple health import — parser revision boundary", () => {
     expect(allQueues).not.toBeNull();
     expect(allQueues![1]).toMatch(/\bAPPLE_HEALTH_IMPORT_V2_QUEUE\b/);
     expect(allQueues![1]).toMatch(/\bAPPLE_HEALTH_IMPORT_LEGACY_QUEUE\b/);
+    // The v2 window is the wider of the two: its binding wraps the batch in
+    // a loop that keeps the first failed outcome, so the handler call sits
+    // further from the queue name than the legacy bridge's does.
     expect(maintenanceSource).toMatch(
-      /boss\.work[\s\S]{0,200}APPLE_HEALTH_IMPORT_V2_QUEUE[\s\S]{0,400}handleAppleHealthImport/,
+      /createAndWork[\s\S]{0,200}APPLE_HEALTH_IMPORT_V2_QUEUE[\s\S]{0,600}handleAppleHealthImport/,
     );
     expect(maintenanceSource).toMatch(
-      /boss\.work[\s\S]{0,200}APPLE_HEALTH_IMPORT_LEGACY_QUEUE[\s\S]{0,400}migrateLegacyAppleHealthImport/,
+      /createAndWork[\s\S]{0,200}APPLE_HEALTH_IMPORT_LEGACY_QUEUE[\s\S]{0,400}migrateLegacyAppleHealthImport/,
     );
   });
 

@@ -32,9 +32,9 @@ describe("workout-insight-generate queue wiring", () => {
     expect(allQueues![1]).toMatch(/\bWORKOUT_INSIGHT_GENERATE_QUEUE\b/);
   });
 
-  it("binds a boss.work handler that drains it", () => {
+  it("binds a createAndWork handler that drains it", () => {
     expect(statusRegistrar).toMatch(
-      /boss\.work[\s\S]{0,300}WORKOUT_INSIGHT_GENERATE_QUEUE[\s\S]{0,300}handleWorkoutInsightGenerate/,
+      /createAndWork[\s\S]{0,300}WORKOUT_INSIGHT_GENERATE_QUEUE[\s\S]{0,300}handleWorkoutInsightGenerate/,
     );
   });
 
@@ -50,8 +50,10 @@ describe("workout-insight-generate queue wiring", () => {
   it("has no cron schedule — it is dispatched by arrival only", () => {
     // A cron here would be a standing invitation to regenerate, which is the
     // saturation surface the design refuses.
+    // Tolerates the optional third schedule element, so a cron sneaking in
+    // with send options still trips this.
     expect(statusRegistrar).not.toMatch(
-      /\[WORKOUT_INSIGHT_GENERATE_QUEUE,\s*\w+_CRON\]/,
+      /\[\s*WORKOUT_INSIGHT_GENERATE_QUEUE,\s*\w+_CRON\s*[,\]]/,
     );
   });
 

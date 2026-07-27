@@ -10,6 +10,7 @@ import {
   type IntakeAutoSkipPayload,
   runIntakeAutoSkipPass,
 } from "@/lib/jobs/intake-auto-skip";
+import { jobDone, jobFailed, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import { expireStaleInUseItems } from "@/lib/medications/inventory/service";
 import { getWorkerPrisma } from "./shared";
@@ -21,18 +22,21 @@ import { getWorkerPrisma } from "./shared";
  */
 export async function handleMedicationInventoryExpire(
   jobs: Job<MedicationInventoryExpirePayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.medication_inventory_expire", async (evt) => {
+  return withBackgroundEvent("job.medication_inventory_expire", async (evt) => {
     try {
       const count = await expireStaleInUseItems({ nowMs: Date.now() });
       evt.addMeta("inventory_expired_count", count);
+      // A pass that found no lapsed pen did its work; zero is a result.
+      return jobDone({ inventory_expired_count: count });
     } catch (err) {
       evt.addWarning(
         `medication-inventory-expire failed: ${
           err instanceof Error ? err.message : String(err)
         }`,
       );
+      return jobFailed("inventory expire pass failed", err);
     }
   });
 }
@@ -46,9 +50,11 @@ export async function handleMedicationInventoryExpire(
  * unit test can drive it with an in-memory fake Prisma; this wrapper
  * threads the worker's pg-boss + background-event plumbing.
  */
-export async function handleIntakeAutoSkip(jobs: Job<IntakeAutoSkipPayload>[]) {
+export async function handleIntakeAutoSkip(
+  jobs: Job<IntakeAutoSkipPayload>[],
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.intake_auto_skip", async (evt) => {
+  return withBackgroundEvent("job.intake_auto_skip", async (evt) => {
     const prisma = getWorkerPrisma();
     try {
       const result = await runIntakeAutoSkipPass(prisma, {
@@ -56,12 +62,17 @@ export async function handleIntakeAutoSkip(jobs: Job<IntakeAutoSkipPayload>[]) {
       });
       evt.addMeta("intake_auto_skip_count", result.skippedCount);
       evt.addMeta("intake_auto_skip_cutoff", result.cutoff.toISOString());
+      return jobDone({
+        intake_auto_skip_count: result.skippedCount,
+        intake_auto_skip_cutoff: result.cutoff.toISOString(),
+      });
     } catch (err) {
       evt.addWarning(
         `intake-auto-skip failed: ${
           err instanceof Error ? err.message : String(err)
         }`,
       );
+      return jobFailed("intake auto-skip pass failed", err);
     }
   });
 }

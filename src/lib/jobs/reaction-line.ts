@@ -29,6 +29,7 @@ import type { Job } from "pg-boss";
 
 import { prisma } from "@/lib/db";
 import { randomUUID } from "node:crypto";
+import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { annotate } from "@/lib/logging/context";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import { resolveProviderChain } from "@/lib/ai/provider";
@@ -677,13 +678,16 @@ export async function runReactionLine(
 
 export async function handleReactionLine(
   jobs: Job<ReactionLineJob>[],
-): Promise<void> {
-  await withBackgroundEvent("job.reaction_line", async (evt) => {
+): Promise<JobOutcome> {
+  return withBackgroundEvent("job.reaction_line", async (evt) => {
+    let generated = 0;
+    let skipped = 0;
     for (const job of jobs) {
       try {
         const outcome = await runReactionLine(job.data);
 
         if (outcome.status === "skipped") {
+          skipped++;
           annotate({
             action: { name: "arrival.reaction_line.skipped" },
             meta: { reason: outcome.reason, kind: job.data.kind },
@@ -692,6 +696,7 @@ export async function handleReactionLine(
           continue;
         }
 
+        generated++;
         annotate({
           action: { name: "arrival.reaction_line.generated" },
           meta: { kind: job.data.kind, local_date: job.data.localDate },
@@ -705,5 +710,9 @@ export async function handleReactionLine(
         throw err;
       }
     }
+    // A skip is a refusal the surface is designed around, not a miss: the
+    // deterministic lead already stands without a line. The pass did its work
+    // whenever it ran to the end.
+    return jobDone({ total: jobs.length, generated, skipped });
   });
 }

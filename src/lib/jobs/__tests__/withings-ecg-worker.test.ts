@@ -93,7 +93,15 @@ describe("handleWithingsEcgSync", () => {
       enddate: 1715000060,
     });
 
-    await expect(handleWithingsEcgSync([queued])).resolves.toBeUndefined();
+    await expect(handleWithingsEcgSync([queued])).resolves.toEqual({
+      ok: true,
+      did: {
+        total: 1,
+        users_synced: 1,
+        users_failed: 0,
+        recordings_imported: 1,
+      },
+    });
 
     expect(ecgFindMany).not.toHaveBeenCalled();
     expect(syncUserEcg).toHaveBeenCalledTimes(1);
@@ -120,14 +128,24 @@ describe("handleWithingsEcgSync", () => {
 
   it("one user's failure never starves the rest of the cohort", async () => {
     ecgFindMany.mockResolvedValue([{ userId: "a" }, { userId: "b" }]);
+    syncUserEcg.mockResolvedValue(0);
     syncUserEcg.mockRejectedValueOnce(new Error("boom for a"));
 
     // Per-user catch-and-warn (mirrors the activity / sleep handlers): the
-    // handler resolves, both users attempted, the leaf records its own ledger
-    // failure so honesty is preserved without rejecting the whole batch.
+    // pass ran, so the job is done and the failing user rides out as a
+    // `users_failed` count. The leaf records its own ledger failure, so
+    // honesty is preserved without rejecting the whole batch.
     await expect(
       handleWithingsEcgSync([job({} as WithingsEcgSyncPayload)]),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({
+      ok: true,
+      did: {
+        total: 2,
+        users_synced: 1,
+        users_failed: 1,
+        recordings_imported: 0,
+      },
+    });
     expect(syncUserEcg).toHaveBeenCalledTimes(2);
   });
 });
@@ -143,7 +161,7 @@ describe("withings ECG queue registration", () => {
       /\[WITHINGS_ECG_SYNC_QUEUE\]:\s*\{[\s\S]*?policy:\s*"short"/,
     );
     expect(registrarSource).toMatch(
-      /boss\.work<WithingsEcgSyncPayload>\([\s\S]*?WITHINGS_ECG_SYNC_QUEUE[\s\S]*?handleWithingsEcgSync/,
+      /createAndWork<WithingsEcgSyncPayload>\(\s*boss,\s*WITHINGS_ECG_SYNC_QUEUE[\s\S]{0,120}handleWithingsEcgSync/,
     );
   });
 });
