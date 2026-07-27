@@ -92,6 +92,7 @@ export async function buildFullBackupPayload(
     medications,
     intakeEvents,
     moodEntries,
+    customMoodTags,
     cycle,
     records,
     nutrientDays,
@@ -174,6 +175,15 @@ export async function buildFullBackupPayload(
           },
         },
       },
+    }),
+    // The account's OWN mood tags. The seeded catalogue is reference data every
+    // instance has; a tag the user made lives only here. Without it the restore
+    // cannot resolve the entry's factor keys — and unlike the cycle path, which
+    // used to drop them silently, the mood path throws, so an account with one
+    // custom rated tag could not be restored at all.
+    prisma.moodTag.findMany({
+      where: { userId },
+      orderBy: { key: "asc" },
     }),
     buildCycleBackupSection(prisma, userId, {
       purpose: disasterRecovery ? "disaster-recovery" : "portable-export",
@@ -308,6 +318,14 @@ export async function buildFullBackupPayload(
         key: link.moodTag.key,
         rating: link.rating!,
       })),
+    })),
+    customMoodTags: customMoodTags.map((tag) => ({
+      ...(disasterRecovery ? { id: tag.id } : {}),
+      key: tag.key,
+      labelKey: tag.labelKey,
+      categoryId: tag.categoryId,
+      kind: tag.kind,
+      isActive: tag.isActive,
     })),
     cycleProfile: cycle.cycleProfile,
     cycles: cycle.cycles,

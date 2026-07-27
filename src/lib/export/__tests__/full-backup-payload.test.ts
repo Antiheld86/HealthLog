@@ -159,6 +159,7 @@ function makePrisma() {
         },
       ]),
     },
+    moodTag: { findMany: vi.fn().mockResolvedValue([]) },
     moodEntry: {
       findMany: vi.fn().mockResolvedValue([
         {

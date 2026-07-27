@@ -605,6 +605,28 @@ const handler = apiHandler(
                 ),
               ),
             ];
+            // Re-create the account's own tag definitions first. The lookup
+            // below used to ask only for the seeded catalogue (`userId: null`),
+            // so a single custom rated tag made the whole restore throw
+            // "Unknown mood factor keys" — the file was complete and unusable.
+            for (const tag of payload.customMoodTags) {
+              await tx.moodTag.upsert({
+                where: { key: tag.key },
+                create: {
+                  ...(tag.id ? { id: tag.id } : {}),
+                  userId: ownerId,
+                  key: tag.key,
+                  labelKey: tag.labelKey,
+                  categoryId: tag.categoryId,
+                  kind: tag.kind,
+                  isActive: tag.isActive,
+                },
+                // `key` is globally unique, so a seeded key would collide.
+                // Leave the catalogue row alone; the links resolve either way.
+                update: {},
+              });
+            }
+
             const factorRows =
               factorKeys.length === 0
                 ? []
@@ -612,7 +634,8 @@ const handler = apiHandler(
                     where: {
                       key: { in: factorKeys },
                       kind: "RATED",
-                      userId: null,
+                      // The seeded catalogue OR this account's own tags.
+                      OR: [{ userId: null }, { userId: ownerId }],
                     },
                     select: { id: true, key: true },
                   });

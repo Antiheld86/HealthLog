@@ -315,6 +315,26 @@ const cycleProfileSchema = z
   .passthrough();
 
 /**
+ * A mood tag the account created, as opposed to the seeded catalogue.
+ *
+ * Carried for the same reason as a custom cycle symptom, but the failure it
+ * prevents is louder: the restore resolves an entry's rated factors by key and
+ * throws on one it cannot find, so an account with a single custom rated tag
+ * could not be restored at all.
+ */
+const customMoodTagSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    key: z.string().min(1),
+    labelKey: z.string().min(1),
+    categoryId: z.string().min(1),
+    // "BINARY" | "RATED", enforced in app code rather than a DB enum.
+    kind: z.string().min(1),
+    isActive: z.boolean().default(true),
+  })
+  .passthrough();
+
+/**
  * A day's total for one nutrient, from one source.
  *
  * The export has written these since v1.29 and the canonical schema never
@@ -605,6 +625,7 @@ export const backupPayloadSchema = z
     // Defaulted rather than required: files written before this field existed
     // are still valid, and an account with no custom symptoms writes [].
     customSymptoms: z.array(customCycleSymptomSchema).default([]),
+    customMoodTags: z.array(customMoodTagSchema).default([]),
     // Structured records default to empty arrays so older backups remain
     // parseable. Canonical DR writers add stable ids and encrypted document
     // fields; portable exports retain the metadata-only subset.
