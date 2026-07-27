@@ -7,8 +7,11 @@ next to every sign-in. Two tiers can produce that:
   keyless, and on by default — which also means every login IP address of
   every account on the instance leaves the host.
 - **Offline.** MaxMind's GeoLite2-City and GeoLite2-ASN databases read
-  from a local directory. Nothing leaves the host, and the ASN database
-  is the authoritative source for the carrier.
+  from a local directory. The ASN database is the authoritative source
+  for the carrier and the AS number. Note that the resolver is
+  online-first: having the databases in place is not by itself enough to
+  stop the outbound lookup, see "Turning the online lookup off entirely"
+  below.
 
 The offline tier is optional and absent by default. The published image
 only carries the databases when the image build had a MaxMind licence key
