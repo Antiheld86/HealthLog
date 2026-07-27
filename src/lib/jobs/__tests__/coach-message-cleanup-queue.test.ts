@@ -2,7 +2,7 @@
  * v1.18.7 — coach-message-cleanup queue registration guard.
  *
  * Same source-text-grep approach as the other queue-wiring guards: assert the
- * queue is registered in `allQueues`, scheduled, and wired to a `boss.work`
+ * queue is registered in `allQueues`, scheduled, and wired to a `createAndWork`
  * handler — without booting pg-boss + Prisma. An unregistered queue silently
  * never drains (the recurring v1.4.37 dead-queue bug), which would leave the
  * encrypted Coach history growing unbounded with the retention job dark.
@@ -41,13 +41,13 @@ describe("reminder-worker — coach-message-cleanup wiring", () => {
 
   it("schedules the coach-message-cleanup cron", () => {
     expect(workerSource).toMatch(
-      /\[COACH_MESSAGE_CLEANUP_QUEUE,\s*COACH_MESSAGE_CLEANUP_CRON\]/,
+      /\[COACH_MESSAGE_CLEANUP_QUEUE,\s*COACH_MESSAGE_CLEANUP_CRON,\s*cronIsTheRetry\]/,
     );
   });
 
-  it("registers a boss.work handler for the queue", () => {
+  it("registers a createAndWork handler for the queue", () => {
     expect(workerSource).toMatch(
-      /boss\.work[\s\S]{0,200}COACH_MESSAGE_CLEANUP_QUEUE[\s\S]{0,200}handleCoachMessageCleanup/,
+      /createAndWork[\s\S]{0,200}COACH_MESSAGE_CLEANUP_QUEUE[\s\S]{0,200}handleCoachMessageCleanup/,
     );
   });
 

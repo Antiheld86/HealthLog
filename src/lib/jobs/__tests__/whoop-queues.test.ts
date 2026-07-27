@@ -77,25 +77,25 @@ describe("reminder-worker — WHOOP sync queues", () => {
       /\[WHOOP_CYCLE_SYNC_QUEUE,\s*WHOOP_CYCLE_SYNC_CRON\]/,
     );
     expect(source).toMatch(
-      /\[WHOOP_OAUTH_STATE_CLEANUP_QUEUE,\s*WHOOP_OAUTH_STATE_CLEANUP_CRON\]/,
+      /\[\s*WHOOP_OAUTH_STATE_CLEANUP_QUEUE,\s*WHOOP_OAUTH_STATE_CLEANUP_CRON,\s*cronIsTheRetry,?\s*\]/,
     );
   });
 
-  it("registers a boss.work handler for every WHOOP sync queue", () => {
+  it("registers a createAndWork handler for every WHOOP sync queue", () => {
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,160}WHOOP_RECOVERY_SYNC_QUEUE[\s\S]{0,160}handleWhoopRecoverySync/,
+      /createAndWork[\s\S]{0,160}WHOOP_RECOVERY_SYNC_QUEUE[\s\S]{0,160}handleWhoopRecoverySync/,
     );
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,160}WHOOP_SLEEP_SYNC_QUEUE[\s\S]{0,160}handleWhoopSleepSync/,
+      /createAndWork[\s\S]{0,160}WHOOP_SLEEP_SYNC_QUEUE[\s\S]{0,160}handleWhoopSleepSync/,
     );
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,160}WHOOP_WORKOUT_SYNC_QUEUE[\s\S]{0,160}handleWhoopWorkoutSync/,
+      /createAndWork[\s\S]{0,160}WHOOP_WORKOUT_SYNC_QUEUE[\s\S]{0,160}handleWhoopWorkoutSync/,
     );
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,160}WHOOP_CYCLE_SYNC_QUEUE[\s\S]{0,160}handleWhoopCycleSync/,
+      /createAndWork[\s\S]{0,160}WHOOP_CYCLE_SYNC_QUEUE[\s\S]{0,160}handleWhoopCycleSync/,
     );
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,200}WHOOP_BACKFILL_QUEUE[\s\S]{0,260}enqueueIntegrationBackfillAdmission/,
+      /createAndWork[\s\S]{0,200}WHOOP_BACKFILL_QUEUE[\s\S]{0,260}enqueueIntegrationBackfillAdmission/,
     );
   });
 

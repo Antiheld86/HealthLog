@@ -3,7 +3,7 @@
  *
  * The reminder-worker imports heavy infrastructure, so we read the source as
  * text and assert the queue constant is declared, registered in `allQueues`,
- * wired to a `boss.work` handler, and enqueued at boot — the fast guard that
+ * wired to a `createAndWork` handler, and enqueued at boot — the fast guard that
  * catches the v1.4.37 dead-queue class (a queue declared but never registered,
  * which silently never drains).
  */
@@ -30,9 +30,9 @@ describe("reminder-worker — sleep-timeline backfill queue", () => {
     expect(block![1]!).toContain("SLEEP_TIMELINE_BACKFILL_QUEUE");
   });
 
-  it("wires a boss.work handler through the shared admission queue", () => {
+  it("wires a createAndWork handler through the shared admission queue", () => {
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,260}SLEEP_TIMELINE_BACKFILL_QUEUE[\s\S]{0,300}enqueueIntegrationBackfillAdmission/,
+      /createAndWork[\s\S]{0,260}SLEEP_TIMELINE_BACKFILL_QUEUE[\s\S]{0,300}enqueueIntegrationBackfillAdmission/,
     );
   });
 

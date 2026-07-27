@@ -61,19 +61,19 @@ describe("reminder-worker — Google Health sync queues", () => {
       /\[GOOGLE_HEALTH_SYNC_QUEUE,\s*GOOGLE_HEALTH_SYNC_CRON\]/,
     );
     expect(source).toMatch(
-      /\[\s*GOOGLE_HEALTH_OAUTH_STATE_CLEANUP_QUEUE,\s*GOOGLE_HEALTH_OAUTH_STATE_CLEANUP_CRON,?\s*\]/,
+      /\[\s*GOOGLE_HEALTH_OAUTH_STATE_CLEANUP_QUEUE,\s*GOOGLE_HEALTH_OAUTH_STATE_CLEANUP_CRON,\s*cronIsTheRetry,?\s*\]/,
     );
   });
 
-  it("registers a boss.work handler for every Google Health queue", () => {
+  it("registers a createAndWork handler for every Google Health queue", () => {
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,200}GOOGLE_HEALTH_SYNC_QUEUE[\s\S]{0,200}handleGoogleHealthSync/,
+      /createAndWork[\s\S]{0,200}GOOGLE_HEALTH_SYNC_QUEUE[\s\S]{0,200}handleGoogleHealthSync/,
     );
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,320}GOOGLE_HEALTH_BACKFILL_QUEUE[\s\S]{0,320}enqueueIntegrationBackfillAdmission/,
+      /createAndWork[\s\S]{0,320}GOOGLE_HEALTH_BACKFILL_QUEUE[\s\S]{0,320}enqueueIntegrationBackfillAdmission/,
     );
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,200}GOOGLE_HEALTH_OAUTH_STATE_CLEANUP_QUEUE[\s\S]{0,200}handleGoogleHealthOAuthStateCleanup/,
+      /createAndWork[\s\S]{0,200}GOOGLE_HEALTH_OAUTH_STATE_CLEANUP_QUEUE[\s\S]{0,200}handleGoogleHealthOAuthStateCleanup/,
     );
   });
 

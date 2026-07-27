@@ -107,7 +107,17 @@ describe("makePollCohortHandler — marker-aware recordFailure boundary", () => 
       recordFailure,
     });
 
-    await expect(handler([job()])).resolves.toBeUndefined();
+    // The recorder rejection is warned, not propagated: the pass ran, so the
+    // job is done and the failing user is a `users_failed` count.
+    await expect(handler([job()])).resolves.toEqual({
+      ok: true,
+      did: {
+        total: 2,
+        users_synced: 1,
+        users_failed: 1,
+        measurements_imported: 1,
+      },
+    });
     // The next user still synced despite the recorder throwing.
     expect(syncUser).toHaveBeenCalledTimes(2);
     expect(syncUser).toHaveBeenLastCalledWith("next");

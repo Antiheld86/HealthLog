@@ -73,12 +73,16 @@ describe("periodic reconcile — wiring", () => {
       /const schedules[\s\S]*?=\s*\[([\s\S]*?)\];/,
     );
     expect(schedules).not.toBeNull();
+    // The third element pins the retry policy. It is load-bearing now that
+    // the handler reports a failed outcome instead of swallowing: without
+    // `cronIsTheRetry` a database outage would run the same doomed sweep
+    // three times per tick, and the next tick is already the retry.
     expect(schedules![1]).toMatch(
-      /\[IMPORT_JOB_RECONCILE_QUEUE,\s*IMPORT_JOB_RECONCILE_CRON\]/,
+      /\[IMPORT_JOB_RECONCILE_QUEUE,\s*IMPORT_JOB_RECONCILE_CRON,\s*cronIsTheRetry\]/,
     );
 
     expect(maintenanceSource).toMatch(
-      /boss\.work\(\s*IMPORT_JOB_RECONCILE_QUEUE[\s\S]{0,120}handleImportJobReconcileTick/,
+      /createAndWork\(\s*boss,\s*IMPORT_JOB_RECONCILE_QUEUE[\s\S]{0,120}handleImportJobReconcileTick/,
     );
   });
 });
@@ -163,24 +167,30 @@ describe("reconcileOrphanImportJobs", () => {
 });
 
 describe("handleImportJobReconcileTick", () => {
-  it("delegates to reconcileOrphanImportJobs and resolves on success", async () => {
+  it("delegates to reconcileOrphanImportJobs and reports a done outcome", async () => {
     mocks.findMany.mockResolvedValue([]);
 
-    await expect(
-      handleImportJobReconcileTick([] as never),
-    ).resolves.toBeUndefined();
+    await expect(handleImportJobReconcileTick([] as never)).resolves.toEqual({
+      ok: true,
+      did: {},
+    });
     expect(mocks.findMany).toHaveBeenCalledTimes(1);
   });
 
-  it("swallows a reconcile failure instead of throwing", async () => {
-    mocks.findMany.mockRejectedValue(new Error("db unavailable"));
+  it("reports a failed outcome when the reconcile pass throws", async () => {
+    const cause = new Error("db unavailable");
+    mocks.findMany.mockRejectedValue(cause);
 
-    // A background sweep this cheap must never spam pg-boss's
-    // retry/backoff machinery — it just re-runs on the next 15-minute
-    // tick. The handler must resolve even when the underlying reconcile
-    // pass throws.
-    await expect(
-      handleImportJobReconcileTick([] as never),
-    ).resolves.toBeUndefined();
+    // The handler used to swallow this and resolve, which left a sweep
+    // that had not run for hours indistinguishable from one that found
+    // nothing to do. It now names the failure, `runJob` rethrows it, and
+    // pg-boss records a failed job. The queue carries `cronIsTheRetry`
+    // (retryLimit 0) because the next 15-minute tick is the retry — a
+    // database that is down stays down for an immediate re-run.
+    await expect(handleImportJobReconcileTick([] as never)).resolves.toEqual({
+      ok: false,
+      reason: "apple health import reconcile failed",
+      cause,
+    });
   });
 });

@@ -5,7 +5,7 @@
  *
  * Same source-text-grep approach as the WX-C recovery-score guard: assert
  * each queue is imported, registered in `allQueues`, scheduled (the two
- * cron-driven score jobs), and wired to a `boss.work` handler — without
+ * cron-driven score jobs), and wired to a `createAndWork` handler — without
  * booting pg-boss + Prisma. An unregistered queue silently never drains
  * (the recurring past bug this guards against).
  */
@@ -67,9 +67,9 @@ describe("reminder-worker — stress-score wiring", () => {
     expect(source).toMatch(/\[STRESS_SCORE_QUEUE,\s*STRESS_SCORE_CRON\]/);
   });
 
-  it("registers a boss.work handler that runs the stress-score pass", () => {
+  it("registers a createAndWork handler that runs the stress-score pass", () => {
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,200}STRESS_SCORE_QUEUE[\s\S]{0,400}runStressScore/,
+      /createAndWork[\s\S]{0,200}STRESS_SCORE_QUEUE[\s\S]{0,400}runStressScore/,
     );
   });
 });
@@ -90,9 +90,9 @@ describe("reminder-worker — strain-score wiring", () => {
     expect(source).toMatch(/\[STRAIN_SCORE_QUEUE,\s*STRAIN_SCORE_CRON\]/);
   });
 
-  it("registers a boss.work handler that runs the strain-score pass", () => {
+  it("registers a createAndWork handler that runs the strain-score pass", () => {
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,200}STRAIN_SCORE_QUEUE[\s\S]{0,400}runStrainScore/,
+      /createAndWork[\s\S]{0,200}STRAIN_SCORE_QUEUE[\s\S]{0,400}runStrainScore/,
     );
   });
 });
@@ -111,9 +111,9 @@ describe("reminder-worker — dense intra-day retention wiring", () => {
     expect(allQueuesBlock()).toMatch(/\bDENSE_INTRADAY_RETENTION_QUEUE\b/);
   });
 
-  it("registers a boss.work handler against the dense-intraday-retention queue", () => {
+  it("registers a createAndWork handler against the dense-intraday-retention queue", () => {
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,250}DENSE_INTRADAY_RETENTION_QUEUE[\s\S]{0,500}runDenseIntradayRetentionForUser/,
+      /createAndWork[\s\S]{0,250}DENSE_INTRADAY_RETENTION_QUEUE[\s\S]{0,500}runDenseIntradayRetentionForUser/,
     );
   });
 
@@ -163,9 +163,9 @@ describe("reminder-worker — dense hourly-rebuild wiring", () => {
     expect(allQueuesBlock()).toMatch(/\bDENSE_INTRADAY_HOURLY_REBUILD_QUEUE\b/);
   });
 
-  it("registers a boss.work handler against the hourly-rebuild queue", () => {
+  it("registers a createAndWork handler against the hourly-rebuild queue", () => {
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,250}DENSE_INTRADAY_HOURLY_REBUILD_QUEUE[\s\S]{0,500}runDenseIntradayHourlyRebuildForUser/,
+      /createAndWork[\s\S]{0,250}DENSE_INTRADAY_HOURLY_REBUILD_QUEUE[\s\S]{0,500}runDenseIntradayHourlyRebuildForUser/,
     );
   });
 
