@@ -1,6 +1,7 @@
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiSuccess, apiError } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
+import { resolveSyncOutcome } from "@/lib/outcome/written-outcome";
 import { syncUserMeasurements } from "@/lib/withings/sync";
 import { NextRequest } from "next/server";
 
@@ -24,8 +25,6 @@ export const POST = apiHandler(async (request: NextRequest) => {
     // no body provided -> default incremental sync
   }
 
-  const imported = await syncUserMeasurements(user.id, {
-    fullSync,
-  });
-  return apiSuccess({ imported, fullSync });
+  const result = await syncUserMeasurements(user.id, { fullSync });
+  return apiSuccess({ ...resolveSyncOutcome(result), fullSync });
 });

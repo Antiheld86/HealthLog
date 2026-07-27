@@ -89,7 +89,7 @@ export async function handleWithingsFallbackSync(
 
       for (const connection of connections) {
         try {
-          const imported = await syncUserMeasurements(connection.userId);
+          const { imported } = await syncUserMeasurements(connection.userId);
           usersSynced++;
           measurementsImported += imported;
           // v1.18.1 — a fresh reading landed; resolve this user's Vorsorge

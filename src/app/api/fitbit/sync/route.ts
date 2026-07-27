@@ -3,6 +3,7 @@ import { apiSuccess, apiError } from "@/lib/api-response";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { annotate } from "@/lib/logging/context";
 import { syncUserFitbit } from "@/lib/fitbit/sync";
+import { resolveSyncOutcome } from "@/lib/outcome/written-outcome";
 import { NextRequest } from "next/server";
 
 /**
@@ -58,6 +59,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
     }
   }
 
-  const { imported } = await syncUserFitbit(user.id, { fullSync });
-  return apiSuccess({ imported, fullSync });
+  // The verdict is resolved here, not in the card: a run that imported nothing
+  // because every resource failed is not the same answer as a quiet hour, and
+  // both used to render as a green tick with a count.
+  const result = await syncUserFitbit(user.id, { fullSync });
+  return apiSuccess({ ...resolveSyncOutcome(result), fullSync });
 });

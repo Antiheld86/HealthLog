@@ -11,8 +11,8 @@ import { useTranslations } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 import { apiFetchRaw, apiGet } from "@/lib/api/api-fetch";
 import { ImportCardShell } from "./import-card-shell";
-import { classifyImportOutcome } from "./import-result-state";
-import { ImportOutcomeLine } from "./import-result-view";
+import { WrittenOutcomeLine } from "@/components/outcome/written-outcome-line";
+import { classifyWrittenOutcome } from "@/lib/outcome/written-outcome";
 
 /** Terminal states the status poll stops on. */
 const TERMINAL_STATES: readonly string[] = ["done", "failed"];
@@ -239,8 +239,8 @@ export function AppleHealthImportCard() {
           </div>
         )}
         {isDone && (
-          <ImportOutcomeLine
-            outcome={classifyImportOutcome({
+          <WrittenOutcomeLine
+            outcome={classifyWrittenOutcome({
               written: status?.result?.totals?.rowsUpserted ?? 0,
               // The clinical count is a documented, deliberate exclusion
               // (electrocardiograms, lab documents), not a refused row — it

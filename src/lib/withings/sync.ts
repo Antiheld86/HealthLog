@@ -32,6 +32,7 @@ import {
 } from "@/lib/rollups/measurement-rollups";
 import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
 import { invalidateUserDashboardSnapshot } from "@/lib/cache/invalidate";
+import type { SyncWriteResult } from "@/lib/outcome/written-outcome";
 import {
   acquireProviderTokenRefreshLock,
   PROVIDER_REFRESH_TRANSACTION_OPTIONS,
@@ -180,6 +181,9 @@ export const WITHINGS_INCREMENTAL_OVERLAP_MS = 10 * 60 * 1000;
  * Sync measurements from Withings for a given user.
  * Fetches data since last sync (or last 30 days if first sync).
  *
+ * Returns what was written AND whether any part of the run did not land, so
+ * the caller can tell a quiet week apart from a run that refused every row.
+ *
  * Status-tracking contract:
  *   - On any failure (refresh failure, fetch failure, downstream
  *     measurement-upsert that fails ALL items) we call
@@ -193,26 +197,29 @@ export const WITHINGS_INCREMENTAL_OVERLAP_MS = 10 * 60 * 1000;
 export async function syncUserMeasurements(
   userId: string,
   opts: { fullSync?: boolean } = {},
-): Promise<number> {
+): Promise<SyncWriteResult> {
   // Park: if the last burst said reauth_required, do nothing until
-  // the OAuth callback flips state back to "connected". Returning 0
-  // matches the existing contract for "no-op sync".
+  // the OAuth callback flips state back to "connected". The run wrote
+  // nothing AND did not complete, so it reports as a failure — a bare 0
+  // read as "nothing new", which is how a parked connection could keep
+  // answering with a green tick.
   if (await isReauthRequired(userId, "withings")) {
     getEvent()?.addWarning(
       `withings sync skipped for ${userId}: parked at error_reauth`,
     );
-    return 0;
+    return { imported: 0, failed: true };
   }
 
   const tokenInfo = await getValidToken(userId);
   // Note: getValidToken already calls recordSyncFailure on the refresh
   // path, so we don't double-record here.
-  if (!tokenInfo) return 0;
+  if (!tokenInfo) return { imported: 0, failed: true };
 
   const connection = await prisma.withingsConnection.findUnique({
     where: { userId },
   });
-  if (!connection) return 0;
+  // No connection row is not a failure — there is nothing to sync.
+  if (!connection) return { imported: 0, failed: false };
 
   const startDate = opts.fullSync
     ? undefined
@@ -390,7 +397,7 @@ export async function syncUserMeasurements(
       firstRowError ?? new Error("Withings measure row write failed"),
       WITHINGS_LEG_MEASURES,
     );
-    return imported;
+    return { imported, failed: true };
   }
 
   // Update last synced timestamp
@@ -407,7 +414,7 @@ export async function syncUserMeasurements(
     leg: WITHINGS_LEG_MEASURES,
   });
 
-  return imported;
+  return { imported, failed: false };
 }
 
 /**

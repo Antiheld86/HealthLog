@@ -5148,6 +5148,11 @@
     "withingsFullSyncTitle": "Synchronisation complète ?",
     "withingsFullSyncDescription": "Toutes les données Withings disponibles seront entièrement synchronisées. Cela peut prendre un certain temps selon votre historique.",
     "withingsSyncResult": "{count} mesures synchronisées",
+    "syncOutcome": {
+      "empty": "Rien de nouveau à importer. Tout est à jour.",
+      "failed": "Rien n'a été enregistré. La prochaine synchronisation réessaiera.",
+      "partial": "{count} mesures synchronisées. Une partie des données n'a pas pu être enregistrée ; la prochaine synchronisation réessaiera."
+    },
     "withingsFullSyncResult": "{count} mesures entièrement synchronisées",
     "withingsSyncFailed": "Échec de la synchronisation",
     "withingsOauthConnected": "Withings connecté — la première synchronisation démarre en arrière-plan.",
@@ -7873,6 +7878,9 @@
       "saveSelected": "Enregistrer {count} sélectionnées",
       "discardAll": "Tout abandonner",
       "savedToast": "{count} résultats de laboratoire enregistrés",
+      "savedPartialToast": "{count} résultats de laboratoire enregistrés, {skipped} ignorés car en double",
+      "savedNothingToast": "Rien enregistré : {skipped} valeurs étaient déjà présentes",
+      "savedEmptyToast": "Rien à enregistrer",
       "noRows": "Aucune valeur n'a pu être trouvée dans ce compte rendu.",
       "nothingToSave": "Sélectionnez au moins une valeur à enregistrer.",
       "saveFailed": "Impossible d'enregistrer les valeurs. Veuillez réessayer.",

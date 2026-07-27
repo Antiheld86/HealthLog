@@ -5148,6 +5148,11 @@
     "withingsFullSyncTitle": "Pełna synchronizacja?",
     "withingsFullSyncDescription": "Wszystkie dostępne dane Withings zostaną w pełni zsynchronizowane. Może to chwilę potrwać w zależności od historii.",
     "withingsSyncResult": "{count} pomiarów zsynchronizowano",
+    "syncOutcome": {
+      "empty": "Nie ma nic nowego do zaimportowania. Wszystko jest aktualne.",
+      "failed": "Nic nie zostało zapisane. Następne uruchomienie spróbuje ponownie.",
+      "partial": "Zsynchronizowano {count} pomiarów. Części danych nie udało się zapisać; następne uruchomienie spróbuje ponownie."
+    },
     "withingsFullSyncResult": "{count} pomiarów w pełni zsynchronizowano",
     "withingsSyncFailed": "Synchronizacja nie powiodła się",
     "withingsOauthConnected": "Withings połączony — pierwsza synchronizacja rozpocznie się w tle.",
@@ -7873,6 +7878,9 @@
       "saveSelected": "Zapisz {count} wybranych",
       "discardAll": "Odrzuć wszystko",
       "savedToast": "Zapisano {count} wyników laboratoryjnych",
+      "savedPartialToast": "Zapisano {count} wyników laboratoryjnych, {skipped} pominięto jako duplikaty",
+      "savedNothingToast": "Nic nie zapisano: {skipped} wyników było już zarejestrowanych",
+      "savedEmptyToast": "Nie ma nic do zapisania",
       "noRows": "W tym wyniku nie znaleziono żadnych wartości.",
       "nothingToSave": "Wybierz co najmniej jeden wynik do zapisania.",
       "saveFailed": "Nie udało się zapisać wyników. Spróbuj ponownie.",

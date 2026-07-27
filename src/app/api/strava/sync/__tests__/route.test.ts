@@ -60,7 +60,7 @@ describe("POST /api/strava/sync", () => {
 
     expect(response.status).toBe(200);
     expect(await envelope(response)).toEqual({
-      data: { imported: 4 },
+      data: { imported: 4, failed: false, outcome: "success" },
       error: null,
     });
     expect(syncUserStrava).toHaveBeenCalledWith("u1");

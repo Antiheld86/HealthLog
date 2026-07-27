@@ -51,6 +51,7 @@ import {
   recomputeBucketsForMeasurement,
 } from "@/lib/rollups/measurement-rollups";
 import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
+import type { SyncWriteResult } from "@/lib/outcome/written-outcome";
 import { maybeEnqueueMorningRefresh } from "@/lib/daily/morning-refresh-trigger";
 import {
   emitInsertedMeasurementArrivals,
@@ -161,9 +162,11 @@ export interface PolarCollectionFailure {
 }
 
 /**
- * Sync one user's Polar data. Returns the count of measurement rows written.
- * A user with no Polar connection is a clean no-op (returns 0, touches no
- * status row).
+ * Sync one user's Polar data. Returns the rows written AND whether a
+ * collection did not settle — the bare count used to narrow the partial away,
+ * so a run whose every collection failed answered the same `0` as a quiet
+ * night. A user with no Polar connection is a clean no-op (nothing imported,
+ * nothing failed, no status row touched).
  *
  * The five vitals collections are settled independently: the healthy ones
  * import, a failing one is recorded as a single partial failure (no success
@@ -171,9 +174,9 @@ export interface PolarCollectionFailure {
  * escapes now is a write-path/unexpected error out of `upsertPolarMeasurements`
  * — the poll-cohort boundary records that unmarked escape once.
  */
-export async function syncUserPolar(userId: string): Promise<number> {
+export async function syncUserPolar(userId: string): Promise<SyncWriteResult> {
   const conn = await getPolarConnection(userId);
-  if (!conn) return 0;
+  if (!conn) return { imported: 0, failed: false };
 
   // Filled by the sleep collection's closure as it maps records; carried so the
   // caller can run the record-scoped sweep before the upsert. A collection that
@@ -301,11 +304,11 @@ export async function syncUserPolar(userId: string): Promise<number> {
           ? String(firstErr.httpStatus)
           : undefined,
     });
-    return imported;
+    return { imported, failed: true };
   }
 
   await recordSyncSuccess(userId, "polar", { leg: POLAR_LEG_VITALS });
-  return imported;
+  return { imported, failed: false };
 }
 
 /**
