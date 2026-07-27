@@ -22,6 +22,7 @@ import { prisma } from "@/lib/db";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiSuccess, returnAllZodIssues } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
+import { binaryReferenceSex } from "@/lib/profile/sex";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import {
   NUTRIENT_CATALOG,
@@ -72,8 +73,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     daySeries.push({ day: key, amount: sumByDay.get(key) ?? 0 });
   }
 
-  const sex =
-    user.gender === "MALE" || user.gender === "FEMALE" ? user.gender : null;
+  const sex = binaryReferenceSex(user.gender);
   const reference = resolveNutrientReference(nutrient, sex);
 
   annotate({

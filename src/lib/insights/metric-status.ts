@@ -83,6 +83,7 @@ import {
 import { hashInsightSnapshot } from "@/lib/insights/snapshot-hash";
 import { returnTimeoutFallback } from "@/lib/insights/timeout-fallback";
 import { annotate } from "@/lib/logging/context";
+import { binaryReferenceSex } from "@/lib/profile/sex";
 
 export interface MetricStatusResult {
   hasProvider: boolean;
@@ -335,8 +336,7 @@ export async function generateMetricStatus(args: {
     : null;
 
   const ageYears = getAgeFromDateOfBirth(user?.dateOfBirth ?? null);
-  const sex =
-    user?.gender === "MALE" || user?.gender === "FEMALE" ? user.gender : null;
+  const sex = binaryReferenceSex(user?.gender);
 
   // v1.10.0 F1 — sharpen the coarse registry `normalRange` with the
   // age/sex reference-range enabler when one is available for this

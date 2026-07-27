@@ -15,6 +15,7 @@
  * consistently.
  */
 
+import { binaryReferenceSex } from "@/lib/profile/sex";
 import { getBpTargets } from "./bp-targets";
 import {
   getAgeFromDateOfBirth,
@@ -120,11 +121,6 @@ const GLUCOSE_DEFAULTS: Record<
   BEDTIME: { min: 90, max: 150 },
 };
 
-function normalizedGender(value: string | null): "MALE" | "FEMALE" | null {
-  if (value === "MALE" || value === "FEMALE") return value;
-  return null;
-}
-
 function toDate(value: Date | string | null): Date | null {
   if (!value) return null;
   return value instanceof Date ? value : new Date(value);
@@ -135,7 +131,7 @@ function defaultRange(
   profile: UserProfileForRange,
 ): TrafficRange | null {
   const age = getAgeFromDateOfBirth(profile.dateOfBirth ?? null);
-  const gender = normalizedGender(profile.gender ?? null);
+  const gender = binaryReferenceSex(profile.gender);
   const dateOfBirth = toDate(profile.dateOfBirth);
 
   switch (metric) {

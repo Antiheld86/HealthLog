@@ -101,7 +101,11 @@ import {
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 import type { Locale } from "@/lib/i18n/config";
 import { getAgeFromDateOfBirth } from "@/lib/analytics/pulse-targets";
-import { toProfileSex, type ProfileSex } from "@/lib/profile/sex";
+import {
+  binaryReferenceSex,
+  toProfileSex,
+  type ProfileSex,
+} from "@/lib/profile/sex";
 
 /** Briefing freshness window — mirrors the 24 h TTL on the advisor cache. */
 const BRIEFING_TTL_MS = 24 * 60 * 60 * 1000;
@@ -1246,8 +1250,7 @@ export async function buildDashboardSnapshot(
   // never sinks the snapshot. The narrative block rides the warm phase's
   // healthScore; memory rides the briefing card. The locale defaults to English.
   const locale = options.locale ?? "en";
-  const narrativeSex: "MALE" | "FEMALE" | null =
-    user.gender === "MALE" || user.gender === "FEMALE" ? user.gender : null;
+  const narrativeSex = binaryReferenceSex(user.gender);
   const narrativeProfile = {
     ageYears: getAgeFromDateOfBirth(user.dateOfBirth),
     sex: narrativeSex,

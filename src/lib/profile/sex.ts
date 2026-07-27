@@ -21,6 +21,13 @@
 export type ProfileSex = "MALE" | "FEMALE" | "OTHER" | null;
 
 /**
+ * The two values a sex-split reference table actually has rows for. Named so
+ * a table's signature can say what it needs without re-listing the pair, and
+ * so the list has exactly one place to change.
+ */
+export type BinaryReferenceSex = "MALE" | "FEMALE";
+
+/**
  * Narrow a stored sex to the two values a sex-split reference table has
  * rows for. `OTHER` and "no answer" both resolve to `null`, and every
  * consumer of that `null` answers with a neutral value or with nothing —
@@ -29,7 +36,7 @@ export type ProfileSex = "MALE" | "FEMALE" | "OTHER" | null;
  */
 export function binaryReferenceSex(
   sex: string | null | undefined,
-): "MALE" | "FEMALE" | null {
+): BinaryReferenceSex | null {
   return sex === "MALE" || sex === "FEMALE" ? sex : null;
 }
 
