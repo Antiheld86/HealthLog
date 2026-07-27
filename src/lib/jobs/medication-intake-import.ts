@@ -58,8 +58,13 @@ export interface MedicationImportPayload {
  *
  * `duplicate_in_file` — two rows of the same submission resolve to the same
  * medication and slot, so only one can be written.
- * `already_recorded` — the dose is already on the ledger for that slot, from an
- * earlier import or from any other intake surface.
+ * `already_recorded` — the dose is already on the ledger for that slot from an
+ * earlier import. `source` is part of the live-row unique
+ * `(user_id, medication_id, scheduled_for, source)`, so this does NOT cover a
+ * dose the person logged by hand at the same slot on another surface: that row
+ * and the imported one are distinct keys and both are written. Cross-surface
+ * dedup is a slot-window question, not a unique-key one, and it does not exist
+ * yet — do not read this reason as though it did.
  *
  * Those two used to be one `skippedDuplicates` number, which is how a file whose
  * every row collapsed onto one key could report "27 duplicates skipped" about 27
