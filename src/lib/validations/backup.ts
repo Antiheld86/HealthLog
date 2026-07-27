@@ -314,6 +314,27 @@ const cycleProfileSchema = z
   })
   .passthrough();
 
+/**
+ * A symptom the account created, as opposed to the seeded catalogue.
+ *
+ * Carried because a day-log's symptom link resolves by key: without the
+ * definition the key resolves to nothing on the restoring instance, and the
+ * link is lost. The seeded rows are deliberately NOT carried — every instance
+ * already has them, and shipping them would mean a restore could rewrite
+ * another instance's reference data.
+ */
+const customCycleSymptomSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    key: z.string().min(1),
+    labelKey: z.string().min(1),
+    categoryId: z.string().min(1),
+    icon: z.string().nullable().optional(),
+    sortOrder: z.number().int().default(0),
+    isActive: z.boolean().default(true),
+  })
+  .passthrough();
+
 const appSettingsBackupSchema = z
   .object({
     id: z.string().min(1),
@@ -561,6 +582,9 @@ export const backupPayloadSchema = z
     cycleProfile: cycleProfileSchema.nullable().default(null),
     cycles: z.array(cycleSpanSchema).default([]),
     cycleDayLogs: z.array(cycleDayLogSchema).default([]),
+    // Defaulted rather than required: files written before this field existed
+    // are still valid, and an account with no custom symptoms writes [].
+    customSymptoms: z.array(customCycleSymptomSchema).default([]),
     // Structured records default to empty arrays so older backups remain
     // parseable. Canonical DR writers add stable ids and encrypted document
     // fields; portable exports retain the metadata-only subset.

@@ -18,6 +18,7 @@ vi.mock("@/lib/db", () => ({
     cycleProfile: { findUnique: vi.fn().mockResolvedValue(null) },
     menstrualCycle: { findMany: vi.fn().mockResolvedValue([]) },
     cycleDayLog: { findMany: vi.fn().mockResolvedValue([]) },
+    cycleSymptom: { findMany: vi.fn().mockResolvedValue([]) },
     // v1.28 backup-completeness — the records section the shared payload
     // builder now also reads (`buildRecordsBackupSection`).
     labResult: { findMany: vi.fn().mockResolvedValue([]) },

@@ -21,6 +21,7 @@ vi.mock("@/lib/db", () => ({
     cycleProfile: { findUnique: vi.fn() },
     menstrualCycle: { findMany: vi.fn() },
     cycleDayLog: { findMany: vi.fn() },
+    cycleSymptom: { findMany: vi.fn() },
     // v1.28 backup-completeness — the records section the full-backup
     // helper now also reads (`buildRecordsBackupSection`).
     labResult: { findMany: vi.fn() },
@@ -408,6 +409,7 @@ describe("GET /api/export/full-backup", () => {
     vi.mocked(prisma.cycleProfile.findUnique).mockResolvedValue(null as never);
     vi.mocked(prisma.menstrualCycle.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.cycleDayLog.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.cycleSymptom.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.labResult.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.biomarker.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.illnessEpisode.findMany).mockResolvedValue([] as never);
@@ -476,6 +478,7 @@ describe("GET /api/export/full-backup", () => {
     vi.mocked(prisma.cycleProfile.findUnique).mockResolvedValue(null as never);
     vi.mocked(prisma.menstrualCycle.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.cycleDayLog.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.cycleSymptom.findMany).mockResolvedValue([] as never);
 
     const { encryptToBytes } = await import("@/lib/ai/coach/bytes-codec");
     vi.mocked(prisma.labResult.findMany).mockResolvedValue([
