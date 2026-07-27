@@ -16,13 +16,18 @@
  * assert a single aggregate `allQueues` (defence in depth: the per-registrar
  * arrays AND the boot-level union both have to agree).
  */
-import { PgBoss } from "pg-boss";
+import { PgBoss, type WorkOptions } from "pg-boss";
 
 import { prisma } from "@/lib/db";
 
 import { workerLog } from "./shared";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import { annotate } from "@/lib/logging/context";
+import {
+  runJob,
+  type JobHandler,
+  type JobWithMetadataHandler,
+} from "@/lib/jobs/run-job";
 
 /**
  * Cron schedule tuple: `[queueName, cronExpression, sendOptions?]`. The
@@ -197,4 +202,42 @@ export async function createAndSchedule(
       },
     );
   }
+}
+
+/**
+ * Bind a handler to a queue. The one legal way to reach `boss.work` in this
+ * tree — the `healthlog/job-handler-outcome` lint rule refuses a bare
+ * `boss.work(` anywhere else.
+ *
+ * The point of routing every binding through here is the handler type:
+ * `JobHandler<T>` resolves to `Promise<JobOutcome>`, so a handler cannot be
+ * bound unless it returns a value declaring what it did. `runJob` then fails
+ * the pg-boss job on `ok: false` instead of completing it. Falling off the
+ * end of a handler, which used to read as success, is now a type error.
+ *
+ * Argument order matches `boss.work(queue, options, handler)` so a binding
+ * reads the same as it did before, with `boss` moved to the front.
+ */
+export async function createAndWork<T>(
+  boss: PgBoss,
+  queue: string,
+  options: WorkOptions & { includeMetadata: true },
+  handler: JobWithMetadataHandler<T>,
+): Promise<void>;
+export async function createAndWork<T>(
+  boss: PgBoss,
+  queue: string,
+  options: WorkOptions,
+  handler: JobHandler<T>,
+): Promise<void>;
+export async function createAndWork<T>(
+  boss: PgBoss,
+  queue: string,
+  options: WorkOptions,
+  handler: JobHandler<T> | JobWithMetadataHandler<T>,
+): Promise<void> {
+  // `JobWithMetadata<T>` extends `Job<T>`, so the metadata handler accepts
+  // everything the plain one does; the overloads above are what keeps the
+  // call sites honest about which shape they asked pg-boss for.
+  await boss.work<T>(queue, options, runJob(queue, handler as JobHandler<T>));
 }
