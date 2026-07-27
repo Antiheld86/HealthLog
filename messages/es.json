@@ -468,6 +468,8 @@
     "moveDown": "Bajar",
     "layoutTileColumn": "Tarjeta",
     "layoutChartColumn": "Gráfico",
+    "layoutNativeOnlyTitle": "Visible en la app móvil",
+    "layoutNativeOnlyHint": "Estos los dibuja la app móvil, no esta página. Se guardan en el mismo diseño, así que apagar uno aquí también lo apaga allí.",
     "dragHandle": "Arrastra para reordenar",
     "dragHandleHint": "Arrastra el manejador para reordenar este widget. También puedes usar los botones de flecha Arriba y Abajo, o enfocar el manejador y pulsar Espacio más las flechas.",
     "emptyTitle": "Tu panel está vacío",

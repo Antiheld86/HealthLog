@@ -12,6 +12,7 @@ import {
   widgetWritesBusy,
   type DashboardLayout,
 } from "@/lib/dashboard-layout";
+import { NATIVE_ONLY_WIDGET_LABEL_KEYS } from "@/lib/dashboard/widget-modules";
 
 // v1.11.2 HIGH-1 — the web Settings list renders one row per WRITABLE id
 // (`DASHBOARD_WIDGET_IDS`) MINUS the `IOS_PIN_ONLY_WIDGET_IDS` (writable so
@@ -113,10 +114,14 @@ describe("<DashboardLayoutSection> — tile + chart split", () => {
     const html = render(<DashboardLayoutSection id="dashboard-layout" />);
     const tileSwitches = html.match(/data-slot="widget-tile-switch"/g) ?? [];
     const chartSwitches = html.match(/data-slot="widget-chart-switch"/g) ?? [];
-    // One tile + one chart switch per WEB-renderable widget (the
-    // iOS-pin-only ids are filtered out — they have no web render path).
-    expect(tileSwitches).toHaveLength(WEB_RENDERABLE_ROW_COUNT);
-    expect(chartSwitches).toHaveLength(WEB_RENDERABLE_ROW_COUNT);
+    // One tile + one chart switch per row: the WEB-renderable widgets in
+    // the sortable list, plus the native-only rows below it (issue #581 —
+    // the iOS-pin-only ids the default layout carries).
+    const nativeRows = (html.match(/data-slot="native-widget-row"/g) ?? [])
+      .length;
+    expect(nativeRows).toBe(IOS_PIN_ONLY_WIDGET_IDS.length);
+    expect(tileSwitches).toHaveLength(WEB_RENDERABLE_ROW_COUNT + nativeRows);
+    expect(chartSwitches).toHaveLength(WEB_RENDERABLE_ROW_COUNT + nativeRows);
   });
 });
 
@@ -236,14 +241,17 @@ describe("reorderWidgets — pure mutation contract", () => {
 });
 
 /**
- * v1.7.0 W1 — the stored layout now round-trips the 11 iOS-only widget
- * ids. The web Settings list has no tile/chart surface for them, so the
- * render must SKIP an id with no web component rather than paint an
- * unlabelled row with dead toggles.
+ * v1.7.0 W1 — the stored layout round-trips the iOS-only widget ids. The
+ * web tile/chart LIST still has no surface for them (no drag handle, no
+ * reorder, no web render path), so the sortable list must skip them.
+ *
+ * issue #581 — but skipping them everywhere left the account holding rows
+ * it never set and could not change from any surface, so they now appear in
+ * a separate, clearly-labelled group with their visibility flags.
  */
-describe("<DashboardLayoutSection> — iOS-only id skip (v1.7.0)", () => {
-  it("renders only web-known rows when the layout carries iOS-only ids", () => {
-    // Inject a layout = the 16 web defaults + the 11 iOS-only ids.
+describe("<DashboardLayoutSection> — iOS-only ids stay out of the web list (v1.7.0)", () => {
+  it("keeps iOS-only ids out of the sortable web list", () => {
+    // Inject a layout = the web defaults + every catalogue-only iOS id.
     queryState.layout = {
       ...DEFAULT_DASHBOARD_LAYOUT,
       widgets: [
@@ -259,13 +267,13 @@ describe("<DashboardLayoutSection> — iOS-only id skip (v1.7.0)", () => {
 
     const html = render(<DashboardLayoutSection id="dashboard-layout" />);
 
-    // One row (= one tile switch) per WEB-renderable widget — the iOS-only
-    // ids (and the iOS-pin-only writable ids) are skipped, not rendered as
-    // raw-id rows.
-    const tileSwitches = html.match(/data-slot="widget-tile-switch"/g) ?? [];
-    expect(tileSwitches).toHaveLength(WEB_RENDERABLE_ROW_COUNT);
+    // The sortable list is exactly the web-renderable widgets: one drag
+    // handle each, and no more.
+    const handles = html.match(/data-slot="widget-drag-handle"/g) ?? [];
+    expect(handles).toHaveLength(WEB_RENDERABLE_ROW_COUNT);
 
-    // No iOS-only raw id leaks into the markup as a row label.
+    // No iOS-only raw id leaks into the markup as a row label — every one
+    // of them resolves through a translation key.
     for (const iosId of DASHBOARD_IOS_ONLY_WIDGET_IDS) {
       expect(html).not.toContain(`>${iosId}<`);
     }
@@ -283,10 +291,113 @@ describe("<DashboardLayoutSection> — iOS-only id skip (v1.7.0)", () => {
     };
 
     const html = render(<DashboardLayoutSection id="dashboard-layout" />);
-    // No web-known rows → zero switches, but the section still renders.
-    const tileSwitches = html.match(/data-slot="widget-tile-switch"/g) ?? [];
-    expect(tileSwitches).toHaveLength(0);
+    // No web-renderable rows → no sortable list at all, but the section
+    // still renders and every id lands in the native-only group.
+    const handles = html.match(/data-slot="widget-drag-handle"/g) ?? [];
+    expect(handles).toHaveLength(0);
+    const nativeRows = html.match(/data-slot="native-widget-row"/g) ?? [];
+    expect(nativeRows).toHaveLength(DASHBOARD_IOS_ONLY_WIDGET_IDS.length);
     expect(html).toContain("dashboard-layout");
+  });
+});
+
+/**
+ * issue #581 — BMI rendered on the native dashboard and was configurable
+ * from nowhere: the widgets PUT accepts and persists it, the native client
+ * writes it, and the web Settings list filtered it out because the web has
+ * no render path for it. The account was left holding
+ * `{"id":"bmi","visible":false,…}` — a value it never set and could not
+ * change. The native-only group is where those flags become reachable.
+ */
+describe("<DashboardLayoutSection> — native-only widget group (issue #581)", () => {
+  const NATIVE_ONLY_IDS = [
+    ...IOS_PIN_ONLY_WIDGET_IDS,
+    ...DASHBOARD_IOS_ONLY_WIDGET_IDS,
+  ];
+
+  it("offers a tile and a chart switch for BMI when the layout carries it", () => {
+    queryState.layout = {
+      ...DEFAULT_DASHBOARD_LAYOUT,
+      widgets: [
+        ...DEFAULT_DASHBOARD_LAYOUT.widgets,
+        {
+          id: "bmi",
+          visible: false,
+          tileVisible: true,
+          order: DEFAULT_DASHBOARD_LAYOUT.widgets.length,
+        },
+      ],
+    };
+
+    const html = render(<DashboardLayoutSection id="dashboard-layout" />);
+
+    expect(html).toContain('data-widget-id="bmi"');
+    expect(html).toContain('aria-label="BMI — Tile"');
+    expect(html).toContain('aria-label="BMI — Chart"');
+    // Reflects the stored flags rather than inventing a default.
+    const row = html.match(
+      /data-widget-id="bmi"[\s\S]*?(?=data-slot="native-widget-row"|$)/,
+    )![0];
+    expect(row).toContain('data-slot="widget-tile-switch"');
+    expect(row).toContain('data-slot="widget-chart-switch"');
+    // ...and it is NOT in the sortable web list (no drag handle for it).
+    const handles = html.match(/data-slot="widget-drag-handle"/g) ?? [];
+    expect(handles).toHaveLength(WEB_RENDERABLE_ROW_COUNT);
+  });
+
+  it("labels the group and says which client draws these widgets", () => {
+    queryState.layout = {
+      ...DEFAULT_DASHBOARD_LAYOUT,
+      widgets: [
+        ...DEFAULT_DASHBOARD_LAYOUT.widgets,
+        { id: "bmi", visible: false, tileVisible: true, order: 99 },
+      ],
+    };
+    const html = render(<DashboardLayoutSection id="dashboard-layout" />);
+    expect(html).toContain('data-slot="native-only-widgets"');
+    expect(html).toContain("Shown in the mobile app");
+    expect(html).toContain("The mobile app draws these");
+  });
+
+  it("shows nothing when the layout holds no native-only id", () => {
+    // The stock web default layout carries the pin-only writable ids but
+    // no catalogue-only ones; strip both so a pure web account is modelled.
+    const nativeOnly = new Set<string>(NATIVE_ONLY_IDS);
+    queryState.layout = {
+      ...DEFAULT_DASHBOARD_LAYOUT,
+      widgets: DEFAULT_DASHBOARD_LAYOUT.widgets.filter(
+        (w) => !nativeOnly.has(w.id),
+      ),
+    };
+    const html = render(<DashboardLayoutSection id="dashboard-layout" />);
+    expect(html).not.toContain('data-slot="native-only-widgets"');
+    expect(html).not.toContain("Shown in the mobile app");
+  });
+
+  it("every native-only id has a label key, so no row can render raw", () => {
+    for (const id of NATIVE_ONLY_IDS) {
+      expect(
+        NATIVE_ONLY_WIDGET_LABEL_KEYS[id],
+        `${id} has no label key — its row would render its raw id`,
+      ).toBeTruthy();
+    }
+  });
+
+  it("hides a native-only row whose owning module is off", () => {
+    authState.modules = { recovery: false };
+    queryState.layout = {
+      ...DEFAULT_DASHBOARD_LAYOUT,
+      widgets: [
+        ...DEFAULT_DASHBOARD_LAYOUT.widgets,
+        { id: "bmi", visible: false, tileVisible: true, order: 99 },
+      ],
+    };
+    const html = render(<DashboardLayoutSection id="dashboard-layout" />);
+    // `cardioRecovery` belongs to the recovery module and drops out; BMI
+    // belongs to none and stays.
+    expect(html).not.toContain('data-widget-id="cardioRecovery"');
+    expect(html).toContain('data-widget-id="bmi"');
+    authState.modules = undefined;
   });
 });
 
@@ -296,18 +407,18 @@ describe("<DashboardLayoutSection> — iOS-only id skip (v1.7.0)", () => {
  * Settings list must NOT offer a dead toggle for them.
  */
 describe("<DashboardLayoutSection> — iOS-pin-only ids hidden from web (v1.11.2)", () => {
-  it("renders one fewer row per iOS-pin-only id than the writable id count", () => {
-    // Default layout carries all 24 writable widgets incl. the 8 pin-only.
+  it("renders one fewer sortable row per iOS-pin-only id than the writable id count", () => {
+    // Default layout carries all writable widgets incl. the pin-only ones.
     const html = render(<DashboardLayoutSection id="dashboard-layout" />);
-    const tileSwitches = html.match(/data-slot="widget-tile-switch"/g) ?? [];
-    expect(tileSwitches).toHaveLength(WEB_RENDERABLE_ROW_COUNT);
+    const handles = html.match(/data-slot="widget-drag-handle"/g) ?? [];
+    expect(handles).toHaveLength(WEB_RENDERABLE_ROW_COUNT);
     // Sanity: WEB_RENDERABLE_ROW_COUNT == writable − pin-only.
     expect(WEB_RENDERABLE_ROW_COUNT).toBe(
       DASHBOARD_WIDGET_IDS.length - IOS_PIN_ONLY_WIDGET_IDS.length,
     );
   });
 
-  it("does not paint a row whose aria-label matches an iOS-pin-only widget label", () => {
+  it("paints the pin-only labels ONLY in the native-only group", () => {
     const html = render(<DashboardLayoutSection id="dashboard-layout" />);
     // The pin-only ids reuse `measurements.type*` labels that resolve to
     // distinctive English strings; none should appear as a toggle aria-label.
@@ -325,10 +436,17 @@ describe("<DashboardLayoutSection> — iOS-pin-only ids hidden from web (v1.11.2
       falls: "Falls",
       walkingSteadiness: "Walking steadiness",
     };
+    // The sortable web list must not offer them (issue #581 note: the
+    // native-only group below it does, which is where the markup match
+    // now comes from — so anchor on the sortable rows themselves).
+    const sortableList = html.slice(
+      0,
+      html.indexOf('data-slot="native-only-widgets"'),
+    );
     for (const id of IOS_PIN_ONLY_WIDGET_IDS) {
-      // The widget label drives the switch aria-label; if the row were
-      // rendered the localised label would show up in the markup.
-      expect(html).not.toContain(`${pinOnlyLabels[id]} — `);
+      expect(sortableList).not.toContain(`${pinOnlyLabels[id]} — `);
+      // ...and each is reachable exactly once, in the native-only group.
+      expect(html).toContain(`data-widget-id="${id}"`);
     }
   });
 });
@@ -354,9 +472,9 @@ describe("<DashboardLayoutSection> — disabled-module widget toggles", () => {
     const html = render(<DashboardLayoutSection id="dashboard-layout" />);
     // The achievements row (and its switches) are gone…
     expect(html).not.toContain(ACHIEVEMENTS_ARIA);
-    // …and exactly one fewer web-renderable row renders.
-    const tileSwitches = html.match(/data-slot="widget-tile-switch"/g) ?? [];
-    expect(tileSwitches).toHaveLength(WEB_RENDERABLE_ROW_COUNT - 1);
+    // …and exactly one fewer sortable row renders.
+    const handles = html.match(/data-slot="widget-drag-handle"/g) ?? [];
+    expect(handles).toHaveLength(WEB_RENDERABLE_ROW_COUNT - 1);
   });
 
   it("keeps an enabled-module widget and core (no-module) widgets shown", () => {
@@ -371,8 +489,8 @@ describe("<DashboardLayoutSection> — disabled-module widget toggles", () => {
   it("shows every row when the module map is absent (fail-open)", () => {
     authState.modules = undefined;
     const html = render(<DashboardLayoutSection id="dashboard-layout" />);
-    const tileSwitches = html.match(/data-slot="widget-tile-switch"/g) ?? [];
-    expect(tileSwitches).toHaveLength(WEB_RENDERABLE_ROW_COUNT);
+    const handles = html.match(/data-slot="widget-drag-handle"/g) ?? [];
+    expect(handles).toHaveLength(WEB_RENDERABLE_ROW_COUNT);
     expect(html).toContain(ACHIEVEMENTS_ARIA);
   });
 });

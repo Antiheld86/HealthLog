@@ -154,3 +154,48 @@ export function gateMetricCardsByModules<T extends { kind: string }>(
     return !type || !dropped.has(type);
   });
 }
+
+/**
+ * Label key for every catalogue widget the WEB does not render.
+ *
+ * These ids round-trip through `/api/dashboard/widgets` and are drawn by the
+ * native client, but `src/app/page.tsx` has no render path for them, so the
+ * web Settings list filters them out of its tile/chart rows. That filtering
+ * is right — a toggle over a widget this page cannot draw would be a silent
+ * no-op — but paired with the native client materialising them into the
+ * stored layout it produced a widget nobody could turn off from anywhere
+ * (issue #581): the row `{"id":"bmi", …}` was a value the account never set
+ * and could not change.
+ *
+ * So the Settings page surfaces them in a clearly-labelled second group whose
+ * copy says these are drawn by the mobile app. Membership is derived from the
+ * two id constants in `@/lib/dashboard-layout` rather than repeated here; this
+ * map only answers "what do we call it", and a guard test asserts it covers
+ * every native-only id so a new one cannot arrive unlabelled.
+ */
+export const NATIVE_ONLY_WIDGET_LABEL_KEYS: Record<string, string> = {
+  // Writable ids (in `DASHBOARD_WIDGET_IDS`) with no web render path.
+  cardioRecovery: "measurements.typeCardioRecovery",
+  sixMinuteWalk: "measurements.typeSixMinuteWalkDistance",
+  stairAscentSpeed: "measurements.typeStairAscentSpeed",
+  stairDescentSpeed: "measurements.typeStairDescentSpeed",
+  breathingDisturbances: "measurements.typeBreathingDisturbances",
+  falls: "measurements.typeFallCount",
+  walkingSteadiness: "measurements.typeWalkingSteadiness",
+  // Catalogue-only ids the native client materialises in its own layout.
+  restingHeartRate: "measurements.typeRestingHeartRate",
+  walkingSpeed: "measurements.typeWalkingSpeed",
+  walkingAsymmetry: "measurements.typeWalkingAsymmetry",
+  walkingStepLength: "measurements.typeWalkingStepLength",
+  // BMI is derived from weight + the profile height; the dashboard metric
+  // title is the name every other surface already gives it.
+  bmi: "dashboard.metric.title.bmi",
+  bodyTemperature: "measurements.typeBodyTemperature",
+  walkingDoubleSupport: "measurements.typeWalkingDoubleSupport",
+  audioExposureEnvironment: "measurements.typeAudioExposureEnv",
+  audioExposureHeadphone: "measurements.typeAudioExposureHeadphone",
+  gripStrength: "measurements.typeGripStrength",
+  painNRS: "measurements.typePainNrs",
+  waistCircumference: "measurements.typeWaistCircumference",
+  waistToHeight: "measurements.typeWaistToHeight",
+};
