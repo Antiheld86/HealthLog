@@ -2,6 +2,89 @@
 
 ## [Unreleased]
 
+## [1.33.1] — 2026-07-27
+
+A patch release about the same thing as the one before it: places where the
+app knew something and said something else.
+
+### Two that change what you receive
+
+**Medication reminders arrived every fifteen minutes.** The rule that decides
+whether a reminder has already been sent was keyed on a ledger that could not
+tell one dose slot from another, so an overdue dose kept re-announcing itself
+for as long as it stayed overdue. One account was getting roughly fifty mails
+a day. A reminder now goes out once per dose, per escalation step, per local
+day, and two doses due at the same time no longer replace each other on the
+lock screen.
+
+**"Handled by the app" now silences only the app.** The setting that lets the
+iOS client take over medication reminders was suppressing every channel, so
+switching it on quietly turned off Telegram, ntfy, webhooks, email and web
+push as well. That was never what it said it did. If you have been using it as
+a general mute, those channels will start delivering again, and the setting
+does what its name says.
+
+### Two that were reported
+
+Someone self-hosting could not use an OpenAI-compatible gateway. LiteLLM,
+OpenRouter and vLLM all speak the OpenAI wire, but the provider list had no
+entry that honoured a base URL of your own, and an earlier answer from us said
+otherwise. There is now a provider for exactly this, with its own key, model
+and endpoint. The plain OpenAI entry stays pinned to OpenAI, which a test
+enforces, so a key meant for one never travels to the other.
+
+Timestamps followed the browser rather than the profile in four places. The
+worst of them: a shared report downloaded as a PDF could carry a different
+date than the page it was downloaded from, for the same reading. Charts also
+drew their week and month boundaries in one fixed timezone, so an evening
+reading landed in the wrong bar for anyone living elsewhere.
+
+### The backup
+
+Three things it carried and could not restore, or could not carry at all.
+
+A cycle symptom you created yourself was never included, so on restore its
+key resolved to nothing and the link was dropped without a word. Three lines
+away in the same function, an unknown cycle reference threw an error. Same
+kind of missing reference, two different answers.
+
+A mood factor you created yourself had the opposite ending: the restore
+looked only for the built-in ones, found your own missing, and stopped. The
+file was complete and unusable.
+
+Nutrient day totals have been written into every backup since v1.29 and were
+discarded on restore, silently, while the restore reported success.
+
+What a backup contains is now declared in one place, with a written reason
+for every record type left out. Around thirty types are still carried by
+neither the file nor the restore, and they are named there rather than left
+to be discovered. The export card no longer promises "every record you own",
+because it does not.
+
+### For operators
+
+Two migrations. `0280` adds the gateway provider's columns, `0281` turns the
+integration ledger's single failing-part slot into a set. Neither deletes or
+rewrites a measurement.
+
+A provider that syncs several things separately can now remember every part
+that is failing at once. Until now the last one to report overwrote the rest,
+which is the limit named in the v1.33.0 notes and not fixed then.
+
+Self-hosters can point `GEOLITE2_DIR` at their own GeoLite2 databases. The
+variable was read by the code and missing from the compose whitelist, so it
+never reached the container. The message in the admin area used to tell
+self-hosters to set a secret in this repository, which is not something they
+can do.
+
+### Credit
+
+Reported by @k-nacion (the OpenAI-compatible gateway and the timezone
+rendering), @mathewcsims (the unreachable GeoLite2 setting, found by reading
+the strings inside a running container), @Nazza01 (the dose-history import),
+@doenke (the table under the chart, and for narrowing his own request until it
+fit one release) and @lutzkind (the dashboard layout).
+
 ## [1.33.0] — 2026-07-26
 
 Eight defects, and every one of them had the same shape: something failed
