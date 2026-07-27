@@ -2856,6 +2856,13 @@
       "scoresBack": "Retour aux Insights",
       "ecgDescription": "Enregistrements ECG à dérivation unique de votre appareil, chacun accompagné du résultat de l'appareil. HealthLog affiche le tracé et l'enregistrement, mais n'interprète pas la courbe."
     },
+    "units": {
+      "steps": "pas",
+      "flights": "étages",
+      "falls": "chutes",
+      "years": "ans",
+      "breathingEvents": "événements"
+    },
     "sleep": {
       "title": "Sommeil",
       "description": "Répartition des phases et durée nocturne, issues d’Apple Health.",

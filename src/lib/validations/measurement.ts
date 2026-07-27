@@ -495,6 +495,11 @@ export const VALUE_RANGES: Record<string, { min: number; max: number }> = {
   // the ×100 server-side scaling the canonical band is 0..100.
   WALKING_ASYMMETRY: { min: 0, max: 100 },
   WALKING_DOUBLE_SUPPORT: { min: 0, max: 100 },
+  // Same ×100-scaled 0..100 percent as its two gait siblings above. The
+  // entry was simply missing; the map is the app's plausibility domain AND
+  // (via `value-domain.ts`) the answer to "can this metric be negative",
+  // so an omission reads as "unknown" on both questions.
+  WALKING_STEADINESS: { min: 0, max: 100 },
   // ── v1.5.5 iOS-coord follow-up — raw-SI gait pair ──
   // Step length (metres) — adult walking sits around 0.5–0.8 m; the
   // 0.1 floor captures shuffling gait and the 2.0 ceiling covers
@@ -541,6 +546,14 @@ export const VALUE_RANGES: Record<string, { min: number; max: number }> = {
   LOW_HEART_RATE_EVENT: { min: 1, max: 1 },
   WALKING_STEADINESS_EVENT: { min: 1, max: 1 },
   BREATHING_DISTURBANCE_EVENT: { min: 1, max: 1 },
+  // Loud-listening event flag (env + headphone). One fired event per row, so
+  // the floor is 1 — a non-event is not stored. The entry was missing from
+  // the map entirely, which let ANY number through ingest, including a
+  // negative one. The ceiling stays generous rather than pinned at 1 like the
+  // five events above: this type is written only by the iOS client and
+  // nothing in this repo asserts the exact value, so the floor is the part
+  // that is certain.
+  AUDIO_EXPOSURE_EVENT: { min: 1, max: 1000 },
   // ── v1.10.0 — computed scores (WX-C) ──
   // Server-derived 0–100 scores. The plausibility band pins them to the
   // score range so a malformed store (a stray negative or > 100) is rejected.

@@ -2856,6 +2856,13 @@
       "scoresBack": "Powrót do Insights",
       "ecgDescription": "Zapisy EKG jednoodprowadzeniowe z Twojego urządzenia, każdy z wynikiem samego urządzenia. HealthLog pokazuje przebieg i zapis — nie interpretuje krzywej."
     },
+    "units": {
+      "steps": "kroki",
+      "flights": "piętra",
+      "falls": "upadki",
+      "years": "lata",
+      "breathingEvents": "zdarzenia"
+    },
     "sleep": {
       "title": "Sen",
       "description": "Podział na fazy i nocna długość snu, dane z Apple Health.",

@@ -21,8 +21,7 @@ export default function InsightsBreathingDisturbancesPage() {
       i18nPrefix="insights.breathingDisturbances"
       explainerMetric="breathingDisturbances"
       color="var(--info)"
-      unit="count"
-      yAxisUnit="count"
+      unitKey="insights.units.breathingEvents"
       emptyStateIcon={<Wind className="size-6" />}
       emptyStateCtaType={null}
       coachPrefill="I haven't logged any sleep-breathing-disturbance data yet — what does this metric tell me about my health, and how do I improve it?"

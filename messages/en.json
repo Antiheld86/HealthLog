@@ -2856,6 +2856,13 @@
       "scoresBack": "Back to insights",
       "ecgDescription": "Single-lead ECG recordings from your device, each with the device's own result. HealthLog shows the trace and the recording — it does not interpret the waveform."
     },
+    "units": {
+      "steps": "steps",
+      "flights": "flights",
+      "falls": "falls",
+      "years": "years",
+      "breathingEvents": "events"
+    },
     "sleep": {
       "title": "Sleep",
       "description": "Stage breakdown and nightly duration, drawn from Apple Health.",

@@ -2856,6 +2856,13 @@
       "scoresBack": "Zurück zu Insights",
       "ecgDescription": "Einkanal-EKG-Aufzeichnungen deines Geräts, jeweils mit dem Ergebnis des Geräts. HealthLog zeigt die Kurve und die Aufzeichnung – die Kurve wird nicht interpretiert."
     },
+    "units": {
+      "steps": "Schritte",
+      "flights": "Etagen",
+      "falls": "Stürze",
+      "years": "Jahre",
+      "breathingEvents": "Ereignisse"
+    },
     "sleep": {
       "title": "Schlaf",
       "description": "Phasen-Aufschlüsselung und nächtliche Dauer – gezogen aus Apple Health.",

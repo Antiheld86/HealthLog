@@ -425,7 +425,10 @@ function bandFor(series: VitalSeries): {
   spread: number;
 } | null {
   if (series.baselineDays.length < MIN_BASELINE_DAYS) return null;
-  const band = buildBaselineBand(series.baselineDays.map((p) => p.mean));
+  const band = buildBaselineBand(
+    series.baselineDays.map((p) => p.mean),
+    series.type,
+  );
   if (!band || band.spread <= 0) return null;
   return { center: band.center, spread: band.spread };
 }

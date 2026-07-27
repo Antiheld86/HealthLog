@@ -28,6 +28,7 @@
  *
  * Pure: no DB, no clock, no network. Fully unit-testable over injected series.
  */
+import type { MeasurementType } from "@/generated/prisma/client";
 import { buildBaselineBand } from "@/lib/insights/derived/baseline";
 
 /** One DAY-bucket point: a calendar day key (YYYY-MM-DD) + that day's mean. */
@@ -103,10 +104,15 @@ function placeValue(value: number, band: StreakBand): BandPlacement {
  * `band` may be supplied (e.g. a prior-period band) — when omitted it is built
  * from the whole series via `buildBaselineBand`. A gap day (a calendar day with
  * no point between two present days) BREAKS any streak that would span it.
+ *
+ * `metricType` names the metric the series belongs to so a self-built band
+ * floors at zero on a metric that cannot go negative. Omit it only when the
+ * series genuinely has no metric identity, or when the caller supplies `band`.
  */
 export function detectStreak(
   series: StreakPoint[],
   band?: StreakBand | null,
+  metricType?: string | null,
 ): StreakResult {
   const empty: StreakResult = {
     latestPlacement: null,
@@ -127,7 +133,12 @@ export function detectStreak(
 
   // Resolve the personal band: caller-supplied, else median ± k·MAD over the
   // whole series. Null (too little history) → omit rather than guess.
-  const resolvedBand = band ?? buildBandFromSeries(points.map((p) => p.value));
+  const resolvedBand =
+    band ??
+    buildBandFromSeries(
+      points.map((p) => p.value),
+      metricType,
+    );
   if (!resolvedBand) return empty;
 
   // Per-day placement, ascending. A gap day inserts an explicit break marker so
@@ -194,8 +205,14 @@ export function detectStreak(
 }
 
 /** Build the personal band from a value series; null when too little data. */
-function buildBandFromSeries(values: number[]): StreakBand | null {
-  const band = buildBaselineBand(values);
+function buildBandFromSeries(
+  values: number[],
+  metricType: string | null | undefined,
+): StreakBand | null {
+  const band = buildBaselineBand(
+    values,
+    (metricType ?? null) as MeasurementType | null,
+  );
   if (!band) return null;
   if (!Number.isFinite(band.low) || !Number.isFinite(band.high)) return null;
   return { low: band.low, high: band.high };

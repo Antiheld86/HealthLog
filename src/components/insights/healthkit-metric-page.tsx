@@ -14,6 +14,7 @@ import { useTranslations } from "@/lib/i18n/context";
 import type { InsightMetric } from "@/lib/insights/metric-availability";
 import type { MetricStatusMetricId } from "@/lib/insights/metric-status-registry";
 import type { ChartOverlayKey } from "@/lib/dashboard-layout";
+import { metricFractionDigits } from "@/lib/measurements/value-domain";
 import { Button } from "@/components/ui/button";
 import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { Card, CardContent } from "@/components/ui/card";
@@ -98,6 +99,17 @@ export interface HealthKitMetricPageProps {
    * transformed types omit these props; everything else still passes `unit`.
    */
   unit?: string;
+  /**
+   * i18n key for a unit that is a WORD rather than a symbol — `steps`,
+   * `flights`, `falls`, `years`, `events`. Resolved through `t()` so it
+   * renders in the reader's language; a German user was shown "13.387,6
+   * steps". Symbols (`bpm`, `mmHg`, `%`, `m/s`, `kg/m²`, …) are language-
+   * neutral and stay literals in `unit` — translating a symbol would be the
+   * opposite mistake. Wins over `unit` / `yAxisUnit` for both the chart and
+   * the axis label; a type with a registered display transform still
+   * overrides everything.
+   */
+  unitKey?: string;
   /** Optional y-axis label shown above the unit. */
   yAxisUnit?: string;
   /** Optional value bands (Apple-Health-style target zone shading). */
@@ -206,6 +218,7 @@ export function HealthKitMetricPage({
   i18nPrefix,
   color,
   unit,
+  unitKey,
   yAxisUnit,
   valueBands,
   emptyStateCtaType,
@@ -264,13 +277,24 @@ export function HealthKitMetricPage({
   const transform = unitDisplay.isTransformed(effectiveType)
     ? unitDisplay.transformFor(effectiveType)
     : null;
-  const resolvedUnit = transform ? transform.displayUnit : unit;
-  const resolvedYAxisUnit = transform ? transform.displayUnit : yAxisUnit;
+  // A word-shaped unit arrives as an i18n key and is resolved here, once, for
+  // the chart line, the axis label, the stat strip and the coach-read strip.
+  const localisedUnit = unitKey ? t(unitKey) : undefined;
+  const resolvedUnit = transform
+    ? transform.displayUnit
+    : (localisedUnit ?? unit);
+  const resolvedYAxisUnit = transform
+    ? transform.displayUnit
+    : (localisedUnit ?? yAxisUnit);
   const resolvedScale = transform ? transform.factor : (valueScale ?? 1);
   const resolvedOffset = transform ? (transform.offset ?? 0) : 0;
+  // Precision follows the METRIC, not the page. A discrete metric renders no
+  // fractional part even when the page says nothing — the steps page said
+  // nothing and its Min read "104.0 steps". An explicit `statFractionDigits`
+  // still wins for the metrics that genuinely need one (mmol/L, skin temp).
   const resolvedFractionDigits = transform
     ? transform.decimals
-    : statFractionDigits;
+    : (statFractionDigits ?? metricFractionDigits(effectiveType));
   // Value bands are absolute bounds → affine-convert (factor + offset) so the
   // shaded zone tracks the converted line. Metric users get the identity.
   const resolvedBands =
