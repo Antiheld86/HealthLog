@@ -23,7 +23,10 @@ notes, and machine-readable specs that ship alongside the source:
   off-by-default MCP connector and pointing Claude.ai / ChatGPT /
   Claude Desktop at it, and [`self-hosting/sso.md`](./self-hosting/sso.md)
   — OIDC SSO login: IdP setup, the identity-pinning security model,
-  `OIDC_ONLY` consequences, and the break-glass runbook.
+  `OIDC_ONLY` consequences, and the break-glass runbook. Also
+  [`self-hosting/geolite2.md`](./self-hosting/geolite2.md) — bringing your
+  own offline GeoLite2 databases via `GEOLITE2_DIR` instead of sending
+  login IPs to a third-party lookup.
 - [`migration/`](./migration/) — release-by-release migration notes.
   Read the entry for the version you're upgrading from.
 - [`audit/`](./audit/) — per-release audit summaries archived for

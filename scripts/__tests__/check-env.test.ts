@@ -289,4 +289,46 @@ describe("environment inventory", () => {
       expect(manifestNames).toContain(variableName);
     }
   });
+
+  it("forwards GEOLITE2_DIR through the compose whitelist and documents it", () => {
+    // issue #659 — `src/lib/geo.ts` has always read this variable, but it
+    // was absent from the compose `environment:` block, and a variable
+    // that is not on that whitelist never reaches the container even when
+    // the operator's `.env` sets it. The override existed in code and was
+    // unreachable from the documented path.
+    const repositoryRoot = join(__dirname, "../..");
+    const compose = readFileSync(
+      join(repositoryRoot, "docker-compose.yml"),
+      "utf8",
+    );
+    const manifest = JSON.parse(
+      readFileSync(join(repositoryRoot, "scripts/env-manifest.json"), "utf8"),
+    ) as { groups: Array<{ variables: Array<{ name: string }> }> };
+
+    // The compose line must SUBSTITUTE the operator's own value — a
+    // hardcoded literal would list the key and still ignore `.env`.
+    expect(compose).toMatch(
+      /^\s*GEOLITE2_DIR: "\$\{GEOLITE2_DIR(:-[^}]*)?\}"$/m,
+    );
+    // ...and the container needs a place to read the files from.
+    expect(compose).toMatch(/geolite2:ro$/m);
+
+    for (const exampleFile of [".env.example", ".env.production.example"]) {
+      const example = readFileSync(join(repositoryRoot, exampleFile), "utf8");
+      expect(example, `${exampleFile} does not document GEOLITE2_DIR`).toMatch(
+        /^# GEOLITE2_DIR=/m,
+      );
+    }
+
+    expect(
+      manifest.groups.flatMap((group) =>
+        group.variables.map((variable) => variable.name),
+      ),
+    ).toContain("GEOLITE2_DIR");
+
+    // The runbook the admin notification and both examples point at.
+    expect(() =>
+      readFileSync(join(repositoryRoot, "docs/self-hosting/geolite2.md")),
+    ).not.toThrow();
+  });
 });

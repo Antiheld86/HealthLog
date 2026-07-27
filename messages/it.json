@@ -5968,7 +5968,7 @@
     "integrationWebPush": "Web Push",
     "offlineGeoLabel": "Dati geografici",
     "offlineGeoEnabled": "Offline (GeoLite2)",
-    "offlineGeoFallback": "Online ({host}) — imposta MAXMIND_LICENSE_KEY in CI",
+    "offlineGeoFallback": "Online ({host}) — monta i database GeoLite2 e imposta GEOLITE2_DIR",
     "apiGlobal": "Consentire endpoint API e token API.",
     "umamiTitle": "Umami",
     "umamiDescription": "Analisi web con Umami",
@@ -6769,7 +6769,7 @@
       "reminderCheckOverdueTitle": "Dose in ritardo: {medication}",
       "reminderCheckOverdueBody": "{medication} ({dose}) nella finestra {window} è in ritardo di {minutes} minuti.",
       "offlineGeoUnavailableTitle": "Database di geolocalizzazione offline non caricati",
-      "offlineGeoUnavailableBody": "HealthLog sta risolvendo le posizioni di accesso tramite il fallback online ipwho.is. Per abilitare i database offline GeoLite2-City e GeoLite2-ASN, imposta MAXMIND_LICENSE_KEY nei secret di GitHub Actions su {secretsUrl} e ridistribuisci. Fino ad allora la colonna operatore nella panoramica degli accessi rimane vuota.",
+      "offlineGeoUnavailableBody": "HealthLog risolve le posizioni di accesso tramite la ricerca online su {host}, quindi ogni IP di accesso lascia questo server. Per risolverle localmente, scarica i database GeoLite2-City e GeoLite2-ASN con un account MaxMind gratuito, monta la directory nel container e fai puntare GEOLITE2_DIR ad essa. Passaggi: {docsUrl}",
       "tlsPinChangedTitle": "Certificato foglia TLS modificato: {host}",
       "tlsPinChangedBody": "La foglia TLS servita da {host} ora ha il pin SPKI {servedPin}, che non è nell'insieme dei pin noti. I client con pin fisso (l'app nativa) non potranno più connettersi una volta scomparso il vecchio pin. Riestrai il nuovo pin della foglia, aggiungilo a TLS_LEAF_SPKI_PINS e all'insieme dei pin del client nativo, e pubblica una build prima che questo certificato scada il {validTo}. Vedi docs/ops/tls-cert-pin.md."
     },

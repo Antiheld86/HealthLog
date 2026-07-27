@@ -31,7 +31,11 @@
  * The base path is overridable via `GEOLITE2_DIR` (default
  * `/opt/geolite2`). When the DB files are missing the helpers silently
  * skip the offline tier — local dev without the MMDBs still works and
- * falls straight back to the online provider.
+ * falls straight back to the online provider. A self-hoster running the
+ * published image mounts their own `.mmdb` directory and points the
+ * variable at it; `docs/self-hosting/geolite2.md` is the runbook and
+ * `docker-compose.yml` carries the variable on its `environment:`
+ * whitelist so a value in `.env` actually reaches the container.
  *
  * Default provider for the online lookup is ipwho.is (free, no key, HTTPS).
  * Both the ipwho.is shape (`success`/`country_code`) and the ip-api.com shape
@@ -147,8 +151,20 @@ export function resolveGeoProviderHost(): string {
   }
 }
 
+/**
+ * Directory the offline MMDBs are read from.
+ *
+ * `GEOLITE2_DIR` is on the compose `environment:` whitelist, so an
+ * operator who mounts their own databases can point the runtime at them
+ * without rebuilding the image (`docs/self-hosting/geolite2.md`). Compose
+ * substitutes an unset variable to the EMPTY STRING rather than leaving
+ * it absent, and an empty string is not nullish — so trim and treat blank
+ * as unset, otherwise a stack that merely lists the variable would read
+ * the process working directory and silently lose the offline tier.
+ */
 function geoLiteDir(): string {
-  return process.env.GEOLITE2_DIR ?? "/opt/geolite2";
+  const configured = process.env.GEOLITE2_DIR?.trim();
+  return configured ? configured : "/opt/geolite2";
 }
 
 // ── Per-IP location cache ────────────────────────────────────────────
@@ -257,6 +273,14 @@ export function __resetGeoLite2CacheForTests(): void {
 
 let notifiedThisProcess = false;
 
+/**
+ * Where the admin notification sends someone who wants the offline tier.
+ * The in-repo path is the durable one — the runbook ships with the source
+ * that emits this link, so the two cannot drift apart.
+ */
+const GEOLITE2_DOCS_URL =
+  "https://github.com/MBombeck/HealthLog/blob/main/docs/self-hosting/geolite2.md";
+
 export function offlineGeoReady(): boolean {
   try {
     const dir = geoLiteDir();
@@ -296,9 +320,14 @@ async function notifyOfflineGeoUnavailable(): Promise<void> {
         userId: admin.id,
         titleKey: "notifications.admin.offlineGeoUnavailableTitle",
         messageKey: "notifications.admin.offlineGeoUnavailableBody",
+        // The message names what the person reading it can actually do.
+        // It used to point at a licence-key secret in this repository's
+        // Actions settings, which nobody running the published image can
+        // set (issue #659) — the reachable path is mounting your own
+        // databases and pointing GEOLITE2_DIR at them.
         params: {
-          secretsUrl:
-            "https://github.com/MBombeck/HealthLog/settings/secrets/actions",
+          host: resolveGeoProviderHost(),
+          docsUrl: GEOLITE2_DOCS_URL,
         },
         metadata: { source: "geo-offline-detection" },
       });
@@ -554,9 +583,10 @@ export function lookupIpAsn(
   if (!ip || PRIVATE_IP.test(ip)) return null;
   const reader = getAsnReader();
   if (!reader) {
-    // No offline ASN data — alert once per process. There is no online
-    // fallback for ASN, but the maintainer still wants to know the
-    // carrier chip is going to stay empty until the secret is set.
+    // No offline ASN data — alert once per process. The online tier can
+    // still fill the carrier from its ISP field, but the ASN number and
+    // the authoritative carrier come from the MMDB, so the admin is told
+    // once that the offline tier is not being read.
     if (!offlineGeoReady()) {
       void notifyOfflineGeoUnavailable();
     }

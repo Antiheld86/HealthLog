@@ -5968,7 +5968,7 @@
     "integrationWebPush": "Web Push",
     "offlineGeoLabel": "Geodaten",
     "offlineGeoEnabled": "Offline (GeoLite2)",
-    "offlineGeoFallback": "Online ({host}) — MAXMIND_LICENSE_KEY in CI setzen",
+    "offlineGeoFallback": "Online ({host}) — GeoLite2-Datenbanken einbinden und GEOLITE2_DIR setzen",
     "apiGlobal": "API-Endpunkte und API-Tokens erlauben.",
     "umamiTitle": "Umami",
     "umamiDescription": "Web-Analyse mit Umami",
@@ -6769,7 +6769,7 @@
       "reminderCheckOverdueTitle": "Einnahme überfällig: {medication}",
       "reminderCheckOverdueBody": "{medication} ({dose}) im Zeitfenster {window} ist seit {minutes} Minuten überfällig.",
       "offlineGeoUnavailableTitle": "Offline-Geodatenbanken nicht geladen",
-      "offlineGeoUnavailableBody": "HealthLog löst Login-Standorte aktuell über den Online-Fallback ipwho.is auf. Um die Offline-Datenbanken GeoLite2-City und GeoLite2-ASN zu aktivieren, setze MAXMIND_LICENSE_KEY in den GitHub-Actions-Secrets unter {secretsUrl} und deploye neu. Bis dahin bleibt die Carrier-Spalte in der Login-Übersicht leer.",
+      "offlineGeoUnavailableBody": "HealthLog löst Login-Standorte über die Online-Abfrage bei {host} auf, damit verlässt jede Login-IP diesen Server. Um sie stattdessen lokal aufzulösen, lade die Datenbanken GeoLite2-City und GeoLite2-ASN mit einem kostenlosen MaxMind-Konto herunter, binde das Verzeichnis in den Container ein und setze GEOLITE2_DIR darauf. Anleitung: {docsUrl}",
       "tlsPinChangedTitle": "TLS-Leaf-Zertifikat geändert: {host}",
       "tlsPinChangedBody": "Das von {host} ausgelieferte TLS-Leaf hat jetzt den SPKI-Pin {servedPin}, der nicht im bekannten Pin-Satz enthalten ist. Gepinnte Clients (die native App) können sich nicht mehr verbinden, sobald der alte Pin weg ist. Extrahiere den neuen Leaf-Pin erneut, ergänze ihn in TLS_LEAF_SPKI_PINS sowie im Pin-Satz des nativen Clients und veröffentliche einen Build, bevor dieses Zertifikat am {validTo} abläuft. Siehe docs/ops/tls-cert-pin.md."
     },

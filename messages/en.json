@@ -5968,7 +5968,7 @@
     "integrationWebPush": "Web Push",
     "offlineGeoLabel": "Geo data",
     "offlineGeoEnabled": "Offline (GeoLite2)",
-    "offlineGeoFallback": "Online ({host}) — set MAXMIND_LICENSE_KEY in CI",
+    "offlineGeoFallback": "Online ({host}) — mount GeoLite2 databases and set GEOLITE2_DIR",
     "apiGlobal": "Allow API endpoints and API tokens.",
     "umamiTitle": "Umami",
     "umamiDescription": "Web analytics with Umami",
@@ -6769,7 +6769,7 @@
       "reminderCheckOverdueTitle": "Dose overdue: {medication}",
       "reminderCheckOverdueBody": "{medication} ({dose}) in the {window} window is {minutes} minutes overdue.",
       "offlineGeoUnavailableTitle": "Offline geolocation databases not loaded",
-      "offlineGeoUnavailableBody": "HealthLog is resolving login locations through the online ipwho.is fallback. To enable the offline GeoLite2-City + GeoLite2-ASN databases, set MAXMIND_LICENSE_KEY in GitHub Actions secrets at {secretsUrl} and redeploy. Until then the carrier column on the login overview stays empty.",
+      "offlineGeoUnavailableBody": "HealthLog is resolving login locations through the online lookup at {host}, so every login IP address leaves this server. To resolve them locally instead, download the GeoLite2-City and GeoLite2-ASN databases with a free MaxMind account, mount the directory into the container, and point GEOLITE2_DIR at it. Steps: {docsUrl}",
       "tlsPinChangedTitle": "TLS leaf certificate changed: {host}",
       "tlsPinChangedBody": "The TLS leaf served by {host} now has SPKI pin {servedPin}, which is not in the known pin set. Pinned clients (the native app) will fail to connect once the old pin is gone. Re-extract the new leaf pin, add it to TLS_LEAF_SPKI_PINS and the native client's pin set, and ship a build before this certificate expires on {validTo}. See docs/ops/tls-cert-pin.md."
     },

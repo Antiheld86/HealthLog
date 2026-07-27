@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -97,6 +97,25 @@ describe("offline-geo runtime detection (v1.4.27 R5)", () => {
     expect(offlineGeoReady()).toBe(false);
   });
 
+  it("treats a blank GEOLITE2_DIR as unset rather than as the working directory", async () => {
+    // A compose `${GEOLITE2_DIR:-}` substitutes to the EMPTY STRING, which
+    // is not nullish. Without the trim, `path.join("", "GeoLite2-City.mmdb")`
+    // is a RELATIVE path and the readiness check answers from whatever the
+    // process working directory happens to hold. Proven by putting a stub
+    // MMDB in the working directory and asserting the blank value still
+    // resolves to the documented default (which has none).
+    const originalCwd = process.cwd();
+    writeFileSync(join(tmpRoot, "GeoLite2-City.mmdb"), Buffer.from("stub"));
+    process.chdir(tmpRoot);
+    try {
+      process.env.GEOLITE2_DIR = "";
+      const { offlineGeoReady } = await import("../geo");
+      expect(offlineGeoReady()).toBe(false);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
   it("offlineGeoReady() is true when the City MMDB is present and no marker", async () => {
     writeFileSync(
       join(tmpRoot, "GeoLite2-City.mmdb"),
@@ -123,13 +142,58 @@ describe("offline-geo runtime detection (v1.4.27 R5)", () => {
         titleKey: "notifications.admin.offlineGeoUnavailableTitle",
         messageKey: "notifications.admin.offlineGeoUnavailableBody",
         params: expect.objectContaining({
-          secretsUrl: expect.stringContaining(
-            "github.com/MBombeck/HealthLog/settings/secrets/actions",
-          ),
+          host: "ipwho.is",
+          docsUrl: expect.stringContaining("docs/self-hosting/geolite2.md"),
         }),
         metadata: expect.objectContaining({ source: "geo-offline-detection" }),
       }),
     );
+  });
+
+  it("names the real online provider in the notification params", async () => {
+    writeFileSync(join(tmpRoot, ".empty"), "");
+    process.env.IP_GEO_LOOKUP_DISABLED = "1";
+    process.env.IP_GEO_LOOKUP_URL = "https://ip-api.example/json";
+    const { lookupIpLocation } = await import("../geo");
+
+    await lookupIpLocation("8.8.8.8");
+    await flushMicrotasks();
+
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        params: expect.objectContaining({ host: "ip-api.example" }),
+      }),
+    );
+  });
+
+  it("points the admin at a reachable action, never at a repository secret", async () => {
+    // issue #659 — the message used to tell a self-hoster to set
+    // MAXMIND_LICENSE_KEY in this repository's Actions secrets, which is
+    // not something they can do. Every locale must name the mount instead.
+    const locales = ["de", "en", "es", "fr", "it", "pl"] as const;
+    for (const locale of locales) {
+      const bundle = JSON.parse(
+        readFileSync(
+          join(__dirname, `../../../messages/${locale}.json`),
+          "utf8",
+        ),
+      ) as {
+        notifications: { admin: { offlineGeoUnavailableBody: string } };
+      };
+      const body = bundle.notifications.admin.offlineGeoUnavailableBody;
+      expect(body, `${locale} still names a build-time secret`).not.toMatch(
+        /MAXMIND_LICENSE_KEY|GitHub|Actions|secret/i,
+      );
+      expect(body, `${locale} does not name the reachable override`).toContain(
+        "GEOLITE2_DIR",
+      );
+      expect(body, `${locale} drops the {host} placeholder`).toContain(
+        "{host}",
+      );
+      expect(body, `${locale} drops the {docsUrl} placeholder`).toContain(
+        "{docsUrl}",
+      );
+    }
   });
 
   it("does NOT fire the notification when the City MMDB is present", async () => {

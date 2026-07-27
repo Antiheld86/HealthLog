@@ -133,6 +133,17 @@
       ]
     },
     {
+      "name": "Offline geolocation",
+      "description": "Optional offline GeoLite2 tier for the admin login overview. Unset, the runtime reads /opt/geolite2 (the path the image bakes its own copy into) and falls back to the online provider when the databases are absent.",
+      "required": false,
+      "variables": [
+        {
+          "name": "GEOLITE2_DIR",
+          "purpose": "Directory holding GeoLite2-City.mmdb + GeoLite2-ASN.mmdb. Point it at a read-only mount to bring your own databases. Default /opt/geolite2."
+        }
+      ]
+    },
+    {
       "name": "APNs (iOS push)",
       "description": "All four core APNS_* vars together. Missing any disables APNs silently — the v1.4.40 AP-2 gap that motivated this manifest. allOrNone trips the synthetic <all-or-none> required row whenever 1-3 of the 4 are set.",
       "required": false,

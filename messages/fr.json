@@ -5968,7 +5968,7 @@
     "integrationWebPush": "Web Push",
     "offlineGeoLabel": "Données géographiques",
     "offlineGeoEnabled": "Hors ligne (GeoLite2)",
-    "offlineGeoFallback": "En ligne ({host}) — définissez MAXMIND_LICENSE_KEY dans la CI",
+    "offlineGeoFallback": "En ligne ({host}) — montez les bases GeoLite2 et définissez GEOLITE2_DIR",
     "apiGlobal": "Autoriser les points de terminaison d'API et les jetons d'API.",
     "umamiTitle": "Umami",
     "umamiDescription": "Analyse web avec Umami",
@@ -6769,7 +6769,7 @@
       "reminderCheckOverdueTitle": "Prise en retard : {medication}",
       "reminderCheckOverdueBody": "{medication} ({dose}) dans la fenêtre {window} est en retard de {minutes} minutes.",
       "offlineGeoUnavailableTitle": "Bases de géolocalisation hors ligne non chargées",
-      "offlineGeoUnavailableBody": "HealthLog résout les localisations de connexion via le fallback en ligne ipwho.is. Pour activer les bases hors ligne GeoLite2-City et GeoLite2-ASN, définissez MAXMIND_LICENSE_KEY dans les secrets GitHub Actions à {secretsUrl} puis redéployez. En attendant, la colonne opérateur dans l'aperçu des connexions reste vide.",
+      "offlineGeoUnavailableBody": "HealthLog résout les localisations de connexion via la requête en ligne vers {host}, donc chaque adresse IP de connexion quitte ce serveur. Pour les résoudre localement, téléchargez les bases GeoLite2-City et GeoLite2-ASN avec un compte MaxMind gratuit, montez le répertoire dans le conteneur et faites-y pointer GEOLITE2_DIR. Étapes : {docsUrl}",
       "tlsPinChangedTitle": "Certificat feuille TLS modifié : {host}",
       "tlsPinChangedBody": "La feuille TLS servie par {host} a maintenant le pin SPKI {servedPin}, qui ne figure pas dans l'ensemble de pins connus. Les clients épinglés (l'app native) ne pourront plus se connecter une fois l'ancien pin disparu. Réextrayez le nouveau pin de la feuille, ajoutez-le à TLS_LEAF_SPKI_PINS et à l'ensemble de pins du client natif, et publiez une version avant l'expiration de ce certificat le {validTo}. Voir docs/ops/tls-cert-pin.md."
     },
