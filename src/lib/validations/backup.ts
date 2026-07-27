@@ -315,6 +315,26 @@ const cycleProfileSchema = z
   .passthrough();
 
 /**
+ * A day's total for one nutrient, from one source.
+ *
+ * The export has written these since v1.29 and the canonical schema never
+ * declared them, so `.passthrough()` carried the key through parsing and no
+ * reader ever looked at it. The restore therefore dropped every water and
+ * vitamin total on the floor while reporting success.
+ */
+const nutrientDaySchema = z
+  .object({
+    day: z.string().min(1),
+    nutrient: z.string().min(1),
+    amount: z.number(),
+    unit: z.string().min(1),
+    // Closed set in app code rather than a DB enum; kept as a string here so a
+    // future source does not make an old file unparseable.
+    source: z.string().min(1),
+  })
+  .passthrough();
+
+/**
  * A symptom the account created, as opposed to the seeded catalogue.
  *
  * Carried because a day-log's symptom link resolves by key: without the
@@ -595,6 +615,7 @@ export const backupPayloadSchema = z
     familyHistory: z.array(familyHistoryBackupSchema).default([]),
     workouts: z.array(workoutBackupSchema).default([]),
     documents: z.array(documentBackupSchema).default([]),
+    nutrientDays: z.array(nutrientDaySchema).default([]),
     manifest: backupManifestSchema.nullable().default(null),
   })
   .passthrough()
@@ -632,6 +653,7 @@ export interface BackupSummary {
   cycleDayLogs: number;
   /** Lab results in the backup. */
   labResults: number;
+  nutrientDays: number;
   /** User-scoped biomarker catalog entries in the backup. */
   biomarkers: number;
   /** Illness episodes, including flares/exacerbations. */
@@ -659,6 +681,7 @@ export function summarizeBackup(payload: BackupPayload): BackupSummary {
     moodEntries: payload.moodEntries.length,
     cycles: payload.cycles.length,
     cycleDayLogs: payload.cycleDayLogs.length,
+    nutrientDays: payload.nutrientDays.length,
     labResults: payload.labResults.length,
     biomarkers: payload.biomarkers.length,
     illnessEpisodes: payload.illnessEpisodes.length,

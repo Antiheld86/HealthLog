@@ -58,6 +58,7 @@ interface RestoreResponse {
     cycleProfile: number;
     labResults: number;
     biomarkers: number;
+    nutrientDays: number;
     illnessEpisodes: number;
     allergies: number;
     familyHistory: number;
@@ -326,6 +327,12 @@ const handler = apiHandler(
             where: { userId: ownerId },
           });
           const biomarkers = await tx.biomarker.deleteMany({
+            where: { userId: ownerId },
+          });
+          // The export has written nutrient day totals since v1.29 and nothing
+          // here ever read them back: water and vitamin history was carried in
+          // the file, discarded on restore, and the restore reported success.
+          const nutrientDays = await tx.nutrientIntakeDay.deleteMany({
             where: { userId: ownerId },
           });
 
@@ -968,6 +975,19 @@ const handler = apiHandler(
             });
           }
 
+          if (payload.nutrientDays.length > 0) {
+            await tx.nutrientIntakeDay.createMany({
+              data: payload.nutrientDays.map((n) => ({
+                userId: ownerId,
+                day: n.day,
+                nutrient: n.nutrient,
+                amount: n.amount,
+                unit: n.unit,
+                source: n.source,
+              })),
+            });
+          }
+
           if (payload.documents.length > 0) {
             await tx.inboundDocument.createMany({
               data: payload.documents.map((document) => ({
@@ -1018,6 +1038,7 @@ const handler = apiHandler(
             cycleProfile: cycleCleared.cycleProfile,
             labResults: labResults.count,
             biomarkers: biomarkers.count,
+            nutrientDays: nutrientDays.count,
             illnessEpisodes: illnessEpisodes.count,
             allergies: allergies.count,
             familyHistory: familyHistory.count,
@@ -1140,6 +1161,7 @@ const handler = apiHandler(
           cycleDayLogs: summary.cycleDayLogs,
           labResults: summary.labResults,
           biomarkers: summary.biomarkers,
+          nutrientDays: summary.nutrientDays,
           illnessEpisodes: summary.illnessEpisodes,
           illnessDayLogs: summary.illnessDayLogs,
           allergies: summary.allergies,
