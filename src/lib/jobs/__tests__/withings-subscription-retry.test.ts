@@ -4,7 +4,9 @@ import type { Job } from "pg-boss";
 const retryDueWithingsWebhookSubscriptions = vi.hoisted(() =>
   vi.fn().mockResolvedValue(0),
 );
-const syncUserMeasurements = vi.hoisted(() => vi.fn().mockResolvedValue(0));
+const syncUserMeasurements = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ imported: 0, failed: false }),
+);
 const findMany = vi.hoisted(() => vi.fn().mockResolvedValue([]));
 const addWarning = vi.hoisted(() => vi.fn());
 
@@ -63,7 +65,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   findMany.mockResolvedValue([]);
   retryDueWithingsWebhookSubscriptions.mockResolvedValue(0);
-  syncUserMeasurements.mockResolvedValue(0);
+  syncUserMeasurements.mockResolvedValue({ imported: 0, failed: false });
 });
 
 describe("handleWithingsFallbackSync subscription repair", () => {
