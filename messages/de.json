@@ -4503,7 +4503,7 @@
           },
           "fullBackup": {
             "title": "Voll-Backup",
-            "description": "Deine Messwerte, Medikamente, Stimmung, Zyklus, Laborwerte, Krankheitsepisoden, Allergien, Familienanamnese, Nährstoffe und Workouts in einer JSON-Datei. Gleiche Form wie die wöchentliche automatische Sicherung. Einige Satzarten sind noch nicht enthalten — das Manifest der Datei nennt, was drinsteht.",
+            "description": "Deine Messwerte, Medikamente, Stimmung, Zyklus, Laborwerte, Krankheitsepisoden, Allergien, Familienanamnese, Nährstoffe, Workouts, dein Gesundheitsprofil und deine eigenen Messgrößen in einer JSON-Datei. Gleiche Form wie die wöchentliche automatische Sicherung. Einige Satzarten sind noch nicht enthalten — das Manifest der Datei nennt, was drinsteht.",
             "scopeNote": "Dokumentmetadaten und die KI-Zusammenfassung, falls vorhanden, sind als Klartext enthalten; die Originaldateien der Dokumente sowie GPS-Routen und Einzelmesswerte von Workouts sind es nicht — lade diese separat aus dem Dokumententresor bzw. dem Workout-Export herunter.",
             "encryptToggle": "Mit einer Passphrase verschlüsseln",
             "passphrasePlaceholder": "Passphrase (mind. 12 Zeichen)",

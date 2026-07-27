@@ -18,6 +18,10 @@ vi.mock("@/lib/db", () => ({
     moodEntry: { findMany: vi.fn() },
     moodTag: { findMany: vi.fn() },
     nutrientIntakeDay: { findMany: vi.fn().mockResolvedValue([]) },
+    // Durable self-context + user-defined metrics, read by
+    // `buildProfileBackupSection`.
+    userHealthProfile: { findUnique: vi.fn().mockResolvedValue(null) },
+    customMetric: { findMany: vi.fn().mockResolvedValue([]) },
     // v1.15.0 — cycle tables read by the full-backup helper.
     cycleProfile: { findUnique: vi.fn() },
     menstrualCycle: { findMany: vi.fn() },
@@ -73,9 +77,13 @@ function mkReq(url: string): NextRequest {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  // `resetAllMocks` clears the inline default, and the full-backup payload
-  // builder reads this unconditionally.
+  // `resetAllMocks` clears the inline defaults, and the full-backup payload
+  // builder reads these unconditionally.
   vi.mocked(prisma.nutrientIntakeDay.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.userHealthProfile.findUnique).mockResolvedValue(
+    null as never,
+  );
+  vi.mocked(prisma.customMetric.findMany).mockResolvedValue([] as never);
 });
 
 afterEach(() => {
