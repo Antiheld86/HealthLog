@@ -208,6 +208,18 @@ same run via Apple Health / WHOOP stay distinct rows; the read-time
 `pickCanonicalWorkoutRows` picker collapses the cross-source twin per the user's
 source ladder.
 
+**Sport provenance.** The `other` fallback is lossy: `sportType` alone cannot
+say whether Google reported `OTHER_WORKOUT` or a sport the map does not know.
+So the ingest also writes the label verbatim to
+`Workout.metadata.googleExerciseType` (`GoogleHealthMappedWorkout.sportTypeRaw`
+→ `sync-workout.ts`), matching Polar's `polarSport`, Strava's `stravaType` and
+WHOOP's `whoopSportName`. Provenance only — nothing reads it back as the
+canonical sport. The key is omitted, never nulled, when a session carries no
+type, so a re-sync cannot clear what an earlier run recorded. Rows written
+before this existed carry no key; a full sync (`{fullSync:true}`) re-fetches the
+session under the same externalId and fills it in, since insert and update share
+one payload.
+
 ## Idempotency
 
 `(userId, type, source: "GOOGLE_HEALTH", externalId)` unique. Spot/daily metric

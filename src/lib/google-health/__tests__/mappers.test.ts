@@ -533,6 +533,8 @@ describe("mapWorkout — exercise session", () => {
     });
     expect(w!.startedAt.toISOString()).toBe("2026-06-03T07:00:00.000Z");
     expect(w!.endedAt.toISOString()).toBe("2026-06-03T07:45:00.000Z");
+    // Provenance rides along even when the mapping succeeded.
+    expect(w!.sportTypeRaw).toBe("RUNNING");
   });
 
   it("falls back to a start-anchored externalId when the resource name is absent", () => {
@@ -563,12 +565,56 @@ describe("mapWorkout — exercise session", () => {
     ).toBeNull();
   });
 
+  it("keeps the raw exerciseType when the sport falls back to 'other'", () => {
+    // The whole point of the provenance field: `sportType` alone cannot say
+    // whether Google reported a sport the map has never heard of or a genuine
+    // OTHER_WORKOUT, and the answer is not recoverable from anywhere else.
+    const w = mapWorkout({
+      name: "users/me/dataTypes/exercise/dataPoints/kite1",
+      exercise: {
+        exerciseType: " KITESURFING ",
+        interval: {
+          startTime: "2026-06-04T10:00:00.000Z",
+          endTime: "2026-06-04T11:00:00.000Z",
+        },
+      },
+    });
+    expect(w!.sportType).toBe("other");
+    expect(w!.sportTypeRaw).toBe("KITESURFING");
+  });
+
+  it("reports a missing or blank exerciseType as null, not an empty string", () => {
+    const noType = mapWorkout({
+      exercise: {
+        interval: {
+          startTime: "2026-06-04T12:00:00.000Z",
+          endTime: "2026-06-04T12:30:00.000Z",
+        },
+      },
+    });
+    expect(noType!.sportType).toBe("other");
+    expect(noType!.sportTypeRaw).toBeNull();
+
+    const blankType = mapWorkout({
+      exercise: {
+        exerciseType: "   ",
+        interval: {
+          startTime: "2026-06-04T13:00:00.000Z",
+          endTime: "2026-06-04T13:30:00.000Z",
+        },
+      },
+    });
+    expect(blankType!.sportTypeRaw).toBeNull();
+  });
+
   it("resolves the UPPERCASE ExerciseType enum, with a generic fallback", () => {
     expect(mapGoogleHealthSportType("STRENGTH_TRAINING")).toBe("strength");
     expect(mapGoogleHealthSportType("HIGH_INTENSITY_INTERVAL_TRAINING")).toBe(
       "hiit",
     );
     expect(mapGoogleHealthSportType("CYCLING")).toBe("cycling");
+    // Lossy by design — `Workout.metadata.googleExerciseType` is what carries
+    // the original (see the mapWorkout provenance cases above).
     expect(mapGoogleHealthSportType("KITESURFING")).toBe("other");
     expect(mapGoogleHealthSportType("")).toBe("other");
   });

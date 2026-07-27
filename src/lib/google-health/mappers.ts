@@ -955,9 +955,13 @@ export function mapSleepSession(
  * Google Health `Exercise.exerciseType` → HealthLog `WorkoutSportType`. The
  * enum arrives UPPERCASE (`RUNNING`, `STRENGTH_TRAINING`, …); the resolver
  * lowercases + underscores before the lookup, so the keys here are the
- * normalised forms. Unknown types fall through to a generic label; the column
- * is free-text so an unmapped type still persists (just not under a canonical
- * sport bucket).
+ * normalised forms. An unmapped type resolves to the literal `"other"`: the
+ * upstream label does NOT survive in `sportType`, and the column read back
+ * cannot tell a genuine `OTHER_WORKOUT` from a sport this map has never heard
+ * of. What preserves it is `GoogleHealthMappedWorkout.sportTypeRaw`, which the
+ * ingest writes verbatim to `Workout.metadata.googleExerciseType`
+ * (`sync-workout.ts`) — so a session that shows as "other" can still be traced
+ * back to what Google sent, without re-fetching it.
  */
 const GOOGLE_HEALTH_EXERCISE_TYPE_MAP: Record<string, string> = {
   walk: "walking",
@@ -1055,6 +1059,12 @@ export function mapGoogleHealthSportType(raw: unknown): string {
 export interface GoogleHealthMappedWorkout {
   externalId: string;
   sportType: string;
+  /**
+   * The upstream `exercise.exerciseType` verbatim (trimmed), or null when the
+   * session carried none. Provenance only — never the canonical `sportType`,
+   * which `mapGoogleHealthSportType()` owns.
+   */
+  sportTypeRaw: string | null;
   startedAt: Date;
   endedAt: Date;
   durationSec: number;
@@ -1113,6 +1123,9 @@ function readInstant(
  * the start instant is the fallback. metricsSummary carries no max/min HR →
  * null.
  *
+ * `exerciseType` leaves here twice: once mapped onto a canonical sport bucket,
+ * once verbatim as `sportTypeRaw` so the ingest can keep the provenance.
+ *
  * Session start/end can arrive OFFSET-LESS (local wall clock); `tz` anchors
  * them to the correct UTC instant rather than the process zone.
  */
@@ -1136,6 +1149,10 @@ export function mapWorkout(
       : `exercise:${startedAt.toISOString()}`;
 
   const sportRaw = readPath(point, `${k}.exerciseType`);
+  const sportTypeRaw =
+    typeof sportRaw === "string" && sportRaw.trim() !== ""
+      ? sportRaw.trim()
+      : null;
 
   const energyKcal = readNumber(point, [`${k}.metricsSummary.caloriesKcal`]);
   const distanceMm = readNumber(point, [
@@ -1148,6 +1165,7 @@ export function mapWorkout(
   return {
     externalId,
     sportType: mapGoogleHealthSportType(sportRaw),
+    sportTypeRaw,
     startedAt,
     endedAt,
     durationSec,
