@@ -36,13 +36,15 @@ export const PRIORITY_ITEM_KINDS = [
   "milestone",
   "ecg_new_recording",
   "tension_window",
+  "same_time_baseline",
 ] as const;
 
 export type PriorityItemKind = (typeof PRIORITY_ITEM_KINDS)[number];
 
 /**
  * The OBSERVATIONAL kinds — a durable-state reward, a new-ECG pointer, an
- * elevated-at-rest window. These carry no pending action; the user can only
+ * elevated-at-rest window, a same-time activity read. These carry no pending
+ * action; the user can only
  * acknowledge them, so they're the only kinds the Today rail lets you
  * dismiss. The remaining kinds (`dose_window`, `sync_issue`,
  * `preventive_care`, `coach_checkin`) are ACTIONABLE — they clear on their
@@ -54,6 +56,7 @@ export const DISMISSIBLE_PRIORITY_ITEM_KINDS = [
   "milestone",
   "ecg_new_recording",
   "tension_window",
+  "same_time_baseline",
 ] as const satisfies readonly PriorityItemKind[];
 
 export type DismissiblePriorityItemKind =

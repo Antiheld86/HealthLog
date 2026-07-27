@@ -52,6 +52,12 @@
 export const BACKED_UP_MODELS = [
   // ── Measurements ──────────────────────────────────────────────────────────
   "Measurement",
+  // Not derived, despite looking it. The hourly shape of a cumulative day is
+  // folded out of the per-sample rows in the same transaction that deletes
+  // them, so past the 36-hour grace window there is nothing left to rebuild it
+  // from. A restore without it silently resets the same-time baseline to
+  // "still learning" for two weeks.
+  "IntradayCumulativeProfile",
 
   // ── Medications, and everything hanging off one ───────────────────────────
   // The parent alone restores a drug list with no schedule, no history and no

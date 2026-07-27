@@ -22,6 +22,7 @@ import {
   Activity,
   Award,
   CalendarClock,
+  Footprints,
   HeartPulse,
   MessageCircle,
   Pill,
@@ -53,6 +54,7 @@ const KIND_ICON: Record<PriorityItemKind, LucideIcon> = {
   milestone: Award,
   ecg_new_recording: HeartPulse,
   tension_window: Activity,
+  same_time_baseline: Footprints,
 };
 
 /**

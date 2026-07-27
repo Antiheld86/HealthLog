@@ -3640,6 +3640,10 @@
         "TRAJECTORY": {
           "method": "Una recta de mínimos cuadrados ajustada a tus valores diarios recientes y proyectada hacia delante en un horizonte corto, con el intervalo de predicción clásico que se ensancha cuanto más lejos llega. Solo se calcula cuando la tendencia reciente es lo bastante marcada y tu historial es lo bastante largo y actual; de lo contrario no se traza ninguna línea.",
           "caveat": "Una proyección de tu propia tendencia reciente, no una predicción, un objetivo ni un pronóstico clínico. Solo se cumple si el patrón reciente continúa; la banda sombreada muestra con qué rapidez se desvanece esa certeza."
+        },
+        "SAME_TIME_BASELINE": {
+          "method": "Tu total acumulado de hoy frente a la mediana de esa misma hora local durante tus últimas cuatro semanas, con una banda robusta de mediana ± MAD alrededor. Solo cuentan los días con suficiente detalle registrado, y no se muestra ninguna comparación hasta tener al menos catorce.",
+          "caveat": "Una comparación con tu propio historial reciente, no un objetivo. Indica dónde se sitúa hoy frente a tu patrón habitual a esta hora, y nada sobre si ese patrón es el adecuado para ti."
         }
       },
       "scores": {
@@ -3673,6 +3677,13 @@
         "caveat": "Una proyección de tu propia tendencia reciente, no una predicción. La banda sombreada se ensancha para mostrar la rapidez con que crece la incertidumbre.",
         "insufficient": "Aún no hay una tendencia lo bastante clara para proyectar: sigue registrando y aparecerá una proyección cuando el patrón reciente sea lo bastante marcado.",
         "daysNeeded": "Faltan unos {count} días más de registro para que pueda aparecer una proyección."
+      },
+      "sameTime": {
+        "sectionTitle": "Hoy hasta ahora",
+        "sectionSubtitle": "Tus totales acumulados frente a lo que es habitual en ti a esta hora",
+        "learning": "Aprendiendo tu día habitual — {count} de {target} días",
+        "framing": "Habitual a las {time}: {typical} {unit}",
+        "comparisonLabel": "Tu día habitual"
       }
     },
     "cardioFitness": {
@@ -8979,6 +8990,16 @@
           "notDetected": "ningún ritmo irregular",
           "inconclusive": "un resultado no concluyente"
         }
+      },
+      "sameTimeBaseline": {
+        "title": {
+          "below": "Por detrás de tu ritmo habitual",
+          "above": "Por delante de tu ritmo habitual"
+        },
+        "body": {
+          "below": "A las {time} llevas {today} pasos. En un día habitual rondas los {typical} a esta hora.",
+          "above": "A las {time} llevas {today} pasos, por encima de los {typical} habituales a esta hora."
+        }
       }
     },
     "action": {
@@ -8990,7 +9011,8 @@
       "checkinLetGo": "Dejarlo ir",
       "viewMilestone": "Ver",
       "viewPulse": "Ver pulso",
-      "viewEcg": "Ver registro"
+      "viewEcg": "Ver registro",
+      "viewSteps": "Ver pasos"
     },
     "today": {
       "scoreLabel": "Puntuación de salud",

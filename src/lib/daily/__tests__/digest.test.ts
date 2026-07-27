@@ -10,6 +10,7 @@ import {
   MAX_WORTH_A_LOOK,
   type DailyDigestCoachPlan,
   type DailyDigestInput,
+  type DailyDigestSameTime,
 } from "@/lib/daily/digest";
 import {
   COACH_CHECKIN_KEEP_INTENT,
@@ -21,6 +22,7 @@ import type { PriorityItem } from "@/lib/daily/priority-item";
 import {
   ecgItemKey,
   milestoneItemKey,
+  sameTimeBaselineItemKey,
   tensionWindowItemKey,
 } from "@/lib/daily/priority-item-key";
 
@@ -820,6 +822,128 @@ describe("buildDailyDigest — S11 tension_window item", () => {
       t,
     );
     expect(tension(d)).toBeUndefined();
+  });
+});
+
+describe("buildDailyDigest — same_time_baseline item", () => {
+  const sameTimeItem = (d: ReturnType<typeof buildDailyDigest>) =>
+    d.worthALook.find((i) => i.kind === "same_time_baseline");
+
+  function sameTime(
+    over: Partial<DailyDigestSameTime> = {},
+  ): DailyDigestSameTime {
+    return {
+      type: "ACTIVITY_STEPS",
+      band: "below",
+      asOfHour: 20,
+      todayValue: 1834,
+      typicalValue: 5111,
+      todayLabel: "1,834",
+      typicalLabel: "5,111",
+      ...over,
+    };
+  }
+
+  it("names both totals and the hour they are compared at", () => {
+    const d = buildDailyDigest(input({ sameTime: sameTime() }), t);
+    const item = sameTimeItem(d);
+    expect(item).toBeDefined();
+    expect(item?.status).toBe("info");
+    // The comparison covers everything through the END of hour 20, which
+    // reads on the clock as 21:00.
+    expect(item?.body).toContain("21:00");
+    expect(item?.body).toContain("1,834");
+    expect(item?.body).toContain("5,111");
+    expect(item?.actions[0].intent).toBe("steps.view");
+    expect(item?.actions[0].href).toBe("/insights/steps");
+  });
+
+  it("says nothing about a day that is tracking its own normal", () => {
+    // A rail that reports "exactly as usual" every afternoon teaches people to
+    // stop reading the rail.
+    const d = buildDailyDigest(
+      input({ sameTime: sameTime({ band: "within" }) }),
+      t,
+    );
+    expect(sameTimeItem(d)).toBeUndefined();
+  });
+
+  it("says nothing when the engine returned no comparison", () => {
+    expect(
+      sameTimeItem(buildDailyDigest(input({ sameTime: null }), t)),
+    ).toBeUndefined();
+    expect(sameTimeItem(buildDailyDigest(input({}), t))).toBeUndefined();
+  });
+
+  it("stays silent when the insights module is off", () => {
+    const d = buildDailyDigest(
+      input({ modules: { insights: false }, sameTime: sameTime() }),
+      t,
+    );
+    expect(sameTimeItem(d)).toBeUndefined();
+  });
+
+  it("uses a different sentence when today is ahead", () => {
+    const below = buildDailyDigest(input({ sameTime: sameTime() }), t);
+    const above = buildDailyDigest(
+      input({ sameTime: sameTime({ band: "above" }) }),
+      t,
+    );
+    expect(sameTimeItem(above)?.title).not.toBe(sameTimeItem(below)?.title);
+    expect(sameTimeItem(above)?.body).not.toBe(sameTimeItem(below)?.body);
+  });
+
+  it("keys the dismissal by day and metric, never by the hour", () => {
+    // Folding the hour in would undo the dismissal every sixty minutes.
+    const d = buildDailyDigest(
+      input({ sameTime: sameTime(), todayLocalDate: "2026-07-16" }),
+      t,
+    );
+    expect(sameTimeItem(d)?.itemKey).toBe(
+      sameTimeBaselineItemKey("2026-07-16", "ACTIVITY_STEPS"),
+    );
+    // The same key whatever the clock says — that is the whole point.
+    const later = buildDailyDigest(
+      input({
+        sameTime: sameTime({ asOfHour: 9 }),
+        todayLocalDate: "2026-07-16",
+      }),
+      t,
+    );
+    expect(sameTimeItem(later)?.itemKey).toBe(sameTimeItem(d)?.itemKey);
+  });
+
+  it("is dropped once dismissed, and stays dropped as the hour moves on", () => {
+    const dismissed = new Set([
+      sameTimeBaselineItemKey("2026-07-16", "ACTIVITY_STEPS"),
+    ]);
+    for (const asOfHour of [9, 14, 20]) {
+      const d = buildDailyDigest(
+        input({
+          sameTime: sameTime({ asOfHour }),
+          todayLocalDate: "2026-07-16",
+          dismissedItemKeys: dismissed,
+        }),
+        t,
+      );
+      expect(sameTimeItem(d)).toBeUndefined();
+    }
+  });
+
+  it("yields the bounded rail to time-sensitive actions first", () => {
+    const d = buildDailyDigest(
+      input({
+        medsToday: meds({ nextDueOverdue: true, nextDueMedicationName: "X" }),
+        syncIssues: [
+          { integration: "withings", state: "error_reauth" },
+          { integration: "nightscout", state: "parked" },
+        ],
+        sameTime: sameTime(),
+      }),
+      t,
+    );
+    expect(d.worthALook).toHaveLength(MAX_WORTH_A_LOOK);
+    expect(sameTimeItem(d)).toBeUndefined();
   });
 });
 

@@ -23,8 +23,10 @@ import { type DerivedBatchRead } from "./use-derived-metric";
 import {
   SECTION_VITALS,
   SECTION_MOBILITY,
+  SECTION_CUMULATIVE,
   type DashboardDerived,
 } from "./use-dashboard-derived";
+import { SAME_TIME_BASELINE_MIN_HISTORY_DAYS } from "@/lib/insights/derived/registry";
 import { resolveTileLayout, type InsightsLayout } from "@/lib/insights-layout";
 import type { TrendDirectionSentiment } from "@/lib/insights/trend-sentiment";
 // Type-only — the compute payloads never drag the server graph into the bundle.
@@ -34,6 +36,7 @@ import type { VascularAgeDeltaValue } from "@/lib/insights/derived/vascular-age"
 import type { HrvBalanceValue } from "@/lib/insights/derived/hrv-balance";
 import type { BmiValue } from "@/lib/insights/derived/bmi";
 import type { SixMinuteWalkValue } from "@/lib/insights/derived/six-minute-walk";
+import type { SameTimeBaselineValue } from "@/lib/insights/derived/same-time-baseline";
 import type { DerivedProvenance } from "@/lib/insights/derived/types";
 
 /**
@@ -127,6 +130,14 @@ const MOBILITY_TILE_LAYOUT_ID: Record<string, string> = {
   STAIR_ASCENT_SPEED: "stair-ascent-speed",
   STAIR_DESCENT_SPEED: "stair-descent-speed",
   WRIST_TEMPERATURE: "wrist-temperature",
+};
+
+/** Same-time-baseline `MeasurementType` → layout tile id (routed slug). */
+const CUMULATIVE_TILE_LAYOUT_ID: Record<string, string> = {
+  ACTIVITY_STEPS: "steps",
+  ACTIVE_ENERGY_BURNED: "active-energy",
+  WALKING_RUNNING_DISTANCE: "walking-distance",
+  FLIGHTS_CLIMBED: "flights-climbed",
 };
 
 /**
@@ -301,6 +312,118 @@ function BaselineTile({
           // without the repetition or the header-row squeeze that clipped the
           // cardio-fitness heading.
           <MetricProvenance metric={metric} provenance={data.provenance} />
+        }
+        footer={<LearnMoreLink concept={tileId} />}
+      />
+    </div>
+  );
+}
+
+/**
+ * v1.34.0 — the same-time baseline tile for one cumulative metric.
+ *
+ * Every other tile in this grid frames a latest reading against a band. A
+ * cumulative metric has no latest reading, so this one frames today's running
+ * total against the person's own typical total at the same local hour, and the
+ * sparkline carries both trajectories on one pair of axes rather than one.
+ *
+ * The states are the states the rest of the grid already has, with one
+ * addition that matters more here than anywhere else: a baseline built from
+ * three days is not a baseline, so below the floor the tile says it is still
+ * learning and shows how far along it is. It never renders a number it does
+ * not have the history for.
+ */
+function SameTimeBaselineTile({
+  type,
+  read,
+  isLoading,
+}: TileProps & {
+  type: string;
+}) {
+  const { t } = useTranslations();
+  const fmt = useFormatters();
+  const unitDisplay = useUnitDisplay();
+  const data = read<SameTimeBaselineValue>({
+    metric: "SAME_TIME_BASELINE",
+    type,
+  });
+
+  if (isLoading || !data) return null;
+
+  const Icon = MEASUREMENT_TYPE_ICONS[type] ?? Footprints;
+  const labelKey = MEASUREMENT_TYPE_LABEL_KEYS[type];
+  const label = labelKey ? t(labelKey) : type;
+  const tileId = CUMULATIVE_TILE_LAYOUT_ID[type] ?? type;
+
+  if (data.status === "insufficient") {
+    // Absent, not gated. No sub-daily rows today (every daily-total source —
+    // Fitbit, Withings, Polar — is permanently here), an unsupported type, or
+    // a day whose first hour has not finished yet. None of these is a state
+    // the user can act on, so the tile does not render at all rather than
+    // occupying the grid with an apology.
+    if (data.reason !== "learning_usual_day") return null;
+    return (
+      <div
+        data-slot="same-time-tile"
+        data-metric={tileId}
+        data-state="learning"
+        className="bg-card border-border flex h-full w-full min-w-0 flex-col gap-3 rounded-xl border p-4 md:p-6"
+      >
+        <TileHeader
+          icon={Icon}
+          title={label}
+          titleAs="h2"
+          titleClassName="truncate"
+        />
+        <p
+          className="text-muted-foreground text-sm"
+          data-slot="same-time-tile-learning"
+        >
+          {t("insights.derived.sameTime.learning", {
+            count: data.coverage.historyDays,
+            target: SAME_TIME_BASELINE_MIN_HISTORY_DAYS,
+          })}
+        </p>
+        <CoverageMeter coverage={data.coverage} />
+      </div>
+    );
+  }
+
+  const v = data.value!;
+  const unit = unitDisplay.unitFor(type);
+  const toShown = (raw: number) => unitDisplay.toDisplay(type, raw);
+  // A transformed distance reads in kilometres and wants a decimal; a step,
+  // flight or kilocalorie count is a whole number and a decimal on it is noise.
+  const precision = unitDisplay.isTransformed(type) ? 1 : 0;
+  // The comparison is anchored to the END of `asOfHour`, which is the top of
+  // the following hour on the clock. 24-hour form, built from the number the
+  // server already resolved — deriving a locale-formatted instant on the
+  // client from a server-side local hour is how a hydration mismatch starts.
+  const byClock = `${String(v.asOfHour + 1).padStart(2, "0")}:00`;
+
+  return (
+    <div data-slot="same-time-tile" data-metric={tileId} data-state="ok">
+      <SparklineDeltaTile
+        label={label}
+        value={toShown(v.todayValue)}
+        unit={unit}
+        icon={Icon}
+        series={v.todayCurve.map(toShown)}
+        comparisonSeries={v.typicalCurve.map(toShown)}
+        comparisonLabel={t("insights.derived.sameTime.comparisonLabel")}
+        delta={unitDisplay.toDisplayDelta(type, v.delta)}
+        directionSentiment="up-good"
+        precision={precision}
+        framing={t("insights.derived.sameTime.framing", {
+          time: byClock,
+          typical: fmt.number(toShown(v.typicalValue), precision),
+          unit,
+        })}
+        provenance={
+          <MetricProvenance
+            metric="SAME_TIME_BASELINE"
+            provenance={data.provenance}
+          />
         }
         footer={<LearnMoreLink concept={tileId} />}
       />
@@ -632,6 +755,29 @@ function hasRenderableMobility(
   return false;
 }
 
+/**
+ * Whether the batch holds at least one same-time tile worth painting. Mirrors
+ * the tile's own gate exactly: only an `ok` value or the honest "still
+ * learning" state counts, so the section heading never strands over a grid
+ * that turned out to be empty (every daily-total source lands there).
+ */
+function hasRenderableSameTime(
+  read: DerivedBatchRead,
+  layout: InsightsLayout | undefined,
+): boolean {
+  for (const type of SECTION_CUMULATIVE) {
+    if (!tileVisible(layout, CUMULATIVE_TILE_LAYOUT_ID[type] ?? type)) continue;
+    const data = read<SameTimeBaselineValue>({
+      metric: "SAME_TIME_BASELINE",
+      type,
+    });
+    if (!data) continue;
+    if (data.status === "ok") return true;
+    if (data.reason === "learning_usual_day") return true;
+  }
+  return false;
+}
+
 export function VitalsDashboard({ batch, layout, className }: DashboardProps) {
   const { t } = useTranslations();
 
@@ -724,6 +870,20 @@ export function VitalsDashboard({ batch, layout, className }: DashboardProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout, read, isLoading]);
 
+  const cumulativeTiles = useMemo(() => {
+    return SECTION_CUMULATIVE.map((type) => {
+      const id = CUMULATIVE_TILE_LAYOUT_ID[type] ?? type;
+      return {
+        id,
+        order: tileOrder(layout, id),
+        node: <SameTimeBaselineTile key={type} type={type} {...tileProps} />,
+      };
+    })
+      .filter((e) => tileVisible(layout, e.id))
+      .sort((a, b) => a.order - b.order);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layout, read, isLoading]);
+
   // A failed batch (retry:0 + the 8 s client ceiling) must read as an error,
   // not as "no data" — otherwise the whole Vitals + Wellness surface silently
   // vanishes. Surface a compact message + a Retry that refetches the one
@@ -761,6 +921,7 @@ export function VitalsDashboard({ batch, layout, className }: DashboardProps) {
   // pops in below it — the CLS this pass removes.
   const showSection = isLoading || hasRenderableVital(read, layout);
   const showMobility = !isLoading && hasRenderableMobility(read, layout);
+  const showSameTime = !isLoading && hasRenderableSameTime(read, layout);
 
   return (
     <div
@@ -799,6 +960,30 @@ export function VitalsDashboard({ batch, layout, className }: DashboardProps) {
                   <VitalsTileSkeleton key={`vitals-skeleton-${i}`} />
                 ))
               : vitalTiles.map((tile) => tile.node)}
+          </div>
+        </section>
+      )}
+      {showSameTime && (
+        <section
+          data-slot="vitals-same-time"
+          aria-label={t("insights.derived.sameTime.sectionTitle")}
+          className="space-y-3"
+        >
+          <SectionHeading
+            icon={Footprints}
+            title={t("insights.derived.sameTime.sectionTitle")}
+            subtitle={t("insights.derived.sameTime.sectionSubtitle")}
+          />
+          <div
+            data-slot="vitals-same-time-grid"
+            className={cn(
+              "grid grid-cols-1 gap-4",
+              // A lone tile spans the full width rather than orphaning a
+              // one-third column, matching the sections above it.
+              cumulativeTiles.length > 1 && "sm:grid-cols-2 lg:grid-cols-3",
+            )}
+          >
+            {cumulativeTiles.map((tile) => tile.node)}
           </div>
         </section>
       )}

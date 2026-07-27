@@ -128,12 +128,14 @@ export interface SameTimeBaselineOpts {
  * `profile` is accepted for signature parity with every other engine in this
  * directory — the dispatcher hands each one the same once-loaded profile — but
  * a same-time comparison is purely against the person's own history and reads
- * nothing off it. The timezone it does need is read here, because a comparison
- * whose whole subject is "at this hour" cannot borrow anybody else's clock.
+ * nothing off it. It is therefore nullable, so a caller outside the dispatcher
+ * (the daily digest) does not have to issue a profile read it has no use for.
+ * The timezone the engine does need is read here, because a comparison whose
+ * whole subject is "at this hour" cannot borrow anybody else's clock.
  */
 export async function computeSameTimeBaseline(
   userId: string,
-  _profile: BaselineProfile,
+  _profile: BaselineProfile | null,
   opts: SameTimeBaselineOpts,
 ): Promise<Derived<SameTimeBaselineValue>> {
   const now = opts.now ?? new Date();

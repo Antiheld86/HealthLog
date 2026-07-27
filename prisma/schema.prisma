@@ -1983,34 +1983,34 @@ model MeasurementRollup {
 // still inside the grace window have no row yet and are folded live
 // from the raw rows on read, so the current day is always available.
 model IntradayCumulativeProfile {
-  id     String          @id @default(cuid())
-  userId String          @map("user_id")
-  type   MeasurementType
+  id               String          @id @default(cuid())
+  userId           String          @map("user_id")
+  type             MeasurementType
   /// Local calendar day the profile describes (`YYYY-MM-DD`), in the
   /// user's timezone at fold time. Lexicographically ordered, so a
   /// trailing-window read and the retention prune are both range scans.
-  dateKey          String   @map("date_key") @db.VarChar(10)
+  dateKey          String          @map("date_key") @db.VarChar(10)
   /// Twenty-four running totals in canonical units — element `h` is the
   /// value accumulated from local midnight through the END of local hour
   /// `h`, so the array is non-decreasing and `[23]` equals `dayTotal`.
   /// A DST day still has exactly 24 slots: the repeated hour folds into
   /// its slot and a skipped hour repeats its predecessor's running total,
   /// which keeps every stored day index-comparable with every other.
-  hourlyCumulative Float[]  @map("hourly_cumulative")
+  hourlyCumulative Float[]         @map("hourly_cumulative")
   /// The day's total — `hourlyCumulative[23]`, denormalised so a coverage
   /// check never has to read the array.
-  dayTotal         Float    @map("day_total")
+  dayTotal         Float           @map("day_total")
   /// How many raw per-sample rows backed this profile. A day folded from
   /// two rows is not a shape; the baseline reader uses this to refuse such
   /// a day rather than let it drag the median.
-  sampleCount      Int      @map("sample_count")
+  sampleCount      Int             @map("sample_count")
   /// The IANA zone the day was bucketed in. A user who later moves zones
   /// leaves behind profiles cut on the old clock; carrying the zone lets
   /// the reader drop the mismatched days instead of silently comparing
   /// hours that mean different things.
   timezone         String
-  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

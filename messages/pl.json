@@ -3640,6 +3640,10 @@
         "TRAJECTORY": {
           "method": "Prosta dopasowana metodą najmniejszych kwadratów do Twoich ostatnich wartości dziennych i rzutowana w przód na krótki horyzont, z klasycznym przedziałem predykcji, który poszerza się tym bardziej, im dalej sięga. Obliczana tylko wtedy, gdy ostatni trend jest dość wyraźny, a Twoja historia wystarczająco długa i aktualna; w przeciwnym razie linia nie jest rysowana.",
           "caveat": "Rzut Twojego własnego ostatniego trendu — nie prognoza, cel ani kliniczne przewidywanie. Sprawdza się tylko, jeśli ostatni wzorzec się utrzyma; zacieniony pas pokazuje, jak szybko ta pewność maleje."
+        },
+        "SAME_TIME_BASELINE": {
+          "method": "Twoja dzisiejsza suma narastająca zestawiona z medianą tej samej godziny lokalnej z ostatnich czterech tygodni, z odpornym pasmem mediana ± MAD wokół niej. Liczą się tylko dni z wystarczającą liczbą zapisów, a porównanie nie pojawia się, dopóki nie ma ich co najmniej czternastu.",
+          "caveat": "Porównanie z twoją własną niedawną historią, a nie cel. Mówi, gdzie dziś jesteś względem swojego zwykłego wzorca o tej godzinie — i nic o tym, czy ten wzorzec jest dla ciebie właściwy."
         }
       },
       "scores": {
@@ -3673,6 +3677,13 @@
         "caveat": "Rzut Twojego własnego ostatniego trendu, nie prognoza. Zacieniony pas poszerza się, pokazując, jak szybko rośnie niepewność.",
         "insufficient": "Jeszcze brak wystarczająco wyraźnego trendu do rzutowania — rejestruj dalej, a rzut pojawi się, gdy ostatni wzorzec będzie dość wyraźny.",
         "daysNeeded": "Potrzeba jeszcze około {count} dni rejestrowania, zanim pojawi się rzut."
+      },
+      "sameTime": {
+        "sectionTitle": "Dziś do tej pory",
+        "sectionSubtitle": "Twoje sumy narastające względem tego, co o tej godzinie jest u ciebie zwykłe",
+        "learning": "Uczę się twojego zwykłego dnia — {count} z {target} dni",
+        "framing": "Zwykle do {time}: {typical} {unit}",
+        "comparisonLabel": "Twój zwykły dzień"
       }
     },
     "cardioFitness": {
@@ -8979,6 +8990,16 @@
           "notDetected": "brak nieregularnego rytmu",
           "inconclusive": "wynik niejednoznaczny"
         }
+      },
+      "sameTimeBaseline": {
+        "title": {
+          "below": "Poniżej swojego zwykłego tempa",
+          "above": "Powyżej swojego zwykłego tempa"
+        },
+        "body": {
+          "below": "Do {time} masz {today} kroków. W zwykły dzień o tej porze jesteś w okolicach {typical}.",
+          "above": "Do {time} masz {today} kroków, powyżej zwykłych {typical} o tej porze."
+        }
       }
     },
     "action": {
@@ -8990,7 +9011,8 @@
       "checkinLetGo": "Odpuść",
       "viewMilestone": "Zobacz",
       "viewPulse": "Zobacz tętno",
-      "viewEcg": "Zobacz zapis"
+      "viewEcg": "Zobacz zapis",
+      "viewSteps": "Zobacz kroki"
     },
     "today": {
       "scoreLabel": "Wynik zdrowia",

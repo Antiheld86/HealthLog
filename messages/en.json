@@ -3640,6 +3640,10 @@
         "TRAJECTORY": {
           "method": "A least-squares line fitted to your recent daily values and projected forward over a short horizon, with the textbook prediction interval that widens the further it reaches. Computed only when the recent trend is strong enough and your history is long and current enough; otherwise no line is drawn.",
           "caveat": "A projection of your own recent trend — not a prediction, a target, or a clinical forecast. It holds only if the recent pattern continues; the shaded band shows how quickly that certainty fades."
+        },
+        "SAME_TIME_BASELINE": {
+          "method": "Your running total for today set against the median of the same local hour across your last four weeks, with a robust median ± MAD band around it. Only days with enough recorded detail count towards it, and no comparison is shown until at least fourteen of them are in hand.",
+          "caveat": "A comparison with your own recent history, not a target. It says where today sits against your usual pattern at this hour and nothing about whether that pattern is right for you."
         }
       },
       "scores": {
@@ -3673,6 +3677,13 @@
         "caveat": "A projection of your own recent trend, not a prediction. The shaded band widens to show how quickly the uncertainty grows.",
         "insufficient": "Not enough of a clear trend to project yet — keep tracking and a projection will appear once the recent pattern is strong enough.",
         "daysNeeded": "About {count} more days of tracking needed before a projection can appear."
+      },
+      "sameTime": {
+        "sectionTitle": "Today so far",
+        "sectionSubtitle": "Your running totals against what is usual for you at this hour",
+        "learning": "Learning your usual day — {count} of {target} days",
+        "framing": "Typical by {time}: {typical} {unit}",
+        "comparisonLabel": "Your typical day"
       }
     },
     "cardioFitness": {
@@ -8979,6 +8990,16 @@
           "notDetected": "no irregular rhythm",
           "inconclusive": "an inconclusive result"
         }
+      },
+      "sameTimeBaseline": {
+        "title": {
+          "below": "Behind your usual pace",
+          "above": "Ahead of your usual pace"
+        },
+        "body": {
+          "below": "By {time} you are at {today} steps. On a usual day you are around {typical} by now.",
+          "above": "By {time} you are at {today} steps, ahead of the {typical} that is usual for you by now."
+        }
       }
     },
     "action": {
@@ -8990,7 +9011,8 @@
       "checkinLetGo": "Let it go",
       "viewMilestone": "View",
       "viewPulse": "View pulse",
-      "viewEcg": "View recording"
+      "viewEcg": "View recording",
+      "viewSteps": "View steps"
     },
     "today": {
       "scoreLabel": "Health score",
