@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HealthLog API
-  version: 1.33.0
+  version: 1.33.1
   description: >-
     Self-hosted personal-health-tracking PWA — public API surface for the iOS native client and external ingest.
 
@@ -4477,10 +4477,10 @@ paths:
       tags:
         - Auth
       summary: Read the calling user's AI-provider configuration
-      description: "Returns the user's selected provider/model/baseUrl plus the effective availability: `aiAvailable` is true
-        when any provider can serve the user (BYOK, self-hosted, or the operator's server-managed key), and `managedBy`
-        reports which. iOS gates Coach visibility off these two fields. Key material is reported as presence + a 4-char
-        masked preview only."
+      description: "Returns the user's selected provider/model/baseUrl (plus the OpenAI-compatible gateway's own base URL and
+        model) and the effective availability: `aiAvailable` is true when any provider can serve the user (BYOK,
+        self-hosted, or the operator's server-managed key), and `managedBy` reports which. iOS gates Coach visibility
+        off these two fields. Key material is reported as presence + a 4-char masked preview only."
       responses:
         "200":
           description: Resolved AI-provider configuration.
@@ -12100,10 +12100,11 @@ components:
           items:
             $ref: "#/components/schemas/AppleHealthBatchEntry"
         syncTrigger:
-          description: "Diagnostic-only. Names what triggered this sync (foreground app open, background refresh, or a push wake)
-            so an operator can see, per batch, which trigger produced it. Recorded on the ingest wide event and nowhere
-            else — it does not affect dedup, attribution, or how any sample is stored. Optional and backward-compatible:
-            pre-#66 clients omit it."
+          description: "Diagnostic-only. Names what triggered this sync (foreground app open, background refresh, or a push wake).
+            Recorded on the ingest wide event and kept on the account as `lastSyncTrigger` — plus `lastBackgroundSyncAt`
+            for a `background` or `push` trigger — both readable from `GET /api/integrations/healthkit`. It does not
+            affect dedup, attribution, or how any sample is stored. Optional and backward-compatible: pre-#66 clients
+            omit it."
           type: string
           enum:
             - foreground
@@ -21942,6 +21943,7 @@ components:
                 - OPENAI
                 - ANTHROPIC
                 - LOCAL
+                - OPENAI_COMPATIBLE
                 - CHATGPT_OAUTH
             - type: "null"
           description: The user's selected provider, or null when none is set.
@@ -21984,6 +21986,21 @@ components:
             - type: string
             - type: "null"
           description: "`...` + last 4 chars of the stored OpenAI key, or null."
+        compatBaseUrl:
+          anyOf:
+            - type: string
+            - type: "null"
+          description: "v1.33.1 (#470) — base URL of the OpenAI-compatible gateway (LiteLLM / OpenRouter / vLLM). Its own column:
+            the OpenAI provider stays pinned to api.openai.com and never reads it."
+        compatModel:
+          anyOf:
+            - type: string
+            - type: "null"
+          description: Model the gateway should route. Null falls back to `model`; with neither set the gateway entry does not
+            resolve.
+        hasCompatKey:
+          type: boolean
+          description: Whether a bearer is stored for the gateway. The bearer is optional — a gateway without auth needs none.
         responseTimeoutSeconds:
           anyOf:
             - type: integer
@@ -22003,6 +22020,9 @@ components:
         - hasLocalKey
         - hasOpenaiKey
         - openaiKeyPreview
+        - compatBaseUrl
+        - compatModel
+        - hasCompatKey
         - responseTimeoutSeconds
       additionalProperties: false
       description: The calling user's AI-provider configuration plus the effective availability (`aiAvailable` + `managedBy`).
@@ -32612,6 +32632,27 @@ components:
               pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
             - type: "null"
           description: When HealthKit last synced for this user; null when never (and always null on the PATCH echo).
+        lastSyncTrigger:
+          description: What the client declared triggered the most recent accepted batch. Null when the client sent no trigger —
+            an older build, or a batch that predates the field. Present on the GET read; omitted from the PATCH echo.
+          anyOf:
+            - type: string
+              enum:
+                - foreground
+                - background
+                - push
+              description: What triggered a HealthKit batch.
+            - type: "null"
+        lastBackgroundSyncAt:
+          description: When a batch last arrived without the app being opened (a `background` or `push` trigger). Null when that
+            has never happened. `lastSyncedAt` alone cannot separate a phone that delivers on its own from one that only
+            delivers while the app is open; this field is what does. Present on the GET read; omitted from the PATCH
+            echo.
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
         syncHealth:
           description: Present on the GET read; omitted from the PATCH echo.
           $ref: "#/components/schemas/SyncHealth"

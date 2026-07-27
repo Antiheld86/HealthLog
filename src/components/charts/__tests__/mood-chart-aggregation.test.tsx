@@ -55,6 +55,10 @@ describe("pickMoodBucket()", () => {
   });
 });
 
+// Berlin was the module's hard-coded calendar, so these expectations were
+// always Berlin's. Naming it here keeps that visible now it is a parameter.
+const BERLIN = "Europe/Berlin";
+
 describe("aggregateMoodEntries()", () => {
   it("returns daily points unchanged for short windows", () => {
     const entries = [
@@ -62,7 +66,7 @@ describe("aggregateMoodEntries()", () => {
       { date: "2026-05-02", score: 4 },
       { date: "2026-05-03", score: 5 },
     ];
-    const out = aggregateMoodEntries(entries);
+    const out = aggregateMoodEntries(entries, BERLIN);
     expect(out.bucket).toBe("day");
     expect(out.points).toHaveLength(3);
     expect(out.points.map((p) => p.score)).toEqual([3, 4, 5]);
@@ -71,7 +75,7 @@ describe("aggregateMoodEntries()", () => {
   it("aggregates to weekly mean for windows in the 91-730d range", () => {
     // 100-day span — pickBucket → "week".
     const entries = dayEntries("2026-01-01", 100, 4);
-    const out = aggregateMoodEntries(entries);
+    const out = aggregateMoodEntries(entries, BERLIN);
     expect(out.bucket).toBe("week");
     // Constant input score = mean of every weekly bucket should be the
     // same constant (independent of partial-week edge effects).
@@ -85,7 +89,7 @@ describe("aggregateMoodEntries()", () => {
 
   it("aggregates to monthly mean for windows > 730 days", () => {
     const entries = dayEntries("2024-01-01", 800, 5);
-    const out = aggregateMoodEntries(entries);
+    const out = aggregateMoodEntries(entries, BERLIN);
     expect(out.bucket).toBe("month");
     // 800 days ≈ 27 months — well below the daily count.
     expect(out.points.length).toBeLessThan(50);
@@ -97,7 +101,10 @@ describe("aggregateMoodEntries()", () => {
   });
 
   it("emits empty points array for empty input", () => {
-    expect(aggregateMoodEntries([])).toEqual({ bucket: "day", points: [] });
+    expect(aggregateMoodEntries([], BERLIN)).toEqual({
+      bucket: "day",
+      points: [],
+    });
   });
 });
 

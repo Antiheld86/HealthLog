@@ -346,7 +346,13 @@ const profileUpdateResponse = z
 const aiProviderResponse = z
   .object({
     provider: z
-      .enum(["OPENAI", "ANTHROPIC", "LOCAL", "CHATGPT_OAUTH"])
+      .enum([
+        "OPENAI",
+        "ANTHROPIC",
+        "LOCAL",
+        "OPENAI_COMPATIBLE",
+        "CHATGPT_OAUTH",
+      ])
       .nullable()
       .describe("The user's selected provider, or null when none is set."),
     model: z.string().nullable(),
@@ -376,6 +382,23 @@ const aiProviderResponse = z
       .string()
       .nullable()
       .describe("`...` + last 4 chars of the stored OpenAI key, or null."),
+    compatBaseUrl: z
+      .string()
+      .nullable()
+      .describe(
+        "v1.33.1 (#470) — base URL of the OpenAI-compatible gateway (LiteLLM / OpenRouter / vLLM). Its own column: the OpenAI provider stays pinned to api.openai.com and never reads it.",
+      ),
+    compatModel: z
+      .string()
+      .nullable()
+      .describe(
+        "Model the gateway should route. Null falls back to `model`; with neither set the gateway entry does not resolve.",
+      ),
+    hasCompatKey: z
+      .boolean()
+      .describe(
+        "Whether a bearer is stored for the gateway. The bearer is optional — a gateway without auth needs none.",
+      ),
     responseTimeoutSeconds: z
       .number()
       .int()
@@ -396,7 +419,7 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Auth"],
       summary: "Read the calling user's AI-provider configuration",
       description:
-        "Returns the user's selected provider/model/baseUrl plus the effective availability: `aiAvailable` is true when any provider can serve the user (BYOK, self-hosted, or the operator's server-managed key), and `managedBy` reports which. iOS gates Coach visibility off these two fields. Key material is reported as presence + a 4-char masked preview only.",
+        "Returns the user's selected provider/model/baseUrl (plus the OpenAI-compatible gateway's own base URL and model) and the effective availability: `aiAvailable` is true when any provider can serve the user (BYOK, self-hosted, or the operator's server-managed key), and `managedBy` reports which. iOS gates Coach visibility off these two fields. Key material is reported as presence + a 4-char masked preview only.",
       responses: {
         "200": {
           description: "Resolved AI-provider configuration.",

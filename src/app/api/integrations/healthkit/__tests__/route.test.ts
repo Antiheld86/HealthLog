@@ -219,6 +219,8 @@ describe("GET /api/integrations/healthkit — sync health", () => {
 
   type Body = {
     lastSyncedAt: string | null;
+    lastSyncTrigger: string | null;
+    lastBackgroundSyncAt: string | null;
     syncHealth: { verdict: string; since: string | null };
     metricFreshness: Array<{
       type: string;
@@ -291,6 +293,38 @@ describe("GET /api/integrations/healthkit — sync health", () => {
     );
     expect(byType.RESPIRATORY_RATE).toBe(true);
     expect(byType.PULSE).toBe(false);
+  });
+
+  // #586 — the reporter's question is whether the phone delivers on its own or
+  // only while the app is open. `lastSyncedAt` reads identically either way, so
+  // it cannot answer it; these two fields are what can.
+  it("publishes the trigger of the last batch and the last background arrival", async () => {
+    const backgroundAt = ago(3 * 60 * 60 * 1000);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      healthKitConfigJson: null,
+      healthKitLastSyncedAt: ago(60 * 60 * 1000),
+      healthKitLastSyncTrigger: "background",
+      healthKitLastBackgroundSyncAt: backgroundAt,
+    } as never);
+
+    const body = await read();
+    expect(body.lastSyncTrigger).toBe("background");
+    expect(body.lastBackgroundSyncAt).toBe(backgroundAt.toISOString());
+  });
+
+  it("reports honest absence when the client has never declared a trigger", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      healthKitConfigJson: null,
+      healthKitLastSyncedAt: ago(60 * 60 * 1000),
+      healthKitLastSyncTrigger: null,
+      healthKitLastBackgroundSyncAt: null,
+    } as never);
+
+    const body = await read();
+    // An older client that reports nothing, and a pipe that has never
+    // delivered in the background, both read as null — never as a guess.
+    expect(body.lastSyncTrigger).toBeNull();
+    expect(body.lastBackgroundSyncAt).toBeNull();
   });
 
   it("degrades to no per-metric data rather than failing the config read", async () => {

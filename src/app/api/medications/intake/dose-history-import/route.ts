@@ -32,18 +32,15 @@ import { NextRequest } from "next/server";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiError, apiSuccess, getClientIp } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
-import { prisma, toJson } from "@/lib/db";
-import { getGlobalBoss } from "@/lib/jobs/boss-instance";
+import { prisma } from "@/lib/db";
 import {
-  MEDICATION_INTAKE_IMPORT_QUEUE,
-  MEDICATION_INTAKE_IMPORT_SEND_OPTIONS,
-  MEDICATION_INTAKE_IMPORT_STALE_AFTER_MS,
   groupMedicationImportSkips,
   totalMedicationImportSkips,
   type MedicationImportPayload,
   type MedicationImportProgress,
 } from "@/lib/jobs/medication-intake-import";
 import { annotate } from "@/lib/logging/context";
+import { admitIntakeImportJob } from "@/lib/medications/intake-import-admission";
 import {
   parseAutoExportCsv,
   parseAutoExportJson,
@@ -190,104 +187,28 @@ export const POST = apiHandler(async (request: NextRequest) => {
     rollupProcessed: 0,
   };
 
-  const admission = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`
-      SELECT "id"
-      FROM "users"
-      WHERE "id" = ${user.id}
-      FOR UPDATE
-    `;
-    const now = new Date();
-    const staleBefore = new Date(
-      now.getTime() - MEDICATION_INTAKE_IMPORT_STALE_AFTER_MS,
-    );
-    await tx.medicationIntakeImportJob.updateMany({
-      where: {
-        userId: user.id,
-        medicationId: null,
-        status: { in: ["queued", "running"] },
-        OR: [
-          { heartbeatAt: { lt: staleBefore } },
-          { heartbeatAt: null, startedAt: { lt: staleBefore } },
-          {
-            heartbeatAt: null,
-            startedAt: null,
-            createdAt: { lt: staleBefore },
-          },
-        ],
-      },
-      data: {
-        status: "failed",
-        failureReason: "Medication intake import abandoned",
-        heartbeatAt: now,
-        completedAt: now,
-      },
-    });
-    const activeJob = await tx.medicationIntakeImportJob.findFirst({
-      where: {
-        userId: user.id,
-        medicationId: null,
-        status: { in: ["queued", "running"] },
-      },
-      select: { id: true },
-    });
-    if (activeJob) return { active: true as const };
-
-    const importJob = await tx.medicationIntakeImportJob.create({
-      data: {
-        userId: user.id,
-        medicationId: null,
-        status: "queued",
-        payload: toJson(payload),
-        progress: toJson(progress),
-      },
-    });
-    return { active: false as const, importJob };
+  const admission = await admitIntakeImportJob({
+    userId: user.id,
+    medicationId: null,
+    payload,
+    progress,
+    ipAddress: getClientIp(request),
   });
-  if (admission.active) {
+  if (!admission.admitted) {
     return apiError("A dose-history import is already in progress", 409);
   }
-  const { importJob } = admission;
-
-  const statusUrl = `/api/medications/intake/dose-history-import/${importJob.id}/status`;
-  let bossJobId: string | null = null;
-  try {
-    const boss = getGlobalBoss();
-    if (!boss) throw new Error("worker unavailable");
-    bossJobId = await boss.send(
-      MEDICATION_INTAKE_IMPORT_QUEUE,
-      { jobId: importJob.id },
-      MEDICATION_INTAKE_IMPORT_SEND_OPTIONS,
-    );
-    if (!bossJobId) throw new Error("queue rejected job");
-    await prisma.medicationIntakeImportJob.update({
-      where: { id: importJob.id },
-      data: { pgBossJobId: bossJobId },
-    });
-  } catch {
-    const completedAt = new Date();
-    await prisma.medicationIntakeImportJob.update({
-      where: { id: importJob.id },
-      data: {
-        status: "failed",
-        failureReason: "Background worker enqueue failed",
-        heartbeatAt: completedAt,
-        completedAt,
-      },
-    });
-    await auditLog("medication.intake.import.kickoff.denied", {
-      userId: user.id,
-      ipAddress: getClientIp(request),
-      details: { jobId: importJob.id, reason: "enqueue_failed" },
-    });
+  if (!admission.enqueued) {
     return apiError("Background worker is not available", 503);
   }
+  const { jobId, bossJobId } = admission;
+
+  const statusUrl = `/api/medications/intake/dose-history-import/${jobId}/status`;
 
   await auditLog("medication.intake.history.import.kickoff", {
     userId: user.id,
     ipAddress: getClientIp(request),
     details: {
-      jobId: importJob.id,
+      jobId,
       bossJobId,
       rowsRead: file.rowsRead,
       queued: file.queued,
@@ -297,7 +218,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   annotate({
     action: { name: "medication.intake.history.import.kickoff" },
     meta: {
-      job_id: importJob.id,
+      job_id: jobId,
       rows_read: file.rowsRead,
       queued: file.queued,
       refused: file.refused,
@@ -307,7 +228,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   return apiSuccess(
     {
       dryRun: false,
-      jobId: importJob.id,
+      jobId,
       status: "queued" as const,
       statusUrl,
       file,

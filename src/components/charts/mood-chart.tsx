@@ -20,6 +20,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { useTranslations } from "@/lib/i18n/context";
 import { makeBucketLabelFormatters } from "@/lib/charts/bucket-label";
+import { readStoredTimezone } from "@/lib/timezone-mirror";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import type { DataSummary } from "@/lib/analytics/trends";
 import {
   bucketTimeSeries,
@@ -244,7 +246,16 @@ export function pickMoodBucket(entries: MoodEntryDay[]): ChartBucketType {
  * Pure & deterministic so the unit test can pin the exact aggregated
  * mean per bucket.
  */
-export function aggregateMoodEntries(entries: MoodEntryDay[]): {
+export function aggregateMoodEntries(
+  entries: MoodEntryDay[],
+  /**
+   * The calendar the week / month boundaries are drawn in. Required rather
+   * than defaulted for the same reason `bucketTimeSeries` requires it: a
+   * default would leave a forgotten caller quietly bucketing someone else's
+   * evening into the wrong month.
+   */
+  timeZone: string,
+): {
   bucket: ChartBucketType;
   points: Array<{ timestamp: number; score: number }>;
 } {
@@ -268,7 +279,7 @@ export function aggregateMoodEntries(entries: MoodEntryDay[]): {
       timestamp: dayKeyToTimestamp(entry.date),
       values: { score: entry.score },
     })),
-    { bucket },
+    { bucket, timeZone },
   );
 
   return {
@@ -309,6 +320,11 @@ export function MoodChart({
   // encoded day paints verbatim in every profile zone (a profile-tz
   // formatter shifted week/month bucket labels for zones west of Berlin).
   const tzFmt = useMemo(() => makeBucketLabelFormatters(locale), [locale]);
+  // The bucket BOUNDARIES follow the profile, even though the bucket LABELS
+  // stay UTC-pinned (see above): a week that starts on the wrong day puts a
+  // reading in the wrong bar, which is a different mistake from a label that
+  // reads a few hours off.
+  const profileTimeZone = readStoredTimezone() || DEFAULT_TIMEZONE;
   const initialRangePoints = windowOverride
     ? MINI_RANGE_POINTS[windowOverride]
     : 30;
@@ -453,7 +469,7 @@ export function MoodChart({
               timestamp: p.timestamp,
               values: { score: p.score },
             })),
-            { bucket: bucketType },
+            { bucket: bucketType, timeZone: profileTimeZone },
           ).points.map((point) => ({
             date: tzFmt.dateShortSmart(new Date(point.timestamp)),
             timestamp: point.timestamp,
@@ -507,7 +523,7 @@ export function MoodChart({
     }
 
     return enriched;
-  }, [data, rangePoints, showMA, showTrend, tzFmt]);
+  }, [data, rangePoints, showMA, showTrend, tzFmt, profileTimeZone]);
 
   /**
    * v1.4.16 B8 — comparison overlay merged into chartData.

@@ -24,6 +24,7 @@ vi.mock("@/lib/db", () => ({
     medication: { findMany: vi.fn() },
     medicationIntakeEvent: { findMany: vi.fn(), count: vi.fn() },
     moodEntry: { findMany: vi.fn(), count: vi.fn() },
+    moodTag: { findMany: vi.fn() },
     nutrientIntakeDay: { findMany: vi.fn().mockResolvedValue([]) },
     user: { findUnique: vi.fn() },
     passkey: { findMany: vi.fn() },

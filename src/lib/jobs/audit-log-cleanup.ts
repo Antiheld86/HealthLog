@@ -37,7 +37,7 @@ export function getAuditLogRetentionDays(): number {
  * on every removed row. Past the 60-second `statement_timeout` that aborts and
  * rolls back, and the next night repeats it against the same rows — a
  * retention window that can never close on an instance that has accumulated
- * enough of them. Migration 0277 adds the `created_at` index; the batching
+ * enough of them. Migration 0276 adds the `created_at` index; the batching
  * keeps any single statement bounded regardless.
  */
 export async function cleanupOldAuditLogs(

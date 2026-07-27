@@ -416,3 +416,22 @@ export function parseUploadResponse(
   }
   return classifyUploadFailure(status, envelope?.meta);
 }
+
+/** What a keypress on a focused document card does. */
+export type DocumentCardKeyAction = "select" | "delete" | null;
+
+/**
+ * Resolve the action for a keypress on a focused vault card.
+ *
+ * `Backspace` is deliberately absent. The timeline's roving tabindex hands a
+ * card focus the moment someone tabs into the grid, `Backspace` is the reflex
+ * "go back" key, and a card carries no other delete control — so the reflex
+ * press deleted a medical document with nothing but a transient undo toast
+ * between the person and the loss. `Delete` alone deletes, and the card shows
+ * that key while it holds focus.
+ */
+export function documentCardKeyAction(key: string): DocumentCardKeyAction {
+  if (key === " ") return "select";
+  if (key === "Delete") return "delete";
+  return null;
+}

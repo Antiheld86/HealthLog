@@ -468,6 +468,8 @@
     "moveDown": "Move down",
     "layoutTileColumn": "Tile",
     "layoutChartColumn": "Chart",
+    "layoutNativeOnlyTitle": "Shown in the mobile app",
+    "layoutNativeOnlyHint": "The mobile app draws these widgets; this page does not. They are stored in the same layout, so this is where their visibility is set.",
     "dragHandle": "Drag to reorder",
     "dragHandleHint": "Drag the handle to reorder this widget. You can also use the Up and Down arrow buttons, or focus the handle and press Space and the arrow keys.",
     "emptyTitle": "Your dashboard is empty",
@@ -4497,7 +4499,7 @@
           },
           "fullBackup": {
             "title": "Full backup",
-            "description": "Every record you own in one JSON file — measurements, medications, mood, cycle, labs, illness episodes, allergies, family history, and workouts. Same shape as the weekly auto-backup.",
+            "description": "Your measurements, medications, mood, cycle, labs, illness episodes, allergies, family history, nutrients and workouts in one JSON file. Same shape as the weekly auto-backup. Some record types are not carried yet — the file's manifest names what is in it.",
             "scopeNote": "Document metadata and the AI-generated summary, if one exists, are included as plain text; original document files and workout GPS/sample data are not — download those separately from the vault or the workout export.",
             "encryptToggle": "Encrypt with a passphrase",
             "passphrasePlaceholder": "Passphrase (min. 12 characters)",
@@ -4937,6 +4939,7 @@
           "openai": "OpenAI (your key)",
           "anthropic": "Anthropic (Claude)",
           "local": "Local model",
+          "openai-compatible": "OpenAI-compatible gateway",
           "admin-openai": "Admin OpenAI"
         },
         "title": "Fallback chain",
@@ -4963,7 +4966,13 @@
         "openai": "OpenAI (your API key)",
         "anthropic": "Anthropic (Claude)",
         "local": "Local model (OpenAI-compatible)",
+        "openai-compatible": "OpenAI-compatible gateway",
         "admin-openai": "Admin-provided OpenAI"
+      },
+      "compat": {
+        "description": "A first-class provider for any endpoint that speaks the OpenAI /v1/chat/completions API: LiteLLM, OpenRouter, vLLM or another gateway. The base URL ends with /v1, the API key is optional, and the model is whatever your gateway routes. Your OpenAI key never reaches this endpoint — this provider has its own.",
+        "keyLabel": "API key (optional)",
+        "modelHint": "The model name your gateway expects. Left blank, the model saved for your other providers is used; with neither set, this provider is skipped."
       },
       "openai": {
         "modelSelect": "Model",
@@ -5091,8 +5100,8 @@
       "responseTimeoutInvalid": "Enter a number between 10 and 600 seconds.",
       "autoRead": {
         "title": "Read documents automatically with AI",
-        "subLabel": "Newly uploaded documents are read and indexed by your configured AI provider without a per-document tap.",
-        "honesty": "When on, each document you upload is sent to your configured AI provider to be read, described, and indexed for search — with no per-document confirmation. This happens on the server and the document's contents leave this machine to that provider. If your configured provider is a subscription connection (a signed-in AI account rather than an API key), that provider's own data settings apply — subscription providers may use the content to improve their models, and no data-processing agreement covers it. Documents read by a self-hosted local model never leave your server. Off by default; turn it on only if you accept this trade for the documents you upload.",
+        "subLabel": "Documents are read and indexed by your configured AI provider without a per-document tap.",
+        "honesty": "When on, each document you upload is sent to your configured AI provider to be read, described, and indexed for search — with no per-document confirmation. Turning it on also reaches backwards: documents you have already uploaded that carry no summary yet are sent too, up to 200 each time you switch it on. This happens on the server and the document's contents leave this machine to that provider. If your configured provider is a subscription connection (a signed-in AI account rather than an API key), that provider's own data settings apply — subscription providers may use the content to improve their models, and no data-processing agreement covers it. Documents read by a self-hosted local model never leave your server. Off by default; turn it on only if you accept this trade for your documents.",
         "confirm": "I understand — turn on automatic AI reading",
         "cancel": "Cancel"
       },
@@ -5290,7 +5299,6 @@
       "minutesAgo": "{count} min ago",
       "hoursAgo": "{count} h ago",
       "daysAgo": "{count} d ago",
-      "ariaLabel": "Integration status",
       "resumeCta": "Reconnect",
       "resumeSuccess": "Integration resumed",
       "resumeError": "Reconnect failed",
@@ -5834,7 +5842,20 @@
       "backgroundStep": "Keep Background App Refresh enabled. The app syncs new data automatically in the foreground and when iOS grants background time.",
       "importNote": "Need older history or cannot use the iOS app? The Apple Health XML/ZIP upload is a one-shot fallback and does not enable live sync.",
       "importAction": "Open one-shot import",
-      "staleNote": "No Apple Health data has arrived for over a week. Open the HealthLog app on your iPhone and check the Apple Health permissions."
+      "staleNote": "No Apple Health data has arrived for over a week. Open the HealthLog app on your iPhone and check the Apple Health permissions.",
+      "delivery": {
+        "title": "Delivery",
+        "lastTriggerLabel": "Latest sync arrived",
+        "lastBackgroundLabel": "Last background sync",
+        "backgroundNever": "Never — every sync so far arrived with the app open",
+        "noSyncYet": "No sync has arrived yet, so there is nothing to report here.",
+        "trigger": {
+          "foreground": "with the app open",
+          "background": "in the background",
+          "push": "from a push wake",
+          "unknown": "trigger not reported by the app"
+        }
+      }
     },
     "garminInfo": {
       "title": "Garmin",
@@ -5949,7 +5970,7 @@
     "integrationWebPush": "Web Push",
     "offlineGeoLabel": "Geo data",
     "offlineGeoEnabled": "Offline (GeoLite2)",
-    "offlineGeoFallback": "Online ({host}) — set MAXMIND_LICENSE_KEY in CI",
+    "offlineGeoFallback": "Online ({host}) — mount GeoLite2 databases and set GEOLITE2_DIR",
     "apiGlobal": "Allow API endpoints and API tokens.",
     "umamiTitle": "Umami",
     "umamiDescription": "Web analytics with Umami",
@@ -6750,7 +6771,7 @@
       "reminderCheckOverdueTitle": "Dose overdue: {medication}",
       "reminderCheckOverdueBody": "{medication} ({dose}) in the {window} window is {minutes} minutes overdue.",
       "offlineGeoUnavailableTitle": "Offline geolocation databases not loaded",
-      "offlineGeoUnavailableBody": "HealthLog is resolving login locations through the online ipwho.is fallback. To enable the offline GeoLite2-City + GeoLite2-ASN databases, set MAXMIND_LICENSE_KEY in GitHub Actions secrets at {secretsUrl} and redeploy. Until then the carrier column on the login overview stays empty.",
+      "offlineGeoUnavailableBody": "HealthLog is resolving login locations through the online lookup at {host}, so every login IP address leaves this server. To resolve them locally instead, download the GeoLite2-City and GeoLite2-ASN databases with a free MaxMind account, mount the directory into the container, and point GEOLITE2_DIR at it. Steps: {docsUrl}",
       "tlsPinChangedTitle": "TLS leaf certificate changed: {host}",
       "tlsPinChangedBody": "The TLS leaf served by {host} now has SPKI pin {servedPin}, which is not in the known pin set. Pinned clients (the native app) will fail to connect once the old pin is gone. Re-extract the new leaf pin, add it to TLS_LEAF_SPKI_PINS and the native client's pin set, and ship a build before this certificate expires on {validTo}. See docs/ops/tls-cert-pin.md."
     },
@@ -8602,7 +8623,8 @@
       "uploading": "Uploading…",
       "dismissFailed": "Dismiss failed upload",
       "processing": "Processing…",
-      "ready": "Ready"
+      "ready": "Ready",
+      "deleteKey": "Del"
     },
     "error": {
       "fileTooLarge": "This file is larger than the {maxSize} limit.",

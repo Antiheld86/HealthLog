@@ -36,6 +36,8 @@
  * its source string.
  */
 
+import type { BinaryReferenceSex } from "@/lib/profile/sex";
+
 export const NUTRIENT_CODES = [
   // 13 vitamins
   "vitamin_a",
@@ -331,7 +333,7 @@ export interface ResolvedNutrientReference {
  */
 export function resolveNutrientReference(
   code: NutrientCode,
-  sex: "MALE" | "FEMALE" | null,
+  sex: BinaryReferenceSex | null,
 ): ResolvedNutrientReference | null {
   const ref = NUTRIENT_CATALOG[code].reference;
   const value =

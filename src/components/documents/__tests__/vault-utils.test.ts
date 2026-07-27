@@ -6,6 +6,7 @@ import {
   buildVaultListApiSearch,
   classifyUploadFailure,
   countActiveFilters,
+  documentCardKeyAction,
   documentDateKey,
   expandRangeSelection,
   formatBytes,
@@ -409,5 +410,24 @@ describe("isRecentlyUploaded / isDocumentProcessing / hasProcessingDocument", ()
 
   it("hasProcessingDocument is false for an empty list", () => {
     expect(hasProcessingDocument([], NOW)).toBe(false);
+  });
+});
+
+describe("documentCardKeyAction", () => {
+  it("deletes on Delete and selects on Space", () => {
+    expect(documentCardKeyAction("Delete")).toBe("delete");
+    expect(documentCardKeyAction(" ")).toBe("select");
+  });
+
+  it("does NOT delete on Backspace", () => {
+    // The reflex "go back" key on a card that takes focus by default, with
+    // no other delete control and only a transient undo toast behind it.
+    expect(documentCardKeyAction("Backspace")).toBeNull();
+  });
+
+  it("ignores every other key", () => {
+    for (const key of ["Enter", "Escape", "a", "ArrowDown", "Del"]) {
+      expect(documentCardKeyAction(key)).toBeNull();
+    }
   });
 });

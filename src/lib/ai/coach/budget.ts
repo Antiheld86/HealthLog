@@ -55,7 +55,8 @@ export const USER_PLAN_CAP = 2_000_000;
  * primary provider is `admin-openai` (the operator's shared API key) OR
  * `admin-codex` (the operator's shared ChatGPT-subscription account) — both
  * drain the operator's resources, so the operator-cost cap applies. Every other
- * primary (`codex` / `openai` / `anthropic` / `local`) is the user's own
+ * primary (`codex` / `openai` / `anthropic` / `local` / `openai-compatible`)
+ * is the user's own
  * egress, so the generous user-plan cap applies. An empty chain (no provider
  * resolved) defaults to the operator cap — the conservative side.
  */

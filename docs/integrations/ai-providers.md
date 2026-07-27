@@ -9,14 +9,15 @@ Ollama endpoint can fall back from one to the other automatically.
 
 ## Provider matrix
 
-| Provider        | Key acquisition                               | Default model       | Endpoint                                  | Privacy stance                        |
-| --------------- | --------------------------------------------- | ------------------- | ----------------------------------------- | ------------------------------------- |
-| `OPENAI`        | <https://platform.openai.com/api-keys>        | `gpt-4o`            | `https://api.openai.com/v1`               | Measurement context sent to OpenAI    |
-| `ANTHROPIC`     | <https://console.anthropic.com/settings/keys> | `claude-sonnet-4-6` | Anthropic SDK default                     | Measurement context sent to Anthropic |
-| `LOCAL`         | None (your endpoint)                          | `local-model`       | OpenAI-compatible URL you control         | Stays on your network                 |
-| `CHATGPT_OAUTH` | Sign in with your ChatGPT account             | Codex-routed        | `chatgpt.com/backend-api/codex/responses` | Routed via your ChatGPT subscription  |
+| Provider            | Key acquisition                               | Default model       | Endpoint                                  | Privacy stance                          |
+| ------------------- | --------------------------------------------- | ------------------- | ----------------------------------------- | --------------------------------------- |
+| `OPENAI`            | <https://platform.openai.com/api-keys>        | `gpt-4o`            | `https://api.openai.com/v1`               | Measurement context sent to OpenAI      |
+| `ANTHROPIC`         | <https://console.anthropic.com/settings/keys> | `claude-sonnet-4-6` | Anthropic SDK default                     | Measurement context sent to Anthropic   |
+| `LOCAL`             | None (your endpoint)                          | `local-model`       | OpenAI-compatible URL you control         | Stays on your network                   |
+| `OPENAI_COMPATIBLE` | Your gateway's key, or none                   | none (you name it)  | OpenAI-compatible URL you configure       | Reaches whatever your gateway routes to |
+| `CHATGPT_OAUTH`     | Sign in with your ChatGPT account             | Codex-routed        | `chatgpt.com/backend-api/codex/responses` | Routed via your ChatGPT subscription    |
 
-The four spellings above are the canonical `User.aiProvider` enum
+The five spellings above are the canonical `User.aiProvider` enum
 values. Anything else falls through to the admin-shared OpenAI key
 (if configured) or the `NoProvider` stub that surfaces "No AI
 provider configured" to the UI.
@@ -53,6 +54,11 @@ order. The default is encoded in
 3. `anthropic` — user's own Anthropic API key.
 4. `local` — self-hosted Ollama / LM Studio / vLLM endpoint.
 5. `admin-openai` — operator's shared key (last-ditch).
+
+`openai-compatible` is a sixth chain entry you can add in the editor.
+It is deliberately not in the default chain: it resolves only against a
+base URL you saved, so a default entry would be dead weight for
+everyone who never configures a gateway.
 
 Entries the user has no credential for are silently skipped. The
 runner walks the surviving entries in order; the first to return a
@@ -150,34 +156,59 @@ internal endpoint.
 16-24 GB GPU / M-series Pro/Max (sweet spot for BYOK-style usage),
 70B+ for 48 GB+ / multi-GPU (comparable to mid-tier hosted models).
 
-### OpenAI-compatible gateways (LiteLLM, OpenRouter, …)
+## OpenAI-compatible gateways (LiteLLM, OpenRouter, vLLM, …)
 
-The **Local** provider is also the gateway path: any service that
-speaks the OpenAI `/v1/chat/completions` wire plugs in the same way,
-whether it runs on your host or not. The OPENAI provider deliberately
-pins `api.openai.com` (an OpenAI key is never forwarded to a custom
-host), so a gateway always goes through **Local**:
+Since v1.33.1 a gateway has its own provider: **OpenAI-compatible
+gateway**. Any service that speaks the OpenAI `/v1/chat/completions`
+wire plugs in there, whether it runs on your network or not.
 
-1. In `/settings/ai`, set provider to **Local (OpenAI-compatible)**.
+1. In `/settings/ai`, set provider to **OpenAI-compatible gateway**.
 2. Base URL is the gateway's OpenAI-compatible root and **ends with
-   `/v1`** — e.g. `https://litellm.example.com/v1` or
-   `https://openrouter.ai/api/v1`.
+   `/v1`** — e.g. `https://litellm.example.com/v1`,
+   `https://openrouter.ai/api/v1`, or `http://vllm.lan:8000/v1`.
 3. API key is **optional** — set it when the gateway requires a
    Bearer token (OpenRouter key, LiteLLM master key), leave it blank
-   otherwise. It is encrypted at rest like every other credential.
+   otherwise. It is encrypted at rest like every other credential,
+   in its own column.
 4. Model is whatever the gateway routes — e.g.
    `anthropic/claude-sonnet-4-6` on OpenRouter or a LiteLLM alias.
+   Leave it blank and the model saved for your other providers is
+   used; with neither set the provider is skipped.
+
+Then add **OpenAI-compatible gateway** to the fallback chain (it is
+not in the default one) and put it where you want it tried.
+
+**Why it is a separate provider and not a base-URL field on OPENAI.**
+The OPENAI provider pins `api.openai.com`, and the gateway provider
+reads three columns of its own: its base URL, its own key, its own
+model. Neither can see the other's. A key you issued to OpenAI can
+therefore never be sent to a host you typed into a different form,
+and that property is structural rather than a comment — the OPENAI
+arm has no code path that reads the gateway's base URL.
+
+**SSRF guard.** The gateway's base URL passes the same floor as the
+Local provider's: a public host always, a private one only when the
+operator allowlisted it via `ALLOW_LOCAL_AI_PRIVATE_HOSTS` (documented
+under Local endpoints above). LAN gateways are the normal case for LiteLLM and vLLM, so
+the escape hatch matters here as much as it does for Ollama.
 
 JSON surfaces send the standard
 `response_format: { type: "json_object" }`; an endpoint that rejects
 the field is detected on the first refusal and retried without it,
 so strict gateways and older local servers both work unmodified.
 
+**The Local provider still works for this** and nothing about it
+changed — it speaks the same wire and honours the same base URL. Pick
+the gateway provider when the endpoint is a gateway (it says so in
+the UI, it keeps a separate key, and it can sit in the chain
+alongside Local), and pick Local for a model running on your own
+machine.
+
 The **admin** server-key path has a separate guard: an admin-set
 custom base URL must additionally be allowed via
-`ADMIN_AI_BASE_URL_ALLOWLIST` in the container environment. The
-user-level Local provider does not read that variable — it is
-governed by the SSRF guard above.
+`ADMIN_AI_BASE_URL_ALLOWLIST` in the container environment. Neither
+the user-level Local provider nor the gateway provider reads that
+variable — both are governed by the SSRF guard above.
 
 ## ChatGPT OAuth (Codex)
 
@@ -256,6 +287,13 @@ provider instead; their own entries always resolve first.
 - **LOCAL** keeps everything on your network. Snapshots reach only
   the endpoint you configured. With Ollama on the same host as
   HealthLog, nothing leaves the host at all.
+- **OPENAI_COMPATIBLE** reaches exactly the endpoint you configured,
+  and then wherever that endpoint routes. A gateway on your own
+  network keeps the data there; a hosted gateway forwards it to
+  whichever provider it fronts, under that provider's retention
+  policy. HealthLog cannot see past the gateway, so the honest
+  statement is the one above: this provider's privacy stance is your
+  gateway's.
 - **CHATGPT_OAUTH** routes via OpenAI's Codex endpoint. Same caveat
   as OpenAI; the difference is the billing axis (ChatGPT
   subscription instead of API tokens).

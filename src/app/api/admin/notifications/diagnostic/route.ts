@@ -4,6 +4,7 @@ import { annotate } from "@/lib/logging/context";
 import { apiSuccess } from "@/lib/api-response";
 import { decrypt } from "@/lib/crypto";
 import type { ChannelType } from "@/lib/notifications/types";
+import { REMINDER_DEDUP_CHANNEL } from "@/lib/notifications/reminder-dedup";
 
 export const dynamic = "force-dynamic";
 
@@ -174,7 +175,10 @@ export const GET = apiHandler(async () => {
     // turns the orderBy + take into a single index scan, so the cost is
     // bounded regardless of the user's lifetime push volume.
     prisma.pushAttempt.findMany({
-      where: { userId: user.id },
+      // The reminder tick's per-slot dedup anchors live in this table under
+      // a sentinel channel. They are bookkeeping, not delivery attempts,
+      // and would push the real sends out of the trailing window.
+      where: { userId: user.id, channel: { not: REMINDER_DEDUP_CHANNEL } },
       orderBy: { createdAt: "desc" },
       take: 20,
       select: {

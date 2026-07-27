@@ -24,6 +24,11 @@ import {
   recordChannelTransientFailure,
 } from "@/lib/notifications/channel-state";
 import { getEvent } from "@/lib/logging/context";
+import {
+  CLIENT_MANAGED_APNS_EVENTS,
+  hasClientManagedApnsGate,
+} from "@/lib/notifications/client-managed-apns";
+import { recordPushAttempt } from "@/lib/notifications/senders/push-attempt-record";
 
 /**
  * Dispatch a notification to all enabled channels for a user.
@@ -33,7 +38,9 @@ import { getEvent } from "@/lib/logging/context";
  *  1. Skip if `enabled=false` (manually or auto-disabled).
  *  2. Skip if currently in retry-cooldown (`nextRetryAt > now`).
  *  3. Check the per-channel preference for this eventType (default: enabled).
- *  4. Call the appropriate sender — which now returns a `SendOutcome` so
+ *  4. Skip the APNs channel — and only that one — when the user's iOS
+ *     client owns the local reminder for this event type.
+ *  5. Call the appropriate sender — which now returns a `SendOutcome` so
  *     the dispatcher can classify hard rejects (410, blocked-by-user) vs
  *     soft errors (5xx, 429, network) and update channel state accordingly.
  *
@@ -156,6 +163,26 @@ export async function dispatchNotification(
       });
       defaultEnabled = user?.moodReminderEnabled === true;
     }
+    // Client-managed APNs suppression, resolved at most once per dispatch
+    // and only when an APNs channel is actually in the cascade. `null`
+    // means "not applicable"; the read is lazy so the common event types
+    // pay nothing for it.
+    let clientManagedApns: boolean | null = null;
+    const resolveClientManagedApns = async (): Promise<boolean> => {
+      if (clientManagedApns !== null) return clientManagedApns;
+      const gate = CLIENT_MANAGED_APNS_EVENTS[payload.eventType];
+      if (!gate) {
+        clientManagedApns = false;
+        return false;
+      }
+      const row = await prisma.user.findUnique({
+        where: { id: payload.userId },
+        select: { notificationPrefs: true },
+      });
+      clientManagedApns = gate.isClientManaged(row?.notificationPrefs);
+      return clientManagedApns;
+    };
+
     for (const channel of channels) {
       const pref = channel.preferences[0];
       if (pref) {
@@ -173,6 +200,33 @@ export async function dispatchNotification(
           `notification_skip_${channel.type.toLowerCase()}_cooldown`,
           channel.nextRetryAt?.toISOString() ?? "unknown",
         );
+        continue;
+      }
+
+      // The iOS client owns the local banner for this event type — skip
+      // the server's APNs send and nothing else. Not counted as an
+      // attempt: no send was made, so `dispatched` keeps telling the truth
+      // about whether anything actually reached the user.
+      if (
+        channel.type === "APNS" &&
+        hasClientManagedApnsGate(payload.eventType) &&
+        (await resolveClientManagedApns())
+      ) {
+        const gate = CLIENT_MANAGED_APNS_EVENTS[payload.eventType];
+        getEvent()?.addMeta(gate.metaKey, gate.tag(payload.metadata));
+        if (gate.detail && gate.detailKey) {
+          getEvent()?.addMeta(
+            gate.detailKey,
+            gate.detail(payload.userId, payload.metadata),
+          );
+        }
+        recordPushAttempt({
+          userId: payload.userId,
+          channel: "APNS",
+          eventType: payload.eventType,
+          result: "skipped",
+          reason: "client_managed",
+        });
         continue;
       }
 

@@ -15,8 +15,10 @@
 # Leave it unset (or true) only when a TLS reverse proxy serves HTTPS.
 #
 # Persistent state lives in exactly one named volume (`pgdata`, Postgres'
-# data dir). The app container is stateless — GeoLite2 MMDBs are baked into
-# the image — so a backup of the database is a backup of everything.
+# data dir). The app container is stateless, so a backup of the database is
+# a backup of everything. The optional GeoLite2 databases are either baked
+# into the image at build time or mounted read-only from the host and
+# pointed at with GEOLITE2_DIR — either way they are replaceable, not state.
 services:
   # Single-container default (HEALTHLOG_PROCESS_TYPE=all). Existing
   # self-host deployments stay working with `docker compose up`.
@@ -96,6 +98,15 @@ services:
       IP_GEO_LOOKUP_URL: "${IP_GEO_LOOKUP_URL:-}"
       IP_GEO_LOOKUP_DISABLED: "${IP_GEO_LOOKUP_DISABLED:-}"
       IP_GEO_ALLOW_INSECURE: "${IP_GEO_ALLOW_INSECURE:-}"
+      # Directory the offline GeoLite2 databases are read from. Default
+      # `/opt/geolite2` — the path the published image bakes its own copy
+      # into, if the build had a MaxMind licence key. Point this at a
+      # directory you mount yourself (see the `volumes:` block below) to
+      # bring your own GeoLite2-City.mmdb + GeoLite2-ASN.mmdb, refreshed
+      # with `geoipupdate` on your own schedule. Listed here so an operator
+      # value in .env reaches the container (the `environment:` block is a
+      # whitelist). See docs/self-hosting/geolite2.md.
+      GEOLITE2_DIR: "${GEOLITE2_DIR:-/opt/geolite2}"
       # all = bundle web + worker in this container (default, single-host)
       # web = serve HTTP only; pair with a separate app-worker service
       HEALTHLOG_PROCESS_TYPE: "${HEALTHLOG_PROCESS_TYPE:-all}"
@@ -219,6 +230,16 @@ services:
       # Set "true" only if your own iOS build carries Apple's Critical Alerts
       # entitlement; otherwise urgent alerts use the time-sensitive level.
       APNS_CRITICAL_ENTITLEMENT: "${APNS_CRITICAL_ENTITLEMENT:-}"
+    # Bring your own GeoLite2 databases. The published image only carries
+    # MMDBs if the build had a MaxMind licence key, so on `:latest` the
+    # offline tier is usually absent and every login IP goes to the online
+    # provider instead. Create a free MaxMind account, pull
+    # GeoLite2-City.mmdb + GeoLite2-ASN.mmdb with `geoipupdate`, mount the
+    # directory read-only, and set GEOLITE2_DIR to the container path.
+    # Steps: docs/self-hosting/geolite2.md.
+    #
+    # volumes:
+    #   - ./geolite2:/var/lib/geolite2:ro
     depends_on:
       db:
         condition: service_healthy

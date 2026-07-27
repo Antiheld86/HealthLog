@@ -29,6 +29,7 @@ import type { InboundDocumentDto } from "@/lib/validations/inbound-documents";
 import { DOCUMENT_KIND_ICONS } from "./document-kind-meta";
 import type { UploadQueueItem } from "./use-document-upload";
 import {
+  documentCardKeyAction,
   documentDateKey,
   formatBytes,
   isDocumentProcessing,
@@ -241,7 +242,15 @@ export function DocumentCard({
           (the checkbox stays reachable via its own z-10). Keyboard contract
           (roving tabindex owned by the timeline): Enter opens (native
           click), Space toggles selection, Delete removes with undo. Touch:
-          press-and-hold selects instead of opening. */}
+          press-and-hold selects instead of opening.
+
+          Backspace is deliberately NOT a delete key here. It is the reflex
+          "go back" key, the roving tabindex hands a card focus the moment
+          someone tabs into the grid, and a card carries no other delete
+          control — so the reflex press destroyed a medical document with
+          nothing but a transient undo toast to catch it. Delete alone,
+          announced through `aria-keyshortcuts` and shown as a `<kbd>` chip
+          while the card holds focus. */}
       <button
         type="button"
         data-slot="document-open"
@@ -254,10 +263,11 @@ export function DocumentCard({
           onOpen(document.id);
         }}
         onKeyDown={(e) => {
-          if (e.key === " ") {
+          const action = documentCardKeyAction(e.key);
+          if (action === "select") {
             e.preventDefault();
             onToggleSelected(document.id, e.shiftKey);
-          } else if (e.key === "Delete" || e.key === "Backspace") {
+          } else if (action === "delete") {
             e.preventDefault();
             onDelete?.(document.id);
           }
@@ -279,8 +289,29 @@ export function DocumentCard({
           onPrefetch?.(document.id);
         }}
         aria-label={t("documents.card.openLabel", { title })}
+        aria-keyshortcuts={onDelete ? "Delete" : undefined}
         className="focus-visible:ring-ring/50 absolute inset-0 rounded-xl focus-visible:ring-[3px] focus-visible:outline-none"
       />
+      {/* The only visible affordance for deleting a single card. Shown while
+          the card holds focus (same `group-focus-within` trigger the checkbox
+          uses) and hidden from the accessibility tree, because
+          `aria-keyshortcuts` on the overlay button already announces the same
+          key. `pointer-events-none` keeps it out of the click target.
+
+          Full `text-foreground`, not `text-muted-foreground`: the muted token
+          on this card's background measures 4.06:1, under the 4.5:1 floor, and
+          axe fails the vault on it. A key hint is the one piece of meta text
+          that has to be readable at a glance, so the usual muted-for-meta rule
+          gives way here rather than the contrast one. */}
+      {onDelete ? (
+        <kbd
+          aria-hidden
+          data-slot="document-delete-hint"
+          className="border-border bg-background text-foreground pointer-events-none absolute right-2 bottom-2 hidden rounded border px-1.5 font-mono text-xs opacity-0 transition-opacity group-focus-within:opacity-100 sm:inline-block"
+        >
+          {t("documents.card.deleteKey")}
+        </kbd>
+      ) : null}
     </Card>
   );
 }

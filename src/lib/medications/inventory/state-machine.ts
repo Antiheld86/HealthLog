@@ -79,6 +79,10 @@ import type {
   MedicationContainerType,
   MedicationInventoryState,
 } from "@/generated/prisma/client";
+import {
+  IN_USE_CLOCK_CONTAINER_TYPES as CLOCK_CONTAINER_TYPES,
+  startsInUseClock,
+} from "./clock-container-types";
 
 /** Default in-use window per EMA EPAR §6.3 for the strictest GLP-1
  *  agonists (Mounjaro, Saxenda). 30 days. */
@@ -90,17 +94,18 @@ export const DEFAULT_IN_USE_WINDOW_DAYS = 30;
  * Every other kind holds individually sealed units (or an unknown
  * arrangement) and expires only on its printed date. See the module
  * docblock for the per-member reasoning.
+ *
+ * The list itself lives in `./clock-container-types`, which the settings
+ * client can import; `satisfies` here is the drift guard, so a container
+ * kind renamed or dropped from the column stops compiling instead of
+ * quietly never matching.
  */
-export const IN_USE_CLOCK_CONTAINER_TYPES = [
-  "PEN",
-  "AMPOULE",
-] as const satisfies readonly MedicationContainerType[];
+export const IN_USE_CLOCK_CONTAINER_TYPES =
+  CLOCK_CONTAINER_TYPES satisfies readonly MedicationContainerType[];
 
 /** Does opening this container start the in-use window? */
 export function hasInUseClock(containerType: MedicationContainerType): boolean {
-  return (IN_USE_CLOCK_CONTAINER_TYPES as readonly string[]).includes(
-    containerType,
-  );
+  return startsInUseClock(containerType);
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;

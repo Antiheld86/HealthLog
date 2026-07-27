@@ -77,7 +77,7 @@ function render(node: React.ReactNode, locale: "en" | "de" = "de"): string {
 }
 
 const src = readFileSync(
-  resolve(__dirname, "../sections/inventory-section.tsx"),
+  resolve(__dirname, "../sections/inventory-dialogs.tsx"),
   "utf8",
 );
 

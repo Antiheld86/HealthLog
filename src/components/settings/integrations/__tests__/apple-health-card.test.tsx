@@ -12,6 +12,8 @@ import pl from "../../../../../messages/pl.json";
 
 type Payload = {
   lastSyncedAt: string | null;
+  lastSyncTrigger?: "foreground" | "background" | "push" | null;
+  lastBackgroundSyncAt?: string | null;
   syncHealth?: { verdict: string; since: string | null };
   metricFreshness?: Array<{
     type: string;
@@ -226,4 +228,70 @@ describe("<AppleHealthCard>", () => {
       expect(html).not.toContain("settings.appleHealth.");
     },
   );
+});
+
+describe("<AppleHealthCard> — delivery diagnostic (#586)", () => {
+  beforeEach(() => {
+    statusPayload = undefined;
+    statusLoading = false;
+    statusError = false;
+  });
+
+  it("names how the last sync arrived and when data last came in on its own", () => {
+    statusPayload = {
+      lastSyncedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      lastSyncTrigger: "background",
+      lastBackgroundSyncAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      syncHealth: { verdict: "fresh", since: null },
+    };
+
+    const html = render();
+
+    expect(html).toContain('data-testid="apple-health-delivery"');
+    expect(html).toContain("in the background");
+    expect(html).toContain("Last background sync");
+  });
+
+  it("says plainly that background delivery has never happened", () => {
+    statusPayload = {
+      lastSyncedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      lastSyncTrigger: "foreground",
+      lastBackgroundSyncAt: null,
+      syncHealth: { verdict: "fresh", since: null },
+    };
+
+    const html = render();
+
+    // The reporter's question, answered rather than left to inference: every
+    // sync so far arrived while the app was open.
+    expect(html).toContain("with the app open");
+    expect(html).toContain("every sync so far arrived with the app open");
+  });
+
+  it("reports a missing trigger as unreported instead of guessing one", () => {
+    statusPayload = {
+      lastSyncedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      lastSyncTrigger: null,
+      lastBackgroundSyncAt: null,
+      syncHealth: { verdict: "fresh", since: null },
+    };
+
+    const html = render();
+
+    expect(html).toContain(
+      '<dd data-testid="apple-health-last-trigger">trigger not reported by the app</dd>',
+    );
+  });
+
+  it("says there is nothing to report when no sync has ever arrived", () => {
+    statusPayload = {
+      lastSyncedAt: null,
+      syncHealth: { verdict: "pending_first_sync", since: null },
+    };
+
+    const html = render();
+
+    expect(html).toContain("No sync has arrived yet");
+    expect(html).not.toContain("Last background sync");
+  });
 });

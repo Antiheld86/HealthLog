@@ -23,9 +23,9 @@
  *      query in the cron, NOT a hook on the hot iOS batch-ingest path.
  *      Free-text reminders (no `measurementType`) never auto-resolve;
  *      they advance only on a manual satisfy.
- *   3. Per-reminder `clientManaged` suppression of the server-side APNs
- *      (the medication `clientManaged` precedent) is applied for the
- *      whole user via `notificationPrefs.measurementReminder.clientManaged`.
+ *   3. `notificationPrefs.measurementReminder.clientManaged` suppresses the
+ *      server-side APNs send only, and it does so in the dispatcher — the
+ *      tick dispatches for every user and lets the cascade decide.
  */
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { MeasurementType } from "@/generated/prisma/client";
@@ -35,7 +35,6 @@ import { defaultLocale, locales } from "@/lib/i18n/config";
 import { wallClockInTz } from "@/lib/tz/wall-clock";
 import { dispatchNotification } from "@/lib/notifications/dispatcher";
 import { getEvent } from "@/lib/logging/context";
-import { isMeasurementReminderClientManaged } from "@/lib/validations/notification-prefs";
 import { isModuleEnabled } from "@/lib/modules/gate";
 import type { ModuleKey } from "@/lib/modules/registry";
 import {
@@ -91,7 +90,6 @@ export interface MeasurementReminderSummary {
   skippedNotDue: number;
   skippedOutsideWindow: number;
   skippedModuleDisabled: number;
-  skippedClientManaged: number;
   skippedNoChannel: number;
   /** v1.18.1 — expired COACH course-window reminders soft-deleted this tick. */
   expiredCleaned: number;
@@ -204,7 +202,6 @@ export async function runMeasurementReminderTick(
     skippedNotDue: 0,
     skippedOutsideWindow: 0,
     skippedModuleDisabled: 0,
-    skippedClientManaged: 0,
     skippedNoChannel: 0,
     expiredCleaned: 0,
     failed: 0,
@@ -237,7 +234,6 @@ export async function runMeasurementReminderTick(
           id: true,
           timezone: true,
           locale: true,
-          notificationPrefs: true,
         },
       },
     },
@@ -313,25 +309,21 @@ export async function runMeasurementReminderTick(
         summary.skippedModuleDisabled += 1;
         // Advance past this cycle so a disabled-module reminder does not pin
         // the server tick re-evaluating the same overdue slot every 15
-        // minutes for the rest of the day (the client-managed precedent).
+        // minutes for the rest of the day. The user turned the module off,
+        // so there is nothing this reminder could still deliver.
         await advanceNextDue(prisma, reminder, timezone, now);
         continue;
       }
 
-      // Per-user client-managed suppression (the medication precedent).
-      if (isMeasurementReminderClientManaged(reminder.user.notificationPrefs)) {
-        getEvent()?.addMeta(
-          "measurement_reminder.suppressed_client_managed",
-          reminder.id,
-        );
-        summary.skippedClientManaged += 1;
-        // Advance past this cycle anyway so a client-managed reminder does
-        // not pin the server tick re-evaluating the same overdue slot
-        // every 15 minutes for the rest of the day.
-        await advanceNextDue(prisma, reminder, timezone, now);
-        continue;
-      }
-
+      // `measurementReminder.clientManaged` is NOT consulted here. It
+      // suppresses the server's APNs send only — the dispatcher's APNs
+      // branch owns that decision and emits the
+      // `measurement_reminder.suppressed_client_managed` annotation per
+      // skip. The tick used to suppress every channel AND advance
+      // `nextDueAt`, so a preventive-care reminder that never reached the
+      // user was filed as handled and vanished from the card and the digest.
+      // Now, when nothing delivers, the no-channel branch below leaves the
+      // reminder overdue and visible.
       const { title, body } = buildMeasurementReminderPayload(
         reminder.user.locale,
         reminder.label,

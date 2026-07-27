@@ -90,6 +90,29 @@ describe("getEffectiveRange", () => {
   });
 });
 
+// The resolver narrows the stored three-value sex to the two a sex-split
+// reference table has rows for, and OTHER / "no answer" must land on the
+// neutral band rather than on either side. Nothing pinned that before, so a
+// resolver that quietly stopped reading the profile's sex — or read it and
+// picked a default side — went unnoticed.
+describe("sex-split defaults", () => {
+  const withGender = (gender: string | null) =>
+    getEffectiveRange("BODY_FAT", { ...baseProfile, gender }, null).range!;
+
+  it("gives each recorded side its own body-fat band", () => {
+    expect(withGender("MALE").greenMin).toBe(14);
+    expect(withGender("MALE").greenMax).toBe(24);
+    expect(withGender("FEMALE").greenMin).toBe(21);
+    expect(withGender("FEMALE").greenMax).toBe(31);
+  });
+
+  it("gives OTHER and an unanswered profile the same neutral band", () => {
+    const neutral = { greenMin: 17, greenMax: 27 };
+    expect(withGender("OTHER")).toMatchObject(neutral);
+    expect(withGender(null)).toMatchObject(neutral);
+  });
+});
+
 describe("getAllEffectiveRanges", () => {
   it("returns an entry for every metric", () => {
     const ranges = getAllEffectiveRanges(baseProfile, null);

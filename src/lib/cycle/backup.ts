@@ -92,6 +92,23 @@ export interface CycleBackupSection {
     updatedAt?: string;
     symptomKeys: string[];
   }>;
+  /**
+   * The account's OWN symptom definitions.
+   *
+   * The seeded catalogue is reference data every instance already has, but a
+   * symptom the user created exists only here. Without it the restore looks up
+   * a key that resolves to nothing and drops the link — the day-log comes back
+   * with one of its symptoms quietly missing.
+   */
+  customSymptoms: Array<{
+    id?: string;
+    key: string;
+    labelKey: string;
+    categoryId: string;
+    icon: string | null;
+    sortOrder: number;
+    isActive: boolean;
+  }>;
 }
 
 /**
@@ -100,12 +117,15 @@ export interface CycleBackupSection {
  * client) so both writers share one read.
  */
 export async function buildCycleBackupSection(
-  prisma: Pick<PrismaClient, "cycleProfile" | "menstrualCycle" | "cycleDayLog">,
+  prisma: Pick<
+    PrismaClient,
+    "cycleProfile" | "menstrualCycle" | "cycleDayLog" | "cycleSymptom"
+  >,
   userId: string,
   options: CycleBackupOptions = {},
 ): Promise<CycleBackupSection> {
   const disasterRecovery = options.purpose === "disaster-recovery";
-  const [profile, cycles, dayLogs] = await Promise.all([
+  const [profile, cycles, dayLogs, customSymptoms] = await Promise.all([
     prisma.cycleProfile.findUnique({ where: { userId } }),
     prisma.menstrualCycle.findMany({
       where: disasterRecovery
@@ -119,6 +139,12 @@ export async function buildCycleBackupSection(
       include: {
         symptomLinks: { include: { symptom: { select: { key: true } } } },
       },
+    }),
+    // `userId` set means the user made it. The NULL rows are the seeded
+    // catalogue, which the restoring instance already has.
+    prisma.cycleSymptom.findMany({
+      where: { userId },
+      orderBy: { key: "asc" },
     }),
   ]);
 
@@ -195,6 +221,16 @@ export async function buildCycleBackupSection(
       externalId: d.externalId,
       tz: d.tz,
       symptomKeys: d.symptomLinks.map((l) => l.symptom.key),
+    })),
+    customSymptoms: customSymptoms.map((sym) => ({
+      ...(disasterRecovery ? { id: sym.id } : {}),
+      key: sym.key,
+      labelKey: sym.labelKey,
+      categoryId: sym.categoryId,
+      icon: sym.icon,
+      sortOrder: sym.sortOrder,
+      isActive: sym.isActive,
+      labelEncrypted: sym.labelEncrypted,
     })),
   };
 }
@@ -353,7 +389,31 @@ export async function restoreCycleData(
     restoredCycleIds.add(created.id);
   }
 
-  // Resolve the seeded symptom catalogue once for the link re-creation.
+  // Re-create the account's own symptom definitions BEFORE resolving links.
+  // The seeded catalogue is already on this instance; a symptom the user made
+  // exists only in the file, and a link cannot resolve to a row that was never
+  // written back.
+  for (const sym of payload.customSymptoms ?? []) {
+    await tx.cycleSymptom.upsert({
+      where: { key: sym.key },
+      create: {
+        ...(sym.id ? { id: sym.id } : {}),
+        userId: ownerId,
+        key: sym.key,
+        labelKey: sym.labelKey,
+        categoryId: sym.categoryId,
+        icon: sym.icon ?? null,
+        sortOrder: sym.sortOrder,
+        isActive: sym.isActive,
+        labelEncrypted: sym.labelEncrypted ?? null,
+      },
+      // `key` is globally unique, so a seeded key would collide. Leave the
+      // catalogue row alone: the account's links resolve against it either way.
+      update: {},
+    });
+  }
+
+  // Resolve the symptom catalogue once for the link re-creation.
   const allKeys = Array.from(
     new Set(payload.cycleDayLogs.flatMap((d) => d.symptomKeys ?? [])),
   );
@@ -367,6 +427,20 @@ export async function restoreCycleData(
       select: { id: true, key: true },
     });
     for (const r of rows) symptomIdByKey.set(r.key, r.id);
+
+    // Three lines below, an unknown CYCLE reference throws. An unknown symptom
+    // used to be filtered out instead: the day-log came back with one of its
+    // symptoms quietly missing, and the restore reported success. Same
+    // function, same class of missing reference, two different answers — so
+    // this one is loud now too.
+    const unresolved = allKeys.filter((k) => !symptomIdByKey.has(k));
+    if (unresolved.length > 0) {
+      throw new Error(
+        `Unknown cycle symptom keys: ${unresolved.join(", ")}. ` +
+          "The backup references symptoms that are neither in this instance's " +
+          "seeded catalogue nor carried in the file.",
+      );
+    }
   }
 
   // Recreate day-logs (with symptom links). The owning cycle is the latest
@@ -384,9 +458,14 @@ export async function restoreCycleData(
   };
 
   for (const d of payload.cycleDayLogs) {
-    const symptomIds = (d.symptomKeys ?? [])
-      .map((k) => symptomIdByKey.get(k))
-      .filter((v): v is string => v !== undefined);
+    // Every key was proven resolvable above, so this maps rather than filters:
+    // a `.filter(Boolean)` here would silently re-open the hole that check
+    // just closed.
+    const symptomIds = (d.symptomKeys ?? []).map((k) => {
+      const id = symptomIdByKey.get(k);
+      if (!id) throw new Error(`Unresolved cycle symptom key: ${k}`);
+      return id;
+    });
     const cycleId =
       d.cycleId !== undefined
         ? d.cycleId === null

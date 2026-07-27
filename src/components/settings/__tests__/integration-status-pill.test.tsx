@@ -230,3 +230,27 @@ describe("IntegrationStatusPill — a failing provider states its age", () => {
     expect(html).toContain("Sync fehlgeschlagen");
   });
 });
+
+describe("IntegrationStatusPill — accessible name", () => {
+  /**
+   * A generic `aria-label` used to sit on the badge. Being a label, it
+   * REPLACED the accessible name with itself, so a screen reader announced the
+   * same words for a healthy connection as for a broken one — erasing the one
+   * distinction the pill exists to draw.
+   */
+  it.each([
+    ["connected", "Connected"],
+    ["error", "Error"],
+    ["parked", "Paused"],
+  ] as const)("lets the %s label be the accessible name", (state, label) => {
+    const html = render(
+      <IntegrationStatusPill
+        state={state}
+        lastSyncAt={new Date(Date.now() - 12 * 60 * 1000)}
+        now={new Date()}
+      />,
+    );
+    expect(html).not.toContain("aria-label=");
+    expect(html).toContain(label);
+  });
+});

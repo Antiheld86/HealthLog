@@ -58,6 +58,7 @@ interface RestoreResponse {
     cycleProfile: number;
     labResults: number;
     biomarkers: number;
+    nutrientDays: number;
     illnessEpisodes: number;
     allergies: number;
     familyHistory: number;
@@ -326,6 +327,12 @@ const handler = apiHandler(
             where: { userId: ownerId },
           });
           const biomarkers = await tx.biomarker.deleteMany({
+            where: { userId: ownerId },
+          });
+          // The export has written nutrient day totals since v1.29 and nothing
+          // here ever read them back: water and vitamin history was carried in
+          // the file, discarded on restore, and the restore reported success.
+          const nutrientDays = await tx.nutrientIntakeDay.deleteMany({
             where: { userId: ownerId },
           });
 
@@ -598,6 +605,34 @@ const handler = apiHandler(
                 ),
               ),
             ];
+            // Re-create the account's own tag definitions first. The lookup
+            // below used to ask only for the seeded catalogue (`userId: null`),
+            // so a single custom rated tag made the whole restore throw
+            // "Unknown mood factor keys" — the file was complete and unusable.
+            for (const tag of payload.customMoodTags) {
+              await tx.moodTag.upsert({
+                where: { key: tag.key },
+                create: {
+                  ...(tag.id ? { id: tag.id } : {}),
+                  userId: ownerId,
+                  key: tag.key,
+                  labelKey: tag.labelKey,
+                  categoryId: tag.categoryId,
+                  kind: tag.kind,
+                  isActive: tag.isActive,
+                  icon: tag.icon ?? null,
+                  sortOrder: tag.sortOrder,
+                  labelEncrypted: tag.labelEncrypted ?? null,
+                  scaleMin: tag.scaleMin,
+                  scaleMax: tag.scaleMax,
+                  inverse: tag.inverse,
+                },
+                // `key` is globally unique, so a seeded key would collide.
+                // Leave the catalogue row alone; the links resolve either way.
+                update: {},
+              });
+            }
+
             const factorRows =
               factorKeys.length === 0
                 ? []
@@ -605,7 +640,8 @@ const handler = apiHandler(
                     where: {
                       key: { in: factorKeys },
                       kind: "RATED",
-                      userId: null,
+                      // The seeded catalogue OR this account's own tags.
+                      OR: [{ userId: null }, { userId: ownerId }],
                     },
                     select: { id: true, key: true },
                   });
@@ -968,6 +1004,19 @@ const handler = apiHandler(
             });
           }
 
+          if (payload.nutrientDays.length > 0) {
+            await tx.nutrientIntakeDay.createMany({
+              data: payload.nutrientDays.map((n) => ({
+                userId: ownerId,
+                day: n.day,
+                nutrient: n.nutrient,
+                amount: n.amount,
+                unit: n.unit,
+                source: n.source,
+              })),
+            });
+          }
+
           if (payload.documents.length > 0) {
             await tx.inboundDocument.createMany({
               data: payload.documents.map((document) => ({
@@ -1018,6 +1067,7 @@ const handler = apiHandler(
             cycleProfile: cycleCleared.cycleProfile,
             labResults: labResults.count,
             biomarkers: biomarkers.count,
+            nutrientDays: nutrientDays.count,
             illnessEpisodes: illnessEpisodes.count,
             allergies: allergies.count,
             familyHistory: familyHistory.count,
@@ -1140,6 +1190,7 @@ const handler = apiHandler(
           cycleDayLogs: summary.cycleDayLogs,
           labResults: summary.labResults,
           biomarkers: summary.biomarkers,
+          nutrientDays: summary.nutrientDays,
           illnessEpisodes: summary.illnessEpisodes,
           illnessDayLogs: summary.illnessDayLogs,
           allergies: summary.allergies,

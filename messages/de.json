@@ -468,6 +468,8 @@
     "moveDown": "Nach unten",
     "layoutTileColumn": "Kachel",
     "layoutChartColumn": "Chart",
+    "layoutNativeOnlyTitle": "In der mobilen App sichtbar",
+    "layoutNativeOnlyHint": "Diese Widgets zeichnet die mobile App, nicht diese Seite. Sie liegen im selben gespeicherten Layout — hier wird ihre Sichtbarkeit gesetzt.",
     "dragHandle": "Zum Verschieben ziehen",
     "dragHandleHint": "Pfeiltasten Hoch/Runter, oder Leertaste plus Pfeiltasten am fokussierten Griff.",
     "emptyTitle": "Dein Dashboard ist leer",
@@ -4497,7 +4499,7 @@
           },
           "fullBackup": {
             "title": "Voll-Backup",
-            "description": "Alle deine Daten in einer JSON-Datei — Messwerte, Medikamente, Stimmung, Zyklus, Laborwerte, Krankheitsepisoden, Allergien, Familienanamnese und Workouts. Gleiches Format wie das wöchentliche Auto-Backup.",
+            "description": "Deine Messwerte, Medikamente, Stimmung, Zyklus, Laborwerte, Krankheitsepisoden, Allergien, Familienanamnese, Nährstoffe und Workouts in einer JSON-Datei. Gleiche Form wie die wöchentliche automatische Sicherung. Einige Satzarten sind noch nicht enthalten — das Manifest der Datei nennt, was drinsteht.",
             "scopeNote": "Dokumentmetadaten und die KI-Zusammenfassung, falls vorhanden, sind als Klartext enthalten; die Originaldateien der Dokumente sowie GPS-Routen und Einzelmesswerte von Workouts sind es nicht — lade diese separat aus dem Dokumententresor bzw. dem Workout-Export herunter.",
             "encryptToggle": "Mit einer Passphrase verschlüsseln",
             "passphrasePlaceholder": "Passphrase (mind. 12 Zeichen)",
@@ -4937,6 +4939,7 @@
           "openai": "OpenAI (eigener Key)",
           "anthropic": "Anthropic (Claude)",
           "local": "Lokales Modell",
+          "openai-compatible": "OpenAI-kompatibles Gateway",
           "admin-openai": "Admin-OpenAI"
         },
         "title": "Fallback-Kette",
@@ -4963,7 +4966,13 @@
         "openai": "OpenAI (eigener API-Key)",
         "anthropic": "Anthropic (Claude)",
         "local": "Lokales Modell (OpenAI-kompatibel)",
+        "openai-compatible": "OpenAI-kompatibles Gateway",
         "admin-openai": "Admin-OpenAI"
+      },
+      "compat": {
+        "description": "Ein vollwertiger Anbieter für jeden Endpunkt, der die OpenAI-API /v1/chat/completions spricht: LiteLLM, OpenRouter, vLLM oder ein anderes Gateway. Die Basis-URL endet auf /v1, der API-Key ist optional, und das Modell ist das, was dein Gateway weiterleitet. Dein OpenAI-Key erreicht diesen Endpunkt nie — dieser Anbieter hat einen eigenen.",
+        "keyLabel": "API-Key (optional)",
+        "modelHint": "Der Modellname, den dein Gateway erwartet. Bleibt das Feld leer, wird das für deine anderen Anbieter gespeicherte Modell verwendet; ist auch das leer, wird dieser Anbieter übersprungen."
       },
       "openai": {
         "modelSelect": "Modell",
@@ -5091,8 +5100,8 @@
       "responseTimeoutInvalid": "Gib eine Zahl zwischen 10 und 600 Sekunden ein.",
       "autoRead": {
         "title": "Dokumente automatisch mit KI lesen",
-        "subLabel": "Neu hochgeladene Dokumente werden von deinem konfigurierten KI-Anbieter gelesen und indiziert, ohne dass du jedes Dokument einzeln bestätigen musst.",
-        "honesty": "Wenn aktiviert, wird jedes hochgeladene Dokument an deinen konfigurierten KI-Anbieter gesendet, um gelesen, beschrieben und für die Suche indiziert zu werden – ohne Bestätigung pro Dokument. Das geschieht auf dem Server, und der Inhalt des Dokuments verlässt dabei diese Maschine in Richtung dieses Anbieters. Wenn dein konfigurierter Anbieter eine Abo-Verbindung ist (ein angemeldetes KI-Konto statt eines API-Schlüssels), gelten dessen eigene Datenschutzeinstellungen – Abo-Anbieter dürfen den Inhalt zur Verbesserung ihrer Modelle verwenden, und kein Auftragsverarbeitungsvertrag deckt das ab. Dokumente, die von einem selbst gehosteten lokalen Modell gelesen werden, verlassen deinen Server nie. Standardmäßig aus; aktiviere es nur, wenn du diesen Kompromiss für die von dir hochgeladenen Dokumente akzeptierst.",
+        "subLabel": "Dokumente werden von deinem konfigurierten KI-Anbieter gelesen und indiziert, ohne dass du jedes Dokument einzeln bestätigen musst.",
+        "honesty": "Wenn aktiviert, wird jedes hochgeladene Dokument an deinen konfigurierten KI-Anbieter gesendet, um gelesen, beschrieben und für die Suche indiziert zu werden – ohne Bestätigung pro Dokument. Das Einschalten wirkt außerdem rückwirkend: Bereits hochgeladene Dokumente ohne Zusammenfassung werden ebenfalls gesendet, bis zu 200 pro Einschaltvorgang. Das geschieht auf dem Server, und der Inhalt des Dokuments verlässt dabei diese Maschine in Richtung dieses Anbieters. Wenn dein konfigurierter Anbieter eine Abo-Verbindung ist (ein angemeldetes KI-Konto statt eines API-Schlüssels), gelten dessen eigene Datenschutzeinstellungen – Abo-Anbieter dürfen den Inhalt zur Verbesserung ihrer Modelle verwenden, und kein Auftragsverarbeitungsvertrag deckt das ab. Dokumente, die von einem selbst gehosteten lokalen Modell gelesen werden, verlassen deinen Server nie. Standardmäßig aus; aktiviere es nur, wenn du diesen Kompromiss für deine Dokumente akzeptierst.",
         "confirm": "Ich verstehe – automatisches KI-Lesen aktivieren",
         "cancel": "Abbrechen"
       },
@@ -5290,7 +5299,6 @@
       "minutesAgo": "vor {count} min",
       "hoursAgo": "vor {count} Std.",
       "daysAgo": "vor {count} d",
-      "ariaLabel": "Integrationsstatus",
       "resumeCta": "Wieder verbinden",
       "resumeSuccess": "Integration wieder aktiv",
       "resumeError": "Wieder verbinden fehlgeschlagen",
@@ -5834,7 +5842,20 @@
       "backgroundStep": "Lass die Hintergrundaktualisierung aktiviert. Die App synchronisiert neue Daten automatisch im Vordergrund und wenn iOS Hintergrundzeit gewährt.",
       "importNote": "Du brauchst ältere Daten oder kannst die iOS-App nicht nutzen? Der Apple-Health-XML/ZIP-Upload ist ein einmaliger Ersatzweg und aktiviert keine Live-Synchronisierung.",
       "importAction": "Einmaligen Import öffnen",
-      "staleNote": "Seit über einer Woche sind keine Apple-Health-Daten angekommen. Öffne die HealthLog-App auf deinem iPhone und prüfe die Apple-Health-Berechtigungen."
+      "staleNote": "Seit über einer Woche sind keine Apple-Health-Daten angekommen. Öffne die HealthLog-App auf deinem iPhone und prüfe die Apple-Health-Berechtigungen.",
+      "delivery": {
+        "title": "Übermittlung",
+        "lastTriggerLabel": "Letzte Synchronisierung kam",
+        "lastBackgroundLabel": "Letzte Hintergrund-Synchronisierung",
+        "backgroundNever": "Nie — bisher kam jede Synchronisierung bei geöffneter App an",
+        "noSyncYet": "Es ist noch keine Synchronisierung angekommen, daher gibt es hier nichts zu berichten.",
+        "trigger": {
+          "foreground": "bei geöffneter App",
+          "background": "im Hintergrund",
+          "push": "durch einen Push-Weckruf",
+          "unknown": "Auslöser von der App nicht gemeldet"
+        }
+      }
     },
     "garminInfo": {
       "title": "Garmin",
@@ -5949,7 +5970,7 @@
     "integrationWebPush": "Web Push",
     "offlineGeoLabel": "Geodaten",
     "offlineGeoEnabled": "Offline (GeoLite2)",
-    "offlineGeoFallback": "Online ({host}) — MAXMIND_LICENSE_KEY in CI setzen",
+    "offlineGeoFallback": "Online ({host}) — GeoLite2-Datenbanken einbinden und GEOLITE2_DIR setzen",
     "apiGlobal": "API-Endpunkte und API-Tokens erlauben.",
     "umamiTitle": "Umami",
     "umamiDescription": "Web-Analyse mit Umami",
@@ -6750,7 +6771,7 @@
       "reminderCheckOverdueTitle": "Einnahme überfällig: {medication}",
       "reminderCheckOverdueBody": "{medication} ({dose}) im Zeitfenster {window} ist seit {minutes} Minuten überfällig.",
       "offlineGeoUnavailableTitle": "Offline-Geodatenbanken nicht geladen",
-      "offlineGeoUnavailableBody": "HealthLog löst Login-Standorte aktuell über den Online-Fallback ipwho.is auf. Um die Offline-Datenbanken GeoLite2-City und GeoLite2-ASN zu aktivieren, setze MAXMIND_LICENSE_KEY in den GitHub-Actions-Secrets unter {secretsUrl} und deploye neu. Bis dahin bleibt die Carrier-Spalte in der Login-Übersicht leer.",
+      "offlineGeoUnavailableBody": "HealthLog löst Login-Standorte über die Online-Abfrage bei {host} auf, damit verlässt jede Login-IP diesen Server. Um sie stattdessen lokal aufzulösen, lade die Datenbanken GeoLite2-City und GeoLite2-ASN mit einem kostenlosen MaxMind-Konto herunter, binde das Verzeichnis in den Container ein und setze GEOLITE2_DIR darauf. Anleitung: {docsUrl}",
       "tlsPinChangedTitle": "TLS-Leaf-Zertifikat geändert: {host}",
       "tlsPinChangedBody": "Das von {host} ausgelieferte TLS-Leaf hat jetzt den SPKI-Pin {servedPin}, der nicht im bekannten Pin-Satz enthalten ist. Gepinnte Clients (die native App) können sich nicht mehr verbinden, sobald der alte Pin weg ist. Extrahiere den neuen Leaf-Pin erneut, ergänze ihn in TLS_LEAF_SPKI_PINS sowie im Pin-Satz des nativen Clients und veröffentliche einen Build, bevor dieses Zertifikat am {validTo} abläuft. Siehe docs/ops/tls-cert-pin.md."
     },
@@ -8602,7 +8623,8 @@
       "uploading": "Wird hochgeladen…",
       "dismissFailed": "Fehlgeschlagenen Upload ausblenden",
       "processing": "Wird verarbeitet…",
-      "ready": "Bereit"
+      "ready": "Bereit",
+      "deleteKey": "Entf"
     },
     "error": {
       "fileTooLarge": "Diese Datei ist größer als das Limit von {maxSize}.",

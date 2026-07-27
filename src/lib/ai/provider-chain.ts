@@ -32,6 +32,15 @@
  * (see `resolveProviderChain`), so a persisted `admin-codex` entry never
  * resolves on its own.
  *
+ * `openai-compatible` (v1.33.1, #470) is the user-configured gateway —
+ * LiteLLM, OpenRouter, vLLM, or any other endpoint on the
+ * `/v1/chat/completions` wire. It is offered in the chain editor but is NOT
+ * part of `PROVIDER_CHAIN_DEFAULT`: it resolves only against the base URL the
+ * user saved, so putting it in the default chain would put an entry there
+ * that can never resolve for anyone who has not configured it. It reads its
+ * own three columns and never the OpenAI ones — the OpenAI arm's pinned base
+ * URL stays pinned.
+ *
  * Distinct from `ProviderType` (in `types.ts`) because that enum tags
  * the **runtime** provider instance — which has no notion of "admin
  * OpenAI" vs "user OpenAI" at the wire level (both are
@@ -43,6 +52,7 @@ export const PROVIDER_CHAIN_TYPES = [
   "openai",
   "anthropic",
   "local",
+  "openai-compatible",
   "admin-openai",
   "admin-codex",
 ] as const;
@@ -65,6 +75,10 @@ export interface ProviderChainEntry {
  *   4. local — self-hosted Ollama / LM Studio.
  *   5. admin-openai — operator's shared key, last-ditch so a user with
  *      no personal config still sees insights.
+ *
+ * `openai-compatible` is deliberately absent: it resolves only against a
+ * base URL the user saved, so a default entry would be dead weight for
+ * everyone who never configures one. Users add it in the chain editor.
  */
 export const PROVIDER_CHAIN_DEFAULT: readonly ProviderChainEntry[] = [
   { providerType: "codex", priority: 1, enabled: true },

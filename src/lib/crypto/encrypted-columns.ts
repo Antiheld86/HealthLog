@@ -81,6 +81,10 @@ export const ENCRYPTED_COLUMNS: readonly EncryptedColumn[] = [
   { model: "User", field: "aiAnthropicKeyEncrypted", kind: "string" },
   { model: "User", field: "aiLocalKeyEncrypted", kind: "string" },
   { model: "User", field: "aiOpenaiKeyEncrypted", kind: "string" },
+  // v1.33.1 (#470) — the OpenAI-compatible gateway provider's optional bearer.
+  // A dedicated column, never the OpenAI key: the gateway host is user-chosen,
+  // so the credential that reaches it must be one the user issued for it.
+  { model: "User", field: "aiCompatKeyEncrypted", kind: "string" },
   { model: "User", field: "insuranceNumberEncrypted", kind: "string" },
   // v1.23 — TOTP shared secret (second factor). String ciphertext like the
   // other User credential columns.

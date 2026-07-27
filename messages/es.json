@@ -468,6 +468,8 @@
     "moveDown": "Bajar",
     "layoutTileColumn": "Tarjeta",
     "layoutChartColumn": "Gráfico",
+    "layoutNativeOnlyTitle": "Visible en la app móvil",
+    "layoutNativeOnlyHint": "Estos widgets los dibuja la app móvil, no esta página. Se guardan en el mismo diseño, así que aquí es donde se define su visibilidad.",
     "dragHandle": "Arrastra para reordenar",
     "dragHandleHint": "Arrastra el manejador para reordenar este widget. También puedes usar los botones de flecha Arriba y Abajo, o enfocar el manejador y pulsar Espacio más las flechas.",
     "emptyTitle": "Tu panel está vacío",
@@ -4497,7 +4499,7 @@
           },
           "fullBackup": {
             "title": "Copia completa",
-            "description": "Todos tus datos en un único archivo JSON: mediciones, medicamentos, estado de ánimo, ciclo, analíticas, episodios de enfermedad, alergias, antecedentes familiares y entrenamientos. Mismo formato que la copia automática semanal.",
+            "description": "Tus mediciones, medicamentos, estado de ánimo, ciclo, analíticas, episodios de enfermedad, alergias, antecedentes familiares, nutrientes y entrenamientos en un archivo JSON. El mismo formato que la copia automática semanal. Algunos tipos de registro aún no se incluyen: el manifiesto del archivo indica qué contiene.",
             "scopeNote": "Los metadatos de los documentos y el resumen de IA, si existe, se incluyen en texto plano; los archivos originales de los documentos y los datos de rutas GPS/muestras de los entrenamientos no están incluidos — descárgalos por separado desde el archivo de documentos o la exportación de entrenamientos.",
             "encryptToggle": "Cifrar con una contraseña",
             "passphrasePlaceholder": "Contraseña (mín. 12 caracteres)",
@@ -4937,6 +4939,7 @@
           "openai": "OpenAI (tu clave)",
           "anthropic": "Anthropic (Claude)",
           "local": "Modelo local",
+          "openai-compatible": "Pasarela compatible con OpenAI",
           "admin-openai": "OpenAI de administrador"
         },
         "title": "Cadena de respaldo",
@@ -4963,7 +4966,13 @@
         "openai": "OpenAI (tu clave de API)",
         "anthropic": "Anthropic (Claude)",
         "local": "Modelo local (compatible con OpenAI)",
+        "openai-compatible": "Pasarela compatible con OpenAI",
         "admin-openai": "OpenAI proporcionado por el administrador"
+      },
+      "compat": {
+        "description": "Un proveedor de pleno derecho para cualquier endpoint que hable la API /v1/chat/completions de OpenAI: LiteLLM, OpenRouter, vLLM u otra pasarela. La URL base termina en /v1, la clave de API es opcional y el modelo es el que enrute tu pasarela. Tu clave de OpenAI nunca llega a este endpoint: este proveedor tiene la suya.",
+        "keyLabel": "Clave de API (opcional)",
+        "modelHint": "El nombre de modelo que espera tu pasarela. Si lo dejas vacío, se usa el modelo guardado para tus otros proveedores; si tampoco hay uno, este proveedor se omite."
       },
       "openai": {
         "modelSelect": "Modelo",
@@ -5091,8 +5100,8 @@
       "responseTimeoutInvalid": "Introduce un número entre 10 y 600 segundos.",
       "autoRead": {
         "title": "Leer documentos automáticamente con IA",
-        "subLabel": "Los documentos recién subidos son leídos e indexados por tu proveedor de IA configurado, sin confirmar cada documento.",
-        "honesty": "Cuando está activado, cada documento que subes se envía a tu proveedor de IA configurado para leerlo, describirlo e indexarlo para la búsqueda, sin confirmación por documento. Esto ocurre en el servidor y el contenido del documento sale de esta máquina hacia ese proveedor. Si tu proveedor configurado es una conexión de suscripción (una cuenta de IA con sesión iniciada en lugar de una clave de API), se aplican sus propios ajustes de datos: los proveedores de suscripción pueden usar el contenido para mejorar sus modelos, y ningún acuerdo de tratamiento de datos lo cubre. Los documentos leídos por un modelo local autoalojado nunca salen de tu servidor. Desactivado de forma predeterminada; actívalo solo si aceptas este compromiso para los documentos que subes.",
+        "subLabel": "Los documentos son leídos e indexados por tu proveedor de IA configurado, sin confirmar cada documento.",
+        "honesty": "Cuando está activado, cada documento que subes se envía a tu proveedor de IA configurado para leerlo, describirlo e indexarlo para la búsqueda, sin confirmación por documento. Activarlo también actúa de forma retroactiva: los documentos que ya has subido y que aún no tienen resumen también se envían, hasta 200 cada vez que lo activas. Esto ocurre en el servidor y el contenido del documento sale de esta máquina hacia ese proveedor. Si tu proveedor configurado es una conexión de suscripción (una cuenta de IA con sesión iniciada en lugar de una clave de API), se aplican sus propios ajustes de datos: los proveedores de suscripción pueden usar el contenido para mejorar sus modelos, y ningún acuerdo de tratamiento de datos lo cubre. Los documentos leídos por un modelo local autoalojado nunca salen de tu servidor. Desactivado de forma predeterminada; actívalo solo si aceptas este compromiso para tus documentos.",
         "confirm": "Lo entiendo: activar la lectura automática con IA",
         "cancel": "Cancelar"
       },
@@ -5290,7 +5299,6 @@
       "minutesAgo": "hace {count} min",
       "hoursAgo": "hace {count} h",
       "daysAgo": "hace {count} d",
-      "ariaLabel": "Estado de la integración",
       "resumeCta": "Reconectar",
       "resumeSuccess": "Integración reanudada",
       "resumeError": "Reconexión fallida",
@@ -5834,7 +5842,20 @@
       "backgroundStep": "Mantén activada la actualización en segundo plano. La app sincroniza datos nuevos automáticamente en primer plano y cuando iOS le concede tiempo en segundo plano.",
       "importNote": "¿Necesitas un historial anterior o no puedes usar la app de iOS? La carga XML/ZIP de Apple Health es una alternativa puntual y no activa la sincronización en vivo.",
       "importAction": "Abrir importación puntual",
-      "staleNote": "Hace más de una semana que no llegan datos de Apple Health. Abre la app HealthLog en tu iPhone y revisa los permisos de Apple Health."
+      "staleNote": "Hace más de una semana que no llegan datos de Apple Health. Abre la app HealthLog en tu iPhone y revisa los permisos de Apple Health.",
+      "delivery": {
+        "title": "Entrega",
+        "lastTriggerLabel": "La última sincronización llegó",
+        "lastBackgroundLabel": "Última sincronización en segundo plano",
+        "backgroundNever": "Nunca — hasta ahora todas las sincronizaciones llegaron con la app abierta",
+        "noSyncYet": "Aún no ha llegado ninguna sincronización, así que no hay nada que informar aquí.",
+        "trigger": {
+          "foreground": "con la app abierta",
+          "background": "en segundo plano",
+          "push": "desde un aviso push",
+          "unknown": "la app no informó del desencadenante"
+        }
+      }
     },
     "garminInfo": {
       "title": "Garmin",
@@ -5949,7 +5970,7 @@
     "integrationWebPush": "Web Push",
     "offlineGeoLabel": "Datos geográficos",
     "offlineGeoEnabled": "Sin conexión (GeoLite2)",
-    "offlineGeoFallback": "En línea ({host}) — configura MAXMIND_LICENSE_KEY en CI",
+    "offlineGeoFallback": "En línea ({host}) — monta las bases GeoLite2 y define GEOLITE2_DIR",
     "apiGlobal": "Permitir endpoints de API y tokens de API.",
     "umamiTitle": "Umami",
     "umamiDescription": "Analítica web con Umami",
@@ -6750,7 +6771,7 @@
       "reminderCheckOverdueTitle": "Dosis atrasada: {medication}",
       "reminderCheckOverdueBody": "{medication} ({dose}) en la ventana {window} lleva {minutes} minutos de retraso.",
       "offlineGeoUnavailableTitle": "Bases de datos de geolocalización sin conexión no cargadas",
-      "offlineGeoUnavailableBody": "HealthLog está resolviendo las ubicaciones de inicio de sesión mediante el respaldo en línea ipwho.is. Para habilitar las bases sin conexión GeoLite2-City y GeoLite2-ASN, configura MAXMIND_LICENSE_KEY en los secrets de GitHub Actions en {secretsUrl} y vuelve a desplegar. Hasta entonces, la columna de operador en el resumen de inicios de sesión permanece vacía.",
+      "offlineGeoUnavailableBody": "HealthLog resuelve las ubicaciones de inicio de sesión mediante la consulta en línea a {host}, por lo que cada IP de inicio de sesión sale de este servidor. Para resolverlas localmente, descarga las bases GeoLite2-City y GeoLite2-ASN con una cuenta gratuita de MaxMind, monta el directorio en el contenedor y apunta GEOLITE2_DIR a él. Pasos: {docsUrl}",
       "tlsPinChangedTitle": "Certificado de hoja TLS cambiado: {host}",
       "tlsPinChangedBody": "La hoja TLS servida por {host} ahora tiene el pin SPKI {servedPin}, que no está en el conjunto de pines conocidos. Los clientes con pin fijo (la app nativa) no podrán conectarse una vez que desaparezca el pin antiguo. Vuelve a extraer el nuevo pin de la hoja, añádelo a TLS_LEAF_SPKI_PINS y al conjunto de pines del cliente nativo, y publica una versión antes de que este certificado caduque el {validTo}. Consulta docs/ops/tls-cert-pin.md."
     },
@@ -8602,7 +8623,8 @@
       "uploading": "Subiendo…",
       "dismissFailed": "Descartar subida fallida",
       "processing": "Procesando…",
-      "ready": "Listo"
+      "ready": "Listo",
+      "deleteKey": "Supr"
     },
     "error": {
       "fileTooLarge": "Este archivo supera el límite de {maxSize}.",

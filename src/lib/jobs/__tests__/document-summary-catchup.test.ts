@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * The auto-read catch-up pass.
@@ -167,5 +169,40 @@ describe("enqueueSummaryCatchUp", () => {
     await expect(enqueueSummaryCatchUp("user-1")).resolves.toEqual({
       enqueued: false,
     });
+  });
+});
+
+describe("the toggle copy discloses the catch-up", () => {
+  const LOCALES = ["de", "en", "es", "fr", "it", "pl"] as const;
+
+  function autoReadCopy(locale: string): { subLabel: string; honesty: string } {
+    const bundle = JSON.parse(
+      readFileSync(
+        join(__dirname, `../../../../messages/${locale}.json`),
+        "utf8",
+      ),
+    ) as {
+      settings: {
+        ai: { autoRead: { subLabel: string; honesty: string } };
+      };
+    };
+    return bundle.settings.ai.autoRead;
+  }
+
+  it.each(LOCALES)(
+    "%s does not promise the switch only applies to future uploads",
+    (locale) => {
+      // The flip enqueues a pass over documents ALREADY stored, so copy that
+      // scopes the switch to newly uploaded documents understates its reach.
+      const { subLabel } = autoReadCopy(locale);
+      expect(subLabel).not.toMatch(
+        /newly|neu hochgeladene|recién subidos|nouvellement téléversés|appena caricati|nowo przesłane/i,
+      );
+    },
+  );
+
+  it.each(LOCALES)("%s names the retroactive pass and its cap", (locale) => {
+    const { honesty } = autoReadCopy(locale);
+    expect(honesty).toContain(String(MAX_ENQUEUES_PER_RUN));
   });
 });

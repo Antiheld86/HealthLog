@@ -314,6 +314,82 @@ const cycleProfileSchema = z
   })
   .passthrough();
 
+/**
+ * A mood tag the account created, as opposed to the seeded catalogue.
+ *
+ * Carried for the same reason as a custom cycle symptom, but the failure it
+ * prevents is louder: the restore resolves an entry's rated factors by key and
+ * throws on one it cannot find, so an account with a single custom rated tag
+ * could not be restored at all.
+ */
+const customMoodTagSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    key: z.string().min(1),
+    labelKey: z.string().min(1),
+    categoryId: z.string().min(1),
+    // "BINARY" | "RATED", enforced in app code rather than a DB enum.
+    kind: z.string().min(1),
+    isActive: z.boolean().default(true),
+    icon: z.string().nullable().optional(),
+    sortOrder: z.number().int().default(0),
+    // The user's own words for the tag, encrypted at rest and carried
+    // verbatim. Without it the tag comes back as a bare key and the person
+    // who named it "Migräne" gets `custom:cm3x9…` instead.
+    labelEncrypted: z.string().nullable().optional(),
+    // The scale a RATED factor was recorded on. `inverse` marks a factor
+    // where a HIGH value is bad (stress, conflict). Dropping it does not lose
+    // a label, it silently reverses the meaning of every rating already
+    // stored against that tag.
+    scaleMin: z.number().int().default(1),
+    scaleMax: z.number().int().default(5),
+    inverse: z.boolean().default(false),
+  })
+  .passthrough();
+
+/**
+ * A day's total for one nutrient, from one source.
+ *
+ * The export has written these since v1.29 and the canonical schema never
+ * declared them, so `.passthrough()` carried the key through parsing and no
+ * reader ever looked at it. The restore therefore dropped every water and
+ * vitamin total on the floor while reporting success.
+ */
+const nutrientDaySchema = z
+  .object({
+    day: z.string().min(1),
+    nutrient: z.string().min(1),
+    amount: z.number(),
+    unit: z.string().min(1),
+    // Closed set in app code rather than a DB enum; kept as a string here so a
+    // future source does not make an old file unparseable.
+    source: z.string().min(1),
+  })
+  .passthrough();
+
+/**
+ * A symptom the account created, as opposed to the seeded catalogue.
+ *
+ * Carried because a day-log's symptom link resolves by key: without the
+ * definition the key resolves to nothing on the restoring instance, and the
+ * link is lost. The seeded rows are deliberately NOT carried — every instance
+ * already has them, and shipping them would mean a restore could rewrite
+ * another instance's reference data.
+ */
+const customCycleSymptomSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    key: z.string().min(1),
+    labelKey: z.string().min(1),
+    categoryId: z.string().min(1),
+    icon: z.string().nullable().optional(),
+    sortOrder: z.number().int().default(0),
+    isActive: z.boolean().default(true),
+    // Same reasoning as the mood tag's: the user's own words live here.
+    labelEncrypted: z.string().nullable().optional(),
+  })
+  .passthrough();
+
 const appSettingsBackupSchema = z
   .object({
     id: z.string().min(1),
@@ -561,6 +637,10 @@ export const backupPayloadSchema = z
     cycleProfile: cycleProfileSchema.nullable().default(null),
     cycles: z.array(cycleSpanSchema).default([]),
     cycleDayLogs: z.array(cycleDayLogSchema).default([]),
+    // Defaulted rather than required: files written before this field existed
+    // are still valid, and an account with no custom symptoms writes [].
+    customSymptoms: z.array(customCycleSymptomSchema).default([]),
+    customMoodTags: z.array(customMoodTagSchema).default([]),
     // Structured records default to empty arrays so older backups remain
     // parseable. Canonical DR writers add stable ids and encrypted document
     // fields; portable exports retain the metadata-only subset.
@@ -571,6 +651,7 @@ export const backupPayloadSchema = z
     familyHistory: z.array(familyHistoryBackupSchema).default([]),
     workouts: z.array(workoutBackupSchema).default([]),
     documents: z.array(documentBackupSchema).default([]),
+    nutrientDays: z.array(nutrientDaySchema).default([]),
     manifest: backupManifestSchema.nullable().default(null),
   })
   .passthrough()
@@ -608,6 +689,7 @@ export interface BackupSummary {
   cycleDayLogs: number;
   /** Lab results in the backup. */
   labResults: number;
+  nutrientDays: number;
   /** User-scoped biomarker catalog entries in the backup. */
   biomarkers: number;
   /** Illness episodes, including flares/exacerbations. */
@@ -635,6 +717,7 @@ export function summarizeBackup(payload: BackupPayload): BackupSummary {
     moodEntries: payload.moodEntries.length,
     cycles: payload.cycles.length,
     cycleDayLogs: payload.cycleDayLogs.length,
+    nutrientDays: payload.nutrientDays.length,
     labResults: payload.labResults.length,
     biomarkers: payload.biomarkers.length,
     illnessEpisodes: payload.illnessEpisodes.length,

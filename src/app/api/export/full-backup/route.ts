@@ -11,15 +11,19 @@
  * `.json` so the browser writes a `.json` file even though the route
  * segment doesn't carry the extension.
  *
- * Backup-completeness — the payload also carries lab results, the
- * biomarker catalog, illness episodes (incl. flares/exacerbations) with
- * their day-logs, allergies, family history, and workout summaries. These
- * domains are EXPORT-ONLY today: `POST /api/admin/backups/[id]/restore`
- * only re-creates the original measurements/medications/mood/cycle
- * domains, so restoring a snapshot does not (yet) recreate these sections
- * — see `src/lib/export/records-backup.ts`. Document original files and
- * workout GPS/sample time series are never included; the payload's
- * `manifest` field discloses both, and the export UI states this too.
+ * Backup completeness — what this file carries, and what it does not, is
+ * declared in `src/lib/export/backup-plan.ts` rather than described here. A
+ * sentence beside the code is how the previous version of this comment came
+ * to be wrong: it said lab results, biomarkers, illness episodes, allergies,
+ * family history and workouts were EXPORT-ONLY and could not be restored.
+ * The restore route re-creates all of them, and since v1.33.1 nutrient day
+ * totals as well.
+ *
+ * The gap that IS real: roughly 31 of the models the plan marks `BACKED_UP`
+ * have neither a reader here nor a restore branch yet. The plan names each
+ * one. Document original files and workout GPS/sample time series are never
+ * included; the payload's `manifest` field discloses both, and the export UI
+ * states this too.
  *
  * Auth: cookie session OR Bearer token (`requireAuth`).
  * Rate-limit: shared `export:<userId>` bucket (10/h).

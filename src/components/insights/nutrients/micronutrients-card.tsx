@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
 import { apiGet } from "@/lib/api/api-fetch";
 import { queryKeys } from "@/lib/query-keys";
+import { binaryReferenceSex } from "@/lib/profile/sex";
 import {
   NUTRIENT_CODES,
   isNutrientCode,
@@ -51,8 +52,7 @@ export function MicronutrientsCard() {
   const { t } = useTranslations();
   const fmt = useFormatters();
   const { user } = useAuth();
-  const sex =
-    user?.gender === "MALE" || user?.gender === "FEMALE" ? user.gender : null;
+  const sex = binaryReferenceSex(user?.gender);
 
   // A failed read left `data` undefined, `rows` empty, and the card rendered
   // its "no micronutrient data" EmptyState — the same output as an account that

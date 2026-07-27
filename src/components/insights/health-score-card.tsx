@@ -11,6 +11,7 @@ import {
   Scale,
 } from "lucide-react";
 import { useTranslations } from "@/lib/i18n/context";
+import { readStoredTimezone } from "@/lib/timezone-mirror";
 import { cn } from "@/lib/utils";
 import { HealthScoreDeltaExplainer } from "./health-score-delta-explainer";
 
@@ -219,12 +220,21 @@ export function HealthScoreCard({
   // we fall through to the raw ISO so the user still sees something.
   // The formatter is memoised per locale so the row map below doesn't
   // build a fresh `Intl.DateTimeFormat` instance per row.
+  // The timezone is as load-bearing as the locale and was missing: without it
+  // the formatter used the browser's, so a reading taken late in the evening
+  // could print yesterday's date for someone whose profile timezone is east of
+  // where their laptop happens to be. The locale still decides the separator
+  // convention; the timezone decides which day it was.
   const asOfFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat(locale, {
         year: "numeric",
         month: "short",
         day: "2-digit",
+        // `readStoredTimezone` returns "" when nothing is stored or during
+        // SSR, and an empty string makes Intl throw RangeError rather than
+        // fall back. `undefined` is the value that means "use the default".
+        timeZone: readStoredTimezone() || undefined,
       }),
     [locale],
   );

@@ -40,7 +40,8 @@ import type {
 /**
  * Preference rank for a provider when the payload is a DOCUMENT. Lower wins.
  * Local keeps the document on the machine (rank 0); BYOK no-train API keys are
- * next (rank 1); the operator's shared no-train key follows (rank 2); the
+ * next (rank 1, including the user's own OpenAI-compatible gateway); the
+ * operator's shared no-train key follows (rank 2); the
  * ChatGPT-subscription OAuth paths are LAST (rank 3) — the user's own `codex`
  * AND the operator's shared `admin-codex`, both train on consumer content by
  * default and cannot be verified opted-out from here.
@@ -52,6 +53,11 @@ function documentProviderRank(providerType: string): number {
     case "openai":
     case "anthropic":
     case "admin-key":
+    // The user's own gateway (LiteLLM / OpenRouter / vLLM) is a BYO endpoint
+    // under their own contract. It may well be on their own network, but
+    // HealthLog cannot tell that from the URL, so it ranks with the BYO API
+    // keys rather than with `local` — the conservative side.
+    case "openai-compatible":
       return 1;
     case "admin-openai":
       return 2;

@@ -38,7 +38,7 @@ function tombstoneCutoff(now: Date): Date {
  * the transaction rolled back, and the next night ran the identical statement
  * against the same rows. `measurements` is the densest table in the schema and
  * a bulk source delete can tombstone a six-figure row count in one action, so
- * this is the one most likely to have been stuck. Migration 0277 adds the
+ * this is the one most likely to have been stuck. Migration 0276 adds the
  * partial index the predicate needs.
  */
 export async function cleanupExpiredMeasurementTombstones(

@@ -261,6 +261,27 @@ describe("POST /api/ai/test — dropdown-aware override", () => {
     expect(body.data.model).toBe("claude-3-5-sonnet-latest");
   });
 
+  it("forwards the gateway's own override fields (#470)", async () => {
+    makeProviderThatSucceeds("anthropic/claude-sonnet-4-6");
+    const response = await POST(
+      jsonRequest({
+        provider: "OPENAI_COMPATIBLE",
+        compatBaseUrl: "https://litellm.example.com/v1",
+        compatKey: "gateway-secret",
+        compatModel: "anthropic/claude-sonnet-4-6",
+      }) as never,
+    );
+    expect(response.status).toBe(200);
+    // The gateway's fields travel under their own names — the pinned OpenAI
+    // arm reads `baseUrl` / `openaiKey` and must not be reachable from here.
+    expect(resolveProviderForTest).toHaveBeenCalledWith("u-1", {
+      provider: "OPENAI_COMPATIBLE",
+      compatBaseUrl: "https://litellm.example.com/v1",
+      compatKey: "gateway-secret",
+      compatModel: "anthropic/claude-sonnet-4-6",
+    });
+  });
+
   it("rejects unknown provider values with 422", async () => {
     const response = await POST(
       jsonRequest({ provider: "MALICIOUS" }) as never,

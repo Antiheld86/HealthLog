@@ -262,6 +262,9 @@ export const USER_RESET = {
   aiAnthropicKeyEncrypted: null,
   aiLocalKeyEncrypted: null,
   aiOpenaiKeyEncrypted: null,
+  aiCompatBaseUrl: null,
+  aiCompatKeyEncrypted: null,
+  aiCompatModel: null,
   aiProviderChain: Prisma.DbNull,
   aiResponseTimeoutSeconds: null,
   disableCoach: false,
@@ -308,6 +311,8 @@ export const USER_RESET = {
   stravaBackfillCompletedAt: null,
   healthKitConfigJson: Prisma.DbNull,
   healthKitLastSyncedAt: null,
+  healthKitLastSyncTrigger: null,
+  healthKitLastBackgroundSyncAt: null,
   lastSyncedAt: null,
   sourcePriorityJson: Prisma.DbNull,
 

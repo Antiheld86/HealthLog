@@ -3,8 +3,8 @@
  * batch ingest.
  *
  * It is DIAGNOSTIC-ONLY: recorded on the `measurement.batch.ingest` wide event
- * so an operator can see, per batch, what woke the client (foreground app open,
- * background refresh, or a push), and NOTHING else. These pin that contract:
+ * and kept on the account, where the Apple Health card reads it. These pin that
+ * contract:
  *
  *   - a batch carrying `syncTrigger:"background"` is accepted and the value
  *     rides the ingest annotation;
@@ -12,7 +12,11 @@
  *   - an invalid value is a 422 (closed enum);
  *   - the field never changes which rows are inserted / updated — the per-row
  *     outcomes are byte-identical with and without it, so it cannot leak into
- *     dedup, attribution, or storage.
+ *     dedup, attribution, or storage;
+ *   - the trigger is stamped on the account, and a background or push trigger
+ *     additionally dates the last background arrival. That second timestamp is
+ *     the whole diagnostic (#586): `healthKitLastSyncedAt` alone reads the same
+ *     whether the phone delivers on its own or only while the app is open.
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
@@ -299,5 +303,70 @@ describe("POST /api/measurements/batch — syncTrigger diagnostic (iOS #66)", ()
     expect(withBody.entries).toEqual(withoutBody.entries);
     expect(withoutBody.updated).toBe(1);
     expect(withoutBody.inserted).toBe(1);
+  });
+});
+
+describe("POST /api/measurements/batch — HealthKit trigger persistence (#586)", () => {
+  function stampedData() {
+    const call = vi.mocked(prisma.user.update).mock.calls[0]?.[0] as
+      { data: Record<string, unknown> } | undefined;
+    return call?.data;
+  }
+
+  it("dates the last background arrival when the batch says it woke in the background", async () => {
+    const res = await POST(
+      makeRequest({
+        entries: [sampleEntry(SAMPLE_ID, 64)],
+        syncTrigger: "background",
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(stampedData()).toMatchObject({
+      healthKitLastSyncedAt: expect.any(Date),
+      healthKitLastSyncTrigger: "background",
+      healthKitLastBackgroundSyncAt: expect.any(Date),
+    });
+  });
+
+  it("treats a push wake as delivery without the app too", async () => {
+    const res = await POST(
+      makeRequest({
+        entries: [sampleEntry(SAMPLE_ID, 64)],
+        syncTrigger: "push",
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(stampedData()).toMatchObject({
+      healthKitLastSyncTrigger: "push",
+      healthKitLastBackgroundSyncAt: expect.any(Date),
+    });
+  });
+
+  it("leaves the background timestamp untouched for a foreground batch", async () => {
+    const res = await POST(
+      makeRequest({
+        entries: [sampleEntry(SAMPLE_ID, 64)],
+        syncTrigger: "foreground",
+      }),
+    );
+    expect(res.status).toBe(200);
+    const data = stampedData();
+    expect(data).toMatchObject({ healthKitLastSyncTrigger: "foreground" });
+    // Not written at all — a sync the user triggered by opening the app is no
+    // evidence about background delivery, and overwriting the older honest
+    // timestamp with this one would erase the only answer the card has.
+    expect(data).not.toHaveProperty("healthKitLastBackgroundSyncAt");
+  });
+
+  it("writes null over a stale trigger when the client declares none", async () => {
+    const res = await POST(
+      makeRequest({ entries: [sampleEntry(SAMPLE_ID, 64)] }),
+    );
+    expect(res.status).toBe(200);
+    const data = stampedData();
+    // The field describes THIS sync. Leaving the previous batch's trigger
+    // standing would attribute it to a batch that never declared one.
+    expect(data).toMatchObject({ healthKitLastSyncTrigger: null });
+    expect(data).not.toHaveProperty("healthKitLastBackgroundSyncAt");
   });
 });

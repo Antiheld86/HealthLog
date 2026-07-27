@@ -112,7 +112,6 @@ export async function handleMeasurementReminderCheck(
           auto_resolved: summary.autoResolved,
           skipped_not_due: summary.skippedNotDue,
           skipped_outside_window: summary.skippedOutsideWindow,
-          skipped_client_managed: summary.skippedClientManaged,
           skipped_no_channel: summary.skippedNoChannel,
           failed: summary.failed,
         },

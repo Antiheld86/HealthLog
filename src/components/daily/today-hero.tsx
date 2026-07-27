@@ -38,6 +38,7 @@ import Link from "next/link";
 import { Moon } from "lucide-react";
 
 import { useMounted } from "@/hooks/use-mounted";
+import { formatTime } from "@/lib/format";
 import { ScoreRing } from "@/components/insights/derived/score-ring";
 import type { ScoreBand } from "@/components/insights/derived/band-tokens";
 import { ProseBlocks } from "@/components/insights/prose-blocks";
@@ -73,17 +74,17 @@ function formatDelta(
  * the hydration render — React #418, a class of bug this project has already
  * paid for once.
  *
- * `undefined` locale lets the browser pick the user's own regional format
- * (24-hour here, 12-hour there); the chip is a timestamp, not copy.
+ * Goes through the shared `formatTime`, which reads the profile's timezone and
+ * clock preference. The bare `toLocaleTimeString(undefined, …)` this replaces
+ * asked the BROWSER instead, which is a different question: someone whose
+ * profile says Europe/Berlin while their laptop sits in Manila saw a Manila
+ * time here and a Berlin time on every other surface, for the same instant.
  */
 function formatJustInTime(iso: string): string | null {
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return null;
   try {
-    return at.toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatTime(at);
   } catch {
     return null;
   }

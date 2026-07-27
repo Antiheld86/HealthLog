@@ -42,7 +42,9 @@ import {
   COMPARISON_BASELINES,
   DEFAULT_DASHBOARD_LAYOUT,
   DASHBOARD_WIDGET_IDS,
+  DASHBOARD_IOS_ONLY_WIDGET_IDS,
   IOS_PIN_ONLY_WIDGET_IDS,
+  type DashboardWidgetCatalogueId,
   SCORE_RING_IDS,
   SCORE_RING_MODULE,
   MAX_SELECTED_SCORE_RINGS,
@@ -61,7 +63,10 @@ import {
 } from "@/components/ui/select";
 import { apiDelete, apiGet, apiPut, ApiError } from "@/lib/api/api-fetch";
 import { useAuth } from "@/hooks/use-auth";
-import { WIDGET_MODULE_BY_ID } from "@/lib/dashboard/widget-modules";
+import {
+  NATIVE_ONLY_WIDGET_LABEL_KEYS,
+  WIDGET_MODULE_BY_ID,
+} from "@/lib/dashboard/widget-modules";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 
@@ -348,7 +353,7 @@ export function DashboardLayoutSection({ id }: { id: string }) {
     },
   });
 
-  function toggle(widgetId: DashboardWidgetId, visible: boolean) {
+  function toggle(widgetId: DashboardWidgetCatalogueId, visible: boolean) {
     if (!layout) return;
     setDraft({
       ...layout,
@@ -365,7 +370,10 @@ export function DashboardLayoutSection({ id }: { id: string }) {
    * coarse: they wanted a chart visible without the tile (for metrics they
    * tracks without wanting the at-a-glance number) or vice versa.
    */
-  function toggleTile(widgetId: DashboardWidgetId, tileVisible: boolean) {
+  function toggleTile(
+    widgetId: DashboardWidgetCatalogueId,
+    tileVisible: boolean,
+  ) {
     if (!layout) return;
     setDraft({
       ...layout,
@@ -911,6 +919,74 @@ export function DashboardLayoutSection({ id }: { id: string }) {
               {t("dashboard.dragHandleHint")}
             </p>
           )}
+
+          {/* issue #581 — widgets the mobile app draws and this page does
+              not. Filtering them out of the list above is right (a toggle
+              over something the web cannot draw would be a silent no-op),
+              but the native client materialises them into the SAME stored
+              layout, so the account ended up holding rows it never set and
+              could not change from anywhere. They get their own labelled
+              group: the same two flags, no reordering (placement is the
+              native client's), and only for ids the layout actually holds —
+              an account with no native client has nothing to configure here
+              and sees nothing. */}
+          {(() => {
+            const nativeOnlyIds = new Set<string>([
+              ...IOS_PIN_ONLY_WIDGET_IDS,
+              ...DASHBOARD_IOS_ONLY_WIDGET_IDS,
+            ]);
+            const nativeWidgets = layout.widgets
+              .filter((w) => nativeOnlyIds.has(w.id))
+              // Same fail-open module gate as the web list: only an explicit
+              // `false` hides the row.
+              .filter((w) => {
+                const moduleKey = WIDGET_MODULE_BY_ID[w.id];
+                return !moduleKey || modules?.[moduleKey] !== false;
+              })
+              .sort((a, b) => a.order - b.order);
+            if (nativeWidgets.length === 0) return null;
+            return (
+              <div
+                data-slot="native-only-widgets"
+                className="border-border/60 mt-6 space-y-2 border-t pt-4"
+              >
+                <p className="text-sm font-medium">
+                  {t("dashboard.layoutNativeOnlyTitle")}
+                </p>
+                <p className="text-muted-foreground text-xs">
+                  {t("dashboard.layoutNativeOnlyHint")}
+                </p>
+                <div className="text-muted-foreground flex items-center gap-2 px-3 pt-2 pb-1 text-xs font-medium tracking-wide uppercase">
+                  <span className="flex-1" aria-hidden="true" />
+                  <span className="w-12 text-center">
+                    {t("dashboard.layoutTileColumn")}
+                  </span>
+                  <span className="w-12 text-center">
+                    {t("dashboard.layoutChartColumn")}
+                  </span>
+                </div>
+                {nativeWidgets.map((widget) => {
+                  const label = t(
+                    NATIVE_ONLY_WIDGET_LABEL_KEYS[widget.id] ?? widget.id,
+                  );
+                  return (
+                    <StaticWidgetRow
+                      key={widget.id}
+                      widget={widget}
+                      disabled={saveMutation.isPending}
+                      labels={{
+                        tileColumn: t("dashboard.layoutTileColumn"),
+                        chartColumn: t("dashboard.layoutChartColumn"),
+                        widgetLabel: label,
+                      }}
+                      onToggleTile={toggleTile}
+                      onToggleChart={toggle}
+                    />
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -1112,6 +1188,66 @@ function SortableWidgetRow({
       >
         <ArrowDown className="h-4 w-4" />
       </Button>
+    </div>
+  );
+}
+
+/**
+ * issue #581 — one row in the native-only group: the same two switches as a
+ * widget row above, without the drag handle or the arrow buttons. Placement
+ * of these widgets belongs to the client that draws them, so the web offers
+ * visibility and nothing it cannot honour.
+ */
+function StaticWidgetRow({
+  widget,
+  disabled,
+  labels,
+  onToggleTile,
+  onToggleChart,
+}: {
+  widget: {
+    id: DashboardWidgetCatalogueId;
+    visible: boolean;
+    tileVisible?: boolean;
+    order: number;
+  };
+  disabled: boolean;
+  labels: { tileColumn: string; chartColumn: string; widgetLabel: string };
+  onToggleTile: (id: DashboardWidgetCatalogueId, value: boolean) => void;
+  onToggleChart: (id: DashboardWidgetCatalogueId, value: boolean) => void;
+}) {
+  const tileChecked =
+    typeof widget.tileVisible === "boolean"
+      ? widget.tileVisible
+      : widget.visible;
+
+  return (
+    <div
+      data-slot="native-widget-row"
+      data-widget-id={widget.id}
+      className="border-border bg-background/30 flex min-h-12 items-center gap-2 rounded-md border px-3 py-2"
+    >
+      <span className="flex-1 truncate text-sm" title={labels.widgetLabel}>
+        {labels.widgetLabel}
+      </span>
+      <div className="flex w-12 justify-center">
+        <Switch
+          checked={tileChecked}
+          onCheckedChange={(v) => onToggleTile(widget.id, v)}
+          aria-label={`${labels.widgetLabel} — ${labels.tileColumn}`}
+          disabled={disabled}
+          data-slot="widget-tile-switch"
+        />
+      </div>
+      <div className="flex w-12 justify-center">
+        <Switch
+          checked={widget.visible}
+          onCheckedChange={(v) => onToggleChart(widget.id, v)}
+          aria-label={`${labels.widgetLabel} — ${labels.chartColumn}`}
+          disabled={disabled}
+          data-slot="widget-chart-switch"
+        />
+      </div>
     </div>
   );
 }

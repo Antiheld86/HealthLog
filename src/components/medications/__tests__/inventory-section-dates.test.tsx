@@ -21,7 +21,7 @@ import { I18nProvider } from "@/lib/i18n/context";
 const src = readFileSync(
   resolve(
     process.cwd(),
-    "src/components/medications/sections/inventory-section.tsx",
+    "src/components/medications/sections/inventory-dialogs.tsx",
   ),
   "utf8",
 );

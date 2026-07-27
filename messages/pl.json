@@ -468,6 +468,8 @@
     "moveDown": "W dół",
     "layoutTileColumn": "Kafelek",
     "layoutChartColumn": "Wykres",
+    "layoutNativeOnlyTitle": "Widoczne w aplikacji mobilnej",
+    "layoutNativeOnlyHint": "Te widżety rysuje aplikacja mobilna, nie ta strona. Są zapisane w tym samym układzie, więc to tutaj ustawia się ich widoczność.",
     "dragHandle": "Przeciągnij, aby zmienić kolejność",
     "dragHandleHint": "Strzałki Góra/Dół, lub Spacja plus strzałki na zaznaczonym uchwycie.",
     "emptyTitle": "Twój panel jest pusty",
@@ -4497,7 +4499,7 @@
           },
           "fullBackup": {
             "title": "Pełna kopia zapasowa",
-            "description": "Wszystkie Twoje dane w jednym pliku JSON — pomiary, leki, nastrój, cykl, wyniki badań laboratoryjnych, epizody chorobowe, alergie, wywiad rodzinny i treningi. Taki sam format jak cotygodniowa automatyczna kopia.",
+            "description": "Twoje pomiary, leki, nastrój, cykl, wyniki badań, epizody chorobowe, alergie, wywiad rodzinny, składniki odżywcze i treningi w jednym pliku JSON. Ten sam kształt co cotygodniowa kopia automatyczna. Niektóre rodzaje wpisów nie są jeszcze przenoszone — manifest pliku wskazuje, co zawiera.",
             "scopeNote": "Metadane dokumentów oraz podsumowanie AI, jeśli istnieje, są uwzględnione jako czysty tekst; oryginalne pliki dokumentów oraz dane tras GPS/próbek treningów nie są uwzględnione — pobierz je osobno z archiwum dokumentów lub eksportu treningów.",
             "encryptToggle": "Zaszyfruj hasłem-frazą",
             "passphrasePlaceholder": "Hasło-fraza (min. 12 znaków)",
@@ -4937,6 +4939,7 @@
           "openai": "OpenAI (Twój klucz)",
           "anthropic": "Anthropic (Claude)",
           "local": "Model lokalny",
+          "openai-compatible": "Brama zgodna z OpenAI",
           "admin-openai": "OpenAI administratora"
         },
         "title": "Łańcuch zapasowy",
@@ -4963,7 +4966,13 @@
         "openai": "OpenAI (Twój klucz API)",
         "anthropic": "Anthropic (Claude)",
         "local": "Model lokalny (zgodny z OpenAI)",
+        "openai-compatible": "Brama zgodna z OpenAI",
         "admin-openai": "OpenAI udostępniony przez administratora"
+      },
+      "compat": {
+        "description": "Pełnoprawny dostawca dla każdego punktu końcowego mówiącego API /v1/chat/completions OpenAI: LiteLLM, OpenRouter, vLLM lub inna brama. Adres bazowy kończy się na /v1, klucz API jest opcjonalny, a model to ten, który kieruje twoja brama. Twój klucz OpenAI nigdy nie trafia do tego punktu końcowego — ten dostawca ma własny.",
+        "keyLabel": "Klucz API (opcjonalny)",
+        "modelHint": "Nazwa modelu, której oczekuje twoja brama. Pozostawione puste, użyty zostanie model zapisany dla pozostałych dostawców; gdy nie ustawiono żadnego, ten dostawca jest pomijany."
       },
       "openai": {
         "modelSelect": "Model",
@@ -5091,8 +5100,8 @@
       "responseTimeoutInvalid": "Podaj liczbę od 10 do 600 sekund.",
       "autoRead": {
         "title": "Automatyczne czytanie dokumentów przez AI",
-        "subLabel": "Nowo przesłane dokumenty są czytane i indeksowane przez skonfigurowanego dostawcę AI bez potwierdzania każdego dokumentu.",
-        "honesty": "Po włączeniu każdy przesłany dokument jest wysyłany do skonfigurowanego dostawcy AI, aby go odczytać, opisać i zaindeksować do wyszukiwania — bez potwierdzania każdego dokumentu. Dzieje się to na serwerze, a treść dokumentu opuszcza to urządzenie i trafia do tego dostawcy. Jeśli skonfigurowany dostawca to połączenie subskrypcyjne (zalogowane konto AI zamiast klucza API), obowiązują jego własne ustawienia danych — dostawcy subskrypcyjni mogą wykorzystywać treść do ulepszania swoich modeli i nie obejmuje tego żadna umowa powierzenia przetwarzania danych. Dokumenty odczytywane przez samodzielnie hostowany model lokalny nigdy nie opuszczają Twojego serwera. Domyślnie wyłączone; włącz je tylko wtedy, gdy akceptujesz ten kompromis dla przesyłanych dokumentów.",
+        "subLabel": "Dokumenty są czytane i indeksowane przez skonfigurowanego dostawcę AI bez potwierdzania każdego dokumentu.",
+        "honesty": "Po włączeniu każdy przesłany dokument jest wysyłany do skonfigurowanego dostawcy AI, aby go odczytać, opisać i zaindeksować do wyszukiwania — bez potwierdzania każdego dokumentu. Włączenie działa też wstecz: dokumenty już przesłane, które nie mają jeszcze streszczenia, również zostaną wysłane — do 200 przy każdym włączeniu. Dzieje się to na serwerze, a treść dokumentu opuszcza to urządzenie i trafia do tego dostawcy. Jeśli skonfigurowany dostawca to połączenie subskrypcyjne (zalogowane konto AI zamiast klucza API), obowiązują jego własne ustawienia danych — dostawcy subskrypcyjni mogą wykorzystywać treść do ulepszania swoich modeli i nie obejmuje tego żadna umowa powierzenia przetwarzania danych. Dokumenty odczytywane przez samodzielnie hostowany model lokalny nigdy nie opuszczają Twojego serwera. Domyślnie wyłączone; włącz je tylko wtedy, gdy akceptujesz ten kompromis dla swoich dokumentów.",
         "confirm": "Rozumiem — włącz automatyczne czytanie przez AI",
         "cancel": "Anuluj"
       },
@@ -5290,7 +5299,6 @@
       "minutesAgo": "{count} min temu",
       "hoursAgo": "{count} godz. temu",
       "daysAgo": "{count} dni temu",
-      "ariaLabel": "Status integracji",
       "resumeCta": "Połącz ponownie",
       "resumeSuccess": "Integracja wznowiona",
       "resumeError": "Ponowne połączenie nieudane",
@@ -5834,7 +5842,20 @@
       "backgroundStep": "Pozostaw włączone odświeżanie aplikacji w tle. Aplikacja synchronizuje nowe dane automatycznie na pierwszym planie oraz gdy iOS przydzieli jej czas w tle.",
       "importNote": "Potrzebujesz starszej historii lub nie możesz użyć aplikacji iOS? Przesłanie pliku XML/ZIP z Apple Health jest jednorazową alternatywą i nie włącza synchronizacji na żywo.",
       "importAction": "Otwórz jednorazowy import",
-      "staleNote": "Od ponad tygodnia nie napłynęły żadne dane z Apple Health. Otwórz aplikację HealthLog na iPhonie i sprawdź uprawnienia Apple Health."
+      "staleNote": "Od ponad tygodnia nie napłynęły żadne dane z Apple Health. Otwórz aplikację HealthLog na iPhonie i sprawdź uprawnienia Apple Health.",
+      "delivery": {
+        "title": "Dostarczanie",
+        "lastTriggerLabel": "Ostatnia synchronizacja dotarła",
+        "lastBackgroundLabel": "Ostatnia synchronizacja w tle",
+        "backgroundNever": "Nigdy — jak dotąd każda synchronizacja dotarła przy otwartej aplikacji",
+        "noSyncYet": "Żadna synchronizacja jeszcze nie dotarła, więc nie ma tu nic do zgłoszenia.",
+        "trigger": {
+          "foreground": "przy otwartej aplikacji",
+          "background": "w tle",
+          "push": "z wybudzenia push",
+          "unknown": "aplikacja nie zgłosiła wyzwalacza"
+        }
+      }
     },
     "garminInfo": {
       "title": "Garmin",
@@ -5949,7 +5970,7 @@
     "integrationWebPush": "Web Push",
     "offlineGeoLabel": "Dane geograficzne",
     "offlineGeoEnabled": "Offline (GeoLite2)",
-    "offlineGeoFallback": "Online ({host}) — ustaw MAXMIND_LICENSE_KEY w CI",
+    "offlineGeoFallback": "Online ({host}) — podłącz bazy GeoLite2 i ustaw GEOLITE2_DIR",
     "apiGlobal": "Zezwól na punkty końcowe API i tokeny API.",
     "umamiTitle": "Umami",
     "umamiDescription": "Analityka internetowa z Umami",
@@ -6750,7 +6771,7 @@
       "reminderCheckOverdueTitle": "Dawka opóźniona: {medication}",
       "reminderCheckOverdueBody": "{medication} ({dose}) w przedziale {window} jest opóźnione o {minutes} minut.",
       "offlineGeoUnavailableTitle": "Bazy geolokalizacji offline nie zostały załadowane",
-      "offlineGeoUnavailableBody": "HealthLog rozwiązuje lokalizacje logowania przez awaryjne źródło online ipwho.is. Aby włączyć bazy offline GeoLite2-City i GeoLite2-ASN, ustaw MAXMIND_LICENSE_KEY w sekretach GitHub Actions pod adresem {secretsUrl} i ponownie wdroż. Do tego czasu kolumna operatora w przeglądzie logowań pozostaje pusta.",
+      "offlineGeoUnavailableBody": "HealthLog rozwiązuje lokalizacje logowania przez zapytanie online do {host}, więc każdy adres IP logowania opuszcza ten serwer. Aby rozwiązywać je lokalnie, pobierz bazy GeoLite2-City i GeoLite2-ASN na bezpłatnym koncie MaxMind, podłącz katalog do kontenera i ustaw na niego GEOLITE2_DIR. Kroki: {docsUrl}",
       "tlsPinChangedTitle": "Zmieniono certyfikat liścia TLS: {host}",
       "tlsPinChangedBody": "Liść TLS serwowany przez {host} ma teraz pin SPKI {servedPin}, którego nie ma w znanym zestawie pinów. Klienci z przypiętym pinem (aplikacja natywna) nie połączą się po usunięciu starego pinu. Ponownie wyodrębnij nowy pin liścia, dodaj go do TLS_LEAF_SPKI_PINS oraz do zestawu pinów klienta natywnego i opublikuj kompilację, zanim ten certyfikat wygaśnie {validTo}. Zobacz docs/ops/tls-cert-pin.md."
     },
@@ -8602,7 +8623,8 @@
       "uploading": "Przesyłanie…",
       "dismissFailed": "Odrzuć nieudane przesyłanie",
       "processing": "Przetwarzanie…",
-      "ready": "Gotowe"
+      "ready": "Gotowe",
+      "deleteKey": "Del"
     },
     "error": {
       "fileTooLarge": "Ten plik przekracza limit {maxSize}.",

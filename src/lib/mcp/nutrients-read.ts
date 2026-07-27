@@ -20,6 +20,7 @@
  */
 import { prisma } from "@/lib/db";
 import { isModuleEnabled } from "@/lib/modules/gate";
+import { binaryReferenceSex, type BinaryReferenceSex } from "@/lib/profile/sex";
 import {
   NUTRIENT_CATALOG,
   NUTRIENT_CODES,
@@ -195,7 +196,7 @@ async function readOverview(
 async function readDaily(
   userId: string,
   userTz: string,
-  sex: "MALE" | "FEMALE" | null,
+  sex: BinaryReferenceSex | null,
   nutrient: NutrientCode,
   days: number,
 ): Promise<NutrientsDailyResult> {
@@ -268,9 +269,7 @@ export async function getNutrients(
     select: { timezone: true, gender: true },
   });
   const userTz = user?.timezone || DEFAULT_TIMEZONE;
-  const genderValue = user?.gender ?? null;
-  const sex =
-    genderValue === "MALE" || genderValue === "FEMALE" ? genderValue : null;
+  const sex = binaryReferenceSex(user?.gender);
 
   if (!args.nutrient) {
     const days = clampDays(args.days, OVERVIEW_DEFAULT_DAYS, OVERVIEW_MAX_DAYS);

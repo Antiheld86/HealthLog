@@ -130,12 +130,27 @@ export const GET = apiHandler(async () => {
 
   const row = await prisma.user.findUnique({
     where: { id: user.id },
-    select: { healthKitConfigJson: true, healthKitLastSyncedAt: true },
+    select: {
+      healthKitConfigJson: true,
+      healthKitLastSyncedAt: true,
+      healthKitLastSyncTrigger: true,
+      healthKitLastBackgroundSyncAt: true,
+    },
   });
 
   const stored = parseStored(row?.healthKitConfigJson ?? null);
   const entries = mergeWithDefaults(stored);
   const lastSyncedAt = row?.healthKitLastSyncedAt?.toISOString() ?? null;
+  // What triggered the most recent accepted batch, and when data last arrived
+  // without the app being opened. `lastSyncedAt` alone cannot separate those
+  // two cases, which is the whole diagnostic: a card that only ever says "last
+  // sync 10 minutes ago" reads the same whether the phone is delivering by
+  // itself or whether every arrival was the user opening the app. Null in
+  // either field is honest absence — an older client that declares no trigger,
+  // or a pipe that has never delivered in the background.
+  const lastSyncTrigger = row?.healthKitLastSyncTrigger ?? null;
+  const lastBackgroundSyncAt =
+    row?.healthKitLastBackgroundSyncAt?.toISOString() ?? null;
 
   // Apple Health is push-based: the iOS app delivers and nothing here polls, so
   // liveness is a data question, not an attempt question. Without a threshold a
@@ -157,6 +172,8 @@ export const GET = apiHandler(async () => {
   return apiSuccess({
     entries,
     lastSyncedAt,
+    lastSyncTrigger,
+    lastBackgroundSyncAt,
     syncHealth,
     metricFreshness: classifyMetricFreshness(samples, syncHealth.verdict),
   });

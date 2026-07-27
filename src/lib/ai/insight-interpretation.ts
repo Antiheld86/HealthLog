@@ -27,6 +27,8 @@
  * The band position is computed HERE, server-side — never left to the model.
  */
 
+import { binaryReferenceSex, type BinaryReferenceSex } from "@/lib/profile/sex";
+
 /** How a band reads against health: the four-way valence the prose leans on. */
 export type BandValence = "favourable" | "neutral" | "caution" | "unfavourable";
 
@@ -54,7 +56,7 @@ export interface MetricInterpretation {
   /** Ascending bands when the metric is not sex-split. */
   bands?: InterpretationBand[];
   /** Sex-split bands; used only when the profile carries the sex. */
-  sexBands?: Record<"MALE" | "FEMALE", InterpretationBand[]>;
+  sexBands?: Record<BinaryReferenceSex, InterpretationBand[]>;
   /**
    * Optional honesty caveat surfaced in the prompt block — used where the KB
    * hedges the edges (consumer rating scales, proxy measurements).
@@ -300,7 +302,7 @@ const INTERPRETATION_REGISTRY: Record<string, MetricInterpretation> = {
  */
 export function resolveInterpretation(
   metricKey: string,
-  sex: "MALE" | "FEMALE" | null | undefined,
+  sex: BinaryReferenceSex | null | undefined,
 ): {
   unit: string;
   directionOfGood: DirectionOfGood;
@@ -312,8 +314,9 @@ export function resolveInterpretation(
   if (!entry) return null;
   let bands: InterpretationBand[] | undefined = entry.bands;
   if (entry.sexBands) {
-    if (sex !== "MALE" && sex !== "FEMALE") return null;
-    bands = entry.sexBands[sex];
+    const referenceSex = binaryReferenceSex(sex);
+    if (!referenceSex) return null;
+    bands = entry.sexBands[referenceSex];
   }
   if (!bands || bands.length === 0) return null;
   return {
@@ -398,7 +401,7 @@ export function classifyBandPosition(
  */
 export function interpretationBandEdges(
   metricKey: string,
-  sex?: "MALE" | "FEMALE" | null,
+  sex?: BinaryReferenceSex | null,
 ): number[] {
   const resolved = resolveInterpretation(metricKey, sex ?? null);
   if (!resolved) {

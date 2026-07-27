@@ -114,6 +114,7 @@ export type VisionProviderType =
   | "admin-openai"
   | "admin-key"
   | "local"
+  | "openai-compatible"
   | "codex"
   | "admin-codex"
   | "none";
@@ -127,6 +128,11 @@ export type VisionProviderType =
  *                           configuring a self-hosted model and we cannot sniff
  *                           its capabilities; a non-vision local model surfaces
  *                           a clear extract failure rather than a silent gate.
+ *  - openai-compatible    → same trust-by-default: a gateway routes whatever
+ *                           model name its operator aliased, so the OpenAI
+ *                           allowlist would reject perfectly capable models
+ *                           (and accept incapable ones) on the strength of a
+ *                           string the gateway owner picked.
  *  - codex                → vision when the resolved codex slug is a
  *                           multimodal model (GPT-5.x / gpt-4o-class). Image
  *                           input rides the ChatGPT plan — no API key. A
@@ -145,6 +151,7 @@ export function supportsVisionForConfig(
     case "admin-key":
       return model ? openaiSupportsVision(model) : false;
     case "local":
+    case "openai-compatible":
       return true;
     case "codex":
     // The operator-shared central Codex runs the same `codex/responses` wire on
