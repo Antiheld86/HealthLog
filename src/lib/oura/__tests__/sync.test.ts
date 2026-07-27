@@ -567,7 +567,6 @@ describe("syncUserOura", () => {
     // blanked — and the partial rides back with the count, so the card can
     // report a warning rather than a tick over a run that lost a collection.
     expect(result).toEqual({ imported: 2, failed: true });
-    const imported = result.imported;
     const written = createdRows().map((row) => row.type);
     expect(written).toContain("SLEEP_SCORE");
     expect(written).toContain("OXYGEN_SATURATION");

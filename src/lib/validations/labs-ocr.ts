@@ -18,6 +18,8 @@
  */
 import { z } from "zod/v4";
 
+import type { WrittenOutcome } from "@/lib/outcome/written-outcome";
+
 import { validateEntryInstant } from "@/lib/validations/entry-instant";
 
 /** Max rows a single scan / commit may carry — a dense panel is ~30 analytes. */
@@ -200,6 +202,13 @@ export interface OcrSkippedRowDto {
 export interface OcrCommitResponseDto {
   inserted: unknown[];
   skipped: OcrSkippedRowDto[];
+  /**
+   * How the commit reads, resolved server-side from the two lists. The dialog
+   * renders this rather than assuming a 200 means readings were saved — a
+   * re-scan in which every confirmed row turned out to be a duplicate writes
+   * nothing and must not report a green toast.
+   */
+  outcome: WrittenOutcome;
 }
 
 /** The capability-probe response (drives whether the UI shows the scan entry). */

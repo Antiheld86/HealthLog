@@ -5148,6 +5148,11 @@
     "withingsFullSyncTitle": "¿Sincronización completa?",
     "withingsFullSyncDescription": "Se sincronizarán por completo todos los datos disponibles de Withings. Esto puede tardar un poco según tu historial.",
     "withingsSyncResult": "{count} mediciones sincronizadas",
+    "syncOutcome": {
+      "empty": "No hay nada nuevo que importar. Todo está al día.",
+      "failed": "No se guardó nada. El próximo intento lo repetirá.",
+      "partial": "{count} mediciones sincronizadas. Parte de los datos no se pudo guardar; el próximo intento lo repetirá."
+    },
     "withingsFullSyncResult": "{count} mediciones sincronizadas por completo",
     "withingsSyncFailed": "Falló la sincronización",
     "withingsOauthConnected": "Withings conectado — la primera sincronización comienza en segundo plano.",
@@ -7873,6 +7878,9 @@
       "saveSelected": "Guardar {count} seleccionados",
       "discardAll": "Descartar todo",
       "savedToast": "{count} resultados de laboratorio guardados",
+      "savedPartialToast": "{count} resultados de laboratorio guardados, {skipped} omitidos por duplicados",
+      "savedNothingToast": "No se guardó nada: {skipped} valores ya estaban registrados",
+      "savedEmptyToast": "No hay nada que guardar",
       "noRows": "No se encontraron valores en este informe.",
       "nothingToSave": "Selecciona al menos un valor para guardar.",
       "saveFailed": "No se pudieron guardar los valores. Inténtalo de nuevo.",

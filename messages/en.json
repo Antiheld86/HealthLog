@@ -5148,6 +5148,11 @@
     "withingsFullSyncTitle": "Full synchronization?",
     "withingsFullSyncDescription": "All available Withings data will be fully synchronized. This may take some time depending on your history.",
     "withingsSyncResult": "{count} measurements synchronized",
+    "syncOutcome": {
+      "empty": "Nothing new to import. Everything is up to date.",
+      "failed": "Nothing was saved. The next run retries it.",
+      "partial": "{count} measurements synchronized. Some data could not be saved; the next run retries it."
+    },
     "withingsFullSyncResult": "{count} measurements fully synchronized",
     "withingsSyncFailed": "Sync failed",
     "withingsOauthConnected": "Withings connected — the first sync starts in the background.",
@@ -7873,6 +7878,9 @@
       "saveSelected": "Save {count} selected",
       "discardAll": "Discard all",
       "savedToast": "{count} lab results saved",
+      "savedPartialToast": "{count} lab results saved, {skipped} skipped as duplicates",
+      "savedNothingToast": "Nothing saved: {skipped} readings were already recorded",
+      "savedEmptyToast": "Nothing to save",
       "noRows": "No readings could be found in this report.",
       "nothingToSave": "Select at least one reading to save.",
       "saveFailed": "Couldn't save the readings. Please try again.",

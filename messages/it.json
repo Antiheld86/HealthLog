@@ -5148,6 +5148,11 @@
     "withingsFullSyncTitle": "Sincronizzazione completa?",
     "withingsFullSyncDescription": "Tutti i dati Withings disponibili verranno sincronizzati completamente. Potrebbe richiedere del tempo a seconda del tuo storico.",
     "withingsSyncResult": "{count} misurazioni sincronizzate",
+    "syncOutcome": {
+      "empty": "Non c'è nulla di nuovo da importare. Tutto è aggiornato.",
+      "failed": "Non è stato salvato nulla. La prossima esecuzione riprova.",
+      "partial": "{count} misurazioni sincronizzate. Una parte dei dati non è stata salvata; la prossima esecuzione riprova."
+    },
     "withingsFullSyncResult": "{count} misurazioni sincronizzate completamente",
     "withingsSyncFailed": "Sincronizzazione non riuscita",
     "withingsOauthConnected": "Withings collegato — la prima sincronizzazione parte in background.",
@@ -7873,6 +7878,9 @@
       "saveSelected": "Salva {count} selezionati",
       "discardAll": "Scarta tutto",
       "savedToast": "{count} risultati di laboratorio salvati",
+      "savedPartialToast": "{count} risultati di laboratorio salvati, {skipped} ignorati perché duplicati",
+      "savedNothingToast": "Nulla salvato: {skipped} valori erano già registrati",
+      "savedEmptyToast": "Nulla da salvare",
       "noRows": "Nessun valore trovato in questo referto.",
       "nothingToSave": "Seleziona almeno un valore da salvare.",
       "saveFailed": "Impossibile salvare i valori. Riprova.",

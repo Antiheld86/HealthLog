@@ -50,6 +50,7 @@ import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { IntegrationStatusPill } from "@/components/settings/integration-status-pill";
 import { TestConnectionButton } from "@/components/settings/test-connection-button";
 import { apiFetchRaw, apiPost } from "@/lib/api/api-fetch";
+import { WrittenOutcomeLine } from "@/components/outcome/written-outcome-line";
 import { useTranslations } from "@/lib/i18n/context";
 import {
   invalidateKeys,
@@ -64,6 +65,11 @@ import {
   type IntegrationStatusViewModel,
 } from "./shared";
 import { MetricFreshnessDisclosure } from "./metric-freshness-disclosure";
+import {
+  readSyncOutcome,
+  useSyncOutcomeMessage,
+  type SyncOutcomeState,
+} from "./sync-outcome";
 import { IntegrationCardDescription } from "./setup-guide-link";
 
 export function GoogleHealthCard({
@@ -72,11 +78,9 @@ export function GoogleHealthCard({
   viewModel: IntegrationStatusViewModel | undefined;
 }) {
   const { t } = useTranslations();
+  const describeSyncOutcome = useSyncOutcomeMessage();
   const [syncing, setSyncing] = useState(false);
-  const [syncMsg, setSyncMsg] = useState<string | null>(null);
-  const [syncMsgType, setSyncMsgType] = useState<"success" | "error" | null>(
-    null,
-  );
+  const [syncResult, setSyncResult] = useState<SyncOutcomeState | null>(null);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [credsSaving, setCredsSaving] = useState(false);
@@ -120,8 +124,7 @@ export function GoogleHealthCard({
 
   async function handleSync(fullSync = false) {
     setSyncing(true);
-    setSyncMsg(null);
-    setSyncMsgType(null);
+    setSyncResult(null);
     try {
       const res = await apiFetchRaw("/api/google-health/sync", {
         method: "POST",
@@ -129,23 +132,32 @@ export function GoogleHealthCard({
         body: JSON.stringify({ fullSync }),
       });
       const json = await res.json();
-      if (res.ok) {
-        setSyncMsg(
-          t("settings.googleHealthSyncResult", { count: json.data.imported }),
-        );
-        setSyncMsgType("success");
+      const result = res.ok ? readSyncOutcome(json) : null;
+      if (result) {
+        // The tone comes off what the run wrote, not off `res.ok`.
+        setSyncResult({
+          outcome: result.outcome,
+          message: describeSyncOutcome(
+            result,
+            t("settings.googleHealthSyncResult", { count: result.imported }),
+          ),
+        });
         void invalidateKeys(queryClient, measurementDependentKeys);
         queryClient.invalidateQueries({ queryKey: queryKeys.googleHealth() });
         queryClient.invalidateQueries({
           queryKey: queryKeys.integrationsStatus(),
         });
       } else {
-        setSyncMsg(json.error || t("settings.googleHealthSyncFailed"));
-        setSyncMsgType("error");
+        setSyncResult({
+          outcome: "failed",
+          message: json?.error || t("settings.googleHealthSyncFailed"),
+        });
       }
     } catch {
-      setSyncMsg(t("settings.googleHealthSyncFailed"));
-      setSyncMsgType("error");
+      setSyncResult({
+        outcome: "failed",
+        message: t("settings.googleHealthSyncFailed"),
+      });
     } finally {
       setSyncing(false);
     }
@@ -501,13 +513,12 @@ export function GoogleHealthCard({
                 {t("settings.googleHealthBackfillInProgress")}
               </p>
             )}
-            {syncMsg && (
-              <p
-                role="alert"
-                className={`text-sm ${syncMsgType === "success" ? "text-success" : "text-destructive"}`}
-              >
-                {syncMsg}
-              </p>
+            {syncResult && (
+              <WrittenOutcomeLine
+                outcome={syncResult.outcome}
+                message={syncResult.message}
+                testId="google-health-sync-result"
+              />
             )}
             {/* connect→data loop: a discreet link to where this provider's
                 readings now surface — doubles as the "your data is richer"
