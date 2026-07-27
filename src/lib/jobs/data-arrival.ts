@@ -30,6 +30,7 @@
 import type { Job } from "pg-boss";
 
 import { invalidateUserDashboardSnapshot } from "@/lib/cache/invalidate";
+import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { annotate } from "@/lib/logging/context";
 import { withBackgroundEvent } from "@/lib/logging/background";
 
@@ -248,14 +249,17 @@ export async function runDataArrival(
 
 export async function handleDataArrival(
   jobs: Job<DataArrival>[],
-): Promise<void> {
-  await withBackgroundEvent("job.data_arrival", async (evt) => {
+): Promise<JobOutcome> {
+  return withBackgroundEvent("job.data_arrival", async (evt) => {
+    let processed = 0;
+    let skipped = 0;
     for (const job of jobs) {
       const arrival = job.data;
       try {
         const outcome = await runDataArrival(getWorkerPrisma(), arrival);
 
         if (outcome.status === "skipped") {
+          skipped++;
           annotate({
             action: { name: `arrival.${arrival.kind}.skipped` },
             meta: { reason: outcome.reason, source: arrival.source },
@@ -264,6 +268,7 @@ export async function handleDataArrival(
           continue;
         }
 
+        processed++;
         annotate({
           action: { name: `arrival.${arrival.kind}.processed` },
           meta: {
@@ -285,5 +290,9 @@ export async function handleDataArrival(
         throw err;
       }
     }
+    // Both statuses are successes — a refused arrival is a decision the spine
+    // made, not work it failed to do. The counts are what make the split
+    // between them readable at all.
+    return jobDone({ total: jobs.length, processed, skipped });
   });
 }

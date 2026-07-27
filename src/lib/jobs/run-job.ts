@@ -45,6 +45,12 @@ export class JobFailure extends Error {
     this.name = "JobFailure";
     this.queue = queue;
     this.reason = reason;
+    // Carry the thrown error's stack. Without this the only stack the
+    // operator ever sees points at `runJob`, which is the same for all 101
+    // queues and says nothing about where the work actually broke.
+    if (cause instanceof Error && cause.stack) {
+      this.stack = `${this.name}: ${this.message}\ncaused by ${cause.stack}`;
+    }
   }
 }
 

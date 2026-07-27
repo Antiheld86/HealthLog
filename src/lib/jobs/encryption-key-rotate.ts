@@ -24,6 +24,7 @@
  */
 import { type Job } from "pg-boss";
 import { withBackgroundEvent } from "@/lib/logging/background";
+import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { auditLog } from "@/lib/auth/audit";
 import {
   rotateCorpus,
@@ -60,8 +61,8 @@ export async function runEncryptionKeyRotation(): Promise<{
 
 export async function handleEncryptionKeyRotate(
   jobs: Job<EncryptionKeyRotatePayload>[],
-) {
-  await withBackgroundEvent("job.encryption_key_rotate", async (evt) => {
+): Promise<JobOutcome> {
+  return withBackgroundEvent("job.encryption_key_rotate", async (evt) => {
     const requestedBy = jobs[0]?.data?.requestedByUserId ?? null;
     try {
       const result = await runEncryptionKeyRotation();
@@ -77,6 +78,15 @@ export async function handleEncryptionKeyRotate(
           rotated: result.totalRotated,
           errors: result.totalErrors,
         },
+      });
+      // Per-row errors are the fail-closed skip of a row under a key the
+      // deployment no longer configures. The pass still ran, so they ride out
+      // as a count rather than failing (and retrying) the whole corpus.
+      return jobDone({
+        rotate_active_key_id: result.activeKeyId,
+        rotate_scanned: result.totalScanned,
+        rotate_rotated: result.totalRotated,
+        rotate_errors: result.totalErrors,
       });
     } catch (err) {
       evt.addWarning(`encryption-key-rotate failed: ${err}`);

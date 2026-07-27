@@ -2,10 +2,27 @@
  * Retention and maintenance cleanups: rate-limit rows, idempotency keys, audit logs, OAuth states (Withings / WHOOP), mood-reminder events, push attempts, and measurement tombstones.
  *
  * Extracted from reminder-worker.ts, which owns the queue names, cron
- * schedules, and boss.work registrations.
+ * schedules, and the queue bindings.
+ *
+ * Every pass in here used to catch its own failure, write a warning nobody
+ * reads, and return — so a retention purge that had not run for weeks was
+ * indistinguishable from one with nothing to delete. They now return
+ * `jobFailed`, which fails the pg-boss job and puts the queue on the operator's
+ * failing-jobs surface.
+ *
+ * That change has a price, and the registrars pay it: these are bulk DELETEs
+ * over a retention horizon, and their failure mode is deterministic. A
+ * statement that timed out against a large trailing edge times out again
+ * immediately. Under pg-boss's default policy (retryLimit 2, no delay, no
+ * backoff) each converted queue would run the same doomed statement three
+ * times in a row every night. So every cron-driven cleanup registered from
+ * this module is scheduled with `retryLimit: 0`: the failure is recorded once
+ * and the next night's tick is the retry, which is the right backoff for
+ * retention work that has a whole day of slack.
  */
 import { type Job } from "pg-boss";
 import { withBackgroundEvent } from "@/lib/logging/background";
+import { jobDone, jobFailed, type JobOutcome } from "@/lib/jobs/job-outcome";
 import {
   cleanupExpiredWhoopConnectTickets,
   cleanupExpiredWhoopOAuthStates,
@@ -78,9 +95,9 @@ export interface MoodReminderCleanupPayload {
 
 export async function handleMoodReminderCleanup(
   jobs: Job<MoodReminderCleanupPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.mood_reminder_cleanup", async (evt) => {
+  return withBackgroundEvent("job.mood_reminder_cleanup", async (evt) => {
     const p = getWorkerPrisma();
     try {
       const cutoff = new Date();
@@ -90,8 +107,10 @@ export async function handleMoodReminderCleanup(
         where: { date: { lt: cutoffIso } },
       });
       evt.addMeta("mood_reminder_cleanup_deleted", deleted.count);
+      return jobDone({ deleted: deleted.count });
     } catch (err) {
       evt.addWarning(`mood-reminder-cleanup failed: ${err}`);
+      return jobFailed("mood-reminder cleanup failed", err);
     }
   });
 }
@@ -118,9 +137,9 @@ export interface PushAttemptCleanupPayload {
 
 export async function handlePushAttemptCleanup(
   jobs: Job<PushAttemptCleanupPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.push_attempt_cleanup", async (evt) => {
+  return withBackgroundEvent("job.push_attempt_cleanup", async (evt) => {
     const p = getWorkerPrisma();
     try {
       const cutoff = new Date();
@@ -129,8 +148,10 @@ export async function handlePushAttemptCleanup(
         where: { createdAt: { lt: cutoff } },
       });
       evt.addMeta("push_attempt_cleanup_deleted", deleted.count);
+      return jobDone({ deleted: deleted.count });
     } catch (err) {
       evt.addWarning(`push-attempt-cleanup failed: ${err}`);
+      return jobFailed("push-attempt cleanup failed", err);
     }
   });
 }
@@ -152,9 +173,9 @@ export interface ArrivalReactionCleanupPayload {
 
 export async function handleArrivalReactionCleanup(
   jobs: Job<ArrivalReactionCleanupPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.arrival_reaction_cleanup", async (evt) => {
+  return withBackgroundEvent("job.arrival_reaction_cleanup", async (evt) => {
     const p = getWorkerPrisma();
     try {
       const cutoff = new Date();
@@ -163,8 +184,10 @@ export async function handleArrivalReactionCleanup(
         where: { createdAt: { lt: cutoff } },
       });
       evt.addMeta("arrival_reaction_cleanup_deleted", deleted.count);
+      return jobDone({ deleted: deleted.count });
     } catch (err) {
       evt.addWarning(`arrival-reaction-cleanup failed: ${err}`);
+      return jobFailed("arrival-reaction cleanup failed", err);
     }
   });
 }
@@ -175,9 +198,9 @@ export interface MeasurementTombstoneCleanupPayload {
 
 export async function handleMeasurementTombstoneCleanup(
   jobs: Job<MeasurementTombstoneCleanupPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent(
+  return withBackgroundEvent(
     "job.measurement_tombstone_cleanup",
     async (evt) => {
       const p = getWorkerPrisma();
@@ -208,6 +231,12 @@ export async function handleMeasurementTombstoneCleanup(
             "tombstone-cleanup stopped at the batch cap; a backlog remains for the next run",
           );
         }
+        return jobDone({
+          measurements_pruned: measurements.deleted,
+          mood_pruned: mood.deleted,
+          intakes_pruned: intakes.deleted,
+          drained,
+        });
       } catch (err) {
         // Rethrow. A retention purge that fails silently every night looks
         // exactly like one that has nothing to do; pg-boss recording a failed
@@ -221,32 +250,36 @@ export async function handleMeasurementTombstoneCleanup(
 
 export async function handleRateLimitCleanup(
   jobs: Job<RateLimitCleanupPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.rate_limit_cleanup", async (evt) => {
+  return withBackgroundEvent("job.rate_limit_cleanup", async (evt) => {
     const p = getWorkerPrisma();
     try {
       const result = await p.$executeRaw`
         DELETE FROM rate_limits WHERE reset_at < NOW()
       `;
       evt.addMeta("rate_limit_cleanup_deleted", result);
+      return jobDone({ deleted: result });
     } catch (err) {
       evt.addWarning(`rate-limit-cleanup failed: ${err}`);
+      return jobFailed("rate-limit cleanup failed", err);
     }
   });
 }
 
 export async function handleIdempotencyCleanup(
   jobs: Job<IdempotencyCleanupPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.idempotency_cleanup", async (evt) => {
+  return withBackgroundEvent("job.idempotency_cleanup", async (evt) => {
     const p = getWorkerPrisma();
     try {
       const deleted = await cleanupExpiredIdempotencyKeys(p);
       evt.addMeta("idempotency_cleanup_deleted", deleted);
+      return jobDone({ deleted });
     } catch (err) {
       evt.addWarning(`idempotency-cleanup failed: ${err}`);
+      return jobFailed("idempotency-key cleanup failed", err);
     }
   });
 }
@@ -266,26 +299,28 @@ export async function handleIdempotencyCleanup(
  */
 export async function handleStepUpElevationCleanup(
   jobs: Job<StepUpElevationCleanupPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.step_up_elevation_cleanup", async (evt) => {
+  return withBackgroundEvent("job.step_up_elevation_cleanup", async (evt) => {
     const p = getWorkerPrisma();
     try {
       const { count } = await p.stepUpElevation.deleteMany({
         where: { expiresAt: { lt: new Date() } },
       });
       evt.addMeta("step_up_elevation_cleanup_deleted", count);
+      return jobDone({ deleted: count });
     } catch (err) {
       evt.addWarning(`step-up-elevation-cleanup failed: ${err}`);
+      return jobFailed("step-up elevation cleanup failed", err);
     }
   });
 }
 
 export async function handleAuditLogCleanup(
   jobs: Job<AuditLogCleanupPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.audit_log_cleanup", async (evt) => {
+  return withBackgroundEvent("job.audit_log_cleanup", async (evt) => {
     const p = getWorkerPrisma();
     try {
       const outcome = await cleanupOldAuditLogs(p);
@@ -296,6 +331,7 @@ export async function handleAuditLogCleanup(
           "audit-log-cleanup stopped at the batch cap; a backlog remains for the next run",
         );
       }
+      return jobDone({ deleted: outcome.deleted, drained: outcome.drained });
     } catch (err) {
       // Rethrow — see the tombstone handler. Storage-limitation retention that
       // fails quietly is retention that is not happening.
@@ -307,15 +343,17 @@ export async function handleAuditLogCleanup(
 
 export async function handleCoachMessageCleanup(
   jobs: Job<CoachMessageCleanupPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.coach_message_cleanup", async (evt) => {
+  return withBackgroundEvent("job.coach_message_cleanup", async (evt) => {
     const p = getWorkerPrisma();
     try {
       const deleted = await cleanupOldCoachMessages(p);
       evt.addMeta("coach_message_cleanup_deleted", deleted);
+      return jobDone({ deleted });
     } catch (err) {
       evt.addWarning(`coach-message-cleanup failed: ${err}`);
+      return jobFailed("coach-message cleanup failed", err);
     }
   });
 }
@@ -326,9 +364,9 @@ export interface McpTokenCleanupPayload {
 
 export async function handleMcpTokenCleanup(
   jobs: Job<McpTokenCleanupPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.mcp_token_cleanup", async (evt) => {
+  return withBackgroundEvent("job.mcp_token_cleanup", async (evt) => {
     const p = getWorkerPrisma();
     try {
       const result = await cleanupExpiredMcpTokens(p);
@@ -340,27 +378,40 @@ export async function handleMcpTokenCleanup(
         "mcp_token_cleanup_connections_deleted",
         result.connectionsDeleted,
       );
+      return jobDone({
+        access_tokens_deleted: result.accessTokensDeleted,
+        connections_deleted: result.connectionsDeleted,
+      });
     } catch (err) {
       evt.addWarning(`mcp-token-cleanup failed: ${err}`);
+      return jobFailed("mcp-token cleanup failed", err);
     }
   });
 }
 
 export async function handleWithingsOAuthStateCleanup(
   jobs: Job<WithingsOAuthStateCleanupPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.withings_oauth_state_cleanup", async (evt) => {
-    const p = getWorkerPrisma();
-    try {
-      const deleted = await cleanupExpiredWithingsOAuthStates(p);
-      evt.addMeta("withings_oauth_state_cleanup_deleted", deleted);
-    } catch (err) {
-      // The OAuth flow tolerates a stale row sticking around for an
-      // extra day — log + carry on so the boss queue doesn't retry-loop.
-      evt.addWarning(`withings-oauth-state-cleanup failed: ${err}`);
-    }
-  });
+  return withBackgroundEvent(
+    "job.withings_oauth_state_cleanup",
+    async (evt) => {
+      const p = getWorkerPrisma();
+      try {
+        const deleted = await cleanupExpiredWithingsOAuthStates(p);
+        evt.addMeta("withings_oauth_state_cleanup_deleted", deleted);
+        return jobDone({ deleted });
+      } catch (err) {
+        // The OAuth flow tolerates a stale row for an extra day, which used
+        // to be the argument for swallowing this so the queue would not
+        // retry-loop. Tolerable is not the same as invisible: the failure is
+        // now reported, and the retry-loop worry is answered where it belongs,
+        // by the `retryLimit: 0` this queue is scheduled with.
+        evt.addWarning(`withings-oauth-state-cleanup failed: ${err}`);
+        return jobFailed("withings oauth-state cleanup failed", err);
+      }
+    },
+  );
 }
 
 export interface OidcNativeHandoffCleanupPayload {
@@ -369,17 +420,21 @@ export interface OidcNativeHandoffCleanupPayload {
 
 export async function handleOidcNativeHandoffCleanup(
   jobs: Job<OidcNativeHandoffCleanupPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.oidc_native_handoff_cleanup", async (evt) => {
+  return withBackgroundEvent("job.oidc_native_handoff_cleanup", async (evt) => {
     const p = getWorkerPrisma();
     try {
       const deleted = await cleanupExpiredOidcNativeHandoffs(p);
       evt.addMeta("oidc_native_handoff_cleanup_deleted", deleted);
+      return jobDone({ deleted });
     } catch (err) {
-      // The handoff flow tolerates a stale row for an extra day (expiry is
-      // enforced at read) — log + carry on so the boss queue doesn't retry-loop.
+      // Expiry is enforced at read, so a stale row for an extra day is
+      // harmless — but see the withings twin above: harmless is not a
+      // reason to hide the failure. `retryLimit: 0` on the schedule is what
+      // keeps a doomed statement from running three times a night.
       evt.addWarning(`oidc-native-handoff-cleanup failed: ${err}`);
+      return jobFailed("oidc native-handoff cleanup failed", err);
     }
   });
 }
@@ -390,17 +445,22 @@ export interface WhoopOAuthStateCleanupPayload {
 
 export async function handleWhoopOAuthStateCleanup(
   jobs: Job<WhoopOAuthStateCleanupPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.whoop_oauth_state_cleanup", async (evt) => {
+  return withBackgroundEvent("job.whoop_oauth_state_cleanup", async (evt) => {
     const p = getWorkerPrisma();
     try {
       const deleted = await cleanupExpiredWhoopOAuthStates(p);
       evt.addMeta("whoop_oauth_state_cleanup_deleted", deleted);
       const ticketsDeleted = await cleanupExpiredWhoopConnectTickets(p);
       evt.addMeta("whoop_connect_ticket_cleanup_deleted", ticketsDeleted);
+      return jobDone({
+        states_deleted: deleted,
+        connect_tickets_deleted: ticketsDeleted,
+      });
     } catch (err) {
       evt.addWarning(`whoop-oauth-state-cleanup failed: ${err}`);
+      return jobFailed("whoop oauth-state cleanup failed", err);
     }
   });
 }

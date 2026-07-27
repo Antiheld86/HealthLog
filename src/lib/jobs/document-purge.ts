@@ -11,6 +11,7 @@
  */
 import { type Job } from "pg-boss";
 import { withBackgroundEvent } from "@/lib/logging/background";
+import { jobDone, jobFailed, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { getWorkerPrisma } from "@/lib/jobs/reminder/shared";
 import type { PrismaClient } from "@/generated/prisma/client";
 
@@ -43,16 +44,22 @@ export async function purgeExpiredDocumentTombstones(
   return count;
 }
 
-export async function handleDocumentPurge(jobs: Job<DocumentPurgePayload>[]) {
+export async function handleDocumentPurge(
+  jobs: Job<DocumentPurgePayload>[],
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.document_tombstone_purge", async (evt) => {
+  return withBackgroundEvent("job.document_tombstone_purge", async (evt) => {
     const prisma = getWorkerPrisma();
     try {
       const purged = await purgeExpiredDocumentTombstones(prisma);
       evt.setAction({ name: "documents.vault.purge" });
       evt.addMeta("document_purge_deleted", purged);
+      // A night with no expired tombstone purges nothing and is still a run
+      // that did its work — the zero is the fact, not an absence of one.
+      return jobDone({ document_purge_deleted: purged });
     } catch (err) {
       evt.addWarning(`document-tombstone-purge failed: ${err}`);
+      return jobFailed("document tombstone purge failed", err);
     }
   });
 }

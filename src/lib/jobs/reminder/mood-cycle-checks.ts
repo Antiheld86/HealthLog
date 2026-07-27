@@ -6,6 +6,7 @@
  */
 import { type Job } from "pg-boss";
 import { recordError } from "@/lib/jobs/worker-status";
+import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import { runMoodReminderTick } from "@/lib/jobs/mood-reminder";
 import { runCycleReminderTick } from "@/lib/jobs/cycle-reminder";
@@ -30,9 +31,9 @@ export interface MeasurementReminderPayload {
 
 export async function handleMoodReminderCheck(
   jobs: Job<MoodReminderPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.mood_reminder", async (evt) => {
+  return withBackgroundEvent("job.mood_reminder", async (evt) => {
     const prisma = getWorkerPrisma();
     try {
       const summary = await runMoodReminderTick(prisma, new Date());
@@ -46,6 +47,16 @@ export async function handleMoodReminderCheck(
           skipped_already_dispatched: summary.skippedAlreadyDispatched,
           skipped_outside_window: summary.skippedOutsideWindow,
         },
+      });
+      // A tick that found nobody in their local reminder hour still ran the
+      // sweep, so it is a success with zero counts.
+      return jobDone({
+        candidates_scanned: summary.candidatesScanned,
+        in_window: summary.inWindow,
+        dispatched: summary.dispatched,
+        skipped_already_logged: summary.skippedAlreadyLogged,
+        skipped_already_dispatched: summary.skippedAlreadyDispatched,
+        skipped_outside_window: summary.skippedOutsideWindow,
       });
     } catch (err) {
       evt.setError(err);
@@ -63,9 +74,9 @@ export async function handleMoodReminderCheck(
  */
 export async function handleCycleReminderCheck(
   jobs: Job<CycleReminderPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.cycle_reminder", async (evt) => {
+  return withBackgroundEvent("job.cycle_reminder", async (evt) => {
     const prisma = getWorkerPrisma();
     try {
       const summary = await runCycleReminderTick(prisma, new Date());
@@ -82,6 +93,16 @@ export async function handleCycleReminderCheck(
           skipped_outside_window: summary.skippedOutsideWindow,
         },
       });
+      return jobDone({
+        candidates_scanned: summary.candidatesScanned,
+        in_window: summary.inWindow,
+        dispatched_period_soon: summary.dispatchedPeriodSoon,
+        dispatched_period_confirm: summary.dispatchedPeriodConfirm,
+        suppressed_client_managed: summary.suppressedClientManaged,
+        suppressed_discreet: summary.suppressedDiscreet,
+        skipped_already_notified: summary.skippedAlreadyNotified,
+        skipped_outside_window: summary.skippedOutsideWindow,
+      });
     } catch (err) {
       evt.setError(err);
       recordError();
@@ -97,9 +118,9 @@ export async function handleCycleReminderCheck(
  */
 export async function handleMeasurementReminderCheck(
   jobs: Job<MeasurementReminderPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.measurement_reminder", async (evt) => {
+  return withBackgroundEvent("job.measurement_reminder", async (evt) => {
     const prisma = getWorkerPrisma();
     try {
       const summary = await runMeasurementReminderTick(prisma, new Date());
@@ -115,6 +136,19 @@ export async function handleMeasurementReminderCheck(
           skipped_no_channel: summary.skippedNoChannel,
           failed: summary.failed,
         },
+      });
+      // `failed` counts per-reminder dispatch failures the tick isolated. The
+      // sweep itself ran, so those ride out as a count rather than failing the
+      // job and retrying the whole cohort over one user's channel.
+      return jobDone({
+        candidates_scanned: summary.candidatesScanned,
+        in_window: summary.inWindow,
+        dispatched: summary.dispatched,
+        auto_resolved: summary.autoResolved,
+        skipped_not_due: summary.skippedNotDue,
+        skipped_outside_window: summary.skippedOutsideWindow,
+        skipped_no_channel: summary.skippedNoChannel,
+        failed: summary.failed,
       });
     } catch (err) {
       evt.setError(err);
@@ -133,8 +167,8 @@ export async function handleMeasurementReminderCheck(
  */
 export async function handleReminderSatisfy(
   jobs: Job<ReminderSatisfyPayload>[],
-) {
-  await withBackgroundEvent("job.reminder_satisfy", async (evt) => {
+): Promise<JobOutcome> {
+  return withBackgroundEvent("job.reminder_satisfy", async (evt) => {
     const prisma = getWorkerPrisma();
     const now = new Date();
     // Distinct users in this batch — a multi-source ingest spike can enqueue
@@ -159,6 +193,13 @@ export async function handleReminderSatisfy(
           candidates_scanned: candidates,
           satisfied,
         },
+      });
+      // A batch whose jobs carried no usable userId resolved nothing and is
+      // still a success with zero counts.
+      return jobDone({
+        users: userIds.length,
+        candidates_scanned: candidates,
+        satisfied,
       });
     } catch (err) {
       evt.setError(err);

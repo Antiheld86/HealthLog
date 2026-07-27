@@ -3,6 +3,7 @@ import { Prisma, type PrismaClient } from "@/generated/prisma/client";
 
 import { invalidateUserMedications } from "@/lib/cache/invalidate";
 import { prisma, toJson } from "@/lib/db";
+import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { consumeImportedIntakesBatch } from "@/lib/medications/inventory/consumption";
 import { queueMedicationIntakeSync } from "@/lib/notifications/medication-intake-sync";
 import {
@@ -711,9 +712,19 @@ async function recordWorkerFailure(
 
 export async function handleMedicationIntakeImport(
   job: Job<MedicationIntakeImportQueuePayload>,
-): Promise<void> {
+): Promise<JobOutcome> {
   try {
-    await processMedicationIntakeImportJob(job.data.jobId);
+    const result = await processMedicationIntakeImportJob(job.data.jobId);
+    // A null result is a delivery that found the row already terminal or gone.
+    // There was nothing left to import, which is an absence of work rather
+    // than a failure to do it.
+    return result === null
+      ? jobDone({ finalized: false })
+      : jobDone({
+          finalized: true,
+          imported: result.imported,
+          skipped: result.skipped,
+        });
   } catch (error) {
     await recordWorkerFailure(job, error);
     throw error;

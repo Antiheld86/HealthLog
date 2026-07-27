@@ -31,6 +31,7 @@ import type { Job } from "pg-boss";
 
 import { extractExportXml } from "@/lib/import/unzip-export-xml";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
+import { jobDone, jobFailed, type JobOutcome } from "@/lib/jobs/job-outcome";
 import {
   streamParseExportXml,
   type ImportJobProgress,
@@ -66,23 +67,26 @@ export const IMPORT_JOB_RECONCILE_CRON = "*/15 * * * *";
  * the same `reconcileOrphanImportJobs()` the boot path calls — the
  * heartbeat + live pg-boss-job check already make it safe to re-run
  * on a healthy worker (a live import's fresh heartbeat and `active`
- * pg-boss state both keep its row untouched). Errors are logged, not
- * rethrown — a reconcile miss must never spam pg-boss's retry/backoff
- * machinery for a background sweep this cheap to just re-run in 15
- * minutes.
+ * pg-boss state both keep its row untouched). A sweep that throws now
+ * reports a failed outcome instead of only leaving a warning behind:
+ * this pass exists to end a silent stall, and a stall in the pass
+ * itself was the one condition nothing surfaced. The next tick is 15
+ * minutes away regardless, so nothing rests on the retry.
  */
 export async function handleImportJobReconcileTick(
   jobs: Job<object>[],
-): Promise<void> {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent(
+  return withBackgroundEvent(
     "job.apple_health_import_reconcile",
     async (evt) => {
       try {
         await reconcileOrphanImportJobs();
       } catch (err) {
         evt.addWarning(`apple-health-import-reconcile failed: ${err}`);
+        return jobFailed("apple health import reconcile failed", err);
       }
+      return jobDone();
     },
   );
 }
@@ -230,7 +234,7 @@ async function writeProgress(
  */
 export async function handleAppleHealthImport(
   job: Job<AppleHealthImportPayload>,
-): Promise<void> {
+): Promise<JobOutcome> {
   const { userId, uploadPath, uploadBytes, triggeredByAdminId } = job.data;
   const prisma = getWorkerPrisma();
 
@@ -280,7 +284,7 @@ export async function handleAppleHealthImport(
         ` — row is already terminal (${importJob.status}); the staged upload` +
         " was consumed by the first run and a re-run could only mask its outcome",
     );
-    return;
+    return jobDone({ skipped: "already_terminal" });
   }
 
   // Extracted-XML path, hoisted so the failure path can clean it up —
@@ -364,6 +368,12 @@ export async function handleAppleHealthImport(
     // the end, scoped to the user's full measurement span, so
     // post-import reads of the analytics + comprehensive surfaces
     // hit the warm rollup table on first paint.
+    //
+    // The miss rides out as a fact rather than as a failed job: the
+    // import is committed and its mirror row already reads `done`, so
+    // failing here would report a completed import as failed and
+    // contradict the row the status poll surfaces to the operator.
+    let rollupFailed = false;
     try {
       const span = await prisma.measurement.aggregate({
         where: { userId },
@@ -382,6 +392,7 @@ export async function handleAppleHealthImport(
     } catch (rollupErr) {
       // Rollup failure is non-fatal — the next read falls through to
       // live aggregation. Log but don't poison the import.
+      rollupFailed = true;
       console.warn(
         `[apple-health-import] Rollup recompute failed for user ${userId}`,
         rollupErr,
@@ -392,6 +403,13 @@ export async function handleAppleHealthImport(
     // periodically swept on the host.
     safeUnlink(unzip.xmlPath);
     safeUnlink(uploadPath);
+
+    return jobDone({
+      records_read: result.totals.recordsRead,
+      rows_upserted: result.totals.rowsUpserted,
+      duration_ms: result.totals.durationMs,
+      rollup_failed: rollupFailed,
+    });
   } catch (err) {
     // v1.28.33 (issue #486) — a missing staging file is an operational
     // condition, not a parse failure: `/tmp` is wiped on a container

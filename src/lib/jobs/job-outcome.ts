@@ -17,6 +17,13 @@
  * signal a failure) into commission (claiming a success that did not
  * happen), which is a smaller and much more reviewable class of defect.
  *
+ * A fan-out pass is judged on the pass, not on its legs. A nightly sweep
+ * over every connected account is `ok: true` when the sweep ran, even if one
+ * account's grant was revoked: that belongs on the account's own integration
+ * ledger, and failing the queue would retry the whole cohort over one user's
+ * expired token. The per-leg failures ride out as a count in `did`, which is
+ * what makes them visible at all — today they are visible nowhere.
+ *
  * `did` is the small pinned-shape bag of facts about the run — counts,
  * identifiers, booleans. It rides into the failure report and, once the
  * failure ledger lands, into the operator surface. Keep it to scalars that

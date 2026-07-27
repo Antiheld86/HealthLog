@@ -7,9 +7,15 @@
  *
  * v1.4.37 dead-queue contract: every queue name appears in `allQueues`, its
  * cron (where it has one) appears as a `[QUEUE, CRON]` tuple in `schedules`,
- * and a `boss.work(QUEUE, …, handler)` binding drains it. The
+ * and a `createAndWork(boss, QUEUE, …, handler)` binding drains it. The
  * `cycle-reminder-queue` and `measurement-reminder-queue` guards read THIS
  * module.
+ *
+ * Retry policy: every queue here keeps the pg-boss default. These ticks are
+ * fan-out passes whose per-user failures never fail the job, so a job-level
+ * failure means the pass itself could not run — a transient the default two
+ * retries are the right answer to. The satisfy queue carries its own
+ * `retryLimit` at send time (see `reminder-satisfy.ts`).
  */
 import { PgBoss } from "pg-boss";
 import {
@@ -17,7 +23,11 @@ import {
   REMINDER_SATISFY_CONCURRENCY,
   type ReminderSatisfyPayload,
 } from "@/lib/jobs/reminder-satisfy";
-import { createAndSchedule, type ScheduleEntry } from "./registrar-shared";
+import {
+  createAndSchedule,
+  createAndWork,
+  type ScheduleEntry,
+} from "./registrar-shared";
 import {
   ReminderCheckPayload,
   handleReminderCheck,
@@ -121,7 +131,8 @@ export async function registerReminderQueues(
 ): Promise<readonly string[]> {
   await createAndSchedule(boss, allQueues, schedules);
 
-  await boss.work<ReminderCheckPayload>(
+  await createAndWork<ReminderCheckPayload>(
+    boss,
     QUEUE_NAME,
     { localConcurrency: 1 },
     handleReminderCheck,
@@ -130,7 +141,8 @@ export async function registerReminderQueues(
   // two reminder ticks from interleaving against the same user row;
   // the dedup ledger would still save us, but skipping the race here
   // avoids spurious P2002 errors in the wide-event log.
-  await boss.work<MoodReminderPayload>(
+  await createAndWork<MoodReminderPayload>(
+    boss,
     MOOD_REMINDER_QUEUE,
     { localConcurrency: 1 },
     handleMoodReminderCheck,
@@ -138,7 +150,8 @@ export async function registerReminderQueues(
   // v1.15 — single-flight cycle-reminder worker. localConcurrency=1 keeps
   // two ticks from racing the fire-and-forget `push_attempts` ledger that
   // anchors the per-day idempotency, exactly like the mood-reminder worker.
-  await boss.work<CycleReminderPayload>(
+  await createAndWork<CycleReminderPayload>(
+    boss,
     CYCLE_REMINDER_QUEUE,
     { localConcurrency: 1 },
     handleCycleReminderCheck,
@@ -147,7 +160,8 @@ export async function registerReminderQueues(
   // localConcurrency=1 keeps two ticks from racing the `nextDueAt`
   // advance that anchors the per-cycle idempotency, exactly like the
   // mood / cycle reminder workers.
-  await boss.work<MeasurementReminderPayload>(
+  await createAndWork<MeasurementReminderPayload>(
+    boss,
     MEASUREMENT_REMINDER_QUEUE,
     { localConcurrency: 1 },
     handleMeasurementReminderCheck,
@@ -155,7 +169,8 @@ export async function registerReminderQueues(
   // v1.18.1 — eventful Vorsorge satisfaction. Resolves a user's reminders
   // against their just-landed measurement / lab. Read-heavy on the user's
   // own data; the same small concurrency budget as PR detection.
-  await boss.work<ReminderSatisfyPayload>(
+  await createAndWork<ReminderSatisfyPayload>(
+    boss,
     REMINDER_SATISFY_QUEUE,
     { localConcurrency: REMINDER_SATISFY_CONCURRENCY },
     handleReminderSatisfy,
