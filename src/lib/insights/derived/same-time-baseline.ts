@@ -210,12 +210,16 @@ export async function computeSameTimeBaseline(
   const typicalValue = typicalCurve[asOfHour];
 
   // The band comes off the same estimator the vitals baseline uses, applied to
-  // the window's totals AT THIS HOUR rather than to daily means. Floored at
-  // zero: a cumulative total cannot be negative, and a band edge below zero
-  // would widen the "within" verdict on the low side for free.
+  // the window's totals AT THIS HOUR rather than to daily means. Passing the
+  // metric is what floors the lower edge at zero: a cumulative total cannot be
+  // negative, and a band edge below zero would widen the "within" verdict on
+  // the low side for free. That floor used to be a local `Math.max(0, …)` here.
+  // It is gone because `buildBaselineBand` now answers the question for every
+  // caller from the metric's declared domain, and one question with two answers
+  // in the same tree is the defect this release exists to remove.
   const atHour = history.map((p) => p.hourlyCumulative[asOfHour]);
-  const spread = buildBaselineBand(atHour);
-  const typicalLow = Math.max(0, spread ? spread.low : typicalValue);
+  const spread = buildBaselineBand(atHour, type);
+  const typicalLow = spread ? spread.low : typicalValue;
   const typicalHigh = spread ? spread.high : typicalValue;
 
   const band: SameTimeBand =
