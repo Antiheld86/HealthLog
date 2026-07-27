@@ -390,6 +390,70 @@ const customCycleSymptomSchema = z
   })
   .passthrough();
 
+/**
+ * The account's durable self-context — one row per user.
+ *
+ * Portable exports carry the decrypted free text; disaster-recovery payloads
+ * carry the AES-256-GCM envelopes as base64 and leave the plaintext fields
+ * null. The restore prefers ciphertext when the file has it and re-encrypts
+ * the plaintext otherwise, which is the same contract the lab note uses.
+ */
+const healthProfileBackupSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    aboutMe: z.string().nullable().default(null),
+    conditions: z.string().nullable().default(null),
+    allergies: z.string().nullable().default(null),
+    coachFocus: z.string().nullable().default(null),
+    aboutMeEncrypted: base64BytesSchema.nullable().optional(),
+    conditionsEncrypted: base64BytesSchema.nullable().optional(),
+    allergiesEncrypted: base64BytesSchema.nullable().optional(),
+    coachFocusEncrypted: base64BytesSchema.nullable().optional(),
+    pendingQuestionsEncrypted: base64BytesSchema.nullable().optional(),
+    createdAt: isoDateTime.optional(),
+    updatedAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
+/** One reading of a user-defined metric, nested under the metric that owns it. */
+const customMetricEntryBackupSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    value: z.number(),
+    unit: z.string().min(1),
+    measuredAt: isoDateTime,
+    note: z.string().nullable().default(null),
+    createdAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
+/**
+ * A metric the account defined itself.
+ *
+ * The one class of series no integration can ever re-sync: nobody else has the
+ * definition and nobody else has the readings. It was classified as carried
+ * from the day the backup plan was written and carried by nothing, so a
+ * restore rebuilt the account without it and reported success.
+ *
+ * Readings are nested rather than flat-with-a-name-reference so the restore
+ * has no parent to look up and therefore no lookup to miss.
+ */
+const customMetricBackupSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    name: z.string().min(1),
+    unit: z.string().min(1),
+    targetLow: z.number().nullable().default(null),
+    targetHigh: z.number().nullable().default(null),
+    decimals: z.number().int().nullable().default(null),
+    description: z.string().nullable().default(null),
+    createdAt: isoDateTime.optional(),
+    updatedAt: isoDateTime.optional(),
+    deletedAt: isoDateTime.nullable().optional(),
+    entries: z.array(customMetricEntryBackupSchema).default([]),
+  })
+  .passthrough();
+
 const appSettingsBackupSchema = z
   .object({
     id: z.string().min(1),
@@ -652,6 +716,11 @@ export const backupPayloadSchema = z
     workouts: z.array(workoutBackupSchema).default([]),
     documents: z.array(documentBackupSchema).default([]),
     nutrientDays: z.array(nutrientDaySchema).default([]),
+    // Durable self-context and user-defined series. Defaulted so files written
+    // before either rode the wire still parse; an account with neither writes
+    // `null` / `[]`.
+    healthProfile: healthProfileBackupSchema.nullable().default(null),
+    customMetrics: z.array(customMetricBackupSchema).default([]),
     manifest: backupManifestSchema.nullable().default(null),
   })
   .passthrough()
@@ -704,6 +773,12 @@ export interface BackupSummary {
   workouts: number;
   /** Document records (ciphertext included in canonical DR payloads). */
   documents: number;
+  /** 1 when the account's durable self-context rides the file, 0 otherwise. */
+  healthProfile: number;
+  /** Metrics the account defined itself. */
+  customMetrics: number;
+  /** Readings across every user-defined metric. */
+  customMetricEntries: number;
 }
 
 export function summarizeBackup(payload: BackupPayload): BackupSummary {
@@ -729,6 +804,12 @@ export function summarizeBackup(payload: BackupPayload): BackupSummary {
     familyHistory: payload.familyHistory.length,
     workouts: payload.workouts.length,
     documents: payload.documents.length,
+    healthProfile: payload.healthProfile ? 1 : 0,
+    customMetrics: payload.customMetrics.length,
+    customMetricEntries: payload.customMetrics.reduce(
+      (sum, metric) => sum + metric.entries.length,
+      0,
+    ),
   };
 }
 

@@ -187,6 +187,49 @@ function makePrisma() {
         },
       ]),
     },
+    // Left unmocked on purpose: `buildProfileBackupSection` runs for real
+    // against these, so the assertions below exercise the builder rather than
+    // a stand-in that would agree with whatever the payload happened to do.
+    userHealthProfile: {
+      findUnique: vi.fn().mockResolvedValue({
+        id: "profile-1",
+        userId: "user-1",
+        aboutMeEncrypted: encryptToBytes("desk job, two kids"),
+        conditionsEncrypted: null,
+        allergiesEncrypted: encryptToBytes("penicillin"),
+        coachFocusEncrypted: null,
+        pendingQuestionsEncrypted: encryptToBytes('["How is your sleep?"]'),
+        createdAt: new Date("2026-07-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-07-19T00:00:00.000Z"),
+      }),
+    },
+    customMetric: {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "metric-1",
+          userId: "user-1",
+          name: "Morning grip strength",
+          unit: "kg",
+          targetLow: 40,
+          targetHigh: null,
+          decimals: 1,
+          description: "Right hand, before breakfast",
+          createdAt: new Date("2026-07-01T00:00:00.000Z"),
+          updatedAt: new Date("2026-07-19T00:00:00.000Z"),
+          deletedAt: null,
+          entries: [
+            {
+              id: "entry-1",
+              value: 44.5,
+              unit: "kg",
+              measuredAt: new Date("2026-07-19T06:30:00.000Z"),
+              note: "felt strong",
+              createdAt: new Date("2026-07-19T06:31:00.000Z"),
+            },
+          ],
+        },
+      ]),
+    },
   };
 }
 
@@ -229,6 +272,19 @@ function installSectionMocks() {
     cycleProfile: null,
     cycles: [],
     cycleDayLogs: [],
+    // The key the payload assembly used to drop on the floor.
+    customSymptoms: [
+      {
+        id: "symptom-1",
+        key: "custom:jaw_tension",
+        labelKey: "custom",
+        categoryId: "cat-1",
+        icon: null,
+        sortOrder: 0,
+        isActive: true,
+        labelEncrypted: "Y2lwaGVy",
+      },
+    ],
   });
   mocks.buildRecordsBackupSection.mockResolvedValue({
     labResults: [],
@@ -441,5 +497,182 @@ describe("buildFullBackupPayload — aggregation provenance", () => {
     // externalSourceVersion, no glucoseContext, and no provenance either.
     expect(rows[0]).not.toHaveProperty("aggregationProvenance");
     expect(rows[0]).not.toHaveProperty("externalSourceVersion");
+  });
+});
+
+/**
+ * The assembly step must carry EVERY key its sections produce.
+ *
+ * The custom cycle symptoms were lost here and nowhere else: the section
+ * builder returned them, the wire schema declared them, the restore read them,
+ * and the payload was assembled by copying keys out one at a time. Nothing in
+ * the tree compared the two lists, so the omission survived a release that was
+ * specifically about that data.
+ *
+ * Mutation check: hand-pick the cycle keys again instead of spreading the
+ * section, and this goes red naming the key that fell out.
+ */
+describe("buildFullBackupPayload — section keys reach the payload", () => {
+  it("carries every key of every section it builds", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+
+    const { payload } = await buildFullBackupPayload(
+      prisma as never,
+      "user-1",
+      {
+        purpose: "disaster-recovery",
+        exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+      },
+    );
+
+    const sectionKeys = [
+      ...Object.keys(await mocks.buildCycleBackupSection.mock.results[0].value),
+      ...Object.keys(
+        await mocks.buildRecordsBackupSection.mock.results[0].value,
+      ),
+      // The profile section runs for real, so its keys come from the builder.
+      "healthProfile",
+      "customMetrics",
+    ];
+
+    const missing = sectionKeys.filter((key) => !(key in payload));
+    expect(
+      missing,
+      "a section key that never reaches the payload is data the file does not carry, however complete the builder is",
+    ).toEqual([]);
+  });
+
+  it("carries the account's own cycle symptoms", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+
+    const { payload } = await buildFullBackupPayload(
+      prisma as never,
+      "user-1",
+      {
+        purpose: "disaster-recovery",
+        exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+      },
+    );
+
+    expect(payload.customSymptoms).toEqual([
+      expect.objectContaining({
+        key: "custom:jaw_tension",
+        labelEncrypted: "Y2lwaGVy",
+      }),
+    ]);
+  });
+});
+
+/**
+ * Durable self-context and user-defined metrics ride the file.
+ *
+ * Both were classified `BACKED_UP` and carried by nothing. The custom metric is
+ * the live loss: a series the account defined itself is the one kind no
+ * integration can re-sync, so a restore without it rebuilt the account minus
+ * the metric AND every reading, and reported success.
+ */
+describe("buildFullBackupPayload — profile and custom metrics", () => {
+  it("carries ciphertext verbatim and no plaintext in the recovery payload", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+
+    const { payload, counts } = await buildFullBackupPayload(
+      prisma as never,
+      "user-1",
+      {
+        purpose: "disaster-recovery",
+        exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+      },
+    );
+
+    const profile = payload.healthProfile as Record<string, unknown>;
+    expect(profile.id).toBe("profile-1");
+    // The envelope travels; the plaintext of a column carried encrypted must
+    // not be duplicated beside it.
+    expect(typeof profile.aboutMeEncrypted).toBe("string");
+    expect(profile.aboutMe).toBeNull();
+    expect(profile.conditionsEncrypted).toBeNull();
+    expect(typeof profile.pendingQuestionsEncrypted).toBe("string");
+    expect(counts.healthProfile).toBe(1);
+  });
+
+  it("decrypts the profile free text into the portable export", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+
+    const { payload } = await buildFullBackupPayload(
+      prisma as never,
+      "user-1",
+      {
+        purpose: "portable-export",
+        exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+      },
+    );
+
+    const profile = payload.healthProfile as Record<string, unknown>;
+    expect(profile.aboutMe).toBe("desk job, two kids");
+    expect(profile.allergies).toBe("penicillin");
+    expect(profile.conditions).toBeNull();
+    // A portable file is the human-readable artefact; it carries no envelopes,
+    // and it does not carry the server-derived pending questions at all.
+    expect(profile).not.toHaveProperty("aboutMeEncrypted");
+    expect(profile).not.toHaveProperty("pendingQuestionsEncrypted");
+    expect(profile).not.toHaveProperty("id");
+  });
+
+  it("carries each metric with its readings nested inside it", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+
+    const { payload, counts } = await buildFullBackupPayload(
+      prisma as never,
+      "user-1",
+      {
+        purpose: "disaster-recovery",
+        exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+      },
+    );
+
+    expect(payload.customMetrics).toEqual([
+      expect.objectContaining({
+        id: "metric-1",
+        name: "Morning grip strength",
+        unit: "kg",
+        targetLow: 40,
+        targetHigh: null,
+        decimals: 1,
+        description: "Right hand, before breakfast",
+        deletedAt: null,
+        entries: [
+          expect.objectContaining({
+            id: "entry-1",
+            value: 44.5,
+            unit: "kg",
+            measuredAt: "2026-07-19T06:30:00.000Z",
+            note: "felt strong",
+          }),
+        ],
+      }),
+    ]);
+    expect(counts.customMetrics).toBe(1);
+    expect(counts.customMetricEntries).toBe(1);
+  });
+
+  it("excludes deleted metrics from a portable export", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+
+    await buildFullBackupPayload(prisma as never, "user-1", {
+      purpose: "portable-export",
+      exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+    });
+
+    expect(prisma.customMetric.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: "user-1", deletedAt: null },
+      }),
+    );
   });
 });

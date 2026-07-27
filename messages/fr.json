@@ -4499,7 +4499,7 @@
           },
           "fullBackup": {
             "title": "Sauvegarde complète",
-            "description": "Vos mesures, médicaments, humeur, cycle, analyses, épisodes de maladie, allergies, antécédents familiaux, nutriments et séances dans un seul fichier JSON. Même format que la sauvegarde automatique hebdomadaire. Certains types d'enregistrement ne sont pas encore inclus : le manifeste du fichier indique ce qu'il contient.",
+            "description": "Vos mesures, médicaments, humeur, cycle, analyses, épisodes de maladie, allergies, antécédents familiaux, nutriments, séances, votre profil de santé et vos mesures personnalisées dans un seul fichier JSON. Même format que la sauvegarde automatique hebdomadaire. Certains types d'enregistrement ne sont pas encore inclus : le manifeste du fichier indique ce qu'il contient.",
             "scopeNote": "Les métadonnées des documents et le résumé IA, s'il existe, sont inclus en texte clair ; les fichiers originaux des documents ainsi que les tracés GPS/données d'échantillons des entraînements ne le sont pas — téléchargez-les séparément depuis le coffre de documents ou l'export des entraînements.",
             "encryptToggle": "Chiffrer avec une phrase secrète",
             "passphrasePlaceholder": "Phrase secrète (12 caractères min.)",

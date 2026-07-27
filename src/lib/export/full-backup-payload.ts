@@ -25,8 +25,15 @@ import {
   type RecordsBackupCounts,
   type RecordsBackupSection,
 } from "@/lib/export/records-backup";
+import {
+  buildProfileBackupSection,
+  countProfileBackupSection,
+  type ProfileBackupCounts,
+  type ProfileBackupSection,
+} from "@/lib/export/profile-backup";
 
-export interface FullBackupCounts extends RecordsBackupCounts {
+export interface FullBackupCounts
+  extends RecordsBackupCounts, ProfileBackupCounts {
   measurements: number;
   medications: number;
   intakeEvents: number;
@@ -99,6 +106,7 @@ export async function buildFullBackupPayload(
     customMoodTags,
     cycle,
     records,
+    profile,
     nutrientDays,
   ] = await Promise.all([
     disasterRecovery
@@ -195,6 +203,13 @@ export async function buildFullBackupPayload(
     buildRecordsBackupSection(prisma, userId, {
       purpose: disasterRecovery ? "disaster-recovery" : "portable-export",
     }),
+    // Durable self-context + user-defined metrics. Both were classified as
+    // carried when the backup plan was written and carried by nothing; the
+    // metrics are the live loss, since a series the person defined themselves
+    // is the one kind no integration can re-sync.
+    buildProfileBackupSection(prisma, userId, {
+      purpose: disasterRecovery ? "disaster-recovery" : "portable-export",
+    }),
     // Nutrient day totals were absent from every export path, which
     // contradicted the schema's own reason for denormalising the unit column
     // ("rows stay self-describing in exports even if the catalog ever drifts").
@@ -218,6 +233,7 @@ export async function buildFullBackupPayload(
   // (or narrow) what reaches the wire.
   const cycleSection: CycleBackupSection = cycle;
   const recordsSection: RecordsBackupSection = records;
+  const profileSection: ProfileBackupSection = profile;
 
   const payload = {
     schemaVersion: BACKUP_SCHEMA_VERSION,
@@ -362,6 +378,7 @@ export async function buildFullBackupPayload(
     // itself, not just in the export UI copy.
     ...cycleSection,
     ...recordsSection,
+    ...profileSection,
     nutrientDays: nutrientDays.map((n) => ({
       day: n.day,
       nutrient: n.nutrient,
@@ -383,6 +400,7 @@ export async function buildFullBackupPayload(
       cycleDayLogs: cycle.cycleDayLogs.length,
       nutrientDays: nutrientDays.length,
       ...countRecordsBackupSection(records),
+      ...countProfileBackupSection(profile),
     },
   };
 }

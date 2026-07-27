@@ -4499,7 +4499,7 @@
           },
           "fullBackup": {
             "title": "Full backup",
-            "description": "Your measurements, medications, mood, cycle, labs, illness episodes, allergies, family history, nutrients and workouts in one JSON file. Same shape as the weekly auto-backup. Some record types are not carried yet — the file's manifest names what is in it.",
+            "description": "Your measurements, medications, mood, cycle, labs, illness episodes, allergies, family history, nutrients, workouts, health profile and custom metrics in one JSON file. Same shape as the weekly auto-backup. Some record types are not carried yet — the file's manifest names what is in it.",
             "scopeNote": "Document metadata and the AI-generated summary, if one exists, are included as plain text; original document files and workout GPS/sample data are not — download those separately from the vault or the workout export.",
             "encryptToggle": "Encrypt with a passphrase",
             "passphrasePlaceholder": "Passphrase (min. 12 characters)",

@@ -16,6 +16,10 @@ vi.mock("@/lib/db", () => ({
     moodEntry: { findMany: vi.fn().mockResolvedValue([]) },
     moodTag: { findMany: vi.fn().mockResolvedValue([]) },
     nutrientIntakeDay: { findMany: vi.fn().mockResolvedValue([]) },
+    // Durable self-context + user-defined metrics, read by
+    // `buildProfileBackupSection`.
+    userHealthProfile: { findUnique: vi.fn().mockResolvedValue(null) },
+    customMetric: { findMany: vi.fn().mockResolvedValue([]) },
     cycleProfile: { findUnique: vi.fn().mockResolvedValue(null) },
     menstrualCycle: { findMany: vi.fn().mockResolvedValue([]) },
     cycleDayLog: { findMany: vi.fn().mockResolvedValue([]) },
