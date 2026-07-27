@@ -1154,6 +1154,23 @@ describe("recordSyncSuccess — leg scoping", () => {
     expect(prisma.integrationStatus.upsert).toHaveBeenCalledOnce();
   });
 
+  it("drops a non-string member rather than coercing it into a leg name", async () => {
+    vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
+      state: "error_transient",
+      failingLegs: ["sleep", 42, null],
+    } as never);
+    vi.mocked(prisma.integrationStatus.update).mockResolvedValueOnce(
+      {} as never,
+    );
+
+    await recordSyncSuccess("u1", "withings", { leg: "ecg" });
+
+    const args = vi.mocked(prisma.integrationStatus.update).mock.calls[0]![0]!;
+    // Coercing `42` into `"42"` would invent a leg no caller can ever succeed
+    // for, holding the row in error against a failure nobody recorded.
+    expect(args.data).toMatchObject({ failingLegs: ["sleep"] });
+  });
+
   it("reads a malformed leg column as unattributed rather than guessing", async () => {
     vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
       state: "error_transient",
