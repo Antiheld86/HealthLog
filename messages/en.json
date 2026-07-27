@@ -8621,7 +8621,8 @@
       "uploading": "Uploading…",
       "dismissFailed": "Dismiss failed upload",
       "processing": "Processing…",
-      "ready": "Ready"
+      "ready": "Ready",
+      "deleteKey": "Del"
     },
     "error": {
       "fileTooLarge": "This file is larger than the {maxSize} limit.",

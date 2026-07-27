@@ -8621,7 +8621,8 @@
       "uploading": "Téléversement…",
       "dismissFailed": "Ignorer le téléversement échoué",
       "processing": "Traitement en cours…",
-      "ready": "Prêt"
+      "ready": "Prêt",
+      "deleteKey": "Suppr"
     },
     "error": {
       "fileTooLarge": "Ce fichier dépasse la limite de {maxSize}.",

@@ -65,6 +65,38 @@ describe("<DocumentCard>", () => {
     expect(html).not.toContain("Download only");
   });
 
+  it("announces and shows the Delete shortcut when the card is deletable", () => {
+    const html = render(
+      <DocumentCard
+        document={doc()}
+        selected={false}
+        onToggleSelected={noop}
+        onOpen={noop}
+        onDelete={noop}
+        highlighted={false}
+      />,
+    );
+    // The keyboard contract used to live only in a code comment. It is now
+    // announced to assistive tech and drawn while the card holds focus.
+    expect(html).toContain('aria-keyshortcuts="Delete"');
+    expect(html).toContain('data-slot="document-delete-hint"');
+    expect(html).toContain("Del");
+  });
+
+  it("offers no delete shortcut when the card carries no delete handler", () => {
+    const html = render(
+      <DocumentCard
+        document={doc()}
+        selected={false}
+        onToggleSelected={noop}
+        onOpen={noop}
+        highlighted={false}
+      />,
+    );
+    expect(html).not.toContain("aria-keyshortcuts");
+    expect(html).not.toContain('data-slot="document-delete-hint"');
+  });
+
   it("shows the download-only badge for attachment-class documents", () => {
     const html = render(
       <DocumentCard

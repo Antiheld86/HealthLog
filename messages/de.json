@@ -8621,7 +8621,8 @@
       "uploading": "Wird hochgeladen…",
       "dismissFailed": "Fehlgeschlagenen Upload ausblenden",
       "processing": "Wird verarbeitet…",
-      "ready": "Bereit"
+      "ready": "Bereit",
+      "deleteKey": "Entf"
     },
     "error": {
       "fileTooLarge": "Diese Datei ist größer als das Limit von {maxSize}.",

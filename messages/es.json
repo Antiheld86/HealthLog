@@ -8621,7 +8621,8 @@
       "uploading": "Subiendo…",
       "dismissFailed": "Descartar subida fallida",
       "processing": "Procesando…",
-      "ready": "Listo"
+      "ready": "Listo",
+      "deleteKey": "Supr"
     },
     "error": {
       "fileTooLarge": "Este archivo supera el límite de {maxSize}.",

@@ -8621,7 +8621,8 @@
       "uploading": "Przesyłanie…",
       "dismissFailed": "Odrzuć nieudane przesyłanie",
       "processing": "Przetwarzanie…",
-      "ready": "Gotowe"
+      "ready": "Gotowe",
+      "deleteKey": "Del"
     },
     "error": {
       "fileTooLarge": "Ten plik przekracza limit {maxSize}.",
