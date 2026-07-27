@@ -1,61 +1,12 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, Info, TriangleAlert } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-
+import { WrittenOutcomeLine } from "@/components/outcome/written-outcome-line";
 import { useTranslations } from "@/lib/i18n/context";
 import {
-  classifyImportOutcome,
+  classifyWrittenOutcome,
   groupSkipReasons,
-  type ImportOutcome,
-  type ImportRowResult,
-} from "./import-result-state";
-
-/**
- * The one mapping from an import outcome to how it looks.
- *
- * `CheckCircle2` and `text-success` appear exactly once in the import panel,
- * on the `success` key, so no future edit can attach a tick to a result that
- * wrote nothing. `import-result-guard.test.ts` holds that line.
- */
-const OUTCOME_PRESENTATION: Record<
-  ImportOutcome,
-  { Icon: LucideIcon; className: string }
-> = {
-  success: { Icon: CheckCircle2, className: "text-success" },
-  partial: { Icon: TriangleAlert, className: "text-warning" },
-  failed: { Icon: AlertCircle, className: "text-destructive" },
-  empty: { Icon: Info, className: "text-muted-foreground" },
-};
-
-/**
- * The headline line of an import result. Sits inside each card's existing
- * `aria-live="polite"` region, so the outcome is announced as it lands.
- */
-export function ImportOutcomeLine({
-  outcome,
-  message,
-  testId,
-}: {
-  outcome: ImportOutcome;
-  message: string;
-  testId: string;
-}) {
-  const { Icon, className } = OUTCOME_PRESENTATION[outcome];
-  return (
-    <p
-      data-testid={testId}
-      data-outcome={outcome}
-      className="text-foreground flex items-start gap-2 text-xs"
-    >
-      <Icon
-        className={`${className} mt-0.5 h-3.5 w-3.5 shrink-0`}
-        aria-hidden="true"
-      />
-      <span>{message}</span>
-    </p>
-  );
-}
+  type WrittenRowResult,
+} from "@/lib/outcome/written-outcome";
 
 export interface CsvImportResult {
   inserted: number;
@@ -63,7 +14,7 @@ export interface CsvImportResult {
   skipped: number;
   total: number;
   dryRun: boolean;
-  rows: ImportRowResult[];
+  rows: WrittenRowResult[];
 }
 
 /**
@@ -118,7 +69,7 @@ export function CsvImportResultView({ result }: { result: CsvImportResult }) {
   const labelFor = useSkipReasonLabel();
 
   const written = result.inserted + result.updated;
-  const outcome = classifyImportOutcome({ written, skipped: result.skipped });
+  const outcome = classifyWrittenOutcome({ written, skipped: result.skipped });
   const groups = groupSkipReasons(result.rows);
   const skippedRows = result.rows.filter((row) => row.status === "skipped");
 
@@ -162,7 +113,7 @@ export function CsvImportResultView({ result }: { result: CsvImportResult }) {
 
   return (
     <div data-testid="import-csv-result" className="space-y-1.5">
-      <ImportOutcomeLine
+      <WrittenOutcomeLine
         outcome={outcome}
         message={message}
         testId="import-csv-outcome"
