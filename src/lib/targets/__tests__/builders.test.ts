@@ -20,6 +20,7 @@ describe("target section builders", () => {
       gender: null,
       timezone: TZ,
       now: NOW,
+      weightTargetOverride: null,
     });
 
     expect(result.targets.map((target) => target.type)).toEqual([
@@ -161,5 +162,41 @@ describe("target section builders", () => {
       totalTargets: 3,
       streakHighlight: { metric: "WEIGHT", days: 3 },
     });
+  });
+});
+
+/**
+ * v1.34 — the weight card grades against the user's own target when one is set,
+ * so the `/targets` reference panel and the weight chart above it name the same
+ * band. The panel used to show the WHO BMI band unconditionally.
+ */
+describe("buildVitalTargets — user weight target", () => {
+  const base = {
+    recentMeasurements: [],
+    latestByType: {},
+    average30ByType: {},
+    heightCm: 178,
+    age: 40,
+    gender: null,
+    timezone: TZ,
+    now: NOW,
+  };
+
+  it("shows the WHO BMI band when no target is set", () => {
+    const weight = buildVitalTargets({
+      ...base,
+      weightTargetOverride: null,
+    }).targets.find((t) => t.type === "WEIGHT");
+    expect(weight?.source).toBe("WHO BMI");
+    expect(weight?.range).not.toEqual({ min: 74, max: 78 });
+  });
+
+  it("shows the user's own band, labelled as theirs, when one is set", () => {
+    const weight = buildVitalTargets({
+      ...base,
+      weightTargetOverride: { min: 74, max: 78 },
+    }).targets.find((t) => t.type === "WEIGHT");
+    expect(weight?.range).toEqual({ min: 74, max: 78 });
+    expect(weight?.source).toBe("Custom");
   });
 });
