@@ -24,7 +24,7 @@ push as well. That was never what it said it did. If you have been using it as
 a general mute, those channels will start delivering again, and the setting
 does what its name says.
 
-### Two that were reported
+### Three that were reported
 
 Someone self-hosting could not use an OpenAI-compatible gateway. LiteLLM,
 OpenRouter and vLLM all speak the OpenAI wire, but the provider list had no
@@ -38,6 +38,15 @@ worst of them: a shared report downloaded as a PDF could carry a different
 date than the page it was downloaded from, for the same reading. Charts also
 drew their week and month boundaries in one fixed timezone, so an evening
 reading landed in the wrong bar for anyone living elsewhere.
+
+Some dashboard tiles could be seen and not switched off. The mobile app draws
+a handful of widgets the web has no render path for, and it writes them into
+the same stored layout, so an account ended up holding rows it never set and
+could not change from anywhere. `bmi` was one of them. They now appear in the
+dashboard settings in their own labelled group, with the same show and hide
+controls as everything else and no reordering, because placement stays the
+mobile app's. The group only shows up for widgets your layout actually holds,
+so an account with no phone client sees nothing new.
 
 ### The backup
 
