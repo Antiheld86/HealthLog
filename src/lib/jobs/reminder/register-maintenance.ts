@@ -10,7 +10,7 @@
  *
  * v1.4.37 dead-queue contract: every queue name appears in `allQueues`, its
  * cron (where it has one) appears as a `[QUEUE, CRON]` tuple in `schedules`,
- * and a `boss.work(QUEUE, …, handler)` binding drains it. The
+ * and a `createAndWork(boss, QUEUE, …, handler)` binding drains it. The
  * `measurement-tombstone-cleanup`, `withings-oauth-state-cleanup`,
  * `intake-slot-dedup-queue`, `tls-pin-monitor-queue`, and `geo-backfill`
  * guards read THIS module.
@@ -131,9 +131,12 @@ import {
   type EnvironmentFetchPayload,
 } from "@/lib/jobs/environment-fetch";
 import { recordError } from "@/lib/jobs/worker-status";
+import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { workerLog, BOOT_BACKFILL_STAGGER_SECONDS } from "./shared";
 import {
   createAndSchedule,
+  createAndWork,
+  cronIsTheRetry,
   type QueuePolicyTable,
   type ScheduleEntry,
 } from "./registrar-shared";
@@ -411,24 +414,35 @@ const allQueues = [
   DOCUMENT_SUMMARY_CATCHUP_QUEUE,
 ];
 
+// `cronIsTheRetry` (retryLimit 0) marks the passes whose handler now returns
+// `jobFailed` where it used to warn and carry on, AND whose failure repeats:
+// a bulk DELETE or UPDATE that timed out will time out again on an immediate
+// retry, so pg-boss's default two would run the same doomed statement three
+// times a night. The queues without it are the ones whose failure is
+// transient — the TLS probe, the off-host upload, the restore drill, the
+// per-user environment fetch — and those still want the default retries.
 const schedules: ScheduleEntry[] = [
   // v1.25 (W-ENV) — daily 02:10 Europe/Berlin discovery tick (empty payload)
   // that fans out one per-user environment fetch per opted-in account.
   [ENVIRONMENT_FETCH_QUEUE, ENVIRONMENT_FETCH_CRON],
   [DATA_BACKUP_QUEUE, DATA_BACKUP_CRON],
-  [RATE_LIMIT_CLEANUP_QUEUE, RATE_LIMIT_CLEANUP_CRON],
-  [IDEMPOTENCY_CLEANUP_QUEUE, IDEMPOTENCY_CLEANUP_CRON],
+  [RATE_LIMIT_CLEANUP_QUEUE, RATE_LIMIT_CLEANUP_CRON, cronIsTheRetry],
+  [IDEMPOTENCY_CLEANUP_QUEUE, IDEMPOTENCY_CLEANUP_CRON, cronIsTheRetry],
   [AUDIT_LOG_CLEANUP_QUEUE, AUDIT_LOG_CLEANUP_CRON],
-  [STEP_UP_ELEVATION_CLEANUP_QUEUE, STEP_UP_ELEVATION_CLEANUP_CRON],
+  [
+    STEP_UP_ELEVATION_CLEANUP_QUEUE,
+    STEP_UP_ELEVATION_CLEANUP_CRON,
+    cronIsTheRetry,
+  ],
   [OFFHOST_BACKUP_QUEUE, OFFHOST_BACKUP_CRON],
   [RESTORE_DRILL_QUEUE, RESTORE_DRILL_CRON],
-  [HOST_METRIC_QUEUE, HOST_METRIC_CRON],
-  [FEEDBACK_AGGREGATOR_QUEUE, FEEDBACK_AGGREGATOR_CRON],
+  [HOST_METRIC_QUEUE, HOST_METRIC_CRON, cronIsTheRetry],
+  [FEEDBACK_AGGREGATOR_QUEUE, FEEDBACK_AGGREGATOR_CRON, cronIsTheRetry],
   // v1.4.37 — hourly geo backfill. The helper is idempotent + capped
   // at 5 000 rows per pass; running it at :40 every hour catches the
   // long tail of audit rows that landed with the offline MMDB
   // missing or the online provider unreachable.
-  [GEO_BACKFILL_QUEUE, GEO_BACKFILL_CRON],
+  [GEO_BACKFILL_QUEUE, GEO_BACKFILL_CRON, cronIsTheRetry],
   // v1.12.2 ios-coord — every-6-hour TLS leaf SPKI probe (:07 off the
   // hourly sync crons). Surfaces a pinned-leaf rotation well inside the
   // ≥11-day re-pin window the iOS release owner needs.
@@ -443,14 +457,18 @@ const schedules: ScheduleEntry[] = [
   // entities. Flips IN_USE rows whose 30-day clock has blown to
   // EXPIRED at 03:30 Europe/Berlin (in the existing 02:xx–03:xx
   // maintenance window, right after idempotency-cleanup).
-  [MEDICATION_INVENTORY_EXPIRE_QUEUE, MEDICATION_INVENTORY_EXPIRE_CRON],
+  [
+    MEDICATION_INVENTORY_EXPIRE_QUEUE,
+    MEDICATION_INVENTORY_EXPIRE_CRON,
+    cronIsTheRetry,
+  ],
   // v1.4.46 — hourly auto-skip for medication intakes the user never
   // marked. Cron `5 * * * *` slots off the top-of-the-hour
   // reminder-check (:00) so the hourly ticks don't pile up on the same
   // boss poll.
-  [INTAKE_AUTO_SKIP_QUEUE, INTAKE_AUTO_SKIP_CRON],
+  [INTAKE_AUTO_SKIP_QUEUE, INTAKE_AUTO_SKIP_CRON, cronIsTheRetry],
   // v0.5.4 ios-coord — daily mood-reminder dispatch-ledger retention sweep.
-  [MOOD_REMINDER_CLEANUP_QUEUE, MOOD_REMINDER_CLEANUP_CRON],
+  [MOOD_REMINDER_CLEANUP_QUEUE, MOOD_REMINDER_CLEANUP_CRON, cronIsTheRetry],
   // v1.15.19 — daily 03:28 Europe/Berlin duplicate dose-slot dedup
   // discovery. The empty cron payload (no `userId`) is the handler's
   // signal to run the discovery fan-out instead of a per-user pass, so
@@ -458,20 +476,24 @@ const schedules: ScheduleEntry[] = [
   // a day instead of waiting for the next worker reboot.
   [INTAKE_SLOT_DEDUP_QUEUE, INTAKE_SLOT_DEDUP_CRON],
   // v1.4.49 — daily 03:35 Europe/Berlin prune for push_attempts.
-  [PUSH_ATTEMPT_CLEANUP_QUEUE, PUSH_ATTEMPT_CLEANUP_CRON],
+  [PUSH_ATTEMPT_CLEANUP_QUEUE, PUSH_ATTEMPT_CLEANUP_CRON, cronIsTheRetry],
   // v1.31.0 — daily 04:10 Europe/Berlin prune for arrival_reactions.
-  [ARRIVAL_REACTION_CLEANUP_QUEUE, ARRIVAL_REACTION_CLEANUP_CRON],
+  [
+    ARRIVAL_REACTION_CLEANUP_QUEUE,
+    ARRIVAL_REACTION_CLEANUP_CRON,
+    cronIsTheRetry,
+  ],
   // v1.7.0 — daily 03:40 Europe/Berlin prune for expired measurement
   // tombstones.
   [MEASUREMENT_TOMBSTONE_CLEANUP_QUEUE, MEASUREMENT_TOMBSTONE_CLEANUP_CRON],
   // v1.18.7 — daily 03:50 Europe/Berlin prune for stale Coach history.
-  [COACH_MESSAGE_CLEANUP_QUEUE, COACH_MESSAGE_CLEANUP_CRON],
+  [COACH_MESSAGE_CLEANUP_QUEUE, COACH_MESSAGE_CLEANUP_CRON, cronIsTheRetry],
   // v1.23 — daily 03:55 Europe/Berlin note-encryption backfill discovery.
   // The empty cron payload (no `userId`) is the handler's signal to fan out
   // one per-user job per account still holding a plaintext note.
   [NOTE_ENCRYPTION_BACKFILL_QUEUE, NOTE_ENCRYPTION_BACKFILL_CRON],
   // v1.24 — daily 04:00 Europe/Berlin prune for dead MCP connector tokens.
-  [MCP_TOKEN_CLEANUP_QUEUE, MCP_TOKEN_CLEANUP_CRON],
+  [MCP_TOKEN_CLEANUP_QUEUE, MCP_TOKEN_CLEANUP_CRON, cronIsTheRetry],
   // v1.25 — daily 04:05 Europe/Berlin medication-note encryption backfill
   // discovery. The empty cron payload (no `userId`) is the handler's signal to
   // fan out one per-user job per account still holding a plaintext medication
@@ -479,14 +501,14 @@ const schedules: ScheduleEntry[] = [
   [MED_NOTES_ENCRYPTION_BACKFILL_QUEUE, MED_NOTES_ENCRYPTION_BACKFILL_CRON],
   // Document vault — daily 04:10 Europe/Berlin purge for tombstoned
   // documents past the 30-day undo grace.
-  [DOCUMENT_PURGE_QUEUE, DOCUMENT_PURGE_CRON],
+  [DOCUMENT_PURGE_QUEUE, DOCUMENT_PURGE_CRON, cronIsTheRetry],
   // v1.32.1 (issue #588) — every-15-minute orphan-ImportJob sweep. Re-runs
   // the same reconcile the boot path uses, so a stuck "unpacking" row
   // whose worker crashed/restarted without the boot-time pass catching it
   // (heartbeat not yet stale, pg-boss job not yet expired) still converges
   // to a visible `failed` state within two ticks instead of staying stuck
   // forever on an otherwise-healthy worker.
-  [IMPORT_JOB_RECONCILE_QUEUE, IMPORT_JOB_RECONCILE_CRON],
+  [IMPORT_JOB_RECONCILE_QUEUE, IMPORT_JOB_RECONCILE_CRON, cronIsTheRetry],
 ];
 
 /**
@@ -584,61 +606,76 @@ export async function registerMaintenanceQueues(
 ): Promise<readonly string[]> {
   await createAndSchedule(boss, allQueues, schedules, queuePolicies);
 
-  await boss.work<DataBackupPayload>(
+  await createAndWork<DataBackupPayload>(
+    boss,
     DATA_BACKUP_QUEUE,
     { localConcurrency: 1 },
     handleDataBackup,
   );
-  await boss.work<RateLimitCleanupPayload>(
+  await createAndWork<RateLimitCleanupPayload>(
+    boss,
     RATE_LIMIT_CLEANUP_QUEUE,
     { localConcurrency: 1 },
     handleRateLimitCleanup,
   );
-  await boss.work<IdempotencyCleanupPayload>(
+  await createAndWork<IdempotencyCleanupPayload>(
+    boss,
     IDEMPOTENCY_CLEANUP_QUEUE,
     { localConcurrency: 1 },
     handleIdempotencyCleanup,
   );
-  await boss.work<AuditLogCleanupPayload>(
+  await createAndWork<AuditLogCleanupPayload>(
+    boss,
     AUDIT_LOG_CLEANUP_QUEUE,
     { localConcurrency: 1 },
     handleAuditLogCleanup,
   );
-  await boss.work<StepUpElevationCleanupPayload>(
+  await createAndWork<StepUpElevationCleanupPayload>(
+    boss,
     STEP_UP_ELEVATION_CLEANUP_QUEUE,
     { localConcurrency: 1 },
     handleStepUpElevationCleanup,
   );
-  await boss.work<OffhostBackupPayload>(
+  await createAndWork<OffhostBackupPayload>(
+    boss,
     OFFHOST_BACKUP_QUEUE,
     { localConcurrency: 1 },
     handleOffhostBackup,
   );
-  // prettier-ignore
-  await boss.work(RESTORE_DRILL_QUEUE, { localConcurrency: 1 }, handleRestoreDrill);
-  await boss.work<HostMetricSamplePayload>(
+  await createAndWork(
+    boss,
+    RESTORE_DRILL_QUEUE,
+    { localConcurrency: 1 },
+    handleRestoreDrill,
+  );
+  await createAndWork<HostMetricSamplePayload>(
+    boss,
     HOST_METRIC_QUEUE,
     { localConcurrency: 1 },
     handleHostMetricSample,
   );
-  await boss.work<FeedbackAggregatorPayload>(
+  await createAndWork<FeedbackAggregatorPayload>(
+    boss,
     FEEDBACK_AGGREGATOR_QUEUE,
     { localConcurrency: 1 },
     handleFeedbackAggregator,
   );
-  await boss.work<GeoBackfillPayload>(
+  await createAndWork<GeoBackfillPayload>(
+    boss,
     GEO_BACKFILL_QUEUE,
     { localConcurrency: 1 },
     handleGeoBackfill,
   );
   // v1.12.2 ios-coord — TLS leaf SPKI-change monitor. Single-flight: one
   // short outbound TLS handshake per tick, no benefit to overlapping ticks.
-  await boss.work<TlsPinMonitorPayload>(
+  await createAndWork<TlsPinMonitorPayload>(
+    boss,
     TLS_PIN_MONITOR_QUEUE,
     { localConcurrency: 1 },
     handleTlsPinMonitor,
   );
-  await boss.work<MoodReminderCleanupPayload>(
+  await createAndWork<MoodReminderCleanupPayload>(
+    boss,
     MOOD_REMINDER_CLEANUP_QUEUE,
     { localConcurrency: 1 },
     handleMoodReminderCleanup,
@@ -647,7 +684,8 @@ export async function registerMaintenanceQueues(
   // matches every other cleanup queue; two ticks racing on the same
   // DELETE statement is wasted work and the second tick's payload
   // would be a no-op anyway.
-  await boss.work<PushAttemptCleanupPayload>(
+  await createAndWork<PushAttemptCleanupPayload>(
+    boss,
     PUSH_ATTEMPT_CLEANUP_QUEUE,
     { localConcurrency: 1 },
     handlePushAttemptCleanup,
@@ -655,14 +693,16 @@ export async function registerMaintenanceQueues(
   // v1.31.0 — daily prune of the data-arrival reaction markers. Single-flight
   // like every other cleanup queue: two ticks racing the same DELETE is
   // wasted work.
-  await boss.work<ArrivalReactionCleanupPayload>(
+  await createAndWork<ArrivalReactionCleanupPayload>(
+    boss,
     ARRIVAL_REACTION_CLEANUP_QUEUE,
     { localConcurrency: 1 },
     handleArrivalReactionCleanup,
   );
   // v1.7.0 — daily prune of expired measurement tombstones. Single-flight
   // like every other cleanup queue.
-  await boss.work<MeasurementTombstoneCleanupPayload>(
+  await createAndWork<MeasurementTombstoneCleanupPayload>(
+    boss,
     MEASUREMENT_TOMBSTONE_CLEANUP_QUEUE,
     { localConcurrency: 1 },
     handleMeasurementTombstoneCleanup,
@@ -670,14 +710,16 @@ export async function registerMaintenanceQueues(
   // v1.18.7 — daily prune of the encrypted Coach conversation history.
   // Single-flight like every other cleanup queue; two ticks racing on the
   // same DELETE is wasted work and the second is a no-op.
-  await boss.work<CoachMessageCleanupPayload>(
+  await createAndWork<CoachMessageCleanupPayload>(
+    boss,
     COACH_MESSAGE_CLEANUP_QUEUE,
     { localConcurrency: 1 },
     handleCoachMessageCleanup,
   );
   // MCP Phase 3 (M2) — daily prune of dead MCP connector access tokens +
   // long-revoked connection anchors. Single-flight like every other cleanup.
-  await boss.work<McpTokenCleanupPayload>(
+  await createAndWork<McpTokenCleanupPayload>(
+    boss,
     MCP_TOKEN_CLEANUP_QUEUE,
     { localConcurrency: 1 },
     handleMcpTokenCleanup,
@@ -685,17 +727,20 @@ export async function registerMaintenanceQueues(
   // Document vault — daily purge of tombstoned documents past the 30-day
   // undo grace. Single-flight like every other cleanup queue; the underlying
   // deleteMany is idempotent so a duplicate tick is a no-op.
-  await boss.work<DocumentPurgePayload>(
+  await createAndWork<DocumentPurgePayload>(
+    boss,
     DOCUMENT_PURGE_QUEUE,
     { localConcurrency: 1 },
     handleDocumentPurge,
   );
-  await boss.work<PrDetectionPayload>(
+  await createAndWork<PrDetectionPayload>(
+    boss,
     PR_DETECTION_QUEUE,
     { localConcurrency: PR_DETECTION_CONCURRENCY },
     handlePrDetection,
   );
-  await boss.work<MedicationInventoryExpirePayload>(
+  await createAndWork<MedicationInventoryExpirePayload>(
+    boss,
     MEDICATION_INVENTORY_EXPIRE_QUEUE,
     { localConcurrency: 1 },
     handleMedicationInventoryExpire,
@@ -704,7 +749,8 @@ export async function registerMaintenanceQueues(
   // Single-flight: two ticks racing against the same row pile is wasted
   // work, and the underlying `updateMany` is the canonical idempotent
   // shape anyway.
-  await boss.work<IntakeAutoSkipPayload>(
+  await createAndWork<IntakeAutoSkipPayload>(
+    boss,
     INTAKE_AUTO_SKIP_QUEUE,
     { localConcurrency: 1 },
     handleIntakeAutoSkip,
@@ -712,48 +758,64 @@ export async function registerMaintenanceQueues(
   // v1.4.34 — Apple Health export.zip ingest worker. localConcurrency
   // caps at 1 because the parse loop is CPU-bound and a concurrent
   // second 1 GB import would race the first for RSS.
-  await boss.work<AppleHealthImportPayload>(
+  await createAndWork<AppleHealthImportPayload>(
+    boss,
     APPLE_HEALTH_IMPORT_V2_QUEUE,
     { localConcurrency: APPLE_HEALTH_IMPORT_CONCURRENCY },
     async (jobs) => {
       // pg-boss v12 work callbacks always receive an array (batched
       // worker mode); for our concurrency-1 + batchSize-1 case we just
       // process each job sequentially.
+      //
+      // Each import is independent work, so a failed one does not abort the
+      // rest of the batch; the first failure is what the job reports.
+      let failure: JobOutcome | null = null;
       for (const job of jobs) {
-        await handleAppleHealthImport(job);
+        const outcome = await handleAppleHealthImport(job);
+        if (!outcome.ok && failure === null) failure = outcome;
       }
+      return failure ?? jobDone({ jobs: jobs.length });
     },
   );
   // Drain pre-revision-2 backlog by moving each claimed legacy job onto the
   // isolated v2 queue. This preserves the ImportJob status id without letting
   // the current parser execute under a revision-1 mirror.
-  await boss.work<AppleHealthImportPayload>(
+  await createAndWork<AppleHealthImportPayload>(
+    boss,
     APPLE_HEALTH_IMPORT_LEGACY_QUEUE,
     { localConcurrency: APPLE_HEALTH_IMPORT_CONCURRENCY },
     async (jobs) => {
       for (const job of jobs) {
         await migrateLegacyAppleHealthImport(job);
       }
+      return jobDone({ jobs: jobs.length });
     },
   );
   // v1.32.1 (issue #588) — periodic orphan-ImportJob sweep. Single-flight:
   // the underlying `updateMany` is idempotent and two ticks racing the same
   // read-then-write pass would just be wasted work.
-  await boss.work(
+  await createAndWork(
+    boss,
     IMPORT_JOB_RECONCILE_QUEUE,
     { localConcurrency: 1 },
     handleImportJobReconcileTick,
   );
-  await boss.work<MedicationIntakeImportQueuePayload>(
+  await createAndWork<MedicationIntakeImportQueuePayload>(
+    boss,
     MEDICATION_INTAKE_IMPORT_QUEUE,
     {
       localConcurrency: MEDICATION_INTAKE_IMPORT_CONCURRENCY,
       includeMetadata: true,
     },
     async (jobs) => {
+      // Independent per-delivery imports: run them all, report the first
+      // failure rather than losing it behind a later success.
+      let failure: JobOutcome | null = null;
       for (const job of jobs) {
-        await handleMedicationIntakeImport(job);
+        const outcome = await handleMedicationIntakeImport(job);
+        if (!outcome.ok && failure === null) failure = outcome;
       }
+      return failure ?? jobDone({ jobs: jobs.length });
     },
   );
 
@@ -768,10 +830,21 @@ export async function registerMaintenanceQueues(
   // above) whose payload omits `userId`. That tick runs the SAME discovery
   // fan-out the boot pass uses, so duplicate slots created between deploys
   // collapse within a day instead of waiting for the next worker reboot.
-  await boss.work<Partial<IntakeSlotDedupPayload>>(
+  await createAndWork<Partial<IntakeSlotDedupPayload>>(
+    boss,
     INTAKE_SLOT_DEDUP_QUEUE,
     { localConcurrency: INTAKE_SLOT_DEDUP_CONCURRENCY },
     async (jobs) => {
+      let users = 0;
+      let discoveryEnqueued = 0;
+      let discoverySkipped = 0;
+      // The discovery helper returns its error instead of throwing, so a
+      // failed fan-out would otherwise leave no trace on the job at all.
+      let discoveryFailed = 0;
+      let slotsCollapsed = 0;
+      let rowsSoftDeleted = 0;
+      let rowsNormalised = 0;
+      let daysRecomputed = 0;
       for (const job of jobs) {
         const { userId } = job.data;
         if (!userId) {
@@ -779,6 +852,9 @@ export async function registerMaintenanceQueues(
           // still holding duplicate-slot candidates (singletonKey-coalesced,
           // identical to the boot pass).
           const result = await enqueueBootTimeIntakeSlotDedup();
+          discoveryEnqueued += result.enqueued;
+          discoverySkipped += result.skipped;
+          if (result.error) discoveryFailed++;
           workerLog(
             "info",
             `[intake-slot-dedup] daily discovery enqueued=${result.enqueued} skipped=${result.skipped}${result.error ? ` error=${result.error}` : ""}`,
@@ -787,6 +863,11 @@ export async function registerMaintenanceQueues(
         }
         try {
           const summary = await dedupeUserIntakeSlots(userId);
+          users++;
+          slotsCollapsed += summary.slotsCollapsed;
+          rowsSoftDeleted += summary.rowsSoftDeleted;
+          rowsNormalised += summary.rowsNormalised;
+          daysRecomputed += summary.daysRecomputed;
           workerLog(
             "info",
             `[intake-slot-dedup] user=${userId} slotsCollapsed=${summary.slotsCollapsed} rowsSoftDeleted=${summary.rowsSoftDeleted} rowsNormalised=${summary.rowsNormalised} daysRecomputed=${summary.daysRecomputed}`,
@@ -797,6 +878,17 @@ export async function registerMaintenanceQueues(
           throw err;
         }
       }
+      return jobDone({
+        jobs: jobs.length,
+        users,
+        discovery_enqueued: discoveryEnqueued,
+        discovery_skipped: discoverySkipped,
+        discovery_failed: discoveryFailed,
+        slots_collapsed: slotsCollapsed,
+        rows_soft_deleted: rowsSoftDeleted,
+        rows_normalised: rowsNormalised,
+        days_recomputed: daysRecomputed,
+      });
     },
   );
 
@@ -806,14 +898,26 @@ export async function registerMaintenanceQueues(
   // empty-userId payload is the daily discovery tick and re-fans the per-user
   // jobs (singletonKey-coalesced, identical to the boot pass). Serial
   // concurrency so the migration never crowds the request pool.
-  await boss.work<Partial<NoteEncryptionBackfillPayload>>(
+  await createAndWork<Partial<NoteEncryptionBackfillPayload>>(
+    boss,
     NOTE_ENCRYPTION_BACKFILL_QUEUE,
     { localConcurrency: NOTE_ENCRYPTION_BACKFILL_CONCURRENCY },
     async (jobs) => {
+      let users = 0;
+      let discoveryEnqueued = 0;
+      let discoverySkipped = 0;
+      // The discovery helper returns its error instead of throwing, so a
+      // failed fan-out would otherwise leave no trace on the job at all.
+      let discoveryFailed = 0;
+      let measurements = 0;
+      let moodEntries = 0;
       for (const job of jobs) {
         const { userId } = job.data;
         if (!userId) {
           const result = await enqueueBootTimeNoteEncryptionBackfill();
+          discoveryEnqueued += result.enqueued;
+          discoverySkipped += result.skipped;
+          if (result.error) discoveryFailed++;
           workerLog(
             "info",
             `[note-encryption-backfill] daily discovery enqueued=${result.enqueued} skipped=${result.skipped}${result.error ? ` error=${result.error}` : ""}`,
@@ -823,6 +927,9 @@ export async function registerMaintenanceQueues(
         try {
           const { measurementsMigrated, moodEntriesMigrated } =
             await runNoteEncryptionBackfillForUser(userId);
+          users++;
+          measurements += measurementsMigrated;
+          moodEntries += moodEntriesMigrated;
           workerLog(
             "info",
             `[note-encryption-backfill] user=${userId} measurements=${measurementsMigrated} moodEntries=${moodEntriesMigrated}`,
@@ -837,11 +944,21 @@ export async function registerMaintenanceQueues(
           throw err;
         }
       }
+      return jobDone({
+        jobs: jobs.length,
+        users,
+        discovery_enqueued: discoveryEnqueued,
+        discovery_skipped: discoverySkipped,
+        discovery_failed: discoveryFailed,
+        measurements_migrated: measurements,
+        mood_entries_migrated: moodEntries,
+      });
     },
   );
 
   // v1.23 — admin-triggered encryption-key rotation (on-demand, singleton).
-  await boss.work<EncryptionKeyRotatePayload>(
+  await createAndWork<EncryptionKeyRotatePayload>(
+    boss,
     ENCRYPTION_KEY_ROTATE_QUEUE,
     { localConcurrency: ENCRYPTION_KEY_ROTATE_CONCURRENCY },
     handleEncryptionKeyRotate,
@@ -854,14 +971,27 @@ export async function registerMaintenanceQueues(
   // payload is the daily discovery tick and re-fans the per-user jobs
   // (singletonKey-coalesced, identical to the boot pass). Serial concurrency
   // so the migration never crowds the request pool.
-  await boss.work<Partial<MedNotesEncryptionBackfillPayload>>(
+  await createAndWork<Partial<MedNotesEncryptionBackfillPayload>>(
+    boss,
     MED_NOTES_ENCRYPTION_BACKFILL_QUEUE,
     { localConcurrency: MED_NOTES_ENCRYPTION_BACKFILL_CONCURRENCY },
     async (jobs) => {
+      let users = 0;
+      let discoveryEnqueued = 0;
+      let discoverySkipped = 0;
+      // The discovery helper returns its error instead of throwing, so a
+      // failed fan-out would otherwise leave no trace on the job at all.
+      let discoveryFailed = 0;
+      let sideEffects = 0;
+      let doseChanges = 0;
+      let inventoryItems = 0;
       for (const job of jobs) {
         const { userId } = job.data;
         if (!userId) {
           const result = await enqueueBootTimeMedNotesEncryptionBackfill();
+          discoveryEnqueued += result.enqueued;
+          discoverySkipped += result.skipped;
+          if (result.error) discoveryFailed++;
           workerLog(
             "info",
             `[med-notes-encryption-backfill] daily discovery enqueued=${result.enqueued} skipped=${result.skipped}${result.error ? ` error=${result.error}` : ""}`,
@@ -874,6 +1004,10 @@ export async function registerMaintenanceQueues(
             doseChangesMigrated,
             inventoryItemsMigrated,
           } = await runMedNotesEncryptionBackfillForUser(userId);
+          users++;
+          sideEffects += sideEffectsMigrated;
+          doseChanges += doseChangesMigrated;
+          inventoryItems += inventoryItemsMigrated;
           workerLog(
             "info",
             `[med-notes-encryption-backfill] user=${userId} sideEffects=${sideEffectsMigrated} doseChanges=${doseChangesMigrated} inventoryItems=${inventoryItemsMigrated}`,
@@ -888,6 +1022,16 @@ export async function registerMaintenanceQueues(
           throw err;
         }
       }
+      return jobDone({
+        jobs: jobs.length,
+        users,
+        discovery_enqueued: discoveryEnqueued,
+        discovery_skipped: discoverySkipped,
+        discovery_failed: discoveryFailed,
+        side_effects_migrated: sideEffects,
+        dose_changes_migrated: doseChanges,
+        inventory_items_migrated: inventoryItems,
+      });
     },
   );
 
@@ -895,16 +1039,25 @@ export async function registerMaintenanceQueues(
   // trigger endpoint sends one per-user job; this handler indexes that user's
   // not-yet-indexed documents (consent + budget gated, bounded + resumable).
   // Serial concurrency so the provider calls never crowd the request pool.
-  await boss.work<ContentIndexBackfillPayload>(
+  await createAndWork<ContentIndexBackfillPayload>(
+    boss,
     CONTENT_INDEX_BACKFILL_QUEUE,
     { localConcurrency: CONTENT_INDEX_BACKFILL_CONCURRENCY },
     async (jobs) => {
+      let users = 0;
+      let skipped = 0;
+      let documentsIndexed = 0;
       for (const job of jobs) {
         const { userId } = job.data;
-        if (!userId) continue;
+        if (!userId) {
+          skipped++;
+          continue;
+        }
         try {
           const { indexed, reason } =
             await runContentIndexBackfillForUser(userId);
+          users++;
+          documentsIndexed += indexed;
           workerLog(
             "info",
             `[document-content-index-backfill] user=${userId} indexed=${indexed} reason=${reason}`,
@@ -919,6 +1072,12 @@ export async function registerMaintenanceQueues(
           throw err;
         }
       }
+      return jobDone({
+        jobs: jobs.length,
+        users,
+        skipped,
+        documents_indexed: documentsIndexed,
+      });
     },
   );
 
@@ -926,15 +1085,22 @@ export async function registerMaintenanceQueues(
   // (one job per stored document); provider-first (vision) when configured +
   // consented, else local text-layer extraction. Serial concurrency so the
   // provider calls + PDF parse never crowd the request pool.
-  await boss.work<DocumentIndexPayload>(
+  await createAndWork<DocumentIndexPayload>(
+    boss,
     DOCUMENT_INDEX_QUEUE,
     { localConcurrency: DOCUMENT_INDEX_CONCURRENCY },
     async (jobs) => {
+      let documents = 0;
+      let skipped = 0;
       for (const job of jobs) {
         const { userId, documentId } = job.data;
-        if (!userId || !documentId) continue;
+        if (!userId || !documentId) {
+          skipped++;
+          continue;
+        }
         try {
           await runDocumentIndex(job.data);
+          documents++;
         } catch (err) {
           recordError();
           workerLog(
@@ -945,6 +1111,7 @@ export async function registerMaintenanceQueues(
           throw err;
         }
       }
+      return jobDone({ jobs: jobs.length, documents, skipped });
     },
   );
 
@@ -952,15 +1119,22 @@ export async function registerMaintenanceQueues(
   // upload (one job per stored document); decodes + downscales the original to
   // a small encrypted JPEG. Pure local compute; serial concurrency so the
   // canvas/pdfjs decode never crowds the request pool.
-  await boss.work<DocumentThumbnailPayload>(
+  await createAndWork<DocumentThumbnailPayload>(
+    boss,
     DOCUMENT_THUMBNAIL_QUEUE,
     { localConcurrency: DOCUMENT_THUMBNAIL_CONCURRENCY },
     async (jobs) => {
+      let documents = 0;
+      let skipped = 0;
       for (const job of jobs) {
         const { userId, documentId } = job.data;
-        if (!userId || !documentId) continue;
+        if (!userId || !documentId) {
+          skipped++;
+          continue;
+        }
         try {
           await runDocumentThumbnail(job.data);
+          documents++;
         } catch (err) {
           recordError();
           workerLog(
@@ -971,6 +1145,7 @@ export async function registerMaintenanceQueues(
           throw err;
         }
       }
+      return jobDone({ jobs: jobs.length, documents, skipped });
     },
   );
 
@@ -979,15 +1154,22 @@ export async function registerMaintenanceQueues(
   // the `documentsAutoAiRead` opt-in is ON (egress consent + budget gated) and
   // persists the summary encrypted. Serial concurrency so the provider call
   // never crowds the request pool.
-  await boss.work<DocumentSummaryPayload>(
+  await createAndWork<DocumentSummaryPayload>(
+    boss,
     DOCUMENT_SUMMARY_QUEUE,
     { localConcurrency: DOCUMENT_SUMMARY_CONCURRENCY },
     async (jobs) => {
+      let documents = 0;
+      let skipped = 0;
       for (const job of jobs) {
         const { userId, documentId } = job.data;
-        if (!userId || !documentId) continue;
+        if (!userId || !documentId) {
+          skipped++;
+          continue;
+        }
         try {
           await runDocumentSummaryJob(job.data);
+          documents++;
         } catch (err) {
           recordError();
           workerLog(
@@ -998,6 +1180,7 @@ export async function registerMaintenanceQueues(
           throw err;
         }
       }
+      return jobDone({ jobs: jobs.length, documents, skipped });
     },
   );
 
@@ -1007,15 +1190,24 @@ export async function registerMaintenanceQueues(
   // documents (the upload-time enqueue no-opped while the flag was OFF). It
   // only enqueues — the opt-in, egress consent and budget gates all still run
   // per document inside the summary job. Serial concurrency.
-  await boss.work<SummaryCatchUpPayload>(
+  await createAndWork<SummaryCatchUpPayload>(
+    boss,
     DOCUMENT_SUMMARY_CATCHUP_QUEUE,
     { localConcurrency: DOCUMENT_SUMMARY_CATCHUP_CONCURRENCY },
     async (jobs) => {
+      let users = 0;
+      let skipped = 0;
+      let summariesEnqueued = 0;
       for (const job of jobs) {
         const { userId } = job.data;
-        if (!userId) continue;
+        if (!userId) {
+          skipped++;
+          continue;
+        }
         try {
-          await runSummaryCatchUpForUser(userId);
+          const { enqueued } = await runSummaryCatchUpForUser(userId);
+          users++;
+          summariesEnqueued += enqueued;
         } catch (err) {
           recordError();
           workerLog(
@@ -1026,6 +1218,12 @@ export async function registerMaintenanceQueues(
           throw err;
         }
       }
+      return jobDone({
+        jobs: jobs.length,
+        users,
+        skipped,
+        summaries_enqueued: summariesEnqueued,
+      });
     },
   );
 
@@ -1033,15 +1231,24 @@ export async function registerMaintenanceQueues(
   // discovery sends one per-user job; this handler fans out per-document
   // thumbnail jobs for that user's not-yet-thumbnailed documents. Serial
   // concurrency; cheap discovery + enqueue only.
-  await boss.work<ThumbnailBackfillPayload>(
+  await createAndWork<ThumbnailBackfillPayload>(
+    boss,
     DOCUMENT_THUMBNAIL_BACKFILL_QUEUE,
     { localConcurrency: DOCUMENT_THUMBNAIL_BACKFILL_CONCURRENCY },
     async (jobs) => {
+      let users = 0;
+      let skipped = 0;
+      let thumbnailsEnqueued = 0;
       for (const job of jobs) {
         const { userId } = job.data;
-        if (!userId) continue;
+        if (!userId) {
+          skipped++;
+          continue;
+        }
         try {
           const { enqueued } = await runThumbnailBackfillForUser(userId);
+          users++;
+          thumbnailsEnqueued += enqueued;
           workerLog(
             "info",
             `[document-thumbnail-backfill] user=${userId} enqueued=${enqueued}`,
@@ -1056,6 +1263,12 @@ export async function registerMaintenanceQueues(
           throw err;
         }
       }
+      return jobDone({
+        jobs: jobs.length,
+        users,
+        skipped,
+        thumbnails_enqueued: thumbnailsEnqueued,
+      });
     },
   );
 
@@ -1063,13 +1276,20 @@ export async function registerMaintenanceQueues(
   // payload) fans out one per-user job per opted-in account; the queue also
   // serves the on-demand backfill payloads from the settings surface. Serial
   // concurrency so the staggered outbound fetches never crowd the request pool.
-  await boss.work<EnvironmentFetchPayload>(
+  await createAndWork<EnvironmentFetchPayload>(
+    boss,
     ENVIRONMENT_FETCH_QUEUE,
     { localConcurrency: ENVIRONMENT_FETCH_CONCURRENCY },
     async (jobs) => {
+      // A discovery tick and a per-user backfill share this queue and are
+      // independent of each other, so the pass runs to the end and reports
+      // the first failure it saw.
+      let failure: JobOutcome | null = null;
       for (const job of jobs) {
-        await handleEnvironmentFetch(boss, job.data);
+        const outcome = await handleEnvironmentFetch(boss, job.data);
+        if (!outcome.ok && failure === null) failure = outcome;
       }
+      return failure ?? jobDone({ jobs: jobs.length });
     },
   );
 

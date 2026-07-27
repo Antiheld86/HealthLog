@@ -75,6 +75,13 @@ const eslintConfig = defineConfig([
       // trip it. Density lives on the Card itself (`gap-2 py-3 md:py-4`) or on
       // a swept `p-4 md:p-6` shell. See the rule header.
       "healthlog/spacing-scale": "error",
+      // Every pg-boss queue binding under src/lib/jobs goes through
+      // `createAndWork`, whose handler type is `(jobs) => Promise<JobOutcome>`.
+      // A bare `boss.work(` accepts a handler that resolves to nothing, which
+      // is how a swallowed failure came to read as a completed job. The rule
+      // catches the omission only — a handler that returns `{ ok: true }`
+      // after swallowing still passes, and its header says so.
+      "healthlog/job-handler-outcome": "error",
     },
   },
   // v1.28.17 — every recharts-rendering component funnels through the

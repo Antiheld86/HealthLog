@@ -10,8 +10,8 @@
  *
  * v1.4.37 dead-queue contract: every queue name appears in `allQueues`, its
  * cron (where it has one) appears as a `[QUEUE, CRON]` tuple in `schedules`,
- * and a `boss.work(QUEUE, …, handler)` binding drains it. The status-wiring
- * guards (`status-cron-candidates`, `insight-pregenerate`,
+ * and a `createAndWork(boss, QUEUE, …, handler)` binding drains it. The
+ * status-wiring guards (`status-cron-candidates`, `insight-pregenerate`,
  * `insight-status-generate`, `recovery-score-queue`,
  * `stress-strain-retention-queue`, `period-narrative-warm`,
  * `coach-memory-refresh-queue`) read THIS module.
@@ -101,9 +101,11 @@ import {
   type InsightStatusGeneratePayload,
 } from "@/lib/jobs/insight-status-generate";
 import { withBackgroundEvent } from "@/lib/logging/background";
+import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { getWorkerPrisma, workerLog } from "./shared";
 import {
   createAndSchedule,
+  createAndWork,
   insightRetryOptions,
   type QueuePolicyTable,
   type ScheduleEntry,
@@ -363,37 +365,44 @@ export async function registerStatusQueues(
 ): Promise<readonly string[]> {
   await createAndSchedule(boss, allQueues, schedules, queuePolicies);
 
-  await boss.work<GeneralStatusPayload>(
+  await createAndWork<GeneralStatusPayload>(
+    boss,
     GENERAL_STATUS_QUEUE,
     { localConcurrency: 1 },
     handleGeneralStatusGenerate,
   );
-  await boss.work<BloodPressureStatusPayload>(
+  await createAndWork<BloodPressureStatusPayload>(
+    boss,
     BLOOD_PRESSURE_STATUS_QUEUE,
     { localConcurrency: 1 },
     handleBloodPressureStatusGenerate,
   );
-  await boss.work<WeightStatusPayload>(
+  await createAndWork<WeightStatusPayload>(
+    boss,
     WEIGHT_STATUS_QUEUE,
     { localConcurrency: 1 },
     handleWeightStatusGenerate,
   );
-  await boss.work<PulseStatusPayload>(
+  await createAndWork<PulseStatusPayload>(
+    boss,
     PULSE_STATUS_QUEUE,
     { localConcurrency: 1 },
     handlePulseStatusGenerate,
   );
-  await boss.work<BmiStatusPayload>(
+  await createAndWork<BmiStatusPayload>(
+    boss,
     BMI_STATUS_QUEUE,
     { localConcurrency: 1 },
     handleBmiStatusGenerate,
   );
-  await boss.work<MoodStatusPayload>(
+  await createAndWork<MoodStatusPayload>(
+    boss,
     MOOD_STATUS_QUEUE,
     { localConcurrency: 1 },
     handleMoodStatusGenerate,
   );
-  await boss.work<MedicationComplianceStatusPayload>(
+  await createAndWork<MedicationComplianceStatusPayload>(
+    boss,
     MEDICATION_COMPLIANCE_STATUS_QUEUE,
     { localConcurrency: 1 },
     handleMedicationComplianceStatusGenerate,
@@ -409,7 +418,8 @@ export async function registerStatusQueues(
   // (the cohort walk is itself sequential per user, and the content-hash
   // gate + per-user budget gate inside the handler cover the rare
   // double-tick overlap the old single slot serialised away).
-  await boss.work<InsightPregeneratePayload>(
+  await createAndWork<InsightPregeneratePayload>(
+    boss,
     INSIGHT_PREGENERATE_QUEUE,
     { localConcurrency: 2 },
     handleInsightPregenerateJob,
@@ -420,17 +430,23 @@ export async function registerStatusQueues(
   // night's samples into one job, and the handler's marker re-check makes a
   // rare double-fire a no-op, so one slot is enough and bounds the provider
   // concurrency the same way the nightly path does.
-  await boss.work<MorningDigestRefreshPayload>(
+  await createAndWork<MorningDigestRefreshPayload>(
+    boss,
     MORNING_DIGEST_REFRESH_QUEUE,
     { localConcurrency: 1 },
-    async (jobs) => {
-      await withBackgroundEvent("job.morning_digest_refresh", async (evt) => {
+    async (jobs): Promise<JobOutcome> => {
+      return withBackgroundEvent("job.morning_digest_refresh", async (evt) => {
+        // The counts the batch already decides on: one refresh per job, and
+        // the finalised subset that reaches the morning push seam.
+        let refreshed = 0;
+        let finalised = 0;
         for (const job of jobs) {
           try {
             const result = await runMorningDigestRefresh(
               getWorkerPrisma(),
               job.data,
             );
+            refreshed++;
             evt.addMeta(
               "morning_refresh",
               `${result.status}:${result.comprehensive ?? "none"}`,
@@ -442,6 +458,7 @@ export async function registerStatusQueues(
             // there, so a user who never opted in or is outside the window is a
             // clean no-op. The fallback cron covers the no-sleep-arrived case.
             if (result.status === "finalised") {
+              finalised++;
               const pushResult = await maybeDispatchDailyBriefing(
                 getWorkerPrisma(),
                 job.data.userId,
@@ -457,6 +474,7 @@ export async function registerStatusQueues(
             throw err;
           }
         }
+        return jobDone({ refreshed, finalised });
       });
     },
   );
@@ -464,7 +482,8 @@ export async function registerStatusQueues(
   // read-only status route on a cold card. Low concurrency so a first
   // visit that cold-misses several cards can't saturate the Prisma pool
   // or fan out an unbounded number of concurrent provider calls.
-  await boss.work<InsightStatusGeneratePayload>(
+  await createAndWork<InsightStatusGeneratePayload>(
+    boss,
     INSIGHT_STATUS_GENERATE_QUEUE,
     { localConcurrency: INSIGHT_STATUS_GENERATE_CONCURRENCY },
     handleInsightStatusGenerate,
@@ -474,56 +493,84 @@ export async function registerStatusQueues(
   // eligible user and upserts one `COMPUTED RECOVERY_SCORE` row per scored
   // day (idempotent — a re-fire overwrites in place). Single-flight so two
   // ticks never double-walk the cohort.
-  await boss.work(RECOVERY_SCORE_QUEUE, { localConcurrency: 1 }, async () => {
-    try {
-      const summary = await runRecoveryScore(getWorkerPrisma());
-      workerLog(
-        "info",
-        `[recovery-score] considered=${summary.considered} stored=${summary.stored} insufficient=${summary.insufficient} errored=${summary.errored}`,
-      );
-    } catch (err) {
-      recordError();
-      workerLog("error", "[recovery-score] pass failed", err);
-      throw err;
-    }
-  });
+  await createAndWork(
+    boss,
+    RECOVERY_SCORE_QUEUE,
+    { localConcurrency: 1 },
+    async (): Promise<JobOutcome> => {
+      try {
+        const summary = await runRecoveryScore(getWorkerPrisma());
+        workerLog(
+          "info",
+          `[recovery-score] considered=${summary.considered} stored=${summary.stored} insufficient=${summary.insufficient} errored=${summary.errored}`,
+        );
+        return jobDone({
+          considered: summary.considered,
+          stored: summary.stored,
+          insufficient: summary.insufficient,
+          errored: summary.errored,
+        });
+      } catch (err) {
+        recordError();
+        workerLog("error", "[recovery-score] pass failed", err);
+        throw err;
+      }
+    },
+  );
   // v1.15.20 — proactive Coach nudge. Single-flight; the push-attempts
   // ledger caps a user at one nudge per rolling week, so an overlapping
   // tick would only waste reads. Deterministic triggers, no AI call.
-  await boss.work(COACH_NUDGE_QUEUE, { localConcurrency: 1 }, async () => {
-    await withBackgroundEvent("job.coach_nudge", async (evt) => {
-      try {
-        const summary = await runCoachNudgeTick(getWorkerPrisma(), new Date());
-        evt.setBackground({
-          task_name: "job.coach_nudge",
-          result: {
+  await createAndWork(
+    boss,
+    COACH_NUDGE_QUEUE,
+    { localConcurrency: 1 },
+    async (): Promise<JobOutcome> => {
+      return withBackgroundEvent("job.coach_nudge", async (evt) => {
+        try {
+          const summary = await runCoachNudgeTick(
+            getWorkerPrisma(),
+            new Date(),
+          );
+          evt.setBackground({
+            task_name: "job.coach_nudge",
+            result: {
+              candidates_scanned: summary.candidatesScanned,
+              dispatched: summary.dispatched,
+              persisted: summary.persisted,
+              skipped_opted_out: summary.skippedOptedOut,
+              skipped_no_provider: summary.skippedNoProvider,
+              skipped_recent_nudge: summary.skippedRecentNudge,
+              skipped_recent_engagement: summary.skippedRecentEngagement,
+              skipped_no_trigger: summary.skippedNoTrigger,
+              skipped_no_channel: summary.skippedNoChannel,
+              failed: summary.failed,
+            },
+          });
+          // A per-user failure never fails this pass — it rides out as the
+          // `failed` count, exactly as it does in the wide event.
+          return jobDone({
             candidates_scanned: summary.candidatesScanned,
             dispatched: summary.dispatched,
             persisted: summary.persisted,
-            skipped_opted_out: summary.skippedOptedOut,
-            skipped_no_provider: summary.skippedNoProvider,
-            skipped_recent_nudge: summary.skippedRecentNudge,
-            skipped_recent_engagement: summary.skippedRecentEngagement,
-            skipped_no_trigger: summary.skippedNoTrigger,
-            skipped_no_channel: summary.skippedNoChannel,
             failed: summary.failed,
-          },
-        });
-      } catch (err) {
-        evt.setError(err);
-        recordError();
-        throw err;
-      }
-    });
-  });
+          });
+        } catch (err) {
+          evt.setError(err);
+          recordError();
+          throw err;
+        }
+      });
+    },
+  );
   // v1.16.11 — medication low-stock pass. Single-flight; the
   // per-medication stamp makes a re-fire idempotent (already-notified
   // crossings skip), so an overlapping tick would only waste reads.
-  await boss.work(
+  await createAndWork(
+    boss,
     MEDICATION_LOW_STOCK_QUEUE,
     { localConcurrency: 1 },
-    async () => {
-      await withBackgroundEvent("job.medication_low_stock", async (evt) => {
+    async (): Promise<JobOutcome> => {
+      return withBackgroundEvent("job.medication_low_stock", async (evt) => {
         try {
           const summary = await runMedicationLowStockTick(
             getWorkerPrisma(),
@@ -544,6 +591,15 @@ export async function registerStatusQueues(
               failed: summary.failed,
             },
           });
+          // A per-medication failure never fails this pass — it rides out as
+          // the `failed` count.
+          return jobDone({
+            users_scanned: summary.usersScanned,
+            medications_evaluated: summary.medicationsEvaluated,
+            notified: summary.notified,
+            rearmed: summary.rearmed,
+            failed: summary.failed,
+          });
         } catch (err) {
           evt.setError(err);
           recordError();
@@ -556,7 +612,8 @@ export async function registerStatusQueues(
   // to claim a durable unique row, so two slots would only race each other for
   // a claim exactly one of them can win. It makes no provider call — a
   // module-graph test pins that — so one slot costs nothing in throughput.
-  await boss.work<DataArrival>(
+  await createAndWork<DataArrival>(
+    boss,
     DATA_ARRIVAL_QUEUE,
     { localConcurrency: 1 },
     handleDataArrival,
@@ -564,7 +621,8 @@ export async function registerStatusQueues(
   // v1.31.0 — the arrival reaction line. Single-flight: this is the spine's
   // ONE provider call, and a second concurrent slot would only race the same
   // durable `generatedAt` claim exactly one of them can win.
-  await boss.work<ReactionLineJob>(
+  await createAndWork<ReactionLineJob>(
+    boss,
     REACTION_LINE_QUEUE,
     { localConcurrency: 1 },
     handleReactionLine,
@@ -573,7 +631,8 @@ export async function registerStatusQueues(
   // path the spine deliberately does not walk, so it stays off the request pool
   // and cannot fan out concurrent completions when several workouts land in one
   // sync.
-  await boss.work<WorkoutInsightGeneratePayload>(
+  await createAndWork<WorkoutInsightGeneratePayload>(
+    boss,
     WORKOUT_INSIGHT_GENERATE_QUEUE,
     { localConcurrency: WORKOUT_INSIGHT_GENERATE_CONCURRENCY },
     handleWorkoutInsightGenerate,
@@ -583,84 +642,131 @@ export async function registerStatusQueues(
   // is suppressed), and the tick only loads a digest for opted-in users at
   // their exact local fallback hour. No provider call — it reads the cached
   // digest and dispatches the deterministic line + cached lead.
-  await boss.work(DAILY_BRIEFING_QUEUE, { localConcurrency: 1 }, async () => {
-    await withBackgroundEvent("job.daily_briefing", async (evt) => {
-      try {
-        const summary = await runDailyBriefingTick(
-          getWorkerPrisma(),
-          new Date(),
-        );
-        evt.setBackground({
-          task_name: "job.daily_briefing",
-          result: {
+  await createAndWork(
+    boss,
+    DAILY_BRIEFING_QUEUE,
+    { localConcurrency: 1 },
+    async (): Promise<JobOutcome> => {
+      return withBackgroundEvent("job.daily_briefing", async (evt) => {
+        try {
+          const summary = await runDailyBriefingTick(
+            getWorkerPrisma(),
+            new Date(),
+          );
+          evt.setBackground({
+            task_name: "job.daily_briefing",
+            result: {
+              candidates_scanned: summary.candidatesScanned,
+              in_slot: summary.inSlot,
+              sent: summary.sent,
+              suppressed_frequency: summary.suppressedFrequency,
+              no_digest: summary.noDigest,
+              opted_out: summary.optedOut,
+              module_off: summary.moduleOff,
+              no_channel: summary.noChannel,
+              outside_window: summary.outsideWindow,
+              failed: summary.failed,
+            },
+          });
+          // Most ticks land outside every user's slot; that is the tick doing
+          // its job, so a zero `sent` is a success with zero counts.
+          return jobDone({
             candidates_scanned: summary.candidatesScanned,
             in_slot: summary.inSlot,
             sent: summary.sent,
-            suppressed_frequency: summary.suppressedFrequency,
-            no_digest: summary.noDigest,
-            opted_out: summary.optedOut,
-            module_off: summary.moduleOff,
-            no_channel: summary.noChannel,
-            outside_window: summary.outsideWindow,
             failed: summary.failed,
-          },
-        });
-      } catch (err) {
-        evt.setError(err);
-        recordError();
-        throw err;
-      }
-    });
-  });
+          });
+        } catch (err) {
+          evt.setError(err);
+          recordError();
+          throw err;
+        }
+      });
+    },
+  );
   // v1.10.0 — computed scores (WX-E). Nightly Stress-score (HRV-derived
   // proxy) compute + store. Single-flight so two ticks never double-walk
   // the cohort. The runner iterates every eligible user and upserts one
   // `COMPUTED STRESS_SCORE` row per scored day (idempotent — a re-fire
   // overwrites in place).
-  await boss.work(STRESS_SCORE_QUEUE, { localConcurrency: 1 }, async () => {
-    try {
-      const summary = await runStressScore(getWorkerPrisma());
-      workerLog(
-        "info",
-        `[stress-score] considered=${summary.considered} stored=${summary.stored} insufficient=${summary.insufficient} errored=${summary.errored}`,
-      );
-    } catch (err) {
-      recordError();
-      workerLog("error", "[stress-score] pass failed", err);
-      throw err;
-    }
-  });
+  await createAndWork(
+    boss,
+    STRESS_SCORE_QUEUE,
+    { localConcurrency: 1 },
+    async (): Promise<JobOutcome> => {
+      try {
+        const summary = await runStressScore(getWorkerPrisma());
+        workerLog(
+          "info",
+          `[stress-score] considered=${summary.considered} stored=${summary.stored} insufficient=${summary.insufficient} errored=${summary.errored}`,
+        );
+        return jobDone({
+          considered: summary.considered,
+          stored: summary.stored,
+          insufficient: summary.insufficient,
+          errored: summary.errored,
+        });
+      } catch (err) {
+        recordError();
+        workerLog("error", "[stress-score] pass failed", err);
+        throw err;
+      }
+    },
+  );
   // v1.10.0 — computed scores (WX-E). Nightly Strain-score (Banister TRIMP
   // cardio-load) compute + store. Single-flight; upserts one `COMPUTED
   // STRAIN_SCORE` row per scored day (idempotent).
-  await boss.work(STRAIN_SCORE_QUEUE, { localConcurrency: 1 }, async () => {
-    try {
-      const summary = await runStrainScore(getWorkerPrisma());
-      workerLog(
-        "info",
-        `[strain-score] considered=${summary.considered} stored=${summary.stored} insufficient=${summary.insufficient} errored=${summary.errored}`,
-      );
-    } catch (err) {
-      recordError();
-      workerLog("error", "[strain-score] pass failed", err);
-      throw err;
-    }
-  });
+  await createAndWork(
+    boss,
+    STRAIN_SCORE_QUEUE,
+    { localConcurrency: 1 },
+    async (): Promise<JobOutcome> => {
+      try {
+        const summary = await runStrainScore(getWorkerPrisma());
+        workerLog(
+          "info",
+          `[strain-score] considered=${summary.considered} stored=${summary.stored} insufficient=${summary.insufficient} errored=${summary.errored}`,
+        );
+        return jobDone({
+          considered: summary.considered,
+          stored: summary.stored,
+          insufficient: summary.insufficient,
+          errored: summary.errored,
+        });
+      } catch (err) {
+        recordError();
+        workerLog("error", "[strain-score] pass failed", err);
+        throw err;
+      }
+    },
+  );
   // v1.11.0 — period-narrative warm. A scheduled tick (no `userId`) runs the
   // boundary-gated nightly fan-out; a `userId` payload runs a single-user warm
   // enqueued by the read-only GET on a cold/stale read. Single-flight so two
   // ticks never double-walk the cohort; the per-user budget gate covers the
   // fan-out and the enqueue `singletonKey` covers the single-user path.
-  await boss.work<PeriodNarrativePayload>(
+  await createAndWork<PeriodNarrativePayload>(
+    boss,
     PERIOD_NARRATIVE_QUEUE,
     { localConcurrency: 1 },
-    async (jobs) => {
+    async (jobs): Promise<JobOutcome> => {
+      // Two modes on one queue, so the outcome counts them separately: a
+      // non-boundary night is a scheduled pass that generated nothing, which
+      // is a success with zero counts, not an idle queue.
+      let singleUser = 0;
+      let scheduled = 0;
+      let generated = 0;
+      let failed = 0;
       for (const job of jobs) {
         try {
           if (job.data?.userId) {
             await warmOneNarrative(job.data);
+            singleUser++;
           } else {
             const summary = await runPeriodNarrativeWarm(getWorkerPrisma());
+            scheduled++;
+            generated += summary.generated;
+            failed += summary.failed;
             workerLog(
               "info",
               `[period-narrative] periods=${summary.periods.join(",") || "none"} total=${summary.total} generated=${summary.generated} cached=${summary.cached} skipped=${summary.skipped} insufficient=${summary.insufficient} failed=${summary.failed} budget=${summary.budgetBlocked}`,
@@ -674,26 +780,45 @@ export async function registerStatusQueues(
           throw err;
         }
       }
+      return jobDone({
+        single_user: singleUser,
+        scheduled,
+        generated,
+        failed,
+      });
     },
   );
   // v1.11.1 — combined Coach memory refresh: rolling conversation summary +
   // durable fact extraction for one long conversation. localConcurrency 1 so a
   // burst of long-conversation turns can't fan out concurrent provider calls;
   // each step is budget-gated inside runStatusCompletion and fault-isolated.
-  await boss.work<CoachMemoryRefreshPayload>(
+  await createAndWork<CoachMemoryRefreshPayload>(
+    boss,
     COACH_MEMORY_REFRESH_QUEUE,
     { localConcurrency: 1 },
-    async (jobs) => {
+    async (jobs): Promise<JobOutcome> => {
+      // An incomplete payload is skipped rather than failed, so it has to be
+      // countable — otherwise a queue full of them reads as a clean run.
+      let refreshed = 0;
+      let skippedIncomplete = 0;
       for (const job of jobs) {
-        if (!job.data?.conversationId || !job.data?.userId) continue;
+        if (!job.data?.conversationId || !job.data?.userId) {
+          skippedIncomplete++;
+          continue;
+        }
         try {
           await runCoachMemoryRefresh(job.data);
+          refreshed++;
         } catch (err) {
           recordError();
           workerLog("error", "[coach-memory-refresh] failed", err);
           throw err;
         }
       }
+      return jobDone({
+        refreshed,
+        skipped_incomplete: skippedIncomplete,
+      });
     },
   );
 
@@ -701,11 +826,12 @@ export async function registerStatusQueues(
   // reminder to `due` and minting plan-review reminders are both idempotent
   // across re-fires (an already-due reminder is not re-flipped; a plan whose
   // reviewDate was cleared is not re-minted). No provider call, no push.
-  await boss.work(
+  await createAndWork(
+    boss,
     COACH_REMINDER_SWEEP_QUEUE,
     { localConcurrency: 1 },
-    async () => {
-      await withBackgroundEvent("job.coach_reminder_sweep", async (evt) => {
+    async (): Promise<JobOutcome> => {
+      return withBackgroundEvent("job.coach_reminder_sweep", async (evt) => {
         try {
           const summary = await runCoachReminderSweep(
             getWorkerPrisma(),
@@ -718,6 +844,11 @@ export async function registerStatusQueues(
               plan_reviews_minted: summary.planReviewsMinted,
               errored: summary.errored,
             },
+          });
+          return jobDone({
+            reminders_due: summary.remindersDue,
+            plan_reviews_minted: summary.planReviewsMinted,
+            errored: summary.errored,
           });
         } catch (err) {
           evt.setError(err);
@@ -732,11 +863,12 @@ export async function registerStatusQueues(
   // reminders the sweep minted and writes the grounded before/after read-back
   // into the plan's encrypted outcome column, flipping it to `reviewed`.
   // Idempotent (a reviewed plan is not re-processed). No provider call, no push.
-  await boss.work(
+  await createAndWork(
+    boss,
     COACH_PLAN_REVIEW_QUEUE,
     { localConcurrency: 1 },
-    async () => {
-      await withBackgroundEvent("job.coach_plan_review", async (evt) => {
+    async (): Promise<JobOutcome> => {
+      return withBackgroundEvent("job.coach_plan_review", async (evt) => {
         try {
           const summary = await runCoachPlanReviewTick(
             getWorkerPrisma(),
@@ -749,6 +881,11 @@ export async function registerStatusQueues(
               insufficient: summary.insufficient,
               errored: summary.errored,
             },
+          });
+          return jobDone({
+            reviewed: summary.reviewed,
+            insufficient: summary.insufficient,
+            errored: summary.errored,
           });
         } catch (err) {
           evt.setError(err);
