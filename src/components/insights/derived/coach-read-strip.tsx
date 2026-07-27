@@ -8,6 +8,7 @@ import { useUnitDisplay } from "@/hooks/use-unit-display";
 import { useMounted } from "@/hooks/use-mounted";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
+import { metricFractionDigits } from "@/lib/measurements/value-domain";
 import { apiGet } from "@/lib/api/api-fetch";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { TileHeader } from "@/components/insights/tile-header";
@@ -38,9 +39,12 @@ export interface CoachReadStripProps {
   /** Unit suffix rendered next to the band edges + today's value. */
   unit: string;
   /**
-   * Decimal precision for the formatted numbers. Defaults to 1 — enough for
-   * weight (78.4) / HRV (41.5); integer metrics drop the trailing zero via
-   * `Intl.NumberFormat`. Pages pass 0 for integer-only metrics (BP, steps).
+   * Decimal precision for the formatted numbers. Optional: when omitted the
+   * precision follows the METRIC (`metricFractionDigits`) — a discrete metric
+   * resolves 0, everything else the shared default of 1. It used to default
+   * to a flat 1 and rely on each page remembering to pass 0, which is how a
+   * step page came to print "104.0 steps". Pass it only to override the
+   * metric's own answer.
    */
   fractionDigits?: number;
   /**
@@ -55,9 +59,10 @@ export interface CoachReadStripProps {
 export function CoachReadStrip({
   metricType,
   unit,
-  fractionDigits = 1,
+  fractionDigits,
   valueScale = 1,
 }: CoachReadStripProps) {
+  const digits = fractionDigits ?? metricFractionDigits(metricType);
   const { isAuthenticated } = useAuth();
   const { t, locale } = useTranslations();
   const mounted = useMounted();
@@ -89,7 +94,7 @@ export function CoachReadStrip({
   const fmt = (value: number): string =>
     new Intl.NumberFormat(locale, {
       minimumFractionDigits: 0,
-      maximumFractionDigits: fractionDigits,
+      maximumFractionDigits: digits,
     }).format(
       transformed
         ? unitDisplay.toDisplay(metricType, value)

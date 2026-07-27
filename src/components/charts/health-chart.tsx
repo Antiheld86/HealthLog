@@ -1337,7 +1337,7 @@ export function HealthChart({
       .filter((value): value is number => typeof value === "number")
       .filter((value) => Number.isFinite(value));
 
-    return computePaddedYDomain(values);
+    return computePaddedYDomain(values, types);
   }, [
     chartDataWithCompare,
     effectiveCompareBaseline,

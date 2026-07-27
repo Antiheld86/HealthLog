@@ -59,8 +59,8 @@ export function buildCoreMetricsBlocks(
     );
     const olderSys = sysRows.filter((row) => row.measuredAt < ctx.recentCutoff);
     const olderDia = diaRows.filter((row) => row.measuredAt < ctx.recentCutoff);
-    const sysBand = bpBandFromRows(sysRows);
-    const diaBand = bpBandFromRows(diaRows);
+    const sysBand = bpBandFromRows(sysRows, "BLOOD_PRESSURE_SYS");
+    const diaBand = bpBandFromRows(diaRows, "BLOOD_PRESSURE_DIA");
     const usualRange =
       sysBand || diaBand
         ? {

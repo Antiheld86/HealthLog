@@ -27,8 +27,7 @@ export default function InsightsStepsPage() {
       explainerMetric="steps"
       statIcon={Footprints}
       color="var(--success)"
-      unit="steps"
-      yAxisUnit="steps"
+      unitKey="insights.units.steps"
       emptyStateIcon={<Footprints className="size-6" />}
       emptyStateCtaType={null}
       captureType="ACTIVITY_STEPS"

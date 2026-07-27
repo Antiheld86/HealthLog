@@ -293,6 +293,7 @@ export function buildDailyBpRows(
  */
 export function bpBandFromRows(
   rows: ReadonlyArray<{ measuredAt: Date; value: number }>,
+  type: "BLOOD_PRESSURE_SYS" | "BLOOD_PRESSURE_DIA",
 ): { low: number; high: number } | null {
   const byDay = new Map<string, { sum: number; count: number }>();
   for (const r of rows) {
@@ -304,7 +305,7 @@ export function bpBandFromRows(
   }
   const dayMeans = [...byDay.values()].map((a) => a.sum / a.count);
   if (dayMeans.length < 7) return null;
-  const band = buildBaselineBand(dayMeans);
+  const band = buildBaselineBand(dayMeans, type);
   if (!band) return null;
   return { low: Math.round(band.low), high: Math.round(band.high) };
 }

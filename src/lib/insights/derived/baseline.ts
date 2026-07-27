@@ -32,6 +32,7 @@ import type { MeasurementType, PrismaClient } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { getAgeFromDateOfBirth } from "@/lib/analytics/pulse-targets";
 import { toProfileSex } from "@/lib/profile/sex";
+import { clampDerivedLowerBound } from "@/lib/measurements/value-domain";
 import type { ProfileSex } from "@/lib/profile/sex";
 import {
   probeRollupCoverage,
@@ -63,7 +64,11 @@ export interface VitalsBaselineValue {
   type: MeasurementType;
   /** Robust center (median of the per-day means). */
   center: number;
-  /** Band lower edge (center − k·MAD·scale). */
+  /**
+   * Band lower edge (center − k·MAD·scale), floored at 0 for a metric whose
+   * plausibility domain forbids negative values. `spread` below stays the
+   * unclamped dispersion, so a deviation-in-σ calculation is unaffected.
+   */
   low: number;
   /** Band upper edge (center + k·MAD·scale). */
   high: number;
@@ -173,9 +178,20 @@ export function medianAbsoluteDeviation(values: number[]): number {
  * caller supplies the already-resolved DAY-native series so this can be
  * unit-tested against both a raw-DAY series and a rollup-composed series
  * (they must agree: DAY rollup `mean` equals the per-day raw mean).
+ *
+ * `type` names the metric the series belongs to and is REQUIRED, not
+ * optional: `center − spread` is arithmetic, and arithmetic does not know
+ * that a step, a flight, or a kilocalorie cannot be owed. On a metric with a
+ * wide relative spread the lower edge crosses zero and the strip underneath
+ * the chart reads "your usual range is −5,595.6–13,387.6 steps". The floor
+ * comes from `clampDerivedLowerBound`, which reads the metric's declared
+ * plausibility domain — the same fact the chart's y-axis clamps against, now
+ * answered in one place instead of two. Pass `null` only for a series with no
+ * metric identity; the band then keeps the raw arithmetic edge.
  */
 export function buildBaselineBand(
   dayMeans: number[],
+  type: MeasurementType | null,
   k: number = DEFAULT_MAD_K,
 ): Omit<VitalsBaselineValue, "type" | "series"> | null {
   if (dayMeans.length === 0) return null;
@@ -185,7 +201,7 @@ export function buildBaselineBand(
   const spread = k * mad * MAD_SIGMA_SCALE;
   return {
     center,
-    low: center - spread,
+    low: clampDerivedLowerBound(type, center - spread),
     high: center + spread,
     spread,
     sampleDays: dayMeans.length,
@@ -334,6 +350,7 @@ export async function computeVitalsBaseline(
 
   const band = buildBaselineBand(
     points.map((p) => p.mean),
+    type,
     k,
   );
   if (!band) {

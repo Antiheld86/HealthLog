@@ -22,8 +22,7 @@ export default function InsightsStockwerkePage() {
       i18nPrefix="insights.flightsClimbed"
       explainerMetric="flightsClimbed"
       color="var(--success)"
-      unit="flights"
-      yAxisUnit="flights"
+      unitKey="insights.units.flights"
       emptyStateIcon={<TrendingUp className="size-6" />}
       emptyStateCtaType={null}
       coachPrefill="I haven't logged any flights climbed yet — what does this metric tell me about my health, and how do I improve it?"

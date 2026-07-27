@@ -53,7 +53,7 @@ describe("pure statistics", () => {
   });
 
   it("buildBaselineBand returns a symmetric MAD band", () => {
-    const band = buildBaselineBand([50, 52, 54, 56, 58], 3);
+    const band = buildBaselineBand([50, 52, 54, 56, 58], "PULSE", 3);
     expect(band).not.toBeNull();
     expect(band!.center).toBe(54);
     expect(band!.low).toBeLessThan(band!.center);
@@ -65,8 +65,8 @@ describe("pure statistics", () => {
   it("parity: a composed-DAY-bucket series and the raw-DAY series yield the same band", () => {
     // Same per-day means whether they arrive as raw rows or DAY rollups.
     const perDayMeans = [60, 61, 62, 59, 63, 58, 64];
-    const fromRaw = buildBaselineBand(perDayMeans, 3);
-    const fromRollup = buildBaselineBand([...perDayMeans], 3);
+    const fromRaw = buildBaselineBand(perDayMeans, "PULSE", 3);
+    const fromRollup = buildBaselineBand([...perDayMeans], "PULSE", 3);
     expect(fromRollup).toEqual(fromRaw);
   });
 });

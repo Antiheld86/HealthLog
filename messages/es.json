@@ -2860,6 +2860,13 @@
       "scoresBack": "Volver a Insights",
       "ecgDescription": "Registros de ECG de una derivación de tu dispositivo, cada uno con el resultado del propio dispositivo. HealthLog muestra el trazado y el registro, pero no interpreta la onda."
     },
+    "units": {
+      "steps": "pasos",
+      "flights": "pisos",
+      "falls": "caídas",
+      "years": "años",
+      "breathingEvents": "eventos"
+    },
     "sleep": {
       "title": "Sueño",
       "description": "Desglose por fases y duración nocturna, tomados de Apple Health.",

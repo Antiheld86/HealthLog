@@ -22,8 +22,7 @@ export default function InsightsGefaessalterPage() {
       i18nPrefix="insights.vascularAge"
       explainerMetric="vascularAge"
       color="var(--chart-3)"
-      unit="years"
-      yAxisUnit="years"
+      unitKey="insights.units.years"
       emptyStateIcon={<HeartPulse className="size-6" />}
       emptyStateCtaType={null}
       coachPrefill="I haven't logged any vascular age yet — what does this metric tell me about my health, and how do I improve it?"
