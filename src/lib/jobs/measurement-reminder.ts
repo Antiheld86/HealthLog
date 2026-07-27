@@ -309,7 +309,8 @@ export async function runMeasurementReminderTick(
         summary.skippedModuleDisabled += 1;
         // Advance past this cycle so a disabled-module reminder does not pin
         // the server tick re-evaluating the same overdue slot every 15
-        // minutes for the rest of the day (the client-managed precedent).
+        // minutes for the rest of the day. The user turned the module off,
+        // so there is nothing this reminder could still deliver.
         await advanceNextDue(prisma, reminder, timezone, now);
         continue;
       }
