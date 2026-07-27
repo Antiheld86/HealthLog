@@ -14,6 +14,7 @@ import type {
   MedicationImportSkipReason,
 } from "@/lib/jobs/medication-intake-import";
 
+import { medicationImportIdempotencyKey } from "@/lib/medications/intake-import-payload";
 import { normaliseMedicationName } from "./auto-export-format";
 import type {
   AutoExportDose,
@@ -60,22 +61,6 @@ export interface AutoExportPlan {
   csvCodingsIgnored: number;
   /** Header cells the importer has no verdict for. */
   unknownColumns: string[];
-}
-
-/**
- * An imported dose is identified by its medication and its slot instant.
- *
- * That is the grain the database already enforces through the live-row unique on
- * `(user_id, medication_id, scheduled_for, source)`, so the replay key is a
- * function of exactly the same facts. It was previously built from an optional
- * counter field in the request body, which collapsed a month of distinct doses
- * onto one key as soon as an export put something non-unique there.
- */
-export function autoExportIdempotencyKey(
-  medicationId: string,
-  scheduledFor: Date,
-): string {
-  return `import-${medicationId}-${scheduledFor.getTime()}`;
 }
 
 function bump(
@@ -178,7 +163,7 @@ export function planAutoExportImport(
       continue;
     }
 
-    const idempotencyKey = autoExportIdempotencyKey(
+    const idempotencyKey = medicationImportIdempotencyKey(
       match.id,
       dose.scheduledFor,
     );
