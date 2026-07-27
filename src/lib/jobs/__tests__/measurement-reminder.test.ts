@@ -11,7 +11,8 @@
  *     auto-resolve.
  *   - Ledger-free dedup: a successful dispatch advances nextDueAt past
  *     now so the same due cycle never re-fires.
- *   - clientManaged suppression skips the APNs send but still advances.
+ *   - clientManaged suppresses the APNs leg only: the tick still
+ *     dispatches, and a reminder nothing delivered stays overdue.
  *
  * The Prisma surface is stubbed manually to avoid a testcontainer boot.
  */
@@ -291,8 +292,12 @@ describe("runMeasurementReminderTick", () => {
     expect(prisma.measurement.findFirst).not.toHaveBeenCalled();
   });
 
-  it("suppresses the push under clientManaged but still advances nextDueAt", async () => {
-    const { prisma, updates } = makePrisma({
+  it("still dispatches under clientManaged — the suppression is APNs-only", async () => {
+    // `measurementReminder.clientManaged` suppresses the server's APNs
+    // send, which the dispatcher decides per channel. The tick must not
+    // pre-empt that decision: a user whose phone owns the local banner
+    // still reads Telegram or email on their desktop.
+    const { prisma } = makePrisma({
       reminders: [
         reminder({
           measurementType: null,
@@ -314,10 +319,44 @@ describe("runMeasurementReminderTick", () => {
       { dispatch },
     );
 
-    expect(summary.skippedClientManaged).toBe(1);
-    expect(dispatch).not.toHaveBeenCalled();
-    expect(updates).toHaveLength(1);
-    expect(updates[0].data.nextDueAt).toBeInstanceOf(Date);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(summary.dispatched).toBe(1);
+  });
+
+  it("leaves the reminder overdue when the client-managed skip was the only channel", async () => {
+    // Nothing delivered, so nothing may be recorded as handled: advancing
+    // `nextDueAt` here dropped the reminder out of the Vorsorge card and
+    // out of the daily digest, and a preventive-care reminder that never
+    // fired was filed as done.
+    const { prisma, updates } = makePrisma({
+      reminders: [
+        reminder({
+          measurementType: null,
+          user: {
+            id: "u1",
+            timezone: TZ,
+            locale: "de",
+            notificationPrefs: { measurementReminder: { clientManaged: true } },
+          },
+        }),
+      ],
+      measurementMatch: null,
+    });
+    const dispatch = vi.fn<DispatchFn>(async () => ({
+      dispatched: false,
+      channelsAttempted: 0,
+      channelsSucceeded: 0,
+    }));
+
+    const summary = await runMeasurementReminderTick(
+      prisma as never,
+      NINE_LOCAL,
+      { dispatch },
+    );
+
+    expect(summary.skippedNoChannel).toBe(1);
+    expect(summary.dispatched).toBe(0);
+    expect(updates).toHaveLength(0);
   });
 
   it("bounds the scan with a nextDueAt filter so the index is used", async () => {
