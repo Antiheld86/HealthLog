@@ -296,12 +296,18 @@ export function DocumentCard({
           the card holds focus (same `group-focus-within` trigger the checkbox
           uses) and hidden from the accessibility tree, because
           `aria-keyshortcuts` on the overlay button already announces the same
-          key. `pointer-events-none` keeps it out of the click target. */}
+          key. `pointer-events-none` keeps it out of the click target.
+
+          Full `text-foreground`, not `text-muted-foreground`: the muted token
+          on this card's background measures 4.06:1, under the 4.5:1 floor, and
+          axe fails the vault on it. A key hint is the one piece of meta text
+          that has to be readable at a glance, so the usual muted-for-meta rule
+          gives way here rather than the contrast one. */}
       {onDelete ? (
         <kbd
           aria-hidden
           data-slot="document-delete-hint"
-          className="border-border bg-background text-muted-foreground pointer-events-none absolute right-2 bottom-2 hidden rounded border px-1.5 font-mono text-xs opacity-0 transition-opacity group-focus-within:opacity-100 sm:inline-block"
+          className="border-border bg-background text-foreground pointer-events-none absolute right-2 bottom-2 hidden rounded border px-1.5 font-mono text-xs opacity-0 transition-opacity group-focus-within:opacity-100 sm:inline-block"
         >
           {t("documents.card.deleteKey")}
         </kbd>
