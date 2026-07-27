@@ -64,10 +64,14 @@ const TRIGGER_KEYS: Record<SyncTrigger, string> = {
 function DeliveryDiagnostic({
   status,
   t,
+  now,
 }: {
   status: HealthKitStatus;
   t: (key: string, params?: Record<string, string | number>) => string;
+  /** Injectable reference instant, mirroring the pill's own prop. */
+  now?: Date;
 }) {
+  const reference = now ?? new Date();
   const trigger = status.lastSyncTrigger ?? null;
   const triggerLabel = t(
     trigger
@@ -96,7 +100,10 @@ function DeliveryDiagnostic({
             <dd data-testid="apple-health-last-background">
               {backgroundAt
                 ? formatRelative(
-                    Math.max(0, Date.now() - new Date(backgroundAt).getTime()),
+                    Math.max(
+                      0,
+                      reference.getTime() - new Date(backgroundAt).getTime(),
+                    ),
                     t,
                   )
                 : t("settings.appleHealth.delivery.backgroundNever")}

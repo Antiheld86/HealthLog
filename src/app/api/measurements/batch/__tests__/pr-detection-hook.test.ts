@@ -153,7 +153,12 @@ describe("POST /api/measurements/batch — PR detection enqueue (v1.4.25 W16c)",
     expect(prisma.user.update).toHaveBeenCalledTimes(1);
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: "user-1" },
-      data: { healthKitLastSyncedAt: expect.any(Date) },
+      // This batch declares no trigger, so the trigger field is nulled and the
+      // background timestamp is not written — see the sync-trigger suite.
+      data: {
+        healthKitLastSyncedAt: expect.any(Date),
+        healthKitLastSyncTrigger: null,
+      },
     });
   });
 
