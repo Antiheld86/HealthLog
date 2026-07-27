@@ -85,6 +85,16 @@ import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 
 const OWNER = "user-A";
 
+/**
+ * A day's cumulative curve, twenty-four running totals. Uneven on purpose: a
+ * flat ramp would survive a restore that rebuilt the shape from `dayTotal`
+ * instead of carrying it, and this file is the only copy of the real one.
+ */
+const DAY_CURVE = [
+  0, 0, 0, 0, 0, 0, 120, 940, 2310, 2380, 2400, 2860, 4120, 4180, 4200, 4260,
+  5010, 6340, 7480, 8020, 8090, 8110, 8110, 8110,
+];
+
 /* ── the account being backed up ────────────────────────────────────── */
 
 function sourceClient() {
@@ -172,6 +182,24 @@ function sourceClient() {
         createdAt: new Date("2026-07-01T00:00:00.000Z"),
         updatedAt: new Date("2026-07-19T00:00:00.000Z"),
       }),
+    },
+    // The hourly shape of a drained day. The per-sample rows it was folded
+    // from are already gone, so nothing but this row can rebuild it.
+    intradayCumulativeProfile: {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "shape-1",
+          userId: OWNER,
+          type: "ACTIVITY_STEPS",
+          dateKey: "2026-07-18",
+          hourlyCumulative: DAY_CURVE,
+          dayTotal: DAY_CURVE[23],
+          sampleCount: 96,
+          timezone: "Europe/Berlin",
+          createdAt: new Date("2026-07-19T02:00:00.000Z"),
+          updatedAt: new Date("2026-07-19T02:00:00.000Z"),
+        },
+      ]),
     },
     customMetric: {
       findMany: vi.fn().mockResolvedValue([
@@ -347,6 +375,35 @@ describe("backup round trip — export, wire schema, restore", () => {
       unit: "kg",
       note: "felt strong",
     });
+  });
+
+  it("writes the day's cumulative shape back, every hour of it", async () => {
+    const { written } = await roundTrip();
+
+    const write = written.find(
+      (w) => w.model === "intradayCumulativeProfile" && w.op === "createMany",
+    );
+    expect(
+      write,
+      "the day curve reached the file and nothing wrote it back",
+    ).toBeDefined();
+
+    const rows = write!.data as unknown as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: "shape-1",
+      userId: OWNER,
+      type: "ACTIVITY_STEPS",
+      dateKey: "2026-07-18",
+      dayTotal: DAY_CURVE[23],
+      sampleCount: 96,
+      // Dropping the zone would make a curve cut on another clock look
+      // comparable to one cut on this account's.
+      timezone: "Europe/Berlin",
+    });
+    // The curve is the part that cannot be rebuilt from anything else, so it
+    // is asserted hour by hour rather than by its total.
+    expect(rows[0].hourlyCumulative).toEqual(DAY_CURVE);
   });
 
   it("writes the account's own cycle symptom back before resolving its links", async () => {

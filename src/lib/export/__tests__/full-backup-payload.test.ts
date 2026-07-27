@@ -187,6 +187,22 @@ function makePrisma() {
         },
       ]),
     },
+    intradayCumulativeProfile: {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "shape-1",
+          userId: "user-1",
+          type: "ACTIVITY_STEPS",
+          dateKey: "2026-07-18",
+          hourlyCumulative: Array.from({ length: 24 }, (_, h) => h * 300),
+          dayTotal: 6900,
+          sampleCount: 96,
+          timezone: "Europe/Berlin",
+          createdAt: new Date("2026-07-19T02:00:00.000Z"),
+          updatedAt: new Date("2026-07-19T02:00:00.000Z"),
+        },
+      ]),
+    },
     // Left unmocked on purpose: `buildProfileBackupSection` runs for real
     // against these, so the assertions below exercise the builder rather than
     // a stand-in that would agree with whatever the payload happened to do.
@@ -531,9 +547,11 @@ describe("buildFullBackupPayload — section keys reach the payload", () => {
       ...Object.keys(
         await mocks.buildRecordsBackupSection.mock.results[0].value,
       ),
-      // The profile section runs for real, so its keys come from the builder.
+      // The profile and intraday sections run for real, so their keys come
+      // from the builders.
       "healthProfile",
       "customMetrics",
+      "intradayProfiles",
     ];
 
     const missing = sectionKeys.filter((key) => !(key in payload));
@@ -674,5 +692,34 @@ describe("buildFullBackupPayload — profile and custom metrics", () => {
         where: { userId: "user-1", deletedAt: null },
       }),
     );
+  });
+
+  it("carries the day curve hour by hour, with its count", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+
+    const { payload, counts } = await buildFullBackupPayload(
+      prisma as never,
+      "user-1",
+      {
+        purpose: "disaster-recovery",
+        exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+      },
+    );
+
+    // Rebuilding the curve from `dayTotal` would produce a plausible ramp that
+    // describes no day that happened, so the whole array is asserted.
+    expect(payload.intradayProfiles).toEqual([
+      expect.objectContaining({
+        id: "shape-1",
+        type: "ACTIVITY_STEPS",
+        dateKey: "2026-07-18",
+        hourlyCumulative: Array.from({ length: 24 }, (_, h) => h * 300),
+        dayTotal: 6900,
+        sampleCount: 96,
+        timezone: "Europe/Berlin",
+      }),
+    ]);
+    expect(counts.intradayProfiles).toBe(1);
   });
 });

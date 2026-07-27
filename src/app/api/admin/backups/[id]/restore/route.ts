@@ -39,6 +39,7 @@ import {
 import { recomputeUserRollups } from "@/lib/rollups/measurement-rollups";
 import { restoreCycleData } from "@/lib/cycle/backup";
 import { restoreProfileData } from "@/lib/export/profile-backup";
+import { restoreIntradayProfileData } from "@/lib/export/intraday-profile-backup";
 import { invalidateUserData } from "@/lib/cache/invalidate";
 
 export const dynamic = "force-dynamic";
@@ -67,6 +68,7 @@ interface RestoreResponse {
     documents: number;
     healthProfile: number;
     customMetrics: number;
+    intradayProfiles: number;
   };
 }
 
@@ -753,6 +755,15 @@ const handler = apiHandler(
           // find the cycle restore one line above.
           const profileCleared = await restoreProfileData(tx, ownerId, payload);
 
+          // The hourly shape of a cumulative day. Both ends live in
+          // `src/lib/export/intraday-profile-backup.ts` beside its builder, so
+          // a grep of THIS file alone will not find them either.
+          const intradayCleared = await restoreIntradayProfileData(
+            tx,
+            ownerId,
+            payload,
+          );
+
           const biomarkerByName = new Map<string, string>();
           const restoredBiomarkerIds = new Set<string>();
           for (const biomarker of payload.biomarkers) {
@@ -1110,6 +1121,7 @@ const handler = apiHandler(
             documents: documents.count,
             healthProfile: profileCleared.healthProfile,
             customMetrics: profileCleared.customMetrics,
+            intradayProfiles: intradayCleared.intradayProfiles,
           };
         },
         {

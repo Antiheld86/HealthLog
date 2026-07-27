@@ -154,12 +154,14 @@ export const BACKUP_WRITER_FILES: readonly string[] = [
   "src/lib/export/paged-measurements.ts",
   "src/lib/export/records-backup.ts",
   "src/lib/export/profile-backup.ts",
+  "src/lib/export/intraday-profile-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
 export const BACKUP_RESTORE_FILES: readonly string[] = [
   "src/app/api/admin/backups/[id]/restore/route.ts",
   "src/lib/export/profile-backup.ts",
+  "src/lib/export/intraday-profile-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -178,6 +180,7 @@ export const BACKUP_RESTORE_FILES: readonly string[] = [
  */
 export const TWO_ENDED_MODELS: readonly string[] = [
   "Measurement",
+  "IntradayCumulativeProfile",
   "Medication",
   "MedicationSchedule",
   "MedicationIntakeEvent",

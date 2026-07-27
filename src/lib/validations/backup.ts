@@ -454,6 +454,34 @@ const customMetricBackupSchema = z
   })
   .passthrough();
 
+/**
+ * One local day's cumulative curve for one metric.
+ *
+ * The drain writes this row and deletes the per-sample rows it was folded from
+ * in the same transaction, so past the grace window the file is the only copy.
+ * `hourlyCumulative` is left unconstrained in length here on purpose: the
+ * restore checks it against the slot count it shares with the reader and
+ * throws naming the day, which says what is wrong with one row instead of
+ * making a whole file unparseable.
+ */
+const intradayProfileBackupSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    type: z.enum(MeasurementType),
+    dateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    hourlyCumulative: z.array(z.number()),
+    dayTotal: z.number(),
+    sampleCount: z.number().int(),
+    // The zone the day was cut on. The reader compares it against the
+    // account's current zone and drops the mismatched days, so a restore that
+    // dropped this column would make old curves look comparable when their
+    // hours mean something else.
+    timezone: z.string().min(1),
+    createdAt: isoDateTime.optional(),
+    updatedAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
 const appSettingsBackupSchema = z
   .object({
     id: z.string().min(1),
@@ -721,6 +749,9 @@ export const backupPayloadSchema = z
     // `null` / `[]`.
     healthProfile: healthProfileBackupSchema.nullable().default(null),
     customMetrics: z.array(customMetricBackupSchema).default([]),
+    // The hourly shape of a cumulative day. Defaulted for the same reason as
+    // the pair above: a file written before the table existed carries no key.
+    intradayProfiles: z.array(intradayProfileBackupSchema).default([]),
     manifest: backupManifestSchema.nullable().default(null),
   })
   .passthrough()
@@ -779,6 +810,8 @@ export interface BackupSummary {
   customMetrics: number;
   /** Readings across every user-defined metric. */
   customMetricEntries: number;
+  /** Stored day curves for the cumulative metrics, across every metric. */
+  intradayProfiles: number;
 }
 
 export function summarizeBackup(payload: BackupPayload): BackupSummary {
@@ -810,6 +843,7 @@ export function summarizeBackup(payload: BackupPayload): BackupSummary {
       (sum, metric) => sum + metric.entries.length,
       0,
     ),
+    intradayProfiles: payload.intradayProfiles.length,
   };
 }
 

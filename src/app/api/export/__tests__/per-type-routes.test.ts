@@ -22,6 +22,9 @@ vi.mock("@/lib/db", () => ({
     // `buildProfileBackupSection`.
     userHealthProfile: { findUnique: vi.fn().mockResolvedValue(null) },
     customMetric: { findMany: vi.fn().mockResolvedValue([]) },
+    // The hourly shape of a cumulative day, read by
+    // `buildIntradayProfileBackupSection`.
+    intradayCumulativeProfile: { findMany: vi.fn().mockResolvedValue([]) },
     // v1.15.0 — cycle tables read by the full-backup helper.
     cycleProfile: { findUnique: vi.fn() },
     menstrualCycle: { findMany: vi.fn() },
@@ -84,6 +87,9 @@ beforeEach(() => {
     null as never,
   );
   vi.mocked(prisma.customMetric.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.intradayCumulativeProfile.findMany).mockResolvedValue(
+    [] as never,
+  );
 });
 
 afterEach(() => {

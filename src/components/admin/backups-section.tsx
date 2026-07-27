@@ -246,6 +246,7 @@ export function BackupsSection() {
           healthProfile?: number;
           customMetrics?: number;
           customMetricEntries?: number;
+          intradayProfiles?: number;
         };
       }>("/api/admin/backups/upload", { method: "POST", body: fd });
     },
@@ -272,7 +273,8 @@ export function BackupsSection() {
         (data.summary.nutrientDays ?? 0) +
         (data.summary.healthProfile ?? 0) +
         (data.summary.customMetrics ?? 0) +
-        (data.summary.customMetricEntries ?? 0);
+        (data.summary.customMetricEntries ?? 0) +
+        (data.summary.intradayProfiles ?? 0);
       toast.success(
         t("admin.section.backups.uploadSuccess", { count: String(total) }),
       );

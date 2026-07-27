@@ -120,6 +120,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       export_health_profile_count: counts.healthProfile,
       export_custom_metric_count: counts.customMetrics,
       export_custom_metric_entry_count: counts.customMetricEntries,
+      export_intraday_profile_count: counts.intradayProfiles,
       export_archive_bytes: archive.byteLength,
     },
   });

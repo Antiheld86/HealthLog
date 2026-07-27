@@ -20,6 +20,9 @@ vi.mock("@/lib/db", () => ({
     // `buildProfileBackupSection`.
     userHealthProfile: { findUnique: vi.fn().mockResolvedValue(null) },
     customMetric: { findMany: vi.fn().mockResolvedValue([]) },
+    // The hourly shape of a cumulative day, read by
+    // `buildIntradayProfileBackupSection`.
+    intradayCumulativeProfile: { findMany: vi.fn().mockResolvedValue([]) },
     cycleProfile: { findUnique: vi.fn().mockResolvedValue(null) },
     menstrualCycle: { findMany: vi.fn().mockResolvedValue([]) },
     cycleDayLog: { findMany: vi.fn().mockResolvedValue([]) },
