@@ -22,7 +22,8 @@ import { HealthScoreDeltaExplainer } from "./health-score-delta-explainer";
  * and stacks below the title block on `<lg`. Surfaces:
  *   - the composite 0..100 score with a band-coloured number
  *   - "vs last week" delta line with arrow + percentage
- *   - 4 component rows (BP / Weight / Mood / Compliance) with sub-bars
+ *   - 4 component rows (BP / Weight / Mood / Compliance) with sub-bars,
+ *     the weight row naming the yardstick it was graded against
  *   - "Indicative — not a clinical assessment" disclaimer
  *   - "Ask the Coach" button that opens the B2 drawer with a prefill
  *     ("Why is my health score X out of 100?") so the user can drill
@@ -128,6 +129,20 @@ export interface HealthScoreCardProps {
     /** Days the metric has now sat back inside its range. */
     daysInside: number;
   } | null;
+  /**
+   * v1.34 — the weight row's yardstick, disclosed.
+   *
+   * `"user"` renders "vs your target 64-70 kg" (the parent formats
+   * `targetLabel` in the reader's display unit); `"none"` renders the
+   * trend-only line. The score used to grade weight against a BMI-22 band
+   * the user never set, and no surface said so — that silence is what this
+   * line ends. Omitted only by callers that render no weight pillar.
+   */
+  weightYardstick?: {
+    source: "user" | "none";
+    /** Already unit-formatted band, e.g. "64-70 kg". Null when source is "none". */
+    targetLabel: string | null;
+  } | null;
 }
 
 type ComponentKey = keyof HealthScoreCardProps["components"];
@@ -212,6 +227,7 @@ export function HealthScoreCard({
   restModeActive = false,
   tension = null,
   returnToBand = null,
+  weightYardstick = null,
 }: HealthScoreCardProps) {
   const { t, locale } = useTranslations();
   // The asOf timestamps render under the source pill as a tooltip
@@ -539,38 +555,58 @@ export function HealthScoreCard({
               key={key}
               data-slot="health-score-card-component-row"
               data-component={key}
-              className="flex items-center gap-2 text-xs"
+              className="text-xs"
             >
-              {/* v1.4.25 W3 — widened label column from w-16 (64px) to
-                  w-24 (96px) so the longest German label
-                  ("Einnahmetreue" — 13 chars at 11px) sits inside the
-                  column without spilling into the bar/value chip. */}
-              <span className="text-muted-foreground w-24 shrink-0 truncate">
-                {label}
-              </span>
-              <div
-                className="bg-muted/50 h-1.5 flex-1 overflow-hidden rounded-full"
-                aria-hidden="true"
-              >
+              <div className="flex items-center gap-2">
+                {/* v1.4.25 W3 — widened label column from w-16 (64px) to
+                    w-24 (96px) so the longest German label
+                    ("Einnahmetreue" — 13 chars at 11px) sits inside the
+                    column without spilling into the bar/value chip. */}
+                <span className="text-muted-foreground w-24 shrink-0 truncate">
+                  {label}
+                </span>
                 <div
-                  className={cn(
-                    "h-full",
-                    value === null ? "bg-muted" : BAND_PROGRESS_CLASS[band],
-                  )}
-                  style={{
-                    width:
-                      value === null
-                        ? "0%"
-                        : `${Math.max(0, Math.min(100, value))}%`,
-                  }}
-                />
+                  className="bg-muted/50 h-1.5 flex-1 overflow-hidden rounded-full"
+                  aria-hidden="true"
+                >
+                  <div
+                    className={cn(
+                      "h-full",
+                      value === null ? "bg-muted" : BAND_PROGRESS_CLASS[band],
+                    )}
+                    style={{
+                      width:
+                        value === null
+                          ? "0%"
+                          : `${Math.max(0, Math.min(100, value))}%`,
+                    }}
+                  />
+                </div>
+                <span
+                  data-slot="health-score-card-component-value"
+                  className="text-foreground w-8 shrink-0 text-right tabular-nums"
+                >
+                  {value === null ? "—" : Math.round(value)}
+                </span>
               </div>
-              <span
-                data-slot="health-score-card-component-value"
-                className="text-foreground w-8 shrink-0 text-right tabular-nums"
-              >
-                {value === null ? "—" : Math.round(value)}
-              </span>
+              {/* v1.34 — the weight row names its yardstick. Either the user's
+                  own target band or an explicit "trend only, no target set".
+                  Indented to the label column so it reads as that row's
+                  caption rather than a new row. */}
+              {key === "weight" && weightYardstick && value !== null && (
+                <p
+                  data-slot="health-score-card-weight-yardstick"
+                  data-target-source={weightYardstick.source}
+                  className="text-muted-foreground mt-1 pl-[6.5rem] leading-snug"
+                >
+                  {weightYardstick.source === "user" &&
+                  weightYardstick.targetLabel
+                    ? t("insights.healthScore.weightTarget.user", {
+                        range: weightYardstick.targetLabel,
+                      })
+                    : t("insights.healthScore.weightTarget.none")}
+                </p>
+              )}
             </li>
           ))}
         </ul>

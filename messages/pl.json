@@ -2234,6 +2234,10 @@
       "componentWeight": "Waga",
       "componentMood": "Nastrój",
       "componentCompliance": "Przestrzeganie",
+      "weightTarget": {
+        "user": "Oceniane względem Twojego celu, {range}.",
+        "none": "Oceniane tylko na podstawie trendu, brak ustawionego celu."
+      },
       "deltaExplainer": {
         "title": "Jak liczona jest ta zmiana",
         "description": "Zmiana względem ubiegłego tygodnia: {delta}",

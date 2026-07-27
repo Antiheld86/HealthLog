@@ -2234,6 +2234,10 @@
       "componentWeight": "Poids",
       "componentMood": "Humeur",
       "componentCompliance": "Observance",
+      "weightTarget": {
+        "user": "Évalué par rapport à ton objectif, {range}.",
+        "none": "Évalué sur la tendance seule, aucun objectif défini."
+      },
       "deltaExplainer": {
         "title": "Comment l'écart est calculé",
         "description": "Écart par rapport à la semaine dernière : {delta}",

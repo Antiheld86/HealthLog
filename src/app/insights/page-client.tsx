@@ -7,6 +7,7 @@ import Link from "next/link";
 import { SlidersHorizontal, TrendingUp } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
+import { useUnitDisplay } from "@/hooks/use-unit-display";
 import { queryKeys } from "@/lib/query-keys";
 import { apiGet } from "@/lib/api/api-fetch";
 import { useFeatureFlags } from "@/hooks/use-feature-flags";
@@ -344,6 +345,27 @@ export default function InsightsPageClient() {
   const heroTension = snapshotHealthScore?.tension ?? null;
   const heroReturnToBand = snapshotHealthScore?.returnToBand ?? null;
 
+  // v1.34 — the weight pillar's yardstick, disclosed on the score card. The
+  // server sends the band in canonical kg; the reader's display unit is a
+  // client fact, so the page formats the label and the card renders the line.
+  // A payload without `targetSource` (an older cached body) discloses nothing
+  // rather than guessing at one.
+  const unitDisplay = useUnitDisplay();
+  const weightComponent = analytics?.healthScore?.components.weight;
+  const weightTargetSource = weightComponent?.targetSource ?? null;
+  const weightTargetBand = weightComponent?.target ?? null;
+  const heroWeightYardstick = weightTargetSource
+    ? {
+        source: weightTargetSource,
+        targetLabel: weightTargetBand
+          ? `${unitDisplay.toDisplay("WEIGHT", weightTargetBand.min)}–${unitDisplay.toDisplay(
+              "WEIGHT",
+              weightTargetBand.max,
+            )} ${unitDisplay.unitFor("WEIGHT")}`
+          : null,
+      }
+    : null;
+
   // v1.12.6 — the page owns the ONE overview derived batch. The wellness
   // strip (above the briefing) and the vitals grid (below it) both read this
   // single query instance, so the wellness lift adds no second request.
@@ -572,6 +594,8 @@ export default function InsightsPageClient() {
         // forwards them to the score card; null leaves the card quiet.
         tension={heroTension}
         returnToBand={heroReturnToBand}
+        // v1.34 — name the yardstick the weight pillar was graded against.
+        weightYardstick={heroWeightYardstick}
       />
 
       {/* v1.15.18 — the inline "Anpassen" toggle was removed. Customising the

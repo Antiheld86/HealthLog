@@ -96,6 +96,12 @@ interface HeroStripProps {
     restMode?: { active: boolean } | null;
   } | null;
   /**
+   * v1.34 — the weight pillar's yardstick, already resolved into the reader's
+   * display unit by the page (the hero carries no unit context of its own).
+   * Forwarded verbatim to the score card, which renders the disclosure line.
+   */
+  weightYardstick?: HealthScoreCardProps["weightYardstick"];
+  /**
    * v1.21.2 (A5) — Tension Verdict, server-resolved + locale-agnostic. `band`
    * is the readiness composite's band; `positive` / `negative` carry the
    * readiness contributor KEYS (`rhr` / `hrv` / `sleep` / `respiratory` /
@@ -188,6 +194,7 @@ export function HeroStrip({
   noProviderStale = false,
   tension = null,
   returnToBand = null,
+  weightYardstick = null,
 }: HeroStripProps) {
   const { t } = useTranslations();
   const fmt = useFormatters();
@@ -412,6 +419,7 @@ export function HeroStrip({
             restModeActive={healthScore.restMode?.active ?? false}
             tension={tensionProp}
             returnToBand={returnToBandProp}
+            weightYardstick={weightYardstick}
           />
         )}
       </div>
