@@ -18,7 +18,17 @@ import {
   __test__,
   detectPersonalRecordsForUser,
 } from "../pr-detection-worker";
-import { getPRDirection, isPRTrackable } from "../pr-direction";
+import {
+  getPRDirection,
+  isPRTrackable,
+  type PRDirectionContext,
+} from "../pr-direction";
+
+/**
+ * v1.34 — the fixtures below carry no weight target, so the resolver answers
+ * for an account that has set no goal (the historical behaviour).
+ */
+const NO_GOAL: PRDirectionContext = { weightGoal: null };
 import { CUMULATIVE_HK_TYPES } from "@/lib/measurements/apple-health-mapping";
 import { measurementTypeEnum } from "@/lib/validations/measurement";
 import {
@@ -147,6 +157,9 @@ function makeFakePrisma(state: {
         // the existing day-sum assertions stay valid.
         timezone: "UTC",
         sourcePriorityJson: null,
+        // v1.34 — no weight target on file, so weight / BMI keep their
+        // historical null PR direction throughout this file's fixtures.
+        thresholdsJson: null,
       })),
     },
     measurement: {
@@ -688,7 +701,7 @@ describe("detectPersonalRecordsForUser — flags + drift guard", () => {
     const result = await detectPersonalRecordsForUser(USER, { prisma });
 
     const trackable = measurementTypeEnum.options.filter((t) =>
-      isPRTrackable(t as MeasurementType),
+      isPRTrackable(t as MeasurementType, NO_GOAL),
     );
     expect(result.scanned).toBeGreaterThanOrEqual(trackable.length);
   });
@@ -783,7 +796,7 @@ describe("detectPersonalRecordsForUser — REG-9 cumulative day-sum (v1.4.46)", 
     // direction lookup short-circuits null-direction types upstream;
     // we filter to the PR-trackable subset for the loop.
     const trackableCumulative = Array.from(CUMULATIVE_HK_TYPES).filter((t) =>
-      isPRTrackable(t),
+      isPRTrackable(t, NO_GOAL),
     );
     expect(trackableCumulative.length).toBeGreaterThan(0);
 
@@ -843,7 +856,9 @@ describe("detectPersonalRecordsForUser — REG-9 cumulative day-sum (v1.4.46)", 
       // falls is the record) the winning day is the smallest day-sum, so
       // the seed days at 100 hold the record over the 500 day.
       const expectedValue =
-        getPRDirection(type) === PersonalRecordDirection.MIN ? 100 : 500;
+        getPRDirection(type, NO_GOAL) === PersonalRecordDirection.MIN
+          ? 100
+          : 500;
       expect(pr?.value, `${type} day-sum`).toBe(expectedValue);
     }
   });

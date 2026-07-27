@@ -105,24 +105,28 @@ describe("buildTargetBands — server/client parity", () => {
     dateOfBirth: Date | null;
     gender: "MALE" | "FEMALE" | null;
     heightCm: number | null;
+    weightTargetOverride: { min: number; max: number } | null;
   }> = [
     {
       name: "male 180cm with DOB",
       dateOfBirth: new Date("1985-06-15T00:00:00.000Z"),
       gender: "MALE",
       heightCm: 180,
+      weightTargetOverride: null,
     },
     {
       name: "female 165cm with DOB",
       dateOfBirth: new Date("1970-01-01T00:00:00.000Z"),
       gender: "FEMALE",
       heightCm: 165,
+      weightTargetOverride: null,
     },
     {
       name: "no-profile user (null DOB / gender / height)",
       dateOfBirth: null,
       gender: null,
       heightCm: null,
+      weightTargetOverride: null,
     },
   ];
 
@@ -142,17 +146,20 @@ describe("buildTargetBands — server/client parity", () => {
       dateOfBirth: new Date("1985-06-15T00:00:00.000Z"),
       gender: "OTHER",
       heightCm: 180,
+      weightTargetOverride: null,
     });
     const unanswered = buildTargetBands({
       dateOfBirth: new Date("1985-06-15T00:00:00.000Z"),
       gender: null,
       heightCm: 180,
+      weightTargetOverride: null,
     });
     expect(other).toEqual(unanswered);
     const male = buildTargetBands({
       dateOfBirth: new Date("1985-06-15T00:00:00.000Z"),
       gender: "MALE",
       heightCm: 180,
+      weightTargetOverride: null,
     });
     expect(other.bodyFatBands).not.toEqual(male.bodyFatBands);
   });
@@ -162,6 +169,7 @@ describe("buildTargetBands — server/client parity", () => {
       dateOfBirth: null,
       gender: null,
       heightCm: null,
+      weightTargetOverride: null,
     });
     expect(bands.bpTargets).toBeNull();
     expect(bands.bpSysRange).toBeNull();
@@ -171,5 +179,65 @@ describe("buildTargetBands — server/client parity", () => {
     // Pulse + body-fat always resolve (AHA / neutral fallback).
     expect(bands.pulseBands.length).toBeGreaterThan(0);
     expect(bands.bodyFatBands.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * v1.34 — an explicit weight target outranks the height-derived WHO band.
+ * The dashboard used to shade the BMI band for someone who had already
+ * answered the question on `/targets`, so the answer stayed invisible on
+ * every surface that mattered.
+ */
+describe("buildTargetBands — user weight target", () => {
+  const profile = {
+    dateOfBirth: new Date("1985-06-15T00:00:00.000Z"),
+    gender: "MALE" as const,
+    heightCm: 180,
+  };
+
+  it("replaces the height-derived band with the user's own", () => {
+    const withTarget = buildTargetBands({
+      ...profile,
+      weightTargetOverride: { min: 74, max: 78 },
+    });
+    expect(withTarget.weightRange?.greenMin).toBe(74);
+    expect(withTarget.weightRange?.greenMax).toBe(78);
+
+    const heightDerived = buildTargetBands({
+      ...profile,
+      weightTargetOverride: null,
+    });
+    expect(heightDerived.weightRange).not.toEqual(withTarget.weightRange);
+    // The chart bands follow the same range, so tile and chart agree.
+    expect(withTarget.weightBands).not.toEqual(heightDerived.weightBands);
+    const green = withTarget.weightBands?.find(
+      (b) => b.color === "var(--success)",
+    );
+    expect(green).toEqual(expect.objectContaining({ min: 74, max: 78 }));
+  });
+
+  it("honours a target even for a profile with no height on file", () => {
+    const bands = buildTargetBands({
+      dateOfBirth: null,
+      gender: null,
+      heightCm: null,
+      weightTargetOverride: { min: 60, max: 65 },
+    });
+    expect(bands.weightRange?.greenMin).toBe(60);
+    expect(bands.weightBands?.length).toBeGreaterThan(0);
+  });
+
+  it("leaves every non-weight band untouched", () => {
+    const withTarget = buildTargetBands({
+      ...profile,
+      weightTargetOverride: { min: 74, max: 78 },
+    });
+    const without = buildTargetBands({
+      ...profile,
+      weightTargetOverride: null,
+    });
+    expect(withTarget.bpTargets).toEqual(without.bpTargets);
+    expect(withTarget.pulseBands).toEqual(without.pulseBands);
+    expect(withTarget.bodyFatBands).toEqual(without.bodyFatBands);
   });
 });

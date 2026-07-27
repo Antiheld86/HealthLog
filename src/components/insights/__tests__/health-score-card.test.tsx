@@ -359,3 +359,75 @@ describe("<HealthScoreCard>", () => {
     expect(progressMatch?.[0]).toContain('aria-valuemax="100"');
   });
 });
+
+/**
+ * v1.34 — the weight row names its yardstick. Before this the score graded
+ * weight against a band the user never set and the card said nothing at all,
+ * which is why the defect survived for months.
+ */
+describe("<HealthScoreCard> — weight yardstick disclosure", () => {
+  it("names the user's own target band", () => {
+    const html = ssr(
+      <HealthScoreCard
+        score={80}
+        band="green"
+        components={baseComponents}
+        delta={null}
+        weightYardstick={{ source: "user", targetLabel: "64-70 kg" }}
+      />,
+    );
+    const line = html.match(
+      /<p[^>]*data-slot="health-score-card-weight-yardstick"[^>]*>([\s\S]*?)<\/p>/,
+    );
+    expect(line).not.toBeNull();
+    expect(line?.[0]).toContain('data-target-source="user"');
+    expect(line?.[1]).toContain("64-70 kg");
+  });
+
+  it("says plainly when no target graded the row", () => {
+    const html = ssr(
+      <HealthScoreCard
+        score={80}
+        band="green"
+        components={baseComponents}
+        delta={null}
+        weightYardstick={{ source: "none", targetLabel: null }}
+      />,
+    );
+    const line = html.match(
+      /<p[^>]*data-slot="health-score-card-weight-yardstick"[^>]*>([\s\S]*?)<\/p>/,
+    );
+    expect(line).not.toBeNull();
+    expect(line?.[0]).toContain('data-target-source="none"');
+    expect(line?.[1]).toMatch(/trend/i);
+  });
+
+  it("discloses nothing when the payload carries no yardstick", () => {
+    // An older cached body has no `targetSource`; silence beats a guess.
+    const html = ssr(
+      <HealthScoreCard
+        score={80}
+        band="green"
+        components={baseComponents}
+        delta={null}
+      />,
+    );
+    expect(html).not.toContain("health-score-card-weight-yardstick");
+  });
+
+  it("stays quiet when the weight pillar itself has no value", () => {
+    const html = ssr(
+      <HealthScoreCard
+        score={80}
+        band="green"
+        components={{
+          ...baseComponents,
+          weight: { value: null, weight: 0 },
+        }}
+        delta={null}
+        weightYardstick={{ source: "none", targetLabel: null }}
+      />,
+    );
+    expect(html).not.toContain("health-score-card-weight-yardstick");
+  });
+});
