@@ -257,7 +257,7 @@ describe("leg-scoped success", () => {
     expect(current!.state).toBe("error_transient");
     expect(current!.lastError).toBe(afterFailure!.lastError);
     expect(current!.consecutiveFailuresByKind).toMatchObject({ transient: 1 });
-    expect(current!.failingLeg).toBe("sleep");
+    expect(current!.failingLegs).toEqual(["sleep"]);
     expect(current!.failingSinceAt!.getTime()).toBe(streakStart.getTime());
     // Not advanced: it is what the card's "connected · X ago" reads, and the
     // sleep pipe has delivered nothing.
@@ -280,7 +280,7 @@ describe("leg-scoped success", () => {
     const current = await row("withings");
     expect(current!.state).toBe("connected");
     expect(current!.lastError).toBeNull();
-    expect(current!.failingLeg).toBeNull();
+    expect(current!.failingLegs).toEqual([]);
     expect(current!.failingSinceAt).toBeNull();
     expect(current!.lastSuccessAt).toBeInstanceOf(Date);
     expect(current!.consecutiveFailuresByKind).toMatchObject({
@@ -342,7 +342,7 @@ describe("leg-scoped success", () => {
     const current = await row("whoop");
     expect(current!.state).toBe("connected");
     expect(current!.lastError).toBeNull();
-    expect(current!.failingLeg).toBeNull();
+    expect(current!.failingLegs).toEqual([]);
     expect(current!.failingSinceAt).toBeNull();
   });
 
@@ -354,5 +354,127 @@ describe("leg-scoped success", () => {
     expect(current!.state).toBe("connected");
     expect(current!.lastError).toBeNull();
     expect(current!.failingSinceAt).toBeNull();
+  });
+});
+
+describe("two legs failing in overlapping windows", () => {
+  /**
+   * The case a single `failing_leg` slot could not hold, and the one the
+   * v1.33.0 notes named in public rather than fixed.
+   *
+   * Sleep fails, then activity fails. With one slot, activity's failure
+   * overwrote sleep's, so activity recovering cleared the row whole — the
+   * error, the buckets and the streak anchor — while sleep was still dead. The
+   * card went green over a data class that had stopped arriving weeks earlier,
+   * and the strike ladder restarted from zero every time the healthy leg ticked.
+   */
+  it("remembers the earlier leg after the later one recovers", async () => {
+    await failTransient("withings", "sleep");
+    const afterSleep = await row("withings");
+    const streakStart = afterSleep!.failingSinceAt!;
+
+    await failTransient("withings", "activity");
+    // Both legs are on the row. The slot could only ever have held one.
+    expect((await row("withings"))!.failingLegs).toEqual(["sleep", "activity"]);
+
+    // Activity comes back. Sleep has not.
+    await recordSyncSuccess(TEST_USER_ID, "withings", { leg: "activity" });
+
+    const current = await row("withings");
+    expect(current!.failingLegs).toEqual(["sleep"]);
+    // The error still stands, dated from sleep's first failure, with both
+    // strikes intact — this is the ladder that could never climb.
+    expect(current!.state).toBe("error_transient");
+    expect(current!.failingSinceAt!.getTime()).toBe(streakStart.getTime());
+    expect(current!.consecutiveFailuresByKind).toMatchObject({ transient: 2 });
+    // Still nothing has been delivered by the sleep leg, so the field the card
+    // reads as "connected · X ago" must not have moved.
+    expect(current!.lastSuccessAt).toBeNull();
+  });
+
+  it("drops the error message once the leg that wrote it recovers", async () => {
+    await failTransient("withings", "sleep");
+    await recordSyncFailure({
+      userId: TEST_USER_ID,
+      integration: "withings",
+      kind: "transient",
+      message: "activity write failed: upstream 503",
+      leg: "activity",
+    });
+    // Activity failed last, so its message is the one the row holds.
+    expect((await row("withings"))!.lastError).not.toBeNull();
+
+    await recordSyncSuccess(TEST_USER_ID, "withings", { leg: "activity" });
+
+    const current = await row("withings");
+    // Keeping activity's message would leave the row describing a leg that has
+    // recovered while sleep is the one still failing. No message is honest
+    // here; a guessed one would not be.
+    expect(current!.lastError).toBeNull();
+    expect(current!.failingLegs).toEqual(["sleep"]);
+    expect(current!.state).toBe("error_transient");
+  });
+
+  it("keeps the message when a leg that did not write it recovers", async () => {
+    await recordSyncFailure({
+      userId: TEST_USER_ID,
+      integration: "withings",
+      kind: "transient",
+      message: "activity write failed: upstream 503",
+      leg: "activity",
+    });
+    await failTransient("withings", "sleep");
+    const sleepMessage = (await row("withings"))!.lastError;
+
+    // Activity recovers, but sleep failed last and owns the message.
+    await recordSyncSuccess(TEST_USER_ID, "withings", { leg: "activity" });
+
+    const current = await row("withings");
+    expect(current!.lastError).toBe(sleepMessage);
+    expect(current!.failingLegs).toEqual(["sleep"]);
+  });
+
+  it("clears the row only once every failing leg has come back", async () => {
+    await failTransient("withings", "sleep");
+    await failTransient("withings", "activity");
+    await failTransient("withings", "ecg");
+
+    await recordSyncSuccess(TEST_USER_ID, "withings", { leg: "ecg" });
+    await recordSyncSuccess(TEST_USER_ID, "withings", { leg: "sleep" });
+    expect((await row("withings"))!.state).toBe("error_transient");
+    expect((await row("withings"))!.failingLegs).toEqual(["activity"]);
+
+    await recordSyncSuccess(TEST_USER_ID, "withings", { leg: "activity" });
+
+    const current = await row("withings");
+    expect(current!.state).toBe("connected");
+    expect(current!.failingLegs).toEqual([]);
+    expect(current!.failingSinceAt).toBeNull();
+    expect(current!.lastError).toBeNull();
+    expect(current!.lastSuccessAt).toBeInstanceOf(Date);
+    expect(current!.consecutiveFailuresByKind).toMatchObject({
+      transient: 0,
+      reauth_required: 0,
+      persistent: 0,
+    });
+  });
+
+  it("does not duplicate a leg that keeps failing", async () => {
+    await failTransient("withings", "sleep");
+    await failTransient("withings", "activity");
+    await failTransient("withings", "sleep");
+
+    // Sleep moves to the end because it wrote the message the row now holds.
+    expect((await row("withings"))!.failingLegs).toEqual(["activity", "sleep"]);
+  });
+
+  it("does not let an unattributed failure erase a named leg", async () => {
+    await failTransient("withings", "sleep");
+    // A recorder that caught the error at a boundary and cannot say which leg
+    // it belongs to. Overwriting the set here would let the sleep leg's next
+    // success clear an error it did not fix.
+    await failTransient("withings");
+
+    expect((await row("withings"))!.failingLegs).toEqual(["sleep"]);
   });
 });

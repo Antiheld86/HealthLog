@@ -130,6 +130,36 @@ describe("getSourceMetricFreshness", () => {
       { type: "WORKOUTS", lastSeenAt: "2026-07-19T17:00:00.000Z" },
     ]);
   });
+
+  it.each(["whoop", "fitbit", "google-health"] as const)(
+    "carries the workout leg for %s, which writes workouts too",
+    async (integration) => {
+      const source = {
+        whoop: "WHOOP",
+        fitbit: "FITBIT",
+        "google-health": "GOOGLE_HEALTH",
+      }[integration];
+
+      // These three were missing from the workout table, so a card could
+      // report every measurement type fresh while the workout leg had been
+      // silent for weeks — the disclosure had no row that could go quiet.
+      groupByMock.mockResolvedValue([
+        {
+          source,
+          type: "SLEEP_DURATION",
+          _max: { measuredAt: new Date("2026-07-24T04:00:00.000Z") },
+        },
+      ]);
+      workoutGroupByMock.mockResolvedValue([
+        { source, _max: { startedAt: new Date("2026-06-01T09:00:00.000Z") } },
+      ]);
+
+      expect((await getSourceMetricFreshness("u1"))[integration]).toEqual([
+        { type: "SLEEP_DURATION", lastSeenAt: "2026-07-24T04:00:00.000Z" },
+        { type: "WORKOUTS", lastSeenAt: "2026-06-01T09:00:00.000Z" },
+      ]);
+    },
+  );
 });
 
 describe("getSourceFreshness — one source, for Apple Health", () => {

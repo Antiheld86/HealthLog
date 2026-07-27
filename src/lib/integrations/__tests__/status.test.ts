@@ -109,7 +109,7 @@ describe("recordSyncSuccess", () => {
       },
       persistentFailureStartedAt: null,
       failingSinceAt: null,
-      failingLeg: null,
+      failingLegs: [],
       alertedAt: null,
     });
   });
@@ -496,7 +496,7 @@ describe("markReauthRequired / markDisconnected / markReconnected", () => {
       },
       persistentFailureStartedAt: null,
       failingSinceAt: null,
-      failingLeg: null,
+      failingLegs: [],
       alertedAt: null,
     });
   });
@@ -521,7 +521,7 @@ describe("markReauthRequired / markDisconnected / markReconnected", () => {
       },
       persistentFailureStartedAt: null,
       failingSinceAt: null,
-      failingLeg: null,
+      failingLegs: [],
       alertedAt: null,
     });
   });
@@ -840,7 +840,7 @@ describe("resumeIntegrationFromPark", () => {
       },
       persistentFailureStartedAt: null,
       failingSinceAt: null,
-      failingLeg: null,
+      failingLegs: [],
       alertedAt: null,
     });
 
@@ -1032,7 +1032,7 @@ describe("recordSyncSuccess — leg scoping", () => {
   it("leaves a sibling leg's error standing and only records the attempt", async () => {
     vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
       state: "error_transient",
-      failingLeg: "sleep",
+      failingLegs: ["sleep"],
     } as never);
     vi.mocked(prisma.integrationStatus.update).mockResolvedValueOnce(
       {} as never,
@@ -1044,13 +1044,59 @@ describe("recordSyncSuccess — leg scoping", () => {
     const args = vi.mocked(prisma.integrationStatus.update).mock.calls[0]![0]!;
     // `lastSuccessAt` deliberately absent: it is what the card's
     // "connected · X ago" reads, and the sleep pipe has delivered nothing.
-    expect(args.data).toEqual({ lastAttemptAt: expect.any(Date) });
+    // `lastError` is absent too — sleep still owns the message on the row.
+    expect(args.data).toEqual({
+      lastAttemptAt: expect.any(Date),
+      failingLegs: ["sleep"],
+    });
+  });
+
+  it("drops only its own leg when several are failing at once", async () => {
+    vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
+      state: "error_transient",
+      failingLegs: ["sleep", "activity", "ecg"],
+    } as never);
+    vi.mocked(prisma.integrationStatus.update).mockResolvedValueOnce(
+      {} as never,
+    );
+
+    await recordSyncSuccess("u1", "withings", { leg: "activity" });
+
+    expect(prisma.integrationStatus.upsert).not.toHaveBeenCalled();
+    const args = vi.mocked(prisma.integrationStatus.update).mock.calls[0]![0]!;
+    // The single slot could hold one of these three. Two legs are still
+    // failing, and both are still on the row.
+    expect(args.data).toMatchObject({ failingLegs: ["sleep", "ecg"] });
+    // `activity` did not write the message the row holds — `ecg` did, and it
+    // is still failing — so the message stays.
+    expect(args.data).not.toHaveProperty("lastError");
+  });
+
+  it("clears the error message when the leg that wrote it recovers first", async () => {
+    vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
+      state: "error_transient",
+      failingLegs: ["sleep", "ecg"],
+    } as never);
+    vi.mocked(prisma.integrationStatus.update).mockResolvedValueOnce(
+      {} as never,
+    );
+
+    // `ecg` is last, so it failed most recently and owns `lastError`.
+    await recordSyncSuccess("u1", "withings", { leg: "ecg" });
+
+    const args = vi.mocked(prisma.integrationStatus.update).mock.calls[0]![0]!;
+    // Keeping the message would leave the row describing a leg that is now
+    // healthy while `sleep` is the one actually failing.
+    expect(args.data).toMatchObject({
+      failingLegs: ["sleep"],
+      lastError: null,
+    });
   });
 
   it("clears the row whole when the failing leg is the one that succeeded", async () => {
     vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
       state: "error_transient",
-      failingLeg: "sleep",
+      failingLegs: ["sleep"],
     } as never);
     vi.mocked(prisma.integrationStatus.upsert).mockResolvedValueOnce(
       {} as never,
@@ -1064,14 +1110,14 @@ describe("recordSyncSuccess — leg scoping", () => {
       state: "connected",
       lastError: null,
       failingSinceAt: null,
-      failingLeg: null,
+      failingLegs: [],
     });
   });
 
   it("clears the row whole when the failure was never attributed to a leg", async () => {
     vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
       state: "error_transient",
-      failingLeg: null,
+      failingLegs: [],
     } as never);
     vi.mocked(prisma.integrationStatus.upsert).mockResolvedValueOnce(
       {} as never,
@@ -1097,7 +1143,7 @@ describe("recordSyncSuccess — leg scoping", () => {
   it("does not treat a healthy row's stale leg marker as a held error", async () => {
     vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
       state: "connected",
-      failingLeg: "sleep",
+      failingLegs: ["sleep"],
     } as never);
     vi.mocked(prisma.integrationStatus.upsert).mockResolvedValueOnce(
       {} as never,
@@ -1106,5 +1152,103 @@ describe("recordSyncSuccess — leg scoping", () => {
     await recordSyncSuccess("u1", "withings", { leg: "ecg" });
 
     expect(prisma.integrationStatus.upsert).toHaveBeenCalledOnce();
+  });
+
+  it("reads a malformed leg column as unattributed rather than guessing", async () => {
+    vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
+      state: "error_transient",
+      // Not an array of strings — a legacy shape, or a hand-edited row.
+      failingLegs: { sleep: true },
+    } as never);
+    vi.mocked(prisma.integrationStatus.upsert).mockResolvedValueOnce(
+      {} as never,
+    );
+
+    await recordSyncSuccess("u1", "withings", { leg: "ecg" });
+
+    // Unattributed means any success clears — the pre-existing semantics for
+    // a failure that named no leg, not an invented leg name.
+    expect(prisma.integrationStatus.upsert).toHaveBeenCalledOnce();
+  });
+});
+
+describe("recordSyncFailure — leg set", () => {
+  function writtenUpdate() {
+    return vi.mocked(prisma.integrationStatus.upsert).mock.calls[0]![0]!
+      .update as Record<string, unknown>;
+  }
+
+  it("adds a second failing leg instead of overwriting the first", async () => {
+    vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
+      consecutiveFailuresByKind: {
+        transient: 1,
+        reauth_required: 0,
+        persistent: 0,
+      },
+      persistentFailureStartedAt: null,
+      failingSinceAt: new Date("2026-01-01T00:00:00Z"),
+      failingLegs: ["sleep"],
+      alertedAt: null,
+    } as never);
+
+    await recordSyncFailure({
+      userId: "u1",
+      integration: "withings",
+      kind: "transient",
+      message: "Withings activity error: 503 - upstream",
+      leg: "activity",
+    });
+
+    expect(writtenUpdate().failingLegs).toEqual(["sleep", "activity"]);
+  });
+
+  it("moves a re-failing leg to the end so it owns the message it just wrote", async () => {
+    vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
+      consecutiveFailuresByKind: {
+        transient: 2,
+        reauth_required: 0,
+        persistent: 0,
+      },
+      persistentFailureStartedAt: null,
+      failingSinceAt: new Date("2026-01-01T00:00:00Z"),
+      failingLegs: ["sleep", "activity"],
+      alertedAt: null,
+    } as never);
+
+    await recordSyncFailure({
+      userId: "u1",
+      integration: "withings",
+      kind: "transient",
+      message: "Withings sleep error: 503 - upstream",
+      leg: "sleep",
+    });
+
+    // No duplicate, and `sleep` is last because it wrote `lastError`.
+    expect(writtenUpdate().failingLegs).toEqual(["activity", "sleep"]);
+  });
+
+  it("leaves the set alone when the failure names no leg", async () => {
+    vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
+      consecutiveFailuresByKind: {
+        transient: 1,
+        reauth_required: 0,
+        persistent: 0,
+      },
+      persistentFailureStartedAt: null,
+      failingSinceAt: new Date("2026-01-01T00:00:00Z"),
+      failingLegs: ["sleep"],
+      alertedAt: null,
+    } as never);
+
+    await recordSyncFailure({
+      userId: "u1",
+      integration: "withings",
+      kind: "transient",
+      message: "Withings error: 503 - upstream",
+    });
+
+    // An unattributed failure carries nothing to record; erasing `sleep` would
+    // let the sleep leg's next success clear an error it did not fix.
+    expect(writtenUpdate().failingLegs).toEqual(["sleep"]);
   });
 });
