@@ -3,6 +3,7 @@ import {
   getEffectiveRange,
   getAllEffectiveRanges,
   METRIC_BOUNDS,
+  resolveWeightTargetOverride,
   type UserProfileForRange,
   type ThresholdOverridesJson,
 } from "../effective-range";
@@ -222,5 +223,50 @@ describe("OXYGEN_SATURATION thresholds", () => {
       max: 100,
       unit: "%",
     });
+  });
+});
+
+/**
+ * v1.34 — `User.thresholdsJson` is untyped JSON and v1.34 gave the weight
+ * target three new consumers at once (the Health Score, the dashboard bands,
+ * the PR direction). One narrowing beats three hand-rolled casts, and a
+ * malformed blob must read as "no target", never as a target of NaN.
+ */
+describe("resolveWeightTargetOverride", () => {
+  it("reads a well-formed weight override", () => {
+    expect(
+      resolveWeightTargetOverride({ WEIGHT: { min: 74, max: 78 } }),
+    ).toEqual({ min: 74, max: 78 });
+  });
+
+  it("returns null for a blob with no weight entry", () => {
+    expect(resolveWeightTargetOverride(null)).toBeNull();
+    expect(resolveWeightTargetOverride({})).toBeNull();
+    expect(
+      resolveWeightTargetOverride({ BLOOD_PRESSURE_SYS: { min: 1, max: 2 } }),
+    ).toBeNull();
+  });
+
+  it("rejects a malformed pair instead of passing it through", () => {
+    expect(resolveWeightTargetOverride({ WEIGHT: { min: 74 } })).toBeNull();
+    expect(
+      resolveWeightTargetOverride({ WEIGHT: { min: "74", max: "78" } }),
+    ).toBeNull();
+    expect(
+      resolveWeightTargetOverride({ WEIGHT: { min: NaN, max: 78 } }),
+    ).toBeNull();
+    // An inverted or collapsed band is not a band.
+    expect(
+      resolveWeightTargetOverride({ WEIGHT: { min: 80, max: 70 } }),
+    ).toBeNull();
+    expect(
+      resolveWeightTargetOverride({ WEIGHT: { min: 75, max: 75 } }),
+    ).toBeNull();
+  });
+
+  it("survives a non-object blob", () => {
+    expect(resolveWeightTargetOverride("nope")).toBeNull();
+    expect(resolveWeightTargetOverride(42)).toBeNull();
+    expect(resolveWeightTargetOverride(undefined)).toBeNull();
   });
 });

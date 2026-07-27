@@ -47,6 +47,13 @@ interface VitalTargetsInput {
   gender: ProfileSex;
   timezone: string;
   now: Date;
+  /**
+   * v1.34 — the user's own weight band from `User.thresholdsJson`, in kg.
+   * When present it replaces the WHO BMI band on the weight card and the
+   * card's source reads "Custom", matching how the glucose builder has
+   * always treated a user override. `null` keeps the height-derived band.
+   */
+  weightTargetOverride: { min: number; max: number } | null;
 }
 
 export interface VitalTargetsResult {
@@ -140,6 +147,7 @@ export function buildVitalTargets({
   gender,
   timezone,
   now,
+  weightTargetOverride,
 }: VitalTargetsInput): VitalTargetsResult {
   const targets: TargetItem[] = [];
   const consistencyClock = { timezone, now };
@@ -148,7 +156,11 @@ export function buildVitalTargets({
   // answers a null with a neutral value, never with one of the two sides.
   const referenceSex = binaryReferenceSex(gender);
 
-  const weightRange = heightCm ? getWeightRange(heightCm) : null;
+  // v1.34 — a user-set target outranks the WHO BMI band. The BMI
+  // classification below stays WHO-derived either way: it names which BMI
+  // category a reading falls in, which is a reference fact and not a goal.
+  const weightRange =
+    weightTargetOverride ?? (heightCm ? getWeightRange(heightCm) : null);
   let weightClassification: TargetItem["classification"] = null;
   if (latestByType.WEIGHT != null && heightCm) {
     const heightM = heightCm / 100;
@@ -169,7 +181,7 @@ export function buildVitalTargets({
     unit: "kg",
     range: weightRange,
     classification: weightClassification,
-    source: "WHO BMI",
+    source: weightTargetOverride ? "Custom" : "WHO BMI",
     ...rollupConsistency({
       events: recentMeasurements.filter(
         (measurement) => measurement.type === "WEIGHT",

@@ -3,7 +3,6 @@ import {
   coefficientOfVariation,
   complianceRate,
   computeHealthScore,
-  defaultWeightTargetFromHeight,
   linearRegressionSlope,
   moodStability,
   weightTrendAlignment,
@@ -170,16 +169,6 @@ describe("complianceRate", () => {
   });
 });
 
-describe("defaultWeightTargetFromHeight", () => {
-  it("returns null when height is null", () => {
-    expect(defaultWeightTargetFromHeight(null)).toBeNull();
-  });
-
-  it("approximates BMI-22 midpoint for 178 cm", () => {
-    expect(defaultWeightTargetFromHeight(178)).toBeCloseTo(69.7, 1);
-  });
-});
-
 // ── Composite scenarios ──────────────────────────────────────────────
 
 describe("computeHealthScore — strong positive case", () => {
@@ -187,7 +176,8 @@ describe("computeHealthScore — strong positive case", () => {
     const input: HealthScoreInput = {
       bpInTargetRate: 90,
       weightSeriesLast30d: weightSeries([80, 79.5, 79, 78.5, 78]),
-      weightTargetKg: 78,
+      weightTarget: { min: 76, max: 80 },
+      weightTargetSource: "user",
       moodEntriesLast30d: moodEntries([4, 4, 5, 4, 5, 4, 5, 4, 4]),
       medicationCompliance30: [95, 100, 90],
     };
@@ -205,7 +195,8 @@ describe("computeHealthScore — mixed case", () => {
       bpInTargetRate: 60,
       // Above the band, drifting up — alignment <50.
       weightSeriesLast30d: weightSeries([85, 86, 87, 88]),
-      weightTargetKg: 80,
+      weightTarget: { min: 78, max: 82 },
+      weightTargetSource: "user",
       moodEntriesLast30d: moodEntries([2, 3, 5, 1, 4, 3]),
       medicationCompliance30: [100, 100],
     };
@@ -221,7 +212,8 @@ describe("computeHealthScore — poor case", () => {
     const input: HealthScoreInput = {
       bpInTargetRate: 20,
       weightSeriesLast30d: weightSeries([95, 96, 97, 98, 99]),
-      weightTargetKg: 80,
+      weightTarget: { min: 78, max: 82 },
+      weightTargetSource: "user",
       moodEntriesLast30d: moodEntries([1, 5, 1, 5, 1, 5]),
       medicationCompliance30: [40, 30, 20],
     };
@@ -236,7 +228,8 @@ describe("computeHealthScore — null component redistribution", () => {
     const input: HealthScoreInput = {
       bpInTargetRate: null,
       weightSeriesLast30d: weightSeries([80, 80, 80, 80]),
-      weightTargetKg: 80,
+      weightTarget: { min: 78, max: 82 },
+      weightTargetSource: "user",
       moodEntriesLast30d: moodEntries([5, 5, 5, 5, 5]),
       medicationCompliance30: [100, 100],
     };
@@ -254,7 +247,8 @@ describe("computeHealthScore — null component redistribution", () => {
     const input: HealthScoreInput = {
       bpInTargetRate: null,
       weightSeriesLast30d: weightSeries([80, 80, 80]),
-      weightTargetKg: 80,
+      weightTarget: { min: 78, max: 82 },
+      weightTargetSource: "user",
       // <5 mood entries → moodStability returns null.
       moodEntriesLast30d: moodEntries([4, 4]),
       medicationCompliance30: [80],
@@ -273,7 +267,8 @@ describe("computeHealthScore — null component redistribution", () => {
     const input: HealthScoreInput = {
       bpInTargetRate: null,
       weightSeriesLast30d: [],
-      weightTargetKg: null,
+      weightTarget: null,
+      weightTargetSource: "none",
       moodEntriesLast30d: [],
       medicationCompliance30: [73],
     };
@@ -287,7 +282,8 @@ describe("computeHealthScore — null component redistribution", () => {
     const input: HealthScoreInput = {
       bpInTargetRate: null,
       weightSeriesLast30d: [],
-      weightTargetKg: null,
+      weightTarget: null,
+      weightTargetSource: "none",
       moodEntriesLast30d: [],
       medicationCompliance30: [],
     };
@@ -305,7 +301,8 @@ describe("computeHealthScore — determinism", () => {
   const input: HealthScoreInput = {
     bpInTargetRate: 75,
     weightSeriesLast30d: weightSeries([82, 81, 80, 79]),
-    weightTargetKg: 78,
+    weightTarget: { min: 76, max: 80 },
+    weightTargetSource: "user",
     moodEntriesLast30d: moodEntries([4, 5, 3, 4, 5, 4]),
     medicationCompliance30: [85, 90, 80],
   };
@@ -335,7 +332,8 @@ describe("computeHealthScore — delta vs previous week", () => {
   const baseInput: HealthScoreInput = {
     bpInTargetRate: 80,
     weightSeriesLast30d: weightSeries([82, 81, 80]),
-    weightTargetKg: 80,
+    weightTarget: { min: 78, max: 82 },
+    weightTargetSource: "user",
     moodEntriesLast30d: moodEntries([5, 4, 5, 4, 5]),
     medicationCompliance30: [100, 100],
   };
@@ -377,7 +375,8 @@ describe("computeHealthScore — source attribution", () => {
     return {
       bpInTargetRate: 90,
       weightSeriesLast30d: weightSeries([80, 80, 80]),
-      weightTargetKg: 80,
+      weightTarget: { min: 78, max: 82 },
+      weightTargetSource: "user",
       moodEntriesLast30d: moodEntries([5, 4, 5, 4, 5]),
       medicationCompliance30: [95, 100],
       attribution,
@@ -433,7 +432,8 @@ describe("computeHealthScore — source attribution", () => {
     const input: HealthScoreInput = {
       bpInTargetRate: null,
       weightSeriesLast30d: [],
-      weightTargetKg: null,
+      weightTarget: null,
+      weightTargetSource: "none",
       // <5 mood entries → moodStability returns null.
       moodEntriesLast30d: moodEntries([4, 4]),
       medicationCompliance30: [],
@@ -461,7 +461,8 @@ describe("computeHealthScore — source attribution", () => {
     const result = computeHealthScore({
       bpInTargetRate: 80,
       weightSeriesLast30d: weightSeries([80, 80, 80]),
-      weightTargetKg: 80,
+      weightTarget: { min: 78, max: 82 },
+      weightTargetSource: "user",
       moodEntriesLast30d: moodEntries([5, 5, 5, 5, 5]),
       medicationCompliance30: [100],
     });
@@ -480,7 +481,8 @@ describe("computeHealthScore — source attribution", () => {
     const result = computeHealthScore({
       bpInTargetRate: 90,
       weightSeriesLast30d: weightSeries([80, 80, 80]),
-      weightTargetKg: 80,
+      weightTarget: { min: 78, max: 82 },
+      weightTargetSource: "user",
       moodEntriesLast30d: moodEntries([5, 5, 5, 5, 5]),
       medicationCompliance30: [100],
       attribution: {
@@ -492,5 +494,77 @@ describe("computeHealthScore — source attribution", () => {
     expect(result.components.bp.source).toBe("withings");
     // No asOf supplied → fall back to window end.
     expect(result.components.bp.asOf).toBe(WINDOW_END);
+  });
+});
+
+/**
+ * v1.34 — the weight yardstick.
+ *
+ * Until this release the pillar graded every account with a height on file
+ * against `22 x height^2` +/- 2 kg: a band nobody set and no surface named.
+ * These pin the replacement contract — the band arrives whole from the caller,
+ * a missing band scores the bare trend, and the result says which of the two
+ * happened.
+ */
+describe("computeHealthScore — weight yardstick", () => {
+  const stable = weightSeries([80, 80, 80, 80]);
+
+  function scoreWeightOnly(
+    series: Array<{ date: string; kg: number }>,
+    target: { min: number; max: number } | null,
+  ) {
+    return computeHealthScore({
+      bpInTargetRate: null,
+      weightSeriesLast30d: series,
+      weightTarget: target,
+      weightTargetSource: target ? "user" : "none",
+      moodEntriesLast30d: [],
+      medicationCompliance30: [],
+    });
+  }
+
+  it("takes the band whole — no expansion of the caller's bounds", () => {
+    // 80 kg sits OUTSIDE 76-79. A +/- 2 kg widening would pull it in and
+    // score 100; the band must be used exactly as handed over.
+    expect(
+      scoreWeightOnly(stable, { min: 76, max: 79 }).components.weight.value,
+    ).toBe(50);
+    // The same reading INSIDE the band scores the in-band 100.
+    expect(
+      scoreWeightOnly(stable, { min: 78, max: 82 }).components.weight.value,
+    ).toBe(100);
+  });
+
+  it("scores the bare trend when no target is set", () => {
+    // Stable weight, no target: the trend-only anchor, not the target-aware
+    // "neither" midpoint of 50, and never a fabricated band.
+    const result = scoreWeightOnly(stable, null);
+    expect(result.components.weight.value).toBe(75);
+    expect(result.components.weight.weight).toBeGreaterThan(0);
+  });
+
+  it("carries the resolved yardstick on the weight component", () => {
+    const withTarget = scoreWeightOnly(stable, { min: 78, max: 82 });
+    expect(withTarget.components.weight.targetSource).toBe("user");
+    expect(withTarget.components.weight.target).toEqual({ min: 78, max: 82 });
+
+    const without = scoreWeightOnly(stable, null);
+    expect(without.components.weight.targetSource).toBe("none");
+    expect(without.components.weight.target).toBeNull();
+  });
+
+  it("never reports a band when the source is `none`", () => {
+    // Defensive: a caller that passes a band while declaring no source must
+    // not have that band surface as though the user had set it.
+    const result = computeHealthScore({
+      bpInTargetRate: null,
+      weightSeriesLast30d: stable,
+      weightTarget: { min: 78, max: 82 },
+      weightTargetSource: "none",
+      moodEntriesLast30d: [],
+      medicationCompliance30: [],
+    });
+    expect(result.components.weight.target).toBeNull();
+    expect(result.components.weight.targetSource).toBe("none");
   });
 });

@@ -53,7 +53,14 @@ import {
   computeBpInTargetFastPath,
   type BpInTargetEnvelope,
 } from "@/lib/analytics/bp-in-target-fast-path";
-import { buildHealthScoreBpInputs } from "@/lib/analytics/health-score-inputs";
+import {
+  buildHealthScoreBpInputs,
+  buildHealthScoreWeightTarget,
+} from "@/lib/analytics/health-score-inputs";
+import {
+  resolveWeightTargetOverride,
+  type ThresholdOverridesJson,
+} from "@/lib/analytics/effective-range";
 import { deriveBpWindow90 } from "@/lib/analytics/window-confidence";
 import {
   probeRollupCoverage,
@@ -472,6 +479,14 @@ export interface SnapshotUserInput {
   insightsCachedText: string | null;
   insightsCachedAt: Date | null;
   dashboardWidgetsJson: unknown;
+  /**
+   * v1.34 — the raw `User.thresholdsJson` blob. The hero ring's weight
+   * pillar and the dashboard's weight bands both grade against the user's
+   * OWN target when one is set, so the builder needs the overrides the
+   * `/targets` editor writes. Parsed at the point of use through
+   * `ThresholdOverridesJson`.
+   */
+  thresholdsJson: unknown;
 }
 
 /** Wall-clock hour in `tz`, used for the server-side greeting. */
@@ -582,6 +597,11 @@ async function buildNutrientWaterBlock(
  * windows already computed here (`gradedScore` + `last30Days.pct`) and
  * the same coverage map, so the score's weight pillar also stays on
  * the rollup branch.
+ *
+ * v1.34 — takes the resolved module map. The hero ring used to score a
+ * mood pillar for accounts that had switched the mood module off, while
+ * the Insights card (which does resolve the module) dropped it: one
+ * score, two compositions, two surfaces.
  */
 async function buildExtras(
   prisma: PrismaClient,
@@ -590,6 +610,7 @@ async function buildExtras(
   coverage: RollupCoverageMap,
   now: Date,
   time: <T>(label: string, fn: () => Promise<T>) => Promise<T>,
+  modules: Record<ModuleKey, boolean>,
 ): Promise<{
   extras: DashboardSnapshotExtras;
   healthScore: DashboardSnapshotHealthScore | null;
@@ -666,13 +687,28 @@ async function buildExtras(
   // 90-day window via W1d, same all-time fallback, same graded score, same
   // prior-week delta values). Closes the dashboard-vs-insights divergence.
   const bpInputs = buildHealthScoreBpInputs(bpEnvelope, bpEnvelopePriorWeek);
+  // v1.34 — the weight yardstick, resolved through the same shared builder the
+  // analytics route uses. A target reaches the pillar only when the account
+  // set one; otherwise the pillar scores the bare trend on both surfaces.
+  const weightTargetInputs = buildHealthScoreWeightTarget(
+    {
+      heightCm: user.heightCm,
+      dateOfBirth: user.dateOfBirth,
+      gender: user.gender,
+    },
+    (user.thresholdsJson ?? null) as ThresholdOverridesJson | null,
+  );
   const scoreResult = await time("healthScore", () =>
     computeUserHealthScoreFastPath({
       userId: user.id,
       ...bpInputs,
-      heightCm: user.heightCm,
+      ...weightTargetInputs,
       now,
       coverage,
+      // v1.34 — the mood module gates the pillar here exactly as it does on
+      // `/api/analytics`. Before this the ring scored a pillar the account
+      // had switched off everywhere else.
+      moodEnabled: modules.mood !== false,
     }),
   );
   // v1.18.1 — resolve the value-free Rest Mode annotation alongside the score
@@ -1165,9 +1201,21 @@ export async function buildDashboardSnapshot(
     // doesn't re-run the identical `probeRollupCoverage` query.
     time("summaries", () => computeSummariesSlice(user.id, coverage)),
     time("mood", () => buildMoodBlock(prisma, user.id)),
+    // v1.34 — the thick slice awaits the shared `modulesPromise` (the same
+    // pattern the score-ring task uses) so the hero ring's health score can
+    // gate its mood pillar on the resolved module map without a second
+    // resolver call or a serialised phase.
     warm
-      ? time("extras", () =>
-          buildExtras(prisma, user, userTz, coverage, now, time),
+      ? time("extras", async () =>
+          buildExtras(
+            prisma,
+            user,
+            userTz,
+            coverage,
+            now,
+            time,
+            await modulesPromise,
+          ),
         )
       : Promise.resolve(null),
     time("flags", () => getAssistantFlags()),
@@ -1306,6 +1354,10 @@ export async function buildDashboardSnapshot(
       dateOfBirth: user.dateOfBirth,
       gender,
       heightCm: user.heightCm ?? null,
+      // v1.34 — the user's own weight target, when they set one, replaces the
+      // height-derived band on the tile + the chart. Resolved off the same
+      // `thresholdsJson` blob the health score reads.
+      weightTargetOverride: resolveWeightTargetOverride(user.thresholdsJson),
     }),
     tiles: {
       summaries: slim.summaries,

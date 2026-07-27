@@ -89,11 +89,19 @@ export function buildWeightRangeFromHeight(heightCm: number): TrafficRange {
   };
 }
 
-export function buildWeightBandsFromHeight(
-  heightCm: number,
+/**
+ * Chart bands straight off an already-resolved traffic range.
+ *
+ * v1.34 — the weight chart shades either the height-derived WHO band or the
+ * user's OWN target band (`User.thresholdsJson`, resolved through
+ * `getEffectiveRange`, which computes its own orange wings). Both go through
+ * this one builder so the two yardsticks paint with identical geometry and
+ * only the numbers differ.
+ */
+export function buildBandsFromTrafficRange(
+  range: TrafficRange,
   options: { lowerBound?: number; upperBound?: number } = {},
 ): ValueBand[] {
-  const range = buildWeightRangeFromHeight(heightCm);
   const lowerBound = options.lowerBound ?? 30;
   const upperBound = options.upperBound ?? 250;
 
@@ -129,6 +137,16 @@ export function buildWeightBandsFromHeight(
       opacity: 0.16,
     },
   ].filter((band) => band.max > band.min);
+}
+
+export function buildWeightBandsFromHeight(
+  heightCm: number,
+  options: { lowerBound?: number; upperBound?: number } = {},
+): ValueBand[] {
+  return buildBandsFromTrafficRange(
+    buildWeightRangeFromHeight(heightCm),
+    options,
+  );
 }
 
 /**

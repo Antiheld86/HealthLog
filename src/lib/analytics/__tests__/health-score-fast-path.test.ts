@@ -132,9 +132,11 @@ describe("computeUserHealthScoreFastPath", () => {
       const result = await computeUserHealthScoreFastPath({
         userId: "user-rollup",
         bpInTargetPct: 85,
-        heightCm: 178,
+        weightTarget: null,
+        weightTargetSource: "none",
         now,
         coverage,
+        moodEnabled: true,
       });
 
       expect(result).not.toBeNull();
@@ -225,9 +227,11 @@ describe("computeUserHealthScoreFastPath", () => {
       await computeUserHealthScoreFastPath({
         userId: "user-longwindow",
         bpInTargetPct: 85,
-        heightCm: 178,
+        weightTarget: null,
+        weightTargetSource: "none",
         now,
         coverage,
+        moodEnabled: true,
       });
 
       const calls = ANNOTATE.mock.calls.map((c) => c[0]);
@@ -276,9 +280,11 @@ describe("computeUserHealthScoreFastPath", () => {
       await computeUserHealthScoreFastPath({
         userId: "user-no-longwindow",
         bpInTargetPct: 85,
-        heightCm: 178,
+        weightTarget: null,
+        weightTargetSource: "none",
         now,
         coverage,
+        moodEnabled: true,
       });
 
       const calls = ANNOTATE.mock.calls.map((c) => c[0]);
@@ -306,9 +312,11 @@ describe("computeUserHealthScoreFastPath", () => {
       await computeUserHealthScoreFastPath({
         userId: "user-live-nowmy",
         bpInTargetPct: 80,
-        heightCm: 178,
+        weightTarget: null,
+        weightTargetSource: "none",
         now,
         coverage,
+        moodEnabled: true,
       });
 
       // The live branch never issues the long-window probe — guards
@@ -348,9 +356,11 @@ describe("computeUserHealthScoreFastPath", () => {
       const result = await computeUserHealthScoreFastPath({
         userId: "user-live",
         bpInTargetPct: 75,
-        heightCm: 178,
+        weightTarget: null,
+        weightTargetSource: "none",
         now,
         coverage,
+        moodEnabled: true,
       });
 
       expect(result).not.toBeNull();
@@ -402,9 +412,11 @@ describe("computeUserHealthScoreFastPath", () => {
       const result = await computeUserHealthScoreFastPath({
         userId: "user-no-height",
         bpInTargetPct: null,
-        heightCm: null,
+        weightTarget: null,
+        weightTargetSource: "none",
         now,
         coverage,
+        moodEnabled: true,
       });
 
       expect(result).not.toBeNull();
@@ -430,9 +442,11 @@ describe("computeUserHealthScoreFastPath", () => {
       const result = await computeUserHealthScoreFastPath({
         userId: "user-empty",
         bpInTargetPct: null,
-        heightCm: null,
+        weightTarget: null,
+        weightTargetSource: "none",
         now: new Date("2026-05-17T12:00:00.000Z"),
         coverage,
+        moodEnabled: true,
       });
 
       expect(result).toBeNull();
@@ -468,9 +482,11 @@ describe("computeUserHealthScoreFastPath", () => {
       const result = await computeUserHealthScoreFastPath({
         userId: "user-one-mood-entry",
         bpInTargetPct: null,
-        heightCm: null,
+        weightTarget: null,
+        weightTargetSource: "none",
         now,
         coverage,
+        moodEnabled: true,
       });
 
       expect(result).toBeNull();
@@ -500,9 +516,11 @@ describe("computeUserHealthScoreFastPath", () => {
       const result = await computeUserHealthScoreFastPath({
         userId: "user-one-weight-reading",
         bpInTargetPct: null,
-        heightCm: null,
+        weightTarget: null,
+        weightTargetSource: "none",
         now,
         coverage,
+        moodEnabled: true,
       });
 
       expect(result).toBeNull();
@@ -534,9 +552,11 @@ describe("computeUserHealthScoreFastPath", () => {
       const result = await computeUserHealthScoreFastPath({
         userId: "user-multi-pillar-ineligible",
         bpInTargetPct: null,
-        heightCm: null,
+        weightTarget: null,
+        weightTargetSource: "none",
         now,
         coverage,
+        moodEnabled: true,
       });
 
       expect(result).toBeNull();
@@ -559,9 +579,11 @@ describe("computeUserHealthScoreFastPath", () => {
         userId: "user-legit-zero",
         bpInTargetPct: 0,
         bpGradedScore: 0,
-        heightCm: null,
+        weightTarget: null,
+        weightTargetSource: "none",
         now,
         coverage,
+        moodEnabled: true,
       });
 
       expect(result).not.toBeNull();
@@ -580,8 +602,10 @@ describe("computeUserHealthScoreFastPath", () => {
       await computeUserHealthScoreFastPath({
         userId: "user-fresh",
         bpInTargetPct: null,
-        heightCm: null,
+        weightTarget: null,
+        weightTargetSource: "none",
         now: new Date("2026-05-17T12:00:00.000Z"),
+        moodEnabled: true,
       });
 
       expect(PROBE).toHaveBeenCalledWith("user-fresh");
@@ -603,9 +627,11 @@ describe("computeUserHealthScoreFastPath", () => {
         userId: "user-bpdelta",
         bpInTargetPct: 90,
         bpInTargetPctPriorWeek: 70,
-        heightCm: null,
+        weightTarget: null,
+        weightTargetSource: "none",
         now: new Date("2026-05-17T12:00:00.000Z"),
         coverage,
+        moodEnabled: true,
       });
 
       // With only BP data the helper still returns a score. The delta
@@ -634,9 +660,11 @@ describe("computeUserHealthScoreFastPath", () => {
         userId: "user-bplegacy",
         bpInTargetPct: 80,
         // bpInTargetPctPriorWeek omitted — should fall back to 80.
-        heightCm: null,
+        weightTarget: null,
+        weightTargetSource: "none",
         now: new Date("2026-05-17T12:00:00.000Z"),
         coverage,
+        moodEnabled: true,
       });
 
       expect(result).not.toBeNull();
@@ -715,9 +743,11 @@ describe("computeUserHealthScoreFastPath", () => {
       const result = await computeUserHealthScoreFastPath({
         userId: "user-weekly-med",
         bpInTargetPct: 80,
-        heightCm: 178,
+        weightTarget: null,
+        weightTargetSource: "none",
         now,
         coverage,
+        moodEnabled: true,
       });
 
       expect(result).not.toBeNull();
@@ -778,9 +808,11 @@ describe("computeUserHealthScoreFastPath", () => {
       const result = await computeUserHealthScoreFastPath({
         userId: "user-daily-med",
         bpInTargetPct: 80,
-        heightCm: 178,
+        weightTarget: null,
+        weightTargetSource: "none",
         now,
         coverage,
+        moodEnabled: true,
       });
 
       expect(result).not.toBeNull();
@@ -799,6 +831,10 @@ describe("computeUserHealthScoreFastPath", () => {
    * (or inflated) by a pillar the user can no longer see. Golden fixture:
    * an identical profile with strong, stable mood scored mood-on vs
    * mood-off must produce a different, correctly re-weighted score.
+   *
+   * v1.34 — the flag is required. It used to default to on, and the
+   * dashboard snapshot never passed it, so the hero ring scored a pillar
+   * the account had switched off while the Insights card dropped it.
    */
   describe("module-aware mood pillar (R4)", () => {
     // A profile with BP + steady high mood (low variance → high
@@ -811,7 +847,7 @@ describe("computeUserHealthScoreFastPath", () => {
       }));
     }
 
-    it("weights the mood pillar when moodEnabled is omitted (pre-v1.18.0 default)", async () => {
+    it("weights the mood pillar when moodEnabled is true", async () => {
       const coverage = new Map<string, boolean>();
       FULLY_COVERED.mockReturnValue(false);
       PROBE.mockResolvedValue(coverage);
@@ -823,9 +859,11 @@ describe("computeUserHealthScoreFastPath", () => {
         userId: "user-mood-on",
         bpInTargetPct: 60,
         bpGradedScore: 60,
-        heightCm: null,
+        weightTarget: null,
+        weightTargetSource: "none",
         now,
         coverage,
+        moodEnabled: true,
       });
 
       expect(result).not.toBeNull();
@@ -849,7 +887,8 @@ describe("computeUserHealthScoreFastPath", () => {
         userId: "user-mood-off",
         bpInTargetPct: 60,
         bpGradedScore: 60,
-        heightCm: null,
+        weightTarget: null,
+        weightTargetSource: "none",
         now,
         coverage,
         moodEnabled: false,
@@ -888,9 +927,11 @@ describe("computeUserHealthScoreFastPath", () => {
         userId: "user-golden-on",
         bpInTargetPct: 60,
         bpGradedScore: 60,
-        heightCm: null,
+        weightTarget: null,
+        weightTargetSource: "none",
         now,
         coverage,
+        moodEnabled: true,
       });
 
       // Mood-OFF: only BP=60 survives → score 60.
@@ -899,7 +940,8 @@ describe("computeUserHealthScoreFastPath", () => {
         userId: "user-golden-off",
         bpInTargetPct: 60,
         bpGradedScore: 60,
-        heightCm: null,
+        weightTarget: null,
+        weightTargetSource: "none",
         now,
         coverage,
         moodEnabled: false,
@@ -936,9 +978,11 @@ describe("computeUserHealthScoreFastPath", () => {
         bpInTargetPct: 16,
         // …but the graded clinical-proximity score says borderline.
         bpGradedScore: 55,
-        heightCm: null,
+        weightTarget: null,
+        weightTargetSource: "none",
         now,
         coverage,
+        moodEnabled: true,
       });
 
       expect(result).not.toBeNull();
@@ -968,9 +1012,11 @@ describe("computeUserHealthScoreFastPath", () => {
         // stray graded score were supplied.
         bpInTargetPct: null,
         bpGradedScore: 80,
-        heightCm: null,
+        weightTarget: null,
+        weightTargetSource: "none",
         now,
         coverage,
+        moodEnabled: true,
       });
 
       expect(result).not.toBeNull();

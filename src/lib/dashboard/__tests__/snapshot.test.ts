@@ -146,6 +146,7 @@ function baseUser(
     insightsCachedText: null,
     insightsCachedAt: null,
     dashboardWidgetsJson: null,
+    thresholdsJson: null,
     ...overrides,
   };
 }
@@ -471,7 +472,9 @@ describe("buildDashboardSnapshot — healthScore (warm phase only)", () => {
       userId: string;
       bpInTargetPct: number | null;
       bpGradedScore: number | null;
-      heightCm: number | null;
+      weightTarget: { min: number; max: number } | null;
+      weightTargetSource: string;
+      moodEnabled: boolean;
       coverage: unknown;
     };
     expect(arg.userId).toBe("user-1");
@@ -480,7 +483,10 @@ describe("buildDashboardSnapshot — healthScore (warm phase only)", () => {
     // number. Previously this was last30Days (80).
     expect(arg.bpInTargetPct).toBe(77);
     expect(arg.bpGradedScore).toBe(88);
-    expect(arg.heightCm).toBe(180);
+    // v1.34 — no weight target on this fixture, so the pillar scores the bare
+    // trend. The BMI-22 band that used to be derived from `heightCm` is gone.
+    expect(arg.weightTarget).toBeNull();
+    expect(arg.weightTargetSource).toBe("none");
     expect(arg.coverage).toBe(coverageMap);
   });
 
@@ -998,6 +1004,40 @@ describe("buildDashboardSnapshot — module gating (v1.18.0)", () => {
     expect(snap.tiles.mood.summary).toBeNull();
     // Core tile unaffected.
     expect(widget(snap, "weight")!.visible).toBe(true);
+    // v1.34 — the hero ring's health score drops the mood pillar too. Before
+    // this the snapshot never resolved the module, so a mood-off account was
+    // scored on a pillar the Insights card had already dropped.
+    const scoreCall = computeUserHealthScoreFastPath.mock.calls.at(-1)?.[0] as
+      { moodEnabled: boolean } | undefined;
+    expect(scoreCall?.moodEnabled).toBe(false);
+  });
+
+  it("mood enabled: the health score keeps its mood pillar", async () => {
+    await buildDashboardSnapshot(fakePrisma, baseUser(), {
+      modules: () => Promise.resolve(moduleMap()),
+    });
+    const scoreCall = computeUserHealthScoreFastPath.mock.calls.at(-1)?.[0] as
+      { moodEnabled: boolean } | undefined;
+    expect(scoreCall?.moodEnabled).toBe(true);
+  });
+
+  it("an explicit weight target reaches the score and the bands", async () => {
+    const snap = await buildDashboardSnapshot(
+      fakePrisma,
+      baseUser({ thresholdsJson: { WEIGHT: { min: 74, max: 78 } } }),
+      { modules: () => Promise.resolve(moduleMap()) },
+    );
+    const scoreCall = computeUserHealthScoreFastPath.mock.calls.at(-1)?.[0] as
+      | {
+          weightTarget: { min: number; max: number } | null;
+          weightTargetSource: string;
+        }
+      | undefined;
+    expect(scoreCall?.weightTarget).toEqual({ min: 74, max: 78 });
+    expect(scoreCall?.weightTargetSource).toBe("user");
+    // The tile / chart band follows the same target.
+    expect(snap.targetBands.weightRange?.greenMin).toBe(74);
+    expect(snap.targetBands.weightRange?.greenMax).toBe(78);
   });
 
   it("sleep disabled: tile hidden + SLEEP_DURATION stripped from summaries", async () => {

@@ -180,8 +180,10 @@ describe("PR detection — drift guard (real DB)", () => {
     // either the worker or the suppress branch via `getPRDirection`).
     const result = await detectPersonalRecordsForUser(TEST_USER_ID);
 
+    // v1.34 — the seeded user carries no weight target, so weight / BMI keep
+    // their null direction and stay out of the trackable set.
     const trackable = measurementTypeEnum.options.filter((t) =>
-      isPRTrackable(t as MeasurementType),
+      isPRTrackable(t as MeasurementType, { weightGoal: null }),
     );
     expect(result.scanned).toBeGreaterThanOrEqual(trackable.length);
   });

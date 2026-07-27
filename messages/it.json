@@ -2234,6 +2234,10 @@
       "componentWeight": "Peso",
       "componentMood": "Umore",
       "componentCompliance": "Aderenza",
+      "weightTarget": {
+        "user": "Valutato rispetto al tuo obiettivo, {range}.",
+        "none": "Valutato solo sull'andamento, nessun obiettivo impostato."
+      },
       "deltaExplainer": {
         "title": "Come si calcola la variazione",
         "description": "Variazione rispetto alla settimana scorsa: {delta}",

@@ -2234,6 +2234,10 @@
       "componentWeight": "Gewicht",
       "componentMood": "Stimmung",
       "componentCompliance": "Therapietreue",
+      "weightTarget": {
+        "user": "Gemessen an deinem Ziel, {range}.",
+        "none": "Nur am Verlauf gemessen, kein Ziel gesetzt."
+      },
       "deltaExplainer": {
         "title": "So wird die Veränderung berechnet",
         "description": "Veränderung gegenüber letzter Woche: {delta}",

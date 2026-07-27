@@ -19,7 +19,11 @@ import {
 import { computeUserHealthScoreFastPath } from "@/lib/analytics/health-score-fast-path";
 import { isModuleEnabled } from "@/lib/modules/gate";
 import { resolveRestMode } from "@/lib/illness/rest-mode";
-import { buildHealthScoreBpInputs } from "@/lib/analytics/health-score-inputs";
+import {
+  buildHealthScoreBpInputs,
+  buildHealthScoreWeightTarget,
+} from "@/lib/analytics/health-score-inputs";
+import type { ThresholdOverridesJson } from "@/lib/analytics/effective-range";
 import { deriveBpWindow90 } from "@/lib/analytics/window-confidence";
 import { computeCorrelationHypothesesFastPath } from "@/lib/analytics/correlations-fast-path";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
@@ -453,10 +457,24 @@ async function buildAnalyticsResponse(user: AuthedUser, locale: Locale) {
   // Mode annotation resolves against the SAME window the score covers, not a
   // fresh "now" that could fall outside it.
   const scoredAt = new Date();
+  // v1.34 — the weight yardstick comes from the ONE shared
+  // `buildHealthScoreWeightTarget` builder the dashboard snapshot also uses,
+  // so the ring and the card grade weight against the identical band. It hands
+  // over a target ONLY when the account carries an explicit override; every
+  // other account scores the bare trend. The fabricated BMI-22 band that stood
+  // in here is gone.
+  const weightTargetInputs = buildHealthScoreWeightTarget(
+    {
+      heightCm: user.heightCm ?? null,
+      dateOfBirth: user.dateOfBirth,
+      gender: user.gender,
+    },
+    (user.thresholdsJson ?? null) as ThresholdOverridesJson | null,
+  );
   const healthScore = await computeUserHealthScoreFastPath({
     userId: user.id,
     ...bpInputs,
-    heightCm: user.heightCm ?? null,
+    ...weightTargetInputs,
     now: scoredAt,
     coverage,
     moodEnabled,

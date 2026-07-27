@@ -2234,6 +2234,10 @@
       "componentWeight": "Peso",
       "componentMood": "Estado de ánimo",
       "componentCompliance": "Cumplimiento",
+      "weightTarget": {
+        "user": "Evaluado con tu objetivo, {range}.",
+        "none": "Evaluado solo por la tendencia, sin objetivo definido."
+      },
       "deltaExplainer": {
         "title": "Cómo se calcula el cambio",
         "description": "Cambio respecto a la semana pasada: {delta}",

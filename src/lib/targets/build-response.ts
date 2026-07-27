@@ -16,7 +16,10 @@ import { SCHEDULE_COMPLIANCE_SELECT } from "@/lib/analytics/compliance";
 import { DEFAULT_TIMEZONE } from "@/lib/tz/resolver";
 import pLimit from "p-limit";
 import type { MeasurementType } from "@/generated/prisma/client";
-import type { ThresholdOverridesJson } from "@/lib/analytics/effective-range";
+import {
+  resolveWeightTargetOverride,
+  type ThresholdOverridesJson,
+} from "@/lib/analytics/effective-range";
 import { resolveGlucoseUnit } from "@/lib/glucose";
 import { toProfileSex } from "@/lib/profile/sex";
 import {
@@ -264,6 +267,10 @@ export async function buildTargetsResponse(user: AuthedUser) {
     gender,
     timezone,
     now,
+    // v1.34 — the weight card grades against the user's OWN target when they
+    // set one, so the reference panel and the weight chart above it name the
+    // same band.
+    weightTargetOverride: resolveWeightTargetOverride(dbUser?.thresholdsJson),
   });
   const sleepTarget = buildSleepTarget({
     sleepStageRows,

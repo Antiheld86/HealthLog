@@ -20,11 +20,26 @@
  * the two surfaces again. Both callers pass the identical
  * `BpInTargetEnvelope` pair through here and consume the result verbatim.
  *
+ * v1.34 — the WEIGHT yardstick joins the file for the same reason. The score
+ * used to grade weight against `22 × height²` ± 2 kg: a target no user ever
+ * set and no surface ever named. `buildHealthScoreWeightTarget` replaces it
+ * with the one honest source, `getEffectiveRange("WEIGHT", …)`, and hands the
+ * band over ONLY when it is a real user override. Both callers route through
+ * it so the ring and the card can never grade weight against two different
+ * yardsticks.
+ *
  * Pure & deterministic — no I/O. The callers own the
  * `computeBpInTargetFastPath` reads (current + prior-week) and hand the two
- * envelopes in.
+ * envelopes in, and own the `User` row the weight profile / overrides come
+ * from.
  */
 import type { BpInTargetEnvelope } from "./bp-in-target-fast-path";
+import {
+  getEffectiveRange,
+  type ThresholdOverridesJson,
+  type UserProfileForRange,
+} from "./effective-range";
+import type { WeightTargetSource } from "./health-score";
 import { isWindowSufficient } from "./window-confidence";
 
 /**
@@ -103,5 +118,44 @@ export function buildHealthScoreBpInputs(
     bpGradedScorePriorWeek: priorPillarPresent
       ? (priorWeek?.gradedScore ?? null)
       : null,
+  };
+}
+
+/**
+ * The weight-pillar slice of `HealthScoreFastPathInput`. Both Health-Score
+ * callers spread this into their `computeUserHealthScoreFastPath` call so the
+ * pillar is graded against the identical yardstick regardless of surface.
+ */
+export interface HealthScoreWeightTargetInputs {
+  weightTarget: { min: number; max: number } | null;
+  weightTargetSource: WeightTargetSource;
+}
+
+/**
+ * Resolve the weight yardstick for the Health Score.
+ *
+ * The score grades weight against the user's OWN target or against nothing.
+ * `getEffectiveRange` layers an evidence-based default under the override, and
+ * that default is exactly what must NOT reach the score: it is a reference
+ * band the person never chose and no score surface ever named. So the green
+ * band is handed over only when `isOverride` is true; every other case resolves
+ * to `null`, which routes the pillar through the honest trend-only path.
+ *
+ * Pure. `overrides` is the parsed `User.thresholdsJson` value (may be null).
+ */
+export function buildHealthScoreWeightTarget(
+  profile: UserProfileForRange,
+  overrides: ThresholdOverridesJson | null,
+): HealthScoreWeightTargetInputs {
+  const effective = getEffectiveRange("WEIGHT", profile, overrides);
+  if (!effective.isOverride || !effective.range) {
+    return { weightTarget: null, weightTargetSource: "none" };
+  }
+  return {
+    weightTarget: {
+      min: effective.range.greenMin,
+      max: effective.range.greenMax,
+    },
+    weightTargetSource: "user",
   };
 }

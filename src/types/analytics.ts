@@ -151,6 +151,16 @@ export interface InsightsAnalyticsData {
         weight: number;
         source?: "manual" | "withings" | "appleHealth" | "mixed" | "none";
         asOf?: string;
+        /**
+         * v1.34 — which yardstick graded this row. `"user"` when the account
+         * has set an explicit weight target (`target` then carries that band
+         * in kg), `"none"` when the pillar scored the bare trend against no
+         * target at all. The card renders one disclosure line off this pair;
+         * until it existed the score graded weight against a BMI-22 band
+         * nobody chose and no surface named.
+         */
+        targetSource?: "user" | "none";
+        target?: { min: number; max: number } | null;
       };
       mood: {
         value: number | null;

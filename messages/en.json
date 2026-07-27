@@ -2234,6 +2234,10 @@
       "componentWeight": "Weight",
       "componentMood": "Mood",
       "componentCompliance": "Adherence",
+      "weightTarget": {
+        "user": "Graded against your target, {range}.",
+        "none": "Graded on the trend alone, no target set."
+      },
       "deltaExplainer": {
         "title": "How the delta is computed",
         "description": "Change vs last week: {delta}",
