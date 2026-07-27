@@ -67,6 +67,7 @@ export async function readDashboardSnapshotCached(
     insightsCachedText: user.insightsCachedText,
     insightsCachedAt: user.insightsCachedAt,
     dashboardWidgetsJson: user.dashboardWidgetsJson,
+    thresholdsJson: user.thresholdsJson,
   };
 
   // v1.21.2 (A4) — the briefing recall + forward-look is locale-specific

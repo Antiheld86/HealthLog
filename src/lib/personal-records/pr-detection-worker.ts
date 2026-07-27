@@ -43,7 +43,13 @@ import { dayKeyForUserTz } from "@/lib/measurements/consolidation-tz";
 import { metricKeyForType } from "@/lib/measurements/cumulative-day-sum";
 import { pickCanonicalSourceRows } from "@/lib/analytics/source-priority";
 import { measurementTypeEnum } from "@/lib/validations/measurement";
-import { getPRDirection, isPRTrackable } from "./pr-direction";
+import {
+  getPRDirection,
+  isPRTrackable,
+  resolveWeightGoalDirection,
+  type PRDirectionContext,
+} from "./pr-direction";
+import { resolveWeightTargetOverride } from "@/lib/analytics/effective-range";
 import {
   Prisma,
   PersonalRecordDirection,
@@ -223,7 +229,14 @@ export async function detectPersonalRecordsForUser(
   // stays intact for tests.
   const userRow = await prisma.user.findUnique({
     where: { id: userId },
-    select: { timezone: true, sourcePriorityJson: true },
+    select: {
+      timezone: true,
+      sourcePriorityJson: true,
+      // v1.34 — the weight target the user set on `/targets`. Weight and BMI
+      // have no intrinsic record direction; they have the user's own once a
+      // target exists, and this is the read the v1.5.5 comment deferred.
+      thresholdsJson: true,
+    },
   });
   const tz =
     userRow?.timezone && userRow.timezone.length > 0
@@ -231,13 +244,31 @@ export async function detectPersonalRecordsForUser(
       : "Europe/Berlin";
   const priorityJson = userRow?.sourcePriorityJson ?? null;
 
+  // v1.34 — resolve the weight goal once per run: the user's own target band
+  // plus their latest reading decide which end of the scale is the record.
+  // The latest-weight read only fires when a target actually exists, so an
+  // account without one pays nothing.
+  const weightTarget = resolveWeightTargetOverride(userRow?.thresholdsJson);
+  let latestWeightKg: number | null = null;
+  if (weightTarget) {
+    const latestWeight = await prisma.measurement.findFirst({
+      where: { userId, type: "WEIGHT", deletedAt: null },
+      orderBy: { measuredAt: "desc" },
+      select: { value: true },
+    });
+    latestWeightKg = latestWeight?.value ?? null;
+  }
+  const directionContext: PRDirectionContext = {
+    weightGoal: resolveWeightGoalDirection(weightTarget, latestWeightKg),
+  };
+
   // ── Measurement-driven PRs (metricSlot = null) ─────────────
   for (const type of measurementTypeEnum.options) {
     const metricType = type as MeasurementType;
-    if (!isPRTrackable(metricType)) continue;
+    if (!isPRTrackable(metricType, directionContext)) continue;
     scanned += 1;
 
-    const direction = getPRDirection(metricType);
+    const direction = getPRDirection(metricType, directionContext);
     if (direction === null) continue;
 
     // Warm-up gate. Cheap count first so we don't pull a 30k-row

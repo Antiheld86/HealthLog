@@ -311,6 +311,28 @@ export function getEffectiveRange(
 }
 
 /**
+ * Narrow a raw `User.thresholdsJson` blob down to the user's WEIGHT override.
+ *
+ * The column is untyped JSON, so every consumer that wants the weight target
+ * has to validate it. v1.34 gave weight targets three new consumers at once
+ * (the Health Score, the dashboard bands, the PR direction) and one shared
+ * narrowing beats three hand-rolled casts. Returns `null` for anything that
+ * is not a well-formed, ordered pair of finite numbers — a malformed blob
+ * reads as "no target set", never as a target of `NaN`.
+ */
+export function resolveWeightTargetOverride(
+  thresholdsJson: unknown,
+): { min: number; max: number } | null {
+  if (!thresholdsJson || typeof thresholdsJson !== "object") return null;
+  const weight = (thresholdsJson as Record<string, unknown>).WEIGHT;
+  if (!weight || typeof weight !== "object") return null;
+  const { min, max } = weight as { min?: unknown; max?: unknown };
+  if (typeof min !== "number" || typeof max !== "number") return null;
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return null;
+  return { min, max };
+}
+
+/**
  * Convenience: resolve every supported metric at once. Useful for /targets
  * and the insight generator.
  */

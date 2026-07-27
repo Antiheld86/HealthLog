@@ -55,10 +55,10 @@ import {
 import { resolveUserTimezone } from "@/lib/tz/resolver";
 import {
   computeHealthScore,
-  defaultWeightTargetFromHeight,
   type ContributingSource,
   type HealthScoreInput,
   type HealthScoreResult,
+  type WeightTargetSource,
 } from "./health-score";
 import type { MeasurementSource } from "@/generated/prisma/client";
 
@@ -129,7 +129,17 @@ export interface HealthScoreFastPathInput {
    * delta), mirroring the `bpInTargetPctPriorWeek` fallback.
    */
   bpGradedScorePriorWeek?: number | null;
-  heightCm: number | null;
+  /**
+   * v1.34 — the weight yardstick, resolved by the caller through
+   * `buildHealthScoreWeightTarget`. The band the user set, or `null`
+   * when they set none. Required, not defaulted: a forgotten caller must
+   * fail to compile rather than silently fall back to a number nobody
+   * chose — which is exactly how `22 × height²` graded every account for
+   * months.
+   */
+  weightTarget: { min: number; max: number } | null;
+  /** Which yardstick `weightTarget` came from. Required for the same reason. */
+  weightTargetSource: WeightTargetSource;
   now: Date;
   /**
    * Per-type rollup coverage map. The caller (analytics route) probes
@@ -145,11 +155,15 @@ export interface HealthScoreFastPathInput {
    * `null` and the existing proportional null-redistribution re-scales
    * the surviving pillars to sum to 100. Without this a disabled-mood
    * account is silently penalised (or rewarded) by a pillar it can no
-   * longer see anywhere else in the product. Omit (or pass `true`) to
-   * keep the pre-v1.18.0 always-weighted behaviour — the field is
-   * additive so legacy callers are unchanged.
+   * longer see anywhere else in the product.
+   *
+   * v1.34 — required. The field used to default to `true`, and the
+   * dashboard snapshot never passed it: a mood-off account got a mood
+   * pillar in the hero ring and none in the Insights card, the same
+   * score composed two different ways on two surfaces. A required flag
+   * makes the compiler name every caller.
    */
-  moodEnabled?: boolean;
+  moodEnabled: boolean;
 }
 
 /**
@@ -163,11 +177,14 @@ export async function computeUserHealthScoreFastPath(
   input: HealthScoreFastPathInput,
 ): Promise<HealthScoreResult | null> {
   const DAY_MS = 24 * 60 * 60 * 1000;
-  const { userId, bpInTargetPct, heightCm, now } = input;
-  // v1.18.0 R4 — default-on so omitting the flag preserves the
-  // pre-v1.18.0 always-weighted mood pillar. Only an explicit `false`
-  // (the caller resolved `mood` as a disabled module) drops the pillar.
-  const moodEnabled = input.moodEnabled !== false;
+  const {
+    userId,
+    bpInTargetPct,
+    now,
+    moodEnabled,
+    weightTarget,
+    weightTargetSource,
+  } = input;
   // v1.4.38 — prior-week BP fallback. When the caller omits the field
   // we pin to the current value (pre-v1.4.38 behaviour) so the helper
   // stays a drop-in replacement for legacy callers; when the caller
@@ -448,8 +465,6 @@ export async function computeUserHealthScoreFastPath(
     });
   }
 
-  const fallbackTarget = defaultWeightTargetFromHeight(heightCm);
-
   const moodSeriesLast30d = moodRows
     .filter((r) => r.moodLoggedAt >= since30d)
     .map((r) => ({
@@ -489,7 +504,8 @@ export async function computeUserHealthScoreFastPath(
     // (the binary rate above only gates presence + is the secondary stat).
     bpGradedScore: input.bpGradedScore ?? null,
     weightSeriesLast30d,
-    weightTargetKg: fallbackTarget,
+    weightTarget,
+    weightTargetSource,
     moodEntriesLast30d: moodSeriesLast30d,
     medicationCompliance30,
     attribution: {
@@ -524,7 +540,8 @@ export async function computeUserHealthScoreFastPath(
         ? (input.bpGradedScore ?? null)
         : input.bpGradedScorePriorWeek,
     weightSeriesLast30d: weightSeriesPrev30d,
-    weightTargetKg: fallbackTarget,
+    weightTarget,
+    weightTargetSource,
     moodEntriesLast30d: moodSeriesPrev30d,
     medicationCompliance30: medicationCompliance30Previous,
   };

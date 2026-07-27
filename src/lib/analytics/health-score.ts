@@ -18,10 +18,20 @@
  *   + 0.30 * complianceRate       // mean of medication compliance30
  *   )
  *
- * When a component is null (insufficient data, no medications, no
- * weight target, etc.) the remaining weights are scaled proportionally
- * so they still sum to 100 — the score never lies about what was
- * actually measured.
+ * When a component is null (insufficient data, no medications, etc.)
+ * the remaining weights are scaled proportionally so they still sum to
+ * 100 — the score never lies about what was actually measured.
+ *
+ * Weight yardstick: the pillar grades against the user's OWN target
+ * band or against nothing at all. There is no population default and no
+ * derived stand-in — a band the user never set is not a band. Callers
+ * resolve the target through `buildHealthScoreWeightTarget`
+ * (`./health-score-inputs`) and pass `weightTarget: null` +
+ * `weightTargetSource: "none"` when the account carries no override; the
+ * trend is then scored on its own via `bareWeightTrendScore`. The
+ * resolved yardstick rides the result on
+ * `components.weight.targetSource` so every surface can say which
+ * yardstick graded the row.
  *
  * Bands:
  *   green  >= 75
@@ -54,6 +64,19 @@ export type HealthScoreBand = "green" | "yellow" | "red";
  * "appleHealth"` was previously spelled at four call sites.
  */
 export type ContributingSource = "manual" | "withings" | "appleHealth";
+
+/**
+ * Which yardstick graded the weight pillar.
+ *
+ * - `"user"` — an explicit target the user set on the targets surface
+ *   (`User.thresholdsJson`, resolved through `getEffectiveRange`).
+ * - `"none"` — no target on file; the pillar scores the bare trend and
+ *   the surfaces say so.
+ *
+ * There is deliberately no third token: a score must never grade a
+ * person against a band nobody set and nothing discloses.
+ */
+export type WeightTargetSource = "user" | "none";
 
 export type HealthScoreComponentSource = ContributingSource | "mixed" | "none";
 
@@ -105,8 +128,22 @@ export interface HealthScoreInput {
   bpGradedScore?: number | null;
   /** Weight readings over the last 30 days, ascending or unsorted (we sort). */
   weightSeriesLast30d: Array<{ date: string; kg: number }>;
-  /** User's stored target weight in kg, if any. */
-  weightTargetKg: number | null;
+  /**
+   * The user's own target weight band in kg, or `null` when they have
+   * not set one. The band arrives whole — the scorer neither widens nor
+   * narrows it, and it never synthesises one from height, BMI, or the
+   * user's own median. `null` routes the pillar through
+   * `bareWeightTrendScore`.
+   */
+  weightTarget: { min: number; max: number } | null;
+  /**
+   * Which yardstick the weight pillar is graded against. `"user"` means
+   * `weightTarget` carries an explicit override the user set on the
+   * targets surface; `"none"` means no target exists and the pillar
+   * scores the bare trend. Required so a caller cannot pass a band
+   * without declaring where it came from.
+   */
+  weightTargetSource: WeightTargetSource;
   /** Mood entries over the last 30 days. `score` 1..5 in HealthLog. */
   moodEntriesLast30d: Array<{ date: string; score: number }>;
   /** Per-active-medication 30-day compliance %. Empty array → null. */
@@ -138,13 +175,29 @@ export interface HealthScoreComponentDetail {
   asOf: string;
 }
 
+/**
+ * The weight pillar carries its yardstick alongside the value, so every
+ * surface can name what the row was graded against instead of leaving
+ * the reader to assume. The disclosure is the point: a target that grades
+ * silently is the defect this field closes.
+ */
+export interface HealthScoreWeightComponentDetail extends HealthScoreComponentDetail {
+  /** `"user"` when an explicit target graded the pillar, else `"none"`. */
+  targetSource: WeightTargetSource;
+  /**
+   * The band the pillar was graded against, in kg. Null exactly when
+   * `targetSource` is `"none"` — the pillar then scored the bare trend.
+   */
+  target: { min: number; max: number } | null;
+}
+
 export interface HealthScoreResult {
   /** 0..100, integer. Always present (defaults to 0 with all-null input). */
   score: number;
   band: HealthScoreBand;
   components: {
     bp: HealthScoreComponentDetail;
-    weight: HealthScoreComponentDetail;
+    weight: HealthScoreWeightComponentDetail;
     mood: HealthScoreComponentDetail;
     compliance: HealthScoreComponentDetail;
   };
@@ -232,12 +285,10 @@ export function coefficientOfVariation(values: number[]): number | null {
 /**
  * Score the recent weight trend on its own, with no target band.
  *
- * Used when the user has weight readings but no derivable target (their
- * profile has no `heightCm`, so `defaultWeightTargetFromHeight` returns
- * null). Without a goal we can't say "closing the gap", but a sustained
- * upward weight trend is the one direction that is broadly an adverse
- * signal independent of any individual target, so we score on that
- * asymmetry:
+ * Used whenever the user has weight readings but has not set a target.
+ * Without a goal we can't say "closing the gap", but a sustained upward
+ * weight trend is the one direction that is broadly an adverse signal
+ * independent of any individual target, so we score on that asymmetry:
  *
  * - Flat / stable (slope ≈ 0)        → 75 (maintenance is a solid result).
  * - Gentle-to-steep decline (slope<0) → 75 → 100 (favourable; saturating).
@@ -281,13 +332,13 @@ function bareWeightTrendScore(
  *   doesn't read more positive than a 0.05 kg/day drop.
  * - Below the band → an upward slope is closing.
  *
- * No target (no stored height → no BMI-22 fallback band) but ≥ 2
- * readings → fall back to scoring the **bare trend** on its own, so a
- * user with weight data still gets a populated, weighted pillar instead
- * of an empty `{value:null, weight:0, source:"none"}`. See
- * `bareWeightTrendScore` for the curve and its rationale. We do NOT
- * fabricate a target from the user's own median and pretend it's a goal
- * — the trend is scored honestly, without a target.
+ * No target set but ≥ 2 readings → fall back to scoring the **bare
+ * trend** on its own, so a user with weight data still gets a populated,
+ * weighted pillar instead of an empty `{value:null, weight:0,
+ * source:"none"}`. See `bareWeightTrendScore` for the curve and its
+ * rationale. We do NOT fabricate a target — not from height, not from
+ * the user's own median — and pretend it's a goal; the trend is scored
+ * honestly, without one.
  *
  * Insufficient data (< 2 readings) → null regardless of target.
  */
@@ -383,8 +434,13 @@ export function computeHealthScore(
         ? clampToHundred(input.bpGradedScore)
         : clampToHundred(input.bpInTargetRate);
 
-  const target = deriveWeightTarget(input.weightTargetKg);
-  const weightValue = weightTrendAlignment(input.weightSeriesLast30d, target);
+  // The band arrives whole from the caller's `getEffectiveRange` read —
+  // no expansion, no fabrication. `null` scores the bare trend.
+  const weightTarget = input.weightTarget;
+  const weightValue = weightTrendAlignment(
+    input.weightSeriesLast30d,
+    weightTarget,
+  );
 
   const moodValue = moodStability(input.moodEntriesLast30d);
 
@@ -418,6 +474,10 @@ export function computeHealthScore(
       },
     },
     windowEndAt,
+    {
+      source: input.weightTargetSource,
+      target: input.weightTargetSource === "user" ? weightTarget : null,
+    },
   );
 
   let raw = 0;
@@ -482,6 +542,10 @@ function redistribute(
     }
   >,
   windowEndAt: string,
+  weightYardstick: {
+    source: WeightTargetSource;
+    target: { min: number; max: number } | null;
+  },
 ): HealthScoreResult["components"] {
   const present: Array<keyof typeof BASE_WEIGHTS> = [];
   for (const key of ["bp", "weight", "mood", "compliance"] as const) {
@@ -511,7 +575,11 @@ function redistribute(
   };
   return {
     bp: detailFor("bp"),
-    weight: detailFor("weight"),
+    weight: {
+      ...detailFor("weight"),
+      targetSource: weightYardstick.source,
+      target: weightYardstick.target,
+    },
     mood: detailFor("mood"),
     compliance: detailFor("compliance"),
   };
@@ -541,29 +609,4 @@ function deriveWindowEndAt(input: HealthScoreInput): string {
   }
   if (latest === -Infinity) return new Date(0).toISOString();
   return new Date(latest).toISOString();
-}
-
-/**
- * The `weightTargetKg` input is a single number; we expand it to a
- * narrow ±2 kg band so the alignment helper has a "target zone" to
- * test inclusion against. Null target → null band → null component.
- */
-function deriveWeightTarget(
-  targetKg: number | null,
-): { min: number; max: number } | null {
-  if (targetKg === null || !Number.isFinite(targetKg)) return null;
-  return { min: targetKg - 2, max: targetKg + 2 };
-}
-
-/**
- * Helper for callers that have only height + want a BMI-22 fallback
- * target. Surfaces the same ±2 kg band semantics as the in-house
- * derivation so the math is consistent across callers.
- */
-export function defaultWeightTargetFromHeight(
-  heightCm: number | null,
-): number | null {
-  if (heightCm === null || heightCm <= 0) return null;
-  const heightM = heightCm / 100;
-  return Math.round(22 * heightM * heightM * 10) / 10;
 }
