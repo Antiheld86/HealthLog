@@ -369,7 +369,6 @@ export async function buildFullBackupPayload(
       unit: n.unit,
       source: n.source,
     })),
-    manifest: records.manifest,
   };
 
   return {
