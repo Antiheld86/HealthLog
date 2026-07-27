@@ -21,21 +21,18 @@
  *
  * `BACKED_UP`   — the account would lose something real if this were missing.
  *
- *                 **Read this as "must be", not "is".** Today the guard beside
- *                 this file checks only that every model HAS a verdict. The
- *                 two-ended check — that each `BACKED_UP` model has both a
- *                 payload reader and a restore branch — does not exist yet,
- *                 and roughly 31 of the models listed here have neither end.
- *                 Three were closed in v1.33.1 (custom cycle symptoms,
- *                 nutrient day totals, custom mood tags); the rest are named
- *                 here so the gap is written down instead of invisible, which
- *                 is the only honest thing this list can do before the guard
- *                 exists.
+ *                 Split in two below, because "must be carried" and "is
+ *                 carried" are different claims and this file used to make
+ *                 only the first. {@link TWO_ENDED_MODELS} names the models
+ *                 with BOTH a payload reader and a restore branch, checked by
+ *                 the guard beside this file. {@link COVERAGE_PENDING} names
+ *                 the rest, each with what an account loses meanwhile.
  *
  *                 An earlier draft of this comment claimed the two-ended guard
- *                 in the present tense. It did not exist then either. That is
- *                 the same defect this file was written to prevent, so it is
- *                 recorded rather than quietly corrected.
+ *                 in the present tense. It did not exist then. That is the same
+ *                 defect this file was written to prevent, so it is recorded
+ *                 rather than quietly corrected — and it is why the guard now
+ *                 reads the source rather than trusting a list.
  * `DERIVED`     — recomputable from `BACKED_UP` rows. Leaving it out keeps the
  *                 file smaller and cannot lose anything; the reason names what
  *                 recomputes it.
@@ -129,6 +126,148 @@ export const BACKED_UP_MODELS = [
   "ReminderPhaseConfig",
   "ConsentReceipt",
 ] as const;
+
+/**
+ * The files that carry a backed-up model OUT of the database, and the files
+ * that put one back.
+ *
+ * Declared rather than discovered, because discovery is what keeps going
+ * wrong here. A previous review grepped the restore ROUTE, concluded the cycle
+ * data was never restored, and had to retract it publicly: the route delegates
+ * to `restoreCycleData`, and a grep of the route alone lies. The profile and
+ * custom-metric pair added later delegates the same way, on purpose.
+ *
+ * Keeping both lists here means a new section has to say where its two ends
+ * live, and the guard reads those files instead of guessing which ones matter.
+ */
+export const BACKUP_WRITER_FILES: readonly string[] = [
+  "src/lib/export/full-backup-payload.ts",
+  // Measurements are read through this pager, not directly. The guard caught
+  // its absence from this list on the first run — the same "the caller
+  // delegates" mistake the list exists to prevent, made while writing the list.
+  "src/lib/export/paged-measurements.ts",
+  "src/lib/export/records-backup.ts",
+  "src/lib/export/profile-backup.ts",
+  "src/lib/cycle/backup.ts",
+];
+
+export const BACKUP_RESTORE_FILES: readonly string[] = [
+  "src/app/api/admin/backups/[id]/restore/route.ts",
+  "src/lib/export/profile-backup.ts",
+  "src/lib/cycle/backup.ts",
+];
+
+/**
+ * Backed-up models that genuinely travel BOTH ways.
+ *
+ * The guard checks each of these against the files above: a read in a writer
+ * file and a write in a restore file, counting a relation carried inside its
+ * parent (`include: { schedules: true }` out, `schedules: { create: … }` back)
+ * as covered, because that is how the child rows actually ride.
+ *
+ * A model moves onto this list when its two ends land, never before. That is
+ * the whole point of the split — a verdict of `BACKED_UP` is an intention, and
+ * an intention is what the nutrient day totals had while a restore was throwing
+ * them away and reporting success.
+ */
+export const TWO_ENDED_MODELS: readonly string[] = [
+  "Measurement",
+  "Medication",
+  "MedicationSchedule",
+  "MedicationIntakeEvent",
+  "MoodEntry",
+  "MoodEntryTagLink",
+  "MoodTag",
+  "LabResult",
+  "Biomarker",
+  "Allergy",
+  "FamilyHistoryEntry",
+  "IllnessEpisode",
+  "IllnessDayLog",
+  "IllnessSymptomLink",
+  "UserHealthProfile",
+  "CycleProfile",
+  "MenstrualCycle",
+  "CycleDayLog",
+  "CycleSymptom",
+  "CycleSymptomLink",
+  "CustomMetric",
+  "CustomMetricEntry",
+  "Workout",
+  "NutrientIntakeDay",
+  "InboundDocument",
+];
+
+/**
+ * Backed-up models that do NOT travel yet, each with what an account loses
+ * until it does.
+ *
+ * This is a debt register, not a design. Every line is a restore that comes
+ * back short without saying so, which is the failure mode the whole file
+ * exists to make visible. The reasons say what goes missing rather than
+ * "not yet", so the next person can order the work by what it costs a person
+ * rather than by what is cheapest to write.
+ */
+export const COVERAGE_PENDING: Readonly<Record<string, string>> = {
+  MedicationScheduleRevision:
+    "The history of how a schedule changed. Without it a restored medication keeps today's schedule and loses the record of when the dose or timing moved, which is the part a doctor asks about.",
+  MedicationDoseChange:
+    "Titration history — when a dose went up or down and by how much. A restore rebuilds the current dose and drops the ramp that led to it.",
+  MedicationPauseEra:
+    "The spans where a medication was deliberately paused. Without them the compliance recomputation counts a deliberate pause as missed doses and the restored account looks non-adherent.",
+  MedicationSideEffect:
+    "Side effects the person recorded against a drug. Restoring the drug without them loses the reason someone may have stopped taking it.",
+  MedicationEfficacyTarget:
+    "What a medication was supposed to move, and by how much. The drug comes back with no statement of what it was for.",
+  MedicationInventoryItem:
+    "Pack sizes and remaining stock. A restored account reports no supply and every low-stock reminder has to be reconstructed by hand.",
+  MedicationInventoryEvent:
+    "The ledger of refills and consumption behind the stock count. Without it the count above cannot be rebuilt even in principle.",
+  MoodTagCategory:
+    "Categories a person created to group their own mood factors. Custom tags restore into a grouping that no longer exists.",
+  MoodTagHidden:
+    "Which seeded mood tags the account chose to hide. A restore un-hides every one, so the mood editor comes back cluttered with tags the person removed on purpose.",
+  MentalHealthAssessment:
+    "Completed WHO-5, PHQ and GAD instruments with their scores and dates. Clinically meaningful history that no integration can re-sync, and the single largest gap on this list.",
+  EcgRecording:
+    "ECG traces and their rhythm classification. The originating device may still hold them, but a self-hoster who exported and wiped has nothing to re-sync from.",
+  MeasurementReminder:
+    "Per-metric reminder cadences the person configured. A restore leaves the account silent until each one is set up again.",
+  WorkoutRoute:
+    "GPS traces. Deliberately absent from the payload today and DISCLOSED as absent in the file's own manifest, which is why this is a documented exclusion rather than a silent one — but it is still a loss for a self-hoster with no other copy.",
+  WorkoutSamples:
+    "Per-sample heart-rate and pace series behind a workout summary. Same disclosed-exclusion status as the routes above, same cost.",
+  PersonalRecord:
+    "Bests the account accumulated. Recomputable in principle from measurements and workouts, but nothing recomputes them today, so in practice they are lost.",
+  UserAchievement:
+    "Milestones the account earned, with the date each was reached. The date is the part that cannot be recovered.",
+  EnvironmentContext:
+    "Per-day environmental readings joined to the record. Re-fetchable for recent days only; older history is gone once the provider window closes.",
+  EnvironmentTravelLocation:
+    "Where the person was on a given day, which is what makes the environmental readings mean anything. Never re-derivable.",
+  DocumentConditionLink:
+    "Which documents were filed against which condition. Documents and conditions both restore; the filing between them does not, so a restored vault is unsorted.",
+  ExtractedFact:
+    "Facts read out of a document by the AI pass, with their provenance back to the page. Re-derivable only by re-running the extraction against a provider, at the operator's cost.",
+  CoachConversation:
+    "The thread structure of past coaching conversations — which messages belong together and what each exchange was about. Without it the messages below, if they were ever carried, would restore as one undifferentiated pile.",
+  CoachMessage:
+    "The messages themselves, encrypted at rest. The largest volume of free text an account owns after its documents.",
+  CoachConversationDocument:
+    "Which documents a conversation was grounded in — the provenance that makes an old answer checkable.",
+  CoachFact:
+    "Durable facts the Coach was told to remember. A restore makes the account re-tell its history.",
+  CoachPlan:
+    "An agreed plan and its progress. Restoring the conversation without the plan keeps the talk and loses the commitment.",
+  CoachReminder:
+    "Reminders the Coach agreed to send. A restored account silently stops sending them.",
+  NotificationPreference:
+    "Per-event channel and quiet-hours choices. A restore reverts to defaults, so an account that had deliberately silenced a category starts being notified again.",
+  ReminderPhaseConfig:
+    "Custom reminder phase timings. Same shape of loss as the preferences above.",
+  ConsentReceipt:
+    "The record of what the account agreed to and when. Arguably belongs with the instance rather than the account, and that question has to be settled before this one can be carried either way.",
+};
 
 /**
  * Recomputable from backed-up rows. The reason names what rebuilds it, so a

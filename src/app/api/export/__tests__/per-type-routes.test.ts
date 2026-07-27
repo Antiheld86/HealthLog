@@ -77,9 +77,13 @@ function mkReq(url: string): NextRequest {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  // `resetAllMocks` clears the inline default, and the full-backup payload
-  // builder reads this unconditionally.
+  // `resetAllMocks` clears the inline defaults, and the full-backup payload
+  // builder reads these unconditionally.
   vi.mocked(prisma.nutrientIntakeDay.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.userHealthProfile.findUnique).mockResolvedValue(
+    null as never,
+  );
+  vi.mocked(prisma.customMetric.findMany).mockResolvedValue([] as never);
 });
 
 afterEach(() => {
