@@ -25,7 +25,11 @@ import {
   getPhaseMessage,
   getPhaseKeyboard,
 } from "@/lib/jobs/reminder-phases";
-import { isMedicationReminderClientManaged } from "@/lib/validations/notification-prefs";
+import {
+  hasReminderDedupAnchor,
+  medicationReminderDedupKey,
+  writeReminderDedupAnchor,
+} from "@/lib/notifications/reminder-dedup";
 import {
   getUserTodayBounds as getUserTodayBoundsUtil,
   localHmAsUtc,
@@ -167,12 +171,6 @@ export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
               // Used to localise the reminder title / message / keyboard
               // labels per user. Null falls back to the app default.
               locale: true,
-              // v1.4.49 M-DOUBLE-REMINDER — read the per-user prefs
-              // blob so the dispatch step can skip APNs sends for users
-              // whose iOS client has opted in to local SpeziScheduler
-              // reminders. Null = legacy default (clientManaged: false),
-              // i.e. the server reminder fires as before.
-              notificationPrefs: true,
             },
           },
         },
@@ -380,23 +378,29 @@ export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
               continue;
             }
 
-            // Check if this phase was already notified today for this
-            // time-of-day.
-            const existingMessage =
-              await prisma.telegramReminderMessage.findUnique({
-                where: {
-                  medicationId_scheduleId_date_phase_timeOfDay: {
-                    medicationId: med.id,
-                    scheduleId: schedule.id,
-                    date: localDateStr,
-                    phase: currentPhase,
-                    timeOfDay: dedupTimeOfDay,
-                  },
-                },
-              });
+            // Already notified for this slot, phase and local day? The
+            // anchor lives in `push_attempts` and is stamped for every
+            // dispatched slot regardless of which channels delivered. It
+            // used to be the Telegram message ledger, which is written only
+            // when a Telegram send succeeds — so a user on email / APNs /
+            // ntfy had no row and the tick re-sent the same overdue notice
+            // every 15 minutes for the rest of the day.
+            const dedupReason = medicationReminderDedupKey({
+              medicationId: med.id,
+              scheduleId: schedule.id,
+              slotTime,
+              phase: currentPhase,
+              localDate: localDateStr,
+            });
 
-            if (existingMessage) {
-              // Already sent for this phase + time-of-day — skip
+            if (
+              await hasReminderDedupAnchor(prisma, {
+                userId: med.user.id,
+                eventType: "MEDICATION_REMINDER",
+                reason: dedupReason,
+                now,
+              })
+            ) {
               continue;
             }
 
@@ -449,28 +453,14 @@ export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
               }
             }
 
-            // Send notification if enabled
+            // Send notification if enabled.
+            //
+            // `medication.clientManaged` is NOT consulted here. It suppresses
+            // the server's APNs send only — the iOS client owns the local
+            // banner, every other channel the user configured still delivers
+            // — so the gate lives in the dispatcher's APNs branch, which is
+            // the only place that knows whether an APNs send was on the table.
             if (med.notificationsEnabled) {
-              // v1.4.49 M-DOUBLE-REMINDER — opt-in client-managed
-              // suppression. ONLY suppresses MEDICATION_REMINDER.
-              if (
-                isMedicationReminderClientManaged(med.user.notificationPrefs)
-              ) {
-                const doseAtIso = slotScheduledFor.toISOString();
-                evt.addMeta(
-                  "medication_reminder_suppressed_client_managed",
-                  `${med.name}:${slotTime}`,
-                );
-                evt.addMeta("medication_reminder_suppressed_meta", {
-                  user_id: med.user.id,
-                  medication_id: med.id,
-                  schedule_id: schedule.id,
-                  phase: currentPhase,
-                  dose_at: doseAtIso,
-                });
-                continue;
-              }
-
               const { title, message } = getPhaseMessage(
                 currentPhase,
                 med.name,
@@ -494,6 +484,15 @@ export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
                 "notification_phase",
                 `${currentPhase}:${med.name}:${slotTime}`,
               );
+
+              // Stamp the dedup anchor BEFORE dispatching: a crash between
+              // the two costs this phase's notice, a repeat costs the user
+              // a notification every 15 minutes until the day rolls.
+              await writeReminderDedupAnchor(prisma, {
+                userId: med.user.id,
+                eventType: "MEDICATION_REMINDER",
+                reason: dedupReason,
+              });
 
               try {
                 await dispatchNotification({
