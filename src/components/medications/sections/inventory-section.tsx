@@ -75,6 +75,7 @@ import {
   apiPost,
   apiPut,
 } from "@/lib/api/api-fetch";
+import { startsInUseClock } from "@/lib/medications/inventory/clock-container-types";
 import type { SupplySummary } from "@/lib/medications/inventory/summary";
 
 /**
@@ -168,15 +169,6 @@ const STATE_BADGE: Record<
   EXPIRED: "destructive",
   USED_UP: "outline",
 };
-
-/**
- * Container kinds whose first opening starts a 30-day degradation clock.
- * Mirrors `IN_USE_CLOCK_CONTAINER_TYPES` in
- * `src/lib/medications/inventory/state-machine.ts` — the server owns the
- * transition; the client only needs to know which helper text to show
- * beside the opening date.
- */
-const CLOCK_CONTAINER_TYPES: readonly ContainerType[] = ["PEN", "AMPOULE"];
 
 /** Default container kind for the register flow, from the delivery form. */
 function defaultContainerType(deliveryForm: string | undefined): ContainerType {
@@ -971,7 +963,7 @@ export function AdjustInventoryDialog({
             id="inventory-edit-opened-helper"
             className="text-muted-foreground text-xs"
           >
-            {CLOCK_CONTAINER_TYPES.includes(item.containerType)
+            {startsInUseClock(item.containerType)
               ? t("medications.detail.bestand.editOpenedHelperClock")
               : t("medications.detail.bestand.editOpenedHelper")}
           </p>
