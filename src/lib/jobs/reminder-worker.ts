@@ -8,8 +8,8 @@
  * the domain registrars under `src/lib/jobs/reminder/`. Each registrar owns the
  * four facts the v1.4.37 dead-queue guards pin — the queue-name constant, its
  * `allQueues` membership, its `[QUEUE, CRON]` schedule tuple, and its
- * `boss.work(QUEUE, …, handler)` binding — so a queue can never be declared
- * without being provisioned, scheduled, and drained.
+ * `createAndWork(boss, QUEUE, …, handler)` binding — so a queue can never be
+ * declared without being provisioned, scheduled, and drained.
  *
  * Usage: Run as a standalone process or call startReminderWorker() from a
  * custom server setup. In dev, use: npx tsx src/lib/jobs/reminder-worker.ts
