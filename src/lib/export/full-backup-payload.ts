@@ -326,6 +326,14 @@ export async function buildFullBackupPayload(
       categoryId: tag.categoryId,
       kind: tag.kind,
       isActive: tag.isActive,
+      icon: tag.icon,
+      sortOrder: tag.sortOrder,
+      // Ciphertext verbatim, like every other *Encrypted column in a DR
+      // payload: the same instance's key reads it back unchanged.
+      labelEncrypted: tag.labelEncrypted,
+      scaleMin: tag.scaleMin,
+      scaleMax: tag.scaleMax,
+      inverse: tag.inverse,
     })),
     cycleProfile: cycle.cycleProfile,
     cycles: cycle.cycles,

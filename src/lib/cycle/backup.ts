@@ -230,6 +230,7 @@ export async function buildCycleBackupSection(
       icon: sym.icon,
       sortOrder: sym.sortOrder,
       isActive: sym.isActive,
+      labelEncrypted: sym.labelEncrypted,
     })),
   };
 }
@@ -404,6 +405,7 @@ export async function restoreCycleData(
         icon: sym.icon ?? null,
         sortOrder: sym.sortOrder,
         isActive: sym.isActive,
+        labelEncrypted: sym.labelEncrypted ?? null,
       },
       // `key` is globally unique, so a seeded key would collide. Leave the
       // catalogue row alone: the account's links resolve against it either way.

@@ -20,10 +20,22 @@
  * ── The three verdicts ──────────────────────────────────────────────────────
  *
  * `BACKED_UP`   — the account would lose something real if this were missing.
- *                 The guard requires BOTH a payload reader AND a restore
- *                 branch for every one of these, because carried-but-never-
- *                 restored is the exact defect this file exists to prevent and
- *                 it looks identical to working until someone needs it.
+ *
+ *                 **Read this as "must be", not "is".** Today the guard beside
+ *                 this file checks only that every model HAS a verdict. The
+ *                 two-ended check — that each `BACKED_UP` model has both a
+ *                 payload reader and a restore branch — does not exist yet,
+ *                 and roughly 31 of the models listed here have neither end.
+ *                 Three were closed in v1.33.1 (custom cycle symptoms,
+ *                 nutrient day totals, custom mood tags); the rest are named
+ *                 here so the gap is written down instead of invisible, which
+ *                 is the only honest thing this list can do before the guard
+ *                 exists.
+ *
+ *                 An earlier draft of this comment claimed the two-ended guard
+ *                 in the present tense. It did not exist then either. That is
+ *                 the same defect this file was written to prevent, so it is
+ *                 recorded rather than quietly corrected.
  * `DERIVED`     — recomputable from `BACKED_UP` rows. Leaving it out keeps the
  *                 file smaller and cannot lose anything; the reason names what
  *                 recomputes it.

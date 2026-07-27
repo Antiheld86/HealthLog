@@ -16,8 +16,11 @@ import {
  *
  * This is the first half of the backup guard: classification. The second half
  * — that every `BACKED_UP` model actually has a payload reader AND a restore
- * branch — lives beside it, because a model that is classified as carried and
- * then never restored is the defect, not the fix.
+ * branch — DOES NOT EXIST YET. It is the harder half and the one that matters,
+ * because a model classified as carried and then never restored is the defect
+ * rather than the fix, and this test would pass either way.
+ *
+ * Until it lands, `BACKED_UP` means "must be carried", not "is carried".
  *
  * The failure this prevents: a model is added to `schema.prisma`, it is
  * user-scoped from birth, and it is outside the backup by default. Nothing

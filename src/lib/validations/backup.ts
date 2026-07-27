@@ -331,6 +331,19 @@ const customMoodTagSchema = z
     // "BINARY" | "RATED", enforced in app code rather than a DB enum.
     kind: z.string().min(1),
     isActive: z.boolean().default(true),
+    icon: z.string().nullable().optional(),
+    sortOrder: z.number().int().default(0),
+    // The user's own words for the tag, encrypted at rest and carried
+    // verbatim. Without it the tag comes back as a bare key and the person
+    // who named it "Migräne" gets `custom:cm3x9…` instead.
+    labelEncrypted: z.string().nullable().optional(),
+    // The scale a RATED factor was recorded on. `inverse` marks a factor
+    // where a HIGH value is bad (stress, conflict). Dropping it does not lose
+    // a label, it silently reverses the meaning of every rating already
+    // stored against that tag.
+    scaleMin: z.number().int().default(1),
+    scaleMax: z.number().int().default(5),
+    inverse: z.boolean().default(false),
   })
   .passthrough();
 
@@ -372,6 +385,8 @@ const customCycleSymptomSchema = z
     icon: z.string().nullable().optional(),
     sortOrder: z.number().int().default(0),
     isActive: z.boolean().default(true),
+    // Same reasoning as the mood tag's: the user's own words live here.
+    labelEncrypted: z.string().nullable().optional(),
   })
   .passthrough();
 

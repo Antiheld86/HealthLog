@@ -4499,7 +4499,7 @@
           },
           "fullBackup": {
             "title": "Copia completa",
-            "description": "Todos tus datos en un único archivo JSON: mediciones, medicamentos, estado de ánimo, ciclo, analíticas, episodios de enfermedad, alergias, antecedentes familiares y entrenamientos. Mismo formato que la copia automática semanal.",
+            "description": "Tus mediciones, medicamentos, estado de ánimo, ciclo, analíticas, episodios de enfermedad, alergias, antecedentes familiares, nutrientes y entrenamientos en un archivo JSON. El mismo formato que la copia automática semanal. Algunos tipos de registro aún no se incluyen: el manifiesto del archivo indica qué contiene.",
             "scopeNote": "Los metadatos de los documentos y el resumen de IA, si existe, se incluyen en texto plano; los archivos originales de los documentos y los datos de rutas GPS/muestras de los entrenamientos no están incluidos — descárgalos por separado desde el archivo de documentos o la exportación de entrenamientos.",
             "encryptToggle": "Cifrar con una contraseña",
             "passphrasePlaceholder": "Contraseña (mín. 12 caracteres)",

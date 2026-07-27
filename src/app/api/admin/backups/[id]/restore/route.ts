@@ -620,6 +620,12 @@ const handler = apiHandler(
                   categoryId: tag.categoryId,
                   kind: tag.kind,
                   isActive: tag.isActive,
+                  icon: tag.icon ?? null,
+                  sortOrder: tag.sortOrder,
+                  labelEncrypted: tag.labelEncrypted ?? null,
+                  scaleMin: tag.scaleMin,
+                  scaleMax: tag.scaleMax,
+                  inverse: tag.inverse,
                 },
                 // `key` is globally unique, so a seeded key would collide.
                 // Leave the catalogue row alone; the links resolve either way.

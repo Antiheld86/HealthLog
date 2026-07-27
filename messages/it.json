@@ -4499,7 +4499,7 @@
           },
           "fullBackup": {
             "title": "Backup completo",
-            "description": "Tutti i tuoi dati in un unico file JSON: misurazioni, farmaci, umore, ciclo, esami di laboratorio, episodi di malattia, allergie, anamnesi familiare e allenamenti. Stesso formato del backup automatico settimanale.",
+            "description": "Le tue misurazioni, i farmaci, l'umore, il ciclo, le analisi, gli episodi di malattia, le allergie, l'anamnesi familiare, i nutrienti e gli allenamenti in un unico file JSON. Stesso formato del backup automatico settimanale. Alcuni tipi di dato non sono ancora inclusi: il manifest del file indica cosa contiene.",
             "scopeNote": "I metadati dei documenti e il riepilogo IA, se presente, sono inclusi in chiaro; i file originali dei documenti e i dati di percorso GPS/campionamento degli allenamenti non lo sono — scaricali separatamente dall'archivio documenti o dall'esportazione degli allenamenti.",
             "encryptToggle": "Cifra con una passphrase",
             "passphrasePlaceholder": "Passphrase (min. 12 caratteri)",
