@@ -469,7 +469,7 @@
     "layoutTileColumn": "Tile",
     "layoutChartColumn": "Chart",
     "layoutNativeOnlyTitle": "Shown in the mobile app",
-    "layoutNativeOnlyHint": "The mobile app draws these; this page does not. They are stored in the same layout, so switching one off here turns it off there as well.",
+    "layoutNativeOnlyHint": "The mobile app draws these widgets; this page does not. They are stored in the same layout, so this is where their visibility is set.",
     "dragHandle": "Drag to reorder",
     "dragHandleHint": "Drag the handle to reorder this widget. You can also use the Up and Down arrow buttons, or focus the handle and press Space and the arrow keys.",
     "emptyTitle": "Your dashboard is empty",

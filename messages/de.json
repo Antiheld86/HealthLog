@@ -469,7 +469,7 @@
     "layoutTileColumn": "Kachel",
     "layoutChartColumn": "Chart",
     "layoutNativeOnlyTitle": "In der mobilen App sichtbar",
-    "layoutNativeOnlyHint": "Diese Widgets zeichnet die mobile App, nicht diese Seite. Sie liegen im selben Layout — was du hier ausschaltest, ist auch dort aus.",
+    "layoutNativeOnlyHint": "Diese Widgets zeichnet die mobile App, nicht diese Seite. Sie liegen im selben gespeicherten Layout — hier wird ihre Sichtbarkeit gesetzt.",
     "dragHandle": "Zum Verschieben ziehen",
     "dragHandleHint": "Pfeiltasten Hoch/Runter, oder Leertaste plus Pfeiltasten am fokussierten Griff.",
     "emptyTitle": "Dein Dashboard ist leer",

@@ -469,7 +469,7 @@
     "layoutTileColumn": "Kafelek",
     "layoutChartColumn": "Wykres",
     "layoutNativeOnlyTitle": "Widoczne w aplikacji mobilnej",
-    "layoutNativeOnlyHint": "Te widżety rysuje aplikacja mobilna, nie ta strona. Są zapisane w tym samym układzie, więc wyłączenie tutaj wyłącza je również tam.",
+    "layoutNativeOnlyHint": "Te widżety rysuje aplikacja mobilna, nie ta strona. Są zapisane w tym samym układzie, więc to tutaj ustawia się ich widoczność.",
     "dragHandle": "Przeciągnij, aby zmienić kolejność",
     "dragHandleHint": "Strzałki Góra/Dół, lub Spacja plus strzałki na zaznaczonym uchwycie.",
     "emptyTitle": "Twój panel jest pusty",
