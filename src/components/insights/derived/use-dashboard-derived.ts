@@ -43,11 +43,24 @@ export const SECTION_MOBILITY: { metric: DerivedMetricId; type: string }[] = [
 ];
 
 /**
+ * v1.34.0 — the cumulative metrics that carry a same-time baseline. Order is
+ * the order the section renders in: steps leads because it is the number
+ * people actually check, and the one a "how am I doing" question is usually
+ * about.
+ */
+export const SECTION_CUMULATIVE: string[] = [
+  "ACTIVITY_STEPS",
+  "ACTIVE_ENERGY_BURNED",
+  "WALKING_RUNNING_DISTANCE",
+  "FLIGHTS_CLIMBED",
+];
+
+/**
  * The full set of tokens the overview reads in one batch — the five wellness
  * scores + the four derived re-frames + one baseline per vital (minus HRV,
- * which has its own balance tile) + the mobility/body metrics. The
- * coincident-deviation flag is read by the dedicated "Today's signal" card,
- * not here.
+ * which has its own balance tile) + the mobility/body metrics + one same-time
+ * baseline per cumulative metric. The coincident-deviation flag is read by the
+ * dedicated "Today's signal" card, not here.
  */
 export function dashboardTokens(): DerivedBatchToken[] {
   const tokens: DerivedBatchToken[] = [
@@ -68,6 +81,9 @@ export function dashboardTokens(): DerivedBatchToken[] {
   }
   for (const { metric } of SECTION_MOBILITY) {
     tokens.push({ metric });
+  }
+  for (const type of SECTION_CUMULATIVE) {
+    tokens.push({ metric: "SAME_TIME_BASELINE", type });
   }
   return tokens;
 }

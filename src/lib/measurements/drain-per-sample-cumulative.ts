@@ -18,7 +18,12 @@
  *   5. Otherwise preserve legacy late-increment semantics, explicitly stamp
  *      LEGACY_UNKNOWN, and increment syncVersion; fresh/adopted rows are also
  *      LEGACY_UNKNOWN.
- *   6. DELETE the original per-sample rows in the same transaction.
+ *   6. Fold the day's still-live per-sample rows into 24 hourly running totals
+ *      and merge them into `IntradayCumulativeProfile` (v1.34.0). This runs
+ *      inside the same transaction and BEFORE the delete: the shape of a
+ *      cumulative day is the only substrate a "typical by 21:00" comparison
+ *      can be built from, and step 7 is where it used to be destroyed.
+ *   7. DELETE the original per-sample rows in the same transaction.
  *
  * Designed to be invoked by both:
  *   - the CLI at `scripts/drain-per-sample-cumulative.ts`
@@ -56,6 +61,11 @@ import {
   localStartOfDay,
   type PerSampleRow,
 } from "./consolidation-tz";
+import {
+  foldHourlyCumulative,
+  mergeIntradayCumulativeProfile,
+  pruneIntradayCumulativeProfiles,
+} from "./intraday-cumulative-profile";
 
 // Re-export the shared timezone day-math primitives + `PerSampleRow`
 // shape so every established `drain-per-sample-cumulative` import site
@@ -128,6 +138,11 @@ export interface DrainSummary {
      * whole global walk — every other day still collapses.
      */
     daysFailed: number;
+    /**
+     * Intraday cumulative profiles dropped past the retention bound. Zero on
+     * a dry run, and zero on most nights — the bound is a year and a bit.
+     */
+    profilesPruned: number;
   };
 }
 
@@ -202,6 +217,7 @@ export async function drainPerSampleCumulative(
       perSampleRowsDeleted: 0,
       dailyRowsUpserted: 0,
       daysFailed: 0,
+      profilesPruned: 0,
     },
   };
 
@@ -249,6 +265,8 @@ export async function drainPerSampleCumulative(
       reducedValue,
       dayRows,
       sourceRowIds,
+      tz,
+      dateKey,
     }): Promise<DayWriteOutcome> => {
       // Adopt-in-place canonical-noon resolution + a single P2002 retry,
       // mirroring `dense-intraday-retention.ts`. Two unique indexes can
@@ -323,15 +341,23 @@ export async function drainPerSampleCumulative(
             AUTHORITATIVE_AGGREGATION_PROVENANCE.has(adoptProvenance);
 
           // Re-read contributors under the advisory lock. A serialized loser
-          // sees zero live rows and therefore performs no canonical update.
+          // sees zero live rows and therefore performs no canonical update —
+          // and, below, contributes nothing to the day's stored shape either.
+          // One read serves both: the sum the canonical row needs and the
+          // timestamps the hourly fold needs.
+          const liveRows = await tx.measurement.findMany({
+            where: { id: { in: sourceRowIds } },
+            select: {
+              id: true,
+              type: true,
+              value: true,
+              measuredAt: true,
+              externalId: true,
+            },
+          });
           const liveIncrement =
             eidRow !== null && !protectedAggregate
-              ? (
-                  await tx.measurement.findMany({
-                    where: { id: { in: sourceRowIds } },
-                    select: { value: true },
-                  })
-                ).reduce((sum, row) => sum + row.value, 0)
+              ? liveRows.reduce((sum, row) => sum + row.value, 0)
               : 0;
           const mergedValue =
             eidRow !== null ? eidRow.value + liveIncrement : reducedValue;
@@ -379,6 +405,23 @@ export async function drainPerSampleCumulative(
               select: { id: true },
             });
             canonicalRowId = created.id;
+          }
+
+          // v1.34.0 — keep the day's SHAPE before the delete below removes the
+          // only rows it can be derived from. A cumulative day has no
+          // meaningful latest reading, so the one honest comparison is against
+          // this person's own typical total at the same local hour; that needs
+          // an hourly substrate, and this transaction is the last moment it
+          // exists. Folded from the rows re-read under the advisory lock, so a
+          // serialised loser folds nothing and a late-arrival drain merges only
+          // its own new rows.
+          const shape = foldHourlyCumulative(liveRows, dateKey, tz);
+          if (shape) {
+            await mergeIntradayCumulativeProfile(tx, {
+              userId,
+              type,
+              increment: shape,
+            });
           }
 
           // Hard-delete the per-sample rows that contributed to the sum.
@@ -480,8 +523,22 @@ export async function drainPerSampleCumulative(
 
   summary.totals.usersScanned = usersScanned;
 
+  // v1.34.0 — bound the profile sidecar. One indexed range delete per run,
+  // across every account, on the same nightly tick that writes the profiles.
+  // A failure here must never fail the drain: the fold is the load-bearing
+  // half and a missed prune costs a few hundred bytes until tomorrow.
+  if (!summary.dryRun) {
+    try {
+      summary.totals.profilesPruned =
+        await pruneIntradayCumulativeProfiles(prismaClient);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log(`[drain] intraday-profile prune skipped — ${message}`);
+    }
+  }
+
   log(
-    `[drain] done — usersScanned=${summary.totals.usersScanned} bucketsCollapsed=${summary.totals.bucketsCollapsed} perSampleRowsDeleted=${summary.totals.perSampleRowsDeleted} dailyRowsUpserted=${summary.totals.dailyRowsUpserted} daysFailed=${summary.totals.daysFailed}${options.dryRun ? " (dry-run)" : ""}`,
+    `[drain] done — usersScanned=${summary.totals.usersScanned} bucketsCollapsed=${summary.totals.bucketsCollapsed} perSampleRowsDeleted=${summary.totals.perSampleRowsDeleted} dailyRowsUpserted=${summary.totals.dailyRowsUpserted} daysFailed=${summary.totals.daysFailed} profilesPruned=${summary.totals.profilesPruned}${options.dryRun ? " (dry-run)" : ""}`,
   );
   return summary;
 }

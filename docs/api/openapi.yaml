@@ -7396,6 +7396,7 @@ paths:
               - STAIR_DESCENT_SPEED_BASELINE
               - SIX_MINUTE_WALK_BAND
               - TRAJECTORY
+              - SAME_TIME_BASELINE
             description: "Derived-metric id to compute (e.g. VITALS_BASELINE, FITNESS_AGE, VASCULAR_AGE_DELTA, HRV_BALANCE, BMI,
               READINESS). Closed enum: an unknown id 422s. Metrics whose compute has not yet landed return an
               `insufficient` value with reason `not_implemented`."
@@ -27283,6 +27284,7 @@ components:
             - STAIR_DESCENT_SPEED_BASELINE
             - SIX_MINUTE_WALK_BAND
             - TRAJECTORY
+            - SAME_TIME_BASELINE
           description: Echoes the requested derived-metric id (tags the union).
         status:
           type: string
@@ -32924,6 +32926,7 @@ components:
             - milestone
             - ecg_new_recording
             - tension_window
+            - same_time_baseline
           description: Closed rail-item kind.
         itemKey:
           description: Stable dismiss identity, namespaced `<kind>:...`. Present only on the observational kinds (milestone /

@@ -39,3 +39,19 @@ export function tensionWindowItemKey(
 ): string {
   return `tension_window:${localDayKey}:${partOfDay}`;
 }
+
+/**
+ * `same_time_baseline:<localDayKey>:<MeasurementType>` — one key per metric
+ * per local day.
+ *
+ * Deliberately NOT keyed on the hour the comparison was anchored to. The card
+ * refreshes as the day goes on, and folding the hour into the key would mean a
+ * dismissal at 14:00 was undone at 15:00 — the user would have to swat the
+ * same card away nine times before bed. Dismissing it means "not today".
+ */
+export function sameTimeBaselineItemKey(
+  localDayKey: string,
+  type: string,
+): string {
+  return `same_time_baseline:${localDayKey}:${type}`;
+}

@@ -85,7 +85,8 @@ describe("registry", () => {
     expect(DERIVED_METRIC_IDS).toContain("STAIR_DESCENT_SPEED_BASELINE");
     expect(DERIVED_METRIC_IDS).toContain("SIX_MINUTE_WALK_BAND");
     expect(DERIVED_METRIC_IDS).toContain("TRAJECTORY");
-    expect(DERIVED_METRIC_IDS.length).toBe(16);
+    expect(DERIVED_METRIC_IDS).toContain("SAME_TIME_BASELINE");
+    expect(DERIVED_METRIC_IDS.length).toBe(17);
   });
 });
 

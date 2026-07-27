@@ -31,6 +31,7 @@ import {
 import {
   ecgItemKey,
   milestoneItemKey,
+  sameTimeBaselineItemKey,
   tensionWindowItemKey,
 } from "@/lib/daily/priority-item-key";
 import {
@@ -127,6 +128,37 @@ export interface DailyDigestTensionWindow {
  * DTO carries no samples). The builder decides "new" from `recordedAt`; the
  * card attributes any verdict to the recording device.
  */
+/**
+ * v1.34.0 — the day's same-time activity read, already computed and gated by
+ * `computeSameTimeBaseline`. The builder formats it and decides nothing: the
+ * band verdict, the two totals and the hour are the server's, and the copy is
+ * a deterministic template over them.
+ *
+ * Null whenever the engine returned its `insufficient` arm — still learning
+ * the usual day, no intraday rows today, or the day too young to compare. The
+ * rail stays quiet in every one of those cases rather than guessing.
+ */
+export interface DailyDigestSameTime {
+  /** The cumulative metric compared (`ACTIVITY_STEPS`). */
+  type: string;
+  /** Where today sits against the typical band at this hour. */
+  band: "below" | "within" | "above";
+  /** The last completed local hour the comparison is anchored to (0–23). */
+  asOfHour: number;
+  /** Today's running total through the end of `asOfHour`, already rounded. */
+  todayValue: number;
+  /** The typical total at the same hour, already rounded. */
+  typicalValue: number;
+  /**
+   * The same two figures grouped for the reader's locale. The copy
+   * interpolates these because the server translator substitutes raw strings
+   * and "1834 steps" is not how anybody writes it; the numbers above stay so a
+   * consumer that wants to compute rather than read still can.
+   */
+  todayLabel: string;
+  typicalLabel: string;
+}
+
 export interface DailyDigestEcg {
   recordedAt: Date;
   /** The recording device's OWN verdict, or null when unclassified. */
@@ -213,6 +245,13 @@ export interface DailyDigestInput {
   milestone?: Milestone | null;
   /** S11 — the day's detected elevated-at-rest window, or null (honest-absent). */
   tensionWindow: DailyDigestTensionWindow | null;
+  /**
+   * v1.34.0 — today's cumulative-activity read against this person's own
+   * typical total at the same local hour, or null. Optional so a consumer that
+   * predates it stays valid; the builder treats a missing value as "nothing to
+   * say about today's activity yet".
+   */
+  sameTime?: DailyDigestSameTime | null;
   /**
    * S10 — the freshest ECG recording (device verdict + recordedAt only), or
    * null. Optional so consumers that predate the ECG weave stay valid; the
@@ -515,6 +554,53 @@ function buildTensionWindowItem(
 }
 
 /**
+ * v1.34.0 — the same-time activity card.
+ *
+ * A cumulative metric has no meaningful latest reading, so this is the one
+ * rail item whose whole content is a comparison: today's running total against
+ * the person's own typical total at this hour. Every number in it was computed
+ * and gated server-side; the builder only chooses which of two sentences to
+ * render and fills the blanks.
+ *
+ * It speaks only when today is actually OUTSIDE the typical band. A day
+ * tracking its own normal is not worth a card, and a rail that says "you are
+ * doing exactly what you usually do" every afternoon teaches people to stop
+ * reading the rail.
+ */
+function buildSameTimeBaselineItem(
+  sameTime: DailyDigestSameTime | null | undefined,
+  modules: DigestModuleMap,
+  todayLocalDate: string,
+  t: Translate,
+): PriorityItem | null {
+  if (!moduleEnabled(modules, "insights")) return null;
+  if (!sameTime) return null;
+  if (sameTime.band === "within") return null;
+  // The comparison is against everything accumulated through the END of
+  // `asOfHour`, which reads on the clock as the top of the next hour.
+  const time = `${String(sameTime.asOfHour + 1).padStart(2, "0")}:00`;
+  return {
+    kind: "same_time_baseline",
+    itemKey: sameTimeBaselineItemKey(todayLocalDate, sameTime.type),
+    title: t(`daily.item.sameTimeBaseline.title.${sameTime.band}`),
+    body: t(`daily.item.sameTimeBaseline.body.${sameTime.band}`, {
+      time,
+      today: sameTime.todayLabel,
+      typical: sameTime.typicalLabel,
+    }),
+    status: "info",
+    actions: [
+      {
+        labelKey: "daily.action.viewSteps",
+        intent: "steps.view",
+        href: "/insights/steps",
+      },
+    ],
+    moduleKey: "insights",
+  };
+}
+
+/**
  * The instant a plan's check-in came due (§2.3). A coach-pinned `reviewDate`
  * wins. Otherwise, a `reviewed` plan lost its `reviewDate` to the daily sweep
  * when the read-back fired, so its `updatedAt` (the flip moment) is when the
@@ -779,6 +865,16 @@ export function buildDailyDigest(
     t,
   );
   if (tension) worthALook.push(tension);
+  // v1.34.0 — the same-time activity read sits last for the same reason the
+  // tension marker does: it is context about the day so far, not an action
+  // that expires, so anything time-sensitive wins the bounded rail ahead of it.
+  const sameTime = buildSameTimeBaselineItem(
+    input.sameTime,
+    input.modules,
+    input.todayLocalDate,
+    t,
+  );
+  if (sameTime) worthALook.push(sameTime);
 
   // Defence-in-depth: no card ever exceeds the P1 action cap.
   for (const item of worthALook) {

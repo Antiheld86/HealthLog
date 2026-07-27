@@ -3644,6 +3644,10 @@
         "TRAJECTORY": {
           "method": "Una retta ai minimi quadrati adattata ai tuoi valori giornalieri recenti e proiettata in avanti su un breve orizzonte, con l’intervallo di previsione classico che si allarga man mano che si estende. Calcolata solo quando la tendenza recente è abbastanza marcata e la tua cronologia è abbastanza lunga e aggiornata; altrimenti non viene tracciata alcuna linea.",
           "caveat": "Una proiezione della tua tendenza recente — non una previsione, un obiettivo o una prognosi clinica. Vale solo se lo schema recente continua; la banda ombreggiata mostra quanto rapidamente quella certezza svanisce."
+        },
+        "SAME_TIME_BASELINE": {
+          "method": "Il tuo totale progressivo di oggi confrontato con la mediana della stessa ora locale nelle ultime quattro settimane, con una banda robusta mediana ± MAD attorno. Contano solo i giorni con abbastanza dettaglio registrato, e nessun confronto viene mostrato finché non ce ne sono almeno quattordici.",
+          "caveat": "Un confronto con la tua storia recente, non un obiettivo. Dice dove si colloca oggi rispetto alla tua abitudine a quest'ora, e nulla sul fatto che quell'abitudine sia quella giusta per te."
         }
       },
       "scores": {
@@ -3677,6 +3681,13 @@
         "caveat": "Una proiezione della tua tendenza recente, non una previsione. La banda ombreggiata si allarga per mostrare quanto rapidamente cresce l’incertezza.",
         "insufficient": "Non c’è ancora una tendenza abbastanza chiara da proiettare — continua a registrare e comparirà una proiezione quando lo schema recente sarà abbastanza marcato.",
         "daysNeeded": "Servono ancora circa {count} giorni di registrazione prima che possa comparire una proiezione."
+      },
+      "sameTime": {
+        "sectionTitle": "Oggi finora",
+        "sectionSubtitle": "I tuoi totali progressivi rispetto a ciò che per te è abituale a quest'ora",
+        "learning": "Sto imparando la tua giornata tipo — {count} di {target} giorni",
+        "framing": "Abituale entro le {time}: {typical} {unit}",
+        "comparisonLabel": "La tua giornata tipo"
       }
     },
     "cardioFitness": {
@@ -8991,6 +9002,16 @@
           "notDetected": "nessun ritmo irregolare",
           "inconclusive": "un risultato non conclusivo"
         }
+      },
+      "sameTimeBaseline": {
+        "title": {
+          "below": "Sotto il tuo ritmo abituale",
+          "above": "Sopra il tuo ritmo abituale"
+        },
+        "body": {
+          "below": "Alle {time} sei a {today} passi. In una giornata tipo a quest'ora sei intorno a {typical}.",
+          "above": "Alle {time} sei a {today} passi, sopra i {typical} che per te sono abituali a quest'ora."
+        }
       }
     },
     "action": {
@@ -9002,7 +9023,8 @@
       "checkinLetGo": "Lascia andare",
       "viewMilestone": "Vedi",
       "viewPulse": "Vedi battito",
-      "viewEcg": "Vedi registrazione"
+      "viewEcg": "Vedi registrazione",
+      "viewSteps": "Vedi i passi"
     },
     "today": {
       "scoreLabel": "Punteggio di salute",

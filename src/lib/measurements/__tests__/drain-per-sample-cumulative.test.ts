@@ -788,3 +788,154 @@ describe("drainPerSampleCumulative — concurrent fold does not double-count (F2
     expect(update).not.toHaveBeenCalled();
   });
 });
+
+/** The columns the drain writes onto one stored profile. */
+interface StoredProfile {
+  dateKey: string;
+  hourlyCumulative: number[];
+  dayTotal: number;
+  sampleCount: number;
+  timezone: string;
+}
+
+describe("drainPerSampleCumulative — the day's shape survives the delete", () => {
+  // The whole point of the fold: the per-sample rows are the ONLY thing an
+  // hourly curve can be derived from, and the next statement deletes them.
+  // A test that lets the merge fail silently is worse than no test, because
+  // the evidence it was supposed to keep is gone by the time anybody looks.
+
+  function buildShapeMock(options: { drainedByAnotherTick?: boolean } = {}) {
+    const findManyUser = vi
+      .fn()
+      .mockResolvedValue([{ id: "user-1", timezone: "Europe/Berlin" }]);
+
+    // Two samples on 2026-05-16 Berlin: 08:00 local (06:00 UTC) and
+    // 20:00 local (18:00 UTC).
+    const rows = [
+      {
+        id: "samp-1",
+        type: "ACTIVITY_STEPS" as const,
+        value: 1200,
+        measuredAt: new Date("2026-05-16T06:00:00.000Z"),
+        externalId: "hk-uuid-1",
+      },
+      {
+        id: "samp-2",
+        type: "ACTIVITY_STEPS" as const,
+        value: 800,
+        measuredAt: new Date("2026-05-16T18:00:00.000Z"),
+        externalId: "hk-uuid-2",
+      },
+    ];
+
+    const findManyMeasurement = vi.fn(
+      async (args: { where: { type: string } }) =>
+        args.where.type === "ACTIVITY_STEPS" ? rows : [],
+    );
+
+    const order: string[] = [];
+    const create = vi.fn(async () => {
+      order.push("create");
+      return { id: "stats-row-new" };
+    });
+    const update = vi.fn().mockResolvedValue({ id: "stats-row" });
+    const deleteMany = vi.fn(async () => {
+      order.push("deleteMany");
+      return { count: rows.length };
+    });
+    const findFirst = vi.fn(
+      async (args: { where: Record<string, unknown> }) => {
+        if ("externalId" in args.where) return null;
+        if ("measuredAt" in args.where) return null;
+        return { unit: "steps" };
+      },
+    );
+    // The in-transaction re-read of the contributing rows, under the lock. The
+    // serialised loser of two overlapping ticks sees none of them.
+    const findMany = vi
+      .fn()
+      .mockResolvedValue(options.drainedByAnotherTick ? [] : rows);
+    const $queryRaw = vi.fn().mockResolvedValue([{ locked: 1 }]);
+
+    const profileFindUnique = vi.fn().mockResolvedValue(null);
+    let storedProfile: StoredProfile | null = null;
+    const profileUpsert = vi.fn(async (args: { create: StoredProfile }) => {
+      order.push("profileUpsert");
+      storedProfile = args.create;
+      return {};
+    });
+
+    const tx = {
+      $queryRaw,
+      measurement: { update, create, deleteMany, findFirst, findMany },
+      intradayCumulativeProfile: {
+        findUnique: profileFindUnique,
+        upsert: profileUpsert,
+      },
+    };
+    const prisma = {
+      user: { findMany: findManyUser },
+      measurement: { findMany: findManyMeasurement },
+      intradayCumulativeProfile: {
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      $transaction: vi.fn(async (cb: (t: typeof tx) => Promise<unknown>) =>
+        cb(tx),
+      ),
+    } as unknown as PrismaClient;
+
+    return {
+      prisma,
+      profileUpsert,
+      order,
+      deleteMany,
+      storedProfile: () => storedProfile,
+    };
+  }
+
+  it("writes the hourly curve before deleting the rows it came from", async () => {
+    const { prisma, profileUpsert, order, deleteMany } = buildShapeMock();
+
+    const summary = await drainPerSampleCumulative(prisma, { log: () => {} });
+
+    expect(summary.totals.daysFailed).toBe(0);
+    expect(profileUpsert).toHaveBeenCalledTimes(1);
+    expect(deleteMany).toHaveBeenCalledTimes(1);
+    // Order inside the one transaction is the whole guarantee.
+    expect(order.indexOf("profileUpsert")).toBeLessThan(
+      order.indexOf("deleteMany"),
+    );
+  });
+
+  it("stores a running total that matches where the samples actually fell", async () => {
+    const { prisma, storedProfile } = buildShapeMock();
+
+    await drainPerSampleCumulative(prisma, { log: () => {} });
+
+    const stored = storedProfile();
+    expect(stored).not.toBeNull();
+    expect(stored!.dateKey).toBe("2026-05-16");
+    expect(stored!.timezone).toBe("Europe/Berlin");
+    expect(stored!.sampleCount).toBe(2);
+    expect(stored!.dayTotal).toBe(2000);
+    expect(stored!.hourlyCumulative).toHaveLength(24);
+    // 08:00 and 20:00 Berlin — nothing before hour 8, nothing added between.
+    expect(stored!.hourlyCumulative[7]).toBe(0);
+    expect(stored!.hourlyCumulative[8]).toBe(1200);
+    expect(stored!.hourlyCumulative[19]).toBe(1200);
+    expect(stored!.hourlyCumulative[20]).toBe(2000);
+  });
+
+  it("writes no profile when the re-read finds the rows already drained", async () => {
+    // The serialised loser of two overlapping nightly ticks. It contributes
+    // nothing to the canonical total and must contribute nothing to the shape,
+    // or the additive merge would double the day.
+    const { prisma, profileUpsert } = buildShapeMock({
+      drainedByAnotherTick: true,
+    });
+
+    await drainPerSampleCumulative(prisma, { log: () => {} });
+
+    expect(profileUpsert).not.toHaveBeenCalled();
+  });
+});

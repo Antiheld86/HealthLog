@@ -3644,6 +3644,10 @@
         "TRAJECTORY": {
           "method": "Eine Ausgleichsgerade (kleinste Quadrate), an deine jüngsten Tageswerte angepasst und über einen kurzen Zeitraum fortgeschrieben — mit dem klassischen Vorhersageintervall, das umso breiter wird, je weiter es reicht. Wird nur berechnet, wenn der jüngste Trend deutlich genug und deine Datenreihe lang und aktuell genug ist; sonst wird keine Linie gezeichnet.",
           "caveat": "Eine Fortschreibung deines eigenen jüngsten Trends — keine Vorhersage, kein Ziel und keine klinische Prognose. Sie gilt nur, solange das jüngste Muster anhält; das schattierte Band zeigt, wie schnell diese Sicherheit nachlässt."
+        },
+        "SAME_TIME_BASELINE": {
+          "method": "Dein heutiger laufender Gesamtwert im Vergleich zum Median derselben Ortszeit-Stunde aus deinen letzten vier Wochen, mit einem robusten Median-±-MAD-Band darum. Nur Tage mit ausreichend aufgezeichneten Details zählen, und es wird kein Vergleich gezeigt, bevor mindestens vierzehn davon vorliegen.",
+          "caveat": "Ein Vergleich mit deiner eigenen jüngeren Vergangenheit, kein Ziel. Er sagt, wo der heutige Tag zu dieser Stunde gegenüber deinem üblichen Muster steht — und nichts darüber, ob dieses Muster für dich das richtige ist."
         }
       },
       "scores": {
@@ -3677,6 +3681,13 @@
         "caveat": "Eine Fortschreibung deines eigenen jüngsten Trends, keine Vorhersage. Das schattierte Band wird breiter und zeigt, wie schnell die Unsicherheit wächst.",
         "insufficient": "Noch kein klar genuger Trend für eine Projektion — erfasse weiter, dann erscheint eine Projektion, sobald das jüngste Muster deutlich genug ist.",
         "daysNeeded": "Noch etwa {count} Tage Erfassung nötig, bis eine Projektion erscheinen kann."
+      },
+      "sameTime": {
+        "sectionTitle": "Heute bisher",
+        "sectionSubtitle": "Deine laufenden Summen im Vergleich zu dem, was zu dieser Stunde für dich üblich ist",
+        "learning": "Lernt deinen üblichen Tag — {count} von {target} Tagen",
+        "framing": "Üblich bis {time}: {typical} {unit}",
+        "comparisonLabel": "Dein üblicher Tag"
       }
     },
     "cardioFitness": {
@@ -8991,6 +9002,16 @@
           "notDetected": "keinen unregelmäßigen Rhythmus",
           "inconclusive": "ein nicht eindeutiges Ergebnis"
         }
+      },
+      "sameTimeBaseline": {
+        "title": {
+          "below": "Hinter deinem üblichen Tempo",
+          "above": "Vor deinem üblichen Tempo"
+        },
+        "body": {
+          "below": "Bis {time} stehst du bei {today} Schritten. An einem üblichen Tag sind es um diese Zeit etwa {typical}.",
+          "above": "Bis {time} stehst du bei {today} Schritten — mehr als die {typical}, die um diese Zeit für dich üblich sind."
+        }
       }
     },
     "action": {
@@ -9002,7 +9023,8 @@
       "checkinLetGo": "Loslassen",
       "viewMilestone": "Ansehen",
       "viewPulse": "Puls ansehen",
-      "viewEcg": "Aufzeichnung ansehen"
+      "viewEcg": "Aufzeichnung ansehen",
+      "viewSteps": "Schritte ansehen"
     },
     "today": {
       "scoreLabel": "Gesundheitsscore",
