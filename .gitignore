@@ -62,12 +62,6 @@ next-env.d.ts
 # COPY target always exists.
 /assets/geolite2/*.mmdb
 
-# AI session artefacts (kept locally, not committed)
-/docs/superpowers/
-.claude/
-.cursor/
-.codex/
-.aider*
 
 # Planning scratch — all internal per-release reports, QA findings, ad-hoc
 # backlog, and the iOS coordination channel. These are internal working
