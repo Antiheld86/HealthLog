@@ -3955,17 +3955,6 @@
         "forwardHolding": "Im Moment ist alles stabil."
       }
     },
-    "tension": {
-      "label": "Ehrliche Lesung: {positive} sieht gut aus, aber {negative} fällt ab — das Komposit landet bei {band}.",
-      "contributor": {
-        "green": "grün",
-        "yellow": "gelb",
-        "red": "rot"
-      }
-    },
-    "streak": {
-      "returnLabel": "Dein {metric} ist seit {count} Tagen wieder in deinem üblichen Bereich — was es auch war, es ist vorbei."
-    },
     "updatedTodayAt": "Heute aktualisiert, {time}",
     "updatedYesterday": "Gestern aktualisiert",
     "updatedOn": "Aktualisiert am {date}",

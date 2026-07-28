@@ -3955,17 +3955,6 @@
         "forwardHolding": "Per ora è tutto stabile."
       }
     },
-    "tension": {
-      "label": "Lettura sincera: {positive} ha un bell'aspetto, ma {negative} è in calo — il complessivo si attesta su {band}.",
-      "contributor": {
-        "green": "verde",
-        "yellow": "giallo",
-        "red": "rosso"
-      }
-    },
-    "streak": {
-      "returnLabel": "Il tuo {metric} è di nuovo nel tuo intervallo abituale dopo {count} giorni — qualunque cosa fosse, è passata."
-    },
     "updatedTodayAt": "Aggiornato oggi, {time}",
     "updatedYesterday": "Aggiornato ieri",
     "updatedOn": "Aggiornato il {date}",

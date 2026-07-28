@@ -3955,17 +3955,6 @@
         "forwardHolding": "Na razie wszystko jest stabilne."
       }
     },
-    "tension": {
-      "label": "Szczera ocena: {positive} wygląda dobrze, ale {negative} odstaje — wynik łączny ląduje na {band}.",
-      "contributor": {
-        "green": "zielony",
-        "yellow": "żółty",
-        "red": "czerwony"
-      }
-    },
-    "streak": {
-      "returnLabel": "Twój {metric} wrócił do twojego zwykłego zakresu po {count} dniach — cokolwiek to było, minęło."
-    },
     "updatedTodayAt": "Zaktualizowano dzisiaj, {time}",
     "updatedYesterday": "Zaktualizowano wczoraj",
     "updatedOn": "Zaktualizowano {date}",

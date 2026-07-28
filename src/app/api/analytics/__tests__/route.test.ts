@@ -28,6 +28,13 @@ vi.mock("@/lib/db", () => ({
     moodEntry: { findMany: vi.fn() },
     medicationIntakeEvent: { findMany: vi.fn() },
     medication: { findMany: vi.fn() },
+    // v1.34 — the versioned reference score reads these three models
+    // directly (not through the shared measurement/rollup path); default
+    // to empty/null so a brand-new-user response doesn't throw before the
+    // route can even decide the composite is ungraded.
+    mentalHealthAssessment: { findMany: vi.fn().mockResolvedValue([]) },
+    labResult: { findMany: vi.fn().mockResolvedValue([]) },
+    dismissedPriorityItem: { findUnique: vi.fn().mockResolvedValue(null) },
     // v1.4.33 C1 — slim summaries slice runs through `$queryRaw`. The
     // v1.4.36 per-type coverage probe and the v1.4.37 default-slice
     // probe also ride `$queryRaw`. Default to an empty coverage map so
@@ -139,6 +146,13 @@ beforeEach(() => {
     [] as never,
   );
   vi.mocked(prisma.medication.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.mentalHealthAssessment.findMany).mockResolvedValue(
+    [] as never,
+  );
+  vi.mocked(prisma.labResult.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.dismissedPriorityItem.findUnique).mockResolvedValue(
+    null as never,
+  );
   // v1.4.35 — rollup table defaults. `resetAllMocks` clears the
   // module-level implementations, so we re-seed both per test. Empty
   // findMany + null findFirst means the slim slice's parity check
@@ -210,13 +224,16 @@ describe("GET /api/analytics", () => {
       data: {
         summaries: Record<string, { count: number }>;
         bmi: number | null;
-        healthScore: unknown;
+        healthScore: { composite: { status: string } } | null;
       };
     };
     expect(body.data.summaries.PULSE.count).toBe(0);
     expect(body.data.summaries.WEIGHT.count).toBe(0);
     expect(body.data.bmi).toBeNull();
-    expect(body.data.healthScore).toBeNull();
+    // v1.34 — the versioned reference score always returns a structured
+    // report, even with zero data; a brand-new user reads as an explicit
+    // "insufficient" composite, never a bare null.
+    expect(body.data.healthScore?.composite.status).toBe("insufficient");
     // v1.4.49.1 — the legacy 15-way per-type live walk used a chunked
     // pagination select `(id, measuredAt, value, source, deviceType)`
     // unique to `fetchMeasurementSeriesChunked`. Other `findMany` calls

@@ -3955,17 +3955,6 @@
         "forwardHolding": "Everything's holding steady for now."
       }
     },
-    "tension": {
-      "label": "Honest read: {positive} looks good, but {negative} is off — the composite lands {band}.",
-      "contributor": {
-        "green": "green",
-        "yellow": "yellow",
-        "red": "red"
-      }
-    },
-    "streak": {
-      "returnLabel": "Your {metric} has been back inside your usual range for {count} days now — whatever that was, it's passed."
-    },
     "updatedTodayAt": "Updated today, {time}",
     "updatedYesterday": "Updated yesterday",
     "updatedOn": "Updated on {date}",
