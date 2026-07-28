@@ -10,12 +10,7 @@ import type {
   DerivedProvenanceSource,
 } from "@/lib/insights/derived/types";
 
-import type {
-  DomainReadState,
-  PillarValue,
-  ScoreBand,
-  ScorePillarId,
-} from "./types";
+import type { PillarValue, ScoreBand, ScorePillarId } from "./types";
 
 export const DAY_MS = 86_400_000;
 
@@ -190,8 +185,4 @@ export function coverage(args: {
     historyDays: Math.max(0, args.historyDays),
     missing: args.missing ?? [],
   };
-}
-
-export function readFailure(state: DomainReadState): boolean {
-  return state.readFailed;
 }

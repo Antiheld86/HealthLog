@@ -1,11 +1,13 @@
 /**
- * v1.4.20 phase B5 — integration coverage for the analytics route's
- * Personal Health Score field.
+ * v1.34.0 — integration coverage for the analytics route's versioned
+ * reference-composite Health Score (`src/lib/analytics/score/**`).
  *
- * Seeds a deterministic mix of weight + mood + medication-intake
- * fixtures alongside the existing BP-in-target seed, then asserts the
- * route returns a `healthScore` envelope whose band corresponds to the
- * synthetic-data shape.
+ * Replaces the pre-v1.34.0 weighted bp/weight/mood/compliance shape this
+ * file used to pin. That scorer, its `components.*` envelope, and its
+ * mood/compliance pillars are gone; the current score reads coverage- and
+ * provenance-tagged pillars (BLOOD_PRESSURE, GLYCAEMIA, ACTIVITY, SLEEP,
+ * ADIPOSITY, WELLBEING, FITNESS, LIPIDS) through a real Postgres round trip
+ * of `GET /api/analytics`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -50,18 +52,25 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+interface PillarEnvelope {
+  id: string;
+  domain: string;
+  result: {
+    status: "ok" | "insufficient";
+    reason?: string;
+    value?: { score: number; observed: { value: number } };
+  };
+}
+
 interface AnalyticsEnvelope {
   data: {
     healthScore: {
-      score: number;
-      band: "green" | "yellow" | "red";
-      components: {
-        bp: { value: number | null; weight: number };
-        weight: { value: number | null; weight: number };
-        mood: { value: number | null; weight: number };
-        compliance: { value: number | null; weight: number };
+      composite: {
+        status: "ok" | "insufficient";
+        reason?: string;
+        value?: { score: number; band: "green" | "yellow" | "red" };
       };
-      delta: number | null;
+      pillars: PillarEnvelope[];
     } | null;
   } | null;
   error?: string | null;
@@ -88,97 +97,80 @@ async function seedSession(username: string) {
   return user;
 }
 
-describe("GET /api/analytics — Health Score", () => {
-  it("returns a green-band score for a strong-positive synthetic shape", async () => {
-    const prisma = getPrismaClient();
-    const user = await seedSession("hs-strong");
-
-    const now = Date.now();
-    const DAY = 24 * 60 * 60 * 1000;
-
-    // ── BP: 18 in-target paired readings + 2 out → ≈ 90 % ──
-    for (let i = 0; i < 20; i++) {
-      const at = new Date(now - i * DAY);
-      const inTarget = i >= 2; // 18 in-target, 2 out
-      await prisma.measurement.create({
-        data: {
-          userId: user.id,
-          type: "BLOOD_PRESSURE_SYS",
-          value: inTarget ? 120 : 145,
-          unit: "mmHg",
-          measuredAt: at,
-        },
-      });
-      await prisma.measurement.create({
-        data: {
-          userId: user.id,
-          type: "BLOOD_PRESSURE_DIA",
-          value: inTarget ? 78 : 95,
-          unit: "mmHg",
-          measuredAt: at,
-        },
-      });
-    }
-
-    // ── Weight: closing toward BMI-22 target (≈ 69.7 kg for 178 cm) ──
-    for (let i = 0; i < 10; i++) {
-      await prisma.measurement.create({
-        data: {
-          userId: user.id,
-          type: "WEIGHT",
-          value: 72 - i * 0.2, // 72.0 -> 70.2 across 10 days
-          unit: "kg",
-          measuredAt: new Date(now - (10 - i) * DAY),
-        },
-      });
-    }
-
-    // ── Mood: stable high score ──
-    for (let i = 0; i < 10; i++) {
-      const at = new Date(now - i * DAY);
-      const ymd = at.toISOString().slice(0, 10);
-      await prisma.moodEntry.create({
-        data: {
-          userId: user.id,
-          score: i % 2 === 0 ? 5 : 4,
-          mood: "GUT",
-          source: "WEB",
-          date: ymd,
-          moodLoggedAt: at,
-        },
-      });
-    }
-
-    // ── Medication: one med, perfect compliance ──
-    const med = await prisma.medication.create({
+/**
+ * BP pillar requires `BLOOD_PRESSURE_MIN_PAIRS` (12) paired readings inside
+ * the trailing 90-day window read through the same fast-path aggregator the
+ * BP-in-target tile uses.
+ */
+async function seedInTargetBp(userId: string, now: number, days: number) {
+  const prisma = getPrismaClient();
+  const DAY = 24 * 60 * 60 * 1000;
+  for (let i = 0; i < days; i++) {
+    const at = new Date(now - i * DAY);
+    await prisma.measurement.create({
       data: {
-        userId: user.id,
-        name: "Ramipril",
-        dose: "5mg",
-        active: true,
-        createdAt: new Date(now - 60 * DAY),
-        schedules: {
-          create: [{ windowStart: "08:00", windowEnd: "10:00" }],
-        },
+        userId,
+        type: "BLOOD_PRESSURE_SYS",
+        value: 122,
+        unit: "mmHg",
+        measuredAt: at,
       },
     });
-    for (let i = 0; i < 30; i++) {
-      // Anchor the take to a fixed wall-clock instant that lands inside the
-      // 08:00–10:00 Berlin window (07:30 UTC ≈ 09:30 Berlin) so the slot
-      // matcher reads "on-time" deterministically regardless of host TZ —
-      // an unaligned `now - i*DAY` shifts its Berlin hour with the runner TZ.
-      const scheduledFor = new Date(now - i * DAY);
-      scheduledFor.setUTCHours(7, 30, 0, 0);
-      await prisma.medicationIntakeEvent.create({
-        data: {
-          userId: user.id,
-          medicationId: med.id,
-          scheduledFor,
-          takenAt: scheduledFor,
-          skipped: false,
-        },
-      });
-    }
+    await prisma.measurement.create({
+      data: {
+        userId,
+        type: "BLOOD_PRESSURE_DIA",
+        value: 78,
+        unit: "mmHg",
+        measuredAt: at,
+      },
+    });
+  }
+}
+
+/** SLEEP pillar requires `SLEEP_MIN_NIGHTS` (14) distinct wake-day nights. */
+async function seedSleepNights(userId: string, now: number, nights: number) {
+  const prisma = getPrismaClient();
+  const DAY = 24 * 60 * 60 * 1000;
+  for (let i = 0; i < nights; i++) {
+    const wake = new Date(now - i * DAY);
+    wake.setUTCHours(6, 0, 0, 0);
+    await prisma.measurement.create({
+      data: {
+        userId,
+        type: "SLEEP_DURATION",
+        value: 450,
+        unit: "min",
+        measuredAt: wake,
+        sleepStage: "ASLEEP",
+        source: "APPLE_HEALTH",
+      },
+    });
+  }
+}
+
+/** ADIPOSITY pillar needs one waist-circumference reading plus a height. */
+async function seedWaist(userId: string, now: number) {
+  const prisma = getPrismaClient();
+  await prisma.measurement.create({
+    data: {
+      userId,
+      type: "WAIST_CIRCUMFERENCE",
+      value: 82,
+      unit: "cm",
+      measuredAt: new Date(now),
+    },
+  });
+}
+
+describe("GET /api/analytics — Health Score (v1.34 reference composite)", () => {
+  it("grades a composite from a strong three-domain synthetic shape", async () => {
+    const user = await seedSession("hs-strong");
+    const now = Date.now();
+
+    await seedInTargetBp(user.id, now, 20);
+    await seedSleepNights(user.id, now, 14);
+    await seedWaist(user.id, now);
 
     const { GET } = await import("@/app/api/analytics/route");
     const res = await (GET as (req: Request) => Promise<Response>)(
@@ -187,34 +179,30 @@ describe("GET /api/analytics — Health Score", () => {
     expect(res.status).toBe(200);
     const env = (await res.json()) as AnalyticsEnvelope;
     expect(env.data).not.toBeNull();
-    expect(env.data!.healthScore).not.toBeNull();
     const hs = env.data!.healthScore!;
-    expect(hs.band).toBe("green");
-    expect(hs.score).toBeGreaterThanOrEqual(75);
-    expect(hs.components.bp.value).not.toBeNull();
-    expect(hs.components.compliance.value).toBeGreaterThanOrEqual(95);
+    expect(hs).not.toBeNull();
+    expect(hs.composite.status).toBe("ok");
+    expect(hs.composite.value!.score).toBeGreaterThanOrEqual(75);
+    expect(hs.composite.value!.band).toBe("green");
+
+    // Every seeded pillar graded, not just the ones the composite counted.
+    const byId = new Map(hs.pillars.map((p) => [p.id, p]));
+    expect(byId.get("BLOOD_PRESSURE")!.result.status).toBe("ok");
+    expect(byId.get("SLEEP")!.result.status).toBe("ok");
+    expect(byId.get("ADIPOSITY")!.result.status).toBe("ok");
   });
 
   it("scores the BP pillar from the trailing-90-day window when readings predate the last 30 days", async () => {
-    // v1.17 W1d regression pin: the BD-Zielbereich tile headline, the
-    // Health-Score BP pillar and the coach number all read the SAME
-    // trailing-90-day window. A prior shape fed the 30-day value into the
-    // score, so an account whose BP readings predate the trailing month
-    // lost the 0.30-weight BP pillar entirely and rendered "no rating"
-    // despite having recent-enough BP data. This pins the 90-day feed:
-    // readings 60–80 days ago sit OUTSIDE the trailing 30 days but INSIDE
-    // the 90-day window, so both the pillar and the headline must surface
-    // them.
-    const prisma = getPrismaClient();
+    // v1.17 W1d regression pin, carried forward: the BD-Zielbereich tile
+    // headline, the Health-Score BP pillar and the coach number all read the
+    // SAME trailing-90-day window. Readings 60-80 days ago sit OUTSIDE the
+    // trailing 30 days but INSIDE the 90-day window the pillar and the
+    // headline share.
     const user = await seedSession("hs-bp-old");
-
     const now = Date.now();
     const DAY = 24 * 60 * 60 * 1000;
+    const prisma = getPrismaClient();
 
-    // 20 paired in-target readings, all ~60–80 days ago: outside the
-    // trailing-30-day window, inside the trailing-90-day window the score
-    // and headline now share. Well above the 5-reading confidence floor,
-    // so the pillar grades rather than suppressing as thin data.
     for (let i = 0; i < 20; i++) {
       const at = new Date(now - (60 + i) * DAY);
       await prisma.measurement.create({
@@ -245,26 +233,17 @@ describe("GET /api/analytics — Health Score", () => {
     const env = (await res.json()) as AnalyticsEnvelope & {
       data: { bpInTargetPct: number | null } | null;
     };
-    expect(env.data!.healthScore).not.toBeNull();
     const hs = env.data!.healthScore!;
-    // The BP pillar scores from the 90-day window (recency-weighted).
-    // 122/78 sits just inside the under-65 target ceiling (129/79), so the
-    // graded clinical-proximity score lands high (worst-of-axis ≈ 86)
-    // rather than the old binary 100. The point: the pillar still SCORES
-    // from history when the trailing-30-day window is empty — a clearly
-    // in-target 90-day history reads as a strong (≥ 80) pillar, not drop
-    // out entirely (the regression this test pins).
-    expect(hs.components.bp.value).not.toBeNull();
-    expect(hs.components.bp.value).toBeGreaterThanOrEqual(80);
-    expect(hs.components.bp.weight).toBeGreaterThan(0);
-    // …and the tile headline now reads the SAME 90-day window, so it
-    // surfaces the in-target rate (all 20 pairs in target = 100 %) rather
-    // than dropping to null. The pillar and headline are unified on the
-    // window — that is the v1.17 W1d contract.
+    const bp = hs.pillars.find((p) => p.id === "BLOOD_PRESSURE")!;
+    expect(bp.result.status).toBe("ok");
+    expect(bp.result.value!.score).toBeGreaterThanOrEqual(80);
+    // …and the tile headline reads the SAME 90-day window, so it surfaces
+    // the in-target rate (all 20 pairs in target) rather than dropping to
+    // null. The pillar and the headline stay unified on the window.
     expect(env.data!.bpInTargetPct).toBe(100);
   });
 
-  it("returns null healthScore for a user with no data", async () => {
+  it("reports an explicit insufficient composite for a user with no data", async () => {
     await seedSession("hs-empty");
     const { GET } = await import("@/app/api/analytics/route");
     const res = await (GET as (req: Request) => Promise<Response>)(
@@ -272,56 +251,36 @@ describe("GET /api/analytics — Health Score", () => {
     );
     expect(res.status).toBe(200);
     const env = (await res.json()) as AnalyticsEnvelope;
-    expect(env.data!.healthScore).toBeNull();
+    const hs = env.data!.healthScore!;
+    // v1.34 — the reference composite always returns a structured report,
+    // even with zero data; it reads as an explicit "insufficient" status,
+    // never a bare null.
+    expect(hs).not.toBeNull();
+    expect(hs.composite.status).toBe("insufficient");
+    expect(hs.composite.value).toBeUndefined();
   });
 
-  it("redistributes weights when only compliance is present", async () => {
-    const prisma = getPrismaClient();
-    const user = await seedSession("hs-compliance-only");
-
+  it("stays insufficient with only two eligible domains — the three-domain floor", async () => {
+    // The composite requires at least three eligible domains, including a
+    // measured physiological one, before it grades at all (CORE_MIN_ELIGIBLE
+    // _DOMAINS). Two graded pillars in two domains must not slip past that
+    // floor.
+    const user = await seedSession("hs-two-domains");
     const now = Date.now();
-    const DAY = 24 * 60 * 60 * 1000;
-    const med = await prisma.medication.create({
-      data: {
-        userId: user.id,
-        name: "Vitamin D",
-        dose: "2000 IU",
-        active: true,
-        createdAt: new Date(now - 60 * DAY),
-        schedules: {
-          create: [{ windowStart: "08:00", windowEnd: "10:00" }],
-        },
-      },
-    });
-    for (let i = 0; i < 30; i++) {
-      // Anchor the take to a fixed wall-clock instant that lands inside the
-      // 08:00–10:00 Berlin window (07:30 UTC ≈ 09:30 Berlin) so the slot
-      // matcher reads "on-time" deterministically regardless of host TZ —
-      // an unaligned `now - i*DAY` shifts its Berlin hour with the runner TZ.
-      const scheduledFor = new Date(now - i * DAY);
-      scheduledFor.setUTCHours(7, 30, 0, 0);
-      await prisma.medicationIntakeEvent.create({
-        data: {
-          userId: user.id,
-          medicationId: med.id,
-          scheduledFor,
-          takenAt: scheduledFor,
-          skipped: false,
-        },
-      });
-    }
+
+    await seedSleepNights(user.id, now, 14);
+    await seedWaist(user.id, now);
 
     const { GET } = await import("@/app/api/analytics/route");
     const res = await (GET as (req: Request) => Promise<Response>)(
       new Request("http://localhost/api/analytics"),
     );
+    expect(res.status).toBe(200);
     const env = (await res.json()) as AnalyticsEnvelope;
     const hs = env.data!.healthScore!;
-    expect(hs).not.toBeNull();
-    expect(hs.components.bp.value).toBeNull();
-    expect(hs.components.weight.value).toBeNull();
-    expect(hs.components.mood.value).toBeNull();
-    expect(hs.components.compliance.value).not.toBeNull();
-    expect(hs.components.compliance.weight).toBeCloseTo(1, 5);
+    expect(hs.composite.status).toBe("insufficient");
+    const byId = new Map(hs.pillars.map((p) => [p.id, p]));
+    expect(byId.get("SLEEP")!.result.status).toBe("ok");
+    expect(byId.get("ADIPOSITY")!.result.status).toBe("ok");
   });
 });

@@ -21,7 +21,7 @@ import { userDayKey } from "@/lib/tz/format";
 import { getAgeFromDateOfBirth } from "@/lib/analytics/pulse-targets";
 import { toProfileSex } from "@/lib/profile/sex";
 import { healthScoreAlgorithmItemKey } from "@/lib/daily/priority-item-key";
-import { annotate } from "@/lib/logging/context";
+import { annotate, getEvent } from "@/lib/logging/context";
 
 import { ACTIVITY_WINDOW_DAYS } from "./activity";
 import { SLEEP_WINDOW_DAYS } from "./sleep";
@@ -109,12 +109,31 @@ async function capture<T>(
         ? [failure]
         : [];
     if (failures.length > 0) {
+      // `addMeta` replaces the whole `analytics` key wholesale (it does
+      // not deep-merge), so writing `{ health_score: {...} }` directly
+      // here would silently erase whatever `computeSummariesSlice` (or a
+      // sibling pillar's own capture() failure) already wrote under
+      // `meta.analytics` earlier in the same request. Read the event's
+      // current `analytics` value first and merge into it instead.
+      const existing = getEvent()?.toJSON().meta?.analytics;
+      const existingHealthScore =
+        existing &&
+        typeof existing === "object" &&
+        "health_score" in existing &&
+        typeof existing.health_score === "object" &&
+        existing.health_score !== null
+          ? (existing.health_score as Record<string, string>)
+          : {};
       annotate({
         meta: {
           analytics: {
-            health_score: Object.fromEntries(
-              failures.map((failed) => [failed, "read_failed"]),
-            ),
+            ...(existing && typeof existing === "object" ? existing : {}),
+            health_score: {
+              ...existingHealthScore,
+              ...Object.fromEntries(
+                failures.map((failed) => [failed, "read_failed"]),
+              ),
+            },
           },
         },
       });

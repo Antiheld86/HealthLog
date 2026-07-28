@@ -117,12 +117,6 @@ export interface HealthScoreReport {
   restMode?: RestModeAnnotation | null;
 }
 
-export interface ScoreProfile {
-  ageYears: number | null;
-  sex: ProfileSex;
-  heightCm: number | null;
-}
-
 export interface DomainReadState {
   source: DerivedProvenanceSource;
   readFailed: boolean;
