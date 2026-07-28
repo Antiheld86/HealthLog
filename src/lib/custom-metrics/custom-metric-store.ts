@@ -19,6 +19,7 @@ export interface CustomMetricRow {
   targetHigh: number | null;
   decimals: number | null;
   description: string | null;
+  correlationEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -49,6 +50,7 @@ export function serialiseCustomMetric(row: CustomMetricRow) {
     targetHigh: row.targetHigh,
     decimals: row.decimals,
     description: row.description,
+    correlationEnabled: row.correlationEnabled,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

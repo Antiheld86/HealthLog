@@ -24,6 +24,9 @@ import {
   derivedBatchQuery,
   derivedBatchResponse,
   correlationDiscoveryResponse,
+  correlationPatternListResponse,
+  updateCorrelationPatternRequest,
+  updateCorrelationPatternResponse,
   glp1PlateauResponse,
   insightStatusQuery,
   insightStatusResponse,
@@ -506,6 +509,61 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
               ),
             },
           },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/insights/patterns": {
+    get: {
+      tags: ["Insights"],
+      summary: "List current correlation patterns",
+      description:
+        "Returns the authenticated account's currently accepted persisted correlation identities, evidence, and dismissal timestamps.",
+      responses: {
+        "200": {
+          description: "Current persisted correlation patterns.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                correlationPatternListResponse,
+                "CorrelationPatternListResponseEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/insights/patterns/{id}": {
+    patch: {
+      tags: ["Insights"],
+      summary: "Update correlation pattern dismissal",
+      description:
+        "Dismisses or restores one current account-owned pattern. A dismissal remains effective until the accepted evidence changes materially.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: updateCorrelationPatternRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description: "Updated dismissal decision.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                updateCorrelationPatternResponse,
+                "UpdateCorrelationPatternResponseEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description: "No current pattern with that id for this account.",
+          content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
       },

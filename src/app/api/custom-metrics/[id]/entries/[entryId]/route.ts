@@ -10,6 +10,7 @@ import {
   sanitiseZodIssues,
 } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
+import { invalidateUserCorrelationPatterns } from "@/lib/cache/invalidate";
 import { serialiseCustomMetricEntry } from "@/lib/custom-metrics/custom-metric-store";
 import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
@@ -91,6 +92,7 @@ export const PATCH = apiHandler(
       action: { name: "custom-metric.entry.update" },
       meta: { customMetricId: id, entryId },
     });
+    invalidateUserCorrelationPatterns(user.id);
 
     return apiSuccess(serialiseCustomMetricEntry(updated));
   },
@@ -120,6 +122,7 @@ export const DELETE = apiHandler(
       action: { name: "custom-metric.entry.delete" },
       meta: { customMetricId: id, entryId },
     });
+    invalidateUserCorrelationPatterns(user.id);
 
     return apiSuccess({ deleted: true });
   },

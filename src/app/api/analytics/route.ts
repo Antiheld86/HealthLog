@@ -33,6 +33,11 @@ import {
   GLUCOSE_PANEL_WINDOW_DAYS,
   type GlucoseClinicalMetrics,
 } from "@/lib/analytics/glucose-metrics";
+import {
+  decisionForEvidence,
+  PATTERN_FAMILIES,
+  syncAcceptedPatterns,
+} from "@/lib/insights/correlation-patterns";
 
 export const dynamic = "force-dynamic";
 
@@ -419,6 +424,57 @@ async function buildAnalyticsResponse(user: AuthedUser, locale: Locale) {
     coverage,
     locale,
   });
+  const fixedDefinitions = [
+    {
+      key: "bpCompliance" as const,
+      factorKey: "HYPOTHESIS:MEDICATION_COMPLIANCE",
+      outcomeKey: "BLOOD_PRESSURE_SYS",
+    },
+    {
+      key: "moodPulse" as const,
+      factorKey: "HYPOTHESIS:MOOD",
+      outcomeKey: "RESTING_PULSE",
+    },
+    {
+      key: "weightWeekday" as const,
+      factorKey: "HYPOTHESIS:WEEKDAY",
+      outcomeKey: "WEIGHT",
+    },
+  ];
+  const acceptedFixed = fixedDefinitions.flatMap((definition) => {
+    const result = correlations[definition.key];
+    return result.status === "ok"
+      ? [
+          {
+            factorKey: definition.factorKey,
+            outcomeKey: definition.outcomeKey,
+            lagDays: 0,
+            sampleSize: result.n,
+            effectSize: result.statistic,
+            pValue: result.pValue,
+            qValue: null,
+          },
+        ]
+      : [];
+  });
+  const fixedDecisions = await syncAcceptedPatterns({
+    userId: user.id,
+    family: PATTERN_FAMILIES.fixed,
+    accepted: acceptedFixed,
+  });
+  const correlationsWithPatterns = { ...correlations };
+  for (const definition of fixedDefinitions) {
+    const result = correlations[definition.key];
+    if (result.status !== "ok") continue;
+    const decision = decisionForEvidence(fixedDecisions, {
+      factorKey: definition.factorKey,
+      outcomeKey: definition.outcomeKey,
+      lagDays: 0,
+    });
+    correlationsWithPatterns[definition.key] = decision
+      ? { ...result, ...decision }
+      : result;
+  }
 
   // v1.4.20 phase B5 — Personal Health Score. Server-deterministic
   // composite of BP-in-target % + weight-trend alignment + mood
@@ -509,7 +565,7 @@ async function buildAnalyticsResponse(user: AuthedUser, locale: Locale) {
     bpInTargetSpanDays90,
     glucoseByContext: glucoseByContextOut,
     glucoseClinical: glucoseClinicalOut,
-    correlations,
+    correlations: correlationsWithPatterns,
     healthScore,
     sleepStages,
     // v1.28.x — the latest night's source-discrepancy annotation, computed

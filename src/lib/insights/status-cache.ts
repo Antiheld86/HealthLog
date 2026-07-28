@@ -14,6 +14,7 @@ import {
   DISCOVERY_BEHAVIOURS,
   DISCOVERY_OUTCOMES,
 } from "@/lib/insights/correlation-discovery";
+import { MAX_CUSTOM_CORRELATION_CHANNELS } from "@/lib/insights/correlation-channel-series";
 import { annotate } from "@/lib/logging/context";
 import type { SupportedLocale } from "@/lib/insights/status-shared";
 
@@ -289,7 +290,7 @@ export async function computeStatusInputFingerprint(args: {
     ? Array.from(new Set<string>([...args.types, ...CORRELATION_CHANNEL_TYPES]))
     : [...args.types];
 
-  const [grouped, mood] = await Promise.all([
+  const [grouped, mood, customMetrics] = await Promise.all([
     prisma.measurement.groupBy({
       by: ["type"],
       where: {
@@ -307,6 +308,28 @@ export async function computeStatusInputFingerprint(args: {
           _max: { moodLoggedAt: true },
         })
       : Promise.resolve(null),
+    args.includeCorrelationChannels
+      ? prisma.customMetric.findMany({
+          where: {
+            userId: args.userId,
+            deletedAt: null,
+            correlationEnabled: true,
+          },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          take: MAX_CUSTOM_CORRELATION_CHANNELS,
+          select: {
+            id: true,
+            unit: true,
+            updatedAt: true,
+            _count: { select: { entries: true } },
+            entries: {
+              orderBy: [{ measuredAt: "desc" }, { id: "desc" }],
+              take: 1,
+              select: { measuredAt: true, unit: true },
+            },
+          },
+        })
+      : Promise.resolve([]),
   ]);
   // Deterministic shape regardless of group order: sort by type, project a
   // stable `{ type, count, newest }` triple. `hashInsightSnapshot` sorts keys
@@ -330,6 +353,14 @@ export async function computeStatusInputFingerprint(args: {
           },
         }
       : {}),
+    customMetrics: customMetrics.map((metric) => ({
+      id: metric.id,
+      unit: metric.unit,
+      updatedAt: metric.updatedAt.toISOString(),
+      count: metric._count.entries,
+      newest: metric.entries[0]?.measuredAt.toISOString() ?? null,
+      newestUnit: metric.entries[0]?.unit ?? null,
+    })),
     ...(args.extra ? { extra: args.extra } : {}),
   });
 }

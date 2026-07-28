@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, apiPatch, apiPost } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
@@ -73,6 +74,9 @@ export function CustomMetricForm({
     existing?.decimals != null ? String(existing.decimals) : "",
   );
   const [description, setDescription] = useState(existing?.description ?? "");
+  const [correlationEnabled, setCorrelationEnabled] = useState(
+    existing?.correlationEnabled ?? false,
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -100,6 +104,7 @@ export function CustomMetricForm({
       ...(highVal !== null ? { targetHigh: highVal } : {}),
       ...(decimalsVal !== null ? { decimals: decimalsVal } : {}),
       ...(description.trim() ? { description: description.trim() } : {}),
+      correlationEnabled,
     };
 
     setSubmitting(true);
@@ -225,6 +230,21 @@ export function CustomMetricForm({
             placeholder={t("customMetrics.form.descriptionPlaceholder")}
             maxLength={DESCRIPTION_MAX_LENGTH}
             rows={2}
+          />
+        </div>
+        <div className="flex items-start justify-between gap-4 sm:col-span-2">
+          <div className="space-y-1">
+            <Label htmlFor="custom-metric-correlation-enabled">
+              {t("customMetrics.form.correlationEnabled")}
+            </Label>
+            <p className="text-muted-foreground text-xs">
+              {t("customMetrics.form.correlationEnabledHint")}
+            </p>
+          </div>
+          <Switch
+            id="custom-metric-correlation-enabled"
+            checked={correlationEnabled}
+            onCheckedChange={setCorrelationEnabled}
           />
         </div>
       </div>

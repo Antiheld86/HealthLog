@@ -10,6 +10,7 @@ import {
   sanitiseZodIssues,
 } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
+import { invalidateUserCorrelationPatterns } from "@/lib/cache/invalidate";
 import { serialiseCustomMetric } from "@/lib/custom-metrics/custom-metric-store";
 import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
@@ -121,6 +122,9 @@ export const PATCH = apiHandler(
     if (d.targetHigh !== undefined) data.targetHigh = d.targetHigh;
     if (d.decimals !== undefined) data.decimals = d.decimals;
     if (d.description !== undefined) data.description = d.description;
+    if (d.correlationEnabled !== undefined) {
+      data.correlationEnabled = d.correlationEnabled;
+    }
 
     // Inverted-range guard for a PARTIAL bound update. The schema refine only
     // fires when both bounds arrive together; moving a single bound past the
@@ -143,6 +147,7 @@ export const PATCH = apiHandler(
       action: { name: "custom-metric.metric.update" },
       meta: { customMetricId: id },
     });
+    invalidateUserCorrelationPatterns(user.id);
 
     return apiSuccess(serialiseCustomMetric(updated));
   },
@@ -179,6 +184,7 @@ export const DELETE = apiHandler(
       action: { name: "custom-metric.metric.delete" },
       meta: { customMetricId: id },
     });
+    invalidateUserCorrelationPatterns(user.id);
 
     return apiSuccess({ deleted: true });
   },

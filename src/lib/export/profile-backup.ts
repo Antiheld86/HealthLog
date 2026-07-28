@@ -1,12 +1,11 @@
 /**
- * Durable self-context and user-defined metrics — both ends in one file.
+ * Durable self-context, user-defined metrics, and persisted pattern decisions,
+ * with both backup ends in one file.
  *
- * Two models classified `BACKED_UP` since `backup-plan.ts` was written and
- * carried by nothing: `UserHealthProfile` (what a person told the app is
- * durably true of them) and `CustomMetric` / `CustomMetricEntry` (a series the
- * person defined themselves, which by definition no integration can re-sync).
- * The custom-metric gap is live data loss today: a restore rebuilt the account
- * without the metric or a single one of its readings and reported success.
+ * These account-owned models cannot be reconstructed from an integration:
+ * `UserHealthProfile`, `CustomMetric` / `CustomMetricEntry`, and
+ * `CorrelationPattern`. The last model carries stable finding identity and the
+ * evidence baseline that makes a dismissal survive recomputation and restore.
  *
  * The builder and the restore live together deliberately, the way
  * `src/lib/cycle/backup.ts` does. A reader asking "is this carried at both
@@ -98,6 +97,7 @@ export interface CustomMetricBackupEntry {
   targetHigh: number | null;
   decimals: number | null;
   description: string | null;
+  correlationEnabled: boolean;
   createdAt?: string;
   updatedAt?: string;
   /** Tombstone, DR payloads only — a portable export never carries deleted rows. */
@@ -105,15 +105,40 @@ export interface CustomMetricBackupEntry {
   entries: CustomMetricEntryBackupEntry[];
 }
 
+/** Persisted accepted correlation evidence and its dismissal decision. */
+export interface CorrelationPatternBackupEntry {
+  id?: string;
+  canonicalKey: string;
+  family: string;
+  factorKey: string;
+  outcomeKey: string;
+  lagDays: number;
+  sampleSize: number;
+  effectSize: number;
+  pValue: number;
+  qValue: number | null;
+  evidenceHash: string;
+  isCurrent: boolean;
+  lastComputedAt: string;
+  dismissedAt: string | null;
+  dismissedEvidenceHash: string | null;
+  dismissedEffectSize: number | null;
+  dismissedSampleSize: number | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface ProfileBackupSection {
   healthProfile: HealthProfileBackupEntry | null;
   customMetrics: CustomMetricBackupEntry[];
+  correlationPatterns: CorrelationPatternBackupEntry[];
 }
 
 export interface ProfileBackupCounts {
   healthProfile: number;
   customMetrics: number;
   customMetricEntries: number;
+  correlationPatterns: number;
 }
 
 /**
@@ -155,13 +180,16 @@ function toBase64(buf: Uint8Array | null): string | null {
  * `buildCycleBackupSection` and `buildRecordsBackupSection`.
  */
 export async function buildProfileBackupSection(
-  prisma: Pick<PrismaClient, "userHealthProfile" | "customMetric">,
+  prisma: Pick<
+    PrismaClient,
+    "userHealthProfile" | "customMetric" | "correlationPattern"
+  >,
   userId: string,
   options: ProfileBackupOptions = {},
 ): Promise<ProfileBackupSection> {
   const disasterRecovery = options.purpose === "disaster-recovery";
 
-  const [profileRow, metricRows] = await Promise.all([
+  const [profileRow, metricRows, patternRows] = await Promise.all([
     prisma.userHealthProfile.findUnique({ where: { userId } }),
     prisma.customMetric.findMany({
       // A portable export never resurrects a tombstone; a DR payload restores
@@ -169,11 +197,12 @@ export async function buildProfileBackupSection(
       where: disasterRecovery ? { userId } : { userId, deletedAt: null },
       orderBy: { name: "asc" },
       include: {
-        // `CustomMetricEntry` carries no tombstone of its own — a deleted
-        // metric cascades its readings away — so both purposes read the same
-        // set and only the parent filter differs.
         entries: { orderBy: { measuredAt: "asc" } },
       },
+    }),
+    prisma.correlationPattern.findMany({
+      where: { userId },
+      orderBy: { canonicalKey: "asc" },
     }),
   ]);
 
@@ -230,6 +259,7 @@ export async function buildProfileBackupSection(
     targetHigh: metric.targetHigh,
     decimals: metric.decimals,
     description: metric.description,
+    correlationEnabled: metric.correlationEnabled,
     entries: metric.entries.map((entry) => ({
       ...(disasterRecovery
         ? {
@@ -244,7 +274,35 @@ export async function buildProfileBackupSection(
     })),
   }));
 
-  return { healthProfile, customMetrics };
+  const correlationPatterns: CorrelationPatternBackupEntry[] = patternRows.map(
+    (pattern) => ({
+      ...(disasterRecovery
+        ? {
+            id: pattern.id,
+            createdAt: pattern.createdAt.toISOString(),
+            updatedAt: pattern.updatedAt.toISOString(),
+          }
+        : {}),
+      canonicalKey: pattern.canonicalKey,
+      family: pattern.family,
+      factorKey: pattern.factorKey,
+      outcomeKey: pattern.outcomeKey,
+      lagDays: pattern.lagDays,
+      sampleSize: pattern.sampleSize,
+      effectSize: pattern.effectSize,
+      pValue: pattern.pValue,
+      qValue: pattern.qValue,
+      evidenceHash: pattern.evidenceHash,
+      isCurrent: pattern.isCurrent,
+      lastComputedAt: pattern.lastComputedAt.toISOString(),
+      dismissedAt: pattern.dismissedAt?.toISOString() ?? null,
+      dismissedEvidenceHash: pattern.dismissedEvidenceHash,
+      dismissedEffectSize: pattern.dismissedEffectSize,
+      dismissedSampleSize: pattern.dismissedSampleSize,
+    }),
+  );
+
+  return { healthProfile, customMetrics, correlationPatterns };
 }
 
 /** Row counts for the audit trail, mirroring the other section counters. */
@@ -258,6 +316,7 @@ export function countProfileBackupSection(
       (sum, metric) => sum + metric.entries.length,
       0,
     ),
+    correlationPatterns: section.correlationPatterns.length,
   };
 }
 
@@ -265,6 +324,7 @@ export function countProfileBackupSection(
 export interface ProfileRestoreCleared {
   healthProfile: number;
   customMetrics: number;
+  correlationPatterns: number;
 }
 
 /**
@@ -278,6 +338,7 @@ export interface ProfileRestoreCleared {
 export interface ProfileRestoreInput {
   healthProfile: HealthProfileBackupEntry | null;
   customMetrics: CustomMetricBackupEntry[];
+  correlationPatterns: CorrelationPatternBackupEntry[];
 }
 
 /**
@@ -335,6 +396,9 @@ export async function restoreProfileData(
     where: { userId: ownerId },
   });
   const metricsCleared = await tx.customMetric.deleteMany({
+    where: { userId: ownerId },
+  });
+  const patternsCleared = await tx.correlationPattern.deleteMany({
     where: { userId: ownerId },
   });
 
@@ -406,6 +470,7 @@ export async function restoreProfileData(
         targetHigh: metric.targetHigh,
         decimals: metric.decimals,
         description: metric.description,
+        correlationEnabled: metric.correlationEnabled,
         ...(metric.createdAt ? { createdAt: new Date(metric.createdAt) } : {}),
         ...(metric.updatedAt ? { updatedAt: new Date(metric.updatedAt) } : {}),
         deletedAt: metric.deletedAt ? new Date(metric.deletedAt) : null,
@@ -426,8 +491,47 @@ export async function restoreProfileData(
     });
   }
 
+  const seenPatternKeys = new Set<string>();
+  for (const pattern of payload.correlationPatterns) {
+    if (seenPatternKeys.has(pattern.canonicalKey)) {
+      throw new Error(
+        `Duplicate correlation pattern key: ${pattern.canonicalKey}`,
+      );
+    }
+    seenPatternKeys.add(pattern.canonicalKey);
+    await tx.correlationPattern.create({
+      data: {
+        ...(pattern.id ? { id: pattern.id } : {}),
+        userId: ownerId,
+        canonicalKey: pattern.canonicalKey,
+        family: pattern.family,
+        factorKey: pattern.factorKey,
+        outcomeKey: pattern.outcomeKey,
+        lagDays: pattern.lagDays,
+        sampleSize: pattern.sampleSize,
+        effectSize: pattern.effectSize,
+        pValue: pattern.pValue,
+        qValue: pattern.qValue,
+        evidenceHash: pattern.evidenceHash,
+        isCurrent: pattern.isCurrent,
+        lastComputedAt: new Date(pattern.lastComputedAt),
+        dismissedAt: pattern.dismissedAt ? new Date(pattern.dismissedAt) : null,
+        dismissedEvidenceHash: pattern.dismissedEvidenceHash,
+        dismissedEffectSize: pattern.dismissedEffectSize,
+        dismissedSampleSize: pattern.dismissedSampleSize,
+        ...(pattern.createdAt
+          ? { createdAt: new Date(pattern.createdAt) }
+          : {}),
+        ...(pattern.updatedAt
+          ? { updatedAt: new Date(pattern.updatedAt) }
+          : {}),
+      },
+    });
+  }
+
   return {
     healthProfile: profileCleared.count,
     customMetrics: metricsCleared.count,
+    correlationPatterns: patternsCleared.count,
   };
 }

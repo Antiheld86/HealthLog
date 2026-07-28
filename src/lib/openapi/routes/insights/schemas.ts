@@ -281,6 +281,14 @@ export const discoveredCorrelation = z
       .describe(
         "Outcome channel (lag target), e.g. SLEEP_DURATION, HEART_RATE_VARIABILITY.",
       ),
+    behaviourLabel: z
+      .string()
+      .optional()
+      .describe("Display label for a dynamic behaviour channel."),
+    outcomeLabel: z
+      .string()
+      .optional()
+      .describe("Display label for a dynamic outcome channel."),
     n: z
       .number()
       .int()
@@ -308,8 +316,56 @@ export const discoveredCorrelation = z
       .describe(
         "v1.22 — true for an emerging recent-window pair: fewer days, hedged as provisional rather than established.",
       ),
+    patternId: z
+      .string()
+      .optional()
+      .describe("Account-scoped persisted identity for dismissal."),
+    canonicalKey: z
+      .string()
+      .optional()
+      .describe("Stable factor + outcome + lag identity."),
+    dismissed: z
+      .boolean()
+      .optional()
+      .describe("Server decision to suppress unchanged evidence."),
   })
   .meta({ id: "DiscoveredCorrelation" });
+
+export const correlationPattern = z
+  .object({
+    id: z.string(),
+    canonicalKey: z.string(),
+    family: z.string(),
+    factorKey: z.string(),
+    outcomeKey: z.string(),
+    lagDays: z.number().int(),
+    sampleSize: z.number().int(),
+    effectSize: z.number(),
+    pValue: z.number(),
+    qValue: z.number().nullable(),
+    evidenceHash: z.string(),
+    lastComputedAt: z.string(),
+    dismissedAt: z.string().nullable(),
+  })
+  .meta({ id: "CorrelationPattern" });
+
+export const correlationPatternListResponse = z
+  .object({ patterns: z.array(correlationPattern) })
+  .meta({ id: "CorrelationPatternListResponse" });
+
+export const updateCorrelationPatternRequest = z
+  .strictObject({ dismissed: z.boolean() })
+  .meta({ id: "UpdateCorrelationPatternRequest" });
+
+export const updateCorrelationPatternResponse = z
+  .object({
+    id: z.string(),
+    canonicalKey: z.string(),
+    dismissed: z.boolean(),
+    dismissedAt: z.string().nullable(),
+    evidenceHash: z.string(),
+  })
+  .meta({ id: "UpdateCorrelationPatternResponse" });
 
 // v1.22 — one labs ↔ outcome association (point-vs-window over sparse draws).
 export const discoveredLabCorrelation = z

@@ -130,6 +130,30 @@ beforeEach(async () => {
 });
 
 describe("custom mood-tag groups (real Postgres)", () => {
+  it("exposes alcohol, caffeine, and nicotine from the built-in binary catalogue", async () => {
+    await actAs(USER_A, "mtg-a");
+    const tree = await readTree();
+    const health = tree.find((category) => category.key === "health");
+    expect(health).toBeDefined();
+    expect(
+      health!.tags
+        .filter((tag) => ["alcohol", "caffeine", "nicotine"].includes(tag.key))
+        .map((tag) => tag.key)
+        .sort(),
+    ).toEqual(["alcohol", "caffeine", "nicotine"]);
+
+    const rows = await getPrismaClient().moodTag.findMany({
+      where: { key: { in: ["alcohol", "caffeine", "nicotine"] } },
+      select: { key: true, userId: true, kind: true, isActive: true },
+      orderBy: { key: "asc" },
+    });
+    expect(rows).toEqual([
+      { key: "alcohol", userId: null, kind: "BINARY", isActive: true },
+      { key: "caffeine", userId: null, kind: "BINARY", isActive: true },
+      { key: "nicotine", userId: null, kind: "BINARY", isActive: true },
+    ]);
+  });
+
   it("creates a group, stores the label encrypted, and resolves it on the management read", async () => {
     await actAs(USER_A, "mtg-a");
     const groupKey = await createGroup("Therapie", "Stethoscope");

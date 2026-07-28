@@ -212,6 +212,7 @@ function sourceClient() {
           targetHigh: null,
           decimals: 1,
           description: "Right hand, before breakfast",
+          correlationEnabled: true,
           createdAt: new Date("2026-07-01T00:00:00.000Z"),
           updatedAt: new Date("2026-07-19T00:00:00.000Z"),
           deletedAt: null,
@@ -225,6 +226,32 @@ function sourceClient() {
               createdAt: new Date("2026-07-19T06:31:00.000Z"),
             },
           ],
+        },
+      ]),
+    },
+    correlationPattern: {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "pattern-1",
+          userId: OWNER,
+          canonicalKey: `p1:${"a".repeat(64)}`,
+          family: "DISCOVERY_RETROSPECTIVE",
+          factorKey: "CUSTOM_METRIC:metric-1",
+          outcomeKey: "RESTING_HEART_RATE",
+          lagDays: 1,
+          sampleSize: 42,
+          effectSize: 0.34,
+          pValue: 0.01,
+          qValue: 0.04,
+          evidenceHash: "b".repeat(64),
+          isCurrent: true,
+          lastComputedAt: new Date("2026-07-19T08:00:00.000Z"),
+          dismissedAt: new Date("2026-07-19T09:00:00.000Z"),
+          dismissedEvidenceHash: "b".repeat(64),
+          dismissedEffectSize: 0.34,
+          dismissedSampleSize: 42,
+          createdAt: new Date("2026-07-19T08:00:00.000Z"),
+          updatedAt: new Date("2026-07-19T09:00:00.000Z"),
         },
       ]),
     },
@@ -362,6 +389,7 @@ describe("backup round trip — export, wire schema, restore", () => {
       targetLow: 40,
       decimals: 1,
       description: "Right hand, before breakfast",
+      correlationEnabled: true,
     });
 
     // The readings are the half that would go missing quietly: a metric with
@@ -375,6 +403,25 @@ describe("backup round trip — export, wire schema, restore", () => {
       unit: "kg",
       note: "felt strong",
     });
+  });
+
+  it("writes persisted pattern identity and dismissal evidence back", async () => {
+    const { written } = await roundTrip();
+    const pattern = written.find((w) => w.model === "correlationPattern");
+    expect(pattern).toBeDefined();
+    expect(pattern!.data).toMatchObject({
+      userId: OWNER,
+      canonicalKey: `p1:${"a".repeat(64)}`,
+      family: "DISCOVERY_RETROSPECTIVE",
+      factorKey: "CUSTOM_METRIC:metric-1",
+      outcomeKey: "RESTING_HEART_RATE",
+      dismissedEvidenceHash: "b".repeat(64),
+      dismissedEffectSize: 0.34,
+      dismissedSampleSize: 42,
+    });
+    expect(pattern!.data.dismissedAt).toEqual(
+      new Date("2026-07-19T09:00:00.000Z"),
+    );
   });
 
   it("writes the day's cumulative shape back, every hour of it", async () => {

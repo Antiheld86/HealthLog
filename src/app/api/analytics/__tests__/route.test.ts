@@ -69,6 +69,12 @@ vi.mock("@/lib/db-compat", () => ({
   ensureDbCompatibility: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/insights/correlation-patterns", () => ({
+  PATTERN_FAMILIES: { fixed: "FIXED" },
+  syncAcceptedPatterns: vi.fn().mockResolvedValue(new Map()),
+  decisionForEvidence: vi.fn().mockReturnValue(null),
+}));
+
 vi.mock("next/headers", () => ({
   headers: vi.fn(async () => ({ get: () => null })),
   cookies: vi.fn(async () => ({

@@ -3,16 +3,20 @@ import type { SleepStage } from "@/generated/prisma/client";
 
 const measurementFindMany = vi.fn();
 const moodFindMany = vi.fn();
+const customMetricFindMany = vi.fn();
 vi.mock("@/lib/db", () => ({
   prisma: {
     measurement: { findMany: (a: unknown) => measurementFindMany(a) },
     moodEntry: { findMany: (a: unknown) => moodFindMany(a) },
+    customMetric: { findMany: (a: unknown) => customMetricFindMany(a) },
   },
 }));
 
 import {
   buildMeasurementDailySeries,
   fetchMeasurementWindowSeries,
+  fetchCustomMetricBehaviourSeries,
+  MAX_CUSTOM_CORRELATION_CHANNELS,
   fetchMoodWindowSeries,
   toDailyMeans,
   type MeasurementSeriesRow,
@@ -236,5 +240,75 @@ describe("fetchMoodWindowSeries — desc+cap+resort", () => {
     expect(moodFindMany).toHaveBeenCalledWith(
       expect.objectContaining({ orderBy: { moodLoggedAt: "desc" }, take: CAP }),
     );
+  });
+});
+
+describe("fetchCustomMetricBehaviourSeries", () => {
+  beforeEach(() => {
+    customMetricFindMany.mockReset();
+  });
+
+  it("reads only active opted-in owner metrics with a deterministic cap", async () => {
+    customMetricFindMany.mockResolvedValue([]);
+
+    await fetchCustomMetricBehaviourSeries(
+      "owner-1",
+      "Europe/Berlin",
+      new Date("2026-01-01T00:00:00.000Z"),
+    );
+
+    expect(customMetricFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId: "owner-1",
+          deletedAt: null,
+          correlationEnabled: true,
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        take: MAX_CUSTOM_CORRELATION_CHANNELS,
+      }),
+    );
+  });
+
+  it("keeps metric identity, drops historical units, and averages same-local-day values", async () => {
+    customMetricFindMany.mockResolvedValue([
+      {
+        id: "grip-id",
+        name: "Grip strength",
+        unit: "kg",
+        entries: [
+          {
+            value: 40,
+            unit: "kg",
+            measuredAt: new Date("2026-07-01T08:00:00.000Z"),
+          },
+          {
+            value: 44,
+            unit: "kg",
+            measuredAt: new Date("2026-07-01T18:00:00.000Z"),
+          },
+          {
+            value: 100,
+            unit: "lb",
+            measuredAt: new Date("2026-07-01T20:00:00.000Z"),
+          },
+        ],
+      },
+    ]);
+
+    const result = await fetchCustomMetricBehaviourSeries(
+      "owner-1",
+      "UTC",
+      new Date("2026-01-01T00:00:00.000Z"),
+    );
+
+    expect(result).toEqual([
+      {
+        key: "CUSTOM_METRIC:grip-id",
+        label: "Grip strength",
+        role: "behaviour",
+        points: [{ day: "2026-07-01", value: 42 }],
+      },
+    ]);
   });
 });

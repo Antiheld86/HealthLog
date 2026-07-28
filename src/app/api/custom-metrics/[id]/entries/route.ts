@@ -10,6 +10,7 @@ import {
   sanitiseZodIssues,
 } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
+import { invalidateUserCorrelationPatterns } from "@/lib/cache/invalidate";
 import { serialiseCustomMetricEntry } from "@/lib/custom-metrics/custom-metric-store";
 import { prisma } from "@/lib/db";
 import { withIdempotency } from "@/lib/idempotency";
@@ -152,6 +153,7 @@ async function postCustomMetricEntry(
     action: { name: "custom-metric.entry.create" },
     meta: { customMetricId: id, entryId: created.id },
   });
+  invalidateUserCorrelationPatterns(user.id);
 
   return apiSuccess(serialiseCustomMetricEntry(created), 201);
 }

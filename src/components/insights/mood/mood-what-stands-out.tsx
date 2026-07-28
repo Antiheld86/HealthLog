@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { TrendingUp } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { TileHeader } from "@/components/insights/tile-header";
@@ -55,13 +56,11 @@ export function MoodWhatStandsOut({
     retry: false,
   });
 
-  const moodPairs =
-    isLoading || isError || !data ? [] : moodPairsOf(data.discovered);
+  const moodPairs = !data ? [] : moodPairsOf(data.discovered);
   const hasNarratives = narratives.length > 0;
   const hasDiscovered = moodPairs.length > 0;
 
-  // Both halves empty → render nothing rather than an empty card.
-  if (!hasNarratives && !hasDiscovered) return null;
+  if (!hasNarratives && !isLoading && !isError && !data) return null;
 
   return (
     <Card data-slot="mood-what-stands-out">
@@ -73,6 +72,29 @@ export function MoodWhatStandsOut({
       </CardHeader>
       <CardContent className="space-y-4">
         {hasNarratives && <MoodNarrativeFeed items={narratives} />}
+        {isLoading ? (
+          <Skeleton
+            data-slot="mood-discovery-loading"
+            className="h-16 w-full"
+          />
+        ) : null}
+        {isError ? (
+          <p
+            data-slot="mood-discovery-error"
+            role="alert"
+            className="text-destructive text-sm"
+          >
+            {t("insights.pattern.loadError")}
+          </p>
+        ) : null}
+        {!isLoading && !isError && data && !hasDiscovered ? (
+          <p
+            data-slot="mood-discovery-empty"
+            className="text-muted-foreground text-sm"
+          >
+            {t("insights.pattern.empty")}
+          </p>
+        ) : null}
         {hasDiscovered && (
           <MoodDiscoveredRelations
             pairs={moodPairs}

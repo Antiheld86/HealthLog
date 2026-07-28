@@ -447,10 +447,39 @@ const customMetricBackupSchema = z
     targetHigh: z.number().nullable().default(null),
     decimals: z.number().int().nullable().default(null),
     description: z.string().nullable().default(null),
+    correlationEnabled: z.boolean().default(false),
     createdAt: isoDateTime.optional(),
     updatedAt: isoDateTime.optional(),
     deletedAt: isoDateTime.nullable().optional(),
     entries: z.array(customMetricEntryBackupSchema).default([]),
+  })
+  .passthrough();
+
+const correlationPatternBackupSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    canonicalKey: z.string().regex(/^p1:[a-f0-9]{64}$/),
+    family: z.string().min(1),
+    factorKey: z.string().min(1),
+    outcomeKey: z.string().min(1),
+    lagDays: z.number().int().min(0),
+    sampleSize: z.number().int().positive(),
+    effectSize: z.number().finite(),
+    pValue: z.number().min(0).max(1),
+    qValue: z.number().min(0).max(1).nullable().default(null),
+    evidenceHash: z.string().regex(/^[a-f0-9]{64}$/),
+    isCurrent: z.boolean(),
+    lastComputedAt: isoDateTime,
+    dismissedAt: isoDateTime.nullable().default(null),
+    dismissedEvidenceHash: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .nullable()
+      .default(null),
+    dismissedEffectSize: z.number().finite().nullable().default(null),
+    dismissedSampleSize: z.number().int().positive().nullable().default(null),
+    createdAt: isoDateTime.optional(),
+    updatedAt: isoDateTime.optional(),
   })
   .passthrough();
 
@@ -749,6 +778,7 @@ export const backupPayloadSchema = z
     // `null` / `[]`.
     healthProfile: healthProfileBackupSchema.nullable().default(null),
     customMetrics: z.array(customMetricBackupSchema).default([]),
+    correlationPatterns: z.array(correlationPatternBackupSchema).default([]),
     // The hourly shape of a cumulative day. Defaulted for the same reason as
     // the pair above: a file written before the table existed carries no key.
     intradayProfiles: z.array(intradayProfileBackupSchema).default([]),
@@ -810,6 +840,8 @@ export interface BackupSummary {
   customMetrics: number;
   /** Readings across every user-defined metric. */
   customMetricEntries: number;
+  /** Persisted accepted correlation identities and dismissal decisions. */
+  correlationPatterns: number;
   /** Stored day curves for the cumulative metrics, across every metric. */
   intradayProfiles: number;
 }
@@ -843,6 +875,7 @@ export function summarizeBackup(payload: BackupPayload): BackupSummary {
       (sum, metric) => sum + metric.entries.length,
       0,
     ),
+    correlationPatterns: payload.correlationPatterns.length,
     intradayProfiles: payload.intradayProfiles.length,
   };
 }

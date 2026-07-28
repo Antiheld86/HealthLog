@@ -68,6 +68,7 @@ interface RestoreResponse {
     documents: number;
     healthProfile: number;
     customMetrics: number;
+    correlationPatterns: number;
     intradayProfiles: number;
   };
 }
@@ -1121,6 +1122,7 @@ const handler = apiHandler(
             documents: documents.count,
             healthProfile: profileCleared.healthProfile,
             customMetrics: profileCleared.customMetrics,
+            correlationPatterns: profileCleared.correlationPatterns,
             intradayProfiles: intradayCleared.intradayProfiles,
           };
         },
@@ -1249,6 +1251,7 @@ const handler = apiHandler(
           healthProfile: summary.healthProfile,
           customMetrics: summary.customMetrics,
           customMetricEntries: summary.customMetricEntries,
+          correlationPatterns: summary.correlationPatterns,
         },
       },
     });

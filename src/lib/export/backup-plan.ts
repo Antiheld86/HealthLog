@@ -101,6 +101,7 @@ export const BACKED_UP_MODELS = [
   // ── Custom metrics ────────────────────────────────────────────────────────
   "CustomMetric",
   "CustomMetricEntry",
+  "CorrelationPattern",
 
   // ── Activity and nutrition ────────────────────────────────────────────────
   "Workout",
@@ -202,6 +203,7 @@ export const TWO_ENDED_MODELS: readonly string[] = [
   "CycleSymptomLink",
   "CustomMetric",
   "CustomMetricEntry",
+  "CorrelationPattern",
   "Workout",
   "NutrientIntakeDay",
   "InboundDocument",

@@ -121,6 +121,7 @@ export function metricFamily(key: string): string {
   // near-tautology). They stay free to pair cross-domain against mood / sleep /
   // vitals — the whole point of the module.
   if (key.startsWith("ENV_")) return "ENVIRONMENT";
+  if (key.startsWith("CUSTOM_METRIC:")) return key;
   // v1.21.0 (FDREXTEND) — medication compliance and symptom severity each form
   // their OWN single-channel family, so the loop's same-family guard collapses
   // only the self-lag (compliance→compliance, symptom→symptom). The returned
@@ -168,6 +169,8 @@ export interface NamedSeries {
   key: string;
   /** Whether the channel is a behaviour (lag source) or an outcome (lag target). */
   role: "behaviour" | "outcome";
+  /** User-facing label for dynamic channels such as custom metrics. */
+  label?: string;
   points: DailySeriesPoint[];
 }
 
@@ -175,7 +178,9 @@ export interface NamedSeries {
 export interface DiscoveredCorrelation {
   behaviour: string;
   outcome: string;
+  behaviourLabel?: string;
   /** Paired-day count after the day+1 lag join. */
+  outcomeLabel?: string;
   n: number;
   /** Pearson r (lag-joined). */
   r: number;
@@ -214,6 +219,10 @@ export interface DiscoveredCorrelation {
    * provisional rather than established.
    */
   provisional?: boolean;
+  /** Persisted server decision for dismissal across recomputation. */
+  patternId?: string;
+  canonicalKey?: string;
+  dismissed?: boolean;
 }
 
 export interface CorrelationDiscoveryResult {
@@ -263,6 +272,8 @@ interface RawPair {
   n: number;
   r: number;
   pValue: number;
+  behaviourLabel?: string;
+  outcomeLabel?: string;
 }
 
 /**
@@ -309,10 +320,12 @@ function interpret(
   r: number,
   tier: ConfidenceTier,
   t: Translate,
+  behaviourLabel?: string,
+  outcomeLabel?: string,
 ): string {
   const params = {
-    behaviour: humanise(behaviour, t),
-    outcome: humanise(outcome, t),
+    behaviour: behaviourLabel ?? humanise(behaviour, t),
+    outcome: outcomeLabel ?? humanise(outcome, t),
     direction: t(
       `insights.correlation.direction.${r < 0 ? "lower" : "higher"}`,
     ),
@@ -471,6 +484,8 @@ export function discoverCorrelations(
         n: result.n,
         r: result.r,
         pValue: result.pValue,
+        behaviourLabel: b.label,
+        outcomeLabel: o.label,
       });
     }
   }
@@ -505,13 +520,23 @@ export function discoverCorrelations(
     .map((t) => ({
       behaviour: t.behaviour,
       outcome: t.outcome,
+      behaviourLabel: t.behaviourLabel,
+      outcomeLabel: t.outcomeLabel,
       n: t.n,
       r: t.r,
       pValue: t.pValue,
       qValue: Math.round(t.qValue * 1000) / 1000,
       shrunkR: Math.round(t.shrunkR * 1000) / 1000,
       tier: t.tier,
-      interpretation: interpret(t.behaviour, t.outcome, t.r, t.tier, translate),
+      interpretation: interpret(
+        t.behaviour,
+        t.outcome,
+        t.r,
+        t.tier,
+        translate,
+        t.behaviourLabel,
+        t.outcomeLabel,
+      ),
       lagDays,
     }))
     // RECON1 (D2-2 / D4) — rank by the SHRUNK effect magnitude (a deep, strong

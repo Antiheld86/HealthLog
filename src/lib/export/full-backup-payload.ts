@@ -213,10 +213,9 @@ export async function buildFullBackupPayload(
     buildRecordsBackupSection(prisma, userId, {
       purpose: disasterRecovery ? "disaster-recovery" : "portable-export",
     }),
-    // Durable self-context + user-defined metrics. Both were classified as
-    // carried when the backup plan was written and carried by nothing; the
-    // metrics are the live loss, since a series the person defined themselves
-    // is the one kind no integration can re-sync.
+    // Durable self-context, user-defined metrics, and persisted pattern
+    // decisions. These account-owned rows cannot be reconstructed from an
+    // integration after restore.
     buildProfileBackupSection(prisma, userId, {
       purpose: disasterRecovery ? "disaster-recovery" : "portable-export",
     }),

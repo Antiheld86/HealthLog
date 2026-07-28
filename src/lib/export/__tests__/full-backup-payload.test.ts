@@ -230,6 +230,7 @@ function makePrisma() {
           targetHigh: null,
           decimals: 1,
           description: "Right hand, before breakfast",
+          correlationEnabled: true,
           createdAt: new Date("2026-07-01T00:00:00.000Z"),
           updatedAt: new Date("2026-07-19T00:00:00.000Z"),
           deletedAt: null,
@@ -243,6 +244,32 @@ function makePrisma() {
               createdAt: new Date("2026-07-19T06:31:00.000Z"),
             },
           ],
+        },
+      ]),
+    },
+    correlationPattern: {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "pattern-1",
+          userId: "user-1",
+          canonicalKey: `p1:${"a".repeat(64)}`,
+          family: "DISCOVERY_RETROSPECTIVE",
+          factorKey: "CUSTOM_METRIC:metric-1",
+          outcomeKey: "RESTING_HEART_RATE",
+          lagDays: 1,
+          sampleSize: 42,
+          effectSize: 0.34,
+          pValue: 0.01,
+          qValue: 0.04,
+          evidenceHash: "b".repeat(64),
+          isCurrent: true,
+          lastComputedAt: new Date("2026-07-19T08:00:00.000Z"),
+          dismissedAt: new Date("2026-07-19T09:00:00.000Z"),
+          dismissedEvidenceHash: "b".repeat(64),
+          dismissedEffectSize: 0.34,
+          dismissedSampleSize: 42,
+          createdAt: new Date("2026-07-19T08:00:00.000Z"),
+          updatedAt: new Date("2026-07-19T09:00:00.000Z"),
         },
       ]),
     },
@@ -551,6 +578,7 @@ describe("buildFullBackupPayload — section keys reach the payload", () => {
       // from the builders.
       "healthProfile",
       "customMetrics",
+      "correlationPatterns",
       "intradayProfiles",
     ];
 
@@ -662,6 +690,7 @@ describe("buildFullBackupPayload — profile and custom metrics", () => {
         targetHigh: null,
         decimals: 1,
         description: "Right hand, before breakfast",
+        correlationEnabled: true,
         deletedAt: null,
         entries: [
           expect.objectContaining({
@@ -676,6 +705,17 @@ describe("buildFullBackupPayload — profile and custom metrics", () => {
     ]);
     expect(counts.customMetrics).toBe(1);
     expect(counts.customMetricEntries).toBe(1);
+    expect(payload.correlationPatterns).toEqual([
+      expect.objectContaining({
+        id: "pattern-1",
+        canonicalKey: `p1:${"a".repeat(64)}`,
+        factorKey: "CUSTOM_METRIC:metric-1",
+        outcomeKey: "RESTING_HEART_RATE",
+        dismissedAt: "2026-07-19T09:00:00.000Z",
+        dismissedEvidenceHash: "b".repeat(64),
+      }),
+    ]);
+    expect(counts.correlationPatterns).toBe(1);
   });
 
   it("excludes deleted metrics from a portable export", async () => {

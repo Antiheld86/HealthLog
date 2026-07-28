@@ -10,6 +10,7 @@ import {
   sanitiseZodIssues,
 } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
+import { invalidateUserCorrelationPatterns } from "@/lib/cache/invalidate";
 import { serialiseCustomMetricWithLatest } from "@/lib/custom-metrics/custom-metric-store";
 import { prisma } from "@/lib/db";
 import { withIdempotency } from "@/lib/idempotency";
@@ -94,8 +95,15 @@ async function postCustomMetric(request: NextRequest) {
     return returnAllZodIssues(parsed.error, 422);
   }
 
-  const { name, unit, targetLow, targetHigh, decimals, description } =
-    parsed.data;
+  const {
+    name,
+    unit,
+    targetLow,
+    targetHigh,
+    decimals,
+    description,
+    correlationEnabled,
+  } = parsed.data;
 
   // The `@@unique([userId, name])` index is the structural backstop and spans
   // soft-deleted rows too. Resolve the name up front: a LIVE collision is a
@@ -120,6 +128,7 @@ async function postCustomMetric(request: NextRequest) {
           targetHigh: targetHigh ?? null,
           decimals: decimals ?? null,
           description: description ?? null,
+          correlationEnabled,
           deletedAt: null,
         },
       })
@@ -132,6 +141,7 @@ async function postCustomMetric(request: NextRequest) {
           targetHigh: targetHigh ?? null,
           decimals: decimals ?? null,
           description: description ?? null,
+          correlationEnabled,
         },
       });
 
@@ -145,6 +155,7 @@ async function postCustomMetric(request: NextRequest) {
     action: { name: "custom-metric.metric.create" },
     meta: { customMetricId: created.id, revived: existing !== null },
   });
+  invalidateUserCorrelationPatterns(user.id);
 
   // A freshly created metric has no values; a revived one may retain entries
   // logged before it was soft-deleted, so resolve the latest + count for it.

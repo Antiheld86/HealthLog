@@ -841,10 +841,11 @@ model User {
   // marker); LabResult rows link to a Biomarker for the resolved range/unit.
   biomarkers                     Biomarker[]
   // v1.25.5 — user-defined custom metrics. A separate generic store
-  // (catalog + values), fully isolated from the closed MeasurementType
-  // system: not synced, not in FHIR, not in AI insights — log + chart only.
+  // (catalog + values), not synced and not in FHIR. Correlation discovery
+  // reads a metric only after the account explicitly opts it in.
   customMetrics                  CustomMetric[]
   customMetricEntries            CustomMetricEntry[]
+  correlationPatterns             CorrelationPattern[]
   // v1.19.0 — illness / condition journal (born-gated by the module system).
   // IllnessEpisode is the soft-deleted episode row; IllnessDayLog is the
   // per-day timeline mirroring the CycleDayLog shape.
@@ -4961,6 +4962,9 @@ model CustomMetric {
   decimals    Int?
   /// Optional free-text description ("what this measures"). Plaintext.
   description String?
+  /// Explicit opt-in to expose this metric as a bounded behaviour channel in
+  /// correlation discovery. False keeps the metric isolated.
+  correlationEnabled Boolean   @default(false) @map("correlation_enabled")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
   /// Soft-delete tombstone. NULL = live; non-NULL = deleted at the instant.
@@ -4993,6 +4997,38 @@ model CustomMetricEntry {
 
   @@index([userId, customMetricId, measuredAt])
   @@map("custom_metric_entries")
+}
+
+/// Persisted identity and latest accepted evidence for a user-scoped
+/// correlation finding. `canonicalKey` is derived from factor + outcome + lag;
+/// the named fields remain queryable and make the identity portable.
+model CorrelationPattern {
+  id                    String    @id @default(cuid())
+  userId                String    @map("user_id")
+  canonicalKey          String    @map("canonical_key")
+  family                String
+  factorKey             String    @map("factor_key")
+  outcomeKey            String    @map("outcome_key")
+  lagDays               Int       @map("lag_days")
+  sampleSize            Int       @map("sample_size")
+  effectSize            Float     @map("effect_size")
+  pValue                Float     @map("p_value")
+  qValue                Float?    @map("q_value")
+  evidenceHash          String    @map("evidence_hash")
+  isCurrent             Boolean   @default(true) @map("is_current")
+  lastComputedAt        DateTime  @map("last_computed_at")
+  dismissedAt           DateTime? @map("dismissed_at")
+  dismissedEvidenceHash String?   @map("dismissed_evidence_hash")
+  dismissedEffectSize   Float?    @map("dismissed_effect_size")
+  dismissedSampleSize   Int?      @map("dismissed_sample_size")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, canonicalKey])
+  @@index([userId, family, isCurrent])
+  @@map("correlation_patterns")
 }
 
 // ─── User Achievements ───────────────────────────────────────

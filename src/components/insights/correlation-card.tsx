@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useEffect, useState } from "react";
 import { Activity, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,10 @@ import type { CorrelationResult } from "@/lib/insights/correlations";
 import type { CoachScopeSource } from "@/lib/ai/coach/types";
 import { CONFIDENCE_BADGE_CLASS } from "./confidence-badge";
 import { AskCoachAction } from "./ask-coach-action";
+import {
+  PatternDismissButton,
+  PatternDismissedNotice,
+} from "./pattern-dismiss-action";
 
 /**
  * v1.4.20 phase B3 — single Correlation card.
@@ -95,6 +100,10 @@ const COACH_QUESTION_BY_KIND: Record<CorrelationResult["kind"], string> = {
 
 export function CorrelationCard({ result }: CorrelationCardProps) {
   const { t } = useTranslations();
+  const initialDismissed =
+    result.status === "ok" && result.dismissed === true && !!result.patternId;
+  const [dismissed, setDismissed] = useState(initialDismissed);
+  useEffect(() => setDismissed(initialDismissed), [initialDismissed]);
   const title = t(TITLE_KEY[result.kind]);
   const subtitle = t(SUBTITLE_KEY[result.kind]);
   const coachSources = COACH_SOURCES_BY_KIND[result.kind];
@@ -140,7 +149,12 @@ export function CorrelationCard({ result }: CorrelationCardProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        {result.status === "ok" ? (
+        {dismissed && result.status === "ok" && result.patternId ? (
+          <PatternDismissedNotice
+            patternId={result.patternId}
+            onRestored={() => setDismissed(false)}
+          />
+        ) : result.status === "ok" ? (
           <>
             <ScatterCorrelationChart
               data={result.points}
@@ -188,6 +202,12 @@ export function CorrelationCard({ result }: CorrelationCardProps) {
                 question={t(COACH_QUESTION_BY_KIND[result.kind])}
                 scope={coachScope}
               />
+              {result.patternId ? (
+                <PatternDismissButton
+                  patternId={result.patternId}
+                  onDismissed={() => setDismissed(true)}
+                />
+              ) : null}
             </div>
           </>
         ) : (

@@ -24,6 +24,7 @@ vi.mock("@/lib/db", () => ({
     // channels in (read from EnvironmentContext); default empty so no env
     // channel produces a point.
     environmentContext: { findMany: vi.fn().mockResolvedValue([]) },
+    customMetric: { findMany: vi.fn().mockResolvedValue([]) },
   },
 }));
 
@@ -53,6 +54,15 @@ vi.mock("@/lib/logging/transports", () => ({ emitIfSampled: vi.fn() }));
 
 vi.mock("@/lib/db-compat", () => ({
   ensureDbCompatibility: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/insights/correlation-patterns", () => ({
+  PATTERN_FAMILIES: {
+    discoveryRetrospective: "DISCOVERY_RETROSPECTIVE",
+    discoveryRecent: "DISCOVERY_RECENT",
+  },
+  syncAcceptedPatterns: vi.fn().mockResolvedValue(new Map()),
+  decisionForEvidence: vi.fn().mockReturnValue(null),
 }));
 
 vi.mock("next/headers", () => ({

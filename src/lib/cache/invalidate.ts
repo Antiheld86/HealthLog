@@ -261,6 +261,13 @@ export function invalidateUserMedicationListLayout(userId: string): void {
   caches.medicationListLayout.deleteByPrefix(userId);
 }
 
+/** Invalidate surfaces whose server decision includes pattern dismissal. */
+export function invalidateUserCorrelationPatterns(userId: string): void {
+  caches.analytics.deleteByPrefix(`${userId}|`);
+  caches.moodInsights.deleteByPrefix(userId);
+  caches.insightsDerived.deleteByPrefix(`${userId}|`);
+}
+
 /**
  * v1.16.9 — full per-user cache eviction for the wipe / restore paths.
  * A data wipe or a backup restore replaces (or removes) every row the

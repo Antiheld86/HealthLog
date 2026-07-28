@@ -170,6 +170,9 @@ export interface TagMetricCrosstabRow {
   qValue: number;
   /** Discrete confidence band (p + min per-group day count). */
   confidence: InfluenceConfidence;
+  patternId?: string;
+  canonicalKey?: string;
+  dismissed?: boolean;
 }
 
 const CROSSTAB_SUM_TYPES = new Set<string>([
@@ -497,6 +500,9 @@ export interface FactorMetricCrosstabRow {
   qValue: number;
   /** Discrete confidence band (p + min per-group day count). */
   confidence: InfluenceConfidence;
+  patternId?: string;
+  canonicalKey?: string;
+  dismissed?: boolean;
 }
 
 type FactorMetricDisplay =

@@ -1,10 +1,15 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n/context";
 import { useUnitDisplay } from "@/hooks/use-unit-display";
 import { moodTagIcon } from "@/components/mood/mood-tag-icons";
 import { cn } from "@/lib/utils";
 import type { MoodInfluenceConfidence } from "./mood-tag-influence";
+import {
+  PatternDismissButton,
+  PatternDismissedNotice,
+} from "@/components/insights/pattern-dismiss-action";
 
 /**
  * v1.14.0 — RATED-factor × vital crosstab card.
@@ -42,6 +47,9 @@ export interface MoodFactorMetricCrosstabRow {
   pValue: number;
   qValue: number;
   confidence: MoodInfluenceConfidence;
+  patternId?: string;
+  canonicalKey?: string;
+  dismissed?: boolean;
 }
 
 const METRIC_LABEL_KEY: Record<string, string> = {
@@ -87,6 +95,23 @@ export function MoodFactorMetricCrosstab({
 }) {
   const { t } = useTranslations();
   const unitDisplay = useUnitDisplay();
+  const [dismissedIds, setDismissedIds] = useState(
+    () =>
+      new Set(
+        rows
+          .filter((row) => row.dismissed && row.patternId)
+          .map((row) => row.patternId as string),
+      ),
+  );
+  useEffect(() => {
+    setDismissedIds(
+      new Set(
+        rows
+          .filter((row) => row.dismissed && row.patternId)
+          .map((row) => row.patternId as string),
+      ),
+    );
+  }, [rows]);
   if (rows.length === 0) return null;
 
   return (
@@ -96,6 +121,23 @@ export function MoodFactorMetricCrosstab({
       </p>
       <ul className="divide-border divide-y">
         {rows.map((row) => {
+          if (row.patternId && dismissedIds.has(row.patternId)) {
+            return (
+              <li key={row.canonicalKey ?? row.patternId} className="py-2">
+                <PatternDismissedNotice
+                  compact
+                  patternId={row.patternId}
+                  onRestored={() =>
+                    setDismissedIds((current) => {
+                      const next = new Set(current);
+                      next.delete(row.patternId as string);
+                      return next;
+                    })
+                  }
+                />
+              </li>
+            );
+          }
           const Icon = moodTagIcon(row.icon);
           const factorLabel = t(row.labelKey);
           const metricLabel = t(
@@ -155,6 +197,19 @@ export function MoodFactorMetricCrosstab({
                 >
                   {t(CONFIDENCE_KEY[row.confidence])}
                 </span>
+                {row.patternId ? (
+                  <PatternDismissButton
+                    patternId={row.patternId}
+                    onDismissed={() =>
+                      setDismissedIds((current) => {
+                        const next = new Set(current);
+                        next.add(row.patternId as string);
+                        return next;
+                      })
+                    }
+                    className="shrink-0"
+                  />
+                ) : null}
               </div>
               <p className="text-muted-foreground text-xs">
                 {t(
