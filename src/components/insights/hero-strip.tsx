@@ -383,6 +383,7 @@ export function HeroStrip({
             report={healthScore}
             tension={tensionProp}
             returnToBand={returnToBandProp}
+            className="w-full md:shrink-0 md:grow-0 md:basis-[22rem] xl:basis-[26rem]"
           />
         )}
       </div>

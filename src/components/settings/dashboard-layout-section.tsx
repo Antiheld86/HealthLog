@@ -49,6 +49,7 @@ import {
   type PriorityItemKind,
 } from "@/lib/daily/priority-item";
 import { apiDelete, apiGet, apiPut, ApiError } from "@/lib/api/api-fetch";
+import { useMounted } from "@/hooks/use-mounted";
 import { useAuth } from "@/hooks/use-auth";
 import {
   NATIVE_ONLY_WIDGET_LABEL_KEYS,
@@ -204,6 +205,17 @@ export function DashboardLayoutSection({ id }: { id: string }) {
   const dragHintId = useId();
   const heroDescriptionId = useId();
   const heroNotificationNoteId = useId();
+  // v1.34 — the "Today highlights" fieldset below is gated on `layout`,
+  // which can be truthy on the very first client render whenever a
+  // returning visitor's browser already has a warm, offline-persisted
+  // `dashboardWidgets` cache (queryKeys.dashboardWidgets() sits in
+  // PERSIST_ALLOWLIST_HEADS). The static build has no session, so
+  // `layout` is always null in the server HTML — a warm cache then
+  // diverges the very first client paint from that HTML (React #418).
+  // `useMounted()` forces the fieldset's presence check to agree with
+  // the server on the hydrating render (both false), the same pattern
+  // `LayoutModuleGate` already uses for the same class of mismatch.
+  const hydrated = useMounted();
 
   // v1.4.47 W4 — sensors: pointer for mouse/touch, keyboard for Tab + Space
   // + arrow-key reordering. The KeyboardSensor still works for users who
@@ -452,7 +464,7 @@ export function DashboardLayoutSection({ id }: { id: string }) {
           />
         }
       />
-      {layout && (
+      {hydrated && layout && (
         <fieldset
           aria-describedby={`${heroDescriptionId} ${heroNotificationNoteId}`}
           data-slot="hero-content-settings"

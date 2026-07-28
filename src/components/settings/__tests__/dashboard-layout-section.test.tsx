@@ -69,6 +69,16 @@ vi.mock("@/hooks/use-auth", () => ({
   useAuth: () => ({ user: { modules: authState.modules } }),
 }));
 
+// The hero fieldset gates its presence via `useMounted()` (v1.34, hydration
+// fix). Under SSR (`renderToStaticMarkup`) `useMounted()` returns `false`,
+// which would hide the fieldset from every test below regardless of
+// `layout`. Force it to the hydrated (`true`) snapshot so these tests
+// exercise the real post-mount content — same convention as
+// layout-section.test.tsx for the identical `LayoutModuleGate` pattern.
+vi.mock("@/hooks/use-mounted", () => ({
+  useMounted: () => true,
+}));
+
 import { I18nProvider } from "@/lib/i18n/context";
 import {
   DashboardLayoutSection,
