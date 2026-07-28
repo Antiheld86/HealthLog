@@ -137,25 +137,38 @@ loss, and a below-zero baseline reading that turned out to affect
 other metrics once someone went looking. Built by @mathewcsims
 (Refs #662): the per-slot reminder window fix.
 
-### Thank you
+### Dedication
 
-Eighteen people have opened a report or a request on this tracker so
-far, most of them owing this project nothing. @lutzkind alone has filed
-twenty-four, several arriving with the broken code path already traced.
-@tarantila reports straight to the maintainer and has twice turned one
-observation into a defect nobody else had found. This release carries
-what a good number of those reports and requests turned into. It is not
-all of them, and the ones still open are still open because they are
-waiting their turn, not because they were set aside.
+This release is dedicated to the people who reported something, asked for
+something, or noticed something and said so: @balajiv113, @ChaosExAnima,
+@doenke, @DrGithubble, @Flieger37, @k-nacion, @kevinpapst, @livelylinux,
+@lutzkind, @Manschk3rl, @mathewcsims, @muhdusama, @Nazza01, @nhemnt,
+@StefanIndustries, @TalesFromTheStack, @tarantila, @Uvenstedt, and
+@zet1200. None of you owe this project anything, and all of you gave it
+time anyway.
 
-@StefanIndustries sent this project its first money, ten euros, toward
-the yearly cost of keeping the iOS client on TestFlight without asking
-anyone to pay for it. The amount was never the point. Someone deciding
-this was worth something, and saying so, was not expected here.
+@lutzkind gets a line of his own. Twenty-four issues so far, several of
+them arriving with the broken code path already traced, and a habit of
+pushing back on a design decision until it actually gets better. More
+than one feature in this release started as his idea, not mine, and I
+did not expect that from a project I built to track my own blood
+pressure.
 
-More is welcome: an idea, a rough thought about how something ought to
-work, a screenshot of a number that looks wrong. Especially that last
-one.
+@StefanIndustries was the first person to send this project money. What
+was sent stays between us; the amount was never the point. Deciding
+this was worth paying for, and saying so out loud, was not something I
+expected from a self-hosted app nobody asked me to charge for.
+
+This release carries a good part of what came out of that list, among
+other things a workout category that two providers were silently
+dropping, a below-zero reading nobody else had caught, and a reminder
+window that ignored half its own schedule. It does not carry all of it.
+What is still open stays open because it is waiting its turn, not
+because it got set aside.
+
+More is welcome, from anyone: an idea, a rough thought about how
+something ought to work, a screenshot of a number that looks wrong.
+Especially the number that looks wrong.
 
 ## [1.33.2] — 2026-07-28
 
