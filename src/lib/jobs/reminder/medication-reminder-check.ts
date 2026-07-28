@@ -14,6 +14,7 @@ import { medicationDoseTag } from "@/lib/notifications/dose-tag";
 import {
   buildCanonicalSchedule,
   buildRecurrenceContext,
+  resolveSlotWindowDurationMinutes,
   scheduleEmitsInWindow,
   shouldMintMissedDoseRow,
 } from "@/lib/medications/scheduling/worker-helpers";
@@ -290,17 +291,15 @@ export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
           // slots per day; the pre-v1.7 worker keyed phase + dedup on the
           // single `windowStart`, so the evening dose never reminded.
           // Iterate every first-class time-of-day, each with its own
-          // window (anchored at the time, spanning the legacy
-          // `windowEnd - windowStart` duration), phase, dedup key
-          // (now including the time-of-day), and RED-mint instant.
+          // window (anchored at the time, spanning its own resolved
+          // per-slot duration — see `resolveSlotWindowDurationMinutes`),
+          // phase, dedup key (now including the time-of-day), and
+          // RED-mint instant.
           //
           // The legacy single-window contract is preserved: a schedule
           // with no first-class `timesOfDay` emits exactly one slot at
           // `windowStart` with `timeOfDay = ""`, which dedupes against
           // pre-v1.7 rows (backfilled to "") byte-for-byte.
-          const baseStartMins = parseTimeToMinutes(schedule.windowStart);
-          const baseEndMins = parseTimeToMinutes(schedule.windowEnd);
-          const windowDuration = baseEndMins - baseStartMins;
           const currentMins = parseTimeToMinutes(currentTime);
 
           const hasFirstClassTimes =
@@ -321,6 +320,18 @@ export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
             // explicit HH:mm.
             const dedupTimeOfDay = hasFirstClassTimes ? slotTime : "";
             const slotStartMins = parseTimeToMinutes(slotTime);
+            // Per-slot, not per-schedule — see resolveSlotWindowDurationMinutes.
+            // A multi-time-of-day schedule's whole-span windowEnd-windowStart
+            // is not a safe per-slot duration; this resolves each slot's own
+            // explicit dose-window / reminderGraceMinutes override (or a
+            // shared unconfigured-dose default, bounded by the gap to the
+            // adjacent slot) so a dose's resolved window never depends on
+            // how many sibling doses its schedule has.
+            const windowDuration = resolveSlotWindowDurationMinutes(
+              schedule,
+              slotTime,
+              canonicalSchedule.doseWindows ?? null,
+            );
             const slotEndMins = slotStartMins + windowDuration;
             const minutesToEnd = slotEndMins - currentMins;
             const minutesFromStart = currentMins - slotStartMins;

@@ -23,7 +23,11 @@ import {
   type ScheduleType,
   occurrencesBetween,
 } from "@/lib/medications/scheduling/recurrence";
-import { hhmmToMinutes } from "@/lib/medications/scheduling/hhmm";
+import {
+  hhmmToMinutes,
+  hhmmToMinutesOrNull,
+} from "@/lib/medications/scheduling/hhmm";
+import { DOSE_WINDOW_DEFAULTS } from "@/lib/medications/scheduling/dose-window-defaults";
 
 /**
  * Minimal Prisma-shape projection used by the worker. Mirrors the
@@ -168,6 +172,142 @@ export function scheduleEmitsInWindow(
   windowEnd: Date,
 ): boolean {
   return occurrencesBetween(schedule, windowStart, windowEnd, ctx).length > 0;
+}
+
+/**
+ * Per-slot phase-window duration, in minutes: how long after a dose
+ * slot's own start time it stays "on-time" before the reminder tick
+ * starts escalating through ORANGE/RED, and (halved) the radius a
+ * logged dose must land within to suppress that slot's reminder.
+ *
+ * Bug this closes: the reminder tick used to compute this ONCE per
+ * schedule as the whole schedule's `windowEnd - windowStart` span and
+ * apply that SAME span to every `timeOfDay` slot in the schedule. That
+ * is correct for a single-time-of-day schedule (the span already IS
+ * that one slot's window), but for a multi-time-of-day schedule it
+ * silently inflates every slot's grace period to the full gap between
+ * the schedule's earliest and latest dose. A twice-daily schedule with
+ * `windowStart=08:00`/`windowEnd=18:00` (representing "somewhere
+ * between the morning and evening dose", not a per-dose window) gave
+ * its 08:00 slot a 600-minute (10h) grace before it even entered
+ * ORANGE — silently far too lenient — while a schedule with a single
+ * `08:00` dose and the same-looking `windowEnd=09:00` correctly used a
+ * 60-minute span, and thus a 30-minute suppression radius that a dose
+ * logged more than 30 minutes late could never satisfy — far too
+ * strict. Same misapplied field, opposite-looking symptoms.
+ *
+ * A multi-time-of-day schedule must NOT get a different answer than a
+ * single-time-of-day one for a dose configured the same way — the
+ * point of this function is that the count of sibling slots on the
+ * schedule never changes one slot's own resolved duration except
+ * through the explicit, bounded inter-slot-overlap guard in tier 4
+ * below (which only ever narrows, and only when slots truly are close
+ * enough together to otherwise overlap).
+ *
+ * Four-tier resolution, checked in priority order — the first
+ * applicable tier wins, each strictly a "the user configured this
+ * exact thing" tier before falling back to a shared default:
+ *
+ *  1. An explicit per-dose `doseWindows` entry for THIS `slotTime`
+ *     (`{ timeOfDay, start, end }`, persisted by the dose-window
+ *     editor — v1.15.18) is the actual rule the user set for this
+ *     specific dose in the GUI. Its `end - start` (in minutes) is
+ *     used directly. Independent of every other dose on the
+ *     schedule, by construction — this is a per-`timeOfDay` lookup.
+ *  2. `reminderGraceMinutes`, when set, is used directly. The field
+ *     already exists and is documented ("Replaces the implicit
+ *     windowEnd - windowStart span for late-classification") for
+ *     exactly this purpose, and the write-path already reads it via
+ *     `graceToleranceMs` — but the reminder tick itself never read
+ *     it, so setting it had no effect on when/whether a reminder
+ *     fired. This is a schedule-wide override, applied identically
+ *     to every slot on the schedule (the field itself is per-schedule,
+ *     not per-dose, so uniform application here is what the value
+ *     represents — not a slot-count-dependent choice).
+ *  3. With NEITHER of the above set, this dose has no explicit
+ *     configuration at all, and gets the same default an unconfigured
+ *     "point" dose gets everywhere else in the app (`defaultBandForTime`
+ *     in `dose-window.ts`, `±DOSE_WINDOW_DEFAULTS.dailyOnTimeMinutes`).
+ *     Deliberately NOT the legacy per-schedule `windowEnd - windowStart`
+ *     span here: for a multi-time-of-day schedule that span is not a
+ *     per-dose window at all — it was derived as the earliest and
+ *     latest `timeOfDay` (see the bug writeup above), so an
+ *     unconfigured dose on a two-dose schedule must not silently
+ *     inherit a multi-hour gap purely because it has a sibling.
+ *  4. Bounded by the minimum gap between adjacent sorted `timesOfDay`
+ *     (the midnight wrap counted as one of those gaps) whenever the
+ *     schedule has more than one slot, so two distinct same-day doses
+ *     can never share a window — this can only ever narrow tiers 1-3,
+ *     never widen them, and is a no-op for a single-time-of-day
+ *     schedule (nothing to overlap with).
+ *
+ * The one legacy exception, preserved for backward compatibility: a
+ * single-time-of-day schedule with none of tiers 1-2 set keeps using
+ * the literal `windowEnd - windowStart` span rather than tier 3's
+ * default — for a schedule that predates the per-dose `doseWindows`
+ * system (v1.15.18), that legacy span IS the one and only window the
+ * user configured for that dose, and reinterpreting it as "unconfigured"
+ * would silently narrow an intentionally wide window on every such
+ * pre-existing schedule.
+ */
+export function resolveSlotWindowDurationMinutes(
+  schedule: Pick<
+    WorkerScheduleRow,
+    "windowStart" | "windowEnd" | "timesOfDay" | "reminderGraceMinutes"
+  >,
+  slotTime: string,
+  doseWindows: DoseWindowEntry[] | null,
+): number {
+  const explicit = doseWindows?.find((w) => w.timeOfDay === slotTime);
+  if (explicit) {
+    const startMin = hhmmToMinutesOrNull(explicit.start);
+    const endMin = hhmmToMinutesOrNull(explicit.end);
+    if (startMin !== null && endMin !== null) {
+      let span = endMin - startMin;
+      if (span < 0) span += 24 * 60; // overnight window
+      return span;
+    }
+  }
+
+  if (
+    typeof schedule.reminderGraceMinutes === "number" &&
+    Number.isFinite(schedule.reminderGraceMinutes) &&
+    schedule.reminderGraceMinutes > 0
+  ) {
+    return schedule.reminderGraceMinutes;
+  }
+
+  const slots = (
+    schedule.timesOfDay && schedule.timesOfDay.length > 0
+      ? schedule.timesOfDay
+      : [schedule.windowStart]
+  )
+    .map(hhmmToMinutesOrNull)
+    .filter((m): m is number => m !== null)
+    .sort((a, b) => a - b);
+
+  let span: number;
+  if (slots.length > 1) {
+    span = DOSE_WINDOW_DEFAULTS.dailyOnTimeMinutes * 2;
+  } else {
+    const startMin = hhmmToMinutesOrNull(schedule.windowStart);
+    const endMin = hhmmToMinutesOrNull(schedule.windowEnd);
+    span = startMin === null || endMin === null ? 0 : endMin - startMin;
+    if (span < 0) span += 24 * 60; // overnight window
+    return span; // single-slot legacy path — no sibling to cap against
+  }
+
+  let minGap = Infinity;
+  for (let i = 1; i < slots.length; i++) {
+    minGap = Math.min(minGap, slots[i] - slots[i - 1]);
+  }
+  const wrapGap = slots[0] + 24 * 60 - slots[slots.length - 1];
+  minGap = Math.min(minGap, wrapGap);
+  if (Number.isFinite(minGap) && minGap > 0) {
+    span = Math.min(span, minGap);
+  }
+
+  return span;
 }
 
 /**
