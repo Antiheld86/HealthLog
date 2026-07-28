@@ -60,9 +60,19 @@ import {
   localeLanguageNames as LANGUAGE_NAMES,
 } from "@/lib/i18n/config";
 import { annotate } from "@/lib/logging/context";
+import {
+  DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+  type HealthProfileAiSection,
+} from "@/lib/validations/health-profile-facts";
 
 /** Token ceiling for the single-shot questions completion. */
 const QUESTIONS_MAX_TOKENS = 300;
+const QUESTION_SECTIONS = [
+  "CONDITIONS",
+  "COACH_FOCUS",
+  "ALLERGIES",
+  "ABOUT_ME",
+] as const satisfies readonly HealthProfileAiSection[];
 
 function resolveLocale(locale: string | null | undefined): Locale {
   return locales.includes(locale as Locale)
@@ -79,13 +89,23 @@ function resolveLocale(locale: string | null | undefined): Locale {
 export function buildFallbackQuestions(
   ctx: SelfContext,
   locale: string | null | undefined,
+  includedSections: readonly HealthProfileAiSection[] = DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
 ): string[] {
+  const included = new Set(includedSections);
   const t = getServerTranslator(resolveLocale(locale)).t;
   const hints: string[] = [];
-  if (!ctx.conditions) hints.push(t("coachNudges.questionConditions"));
-  if (!ctx.coachFocus) hints.push(t("coachNudges.questionFocus"));
-  if (!ctx.allergies) hints.push(t("coachNudges.questionAllergies"));
-  if (!ctx.aboutMe) hints.push(t("coachNudges.questionAboutMe"));
+  if (included.has("CONDITIONS") && !ctx.conditions) {
+    hints.push(t("coachNudges.questionConditions"));
+  }
+  if (included.has("COACH_FOCUS") && !ctx.coachFocus) {
+    hints.push(t("coachNudges.questionFocus"));
+  }
+  if (included.has("ALLERGIES") && !ctx.allergies) {
+    hints.push(t("coachNudges.questionAllergies"));
+  }
+  if (included.has("ABOUT_ME") && !ctx.aboutMe) {
+    hints.push(t("coachNudges.questionAboutMe"));
+  }
   return hints.slice(0, 2);
 }
 
@@ -109,20 +129,26 @@ export function buildPrompts(
   ctx: SelfContext,
   locale: Locale,
   snapshotJson?: string | null,
+  includedSections: readonly HealthProfileAiSection[] = DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
 ): { systemPrompt: string; userPrompt: string } {
   const language = LANGUAGE_NAMES[locale];
-  // v1.16.6 — the prompt carries the same health-data snapshot the
-  // Coach chat uses, so the questions can reference what the user
-  // actually tracks (a logged medication, a weight trend, the stated
-  // focus) instead of staying generic.
-  const systemPrompt = `You help complete a health-app user's self-description for their AI health coach. Based on what the user has already shared — and on the health-data snapshot of what they track in the app — write AT MOST 3 short, specific follow-up questions that would best complete the picture (e.g. unstated conditions a stated medication implies, missing context for a stated goal, a tracked metric the self-description does not explain). Prefer questions grounded in the user's own data and stated focus over generic ones. Never ask for anything already answered. Never ask for a diagnosis. Write the questions in ${language}, addressed informally to the user. Reply with ONLY a JSON array of strings — no prose, no code fences.`;
-
-  const fieldLines = [
-    `conditions: ${ctx.conditions ?? "(not answered)"}`,
-    `allergies/intolerances: ${ctx.allergies ?? "(not answered)"}`,
-    `coach focus: ${ctx.coachFocus ?? "(not answered)"}`,
-    `free text: ${ctx.aboutMe ?? "(not answered)"}`,
-  ];
+  const systemPrompt = `You help complete a health-app user's self-description for their AI health coach. Based on what the user has already shared — and on the health-data snapshot of what they track in the app — write AT MOST 3 short, specific follow-up questions that would best complete the included fields listed below. Omitted fields are excluded by the user and must never be requested. Prefer questions grounded in the user's own data and stated focus over generic ones. Never ask for anything already answered. Never ask for a diagnosis. Write the questions in ${language}, addressed informally to the user. Reply with ONLY a JSON array of strings — no prose, no code fences.`;
+  const included = new Set(includedSections);
+  const fieldLines: string[] = [];
+  if (included.has("CONDITIONS")) {
+    fieldLines.push(`conditions: ${ctx.conditions ?? "(not answered)"}`);
+  }
+  if (included.has("ALLERGIES")) {
+    fieldLines.push(
+      `allergies/intolerances: ${ctx.allergies ?? "(not answered)"}`,
+    );
+  }
+  if (included.has("COACH_FOCUS")) {
+    fieldLines.push(`coach focus: ${ctx.coachFocus ?? "(not answered)"}`);
+  }
+  if (included.has("ABOUT_ME")) {
+    fieldLines.push(`free text: ${ctx.aboutMe ?? "(not answered)"}`);
+  }
   const userPrompt = snapshotJson
     ? `${fieldLines.join("\n")}\n\nHEALTH DATA SNAPSHOT\n${snapshotJson}`
     : fieldLines.join("\n");
@@ -159,11 +185,20 @@ export async function deriveClarifyingQuestions(
   userId: string,
   ctx: SelfContext,
   locale: string | null | undefined,
+  includedSections: readonly HealthProfileAiSection[] = DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
 ): Promise<{ questions: string[]; source: "ai" | "fallback" }> {
   const fallback = () => ({
-    questions: buildFallbackQuestions(ctx, locale),
+    questions: buildFallbackQuestions(ctx, locale, includedSections),
     source: "fallback" as const,
   });
+  const included = new Set(includedSections);
+  // A free-form model reply cannot be proven not to cross into an omitted
+  // field. Partial inclusion therefore stays on the closed deterministic
+  // fallback; the AI path is available only when every question-bearing
+  // section is included.
+  if (!QUESTION_SECTIONS.every((section) => included.has(section))) {
+    return fallback();
+  }
 
   try {
     if (!(await hasAnyConfiguredProvider(userId))) return fallback();
@@ -215,6 +250,7 @@ export async function deriveClarifyingQuestions(
       ctx,
       resolveLocale(locale),
       snapshotJson,
+      includedSections,
     );
 
     let result;

@@ -33,12 +33,14 @@ import {
   type DailyDigestEcg,
   type DailyDigestPreventiveDue,
   type DailyDigestScore,
+  type DailyDigestSameTime,
   type DailyDigestSyncIssue,
   type DailyDigestTensionWindow,
 } from "@/lib/daily/digest";
 import {
   ecgItemKey,
   milestoneItemKey,
+  sameTimeBaselineItemKey,
   tensionWindowItemKey,
 } from "@/lib/daily/priority-item-key";
 import { probeRollupCoverage } from "@/lib/rollups/measurement-coverage";
@@ -52,6 +54,11 @@ import {
   type Milestone,
 } from "@/lib/daily/milestones";
 import { loadIntradayPulse } from "@/lib/analytics/intraday-pulse-io";
+import { computeSameTimeBaseline } from "@/lib/insights/derived/same-time-baseline";
+import {
+  PRIORITY_ITEM_KINDS,
+  type PriorityItemKind,
+} from "@/lib/daily/priority-item";
 
 /** Integration states that mean "your action is needed to keep data flowing". */
 const SYNC_ISSUE_STATES = ["error_reauth", "parked"] as const;
@@ -166,7 +173,24 @@ const DIGEST_EXTRAS_CACHE_TTL_MS = DASHBOARD_REFETCH_INTERVAL_MS + 60_000;
 interface DailyDigestExtras {
   milestone: Milestone | null;
   tensionWindow: DailyDigestTensionWindow | null;
+  /**
+   * The cached cell holds the same-time read WITHOUT its locale-formatted
+   * labels: the cell is keyed on (user, local day) and a locale-specific
+   * string in it would be served to a reader who has since switched language.
+   * The labels are grouped at the call site, where the locale is resolved.
+   */
+  sameTime: Omit<DailyDigestSameTime, "todayLabel" | "typicalLabel"> | null;
 }
+
+/**
+ * v1.34.0 — the rail's same-time read is STEPS only.
+ *
+ * All four cumulative metrics carry a same-time baseline and all four have a
+ * tile in the Insights grid. The rail is a glance of at most three items, so
+ * putting four activity cards on it would crowd out an overdue dose to say the
+ * same thing four ways. Steps is the number people actually check.
+ */
+const SAME_TIME_RAIL_TYPE = "ACTIVITY_STEPS";
 
 function digestExtrasCacheKey(userId: string, dateKey: string): string {
   return `${userId}|daily-digest-extras|${dateKey}`;
@@ -186,13 +210,35 @@ async function loadDailyDigestExtrasCached(
       // revision ran them sequentially). Each is already fault-isolated
       // internally (a milestone read-hiccup or a tension-read failure leaves
       // its own field quiet rather than breaking the other).
-      const [milestone, tensionWindow] = await Promise.all([
+      const [milestone, tensionWindow, sameTime] = await Promise.all([
         gatherFreshMilestone(userId, now),
         loadIntradayPulse(userId, timezone, todayLocalDate)
           .then((r) => (r.tension ? { partOfDay: r.tension.partOfDay } : null))
           .catch(() => null),
+        // The engine gates itself — it returns its `insufficient` arm while it
+        // is still learning the usual day, when the account has no intraday
+        // rows at all (every daily-total source), and before the day's first
+        // hour has finished. Only the `ok` arm reaches the rail. Passing no
+        // profile because the engine reads none; fault-isolated like its
+        // siblings, since the digest is a must-not-fail path.
+        computeSameTimeBaseline(userId, null, {
+          type: SAME_TIME_RAIL_TYPE,
+          now,
+        })
+          .then((d): DailyDigestExtras["sameTime"] =>
+            d.status === "ok"
+              ? {
+                  type: d.value.type,
+                  band: d.value.band,
+                  asOfHour: d.value.asOfHour,
+                  todayValue: Math.round(d.value.todayValue),
+                  typicalValue: Math.round(d.value.typicalValue),
+                }
+              : null,
+          )
+          .catch(() => null),
       ]);
-      return { milestone, tensionWindow };
+      return { milestone, tensionWindow, sameTime };
     },
     annotate,
     DIGEST_EXTRAS_CACHE_TTL_MS,
@@ -283,9 +329,19 @@ function toDigestArrival(row: {
   };
 }
 
+export interface DailyDigestLoadOptions {
+  /**
+   * Overrides the dashboard's hero visibility for non-hero consumers.
+   * Passing `PRIORITY_ITEM_KINDS` keeps notification eligibility independent
+   * from which cards the user chose to display in the Today hero.
+   */
+  enabledItemKinds?: readonly PriorityItemKind[];
+}
+
 export async function loadDailyDigest(
   user: User,
   now: Date = new Date(),
+  options: DailyDigestLoadOptions = {},
 ): Promise<DailyDigest> {
   // Computed before the fan-out because the arrival read is keyed on it. Pure
   // (a tz format of `now`), so hoisting it costs nothing.
@@ -372,6 +428,9 @@ export async function loadDailyDigest(
         value: snapshot.healthScore.score,
         band: snapshot.healthScore.band,
         delta: snapshot.healthScore.delta,
+        deltaReason: snapshot.healthScore.deltaReason,
+        scoreVersion: snapshot.healthScore.scoreVersion,
+        composition: snapshot.healthScore.composition,
       }
     : null;
 
@@ -435,14 +494,14 @@ export async function loadDailyDigest(
   // per-sample tension reads on every request — see its docblock for the
   // cache/invalidation contract.
   const insightsEnabled = modules.insights !== false;
-  const { milestone, tensionWindow } = insightsEnabled
+  const { milestone, tensionWindow, sameTime } = insightsEnabled
     ? await loadDailyDigestExtrasCached(
         user.id,
         user.timezone,
         todayLocalDate,
         now,
       )
-    : { milestone: null, tensionWindow: null };
+    : { milestone: null, tensionWindow: null, sameTime: null };
 
   // Dismiss ledger (P — Today rail dismiss). Only the OBSERVATIONAL kinds
   // (milestone / ecg_new_recording / tension_window) can ever be dismissed, so
@@ -454,6 +513,7 @@ export async function loadDailyDigest(
     tensionWindow
       ? tensionWindowItemKey(todayLocalDate, tensionWindow.partOfDay)
       : null,
+    sameTime ? sameTimeBaselineItemKey(todayLocalDate, sameTime.type) : null,
   ].filter((k): k is string => k !== null);
 
   const dismissedRows =
@@ -465,12 +525,29 @@ export async function loadDailyDigest(
       : [];
   const dismissedItemKeys = new Set(dismissedRows.map((r) => r.itemKey));
 
-  const { t } = getServerTranslator(resolveLocale(locale));
+  const resolvedLocale = resolveLocale(locale);
+  const { t } = getServerTranslator(resolvedLocale);
+
+  // Group the two figures for the reader. `Intl.NumberFormat` is the only
+  // locale-aware step the digest takes on its own; everything else it renders
+  // comes through the translator.
+  const groupNumber = new Intl.NumberFormat(resolvedLocale).format;
+  const sameTimeItem: DailyDigestSameTime | null = sameTime
+    ? {
+        ...sameTime,
+        todayLabel: groupNumber(sameTime.todayValue),
+        typicalLabel: groupNumber(sameTime.typicalValue),
+      }
+    : null;
 
   const digest = buildDailyDigest(
     {
       now,
       modules,
+      enabledHeroItemKinds:
+        options.enabledItemKinds ??
+        snapshot.layout.enabledHeroItemKinds ??
+        PRIORITY_ITEM_KINDS,
       score,
       briefing: snapshot.briefing,
       medsToday: snapshot.medsToday,
@@ -481,6 +558,7 @@ export async function loadDailyDigest(
       coachPlans,
       milestone,
       tensionWindow,
+      sameTime: sameTimeItem,
       latestEcg,
       todayLocalDate,
       dismissedItemKeys,

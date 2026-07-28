@@ -196,8 +196,10 @@ describe("queue registration", () => {
     );
   });
 
-  it("registers a boss.work handler for the queue", () => {
-    expect(workerSrc).toMatch(/boss\.work[\s\S]{0,120}PERIOD_NARRATIVE_QUEUE/);
+  it("registers a createAndWork handler for the queue", () => {
+    expect(workerSrc).toMatch(
+      /createAndWork[\s\S]{0,120}PERIOD_NARRATIVE_QUEUE/,
+    );
   });
 
   it("exposes a sane queue name + nightly cron", () => {

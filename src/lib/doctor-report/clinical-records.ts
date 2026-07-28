@@ -14,6 +14,12 @@ import { prisma } from "@/lib/db";
 import { getEvent } from "@/lib/logging/context";
 import { decryptAllergyReaction } from "@/lib/doctor-report-helpers";
 import type { DoctorReportData } from "@/lib/doctor-report-types";
+import { decryptFromBytes } from "@/lib/ai/coach/bytes-codec";
+import { decryptHealthProfileFactValue } from "@/lib/profile/health-facts";
+import type {
+  HealthProfileFactKind,
+  HealthProfileFactValue,
+} from "@/lib/validations/health-profile-facts";
 
 /**
  * Structured lab results over the window, reduced to the latest reading per
@@ -154,4 +160,73 @@ export async function loadFamilyHistory(
     select: { relationship: true, condition: true, ageAtOnset: true },
   });
   return rows.length > 0 ? rows : null;
+}
+
+/**
+ * Chronic conditions and the three current structured facts. The caller owns
+ * the selection gate, so reaching this function always means ANAMNESIS was
+ * explicitly selected. It returns an object even with no rows so the renderer
+ * can label each absence honestly.
+ */
+export async function loadAnamnesis(
+  userId: string,
+): Promise<NonNullable<DoctorReportData["anamnesis"]>> {
+  const [profile, factRows] = await Promise.all([
+    prisma.userHealthProfile.findUnique({
+      where: { userId },
+      select: { conditionsEncrypted: true },
+    }),
+    prisma.healthProfileFactRevision.findMany({
+      where: {
+        userId,
+        validUntil: null,
+        supersededByRevisionId: null,
+      },
+      select: { kind: true, valueEncrypted: true },
+    }),
+  ]);
+
+  let conditions: string | null = null;
+  let conditionsUnreadable = false;
+  if (profile?.conditionsEncrypted) {
+    try {
+      const value = decryptFromBytes(profile.conditionsEncrypted).trim();
+      conditions = value.length > 0 ? value : null;
+    } catch (error) {
+      conditionsUnreadable = true;
+      getEvent()?.addWarning(
+        `doctor-report: conditions decrypt failed for ${userId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  const values: Record<HealthProfileFactKind, HealthProfileFactValue | null> = {
+    SMOKING_STATUS: null,
+    ALCOHOL_PATTERN: null,
+    SHIFT_SCHEDULE: null,
+  };
+  const unreadableFacts: HealthProfileFactKind[] = [];
+  for (const row of factRows) {
+    const kind = row.kind as HealthProfileFactKind;
+    const decrypted = decryptHealthProfileFactValue(kind, row.valueEncrypted);
+    values[kind] = decrypted.value;
+    if (decrypted.unreadable) unreadableFacts.push(kind);
+  }
+
+  return {
+    conditions,
+    conditionsUnreadable,
+    smokingStatus: values.SMOKING_STATUS as NonNullable<
+      DoctorReportData["anamnesis"]
+    >["smokingStatus"],
+    alcoholPattern: values.ALCOHOL_PATTERN as NonNullable<
+      DoctorReportData["anamnesis"]
+    >["alcoholPattern"],
+    shiftSchedule: values.SHIFT_SCHEDULE as NonNullable<
+      DoctorReportData["anamnesis"]
+    >["shiftSchedule"],
+    unreadableFacts,
+  };
 }

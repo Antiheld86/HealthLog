@@ -5,7 +5,19 @@ vi.mock("@/lib/db", () => ({
     user: { findUnique: vi.fn() },
     measurement: { findMany: vi.fn() },
     moodEntry: { findMany: vi.fn() },
+    medication: { findMany: vi.fn() },
+    medicationIntakeEvent: { findMany: vi.fn() },
+    illnessEpisode: { findMany: vi.fn() },
+    illnessDayLog: { findMany: vi.fn() },
+    environmentContext: { findMany: vi.fn() },
+    customMetric: { findMany: vi.fn() },
   },
+}));
+
+vi.mock("@/lib/insights/correlation-patterns", () => ({
+  PATTERN_FAMILIES: { discoveryRetrospective: "DISCOVERY_RETROSPECTIVE" },
+  syncAcceptedPatterns: vi.fn().mockResolvedValue(new Map()),
+  decisionForEvidence: vi.fn().mockReturnValue(null),
 }));
 
 import { prisma } from "@/lib/db";
@@ -17,6 +29,14 @@ beforeEach(() => {
     timezone: "Europe/Berlin",
   } as never);
   vi.mocked(prisma.moodEntry.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.medication.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue(
+    [] as never,
+  );
+  vi.mocked(prisma.illnessEpisode.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.illnessDayLog.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.environmentContext.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.customMetric.findMany).mockResolvedValue([] as never);
 });
 
 describe("getRelevantCorrelationsForMetric", () => {

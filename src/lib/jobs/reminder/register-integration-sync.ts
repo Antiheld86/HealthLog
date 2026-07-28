@@ -9,8 +9,8 @@
  *
  * v1.4.37 dead-queue contract: every queue name appears in `allQueues`, its
  * cron (where it has one) appears as a `[QUEUE, CRON]` tuple in `schedules`,
- * and a `boss.work(QUEUE, …, handler)` binding drains it. The queue-wiring
- * guards (`withings-queues`, `whoop-queues`, `fitbit-queues`,
+ * and a `createAndWork(boss, QUEUE, …, handler)` binding drains it. The
+ * queue-wiring guards (`withings-queues`, `whoop-queues`, `fitbit-queues`,
  * `nightscout-queues`, `sleep-timeline-queues`) read THIS module.
  */
 import { PgBoss } from "pg-boss";
@@ -78,8 +78,11 @@ import {
   type IntegrationBackfillAdmissionPayload,
 } from "@/lib/jobs/integration-backfill-admission";
 import { workerLog } from "./shared";
+import { jobDone } from "@/lib/jobs/job-outcome";
 import {
   createAndSchedule,
+  createAndWork,
+  cronIsTheRetry,
   type QueuePolicyTable,
   type ScheduleEntry,
 } from "./registrar-shared";
@@ -333,7 +336,16 @@ const schedules: ScheduleEntry[] = [
   // v1.32.23 — hourly ECG catch-net (:41) so watch-only accounts pull their
   // strips without a webhook or a scale.
   [WITHINGS_ECG_SYNC_QUEUE, WITHINGS_ECG_SYNC_CRON],
-  [WITHINGS_OAUTH_STATE_CLEANUP_QUEUE, WITHINGS_OAUTH_STATE_CLEANUP_CRON],
+  // The five OAuth-state / handoff prunes carry `cronIsTheRetry`: their
+  // handlers used to warn and carry on, they now fail the job, and a DELETE
+  // that could not run will not run any better a second later. The daily tick
+  // is the retry. The sync crons above keep the default retries — a provider
+  // outage is transient and worth retrying inside the hour.
+  [
+    WITHINGS_OAUTH_STATE_CLEANUP_QUEUE,
+    WITHINGS_OAUTH_STATE_CLEANUP_CRON,
+    cronIsTheRetry,
+  ],
   // v1.11.0 — WHOOP poll-fallback crons. Recovery/sleep/workout catch
   // dropped webhooks; cycle is the sole driver (no webhook). Staggered off
   // the Withings crons so the hourly ticks don't pile up on one boss poll.
@@ -342,11 +354,19 @@ const schedules: ScheduleEntry[] = [
   [WHOOP_WORKOUT_SYNC_QUEUE, WHOOP_WORKOUT_SYNC_CRON],
   [WHOOP_CYCLE_SYNC_QUEUE, WHOOP_CYCLE_SYNC_CRON],
   // v1.11.0 — daily 03:22 Europe/Berlin prune for expired WHOOP OAuth states.
-  [WHOOP_OAUTH_STATE_CLEANUP_QUEUE, WHOOP_OAUTH_STATE_CLEANUP_CRON],
+  [
+    WHOOP_OAUTH_STATE_CLEANUP_QUEUE,
+    WHOOP_OAUTH_STATE_CLEANUP_CRON,
+    cronIsTheRetry,
+  ],
   // v1.12.0 — hourly Fitbit poll (:08, staggered off WHOOP/Withings) + the
   // daily 03:24 Europe/Berlin prune for expired Fitbit OAuth states.
   [FITBIT_SYNC_QUEUE, FITBIT_SYNC_CRON],
-  [FITBIT_OAUTH_STATE_CLEANUP_QUEUE, FITBIT_OAUTH_STATE_CLEANUP_CRON],
+  [
+    FITBIT_OAUTH_STATE_CLEANUP_QUEUE,
+    FITBIT_OAUTH_STATE_CLEANUP_CRON,
+    cronIsTheRetry,
+  ],
   // v1.26.0 — hourly Google Health poll (:18, staggered off WHOOP/Fitbit/
   // Nightscout/Polar/Oura) + the daily 03:26 Europe/Berlin prune for expired
   // Google Health OAuth states.
@@ -354,6 +374,7 @@ const schedules: ScheduleEntry[] = [
   [
     GOOGLE_HEALTH_OAUTH_STATE_CLEANUP_QUEUE,
     GOOGLE_HEALTH_OAUTH_STATE_CLEANUP_CRON,
+    cronIsTheRetry,
   ],
   // v1.17.0 — hourly Nightscout CGM poll (:11, staggered off the other sync
   // ticks).
@@ -364,7 +385,11 @@ const schedules: ScheduleEntry[] = [
   // v1.28.x — hourly Strava (:17) OAuth poll.
   [STRAVA_SYNC_QUEUE, STRAVA_SYNC_CRON],
   // v1.30.x — daily 03:28 Europe/Berlin prune for expired native OIDC handoffs.
-  [OIDC_NATIVE_HANDOFF_CLEANUP_QUEUE, OIDC_NATIVE_HANDOFF_CLEANUP_CRON],
+  [
+    OIDC_NATIVE_HANDOFF_CLEANUP_QUEUE,
+    OIDC_NATIVE_HANDOFF_CLEANUP_CRON,
+    cronIsTheRetry,
+  ],
 ];
 
 /**
@@ -450,19 +475,30 @@ export async function registerIntegrationSyncQueues(
   // reaches this shared durable queue before doing full-history work. The
   // common group is enforced in PostgreSQL across worker processes/nodes.
 
-  await boss.work<IntegrationBackfillAdmissionPayload>(
+  await createAndWork<IntegrationBackfillAdmissionPayload>(
+    boss,
     INTEGRATION_BACKFILL_ADMISSION_QUEUE,
     {
       localConcurrency: INTEGRATION_BACKFILL_GLOBAL_CONCURRENCY,
       groupConcurrency: INTEGRATION_BACKFILL_GLOBAL_CONCURRENCY,
     },
     async (jobs) => {
+      // The drain has no per-job error isolation: a runner that throws fails
+      // the job and the admission retry policy applies. So reaching the end
+      // means every admitted job did its work, and the counts each runner
+      // already returns are what the pass reports.
+      let importedTotal = 0;
+      let removedTotal = 0;
+      let deletedTotal = 0;
+      let markersTotal = 0;
+      let linkedTotal = 0;
       for (const job of jobs) {
         const { kind, data } = job.data;
         const { userId } = data;
         switch (kind) {
           case "whoop-backfill": {
             const { imported } = await runWhoopBackfillForUser(userId);
+            importedTotal += imported;
             workerLog(
               "info",
               `[whoop-backfill] user=${userId} imported=${imported}`,
@@ -471,6 +507,7 @@ export async function registerIntegrationSyncQueues(
           }
           case "fitbit-backfill": {
             const { imported } = await runFitbitBackfillForUser(userId);
+            importedTotal += imported;
             workerLog(
               "info",
               `[fitbit-backfill] user=${userId} imported=${imported}`,
@@ -479,6 +516,7 @@ export async function registerIntegrationSyncQueues(
           }
           case "google-health-backfill": {
             const { imported } = await runGoogleHealthBackfillForUser(userId);
+            importedTotal += imported;
             workerLog(
               "info",
               `[google-health-backfill] user=${userId} imported=${imported}`,
@@ -488,6 +526,7 @@ export async function registerIntegrationSyncQueues(
           case "google-health-sleep-repair": {
             const { imported } =
               await runGoogleHealthSleepRepairForUser(userId);
+            importedTotal += imported;
             workerLog(
               "info",
               `[google-health-sleep-repair] user=${userId} imported=${imported}`,
@@ -497,6 +536,8 @@ export async function registerIntegrationSyncQueues(
           case "fitbit-sleep-repair": {
             const { imported, removed } =
               await runFitbitSleepRepairForUser(userId);
+            importedTotal += imported;
+            removedTotal += removed;
             workerLog(
               "info",
               `[fitbit-sleep-repair] user=${userId} imported=${imported} removed=${removed}`,
@@ -513,6 +554,8 @@ export async function registerIntegrationSyncQueues(
               userId,
               data.provider,
             );
+            deletedTotal += deleted;
+            importedTotal += imported;
             workerLog(
               "info",
               `[sleep-timeline-backfill] user=${userId} provider=${data.provider} deleted=${deleted} imported=${imported}`,
@@ -522,6 +565,8 @@ export async function registerIntegrationSyncQueues(
           case "lab-biomarker-backfill": {
             const { markers, linked } =
               await runLabBiomarkerBackfillForUser(userId);
+            markersTotal += markers;
+            linkedTotal += linked;
             workerLog(
               "info",
               `[lab-biomarker-backfill] user=${userId} markers=${markers} linked=${linked}`,
@@ -530,6 +575,7 @@ export async function registerIntegrationSyncQueues(
           }
           case "strava-backfill": {
             const { imported } = await runStravaBackfillForUser(userId);
+            importedTotal += imported;
             workerLog(
               "info",
               `[strava-backfill] user=${userId} imported=${imported}`,
@@ -538,30 +584,43 @@ export async function registerIntegrationSyncQueues(
           }
         }
       }
+      return jobDone({
+        jobs: jobs.length,
+        imported: importedTotal,
+        removed: removedTotal,
+        deleted: deletedTotal,
+        markers: markersTotal,
+        linked: linkedTotal,
+      });
     },
   );
 
-  await boss.work<WithingsSyncPayload>(
+  await createAndWork<WithingsSyncPayload>(
+    boss,
     WITHINGS_SYNC_QUEUE,
     { localConcurrency: 1 },
     handleWithingsFallbackSync,
   );
-  await boss.work<WithingsActivitySyncPayload>(
+  await createAndWork<WithingsActivitySyncPayload>(
+    boss,
     WITHINGS_ACTIVITY_QUEUE,
     { localConcurrency: 1 },
     handleWithingsActivitySync,
   );
-  await boss.work<WithingsSleepSyncPayload>(
+  await createAndWork<WithingsSleepSyncPayload>(
+    boss,
     WITHINGS_SLEEP_QUEUE,
     { localConcurrency: 1 },
     handleWithingsSleepSync,
   );
-  await boss.work<WithingsEcgSyncPayload>(
+  await createAndWork<WithingsEcgSyncPayload>(
+    boss,
     WITHINGS_ECG_SYNC_QUEUE,
     { localConcurrency: 1 },
     handleWithingsEcgSync,
   );
-  await boss.work<WithingsOAuthStateCleanupPayload>(
+  await createAndWork<WithingsOAuthStateCleanupPayload>(
+    boss,
     WITHINGS_OAUTH_STATE_CLEANUP_QUEUE,
     { localConcurrency: 1 },
     handleWithingsOAuthStateCleanup,
@@ -569,29 +628,34 @@ export async function registerIntegrationSyncQueues(
   // v1.11.0 — WHOOP per-resource sync handlers. Webhook-driven per-user +
   // cron full-iteration. Serial concurrency so a backfill-heavy tick never
   // crowds the request pool and stays inside WHOOP's 100 req/min app cap.
-  await boss.work<WhoopSyncPayload>(
+  await createAndWork<WhoopSyncPayload>(
+    boss,
     WHOOP_RECOVERY_SYNC_QUEUE,
     { localConcurrency: 1 },
     handleWhoopRecoverySync,
   );
-  await boss.work<WhoopSyncPayload>(
+  await createAndWork<WhoopSyncPayload>(
+    boss,
     WHOOP_SLEEP_SYNC_QUEUE,
     { localConcurrency: 1 },
     handleWhoopSleepSync,
   );
-  await boss.work<WhoopSyncPayload>(
+  await createAndWork<WhoopSyncPayload>(
+    boss,
     WHOOP_WORKOUT_SYNC_QUEUE,
     { localConcurrency: 1 },
     handleWhoopWorkoutSync,
   );
-  await boss.work<WhoopSyncPayload>(
+  await createAndWork<WhoopSyncPayload>(
+    boss,
     WHOOP_CYCLE_SYNC_QUEUE,
     { localConcurrency: 1 },
     handleWhoopCycleSync,
   );
   // v1.11.0 — self-converging WHOOP backfill. This source queue retains the
   // per-connection singleton and forwards admitted work to the shared drain.
-  await boss.work<WhoopBackfillPayload>(
+  await createAndWork<WhoopBackfillPayload>(
+    boss,
     WHOOP_BACKFILL_QUEUE,
     { localConcurrency: WHOOP_BACKFILL_CONCURRENCY },
     async (jobs) => {
@@ -601,29 +665,34 @@ export async function registerIntegrationSyncQueues(
           data: job.data,
         });
       }
+      return jobDone({ jobs: jobs.length });
     },
   );
-  await boss.work<WhoopOAuthStateCleanupPayload>(
+  await createAndWork<WhoopOAuthStateCleanupPayload>(
+    boss,
     WHOOP_OAUTH_STATE_CLEANUP_QUEUE,
     { localConcurrency: 1 },
     handleWhoopOAuthStateCleanup,
   );
   // v1.30.x — daily sweep for the native OIDC handoff ledger.
-  await boss.work<OidcNativeHandoffCleanupPayload>(
+  await createAndWork<OidcNativeHandoffCleanupPayload>(
+    boss,
     OIDC_NATIVE_HANDOFF_CLEANUP_QUEUE,
     { localConcurrency: 1 },
     handleOidcNativeHandoffCleanup,
   );
   // v1.12.0 — Fitbit poll-sync (cron full-iteration; no webhook). Serial
   // concurrency so a backfill-heavy tick never crowds the request pool.
-  await boss.work<FitbitSyncPayload>(
+  await createAndWork<FitbitSyncPayload>(
+    boss,
     FITBIT_SYNC_QUEUE,
     { localConcurrency: 1 },
     handleFitbitSync,
   );
   // v1.12.0 — self-converging Fitbit backfill. This source queue retains the
   // per-connection singleton and forwards admitted work to the shared drain.
-  await boss.work<FitbitBackfillPayload>(
+  await createAndWork<FitbitBackfillPayload>(
+    boss,
     FITBIT_BACKFILL_QUEUE,
     { localConcurrency: FITBIT_BACKFILL_CONCURRENCY },
     async (jobs) => {
@@ -633,12 +702,14 @@ export async function registerIntegrationSyncQueues(
           data: job.data,
         });
       }
+      return jobDone({ jobs: jobs.length });
     },
   );
   // One-shot Fitbit sleep duplicate repair. This source queue retains the
   // per-connection singleton and forwards the watermark-safe bounded sleep
   // re-read to the shared drain.
-  await boss.work<FitbitSleepRepairPayload>(
+  await createAndWork<FitbitSleepRepairPayload>(
+    boss,
     FITBIT_SLEEP_REPAIR_QUEUE,
     { localConcurrency: FITBIT_SLEEP_REPAIR_CONCURRENCY },
     async (jobs) => {
@@ -648,16 +719,19 @@ export async function registerIntegrationSyncQueues(
           data: job.data,
         });
       }
+      return jobDone({ jobs: jobs.length });
     },
   );
-  await boss.work<FitbitOAuthStateCleanupPayload>(
+  await createAndWork<FitbitOAuthStateCleanupPayload>(
+    boss,
     FITBIT_OAUTH_STATE_CLEANUP_QUEUE,
     { localConcurrency: 1 },
     handleFitbitOAuthStateCleanup,
   );
   // v1.26.0 — Google Health poll-sync (cron full-iteration; no webhook). Serial
   // concurrency so a backfill-heavy tick never crowds the request pool.
-  await boss.work<GoogleHealthSyncPayload>(
+  await createAndWork<GoogleHealthSyncPayload>(
+    boss,
     GOOGLE_HEALTH_SYNC_QUEUE,
     { localConcurrency: 1 },
     handleGoogleHealthSync,
@@ -665,7 +739,8 @@ export async function registerIntegrationSyncQueues(
   // v1.26.0 — self-converging Google Health backfill. This source queue
   // retains the per-connection singleton and forwards admitted work to the
   // shared drain.
-  await boss.work<GoogleHealthBackfillPayload>(
+  await createAndWork<GoogleHealthBackfillPayload>(
+    boss,
     GOOGLE_HEALTH_BACKFILL_QUEUE,
     { localConcurrency: GOOGLE_HEALTH_BACKFILL_CONCURRENCY },
     async (jobs) => {
@@ -675,12 +750,14 @@ export async function registerIntegrationSyncQueues(
           data: job.data,
         });
       }
+      return jobDone({ jobs: jobs.length });
     },
   );
   // v1.28.x — one-shot Google Health sleep duplicate repair. This source
   // queue retains the per-connection singleton and forwards the watermark-safe
   // full sleep-history re-read to the shared drain.
-  await boss.work<GoogleHealthSleepRepairPayload>(
+  await createAndWork<GoogleHealthSleepRepairPayload>(
+    boss,
     GOOGLE_HEALTH_SLEEP_REPAIR_QUEUE,
     { localConcurrency: GOOGLE_HEALTH_SLEEP_REPAIR_CONCURRENCY },
     async (jobs) => {
@@ -690,9 +767,11 @@ export async function registerIntegrationSyncQueues(
           data: job.data,
         });
       }
+      return jobDone({ jobs: jobs.length });
     },
   );
-  await boss.work<GoogleHealthOAuthStateCleanupPayload>(
+  await createAndWork<GoogleHealthOAuthStateCleanupPayload>(
+    boss,
     GOOGLE_HEALTH_OAUTH_STATE_CLEANUP_QUEUE,
     { localConcurrency: 1 },
     handleGoogleHealthOAuthStateCleanup,
@@ -700,7 +779,8 @@ export async function registerIntegrationSyncQueues(
   // v1.17.1 — one-shot sleep-timeline backfill. This source queue retains the
   // per-(user, provider) singleton and forwards admitted work to the shared
   // drain.
-  await boss.work<SleepTimelineBackfillPayload>(
+  await createAndWork<SleepTimelineBackfillPayload>(
+    boss,
     SLEEP_TIMELINE_BACKFILL_QUEUE,
     { localConcurrency: SLEEP_TIMELINE_BACKFILL_CONCURRENCY },
     async (jobs) => {
@@ -710,11 +790,13 @@ export async function registerIntegrationSyncQueues(
           data: job.data,
         });
       }
+      return jobDone({ jobs: jobs.length });
     },
   );
   // v1.18.1 — one-shot lab-biomarker backfill. This source queue retains the
   // per-user singleton and forwards admitted work to the shared drain.
-  await boss.work<LabBiomarkerBackfillPayload>(
+  await createAndWork<LabBiomarkerBackfillPayload>(
+    boss,
     LAB_BIOMARKER_BACKFILL_QUEUE,
     { localConcurrency: LAB_BIOMARKER_BACKFILL_CONCURRENCY },
     async (jobs) => {
@@ -724,12 +806,14 @@ export async function registerIntegrationSyncQueues(
           data: job.data,
         });
       }
+      return jobDone({ jobs: jobs.length });
     },
   );
   // v1.17.0 — Nightscout CGM poll-cohort sync. The hourly cron tick (no
   // `userId`) walks every configured instance; one user's unreachable host is
   // warned, not fatal.
-  await boss.work<NightscoutSyncPayload>(
+  await createAndWork<NightscoutSyncPayload>(
+    boss,
     NIGHTSCOUT_SYNC_QUEUE,
     { localConcurrency: 1 },
     handleNightscoutSync,
@@ -737,12 +821,14 @@ export async function registerIntegrationSyncQueues(
   // v1.17.0 (F4) — Polar + Oura OAuth poll-cohort sync. The hourly cron tick
   // (no `userId`) re-walks every connected user; one user's revoked grant is
   // warned, not fatal.
-  await boss.work<PolarSyncPayload>(
+  await createAndWork<PolarSyncPayload>(
+    boss,
     POLAR_SYNC_QUEUE,
     { localConcurrency: 1 },
     handlePolarSync,
   );
-  await boss.work<OuraSyncPayload>(
+  await createAndWork<OuraSyncPayload>(
+    boss,
     OURA_SYNC_QUEUE,
     { localConcurrency: 1 },
     handleOuraSync,
@@ -750,14 +836,16 @@ export async function registerIntegrationSyncQueues(
   // v1.28.x — Strava OAuth poll-cohort sync (poll-only; webhook deferred). The
   // hourly cron tick (no `userId`) re-walks every connected user; one user's
   // revoked grant is warned, not fatal.
-  await boss.work<StravaSyncPayload>(
+  await createAndWork<StravaSyncPayload>(
+    boss,
     STRAVA_SYNC_QUEUE,
     { localConcurrency: 1 },
     handleStravaSync,
   );
   // v1.28.x — self-converging Strava backfill. This source queue retains the
   // per-connection singleton and forwards admitted work to the shared drain.
-  await boss.work<StravaBackfillPayload>(
+  await createAndWork<StravaBackfillPayload>(
+    boss,
     STRAVA_BACKFILL_QUEUE,
     { localConcurrency: STRAVA_BACKFILL_CONCURRENCY },
     async (jobs) => {
@@ -767,6 +855,7 @@ export async function registerIntegrationSyncQueues(
           data: job.data,
         });
       }
+      return jobDone({ jobs: jobs.length });
     },
   );
   return allQueues;

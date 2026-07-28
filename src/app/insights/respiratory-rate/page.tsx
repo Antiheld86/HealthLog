@@ -22,8 +22,7 @@ export default function InsightsAtemfrequenzPage() {
       i18nPrefix="insights.respiratoryRate"
       explainerMetric="respiratoryRate"
       color="var(--info)"
-      unit="breaths/min"
-      yAxisUnit="breaths/min"
+      unitKey="insights.units.respiratoryRate"
       emptyStateIcon={<Wind className="size-6" />}
       emptyStateCtaType={null}
       coachPrefill="I haven't logged any respiratory rate yet — what does this metric tell me about my health, and how do I improve it?"

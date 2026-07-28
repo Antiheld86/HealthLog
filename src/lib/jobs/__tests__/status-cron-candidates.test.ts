@@ -196,8 +196,8 @@ describe("mood-status queue registration (dead-queue guard)", () => {
     expect(workerSrc).toMatch(/MOOD_STATUS_CRON\s*=\s*"30 2 \* \* \*"/);
   });
 
-  it("registers a boss.work handler for the queue", () => {
-    expect(workerSrc).toMatch(/boss\.work[\s\S]{0,120}MOOD_STATUS_QUEUE/);
+  it("registers a createAndWork handler for the queue", () => {
+    expect(workerSrc).toMatch(/createAndWork[\s\S]{0,120}MOOD_STATUS_QUEUE/);
   });
 
   it("drives all seven status crons through the shared discovery", () => {

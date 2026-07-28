@@ -33,6 +33,7 @@ import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { IntegrationStatusPill } from "@/components/settings/integration-status-pill";
 import { TestConnectionButton } from "@/components/settings/test-connection-button";
 import { apiFetchRaw, apiPost } from "@/lib/api/api-fetch";
+import { WrittenOutcomeLine } from "@/components/outcome/written-outcome-line";
 import { useTranslations } from "@/lib/i18n/context";
 import {
   invalidateKeys,
@@ -42,11 +43,17 @@ import {
 
 import {
   IntegrationErrorMessage,
+  pillFailurePropsFor,
   pillStateFor,
   pillTimestampFor,
   type IntegrationStatusViewModel,
 } from "./shared";
 import { MetricFreshnessDisclosure } from "./metric-freshness-disclosure";
+import {
+  readSyncOutcome,
+  useSyncOutcomeMessage,
+  type SyncOutcomeState,
+} from "./sync-outcome";
 import {
   IntegrationCardDescription,
   IntegrationRedirectGuide,
@@ -58,11 +65,9 @@ export function WhoopCard({
   viewModel: IntegrationStatusViewModel | undefined;
 }) {
   const { t } = useTranslations();
+  const describeSyncOutcome = useSyncOutcomeMessage();
   const [syncing, setSyncing] = useState(false);
-  const [syncMsg, setSyncMsg] = useState<string | null>(null);
-  const [syncMsgType, setSyncMsgType] = useState<"success" | "error" | null>(
-    null,
-  );
+  const [syncResult, setSyncResult] = useState<SyncOutcomeState | null>(null);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [credsSaving, setCredsSaving] = useState(false);
@@ -109,8 +114,7 @@ export function WhoopCard({
 
   async function handleSync(fullSync = false) {
     setSyncing(true);
-    setSyncMsg(null);
-    setSyncMsgType(null);
+    setSyncResult(null);
     try {
       const res = await apiFetchRaw("/api/whoop/sync", {
         method: "POST",
@@ -118,23 +122,32 @@ export function WhoopCard({
         body: JSON.stringify({ fullSync }),
       });
       const json = await res.json();
-      if (res.ok) {
-        setSyncMsg(
-          t("settings.whoopSyncResult", { count: json.data.imported }),
-        );
-        setSyncMsgType("success");
+      const result = res.ok ? readSyncOutcome(json) : null;
+      if (result) {
+        // The tone comes off what the run wrote, not off `res.ok`.
+        setSyncResult({
+          outcome: result.outcome,
+          message: describeSyncOutcome(
+            result,
+            t("settings.whoopSyncResult", { count: result.imported }),
+          ),
+        });
         void invalidateKeys(queryClient, measurementDependentKeys);
         queryClient.invalidateQueries({ queryKey: queryKeys.whoop() });
         queryClient.invalidateQueries({
           queryKey: queryKeys.integrationsStatus(),
         });
       } else {
-        setSyncMsg(json.error || t("settings.whoopSyncFailed"));
-        setSyncMsgType("error");
+        setSyncResult({
+          outcome: "failed",
+          message: json?.error || t("settings.whoopSyncFailed"),
+        });
       }
     } catch {
-      setSyncMsg(t("settings.whoopSyncFailed"));
-      setSyncMsgType("error");
+      setSyncResult({
+        outcome: "failed",
+        message: t("settings.whoopSyncFailed"),
+      });
     } finally {
       setSyncing(false);
     }
@@ -206,6 +219,7 @@ export function WhoopCard({
           <IntegrationStatusPill
             state={pillState}
             lastSyncAt={pillLastSyncAt}
+            {...pillFailurePropsFor(viewModel)}
           />
         }
       />
@@ -454,13 +468,12 @@ export function WhoopCard({
                 {t("settings.whoopBackfillInProgress")}
               </p>
             )}
-            {syncMsg && (
-              <p
-                role="alert"
-                className={`text-sm ${syncMsgType === "success" ? "text-success" : "text-destructive"}`}
-              >
-                {syncMsg}
-              </p>
+            {syncResult && (
+              <WrittenOutcomeLine
+                outcome={syncResult.outcome}
+                message={syncResult.message}
+                testId="whoop-sync-result"
+              />
             )}
             {/* connect→data loop: a discreet link to where this provider's
                 readings now surface — doubles as the "your data is richer"

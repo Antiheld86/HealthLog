@@ -9,6 +9,14 @@ import { z } from "zod/v4";
 import type { ZodOpenApiObject } from "zod-openapi";
 import { aboutMePutSchema } from "@/lib/validations/about-me";
 import {
+  healthProfileAiSectionSchema,
+  healthProfileFactCorrectionSchema,
+  healthProfileFactDtoSchema,
+  healthProfileFactsResponseSchema,
+  healthProfileFactWriteSchema,
+  removedHealthProfileFactSchema,
+} from "@/lib/validations/health-profile-facts";
+import {
   ACCEPTED_INSIGHTS_TILE_IDS,
   INSIGHTS_SECTION_IDS,
 } from "@/lib/insights-layout";
@@ -675,6 +683,22 @@ coachChatRequestSchema.meta({
     "Inbound Coach turn. `message` is the user's turn (1–4 000 chars). `conversationId` is omitted to start a new conversation (the server mints a title from the first message) and supplied to continue one. `scope` narrows which metrics the snapshot ships and which window the timeline covers; omitted fields fall back to server defaults. `locale` picks the reply language. `guidedQuestion` carries the clarifying question a message answers (client-side bubble, never persisted). No `userId` field — the owner is narrowed from the session / Bearer.",
 });
 
+const anamnesisFactCurrentExistsResponse = {
+  "409": {
+    description:
+      "A current revision already exists for this fact kind. `meta.errorCode` = `anamnesis.fact.currentExists`.",
+    content: { "application/json": { schema: errorEnvelope } },
+  },
+};
+
+const anamnesisFactNotFoundResponse = {
+  "404": {
+    description:
+      "No current revision with this id exists for the authenticated account.",
+    content: { "application/json": { schema: errorEnvelope } },
+  },
+};
+
 export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   "/api/insights/chat": {
     get: {
@@ -1155,6 +1179,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
                   conditions: z.string().nullable(),
                   allergies: z.string().nullable(),
                   coachFocus: z.string().nullable(),
+                  aiIncludedSections: z.array(healthProfileAiSectionSchema),
                   pendingQuestions: z.array(z.string()),
                   updatedAt: z.iso.datetime({ offset: true }).nullable(),
                   maxChars: z.number().int(),
@@ -1195,6 +1220,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
                   conditions: z.string().nullable(),
                   allergies: z.string().nullable(),
                   coachFocus: z.string().nullable(),
+                  aiIncludedSections: z.array(healthProfileAiSectionSchema),
                   pendingQuestions: z.array(z.string()),
                   updatedAt: z.iso.datetime({ offset: true }),
                   maxChars: z.number().int(),
@@ -1206,6 +1232,123 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         ...conflictResponse409("Self-context", "about_me_conflict"),
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/anamnesis/facts": {
+    get: {
+      tags: ["Insights"],
+      summary: "Read effective-dated anamnesis facts",
+      description:
+        "Returns the current value and immutable revision history for the caller's smoking status, alcohol pattern and shift schedule. Values are decrypted server-side; unreadable ciphertext returns `value: null` with `unreadable: true`.",
+      responses: {
+        "200": {
+          description: "Current facts and their revision history.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                healthProfileFactsResponseSchema,
+                "GetAnamnesisFactsResponse",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    post: {
+      tags: ["Insights"],
+      summary: "Create an anamnesis fact",
+      description:
+        "Creates the first current revision for one closed fact kind. The answer is encrypted before persistence. A second current value for the same kind returns 409; corrections use the revision endpoint.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: healthProfileFactWriteSchema },
+        },
+      },
+      responses: {
+        "201": {
+          description: "The newly created current revision.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                healthProfileFactDtoSchema,
+                "CreateAnamnesisFactResponse",
+              ),
+            },
+          },
+        },
+        ...anamnesisFactCurrentExistsResponse,
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/anamnesis/facts/{id}": {
+    patch: {
+      tags: ["Insights"],
+      summary: "Correct a current anamnesis fact",
+      description:
+        "Closes the current revision at the correction instant and creates a successor. Prior ciphertext and its half-open validity interval remain in history.",
+      parameters: [
+        {
+          name: "id",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: healthProfileFactCorrectionSchema },
+        },
+      },
+      responses: {
+        "200": {
+          description: "The successor revision.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                healthProfileFactDtoSchema,
+                "CorrectAnamnesisFactResponse",
+              ),
+            },
+          },
+        },
+        ...anamnesisFactNotFoundResponse,
+        ...conflictResponse409("Anamnesis fact", "anamnesis.fact.conflict"),
+        ...stdResponses,
+      },
+    },
+    delete: {
+      tags: ["Insights"],
+      summary: "Remove a current anamnesis fact",
+      description:
+        "Closes the caller-owned current revision without deleting its encrypted history. The fact kind then resolves as not recorded until a new value is created. The path revision id is the optimistic concurrency token.",
+      parameters: [
+        {
+          name: "id",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
+      ],
+      responses: {
+        "200": {
+          description: "Metadata for the revision whose interval was closed.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                removedHealthProfileFactSchema,
+                "RemoveAnamnesisFactResponse",
+              ),
+            },
+          },
+        },
+        ...anamnesisFactNotFoundResponse,
+        ...conflictResponse409("Anamnesis fact", "anamnesis.fact.conflict"),
         ...stdResponses,
       },
     },

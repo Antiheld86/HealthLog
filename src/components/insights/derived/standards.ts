@@ -178,4 +178,21 @@ export const METRIC_PROVENANCE: Record<DerivedMetricId, MetricProvenanceMeta> =
       },
       caveatKey: "insights.derived.composite.TRAJECTORY.caveat",
     },
+    SAME_TIME_BASELINE: {
+      methodKey: "insights.derived.composite.SAME_TIME_BASELINE.method",
+      standard: {
+        // Same robust median ± k·MAD estimator as the vitals baseline, applied
+        // to the window's totals at one local hour rather than to daily means.
+        name: "Leys et al. 2013, J. Exp. Soc. Psychol.",
+        url: "https://doi.org/10.1016/j.jesp.2013.03.013",
+      },
+      caveatKey: "insights.derived.composite.SAME_TIME_BASELINE.caveat",
+    },
+    HEALTH_SCORE: {
+      methodKey: "insights.healthScore.method",
+      standard: {
+        name: "WHO HEARTS technical package",
+        url: "https://www.who.int/publications/i/item/9789240001367",
+      },
+    },
   };

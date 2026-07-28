@@ -373,6 +373,12 @@ const REGISTRY: DestructiveEntry[] = [
     confirm: ["DeleteButton"],
   },
   {
+    file: "components/records/health-profile-facts-manager.tsx",
+    destroys: "the current value of one effective-dated health-profile fact",
+    recovery: "tombstoned-no-restore",
+    confirm: ["ConfirmButton"],
+  },
+  {
     file: "hooks/use-measurement-reminders.ts",
     destroys: "a checkup or measurement reminder with its schedule",
     triggers: ["components/measurement-reminders/vorsorge-section.tsx"],

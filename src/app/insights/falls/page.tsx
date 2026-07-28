@@ -20,8 +20,7 @@ export default function InsightsFallsPage() {
       i18nPrefix="insights.falls"
       explainerMetric="falls"
       color="var(--destructive)"
-      unit="falls"
-      yAxisUnit="falls"
+      unitKey="insights.units.falls"
       emptyStateIcon={<PersonStanding className="size-6" />}
       emptyStateCtaType={null}
       coachPrefill="I haven't logged any fall data yet — what does this metric tell me about my health, and how do I lower my fall risk?"

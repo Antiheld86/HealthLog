@@ -20,7 +20,7 @@ import { fetchActivityList, mapWorkout, readActivityList } from "./client";
 import type { FitbitMappedWorkout } from "./client";
 import { getValidToken, handleCollectionFetchError } from "./sync-core";
 import type { FitbitResourceSyncOptions } from "./sync-core";
-import { prisma } from "@/lib/db";
+import { prisma, toJson } from "@/lib/db";
 import { emitInsertedWorkoutArrival } from "@/lib/arrivals/workout-emit";
 import { annotate, getEvent } from "@/lib/logging/context";
 import { resolveUserTimezone } from "@/lib/tz/resolver";
@@ -29,6 +29,12 @@ import { resolveUserTimezone } from "@/lib/tz/resolver";
 const WORKOUT_PAGE_SIZE = 100;
 /** Hard ceiling on pages walked per cycle (rate-budget guard). */
 const WORKOUT_MAX_PAGES = 12;
+
+function metadataRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
 
 export async function syncUserWorkout(
   userId: string,
@@ -79,7 +85,15 @@ export async function syncUserWorkout(
       avgHeartRate: w.avgHeartRate,
       maxHeartRate: w.maxHeartRate,
       minHeartRate: w.minHeartRate,
+      metadata: toJson(w.metadata),
     };
+    const where = {
+      userId_source_externalId: {
+        userId,
+        source: "FITBIT",
+        externalId: w.externalId,
+      },
+    } as const;
     try {
       const [inserted] = await prisma.workout.createManyAndReturn({
         data: {
@@ -96,15 +110,19 @@ export async function syncUserWorkout(
           () => {},
         );
       } else {
+        const existing = await prisma.workout.findUnique({
+          where,
+          select: { metadata: true },
+        });
         await prisma.workout.update({
-          where: {
-            userId_source_externalId: {
-              userId,
-              source: "FITBIT",
-              externalId: w.externalId,
-            },
+          where,
+          data: {
+            ...data,
+            metadata: toJson({
+              ...metadataRecord(existing?.metadata),
+              ...w.metadata,
+            }),
           },
-          data,
         });
       }
       imported++;

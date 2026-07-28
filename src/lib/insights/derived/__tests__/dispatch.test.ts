@@ -60,6 +60,7 @@ describe("registry", () => {
       true,
     );
     expect(getDerivedMetricMeta("TRAJECTORY")?.implemented).toBe(true);
+    expect(getDerivedMetricMeta("HEALTH_SCORE")?.implemented).toBe(true);
   });
 
   it("isDerivedMetricId rejects unknown ids", () => {
@@ -77,6 +78,7 @@ describe("registry", () => {
     expect(DERIVED_METRIC_IDS).toContain("READINESS");
     expect(DERIVED_METRIC_IDS).toContain("HRV_BALANCE");
     expect(DERIVED_METRIC_IDS).toContain("BMI");
+    expect(DERIVED_METRIC_IDS).toContain("HEALTH_SCORE");
     expect(DERIVED_METRIC_IDS).toContain("RECOVERY_SCORE");
     expect(DERIVED_METRIC_IDS).toContain("STRESS_SCORE");
     expect(DERIVED_METRIC_IDS).toContain("STRAIN_SCORE");
@@ -85,7 +87,8 @@ describe("registry", () => {
     expect(DERIVED_METRIC_IDS).toContain("STAIR_DESCENT_SPEED_BASELINE");
     expect(DERIVED_METRIC_IDS).toContain("SIX_MINUTE_WALK_BAND");
     expect(DERIVED_METRIC_IDS).toContain("TRAJECTORY");
-    expect(DERIVED_METRIC_IDS.length).toBe(16);
+    expect(DERIVED_METRIC_IDS).toContain("SAME_TIME_BASELINE");
+    expect(DERIVED_METRIC_IDS.length).toBe(18);
   });
 });
 

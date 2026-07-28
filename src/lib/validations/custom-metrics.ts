@@ -44,6 +44,7 @@ export const createCustomMetricSchema = z
     targetHigh,
     decimals,
     description: optionalDescription,
+    correlationEnabled: z.boolean().default(false),
   })
   .refine(
     (d) =>
@@ -71,6 +72,7 @@ export const updateCustomMetricSchema = z
     targetHigh: targetHigh.or(z.null()),
     decimals: decimals.or(z.null()),
     description: optionalDescription.or(z.null()),
+    correlationEnabled: z.boolean().optional(),
   })
   .refine(
     (d) =>

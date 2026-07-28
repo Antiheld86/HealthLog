@@ -38,6 +38,8 @@ import {
   coverageResource,
   observationsFromReportData,
   cycleObservationsFromReportData,
+  anamnesisNarrativeFromReportData,
+  anamnesisObservationsFromReportData,
   conditionsFromReportData,
   medicationStatementsFromReportData,
   medicationAdministrationsFromReportData,
@@ -175,6 +177,7 @@ export function buildFhirDocumentBundle(
   const observationRefs: FhirReference[] = [];
   const vitalSignsObservationRefs: FhirReference[] = [];
   const cycleObservationRefs: FhirReference[] = [];
+  const anamnesisObservationRefs: FhirReference[] = [];
   const medicationRefs: FhirReference[] = [];
   const administrationRefs: FhirReference[] = [];
   const conditionRefs: FhirReference[] = [];
@@ -229,6 +232,18 @@ export function buildFhirDocumentBundle(
     push(obs);
     cycleObservationRefs.push({ reference: `Observation/${obs.id}` });
   }
+
+  // --- Selected current anamnesis facts (opt-in only) --------------------
+  // The collector returns `null` when ANAMNESIS was not selected. When it was
+  // selected, all three facts emit even if their value is absent or unreadable
+  // so omission cannot be mistaken for consent-based exclusion.
+  for (const obs of anamnesisObservationsFromReportData(data)) {
+    push(obs);
+    anamnesisObservationRefs.push({
+      reference: `Observation/${obs.id}`,
+    });
+  }
+  const anamnesisNarrative = anamnesisNarrativeFromReportData(data);
 
   // --- MedicationStatement per active medication -------------------------
   for (const stmt of medicationStatementsFromReportData(data, options)) {
@@ -371,6 +386,28 @@ export function buildFhirDocumentBundle(
             {
               title: "Menstrual cycle",
               entry: cycleObservationRefs,
+            },
+          ]
+        : []),
+      ...(anamnesisNarrative !== null
+        ? [
+            {
+              title: "Anamnesis",
+              code: {
+                coding: [
+                  {
+                    system: LOINC_SYSTEM,
+                    code: "11329-0",
+                    display: "History general Narrative - Reported",
+                  },
+                ],
+                text: "General history",
+              },
+              text: {
+                status: "generated" as const,
+                div: `<div xmlns="http://www.w3.org/1999/xhtml">${escapeXml(anamnesisNarrative)}</div>`,
+              },
+              entry: anamnesisObservationRefs,
             },
           ]
         : []),

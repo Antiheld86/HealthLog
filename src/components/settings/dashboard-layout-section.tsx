@@ -30,38 +30,26 @@ import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { prefersReducedMotion } from "@/lib/charts/reduced-motion";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import {
   type DashboardLayout,
   type DashboardWidgetId,
-  type ComparisonBaseline,
-  type ScoreRingId,
-  type HeroRingId,
-  COMPARISON_BASELINES,
   DEFAULT_DASHBOARD_LAYOUT,
   DASHBOARD_WIDGET_IDS,
   DASHBOARD_IOS_ONLY_WIDGET_IDS,
   IOS_PIN_ONLY_WIDGET_IDS,
   type DashboardWidgetCatalogueId,
-  SCORE_RING_IDS,
-  SCORE_RING_MODULE,
-  MAX_SELECTED_SCORE_RINGS,
-  HEALTH_SCORE_RING_ID,
-  resolveHeroRingOrder,
-  buildRingMutationPayload,
-  widgetWritesBusy,
   type DashboardLayoutWithToken,
 } from "@/lib/dashboard-layout";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  PRIORITY_ITEM_KINDS,
+  type PriorityItemKind,
+} from "@/lib/daily/priority-item";
 import { apiDelete, apiGet, apiPut, ApiError } from "@/lib/api/api-fetch";
+import { useMounted } from "@/hooks/use-mounted";
 import { useAuth } from "@/hooks/use-auth";
 import {
   NATIVE_ONLY_WIDGET_LABEL_KEYS,
@@ -96,6 +84,17 @@ export function reorderWidgets(
   const [removed] = next.splice(fromIdx, 1);
   next.splice(toIdx, 0, removed);
   return next.map((w, i) => ({ ...w, order: i }));
+}
+
+export function setHeroItemKindEnabled(
+  enabledKinds: readonly PriorityItemKind[] | undefined,
+  kind: PriorityItemKind,
+  enabled: boolean,
+): PriorityItemKind[] {
+  const next = new Set(enabledKinds ?? PRIORITY_ITEM_KINDS);
+  if (enabled) next.add(kind);
+  else next.delete(kind);
+  return PRIORITY_ITEM_KINDS.filter((itemKind) => next.has(itemKind));
 }
 
 /**
@@ -135,14 +134,7 @@ function mergeReorderIntoLayout(
   });
 }
 
-/**
- * v1.32.16 (issue #581) — the normal layout Save and the instant hero-ring
- * PUT both write the whole `/api/dashboard/widgets` layout. Sharing one
- * TanStack mutation `scope` serialises them: a second write in this scope
- * waits for the first to settle, so the two PUTs can never overlap at the
- * server and a committed Save cannot be reverted by a ring write that
- * started from the pre-Save snapshot.
- */
+/** Serialise layout saves and resets against the same endpoint. */
 const DASHBOARD_WIDGETS_MUTATION_SCOPE = "dashboard-widgets" as const;
 
 const WIDGET_LABEL_KEYS: Record<DashboardWidgetId, string> = {
@@ -185,27 +177,15 @@ const WIDGET_LABEL_KEYS: Record<DashboardWidgetId, string> = {
   waterIntake: "nutrients.names.water",
 };
 
-/**
- * v1.27.7 — option labels for the hero score-ring picker. The three
- * derived rings reuse their wellness-strip titles; the dose ring names
- * today's tally (the exact thing the ring shows since it moved off the
- * 7-day adherence percentage).
- */
-const SCORE_RING_LABEL_KEYS: Record<ScoreRingId, string> = {
-  READINESS: "insights.derived.composite.READINESS.title",
-  RECOVERY_SCORE: "insights.derived.scores.recovery",
-  SLEEP_SCORE: "insights.derived.composite.SLEEP_SCORE.title",
-  MED_COMPLIANCE: "dashboard.hero.ringDoses",
-};
-
-/**
- * v1.27.27 — label key for any hero ring id, including the always-present
- * health-score anchor ring. Reuses the hero's own "Health Score" label so
- * the picker row and the hero ring name match verbatim.
- */
-const HERO_RING_LABEL_KEYS: Record<HeroRingId, string> = {
-  [HEALTH_SCORE_RING_ID]: "dashboard.hero.scoreLabel",
-  ...SCORE_RING_LABEL_KEYS,
+const HERO_ITEM_LABEL_KEYS: Record<PriorityItemKind, string> = {
+  coach_checkin: "dashboard.heroItems.coach_checkin",
+  dose_window: "dashboard.heroItems.dose_window",
+  preventive_care: "dashboard.heroItems.preventive_care",
+  sync_issue: "dashboard.heroItems.sync_issue",
+  milestone: "dashboard.heroItems.milestone",
+  ecg_new_recording: "dashboard.heroItems.ecg_new_recording",
+  tension_window: "dashboard.heroItems.tension_window",
+  same_time_baseline: "dashboard.heroItems.same_time_baseline",
 };
 
 export function DashboardLayoutSection({ id }: { id: string }) {
@@ -223,6 +203,19 @@ export function DashboardLayoutSection({ id }: { id: string }) {
   // tooltip. One hint paragraph is rendered once at the bottom of the list
   // and referenced by every drag handle in this section.
   const dragHintId = useId();
+  const heroDescriptionId = useId();
+  const heroNotificationNoteId = useId();
+  // v1.34 — the "Today highlights" fieldset below is gated on `layout`,
+  // which can be truthy on the very first client render whenever a
+  // returning visitor's browser already has a warm, offline-persisted
+  // `dashboardWidgets` cache (queryKeys.dashboardWidgets() sits in
+  // PERSIST_ALLOWLIST_HEADS). The static build has no session, so
+  // `layout` is always null in the server HTML — a warm cache then
+  // diverges the very first client paint from that HTML (React #418).
+  // `useMounted()` forces the fieldset's presence check to agree with
+  // the server on the hydrating render (both false), the same pattern
+  // `LayoutModuleGate` already uses for the same class of mismatch.
+  const hydrated = useMounted();
 
   // v1.4.47 W4 — sensors: pointer for mouse/touch, keyboard for Tab + Space
   // + arrow-key reordering. The KeyboardSensor still works for users who
@@ -280,8 +273,6 @@ export function DashboardLayoutSection({ id }: { id: string }) {
   const layout = draft ?? remote ?? null;
 
   const saveMutation = useMutation({
-    // v1.32.16 (issue #581) — shared scope serialises this against the
-    // instant ring PUT so they can never overlap at the server.
     scope: { id: DASHBOARD_WIDGETS_MUTATION_SCOPE },
     mutationFn: async (next: DashboardLayout) => {
       return apiPut<DashboardLayoutWithToken>("/api/dashboard/widgets", {
@@ -312,15 +303,17 @@ export function DashboardLayoutSection({ id }: { id: string }) {
         queryKey: queryKeys.dashboardSnapshot(),
         refetchType: "all",
       });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.dailyDigest(),
+        refetchType: "all",
+      });
       setDraft(null);
       toast.success(t("dashboard.layoutSaveSuccess"));
     },
     onError: (err) => {
-      // v1.32.16 (issue #581) — a 409 means someone else (another tab, or
-      // an interleaved ring write) committed since this edit was based.
-      // Refetch the winning layout so the base token advances, KEEP the
-      // draft so the user can re-apply, and nudge gently instead of a hard
-      // error — nothing was lost, the change just needs re-saving.
+      // A 409 means another client committed since this edit was based.
+      // Refetch the winning layout so the base token advances, keep the draft,
+      // and let the user save the change again.
       if (err instanceof ApiError && err.status === 409) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.dashboardWidgets(),
@@ -333,7 +326,6 @@ export function DashboardLayoutSection({ id }: { id: string }) {
   });
 
   const resetMutation = useMutation({
-    // v1.32.16 — same scope so a reset can't race the layout / ring writes.
     scope: { id: DASHBOARD_WIDGETS_MUTATION_SCOPE },
     mutationFn: async () => {
       return apiDelete<DashboardLayoutWithToken>("/api/dashboard/widgets");
@@ -346,6 +338,10 @@ export function DashboardLayoutSection({ id }: { id: string }) {
       // unmounted snapshot cell must refetch NOW, not on its next poll.
       queryClient.invalidateQueries({
         queryKey: queryKeys.dashboardSnapshot(),
+        refetchType: "all",
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.dailyDigest(),
         refetchType: "all",
       });
       setDraft(null);
@@ -383,179 +379,16 @@ export function DashboardLayoutSection({ id }: { id: string }) {
     });
   }
 
-  /**
-   * v1.4.16 phase B8 — comparison baseline picker. The toggle persists
-   * via the same `/api/dashboard/widgets` PUT the existing layout
-   * controls already use; saving rides through the same `Save` button.
-   */
-  function setComparisonBaseline(value: ComparisonBaseline) {
+  function toggleHeroItem(kind: PriorityItemKind, enabled: boolean) {
     if (!layout) return;
-    setDraft({ ...layout, comparisonBaseline: value });
-  }
-
-  /**
-   * v1.27.8 — the ring choices apply INSTANTLY, outside the draft/Save
-   * machine the rest of the section keeps. The first cut routed ring
-   * toggles through the draft, and the combination of an unflushed
-   * draft, the server snapshot cache, and client staleness read as
-   * "flipping does nothing, rings appear later". The mutation
-   * optimistically updates the widgets query and invalidates the
-   * dashboard snapshot on settle so the hero reflects the choice on the
-   * next visit.
-   *
-   * v1.32.1 — the PUT body used to be the FULL server layout copy,
-   * spreading this component's `remote` query-cache snapshot in ahead of
-   * the two ring fields. That snapshot can be stale by the time the
-   * request actually lands: if the normal
-   * tile/chart Save button committed a newer layout first, this
-   * request's explicit — present, not omitted — stale `widgets` (and
-   * `comparisonBaseline` / `chartOverlayPrefs`) still won on write and
-   * silently reverted the just-saved layout (issue #581). The payload
-   * now carries ONLY the ring fields; the server's preserve-when-absent
-   * merge (`LAYOUT_FIELD_MERGE_DISPOSITION` — `widgets` joined it in the
-   * same release) carries every omitted field forward from whatever is
-   * CURRENTLY stored, so this request can no longer race a concurrent
-   * Save no matter which one lands last.
-   */
-  const ringMutation = useMutation({
-    // v1.32.16 (issue #581) — shared scope serialises this against the full
-    // layout Save so the two writes can never overlap at the server.
-    scope: { id: DASHBOARD_WIDGETS_MUTATION_SCOPE },
-    mutationFn: async (next: {
-      selectedScoreRings: ScoreRingId[];
-      heroRingOrder: HeroRingId[];
-    }) => {
-      return apiPut<DashboardLayoutWithToken>(
-        "/api/dashboard/widgets",
-        // Carries ONLY the ring fields (never `widgets`) plus the base
-        // token, so it can neither clobber a saved layout nor win a stale
-        // race — a conflict 409s instead.
-        buildRingMutationPayload({ ...next, baseUpdatedAt: readBaseToken() }),
-      );
-    },
-    onMutate: async (next) => {
-      await queryClient.cancelQueries({
-        queryKey: queryKeys.dashboardWidgets(),
-      });
-      const previous = queryClient.getQueryData<DashboardLayout>(
-        queryKeys.dashboardWidgets(),
-      );
-      if (previous) {
-        queryClient.setQueryData(queryKeys.dashboardWidgets(), {
-          ...previous,
-          selectedScoreRings: next.selectedScoreRings,
-          heroRingOrder: next.heroRingOrder,
-        });
-      }
-      return { previous };
-    },
-    onError: (err, _next, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(
-          queryKeys.dashboardWidgets(),
-          context.previous,
-        );
-      }
-      // v1.32.16 (issue #581) — a 409 means a concurrent write landed
-      // first. Roll back the optimistic ring change (above), refetch the
-      // winning layout so the token advances, drop this now-stale delta,
-      // and nudge gently so the user can re-toggle against fresh state.
-      if (err instanceof ApiError && err.status === 409) {
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.dashboardWidgets(),
-        });
-        toast.message(t("dashboard.layoutConflictReloaded"));
-        return;
-      }
-      toast.error(t("dashboard.layoutSaveError"));
-    },
-    onSuccess: (saved) => {
-      queryClient.setQueryData(queryKeys.dashboardWidgets(), saved);
-      // `refetchType: "all"` for the same reason as the save path: the
-      // unmounted snapshot cell must refetch NOW, not on its next poll.
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.dashboardSnapshot(),
-        refetchType: "all",
-      });
-    },
-  });
-
-  /**
-   * v1.27.27 — apply a new hero ring ORDER instantly (see `ringMutation`).
-   * The order is the single source of truth: `selectedScoreRings` is
-   * derived from it (order minus the always-present health-score ring) so
-   * the server resolver and the hero read one consistent sequence.
-   */
-  function applyHeroRingOrder(next: HeroRingId[]) {
-    // v1.32.16 (issue #581) — gate on the freshest layout (`draft ?? remote`)
-    // the rest of the section uses, not the `remote` server snapshot alone,
-    // so an open draft's edits stay the source of truth.
-    if (!layout) return;
-    const selectedScoreRings = next.filter(
-      (id): id is ScoreRingId => id !== HEALTH_SCORE_RING_ID,
-    );
-    // Keep an open draft's ring slice in sync so a later Save of the
-    // OTHER layout edits can't revert the instantly-applied choice.
-    if (draft) setDraft({ ...draft, selectedScoreRings, heroRingOrder: next });
-    ringMutation.mutate({ selectedScoreRings, heroRingOrder: next });
-  }
-
-  /** The reconciled hero ring order (health-score anchor + selected rings). */
-  function currentHeroOrder(l: DashboardLayout): HeroRingId[] {
-    return resolveHeroRingOrder(l.heroRingOrder, l.selectedScoreRings ?? []);
-  }
-
-  /**
-   * v1.27.7 — toggle one hero score ring on/off. Enabling appends to the
-   * order (capped at `MAX_SELECTED_SCORE_RINGS`; the remaining switches
-   * disable at the cap); disabling drops it from the order. The
-   * health-score ring has no toggle — it is the always-present anchor.
-   * v1.27.8 / v1.27.27 — applies instantly via `applyHeroRingOrder`.
-   */
-  function toggleScoreRing(ringId: ScoreRingId, enabled: boolean) {
-    if (!layout) return;
-    const order = currentHeroOrder(layout);
-    if (enabled) {
-      if (order.includes(ringId)) return;
-      const selectedCount = order.filter(
-        (id) => id !== HEALTH_SCORE_RING_ID,
-      ).length;
-      if (selectedCount >= MAX_SELECTED_SCORE_RINGS) return;
-      applyHeroRingOrder([...order, ringId]);
-    } else {
-      applyHeroRingOrder(order.filter((id) => id !== ringId));
-    }
-  }
-
-  /**
-   * v1.27.8 / v1.27.27 — reorder the hero rings (the array order IS the
-   * render order on the hero; the health-score anchor moves like any other
-   * ring). Same interaction pair as the widget rows below: drag handle +
-   * arrow buttons.
-   */
-  function moveHeroRing(ringId: HeroRingId, delta: -1 | 1) {
-    if (!layout) return;
-    const order = currentHeroOrder(layout);
-    const idx = order.indexOf(ringId);
-    const target = idx + delta;
-    if (idx < 0 || target < 0 || target >= order.length) return;
-    const next = [...order];
-    [next[idx], next[target]] = [next[target], next[idx]];
-    applyHeroRingOrder(next);
-  }
-
-  function handleRingDragEnd(event: DragEndEvent) {
-    if (!layout) return;
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const order = currentHeroOrder(layout);
-    const from = order.indexOf(active.id as HeroRingId);
-    const to = order.indexOf(over.id as HeroRingId);
-    if (from < 0 || to < 0) return;
-    const next = [...order];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
-    applyHeroRingOrder(next);
+    setDraft({
+      ...layout,
+      enabledHeroItemKinds: setHeroItemKindEnabled(
+        layout.enabledHeroItemKinds,
+        kind,
+        enabled,
+      ),
+    });
   }
 
   /**
@@ -631,170 +464,49 @@ export function DashboardLayoutSection({ id }: { id: string }) {
           />
         }
       />
-      {/*
-        v1.4.22 D / F-32 — the surrounding `<DashboardSection>` page
-        already renders a `settings.sections.dashboard.description`
-        paragraph beneath the H1. The previous in-card help line
-        repeated the same idea ("Choose which cards appear …
-        Defaults work out of the box.") right next to the comparison
-        picker, giving the page three muted-foreground help blocks
-        stacked on top of each other. Removing this duplicate keeps
-        the comparison picker as the only thing between the header
-        and the widget table.
-      */}
-
-      {/* v1.4.16 phase B8 — comparison baseline picker. Lives at the top
-          of the section because it changes how every chart + tile below
-          renders, not just one. v1.4.19 A6: height standardised to the
-          shared 36-px input contract used by every other Settings input
-          / select; the previous `min-h-11` (44 px) made this trigger
-          look like an outlier next to the 36-px Username/Email/Date-of-
-          birth fields one card up. */}
-      {layout && (
-        <div className="space-y-2">
-          <label
-            htmlFor="comparison-baseline"
-            className="text-foreground text-sm font-medium"
-          >
-            {t("comparison.toggleLabel")}
-          </label>
-          <Select
-            value={layout.comparisonBaseline ?? "none"}
-            onValueChange={(value) =>
-              setComparisonBaseline(value as ComparisonBaseline)
-            }
-            disabled={saveMutation.isPending}
-          >
-            <SelectTrigger
-              id="comparison-baseline"
-              className="w-full sm:w-72"
-              data-slot="comparison-baseline-trigger"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {COMPARISON_BASELINES.map((value) => (
-                <SelectItem
-                  key={value}
-                  value={value}
-                  data-slot={`comparison-baseline-option-${value}`}
-                >
-                  {t(`comparison.baseline.${value}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-muted-foreground text-xs">
-            {t("comparison.toggleHint")}
-          </p>
-        </div>
-      )}
-
-      {/* v1.27.7 — hero score-ring picker. Configures the score rings the
-          server computes onto the dashboard snapshot (`selectedScoreRings`
-          / `heroRingOrder`), consumed by the native client. Offers only
-          rings whose owning module is enabled — the WIDGET_MODULE_BY_ID
-          gating pattern; the three derived rings additionally sit behind
-          the insights module, mirroring the derived routes. Selection caps
-          at MAX_SELECTED_SCORE_RINGS; unchecked switches disable at the cap.
-          v1.27.8 — choices apply instantly (no Save round) and the
-          selected rings reorder with the same drag-handle + arrow pair
-          as the widget rows below; the array order is the ring order. */}
-      {layout && (
-        <div
-          data-slot="score-rings-picker"
-          className="border-border bg-background/30 space-y-3 rounded-md border px-3 py-2"
+      {hydrated && layout && (
+        <fieldset
+          aria-describedby={`${heroDescriptionId} ${heroNotificationNoteId}`}
+          data-slot="hero-content-settings"
+          className="border-border bg-background/30 space-y-3 rounded-lg border px-3 py-3"
         >
-          <div className="min-w-0">
-            <p className="text-foreground text-sm font-medium">
-              {t("dashboard.scoreRingsTitle")}
-            </p>
-            <p className="text-muted-foreground text-xs">
-              {t("dashboard.scoreRingsDescription")}
-            </p>
-          </div>
-          {(() => {
-            const available = SCORE_RING_IDS.filter((ringId) => {
-              if (modules?.[SCORE_RING_MODULE[ringId]] === false) return false;
-              if (ringId !== "MED_COMPLIANCE" && modules?.insights === false)
-                return false;
-              return true;
-            });
-            const selected = (layout.selectedScoreRings ?? []).filter(
-              (ringId) => available.includes(ringId),
-            );
-            // v1.27.27 — the reorderable list is the health-score anchor
-            // ring plus the selected score rings, in the persisted order
-            // (health-score first by default). The health-score row has no
-            // on/off switch — it is always present — but drags/moves like
-            // any other ring.
-            const heroOrder = resolveHeroRingOrder(
-              layout.heroRingOrder,
-              selected,
-            );
-            const unselected = available.filter(
-              (ringId) => !heroOrder.includes(ringId),
-            );
-            const atCap = selected.length >= MAX_SELECTED_SCORE_RINGS;
-            // v1.32.16 (issue #581) — ring controls also lock while a Save
-            // is in flight, so the two writes can never overlap.
-            const busy = widgetWritesBusy(
-              saveMutation.isPending,
-              ringMutation.isPending,
-            );
-            return (
-              <div className="space-y-2">
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleRingDragEnd}
+          <legend className="text-foreground text-sm font-medium">
+            {t("dashboard.heroItemsTitle")}
+          </legend>
+          <p id={heroDescriptionId} className="text-muted-foreground text-xs">
+            {t("dashboard.heroItemsDescription")}
+          </p>
+          <div className="divide-border divide-y">
+            {PRIORITY_ITEM_KINDS.map((kind) => {
+              const inputId = `hero-item-${kind}`;
+              const checked = (
+                layout.enabledHeroItemKinds ?? PRIORITY_ITEM_KINDS
+              ).includes(kind);
+              return (
+                <div
+                  key={kind}
+                  className="flex min-h-11 items-center justify-between gap-3 py-2"
                 >
-                  <SortableContext
-                    items={heroOrder}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {heroOrder.map((ringId, index) => (
-                      <SortableRingRow
-                        key={ringId}
-                        ringId={ringId}
-                        label={t(HERO_RING_LABEL_KEYS[ringId])}
-                        index={index}
-                        total={heroOrder.length}
-                        dragHintId={dragHintId}
-                        disabled={busy}
-                        // The health-score ring is the anchor — no toggle.
-                        pinned={ringId === HEALTH_SCORE_RING_ID}
-                        moveUpLabel={t("dashboard.moveUp")}
-                        moveDownLabel={t("dashboard.moveDown")}
-                        dragHandleLabel={t("dashboard.dragHandle")}
-                        onToggle={toggleScoreRing}
-                        onMove={moveHeroRing}
-                      />
-                    ))}
-                  </SortableContext>
-                </DndContext>
-                {unselected.map((ringId) => (
-                  <div
-                    key={ringId}
-                    className="flex min-h-9 items-center justify-between gap-3 px-1"
-                  >
-                    <span className="text-foreground truncate text-sm">
-                      {t(SCORE_RING_LABEL_KEYS[ringId])}
-                    </span>
-                    <Switch
-                      checked={false}
-                      onCheckedChange={(v) => toggleScoreRing(ringId, v)}
-                      disabled={busy || atCap}
-                      aria-label={t(SCORE_RING_LABEL_KEYS[ringId])}
-                      data-slot="score-ring-switch"
-                      data-ring={ringId}
-                    />
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
-        </div>
+                  <Label htmlFor={inputId} className="text-sm font-medium">
+                    {t(HERO_ITEM_LABEL_KEYS[kind])}
+                  </Label>
+                  <Switch
+                    id={inputId}
+                    checked={checked}
+                    onCheckedChange={(value) => toggleHeroItem(kind, value)}
+                    disabled={saveMutation.isPending}
+                    aria-label={t(HERO_ITEM_LABEL_KEYS[kind])}
+                    data-slot="hero-item-switch"
+                    data-kind={kind}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <p id={heroNotificationNoteId} className="text-foreground text-sm">
+            {t("dashboard.heroItemsNotificationNote")}
+          </p>
+        </fieldset>
       )}
 
       {isLoading || !layout ? (
@@ -997,10 +709,7 @@ export function DashboardLayoutSection({ id }: { id: string }) {
             size="sm"
             className="min-h-11 sm:min-h-9"
             onClick={() => setDraft(null)}
-            disabled={widgetWritesBusy(
-              saveMutation.isPending,
-              ringMutation.isPending,
-            )}
+            disabled={saveMutation.isPending}
           >
             {t("common.cancel")}
           </Button>
@@ -1008,12 +717,7 @@ export function DashboardLayoutSection({ id }: { id: string }) {
             size="sm"
             className="min-h-11 sm:min-h-9"
             onClick={() => layout && saveMutation.mutate(layout)}
-            // v1.32.16 (issue #581) — disabled while EITHER write is in
-            // flight so a Save can't be issued mid ring-write and vice versa.
-            disabled={widgetWritesBusy(
-              saveMutation.isPending,
-              ringMutation.isPending,
-            )}
+            disabled={saveMutation.isPending}
           >
             {saveMutation.isPending && (
               <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
@@ -1027,7 +731,9 @@ export function DashboardLayoutSection({ id }: { id: string }) {
         <p className="text-muted-foreground text-xs">
           {layout &&
           JSON.stringify(layout.widgets) ===
-            JSON.stringify(DEFAULT_DASHBOARD_LAYOUT.widgets)
+            JSON.stringify(DEFAULT_DASHBOARD_LAYOUT.widgets) &&
+          JSON.stringify(layout.enabledHeroItemKinds ?? PRIORITY_ITEM_KINDS) ===
+            JSON.stringify(DEFAULT_DASHBOARD_LAYOUT.enabledHeroItemKinds)
             ? t("dashboard.layoutUsingDefaults")
             : t("dashboard.layoutCustomized")}
         </p>
@@ -1248,124 +954,6 @@ function StaticWidgetRow({
           data-slot="widget-chart-switch"
         />
       </div>
-    </div>
-  );
-}
-
-/**
- * v1.27.8 — sortable row for one SELECTED hero score ring. Mirrors the
- * `SortableWidgetRow` interaction exactly (drag handle + arrow buttons +
- * switch) so the two lists in this section share one sorting language;
- * only the payload differs — the ring order is the `selectedScoreRings`
- * array itself, applied instantly through the ring mutation.
- */
-function SortableRingRow({
-  ringId,
-  label,
-  index,
-  total,
-  dragHintId,
-  disabled,
-  pinned = false,
-  moveUpLabel,
-  moveDownLabel,
-  dragHandleLabel,
-  onToggle,
-  onMove,
-}: {
-  ringId: HeroRingId;
-  label: string;
-  index: number;
-  total: number;
-  dragHintId: string;
-  disabled: boolean;
-  /**
-   * v1.27.27 — the health-score anchor ring: always present, no on/off
-   * switch (a disabled, checked switch communicates the locked-on state),
-   * but reorderable like any other ring.
-   */
-  pinned?: boolean;
-  moveUpLabel: string;
-  moveDownLabel: string;
-  dragHandleLabel: string;
-  onToggle: (id: ScoreRingId, value: boolean) => void;
-  onMove: (id: HeroRingId, delta: -1 | 1) => void;
-}) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: ringId });
-
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition: prefersReducedMotion() ? "none" : transition,
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      data-slot="score-ring-row"
-      data-ring={ringId}
-      data-dragging={isDragging ? "true" : undefined}
-      className={`border-border bg-background/30 flex min-h-12 items-center gap-2 rounded-md border px-3 py-2 ${
-        isDragging ? "ring-primary z-10 opacity-90 shadow-lg ring-2" : ""
-      }`}
-    >
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        aria-label={`${dragHandleLabel} — ${label}`}
-        aria-describedby={dragHintId}
-        title={dragHandleLabel}
-        disabled={disabled}
-        data-slot="score-ring-drag-handle"
-        className="text-muted-foreground hover:text-foreground focus-visible:ring-ring focus-visible:ring-offset-background relative -m-1 inline-flex h-7 w-7 cursor-grab touch-none items-center justify-center rounded transition-colors before:absolute before:inset-[-8px] before:content-[''] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
-      >
-        <GripVertical className="h-4 w-4" />
-      </button>
-      <span className="flex-1 truncate text-sm" title={label}>
-        {label}
-      </span>
-      <Switch
-        checked
-        onCheckedChange={
-          pinned ? undefined : (v) => onToggle(ringId as ScoreRingId, v)
-        }
-        // The health-score anchor cannot be switched off — a disabled,
-        // checked switch reads as "always on, locked".
-        disabled={disabled || pinned}
-        aria-label={label}
-        data-slot="score-ring-switch"
-        data-ring={ringId}
-      />
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="size-11 sm:size-9"
-        onClick={() => onMove(ringId, -1)}
-        disabled={index === 0 || disabled}
-        aria-label={moveUpLabel}
-      >
-        <ArrowUp className="h-4 w-4" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="size-11 sm:size-9"
-        onClick={() => onMove(ringId, 1)}
-        disabled={index === total - 1 || disabled}
-        aria-label={moveDownLabel}
-      >
-        <ArrowDown className="h-4 w-4" />
-      </Button>
     </div>
   );
 }

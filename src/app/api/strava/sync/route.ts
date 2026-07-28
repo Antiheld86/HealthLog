@@ -2,6 +2,7 @@ import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiSuccess, apiError } from "@/lib/api-response";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { annotate } from "@/lib/logging/context";
+import { resolveSyncOutcome } from "@/lib/outcome/written-outcome";
 import { syncUserStrava } from "@/lib/strava/sync";
 
 /**
@@ -28,7 +29,11 @@ export const POST = apiHandler(async () => {
 
   try {
     const imported = await syncUserStrava(user.id);
-    return apiSuccess({ imported });
+    // `failed: false` is a statement, not a placeholder: the Strava walk has no
+    // settled-but-partial arm. `upsertStravaWorkouts` rethrows the first row
+    // error after attempting the batch and the page walk rethrows its own, so
+    // reaching this line means every fetched activity was written.
+    return apiSuccess(resolveSyncOutcome({ imported, failed: false }));
   } catch {
     // Already recorded on the `strava` ledger with its classification. Answer
     // generically so no upstream detail rides the response body.

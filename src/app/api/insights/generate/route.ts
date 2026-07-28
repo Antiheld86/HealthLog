@@ -301,6 +301,23 @@ export const POST = apiHandler((request: NextRequest) =>
         aiResponseTimeoutSeconds: true,
       },
     });
+    const modeAtRead = dbUser?.insightsPrivacyMode ?? "aggregated";
+    // v1.34 — the commit guard below (line ~966) matches on these exact
+    // columns instead of the broad `updatedAt` timestamp. Every User write
+    // bumps `updatedAt`, including `resolveProviderChain()`'s OAuth
+    // token-refresh update later in this same request — keying the
+    // optimistic-concurrency check on it produced a false 409 whenever a
+    // provider credential happened to refresh mid-generation. These are
+    // exactly the columns selected above that feed the prompt built below;
+    // capturing them here and requiring an exact match at commit still
+    // catches a genuine privacy-mode / exclude-list / locale / profile
+    // change without colliding on unrelated column writes.
+    const excludeMetricsAtRead = dbUser?.insightsExcludeMetrics ?? [];
+    const localeAtRead = dbUser?.locale ?? null;
+    const dateOfBirthAtRead = dbUser?.dateOfBirth ?? null;
+    const genderAtRead = dbUser?.gender ?? null;
+    const heightCmAtRead = dbUser?.heightCm ?? null;
+    const displayNameAtRead = dbUser?.displayName ?? null;
 
     const effectiveTimeoutMs = resolveEffectiveTimeoutMs(
       dbUser?.aiResponseTimeoutSeconds,
@@ -949,27 +966,26 @@ export const POST = apiHandler((request: NextRequest) =>
       );
     }
 
-    await prisma.user.update({
-      where: { id: userId },
+    const currentSelfContext = await getSelfContextTextForUser(userId, locale);
+    if (currentSelfContext !== aboutMe) {
+      return apiError("Profile scope changed during insight generation", 409, {
+        errorCode: "insights.generate.profileScopeChanged",
+      });
+    }
+    const committed = await prisma.user.updateMany({
+      where: {
+        id: userId,
+        insightsPrivacyMode: modeAtRead,
+        insightsExcludeMetrics: { equals: excludeMetricsAtRead },
+        locale: localeAtRead,
+        dateOfBirth: dateOfBirthAtRead,
+        gender: genderAtRead,
+        heightCm: heightCmAtRead,
+        displayName: displayNameAtRead,
+      },
       data: {
         insightsCachedAt: new Date(),
         insightsCachedText: JSON.stringify(insights),
-        // v1.16.8 — store the snapshot fingerprint so the nightly / forced
-        // regeneration paths can detect "nothing changed" and skip the
-        // provider call. The user-initiated POST itself stays un-gated: an
-        // explicit regenerate request is honoured even on unchanged data
-        // (it is already bounded by the hourly rate limit above). The
-        // composite shape MUST match the gate in `comprehensive-generate.ts`,
-        // or every off-request warm after a manual regenerate re-pays a
-        // full generation on unchanged data. Beyond the features, three
-        // prompt inputs that can change with NO data change join in:
-        //   - aboutMe (Coach remember / Settings → AI edit),
-        //   - comparisonBaseline (the comparison toggle adds/removes the
-        //     prior-period context block; `null` snapshot means "none"),
-        //   - generationLocale (the language the cached text renders in —
-        //     hashing it makes a locale switch regenerate exactly once, so
-        //     the briefing follows the reader; named `generationLocale`
-        //     because the canonicaliser strips `locale` keys as volatile).
         insightsSnapshotHash: hashInsightSnapshot({
           features: compactFeatures,
           aboutMe: aboutMe ?? null,
@@ -978,6 +994,11 @@ export const POST = apiHandler((request: NextRequest) =>
         }),
       },
     });
+    if (committed.count === 0) {
+      return apiError("Insight scope changed during generation", 409, {
+        errorCode: "insights.generate.scopeChanged",
+      });
+    }
 
     // v1.28.30 — persist the grounding omission (marker AFTER the cache
     // write so it is newer than `insightsCachedAt`). The transient

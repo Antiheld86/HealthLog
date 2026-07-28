@@ -10,15 +10,11 @@ import {
 } from "@/lib/i18n/context";
 import { formatUpdatedLabel } from "@/lib/i18n/relative-time";
 import { useAuth } from "@/hooks/use-auth";
-import { useModuleEnabled } from "@/hooks/use-module-enabled";
 import { hourInTz, DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import { ProseBlocks } from "@/components/insights/prose-blocks";
 import { cn } from "@/lib/utils";
-import {
-  HealthScoreCard,
-  type HealthScoreCardProps,
-  type HealthScoreBand,
-} from "./health-score-card";
+import { HealthScoreCard } from "./health-score-card";
+import type { HealthScoreReport, ScoreBand } from "@/lib/analytics/score/types";
 import type { DailyBriefing as DailyBriefingPayload } from "@/lib/ai/schema";
 
 /**
@@ -78,23 +74,8 @@ interface HeroStripProps {
    * footer hint below.
    */
   noProviderStale?: boolean;
-  /**
-   * v1.4.20 phase B5 — Personal Health Score panel data. When supplied
-   * the right side of the hero band paints the score card. When the
-   * parent omits the field the right side stays empty.
-   */
-  healthScore?: {
-    score: HealthScoreCardProps["score"];
-    band: HealthScoreCardProps["band"];
-    components: HealthScoreCardProps["components"];
-    delta: HealthScoreCardProps["delta"];
-    /**
-     * v1.18.6 — value-free Rest Mode annotation off the analytics
-     * payload. When present + active the score card states it is paused
-     * during illness (suppressed, not penalised).
-     */
-    restMode?: { active: boolean } | null;
-  } | null;
+  /** Complete transparent Health Score report from the analytics route. */
+  healthScore?: HealthScoreReport | null;
   /**
    * v1.21.2 (A5) — Tension Verdict, server-resolved + locale-agnostic. `band`
    * is the readiness composite's band; `positive` / `negative` carry the
@@ -106,7 +87,7 @@ interface HeroStripProps {
    * is present.
    */
   tension?: {
-    band: HealthScoreBand;
+    band: ScoreBand;
     positive: ReadinessContributorKey[];
     negative: ReadinessContributorKey[];
   } | null;
@@ -223,11 +204,6 @@ export function HeroStrip({
         daysInside: returnToBand.daysInside,
       }
     : null;
-  // v1.18.0 R4 — mood-module state so the score card hides its Mood row
-  // when the account turned the module off (the server already drops the
-  // pillar from the number itself). SSR-safe + default-on, matching the
-  // disabled-allowlist gate.
-  const moodEnabled = useModuleEnabled("mood");
   // Greeting hour in the user's configured zone, not the browser's — a
   // traveller / VPN user / wrong device clock otherwise sees the wrong
   // salutation. Mirrors the dashboard hero (`hourInTimezone(now, userTz)`).
@@ -404,14 +380,10 @@ export function HeroStrip({
         )}
         {healthScore && (
           <HealthScoreCard
-            score={healthScore.score}
-            band={healthScore.band}
-            components={healthScore.components}
-            delta={healthScore.delta}
-            moodEnabled={moodEnabled}
-            restModeActive={healthScore.restMode?.active ?? false}
+            report={healthScore}
             tension={tensionProp}
             returnToBand={returnToBandProp}
+            className="w-full md:shrink-0 md:grow-0 md:basis-[22rem] xl:basis-[26rem]"
           />
         )}
       </div>

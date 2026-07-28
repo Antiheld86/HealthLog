@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HealthLog API
-  version: 1.33.2
+  version: 1.34.0
   description: >-
     Self-hosted personal-health-tracking PWA — public API surface for the iOS native client and external ingest.
 
@@ -913,7 +913,7 @@ paths:
                       type: number
                       const: 2
                     leaves:
-                      maxItems: 90
+                      maxItems: 91
                       type: array
                       items:
                         type: string
@@ -1004,7 +1004,7 @@ paths:
                       type: number
                       const: 2
                     leaves:
-                      maxItems: 90
+                      maxItems: 91
                       type: array
                       items:
                         type: string
@@ -6259,6 +6259,20 @@ paths:
                 coachFocus:
                   type: string
                   maxLength: 500
+                aiIncludedSections:
+                  maxItems: 8
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - ABOUT_ME
+                      - CONDITIONS
+                      - ALLERGIES
+                      - COACH_FOCUS
+                      - FAMILY_HISTORY
+                      - SMOKING_STATUS
+                      - ALCOHOL_PATTERN
+                      - SHIFT_SCHEDULE
                 baseUpdatedAt:
                   description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
                     legacy unconditional write (older clients are unaffected). When present, the write is guarded on the
@@ -6267,8 +6281,6 @@ paths:
                   type: string
                   format: date-time
                   pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-              required:
-                - aboutMe
       responses:
         "200":
           description: The effective (trimmed) state echoed back plus the freshly derived pending questions and the advanced
@@ -6282,6 +6294,176 @@ paths:
           description: Self-context changed since it was loaded (optimistic-concurrency conflict). No write happened. Re-read the
             resource, re-apply the user's change against the fresh state, and resend with the new token.
             `meta.errorCode` = `about_me_conflict`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422": *a3
+        "429": *a4
+  /api/anamnesis/facts:
+    get:
+      tags:
+        - Insights
+      summary: Read effective-dated anamnesis facts
+      description: "Returns the current value and immutable revision history for the caller's smoking status, alcohol pattern
+        and shift schedule. Values are decrypted server-side; unreadable ciphertext returns `value: null` with
+        `unreadable: true`."
+      responses:
+        "200":
+          description: Current facts and their revision history.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetAnamnesisFactsResponse"
+        "401": *a1
+        "422": *a3
+        "429": *a4
+    post:
+      tags:
+        - Insights
+      summary: Create an anamnesis fact
+      description: Creates the first current revision for one closed fact kind. The answer is encrypted before persistence. A
+        second current value for the same kind returns 409; corrections use the revision endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  properties:
+                    kind:
+                      type: string
+                      const: SMOKING_STATUS
+                    value:
+                      type: string
+                      enum:
+                        - NEVER
+                        - FORMER
+                        - CURRENT
+                  required:
+                    - kind
+                    - value
+                - type: object
+                  properties:
+                    kind:
+                      type: string
+                      const: ALCOHOL_PATTERN
+                    value:
+                      type: string
+                      enum:
+                        - NONE
+                        - OCCASIONAL
+                        - WEEKLY
+                        - MOST_DAYS
+                  required:
+                    - kind
+                    - value
+                - type: object
+                  properties:
+                    kind:
+                      type: string
+                      const: SHIFT_SCHEDULE
+                    value:
+                      type: string
+                      enum:
+                        - NONE
+                        - FIXED_SHIFT
+                        - ROTATING
+                  required:
+                    - kind
+                    - value
+              type: object
+      responses:
+        "201":
+          description: The newly created current revision.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateAnamnesisFactResponse"
+        "401": *a1
+        "409":
+          description: A current revision already exists for this fact kind. `meta.errorCode` = `anamnesis.fact.currentExists`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422": *a3
+        "429": *a4
+  /api/anamnesis/facts/{id}:
+    patch:
+      tags:
+        - Insights
+      summary: Correct a current anamnesis fact
+      description: Closes the current revision at the correction instant and creates a successor. Prior ciphertext and its
+        half-open validity interval remain in history.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value:
+                  type: string
+                  minLength: 1
+              required:
+                - value
+      responses:
+        "200":
+          description: The successor revision.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CorrectAnamnesisFactResponse"
+        "401": *a1
+        "404": &a6
+          description: No current revision with this id exists for the authenticated account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: Anamnesis fact changed since it was loaded (optimistic-concurrency conflict). No write happened. Re-read
+            the resource, re-apply the user's change against the fresh state, and resend with the new token.
+            `meta.errorCode` = `anamnesis.fact.conflict`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422": *a3
+        "429": *a4
+    delete:
+      tags:
+        - Insights
+      summary: Remove a current anamnesis fact
+      description: Closes the caller-owned current revision without deleting its encrypted history. The fact kind then
+        resolves as not recorded until a new value is created. The path revision id is the optimistic concurrency token.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Metadata for the revision whose interval was closed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemoveAnamnesisFactResponse"
+        "401": *a1
+        "404": *a6
+        "409":
+          description: Anamnesis fact changed since it was loaded (optimistic-concurrency conflict). No write happened. Re-read
+            the resource, re-apply the user's change against the fresh state, and resend with the new token.
+            `meta.errorCode` = `anamnesis.fact.conflict`.
           content:
             application/json:
               schema:
@@ -7396,6 +7578,8 @@ paths:
               - STAIR_DESCENT_SPEED_BASELINE
               - SIX_MINUTE_WALK_BAND
               - TRAJECTORY
+              - HEALTH_SCORE
+              - SAME_TIME_BASELINE
             description: "Derived-metric id to compute (e.g. VITALS_BASELINE, FITNESS_AGE, VASCULAR_AGE_DELTA, HRV_BALANCE, BMI,
               READINESS). Closed enum: an unknown id 422s. Metrics whose compute has not yet landed return an
               `insufficient` value with reason `not_implemented`."
@@ -7576,6 +7760,60 @@ paths:
               schema:
                 $ref: "#/components/schemas/CorrelationDiscoveryResponseEnvelope"
         "401": *a1
+        "422": *a3
+        "429": *a4
+  /api/insights/patterns:
+    get:
+      tags:
+        - Insights
+      summary: List current correlation patterns
+      description: Returns the authenticated account's currently accepted persisted correlation identities, evidence, and
+        dismissal timestamps.
+      responses:
+        "200":
+          description: Current persisted correlation patterns.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CorrelationPatternListResponseEnvelope"
+        "401": *a1
+        "403": *a5
+        "422": *a3
+        "429": *a4
+  /api/insights/patterns/{id}:
+    patch:
+      tags:
+        - Insights
+      summary: Update correlation pattern dismissal
+      description: Dismisses or restores one current account-owned pattern. A dismissal remains effective until the accepted
+        evidence changes materially.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCorrelationPatternRequest"
+      responses:
+        "200":
+          description: Updated dismissal decision.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateCorrelationPatternResponseEnvelope"
+        "401": *a1
+        "403": *a5
+        "404":
+          description: No current pattern with that id for this account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a3
         "429": *a4
   /api/insights/health-status:
@@ -7766,7 +8004,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MoodCustomTagPatchEnvelope"
         "401": *a1
-        "404": &a6
+        "404": &a7
           description: Not found / not owned by the caller.
           content:
             application/json:
@@ -7801,7 +8039,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MoodCustomTagDeleteEnvelope"
         "401": *a1
-        "404": *a6
+        "404": *a7
         "422": *a3
         "429": *a4
   /api/mood/tags/{key}/hidden:
@@ -7842,7 +8080,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "401": *a1
-        "404": *a6
+        "404": *a7
         "422": *a3
         "429": *a4
   /api/mood/tags/groups:
@@ -7917,7 +8155,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MoodTagGroupPatchEnvelope"
         "401": *a1
-        "404": *a6
+        "404": *a7
         "422": *a3
         "429": *a4
     delete:
@@ -7948,7 +8186,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MoodTagGroupDeleteEnvelope"
         "401": *a1
-        "404": *a6
+        "404": *a7
         "422": *a3
         "429": *a4
   /api/mood/tags/layout:
@@ -8192,7 +8430,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MeasurementReminderEnvelope"
         "401": *a1
-        "404": &a7
+        "404": &a8
           description: Measurement reminder not found / not owned.
           content:
             application/json:
@@ -8226,7 +8464,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MeasurementReminderPatchEnvelope"
         "401": *a1
-        "404": *a7
+        "404": *a8
         "422": *a3
         "429": *a4
     delete:
@@ -8248,7 +8486,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MeasurementReminderDeleteEnvelope"
         "401": *a1
-        "404": *a7
+        "404": *a8
         "422": *a3
         "429": *a4
   /api/measurement-reminders/{id}/satisfy:
@@ -8272,7 +8510,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MeasurementReminderSatisfyEnvelope"
         "401": *a1
-        "404": *a7
+        "404": *a8
         "422": *a3
         "429": *a4
   /api/measurement-reminders/{id}/complete:
@@ -8299,7 +8537,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MeasurementReminderCompleteEnvelope"
         "401": *a1
-        "404": *a7
+        "404": *a8
         "422": *a3
         "429": *a4
   /api/labs:
@@ -8464,7 +8702,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GetLabResultResponse"
         "401": *a1
-        "404": &a8
+        "404": &a9
           description: Lab result not found (or owned by another user).
           content:
             application/json:
@@ -8542,7 +8780,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateLabResultResponse"
         "401": *a1
-        "404": *a8
+        "404": *a9
         "422": *a3
         "429": *a4
     delete:
@@ -8564,7 +8802,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteLabResultResponse"
         "401": *a1
-        "404": *a8
+        "404": *a9
         "422": *a3
         "429": *a4
   /api/labs/restore:
@@ -8781,7 +9019,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateBiomarkerResponse"
         "401": *a1
-        "409": &a10
+        "409": &a11
           description: A biomarker with this name already exists for the caller.
           content:
             application/json:
@@ -8809,7 +9047,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GetBiomarkerResponse"
         "401": *a1
-        "404": &a9
+        "404": &a10
           description: Biomarker not found (or owned by another user).
           content:
             application/json:
@@ -8876,8 +9114,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateBiomarkerResponse"
         "401": *a1
-        "404": *a9
-        "409": *a10
+        "404": *a10
+        "409": *a11
         "422": *a3
         "429": *a4
     delete:
@@ -8900,7 +9138,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteBiomarkerResponse"
         "401": *a1
-        "404": *a9
+        "404": *a10
         "422": *a3
         "429": *a4
   /api/illness/episodes:
@@ -9025,7 +9263,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GetIllnessEpisodeEnvelope"
         "401": *a1
-        "404": &a11
+        "404": &a12
           description: Illness episode not found (or owned by another user).
           content:
             application/json:
@@ -9103,7 +9341,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateIllnessEpisodeEnvelope"
         "401": *a1
-        "404": *a11
+        "404": *a12
         "422": *a3
         "429": *a4
     delete:
@@ -9126,7 +9364,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteIllnessEpisodeEnvelope"
         "401": *a1
-        "404": *a11
+        "404": *a12
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/restore:
@@ -9152,7 +9390,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RestoreIllnessEpisodeEnvelope"
         "401": *a1
-        "404": *a11
+        "404": *a12
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/resolve:
@@ -9188,7 +9426,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ResolveIllnessEpisodeEnvelope"
         "401": *a1
-        "404": *a11
+        "404": *a12
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/day-logs:
@@ -9238,7 +9476,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GetIllnessDayLogEnvelope"
         "401": *a1
-        "404": *a11
+        "404": *a12
         "422": *a3
         "429": *a4
     post:
@@ -9317,7 +9555,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpsertIllnessDayLogCreatedEnvelope"
         "401": *a1
-        "404": *a11
+        "404": *a12
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/correlation:
@@ -9344,7 +9582,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/IllnessCorrelationEnvelope"
         "401": *a1
-        "404": *a11
+        "404": *a12
         "422": *a3
         "429": *a4
   /api/illness/insights:
@@ -9612,7 +9850,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GetAllergyEnvelope"
         "401": *a1
-        "404": &a12
+        "404": &a13
           description: Allergy not found (or owned by another user).
           content:
             application/json:
@@ -9694,7 +9932,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateAllergyEnvelope"
         "401": *a1
-        "404": *a12
+        "404": *a13
         "422": *a3
         "429": *a4
     delete:
@@ -9717,7 +9955,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteAllergyEnvelope"
         "401": *a1
-        "404": *a12
+        "404": *a13
         "422": *a3
         "429": *a4
   /api/family-history:
@@ -9822,7 +10060,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GetFamilyHistoryEnvelope"
         "401": *a1
-        "404": &a13
+        "404": &a14
           description: Family history entry not found (or owned by another user).
           content:
             application/json:
@@ -9890,7 +10128,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateFamilyHistoryEnvelope"
         "401": *a1
-        "404": *a13
+        "404": *a14
         "422": *a3
         "429": *a4
     delete:
@@ -9913,7 +10151,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteFamilyHistoryEnvelope"
         "401": *a1
-        "404": *a13
+        "404": *a14
         "422": *a3
         "429": *a4
   /api/documents/inbound:
@@ -11008,6 +11246,9 @@ paths:
                 description:
                   type: string
                   maxLength: 2000
+                correlationEnabled:
+                  default: false
+                  type: boolean
               required:
                 - name
                 - unit
@@ -11019,7 +11260,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateCustomMetricResponse"
         "401": *a1
-        "409": &a15
+        "409": &a16
           description: A custom metric with this name already exists for the caller.
           content:
             application/json:
@@ -11047,7 +11288,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GetCustomMetricResponse"
         "401": *a1
-        "404": &a14
+        "404": &a15
           description: Custom metric not found (or owned by another user).
           content:
             application/json:
@@ -11101,6 +11342,8 @@ paths:
                     - type: string
                       maxLength: 2000
                     - type: "null"
+                correlationEnabled:
+                  type: boolean
       responses:
         "200":
           description: Updated custom metric.
@@ -11109,8 +11352,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateCustomMetricResponse"
         "401": *a1
-        "404": *a14
-        "409": *a15
+        "404": *a15
+        "409": *a16
         "422": *a3
         "429": *a4
     delete:
@@ -11133,7 +11376,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteCustomMetricResponse"
         "401": *a1
-        "404": *a14
+        "404": *a15
         "422": *a3
         "429": *a4
   /api/custom-metrics/{id}/entries:
@@ -11176,7 +11419,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ListCustomMetricEntriesEnvelope"
         "401": *a1
-        "404": *a14
+        "404": *a15
         "422": *a3
         "429": *a4
     post:
@@ -11220,7 +11463,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateCustomMetricEntryResponse"
         "401": *a1
-        "404": *a14
+        "404": *a15
         "422": *a3
         "429": *a4
   /api/custom-metrics/{id}/entries/{entryId}:
@@ -11270,7 +11513,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateCustomMetricEntryResponse"
         "401": *a1
-        "404": &a16
+        "404": &a17
           description: Custom metric entry not found (or owned by another user).
           content:
             application/json:
@@ -11302,7 +11545,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteCustomMetricEntryResponse"
         "401": *a1
-        "404": *a16
+        "404": *a17
         "422": *a3
         "429": *a4
   /api/onboarding/disclaimer:
@@ -11438,7 +11681,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientBatchEnvelope"
         "401": *a1
-        "403": &a17
+        "403": &a18
           description: The opt-in `nutrients` module is off for this account (errorCode `module.disabled`). Stop syncing and do
             not retry; offer the enable-in-settings hint. Only run the HealthKit read-authorization flow while the
             module is on.
@@ -11472,7 +11715,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientOverviewEnvelope"
         "401": *a1
-        "403": *a17
+        "403": *a18
         "422": *a3
         "429": *a4
   /api/nutrients/daily:
@@ -11508,7 +11751,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientDailySeriesEnvelope"
         "401": *a1
-        "403": *a17
+        "403": *a18
         "422": *a3
         "429": *a4
   /api/nutrients/water:
@@ -11535,7 +11778,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientWaterWriteEnvelope"
         "401": *a1
-        "403": *a17
+        "403": *a18
         "422": *a3
         "429": *a4
   /api/integrations/healthkit:
@@ -11688,10 +11931,11 @@ paths:
       tags:
         - Dashboard
       summary: Reset the calling user's dashboard widget layout
-      description: Clears the persisted layout and returns the default layout. Idempotent.
+      description: Resets the tile layout and Today-highlight visibility. It preserves the stored comparison baseline, chart
+        overlays, selected score rings, and hero ring order. Idempotent.
       responses:
         "200":
-          description: Layout reset; the default layout is returned.
+          description: Web-controlled layout settings reset; preserved dashboard preferences are returned with the defaults.
           content:
             application/json:
               schema:
@@ -13705,6 +13949,14 @@ components:
       properties: {}
       description: No body fields. The user is taken from the session / Bearer and the locale from the session; the warm
         covers every assessment for that user.
+    UpdateCorrelationPatternRequest:
+      type: object
+      properties:
+        dismissed:
+          type: boolean
+      required:
+        - dismissed
+      additionalProperties: false
     BulkMoodRequest:
       type: object
       properties:
@@ -14376,6 +14628,22 @@ components:
               - RECOVERY_SCORE
               - SLEEP_SCORE
               - MED_COMPLIANCE
+        enabledHeroItemKinds:
+          description: Today-highlight item kinds in catalogue order. Missing means every current kind is enabled; an empty array
+            disables all kinds.
+          maxItems: 8
+          type: array
+          items:
+            type: string
+            enum:
+              - coach_checkin
+              - dose_window
+              - preventive_care
+              - sync_issue
+              - milestone
+              - ecg_new_recording
+              - tension_window
+              - same_time_baseline
         baseUpdatedAt:
           description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
             legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
@@ -25132,6 +25400,19 @@ components:
               anyOf:
                 - type: string
                 - type: "null"
+            aiIncludedSections:
+              type: array
+              items:
+                type: string
+                enum:
+                  - ABOUT_ME
+                  - CONDITIONS
+                  - ALLERGIES
+                  - COACH_FOCUS
+                  - FAMILY_HISTORY
+                  - SMOKING_STATUS
+                  - ALCOHOL_PATTERN
+                  - SHIFT_SCHEDULE
             pendingQuestions:
               type: array
               items:
@@ -25155,6 +25436,7 @@ components:
             - conditions
             - allergies
             - coachFocus
+            - aiIncludedSections
             - pendingQuestions
             - updatedAt
             - maxChars
@@ -25194,6 +25476,19 @@ components:
               anyOf:
                 - type: string
                 - type: "null"
+            aiIncludedSections:
+              type: array
+              items:
+                type: string
+                enum:
+                  - ABOUT_ME
+                  - CONDITIONS
+                  - ALLERGIES
+                  - COACH_FOCUS
+                  - FAMILY_HISTORY
+                  - SMOKING_STATUS
+                  - ALCOHOL_PATTERN
+                  - SHIFT_SCHEDULE
             pendingQuestions:
               type: array
               items:
@@ -25215,10 +25510,420 @@ components:
             - conditions
             - allergies
             - coachFocus
+            - aiIncludedSections
             - pendingQuestions
             - updatedAt
             - maxChars
             - fieldMaxChars
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    GetAnamnesisFactsResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            current:
+              type: object
+              properties:
+                SMOKING_STATUS:
+                  anyOf:
+                    - type: object
+                      properties:
+                        id:
+                          type: string
+                        kind:
+                          type: string
+                          enum:
+                            - SMOKING_STATUS
+                            - ALCOHOL_PATTERN
+                            - SHIFT_SCHEDULE
+                        value:
+                          anyOf:
+                            - type: string
+                            - type: "null"
+                        unreadable:
+                          type: boolean
+                        validFrom:
+                          type: string
+                          format: date-time
+                          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                        validUntil:
+                          anyOf:
+                            - type: string
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                            - type: "null"
+                        provenance:
+                          type: string
+                          enum:
+                            - USER_REPORTED
+                            - USER_CORRECTION
+                        supersededByRevisionId:
+                          anyOf:
+                            - type: string
+                            - type: "null"
+                        createdAt:
+                          type: string
+                          format: date-time
+                          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                      required:
+                        - id
+                        - kind
+                        - value
+                        - unreadable
+                        - validFrom
+                        - validUntil
+                        - provenance
+                        - supersededByRevisionId
+                        - createdAt
+                      additionalProperties: false
+                    - type: "null"
+                ALCOHOL_PATTERN:
+                  anyOf:
+                    - type: object
+                      properties:
+                        id:
+                          type: string
+                        kind:
+                          type: string
+                          enum:
+                            - SMOKING_STATUS
+                            - ALCOHOL_PATTERN
+                            - SHIFT_SCHEDULE
+                        value:
+                          anyOf:
+                            - type: string
+                            - type: "null"
+                        unreadable:
+                          type: boolean
+                        validFrom:
+                          type: string
+                          format: date-time
+                          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                        validUntil:
+                          anyOf:
+                            - type: string
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                            - type: "null"
+                        provenance:
+                          type: string
+                          enum:
+                            - USER_REPORTED
+                            - USER_CORRECTION
+                        supersededByRevisionId:
+                          anyOf:
+                            - type: string
+                            - type: "null"
+                        createdAt:
+                          type: string
+                          format: date-time
+                          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                      required:
+                        - id
+                        - kind
+                        - value
+                        - unreadable
+                        - validFrom
+                        - validUntil
+                        - provenance
+                        - supersededByRevisionId
+                        - createdAt
+                      additionalProperties: false
+                    - type: "null"
+                SHIFT_SCHEDULE:
+                  anyOf:
+                    - type: object
+                      properties:
+                        id:
+                          type: string
+                        kind:
+                          type: string
+                          enum:
+                            - SMOKING_STATUS
+                            - ALCOHOL_PATTERN
+                            - SHIFT_SCHEDULE
+                        value:
+                          anyOf:
+                            - type: string
+                            - type: "null"
+                        unreadable:
+                          type: boolean
+                        validFrom:
+                          type: string
+                          format: date-time
+                          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                        validUntil:
+                          anyOf:
+                            - type: string
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                            - type: "null"
+                        provenance:
+                          type: string
+                          enum:
+                            - USER_REPORTED
+                            - USER_CORRECTION
+                        supersededByRevisionId:
+                          anyOf:
+                            - type: string
+                            - type: "null"
+                        createdAt:
+                          type: string
+                          format: date-time
+                          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                      required:
+                        - id
+                        - kind
+                        - value
+                        - unreadable
+                        - validFrom
+                        - validUntil
+                        - provenance
+                        - supersededByRevisionId
+                        - createdAt
+                      additionalProperties: false
+                    - type: "null"
+              required:
+                - SMOKING_STATUS
+                - ALCOHOL_PATTERN
+                - SHIFT_SCHEDULE
+              additionalProperties: false
+            history:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  kind:
+                    type: string
+                    enum:
+                      - SMOKING_STATUS
+                      - ALCOHOL_PATTERN
+                      - SHIFT_SCHEDULE
+                  value:
+                    anyOf:
+                      - type: string
+                      - type: "null"
+                  unreadable:
+                    type: boolean
+                  validFrom:
+                    type: string
+                    format: date-time
+                    pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                  validUntil:
+                    anyOf:
+                      - type: string
+                        format: date-time
+                        pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                      - type: "null"
+                  provenance:
+                    type: string
+                    enum:
+                      - USER_REPORTED
+                      - USER_CORRECTION
+                  supersededByRevisionId:
+                    anyOf:
+                      - type: string
+                      - type: "null"
+                  createdAt:
+                    type: string
+                    format: date-time
+                    pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                required:
+                  - id
+                  - kind
+                  - value
+                  - unreadable
+                  - validFrom
+                  - validUntil
+                  - provenance
+                  - supersededByRevisionId
+                  - createdAt
+                additionalProperties: false
+          required:
+            - current
+            - history
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    CreateAnamnesisFactResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+            kind:
+              type: string
+              enum:
+                - SMOKING_STATUS
+                - ALCOHOL_PATTERN
+                - SHIFT_SCHEDULE
+            value:
+              anyOf:
+                - type: string
+                - type: "null"
+            unreadable:
+              type: boolean
+            validFrom:
+              type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            validUntil:
+              anyOf:
+                - type: string
+                  format: date-time
+                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                - type: "null"
+            provenance:
+              type: string
+              enum:
+                - USER_REPORTED
+                - USER_CORRECTION
+            supersededByRevisionId:
+              anyOf:
+                - type: string
+                - type: "null"
+            createdAt:
+              type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          required:
+            - id
+            - kind
+            - value
+            - unreadable
+            - validFrom
+            - validUntil
+            - provenance
+            - supersededByRevisionId
+            - createdAt
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    CorrectAnamnesisFactResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+            kind:
+              type: string
+              enum:
+                - SMOKING_STATUS
+                - ALCOHOL_PATTERN
+                - SHIFT_SCHEDULE
+            value:
+              anyOf:
+                - type: string
+                - type: "null"
+            unreadable:
+              type: boolean
+            validFrom:
+              type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            validUntil:
+              anyOf:
+                - type: string
+                  format: date-time
+                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                - type: "null"
+            provenance:
+              type: string
+              enum:
+                - USER_REPORTED
+                - USER_CORRECTION
+            supersededByRevisionId:
+              anyOf:
+                - type: string
+                - type: "null"
+            createdAt:
+              type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          required:
+            - id
+            - kind
+            - value
+            - unreadable
+            - validFrom
+            - validUntil
+            - provenance
+            - supersededByRevisionId
+            - createdAt
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    RemoveAnamnesisFactResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+            kind:
+              type: string
+              enum:
+                - SMOKING_STATUS
+                - ALCOHOL_PATTERN
+                - SHIFT_SCHEDULE
+            removedAt:
+              type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          required:
+            - id
+            - kind
+            - removedAt
           additionalProperties: false
         error:
           type: "null"
@@ -26369,8 +27074,8 @@ components:
               properties:
                 score:
                   type: integer
-                  minimum: -9007199254740991
-                  maximum: 9007199254740991
+                  minimum: 0
+                  maximum: 100
                 band:
                   type: string
                   enum:
@@ -26381,15 +27086,78 @@ components:
                   anyOf:
                     - type: number
                     - type: "null"
+                confidence:
+                  $ref: "#/components/schemas/DerivedConfidence"
+                composition:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - BLOOD_PRESSURE
+                      - GLYCAEMIA
+                      - ACTIVITY
+                      - SLEEP
+                      - ADIPOSITY
+                      - WELLBEING
+                      - FITNESS
+                      - LIPIDS
+                deltaReason:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - algorithm_changed
+                        - composition_changed
+                        - first_eligibility_window
+                        - below_noise_floor
+                        - no_previous_window
+                        - no_current_score
+                    - type: "null"
+                scoreVersion:
+                  type: integer
+                  exclusiveMinimum: 0
+                  maximum: 9007199254740991
+                bandSetter:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - BLOOD_PRESSURE
+                        - GLYCAEMIA
+                        - ACTIVITY
+                        - SLEEP
+                        - ADIPOSITY
+                        - WELLBEING
+                        - FITNESS
+                        - LIPIDS
+                    - type: "null"
+                restMode:
+                  anyOf:
+                    - type: object
+                      properties:
+                        active:
+                          type: boolean
+                        since:
+                          anyOf:
+                            - type: string
+                            - type: "null"
+                        episodeCount:
+                          type: integer
+                          minimum: -9007199254740991
+                          maximum: 9007199254740991
+                      required:
+                        - active
+                        - since
+                        - episodeCount
+                      additionalProperties: false
+                    - type: "null"
               required:
                 - score
                 - band
                 - delta
               additionalProperties: false
             - type: "null"
-          description: Personal health score summary (0..100 score, traffic-light band, week-over-week delta). Null on a
-            rollup-coverage miss (it rides the thick phase alongside `extras`) and when no pillar is computable.
-            Component breakdown is deliberately not serialised here.
+          description: Derived cardiometabolic reference score summary. Null until at least three eligible domains include a
+            measured physiological domain. Additive metadata names confidence, ordered composition, the worst-pillar
+            band setter, score version, and why a delta was suppressed. Rest Mode annotates but never changes the score.
         scoreRings:
           description: "User-selected hero score rings (max 3, `selectedScoreRings` on the dashboard layout), resolved
             server-side: READINESS / RECOVERY_SCORE / SLEEP_SCORE via the derived engines (module-gated like
@@ -26623,6 +27391,24 @@ components:
         ≥36% instability flag; `advanced` is the disclosure tier — J-index (Wojcicki 1995) + LBGI/HBGI (Kovatchev
         hypo/hyper risk). All blocks are null when there are no readings; `advanced.jIndex` is null for a single-reading
         window.
+    DerivedConfidence:
+      type: object
+      properties:
+        score:
+          type: number
+          description: 0..100 confidence; feeds the shared coverage meter unchanged.
+        band:
+          type: string
+          enum:
+            - high
+            - medium
+            - low
+            - draft
+          description: Confidence band the meter renders.
+      required:
+        - score
+        - band
+      additionalProperties: false
     InsightsComprehensiveResponseEnvelope:
       type: object
       properties:
@@ -27283,6 +28069,8 @@ components:
             - STAIR_DESCENT_SPEED_BASELINE
             - SIX_MINUTE_WALK_BAND
             - TRAJECTORY
+            - HEALTH_SCORE
+            - SAME_TIME_BASELINE
           description: Echoes the requested derived-metric id (tags the union).
         status:
           type: string
@@ -27364,24 +28152,6 @@ components:
         - presentInputs
         - historyDays
         - missing
-      additionalProperties: false
-    DerivedConfidence:
-      type: object
-      properties:
-        score:
-          type: number
-          description: 0..100 confidence; feeds the shared coverage meter unchanged.
-        band:
-          type: string
-          enum:
-            - high
-            - medium
-            - low
-            - draft
-          description: Confidence band the meter renders.
-      required:
-        - score
-        - band
       additionalProperties: false
     DerivedProvenance:
       type: object
@@ -27800,6 +28570,12 @@ components:
         outcome:
           type: string
           description: Outcome channel (lag target), e.g. SLEEP_DURATION, HEART_RATE_VARIABILITY.
+        behaviourLabel:
+          description: Display label for a dynamic behaviour channel.
+          type: string
+        outcomeLabel:
+          description: Display label for a dynamic outcome channel.
+          type: string
         n:
           type: integer
           minimum: -9007199254740991
@@ -27831,6 +28607,15 @@ components:
             - recent
         provisional:
           description: "v1.22 — true for an emerging recent-window pair: fewer days, hedged as provisional rather than established."
+          type: boolean
+        patternId:
+          description: Account-scoped persisted identity for dismissal.
+          type: string
+        canonicalKey:
+          description: Stable factor + outcome + lag identity.
+          type: string
+        dismissed:
+          description: Server decision to suppress unchanged evidence.
           type: boolean
       required:
         - behaviour
@@ -27942,6 +28727,124 @@ components:
         - qValue
         - windowDays
         - interpretation
+      additionalProperties: false
+    CorrelationPatternListResponseEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/CorrelationPatternListResponse"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    CorrelationPatternListResponse:
+      type: object
+      properties:
+        patterns:
+          type: array
+          items:
+            $ref: "#/components/schemas/CorrelationPattern"
+      required:
+        - patterns
+      additionalProperties: false
+    CorrelationPattern:
+      type: object
+      properties:
+        id:
+          type: string
+        canonicalKey:
+          type: string
+        family:
+          type: string
+        factorKey:
+          type: string
+        outcomeKey:
+          type: string
+        lagDays:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+        sampleSize:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+        effectSize:
+          type: number
+        pValue:
+          type: number
+        qValue:
+          anyOf:
+            - type: number
+            - type: "null"
+        evidenceHash:
+          type: string
+        lastComputedAt:
+          type: string
+        dismissedAt:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - id
+        - canonicalKey
+        - family
+        - factorKey
+        - outcomeKey
+        - lagDays
+        - sampleSize
+        - effectSize
+        - pValue
+        - qValue
+        - evidenceHash
+        - lastComputedAt
+        - dismissedAt
+      additionalProperties: false
+    UpdateCorrelationPatternResponseEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/UpdateCorrelationPatternResponse"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    UpdateCorrelationPatternResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        canonicalKey:
+          type: string
+        dismissed:
+          type: boolean
+        dismissedAt:
+          anyOf:
+            - type: string
+            - type: "null"
+        evidenceHash:
+          type: string
+      required:
+        - id
+        - canonicalKey
+        - dismissed
+        - dismissedAt
+        - evidenceHash
       additionalProperties: false
     InsightsHealthStatusEnvelope:
       type: object
@@ -29688,11 +30591,22 @@ components:
               - analyte
               - reason
             additionalProperties: false
+        outcome:
+          type: string
+          enum:
+            - empty
+            - failed
+            - partial
+            - success
+          description: How the commit reads, resolved from the counts rather than the status code. `success` only when every
+            confirmed row was written; `partial` when some were skipped; `failed` when nothing was written and at least
+            one row was skipped; `empty` when there was nothing to write.
       required:
         - inserted
         - skipped
+        - outcome
       additionalProperties: false
-      description: 'The rows written (`source: "OCR"`) and those skipped as commit-time duplicates.'
+      description: 'The rows written (`source: "OCR"`), those skipped as commit-time duplicates, and the resolved outcome.'
     OcrCommittedLabResult:
       type: object
       properties:
@@ -32053,6 +32967,8 @@ components:
           anyOf:
             - type: string
             - type: "null"
+        correlationEnabled:
+          type: boolean
         latest:
           anyOf:
             - type: object
@@ -32083,6 +32999,7 @@ components:
         - targetHigh
         - decimals
         - description
+        - correlationEnabled
         - latest
         - entryCount
         - createdAt
@@ -32913,6 +33830,7 @@ components:
             - milestone
             - ecg_new_recording
             - tension_window
+            - same_time_baseline
           description: Closed rail-item kind.
         itemKey:
           description: Stable dismiss identity, namespaced `<kind>:...`. Present only on the observational kinds (milestone /
@@ -33192,6 +34110,22 @@ components:
               - RECOVERY_SCORE
               - SLEEP_SCORE
               - MED_COMPLIANCE
+        enabledHeroItemKinds:
+          description: Today-highlight item kinds in catalogue order. Missing means every current kind is enabled; an empty array
+            disables all kinds.
+          maxItems: 8
+          type: array
+          items:
+            type: string
+            enum:
+              - coach_checkin
+              - dose_window
+              - preventive_care
+              - sync_issue
+              - milestone
+              - ecg_new_recording
+              - tension_window
+              - same_time_baseline
         updatedAt:
           description: "Optimistic-concurrency token: the stored row's `updatedAt` at read/write time. Echo it back as
             `baseUpdatedAt` on the next write. Opaque."

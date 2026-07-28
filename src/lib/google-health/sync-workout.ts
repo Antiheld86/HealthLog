@@ -4,6 +4,9 @@
  * Reads exercise sessions from the `activity_and_fitness.readonly` Restricted
  * bundle and upserts each into the `Workout` table as `source = GOOGLE_HEALTH`,
  * keyed on `(userId, source, externalId)` so a re-fetch overwrites in place.
+ * Insert and update share one payload object, so a full sync repairs rows an
+ * older build wrote — including the raw activity type, which earlier releases
+ * discarded.
  *
  * A Google Health run and the same run via Apple Health (or WHOOP) stay distinct
  * `Workout` rows (different `source`); the read-time `pickCanonicalWorkoutRows`
@@ -76,6 +79,16 @@ export async function syncUserWorkout(
       avgHeartRate: w.avgHeartRate,
       maxHeartRate: w.maxHeartRate,
       minHeartRate: w.minHeartRate,
+      // Raw pre-mapping label, kept for provenance once
+      // `mapGoogleHealthSportType()` has resolved `sportType` to a canonical
+      // bucket — every unmapped `exerciseType` collapses to `"other"`, so
+      // without this the activity Google reported is gone after ingest. Never
+      // read back as the canonical `sportType`. Absent (rather than null) when
+      // the session carried no type, so a re-sync never clears metadata a
+      // previous run wrote.
+      ...(w.sportTypeRaw
+        ? { metadata: { googleExerciseType: w.sportTypeRaw } }
+        : {}),
     };
     try {
       const [inserted] = await prisma.workout.createManyAndReturn({

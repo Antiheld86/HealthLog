@@ -1,11 +1,11 @@
 {
-  "$comment": "Client-bundle budgets, enforced by scripts/check-bundle-budget.mjs (--check) after `next build` in CI. Values are KB gzip and include the shared rootMainFiles baseline. Re-measured at v1.33.0: / 429, /insights 414, /measurements 416, /insights/mood 432, total 3060, baseline 130. The aggregate rose 78 KB from v1.32.0's 2982 because that release adds surfaces rather than libraries: a dose-history import card, inventory date editing, fourteen confirmation dialogs, and a job-failure panel. Every per-route cap still passes with headroom, and the thing this aggregate exists to catch (a newly duplicated ~90 KB library) did not happen: the Recharts chunk count is still 1 and structurally guarded. Raised 3050 to 3120 for that reason, not to make a red check green. Route caps retain focused headroom. Message catalogs and duplicate Recharts chunks have dedicated structural guards.",
+  "$comment": "Client-bundle budgets, enforced by scripts/check-bundle-budget.mjs (--check) after `next build` in CI. Values are KB gzip and include the shared rootMainFiles baseline. Re-measured at v1.34.0: / 430, /insights 417, /measurements 417, /insights/mood 435, total 3130, baseline 130. The aggregate rose 70 KB from v1.33.2's 3060 for the same reason the v1.33.0 raise did: new surfaces, not a duplicated library. This release adds the reference-composite health-score card (per-pillar detail cards, method notes), the structured anamnesis facts editor, custom-metric correlation opt-in, and pattern-dismissal controls on two card types. Every per-route cap still passes with 23-30 KB headroom, and the Recharts chunk count is still 1 and structurally guarded. Raised 3120 to 3140 for that reason, not to make a red gate pass — the per-route budgets are the real ceiling on any single page; the aggregate exists to catch exactly the duplicated-library case that did not happen here.",
   "routesKbGz": {
     "/page": 460,
     "/insights/page": 445,
     "/measurements/page": 445,
     "/insights/mood/page": 460
   },
-  "totalClientKbGz": 3120,
+  "totalClientKbGz": 3140,
   "maxRechartsChunks": 1
 }

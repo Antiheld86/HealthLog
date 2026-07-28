@@ -33,6 +33,7 @@ import {
   utcDayKey,
 } from "@/lib/environment/service";
 import { recordError } from "@/lib/jobs/worker-status";
+import { jobDone, jobFailed, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { workerLog } from "./reminder/shared";
 
 export const ENVIRONMENT_FETCH_QUEUE = "environment-fetch";
@@ -152,14 +153,14 @@ export async function enqueueEnvironmentFetchDiscovery(
 export async function handleEnvironmentFetch(
   boss: PgBoss,
   payload: EnvironmentFetchPayload,
-): Promise<void> {
+): Promise<JobOutcome> {
   if (!payload.userId) {
     const { enqueued, skipped } = await enqueueEnvironmentFetchDiscovery(boss);
     workerLog(
       "info",
       `[environment-fetch] discovery enqueued=${enqueued} skipped=${skipped}`,
     );
-    return;
+    return jobDone({ users_enqueued: enqueued, users_skipped: skipped });
   }
 
   const userId = payload.userId;
@@ -168,7 +169,7 @@ export async function handleEnvironmentFetch(
       "info",
       `[environment-fetch] user=${userId} module disabled — skipping`,
     );
-    return;
+    return jobDone({ skipped: "environment module disabled" });
   }
 
   const { startDate, endDate } = resolveRange(payload);
@@ -179,7 +180,11 @@ export async function handleEnvironmentFetch(
       "error",
       `[environment-fetch] user=${userId} range ${startDate}..${endDate} (${span}d) exceeds cap — skipping`,
     );
-    return;
+    // A refused range is not an opt-out: the job was asked to fill days and
+    // filled none, so it says so instead of completing quietly on a stderr line.
+    return jobFailed("environment backfill range exceeds cap", undefined, {
+      span_days: span,
+    });
   }
 
   try {
@@ -192,6 +197,11 @@ export async function handleEnvironmentFetch(
       "info",
       `[environment-fetch] user=${userId} ${startDate}..${endDate} stored=${result.stored} skipped=${result.skipped} fetches=${result.fetches}`,
     );
+    return jobDone({
+      days_stored: result.stored,
+      days_skipped: result.skipped,
+      fetches: result.fetches,
+    });
   } catch (err) {
     recordError();
     workerLog("error", `[environment-fetch] user=${userId} failed`, err);

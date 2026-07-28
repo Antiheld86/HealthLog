@@ -91,6 +91,33 @@ beforeEach(() => {
   buildCoachSnapshot.mockResolvedValue({ snapshotJson: '{"weight":[]}' });
 });
 
+describe("deriveClarifyingQuestions — included sections", () => {
+  it("falls back only to unanswered fields the user included", async () => {
+    const out = await deriveClarifyingQuestions(
+      "user-1",
+      { ...ctx, aboutMe: null },
+      "en",
+      ["ABOUT_ME"],
+    );
+
+    expect(out.questions).toEqual([
+      "Want to tell the Coach a bit about yourself — routines, goals, context?",
+    ]);
+    expect(providerMocks.hasAnyConfiguredProvider).not.toHaveBeenCalled();
+    expect(buildCoachSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("does no question work when no question-bearing field is included", async () => {
+    const out = await deriveClarifyingQuestions("user-1", ctx, "en", [
+      "FAMILY_HISTORY",
+    ]);
+
+    expect(out.questions).toEqual([]);
+    expect(providerMocks.hasAnyConfiguredProvider).not.toHaveBeenCalled();
+    expect(buildCoachSnapshot).not.toHaveBeenCalled();
+  });
+});
+
 describe("deriveClarifyingQuestions — server-managed consent gate", () => {
   it("refuses the AI path on an operator-managed chain with no receipt", async () => {
     providerMocks.resolveProviderChain.mockResolvedValue([

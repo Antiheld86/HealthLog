@@ -41,6 +41,7 @@ import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { IntegrationStatusPill } from "@/components/settings/integration-status-pill";
 import { TestConnectionButton } from "@/components/settings/test-connection-button";
 import { apiFetchRaw, apiPost } from "@/lib/api/api-fetch";
+import { WrittenOutcomeLine } from "@/components/outcome/written-outcome-line";
 import { useTranslations } from "@/lib/i18n/context";
 import type {
   MetricFreshnessEntry,
@@ -52,7 +53,16 @@ import {
   queryKeys,
 } from "@/lib/query-keys";
 import { MetricFreshnessDisclosure } from "./metric-freshness-disclosure";
-import { IntegrationErrorMessage, pillStateForVerdict } from "./shared";
+import {
+  readSyncOutcome,
+  useSyncOutcomeMessage,
+  type SyncOutcomeState,
+} from "./sync-outcome";
+import {
+  IntegrationErrorMessage,
+  pillFailurePropsFor,
+  pillStateForVerdict,
+} from "./shared";
 import {
   IntegrationCardDescription,
   IntegrationRedirectGuide,
@@ -75,6 +85,12 @@ export interface OAuthProviderStatus {
   lastAttemptAt?: string | null;
   lastError?: string | null;
   legacyLastSyncedAt?: string | null;
+  consecutiveFailuresByKind?: {
+    transient: number;
+    reauth_required: number;
+    persistent: number;
+  } | null;
+  failureThreshold?: number;
   /** The server-resolved liveness verdict; the pill is a projection of it. */
   syncHealth?: SyncHealth;
   metricFreshness?: MetricFreshnessEntry[];
@@ -116,13 +132,11 @@ export function OAuthProviderCard({
   viewModel,
 }: OAuthProviderCardProps) {
   const { t } = useTranslations();
+  const describeSyncOutcome = useSyncOutcomeMessage();
   const queryClient = useQueryClient();
   const [msg, setMsg] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const [syncMsg, setSyncMsg] = useState<string | null>(null);
-  const [syncMsgType, setSyncMsgType] = useState<"success" | "error" | null>(
-    null,
-  );
+  const [syncResult, setSyncResult] = useState<SyncOutcomeState | null>(null);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [credsSaving, setCredsSaving] = useState(false);
@@ -137,28 +151,38 @@ export function OAuthProviderCard({
   // full-history dialog — none of these providers has a full-sync arm to call.
   async function handleSync() {
     setSyncing(true);
-    setSyncMsg(null);
-    setSyncMsgType(null);
+    setSyncResult(null);
     try {
       const res = await apiFetchRaw(`/api/${provider}/sync`, {
         method: "POST",
       });
       const json = await res.json();
-      if (res.ok) {
-        setSyncMsg(t(`${i18nPrefix}SyncResult`, { count: json.data.imported }));
-        setSyncMsgType("success");
+      const result = res.ok ? readSyncOutcome(json) : null;
+      if (result) {
+        // The tone comes off what the run wrote, not off `res.ok`.
+        setSyncResult({
+          outcome: result.outcome,
+          message: describeSyncOutcome(
+            result,
+            t(`${i18nPrefix}SyncResult`, { count: result.imported }),
+          ),
+        });
         void invalidateKeys(queryClient, measurementDependentKeys);
         queryClient.invalidateQueries({ queryKey: statusQueryKey });
         queryClient.invalidateQueries({
           queryKey: queryKeys.integrationsStatus(),
         });
       } else {
-        setSyncMsg(json.error || t(`${i18nPrefix}SyncFailed`));
-        setSyncMsgType("error");
+        setSyncResult({
+          outcome: "failed",
+          message: json?.error || t(`${i18nPrefix}SyncFailed`),
+        });
       }
     } catch {
-      setSyncMsg(t(`${i18nPrefix}SyncFailed`));
-      setSyncMsgType("error");
+      setSyncResult({
+        outcome: "failed",
+        message: t(`${i18nPrefix}SyncFailed`),
+      });
     } finally {
       setSyncing(false);
     }
@@ -256,6 +280,7 @@ export function OAuthProviderCard({
                 ? (status?.syncHealth?.since ?? null)
                 : (status?.legacyLastSyncedAt ?? status?.lastSuccessAt ?? null)
             }
+            {...pillFailurePropsFor(status)}
           />
         }
       />
@@ -463,14 +488,12 @@ export function OAuthProviderCard({
                 </AlertDialogContent>
               </AlertDialog>
             </div>
-            {syncMsg && (
-              <p
-                role="alert"
-                data-testid={`${provider}-sync-result`}
-                className={`text-sm ${syncMsgType === "success" ? "text-success" : "text-destructive"}`}
-              >
-                {syncMsg}
-              </p>
+            {syncResult && (
+              <WrittenOutcomeLine
+                outcome={syncResult.outcome}
+                message={syncResult.message}
+                testId={`${provider}-sync-result`}
+              />
             )}
             {/* connect→data loop: a discreet link to where this provider's
                 readings now surface — doubles as the "your data is richer"

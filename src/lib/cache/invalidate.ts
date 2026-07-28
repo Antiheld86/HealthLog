@@ -186,6 +186,16 @@ export function invalidateUserMedications(
 }
 
 /**
+ * Hard-evict every server cache that can carry the derived Health Score.
+ * Lab, assessment and score-notice mutations call this one bundle so the
+ * analytics report, dashboard snapshot and derived batch cannot disagree.
+ */
+export function invalidateUserHealthScore(userId: string): void {
+  caches.analytics.deleteByPrefix(`${userId}|`);
+  caches.insightsDerived.deleteByPrefix(`${userId}|`);
+}
+
+/**
  * v1.16.8 — invalidate every cache whose payload derives from the user's
  * PROFILE-level settings rather than from measurement / mood / medication
  * rows. The measurement-write invalidators never fire on a settings save,
@@ -259,6 +269,13 @@ export function invalidateUserInsightsLayout(userId: string): void {
  */
 export function invalidateUserMedicationListLayout(userId: string): void {
   caches.medicationListLayout.deleteByPrefix(userId);
+}
+
+/** Invalidate surfaces whose server decision includes pattern dismissal. */
+export function invalidateUserCorrelationPatterns(userId: string): void {
+  caches.analytics.deleteByPrefix(`${userId}|`);
+  caches.moodInsights.deleteByPrefix(userId);
+  caches.insightsDerived.deleteByPrefix(`${userId}|`);
 }
 
 /**

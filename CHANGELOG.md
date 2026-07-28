@@ -2,6 +2,161 @@
 
 ## [Unreleased]
 
+## [1.34.0] — 2026-07-28
+
+Two things this release keeps saying to itself. A job, a sync, or a write
+that fails can no longer report success by falling off the end of a
+function. And a number the app grades you against is either yours or it
+says plainly that it is not.
+
+### A failure now looks like a failure
+
+Every background job in this codebase, all 104 of them across five queues,
+used to signal success by returning nothing. A handler that caught an
+error, logged a warning, and returned was indistinguishable from one that
+finished its work, so a queue could fail quietly for as long as it liked.
+Every handler now has to construct and return the outcome of what it did,
+and the type system enforces it: a handler that falls off the end no
+longer compiles. Retry behaviour was reviewed queue by queue rather than
+flipped in bulk, because a rethrow changes what runs, not only what shows
+up on a screen.
+
+The same fix reached the surfaces you actually watch. Six integration
+cards and the lab import dialog used to key their tone off whether the
+network call itself succeeded, so a sync that imported nothing because
+every reading was refused still rendered a green tick, and a re-scan
+where every row turned out to be a duplicate raised a success toast for
+zero saved readings. They now render the outcome the server actually
+resolved: a tick only when everything landed, a warning when part of it
+did not, an error when none of it did.
+
+### Grading you against your own numbers
+
+The Health Score graded your weight against a target nobody set, silently
+computed from your height and never shown anywhere. If you had entered
+your own weight target on the targets page, the score ignored it. Both
+the targets page and the score now read the same target you actually
+set, and an account with no target of its own gets a plain trend reading
+instead of a number graded against a hidden goal. The score's weight row
+now says outright which of the two it used.
+
+The Health Score itself is rebuilt on the same coverage-and-provenance
+contract the rest of the app's derived metrics already use. Every pillar
+now says what went into it and what did not, weights redistribute openly
+when a pillar has nothing to grade instead of quietly changing what the
+number means, and the card explains itself the way the other Insights
+cards do. Because both of these changes move the same number, they are
+explained once: the score carries a version marker, and the first delta
+you see after updating is suppressed rather than reported as a real
+day-to-day change, with a note on the card saying why.
+
+Steps, active energy, distance, and flights now compare today's running
+total against what is typical for you at this same hour, not just
+against your latest reading, which never meant anything for a metric
+that only makes sense as a full day. It needs at least two weeks of your
+own history before it says anything, and until then it says so honestly
+instead of guessing from three days of data.
+
+### What was asked for, and built
+
+An account-defined custom metric can now feed the same correlation engine
+your built-in metrics already run through, so a value nothing else in the
+app tracks can be checked against your own outcomes rather than sitting
+in its own silo. Caffeine and nicotine join alcohol as taggable factors in
+that same engine. A correlation or crosstab finding can be dismissed once
+it has been looked at, and stays dismissed instead of recomputing itself
+back into view on every run.
+
+Three facts about you, smoking status, alcohol pattern, and shift or
+rotating-schedule work, can now be recorded as dated, correctable entries
+rather than buried in free text, with their own switch for whether they
+reach the Coach's prompt at all.
+
+The "worth a look" rail on the dashboard can now be trimmed to the kinds
+of item you actually want to see there. Turning a tile off there only
+hides it; it does not touch the medication reminder itself, which keeps
+firing on its own channel regardless of what the hero card shows.
+
+### Two defects, found by people who read the code and the numbers
+
+A workout synced from Google Health with a sport type the app's mapping
+table did not recognise lost that type outright and rendered as
+"Other," identical to a workout that genuinely had no category. The
+original label is now kept on the row, the same way three other
+providers already keep theirs; a full re-sync repairs workouts already
+written under the old behaviour.
+
+A same-time baseline band for a metric that cannot go negative, such as
+step count, could report a lower edge below zero. One call site is now
+required to name which metric it is drawing a band for, so the floor
+comes from that metric's own declared range rather than being patched in
+by hand at each caller.
+
+**Reminders for a multi-dose schedule stopped matching the dose they were
+meant for.** The reminder tick computed one window length for a whole
+schedule and applied it to every time slot in it, so a twice-daily
+schedule gave its first dose a ten-hour grace period nobody configured
+while a single-dose schedule with a narrow window escalated correctly but
+then had almost no room to register a dose logged late. Each slot now
+resolves its own window: an explicit per-dose override first, then the
+schedule's own grace setting, then the same default every other
+unconfigured dose gets, bounded so two doses in one day can never share a
+window.
+
+A Fitbit workout kept only its canonical category and dropped the raw
+activity name and type id it arrived with, unlike every other provider
+this app syncs from. An unrecognised Fitbit activity had nothing left to
+diagnose it by. Both are now kept on the row, and carried through backup
+and restore the same way.
+
+### The backup
+
+Your custom metrics and their readings, and the encrypted health-profile
+facts above, are now carried by export and restore. Neither was before;
+a restore silently rebuilt an account without either and reported
+success. The hourly shape behind the same-time baseline is also carried,
+because past a short grace window it is the only copy of that curve
+anywhere. And the summary shown after uploading a backup now counts every
+record class it restores, including the nutrient day totals it was
+quietly leaving out of its own total.
+
+### For operators
+
+Four migrations. `0283` adds the intraday cumulative profile table,
+`0284` adds the effective-dated health-profile fact table and its
+inclusion enum, `0285` adds correlation-pattern identity, `0286` seeds
+the caffeine and nicotine mood tags. None deletes or rewrites a
+measurement.
+
+### Credit
+
+Reported by @lutzkind (#613, #614, #616, #617, #649, and a long run of
+earlier reports this release also carries forward). Reported by
+@tarantila, directly rather than on the tracker: the Google workout-type
+loss, and a below-zero baseline reading that turned out to affect
+other metrics once someone went looking. Built by @mathewcsims
+(Refs #662): the per-slot reminder window fix.
+
+### Thank you
+
+Eighteen people have opened a report or a request on this tracker so
+far, most of them owing this project nothing. @lutzkind alone has filed
+twenty-four, several arriving with the broken code path already traced.
+@tarantila reports straight to the maintainer and has twice turned one
+observation into a defect nobody else had found. This release carries
+what a good number of those reports and requests turned into. It is not
+all of them, and the ones still open are still open because they are
+waiting their turn, not because they were set aside.
+
+@StefanIndustries sent this project its first money, ten euros, toward
+the yearly cost of keeping the iOS client on TestFlight without asking
+anyone to pay for it. The amount was never the point. Someone deciding
+this was worth something, and saying so, was not expected here.
+
+More is welcome: an idea, a rough thought about how something ought to
+work, a screenshot of a number that looks wrong. Especially that last
+one.
+
 ## [1.33.2] — 2026-07-28
 
 ### The cycle-symptom fix in v1.33.1 did not work

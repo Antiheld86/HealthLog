@@ -229,6 +229,13 @@ function seed() {
   rows.familyHistoryEntry = [
     { relationship: "MOTHER", condition: "Hypertension", ageAtOnset: 50 },
   ];
+  rows.userHealthProfileUnique = [{ conditionsEncrypted: new Uint8Array([1]) }];
+  rows.healthProfileFactRevision = [
+    {
+      kind: "SMOKING_STATUS",
+      valueEncrypted: new Uint8Array([1]),
+    },
+  ];
 }
 
 function same(a: DoctorReportData, b: DoctorReportData): boolean {
@@ -257,6 +264,7 @@ describe("per-leaf gating sweep", () => {
     expect(allPayload.illnessEpisodes).not.toBeNull();
     expect(allPayload.mood).not.toBeNull();
     expect(allPayload.cycle).not.toBeNull();
+    expect(allPayload.anamnesis).not.toBeNull();
     expect(allPayload.glp1).not.toBeNull();
     expect(allPayload.medications.length).toBeGreaterThan(0);
     expect(allPayload.medicationAdministrations?.length ?? 0).toBeGreaterThan(
@@ -407,6 +415,8 @@ describe("zero read for unchosen leaves", () => {
     ["ALLERGIES", "allergy"],
     ["LAB_RESULTS", "labResult"],
     ["ILLNESS_EPISODES", "illnessEpisode"],
+    ["ANAMNESIS", "userHealthProfile"],
+    ["ANAMNESIS", "healthProfileFactRevision"],
   ];
 
   it.each(gated)(
@@ -464,6 +474,7 @@ describe("the empty selection serves nothing", () => {
     expect(payload.allergies).toBeNull();
     expect(payload.familyHistory).toBeNull();
     expect(payload.illnessEpisodes).toBeNull();
+    expect(payload.anamnesis).toBeNull();
     expect(payload.cycle).toBeNull();
     expect(payload.mood).toBeNull();
     expect(payload.glp1).toBeNull();

@@ -3,6 +3,7 @@ import { apiSuccess, apiError } from "@/lib/api-response";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { annotate } from "@/lib/logging/context";
 import { syncUserGoogleHealth } from "@/lib/google-health/sync";
+import { resolveSyncOutcome } from "@/lib/outcome/written-outcome";
 import { NextRequest } from "next/server";
 
 /**
@@ -55,11 +56,12 @@ export const POST = apiHandler(async (request: NextRequest) => {
     }
   }
 
-  const { imported, failed } = await syncUserGoogleHealth(user.id, {
-    fullSync,
-  });
-  if (failed) {
+  const result = await syncUserGoogleHealth(user.id, { fullSync });
+  // A run that failed AND wrote nothing is an error, as it always was. A run
+  // that failed after writing some of its resources is a partial, and answering
+  // 502 for it threw away the honest half of the result.
+  if (result.failed && result.imported === 0) {
     return apiError("Google Health sync failed", 502);
   }
-  return apiSuccess({ imported, fullSync });
+  return apiSuccess({ ...resolveSyncOutcome(result), fullSync });
 });

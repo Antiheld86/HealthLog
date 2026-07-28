@@ -43,6 +43,7 @@ import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { IntegrationStatusPill } from "@/components/settings/integration-status-pill";
 import { TestConnectionButton } from "@/components/settings/test-connection-button";
 import { apiFetchRaw, apiPost } from "@/lib/api/api-fetch";
+import { WrittenOutcomeLine } from "@/components/outcome/written-outcome-line";
 import { useTranslations } from "@/lib/i18n/context";
 import {
   invalidateKeys,
@@ -52,7 +53,13 @@ import {
 
 import { MetricFreshnessDisclosure } from "./metric-freshness-disclosure";
 import {
+  readSyncOutcome,
+  useSyncOutcomeMessage,
+  type SyncOutcomeState,
+} from "./sync-outcome";
+import {
   IntegrationErrorMessage,
+  pillFailurePropsFor,
   pillStateForVerdict,
   pillTimestampFor,
   type IntegrationStatusViewModel,
@@ -65,6 +72,7 @@ export function NightscoutCard({
   viewModel?: IntegrationStatusViewModel;
 }) {
   const { t } = useTranslations();
+  const describeSyncOutcome = useSyncOutcomeMessage();
   const queryClient = useQueryClient();
 
   const [url, setUrl] = useState("");
@@ -74,10 +82,7 @@ export function NightscoutCard({
   const [msg, setMsg] = useState<string | null>(null);
   const [msgType, setMsgType] = useState<"success" | "error" | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const [syncMsg, setSyncMsg] = useState<string | null>(null);
-  const [syncMsgType, setSyncMsgType] = useState<"success" | "error" | null>(
-    null,
-  );
+  const [syncResult, setSyncResult] = useState<SyncOutcomeState | null>(null);
 
   const status = viewModel;
 
@@ -144,27 +149,35 @@ export function NightscoutCard({
   // full-history dialog — Nightscout has no full-sync arm to call.
   async function handleSync() {
     setSyncing(true);
-    setSyncMsg(null);
-    setSyncMsgType(null);
+    setSyncResult(null);
     try {
       const res = await apiFetchRaw("/api/nightscout/sync", { method: "POST" });
       const json = await res.json();
-      if (res.ok) {
-        setSyncMsg(
-          t("settings.nightscoutSyncResult", { count: json.data.imported }),
-        );
-        setSyncMsgType("success");
+      const result = res.ok ? readSyncOutcome(json) : null;
+      if (result) {
+        // The tone comes off what the run wrote, not off `res.ok`.
+        setSyncResult({
+          outcome: result.outcome,
+          message: describeSyncOutcome(
+            result,
+            t("settings.nightscoutSyncResult", { count: result.imported }),
+          ),
+        });
         void invalidateKeys(queryClient, measurementDependentKeys);
         queryClient.invalidateQueries({
           queryKey: queryKeys.integrationsStatus(),
         });
       } else {
-        setSyncMsg(json.error || t("settings.nightscoutSyncFailed"));
-        setSyncMsgType("error");
+        setSyncResult({
+          outcome: "failed",
+          message: json?.error || t("settings.nightscoutSyncFailed"),
+        });
       }
     } catch {
-      setSyncMsg(t("settings.nightscoutSyncFailed"));
-      setSyncMsgType("error");
+      setSyncResult({
+        outcome: "failed",
+        message: t("settings.nightscoutSyncFailed"),
+      });
     } finally {
       setSyncing(false);
     }
@@ -198,6 +211,7 @@ export function NightscoutCard({
           <IntegrationStatusPill
             state={pillState}
             lastSyncAt={pillTimestampFor(status)}
+            {...pillFailurePropsFor(status)}
           />
         }
       />
@@ -401,14 +415,12 @@ export function NightscoutCard({
                 </AlertDialogContent>
               </AlertDialog>
             </div>
-            {syncMsg && (
-              <p
-                role="alert"
-                data-testid="nightscout-sync-result"
-                className={`text-sm ${syncMsgType === "success" ? "text-success" : "text-destructive"}`}
-              >
-                {syncMsg}
-              </p>
+            {syncResult && (
+              <WrittenOutcomeLine
+                outcome={syncResult.outcome}
+                message={syncResult.message}
+                testId="nightscout-sync-result"
+              />
             )}
             {/* connect→data loop: a discreet link to where the glucose
                 readings now surface — doubles as the "your data is richer"

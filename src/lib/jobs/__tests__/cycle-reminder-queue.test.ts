@@ -5,7 +5,7 @@
  * consolidation registration guards: assert the cycle-reminder queue is
  * declared, listed in `allQueues` (the v1.4.37 dead-queue lesson — an
  * unregistered queue is never provisioned and the schedule silently
- * no-ops), scheduled on its cron, and wired to a `boss.work` handler that
+ * no-ops), scheduled on its cron, and wired to a `createAndWork` handler that
  * delegates to `runCycleReminderTick`. No pg-boss / Prisma boot.
  */
 import { readFileSync } from "node:fs";
@@ -57,9 +57,9 @@ describe("reminder-worker — cycle-reminder wiring", () => {
     expect(source).toMatch(/\[CYCLE_REMINDER_QUEUE,\s*CYCLE_REMINDER_CRON\]/);
   });
 
-  it("registers a boss.work handler that runs the cycle-reminder tick", () => {
+  it("registers a createAndWork handler that runs the cycle-reminder tick", () => {
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,200}CYCLE_REMINDER_QUEUE[\s\S]{0,200}handleCycleReminderCheck/,
+      /createAndWork[\s\S]{0,200}CYCLE_REMINDER_QUEUE[\s\S]{0,200}handleCycleReminderCheck/,
     );
     expect(source).toMatch(
       /handleCycleReminderCheck[\s\S]{0,400}runCycleReminderTick/,

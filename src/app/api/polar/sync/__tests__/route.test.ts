@@ -67,24 +67,38 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(checkRateLimit).mockResolvedValue({ allowed: true } as never);
   vi.mocked(requireAuth).mockResolvedValue({ user: { id: "u1" } } as never);
-  syncUserPolarMock.mockResolvedValue(0);
+  syncUserPolarMock.mockResolvedValue({ imported: 0, failed: false });
   syncUserPolarWorkoutsMock.mockResolvedValue(0);
 });
 
 describe("POST /api/polar/sync", () => {
   it("runs both Polar legs and totals what they imported", async () => {
-    syncUserPolarMock.mockResolvedValue(5);
+    syncUserPolarMock.mockResolvedValue({ imported: 5, failed: false });
     syncUserPolarWorkoutsMock.mockResolvedValue(2);
 
     const response = await post(request());
 
     expect(response.status).toBe(200);
     expect(await envelope(response)).toEqual({
-      data: { imported: 7 },
+      data: { imported: 7, failed: false, outcome: "success" },
       error: null,
     });
     expect(syncUserPolarMock).toHaveBeenCalledWith("u1");
     expect(syncUserPolarWorkoutsMock).toHaveBeenCalledWith("u1");
+  });
+
+  it("does not call a run whose vitals collections all failed a success", async () => {
+    syncUserPolarMock.mockResolvedValue({ imported: 0, failed: true });
+    syncUserPolarWorkoutsMock.mockResolvedValue(0);
+
+    const response = await post(request());
+
+    expect(response.status).toBe(200);
+    expect((await envelope(response)).data).toEqual({
+      imported: 0,
+      failed: true,
+      outcome: "failed",
+    });
   });
 
   it("goes through the shared legs entry point, not the provider internals", () => {

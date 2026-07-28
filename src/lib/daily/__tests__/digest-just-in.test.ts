@@ -17,6 +17,7 @@ import {
   type DailyDigestArrival,
   type DailyDigestInput,
 } from "@/lib/daily/digest";
+import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
 
 const t = getServerTranslator("en").t;
 const NOW = new Date("2026-07-16T09:00:00.000Z");
@@ -38,6 +39,7 @@ function input(over: Partial<DailyDigestInput> = {}): DailyDigestInput {
   return {
     now: NOW,
     modules: {},
+    enabledHeroItemKinds: [...PRIORITY_ITEM_KINDS],
     score: { value: 82, band: "good", delta: 3 },
     briefing: null,
     medsToday: meds(),

@@ -124,6 +124,15 @@
   },
   "doctorReport": {
     "title": "Rapporto sanitario",
+    "anamnesisTitle": "Profilo sanitario",
+    "anamnesisNotRecorded": "Non registrato",
+    "anamnesisUnreadable": "Impossibile leggere il valore salvato",
+    "anamnesisConditions": "Patologie croniche",
+    "anamnesisSmoking": "Abitudine al fumo",
+    "anamnesisAlcohol": "Consumo di alcol",
+    "anamnesisShiftSchedule": "Orario di lavoro",
+    "anamnesisColFact": "Voce del profilo",
+    "anamnesisColValue": "Valore registrato",
     "subtitle": "HealthLog — Rapporto personale di salute",
     "patient": "Paziente",
     "dateOfBirth": "Data di nascita",
@@ -396,10 +405,6 @@
     },
     "welcomeBack": "{greeting}, bentornato.",
     "welcomeBackWithName": "{greeting} {name}, bentornato.",
-    "hero": {
-      "scoreLabel": "Health Score",
-      "ringDoses": "Dosi di oggi"
-    },
     "greetingSalutation": "Ciao, {name}",
     "streakLabel": "giorni di fila",
     "weight": "Peso",
@@ -452,11 +457,22 @@
     "compliance7d": "Aderenza (7 giorni)",
     "mood": "Umore",
     "customizeTitle": "Layout della dashboard",
-    "scoreRingsTitle": "Anelli dei punteggi",
-    "scoreRingsDescription": "Fino a tre anelli aggiuntivi accanto al punteggio di salute, ad esempio prontezza, recupero, sonno o aderenza. Trascina per riordinare; il punteggio di salute è primo per impostazione predefinita.",
+    "heroItemsTitle": "In evidenza oggi",
+    "heroItemsDescription": "Scegli quali tipi di elementi possono apparire nella sezione In evidenza oggi.",
+    "heroItemsNotificationNote": "Le impostazioni delle notifiche vengono gestite separatamente.",
+    "heroItems": {
+      "coach_checkin": "Verifiche con Coach",
+      "dose_window": "Dosi dei farmaci",
+      "preventive_care": "Prevenzione",
+      "sync_issue": "Problemi di sincronizzazione",
+      "milestone": "Traguardi",
+      "ecg_new_recording": "Nuove registrazioni ECG",
+      "tension_window": "Periodi di tensione",
+      "same_time_baseline": "Attività alla stessa ora"
+    },
     "layoutReset": "Ripristina i valori predefiniti",
     "layoutResetTitle": "Reimpostare il layout della dashboard?",
-    "layoutResetBody": "L’ordine dei riquadri, quelli che hai nascosto e gli anelli scelti tornano ai valori predefiniti. La disposizione non è salvata altrove.",
+    "layoutResetBody": "Il layout dei riquadri e le scelte per la sezione In evidenza oggi tornano ai valori predefiniti.",
     "layoutResetConfirm": "Reimposta layout",
     "layoutSaveSuccess": "Layout della dashboard salvato",
     "layoutSaveError": "Impossibile salvare il layout",
@@ -773,6 +789,8 @@
       "hydrated": "bevuto acqua",
       "walked": "camminato",
       "alcohol": "alcol",
+      "caffeine": "caffeina",
+      "nicotine": "nicotina",
       "family": "famiglia",
       "friends": "amici",
       "party": "festa",
@@ -2081,7 +2099,6 @@
   },
   "comparison": {
     "toggleLabel": "Confronta con",
-    "toggleHint": "Confronta il periodo attuale con lo stesso periodo dell’anno precedente.",
     "baseline": {
       "none": "Disattivato",
       "lastMonth": "Mese precedente",
@@ -2101,6 +2118,15 @@
     "notAvailableForCompliance": "Confronto non disponibile per l’aderenza"
   },
   "insights": {
+    "pattern": {
+      "dismiss": "Ignora",
+      "dismissed": "Questo schema resta ignorato finché i dati non cambiano.",
+      "restore": "Mostra di nuovo",
+      "dismissError": "Impossibile ignorare questo schema.",
+      "restoreError": "Impossibile ripristinare questo schema.",
+      "loadError": "Impossibile caricare gli schemi.",
+      "empty": "Nessuno schema attuale ha superato la soglia di evidenza."
+    },
     "correlation": {
       "direction": {
         "higher": "salire",
@@ -2226,34 +2252,86 @@
     "heroActionAskCoach": "Chiedi al coach",
     "healthScore": {
       "label": "Punteggio di salute",
-      "progressAria": "Avanzamento del punteggio di salute",
-      "deltaVsLastWeek": "{delta} rispetto alla settimana scorsa",
-      "deltaUnavailable": "Ancora nessuno storico — ripassa la prossima settimana.",
-      "restModePaused": "In pausa durante la malattia — oggi il tuo punteggio non viene valutato.",
-      "componentBp": "PA",
-      "componentWeight": "Peso",
-      "componentMood": "Umore",
-      "componentCompliance": "Aderenza",
-      "deltaExplainer": {
-        "title": "Come si calcola la variazione",
-        "description": "Variazione rispetto alla settimana scorsa: {delta}",
-        "body": "Il punteggio combina PA, peso, umore e aderenza. Confrontiamo il punteggio di oggi con quello dello stesso momento della settimana scorsa. Registra una nuova misurazione o una nota di umore per spingerlo verso l'alto."
+      "algorithmChanged": "Il punteggio usa ora intervalli di riferimento cardiometabolici pubblicati; il peso non è più incluso perché il vecchio obiettivo derivava dall'altezza anziché da un obiettivo personale, la variabilità quotidiana dell'umore e l'aderenza ai farmaci sono azioni anziché stati di salute, e la frequenza cardiaca a riposo e l'HRV non hanno un obiettivo universale. I progressi del peso restano visibili sotto come contesto personale, gli altri segnali conservano le proprie schede e un numero nuovo non significa che la tua salute sia cambiata.",
+      "dismissAlgorithmChanged": "Chiudi la nota sul metodo",
+      "band": {
+        "green": "Nell'intervallo di riferimento",
+        "yellow": "Alcuni pilastri richiedono attenzione",
+        "red": "Uno o più pilastri sono fuori dall'intervallo di riferimento"
       },
-      "provenance": {
-        "toggle": "Composto da",
-        "mixedBanner": "Alcuni componenti combinano più fonti. Il dettaglio mostra il valore più recente per componente.",
-        "footnote": "I pesi sono ricalcolati in base ai dati effettivamente disponibili.",
-        "asOfLabel": "al {date}",
-        "provisional": "Provvisorio — solo {count} di {total} valori disponibili",
-        "provisionalBadge": "Provvisorio",
-        "sourceAria": "Fonte: {source}",
-        "sources": {
-          "manual": "Manuale",
-          "withings": "Withings",
-          "appleHealth": "Apple Health",
-          "mixed": "Misto",
-          "none": "Nessun dato"
-        }
+      "method": "Media con peso uguale dei pilastri idonei. Il pilastro più basso determina la fascia complessiva.",
+      "insufficient": "{count} pilastri idonei. Il punteggio ne richiede almeno tre, incluso un pilastro fisiologico misurato.",
+      "composition": "Inclusi: {pillars}",
+      "bandSetter": "Fascia complessiva determinata da {pillar}",
+      "versionAndNoise": "Versione del metodo {version}. Soglia del confronto settimanale: {noise} punti.",
+      "methodVersion": "Versione del metodo {version}.",
+      "none": "nessuno",
+      "delta": "{delta} rispetto al periodo precedente confrontabile",
+      "deltaReason": {
+        "algorithm_changed": "Nessun confronto perché è cambiato il metodo di calcolo.",
+        "composition_changed": "Nessun confronto perché sono cambiati i pilastri inclusi.",
+        "first_eligibility_window": "Nessun confronto perché questo è il primo periodo idoneo.",
+        "below_noise_floor": "La variazione rientra nella fluttuazione combinata delle misurazioni.",
+        "no_previous_window": "Non è disponibile un periodo precedente confrontabile.",
+        "no_current_score": "Nessun confronto perché il periodo attuale non è idoneo."
+      },
+      "restMode": "Modalità riposo attiva dal {since}. Il punteggio è mostrato come contesto e non viene penalizzato.",
+      "pillar": {
+        "bloodPressure": "Pressione arteriosa",
+        "glycaemia": "Glicemia",
+        "activity": "Attività",
+        "sleep": "Sonno",
+        "adiposity": "Adiposità",
+        "wellbeing": "Benessere",
+        "fitness": "Forma fisica misurata",
+        "lipids": "Lipidi"
+      },
+      "observed": "Osservato: {value}",
+      "reference": "Riferimento: {value}",
+      "fastingObserved": "Glicemia a digiuno: {value} {unit}",
+      "fastingReference": "Da {low} a {high} {unit} a digiuno",
+      "personalReference": "Il tuo obiettivo: {value}",
+      "source": "Fonte: {source}, al {date}",
+      "observedActivity": "{value} passi al giorno",
+      "observedSleep": "{value} minuti per notte",
+      "observedAdiposity": "Rapporto vita-altezza {value}",
+      "observedFitness": "{value} {unit}, misurato",
+      "referenceActivity": "Il beneficio si stabilizza a {high} passi al giorno",
+      "referenceSleep": "Almeno {low} minuti per notte; il sonno più lungo non viene penalizzato",
+      "referenceAdiposity": "Rapporto vita-altezza inferiore a {high}",
+      "referenceFitness": "Da {low} a {high} {unit}, intervallo di riferimento per età e sesso",
+      "referenceHba1c": "HbA1c da {low} a {high}%",
+      "referenceDetail": "{label} · {source} · {kind} · da {low} a {high}",
+      "openBound": "aperto",
+      "laboratoryReferenceSource": "Intervalli di riferimento del laboratorio",
+      "personalTargetSource": "Obiettivo personale",
+      "referenceKind": {
+        "clinical": "Soglia clinica",
+        "population": "Percentile della popolazione",
+        "guideline": "Intervallo delle linee guida"
+      },
+      "reason": {
+        "readFailed": "Impossibile caricare i dati",
+        "notTracked": "Non monitorato",
+        "missingProfile": "Manca l'età o il profilo di riferimento",
+        "missingHeight": "Manca l'altezza",
+        "incompletePanel": "È necessario un pannello recente completo con intervalli di riferimento",
+        "crisis": "Al posto del punteggio vengono mostrate indicazioni di sicurezza",
+        "insufficientHistory": "Dati recenti idonei insufficienti",
+        "unavailable": "Questo pilastro non è attualmente idoneo"
+      },
+      "pillarInsufficient": "Nessun punteggio per il pilastro: {reason}",
+      "tension": "I segnali di preparazione differiscono. Favorevoli: {positive}. Sotto sforzo: {negative}.",
+      "returnToBand": "{metric} è di nuovo nel tuo intervallo abituale da {days} giorni.",
+      "weightGoal": {
+        "title": "Obiettivo di peso personale",
+        "value": "Ora {current} {unit}. Obiettivo da {min} a {max} {unit}. Distanza dall'obiettivo: {distance} {unit}.",
+        "delta": "La distanza dall'obiettivo è cambiata di {delta} {unit} dalla misurazione precedente.",
+        "noDelta": "Non è disponibile una misurazione del peso precedente per il confronto.",
+        "no_personal_goal": "Imposta un obiettivo di peso personale per vedere qui i progressi.",
+        "weight_not_tracked": "Registra il peso per vedere i progressi verso il tuo obiettivo.",
+        "read_failed": "Non è stato possibile caricare i dati del peso. Riprova.",
+        "notScored": "I progressi verso l'obiettivo di peso sono un contesto personale e non influenzano il punteggio di salute."
       }
     },
     "suggestedPrompts": {
@@ -2855,6 +2933,14 @@
       "valuesBackToMetric": "Torna a {metric}",
       "scoresBack": "Torna a Insights",
       "ecgDescription": "Registrazioni ECG a singola derivazione dal tuo dispositivo, ciascuna con il risultato del dispositivo. HealthLog mostra il tracciato e la registrazione, ma non interpreta l'onda."
+    },
+    "units": {
+      "steps": "passi",
+      "flights": "piani",
+      "falls": "cadute",
+      "years": "anni",
+      "breathingEvents": "eventi",
+      "respiratoryRate": "respiri/min"
     },
     "sleep": {
       "title": "Sonno",
@@ -3640,6 +3726,10 @@
         "TRAJECTORY": {
           "method": "Una retta ai minimi quadrati adattata ai tuoi valori giornalieri recenti e proiettata in avanti su un breve orizzonte, con l’intervallo di previsione classico che si allarga man mano che si estende. Calcolata solo quando la tendenza recente è abbastanza marcata e la tua cronologia è abbastanza lunga e aggiornata; altrimenti non viene tracciata alcuna linea.",
           "caveat": "Una proiezione della tua tendenza recente — non una previsione, un obiettivo o una prognosi clinica. Vale solo se lo schema recente continua; la banda ombreggiata mostra quanto rapidamente quella certezza svanisce."
+        },
+        "SAME_TIME_BASELINE": {
+          "method": "Il tuo totale progressivo di oggi confrontato con la mediana della stessa ora locale nelle ultime quattro settimane, con una banda robusta mediana ± MAD attorno. Contano solo i giorni con abbastanza dettaglio registrato, e nessun confronto viene mostrato finché non ce ne sono almeno quattordici.",
+          "caveat": "Un confronto con la tua storia recente, non un obiettivo. Dice dove si colloca oggi rispetto alla tua abitudine a quest'ora, e nulla sul fatto che quell'abitudine sia quella giusta per te."
         }
       },
       "scores": {
@@ -3673,6 +3763,13 @@
         "caveat": "Una proiezione della tua tendenza recente, non una previsione. La banda ombreggiata si allarga per mostrare quanto rapidamente cresce l’incertezza.",
         "insufficient": "Non c’è ancora una tendenza abbastanza chiara da proiettare — continua a registrare e comparirà una proiezione quando lo schema recente sarà abbastanza marcato.",
         "daysNeeded": "Servono ancora circa {count} giorni di registrazione prima che possa comparire una proiezione."
+      },
+      "sameTime": {
+        "sectionTitle": "Oggi finora",
+        "sectionSubtitle": "I tuoi totali progressivi rispetto a ciò che per te è abituale a quest'ora",
+        "learning": "Sto imparando la tua giornata tipo — {count} di {target} giorni",
+        "framing": "Abituale entro le {time}: {typical} {unit}",
+        "comparisonLabel": "La tua giornata tipo"
       }
     },
     "cardioFitness": {
@@ -3857,17 +3954,6 @@
         "forwardWatch": "Vale la pena tenere d'occhio {metric}.",
         "forwardHolding": "Per ora è tutto stabile."
       }
-    },
-    "tension": {
-      "label": "Lettura sincera: {positive} ha un bell'aspetto, ma {negative} è in calo — il complessivo si attesta su {band}.",
-      "contributor": {
-        "green": "verde",
-        "yellow": "giallo",
-        "red": "rosso"
-      }
-    },
-    "streak": {
-      "returnLabel": "Il tuo {metric} è di nuovo nel tuo intervallo abituale dopo {count} giorni — qualunque cosa fosse, è passata."
     },
     "updatedTodayAt": "Aggiornato oggi, {time}",
     "updatedYesterday": "Aggiornato ieri",
@@ -4499,7 +4585,7 @@
           },
           "fullBackup": {
             "title": "Backup completo",
-            "description": "Le tue misurazioni, i farmaci, l'umore, il ciclo, le analisi, gli episodi di malattia, le allergie, l'anamnesi familiare, i nutrienti e gli allenamenti in un unico file JSON. Stesso formato del backup automatico settimanale. Alcuni tipi di dato non sono ancora inclusi: il manifest del file indica cosa contiene.",
+            "description": "Le tue misurazioni, i farmaci, l'umore, il ciclo, le analisi, gli episodi di malattia, le allergie, l'anamnesi familiare, i nutrienti, gli allenamenti, il tuo profilo di salute e le tue metriche personalizzate in un unico file JSON. Stesso formato del backup automatico settimanale. Alcuni tipi di dato non sono ancora inclusi: il manifest del file indica cosa contiene.",
             "scopeNote": "I metadati dei documenti e il riepilogo IA, se presente, sono inclusi in chiaro; i file originali dei documenti e i dati di percorso GPS/campionamento degli allenamenti non lo sono — scaricali separatamente dall'archivio documenti o dall'esportazione degli allenamenti.",
             "encryptToggle": "Cifra con una passphrase",
             "passphrasePlaceholder": "Passphrase (min. 12 caratteri)",
@@ -5148,6 +5234,11 @@
     "withingsFullSyncTitle": "Sincronizzazione completa?",
     "withingsFullSyncDescription": "Tutti i dati Withings disponibili verranno sincronizzati completamente. Potrebbe richiedere del tempo a seconda del tuo storico.",
     "withingsSyncResult": "{count} misurazioni sincronizzate",
+    "syncOutcome": {
+      "empty": "Non c'è nulla di nuovo da importare. Tutto è aggiornato.",
+      "failed": "Non è stato salvato nulla. La prossima esecuzione riprova.",
+      "partial": "{count} misurazioni sincronizzate. Una parte dei dati non è stata salvata; la prossima esecuzione riprova."
+    },
     "withingsFullSyncResult": "{count} misurazioni sincronizzate completamente",
     "withingsSyncFailed": "Sincronizzazione non riuscita",
     "withingsOauthConnected": "Withings collegato — la prima sincronizzazione parte in background.",
@@ -5293,6 +5384,7 @@
       "connected": "Connesso",
       "errorReconnect": "Errore — riconnetti",
       "warningServerError": "Sincronizzazione in errore",
+      "failureCount": "{count}/{threshold}",
       "parkedReconnect": "In pausa — riconnettere manualmente",
       "notConnected": "Non connesso",
       "justNow": "proprio ora",
@@ -7873,6 +7965,9 @@
       "saveSelected": "Salva {count} selezionati",
       "discardAll": "Scarta tutto",
       "savedToast": "{count} risultati di laboratorio salvati",
+      "savedPartialToast": "{count} risultati di laboratorio salvati, {skipped} ignorati perché duplicati",
+      "savedNothingToast": "Nulla salvato: {skipped} valori erano già registrati",
+      "savedEmptyToast": "Nulla da salvare",
       "noRows": "Nessun valore trovato in questo referto.",
       "nothingToSave": "Seleziona almeno un valore da salvare.",
       "saveFailed": "Impossibile salvare i valori. Riprova.",
@@ -8461,6 +8556,61 @@
     "historyLoadErrorHint": "Questo non significa che non ci siano risultati: non è stato possibile recuperare l'elenco. Riprova."
   },
   "records": {
+    "aiInclusion": {
+      "cardTitle": "Accesso dell'IA al profilo",
+      "cardDescription": "Scegli quali parti del tuo profilo sanitario possono usare il Coach e i riepiloghi completi.",
+      "sectionAboutMe": "Informazioni personali",
+      "sectionConditions": "Patologie croniche",
+      "sectionAllergies": "Allergie e intolleranze",
+      "sectionCoachFocus": "Priorità del Coach",
+      "sectionFamilyHistory": "Anamnesi familiare",
+      "sectionSmoking": "Abitudine al fumo",
+      "sectionAlcohol": "Consumo di alcol",
+      "sectionShiftSchedule": "Orario di lavoro",
+      "save": "Salva accesso",
+      "savedToast": "Accesso dell'IA al profilo salvato",
+      "saveError": "Impossibile salvare l'accesso dell'IA al profilo",
+      "loadError": "Impossibile caricare l'accesso dell'IA al profilo"
+    },
+    "profileFacts": {
+      "cardTitle": "Contesto dello stile di vita",
+      "cardDescription": "Registra i dati attuali che cambiano l'interpretazione delle tue misurazioni sanitarie.",
+      "smokingLabel": "Abitudine al fumo",
+      "alcoholLabel": "Consumo di alcol",
+      "shiftLabel": "Orario di lavoro",
+      "notRecorded": "Non registrato",
+      "unreadable": "Impossibile leggere il valore salvato",
+      "save": "Salva",
+      "correct": "Correggi",
+      "savedToast": "Contesto dello stile di vita salvato",
+      "saveError": "Impossibile salvare il contesto dello stile di vita",
+      "loadError": "Impossibile caricare il contesto dello stile di vita",
+      "remove": "Rimuovi {kind}",
+      "removeConfirmTitle": "Rimuovere {kind}?",
+      "removeConfirmDescription": "Il valore attuale risulterà non registrato. La cronologia datata verrà conservata.",
+      "removedToast": "{kind} rimosso dal contesto attuale dello stile di vita",
+      "removeError": "Impossibile rimuovere {kind}",
+      "historyTitle": "Valori precedenti",
+      "to": "a",
+      "values": {
+        "SMOKING_STATUS": {
+          "NEVER": "Non ha mai fumato",
+          "FORMER": "Ha smesso di fumare",
+          "CURRENT": "Fuma attualmente"
+        },
+        "ALCOHOL_PATTERN": {
+          "NONE": "Nessun consumo",
+          "OCCASIONAL": "Occasionale",
+          "WEEKLY": "Settimanale",
+          "MOST_DAYS": "Quasi ogni giorno"
+        },
+        "SHIFT_SCHEDULE": {
+          "NONE": "Nessun lavoro a turni",
+          "FIXED_SHIFT": "Turno fisso",
+          "ROTATING": "Turni a rotazione"
+        }
+      }
+    },
     "disclaimer": "Sono i tuoi dati, non una diagnosi medica. HealthLog non diagnostica, non cura e non li interpreta.",
     "allergies": {
       "cardTitle": "Allergie e intolleranze",
@@ -8819,6 +8969,8 @@
       "description": "Descrizione",
       "descriptionPlaceholder": "Cosa misura (facoltativo)",
       "targetHint": "L'intervallo obiettivo è facoltativo e viene disegnato come una banda sul grafico.",
+      "correlationEnabled": "Usa nell’analisi delle correlazioni",
+      "correlationEnabledHint": "Aggiunge questa metrica come canale comportamentale giornaliero con un limite. È disattivata per impostazione predefinita.",
       "requiredError": "Nome e unità sono obbligatori",
       "rangeOrderError": "L'obiettivo minimo non può superare quello massimo",
       "save": "Salva",
@@ -8979,6 +9131,16 @@
           "notDetected": "nessun ritmo irregolare",
           "inconclusive": "un risultato non conclusivo"
         }
+      },
+      "sameTimeBaseline": {
+        "title": {
+          "below": "Sotto il tuo ritmo abituale",
+          "above": "Sopra il tuo ritmo abituale"
+        },
+        "body": {
+          "below": "Alle {time} sei a {today} passi. In una giornata tipo a quest'ora sei intorno a {typical}.",
+          "above": "Alle {time} sei a {today} passi, sopra i {typical} che per te sono abituali a quest'ora."
+        }
       }
     },
     "action": {
@@ -8990,7 +9152,8 @@
       "checkinLetGo": "Lascia andare",
       "viewMilestone": "Vedi",
       "viewPulse": "Vedi battito",
-      "viewEcg": "Vedi registrazione"
+      "viewEcg": "Vedi registrazione",
+      "viewSteps": "Vedi i passi"
     },
     "today": {
       "scoreLabel": "Punteggio di salute",
@@ -9040,6 +9203,7 @@
     }
   },
   "reportSelection": {
+    "leafAnamnesis": "Profilo sanitario",
     "groupIdentity": "Dati anagrafici",
     "groupVitals": "Parametri vitali",
     "groupCardio": "Cuore e circolazione",

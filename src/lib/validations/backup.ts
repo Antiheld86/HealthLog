@@ -54,6 +54,12 @@ import {
   SecondarySymptom,
   SleepStage,
 } from "@/generated/prisma/enums";
+import {
+  DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+  healthProfileAiSectionSchema,
+  healthProfileFactKindSchema,
+  isHealthProfileFactValue,
+} from "@/lib/validations/health-profile-facts";
 
 export const BACKUP_SCHEMA_VERSION = "2" as const;
 const LEGACY_BACKUP_SCHEMA_VERSION = "1" as const;
@@ -390,6 +396,168 @@ const customCycleSymptomSchema = z
   })
   .passthrough();
 
+/**
+ * The account's durable self-context — one row per user.
+ *
+ * Portable exports carry the decrypted free text; disaster-recovery payloads
+ * carry the AES-256-GCM envelopes as base64 and leave the plaintext fields
+ * null. The restore prefers ciphertext when the file has it and re-encrypts
+ * the plaintext otherwise, which is the same contract the lab note uses.
+ */
+const healthProfileBackupSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    aboutMe: z.string().nullable().default(null),
+    conditions: z.string().nullable().default(null),
+    allergies: z.string().nullable().default(null),
+    coachFocus: z.string().nullable().default(null),
+    aiIncludedSections: z
+      .array(healthProfileAiSectionSchema)
+      .default([...DEFAULT_HEALTH_PROFILE_AI_SECTIONS]),
+    aboutMeEncrypted: base64BytesSchema.nullable().optional(),
+    conditionsEncrypted: base64BytesSchema.nullable().optional(),
+    allergiesEncrypted: base64BytesSchema.nullable().optional(),
+    coachFocusEncrypted: base64BytesSchema.nullable().optional(),
+    pendingQuestionsEncrypted: base64BytesSchema.nullable().optional(),
+    createdAt: isoDateTime.optional(),
+    updatedAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
+const healthProfileFactBackupSchema = z
+  .object({
+    id: z.string().min(1),
+    kind: healthProfileFactKindSchema,
+    value: z.string().nullable().default(null),
+    valueEncrypted: base64BytesSchema.optional(),
+    validFrom: isoDateTime,
+    validUntil: isoDateTime.nullable(),
+    provenance: z.enum(["USER_REPORTED", "USER_CORRECTION"]),
+    supersededByRevisionId: z.string().min(1).nullable(),
+    createdAt: isoDateTime,
+  })
+  .passthrough()
+  .superRefine((fact, ctx) => {
+    if (fact.valueEncrypted === undefined) {
+      if (
+        fact.value === null ||
+        !isHealthProfileFactValue(fact.kind, fact.value)
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["value"],
+          message: "A portable profile fact requires a valid readable value",
+        });
+      }
+    }
+    if (
+      fact.validUntil !== null &&
+      Date.parse(fact.validUntil) <= Date.parse(fact.validFrom)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["validUntil"],
+        message: "validUntil must be later than validFrom",
+      });
+    }
+  });
+
+/** One reading of a user-defined metric, nested under the metric that owns it. */
+const customMetricEntryBackupSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    value: z.number(),
+    unit: z.string().min(1),
+    measuredAt: isoDateTime,
+    note: z.string().nullable().default(null),
+    createdAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
+/**
+ * A metric the account defined itself.
+ *
+ * The one class of series no integration can ever re-sync: nobody else has the
+ * definition and nobody else has the readings. It was classified as carried
+ * from the day the backup plan was written and carried by nothing, so a
+ * restore rebuilt the account without it and reported success.
+ *
+ * Readings are nested rather than flat-with-a-name-reference so the restore
+ * has no parent to look up and therefore no lookup to miss.
+ */
+const customMetricBackupSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    name: z.string().min(1),
+    unit: z.string().min(1),
+    targetLow: z.number().nullable().default(null),
+    targetHigh: z.number().nullable().default(null),
+    decimals: z.number().int().nullable().default(null),
+    description: z.string().nullable().default(null),
+    correlationEnabled: z.boolean().default(false),
+    createdAt: isoDateTime.optional(),
+    updatedAt: isoDateTime.optional(),
+    deletedAt: isoDateTime.nullable().optional(),
+    entries: z.array(customMetricEntryBackupSchema).default([]),
+  })
+  .passthrough();
+
+const correlationPatternBackupSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    canonicalKey: z.string().regex(/^p1:[a-f0-9]{64}$/),
+    family: z.string().min(1),
+    factorKey: z.string().min(1),
+    outcomeKey: z.string().min(1),
+    lagDays: z.number().int().min(0),
+    sampleSize: z.number().int().positive(),
+    effectSize: z.number().finite(),
+    pValue: z.number().min(0).max(1),
+    qValue: z.number().min(0).max(1).nullable().default(null),
+    evidenceHash: z.string().regex(/^[a-f0-9]{64}$/),
+    isCurrent: z.boolean(),
+    lastComputedAt: isoDateTime,
+    dismissedAt: isoDateTime.nullable().default(null),
+    dismissedEvidenceHash: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .nullable()
+      .default(null),
+    dismissedEffectSize: z.number().finite().nullable().default(null),
+    dismissedSampleSize: z.number().int().positive().nullable().default(null),
+    createdAt: isoDateTime.optional(),
+    updatedAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
+/**
+ * One local day's cumulative curve for one metric.
+ *
+ * The drain writes this row and deletes the per-sample rows it was folded from
+ * in the same transaction, so past the grace window the file is the only copy.
+ * `hourlyCumulative` is left unconstrained in length here on purpose: the
+ * restore checks it against the slot count it shares with the reader and
+ * throws naming the day, which says what is wrong with one row instead of
+ * making a whole file unparseable.
+ */
+const intradayProfileBackupSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    type: z.enum(MeasurementType),
+    dateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    hourlyCumulative: z.array(z.number()),
+    dayTotal: z.number(),
+    sampleCount: z.number().int(),
+    // The zone the day was cut on. The reader compares it against the
+    // account's current zone and drops the mismatched days, so a restore that
+    // dropped this column would make old curves look comparable when their
+    // hours mean something else.
+    timezone: z.string().min(1),
+    createdAt: isoDateTime.optional(),
+    updatedAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
 const appSettingsBackupSchema = z
   .object({
     id: z.string().min(1),
@@ -572,6 +740,7 @@ const workoutBackupSchema = z
     pauseDurationSec: z.number().int().nullable().optional(),
     source: z.enum(MeasurementSource),
     externalId: z.string().nullable().optional(),
+    metadata: z.json().optional(),
     createdAt: isoDateTime.optional(),
     updatedAt: isoDateTime.optional(),
   })
@@ -652,6 +821,16 @@ export const backupPayloadSchema = z
     workouts: z.array(workoutBackupSchema).default([]),
     documents: z.array(documentBackupSchema).default([]),
     nutrientDays: z.array(nutrientDaySchema).default([]),
+    // Durable self-context and user-defined series. Defaulted so files written
+    // before either rode the wire still parse; an account with neither writes
+    // `null` / `[]`.
+    healthProfile: healthProfileBackupSchema.nullable().default(null),
+    healthProfileFacts: z.array(healthProfileFactBackupSchema).default([]),
+    customMetrics: z.array(customMetricBackupSchema).default([]),
+    correlationPatterns: z.array(correlationPatternBackupSchema).default([]),
+    // The hourly shape of a cumulative day. Defaulted for the same reason as
+    // the pair above: a file written before the table existed carries no key.
+    intradayProfiles: z.array(intradayProfileBackupSchema).default([]),
     manifest: backupManifestSchema.nullable().default(null),
   })
   .passthrough()
@@ -704,6 +883,18 @@ export interface BackupSummary {
   workouts: number;
   /** Document records (ciphertext included in canonical DR payloads). */
   documents: number;
+  /** 1 when the account's durable self-context rides the file, 0 otherwise. */
+  healthProfile: number;
+  /** Effective-dated structured health-profile revisions. */
+  healthProfileFactRevisions: number;
+  /** Metrics the account defined itself. */
+  customMetrics: number;
+  /** Readings across every user-defined metric. */
+  customMetricEntries: number;
+  /** Persisted accepted correlation identities and dismissal decisions. */
+  correlationPatterns: number;
+  /** Stored day curves for the cumulative metrics, across every metric. */
+  intradayProfiles: number;
 }
 
 export function summarizeBackup(payload: BackupPayload): BackupSummary {
@@ -729,6 +920,15 @@ export function summarizeBackup(payload: BackupPayload): BackupSummary {
     familyHistory: payload.familyHistory.length,
     workouts: payload.workouts.length,
     documents: payload.documents.length,
+    healthProfile: payload.healthProfile ? 1 : 0,
+    healthProfileFactRevisions: payload.healthProfileFacts.length,
+    customMetrics: payload.customMetrics.length,
+    customMetricEntries: payload.customMetrics.reduce(
+      (sum, metric) => sum + metric.entries.length,
+      0,
+    ),
+    correlationPatterns: payload.correlationPatterns.length,
+    intradayProfiles: payload.intradayProfiles.length,
   };
 }
 

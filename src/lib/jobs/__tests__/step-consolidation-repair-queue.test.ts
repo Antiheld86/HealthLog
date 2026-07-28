@@ -4,7 +4,7 @@
  *
  * Same source-text-grep approach as the drain + step-consolidation +
  * mean-consolidation guards: assert the repair queue is registered in
- * `allQueues`, a `boss.work` handler is wired against it, and the
+ * `allQueues`, a `createAndWork` handler is wired against it, and the
  * boot-discovery enqueue helper fires — without booting pg-boss + Prisma.
  * An unregistered queue silently never drains (the dead-queue class).
  */
@@ -36,9 +36,9 @@ describe("reminder-worker — step-consolidation-repair wiring", () => {
     expect(allQueuesMatch![1]).toMatch(/\bSTEP_CONSOLIDATION_REPAIR_QUEUE\b/);
   });
 
-  it("registers a boss.work handler against the repair queue", () => {
+  it("registers a createAndWork handler against the repair queue", () => {
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,200}STEP_CONSOLIDATION_REPAIR_QUEUE[\s\S]{0,400}runStepConsolidationRepairForUser/,
+      /createAndWork[\s\S]{0,200}STEP_CONSOLIDATION_REPAIR_QUEUE[\s\S]{0,400}runStepConsolidationRepairForUser/,
     );
   });
 

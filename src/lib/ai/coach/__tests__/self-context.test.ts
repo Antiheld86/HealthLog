@@ -210,6 +210,14 @@ describe("buildFallbackQuestions", () => {
     expect(hints).toEqual(["Do you have any allergies or intolerances?"]);
   });
 
+  it("never offers questions for excluded fields", () => {
+    const hints = buildFallbackQuestions(emptyCtx, "en", ["ABOUT_ME"]);
+
+    expect(hints).toEqual([
+      "Want to tell the Coach a bit about yourself — routines, goals, context?",
+    ]);
+  });
+
   it("returns nothing for a fully answered questionnaire", () => {
     expect(
       buildFallbackQuestions(
@@ -244,5 +252,16 @@ describe("buildPrompts", () => {
     const { userPrompt } = buildPrompts(emptyCtx, "en", null);
     expect(userPrompt).not.toContain("HEALTH DATA SNAPSHOT");
     expect(userPrompt).toContain("conditions: (not answered)");
+  });
+
+  it("omits excluded fields from the model prompt", () => {
+    const { systemPrompt, userPrompt } = buildPrompts(emptyCtx, "en", null, [
+      "COACH_FOCUS",
+    ]);
+
+    expect(userPrompt).toBe("coach focus: (not answered)");
+    expect(systemPrompt).toContain(
+      "Omitted fields are excluded by the user and must never be requested.",
+    );
   });
 });

@@ -364,7 +364,10 @@ export function suggestNearestSlot(
 }
 
 /** The band whose anchor is within epsilon of `instant`, nearest wins. */
-function nearestAnchorBand(instant: Date, bands: SlotBand[]): SlotBand | null {
+export function nearestAnchorBand(
+  instant: Date,
+  bands: SlotBand[],
+): SlotBand | null {
   const t = instant.getTime();
   let best: SlotBand | null = null;
   let bestDist = Infinity;

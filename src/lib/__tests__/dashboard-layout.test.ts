@@ -13,9 +13,9 @@ import {
   PRESERVED_LAYOUT_FIELDS,
   layoutNeedsPreserveRead,
   mergePreservedLayoutFields,
-  buildRingMutationPayload,
   type DashboardLayout,
 } from "@/lib/dashboard-layout";
+import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
 
 /**
  * v1.4.15 Fix 5 — Dashboard layout: top tiles selectable.
@@ -837,6 +837,76 @@ describe("resolveDashboardLayout() — selectedScoreRings", () => {
     ]);
   });
 });
+describe("resolveDashboardLayout() — enabledHeroItemKinds", () => {
+  const legacy = {
+    version: 1,
+    widgets: [{ id: "weight", visible: true, tileVisible: true, order: 0 }],
+  };
+
+  it("enables every current kind for legacy layouts", () => {
+    expect(resolveDashboardLayout(legacy).enabledHeroItemKinds).toEqual([
+      ...PRIORITY_ITEM_KINDS,
+    ]);
+  });
+
+  it("preserves an explicit all-off choice through resolve and serialize", () => {
+    const resolved = resolveDashboardLayout({
+      ...legacy,
+      enabledHeroItemKinds: [],
+    });
+    expect(resolved.enabledHeroItemKinds).toEqual([]);
+
+    const serialized = serializeDashboardLayout(resolved);
+    expect(serialized.enabledHeroItemKinds).toEqual([]);
+    expect(resolveDashboardLayout(serialized).enabledHeroItemKinds).toEqual([]);
+  });
+
+  it("drops unknown values, deduplicates, and restores catalogue order", () => {
+    const resolved = resolveDashboardLayout({
+      ...legacy,
+      enabledHeroItemKinds: [
+        "sync_issue",
+        "future_item",
+        "sync_issue",
+        "dose_window",
+      ],
+    });
+    expect(resolved.enabledHeroItemKinds).toEqual([
+      "dose_window",
+      "sync_issue",
+    ]);
+  });
+
+  it("omits the all-enabled default from storage", () => {
+    const serialized = serializeDashboardLayout({
+      ...DEFAULT_DASHBOARD_LAYOUT,
+      enabledHeroItemKinds: [...PRIORITY_ITEM_KINDS].reverse(),
+    });
+    expect(
+      Object.prototype.hasOwnProperty.call(serialized, "enabledHeroItemKinds"),
+    ).toBe(false);
+    expect(resolveDashboardLayout(serialized).enabledHeroItemKinds).toEqual([
+      ...PRIORITY_ITEM_KINDS,
+    ]);
+  });
+
+  it("keeps a non-full subset in canonical catalogue order", () => {
+    const serialized = serializeDashboardLayout({
+      ...DEFAULT_DASHBOARD_LAYOUT,
+      enabledHeroItemKinds: ["sync_issue", "dose_window"],
+    });
+    expect(serialized.enabledHeroItemKinds).toEqual([
+      "dose_window",
+      "sync_issue",
+    ]);
+  });
+
+  it("the default layout enables every current kind", () => {
+    expect(DEFAULT_DASHBOARD_LAYOUT.enabledHeroItemKinds).toEqual([
+      ...PRIORITY_ITEM_KINDS,
+    ]);
+  });
+});
 
 /**
  * v1.27.27 — hero ring ORDER (`heroRingOrder`). The health-score ring is a
@@ -989,6 +1059,7 @@ describe("layout field merge disposition", () => {
     },
     selectedScoreRings: ["MED_COMPLIANCE"],
     heroRingOrder: ["HEALTH_SCORE", "MED_COMPLIANCE"],
+    enabledHeroItemKinds: [...PRIORITY_ITEM_KINDS],
   };
 
   it("assigns a disposition to every top-level layout field", () => {
@@ -1007,13 +1078,11 @@ describe("layout field merge disposition", () => {
     }
   });
 
-  it("preserves comparisonBaseline and widgets alongside the other client-owned fields", () => {
-    // The regression itself: `comparisonBaseline` must be in the preserve
-    // set, not merely present in the disposition map. `widgets` joined it in
-    // v1.32.1 (issue #581) — see the dedicated describe block below.
+  it("preserves every client-owned field", () => {
     expect([...PRESERVED_LAYOUT_FIELDS].sort()).toEqual([
       "chartOverlayPrefs",
       "comparisonBaseline",
+      "enabledHeroItemKinds",
       "heroRingOrder",
       "selectedScoreRings",
       "widgets",
@@ -1071,11 +1140,13 @@ describe("layout field merge disposition", () => {
       chartOverlayPrefs: fullyPopulatedLayout.chartOverlayPrefs,
       selectedScoreRings: [],
       heroRingOrder: fullyPopulatedLayout.heroRingOrder,
+      enabledHeroItemKinds: [],
     };
     const merged = mergePreservedLayoutFields(incoming, stored);
     // An explicit "none" is a real choice — clearing must survive the merge.
     expect(merged.comparisonBaseline).toBe("none");
     expect(merged.selectedScoreRings).toEqual([]);
+    expect(merged.enabledHeroItemKinds).toEqual([]);
   });
 
   it("leaves the replace-fields untouched by the merge", () => {
@@ -1089,53 +1160,5 @@ describe("layout field merge disposition", () => {
     };
     const merged = mergePreservedLayoutFields(incoming, stored);
     expect(merged.widgets).toEqual(fullyPopulatedLayout.widgets);
-  });
-});
-
-/**
- * v1.32.1 — regression for issue #581 (dashboard layout race). The
- * Settings page's instant score-ring PUT used to resend the FULL layout,
- * built from the `remote` query-cache snapshot
- * (`{...remote, selectedScoreRings, heroRingOrder}`). That snapshot can be
- * stale relative to an in-flight or already-committed tile/chart Save;
- * because `widgets` was a `"replace"`-disposition field on the server, an
- * explicitly-present stale copy always won on write and silently reverted
- * the just-saved layout.
- *
- * `buildRingMutationPayload` is the exact function
- * `ringMutation.mutationFn` (in `dashboard-layout-section.tsx`) calls to
- * build its request body. Pinning its shape here — no `widgets`, no
- * `comparisonBaseline`, no `chartOverlayPrefs` — is what makes the race
- * structurally impossible: a payload that never carries those fields
- * cannot overwrite them no matter which request lands last. See
- * `src/app/api/dashboard/widgets/__tests__/route.test.ts` for the
- * server-side half — a PUT shaped like this preserves whatever layout is
- * CURRENTLY stored, not a client-held snapshot.
- */
-describe("buildRingMutationPayload — instant score-ring PUT payload (regression #581)", () => {
-  it("carries only version + the two ring fields", () => {
-    const payload = buildRingMutationPayload({
-      selectedScoreRings: ["READINESS"],
-      heroRingOrder: ["HEALTH_SCORE", "READINESS"],
-    });
-    expect(Object.keys(payload).sort()).toEqual([
-      "heroRingOrder",
-      "selectedScoreRings",
-      "version",
-    ]);
-    expect(payload.version).toBe(1);
-    expect(payload.selectedScoreRings).toEqual(["READINESS"]);
-    expect(payload.heroRingOrder).toEqual(["HEALTH_SCORE", "READINESS"]);
-  });
-
-  it("never includes widgets, comparisonBaseline, or chartOverlayPrefs — the fields a concurrent Save owns", () => {
-    const payload = buildRingMutationPayload({
-      selectedScoreRings: ["READINESS"],
-      heroRingOrder: ["HEALTH_SCORE", "READINESS"],
-    });
-    expect(payload.widgets).toBeUndefined();
-    expect(payload.comparisonBaseline).toBeUndefined();
-    expect(payload.chartOverlayPrefs).toBeUndefined();
-    expect("widgets" in payload).toBe(false);
   });
 });

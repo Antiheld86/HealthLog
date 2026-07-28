@@ -1,15 +1,14 @@
 /**
- * v1.32.22 (M6) — a privacy-mode flip that lands WHILE a comprehensive
- * generation is in flight must not be overwritten by that generation.
+ * A comprehensive generation must never overwrite a cache after its
+ * prompt-affecting scope has changed in flight.
  *
- * The generation reads `insightsPrivacyMode` at snapshot time and builds its
- * payload under that scope. `PUT /api/insights/settings` flips the mode and
- * nulls the cache. If the in-flight generation then committed unconditionally
- * it would stamp an old-scope briefing over the null the flip wrote. Every
- * cache commit is now guarded on the mode still being what the generation
- * read: a mismatch (simulated here by the guarded `updateMany` matching zero
- * rows) returns `{ status: "skipped", reason: "privacy-mode-changed" }` and
- * writes nothing.
+ * The guarded `updateMany` keys on `insightsPrivacyMode`, `insightsExcludeMetrics`,
+ * `gender`, and `displayName` — the exact User columns this generation's
+ * prompt was built from — rather than the broad `updatedAt` timestamp. A
+ * zero-row result therefore proves a genuine change to one of THOSE columns;
+ * an unrelated User write (e.g. `resolveProviderChain()`'s OAuth
+ * token-refresh update) still advances `updatedAt` but can never collide
+ * with this guard, since it touches none of the guarded columns.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -22,6 +21,7 @@ const runRawCompletionWithFallback = vi.fn();
 const extractFeatures = vi.fn();
 const invalidateUserInsights = vi.fn();
 const annotate = vi.fn();
+const getSelfContextTextForUser = vi.fn();
 
 vi.mock("@/lib/db", () => ({
   prisma: {
@@ -30,8 +30,8 @@ vi.mock("@/lib/db", () => ({
     user: {
       findUnique: (...a: unknown[]) => findUnique(...a),
       update: (...a: unknown[]) => userUpdate(...a),
-      // Controllable per test: `{ count: 0 }` emulates a privacy flip having
-      // advanced the guarded column since the generation read it.
+      // Controllable per test: `{ count: 0 }` emulates any User scope/version
+      // change advancing the guarded token since the generation read it.
       updateMany: (...a: unknown[]) => userUpdateMany(...a),
     },
     auditLog: { deleteMany: vi.fn() },
@@ -62,7 +62,8 @@ vi.mock("@/lib/insights/glp1-plateau", () => ({
   buildGlp1PlateauPrompt: vi.fn(() => ""),
 }));
 vi.mock("@/lib/ai/coach/about-me", () => ({
-  getSelfContextTextForUser: vi.fn(async () => null),
+  getSelfContextTextForUser: (...a: unknown[]) =>
+    getSelfContextTextForUser(...a),
   buildAboutMeInsightBlock: vi.fn(() => ""),
 }));
 vi.mock("@/lib/cache/invalidate", () => ({
@@ -95,12 +96,19 @@ const CACHED_WITH_BRIEFING = JSON.stringify({
   },
 });
 
-function annotatedPrivacyChange(): boolean {
-  return annotate.mock.calls.some(
-    (c) =>
-      (c[0] as { action?: { name?: string } })?.action?.name ===
-      "insights.generate.privacy_mode_changed",
-  );
+function annotatedScopeChange(): boolean {
+  return annotate.mock.calls.some(([entry]) => {
+    if (typeof entry !== "object" || entry === null || !("action" in entry)) {
+      return false;
+    }
+    const action = entry.action;
+    return (
+      typeof action === "object" &&
+      action !== null &&
+      "name" in action &&
+      action.name === "insights.generate.scope_changed"
+    );
+  });
 }
 
 beforeEach(() => {
@@ -111,10 +119,11 @@ beforeEach(() => {
   resolveProvider.mockResolvedValue({ type: "none" });
   extractFeatures.mockResolvedValue(FEATURES);
   userUpdate.mockResolvedValue({});
+  getSelfContextTextForUser.mockResolvedValue(null);
 });
 
-describe("generateComprehensiveInsight — privacy-mode flip guard (M6)", () => {
-  it("main commit: refuses to write when the mode flipped, returns privacy-mode-changed", async () => {
+describe("generateComprehensiveInsight — scope/version commit guard", () => {
+  it("main commit: a token miss returns generic scope-changed, never a privacy-specific claim", async () => {
     findUnique.mockResolvedValue({
       insightsPrivacyMode: "aggregated",
       insightsCachedAt: new Date(Date.now() - 26 * 60 * 60 * 1000),
@@ -132,14 +141,14 @@ describe("generateComprehensiveInsight — privacy-mode flip guard (M6)", () => 
       workingProvider: { providerType: "openai" },
       fallbackHops: [],
     });
-    // The flip landed: the guarded commit matches zero rows.
+    // Some User update landed: the guarded commit matches zero rows.
     userUpdateMany.mockResolvedValue({ count: 0 });
 
     const outcome = await generateComprehensiveInsight("u1", { locale: "de" });
 
     expect(outcome).toEqual({
       status: "skipped",
-      reason: "privacy-mode-changed",
+      reason: "scope-changed",
     });
     // The generation reached the commit (provider was called) …
     expect(runRawCompletionWithFallback).toHaveBeenCalledTimes(1);
@@ -152,10 +161,100 @@ describe("generateComprehensiveInsight — privacy-mode flip guard (M6)", () => 
     // … and it did NOT fall back to an unconditional write.
     expect(userUpdate).not.toHaveBeenCalled();
     expect(invalidateUserInsights).not.toHaveBeenCalled();
-    expect(annotatedPrivacyChange()).toBe(true);
+    expect(annotatedScopeChange()).toBe(true);
   });
 
-  it("main commit: control — with the mode unchanged the same generation commits", async () => {
+  it("main commit: an unrelated User update (e.g. resolveProviderChain's token refresh) does not discard the generation", async () => {
+    // Simulates the real-world race the guard must tolerate: between the
+    // `dbUser` read and this commit, `resolveProviderChain()` refreshed an
+    // OAuth token via `prisma.user.update`, which bumps `updatedAt` but
+    // touches none of the prompt-scope columns. The guard must still commit.
+    findUnique.mockResolvedValue({
+      insightsPrivacyMode: "aggregated",
+      insightsCachedAt: new Date(Date.now() - 26 * 60 * 60 * 1000),
+      insightsCachedText: JSON.stringify({ dailyBriefing: { p: "old" } }),
+      insightsExcludeMetrics: ["sleep"],
+      insightsSnapshotHash: "0".repeat(64),
+      gender: "FEMALE",
+      displayName: "Sam",
+    });
+    runRawCompletionWithFallback.mockResolvedValue({
+      result: {
+        content: JSON.stringify({ dailyBriefing: { p: "new" } }),
+        tokensUsed: 10,
+        providerType: "openai",
+        model: "m",
+      },
+      workingProvider: { providerType: "openai" },
+      fallbackHops: [],
+    });
+    // The real DB returns count: 1 here too, since the guarded predicate
+    // never references `updatedAt` — the credential-refresh write cannot
+    // make it miss.
+    userUpdateMany.mockResolvedValue({ count: 1 });
+
+    const outcome = await generateComprehensiveInsight("u1", { locale: "de" });
+
+    expect(outcome).toEqual({ status: "generated", providerType: "openai" });
+    expect(userUpdateMany).toHaveBeenCalledTimes(1);
+    const where = userUpdateMany.mock.calls[0][0].where as Record<
+      string,
+      unknown
+    >;
+    expect(where).not.toHaveProperty("updatedAt");
+    expect(where).toMatchObject({
+      insightsPrivacyMode: "aggregated",
+      insightsExcludeMetrics: { equals: ["sleep"] },
+      gender: "FEMALE",
+      displayName: "Sam",
+    });
+    expect(invalidateUserInsights).toHaveBeenCalledWith("u1");
+    expect(annotatedScopeChange()).toBe(false);
+  });
+
+  it("main commit: a genuine exclude-list / gender / display-name change mid-generation still discards", async () => {
+    findUnique.mockResolvedValue({
+      insightsPrivacyMode: "aggregated",
+      insightsCachedAt: new Date(Date.now() - 26 * 60 * 60 * 1000),
+      insightsCachedText: JSON.stringify({ dailyBriefing: { p: "old" } }),
+      insightsExcludeMetrics: ["sleep"],
+      insightsSnapshotHash: "0".repeat(64),
+      gender: "FEMALE",
+      displayName: "Sam",
+    });
+    runRawCompletionWithFallback.mockResolvedValue({
+      result: {
+        content: JSON.stringify({ dailyBriefing: { p: "new" } }),
+        tokensUsed: 10,
+        providerType: "openai",
+        model: "m",
+      },
+      workingProvider: { providerType: "openai" },
+      fallbackHops: [],
+    });
+    // Simulates a genuine concurrent settings/profile change (exclude list,
+    // gender, or display name edited) between the read above and the
+    // commit: the exact-field predicate now matches zero rows.
+    userUpdateMany.mockResolvedValue({ count: 0 });
+
+    const outcome = await generateComprehensiveInsight("u1", { locale: "de" });
+
+    expect(outcome).toEqual({ status: "skipped", reason: "scope-changed" });
+    expect(userUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          insightsPrivacyMode: "aggregated",
+          insightsExcludeMetrics: { equals: ["sleep"] },
+          gender: "FEMALE",
+          displayName: "Sam",
+        }),
+      }),
+    );
+    expect(invalidateUserInsights).not.toHaveBeenCalled();
+    expect(annotatedScopeChange()).toBe(true);
+  });
+
+  it("main commit: refuses content built before the profile scope changed", async () => {
     findUnique.mockResolvedValue({
       insightsPrivacyMode: "aggregated",
       insightsCachedAt: new Date(Date.now() - 26 * 60 * 60 * 1000),
@@ -163,6 +262,9 @@ describe("generateComprehensiveInsight — privacy-mode flip guard (M6)", () => 
       insightsExcludeMetrics: [],
       insightsSnapshotHash: "0".repeat(64),
     });
+    getSelfContextTextForUser
+      .mockResolvedValueOnce("Chronic conditions: Asthma")
+      .mockResolvedValueOnce(null);
     runRawCompletionWithFallback.mockResolvedValue({
       result: {
         content: JSON.stringify({ dailyBriefing: { p: "new" } }),
@@ -177,13 +279,21 @@ describe("generateComprehensiveInsight — privacy-mode flip guard (M6)", () => 
 
     const outcome = await generateComprehensiveInsight("u1", { locale: "de" });
 
-    expect(outcome).toEqual({ status: "generated", providerType: "openai" });
-    expect(userUpdateMany).toHaveBeenCalledTimes(1);
-    expect(invalidateUserInsights).toHaveBeenCalledWith("u1");
-    expect(annotatedPrivacyChange()).toBe(false);
+    expect(outcome).toEqual({
+      status: "skipped",
+      reason: "profile-scope-changed",
+    });
+    expect(runRawCompletionWithFallback).toHaveBeenCalledTimes(1);
+    expect(userUpdateMany).not.toHaveBeenCalled();
+    expect(invalidateUserInsights).not.toHaveBeenCalled();
+    expect(annotate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: { name: "insights.generate.profile_scope_changed" },
+      }),
+    );
   });
 
-  it("reroll arm: a flip refuses the paragraph re-roll write too", async () => {
+  it("reroll arm: a stale scope/version token refuses the paragraph write too", async () => {
     findUnique.mockResolvedValue({
       insightsPrivacyMode: "aggregated",
       insightsCachedAt: new Date(Date.now() - 26 * 60 * 60 * 1000),
@@ -210,11 +320,11 @@ describe("generateComprehensiveInsight — privacy-mode flip guard (M6)", () => 
 
     expect(outcome).toEqual({
       status: "skipped",
-      reason: "privacy-mode-changed",
+      reason: "scope-changed",
     });
     expect(userUpdateMany).toHaveBeenCalledTimes(1);
     expect(invalidateUserInsights).not.toHaveBeenCalled();
-    expect(annotatedPrivacyChange()).toBe(true);
+    expect(annotatedScopeChange()).toBe(true);
     // Not marked as a used-today reroll, since nothing committed.
     expect(todayKey).toBe(new Date().toISOString().slice(0, 10));
   });

@@ -22,6 +22,8 @@ import type { ReportSelection } from "@/lib/report-selection/selection";
 import { DocumentEntry } from "./documents-list";
 import { ShareDownloadActions } from "./download-actions";
 import {
+  AllergiesSection,
+  AnamnesisSection,
   GlucoseSection,
   MeasurementGroups,
   MedicationsSection,
@@ -136,6 +138,8 @@ export function ClinicianView({
             ) : null}
             <GlucoseSection t={t} report={report} fmtNum={fmtNum} />
             <MedicationsSection t={t} report={report} selection={selection} />
+            <AllergiesSection t={t} report={report} selection={selection} />
+            <AnamnesisSection t={t} report={report} selection={selection} />
             <WellnessSection t={t} report={report} fmtNum={fmtNum} />
           </>
         ) : null}

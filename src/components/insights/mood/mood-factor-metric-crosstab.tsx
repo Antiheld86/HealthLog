@@ -5,6 +5,11 @@ import { useUnitDisplay } from "@/hooks/use-unit-display";
 import { moodTagIcon } from "@/components/mood/mood-tag-icons";
 import { cn } from "@/lib/utils";
 import type { MoodInfluenceConfidence } from "./mood-tag-influence";
+import {
+  PatternDismissButton,
+  PatternDismissedNotice,
+  usePatternDismissalOverrides,
+} from "@/components/insights/pattern-dismiss-action";
 
 /**
  * v1.14.0 — RATED-factor × vital crosstab card.
@@ -42,6 +47,9 @@ export interface MoodFactorMetricCrosstabRow {
   pValue: number;
   qValue: number;
   confidence: MoodInfluenceConfidence;
+  patternId?: string;
+  canonicalKey?: string;
+  dismissed?: boolean;
 }
 
 const METRIC_LABEL_KEY: Record<string, string> = {
@@ -87,6 +95,7 @@ export function MoodFactorMetricCrosstab({
 }) {
   const { t } = useTranslations();
   const unitDisplay = useUnitDisplay();
+  const dismissal = usePatternDismissalOverrides();
   if (rows.length === 0) return null;
 
   return (
@@ -96,6 +105,22 @@ export function MoodFactorMetricCrosstab({
       </p>
       <ul className="divide-border divide-y">
         {rows.map((row) => {
+          const patternId = row.patternId;
+          if (
+            patternId &&
+            dismissal.isDismissed(patternId, row.dismissed === true)
+          ) {
+            return (
+              <li key={row.canonicalKey ?? patternId} className="py-2">
+                <PatternDismissedNotice
+                  compact
+                  patternId={patternId}
+                  onRestored={() => dismissal.setDismissed(patternId, false)}
+                  onSettled={() => dismissal.clearDismissed(patternId, false)}
+                />
+              </li>
+            );
+          }
           const Icon = moodTagIcon(row.icon);
           const factorLabel = t(row.labelKey);
           const metricLabel = t(
@@ -155,6 +180,14 @@ export function MoodFactorMetricCrosstab({
                 >
                   {t(CONFIDENCE_KEY[row.confidence])}
                 </span>
+                {patternId ? (
+                  <PatternDismissButton
+                    patternId={patternId}
+                    onDismissed={() => dismissal.setDismissed(patternId, true)}
+                    onSettled={() => dismissal.clearDismissed(patternId, true)}
+                    className="shrink-0"
+                  />
+                ) : null}
               </div>
               <p className="text-muted-foreground text-xs">
                 {t(

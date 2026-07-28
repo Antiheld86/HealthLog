@@ -14,6 +14,7 @@ import { useId, useMemo, useState } from "react";
 import { Loader2, ScanLine, Upload } from "lucide-react";
 import { toast } from "sonner";
 
+import { toastWrittenOutcome } from "@/components/outcome/outcome-toast";
 import { Button } from "@/components/ui/button";
 import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
 import { ApiError } from "@/lib/api/api-fetch";
@@ -184,8 +185,25 @@ export function OcrReviewDialog({
       { rows: payload, file: pickedFile },
       {
         onSuccess: (result) => {
-          toast.success(
-            t("labs.ocr.savedToast", { count: result.inserted.length }),
+          // The commit re-checks each confirmed row against what is already
+          // stored, so a re-scan can legitimately write nothing. The toast
+          // used to be green on any 200 and print the count regardless; the
+          // server resolves the outcome from the two lists and the dialog
+          // renders it.
+          toastWrittenOutcome(
+            result.outcome,
+            result.outcome === "success"
+              ? t("labs.ocr.savedToast", { count: result.inserted.length })
+              : result.outcome === "partial"
+                ? t("labs.ocr.savedPartialToast", {
+                    count: result.inserted.length,
+                    skipped: result.skipped.length,
+                  })
+                : result.outcome === "failed"
+                  ? t("labs.ocr.savedNothingToast", {
+                      skipped: result.skipped.length,
+                    })
+                  : t("labs.ocr.savedEmptyToast"),
           );
           onCommitted();
           handleClose(false);

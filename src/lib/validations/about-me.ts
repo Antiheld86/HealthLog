@@ -12,6 +12,7 @@
  * (`src/lib/ai/coach/about-me.ts`) into the generator script.
  */
 import { z } from "zod/v4";
+import { healthProfileAiSectionSchema } from "@/lib/validations/health-profile-facts";
 
 /** Hard cap enforced BEFORE encryption. */
 export const ABOUT_ME_MAX_CHARS = 4000;
@@ -30,21 +31,32 @@ const structuredField = z
   // string clears it (mirrors the `aboutMe` semantics).
   .optional();
 
-export const aboutMePutSchema = z.object({
-  /**
-   * The user's free-text self-description. An empty / whitespace-only
-   * value clears the stored text.
-   */
-  aboutMe: z
-    .string()
-    .max(ABOUT_ME_MAX_CHARS, `Maximum ${ABOUT_ME_MAX_CHARS} characters`),
-  /** Chronic conditions, short free text. */
-  conditions: structuredField,
-  /** Allergies / intolerances, short free text. */
-  allergies: structuredField,
-  /** What the Coach should pay attention to, short free text. */
-  coachFocus: structuredField,
-});
+export const aboutMePutSchema = z
+  .object({
+    /**
+     * The user's free-text self-description. An empty / whitespace-only
+     * value clears the stored text; omission leaves it untouched.
+     */
+    aboutMe: z
+      .string()
+      .max(ABOUT_ME_MAX_CHARS, `Maximum ${ABOUT_ME_MAX_CHARS} characters`)
+      .optional(),
+    conditions: structuredField,
+    /** Allergies / intolerances, short free text. */
+    allergies: structuredField,
+    /** What the Coach should pay attention to, short free text. */
+    coachFocus: structuredField,
+    /** Closed inclusion list for self-context sent to AI surfaces. */
+    aiIncludedSections: z
+      .array(healthProfileAiSectionSchema)
+      .max(8)
+      .refine((values) => new Set(values).size === values.length)
+      .optional(),
+  })
+  .refine(
+    (value) => Object.values(value).some((field) => field !== undefined),
+    "At least one self-context field is required",
+  );
 
 export type AboutMePutInput = z.infer<typeof aboutMePutSchema>;
 

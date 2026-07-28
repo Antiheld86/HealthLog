@@ -31,6 +31,8 @@ vi.mock("@/lib/feature-flags", () => ({
   AssistantDisabledError: class extends Error {},
 }));
 
+const selfContextText = vi.hoisted(() => vi.fn<() => Promise<string | null>>());
+
 vi.mock("@/lib/db", () => ({
   prisma: {
     // The briefing path now reserves against the day's token ledger before
@@ -46,7 +48,7 @@ vi.mock("@/lib/db", () => ({
         insightsCachedText: null,
         locale: "en",
       })),
-      update: vi.fn(async () => ({})),
+      updateMany: vi.fn(async () => ({ count: 1 })),
     },
     auditLog: {
       // v1.4.16 A7: route now evicts stale per-status cache rows
@@ -69,6 +71,11 @@ vi.mock("@/lib/db", () => ({
       findFirst: vi.fn(async () => ({ id: "receipt-1" })),
     },
   },
+}));
+
+vi.mock("@/lib/ai/coach/about-me", () => ({
+  getSelfContextTextForUser: selfContextText,
+  buildAboutMeInsightBlock: vi.fn(() => ""),
 }));
 
 vi.mock("@/lib/auth/audit", () => ({
@@ -178,6 +185,7 @@ beforeEach(() => {
   vi.mocked(prisma.$queryRaw).mockImplementation((async () => [
     { total_tokens: 0 },
   ]) as never);
+  selfContextText.mockResolvedValue(null);
   vi.mocked(checkRateLimit).mockResolvedValue({
     allowed: true,
     remaining: 9,
@@ -255,7 +263,7 @@ describe("POST /api/insights/generate — daily token ceiling", () => {
     expect(body.error).toContain("Daily AI token budget");
     // Not a provider failure: no cache row written, so the last good briefing
     // stays intact and the card does not blank.
-    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
     expect(enqueueStatusRefillForUser).not.toHaveBeenCalled();
   });
 });
@@ -432,13 +440,96 @@ describe("POST /api/insights/generate — cache write (v1.16.8)", () => {
     const res = await POST(jsonRequest({ force: true }) as never);
     expect(res.status).toBe(200);
 
-    expect(prisma.user.update).toHaveBeenCalledTimes(1);
-    const args = vi.mocked(prisma.user.update).mock.calls[0][0] as {
+    expect(prisma.user.updateMany).toHaveBeenCalledTimes(1);
+    const args = vi.mocked(prisma.user.updateMany).mock.calls[0][0] as {
       data: Record<string, unknown>;
     };
     expect(args.data.insightsCachedText).toEqual(expect.any(String));
     // SHA-256 hex digest of the compacted feature snapshot.
     expect(args.data.insightsSnapshotHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("refuses a stale cache write when AI profile inclusion changes during generation", async () => {
+    makeWorkingProvider();
+    selfContextText
+      .mockResolvedValueOnce("Chronic conditions: Asthma")
+      .mockResolvedValueOnce(null);
+
+    const res = await POST(jsonRequest({ force: true }) as never);
+
+    expect(res.status).toBe(409);
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    expect(enqueueStatusRefillForUser).not.toHaveBeenCalled();
+  });
+
+  it("commits successfully even when an unrelated User update (e.g. a provider credential refresh) lands mid-generation", async () => {
+    // resolveProviderChain()'s token-maintenance write (and any other User
+    // update outside the prompt-scope columns) bumps `updatedAt` but must
+    // never collide with this guard — the where-clause below no longer
+    // references it at all.
+    makeWorkingProvider();
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      insightsPrivacyMode: "aggregated",
+      insightsCachedAt: null,
+      insightsCachedText: null,
+      insightsExcludeMetrics: ["sleep"],
+      locale: "en",
+      dateOfBirth: null,
+      gender: "FEMALE",
+      heightCm: 170,
+      displayName: "Sam",
+    } as never);
+    // The real DB returns count: 1 here too, since the exact-field
+    // predicate never touches `updatedAt` — a concurrent OAuth
+    // token-refresh write to the row cannot make it miss.
+    vi.mocked(prisma.user.updateMany).mockResolvedValueOnce({ count: 1 });
+
+    const res = await POST(jsonRequest({ force: true }) as never);
+
+    expect(res.status).toBe(200);
+    expect(prisma.user.updateMany).toHaveBeenCalledTimes(1);
+    const where = vi.mocked(prisma.user.updateMany).mock.calls[0][0]
+      .where as Record<string, unknown>;
+    expect(where).not.toHaveProperty("updatedAt");
+    expect(where).toMatchObject({
+      insightsPrivacyMode: "aggregated",
+      insightsExcludeMetrics: { equals: ["sleep"] },
+      locale: "en",
+      dateOfBirth: null,
+      gender: "FEMALE",
+      heightCm: 170,
+      displayName: "Sam",
+    });
+    expect(enqueueStatusRefillForUser).toHaveBeenCalled();
+  });
+
+  it("refuses a stale cache write when an exact prompt-scope field (privacy mode / exclude list / locale / profile) changed mid-generation", async () => {
+    makeWorkingProvider();
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      insightsPrivacyMode: "aggregated",
+      insightsCachedAt: null,
+      insightsCachedText: null,
+      insightsExcludeMetrics: [],
+      locale: "en",
+    } as never);
+    // Simulates a genuine concurrent settings change (e.g. the exclude
+    // list edited) between the read above and the commit: the guarded
+    // write's exact-field predicate now matches zero rows.
+    vi.mocked(prisma.user.updateMany).mockResolvedValueOnce({ count: 0 });
+
+    const res = await POST(jsonRequest({ force: true }) as never);
+
+    expect(res.status).toBe(409);
+    expect(prisma.user.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          insightsPrivacyMode: "aggregated",
+          insightsExcludeMetrics: { equals: [] },
+          locale: "en",
+        }),
+      }),
+    );
+    expect(enqueueStatusRefillForUser).not.toHaveBeenCalled();
   });
 
   it("does NOT touch the cache when serving from the 24h DB cache", async () => {
@@ -460,7 +551,7 @@ describe("POST /api/insights/generate — cache write (v1.16.8)", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { data: { cached: boolean } };
     expect(body.data.cached).toBe(true);
-    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
     expect(prisma.auditLog.deleteMany).not.toHaveBeenCalled();
   });
 
@@ -547,7 +638,7 @@ describe("POST /api/insights/generate — briefingless fresh cache (v1.28.30)", 
     expect(res.status).toBe(200);
     const body = (await res.json()) as { data: { cached: boolean } };
     expect(body.data.cached).toBe(true);
-    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
   });
 
   it("POST without force + fresh cache WITHOUT briefing + provider → regenerates", async () => {
@@ -560,7 +651,7 @@ describe("POST /api/insights/generate — briefingless fresh cache (v1.28.30)", 
     // The stale-for-briefing cache was bypassed: a real generation ran and
     // wrote a fresh cache row.
     expect(body.data.cached).toBe(false);
-    expect(prisma.user.update).toHaveBeenCalledTimes(1);
+    expect(prisma.user.updateMany).toHaveBeenCalledTimes(1);
   });
 
   it("POST without force + fresh cache WITHOUT briefing + NO provider → serves cached (regeneration is futile)", async () => {
@@ -571,7 +662,7 @@ describe("POST /api/insights/generate — briefingless fresh cache (v1.28.30)", 
     expect(res.status).toBe(200);
     const body = (await res.json()) as { data: { cached: boolean } };
     expect(body.data.cached).toBe(true);
-    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
   });
 
   it("degrades to the cached payload instead of 429 when the briefingless fall-through is rate-limited", async () => {
@@ -589,7 +680,7 @@ describe("POST /api/insights/generate — briefingless fresh cache (v1.28.30)", 
     expect(res.status).toBe(200);
     const body = (await res.json()) as { data: { cached: boolean } };
     expect(body.data.cached).toBe(true);
-    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
   });
 
   it("explicit force keeps the honest 429 when rate-limited", async () => {

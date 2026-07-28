@@ -2,7 +2,7 @@
  * MCP Phase 3 (M2) — mcp-token-cleanup queue registration guard.
  *
  * Source-text-grep guard like the other queue-wiring checks: assert the queue
- * is in `allQueues`, scheduled, and wired to a `boss.work` handler. An
+ * is in `allQueues`, scheduled, and wired to a `createAndWork` handler. An
  * unregistered queue silently never drains (the recurring v1.4.37 dead-queue
  * bug), which would leave expired MCP connector access tokens growing unbounded.
  */
@@ -40,13 +40,13 @@ describe("reminder-worker — mcp-token-cleanup wiring", () => {
 
   it("schedules the mcp-token-cleanup cron", () => {
     expect(workerSource).toMatch(
-      /\[MCP_TOKEN_CLEANUP_QUEUE,\s*MCP_TOKEN_CLEANUP_CRON\]/,
+      /\[MCP_TOKEN_CLEANUP_QUEUE,\s*MCP_TOKEN_CLEANUP_CRON,\s*cronIsTheRetry\]/,
     );
   });
 
-  it("registers a boss.work handler for the queue", () => {
+  it("registers a createAndWork handler for the queue", () => {
     expect(workerSource).toMatch(
-      /boss\.work[\s\S]{0,200}MCP_TOKEN_CLEANUP_QUEUE[\s\S]{0,200}handleMcpTokenCleanup/,
+      /createAndWork[\s\S]{0,200}MCP_TOKEN_CLEANUP_QUEUE[\s\S]{0,200}handleMcpTokenCleanup/,
     );
   });
 

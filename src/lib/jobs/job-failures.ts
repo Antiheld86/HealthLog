@@ -27,6 +27,20 @@
 import { prisma } from "@/lib/db";
 import { redactSecrets } from "@/lib/logging/redact";
 
+/**
+ * pg-boss 12.26.0 stores terminal rows until
+ * `completed_on + deletion_seconds` (`dist/plans.js`). Its queue default is
+ * 604800 seconds, while `retention_seconds` defaults to 1209600 seconds; job
+ * insertion copies those queue values and maintenance applies the terminal-row
+ * deletion clock. The deployed queue-table audit found those same values on
+ * every queue, and no job submitter overrides either option.
+ *
+ * Seven days is therefore the verified availability floor for failed rows.
+ * The reader stays at 72 hours, safely inside that floor, and pg-boss remains
+ * the single failure ledger.
+ */
+export const PG_BOSS_FAILED_ROW_AVAILABILITY_HOURS = 7 * 24;
+
 /** How far back a failure still counts as news. */
 export const JOB_FAILURE_WINDOW_HOURS = 72;
 

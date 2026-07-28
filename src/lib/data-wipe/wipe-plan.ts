@@ -49,6 +49,11 @@ export const WIPE_MODELS = [
   // The rollup tier is a per-day, per-metric reconstruction of the same
   // history. A wipe that leaves it behind is not a wipe.
   "MeasurementRollup",
+  // The intraday cumulative profile is the hourly shape of a day that the
+  // fold kept after deleting the samples it came from. It is that day's
+  // record and nothing else holds it, so a wipe that leaves it behind leaves
+  // behind an account's activity pattern.
+  "IntradayCumulativeProfile",
   "MeasurementReminder",
 
   // ── Medication ──────────────────────────────────────────────────────────
@@ -90,6 +95,8 @@ export const WIPE_MODELS = [
   // ── Context and engagement ──────────────────────────────────────────────
   "EnvironmentContext",
   "EnvironmentTravelLocation",
+  "HealthProfileFactRevision",
+  "CorrelationPattern",
   "UserHealthProfile",
   "UserAchievement",
   "ArrivalReaction",

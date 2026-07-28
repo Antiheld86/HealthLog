@@ -124,6 +124,15 @@
   },
   "doctorReport": {
     "title": "Raport zdrowotny",
+    "anamnesisTitle": "Profil zdrowotny",
+    "anamnesisNotRecorded": "Brak danych",
+    "anamnesisUnreadable": "Nie udało się odczytać zapisanej wartości",
+    "anamnesisConditions": "Choroby przewlekłe",
+    "anamnesisSmoking": "Palenie tytoniu",
+    "anamnesisAlcohol": "Wzorzec spożycia alkoholu",
+    "anamnesisShiftSchedule": "Harmonogram pracy",
+    "anamnesisColFact": "Pozycja profilu",
+    "anamnesisColValue": "Zapisana wartość",
     "subtitle": "HealthLog — Osobisty raport zdrowotny",
     "patient": "Pacjent",
     "dateOfBirth": "Data urodzenia",
@@ -396,10 +405,6 @@
     },
     "welcomeBack": "{greeting}, witaj ponownie.",
     "welcomeBackWithName": "{greeting} {name}, witaj ponownie.",
-    "hero": {
-      "scoreLabel": "Health Score",
-      "ringDoses": "Dzisiejsze dawki"
-    },
     "greetingSalutation": "Cześć, {name}",
     "streakLabel": "dni z rzędu",
     "weight": "Waga",
@@ -452,11 +457,22 @@
     "compliance7d": "Przestrzeganie (7 dni)",
     "mood": "Nastrój",
     "customizeTitle": "Układ panelu",
-    "scoreRingsTitle": "Pierścienie wyników",
-    "scoreRingsDescription": "Maksymalnie trzy dodatkowe pierścienie obok wskaźnika zdrowia — np. gotowość, regeneracja, sen lub przestrzeganie zaleceń. Przeciągnij, aby zmienić kolejność; wskaźnik zdrowia jest domyślnie na początku.",
+    "heroItemsTitle": "Dzisiejsze wyróżnienia",
+    "heroItemsDescription": "Wybierz typy elementów, które mogą pojawiać się w dzisiejszych wyróżnieniach.",
+    "heroItemsNotificationNote": "Ustawieniami powiadomień zarządzasz osobno.",
+    "heroItems": {
+      "coach_checkin": "Podsumowania z Coachem",
+      "dose_window": "Dawki leków",
+      "preventive_care": "Profilaktyka",
+      "sync_issue": "Problemy z synchronizacją",
+      "milestone": "Kamienie milowe",
+      "ecg_new_recording": "Nowe zapisy EKG",
+      "tension_window": "Okresy napięcia",
+      "same_time_baseline": "Aktywność o tej samej porze"
+    },
     "layoutReset": "Przywróć wartości domyślne",
     "layoutResetTitle": "Zresetować układ pulpitu?",
-    "layoutResetBody": "Kolejność kafelków, ukryte kafelki i wybrane pierścienie wracają do ustawień domyślnych. Ten układ nie jest nigdzie indziej zapisany.",
+    "layoutResetBody": "Układ kafelków i wybory dotyczące dzisiejszych wyróżnień wracają do ustawień domyślnych.",
     "layoutResetConfirm": "Zresetuj układ",
     "layoutSaveSuccess": "Układ panelu zapisany",
     "layoutSaveError": "Nie udało się zapisać układu",
@@ -773,6 +789,8 @@
       "hydrated": "piłem wodę",
       "walked": "spacer",
       "alcohol": "alkohol",
+      "caffeine": "kofeina",
+      "nicotine": "nikotyna",
       "family": "rodzina",
       "friends": "znajomi",
       "party": "impreza",
@@ -2081,7 +2099,6 @@
   },
   "comparison": {
     "toggleLabel": "Porównaj z",
-    "toggleHint": "Porównuje bieżący okres z tym samym okresem rok wcześniej.",
     "baseline": {
       "none": "Wyłączone",
       "lastMonth": "Poprzedni miesiąc",
@@ -2101,6 +2118,15 @@
     "notAvailableForCompliance": "Porównanie niedostępne dla przestrzegania"
   },
   "insights": {
+    "pattern": {
+      "dismiss": "Odrzuć",
+      "dismissed": "Ten wzorzec pozostanie odrzucony, dopóki nie zmienią się dowody.",
+      "restore": "Pokaż ponownie",
+      "dismissError": "Nie udało się odrzucić tego wzorca.",
+      "restoreError": "Nie udało się przywrócić tego wzorca.",
+      "loadError": "Nie udało się wczytać wzorców.",
+      "empty": "Żaden aktualny wzorzec nie przekroczył progu dowodów."
+    },
     "correlation": {
       "direction": {
         "higher": "wzrostu",
@@ -2226,34 +2252,86 @@
     "heroActionAskCoach": "Zapytaj coacha",
     "healthScore": {
       "label": "Wynik zdrowia",
-      "progressAria": "Postęp wyniku zdrowia",
-      "deltaVsLastWeek": "{delta} w porównaniu z ubiegłym tygodniem",
-      "deltaUnavailable": "Brak historii — zajrzyj w przyszłym tygodniu.",
-      "restModePaused": "Wstrzymane podczas choroby — Twój wynik nie jest dziś oceniany.",
-      "componentBp": "RR",
-      "componentWeight": "Waga",
-      "componentMood": "Nastrój",
-      "componentCompliance": "Przestrzeganie",
-      "deltaExplainer": {
-        "title": "Jak liczona jest ta zmiana",
-        "description": "Zmiana względem ubiegłego tygodnia: {delta}",
-        "body": "Wynik łączy ciśnienie, wagę, nastrój i przyjmowanie leków. Porównujemy dzisiejszy wynik z tym samym momentem tydzień wcześniej. Dodaj świeży pomiar lub wpis o nastroju, żeby pchnąć go w górę."
+      "algorithmChanged": "Wynik korzysta teraz z opublikowanych kardiometabolicznych zakresów referencyjnych; masa ciała nie jest już uwzględniana, ponieważ poprzedni cel wynikał ze wzrostu, a nie z celu ustawionego przez użytkownika, codzienna zmienność nastroju i przestrzeganie zaleceń lekowych są działaniami, a nie stanami zdrowia, zaś tętno spoczynkowe i HRV nie mają uniwersalnego celu. Postęp masy ciała pozostaje poniżej jako osobisty kontekst, pozostałe sygnały zachowują własne karty, a nowa liczba nie oznacza zmiany stanu zdrowia.",
+      "dismissAlgorithmChanged": "Zamknij informację o metodzie",
+      "band": {
+        "green": "W zakresie referencyjnym",
+        "yellow": "Niektóre filary wymagają uwagi",
+        "red": "Co najmniej jeden filar jest poza zakresem referencyjnym"
       },
-      "provenance": {
-        "toggle": "Składa się z",
-        "mixedBanner": "Niektóre komponenty łączą wiele źródeł. Zestawienie pokazuje najświeższą wartość dla każdego komponentu.",
-        "footnote": "Wagi są przeskalowywane do dostępnych danych.",
-        "asOfLabel": "stan na {date}",
-        "provisional": "Wstępny — dostępne {count} z {total} danych",
-        "provisionalBadge": "Wstępne",
-        "sourceAria": "Źródło: {source}",
-        "sources": {
-          "manual": "Ręczne",
-          "withings": "Withings",
-          "appleHealth": "Apple Health",
-          "mixed": "Mieszane",
-          "none": "Brak danych"
-        }
+      "method": "Średnia z równą wagą kwalifikujących się filarów. Najniższy filar wyznacza ogólny zakres.",
+      "insufficient": "{count} kwalifikujące się filary. Wynik wymaga co najmniej trzech, w tym zmierzonego filaru fizjologicznego.",
+      "composition": "Uwzględniono: {pillars}",
+      "bandSetter": "Ogólny zakres wyznacza {pillar}",
+      "versionAndNoise": "Wersja metody {version}. Próg porównania tygodniowego: {noise} pkt.",
+      "methodVersion": "Wersja metody {version}.",
+      "none": "brak",
+      "delta": "{delta} względem poprzedniego porównywalnego okresu",
+      "deltaReason": {
+        "algorithm_changed": "Brak porównania, ponieważ zmieniła się metoda obliczeń.",
+        "composition_changed": "Brak porównania, ponieważ zmieniły się uwzględnione filary.",
+        "first_eligibility_window": "Brak porównania, ponieważ to pierwszy kwalifikujący się okres.",
+        "below_noise_floor": "Zmiana mieści się w łącznej zmienności pomiarów.",
+        "no_previous_window": "Brak wcześniejszego porównywalnego okresu.",
+        "no_current_score": "Brak porównania, ponieważ bieżący okres nie spełnia warunków."
+      },
+      "restMode": "Tryb odpoczynku aktywny od {since}. Wynik służy jako kontekst i nie jest obniżany.",
+      "pillar": {
+        "bloodPressure": "Ciśnienie krwi",
+        "glycaemia": "Glikemia",
+        "activity": "Aktywność",
+        "sleep": "Sen",
+        "adiposity": "Otłuszczenie",
+        "wellbeing": "Samopoczucie",
+        "fitness": "Zmierzona wydolność",
+        "lipids": "Lipidy"
+      },
+      "observed": "Zaobserwowano: {value}",
+      "reference": "Zakres referencyjny: {value}",
+      "fastingObserved": "Glukoza na czczo: {value} {unit}",
+      "fastingReference": "Od {low} do {high} {unit} na czczo",
+      "personalReference": "Twój cel: {value}",
+      "source": "Źródło: {source}, stan na {date}",
+      "observedActivity": "{value} kroków dziennie",
+      "observedSleep": "{value} minut na noc",
+      "observedAdiposity": "Stosunek obwodu talii do wzrostu {value}",
+      "observedFitness": "{value} {unit}, zmierzone",
+      "referenceActivity": "Korzyść stabilizuje się przy {high} krokach dziennie",
+      "referenceSleep": "Co najmniej {low} minut na noc; dłuższy sen nie obniża wyniku",
+      "referenceAdiposity": "Stosunek obwodu talii do wzrostu poniżej {high}",
+      "referenceFitness": "Od {low} do {high} {unit}, zakres odniesienia według wieku i płci",
+      "referenceHba1c": "HbA1c od {low} do {high}%",
+      "referenceDetail": "{label} · {source} · {kind} · od {low} do {high}",
+      "openBound": "otwarty",
+      "laboratoryReferenceSource": "Zakresy referencyjne laboratorium",
+      "personalTargetSource": "Osobisty cel",
+      "referenceKind": {
+        "clinical": "Próg kliniczny",
+        "population": "Percentyl populacji",
+        "guideline": "Zakres wytycznych"
+      },
+      "reason": {
+        "readFailed": "Nie udało się wczytać danych",
+        "notTracked": "Brak pomiarów",
+        "missingProfile": "Brakuje wieku lub profilu referencyjnego",
+        "missingHeight": "Brakuje wzrostu",
+        "incompletePanel": "Potrzebny jest aktualny pełny panel z zakresami referencyjnymi",
+        "crisis": "Zamiast wyniku wyświetlane są wskazówki bezpieczeństwa",
+        "insufficientHistory": "Za mało aktualnych danych spełniających kryteria",
+        "unavailable": "Ten filar obecnie nie spełnia kryteriów"
+      },
+      "pillarInsufficient": "Brak wyniku filaru: {reason}",
+      "tension": "Sygnały gotowości są rozbieżne. Sprzyjające: {positive}. Obciążone: {negative}.",
+      "returnToBand": "{metric} od {days} dni ponownie mieści się w typowym zakresie.",
+      "weightGoal": {
+        "title": "Osobisty cel wagowy",
+        "value": "Obecnie {current} {unit}. Cel od {min} do {max} {unit}. Odległość od celu: {distance} {unit}.",
+        "delta": "Odległość od celu zmieniła się o {delta} {unit} od poprzedniego pomiaru.",
+        "noDelta": "Brak wcześniejszego pomiaru masy ciała do porównania.",
+        "no_personal_goal": "Ustaw osobisty cel wagowy, aby zobaczyć tutaj postęp.",
+        "weight_not_tracked": "Zapisz pomiar masy ciała, aby zobaczyć postęp w kierunku celu.",
+        "read_failed": "Nie udało się wczytać danych masy ciała. Spróbuj ponownie.",
+        "notScored": "Postęp celu wagowego jest osobistym kontekstem i nie wpływa na wynik zdrowia."
       }
     },
     "suggestedPrompts": {
@@ -2855,6 +2933,14 @@
       "valuesBackToMetric": "Powrót do {metric}",
       "scoresBack": "Powrót do Insights",
       "ecgDescription": "Zapisy EKG jednoodprowadzeniowe z Twojego urządzenia, każdy z wynikiem samego urządzenia. HealthLog pokazuje przebieg i zapis — nie interpretuje krzywej."
+    },
+    "units": {
+      "steps": "kroki",
+      "flights": "piętra",
+      "falls": "upadki",
+      "years": "lata",
+      "breathingEvents": "zdarzenia",
+      "respiratoryRate": "oddechów/min"
     },
     "sleep": {
       "title": "Sen",
@@ -3640,6 +3726,10 @@
         "TRAJECTORY": {
           "method": "Prosta dopasowana metodą najmniejszych kwadratów do Twoich ostatnich wartości dziennych i rzutowana w przód na krótki horyzont, z klasycznym przedziałem predykcji, który poszerza się tym bardziej, im dalej sięga. Obliczana tylko wtedy, gdy ostatni trend jest dość wyraźny, a Twoja historia wystarczająco długa i aktualna; w przeciwnym razie linia nie jest rysowana.",
           "caveat": "Rzut Twojego własnego ostatniego trendu — nie prognoza, cel ani kliniczne przewidywanie. Sprawdza się tylko, jeśli ostatni wzorzec się utrzyma; zacieniony pas pokazuje, jak szybko ta pewność maleje."
+        },
+        "SAME_TIME_BASELINE": {
+          "method": "Twoja dzisiejsza suma narastająca zestawiona z medianą tej samej godziny lokalnej z ostatnich czterech tygodni, z odpornym pasmem mediana ± MAD wokół niej. Liczą się tylko dni z wystarczającą liczbą zapisów, a porównanie nie pojawia się, dopóki nie ma ich co najmniej czternastu.",
+          "caveat": "Porównanie z twoją własną niedawną historią, a nie cel. Mówi, gdzie dziś jesteś względem swojego zwykłego wzorca o tej godzinie — i nic o tym, czy ten wzorzec jest dla ciebie właściwy."
         }
       },
       "scores": {
@@ -3673,6 +3763,13 @@
         "caveat": "Rzut Twojego własnego ostatniego trendu, nie prognoza. Zacieniony pas poszerza się, pokazując, jak szybko rośnie niepewność.",
         "insufficient": "Jeszcze brak wystarczająco wyraźnego trendu do rzutowania — rejestruj dalej, a rzut pojawi się, gdy ostatni wzorzec będzie dość wyraźny.",
         "daysNeeded": "Potrzeba jeszcze około {count} dni rejestrowania, zanim pojawi się rzut."
+      },
+      "sameTime": {
+        "sectionTitle": "Dziś do tej pory",
+        "sectionSubtitle": "Twoje sumy narastające względem tego, co o tej godzinie jest u ciebie zwykłe",
+        "learning": "Uczę się twojego zwykłego dnia — {count} z {target} dni",
+        "framing": "Zwykle do {time}: {typical} {unit}",
+        "comparisonLabel": "Twój zwykły dzień"
       }
     },
     "cardioFitness": {
@@ -3857,17 +3954,6 @@
         "forwardWatch": "Warto mieć na oku {metric}.",
         "forwardHolding": "Na razie wszystko jest stabilne."
       }
-    },
-    "tension": {
-      "label": "Szczera ocena: {positive} wygląda dobrze, ale {negative} odstaje — wynik łączny ląduje na {band}.",
-      "contributor": {
-        "green": "zielony",
-        "yellow": "żółty",
-        "red": "czerwony"
-      }
-    },
-    "streak": {
-      "returnLabel": "Twój {metric} wrócił do twojego zwykłego zakresu po {count} dniach — cokolwiek to było, minęło."
     },
     "updatedTodayAt": "Zaktualizowano dzisiaj, {time}",
     "updatedYesterday": "Zaktualizowano wczoraj",
@@ -4499,7 +4585,7 @@
           },
           "fullBackup": {
             "title": "Pełna kopia zapasowa",
-            "description": "Twoje pomiary, leki, nastrój, cykl, wyniki badań, epizody chorobowe, alergie, wywiad rodzinny, składniki odżywcze i treningi w jednym pliku JSON. Ten sam kształt co cotygodniowa kopia automatyczna. Niektóre rodzaje wpisów nie są jeszcze przenoszone — manifest pliku wskazuje, co zawiera.",
+            "description": "Twoje pomiary, leki, nastrój, cykl, wyniki badań, epizody chorobowe, alergie, wywiad rodzinny, składniki odżywcze, treningi, Twój profil zdrowia i własne wskaźniki w jednym pliku JSON. Ten sam kształt co cotygodniowa kopia automatyczna. Niektóre rodzaje wpisów nie są jeszcze przenoszone — manifest pliku wskazuje, co zawiera.",
             "scopeNote": "Metadane dokumentów oraz podsumowanie AI, jeśli istnieje, są uwzględnione jako czysty tekst; oryginalne pliki dokumentów oraz dane tras GPS/próbek treningów nie są uwzględnione — pobierz je osobno z archiwum dokumentów lub eksportu treningów.",
             "encryptToggle": "Zaszyfruj hasłem-frazą",
             "passphrasePlaceholder": "Hasło-fraza (min. 12 znaków)",
@@ -5148,6 +5234,11 @@
     "withingsFullSyncTitle": "Pełna synchronizacja?",
     "withingsFullSyncDescription": "Wszystkie dostępne dane Withings zostaną w pełni zsynchronizowane. Może to chwilę potrwać w zależności od historii.",
     "withingsSyncResult": "{count} pomiarów zsynchronizowano",
+    "syncOutcome": {
+      "empty": "Nie ma nic nowego do zaimportowania. Wszystko jest aktualne.",
+      "failed": "Nic nie zostało zapisane. Następne uruchomienie spróbuje ponownie.",
+      "partial": "Zsynchronizowano {count} pomiarów. Części danych nie udało się zapisać; następne uruchomienie spróbuje ponownie."
+    },
     "withingsFullSyncResult": "{count} pomiarów w pełni zsynchronizowano",
     "withingsSyncFailed": "Synchronizacja nie powiodła się",
     "withingsOauthConnected": "Withings połączony — pierwsza synchronizacja rozpocznie się w tle.",
@@ -5293,6 +5384,7 @@
       "connected": "Połączono",
       "errorReconnect": "Błąd — połącz ponownie",
       "warningServerError": "Synchronizacja nie działa",
+      "failureCount": "{count}/{threshold}",
       "parkedReconnect": "Wstrzymane — połącz ręcznie",
       "notConnected": "Nie połączono",
       "justNow": "przed chwilą",
@@ -7873,6 +7965,9 @@
       "saveSelected": "Zapisz {count} wybranych",
       "discardAll": "Odrzuć wszystko",
       "savedToast": "Zapisano {count} wyników laboratoryjnych",
+      "savedPartialToast": "Zapisano {count} wyników laboratoryjnych, {skipped} pominięto jako duplikaty",
+      "savedNothingToast": "Nic nie zapisano: {skipped} wyników było już zarejestrowanych",
+      "savedEmptyToast": "Nie ma nic do zapisania",
       "noRows": "W tym wyniku nie znaleziono żadnych wartości.",
       "nothingToSave": "Wybierz co najmniej jeden wynik do zapisania.",
       "saveFailed": "Nie udało się zapisać wyników. Spróbuj ponownie.",
@@ -8461,6 +8556,61 @@
     "historyLoadErrorHint": "To nie znaczy, że nie masz wyników — nie udało się pobrać listy. Spróbuj ponownie."
   },
   "records": {
+    "aiInclusion": {
+      "cardTitle": "Dostęp AI do profilu",
+      "cardDescription": "Wybierz części profilu zdrowotnego, z których mogą korzystać Coach i pełne podsumowania.",
+      "sectionAboutMe": "O mnie",
+      "sectionConditions": "Choroby przewlekłe",
+      "sectionAllergies": "Alergie i nietolerancje",
+      "sectionCoachFocus": "Priorytet Coacha",
+      "sectionFamilyHistory": "Historia rodzinna",
+      "sectionSmoking": "Palenie tytoniu",
+      "sectionAlcohol": "Wzorzec spożycia alkoholu",
+      "sectionShiftSchedule": "Harmonogram pracy",
+      "save": "Zapisz dostęp",
+      "savedToast": "Zapisano dostęp AI do profilu",
+      "saveError": "Nie udało się zapisać dostępu AI do profilu",
+      "loadError": "Nie udało się wczytać dostępu AI do profilu"
+    },
+    "profileFacts": {
+      "cardTitle": "Kontekst stylu życia",
+      "cardDescription": "Zapisz aktualne informacje, które zmieniają interpretację pomiarów zdrowotnych.",
+      "smokingLabel": "Palenie tytoniu",
+      "alcoholLabel": "Wzorzec spożycia alkoholu",
+      "shiftLabel": "Harmonogram pracy",
+      "notRecorded": "Brak danych",
+      "unreadable": "Nie udało się odczytać zapisanej wartości",
+      "save": "Zapisz",
+      "correct": "Popraw",
+      "savedToast": "Zapisano kontekst stylu życia",
+      "saveError": "Nie udało się zapisać kontekstu stylu życia",
+      "loadError": "Nie udało się wczytać kontekstu stylu życia",
+      "remove": "Usuń: {kind}",
+      "removeConfirmTitle": "Usunąć: {kind}?",
+      "removeConfirmDescription": "Bieżąca wartość zmieni się na brak danych. Historia z datami zostanie zachowana.",
+      "removedToast": "Usunięto {kind} z bieżącego kontekstu stylu życia",
+      "removeError": "Nie udało się usunąć: {kind}",
+      "historyTitle": "Poprzednie wartości",
+      "to": "do",
+      "values": {
+        "SMOKING_STATUS": {
+          "NEVER": "Nigdy nie pali",
+          "FORMER": "Były palacz",
+          "CURRENT": "Obecnie pali"
+        },
+        "ALCOHOL_PATTERN": {
+          "NONE": "Nie spożywa",
+          "OCCASIONAL": "Okazjonalnie",
+          "WEEKLY": "Co tydzień",
+          "MOST_DAYS": "Przez większość dni"
+        },
+        "SHIFT_SCHEDULE": {
+          "NONE": "Bez pracy zmianowej",
+          "FIXED_SHIFT": "Stała zmiana",
+          "ROTATING": "Zmiany rotacyjne"
+        }
+      }
+    },
     "disclaimer": "To Twoje własne wpisy, a nie diagnoza lekarska. HealthLog nie diagnozuje, nie leczy i ich nie interpretuje.",
     "allergies": {
       "cardTitle": "Alergie i nietolerancje",
@@ -8819,6 +8969,8 @@
       "description": "Opis",
       "descriptionPlaceholder": "Co to mierzy (opcjonalnie)",
       "targetHint": "Zakres docelowy jest opcjonalny i jest rysowany jako pasmo na wykresie.",
+      "correlationEnabled": "Używaj w analizie korelacji",
+      "correlationEnabledHint": "Dodaje tę metrykę jako ograniczony dzienny kanał zachowania. Domyślnie jest wyłączona.",
       "requiredError": "Nazwa i jednostka są wymagane",
       "rangeOrderError": "Cel dolny nie może przekraczać celu górnego",
       "save": "Zapisz",
@@ -8979,6 +9131,16 @@
           "notDetected": "brak nieregularnego rytmu",
           "inconclusive": "wynik niejednoznaczny"
         }
+      },
+      "sameTimeBaseline": {
+        "title": {
+          "below": "Poniżej swojego zwykłego tempa",
+          "above": "Powyżej swojego zwykłego tempa"
+        },
+        "body": {
+          "below": "Do {time} masz {today} kroków. W zwykły dzień o tej porze jesteś w okolicach {typical}.",
+          "above": "Do {time} masz {today} kroków, powyżej zwykłych {typical} o tej porze."
+        }
       }
     },
     "action": {
@@ -8990,7 +9152,8 @@
       "checkinLetGo": "Odpuść",
       "viewMilestone": "Zobacz",
       "viewPulse": "Zobacz tętno",
-      "viewEcg": "Zobacz zapis"
+      "viewEcg": "Zobacz zapis",
+      "viewSteps": "Zobacz kroki"
     },
     "today": {
       "scoreLabel": "Wynik zdrowia",
@@ -9040,6 +9203,7 @@
     }
   },
   "reportSelection": {
+    "leafAnamnesis": "Profil zdrowotny",
     "groupIdentity": "Dane osobowe",
     "groupVitals": "Parametry życiowe",
     "groupCardio": "Serce i krążenie",

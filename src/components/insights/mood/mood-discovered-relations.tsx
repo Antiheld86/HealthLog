@@ -2,6 +2,11 @@
 
 import { useTranslations } from "@/lib/i18n/context";
 import { MoodExplainerIcon } from "./mood-explainer-icon";
+import {
+  PatternDismissButton,
+  PatternDismissedNotice,
+  usePatternDismissalOverrides,
+} from "@/components/insights/pattern-dismiss-action";
 
 /**
  * v1.11.5 (F3) — FDR-controlled discovered mood relations.
@@ -33,6 +38,11 @@ export interface DiscoveredCorrelation {
   qValue: number;
   interpretation: string;
   lagDays: number;
+  behaviourLabel?: string;
+  outcomeLabel?: string;
+  patternId?: string;
+  canonicalKey?: string;
+  dismissed?: boolean;
 }
 
 export interface CorrelationDiscoveryResponse {
@@ -80,6 +90,7 @@ export function MoodDiscoveredRelations({
   pairsTested: number;
 }) {
   const { t } = useTranslations();
+  const dismissal = usePatternDismissalOverrides();
 
   if (pairs.length === 0) return null;
 
@@ -104,9 +115,29 @@ export function MoodDiscoveredRelations({
       </div>
       <ul className="divide-border divide-y">
         {pairs.map((pair) => {
+          const patternId = pair.patternId;
           const moodIsOutcome = pair.outcome === "MOOD";
           const channelKey = moodIsOutcome ? pair.behaviour : pair.outcome;
-          const factorLabel = t(CHANNEL_LABEL_KEY[channelKey] ?? channelKey);
+          const dynamicLabel = moodIsOutcome
+            ? pair.behaviourLabel
+            : pair.outcomeLabel;
+          const factorLabel =
+            dynamicLabel ?? t(CHANNEL_LABEL_KEY[channelKey] ?? channelKey);
+          if (
+            patternId &&
+            dismissal.isDismissed(patternId, pair.dismissed === true)
+          ) {
+            return (
+              <li key={pair.canonicalKey ?? patternId} className="py-2">
+                <PatternDismissedNotice
+                  compact
+                  patternId={patternId}
+                  onRestored={() => dismissal.setDismissed(patternId, false)}
+                  onSettled={() => dismissal.clearDismissed(patternId, false)}
+                />
+              </li>
+            );
+          }
           const up = pair.r >= 0;
           const sentenceKey = moodIsOutcome
             ? up
@@ -139,6 +170,14 @@ export function MoodDiscoveredRelations({
                   })}
                 />
               </span>
+              {patternId ? (
+                <PatternDismissButton
+                  patternId={patternId}
+                  onDismissed={() => dismissal.setDismissed(patternId, true)}
+                  onSettled={() => dismissal.clearDismissed(patternId, true)}
+                  className="self-start"
+                />
+              ) : null}
             </li>
           );
         })}

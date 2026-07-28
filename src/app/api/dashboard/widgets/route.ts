@@ -2,8 +2,8 @@
  * GET / PUT / DELETE dashboard widget layout.
  *
  * GET returns the resolved effective layout (defaults merged in if the user
- * hasn't customized yet). PUT replaces the layout atomically. DELETE resets
- * to default.
+ * hasn't customized yet). PUT replaces the supplied layout fields atomically.
+ * DELETE resets web-controlled choices and preserves the other preferences.
  */
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import {
@@ -36,7 +36,7 @@ import {
   type DashboardLayout,
   type DashboardLayoutWithToken,
 } from "@/lib/dashboard-layout";
-import { Prisma } from "@/generated/prisma/client";
+import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
 import { z } from "zod/v4";
 import { invalidateUserDashboardWidgets } from "@/lib/cache/invalidate";
 import { cached, caches, type ServerCache } from "@/lib/cache/server-cache";
@@ -81,6 +81,7 @@ const layoutSchema = z.object({
       }),
     )
     .min(1)
+    .max(50)
     // v1.11.2 B5 — raised to 40 so the full catalogue PUT (24 writable +
     // 11 iOS-only = 35) fits with headroom after the v1.10 additive
     // HealthKit signals became pinnable; the enum still bounds each id to
@@ -90,14 +91,9 @@ const layoutSchema = z.object({
     // catalogue (42 ids). The cap only has to clear the catalogue size —
     // the enum bounds each entry and the id set is closed — so it carries
     // headroom rather than tracking the count exactly.
-    .max(50)
-    // v1.32.1 — optional + preserve-when-absent (issue #581). The
-    // Settings page's instant score-ring toggle now PUTs ONLY the ring
-    // fields; omitting `widgets` lets the server carry forward whatever
-    // is CURRENTLY stored instead of the ring mutation resending a
-    // client-held snapshot that can go stale mid-flight and race a
-    // concurrent full-layout Save. A normal Save still always sends
-    // `widgets` — this only widens what a PARTIAL PUT can leave out.
+    // Optional + preserve-when-absent. Partial clients can update one layout
+    // field without resending a potentially stale widget catalogue; a normal
+    // dashboard-layout Save still sends `widgets`.
     .optional(),
   // v1.4.16 phase B8 — comparison baseline (Vormonat / Vorjahr) rides
   // on the layout blob per research §7 Q3 (no Prisma migration). Optional
@@ -155,6 +151,12 @@ const layoutSchema = z.object({
   heroRingOrder: z
     .array(z.enum(HERO_RING_IDS))
     .max(MAX_HERO_RING_ORDER)
+    .optional(),
+  // Today hero item visibility. Empty is an explicit all-off choice; omission
+  // preserves the stored value for clients that predate this field.
+  enabledHeroItemKinds: z
+    .array(z.enum(PRIORITY_ITEM_KINDS))
+    .max(PRIORITY_ITEM_KINDS.length)
     .optional(),
   // v1.32.16 (issue #581) — the optimistic-concurrency base token used to
   // live here. v1.32.21 (R5a) moved it to the shared `takeBaseToken` helper,
@@ -313,29 +315,16 @@ export const PUT = apiHandler(async (request: NextRequest) => {
     return returnAllZodIssues(parsed.error, 422);
   }
 
-  // Preserve-when-absent: every field the client didn't send is carried
-  // forward from the stored layout rather than clamped to its default by
-  // the serializer. The dashboard-layout PUT typically saves widget
-  // visibility / order, while chart prefs are PUT through their own route
-  // (`/api/dashboard/chart-overlay-prefs`), the hero rings come from
-  // Settings, and `comparisonBaseline` is web-only — an omission from any
-  // one surface must not reset a choice made on another. `widgets` itself
-  // joined this set in v1.32.1 (issue #581): the Settings page's instant
-  // score-ring PUT omits it entirely so it always carries forward
-  // whatever is CURRENTLY stored, rather than a client-held snapshot that
-  // could be stale relative to a concurrent full-layout Save.
+  // Preserve every omitted client-owned field from the stored layout instead
+  // of clamping it to a default. The disposition map is exhaustive over
+  // `DashboardLayout`, so adding a field requires an explicit merge decision.
+  // One stored-layout read covers every fallback. The read is skipped only
+  // when the client supplied every preserved field and every supplied chart
+  // preference has rangePoints.
   //
-  // The preserve set is not a list maintained here: it is derived from
-  // `LAYOUT_FIELD_MERGE_DISPOSITION`, which the type system forces to cover
-  // every field of `DashboardLayout`. Adding a layout field without a
-  // disposition fails typecheck, so the next field cannot silently miss this
-  // merge the way `comparisonBaseline` did. One stored-layout read covers
-  // every fallback, and the read is skipped only when the client sent every
-  // preserved top-level field and every supplied chart pref has rangePoints.
-  // The Zod shape leaves the per-chart `comparisonBaseline` optional while
-  // `ChartOverlayPrefs` requires it; `coerceChartOverlayPrefsMap` inside the
-  // serializer fills the gap, so the assertion is safe here exactly as it was
-  // on the previous per-field cast.
+  // The Zod shape leaves per-chart `comparisonBaseline` optional while
+  // `ChartOverlayPrefs` requires it. `coerceChartOverlayPrefsMap` inside the
+  // serializer fills that gap, so the assertion below is safe.
   // v1.32.16 (issue #581) — the concurrency token was already split off the
   // body pre-Zod (`takeBaseToken`), so `parsed.data` is pure layout and can
   // never leak the token into the stored blob.
@@ -387,14 +376,11 @@ export const PUT = apiHandler(async (request: NextRequest) => {
   }
   const normalized = serializeDashboardLayout(toSerialize as DashboardLayout);
 
-  // v1.32.16 (issue #581) / v1.32.21 (R5a) — optimistic concurrency through
-  // the shared `guardedUserUpdate` helper. When the client sends the
-  // `baseUpdatedAt` it read the layout at, the write is CONDITIONAL on the
-  // stored row still carrying that token, so a Save that already committed
-  // can never be silently reverted by a later request (e.g. an instant
-  // hero-ring PUT) that started from the pre-Save snapshot. A stale base
-  // returns 409 and writes NOTHING. Clients that omit the token (older web
-  // builds, the native client) keep the prior unconditional write.
+  // Optimistic concurrency through the shared `guardedUserUpdate` helper.
+  // When a client sends the `baseUpdatedAt` token it read with the layout, the
+  // write succeeds only while the stored row still carries that token. A stale
+  // base returns 409 without writing. Clients that omit the token keep the
+  // legacy unconditional write.
   const guarded = await guardedUserUpdate({
     userId: user.id,
     base,
@@ -427,10 +413,30 @@ export const PUT = apiHandler(async (request: NextRequest) => {
 export const DELETE = apiHandler(async () => {
   const { user } = await requireAuth();
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { dashboardWidgetsJson: Prisma.JsonNull },
-  });
+  const { normalized, updatedAt } = await prisma.$transaction(
+    async (tx) => {
+      const existing = await tx.user.findUnique({
+        where: { id: user.id },
+        select: { dashboardWidgetsJson: true },
+      });
+      const existingLayout = resolveDashboardLayout(
+        existing?.dashboardWidgetsJson,
+      );
+      const normalized = serializeDashboardLayout({
+        ...existingLayout,
+        widgets: DEFAULT_DASHBOARD_LAYOUT.widgets,
+        enabledHeroItemKinds: DEFAULT_DASHBOARD_LAYOUT.enabledHeroItemKinds,
+      });
+
+      const updated = await tx.user.update({
+        where: { id: user.id },
+        data: { dashboardWidgetsJson: toJson(normalized) },
+        select: { updatedAt: true },
+      });
+      return { normalized, updatedAt: updated.updatedAt.toISOString() };
+    },
+    { isolationLevel: "Serializable" },
+  );
 
   annotate({ action: { name: "dashboard.widgets.reset" } });
 
@@ -438,5 +444,8 @@ export const DELETE = apiHandler(async () => {
   // next dashboard mount paints the reset (default) layout.
   invalidateUserDashboardWidgets(user.id);
 
-  return apiSuccess(DEFAULT_DASHBOARD_LAYOUT);
+  return apiSuccess({
+    ...resolveDashboardLayout(normalized),
+    updatedAt,
+  } satisfies DashboardLayoutWithToken);
 });

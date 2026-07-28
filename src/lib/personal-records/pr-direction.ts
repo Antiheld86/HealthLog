@@ -27,11 +27,18 @@
  *     * Blood pressure (high reading isn't an achievement; low can
  *       also be clinically bad), blood glucose (extremes both ways),
  *       body & skin temperature (homeostatic, not a goal), pulse
- *       (spot-reading), oxygen saturation (homeostatic), weight
- *       (direction is user-goal-dependent — to defer until the
- *       v1.4.26 worker can read User.thresholdsJson), sleep duration
+ *       (spot-reading), oxygen saturation (homeostatic), sleep duration
  *       (longer is not strictly better), fat-free mass when treated
  *       as a derived (weight − fat) value with the same ambiguity.
+ *
+ *   user-goal direction (v1.34):
+ *     * Weight and BMI have no intrinsic direction, which is why they
+ *       returned `null` from v1.5.5 until now. They do have the user's
+ *       OWN direction once a weight target exists in
+ *       `User.thresholdsJson`, so the resolver takes a context carrying
+ *       it and answers MIN / MAX accordingly. No target, or a reading
+ *       already inside the band, still returns `null` — the direction is
+ *       read off the person's stated goal, never guessed from height.
  *
  * Adding a new MeasurementType: extend the switch below. The
  * drift-guard test in `__tests__/pr-direction.test.ts` asserts every
@@ -40,8 +47,48 @@
 import type { MeasurementType } from "@/generated/prisma/client";
 import { PersonalRecordDirection } from "@/generated/prisma/client";
 
+/**
+ * v1.34 — the user-goal facts the resolver needs for the goal-dependent
+ * metrics. Everything else in the switch is goal-independent and ignores it.
+ */
+export interface PRDirectionContext {
+  /**
+   * Which way the user's OWN weight target points, resolved by
+   * `resolveWeightGoalDirection` from `User.thresholdsJson` plus their latest
+   * reading. `null` when no target is set, the reading is missing, or the
+   * reading already sits inside the band — in all three cases weight and BMI
+   * keep the historical "no record direction" answer.
+   */
+  weightGoal: "lower" | "higher" | null;
+}
+
+/**
+ * Resolve the weight goal direction from the user's own target band and their
+ * latest weight.
+ *
+ * Above the band → the goal is downward → the record is the lowest reading.
+ * Below the band → upward. Inside the band → no direction: the person is where
+ * they said they wanted to be, and neither end of the scale is an achievement
+ * from there. No target → no direction, because inferring one from height or
+ * population norms is the fabrication this release removes.
+ *
+ * Pure; the worker owns the reads.
+ */
+export function resolveWeightGoalDirection(
+  target: { min: number; max: number } | null,
+  latestWeightKg: number | null,
+): "lower" | "higher" | null {
+  if (!target || latestWeightKg === null || !Number.isFinite(latestWeightKg)) {
+    return null;
+  }
+  if (latestWeightKg > target.max) return "lower";
+  if (latestWeightKg < target.min) return "higher";
+  return null;
+}
+
 export function getPRDirection(
   metricType: MeasurementType,
+  context: PRDirectionContext,
 ): PersonalRecordDirection | null {
   switch (metricType) {
     // MAX direction — higher value is the record.
@@ -107,6 +154,20 @@ export function getPRDirection(
     case "SLEEP_DISTURBANCE_COUNT":
       return PersonalRecordDirection.MIN;
 
+    // v1.34 — weight + BMI are goal-dependent, and the goal finally has a
+    // source the worker can read: the target the user set on `/targets`
+    // (`User.thresholdsJson`). With one on file the record direction is the
+    // direction of their OWN goal — lowest reading when they are working
+    // down, highest when they are working up. Without a target, or while
+    // they sit inside their band, both stay `null` exactly as they have
+    // since v1.5.5: a record direction is not something to guess at from
+    // height or a population norm.
+    case "WEIGHT":
+    case "BODY_MASS_INDEX":
+      if (context.weightGoal === "lower") return PersonalRecordDirection.MIN;
+      if (context.weightGoal === "higher") return PersonalRecordDirection.MAX;
+      return null;
+
     // Explicitly no PersonalRecord — see comment block above.
     case "BLOOD_PRESSURE_SYS":
     case "BLOOD_PRESSURE_DIA":
@@ -115,7 +176,6 @@ export function getPRDirection(
     case "SKIN_TEMPERATURE":
     case "PULSE":
     case "OXYGEN_SATURATION":
-    case "WEIGHT":
     case "SLEEP_DURATION":
     case "FAT_FREE_MASS":
     // v1.4.30 — audio-exposure events fire on a threshold-cross, not
@@ -124,13 +184,11 @@ export function getPRDirection(
     // PR direction. Defer.
     case "AUDIO_EXPOSURE_EVENT":
     // v1.5.5 — homeostatic / display-only metrics. Respiratory rate
-    // is goal-neutral (homeostatic), walking HR average is fitness
+    // is goal-neutral (homeostatic) and walking HR average is fitness
     // dependent without a clean direction (a higher value can be
-    // either ill or harder-effort), and BMI direction is user-goal
-    // dependent — defer until the worker can read User.thresholdsJson.
+    // either ill or harder-effort).
     case "RESPIRATORY_RATE":
     case "WALKING_HEART_RATE_AVERAGE":
-    case "BODY_MASS_INDEX":
     // v1.5.5 follow-up — walking step length is a state metric:
     // taller users have longer strides regardless of fitness, and
     // there is no clean "higher is better" axis (very long strides
@@ -217,10 +275,13 @@ export function getPRDirection(
 }
 
 /**
- * Convenience predicate for the future detection worker:
- * `if (!isPRTrackable(type)) return;` keeps the worker from writing
+ * Convenience predicate for the detection worker:
+ * `if (!isPRTrackable(type, ctx)) return;` keeps the worker from writing
  * rows that wouldn't have a defined direction anyway.
  */
-export function isPRTrackable(metricType: MeasurementType): boolean {
-  return getPRDirection(metricType) !== null;
+export function isPRTrackable(
+  metricType: MeasurementType,
+  context: PRDirectionContext,
+): boolean {
+  return getPRDirection(metricType, context) !== null;
 }

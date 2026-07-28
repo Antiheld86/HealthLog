@@ -7,9 +7,9 @@
  * so the wire contract stays single-source. The response shapes are declared
  * here.
  *
- * Custom metrics are a SEPARATE generic store from the closed measurement
- * system: not synced, not in FHIR, not in AI insights — log + chart only. All
- * fields are plaintext.
+ * Custom metrics are a separate generic store from the closed measurement
+ * system. A definition can explicitly opt into the bounded daily correlation
+ * behaviour-channel scan. All fields are plaintext.
  */
 import type { ZodOpenApiObject } from "zod-openapi";
 import { z } from "zod/v4";
@@ -26,13 +26,13 @@ import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
 createCustomMetricSchema.meta({
   id: "CreateCustomMetricRequest",
   description:
-    "Define a user-scoped custom metric ONCE: free-text `name` + `unit`, an optional target window (`targetLow` / `targetHigh`; when both present `targetLow` must not exceed `targetHigh`), optional display `decimals`, and an optional `description`. The name is unique per user. Logging a value later just picks this metric — its unit is snapshotted onto the value at write time. Isolated from the closed measurement system: not synced, not in FHIR, not in insights.",
+    "Define a user-scoped custom metric ONCE: free-text `name` + `unit`, an optional target window (`targetLow` / `targetHigh`; when both present `targetLow` must not exceed `targetHigh`), optional display `decimals`, an optional `description`, and explicit `correlationEnabled` opt-in. The name is unique per user. Logging a value later snapshots its unit.",
 });
 
 updateCustomMetricSchema.meta({
   id: "UpdateCustomMetricRequest",
   description:
-    "Partial edit of a custom metric. An omitted key leaves the column untouched; an explicit `null` on a target bound / `decimals` / `description` clears it. A rename that collides with another of the caller's live metrics is rejected 409.",
+    "Partial edit of a custom metric. An omitted key leaves the column untouched; an explicit `null` on a target bound / `decimals` / `description` clears it. `correlationEnabled` explicitly controls use as a bounded behaviour channel. A conflicting rename is rejected 409.",
 });
 
 createCustomMetricEntrySchema.meta({
@@ -64,6 +64,7 @@ const customMetricRow = z
     targetHigh: z.number().nullable(),
     decimals: z.number().nullable(),
     description: z.string().nullable(),
+    correlationEnabled: z.boolean(),
     latest: latestValue,
     entryCount: z.number(),
     createdAt: z.string(),

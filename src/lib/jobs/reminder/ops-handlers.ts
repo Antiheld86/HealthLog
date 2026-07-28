@@ -8,6 +8,7 @@ import { type Job } from "pg-boss";
 import { runGeoBackfill } from "@/lib/jobs/geo-backfill";
 import { runTlsPinMonitor } from "@/lib/jobs/tls-pin-monitor";
 import { type PrDetectionPayload } from "@/lib/jobs/pr-detection";
+import { jobDone, jobFailed, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import { runHostMetricTick } from "@/lib/jobs/host-metric-sampler";
 import { aggregateRecommendationFeedback } from "@/lib/jobs/feedback-aggregator";
@@ -34,40 +35,45 @@ export interface TlsPinMonitorPayload {
 
 export async function handleHostMetricSample(
   jobs: Job<HostMetricSamplePayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.host_metric_sample", async (evt) => {
+  return withBackgroundEvent("job.host_metric_sample", async (evt) => {
     const p = getWorkerPrisma();
     try {
       const { pruned } = await runHostMetricTick(p);
       evt.addMeta("host_metric_pruned", pruned);
+      return jobDone({ host_metric_pruned: pruned });
     } catch (err) {
-      // The chart degrades gracefully when samples are missing — log
-      // and move on rather than poisoning the boss queue with retries.
+      // The chart degrades gracefully when samples are missing, so the
+      // warning stays — but a tick that took no sample did not do its work.
       evt.addWarning(`host-metric-sample failed: ${err}`);
+      return jobFailed("host metric sample failed", err);
     }
   });
 }
 
 export async function handleFeedbackAggregator(
   jobs: Job<FeedbackAggregatorPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.feedback_aggregator", async (evt) => {
+  return withBackgroundEvent("job.feedback_aggregator", async (evt) => {
     const p = getWorkerPrisma();
     try {
       const summary = await aggregateRecommendationFeedback(p);
+      const totalRows = summary.buckets.reduce((acc, b) => acc + b.total, 0);
       evt.addMeta("feedback_buckets", summary.buckets.length);
-      evt.addMeta(
-        "feedback_total_rows",
-        summary.buckets.reduce((acc, b) => acc + b.total, 0),
-      );
+      evt.addMeta("feedback_total_rows", totalRows);
       evt.addMeta("feedback_window_days", summary.windowDays);
+      return jobDone({
+        feedback_buckets: summary.buckets.length,
+        feedback_total_rows: totalRows,
+        feedback_window_days: summary.windowDays,
+      });
     } catch (err) {
-      // The admin dashboard tolerates a stale summary — log and move
-      // on rather than poisoning the boss queue with retries that
-      // would block the next cleanup window.
+      // The admin dashboard tolerates a stale summary, so the warning stays —
+      // but a pass that aggregated nothing did not do its work.
       evt.addWarning(`feedback-aggregator failed: ${err}`);
+      return jobFailed("feedback aggregation failed", err);
     }
   });
 }
@@ -91,18 +97,21 @@ export async function handleFeedbackAggregator(
  */
 let geoBackfillRunning = false;
 
-export async function handleGeoBackfill(jobs: Job<GeoBackfillPayload>[]) {
+export async function handleGeoBackfill(
+  jobs: Job<GeoBackfillPayload>[],
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.geo_backfill", async (evt) => {
+  return withBackgroundEvent("job.geo_backfill", async (evt) => {
     if (geoBackfillRunning) {
       // Earlier pass still in flight; skip this tick. Idempotent + the
       // next tick after the in-flight pass completes will pick up
-      // anything we miss here.
+      // anything we miss here. Deliberately ceding to the in-flight pass
+      // is not a failure, so the tick reports the skip and succeeds.
       evt.addWarning(
         "geo-backfill skipped — earlier pass still in flight inside the same worker process",
       );
       evt.addMeta("geo_backfill_skipped", true);
-      return;
+      return jobDone({ geo_backfill_skipped: true });
     }
     geoBackfillRunning = true;
     const p = getWorkerPrisma();
@@ -112,38 +121,60 @@ export async function handleGeoBackfill(jobs: Job<GeoBackfillPayload>[]) {
       evt.addMeta("geo_backfill_located", summary.located);
       evt.addMeta("geo_backfill_carrier_resolved", summary.carrierResolved);
       evt.addMeta("geo_backfill_still_unresolved", summary.stillUnresolved);
+      return jobDone({
+        geo_backfill_scanned: summary.scanned,
+        geo_backfill_located: summary.located,
+        geo_backfill_carrier_resolved: summary.carrierResolved,
+        geo_backfill_still_unresolved: summary.stillUnresolved,
+      });
     } catch (err) {
-      // The admin sign-in overview tolerates a stale Standort cell —
-      // log and move on so a one-off resolver hiccup does not poison
-      // the queue and block the next pass.
+      // The admin sign-in overview tolerates a stale Standort cell, so the
+      // warning stays — but a pass that resolved nothing did not do its work.
       evt.addWarning(`geo-backfill failed: ${err}`);
+      return jobFailed("geo backfill pass failed", err);
     } finally {
       geoBackfillRunning = false;
     }
   });
 }
 
-export async function handleTlsPinMonitor(jobs: Job<TlsPinMonitorPayload>[]) {
+export async function handleTlsPinMonitor(
+  jobs: Job<TlsPinMonitorPayload>[],
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.tls_pin_monitor", async (evt) => {
+  return withBackgroundEvent("job.tls_pin_monitor", async (evt) => {
     const p = getWorkerPrisma();
     try {
       const summary = await runTlsPinMonitor(p);
       evt.addMeta("tls_pin_monitor_outcome", summary.outcome);
       evt.addMeta("tls_pin_monitor_host", summary.host);
       evt.addMeta("tls_pin_monitor_known_count", summary.knownPinCount);
+      // No configured target leaves `host` null; the empty string keeps the
+      // fact shape scalar, and `outcome: "skipped"` already names that case.
+      return jobDone({
+        tls_pin_monitor_outcome: summary.outcome,
+        tls_pin_monitor_host: summary.host ?? "",
+        tls_pin_monitor_known_count: summary.knownPinCount,
+      });
     } catch (err) {
       // runTlsPinMonitor swallows probe failures internally; anything that
-      // escapes is unexpected. Log and move on so a one-off failure does not
-      // poison the queue and block the next tick.
+      // escapes is unexpected, and a tick that never compared a pin is
+      // exactly the silence this monitor exists to break.
       evt.addWarning(`tls-pin-monitor failed: ${err}`);
+      return jobFailed("tls pin probe failed", err);
     }
   });
 }
 
 export async function handlePrDetection(
   jobs: Job<PrDetectionPayload | { userId?: undefined }>[],
-) {
+): Promise<JobOutcome> {
+  // Each job in the batch opens its own wide event; the outcome is reported
+  // once for the batch, so the per-job facts accumulate out here.
+  let usersScanned = 0;
+  let insertedAcrossJobs = 0;
+  let tiesAcrossJobs = 0;
+  let usersFailed = 0;
   for (const job of jobs) {
     await withBackgroundEvent("job.pr_detection", async (evt) => {
       const p = getWorkerPrisma();
@@ -170,6 +201,10 @@ export async function handlePrDetection(
           insertedTotal += result.inserted;
           tiesTotal += result.ties;
         } catch (err) {
+          // One user's detection failing is that user's problem, not the
+          // pass's: it rides out as a count so the cron is not retried for
+          // the whole cohort.
+          usersFailed++;
           evt.addWarning(`pr-detection failed for user ${userId}: ${err}`);
         }
       }
@@ -178,6 +213,18 @@ export async function handlePrDetection(
       evt.addMeta("pr_detection_ties", tiesTotal);
       evt.addMeta("pr_detection_silent", silent);
       evt.addMeta("pr_detection_mode", payloadUserId ? "ingest" : "cron");
+
+      usersScanned += userIds.length;
+      insertedAcrossJobs += insertedTotal;
+      tiesAcrossJobs += tiesTotal;
     });
   }
+
+  return jobDone({
+    pr_detection_jobs: jobs.length,
+    pr_detection_users: usersScanned,
+    pr_detection_inserted: insertedAcrossJobs,
+    pr_detection_ties: tiesAcrossJobs,
+    pr_detection_users_failed: usersFailed,
+  });
 }

@@ -40,10 +40,14 @@ export {
   DERIVED_METRIC_IDS,
   VITALS_BASELINE_TYPES,
   TRAJECTORY_TYPES,
+  SAME_TIME_BASELINE_TYPES,
+  SAME_TIME_BASELINE_WINDOW_DAYS,
+  SAME_TIME_BASELINE_MIN_HISTORY_DAYS,
   isDerivedMetricId,
   getDerivedMetricMeta,
   isVitalsBaselineType,
   isTrajectoryType,
+  isSameTimeBaselineType,
 } from "./registry";
 export type {
   DerivedMetricId,
@@ -171,3 +175,11 @@ export type {
   TrajectoryOpts,
   OlsFit,
 } from "./trajectory";
+
+// ── v1.34.0 same-time baseline for cumulative metrics (server-only) ──
+export { computeSameTimeBaseline } from "./same-time-baseline";
+export type {
+  SameTimeBaselineValue,
+  SameTimeBaselineOpts,
+  SameTimeBand,
+} from "./same-time-baseline";

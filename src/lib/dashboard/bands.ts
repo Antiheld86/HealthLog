@@ -17,9 +17,9 @@
  */
 import { getBpTargets, type BpTargets } from "@/lib/analytics/bp-targets";
 import {
+  buildBandsFromTrafficRange,
   buildTrafficLightBands,
   buildTrafficRange,
-  buildWeightBandsFromHeight,
   buildWeightRangeFromHeight,
   getBodyFatTargetRange,
   type ValueBand,
@@ -30,6 +30,7 @@ import {
   getPersonalizedPulseTarget,
 } from "@/lib/analytics/pulse-targets";
 import { binaryReferenceSex, type ProfileSex } from "@/lib/profile/sex";
+import { getEffectiveRange } from "@/lib/analytics/effective-range";
 
 export interface DashboardTargetBands {
   /** Personalised BP target numbers (null when no DOB). */
@@ -51,9 +52,12 @@ export interface DashboardTargetBands {
   bodyFatRange: { min: number; max: number };
   /** Body-fat chart bands (always present). */
   bodyFatBands: ValueBand[];
-  /** Weight traffic range (null when no height). */
+  /**
+   * Weight traffic range — the user's own target band when they set one,
+   * else the height-derived WHO band, else null (no height, no target).
+   */
   weightRange: TrafficRange | null;
-  /** Weight chart bands (null when no height). */
+  /** Weight chart bands, from the same range. Null when the range is null. */
   weightBands: ValueBand[] | null;
 }
 
@@ -61,11 +65,19 @@ export interface DashboardTargetBands {
  * Resolve the band / target math from a user's profile facts. Pure; no
  * DB read. The snapshot builder and the page fallback both call this so
  * they produce byte-identical numbers.
+ *
+ * v1.34 — `weightTargetOverride` is the user's OWN weight band as stored in
+ * `User.thresholdsJson.WEIGHT`, in kg. When present it replaces the
+ * height-derived WHO band on both the weight range and the weight chart bands:
+ * a user who has answered "this is my target" must not keep reading a shaded
+ * zone that ignores the answer. `null` keeps the height-derived band. Required
+ * rather than optional so every call site is named by the compiler.
  */
 export function buildDashboardBands(profile: {
   dateOfBirth: Date | null;
   gender: ProfileSex;
   heightCm: number | null;
+  weightTargetOverride: { min: number; max: number } | null;
 }): DashboardTargetBands {
   const bpTargets = profile.dateOfBirth
     ? getBpTargets(profile.dateOfBirth)
@@ -76,11 +88,28 @@ export function buildDashboardBands(profile: {
   const referenceSex = binaryReferenceSex(profile.gender);
   const pulseTarget = getPersonalizedPulseTarget(pulseAge, referenceSex);
   const bodyFatRange = getBodyFatTargetRange(referenceSex);
-  const weightRange = profile.heightCm
-    ? buildWeightRangeFromHeight(profile.heightCm)
-    : null;
-  const weightBands = profile.heightCm
-    ? buildWeightBandsFromHeight(profile.heightCm, {
+  // v1.34 — an explicit target outranks the height-derived WHO band. Without
+  // this the dashboard kept shading a band the user had already answered, and
+  // the answer lived on `/targets` where nothing else could see it. The
+  // override is routed through `getEffectiveRange` rather than widened here,
+  // so the orange wings match the `/targets` page and the doctor report
+  // exactly instead of inventing a second convention. No height and no target
+  // → no band at all, unchanged.
+  const weightRange = profile.weightTargetOverride
+    ? getEffectiveRange(
+        "WEIGHT",
+        {
+          heightCm: profile.heightCm,
+          dateOfBirth: profile.dateOfBirth,
+          gender: profile.gender,
+        },
+        { WEIGHT: profile.weightTargetOverride },
+      ).range
+    : profile.heightCm
+      ? buildWeightRangeFromHeight(profile.heightCm)
+      : null;
+  const weightBands = weightRange
+    ? buildBandsFromTrafficRange(weightRange, {
         lowerBound: 30,
         upperBound: 250,
       })

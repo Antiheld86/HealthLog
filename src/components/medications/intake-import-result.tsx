@@ -8,9 +8,9 @@
  * the thing that has to be right is the sentence at the end of the run.
  *
  * The rules are the ones the settings import panel already follows, reused
- * rather than restated: `classifyImportOutcome` decides the tone from the
+ * rather than restated: `classifyWrittenOutcome` decides the tone from the
  * counts, so an import that wrote nothing can never carry the success tick,
- * and `ImportOutcomeLine` owns the tick and the success colour. The skips are
+ * and `WrittenOutcomeLine` owns the tick and the success colour. The skips are
  * grouped by reason with a count, because a file that trips one rule trips it
  * on every row and a per-row list is the same sentence a hundred times.
  *
@@ -18,11 +18,11 @@
  * cards; the medication intake import is the third import surface and it now
  * answers the same way.
  */
+import { WrittenOutcomeLine } from "@/components/outcome/written-outcome-line";
 import {
-  classifyImportOutcome,
-  type ImportOutcome,
-} from "@/components/settings/import-panel/import-result-state";
-import { ImportOutcomeLine } from "@/components/settings/import-panel/import-result-view";
+  classifyWrittenOutcome,
+  type WrittenOutcome,
+} from "@/lib/outcome/written-outcome";
 import { useTranslations } from "@/lib/i18n/context";
 
 /** A skip group exactly as the import job reports it. */
@@ -132,7 +132,7 @@ export function IntakeImportResultView({
     );
   }
 
-  const outcome: ImportOutcome = classifyImportOutcome({
+  const outcome: WrittenOutcome = classifyWrittenOutcome({
     written: result.imported,
     skipped: result.skipped,
   });
@@ -153,7 +153,7 @@ export function IntakeImportResultView({
 
   return (
     <div data-testid="intake-import-result" className="space-y-1.5">
-      <ImportOutcomeLine
+      <WrittenOutcomeLine
         outcome={outcome}
         message={message}
         testId="intake-import-outcome"

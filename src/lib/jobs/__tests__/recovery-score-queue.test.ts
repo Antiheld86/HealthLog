@@ -3,7 +3,7 @@
  *
  * Same source-text-grep approach as the other queue-wiring guards: assert
  * the queue is imported, registered in `allQueues`, scheduled, and wired to
- * a `boss.work` handler — without booting pg-boss + Prisma. An unregistered
+ * a `createAndWork` handler — without booting pg-boss + Prisma. An unregistered
  * queue silently never drains (the recurring past bug this guards against).
  *
  * Also pins the iOS-write rejection of the server-owned COMPUTED source on
@@ -57,9 +57,9 @@ describe("reminder-worker — recovery-score wiring", () => {
     );
   });
 
-  it("registers a boss.work handler that runs the recovery-score pass", () => {
+  it("registers a createAndWork handler that runs the recovery-score pass", () => {
     expect(workerSource).toMatch(
-      /boss\.work[\s\S]{0,200}RECOVERY_SCORE_QUEUE[\s\S]{0,400}runRecoveryScore/,
+      /createAndWork[\s\S]{0,200}RECOVERY_SCORE_QUEUE[\s\S]{0,400}runRecoveryScore/,
     );
   });
 });

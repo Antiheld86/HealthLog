@@ -47,6 +47,7 @@ const EXISTING = {
   targetHigh: 60,
   decimals: 1,
   description: null,
+  correlationEnabled: false,
   createdAt: new Date("2026-06-01T00:00:00.000Z"),
   updatedAt: new Date("2026-06-01T00:00:00.000Z"),
   deletedAt: null,
@@ -125,6 +126,26 @@ describe("PATCH /api/custom-metrics/[id]", () => {
       .calls[0][0] as { data: Record<string, unknown> };
     expect(updateCall.data.targetLow).toBe(20);
     expect(updateCall.data.targetHigh).toBe(50);
+  });
+
+  it("persists only the explicit correlation opt-in field", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    vi.mocked(prisma.customMetric.findFirst).mockResolvedValue(
+      EXISTING as never,
+    );
+    vi.mocked(prisma.customMetric.update).mockResolvedValue({
+      ...EXISTING,
+      correlationEnabled: true,
+    } as never);
+
+    const res = await PATCH(
+      patchReq({ correlationEnabled: true }),
+      params("cm-1"),
+    );
+    expect(res.status).toBe(200);
+    const updateCall = vi.mocked(prisma.customMetric.update).mock
+      .calls[0][0] as { data: Record<string, unknown> };
+    expect(updateCall.data).toEqual({ correlationEnabled: true });
   });
 
   it("422s an inverted partial bound update without updating", async () => {

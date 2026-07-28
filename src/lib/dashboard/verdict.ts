@@ -31,7 +31,6 @@ import {
   COACH_NUDGE_SLEEP_DEFICIT_MARGIN_H,
 } from "@/lib/jobs/coach-nudge-thresholds";
 import { BP_SYS_CRITICAL, BP_DIA_CRITICAL } from "@/lib/clinical-floors";
-import { buildWeightRangeFromHeight } from "@/lib/analytics/value-bands";
 import { userDayKey } from "@/lib/tz/format";
 import type { DashboardSnapshot } from "@/lib/dashboard/snapshot";
 
@@ -187,19 +186,20 @@ export function resolveDashboardVerdict(
   }
 
   // ── 4 · weightDrift ────────────────────────────────────────────────
-  // Distance-to-green-range drift: the 7-day mean sits further from
-  // the BMI-derived green band than the 30-day mean by at least the
-  // coach-nudge drift threshold. No stored height → no range → skip.
+  // Distance-to-green-range drift: the 7-day mean sits further from the
+  // green band than the 30-day mean by at least the coach-nudge drift
+  // threshold.
+  //
+  // v1.34 — the band comes off the snapshot's resolved `targetBands`, which
+  // honours the user's own weight target when they set one. The rung used to
+  // recompute the height-derived BMI band inline, so it nudged about drifting
+  // away from a band the user had explicitly replaced. No band on the snapshot
+  // (no height and no target) → skip.
   const weight = summaries.WEIGHT;
-  if (
-    snapshot.user.heightCm !== null &&
-    weight &&
-    weight.avg7 !== null &&
-    weight.avg30 !== null
-  ) {
-    const range = buildWeightRangeFromHeight(snapshot.user.heightCm);
+  const weightRange = snapshot.targetBands.weightRange;
+  if (weightRange && weight && weight.avg7 !== null && weight.avg30 !== null) {
     const dist = (x: number): number =>
-      Math.max(0, range.greenMin - x, x - range.greenMax);
+      Math.max(0, weightRange.greenMin - x, x - weightRange.greenMax);
     if (dist(weight.avg7) - dist(weight.avg30) >= COACH_NUDGE_WEIGHT_DRIFT_KG) {
       return {
         variant: "weightDrift",
@@ -250,6 +250,7 @@ export function resolveDashboardVerdict(
   if (
     score !== null &&
     score.delta !== null &&
+    score.deltaReason === null &&
     score.delta <= -SCORE_DROP_MIN_POINTS
   ) {
     return {

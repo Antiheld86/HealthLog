@@ -1,12 +1,11 @@
 /**
  * POST /api/daily/digest/dismiss
  *
- * "Dismiss / mark seen" for the Today rail's OBSERVATIONAL `PriorityItem`
- * kinds only — `milestone`, `ecg_new_recording`, `tension_window`. The
- * ACTIONABLE kinds (`dose_window`, `sync_issue`, `preventive_care`,
- * `coach_checkin`) are never reachable here: `dismissPriorityItemSchema`
- * rejects any `itemKey` that doesn't carry one of the three dismissible
- * kind-prefixes before a lookup ever runs (§`isDismissibleItemKey`).
+ * "Dismiss / mark seen" for observational Today rail items and versioned
+ * informational notices. Actionable kinds (`dose_window`, `sync_issue`,
+ * `preventive_care`, `coach_checkin`) are never reachable here:
+ * `dismissPriorityItemSchema` rejects any `itemKey` without an approved
+ * observational or notice prefix before a lookup runs.
  *
  * Persisted server-side (`DismissedPriorityItem`, composite-unique on
  * `userId` + `itemKey`) so the dismissal survives reload / a second device —
@@ -27,6 +26,7 @@ import {
 } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { prisma } from "@/lib/db";
+import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { dismissPriorityItemSchema } from "@/lib/validations/daily";
@@ -72,6 +72,9 @@ export const POST = apiHandler(async (req: NextRequest) => {
     update: {},
     create: { userId: user.id, itemKey },
   });
+  if (itemKey.startsWith("health_score_algorithm:")) {
+    invalidateUserHealthScore(user.id);
+  }
 
   annotate({
     action: { name: "daily.digest.item.dismissed" },

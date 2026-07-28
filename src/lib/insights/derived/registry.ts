@@ -55,8 +55,12 @@ export type DerivedMetricId =
   | "STAIR_DESCENT_SPEED_BASELINE"
   /** v1.10.3: estimated 6-minute-walk distance vs Enright-predicted (passthrough re-frame). */
   | "SIX_MINUTE_WALK_BAND"
+  /** Versioned cardiometabolic reference composite. */
+  | "HEALTH_SCORE"
   /** v1.11.0 (Epic B): short-horizon OLS projection with a widening prediction band. */
-  | "TRAJECTORY";
+  | "TRAJECTORY"
+  /** v1.34.0: today's running total for a cumulative metric vs this person's own typical total at the same local hour. */
+  | "SAME_TIME_BASELINE";
 
 // Documented-as-omitted (v1.10.3): two additive HealthKit signals stay
 // trend-only with NO derived band, on purpose —
@@ -125,6 +129,58 @@ export const VITALS_BASELINE_TYPES: MeasurementType[] = [
   "PULSE",
   "WEIGHT",
 ];
+
+/**
+ * The cumulative metrics a same-time baseline is defined for.
+ *
+ * These four accumulate through the day, which is exactly why a "latest
+ * reading" means nothing for them and a same-hour comparison means everything.
+ *
+ * `TIME_IN_DAYLIGHT` and `FALL_COUNT` are cumulative too and are deliberately
+ * out. Daylight exposure is environmental rather than behavioural — a same-time
+ * verdict on it would read as a judgement on the weather. A fall count is a
+ * near-always-zero safety event whose target is zero, and "you are behind your
+ * usual falls for this hour" is not a sentence this application will ever say.
+ */
+export const SAME_TIME_BASELINE_TYPES: MeasurementType[] = [
+  "ACTIVITY_STEPS",
+  "ACTIVE_ENERGY_BURNED",
+  "WALKING_RUNNING_DISTANCE",
+  "FLIGHTS_CLIMBED",
+];
+
+/** `true` when the type is one the same-time baseline is defined for. */
+export function isSameTimeBaselineType(type: string): boolean {
+  return (SAME_TIME_BASELINE_TYPES as string[]).includes(type);
+}
+
+/**
+ * The trailing window the same-time baseline draws its typical day from.
+ *
+ * Four weeks. Long enough that every weekday is represented several times, so
+ * a single unusual Tuesday cannot move the median; short enough that the
+ * comparison still describes the life the person is living now rather than the
+ * one they had last season.
+ */
+export const SAME_TIME_BASELINE_WINDOW_DAYS = 28;
+
+/**
+ * How many usable days must be in hand before the highlight says anything.
+ *
+ * THIS IS THE THRESHOLD. It is defined here, in the client-safe registry, so
+ * the compute engine, the rail builder and the copy that explains the wait all
+ * read the same number rather than each carrying their own.
+ *
+ * Two weeks, not the seven days the vitals baseline uses. A resting heart rate
+ * is a stable physiological quantity and seven readings genuinely bound it. A
+ * person's day is not: it has a weekday shape and a weekend shape, and a median
+ * built from three working days would confidently call a Saturday morning
+ * "behind" for no better reason than that Saturdays were never in the sample.
+ * Fourteen days covers both twice over. Below it the metric returns the
+ * `insufficient` arm with `learning_usual_day`, which is the honest answer and
+ * the one this arm exists for.
+ */
+export const SAME_TIME_BASELINE_MIN_HISTORY_DAYS = 14;
 
 const REGISTRY: Record<DerivedMetricId, DerivedMetricMeta> = {
   VITALS_BASELINE: {
@@ -279,6 +335,33 @@ const REGISTRY: Record<DerivedMetricId, DerivedMetricMeta> = {
     archetype: "any-user-baseline",
     inputs: VITALS_BASELINE_TYPES,
     minHistoryDays: 14,
+    minInputs: 1,
+    implemented: true,
+  },
+  HEALTH_SCORE: {
+    id: "HEALTH_SCORE",
+    displayName: "Cardiometabolic reference score",
+    archetype: "composite",
+    inputs: [
+      "BLOOD_PRESSURE",
+      "GLYCAEMIA",
+      "ACTIVITY",
+      "SLEEP",
+      "ADIPOSITY",
+      "WELLBEING",
+      "FITNESS",
+      "LIPIDS",
+    ],
+    minHistoryDays: 1,
+    minInputs: 3,
+    implemented: true,
+  },
+  SAME_TIME_BASELINE: {
+    id: "SAME_TIME_BASELINE",
+    displayName: "Same-time baseline",
+    archetype: "any-user-baseline",
+    inputs: SAME_TIME_BASELINE_TYPES,
+    minHistoryDays: SAME_TIME_BASELINE_MIN_HISTORY_DAYS,
     minInputs: 1,
     implemented: true,
   },

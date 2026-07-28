@@ -15,6 +15,7 @@
  */
 import { recordPolarSyncFailure, syncUserPolar } from "@/lib/polar/sync";
 import { syncUserPolarWorkouts } from "@/lib/polar/sync-workouts";
+import type { SyncWriteResult } from "@/lib/outcome/written-outcome";
 import { makePollCohortHandler, type PollCohortPayload } from "./poll-cohort";
 
 export type PolarSyncPayload = PollCohortPayload;
@@ -34,13 +35,21 @@ export type PolarSyncPayload = PollCohortPayload;
  * healthy collections. So the vitals leg reaching this wrapper's catch means a
  * write-path/unexpected error, not a collection fetch failure.
  */
-export async function syncUserPolarLegs(userId: string): Promise<number> {
+export async function syncUserPolarLegs(
+  userId: string,
+): Promise<SyncWriteResult> {
   let total = 0;
   let firstError: unknown;
   let hadError = false;
+  // A settled-but-partial vitals leg neither throws nor reduces the count, so
+  // it has to be carried explicitly — otherwise a run in which four of five
+  // collections failed reads exactly like a clean one.
+  let partial = false;
 
   try {
-    total += await syncUserPolar(userId);
+    const vitals = await syncUserPolar(userId);
+    total += vitals.imported;
+    partial = vitals.failed;
   } catch (err) {
     firstError = err;
     hadError = true;
@@ -56,7 +65,7 @@ export async function syncUserPolarLegs(userId: string): Promise<number> {
   }
 
   if (hadError) throw firstError;
-  return total;
+  return { imported: total, failed: partial };
 }
 
 export const handlePolarSync = makePollCohortHandler({
@@ -68,7 +77,9 @@ export const handlePolarSync = makePollCohortHandler({
     });
     return users.map((u) => u.id);
   },
-  syncUser: syncUserPolarLegs,
+  // The cohort accounts in rows imported; a partial vitals leg is already on
+  // the `polar` ledger, recorded by the leg that saw it.
+  syncUser: async (userId) => (await syncUserPolarLegs(userId)).imported,
   // Catches an UNMARKED escape — the `upsertPolarMeasurements` /
   // `upsertPolarWorkouts` write-path throw. The vitals leg records its own
   // per-collection partial failures inline and returns without rethrowing; the

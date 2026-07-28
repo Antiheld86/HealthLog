@@ -65,6 +65,7 @@ const ROW = {
   targetHigh: null,
   decimals: null,
   description: null,
+  correlationEnabled: false,
   createdAt: new Date("2026-06-01T00:00:00.000Z"),
   updatedAt: new Date("2026-06-01T00:00:00.000Z"),
   deletedAt: null,
@@ -108,7 +109,13 @@ describe("POST /api/custom-metrics", () => {
     vi.mocked(prisma.customMetric.findFirst).mockResolvedValue(null as never);
     vi.mocked(prisma.customMetric.create).mockResolvedValue(ROW as never);
 
-    const res = await POST(postReq({ name: "Grip strength", unit: "kg" }));
+    const res = await POST(
+      postReq({
+        name: "Grip strength",
+        unit: "kg",
+        correlationEnabled: true,
+      }),
+    );
     expect(res.status).toBe(201);
     const createCall = vi.mocked(prisma.customMetric.create).mock
       .calls[0][0] as {
@@ -117,6 +124,7 @@ describe("POST /api/custom-metrics", () => {
     expect(createCall.data.userId).toBe("user-1");
     expect(createCall.data.name).toBe("Grip strength");
     expect("userId" in createCall.data).toBe(true);
+    expect(createCall.data.correlationEnabled).toBe(true);
   });
 
   it("409s a duplicate live name without creating", async () => {

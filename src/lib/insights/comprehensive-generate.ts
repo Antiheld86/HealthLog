@@ -133,17 +133,20 @@ export type GenerateOutcome =
    * against, so the caller must not enqueue the provider-failure retry.
    */
   /**
-   * v1.32.22 (M6) — a privacy-mode flip landed WHILE this generation was in
-   * flight. The generation read the old scope at snapshot time; committing its
-   * output would re-populate the cache under a scope the user just changed
-   * away from. Each cache write is guarded on `insightsPrivacyMode` still being
-   * what it was read as; a zero-row match returns this skip and writes nothing.
-   * The flip already nulled the cache, so the next scheduled/explicit run
-   * regenerates under the new scope — no warm-on-mount.
+   * `scope-changed` — the guarded cache commit matched no User row. The guard
+   * includes both privacy mode and the User `updatedAt` version, so a miss only
+   * proves that some generation scope/version changed in flight. It cannot
+   * safely name privacy mode, profile scope, or another User mutation as the
+   * cause. No stale output is written.
    */
   | {
       status: "skipped";
-      reason: "no-provider" | "no-consent" | "budget" | "privacy-mode-changed";
+      reason:
+        | "no-provider"
+        | "no-consent"
+        | "budget"
+        | "scope-changed"
+        | "profile-scope-changed";
     }
   | { status: "failed"; reason: string };
 
@@ -504,34 +507,67 @@ function failBeforeProvider(
   return { status: "failed", reason };
 }
 
+type InsightCommitResult =
+  "committed" | "scope-changed" | "profile-scope-changed";
+
 /**
- * v1.32.22 (M6) — commit a cache write ONLY while the privacy mode is still
- * what this generation read. Returns `true` when the guarded update matched
- * the row, `false` when a concurrent `PUT /api/insights/settings` flip
- * advanced `insightsPrivacyMode` since the read — in which case the caller
- * must abandon the commit (the flip already nulled the cache). Guards on the
- * raw column value including `null`, so a null → "aggregated" explicit write
- * also invalidates an in-flight generation correctly.
+ * The exact User columns (besides `insightsPrivacyMode`, guarded
+ * separately) that feed the generation prompt built above. Captured at the
+ * same `dbUser` read that starts the generation and required to still
+ * match at commit time.
  */
-async function commitInsightUnderMode(
+type PromptScopeAtRead = {
+  insightsExcludeMetrics: string[];
+  gender: string | null;
+  displayName: string | null;
+};
+
+/**
+ * Recheck every user-controlled prompt scope immediately before a cache write.
+ * The profile text identifies an authoritative profile-scope mismatch. The
+ * guarded User columns below catch a privacy-mode / exclude-list / gender /
+ * display-name change — the exact set of columns this generation's prompt
+ * was built from — without keying on the broad `updatedAt` timestamp, which
+ * a provider credential refresh (e.g. `resolveProviderChain()`'s token
+ * maintenance) also advances and would otherwise false-positive here.
+ */
+async function commitInsightUnderScope(
   userId: string,
   modeAtRead: string,
+  selfContextAtRead: string | null,
+  promptScopeAtRead: PromptScopeAtRead,
+  locale: SupportedLocale,
   data: Prisma.UserUpdateInput,
-): Promise<boolean> {
+): Promise<InsightCommitResult> {
+  const currentSelfContext = await getSelfContextTextForUser(userId, locale);
+  if (currentSelfContext !== selfContextAtRead) {
+    return "profile-scope-changed";
+  }
   const res = await prisma.user.updateMany({
-    where: { id: userId, insightsPrivacyMode: modeAtRead },
+    where: {
+      id: userId,
+      insightsPrivacyMode: modeAtRead,
+      insightsExcludeMetrics: {
+        equals: promptScopeAtRead.insightsExcludeMetrics,
+      },
+      gender: promptScopeAtRead.gender,
+      displayName: promptScopeAtRead.displayName,
+    },
     data,
   });
-  return res.count > 0;
+  return res.count > 0 ? "committed" : "scope-changed";
 }
 
-/** v1.32.22 (M6) — the shared skip outcome when a privacy flip beat the commit. */
-function privacyModeChangedSkip(locale: SupportedLocale): GenerateOutcome {
+function scopeChangedSkip(
+  result: InsightCommitResult,
+  locale: SupportedLocale,
+): GenerateOutcome | null {
+  if (result === "committed") return null;
   annotate({
-    action: { name: "insights.generate.privacy_mode_changed" },
+    action: { name: `insights.generate.${result.replaceAll("-", "_")}` },
     meta: { locale },
   });
-  return { status: "skipped", reason: "privacy-mode-changed" };
+  return { status: "skipped", reason: result };
 }
 
 interface GenerateOptions {
@@ -697,6 +733,17 @@ export async function generateComprehensiveInsight(
   }
 
   const excludeList = dbUser?.insightsExcludeMetrics ?? [];
+  // v1.34 — snapshot of the exact User columns that feed the prompt below
+  // (besides `modeAtRead`, guarded separately), captured at this same
+  // `dbUser` read and required to still match at every commit below. Keeps
+  // the optimistic-concurrency guard immune to unrelated column writes
+  // (e.g. `resolveProviderChain()`'s OAuth token-refresh update) that would
+  // otherwise false-positive an `updatedAt`-keyed check.
+  const promptScopeAtRead: PromptScopeAtRead = {
+    insightsExcludeMetrics: excludeList,
+    gender: dbUser?.gender ?? null,
+    displayName: dbUser?.displayName ?? null,
+  };
   features = applyInsightsExcludeFilter(features, excludeList);
   const compactFeatures = compactSections(
     features as unknown as Record<string, unknown>,
@@ -837,15 +884,23 @@ export async function generateComprehensiveInsight(
         effectiveTimeoutMs,
       });
       if (rerolled) {
-        // v1.32.22 (M6) — the reroll rewrites `insightsCachedText` derived
-        // from the OLD-scope cache; refuse it if a privacy flip landed since
-        // the read.
-        const committed = await commitInsightUnderMode(userId, modeAtRead, {
-          insightsCachedAt: new Date(),
-          insightsCachedText: rerolled.text,
-          insightsBriefingRerollDate: todayKey,
-        });
-        if (!committed) return privacyModeChangedSkip(locale);
+        // The reroll rewrites content derived from the scope captured before
+        // the provider call. Refuse it if either privacy mode or included
+        // self-context changed in flight.
+        const committed = await commitInsightUnderScope(
+          userId,
+          modeAtRead,
+          aboutMe,
+          promptScopeAtRead,
+          locale,
+          {
+            insightsCachedAt: new Date(),
+            insightsCachedText: rerolled.text,
+            insightsBriefingRerollDate: todayKey,
+          },
+        );
+        const skipped = scopeChangedSkip(committed, locale);
+        if (skipped) return skipped;
         invalidateUserInsights(userId);
         annotate({
           action: { name: "insights.generate.briefing_rerolled" },
@@ -855,24 +910,39 @@ export async function generateComprehensiveInsight(
       }
       // A re-roll miss still stamps the day so a persistently failing
       // provider cannot be re-driven on every page-open; the next day retries.
-      // v1.32.22 (M6) — even a timestamp-only stamp would resurrect a "fresh
-      // insight" claim over a cache a privacy flip deliberately nulled, so it
-      // is guarded too.
-      const stamped = await commitInsightUnderMode(userId, modeAtRead, {
-        insightsCachedAt: new Date(),
-        insightsBriefingRerollDate: todayKey,
-      });
-      if (!stamped) return privacyModeChangedSkip(locale);
+      // Even a timestamp-only stamp must not make a cache cleared by a scope
+      // change look fresh again.
+      const stamped = await commitInsightUnderScope(
+        userId,
+        modeAtRead,
+        aboutMe,
+        promptScopeAtRead,
+        locale,
+        {
+          insightsCachedAt: new Date(),
+          insightsBriefingRerollDate: todayKey,
+        },
+      );
+      const skipped = scopeChangedSkip(stamped, locale);
+      if (skipped) return skipped;
       annotate({
         action: { name: "insights.generate.skipped_unchanged" },
         meta: { locale, rerollAttempted: true },
       });
       return { status: "unchanged" };
     }
-    const stamped = await commitInsightUnderMode(userId, modeAtRead, {
-      insightsCachedAt: new Date(),
-    });
-    if (!stamped) return privacyModeChangedSkip(locale);
+    const stamped = await commitInsightUnderScope(
+      userId,
+      modeAtRead,
+      aboutMe,
+      promptScopeAtRead,
+      locale,
+      {
+        insightsCachedAt: new Date(),
+      },
+    );
+    const skipped = scopeChangedSkip(stamped, locale);
+    if (skipped) return skipped;
     annotate({
       action: { name: "insights.generate.skipped_unchanged" },
       meta: { locale },
@@ -1196,16 +1266,23 @@ export async function generateComprehensiveInsight(
     return failBeforeProvider(userId, locale, "aborted");
   }
 
-  // v1.32.22 (M6) — the payload was built under the scope read at the top of
-  // this function. If a privacy flip landed since, committing it would stamp an
-  // old-scope briefing over the null the flip wrote — guard the write on the
-  // mode being unchanged and skip when it advanced.
-  const committed = await commitInsightUnderMode(userId, modeAtRead, {
-    insightsCachedAt: new Date(),
-    insightsCachedText: JSON.stringify(insights),
-    insightsSnapshotHash: snapshotHash,
-  });
-  if (!committed) return privacyModeChangedSkip(locale);
+  // The payload was built under the privacy and profile scope captured before
+  // the provider call. Recheck both before the write so an inclusion change
+  // cannot be overwritten by stale in-flight content.
+  const committed = await commitInsightUnderScope(
+    userId,
+    modeAtRead,
+    aboutMe,
+    promptScopeAtRead,
+    locale,
+    {
+      insightsCachedAt: new Date(),
+      insightsCachedText: JSON.stringify(insights),
+      insightsSnapshotHash: snapshotHash,
+    },
+  );
+  const skipped = scopeChangedSkip(committed, locale);
+  if (skipped) return skipped;
   // v1.16.8 — no blanket per-status eviction here any more. The cards
   // track their own data through the ingest invalidator and their own
   // content-hash gates; a fresh comprehensive briefing does not change

@@ -14,6 +14,11 @@ import type { CorrelationResult } from "@/lib/insights/correlations";
 import type { CoachScopeSource } from "@/lib/ai/coach/types";
 import { CONFIDENCE_BADGE_CLASS } from "./confidence-badge";
 import { AskCoachAction } from "./ask-coach-action";
+import {
+  PatternDismissButton,
+  PatternDismissedNotice,
+  usePatternDismissalOverrides,
+} from "./pattern-dismiss-action";
 
 /**
  * v1.4.20 phase B3 — single Correlation card.
@@ -95,6 +100,12 @@ const COACH_QUESTION_BY_KIND: Record<CorrelationResult["kind"], string> = {
 
 export function CorrelationCard({ result }: CorrelationCardProps) {
   const { t } = useTranslations();
+  const dismissal = usePatternDismissalOverrides();
+  const patternId = result.status === "ok" ? result.patternId : undefined;
+  const dismissed = dismissal.isDismissed(
+    patternId,
+    result.status === "ok" && result.dismissed === true,
+  );
   const title = t(TITLE_KEY[result.kind]);
   const subtitle = t(SUBTITLE_KEY[result.kind]);
   const coachSources = COACH_SOURCES_BY_KIND[result.kind];
@@ -140,7 +151,13 @@ export function CorrelationCard({ result }: CorrelationCardProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        {result.status === "ok" ? (
+        {dismissed && result.status === "ok" && patternId ? (
+          <PatternDismissedNotice
+            patternId={patternId}
+            onRestored={() => dismissal.setDismissed(patternId, false)}
+            onSettled={() => dismissal.clearDismissed(patternId, false)}
+          />
+        ) : result.status === "ok" ? (
           <>
             <ScatterCorrelationChart
               data={result.points}
@@ -188,6 +205,13 @@ export function CorrelationCard({ result }: CorrelationCardProps) {
                 question={t(COACH_QUESTION_BY_KIND[result.kind])}
                 scope={coachScope}
               />
+              {patternId ? (
+                <PatternDismissButton
+                  patternId={patternId}
+                  onDismissed={() => dismissal.setDismissed(patternId, true)}
+                  onSettled={() => dismissal.clearDismissed(patternId, true)}
+                />
+              ) : null}
             </div>
           </>
         ) : (

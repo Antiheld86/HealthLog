@@ -70,6 +70,11 @@ import {
   type TagInfluence,
   type TagSummaryRow,
 } from "@/lib/insights/mood-tag-influence";
+import {
+  decisionForEvidence,
+  PATTERN_FAMILIES,
+  syncAcceptedPatterns,
+} from "@/lib/insights/correlation-patterns";
 import type { MeasurementType } from "@/generated/prisma/enums";
 import type { MeasurementSource } from "@/generated/prisma/client";
 
@@ -760,11 +765,56 @@ export async function fetchMoodAggregates(
     resolveUserTimezone(userId),
   ]);
 
-  return computeMoodAggregates({
+  const aggregate = computeMoodAggregates({
     entries,
     measurements,
     now,
     userPriorityJson,
     tz,
   });
+
+  const tagEvidence = aggregate.tagMetricCrosstab.map((row) => ({
+    factorKey: `TAG:${row.tag}`,
+    outcomeKey: `CROSSTAB:${row.metricKey}`,
+    lagDays: row.mode === "nextDay" ? 1 : 0,
+    sampleSize: row.withDays + row.withoutDays,
+    effectSize: row.delta,
+    pValue: row.pValue,
+    qValue: row.qValue,
+  }));
+  const factorEvidence = aggregate.factorCrosstab.map((row) => ({
+    factorKey: `RATED:${row.factor}`,
+    outcomeKey: `CROSSTAB:${row.metricKey}`,
+    lagDays: row.mode === "nextDay" ? 1 : 0,
+    sampleSize: row.lowDays + row.highDays,
+    effectSize: row.delta,
+    pValue: row.pValue,
+    qValue: row.qValue,
+  }));
+  const [tagDecisions, factorDecisions] = await Promise.all([
+    syncAcceptedPatterns({
+      userId,
+      family: PATTERN_FAMILIES.moodTagCrosstab,
+      accepted: tagEvidence,
+      computedAt: now,
+    }),
+    syncAcceptedPatterns({
+      userId,
+      family: PATTERN_FAMILIES.moodFactorCrosstab,
+      accepted: factorEvidence,
+      computedAt: now,
+    }),
+  ]);
+
+  return {
+    ...aggregate,
+    tagMetricCrosstab: aggregate.tagMetricCrosstab.map((row, index) => ({
+      ...row,
+      ...(decisionForEvidence(tagDecisions, tagEvidence[index]) ?? {}),
+    })),
+    factorCrosstab: aggregate.factorCrosstab.map((row, index) => ({
+      ...row,
+      ...(decisionForEvidence(factorDecisions, factorEvidence[index]) ?? {}),
+    })),
+  };
 }

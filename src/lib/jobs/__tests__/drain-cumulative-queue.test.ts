@@ -50,15 +50,15 @@ describe("reminder-worker — drainPerSampleCumulative nightly schedule", () => 
     expect(source).toMatch(/\bDRAIN_CUMULATIVE_CUTOFF_HOURS\b/);
   });
 
-  it("registers a boss.work handler against the drain queue", () => {
+  it("registers a createAndWork handler against the drain queue", () => {
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,200}DRAIN_CUMULATIVE_QUEUE[\s\S]{0,400}drainPerSampleCumulative/,
+      /createAndWork[\s\S]{0,200}DRAIN_CUMULATIVE_QUEUE[\s\S]{0,900}drainPerSampleCumulative/,
     );
   });
 
   it("schedules the drain cron via boss.schedule (allQueues + schedules)", () => {
     expect(source).toMatch(
-      /\[DRAIN_CUMULATIVE_QUEUE,\s*DRAIN_CUMULATIVE_CRON\]/,
+      /\[DRAIN_CUMULATIVE_QUEUE,\s*DRAIN_CUMULATIVE_CRON,\s*cronIsTheRetry\]/,
     );
   });
 

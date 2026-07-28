@@ -385,6 +385,15 @@ async function main() {
     );
   }
 
+  // ───── HealthProfileFactRevision."valueEncrypted" (Bytes) ─────
+  results.push(
+    await rotateBytesColumn(
+      "HealthProfileFactRevision",
+      "valueEncrypted",
+      prisma.healthProfileFactRevision,
+    ),
+  );
+
   // ───── InsightNarrative."encryptedContent" (Bytes) ─────
   results.push(
     await rotateBytesColumn(

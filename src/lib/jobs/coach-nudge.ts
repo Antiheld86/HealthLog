@@ -39,8 +39,8 @@
  *     incomplete or 60+ days stale AND the user actively talks to the
  *     Coach (a CoachUsage row in the last 14 days) — a gentle check-up
  *     nudge to refresh the personal context the Coach reads. Presence
- *     is checked on the encrypted columns only; nothing is decrypted
- *     during trigger evaluation.
+ *     is checked only on encrypted columns the user included for AI;
+ *     nothing is decrypted during trigger evaluation.
  *   - `weight` (v1.16.5): the weekly weight mean sits outside the
  *     user's effective green range AND has drifted further away from
  *     it than the previous week's mean (≥ 0.5 kg) — trend drift, not a
@@ -101,6 +101,10 @@ import { resolveRestMode } from "@/lib/illness/rest-mode";
 import { reconstructSleepNights } from "@/lib/analytics/sleep-night";
 import { loadUserSourcePriority } from "@/lib/rollups/measurement-read";
 import { DEFAULT_TIMEZONE } from "@/lib/tz/resolver";
+import {
+  DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+  type HealthProfileAiSection,
+} from "@/lib/validations/health-profile-facts";
 // Trend thresholds shared with the dashboard hero's verdict resolver
 // live in a client-safe leaf module; re-exported below so server-side
 // imports keep their path.
@@ -115,6 +119,12 @@ export {
 } from "@/lib/jobs/coach-nudge-thresholds";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const SELF_CONTEXT_AI_SECTIONS = [
+  "ABOUT_ME",
+  "CONDITIONS",
+  "ALLERGIES",
+  "COACH_FOCUS",
+] as const satisfies readonly HealthProfileAiSection[];
 
 /** Pg-boss queue + cron — imported by the reminder worker's bootstrap. */
 export const COACH_NUDGE_QUEUE = "coach-nudge";
@@ -518,6 +528,9 @@ export async function findTriggerForUser(
     vitals: true,
     routine: true,
   },
+  aiIncludedSections: ReadonlySet<HealthProfileAiSection> = new Set(
+    DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+  ),
 ): Promise<CoachNudgeTrigger | null> {
   const sevenDaysAgo = new Date(now.getTime() - 7 * MS_PER_DAY);
   const fourteenDaysAgo = new Date(now.getTime() - 14 * MS_PER_DAY);
@@ -706,43 +719,70 @@ export async function findTriggerForUser(
     }
 
     // 7) Self-context incomplete / stale while the Coach is in active
-    //    use. Presence-only reads on the encrypted columns — nothing is
-    //    decrypted during trigger evaluation.
-    const coachActiveCutoff = new Date(
-      now.getTime() - COACH_NUDGE_COACH_ACTIVE_DAYS * MS_PER_DAY,
+    //    use. Excluded sections count as intentionally complete and their
+    //    encrypted columns are not selected.
+    const hasIncludedSelfContextSection = SELF_CONTEXT_AI_SECTIONS.some(
+      (section) => aiIncludedSections.has(section),
     );
-    const recentUsage = await prisma.coachUsage.findFirst({
-      where: { userId: user.id, updatedAt: { gte: coachActiveCutoff } },
-      orderBy: { updatedAt: "desc" },
-      select: { updatedAt: true },
-    });
-    if (recentUsage) {
-      const profileRow = await prisma.userHealthProfile.findUnique({
-        where: { userId: user.id },
-        select: {
-          aboutMeEncrypted: true,
-          conditionsEncrypted: true,
-          allergiesEncrypted: true,
-          coachFocusEncrypted: true,
-          updatedAt: true,
-        },
-      });
-      const triggered = evaluateSelfContextTrigger(
-        {
-          profile: profileRow
-            ? {
-                hasAboutMe: profileRow.aboutMeEncrypted !== null,
-                hasConditions: profileRow.conditionsEncrypted !== null,
-                hasAllergies: profileRow.allergiesEncrypted !== null,
-                hasCoachFocus: profileRow.coachFocusEncrypted !== null,
-                updatedAt: profileRow.updatedAt,
-              }
-            : null,
-          lastCoachUseAt: recentUsage.updatedAt,
-        },
-        now,
+    if (hasIncludedSelfContextSection) {
+      const coachActiveCutoff = new Date(
+        now.getTime() - COACH_NUDGE_COACH_ACTIVE_DAYS * MS_PER_DAY,
       );
-      if (triggered) return "selfContext";
+      const recentUsage = await prisma.coachUsage.findFirst({
+        where: { userId: user.id, updatedAt: { gte: coachActiveCutoff } },
+        orderBy: { updatedAt: "desc" },
+        select: { updatedAt: true },
+      });
+      if (recentUsage) {
+        const profileRow = (await prisma.userHealthProfile.findUnique({
+          where: { userId: user.id },
+          select: {
+            ...(aiIncludedSections.has("ABOUT_ME")
+              ? { aboutMeEncrypted: true }
+              : {}),
+            ...(aiIncludedSections.has("CONDITIONS")
+              ? { conditionsEncrypted: true }
+              : {}),
+            ...(aiIncludedSections.has("ALLERGIES")
+              ? { allergiesEncrypted: true }
+              : {}),
+            ...(aiIncludedSections.has("COACH_FOCUS")
+              ? { coachFocusEncrypted: true }
+              : {}),
+            updatedAt: true,
+          },
+        })) as {
+          aboutMeEncrypted?: Uint8Array | null;
+          conditionsEncrypted?: Uint8Array | null;
+          allergiesEncrypted?: Uint8Array | null;
+          coachFocusEncrypted?: Uint8Array | null;
+          updatedAt: Date;
+        } | null;
+        const triggered = evaluateSelfContextTrigger(
+          {
+            profile: profileRow
+              ? {
+                  hasAboutMe:
+                    !aiIncludedSections.has("ABOUT_ME") ||
+                    profileRow.aboutMeEncrypted != null,
+                  hasConditions:
+                    !aiIncludedSections.has("CONDITIONS") ||
+                    profileRow.conditionsEncrypted != null,
+                  hasAllergies:
+                    !aiIncludedSections.has("ALLERGIES") ||
+                    profileRow.allergiesEncrypted != null,
+                  hasCoachFocus:
+                    !aiIncludedSections.has("COACH_FOCUS") ||
+                    profileRow.coachFocusEncrypted != null,
+                  updatedAt: profileRow.updatedAt,
+                }
+              : null,
+            lastCoachUseAt: recentUsage.updatedAt,
+          },
+          now,
+        );
+        if (triggered) return "selfContext";
+      }
     }
   }
 
@@ -922,11 +962,20 @@ export async function runCoachNudgeTick(
         continue;
       }
 
+      const controlRow = await prisma.userHealthProfile.findUnique({
+        where: { userId: user.id },
+        select: { aiIncludedSections: true },
+      });
+      const aiIncludedSections = new Set<HealthProfileAiSection>(
+        (controlRow?.aiIncludedSections ??
+          DEFAULT_HEALTH_PROFILE_AI_SECTIONS) as HealthProfileAiSection[],
+      );
       const trigger = await findTriggerForUser(
         prisma,
         user,
         now,
         nudgePrefs.groups,
+        aiIncludedSections,
       );
       if (!trigger) {
         summary.skippedNoTrigger += 1;
@@ -938,7 +987,7 @@ export async function runCoachNudgeTick(
       // decrypted sentence read back. So a cheap presence read replaces the
       // former decrypt; nothing sensitive is decrypted during the nudge.
       let hasCoachFocus = false;
-      if (trigger !== "selfContext") {
+      if (trigger !== "selfContext" && aiIncludedSections.has("COACH_FOCUS")) {
         const profileRow = await prisma.userHealthProfile.findUnique({
           where: { userId: user.id },
           select: { coachFocusEncrypted: true },

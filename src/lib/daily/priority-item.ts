@@ -21,12 +21,10 @@
 import type { ModuleKey } from "@/lib/modules/registry";
 
 /**
- * Closed set of rail-item kinds. It GROWS BY PR — a new rail item type is a new
- * entry here + a new server builder, nothing else. S1 ships builders for
- * `dose_window`, `preventive_care`, and `sync_issue`; the remaining kinds are
- * reserved for the slices that own them (coach check-in S3, milestone S12,
- * new-ECG S10, tension window S11) so their consumers can already type against
- * the union.
+ * Closed set of rail-item kinds. A new kind also needs its server builder and
+ * dashboard-layout label. Typed consumers derive from this tuple so stored
+ * visibility settings and API validation cannot accept vocabulary the current
+ * build does not understand.
  */
 export const PRIORITY_ITEM_KINDS = [
   "coach_checkin",
@@ -36,13 +34,22 @@ export const PRIORITY_ITEM_KINDS = [
   "milestone",
   "ecg_new_recording",
   "tension_window",
+  "same_time_baseline",
 ] as const;
 
 export type PriorityItemKind = (typeof PRIORITY_ITEM_KINDS)[number];
 
+export function isPriorityItemKind(value: unknown): value is PriorityItemKind {
+  return (
+    typeof value === "string" &&
+    (PRIORITY_ITEM_KINDS as readonly string[]).includes(value)
+  );
+}
+
 /**
  * The OBSERVATIONAL kinds — a durable-state reward, a new-ECG pointer, an
- * elevated-at-rest window. These carry no pending action; the user can only
+ * elevated-at-rest window, a same-time activity read. These carry no pending
+ * action; the user can only
  * acknowledge them, so they're the only kinds the Today rail lets you
  * dismiss. The remaining kinds (`dose_window`, `sync_issue`,
  * `preventive_care`, `coach_checkin`) are ACTIONABLE — they clear on their
@@ -54,6 +61,7 @@ export const DISMISSIBLE_PRIORITY_ITEM_KINDS = [
   "milestone",
   "ecg_new_recording",
   "tension_window",
+  "same_time_baseline",
 ] as const satisfies readonly PriorityItemKind[];
 
 export type DismissiblePriorityItemKind =
@@ -73,9 +81,16 @@ export function isDismissibleKind(
  * builder (which stamps the key) and the dismiss route's Zod schema (which
  * rejects anything else structurally, before a lookup ever runs).
  */
+const DISMISSIBLE_NOTICE_PREFIXES = ["health_score_algorithm"] as const;
+
 export function isDismissibleItemKey(itemKey: string): boolean {
-  return DISMISSIBLE_PRIORITY_ITEM_KINDS.some((kind) =>
-    itemKey.startsWith(`${kind}:`),
+  return (
+    DISMISSIBLE_PRIORITY_ITEM_KINDS.some((kind) =>
+      itemKey.startsWith(`${kind}:`),
+    ) ||
+    DISMISSIBLE_NOTICE_PREFIXES.some((prefix) =>
+      itemKey.startsWith(`${prefix}:`),
+    )
   );
 }
 

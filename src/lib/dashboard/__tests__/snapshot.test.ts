@@ -22,7 +22,7 @@ const computeBpInTargetFastPath = vi.fn();
 const getAssistantFlags = vi.fn();
 const hasAnyConfiguredProvider = vi.fn();
 const buildMedsTodayBlock = vi.fn();
-const computeUserHealthScoreFastPath = vi.fn();
+const computeUserHealthScoreMock = vi.fn();
 
 vi.mock("@/lib/analytics/summaries-slice", () => ({
   computeSummariesSlice: (...a: unknown[]) => computeSummariesSlice(...a),
@@ -53,9 +53,57 @@ vi.mock("@/lib/ai/provider", () => ({
 vi.mock("@/lib/dashboard/meds-today", () => ({
   buildMedsTodayBlock: (...a: unknown[]) => buildMedsTodayBlock(...a),
 }));
-vi.mock("@/lib/analytics/health-score-fast-path", () => ({
-  computeUserHealthScoreFastPath: (...a: unknown[]) =>
-    computeUserHealthScoreFastPath(...a),
+vi.mock("@/lib/analytics/score/reader", () => ({
+  computeUserHealthScore: async (...a: unknown[]) => {
+    const legacy = await computeUserHealthScoreMock(...a);
+    const provenance = {
+      inputs: [],
+      source: "none" as const,
+      windowDays: 0,
+      computedAt: "2026-07-28T12:00:00.000Z",
+    };
+    const coverage = {
+      requiredInputs: 3,
+      presentInputs: legacy ? 3 : 0,
+      historyDays: legacy ? 28 : 0,
+      missing: legacy ? [] : ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
+    };
+    const composite = legacy
+      ? {
+          status: "ok" as const,
+          value: {
+            score: legacy.score,
+            band: legacy.band,
+            bandSetter: "BLOOD_PRESSURE" as const,
+            composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"] as const,
+            noiseFloor: 2,
+            scoreVersion: 2 as const,
+          },
+          coverage,
+          confidence: { score: 100, band: "high" as const },
+          provenance,
+        }
+      : {
+          status: "insufficient" as const,
+          coverage,
+          provenance,
+          reason: "three_domains_required",
+        };
+    return {
+      composite,
+      pillars: [],
+      delta: legacy?.delta ?? null,
+      deltaReason: null,
+      scoreVersion: 2 as const,
+      weightGoal: {
+        status: "insufficient" as const,
+        coverage,
+        provenance,
+        reason: "no_personal_goal",
+      },
+      algorithmNotice: null,
+    };
+  },
 }));
 // v1.18.0 — module gate. Default-mocked all-on so the existing envelope
 // tests keep their full tile set; the module-gating suite below passes
@@ -146,6 +194,7 @@ function baseUser(
     insightsCachedText: null,
     insightsCachedAt: null,
     dashboardWidgetsJson: null,
+    thresholdsJson: null,
     ...overrides,
   };
 }
@@ -181,7 +230,7 @@ beforeEach(() => {
     nextDueOverdue: false,
     nextDueMedicationName: null,
   });
-  computeUserHealthScoreFastPath.mockResolvedValue(null);
+  computeUserHealthScoreMock.mockResolvedValue(null);
   resolveModuleMap.mockResolvedValue(moduleMap());
   buildScoreRingsBlock.mockResolvedValue([]);
 });
@@ -300,7 +349,7 @@ describe("buildDashboardSnapshot — per-type thick-phase gate", () => {
       priorYear: { pct: 50 },
       gradedScore: 84,
     });
-    computeUserHealthScoreFastPath.mockResolvedValue({
+    computeUserHealthScoreMock.mockResolvedValue({
       score: 71,
       band: "yellow",
       delta: 3,
@@ -318,16 +367,21 @@ describe("buildDashboardSnapshot — per-type thick-phase gate", () => {
       band: "yellow",
       delta: 3,
       restMode: null,
+      confidence: { score: 100, band: "high" },
+      composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
+      deltaReason: null,
+      scoreVersion: 2,
+      bandSetter: "BLOOD_PRESSURE",
       // v1.21.2 (A5 / A6) — additive narrative fields, null absent a
       // disagreeing readiness set / a returned metric (the fake derived
       // engines resolve nothing here).
       tension: null,
       returnToBand: null,
     });
-    // v1.17 W1b — two runs (current + prior-week), identical to the analytics
-    // route, so the ring's delta reflects BP movement.
-    expect(computeBpInTargetFastPath).toHaveBeenCalledTimes(2);
-    expect(computeUserHealthScoreFastPath).toHaveBeenCalledTimes(1);
+    // Current, prior-week, and prior-two-week windows support both the weekly
+    // movement and the first-eligibility guard.
+    expect(computeBpInTargetFastPath).toHaveBeenCalledTimes(3);
+    expect(computeUserHealthScoreMock).toHaveBeenCalledTimes(1);
   });
 
   it("a fresh account with zero coverage entries stays null", async () => {
@@ -339,7 +393,7 @@ describe("buildDashboardSnapshot — per-type thick-phase gate", () => {
     expect(snap.extras).toBeNull();
     expect(snap.healthScore).toBeNull();
     expect(computeBpInTargetFastPath).not.toHaveBeenCalled();
-    expect(computeUserHealthScoreFastPath).not.toHaveBeenCalled();
+    expect(computeUserHealthScoreMock).not.toHaveBeenCalled();
   });
 
   it("a gated type ABSENT from the map (never logged) keeps the phase warm", async () => {
@@ -356,7 +410,7 @@ describe("buildDashboardSnapshot — per-type thick-phase gate", () => {
       priorYear: null,
       gradedScore: null,
     });
-    computeUserHealthScoreFastPath.mockResolvedValue(null);
+    computeUserHealthScoreMock.mockResolvedValue(null);
 
     const snap = await buildDashboardSnapshot(fakePrisma, baseUser());
 
@@ -422,10 +476,10 @@ describe("buildDashboardSnapshot — healthScore (warm phase only)", () => {
     const snap = await buildDashboardSnapshot(fakePrisma, baseUser());
 
     expect(snap.healthScore).toBeNull();
-    expect(computeUserHealthScoreFastPath).not.toHaveBeenCalled();
+    expect(computeUserHealthScoreMock).not.toHaveBeenCalled();
   });
 
-  it("serialises score + band + delta — and ONLY those — when warm", async () => {
+  it("serialises the additive score identity when warm", async () => {
     const coverageMap = new Map([["WEIGHT", true]]);
     probeRollupCoverage.mockResolvedValue(coverageMap);
     isFullyCovered.mockReturnValue(true);
@@ -442,7 +496,7 @@ describe("buildDashboardSnapshot — healthScore (warm phase only)", () => {
       priorYear: { pct: 50, pairs: 40 },
       gradedScore: 88,
     });
-    computeUserHealthScoreFastPath.mockResolvedValue({
+    computeUserHealthScoreMock.mockResolvedValue({
       score: 72,
       band: "yellow",
       delta: -12,
@@ -459,6 +513,11 @@ describe("buildDashboardSnapshot — healthScore (warm phase only)", () => {
       band: "yellow",
       delta: -12,
       restMode: null,
+      confidence: { score: 100, band: "high" },
+      composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
+      deltaReason: null,
+      scoreVersion: 2,
+      bandSetter: "BLOOD_PRESSURE",
       // v1.21.2 (A5 / A6) — additive narrative fields, null here.
       tension: null,
       returnToBand: null,
@@ -466,22 +525,17 @@ describe("buildDashboardSnapshot — healthScore (warm phase only)", () => {
 
     // The fast path reuses the BP windows + coverage map already
     // computed for `extras` (no re-probe, graded score threaded).
-    expect(computeUserHealthScoreFastPath).toHaveBeenCalledTimes(1);
-    const arg = computeUserHealthScoreFastPath.mock.calls[0][0] as {
+    expect(computeUserHealthScoreMock).toHaveBeenCalledTimes(1);
+    const arg = computeUserHealthScoreMock.mock.calls[0][0] as {
       userId: string;
-      bpInTargetPct: number | null;
-      bpGradedScore: number | null;
-      heightCm: number | null;
-      coverage: unknown;
+      bpEnvelope: { last90Days?: { pct: number } | null } | null;
+      bpTargets: unknown;
+      profile: { thresholdsJson: unknown };
+      modules: { mentalHealth: boolean };
     };
     expect(arg.userId).toBe("user-1");
-    // v1.17 W1d — the BP pillar reads the 90-day window, identical to the
-    // analytics route, so dashboard ring and insights card score off one
-    // number. Previously this was last30Days (80).
-    expect(arg.bpInTargetPct).toBe(77);
-    expect(arg.bpGradedScore).toBe(88);
-    expect(arg.heightCm).toBe(180);
-    expect(arg.coverage).toBe(coverageMap);
+    expect(arg.bpEnvelope?.last90Days?.pct).toBe(77);
+    expect(arg.bpTargets).not.toBeNull();
   });
 
   it("is null when warm but no pillar is computable (fast path returns null)", async () => {
@@ -496,7 +550,7 @@ describe("buildDashboardSnapshot — healthScore (warm phase only)", () => {
       priorYear: null,
       gradedScore: null,
     });
-    computeUserHealthScoreFastPath.mockResolvedValue(null);
+    computeUserHealthScoreMock.mockResolvedValue(null);
 
     const snap = await buildDashboardSnapshot(fakePrisma, baseUser());
 
@@ -987,17 +1041,41 @@ describe("buildDashboardSnapshot — module gating (v1.18.0)", () => {
     );
   });
 
-  it("mood disabled: tile hidden + mood block emptied", async () => {
+  it("mental assessments disabled: WELLBEING is omitted from the score", async () => {
     const snap = await buildDashboardSnapshot(fakePrisma, baseUser(), {
-      modules: () => Promise.resolve(moduleMap({ mood: false })),
+      modules: () => Promise.resolve(moduleMap({ mentalHealth: false })),
     });
-    expect(widget(snap, "mood")!.visible).toBe(false);
-    expect(widget(snap, "mood")!.tileVisible).toBe(false);
-    expect(cat(snap, "mood")!.visible).toBe(false);
-    expect(snap.tiles.mood.entries).toEqual([]);
-    expect(snap.tiles.mood.summary).toBeNull();
-    // Core tile unaffected.
-    expect(widget(snap, "weight")!.visible).toBe(true);
+    // The independent mood tile is unaffected by the assessment-module gate.
+    expect(widget(snap, "mood")!.visible).toBe(true);
+    expect(snap.tiles.mood.entries.length).toBeGreaterThan(0);
+    const scoreCall = computeUserHealthScoreMock.mock.calls.at(-1)?.[0] as
+      { modules: { mentalHealth: boolean } } | undefined;
+    expect(scoreCall?.modules.mentalHealth).toBe(false);
+  });
+
+  it("mental assessments enabled: the score admits WELLBEING", async () => {
+    await buildDashboardSnapshot(fakePrisma, baseUser(), {
+      modules: () => Promise.resolve(moduleMap()),
+    });
+    const scoreCall = computeUserHealthScoreMock.mock.calls.at(-1)?.[0] as
+      { modules: { mentalHealth: boolean } } | undefined;
+    expect(scoreCall?.modules.mentalHealth).toBe(true);
+  });
+
+  it("an explicit weight target reaches personal context and dashboard bands", async () => {
+    const snap = await buildDashboardSnapshot(
+      fakePrisma,
+      baseUser({ thresholdsJson: { WEIGHT: { min: 74, max: 78 } } }),
+      { modules: () => Promise.resolve(moduleMap()) },
+    );
+    const scoreCall = computeUserHealthScoreMock.mock.calls.at(-1)?.[0] as
+      { profile: { thresholdsJson: unknown } } | undefined;
+    expect(scoreCall?.profile.thresholdsJson).toEqual({
+      WEIGHT: { min: 74, max: 78 },
+    });
+    // The tile / chart band follows the same target.
+    expect(snap.targetBands.weightRange?.greenMin).toBe(74);
+    expect(snap.targetBands.weightRange?.greenMax).toBe(78);
   });
 
   it("sleep disabled: tile hidden + SLEEP_DURATION stripped from summaries", async () => {
@@ -1105,7 +1183,7 @@ describe("buildDashboardSnapshot — ambient narrative (A4/A5/A6)", () => {
       priorMonth: { pct: 60 },
       priorYear: { pct: 50 },
     });
-    computeUserHealthScoreFastPath.mockResolvedValue({
+    computeUserHealthScoreMock.mockResolvedValue({
       score: 71,
       band: "yellow",
       delta: 3,

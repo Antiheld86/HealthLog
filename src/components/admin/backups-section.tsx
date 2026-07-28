@@ -239,6 +239,15 @@ export function BackupsSection() {
           familyHistory?: number;
           workouts?: number;
           documents?: number;
+          // Optional for the same reason: a file written before each of these
+          // rode the wire carries no key, and an absent key must total as
+          // nothing rather than break the count.
+          nutrientDays?: number;
+          healthProfile?: number;
+          healthProfileFactRevisions?: number;
+          customMetrics?: number;
+          customMetricEntries?: number;
+          intradayProfiles?: number;
         };
       }>("/api/admin/backups/upload", { method: "POST", body: fd });
     },
@@ -257,7 +266,17 @@ export function BackupsSection() {
         (data.summary.allergies ?? 0) +
         (data.summary.familyHistory ?? 0) +
         (data.summary.workouts ?? 0) +
-        (data.summary.documents ?? 0);
+        (data.summary.documents ?? 0) +
+        // The count the admin is shown has to be the count the file carries.
+        // The nutrient day totals were added to the payload and never to this
+        // sum, so an upload that restored them reported fewer records than it
+        // held — a smaller version of the same defect, on the reporting side.
+        (data.summary.nutrientDays ?? 0) +
+        (data.summary.healthProfile ?? 0) +
+        (data.summary.healthProfileFactRevisions ?? 0) +
+        (data.summary.customMetrics ?? 0) +
+        (data.summary.customMetricEntries ?? 0) +
+        (data.summary.intradayProfiles ?? 0);
       toast.success(
         t("admin.section.backups.uploadSuccess", { count: String(total) }),
       );

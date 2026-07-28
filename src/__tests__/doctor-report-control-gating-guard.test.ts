@@ -74,9 +74,9 @@ describe("report scope gating — structural guard", () => {
   it("reads a plausible catalogue", () => {
     // Sanity floor: a silently degraded catalogue would pass everything below
     // vacuously.
-    expect(ALL_LEAF_IDS.length).toBe(90);
+    expect(ALL_LEAF_IDS.length).toBe(91);
     expect(Object.keys(MEASUREMENT_LEAF_GROUP)).toHaveLength(77);
-    expect(Object.keys(STRUCTURED_LEAF_GROUP)).toHaveLength(13);
+    expect(Object.keys(STRUCTURED_LEAF_GROUP)).toHaveLength(14);
   });
 
   it("places every leaf in exactly one group", () => {
@@ -136,6 +136,7 @@ describe("report scope gating — structural guard", () => {
   it("keeps every sensitive leaf in the fenced tier", () => {
     for (const leaf of [
       "MOOD",
+      "ANAMNESIS",
       "CYCLE",
       "FAMILY_HISTORY",
       "PHQ9_SCORE",

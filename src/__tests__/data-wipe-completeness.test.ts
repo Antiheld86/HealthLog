@@ -118,6 +118,10 @@ describe("data-wipe completeness", () => {
     ).toContain("CoachConversation");
   });
 
+  it("wipes effective-dated health profile fact revisions", () => {
+    expect(WIPE_MODELS).toContain("HealthProfileFactRevision");
+  });
+
   it("every model with a userId column is wiped or exempt with a reason", () => {
     const userScoped = [...models]
       .filter(([, shape]) => shape.scalars.includes("userId"))

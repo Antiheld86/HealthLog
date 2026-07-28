@@ -6,23 +6,14 @@
  *
  * Source pins: each call site that feeds the compliance engine fetches
  * its medications with an explicit `asNeeded: false` predicate. The pin
- * walks the medication-feeding `findMany` of every rate-surfacing call
- * site (the documented set: Coach prompt, BP-status gate, health-score
- * pillar, insight features / targets / comprehensive, the nightly
- * compliance status, the batched card-compliance payload) and asserts
- * the predicate is present — a refactor that drops it fails here before
- * a PRN medication can drag a user's rate to 0% (never-taken-on-no-
- * schedule) or pad it to 100% (vacuous denominator).
+ * walks every rate-surfacing `findMany` and fails if a PRN medication
+ * could enter a scheduled-dose rate.
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const CALL_SITES: Array<{ file: string; surface: string }> = [
-  {
-    file: "src/lib/analytics/health-score-fast-path.ts",
-    surface: "health-score compliance pillar (dashboard)",
-  },
   {
     file: "src/lib/insights/blood-pressure-status.ts",
     surface: "BP-status compliance gate",

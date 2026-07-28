@@ -3,7 +3,7 @@
  * registration guard.
  *
  * Same source-text-grep approach as the step-consolidation-repair guard:
- * assert the queue is registered in `allQueues`, a `boss.work` handler is
+ * assert the queue is registered in `allQueues`, a `createAndWork` handler is
  * wired against it, and the boot-discovery enqueue helper fires — without
  * booting pg-boss + Prisma. An unregistered queue silently never drains
  * (the v1.4.37 dead-queue class).
@@ -34,9 +34,9 @@ describe("reminder-worker — cumulative-pr-rederive wiring", () => {
     expect(allQueuesMatch![1]).toMatch(/\bCUMULATIVE_PR_REDERIVE_QUEUE\b/);
   });
 
-  it("registers a boss.work handler against the queue", () => {
+  it("registers a createAndWork handler against the queue", () => {
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,200}CUMULATIVE_PR_REDERIVE_QUEUE[\s\S]{0,400}runCumulativePrRederivationForUser/,
+      /createAndWork[\s\S]{0,200}CUMULATIVE_PR_REDERIVE_QUEUE[\s\S]{0,400}runCumulativePrRederivationForUser/,
     );
   });
 

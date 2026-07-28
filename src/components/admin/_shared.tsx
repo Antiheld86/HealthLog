@@ -42,7 +42,6 @@ export interface WorkerStatus {
   lastWithingsSync: string | null;
   lastInsightsRun: string | null;
   jobsProcessed: number;
-  errors: number;
 }
 
 /** One queue with exhausted-retry failures, as `/api/admin/status` reports it. */

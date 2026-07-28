@@ -50,9 +50,9 @@ describe("reminder-worker — Nightscout sync queue", () => {
     expect(source).toMatch(/\[NIGHTSCOUT_SYNC_QUEUE,\s*NIGHTSCOUT_SYNC_CRON\]/);
   });
 
-  it("registers a boss.work handler for the queue", () => {
+  it("registers a createAndWork handler for the queue", () => {
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,160}NIGHTSCOUT_SYNC_QUEUE[\s\S]{0,160}handleNightscoutSync/,
+      /createAndWork[\s\S]{0,160}NIGHTSCOUT_SYNC_QUEUE[\s\S]{0,160}handleNightscoutSync/,
     );
   });
 });
@@ -85,12 +85,12 @@ describe("reminder-worker — Polar / Oura sync queues", () => {
     expect(source).toMatch(/\[OURA_SYNC_QUEUE,\s*OURA_SYNC_CRON\]/);
   });
 
-  it("registers a boss.work handler for each queue", () => {
+  it("registers a createAndWork handler for each queue", () => {
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,160}POLAR_SYNC_QUEUE[\s\S]{0,160}handlePolarSync/,
+      /createAndWork[\s\S]{0,160}POLAR_SYNC_QUEUE[\s\S]{0,160}handlePolarSync/,
     );
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,160}OURA_SYNC_QUEUE[\s\S]{0,160}handleOuraSync/,
+      /createAndWork[\s\S]{0,160}OURA_SYNC_QUEUE[\s\S]{0,160}handleOuraSync/,
     );
   });
 });

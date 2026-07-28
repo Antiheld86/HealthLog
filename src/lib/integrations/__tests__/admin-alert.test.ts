@@ -36,7 +36,11 @@ vi.mock("@/lib/auth/audit", () => ({
 }));
 
 vi.mock("@/lib/notifications/dispatcher", () => ({
-  dispatchNotification: vi.fn().mockResolvedValue(undefined),
+  dispatchNotification: vi.fn().mockResolvedValue({
+    dispatched: true,
+    channelsAttempted: 1,
+    channelsSucceeded: 1,
+  }),
 }));
 
 vi.mock("@/lib/crypto", () => ({

@@ -50,6 +50,8 @@ export interface IntegrationStatusViewModel {
     reauth_required: number;
     persistent: number;
   } | null;
+  /** Client-side copy of the envelope threshold, attached by `pickStatus`. */
+  failureThreshold?: number;
   configured?: boolean;
   connected?: boolean;
   connectedAt?: string | null;
@@ -110,7 +112,12 @@ export function pickStatus(
   envelope: IntegrationStatusEnvelope | undefined,
   integration: IntegrationKey,
 ): IntegrationStatusViewModel | undefined {
-  return envelope?.integrations.find((i) => i.integration === integration);
+  const status = envelope?.integrations.find(
+    (entry) => entry.integration === integration,
+  );
+  return status
+    ? { ...status, failureThreshold: envelope?.threshold }
+    : undefined;
 }
 
 /**
@@ -156,6 +163,36 @@ export function pillStateFor(
   status: IntegrationStatusViewModel | undefined,
 ): IntegrationPillState {
   return pillStateForVerdict(status?.syncHealth?.verdict);
+}
+
+export interface IntegrationPillFailureProps {
+  failureCount?: number;
+  failureThreshold?: number;
+}
+
+/**
+ * Pair the largest per-kind streak with the server-owned alert threshold. The
+ * alert ladder uses the same maximum, so the ratio cannot disagree with when a
+ * notification becomes eligible.
+ */
+export function pillFailurePropsFor(
+  status:
+    | Pick<
+        IntegrationStatusViewModel,
+        "consecutiveFailuresByKind" | "failureThreshold"
+      >
+    | undefined,
+): IntegrationPillFailureProps {
+  const buckets = status?.consecutiveFailuresByKind;
+  const failureThreshold = status?.failureThreshold;
+  if (!buckets || failureThreshold === undefined) return {};
+
+  const failureCount = Math.max(
+    buckets.transient,
+    buckets.reauth_required,
+    buckets.persistent,
+  );
+  return failureCount > 0 ? { failureCount, failureThreshold } : {};
 }
 
 /**

@@ -69,6 +69,10 @@ interface IntegrationStatusPillProps {
    *  suffix (used when the integration was just configured but has
    *  never synced yet). */
   lastSyncAt: Date | string | null;
+  /** Current consecutive-failure count from the active server bucket. */
+  failureCount?: number;
+  /** Server-owned alert threshold paired with `failureCount`. */
+  failureThreshold?: number;
   /** Override "now" for deterministic testing. Defaults to `new Date()`. */
   now?: Date;
   /** Override the testid so a card can keep its own established e2e hook. */
@@ -129,6 +133,8 @@ const RELATIVE_STATES = new Set<IntegrationPillState>([
 export function IntegrationStatusPill({
   state,
   lastSyncAt,
+  failureCount,
+  failureThreshold,
   now,
   testId,
   className,
@@ -189,6 +195,15 @@ export function IntegrationStatusPill({
           t,
         )
       : null;
+  const failureRatio =
+    failureCount !== undefined &&
+    failureCount > 0 &&
+    failureThreshold !== undefined
+      ? t("settings.integrationPill.failureCount", {
+          count: failureCount,
+          threshold: failureThreshold,
+        })
+      : null;
 
   return (
     <Badge
@@ -218,6 +233,7 @@ export function IntegrationStatusPill({
       {icon}
       <span className="truncate">
         {label}
+        {failureRatio ? ` · ${failureRatio}` : null}
         {relative ? <span aria-hidden="true"> · {relative}</span> : null}
       </span>
       {relative ? <span className="sr-only">{relative}</span> : null}

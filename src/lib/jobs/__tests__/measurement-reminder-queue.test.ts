@@ -5,7 +5,7 @@
  * guards: assert the Vorsorge-reminder queue is declared, listed in
  * `allQueues` (the v1.4.37 dead-queue lesson — an unregistered queue is
  * never provisioned and the schedule silently no-ops), scheduled on its
- * cron, and wired to a `boss.work` handler that delegates to
+ * cron, and wired to a `createAndWork` handler that delegates to
  * `runMeasurementReminderTick`. No pg-boss / Prisma boot.
  */
 import { readFileSync } from "node:fs";
@@ -56,9 +56,9 @@ describe("reminder-worker — measurement-reminder wiring", () => {
     );
   });
 
-  it("registers a boss.work handler that runs the tick", () => {
+  it("registers a createAndWork handler that runs the tick", () => {
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,200}MEASUREMENT_REMINDER_QUEUE[\s\S]{0,200}handleMeasurementReminderCheck/,
+      /createAndWork[\s\S]{0,200}MEASUREMENT_REMINDER_QUEUE[\s\S]{0,200}handleMeasurementReminderCheck/,
     );
     expect(source).toMatch(
       /handleMeasurementReminderCheck[\s\S]{0,400}runMeasurementReminderTick/,
@@ -80,12 +80,12 @@ describe("reminder-worker — eventful reminder-satisfy wiring (v1.18.1)", () =>
     expect(allQueuesMatch![1]).toMatch(/\bREMINDER_SATISFY_QUEUE\b/);
   });
 
-  it("binds a boss.work handler for the satisfy queue", () => {
+  it("binds a createAndWork handler for the satisfy queue", () => {
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,200}REMINDER_SATISFY_QUEUE[\s\S]{0,200}handleReminderSatisfy/,
+      /createAndWork[\s\S]{0,200}REMINDER_SATISFY_QUEUE[\s\S]{0,200}handleReminderSatisfy/,
     );
     expect(source).toMatch(
-      /handleReminderSatisfy[\s\S]{0,600}runReminderSatisfyForUser/,
+      /handleReminderSatisfy[\s\S]{0,800}runReminderSatisfyForUser/,
     );
   });
 });

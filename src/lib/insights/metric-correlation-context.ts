@@ -28,13 +28,24 @@ import {
   DISCOVERY_BEHAVIOURS,
   DISCOVERY_OUTCOMES,
   type NamedSeries,
+  MEDICATION_COMPLIANCE_CHANNEL_KEY,
+  SYMPTOM_SEVERITY_CHANNEL_KEY,
 } from "@/lib/insights/correlation-discovery";
 import {
   buildMeasurementDailySeries,
+  fetchComplianceSeries,
+  fetchCustomMetricBehaviourSeries,
+  fetchEnvironmentSeries,
   fetchMeasurementWindowSeries,
   fetchMoodWindowSeries,
+  fetchSymptomSeries,
 } from "@/lib/insights/correlation-channel-series";
 import { loadUserSourcePriority } from "@/lib/rollups/measurement-read";
+import {
+  decisionForEvidence,
+  PATTERN_FAMILIES,
+  syncAcceptedPatterns,
+} from "@/lib/insights/correlation-patterns";
 import type { RelevantCorrelation } from "@/lib/insights/assessment-context";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -101,13 +112,25 @@ export async function getRelevantCorrelationsForMetric(
     // lives in `fetchMeasurementWindowSeries` / `fetchMoodWindowSeries`
     // (`correlation-channel-series.ts`), shared with the route, the Coach
     // tool, and the period narrative.
-    const [{ byType }, { moodDaily }, priorityJson] = await Promise.all([
+    const [
+      { byType },
+      { moodDaily },
+      priorityJson,
+      complianceSeries,
+      symptomSeries,
+      environmentSeries,
+      customMetricSeries,
+    ] = await Promise.all([
       fetchMeasurementWindowSeries(userId, since, [
         ...behaviourTypes,
         ...outcomeTypes,
       ]),
       fetchMoodWindowSeries(userId, tz, since),
       loadUserSourcePriority(userId),
+      fetchComplianceSeries(userId, tz, since),
+      fetchSymptomSeries(userId, tz, since),
+      fetchEnvironmentSeries(userId, since),
+      fetchCustomMetricBehaviourSeries(userId, tz, since),
     ]);
 
     const points = (key: string) =>
@@ -122,15 +145,46 @@ export async function getRelevantCorrelationsForMetric(
 
     const series: NamedSeries[] = [];
     for (const key of DISCOVERY_BEHAVIOURS) {
-      series.push({ key, role: "behaviour", points: points(key) });
+      if (key === MEDICATION_COMPLIANCE_CHANNEL_KEY) {
+        series.push(complianceSeries);
+      } else if (key === SYMPTOM_SEVERITY_CHANNEL_KEY) {
+        series.push({ ...symptomSeries, role: "behaviour" });
+      } else {
+        series.push({ key, role: "behaviour", points: points(key) });
+      }
     }
     for (const key of DISCOVERY_OUTCOMES) {
-      series.push({ key, role: "outcome", points: points(key) });
+      if (key === SYMPTOM_SEVERITY_CHANNEL_KEY) {
+        series.push({ ...symptomSeries, role: "outcome" });
+      } else {
+        series.push({ key, role: "outcome", points: points(key) });
+      }
     }
+    series.push(...environmentSeries, ...customMetricSeries);
 
     const result = discoverCorrelations(series);
+    const decisions = await syncAcceptedPatterns({
+      userId,
+      family: PATTERN_FAMILIES.discoveryRetrospective,
+      accepted: result.discovered.map((pattern) => ({
+        factorKey: pattern.behaviour,
+        outcomeKey: pattern.outcome,
+        lagDays: pattern.lagDays,
+        sampleSize: pattern.n,
+        effectSize: pattern.r,
+        pValue: pattern.pValue,
+        qValue: pattern.qValue,
+      })),
+    });
     return result.discovered
-      .filter((d) => d.behaviour === channel || d.outcome === channel)
+      .filter((d) => {
+        const decision = decisionForEvidence(decisions, {
+          factorKey: d.behaviour,
+          outcomeKey: d.outcome,
+          lagDays: d.lagDays,
+        });
+        return decision?.dismissed !== true;
+      })
       .map((d) => ({ interpretation: d.interpretation, n: d.n, r: d.r }));
   } catch {
     return [];

@@ -18,6 +18,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 import { buildDailyDigest, type DailyDigestInput } from "@/lib/daily/digest";
+import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
 
 const findUnique = vi.fn();
 const update = vi.fn();
@@ -121,6 +122,7 @@ function degradedDigest() {
   const input: DailyDigestInput = {
     now: NOW,
     modules: {},
+    enabledHeroItemKinds: [...PRIORITY_ITEM_KINDS],
     score: { value: 82, band: "good", delta: 3 },
     briefing: null,
     medsToday: {

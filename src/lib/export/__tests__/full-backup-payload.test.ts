@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { Buffer } from "node:buffer";
 import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
+import { parseBackupPayload } from "@/lib/validations/backup";
 
 process.env.ENCRYPTION_KEY =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -32,6 +33,7 @@ vi.mock("@/lib/export/records-backup", () => ({
 }));
 
 import { buildFullBackupPayload } from "../full-backup-payload";
+import { restoreProfileData } from "../profile-backup";
 
 const deletedAt = new Date("2026-07-19T12:00:00.000Z");
 const measurementNote = encryptToBytes("canonical measurement note");
@@ -187,6 +189,108 @@ function makePrisma() {
         },
       ]),
     },
+    intradayCumulativeProfile: {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "shape-1",
+          userId: "user-1",
+          type: "ACTIVITY_STEPS",
+          dateKey: "2026-07-18",
+          hourlyCumulative: Array.from({ length: 24 }, (_, h) => h * 300),
+          dayTotal: 6900,
+          sampleCount: 96,
+          timezone: "Europe/Berlin",
+          createdAt: new Date("2026-07-19T02:00:00.000Z"),
+          updatedAt: new Date("2026-07-19T02:00:00.000Z"),
+        },
+      ]),
+    },
+    // Left unmocked on purpose: `buildProfileBackupSection` runs for real
+    // against these, so the assertions below exercise the builder rather than
+    // a stand-in that would agree with whatever the payload happened to do.
+    userHealthProfile: {
+      findUnique: vi.fn().mockResolvedValue({
+        id: "profile-1",
+        userId: "user-1",
+        aboutMeEncrypted: encryptToBytes("desk job, two kids"),
+        conditionsEncrypted: null,
+        allergiesEncrypted: encryptToBytes("penicillin"),
+        coachFocusEncrypted: null,
+        pendingQuestionsEncrypted: encryptToBytes('["How is your sleep?"]'),
+        aiIncludedSections: ["ABOUT_ME", "CONDITIONS"],
+        createdAt: new Date("2026-07-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-07-19T00:00:00.000Z"),
+      }),
+    },
+    healthProfileFactRevision: {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "fact-1",
+          userId: "user-1",
+          kind: "SMOKING_STATUS",
+          valueEncrypted: encryptToBytes("FORMER"),
+          validFrom: new Date("2026-07-01T00:00:00.000Z"),
+          validUntil: null,
+          provenance: "USER_REPORTED",
+          supersededByRevisionId: null,
+          createdAt: new Date("2026-07-01T00:00:00.000Z"),
+        },
+      ]),
+    },
+    customMetric: {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "metric-1",
+          userId: "user-1",
+          name: "Morning grip strength",
+          unit: "kg",
+          targetLow: 40,
+          targetHigh: null,
+          decimals: 1,
+          description: "Right hand, before breakfast",
+          correlationEnabled: true,
+          createdAt: new Date("2026-07-01T00:00:00.000Z"),
+          updatedAt: new Date("2026-07-19T00:00:00.000Z"),
+          deletedAt: null,
+          entries: [
+            {
+              id: "entry-1",
+              value: 44.5,
+              unit: "kg",
+              measuredAt: new Date("2026-07-19T06:30:00.000Z"),
+              note: "felt strong",
+              createdAt: new Date("2026-07-19T06:31:00.000Z"),
+            },
+          ],
+        },
+      ]),
+    },
+    correlationPattern: {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "pattern-1",
+          userId: "user-1",
+          canonicalKey: `p1:${"a".repeat(64)}`,
+          family: "DISCOVERY_RETROSPECTIVE",
+          factorKey: "CUSTOM_METRIC:metric-1",
+          outcomeKey: "RESTING_HEART_RATE",
+          lagDays: 1,
+          sampleSize: 42,
+          effectSize: 0.34,
+          pValue: 0.01,
+          qValue: 0.04,
+          evidenceHash: "b".repeat(64),
+          isCurrent: true,
+          lastComputedAt: new Date("2026-07-19T08:00:00.000Z"),
+          dismissedAt: new Date("2026-07-19T09:00:00.000Z"),
+          dismissedEvidenceHash: "b".repeat(64),
+          dismissedEffectSize: 0.34,
+          dismissedSampleSize: 42,
+          createdAt: new Date("2026-07-19T08:00:00.000Z"),
+          updatedAt: new Date("2026-07-19T09:00:00.000Z"),
+        },
+      ]),
+    },
   };
 }
 
@@ -229,6 +333,19 @@ function installSectionMocks() {
     cycleProfile: null,
     cycles: [],
     cycleDayLogs: [],
+    // The key the payload assembly used to drop on the floor.
+    customSymptoms: [
+      {
+        id: "symptom-1",
+        key: "custom:jaw_tension",
+        labelKey: "custom",
+        categoryId: "cat-1",
+        icon: null,
+        sortOrder: 0,
+        isActive: true,
+        labelEncrypted: "Y2lwaGVy",
+      },
+    ],
   });
   mocks.buildRecordsBackupSection.mockResolvedValue({
     labResults: [],
@@ -441,5 +558,485 @@ describe("buildFullBackupPayload — aggregation provenance", () => {
     // externalSourceVersion, no glucoseContext, and no provenance either.
     expect(rows[0]).not.toHaveProperty("aggregationProvenance");
     expect(rows[0]).not.toHaveProperty("externalSourceVersion");
+  });
+});
+
+/**
+ * The assembly step must carry EVERY key its sections produce.
+ *
+ * The custom cycle symptoms were lost here and nowhere else: the section
+ * builder returned them, the wire schema declared them, the restore read them,
+ * and the payload was assembled by copying keys out one at a time. Nothing in
+ * the tree compared the two lists, so the omission survived a release that was
+ * specifically about that data.
+ *
+ * Mutation check: hand-pick the cycle keys again instead of spreading the
+ * section, and this goes red naming the key that fell out.
+ */
+describe("buildFullBackupPayload — section keys reach the payload", () => {
+  it("carries every key of every section it builds", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+
+    const { payload } = await buildFullBackupPayload(
+      prisma as never,
+      "user-1",
+      {
+        purpose: "disaster-recovery",
+        exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+      },
+    );
+
+    const sectionKeys = [
+      ...Object.keys(await mocks.buildCycleBackupSection.mock.results[0].value),
+      ...Object.keys(
+        await mocks.buildRecordsBackupSection.mock.results[0].value,
+      ),
+      // The profile and intraday sections run for real, so their keys come
+      // from the builders.
+      "healthProfile",
+      "healthProfileFacts",
+      "customMetrics",
+      "correlationPatterns",
+      "intradayProfiles",
+    ];
+
+    const missing = sectionKeys.filter((key) => !(key in payload));
+    expect(
+      missing,
+      "a section key that never reaches the payload is data the file does not carry, however complete the builder is",
+    ).toEqual([]);
+  });
+
+  it("carries the account's own cycle symptoms", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+
+    const { payload } = await buildFullBackupPayload(
+      prisma as never,
+      "user-1",
+      {
+        purpose: "disaster-recovery",
+        exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+      },
+    );
+
+    expect(payload.customSymptoms).toEqual([
+      expect.objectContaining({
+        key: "custom:jaw_tension",
+        labelEncrypted: "Y2lwaGVy",
+      }),
+    ]);
+  });
+});
+
+/**
+ * Durable self-context and user-defined metrics ride the file.
+ *
+ * Both were classified `BACKED_UP` and carried by nothing. The custom metric is
+ * the live loss: a series the account defined itself is the one kind no
+ * integration can re-sync, so a restore without it rebuilt the account minus
+ * the metric AND every reading, and reported success.
+ */
+describe("buildFullBackupPayload — profile and custom metrics", () => {
+  it("carries ciphertext verbatim and no plaintext in the recovery payload", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+
+    const { payload, counts } = await buildFullBackupPayload(
+      prisma as never,
+      "user-1",
+      {
+        purpose: "disaster-recovery",
+        exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+      },
+    );
+
+    const profile = payload.healthProfile as Record<string, unknown>;
+    expect(profile.id).toBe("profile-1");
+    // The envelope travels; the plaintext of a column carried encrypted must
+    // not be duplicated beside it.
+    expect(typeof profile.aboutMeEncrypted).toBe("string");
+    expect(profile.aboutMe).toBeNull();
+    expect(profile.conditionsEncrypted).toBeNull();
+    expect(typeof profile.pendingQuestionsEncrypted).toBe("string");
+    expect(counts.healthProfile).toBe(1);
+    expect(payload.healthProfileFacts).toEqual([
+      expect.objectContaining({
+        id: "fact-1",
+        kind: "SMOKING_STATUS",
+        value: null,
+        valueEncrypted: expect.any(String),
+      }),
+    ]);
+    expect(counts.healthProfileFactRevisions).toBe(1);
+  });
+
+  it("decrypts the profile free text into the portable export", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+
+    const { payload } = await buildFullBackupPayload(
+      prisma as never,
+      "user-1",
+      {
+        purpose: "portable-export",
+        exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+      },
+    );
+
+    const profile = payload.healthProfile as Record<string, unknown>;
+    expect(profile.aboutMe).toBe("desk job, two kids");
+    expect(profile.allergies).toBe("penicillin");
+    expect(profile.conditions).toBeNull();
+    expect(payload.healthProfileFacts).toEqual([
+      expect.objectContaining({
+        id: "fact-1",
+        kind: "SMOKING_STATUS",
+        value: "FORMER",
+      }),
+    ]);
+    // A portable file is the human-readable artefact; it carries no envelopes,
+    // and it does not carry the server-derived pending questions at all.
+    expect(profile).not.toHaveProperty("aboutMeEncrypted");
+    expect(profile).not.toHaveProperty("pendingQuestionsEncrypted");
+    expect(profile).not.toHaveProperty("id");
+  });
+
+  it("preserves readable fact segments around unreadable and invalid revisions", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+    const unreadableCiphertext = Uint8Array.from([0, 1, 2, 3]);
+    prisma.healthProfileFactRevision.findMany.mockResolvedValue([
+      {
+        id: "alcohol-old",
+        userId: "user-1",
+        kind: "ALCOHOL_PATTERN",
+        valueEncrypted: encryptToBytes("WEEKLY"),
+        validFrom: new Date("2026-04-01T00:00:00.000Z"),
+        validUntil: new Date("2026-05-01T00:00:00.000Z"),
+        provenance: "USER_REPORTED",
+        supersededByRevisionId: "alcohol-unreadable",
+        createdAt: new Date("2026-04-01T00:00:00.000Z"),
+      },
+      {
+        id: "alcohol-unreadable",
+        userId: "user-1",
+        kind: "ALCOHOL_PATTERN",
+        valueEncrypted: unreadableCiphertext,
+        validFrom: new Date("2026-05-01T00:00:00.000Z"),
+        validUntil: null,
+        provenance: "USER_CORRECTION",
+        supersededByRevisionId: null,
+        createdAt: new Date("2026-05-01T00:00:00.000Z"),
+      },
+      {
+        id: "smoking-old",
+        userId: "user-1",
+        kind: "SMOKING_STATUS",
+        valueEncrypted: encryptToBytes("CURRENT"),
+        validFrom: new Date("2026-01-01T00:00:00.000Z"),
+        validUntil: new Date("2026-02-01T00:00:00.000Z"),
+        provenance: "USER_REPORTED",
+        supersededByRevisionId: "smoking-unreadable",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      },
+      {
+        id: "smoking-unreadable",
+        userId: "user-1",
+        kind: "SMOKING_STATUS",
+        valueEncrypted: unreadableCiphertext,
+        validFrom: new Date("2026-02-01T00:00:00.000Z"),
+        validUntil: new Date("2026-03-01T00:00:00.000Z"),
+        provenance: "USER_CORRECTION",
+        supersededByRevisionId: "smoking-invalid",
+        createdAt: new Date("2026-02-01T00:00:00.000Z"),
+      },
+      {
+        id: "smoking-invalid",
+        userId: "user-1",
+        kind: "SMOKING_STATUS",
+        valueEncrypted: encryptToBytes("INVALID_SMOKING_STATUS"),
+        validFrom: new Date("2026-03-01T00:00:00.000Z"),
+        validUntil: new Date("2026-04-01T00:00:00.000Z"),
+        provenance: "USER_CORRECTION",
+        supersededByRevisionId: "smoking-current",
+        createdAt: new Date("2026-03-01T00:00:00.000Z"),
+      },
+      {
+        id: "smoking-current",
+        userId: "user-1",
+        kind: "SMOKING_STATUS",
+        valueEncrypted: encryptToBytes("NEVER"),
+        validFrom: new Date("2026-04-01T00:00:00.000Z"),
+        validUntil: null,
+        provenance: "USER_CORRECTION",
+        supersededByRevisionId: null,
+        createdAt: new Date("2026-04-01T00:00:00.000Z"),
+      },
+    ]);
+
+    const portable = await buildFullBackupPayload(prisma as never, "user-1", {
+      purpose: "portable-export",
+      exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+    });
+    const parsedPortable = parseBackupPayload(portable.payload);
+    expect(parsedPortable.healthProfileFacts).toEqual([
+      expect.objectContaining({
+        id: "alcohol-old",
+        supersededByRevisionId: null,
+      }),
+      expect.objectContaining({
+        id: "smoking-old",
+        supersededByRevisionId: null,
+      }),
+      expect.objectContaining({
+        id: "smoking-current",
+        supersededByRevisionId: null,
+      }),
+    ]);
+    expect(
+      parsedPortable.healthProfileFacts.map((fact) => fact.id),
+    ).not.toContain("smoking-invalid");
+    expect(portable.counts.healthProfileFactRevisions).toBe(3);
+
+    const restoredFacts: Array<Record<string, unknown>> = [];
+    const factDelegate = {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn(({ data }: { data: Record<string, unknown> }) => {
+        restoredFacts.push(data);
+        return data;
+      }),
+      update: vi.fn().mockResolvedValue({}),
+    };
+    const emptyDelegate = {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      findUnique: vi.fn().mockResolvedValue(null),
+    };
+    const userDelegate = { update: vi.fn().mockResolvedValue({}) };
+    await restoreProfileData(
+      {
+        healthProfileFactRevision: factDelegate,
+        userHealthProfile: emptyDelegate,
+        customMetric: emptyDelegate,
+        correlationPattern: emptyDelegate,
+        user: userDelegate,
+      } as never,
+      "restored-user",
+      {
+        healthProfile: null,
+        healthProfileFacts: parsedPortable.healthProfileFacts,
+        customMetrics: [],
+        correlationPatterns: [],
+      },
+    );
+    expect(factDelegate.create).toHaveBeenCalledTimes(3);
+    expect(factDelegate.update).not.toHaveBeenCalled();
+
+    const recovery = await buildFullBackupPayload(prisma as never, "user-1", {
+      purpose: "disaster-recovery",
+      exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+    });
+    const parsedRecovery = parseBackupPayload(recovery.payload);
+    expect(parsedRecovery.healthProfileFacts).toHaveLength(6);
+    for (const id of ["alcohol-unreadable", "smoking-unreadable"]) {
+      const envelope = parsedRecovery.healthProfileFacts.find(
+        (fact) => fact.id === id,
+      )?.valueEncrypted;
+      expect(Buffer.from(envelope!, "base64")).toEqual(
+        Buffer.from(unreadableCiphertext),
+      );
+    }
+    expect(recovery.counts.healthProfileFactRevisions).toBe(6);
+
+    prisma.healthProfileFactRevision.findMany.mockResolvedValue(
+      restoredFacts as never,
+    );
+    const roundTripped = await buildFullBackupPayload(
+      prisma as never,
+      "restored-user",
+      {
+        purpose: "portable-export",
+        exportedAt: new Date("2026-07-21T00:00:00.000Z"),
+      },
+    );
+    expect(parseBackupPayload(roundTripped.payload).healthProfileFacts).toEqual(
+      parsedPortable.healthProfileFacts,
+    );
+  });
+
+  it("preserves and restores a readable closed terminal fact revision", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+    prisma.healthProfileFactRevision.findMany.mockResolvedValue([
+      {
+        id: "shift-old",
+        userId: "user-1",
+        kind: "SHIFT_SCHEDULE",
+        valueEncrypted: encryptToBytes("FIXED_SHIFT"),
+        validFrom: new Date("2026-01-01T00:00:00.000Z"),
+        validUntil: new Date("2026-02-01T00:00:00.000Z"),
+        provenance: "USER_REPORTED",
+        supersededByRevisionId: "shift-closed",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      },
+      {
+        id: "shift-closed",
+        userId: "user-1",
+        kind: "SHIFT_SCHEDULE",
+        valueEncrypted: encryptToBytes("ROTATING"),
+        validFrom: new Date("2026-02-01T00:00:00.000Z"),
+        validUntil: new Date("2026-03-01T00:00:00.000Z"),
+        provenance: "USER_CORRECTION",
+        supersededByRevisionId: null,
+        createdAt: new Date("2026-02-01T00:00:00.000Z"),
+      },
+    ]);
+
+    const portable = await buildFullBackupPayload(prisma as never, "user-1", {
+      purpose: "portable-export",
+      exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+    });
+    const parsedPortable = parseBackupPayload(portable.payload);
+    expect(parsedPortable.healthProfileFacts).toEqual([
+      expect.objectContaining({
+        id: "shift-old",
+        supersededByRevisionId: "shift-closed",
+      }),
+      expect.objectContaining({
+        id: "shift-closed",
+        validUntil: "2026-03-01T00:00:00.000Z",
+        supersededByRevisionId: null,
+      }),
+    ]);
+
+    const factDelegate = {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn().mockResolvedValue({}),
+      update: vi.fn().mockResolvedValue({}),
+    };
+    const emptyDelegate = {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      findUnique: vi.fn().mockResolvedValue(null),
+    };
+    const userDelegate = { update: vi.fn().mockResolvedValue({}) };
+    await restoreProfileData(
+      {
+        healthProfileFactRevision: factDelegate,
+        userHealthProfile: emptyDelegate,
+        customMetric: emptyDelegate,
+        correlationPattern: emptyDelegate,
+        user: userDelegate,
+      } as never,
+      "restored-user",
+      {
+        healthProfile: null,
+        healthProfileFacts: parsedPortable.healthProfileFacts,
+        customMetrics: [],
+        correlationPatterns: [],
+      },
+    );
+    expect(factDelegate.create).toHaveBeenCalledTimes(2);
+    expect(factDelegate.update).toHaveBeenCalledExactlyOnceWith({
+      where: { id: "shift-old" },
+      data: { supersededByRevisionId: "shift-closed" },
+    });
+  });
+
+  it("carries each metric with its readings nested inside it", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+
+    const { payload, counts } = await buildFullBackupPayload(
+      prisma as never,
+      "user-1",
+      {
+        purpose: "disaster-recovery",
+        exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+      },
+    );
+
+    expect(payload.customMetrics).toEqual([
+      expect.objectContaining({
+        id: "metric-1",
+        name: "Morning grip strength",
+        unit: "kg",
+        targetLow: 40,
+        targetHigh: null,
+        decimals: 1,
+        description: "Right hand, before breakfast",
+        correlationEnabled: true,
+        deletedAt: null,
+        entries: [
+          expect.objectContaining({
+            id: "entry-1",
+            value: 44.5,
+            unit: "kg",
+            measuredAt: "2026-07-19T06:30:00.000Z",
+            note: "felt strong",
+          }),
+        ],
+      }),
+    ]);
+    expect(counts.customMetrics).toBe(1);
+    expect(counts.customMetricEntries).toBe(1);
+    expect(payload.correlationPatterns).toEqual([
+      expect.objectContaining({
+        id: "pattern-1",
+        canonicalKey: `p1:${"a".repeat(64)}`,
+        factorKey: "CUSTOM_METRIC:metric-1",
+        outcomeKey: "RESTING_HEART_RATE",
+        dismissedAt: "2026-07-19T09:00:00.000Z",
+        dismissedEvidenceHash: "b".repeat(64),
+      }),
+    ]);
+    expect(counts.correlationPatterns).toBe(1);
+  });
+
+  it("excludes deleted metrics from a portable export", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+
+    await buildFullBackupPayload(prisma as never, "user-1", {
+      purpose: "portable-export",
+      exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+    });
+
+    expect(prisma.customMetric.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: "user-1", deletedAt: null },
+      }),
+    );
+  });
+
+  it("carries the day curve hour by hour, with its count", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+
+    const { payload, counts } = await buildFullBackupPayload(
+      prisma as never,
+      "user-1",
+      {
+        purpose: "disaster-recovery",
+        exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+      },
+    );
+
+    // Rebuilding the curve from `dayTotal` would produce a plausible ramp that
+    // describes no day that happened, so the whole array is asserted.
+    expect(payload.intradayProfiles).toEqual([
+      expect.objectContaining({
+        id: "shape-1",
+        type: "ACTIVITY_STEPS",
+        dateKey: "2026-07-18",
+        hourlyCumulative: Array.from({ length: 24 }, (_, h) => h * 300),
+        dayTotal: 6900,
+        sampleCount: 96,
+        timezone: "Europe/Berlin",
+      }),
+    ]);
+    expect(counts.intradayProfiles).toBe(1);
   });
 });

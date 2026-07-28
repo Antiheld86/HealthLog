@@ -338,18 +338,7 @@ describe("i18n locale file integrity", () => {
     },
   );
 
-  /**
-   * v1.4.22 A6 — DE locale must not leak English nouns for the
-   * Health-Score component contract.
-   *
-   * The four `componentBp` / `componentWeight` / `componentMood` /
-   * `componentCompliance` keys are rendered as the four sub-bar
-   * labels on the Health Score card. Up to v1.4.21 the DE locale
-   * shipped `componentMood: "Mood"` (an English noun voice-to-text
-   * rendered as "Mut" on a quick read). Pin the German values so a
-   * future copy-paste regression can't reintroduce the leak.
-   */
-  it("DE locale renders Health-Score component labels in German", () => {
+  it("DE locale renders Health Score pillar labels in German", () => {
     const de = JSON.parse(readFileSync(DE_PATH, "utf8")) as Record<
       string,
       unknown
@@ -357,50 +346,32 @@ describe("i18n locale file integrity", () => {
     const flat: [string, string][] = [];
     flattenValues(de, "", flat);
     const byKey = new Map(flat);
-
-    const EXPECTED: Array<[string, string]> = [
-      ["insights.healthScore.componentBp", "Blutdruck"],
-      ["insights.healthScore.componentWeight", "Gewicht"],
-      ["insights.healthScore.componentMood", "Stimmung"],
-      ["insights.healthScore.componentCompliance", "Therapietreue"],
+    const expected: Array<[string, string]> = [
+      ["insights.healthScore.pillar.bloodPressure", "Blutdruck"],
+      ["insights.healthScore.pillar.glycaemia", "Blutzucker"],
+      ["insights.healthScore.pillar.activity", "Aktivität"],
+      ["insights.healthScore.pillar.sleep", "Schlaf"],
+      ["insights.healthScore.pillar.wellbeing", "Wohlbefinden"],
+      ["insights.healthScore.pillar.fitness", "Gemessene Fitness"],
+      ["insights.healthScore.pillar.lipids", "Blutfette"],
     ];
-
-    for (const [key, expectedDe] of EXPECTED) {
-      const actual = byKey.get(key);
-      expect(actual, `DE label for ${key}`).toBe(expectedDe);
+    for (const [key, expectedDe] of expected) {
+      expect(byKey.get(key), `DE label for ${key}`).toBe(expectedDe);
     }
   });
 
-  /**
-   * v1.4.25 W8e — Health-Score provenance accordion drift-guard.
-   *
-   * Mirrors the `measurement-list-meta` enum-coverage pattern: every
-   * i18n key the accordion renders must resolve in every shipped
-   * locale. If a future copy-paste regression drops a key or a new
-   * source token appears in the analytics layer without a matching
-   * locale entry, this test fails fast.
-   *
-   * The expected key set is hand-pinned (not extracted from the
-   * accordion component) so the test catches both directions —
-   * a missing locale value AND an accidentally dropped accordion
-   * call-site.
-   */
-  it("Health-Score provenance keys resolve in every locale", () => {
-    const PROVENANCE_KEYS = [
-      "insights.healthScore.provenance.toggle",
-      "insights.healthScore.provenance.mixedBanner",
-      "insights.healthScore.provenance.footnote",
-      "insights.healthScore.provenance.asOfLabel",
-      "insights.healthScore.provenance.provisional",
-      "insights.healthScore.provenance.provisionalBadge",
-      "insights.healthScore.provenance.sourceAria",
-      "insights.healthScore.provenance.sources.manual",
-      "insights.healthScore.provenance.sources.withings",
-      "insights.healthScore.provenance.sources.appleHealth",
-      "insights.healthScore.provenance.sources.mixed",
-      "insights.healthScore.provenance.sources.none",
+  it("Health Score transparency keys resolve in every locale", () => {
+    const transparencyKeys = [
+      "insights.healthScore.algorithmChanged",
+      "insights.healthScore.method",
+      "insights.healthScore.composition",
+      "insights.healthScore.bandSetter",
+      "insights.healthScore.versionAndNoise",
+      "insights.healthScore.observed",
+      "insights.healthScore.reference",
+      "insights.healthScore.source",
+      "insights.healthScore.weightGoal.notScored",
     ] as const;
-
     for (const { locale, path } of ALL_LOCALES) {
       const data = JSON.parse(readFileSync(path, "utf8")) as Record<
         string,
@@ -409,7 +380,7 @@ describe("i18n locale file integrity", () => {
       const flat: [string, string][] = [];
       flattenValues(data, "", flat);
       const byKey = new Map(flat);
-      for (const key of PROVENANCE_KEYS) {
+      for (const key of transparencyKeys) {
         expect(
           byKey.get(key),
           `${locale} locale missing or empty: ${key}`,

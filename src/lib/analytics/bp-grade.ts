@@ -199,12 +199,11 @@ export interface BpPairPoint {
 const HALF_LIFE_DAYS = 45;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export function gradeBpScoreFromSeries(input: {
+export function representativeBpFromSeries(input: {
   pairs: ReadonlyArray<BpPairPoint>;
-  target: BpTargets;
   now: Date;
-}): number | null {
-  const { pairs, target, now } = input;
+}): { sys: number; dia: number } | null {
+  const { pairs, now } = input;
   if (pairs.length === 0) return null;
 
   const nowMs = now.getTime();
@@ -223,8 +222,19 @@ export function gradeBpScoreFromSeries(input: {
     diaWeighted += weight * p.dia;
   }
   if (weightSum === 0) return null;
+  return {
+    sys: sysWeighted / weightSum,
+    dia: diaWeighted / weightSum,
+  };
+}
 
-  const sys = sysWeighted / weightSum;
-  const dia = diaWeighted / weightSum;
-  return gradeBpScore({ sys, dia, target });
+export function gradeBpScoreFromSeries(input: {
+  pairs: ReadonlyArray<BpPairPoint>;
+  target: BpTargets;
+  now: Date;
+}): number | null {
+  const representative = representativeBpFromSeries(input);
+  return representative
+    ? gradeBpScore({ ...representative, target: input.target })
+    : null;
 }

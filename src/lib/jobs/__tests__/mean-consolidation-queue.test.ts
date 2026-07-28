@@ -3,7 +3,7 @@
  *
  * Same source-text-grep approach as the drain + step-consolidation
  * regression guards: assert the queue is registered in `allQueues`, a
- * `boss.work` handler is wired against it, and the boot-discovery
+ * `createAndWork` handler is wired against it, and the boot-discovery
  * enqueue helper is called — without booting pg-boss + Prisma. An
  * unregistered queue silently never drains.
  */
@@ -34,9 +34,9 @@ describe("reminder-worker — mean-consolidation wiring", () => {
     expect(allQueuesMatch![1]).toMatch(/\bMEAN_CONSOLIDATION_QUEUE\b/);
   });
 
-  it("registers a boss.work handler against the mean-consolidation queue", () => {
+  it("registers a createAndWork handler against the mean-consolidation queue", () => {
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,200}MEAN_CONSOLIDATION_QUEUE[\s\S]{0,400}runMeanConsolidationForUser/,
+      /createAndWork[\s\S]{0,200}MEAN_CONSOLIDATION_QUEUE[\s\S]{0,400}runMeanConsolidationForUser/,
     );
   });
 

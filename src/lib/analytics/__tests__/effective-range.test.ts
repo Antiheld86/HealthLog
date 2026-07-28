@@ -3,6 +3,8 @@ import {
   getEffectiveRange,
   getAllEffectiveRanges,
   METRIC_BOUNDS,
+  resolveWeightTargetOverride,
+  resolveEffectiveBpTargets,
   type UserProfileForRange,
   type ThresholdOverridesJson,
 } from "../effective-range";
@@ -126,6 +128,48 @@ describe("getAllEffectiveRanges", () => {
   });
 });
 
+describe("resolveEffectiveBpTargets", () => {
+  it("merges the user's systolic and diastolic target overrides", () => {
+    expect(
+      resolveEffectiveBpTargets(baseProfile, {
+        BLOOD_PRESSURE_SYS: { min: 115, max: 125 },
+        BLOOD_PRESSURE_DIA: { min: 65, max: 75 },
+      }),
+    ).toEqual({
+      sysLow: 115,
+      sysHigh: 125,
+      diaLow: 65,
+      diaHigh: 75,
+    });
+  });
+
+  it("uses the evidence default for an axis without an override", () => {
+    expect(
+      resolveEffectiveBpTargets(baseProfile, {
+        BLOOD_PRESSURE_SYS: { min: 115, max: 125 },
+      }),
+    ).toEqual({
+      sysLow: 115,
+      sysHigh: 125,
+      diaLow: 70,
+      diaHigh: 79,
+    });
+  });
+
+  it("rejects malformed target pairs without losing valid defaults", () => {
+    expect(
+      resolveEffectiveBpTargets(baseProfile, {
+        BLOOD_PRESSURE_SYS: { min: 130, max: 120 },
+      }),
+    ).toEqual({
+      sysLow: 120,
+      sysHigh: 129,
+      diaLow: 70,
+      diaHigh: 79,
+    });
+  });
+});
+
 // Audit-2026-05-07 / phase P0 / closes audit C-15: TOTAL_BODY_WATER and
 // BONE_MASS lacked threshold definitions. Severity logic returned `nominal`
 // for any value, so users would see "all healthy" regardless of input.
@@ -222,5 +266,50 @@ describe("OXYGEN_SATURATION thresholds", () => {
       max: 100,
       unit: "%",
     });
+  });
+});
+
+/**
+ * v1.34 — `User.thresholdsJson` is untyped JSON and v1.34 gave the weight
+ * target three new consumers at once (the Health Score, the dashboard bands,
+ * the PR direction). One narrowing beats three hand-rolled casts, and a
+ * malformed blob must read as "no target", never as a target of NaN.
+ */
+describe("resolveWeightTargetOverride", () => {
+  it("reads a well-formed weight override", () => {
+    expect(
+      resolveWeightTargetOverride({ WEIGHT: { min: 74, max: 78 } }),
+    ).toEqual({ min: 74, max: 78 });
+  });
+
+  it("returns null for a blob with no weight entry", () => {
+    expect(resolveWeightTargetOverride(null)).toBeNull();
+    expect(resolveWeightTargetOverride({})).toBeNull();
+    expect(
+      resolveWeightTargetOverride({ BLOOD_PRESSURE_SYS: { min: 1, max: 2 } }),
+    ).toBeNull();
+  });
+
+  it("rejects a malformed pair instead of passing it through", () => {
+    expect(resolveWeightTargetOverride({ WEIGHT: { min: 74 } })).toBeNull();
+    expect(
+      resolveWeightTargetOverride({ WEIGHT: { min: "74", max: "78" } }),
+    ).toBeNull();
+    expect(
+      resolveWeightTargetOverride({ WEIGHT: { min: NaN, max: 78 } }),
+    ).toBeNull();
+    // An inverted or collapsed band is not a band.
+    expect(
+      resolveWeightTargetOverride({ WEIGHT: { min: 80, max: 70 } }),
+    ).toBeNull();
+    expect(
+      resolveWeightTargetOverride({ WEIGHT: { min: 75, max: 75 } }),
+    ).toBeNull();
+  });
+
+  it("survives a non-object blob", () => {
+    expect(resolveWeightTargetOverride("nope")).toBeNull();
+    expect(resolveWeightTargetOverride(42)).toBeNull();
+    expect(resolveWeightTargetOverride(undefined)).toBeNull();
   });
 });

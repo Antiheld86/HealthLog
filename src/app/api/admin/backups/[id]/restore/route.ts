@@ -14,7 +14,7 @@
 import { Buffer } from "node:buffer";
 
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/db";
+import { prisma, toJson } from "@/lib/db";
 import { apiHandler, HttpError, requireAdmin } from "@/lib/api-handler";
 import { apiError, apiSuccess, getClientIp } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
@@ -38,6 +38,8 @@ import {
 } from "@/lib/rollups/medication-compliance-rollups";
 import { recomputeUserRollups } from "@/lib/rollups/measurement-rollups";
 import { restoreCycleData } from "@/lib/cycle/backup";
+import { restoreProfileData } from "@/lib/export/profile-backup";
+import { restoreIntradayProfileData } from "@/lib/export/intraday-profile-backup";
 import { invalidateUserData } from "@/lib/cache/invalidate";
 
 export const dynamic = "force-dynamic";
@@ -64,6 +66,11 @@ interface RestoreResponse {
     familyHistory: number;
     workouts: number;
     documents: number;
+    healthProfile: number;
+    healthProfileFactRevisions: number;
+    customMetrics: number;
+    correlationPatterns: number;
+    intradayProfiles: number;
   };
 }
 
@@ -562,6 +569,32 @@ const handler = apiHandler(
           }
 
           if (payload.intakeEvents.length > 0) {
+            // An event whose medication did not come back used to be mapped to
+            // null and filtered away: the dose history came back short and the
+            // restore reported success. That is the same silent-drop shape the
+            // cycle symptom links had, and it gets the same answer — name the
+            // unresolved reference and stop, so the operator learns from the
+            // error rather than from a compliance rate that quietly moved.
+            const unresolvedMedications = [
+              ...new Set(
+                payload.intakeEvents
+                  .filter(
+                    (e) =>
+                      !(
+                        e.medicationId &&
+                        restoredMedicationIds.has(e.medicationId)
+                      ) && !medByName.has(e.medication),
+                  )
+                  .map((e) => e.medicationId ?? e.medication),
+              ),
+            ];
+            if (unresolvedMedications.length > 0) {
+              throw new Error(
+                `Unknown medication references in intake events: ${unresolvedMedications.join(
+                  ", ",
+                )}. The backup records doses against medications it does not carry.`,
+              );
+            }
             const rows = payload.intakeEvents
               .map((e) => {
                 const medId =
@@ -717,6 +750,21 @@ const handler = apiHandler(
           // symptom links). Delete-then-recreate, mirroring the contract
           // above. `notesEncrypted` is restored as ciphertext verbatim.
           const cycleCleared = await restoreCycleData(tx, ownerId, payload);
+
+          // Durable self-context + user-defined metrics. Both ends of this pair
+          // live in `src/lib/export/profile-backup.ts` beside its builder — a
+          // grep of THIS file alone will not find them, exactly as it does not
+          // find the cycle restore one line above.
+          const profileCleared = await restoreProfileData(tx, ownerId, payload);
+
+          // The hourly shape of a cumulative day. Both ends live in
+          // `src/lib/export/intraday-profile-backup.ts` beside its builder, so
+          // a grep of THIS file alone will not find them either.
+          const intradayCleared = await restoreIntradayProfileData(
+            tx,
+            ownerId,
+            payload,
+          );
 
           const biomarkerByName = new Map<string, string>();
           const restoredBiomarkerIds = new Set<string>();
@@ -994,6 +1042,9 @@ const handler = apiHandler(
                 pauseDurationSec: workout.pauseDurationSec ?? null,
                 source: workout.source as never,
                 externalId: workout.externalId ?? null,
+                ...(workout.metadata == null
+                  ? {}
+                  : { metadata: toJson(workout.metadata) }),
                 ...(workout.createdAt
                   ? { createdAt: new Date(workout.createdAt) }
                   : {}),
@@ -1073,6 +1124,12 @@ const handler = apiHandler(
             familyHistory: familyHistory.count,
             workouts: workouts.count,
             documents: documents.count,
+            healthProfile: profileCleared.healthProfile,
+            healthProfileFactRevisions:
+              profileCleared.healthProfileFactRevisions,
+            customMetrics: profileCleared.customMetrics,
+            correlationPatterns: profileCleared.correlationPatterns,
+            intradayProfiles: intradayCleared.intradayProfiles,
           };
         },
         {
@@ -1197,6 +1254,11 @@ const handler = apiHandler(
           familyHistory: summary.familyHistory,
           workouts: summary.workouts,
           documents: summary.documents,
+          healthProfile: summary.healthProfile,
+          healthProfileFactRevisions: summary.healthProfileFactRevisions,
+          customMetrics: summary.customMetrics,
+          customMetricEntries: summary.customMetricEntries,
+          correlationPatterns: summary.correlationPatterns,
         },
       },
     });

@@ -85,7 +85,7 @@ describe("v1.4.20 B3 — /api/analytics surfaces correlations", () => {
 
   it("returns a `correlations` block on the success payload", () => {
     const src = load(ANALYTICS_ROUTE_PATH);
-    expect(src).toMatch(/correlations,/);
+    expect(src).toMatch(/correlations:\s*correlationsWithPatterns,/);
     expect(src).toMatch(/computeCorrelationHypotheses/);
   });
 

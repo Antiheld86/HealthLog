@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { Scale } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
+import { queryKeys } from "@/lib/query-keys";
+import { apiGet } from "@/lib/api/api-fetch";
 import { useUnitDisplay } from "@/hooks/use-unit-display";
 import { useInsightsAnalytics } from "@/hooks/use-insights-analytics";
 import { useTranslations } from "@/lib/i18n/context";
@@ -19,16 +22,22 @@ import { MetricCorrelationCard } from "@/components/insights/metric-correlation-
 import { MeasurementDiversityNudge } from "@/components/insights/measurement-diversity-nudge";
 import { MetricTargetSummary } from "@/components/insights/metric-target-summary";
 import { SubPageShell } from "@/components/insights/sub-page-shell";
-import { buildWeightBandsFromHeight } from "@/lib/analytics/value-bands";
+import {
+  buildBandsFromTrafficRange,
+  buildWeightBandsFromHeight,
+  type TrafficRange,
+} from "@/lib/analytics/value-bands";
 
 /**
  * v1.4.25 W4 — `/insights/weight`.
  *
- * Routed Weight sub-page. Renders the weight chart with the user's
- * height-derived green/orange/red bands plus the per-section AI
- * assessment. The chart-cog (`chartKey="weight"`) lets the user toggle
- * trend lines + comparison overlay independently from the dashboard
- * weight card.
+ * Routed Weight sub-page. Renders the weight chart with green/orange/red
+ * bands plus the per-section AI assessment. The chart-cog
+ * (`chartKey="weight"`) lets the user toggle trend lines + comparison
+ * overlay independently from the dashboard weight card.
+ *
+ * v1.34 — the bands follow the user's own weight target when one is set,
+ * and fall back to the height-derived WHO band only when it is not.
  *
  * v1.4.28 R3d (BK-F-H1 + BK-F-M1) — analytics fetch + empty-state
  * branch now consume `useInsightsAnalytics()` + `<MetricEmptyState>`.
@@ -41,6 +50,22 @@ export default function InsightsGewichtPage() {
 
   const { data: analytics, isEmpty } = useInsightsAnalytics("WEIGHT");
   const weightSummary = analytics?.summaries?.WEIGHT ?? null;
+
+  // v1.34 — the user's own weight target, read through the shared
+  // `queryKeys.userThresholds()` cell the targets editor also subscribes to, so
+  // editing the target repaints this chart's band without a reload.
+  const { data: thresholds } = useQuery({
+    queryKey: queryKeys.userThresholds(),
+    queryFn: async () => {
+      return apiGet<{
+        effective: Record<
+          string,
+          { range: TrafficRange | null; isOverride: boolean }
+        >;
+      }>("/api/user/thresholds");
+    },
+    enabled: isAuthenticated,
+  });
 
   // v1.32.26 — resolve the weight display unit + scale from the user's
   // preference (kg for metric, lb for imperial). This page inlines the shell
@@ -106,12 +131,27 @@ export default function InsightsGewichtPage() {
     );
   }
 
-  const weightBands = user?.heightCm
-    ? buildWeightBandsFromHeight(user.heightCm, {
+  // v1.34 — the shaded zone follows the user's OWN target when they set one.
+  // The page used to shade the height-derived WHO band unconditionally, so
+  // someone who had entered a target on `/targets` kept reading a chart that
+  // ignored the answer. `/api/user/thresholds` already resolves the override
+  // (with its orange wings) through `getEffectiveRange`, so the page reads the
+  // resolved band rather than re-deriving one. No target and no height → no
+  // bands, unchanged.
+  const overrideRange = thresholds?.effective?.WEIGHT?.isOverride
+    ? (thresholds.effective.WEIGHT.range ?? null)
+    : null;
+  const weightBands = overrideRange
+    ? buildBandsFromTrafficRange(overrideRange, {
         lowerBound: 30,
         upperBound: 250,
       })
-    : undefined;
+    : user?.heightCm
+      ? buildWeightBandsFromHeight(user.heightCm, {
+          lowerBound: 30,
+          upperBound: 250,
+        })
+      : undefined;
   // The bands are kg bounds → scale into the display unit so the shaded zone
   // tracks the converted line (factor-only; weight carries no offset).
   const displayBands =

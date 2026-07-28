@@ -17,6 +17,7 @@
  */
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
+import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import {
   apiError,
@@ -338,6 +339,7 @@ async function postAssessment(request: NextRequest): Promise<Response> {
       externalId: `assessment:${assessment.id}`,
     },
   });
+  invalidateUserHealthScore(user.id);
 
   // v1.27.6 — a screening can be planned as a Vorsorge reminder keyed on
   // PHQ9_SCORE / GAD7_SCORE. Kick the eventful satisfy worker so completing

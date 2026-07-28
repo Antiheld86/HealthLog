@@ -48,6 +48,7 @@ import { pickCanonicalWorkoutRows } from "@/lib/measurements/pick-canonical-work
 import { defaultLocale, locales, type Locale } from "@/lib/i18n/config";
 import { finalizeStatusSummary } from "@/lib/insights/status-shared";
 import { runStatusCompletion } from "@/lib/insights/status-provider";
+import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { annotate } from "@/lib/logging/context";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import { resolveModuleMap } from "@/lib/modules/gate";
@@ -524,10 +525,14 @@ export async function runWorkoutInsightGenerate(
 
 export async function handleWorkoutInsightGenerate(
   jobs: Job<WorkoutInsightGeneratePayload>[],
-): Promise<void> {
-  await withBackgroundEvent("job.workout_insight_generate", async (evt) => {
+): Promise<JobOutcome> {
+  return withBackgroundEvent("job.workout_insight_generate", async (evt) => {
+    let generated = 0;
+    let skipped = 0;
     for (const job of jobs) {
       const outcome = await runWorkoutInsightGenerate(job.data);
+      if (outcome.status === "skipped") skipped++;
+      else generated++;
       evt.addMeta(
         "workout_insight",
         outcome.status === "skipped"
@@ -535,5 +540,9 @@ export async function handleWorkoutInsightGenerate(
           : `generated:${outcome.providerType}`,
       );
     }
+    // Every gate in front of the provider returns `skipped`, so a pass that
+    // wrote no paragraph at all is still a pass that ran. Only a transient
+    // fault escapes `runWorkoutInsightGenerate`, and that one throws.
+    return jobDone({ total: jobs.length, generated, skipped });
   });
 }

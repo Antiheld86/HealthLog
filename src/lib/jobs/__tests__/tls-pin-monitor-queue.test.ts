@@ -3,7 +3,7 @@
  *
  * Same source-text-grep approach as the other queue-wiring guards: assert
  * the queue is imported, registered in `allQueues`, scheduled, and wired to
- * a `boss.work` handler — without booting pg-boss + Prisma. An unregistered
+ * a `createAndWork` handler — without booting pg-boss + Prisma. An unregistered
  * queue silently never drains (the recurring v1.4.37 dead-queue bug), which
  * would leave the pinned-leaf-rotation alarm dark.
  */
@@ -50,9 +50,9 @@ describe("reminder-worker — tls-pin-monitor wiring", () => {
     );
   });
 
-  it("registers a boss.work handler for the queue", () => {
+  it("registers a createAndWork handler for the queue", () => {
     expect(workerSource).toMatch(
-      /boss\.work[\s\S]{0,200}TLS_PIN_MONITOR_QUEUE[\s\S]{0,200}handleTlsPinMonitor/,
+      /createAndWork[\s\S]{0,200}TLS_PIN_MONITOR_QUEUE[\s\S]{0,200}handleTlsPinMonitor/,
     );
   });
 

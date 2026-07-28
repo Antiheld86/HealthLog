@@ -11,6 +11,7 @@ import {
 } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
+import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
 import {
   type ResolvedBiomarker,
   serialiseLabResult,
@@ -217,6 +218,7 @@ export const PUT = apiHandler(
       data,
       include: { biomarker: { select: biomarkerSelect } },
     });
+    invalidateUserHealthScore(user.id);
 
     await auditLog("labResult.update", {
       userId: user.id,
@@ -250,6 +252,7 @@ export const DELETE = apiHandler(
       where: { id },
       data: { deletedAt: new Date() },
     });
+    invalidateUserHealthScore(user.id);
 
     await auditLog("labResult.delete", {
       userId: user.id,

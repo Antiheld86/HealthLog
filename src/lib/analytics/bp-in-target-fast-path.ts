@@ -69,7 +69,7 @@ import {
   isBpReadingInTarget,
   type BpReading,
 } from "./bp-in-target";
-import { gradeBpScoreFromSeries } from "./bp-grade";
+import { gradeBpScoreFromSeries, representativeBpFromSeries } from "./bp-grade";
 import type { BpTargets } from "./bp-targets";
 
 /**
@@ -111,6 +111,10 @@ export interface BpInTargetEnvelope {
    * in-target rate AS THE SCORE. `null` when no pairs formed.
    */
   gradedScore: number | null;
+  /** Same recency-weighted pair that `gradedScore` grades. */
+  representative: { sys: number; dia: number } | null;
+  /** Freshest paired reading in the trailing 90-day score window. */
+  last90LatestAt: Date | null;
 }
 
 /**
@@ -304,11 +308,15 @@ async function computeFromRollups(
   const ninetyDaysAgoMs = ninetyDaysAgo.getTime();
   const nowMs = now.getTime();
   let last90EarliestAt: Date | null = null;
+  let last90LatestAt: Date | null = null;
   for (const p of pairsByDay) {
     const dayMs = p.day.getTime();
     if (dayMs < ninetyDaysAgoMs || dayMs >= nowMs) continue;
     if (last90EarliestAt === null || dayMs < last90EarliestAt.getTime()) {
       last90EarliestAt = p.day;
+    }
+    if (last90LatestAt === null || dayMs > last90LatestAt.getTime()) {
+      last90LatestAt = p.day;
     }
   }
   // All-time on the rollup path is bounded to the 395-day read window.
@@ -361,14 +369,21 @@ async function computeFromRollups(
   // produced different graded scores for the same data depending on
   // DAY-bucket warmth (the in-target RATE already multiplied by
   // perDayPairCount; the graded score now does the equivalent).
+  const scorePairs = pairsByDay
+    .filter((pair) => pair.day >= ninetyDaysAgo && pair.day < now)
+    .map((pair) => ({
+      at: pair.day,
+      sys: pair.sys,
+      dia: pair.dia,
+      count: pair.perDayPairCount,
+    }));
   const gradedScore = gradeBpScoreFromSeries({
-    pairs: pairsByDay.map((p) => ({
-      at: p.day,
-      sys: p.sys,
-      dia: p.dia,
-      count: p.perDayPairCount,
-    })),
+    pairs: scorePairs,
     target: targets,
+    now,
+  });
+  const representative = representativeBpFromSeries({
+    pairs: scorePairs,
     now,
   });
 
@@ -377,12 +392,14 @@ async function computeFromRollups(
     last30Days: last30,
     last90Days: last90,
     last90EarliestAt,
+    last90LatestAt,
     allTime,
     priorMonth,
     priorYear,
     path: "rollup",
     rowCount,
     gradedScore,
+    representative,
   };
 }
 
@@ -525,9 +542,16 @@ async function computeFromLive(
   );
   // v1.15.12 A1 — graded BP pillar score from the recency-weighted
   // representative of every accepted per-event pair over the read window.
+  const scorePairs = collectBpPairs(sysData, diaData, userTz).filter(
+    (pair) => pair.at >= new Date(now.getTime() - 90 * DAY_MS) && pair.at < now,
+  );
   const gradedScore = gradeBpScoreFromSeries({
-    pairs: collectBpPairs(sysData, diaData, userTz),
+    pairs: scorePairs,
     target: targets,
+    now,
+  });
+  const representative = representativeBpFromSeries({
+    pairs: scorePairs,
     now,
   });
   return {
@@ -535,12 +559,17 @@ async function computeFromLive(
     last30Days: windows.last30Days,
     last90Days: windows.last90Days,
     last90EarliestAt: windows.last90EarliestAt,
+    last90LatestAt: scorePairs.reduce<Date | null>(
+      (latest, pair) => (!latest || pair.at > latest ? pair.at : latest),
+      null,
+    ),
     allTime: windows.allTime,
     priorMonth: windows.priorMonth,
     priorYear: windows.priorYear,
     path: "live",
     rowCount,
     gradedScore,
+    representative,
   };
 }
 

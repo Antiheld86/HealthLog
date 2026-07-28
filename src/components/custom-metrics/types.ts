@@ -14,6 +14,7 @@ export interface CustomMetricDto {
   targetHigh: number | null;
   decimals: number | null;
   description: string | null;
+  correlationEnabled: boolean;
   /** Present on the list + create reads; absent on the bare detail read. */
   latest?: CustomMetricLatest | null;
   entryCount?: number;

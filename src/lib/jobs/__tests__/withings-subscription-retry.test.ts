@@ -4,7 +4,9 @@ import type { Job } from "pg-boss";
 const retryDueWithingsWebhookSubscriptions = vi.hoisted(() =>
   vi.fn().mockResolvedValue(0),
 );
-const syncUserMeasurements = vi.hoisted(() => vi.fn().mockResolvedValue(0));
+const syncUserMeasurements = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ imported: 0, failed: false }),
+);
 const findMany = vi.hoisted(() => vi.fn().mockResolvedValue([]));
 const addWarning = vi.hoisted(() => vi.fn());
 
@@ -63,7 +65,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   findMany.mockResolvedValue([]);
   retryDueWithingsWebhookSubscriptions.mockResolvedValue(0);
-  syncUserMeasurements.mockResolvedValue(0);
+  syncUserMeasurements.mockResolvedValue({ imported: 0, failed: false });
 });
 
 describe("handleWithingsFallbackSync subscription repair", () => {
@@ -72,7 +74,16 @@ describe("handleWithingsFallbackSync subscription repair", () => {
       data: { triggeredAt: "2026-07-21T10:00:00.000Z" },
     } as Job<WithingsSyncPayload>;
 
-    await handleWithingsFallbackSync([queued]);
+    await expect(handleWithingsFallbackSync([queued])).resolves.toEqual({
+      ok: true,
+      did: {
+        total: 0,
+        users_synced: 0,
+        users_failed: 0,
+        measurements_imported: 0,
+        subscription_repair_failed: false,
+      },
+    });
 
     expect(retryDueWithingsWebhookSubscriptions).toHaveBeenCalledTimes(1);
     expect(syncUserMeasurements).not.toHaveBeenCalled();
@@ -89,7 +100,19 @@ describe("handleWithingsFallbackSync subscription repair", () => {
       data: { triggeredAt: "2026-07-21T11:00:00.000Z" },
     } as Job<WithingsSyncPayload>;
 
-    await expect(handleWithingsFallbackSync([queued])).resolves.toBeUndefined();
+    // The repair is an auxiliary leg, not the pass this queue is named for:
+    // the fallback sync still ran for everyone, so the job is done and the
+    // repair failure rides out as a fact on the outcome.
+    await expect(handleWithingsFallbackSync([queued])).resolves.toEqual({
+      ok: true,
+      did: {
+        total: 2,
+        users_synced: 2,
+        users_failed: 0,
+        measurements_imported: 0,
+        subscription_repair_failed: true,
+      },
+    });
 
     expect(findMany).toHaveBeenCalledWith({ select: { userId: true } });
     expect(syncUserMeasurements).toHaveBeenNthCalledWith(

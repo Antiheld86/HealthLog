@@ -250,6 +250,56 @@ export async function fetchEnvironmentSeries(
   });
 }
 
+/** Explicit deterministic ceiling on opt-in custom behaviour channels. */
+export const MAX_CUSTOM_CORRELATION_CHANNELS = 8;
+export const CUSTOM_METRIC_CHANNEL_PREFIX = "CUSTOM_METRIC:";
+
+/**
+ * Read only active, owner-scoped custom metrics that explicitly opted into
+ * discovery. Metrics are selected oldest-first with an id tie-break and capped
+ * before entries are read, bounding both channel count and pair-space growth.
+ * Historical rows whose unit snapshot differs from the definition's current
+ * unit are excluded so a rename/conversion can never mix units.
+ */
+export async function fetchCustomMetricBehaviourSeries(
+  userId: string,
+  tz: string,
+  since: Date,
+): Promise<NamedSeries[]> {
+  const metrics = await prisma.customMetric.findMany({
+    where: {
+      userId,
+      deletedAt: null,
+      correlationEnabled: true,
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    take: MAX_CUSTOM_CORRELATION_CHANNELS,
+    select: {
+      id: true,
+      name: true,
+      unit: true,
+      entries: {
+        where: { measuredAt: { gte: since } },
+        orderBy: [{ measuredAt: "desc" }, { id: "desc" }],
+        take: 2000,
+        select: { value: true, unit: true, measuredAt: true },
+      },
+    },
+  });
+
+  return metrics.map((metric) => ({
+    key: `${CUSTOM_METRIC_CHANNEL_PREFIX}${metric.id}`,
+    label: metric.name,
+    role: "behaviour" as const,
+    points: toDailyMeans(
+      metric.entries
+        .filter((entry) => entry.unit === metric.unit)
+        .map((entry) => ({ value: entry.value, at: entry.measuredAt })),
+      tz,
+    ),
+  }));
+}
+
 /** Day key (YYYY-MM-DD) for an instant in the user's display timezone. */
 function tzDayKey(at: Date, tz: string): string {
   const { year, month, day } = wallClockInTz(at, tz);

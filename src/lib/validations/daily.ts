@@ -3,12 +3,10 @@
  * (`POST /api/daily/digest/dismiss`).
  *
  * Lives outside the route file so the OpenAPI registry can import it without
- * touching the route module. `itemKey` is namespaced `<kind>:...`
- * (`isDismissibleItemKey` in `@/lib/daily/priority-item`) — the prefix alone
- * proves the key names one of the OBSERVATIONAL kinds
- * (`milestone` / `ecg_new_recording` / `tension_window`); anything else 422s
- * before a lookup ever runs, so an actionable item can never be dismissed
- * through this endpoint no matter what a client sends.
+ * touching the route module. `isDismissibleItemKey` accepts only approved
+ * observational item and versioned notice prefixes. Anything else 422s before
+ * a lookup runs, so an actionable item can never be dismissed through this
+ * endpoint.
  */
 import { z } from "zod/v4";
 

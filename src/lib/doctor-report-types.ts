@@ -20,6 +20,11 @@ import type {
   MedicationPauseEraLike,
 } from "@/lib/analytics/compliance";
 import type { ScheduleRevisionLike } from "@/lib/medications/scheduling/schedule-eras";
+import type {
+  AlcoholPatternValue,
+  ShiftScheduleValue,
+  SmokingStatusValue,
+} from "@/lib/validations/health-profile-facts";
 
 export interface DoctorReportStats {
   avg: number;
@@ -313,6 +318,21 @@ export interface DoctorReportData {
     /** The relative's age at onset (years), or null when unknown. */
     ageAtOnset: number | null;
   }> | null;
+  /**
+   * User-selected anamnesis leaf. Unlike optional data sections, this object is
+   * present whenever the leaf was selected even when every value is absent, so
+   * the clinician sees an honest "not recorded" label rather than silence.
+   */
+  anamnesis?: {
+    conditions: string | null;
+    conditionsUnreadable: boolean;
+    smokingStatus: SmokingStatusValue | null;
+    alcoholPattern: AlcoholPatternValue | null;
+    shiftSchedule: ShiftScheduleValue | null;
+    unreadableFacts: Array<
+      "SMOKING_STATUS" | "ALCOHOL_PATTERN" | "SHIFT_SCHEDULE"
+    >;
+  } | null;
 }
 
 /** The three persisted score types surfaced in the wellness summary. */

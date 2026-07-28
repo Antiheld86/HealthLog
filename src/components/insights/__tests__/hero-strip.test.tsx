@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { I18nProvider } from "@/lib/i18n/context";
 import { HeroStrip } from "../hero-strip";
 import type { DailyBriefing as DailyBriefingPayload } from "@/lib/ai/schema";
+import type { HealthScoreReport } from "@/lib/analytics/score/types";
 
 // The "generated" freshness line reads the profile timezone via `useAuth`; stub
 // it so the SSR render does not reach for a QueryClient the test omits.
@@ -40,6 +41,53 @@ const sampleBriefing: DailyBriefingPayload = {
 const morningLocal = new Date("2026-05-10T07:00:00Z"); // 09:00 Berlin
 const afternoonLocal = new Date("2026-05-10T12:00:00Z"); // 14:00 Berlin
 const eveningLocal = new Date("2026-05-10T18:00:00Z"); // 20:00 Berlin
+const SCORE_REPORT: HealthScoreReport = {
+  composite: {
+    status: "ok",
+    value: {
+      score: 86,
+      band: "green",
+      bandSetter: null,
+      composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
+      noiseFloor: 3,
+      scoreVersion: 2,
+    },
+    coverage: {
+      requiredInputs: 3,
+      presentInputs: 3,
+      historyDays: 28,
+      missing: [],
+    },
+    confidence: { score: 100, band: "high" },
+    provenance: {
+      inputs: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
+      source: "live",
+      windowDays: 90,
+      computedAt: "2026-05-10T07:00:00.000Z",
+    },
+  },
+  pillars: [],
+  delta: 5,
+  deltaReason: null,
+  scoreVersion: 2,
+  weightGoal: {
+    status: "insufficient",
+    coverage: {
+      requiredInputs: 2,
+      presentInputs: 0,
+      historyDays: 0,
+      missing: ["weight reading", "personal weight target"],
+    },
+    provenance: {
+      inputs: ["WEIGHT"],
+      source: "none",
+      windowDays: 90,
+      computedAt: "2026-05-10T07:00:00.000Z",
+    },
+    reason: "no_personal_goal",
+  },
+  algorithmNotice: null,
+};
 
 describe("<HeroStrip>", () => {
   it("renders the slot wrapper + Dracula gradient utility", () => {
@@ -250,17 +298,7 @@ describe("<HeroStrip>", () => {
       <HeroStrip
         briefing={null}
         now={morningLocal}
-        healthScore={{
-          score: 86,
-          band: "green",
-          components: {
-            bp: { value: 80, weight: 0.3 },
-            weight: { value: 70, weight: 0.2 },
-            mood: { value: 90, weight: 0.2 },
-            compliance: { value: 100, weight: 0.3 },
-          },
-          delta: 5,
-        }}
+        healthScore={SCORE_REPORT}
       />,
     );
     expect(html).toMatch(/data-slot="health-score-card"/);
@@ -277,17 +315,7 @@ describe("<HeroStrip>", () => {
       <HeroStrip
         briefing={null}
         now={morningLocal}
-        healthScore={{
-          score: 86,
-          band: "green",
-          components: {
-            bp: { value: 80, weight: 0.3 },
-            weight: { value: 70, weight: 0.2 },
-            mood: { value: 90, weight: 0.2 },
-            compliance: { value: 100, weight: 0.3 },
-          },
-          delta: 5,
-        }}
+        healthScore={SCORE_REPORT}
       />,
     );
     expect(html).not.toContain('data-slot="health-score-card-ask-coach"');
@@ -299,17 +327,7 @@ describe("<HeroStrip>", () => {
       <HeroStrip
         briefing={null}
         now={morningLocal}
-        healthScore={{
-          score: 86,
-          band: "green",
-          components: {
-            bp: { value: 80, weight: 0.3 },
-            weight: { value: 70, weight: 0.2 },
-            mood: { value: 90, weight: 0.2 },
-            compliance: { value: 100, weight: 0.3 },
-          },
-          delta: null,
-        }}
+        healthScore={SCORE_REPORT}
       />,
     );
     // The wrapper picks up the `lg:flex-row` modifier when the score
@@ -329,17 +347,7 @@ describe("<HeroStrip>", () => {
       <HeroStrip
         briefing={null}
         now={morningLocal}
-        healthScore={{
-          score: 86,
-          band: "green",
-          components: {
-            bp: { value: 80, weight: 0.3 },
-            weight: { value: 70, weight: 0.2 },
-            mood: { value: 90, weight: 0.2 },
-            compliance: { value: 100, weight: 0.3 },
-          },
-          delta: null,
-        }}
+        healthScore={SCORE_REPORT}
       />,
     );
     expect(html).toContain("md:items-stretch");
@@ -395,17 +403,7 @@ describe("<HeroStrip>", () => {
         briefing={null}
         now={morningLocal}
         healthScorePending
-        healthScore={{
-          score: 86,
-          band: "green",
-          components: {
-            bp: { value: 80, weight: 0.3 },
-            weight: { value: 70, weight: 0.2 },
-            mood: { value: 90, weight: 0.2 },
-            compliance: { value: 100, weight: 0.3 },
-          },
-          delta: 5,
-        }}
+        healthScore={SCORE_REPORT}
       />,
     );
     expect(html).toContain('data-slot="health-score-card"');

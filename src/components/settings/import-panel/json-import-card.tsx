@@ -12,8 +12,8 @@ import { apiFetchRaw } from "@/lib/api/api-fetch";
 import { ImportCardShell } from "./import-card-shell";
 import { MAX_PASTE_CHARS } from "./constants";
 import { EXAMPLE_IMPORT, parseImportJson } from "./import-examples";
-import { classifyImportOutcome } from "./import-result-state";
-import { ImportOutcomeLine } from "./import-result-view";
+import { WrittenOutcomeLine } from "@/components/outcome/written-outcome-line";
+import { classifyWrittenOutcome } from "@/lib/outcome/written-outcome";
 
 interface JsonImportResult {
   measurements: number;
@@ -28,7 +28,7 @@ export function JsonImportCard() {
   // concept count envelope, so a payload where every entry was refused used
   // to render the success tick. The counts decide the tone.
   const jsonOutcome = (r: JsonImportResult) =>
-    classifyImportOutcome({
+    classifyWrittenOutcome({
       written: r.measurements + r.moodEntries,
       skipped: r.skipped,
     });
@@ -191,7 +191,7 @@ export function JsonImportCard() {
 
       <div aria-live="polite" className="space-y-2">
         {result && (
-          <ImportOutcomeLine
+          <WrittenOutcomeLine
             outcome={jsonOutcome(result)}
             message={jsonMessage(result)}
             testId="import-json-result"

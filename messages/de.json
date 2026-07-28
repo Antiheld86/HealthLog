@@ -124,6 +124,15 @@
   },
   "doctorReport": {
     "title": "Gesundheitsbericht",
+    "anamnesisTitle": "Gesundheitsprofil",
+    "anamnesisNotRecorded": "Nicht erfasst",
+    "anamnesisUnreadable": "Gespeicherter Wert konnte nicht gelesen werden",
+    "anamnesisConditions": "Chronische Erkrankungen",
+    "anamnesisSmoking": "Rauchstatus",
+    "anamnesisAlcohol": "Alkoholkonsummuster",
+    "anamnesisShiftSchedule": "Arbeitszeitmodell",
+    "anamnesisColFact": "Profilangabe",
+    "anamnesisColValue": "Erfasster Wert",
     "subtitle": "HealthLog — Persönlicher Gesundheitsbericht",
     "patient": "Patient",
     "dateOfBirth": "Geburtsdatum",
@@ -396,10 +405,6 @@
     },
     "welcomeBack": "{greeting}, willkommen zurück.",
     "welcomeBackWithName": "{greeting} {name}, willkommen zurück.",
-    "hero": {
-      "scoreLabel": "Health Score",
-      "ringDoses": "Dosen heute"
-    },
     "greetingSalutation": "Hallo, {name}",
     "streakLabel": "Tage in Folge",
     "weight": "Gewicht",
@@ -452,11 +457,22 @@
     "compliance7d": "Therapietreue (7 Tage)",
     "mood": "Stimmung",
     "customizeTitle": "Dashboard-Layout",
-    "scoreRingsTitle": "Score-Ringe",
-    "scoreRingsDescription": "Bis zu drei zusätzliche Ringe neben dem Health Score – zum Beispiel Bereitschaft, Erholung, Schlaf oder Therapietreue. Zum Umsortieren ziehen; der Health Score steht standardmäßig vorne.",
+    "heroItemsTitle": "Highlights für heute",
+    "heroItemsDescription": "Wähle aus, welche Eintragstypen in den Highlights für heute erscheinen.",
+    "heroItemsNotificationNote": "Benachrichtigungseinstellungen werden separat verwaltet.",
+    "heroItems": {
+      "coach_checkin": "Coach-Check-ins",
+      "dose_window": "Medikamentendosen",
+      "preventive_care": "Vorsorge",
+      "sync_issue": "Synchronisierungsprobleme",
+      "milestone": "Meilensteine",
+      "ecg_new_recording": "Neue EKG-Aufzeichnungen",
+      "tension_window": "Anspannungsphasen",
+      "same_time_baseline": "Aktivität zur gleichen Tageszeit"
+    },
     "layoutReset": "Auf Defaults zurücksetzen",
     "layoutResetTitle": "Dashboard-Layout zurücksetzen?",
-    "layoutResetBody": "Deine Kachel-Reihenfolge, die ausgeblendeten Kacheln und die gewählten Ringe kehren zu den Standardwerten zurück. Die Anordnung wird nirgends sonst gespeichert.",
+    "layoutResetBody": "Dein Kachel-Layout und deine Auswahl für die Highlights für heute werden auf die Standardwerte zurückgesetzt.",
     "layoutResetConfirm": "Layout zurücksetzen",
     "layoutSaveSuccess": "Dashboard-Layout gespeichert",
     "layoutSaveError": "Layout konnte nicht gespeichert werden",
@@ -773,6 +789,8 @@
       "hydrated": "Wasser getrunken",
       "walked": "spazieren",
       "alcohol": "Alkohol",
+      "caffeine": "Koffein",
+      "nicotine": "Nikotin",
       "family": "Familie",
       "friends": "Freunde",
       "party": "Party",
@@ -2081,7 +2099,6 @@
   },
   "comparison": {
     "toggleLabel": "Vergleichen mit",
-    "toggleHint": "Vergleicht den aktuellen Zeitraum mit dem Vorjahreszeitraum.",
     "baseline": {
       "none": "Aus",
       "lastMonth": "Vormonat",
@@ -2101,6 +2118,15 @@
     "notAvailableForCompliance": "Vergleich für Therapietreue nicht verfügbar"
   },
   "insights": {
+    "pattern": {
+      "dismiss": "Ausblenden",
+      "dismissed": "Dieses Muster bleibt ausgeblendet, bis sich die Evidenz ändert.",
+      "restore": "Wieder anzeigen",
+      "dismissError": "Dieses Muster konnte nicht ausgeblendet werden.",
+      "restoreError": "Dieses Muster konnte nicht wiederhergestellt werden.",
+      "loadError": "Muster konnten nicht geladen werden.",
+      "empty": "Kein aktuelles Muster hat die Evidenzschwelle erreicht."
+    },
     "correlation": {
       "direction": {
         "higher": "höher",
@@ -2226,34 +2252,86 @@
     "heroActionAskCoach": "Coach fragen",
     "healthScore": {
       "label": "Gesundheitsscore",
-      "progressAria": "Gesundheitsscore-Fortschritt",
-      "deltaVsLastWeek": "{delta} im Vergleich zur Vorwoche",
-      "deltaUnavailable": "Noch keine Historie — schau nächste Woche wieder vorbei.",
-      "restModePaused": "Während einer Krankheitsphase pausiert — dein Score wird heute nicht bewertet.",
-      "componentBp": "Blutdruck",
-      "componentWeight": "Gewicht",
-      "componentMood": "Stimmung",
-      "componentCompliance": "Therapietreue",
-      "deltaExplainer": {
-        "title": "So wird die Veränderung berechnet",
-        "description": "Veränderung gegenüber letzter Woche: {delta}",
-        "body": "Der Score kombiniert Blutdruck, Gewicht, Stimmung und Therapietreue. Wir vergleichen den heutigen Stand mit demselben Zeitpunkt vor einer Woche. Erfasse eine frische Messung oder einen Stimmungs-Check, um den Wert nach oben zu schubsen."
+      "algorithmChanged": "Der Score nutzt jetzt veröffentlichte kardiometabolische Referenzbereiche; Gewicht ist nicht mehr enthalten, weil das frühere Ziel aus der Körpergröße statt aus einem selbst gesetzten Ziel abgeleitet wurde, tägliche Stimmungsschwankungen und Medikamententreue sind Handlungen statt Gesundheitszustände, und für Ruhepuls und HRV gibt es keinen allgemeinen Zielwert. Der Gewichtsfortschritt bleibt unten als persönlicher Kontext sichtbar, die anderen Signale bleiben auf ihren eigenen Karten, und eine neue Zahl bedeutet keine Veränderung deiner Gesundheit.",
+      "dismissAlgorithmChanged": "Hinweis zur Score-Methode schließen",
+      "band": {
+        "green": "Im Referenzbereich",
+        "yellow": "Einige Bereiche brauchen Aufmerksamkeit",
+        "red": "Mindestens ein Bereich liegt außerhalb des Referenzbereichs"
       },
-      "provenance": {
-        "toggle": "Zusammensetzung",
-        "mixedBanner": "Einige Komponenten kombinieren mehrere Quellen. Die Aufschlüsselung zeigt den aktuellsten Wert je Komponente.",
-        "footnote": "Anteile sind nach verfügbaren Daten neu skaliert.",
-        "asOfLabel": "Stand {date}",
-        "provisional": "Vorläufig — nur {count} von {total} Datenpunkten verfügbar",
-        "provisionalBadge": "Vorläufig",
-        "sourceAria": "Quelle: {source}",
-        "sources": {
-          "manual": "Manuell",
-          "withings": "Withings",
-          "appleHealth": "Apple Health",
-          "mixed": "Gemischt",
-          "none": "Keine Daten"
-        }
+      "method": "Gleich gewichteter Mittelwert der geeigneten Bereiche. Der niedrigste Bereich bestimmt die Gesamtstufe.",
+      "insufficient": "{count} geeignete Bereiche. Der Score benötigt mindestens drei, darunter einen gemessenen physiologischen Bereich.",
+      "composition": "Einbezogen: {pillars}",
+      "bandSetter": "Gesamtstufe bestimmt durch {pillar}",
+      "versionAndNoise": "Methodenversion {version}. Schwelle für den Wochenvergleich: {noise} Punkte.",
+      "methodVersion": "Methodenversion {version}.",
+      "none": "keiner",
+      "delta": "{delta} gegenüber dem vorherigen vergleichbaren Zeitraum",
+      "deltaReason": {
+        "algorithm_changed": "Kein Vergleich, weil sich die Score-Methode geändert hat.",
+        "composition_changed": "Kein Vergleich, weil sich die einbezogenen Bereiche geändert haben.",
+        "first_eligibility_window": "Kein Vergleich, weil dies der erste geeignete Zeitraum ist.",
+        "below_noise_floor": "Die Veränderung liegt innerhalb der gemeinsamen Messschwankung.",
+        "no_previous_window": "Es ist kein früherer vergleichbarer Zeitraum verfügbar.",
+        "no_current_score": "Kein Vergleich, weil der aktuelle Zeitraum nicht geeignet ist."
+      },
+      "restMode": "Ruhemodus aktiv seit {since}. Der Score dient nur als Kontext und wird nicht verschlechtert.",
+      "pillar": {
+        "bloodPressure": "Blutdruck",
+        "glycaemia": "Blutzucker",
+        "activity": "Aktivität",
+        "sleep": "Schlaf",
+        "adiposity": "Körperfettverteilung",
+        "wellbeing": "Wohlbefinden",
+        "fitness": "Gemessene Fitness",
+        "lipids": "Blutfette"
+      },
+      "observed": "Beobachtet: {value}",
+      "reference": "Referenz: {value}",
+      "fastingObserved": "Nüchternglukose: {value} {unit}",
+      "fastingReference": "{low} bis {high} {unit} nüchtern",
+      "personalReference": "Dein Ziel: {value}",
+      "source": "Quelle: {source}, Stand {date}",
+      "observedActivity": "{value} Schritte pro Tag",
+      "observedSleep": "{value} Minuten pro Nacht",
+      "observedAdiposity": "Taille-zu-Körpergröße-Verhältnis {value}",
+      "observedFitness": "{value} {unit}, gemessen",
+      "referenceActivity": "Der Nutzen flacht bei {high} Schritten pro Tag ab",
+      "referenceSleep": "Mindestens {low} Minuten pro Nacht; längerer Schlaf wird nicht abgewertet",
+      "referenceAdiposity": "Taille-zu-Körpergröße-Verhältnis unter {high}",
+      "referenceFitness": "{low} bis {high} {unit}, Referenzbereich nach Alter und Geschlecht",
+      "referenceHba1c": "HbA1c {low} bis {high} %",
+      "referenceDetail": "{label} · {source} · {kind} · {low} bis {high}",
+      "openBound": "offen",
+      "laboratoryReferenceSource": "Referenzbereiche des auswertenden Labors",
+      "personalTargetSource": "Persönliches Ziel",
+      "referenceKind": {
+        "clinical": "Klinischer Schwellenwert",
+        "population": "Bevölkerungsperzentil",
+        "guideline": "Leitlinienbereich"
+      },
+      "reason": {
+        "readFailed": "Daten konnten nicht geladen werden",
+        "notTracked": "Nicht erfasst",
+        "missingProfile": "Alter oder Referenzprofil fehlt",
+        "missingHeight": "Körpergröße fehlt",
+        "incompletePanel": "Ein aktuelles vollständiges Panel mit Referenzbereichen ist erforderlich",
+        "crisis": "Anstelle eines Scores werden Sicherheitshinweise angezeigt",
+        "insufficientHistory": "Nicht genügend aktuelle geeignete Daten",
+        "unavailable": "Dieser Bereich kann derzeit nicht bewertet werden"
+      },
+      "pillarInsufficient": "Kein Bereichsscore: {reason}",
+      "tension": "Die Bereitschaftssignale unterscheiden sich. Unterstützend: {positive}. Belastet: {negative}.",
+      "returnToBand": "{metric} liegt seit {days} Tagen wieder im üblichen Bereich.",
+      "weightGoal": {
+        "title": "Persönliches Gewichtsziel",
+        "value": "Aktuell {current} {unit}. Ziel {min} bis {max} {unit}. Abstand zum Ziel: {distance} {unit}.",
+        "delta": "Der Abstand zum Ziel hat sich seit der vorherigen Messung um {delta} {unit} verändert.",
+        "noDelta": "Für einen Vergleich ist keine frühere Gewichtsmessung verfügbar.",
+        "no_personal_goal": "Lege ein persönliches Gewichtsziel fest, um hier den Fortschritt zu sehen.",
+        "weight_not_tracked": "Erfasse dein Gewicht, um den Fortschritt zum Ziel zu sehen.",
+        "read_failed": "Gewichtsdaten konnten nicht geladen werden. Versuche es erneut.",
+        "notScored": "Der Fortschritt zum Gewichtsziel ist persönlicher Kontext und beeinflusst den Gesundheitsscore nicht."
       }
     },
     "suggestedPrompts": {
@@ -2855,6 +2933,14 @@
       "valuesBackToMetric": "Zurück zu {metric}",
       "scoresBack": "Zurück zu Insights",
       "ecgDescription": "Einkanal-EKG-Aufzeichnungen deines Geräts, jeweils mit dem Ergebnis des Geräts. HealthLog zeigt die Kurve und die Aufzeichnung – die Kurve wird nicht interpretiert."
+    },
+    "units": {
+      "steps": "Schritte",
+      "flights": "Etagen",
+      "falls": "Stürze",
+      "years": "Jahre",
+      "breathingEvents": "Ereignisse",
+      "respiratoryRate": "Atemzüge/min"
     },
     "sleep": {
       "title": "Schlaf",
@@ -3640,6 +3726,10 @@
         "TRAJECTORY": {
           "method": "Eine Ausgleichsgerade (kleinste Quadrate), an deine jüngsten Tageswerte angepasst und über einen kurzen Zeitraum fortgeschrieben — mit dem klassischen Vorhersageintervall, das umso breiter wird, je weiter es reicht. Wird nur berechnet, wenn der jüngste Trend deutlich genug und deine Datenreihe lang und aktuell genug ist; sonst wird keine Linie gezeichnet.",
           "caveat": "Eine Fortschreibung deines eigenen jüngsten Trends — keine Vorhersage, kein Ziel und keine klinische Prognose. Sie gilt nur, solange das jüngste Muster anhält; das schattierte Band zeigt, wie schnell diese Sicherheit nachlässt."
+        },
+        "SAME_TIME_BASELINE": {
+          "method": "Dein heutiger laufender Gesamtwert im Vergleich zum Median derselben Ortszeit-Stunde aus deinen letzten vier Wochen, mit einem robusten Median-±-MAD-Band darum. Nur Tage mit ausreichend aufgezeichneten Details zählen, und es wird kein Vergleich gezeigt, bevor mindestens vierzehn davon vorliegen.",
+          "caveat": "Ein Vergleich mit deiner eigenen jüngeren Vergangenheit, kein Ziel. Er sagt, wo der heutige Tag zu dieser Stunde gegenüber deinem üblichen Muster steht — und nichts darüber, ob dieses Muster für dich das richtige ist."
         }
       },
       "scores": {
@@ -3673,6 +3763,13 @@
         "caveat": "Eine Fortschreibung deines eigenen jüngsten Trends, keine Vorhersage. Das schattierte Band wird breiter und zeigt, wie schnell die Unsicherheit wächst.",
         "insufficient": "Noch kein klar genuger Trend für eine Projektion — erfasse weiter, dann erscheint eine Projektion, sobald das jüngste Muster deutlich genug ist.",
         "daysNeeded": "Noch etwa {count} Tage Erfassung nötig, bis eine Projektion erscheinen kann."
+      },
+      "sameTime": {
+        "sectionTitle": "Heute bisher",
+        "sectionSubtitle": "Deine laufenden Summen im Vergleich zu dem, was zu dieser Stunde für dich üblich ist",
+        "learning": "Lernt deinen üblichen Tag — {count} von {target} Tagen",
+        "framing": "Üblich bis {time}: {typical} {unit}",
+        "comparisonLabel": "Dein üblicher Tag"
       }
     },
     "cardioFitness": {
@@ -3857,17 +3954,6 @@
         "forwardWatch": "{metric} ist im Blick zu behalten.",
         "forwardHolding": "Im Moment ist alles stabil."
       }
-    },
-    "tension": {
-      "label": "Ehrliche Lesung: {positive} sieht gut aus, aber {negative} fällt ab — das Komposit landet bei {band}.",
-      "contributor": {
-        "green": "grün",
-        "yellow": "gelb",
-        "red": "rot"
-      }
-    },
-    "streak": {
-      "returnLabel": "Dein {metric} ist seit {count} Tagen wieder in deinem üblichen Bereich — was es auch war, es ist vorbei."
     },
     "updatedTodayAt": "Heute aktualisiert, {time}",
     "updatedYesterday": "Gestern aktualisiert",
@@ -4499,7 +4585,7 @@
           },
           "fullBackup": {
             "title": "Voll-Backup",
-            "description": "Deine Messwerte, Medikamente, Stimmung, Zyklus, Laborwerte, Krankheitsepisoden, Allergien, Familienanamnese, Nährstoffe und Workouts in einer JSON-Datei. Gleiche Form wie die wöchentliche automatische Sicherung. Einige Satzarten sind noch nicht enthalten — das Manifest der Datei nennt, was drinsteht.",
+            "description": "Deine Messwerte, Medikamente, Stimmung, Zyklus, Laborwerte, Krankheitsepisoden, Allergien, Familienanamnese, Nährstoffe, Workouts, dein Gesundheitsprofil und deine eigenen Messgrößen in einer JSON-Datei. Gleiche Form wie die wöchentliche automatische Sicherung. Einige Satzarten sind noch nicht enthalten — das Manifest der Datei nennt, was drinsteht.",
             "scopeNote": "Dokumentmetadaten und die KI-Zusammenfassung, falls vorhanden, sind als Klartext enthalten; die Originaldateien der Dokumente sowie GPS-Routen und Einzelmesswerte von Workouts sind es nicht — lade diese separat aus dem Dokumententresor bzw. dem Workout-Export herunter.",
             "encryptToggle": "Mit einer Passphrase verschlüsseln",
             "passphrasePlaceholder": "Passphrase (mind. 12 Zeichen)",
@@ -5148,6 +5234,11 @@
     "withingsFullSyncTitle": "Vollsynchronisierung?",
     "withingsFullSyncDescription": "Alle verfügbaren Withings-Daten werden vollständig synchronisiert. Das kann je nach Historie etwas dauern.",
     "withingsSyncResult": "{count} Messwerte synchronisiert",
+    "syncOutcome": {
+      "empty": "Nichts Neues zu importieren. Alles ist aktuell.",
+      "failed": "Es wurde nichts gespeichert. Der nächste Lauf versucht es erneut.",
+      "partial": "{count} Messwerte synchronisiert. Ein Teil der Daten konnte nicht gespeichert werden; der nächste Lauf versucht es erneut."
+    },
     "withingsFullSyncResult": "{count} Messwerte vollständig synchronisiert",
     "withingsSyncFailed": "Sync fehlgeschlagen",
     "withingsOauthConnected": "Withings verbunden — der erste Sync startet im Hintergrund.",
@@ -5293,6 +5384,7 @@
       "connected": "Verbunden",
       "errorReconnect": "Fehler — neu verbinden",
       "warningServerError": "Sync fehlgeschlagen",
+      "failureCount": "{count}/{threshold}",
       "parkedReconnect": "Pausiert — manuell wieder verbinden",
       "notConnected": "Nicht verbunden",
       "justNow": "gerade eben",
@@ -7873,6 +7965,9 @@
       "saveSelected": "{count} ausgewählte speichern",
       "discardAll": "Alle verwerfen",
       "savedToast": "{count} Laborwerte gespeichert",
+      "savedPartialToast": "{count} Laborwerte gespeichert, {skipped} als Dubletten übersprungen",
+      "savedNothingToast": "Nichts gespeichert: {skipped} Werte waren bereits erfasst",
+      "savedEmptyToast": "Nichts zu speichern",
       "noRows": "In diesem Befund konnten keine Werte gefunden werden.",
       "nothingToSave": "Wähle mindestens einen Wert zum Speichern aus.",
       "saveFailed": "Werte konnten nicht gespeichert werden. Bitte erneut versuchen.",
@@ -8461,6 +8556,61 @@
     "historyLoadErrorHint": "Das heißt nicht, dass keine Ergebnisse vorliegen — die Liste konnte nicht abgerufen werden. Versuche es erneut."
   },
   "records": {
+    "aiInclusion": {
+      "cardTitle": "KI-Zugriff auf das Profil",
+      "cardDescription": "Lege fest, welche Teile deines Gesundheitsprofils Coach und umfassende Briefings verwenden dürfen.",
+      "sectionAboutMe": "Über mich",
+      "sectionConditions": "Chronische Erkrankungen",
+      "sectionAllergies": "Allergien und Unverträglichkeiten",
+      "sectionCoachFocus": "Coach-Schwerpunkt",
+      "sectionFamilyHistory": "Familienanamnese",
+      "sectionSmoking": "Rauchstatus",
+      "sectionAlcohol": "Alkoholkonsummuster",
+      "sectionShiftSchedule": "Arbeitszeitmodell",
+      "save": "Zugriff speichern",
+      "savedToast": "KI-Zugriff auf das Profil gespeichert",
+      "saveError": "KI-Zugriff auf das Profil konnte nicht gespeichert werden",
+      "loadError": "KI-Zugriff auf das Profil konnte nicht geladen werden"
+    },
+    "profileFacts": {
+      "cardTitle": "Lebensstil-Kontext",
+      "cardDescription": "Erfasse aktuelle Angaben, die die Einordnung deiner Gesundheitswerte verändern.",
+      "smokingLabel": "Rauchstatus",
+      "alcoholLabel": "Alkoholkonsummuster",
+      "shiftLabel": "Arbeitszeitmodell",
+      "notRecorded": "Nicht erfasst",
+      "unreadable": "Gespeicherter Wert konnte nicht gelesen werden",
+      "save": "Speichern",
+      "correct": "Korrigieren",
+      "savedToast": "Lebensstil-Kontext gespeichert",
+      "saveError": "Lebensstil-Kontext konnte nicht gespeichert werden",
+      "loadError": "Lebensstil-Kontext konnte nicht geladen werden",
+      "remove": "{kind} entfernen",
+      "removeConfirmTitle": "{kind} entfernen?",
+      "removeConfirmDescription": "Der aktuelle Wert gilt danach als nicht erfasst. Der datierte Verlauf bleibt erhalten.",
+      "removedToast": "{kind} aus dem aktuellen Lebensstil-Kontext entfernt",
+      "removeError": "{kind} konnte nicht entfernt werden",
+      "historyTitle": "Frühere Werte",
+      "to": "bis",
+      "values": {
+        "SMOKING_STATUS": {
+          "NEVER": "Nie geraucht",
+          "FORMER": "Früher geraucht",
+          "CURRENT": "Raucht derzeit"
+        },
+        "ALCOHOL_PATTERN": {
+          "NONE": "Kein Alkohol",
+          "OCCASIONAL": "Gelegentlich",
+          "WEEKLY": "Wöchentlich",
+          "MOST_DAYS": "An den meisten Tagen"
+        },
+        "SHIFT_SCHEDULE": {
+          "NONE": "Keine Schichtarbeit",
+          "FIXED_SHIFT": "Feste Schicht",
+          "ROTATING": "Wechselschicht"
+        }
+      }
+    },
     "disclaimer": "Das sind deine eigenen Angaben, keine ärztliche Diagnose. HealthLog stellt keine Diagnose, behandelt nicht und deutet nichts.",
     "allergies": {
       "cardTitle": "Allergien & Unverträglichkeiten",
@@ -8819,6 +8969,8 @@
       "description": "Beschreibung",
       "descriptionPlaceholder": "Was hier gemessen wird (optional)",
       "targetHint": "Der Zielbereich ist optional und wird als Band im Diagramm dargestellt.",
+      "correlationEnabled": "Für Korrelationssuche verwenden",
+      "correlationEnabledHint": "Fügt diese Metrik als begrenzten täglichen Verhaltenskanal hinzu. Standardmäßig ist dies ausgeschaltet.",
       "requiredError": "Name und Einheit sind erforderlich",
       "rangeOrderError": "Der untere Zielwert darf den oberen nicht überschreiten",
       "save": "Speichern",
@@ -8979,6 +9131,16 @@
           "notDetected": "keinen unregelmäßigen Rhythmus",
           "inconclusive": "ein nicht eindeutiges Ergebnis"
         }
+      },
+      "sameTimeBaseline": {
+        "title": {
+          "below": "Hinter deinem üblichen Tempo",
+          "above": "Vor deinem üblichen Tempo"
+        },
+        "body": {
+          "below": "Bis {time} stehst du bei {today} Schritten. An einem üblichen Tag sind es um diese Zeit etwa {typical}.",
+          "above": "Bis {time} stehst du bei {today} Schritten — mehr als die {typical}, die um diese Zeit für dich üblich sind."
+        }
       }
     },
     "action": {
@@ -8990,7 +9152,8 @@
       "checkinLetGo": "Loslassen",
       "viewMilestone": "Ansehen",
       "viewPulse": "Puls ansehen",
-      "viewEcg": "Aufzeichnung ansehen"
+      "viewEcg": "Aufzeichnung ansehen",
+      "viewSteps": "Schritte ansehen"
     },
     "today": {
       "scoreLabel": "Gesundheitsscore",
@@ -9040,6 +9203,7 @@
     }
   },
   "reportSelection": {
+    "leafAnamnesis": "Gesundheitsprofil",
     "groupIdentity": "Stammdaten",
     "groupVitals": "Vitalwerte",
     "groupCardio": "Herz & Kreislauf",

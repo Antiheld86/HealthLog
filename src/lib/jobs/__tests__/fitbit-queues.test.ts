@@ -58,22 +58,22 @@ describe("reminder-worker — Fitbit sync queues", () => {
   it("schedules the hourly poll cron + the daily oauth-state sweep", () => {
     expect(source).toMatch(/\[FITBIT_SYNC_QUEUE,\s*FITBIT_SYNC_CRON\]/);
     expect(source).toMatch(
-      /\[FITBIT_OAUTH_STATE_CLEANUP_QUEUE,\s*FITBIT_OAUTH_STATE_CLEANUP_CRON\]/,
+      /\[\s*FITBIT_OAUTH_STATE_CLEANUP_QUEUE,\s*FITBIT_OAUTH_STATE_CLEANUP_CRON,\s*cronIsTheRetry,?\s*\]/,
     );
   });
 
-  it("registers a boss.work handler for every Fitbit queue", () => {
+  it("registers a createAndWork handler for every Fitbit queue", () => {
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,160}FITBIT_SYNC_QUEUE[\s\S]{0,160}handleFitbitSync/,
+      /createAndWork[\s\S]{0,160}FITBIT_SYNC_QUEUE[\s\S]{0,160}handleFitbitSync/,
     );
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,200}FITBIT_BACKFILL_QUEUE[\s\S]{0,260}enqueueIntegrationBackfillAdmission/,
+      /createAndWork[\s\S]{0,200}FITBIT_BACKFILL_QUEUE[\s\S]{0,260}enqueueIntegrationBackfillAdmission/,
     );
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,200}FITBIT_SLEEP_REPAIR_QUEUE[\s\S]{0,260}enqueueIntegrationBackfillAdmission/,
+      /createAndWork[\s\S]{0,200}FITBIT_SLEEP_REPAIR_QUEUE[\s\S]{0,260}enqueueIntegrationBackfillAdmission/,
     );
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,160}FITBIT_OAUTH_STATE_CLEANUP_QUEUE[\s\S]{0,160}handleFitbitOAuthStateCleanup/,
+      /createAndWork[\s\S]{0,160}FITBIT_OAUTH_STATE_CLEANUP_QUEUE[\s\S]{0,160}handleFitbitOAuthStateCleanup/,
     );
   });
 

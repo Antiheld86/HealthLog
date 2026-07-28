@@ -79,6 +79,7 @@ function baseSnapshot(
       dateOfBirth: null,
       gender: null,
       heightCm: null,
+      weightTargetOverride: null,
     }),
     tiles: {
       summaries: {},
@@ -395,6 +396,7 @@ describe("rung 4 — weightDrift", () => {
     avg7: number | null,
     avg30: number | null,
     heightCm: number | null = 180,
+    weightTargetOverride: { min: number; max: number } | null = null,
   ): DashboardSnapshot {
     const snap = baseSnapshot({
       tiles: {
@@ -408,6 +410,14 @@ describe("rung 4 — weightDrift", () => {
       },
     });
     snap.user.heightCm = heightCm;
+    // v1.34 — the rung reads the snapshot's RESOLVED band, so the fixture
+    // resolves it the same way the builder does.
+    snap.targetBands = buildTargetBands({
+      dateOfBirth: null,
+      gender: null,
+      heightCm,
+      weightTargetOverride,
+    });
     return snap;
   }
 
@@ -429,7 +439,7 @@ describe("rung 4 — weightDrift", () => {
     expect(verdict.variant).toBe("allQuiet");
   });
 
-  it("skips entirely when no height is stored (no derivable range)", () => {
+  it("skips entirely when no height and no target (no band at all)", () => {
     const verdict = resolveDashboardVerdict(
       weightSnapshot(GREEN_MAX_180 + 5, GREEN_MAX_180 - 1, null),
       NOW,
@@ -565,7 +575,12 @@ describe("rung 6 — silence", () => {
 describe("rung 7 — scoreDrop", () => {
   function scoreSnapshot(delta: number | null): DashboardSnapshot {
     return baseSnapshot({
-      healthScore: { score: 60, band: "yellow", delta },
+      healthScore: {
+        score: 60,
+        band: "yellow",
+        delta,
+        deltaReason: null,
+      },
     });
   }
 
@@ -699,7 +714,12 @@ describe("rung 9 — allQuiet + full-ladder precedence", () => {
           },
           mood: { summary: null, entries: [] },
         },
-        healthScore: { score: 40, band: "red", delta: -20 },
+        healthScore: {
+          score: 40,
+          band: "red",
+          delta: -20,
+          deltaReason: null,
+        },
         briefing: {
           paragraph: "Busy day.",
           keyFindings: [WATCH_FINDING],
@@ -715,7 +735,12 @@ describe("rung 9 — allQuiet + full-ladder precedence", () => {
   it("scoreDrop outranks the briefing teaser", () => {
     const verdict = resolveDashboardVerdict(
       baseSnapshot({
-        healthScore: { score: 50, band: "yellow", delta: -15 },
+        healthScore: {
+          score: 50,
+          band: "yellow",
+          delta: -15,
+          deltaReason: null,
+        },
         briefing: {
           paragraph: "Busy day.",
           keyFindings: [WATCH_FINDING],
@@ -727,5 +752,57 @@ describe("rung 9 — allQuiet + full-ladder precedence", () => {
     );
     expect(verdict.variant).toBe("scoreDrop");
     expect(verdict.values).toEqual({ points: 15 });
+  });
+});
+
+/**
+ * v1.34 — the weight-drift rung measures against the band the user actually
+ * reads. It used to recompute the height-derived BMI band inline, so it kept
+ * nudging about drift away from a band an explicit target had replaced.
+ */
+describe("rung 4 — weightDrift honours an explicit target", () => {
+  function driftSnapshot(
+    avg7: number,
+    avg30: number,
+    weightTargetOverride: { min: number; max: number } | null,
+  ): DashboardSnapshot {
+    const snap = baseSnapshot({
+      tiles: {
+        summaries: {
+          WEIGHT: summary({ latest: avg7, avg7, avg30, count: 20 }),
+        },
+        lastSeenByType: {
+          WEIGHT: { lastSeenAt: isoHoursAgo(2), daysAgo: 0 },
+        },
+        mood: { summary: null, entries: [] },
+      },
+    });
+    snap.user.heightCm = 180;
+    snap.targetBands = buildTargetBands({
+      dateOfBirth: null,
+      gender: null,
+      heightCm: 180,
+      weightTargetOverride,
+    });
+    return snap;
+  }
+
+  it("stays quiet inside the user's own band even when the BMI band would fire", () => {
+    // 82 / 81 kg is above the height-derived green max (80.68) and drifting
+    // away from it, but sits inside a self-set 78-85 kg band.
+    expect(
+      resolveDashboardVerdict(driftSnapshot(82, 81, null), NOW).variant,
+    ).toBe("weightDrift");
+    expect(
+      resolveDashboardVerdict(driftSnapshot(82, 81, { min: 78, max: 85 }), NOW)
+        .variant,
+    ).toBe("allQuiet");
+  });
+
+  it("fires on drift away from the user's own band", () => {
+    expect(
+      resolveDashboardVerdict(driftSnapshot(72, 74, { min: 78, max: 85 }), NOW)
+        .variant,
+    ).toBe("weightDrift");
   });
 });

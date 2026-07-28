@@ -35,7 +35,10 @@ import { prisma } from "@/lib/db";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { auditLog } from "@/lib/auth/audit";
 import { annotate, getEvent } from "@/lib/logging/context";
-import { dispatchNotification } from "@/lib/notifications/dispatcher";
+import {
+  dispatchNotification,
+  type DispatchOutcome,
+} from "@/lib/notifications/dispatcher";
 import type { IntegrationClassification } from "@/lib/integrations/http-status-classifier";
 
 export type IntegrationKey =
@@ -755,7 +758,7 @@ export async function recordSyncFailure(
       row.alertedAt &&
       now.getTime() - row.alertedAt.getTime() < ALERT_REPEAT_WINDOW_MS;
     if (!previouslyAlerted) {
-      await maybeAlertAdmins({
+      const outcome = await maybeAlertAdmins({
         userId,
         integration,
         kind: effectiveKind,
@@ -766,14 +769,25 @@ export async function recordSyncFailure(
         getEvent()?.addWarning(
           `Admin alert dispatch failed: ${err instanceof Error ? err.message : String(err)}`,
         );
+        return null;
       });
-      // Stamp the alert window even if dispatch failed — better to
-      // miss one notification than to flood admins on a backend
-      // outage.
-      await prisma.integrationStatus.update({
-        where: { userId_integration: { userId, integration } },
-        data: { alertedAt: now },
-      });
+
+      if (outcome?.channelsAttempted) {
+        // An attempted channel owns its own retry/cooldown policy. Stamp the
+        // alert window even when every attempt failed so a backend outage
+        // cannot turn this failure streak into an hourly notification flood.
+        await prisma.integrationStatus.update({
+          where: { userId_integration: { userId, integration } },
+          data: { alertedAt: now },
+        });
+      } else if (outcome) {
+        // No recipient channel accepted an attempt. Leaving alertedAt empty
+        // keeps the missing delivery visible instead of recording a page that
+        // never left the process.
+        getEvent()?.addWarning(
+          `No admin notification channel available for ${integration} failure alert`,
+        );
+      }
     }
   }
 
@@ -1203,18 +1217,15 @@ export function formatAdminAlertPayload(input: AlertInput): {
 }
 
 /**
- * Page admins on Telegram via the existing dispatcher. We do NOT add
- * a new sender, channel type, or retry path — B3 owns that surface.
- * The dispatcher is opt-in per-event and per-channel, so an admin
- * who has not configured Telegram simply gets no message (silent
- * fall-through is the documented behaviour).
+ * Page admins through the existing dispatcher. We do NOT add a new sender,
+ * channel type, or retry path. The dispatcher is opt-in per event and channel,
+ * and its outcome is the authority on whether a delivery was attempted.
  *
- * The notification is sent to EACH admin user with a Telegram channel
- * configured. We resolve recipients once per failure burst (gated by
- * `alertedAt` upstream) so a deployment with a single admin doesn't
- * pay for a query per user.
+ * The notification is sent to each admin user. The returned outcome aggregates
+ * the dispatcher's real per-admin outcomes so one attempted delivery cannot be
+ * hidden by another admin having no enabled channel.
  */
-async function maybeAlertAdmins(input: AlertInput): Promise<void> {
+async function maybeAlertAdmins(input: AlertInput): Promise<DispatchOutcome> {
   const subject = await prisma.user.findUnique({
     where: { id: input.userId },
     select: { email: true },
@@ -1226,24 +1237,35 @@ async function maybeAlertAdmins(input: AlertInput): Promise<void> {
   });
 
   if (admins.length === 0) {
-    getEvent()?.addWarning(
-      `No admin user found to alert about persistent ${input.integration} failure for user ${input.userId}`,
-    );
-    return;
+    return {
+      dispatched: false,
+      channelsAttempted: 0,
+      channelsSucceeded: 0,
+    };
   }
 
   const payload = formatAdminAlertPayload({
     ...input,
     subjectLabel: subject?.email ?? input.userId,
   });
+  const outcome: DispatchOutcome = {
+    dispatched: false,
+    channelsAttempted: 0,
+    channelsSucceeded: 0,
+  };
 
   for (const admin of admins) {
-    await dispatchNotification({
+    const adminOutcome = await dispatchNotification({
       eventType: "SYSTEM_ALERT",
       userId: admin.id,
       title: payload.title,
       message: payload.message,
       metadata: payload.metadata,
     });
+    outcome.dispatched ||= adminOutcome.dispatched;
+    outcome.channelsAttempted += adminOutcome.channelsAttempted;
+    outcome.channelsSucceeded += adminOutcome.channelsSucceeded;
   }
+
+  return outcome;
 }

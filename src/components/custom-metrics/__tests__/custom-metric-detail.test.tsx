@@ -44,6 +44,7 @@ const METRIC: CustomMetricDto = {
   targetHigh: 60,
   decimals: 1,
   description: "Right-hand grip measured first thing.",
+  correlationEnabled: false,
   createdAt: "2026-06-01T00:00:00.000Z",
   updatedAt: "2026-06-01T00:00:00.000Z",
 };

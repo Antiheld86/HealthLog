@@ -33,6 +33,7 @@ import {
   resolveDashboardLayout,
   type DashboardLayout,
 } from "@/lib/dashboard-layout";
+import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
 import type { DashboardAnalyticsData as AnalyticsData } from "@/types/analytics";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -154,6 +155,7 @@ import type { DataSummary } from "@/lib/analytics/trends";
 import { mergeSlimAndThickAnalytics } from "@/lib/analytics/merge-slim-thick";
 import { isWindowSufficient } from "@/lib/analytics/window-confidence";
 import { buildDashboardBands } from "@/lib/dashboard/bands";
+import { resolveWeightTargetOverride } from "@/lib/analytics/effective-range";
 import { toProfileSex } from "@/lib/profile/sex";
 import { apiGet } from "@/lib/api/api-fetch";
 
@@ -377,6 +379,21 @@ export default function DashboardPageClient({
     analyticsThickQuery.data,
   ]);
 
+  // v1.34 — the user's own weight target, for the legacy (snapshot-disabled)
+  // band fallback only. In snapshot mode the server resolves the same override
+  // into `targetBands` and this query never fires; the fallback would otherwise
+  // keep shading the height-derived band for someone who has set a target.
+  const { data: thresholdsData } = useQuery({
+    queryKey: queryKeys.userThresholds(),
+    queryFn: async () => {
+      return apiGet<{
+        overrides: Record<string, { min: number; max: number }>;
+      }>("/api/user/thresholds");
+    },
+    enabled: !snapshotEnabled && isAuthenticated,
+    ...DASHBOARD_QUERY_OPTS,
+  });
+
   const { data: layoutDataLegacy } = useQuery({
     queryKey: queryKeys.dashboardWidgets(),
     queryFn: async () => {
@@ -470,6 +487,9 @@ export default function DashboardPageClient({
 
   // Resolve full dashboard layout — controls visibility + order of every widget
   const layout = resolveDashboardLayout(layoutData);
+  const renderFilteredHeroAllClear =
+    (layout.enabledHeroItemKinds ?? PRIORITY_ITEM_KINDS).length <
+    PRIORITY_ITEM_KINDS.length;
   /**
    * v1.4.16 phase B8 — comparison baseline (Vormonat / Vorjahr) read
    * from the resolved layout so every chart + tile on the dashboard
@@ -715,14 +735,21 @@ export default function DashboardPageClient({
   // in the snapshot steady state) before this. Keyed on the `user` object
   // identity so the React Compiler can preserve the memo (a narrower
   // property list trips `preserve-manual-memoization`).
+  // v1.34 — the weight target rides the same memo. In snapshot mode
+  // `thresholdsData` is never fetched, so the client copy falls back to the
+  // height-derived band for the frames before `serverBands` lands — exactly
+  // as it already did for every other profile-derived number.
   const clientBands = useMemo(
     () =>
       buildDashboardBands({
         dateOfBirth: user?.dateOfBirth ? new Date(user.dateOfBirth) : null,
         gender: toProfileSex(user?.gender),
         heightCm: user?.heightCm ?? null,
+        weightTargetOverride: resolveWeightTargetOverride(
+          thresholdsData?.overrides ?? null,
+        ),
       }),
-    [user],
+    [user, thresholdsData],
   );
   const bands = serverBands ?? clientBands;
   const bpTargets = bands.bpTargets;
@@ -903,7 +930,10 @@ export default function DashboardPageClient({
         // post-mount. DO NOT add `["daily", …]` to that allowlist, or render
         // the hero from any client-only source, without revisiting this gate.
         (digestQuery.data ? (
-          <TodayHero digest={digestQuery.data} />
+          <TodayHero
+            digest={digestQuery.data}
+            renderFilteredAllClear={renderFilteredHeroAllClear}
+          />
         ) : !mounted || digestQuery.isLoading ? (
           <TodayHeroSkeleton />
         ) : digestQuery.isError ? (

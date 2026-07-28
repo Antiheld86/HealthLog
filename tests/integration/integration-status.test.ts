@@ -35,7 +35,11 @@ vi.mock("@/lib/db-compat", () => ({
 // B3 owns it. Stub returns void so the helper's await chain
 // resolves cleanly.
 vi.mock("@/lib/notifications/dispatcher", () => ({
-  dispatchNotification: vi.fn().mockResolvedValue(undefined),
+  dispatchNotification: vi.fn().mockResolvedValue({
+    dispatched: true,
+    channelsAttempted: 1,
+    channelsSucceeded: 1,
+  }),
 }));
 
 import {

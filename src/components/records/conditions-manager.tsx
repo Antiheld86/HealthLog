@@ -14,9 +14,8 @@
  * (`GET`/`PUT /api/coach/about-me`) and are read/written through the same
  * `queryKeys.coachAboutMe()` query- and mutation-key the rest of the app uses,
  * so every consumer (the Coach above all) keeps reading the same store. The PUT
- * echoes the current `aboutMe` free text (a required field that clears on empty)
- * and omits `allergies` (optional, preserved server-side) so saving conditions
- * never disturbs the other self-context fields.
+ * sends only the two fields this editor owns, so unreadable or concurrently
+ * updated profile text and allergies stay untouched.
  *
  * Plain text only — values render exclusively through inputs and React text
  * children; no markdown renderer (XSS posture, see contributor notes).
@@ -76,16 +75,11 @@ export function ConditionsManager() {
 
   const save = useMutation({
     mutationKey: queryKeys.coachAboutMe(),
-    mutationFn: async (input: { conditions: string; coachFocus: string }) => {
-      // Echo the current free-text `aboutMe` (required; empty clears it) and
-      // omit `allergies` (optional, preserved server-side) so this write only
-      // touches the two conditions fields.
-      return apiPut<AboutMeData>("/api/coach/about-me", {
-        aboutMe: query.data?.aboutMe ?? "",
+    mutationFn: async (input: { conditions: string; coachFocus: string }) =>
+      apiPut<AboutMeData>("/api/coach/about-me", {
         conditions: input.conditions,
         coachFocus: input.coachFocus,
-      });
-    },
+      }),
     onSuccess: () => {
       toast.success(t("records.conditions.savedToast"));
       setDrafts({ conditions: null, coachFocus: null });

@@ -3,6 +3,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import de from "../../../../messages/de.json";
 import en from "../../../../messages/en.json";
 
+const mocks = vi.hoisted(() => ({
+  mutationOptions: [] as Array<{
+    onSuccess?: (data: { summary: Record<string, number> }) => void;
+  }>,
+  toastSuccess: vi.fn(),
+}));
+
 /**
  * v1.4.15 phase-C5 — `/admin/backups` empty state.
  *
@@ -18,6 +25,13 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/admin/backups",
 }));
 
+vi.mock("sonner", () => ({
+  toast: {
+    success: mocks.toastSuccess,
+    error: vi.fn(),
+  },
+}));
+
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({
     data: { rows: [], retentionDays: 30 },
@@ -25,14 +39,21 @@ vi.mock("@tanstack/react-query", () => ({
     isError: false,
   }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
-  useMutation: () => ({
-    mutate: vi.fn(),
-    mutateAsync: vi.fn(),
-    isPending: false,
-    isError: false,
-    error: null,
-    variables: undefined,
-  }),
+  useMutation: (options: unknown) => {
+    mocks.mutationOptions.push(
+      options as {
+        onSuccess?: (data: { summary: Record<string, number> }) => void;
+      },
+    );
+    return {
+      mutate: vi.fn(),
+      mutateAsync: vi.fn(),
+      isPending: false,
+      isError: false,
+      error: null,
+      variables: undefined,
+    };
+  },
 }));
 
 vi.mock("@/hooks/use-auth", () => ({
@@ -104,6 +125,30 @@ describe("BackupsSection — empty state", () => {
     );
     expect(en.admin.section.backups.restoreDescription).toMatch(
       /instance-wide settings/i,
+    );
+  });
+});
+
+describe("BackupsSection — upload outcome", () => {
+  it("includes health profile fact revisions in the restored record total", () => {
+    mocks.toastSuccess.mockClear();
+    const firstMutation = mocks.mutationOptions.length;
+    render();
+    const uploadOutcome = mocks.mutationOptions[firstMutation + 1]?.onSuccess;
+    expect(uploadOutcome).toBeTypeOf("function");
+
+    uploadOutcome!({
+      summary: {
+        measurements: 1,
+        medications: 2,
+        intakeEvents: 3,
+        moodEntries: 4,
+        healthProfileFactRevisions: 5,
+      },
+    });
+
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      expect.stringContaining("15"),
     );
   });
 });

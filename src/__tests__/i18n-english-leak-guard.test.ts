@@ -102,7 +102,6 @@ const LEGIT_IDENTICAL = new Set<string>([
   "admin.overview.snapshotOfflineGeoOff",
   "admin.overview.snapshotOfflineGeoOn",
   "admin.webPushVapidTitle",
-  "dashboard.hero.scoreLabel",
   "insights.healthScore.provenance.sources.appleHealth",
   "measurements.sourceAppleHealth",
   "onboarding.source.more.appleHealth",

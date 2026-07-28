@@ -52,7 +52,14 @@ function digest(over: Partial<DailyDigest> = {}): DailyDigest {
     generatedAt: "2026-07-16T06:00:00.000Z",
     phase: "final",
     sleepPending: false,
-    score: { value: 82, band: "green", delta: 3 },
+    score: {
+      value: 82,
+      band: "green",
+      delta: 3,
+      deltaReason: null,
+      scoreVersion: 2,
+      composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
+    },
     topSignal: {
       sourceMetric: "bp",
       tone: "watch",
@@ -89,6 +96,24 @@ describe("<TodayHero>", () => {
     expect(html).toContain('data-kind="sync_issue"');
     // The score delta chip.
     expect(html).toContain('data-slot="today-hero-score-delta"');
+  });
+
+  it("does not present a suppressed algorithm jump as score movement", () => {
+    const html = render(
+      <TodayHero
+        digest={digest({
+          score: {
+            value: 82,
+            band: "green",
+            delta: 20,
+            deltaReason: "algorithm_changed",
+            scoreVersion: 2,
+            composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
+          },
+        })}
+      />,
+    );
+    expect(html).not.toContain('data-slot="today-hero-score-delta"');
   });
 
   it("wires each PriorityItem action to its existing destination via href", () => {
@@ -141,6 +166,29 @@ describe("<TodayHero>", () => {
     // rather than an alarming empty card (the tile strip carries the
     // add-your-first-reading empty state).
     expect(html).toBe("");
+  });
+
+  it("shows all-clear when layout filtering removes every candidate", () => {
+    const html = render(
+      <TodayHero
+        digest={digest({
+          score: null,
+          topSignal: null,
+          briefingLead: null,
+          line: "Nothing needs your attention today — everything's tracking normally.",
+          worthALook: [],
+          reactionLine: null,
+          justIn: null,
+        })}
+        renderFilteredAllClear
+      />,
+    );
+
+    expect(html).toContain('data-slot="today-hero"');
+    expect(html).toContain('data-slot="today-hero-all-clear"');
+    expect(html).not.toContain('data-slot="today-hero-rail"');
+    expect(html).not.toContain('data-slot="today-hero-signal"');
+    expect(html).not.toContain('data-slot="today-hero-just-in"');
   });
 
   // v1.29.1 — the v1.29.0 selected-score-ring cluster was removed from the web

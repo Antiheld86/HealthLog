@@ -90,7 +90,13 @@ function formatJustInTime(iso: string): string | null {
   }
 }
 
-export function TodayHero({ digest }: { digest: DailyDigest }) {
+export function TodayHero({
+  digest,
+  renderFilteredAllClear = false,
+}: {
+  digest: DailyDigest;
+  renderFilteredAllClear?: boolean;
+}) {
   const { t } = useTranslations();
   // Gates ONLY the chip's time string — never the chip's presence. The hero
   // itself is deliberately NOT mount-gated (v1.30.9: it is the LCP element and
@@ -134,7 +140,10 @@ export function TodayHero({ digest }: { digest: DailyDigest }) {
   // below. A fresh marker counts as content even when line generation was
   // unavailable: the deterministic digest line still gives the hero an honest
   // lead, and hiding the marker would lose the arrival moment entirely.
+  // A filtered layout is the one explicit exception: its empty digest means
+  // "the hidden canonical candidates are quiet here", so retain all-clear.
   if (
+    !renderFilteredAllClear &&
     !hasScore &&
     !hasItems &&
     !digest.briefingLead &&
@@ -220,7 +229,9 @@ export function TodayHero({ digest }: { digest: DailyDigest }) {
                 />
               </Link>
             </div>
-            {digest.score && digest.score.delta !== null ? (
+            {digest.score &&
+            digest.score.delta !== null &&
+            digest.score.deltaReason === null ? (
               <span
                 data-slot="today-hero-score-delta"
                 className="text-muted-foreground text-xs tabular-nums"

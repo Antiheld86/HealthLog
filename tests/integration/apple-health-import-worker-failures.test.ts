@@ -105,7 +105,7 @@ describe("apple health import worker — failure paths (issue #486)", () => {
           enqueuedAt: new Date().toISOString(),
         }),
       ),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ ok: true, did: { skipped: "already_terminal" } });
 
     const row = await prisma.importJob.findUnique({
       where: { pgBossJobId: "boss-terminal-failed" },
@@ -137,7 +137,7 @@ describe("apple health import worker — failure paths (issue #486)", () => {
           enqueuedAt: new Date().toISOString(),
         }),
       ),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ ok: true, did: { skipped: "already_terminal" } });
 
     const row = await prisma.importJob.findUnique({
       where: { pgBossJobId: "boss-terminal-done" },

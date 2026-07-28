@@ -15,6 +15,7 @@ import type { MeasurementType } from "@/generated/prisma/client";
 import { buildInsufficient, nowProvenanceTimestamp } from "./coverage";
 import {
   getDerivedMetricMeta,
+  isSameTimeBaselineType,
   isVitalsBaselineType,
   isTrajectoryType,
   type DerivedMetricId,
@@ -29,11 +30,13 @@ import { computeSleepScore } from "./sleep-score";
 import { computeReadiness } from "./readiness";
 import { computeCoincidentDeviation } from "./coincident-deviation";
 import { computeTrajectory } from "./trajectory";
+import { computeSameTimeBaseline } from "./same-time-baseline";
 import {
   computeWellnessScore,
   type WellnessScoreType,
 } from "./wellness-scores";
 import type { Derived } from "./types";
+import { computeHealthScoreDerived } from "@/lib/analytics/score/derived";
 
 export interface DerivedComputeArgs {
   metric: DerivedMetricId;
@@ -207,6 +210,39 @@ export async function computeDerivedMetric(
         now,
       }) as Promise<Derived<unknown>>;
     }
+    case "SAME_TIME_BASELINE": {
+      // Today's running total against this person's own typical total at the
+      // same local hour. Steps is the default because it is the case the
+      // architecture structurally could not answer before, and the one the
+      // request was written around.
+      const requested = args.type ?? "ACTIVITY_STEPS";
+      if (!isSameTimeBaselineType(requested)) {
+        return buildInsufficient<unknown>({
+          coverage: {
+            requiredInputs: 1,
+            presentInputs: 0,
+            historyDays: 0,
+            missing: [requested],
+          },
+          provenance: {
+            inputs: [requested],
+            source: "none",
+            windowDays: 0,
+            computedAt: nowProvenanceTimestamp(now),
+          },
+          reason: "unsupported_baseline_type",
+        });
+      }
+      return computeSameTimeBaseline(args.userId, args.profile, {
+        type: requested as MeasurementType,
+        windowDays: args.windowDays,
+        now,
+      }) as Promise<Derived<unknown>>;
+    }
+    case "HEALTH_SCORE":
+      return computeHealthScoreDerived(args.userId) as Promise<
+        Derived<unknown>
+      >;
     case "RECOVERY_SCORE":
     case "STRESS_SCORE":
     case "STRAIN_SCORE":

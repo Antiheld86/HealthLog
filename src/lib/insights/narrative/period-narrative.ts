@@ -363,7 +363,7 @@ export function assemblePeriodNarrativeContext(
     const { current, prior } = splitByPeriod(points, currentFrom, priorFrom);
     if (prior.length < MIN_BASELINE_DAYS) continue;
     if (current.length < MIN_COVERED_DAYS_PER_METRIC) continue;
-    const band = buildBaselineBand(prior);
+    const band = buildBaselineBand(prior, type);
     if (!band) continue;
     const center = median(current);
     const above = center > band.high;
@@ -454,7 +454,7 @@ function computeCoincidentFlags(
       }
     }
     if (prior.length < MIN_BASELINE_DAYS) continue;
-    const band = buildBaselineBand(prior);
+    const band = buildBaselineBand(prior, type);
     if (band) bands.set(type, { low: band.low, high: band.high });
   }
 

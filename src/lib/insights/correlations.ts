@@ -106,6 +106,9 @@ export interface CorrelationOk {
   xLabel: string;
   /** Free-form key the UI can use to label the y-axis. */
   yLabel: string;
+  patternId?: string;
+  canonicalKey?: string;
+  dismissed?: boolean;
 }
 
 export interface CorrelationInsufficient {

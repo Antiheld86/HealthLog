@@ -3,7 +3,7 @@
  *
  * Same source-text-grep approach as the drain + step-consolidation +
  * mean-consolidation regression guards: assert the queue is registered
- * in `allQueues`, a `boss.work` handler is wired against it, and the
+ * in `allQueues`, a `createAndWork` handler is wired against it, and the
  * boot-discovery enqueue helper is called — without booting pg-boss +
  * Prisma. An unregistered queue silently never drains (the past incident
  * this guard exists to prevent).
@@ -42,12 +42,12 @@ describe("reminder-worker — intake-slot-dedup wiring", () => {
     expect(allQueuesMatch![1]).toMatch(/\bINTAKE_SLOT_DEDUP_QUEUE\b/);
   });
 
-  it("registers a boss.work handler against the intake-slot-dedup queue", () => {
+  it("registers a createAndWork handler against the intake-slot-dedup queue", () => {
     // v1.15.19 — span widened from {0,400}: the handler gained the daily
     // cron-tick dispatch branch (no `userId` → discovery fan-out) between
     // the queue name and the per-user dedup call.
     expect(source).toMatch(
-      /boss\.work[\s\S]{0,200}INTAKE_SLOT_DEDUP_QUEUE[\s\S]{0,1200}dedupeUserIntakeSlots/,
+      /createAndWork[\s\S]{0,200}INTAKE_SLOT_DEDUP_QUEUE[\s\S]{0,1400}dedupeUserIntakeSlots/,
     );
   });
 

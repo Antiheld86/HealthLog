@@ -6,6 +6,7 @@ vi.mock("@/lib/db", () => ({
     // v1.18.11 (P6) — the input gate / fingerprint probe salient inputs.
     measurement: { groupBy: vi.fn() },
     moodEntry: { aggregate: vi.fn() },
+    customMetric: { findMany: vi.fn() },
   },
 }));
 
@@ -40,6 +41,7 @@ function cacheRow(details: Record<string, unknown>, createdAt = new Date()) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(prisma.customMetric.findMany).mockResolvedValue([] as never);
 });
 
 describe("isTimeoutStub", () => {
@@ -491,6 +493,44 @@ describe("computeStatusInputFingerprint (v1.18.11 P6)", () => {
       includeCorrelationChannels: true,
     });
     expect(after).not.toBe(before);
+  });
+
+  it("folds opted-in custom metric configuration and entries into the fingerprint", async () => {
+    const t0 = new Date("2026-05-30T08:00:00.000Z");
+    vi.mocked(prisma.measurement.groupBy).mockResolvedValue([] as never);
+    vi.mocked(prisma.customMetric.findMany)
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce([
+        {
+          id: "custom-1",
+          unit: "kg",
+          updatedAt: t0,
+          _count: { entries: 1 },
+          entries: [{ measuredAt: t0, unit: "kg" }],
+        },
+      ] as never);
+
+    const before = await computeStatusInputFingerprint({
+      userId: "u1",
+      types: ["WEIGHT"],
+      includeCorrelationChannels: true,
+    });
+    const after = await computeStatusInputFingerprint({
+      userId: "u1",
+      types: ["WEIGHT"],
+      includeCorrelationChannels: true,
+    });
+
+    expect(after).not.toBe(before);
+    expect(prisma.customMetric.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: {
+          userId: "u1",
+          deletedAt: null,
+          correlationEnabled: true,
+        },
+      }),
+    );
   });
 
   it("widens the grouped query by the discovery channels only when asked", async () => {

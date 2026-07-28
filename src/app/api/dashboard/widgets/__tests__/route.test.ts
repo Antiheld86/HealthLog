@@ -11,6 +11,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
+const transactionUser = vi.hoisted(() => ({
+  findUnique: vi.fn(),
+  update: vi.fn(),
+}));
+
 vi.mock("@/lib/db", () => ({
   prisma: {
     user: {
@@ -22,6 +27,7 @@ vi.mock("@/lib/db", () => ({
     auditLog: {
       create: vi.fn(),
     },
+    $transaction: vi.fn(),
   },
   toJson: (v: unknown) => v,
 }));
@@ -55,7 +61,7 @@ vi.mock("next/headers", () => ({
   })),
 }));
 
-import { GET, PUT, __resetAuditDedupMemoForTests } from "../route";
+import { DELETE, GET, PUT, __resetAuditDedupMemoForTests } from "../route";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { annotate } from "@/lib/logging/context";
@@ -66,13 +72,10 @@ import {
   DASHBOARD_WIDGET_CATALOGUE_IDS,
   DEFAULT_DASHBOARD_LAYOUT,
   serializeDashboardLayout,
-  // v1.32.1 — the exact payload builder `ringMutation.mutationFn` calls
-  // (see the settings component). Importing the shipped function rather
-  // than re-implementing its shape means this test exercises the REAL
-  // client contract against the REAL route, not a hand-rolled stand-in.
-  buildRingMutationPayload,
   type DashboardLayout,
+  type DashboardLayoutWithToken,
 } from "@/lib/dashboard-layout";
+import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -85,6 +88,7 @@ const SESSION_OK = {
 };
 
 const callPut = PUT as unknown as (req: NextRequest) => Promise<Response>;
+const callDelete = DELETE as unknown as () => Promise<Response>;
 
 function makeReq(body: unknown): NextRequest {
   return new NextRequest("http://localhost/api/dashboard/widgets", {
@@ -100,6 +104,9 @@ beforeEach(() => {
   __resetAuditDedupMemoForTests();
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
   vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never);
+  vi.mocked(prisma.$transaction).mockImplementation((async (
+    callback: (tx: { user: typeof transactionUser }) => Promise<unknown>,
+  ) => callback({ user: transactionUser })) as never);
 });
 
 describe("PUT /api/dashboard/widgets — 422 multi-issue envelope (v1.4.42 W2)", () => {
@@ -143,6 +150,22 @@ describe("PUT /api/dashboard/widgets — 422 multi-issue envelope (v1.4.42 W2)",
     expect(body.details.issues.length).toBe(3);
     const paths = body.details.issues.map((i) => i.path).sort();
     expect(paths).toEqual(["comparisonBaseline", "version", "widgets"]);
+  });
+
+  it("rejects layouts above the documented 50-widget runtime cap", async () => {
+    const widgets = Array.from({ length: 51 }, (_, order) => ({
+      id: "weight",
+      visible: true,
+      tileVisible: true,
+      order,
+    }));
+    const res = await callPut(makeReq({ version: 1, widgets }));
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as {
+      details: { issues: Array<{ path: string }> };
+    };
+    expect(body.details.issues.map((issue) => issue.path)).toContain("widgets");
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
   it("writes one audit-ledger row keyed dashboard.widgets.validation-failed", async () => {
@@ -487,6 +510,23 @@ describe("dashboard widgets — 27-id catalogue round-trip (v1.7.0 W1)", () => {
     expect(ids.sort()).toEqual([...DASHBOARD_WIDGET_CATALOGUE_IDS].sort());
   });
 
+  it("GET preserves an explicit all-off hero-content choice", async () => {
+    const stored = serializeDashboardLayout({
+      ...DEFAULT_DASHBOARD_LAYOUT,
+      enabledHeroItemKinds: [],
+    });
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      dashboardWidgetsJson: stored,
+    } as never);
+
+    const res = await callGet();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { enabledHeroItemKinds: string[] };
+    };
+    expect(body.data.enabledHeroItemKinds).toEqual([]);
+  });
+
   it("an id genuinely outside the 27-catalogue still drops on PUT", async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       dashboardWidgetsJson: null,
@@ -645,86 +685,66 @@ describe("dashboard widgets — preserve-when-absent on PUT", () => {
   });
 });
 
-/**
- * v1.32.1 — regression for issue #581: dashboard layout changes silently
- * overwritten by a concurrent score-ring save.
- *
- * The scenario from the report: the user edits tile/chart visibility
- * (local draft B), then reorders/toggles a hero score ring before hitting
- * Save. The ring PUT (`ringMutation`) fires immediately, built from
- * whatever layout the client had cached (layout A — the state BEFORE the
- * draft edit). The normal Save button then PUTs the full draft (layout B)
- * and commits first. If the earlier-fired ring request resolves AFTER
- * Save, its body — built from the stale A snapshot — used to carry
- * `widgets: A` explicitly, and an explicitly-present field always wins on
- * write. Save's B silently reverted to A even though the ring PUT reported
- * 200 and only meant to touch the ring selection.
- *
- * The fix is `buildRingMutationPayload` (imported from the real component
- * module, not re-implemented here): it never includes `widgets` at all.
- * This test proves the SERVER half of the fix — a PUT shaped exactly like
- * the shipped ring mutation's body preserves whatever layout is CURRENTLY
- * stored, so the request that resolves last can no longer matter.
- */
-describe("dashboard widgets — ring-only PUT cannot race a concurrent full-layout Save (regression #581)", () => {
-  it("preserves the widgets a concurrent Save already committed, even though the ring request started from a stale snapshot", async () => {
-    // The state AFTER the normal Save committed layout B — a tile turned
-    // off that was on in the stale snapshot A the ring mutation started
-    // from. Starts from the FULL default widget catalogue (rather than a
-    // single-widget array) so `resolveDashboardLayout`'s auto-upgrade
-    // append (missing catalogue ids get seeded invisible) is a no-op here
-    // and the persisted array can be compared for exact equality below.
-    const savedLayoutB: DashboardLayout = serializeDashboardLayout({
-      version: 1,
-      widgets: DEFAULT_DASHBOARD_LAYOUT.widgets.map((w) =>
-        w.id === "weight" ? { ...w, visible: false, tileVisible: false } : w,
-      ),
-      comparisonBaseline: "lastYear",
-      selectedScoreRings: ["MED_COMPLIANCE"],
-      heroRingOrder: ["HEALTH_SCORE", "MED_COMPLIANCE"],
+describe("dashboard widgets — hero-content visibility persistence", () => {
+  it("preserves the stored choice when a stale client omits the field", async () => {
+    const stored = serializeDashboardLayout({
+      ...DEFAULT_DASHBOARD_LAYOUT,
+      enabledHeroItemKinds: ["preventive_care", "milestone"],
     });
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
-      dashboardWidgetsJson: savedLayoutB,
+      dashboardWidgetsJson: stored,
     } as never);
     vi.mocked(prisma.user.update).mockResolvedValue({} as never);
 
-    // The ring mutation's real, shipped payload — built without any
-    // knowledge of layout B. If this were still `{...staleA, ...}` the
-    // stale `widgets`/`comparisonBaseline` would land here explicitly and
-    // overwrite B; `buildRingMutationPayload` never carries them.
-    const ringOnlyBody = buildRingMutationPayload({
-      selectedScoreRings: ["READINESS"],
-      heroRingOrder: ["HEALTH_SCORE", "READINESS"],
-    });
-
-    const res = await callPut(makeReq(ringOnlyBody));
+    const res = await callPut(
+      makeReq({
+        version: 1,
+        widgets: DEFAULT_DASHBOARD_LAYOUT.widgets,
+      }),
+    );
     expect(res.status).toBe(200);
 
     const updateArg = vi.mocked(prisma.user.update).mock
       .calls[0]?.[0] as unknown as {
       data: { dashboardWidgetsJson: DashboardLayout };
     };
-    // B's widgets (and comparisonBaseline) survive — the ring PUT never
-    // touched them, so nothing it carries can outrace the Save that
-    // already committed.
-    expect(updateArg.data.dashboardWidgetsJson.widgets).toEqual(
-      savedLayoutB.widgets,
-    );
-    expect(updateArg.data.dashboardWidgetsJson.comparisonBaseline).toBe(
-      "lastYear",
-    );
-    // The ring selection itself DID apply.
-    expect(updateArg.data.dashboardWidgetsJson.selectedScoreRings).toEqual([
-      "READINESS",
+    expect(updateArg.data.dashboardWidgetsJson.enabledHeroItemKinds).toEqual([
+      "preventive_care",
+      "milestone",
     ]);
-
-    const body = (await res.json()) as { data: DashboardLayout };
-    expect(body.data.widgets[0].visible).toBe(false);
-    expect(body.data.widgets[0].tileVisible).toBe(false);
-    expect(body.data.selectedScoreRings).toEqual(["READINESS"]);
   });
 
-  it("still accepts a normal full-layout Save (widgets present + replace semantics unchanged)", async () => {
+  it("round-trips an explicit all-off PUT without writing notification preferences", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      dashboardWidgetsJson: DEFAULT_DASHBOARD_LAYOUT,
+    } as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({} as never);
+
+    const res = await callPut(
+      makeReq({
+        version: 1,
+        widgets: DEFAULT_DASHBOARD_LAYOUT.widgets,
+        enabledHeroItemKinds: [],
+      }),
+    );
+    expect(res.status).toBe(200);
+
+    const updateArg = vi.mocked(prisma.user.update).mock
+      .calls[0]?.[0] as unknown as {
+      data: Record<string, unknown> & {
+        dashboardWidgetsJson: DashboardLayout;
+      };
+    };
+    expect(updateArg.data.dashboardWidgetsJson.enabledHeroItemKinds).toEqual(
+      [],
+    );
+    expect(Object.keys(updateArg.data)).toEqual(["dashboardWidgetsJson"]);
+
+    const body = (await res.json()) as { data: DashboardLayout };
+    expect(body.data.enabledHeroItemKinds).toEqual([]);
+  });
+
+  it("omits an all-enabled choice from stored and returned serialization", async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       dashboardWidgetsJson: null,
     } as never);
@@ -733,14 +753,39 @@ describe("dashboard widgets — ring-only PUT cannot race a concurrent full-layo
     const res = await callPut(
       makeReq({
         version: 1,
-        widgets: [
-          { id: "weight", visible: false, tileVisible: false, order: 0 },
-        ],
+        widgets: DEFAULT_DASHBOARD_LAYOUT.widgets,
+        enabledHeroItemKinds: [...PRIORITY_ITEM_KINDS].reverse(),
       }),
     );
     expect(res.status).toBe(200);
+
+    const updateArg = vi.mocked(prisma.user.update).mock
+      .calls[0]?.[0] as unknown as {
+      data: { dashboardWidgetsJson: DashboardLayout };
+    };
+    expect(
+      Object.prototype.hasOwnProperty.call(
+        updateArg.data.dashboardWidgetsJson,
+        "enabledHeroItemKinds",
+      ),
+    ).toBe(false);
+
     const body = (await res.json()) as { data: DashboardLayout };
-    expect(body.data.widgets[0].visible).toBe(false);
+    expect(
+      Object.prototype.hasOwnProperty.call(body.data, "enabledHeroItemKinds"),
+    ).toBe(false);
+  });
+
+  it("rejects values outside the current priority-item catalogue", async () => {
+    const res = await callPut(
+      makeReq({
+        version: 1,
+        widgets: DEFAULT_DASHBOARD_LAYOUT.widgets,
+        enabledHeroItemKinds: ["future_item"],
+      }),
+    );
+    expect(res.status).toBe(422);
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 });
 
@@ -763,6 +808,7 @@ describe("dashboard widgets — optimistic concurrency (issue #581)", () => {
       chartOverlayPrefs: {},
       selectedScoreRings: ["MED_COMPLIANCE"],
       heroRingOrder: ["HEALTH_SCORE", "MED_COMPLIANCE"],
+      enabledHeroItemKinds: [...PRIORITY_ITEM_KINDS],
       ...(baseUpdatedAt !== undefined ? { baseUpdatedAt } : {}),
     };
   }
@@ -839,5 +885,85 @@ describe("dashboard widgets — optimistic concurrency (issue #581)", () => {
     expect(prisma.user.updateMany).not.toHaveBeenCalled();
     const body = (await res.json()) as { data: { updatedAt: string } };
     expect(body.data.updatedAt).toBe("2026-07-24T11:00:00.000Z");
+  });
+});
+
+describe("DELETE /api/dashboard/widgets — web-owned reset scope", () => {
+  it("resets tiles and Today highlights while preserving stored advanced preferences", async () => {
+    const stored = serializeDashboardLayout({
+      ...DEFAULT_DASHBOARD_LAYOUT,
+      widgets: DEFAULT_DASHBOARD_LAYOUT.widgets.map((widget, order) => ({
+        ...widget,
+        visible: false,
+        tileVisible: false,
+        order: DEFAULT_DASHBOARD_LAYOUT.widgets.length - order,
+      })),
+      comparisonBaseline: "lastYear",
+      chartOverlayPrefs: {
+        weight: {
+          showTrendIndicator: true,
+          showTrendArrow: true,
+          showTargetRange: false,
+          comparisonBaseline: "lastMonth",
+          rangePoints: 90,
+        },
+      },
+      selectedScoreRings: ["READINESS", "SLEEP_SCORE"],
+      heroRingOrder: ["SLEEP_SCORE", "HEALTH_SCORE", "READINESS"],
+      enabledHeroItemKinds: ["milestone"],
+    });
+    const advanced = new Date("2026-07-24T12:00:00.000Z");
+    transactionUser.findUnique.mockResolvedValue({
+      dashboardWidgetsJson: stored,
+    });
+    transactionUser.update.mockResolvedValue({ updatedAt: advanced });
+
+    const res = await callDelete();
+    expect(res.status).toBe(200);
+
+    expect(prisma.$transaction).toHaveBeenCalledOnce();
+    expect(vi.mocked(prisma.$transaction).mock.calls[0]?.[1]).toEqual({
+      isolationLevel: "Serializable",
+    });
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(transactionUser.findUnique).toHaveBeenCalledOnce();
+    expect(transactionUser.update).toHaveBeenCalledOnce();
+
+    const updateArg = transactionUser.update.mock.calls[0]?.[0] as {
+      data: { dashboardWidgetsJson: DashboardLayout };
+      select: { updatedAt: true };
+    };
+    expect(updateArg.select).toEqual({ updatedAt: true });
+    const persisted = updateArg.data.dashboardWidgetsJson;
+    expect(persisted.widgets).toEqual(DEFAULT_DASHBOARD_LAYOUT.widgets);
+    expect(
+      Object.prototype.hasOwnProperty.call(persisted, "enabledHeroItemKinds"),
+    ).toBe(false);
+    expect(persisted.comparisonBaseline).toBe("lastYear");
+    expect(persisted.chartOverlayPrefs).toEqual({
+      weight: {
+        showTrendIndicator: true,
+        showTrendArrow: true,
+        showTargetRange: false,
+        comparisonBaseline: "lastMonth",
+        rangePoints: 90,
+      },
+    });
+    expect(persisted.selectedScoreRings).toEqual(["READINESS", "SLEEP_SCORE"]);
+    expect(persisted.heroRingOrder).toEqual([
+      "SLEEP_SCORE",
+      "HEALTH_SCORE",
+      "READINESS",
+    ]);
+
+    const body = (await res.json()) as { data: DashboardLayoutWithToken };
+    expect(body.data.widgets).toEqual(DEFAULT_DASHBOARD_LAYOUT.widgets);
+    expect(body.data.enabledHeroItemKinds).toEqual([...PRIORITY_ITEM_KINDS]);
+    expect(body.data.comparisonBaseline).toBe("lastYear");
+    expect(body.data.chartOverlayPrefs).toEqual(persisted.chartOverlayPrefs);
+    expect(body.data.selectedScoreRings).toEqual(persisted.selectedScoreRings);
+    expect(body.data.heroRingOrder).toEqual(persisted.heroRingOrder);
+    expect(body.data.updatedAt).toBe(advanced.toISOString());
   });
 });

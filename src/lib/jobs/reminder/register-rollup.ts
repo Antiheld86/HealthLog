@@ -10,7 +10,7 @@
  *
  * v1.4.37 dead-queue contract: every queue name appears in `allQueues`, its
  * cron (where it has one) appears as a `[QUEUE, CRON]` tuple in `schedules`,
- * and a `boss.work(QUEUE, …, handler)` binding drains it. The
+ * and a `createAndWork(boss, QUEUE, …, handler)` binding drains it. The
  * `drain-cumulative-queue`, `mean-consolidation-queue`, and
  * `stress-strain-retention-queue` (dense-retention facet) guards read THIS
  * module.
@@ -104,9 +104,12 @@ import {
 } from "./shared";
 import {
   createAndSchedule,
+  createAndWork,
+  cronIsTheRetry,
   type QueuePolicyTable,
   type ScheduleEntry,
 } from "./registrar-shared";
+import { jobDone, jobFailed } from "@/lib/jobs/job-outcome";
 // v1.4.37 W7c — nightly drain of per-sample APPLE_HEALTH cumulative rows.
 // Collapses each user × cumulative-type × calendar-day bucket into one
 // `stats:…` row so the list view stops painting hundreds of step chunks per
@@ -170,7 +173,7 @@ const schedules: ScheduleEntry[] = [
   // v1.4.37 W7c — nightly fold of per-sample APPLE_HEALTH cumulative
   // rows into one row per day per type. Slots between the
   // audit-log cleanup (03:15) and the feedback aggregator (04:00).
-  [DRAIN_CUMULATIVE_QUEUE, DRAIN_CUMULATIVE_CRON],
+  [DRAIN_CUMULATIVE_QUEUE, DRAIN_CUMULATIVE_CRON, cronIsTheRetry],
 ];
 
 /**
@@ -274,7 +277,8 @@ export async function registerRollupQueues(
   // the DAY bucket is already recomputed synchronously by the hook
   // itself. Concurrency-2 keeps two recomputes in flight without
   // crowding the dashboard request pool.
-  await boss.work<RollupRecomputePayload>(
+  await createAndWork<RollupRecomputePayload>(
+    boss,
     ROLLUP_RECOMPUTE_QUEUE,
     { localConcurrency: ROLLUP_RECOMPUTE_CONCURRENCY },
     async (jobs) => {
@@ -287,6 +291,10 @@ export async function registerRollupQueues(
           to: new Date(payload.to),
         });
       }
+      // No per-bucket isolation here on purpose: a recompute that throws
+      // fails the job, so reaching this line means every bucket in the batch
+      // was folded.
+      return jobDone({ buckets_recomputed: jobs.length });
     },
   );
 
@@ -295,18 +303,25 @@ export async function registerRollupQueues(
   // full `recomputeUserRollups` against the default 5-year window
   // across every granularity. Serial concurrency so the populator
   // never crowds the dashboard request pool.
-  await boss.work<RollupFullBackfillPayload>(
+  await createAndWork<RollupFullBackfillPayload>(
+    boss,
     ROLLUP_FULL_BACKFILL_QUEUE,
     { localConcurrency: ROLLUP_FULL_BACKFILL_CONCURRENCY },
     async (jobs) => {
+      let rowsUpsertedTotal = 0;
       for (const job of jobs) {
         const { userId } = job.data;
         const { rowsUpserted, durationMs } = await recomputeUserRollups(userId);
+        rowsUpsertedTotal += rowsUpserted;
         workerLog(
           "info",
           `[rollup-full-backfill] user=${userId} rows=${rowsUpserted} duration=${durationMs}ms`,
         );
       }
+      return jobDone({
+        users: jobs.length,
+        rows_upserted: rowsUpsertedTotal,
+      });
     },
   );
 
@@ -315,19 +330,29 @@ export async function registerRollupQueues(
   // step rows; this handler collapses them into one daily-total row per
   // calendar day and soft-deletes the originals. Serial concurrency so
   // the populator never crowds the dashboard request pool.
-  await boss.work<StepConsolidationPayload>(
+  await createAndWork<StepConsolidationPayload>(
+    boss,
     STEP_CONSOLIDATION_QUEUE,
     { localConcurrency: STEP_CONSOLIDATION_CONCURRENCY },
     async (jobs) => {
+      let daysTotal = 0;
+      let legacyRowsTotal = 0;
       for (const job of jobs) {
         const { userId } = job.data;
         const { daysConsolidated, legacyRowsSoftDeleted } =
           await runStepConsolidationForUser(userId);
+        daysTotal += daysConsolidated;
+        legacyRowsTotal += legacyRowsSoftDeleted;
         workerLog(
           "info",
           `[step-consolidation] user=${userId} days=${daysConsolidated} legacyRowsSoftDeleted=${legacyRowsSoftDeleted}`,
         );
       }
+      return jobDone({
+        users: jobs.length,
+        days_consolidated: daysTotal,
+        legacy_rows_soft_deleted: legacyRowsTotal,
+      });
     },
   );
 
@@ -335,18 +360,39 @@ export async function registerRollupQueues(
   // GOOGLE_HEALTH / FITBIT daily-total step rows the pre-fix consolidation
   // swept and removes the shadow MANUAL totals it minted. Serial
   // concurrency so the repair never crowds the dashboard request pool.
-  await boss.work<StepConsolidationRepairPayload>(
+  await createAndWork<StepConsolidationRepairPayload>(
+    boss,
     STEP_CONSOLIDATION_REPAIR_QUEUE,
     { localConcurrency: STEP_CONSOLIDATION_REPAIR_CONCURRENCY },
     async (jobs) => {
+      let rowsResurrected = 0;
+      let wedgeSkipped = 0;
+      let manualMintsRemoved = 0;
+      let daysRecomputed = 0;
+      let failures = 0;
       for (const job of jobs) {
         const { userId } = job.data;
         const summary = await runStepConsolidationRepairForUser(userId);
+        rowsResurrected += summary.rowsResurrected;
+        wedgeSkipped += summary.wedgeSkipped;
+        manualMintsRemoved += summary.manualMintsRemoved;
+        daysRecomputed += summary.daysRecomputed;
+        // The repair isolates its own per-day failures and reports them as a
+        // count, so they ride out as a fact rather than failing the job.
+        failures += summary.failures;
         workerLog(
           "info",
           `[step-consolidation-repair] user=${userId} resurrected=${summary.rowsResurrected} wedgeSkipped=${summary.wedgeSkipped} manualMintsRemoved=${summary.manualMintsRemoved} daysRecomputed=${summary.daysRecomputed} failures=${summary.failures}`,
         );
       }
+      return jobDone({
+        users: jobs.length,
+        rows_resurrected: rowsResurrected,
+        wedge_skipped: wedgeSkipped,
+        manual_mints_removed: manualMintsRemoved,
+        days_recomputed: daysRecomputed,
+        failures,
+      });
     },
   );
 
@@ -356,18 +402,28 @@ export async function registerRollupQueues(
   // it and re-runs detection silently so the honest re-derived best takes
   // its place. Serial concurrency so the repair never crowds the
   // dashboard request pool.
-  await boss.work<CumulativePrRederivePayload>(
+  await createAndWork<CumulativePrRederivePayload>(
+    boss,
     CUMULATIVE_PR_REDERIVE_QUEUE,
     { localConcurrency: CUMULATIVE_PR_REDERIVE_CONCURRENCY },
     async (jobs) => {
+      let rowsDeleted = 0;
+      let rowsReinserted = 0;
       for (const job of jobs) {
         const { userId } = job.data;
         const summary = await runCumulativePrRederivationForUser(userId);
+        rowsDeleted += summary.rowsDeleted;
+        rowsReinserted += summary.rowsReinserted;
         workerLog(
           "info",
           `[cumulative-pr-rederive] user=${userId} rowsDeleted=${summary.rowsDeleted} rowsReinserted=${summary.rowsReinserted}`,
         );
       }
+      return jobDone({
+        users: jobs.length,
+        rows_deleted: rowsDeleted,
+        rows_reinserted: rowsReinserted,
+      });
     },
   );
 
@@ -376,19 +432,29 @@ export async function registerRollupQueues(
   // mean-type rows; this handler collapses each completed day to its
   // mean and soft-deletes the originals. Serial concurrency so the
   // populator never crowds the dashboard request pool.
-  await boss.work<MeanConsolidationPayload>(
+  await createAndWork<MeanConsolidationPayload>(
+    boss,
     MEAN_CONSOLIDATION_QUEUE,
     { localConcurrency: MEAN_CONSOLIDATION_CONCURRENCY },
     async (jobs) => {
+      let daysTotal = 0;
+      let perSampleRowsTotal = 0;
       for (const job of jobs) {
         const { userId } = job.data;
         const { daysConsolidated, perSampleRowsSoftDeleted } =
           await runMeanConsolidationForUser(userId);
+        daysTotal += daysConsolidated;
+        perSampleRowsTotal += perSampleRowsSoftDeleted;
         workerLog(
           "info",
           `[mean-consolidation] user=${userId} days=${daysConsolidated} perSampleRowsSoftDeleted=${perSampleRowsSoftDeleted}`,
         );
       }
+      return jobDone({
+        users: jobs.length,
+        days_consolidated: daysTotal,
+        per_sample_rows_soft_deleted: perSampleRowsTotal,
+      });
     },
   );
 
@@ -399,10 +465,14 @@ export async function registerRollupQueues(
   // soft-deletes the originals, keeping the in-window intra-day shape intact
   // for the Stress engine. Serial concurrency so the backfill never crowds
   // the request pool.
-  await boss.work<DenseIntradayRetentionPayload>(
+  await createAndWork<DenseIntradayRetentionPayload>(
+    boss,
     DENSE_INTRADAY_RETENTION_QUEUE,
     { localConcurrency: DENSE_INTRADAY_RETENTION_CONCURRENCY },
     async (jobs) => {
+      let daysTotal = 0;
+      let perSampleRowsTotal = 0;
+      let derivedRestingRowsTotal = 0;
       for (const job of jobs) {
         const { userId } = job.data;
         try {
@@ -411,6 +481,9 @@ export async function registerRollupQueues(
             perSampleRowsSoftDeleted,
             derivedRestingRowsUpserted,
           } = await runDenseIntradayRetentionForUser(userId);
+          daysTotal += daysConsolidated;
+          perSampleRowsTotal += perSampleRowsSoftDeleted;
+          derivedRestingRowsTotal += derivedRestingRowsUpserted;
           workerLog(
             "info",
             `[dense-intraday-retention] user=${userId} days=${daysConsolidated} perSampleRowsSoftDeleted=${perSampleRowsSoftDeleted} derivedRestingRowsUpserted=${derivedRestingRowsUpserted}`,
@@ -425,6 +498,12 @@ export async function registerRollupQueues(
           throw err;
         }
       }
+      return jobDone({
+        users: jobs.length,
+        days_consolidated: daysTotal,
+        per_sample_rows_soft_deleted: perSampleRowsTotal,
+        derived_resting_rows_upserted: derivedRestingRowsTotal,
+      });
     },
   );
 
@@ -435,10 +514,15 @@ export async function registerRollupQueues(
   // Self-converging: a rebuilt day drops out of the discovery pairing, so
   // the pass runs once per install. Serial concurrency so the rebuild never
   // crowds the request pool.
-  await boss.work<DenseIntradayHourlyRebuildPayload>(
+  await createAndWork<DenseIntradayHourlyRebuildPayload>(
+    boss,
     DENSE_INTRADAY_HOURLY_REBUILD_QUEUE,
     { localConcurrency: DENSE_INTRADAY_HOURLY_REBUILD_CONCURRENCY },
     async (jobs) => {
+      let daysRebuiltTotal = 0;
+      let hourlyRowsTotal = 0;
+      let dailyRowsRetiredTotal = 0;
+      let daysSkippedTotal = 0;
       for (const job of jobs) {
         const { userId } = job.data;
         try {
@@ -448,6 +532,10 @@ export async function registerRollupQueues(
             dailyRowsRetired,
             daysSkippedNoTombstones,
           } = await runDenseIntradayHourlyRebuildForUser(userId);
+          daysRebuiltTotal += daysRebuilt;
+          hourlyRowsTotal += hourlyRowsUpserted;
+          dailyRowsRetiredTotal += dailyRowsRetired;
+          daysSkippedTotal += daysSkippedNoTombstones;
           workerLog(
             "info",
             `[dense-intraday-hourly-rebuild] user=${userId} daysRebuilt=${daysRebuilt} hourlyRowsUpserted=${hourlyRowsUpserted} dailyRowsRetired=${dailyRowsRetired} daysSkippedNoTombstones=${daysSkippedNoTombstones}`,
@@ -462,6 +550,13 @@ export async function registerRollupQueues(
           throw err;
         }
       }
+      return jobDone({
+        users: jobs.length,
+        days_rebuilt: daysRebuiltTotal,
+        hourly_rows_upserted: hourlyRowsTotal,
+        daily_rows_retired: dailyRowsRetiredTotal,
+        days_skipped_no_tombstones: daysSkippedTotal,
+      });
     },
   );
 
@@ -471,7 +566,8 @@ export async function registerRollupQueues(
   // No current read path consumes these buckets — they exist so a
   // future cross-granularity reader can ship without a backfill
   // step. Concurrency-2 mirrors the measurement-rollup worker.
-  await boss.work<MoodRollupRecomputePayload>(
+  await createAndWork<MoodRollupRecomputePayload>(
+    boss,
     MOOD_ROLLUP_RECOMPUTE_QUEUE,
     { localConcurrency: MOOD_ROLLUP_RECOMPUTE_CONCURRENCY },
     async (jobs) => {
@@ -483,6 +579,7 @@ export async function registerRollupQueues(
           to: new Date(payload.to),
         });
       }
+      return jobDone({ buckets_recomputed: jobs.length });
     },
   );
 
@@ -491,10 +588,12 @@ export async function registerRollupQueues(
   // but zero rollup rows; this handler folds the full 5-year window
   // across every granularity. Concurrency-1 so the populator never
   // crowds the request pool.
-  await boss.work<MoodRollupFullBackfillPayload>(
+  await createAndWork<MoodRollupFullBackfillPayload>(
+    boss,
     MOOD_ROLLUP_FULL_BACKFILL_QUEUE,
     { localConcurrency: MOOD_ROLLUP_FULL_BACKFILL_CONCURRENCY },
     async (jobs) => {
+      let rowsUpsertedTotal = 0;
       for (const job of jobs) {
         const { userId } = job.data;
         try {
@@ -508,6 +607,7 @@ export async function registerRollupQueues(
             userId,
             { replace: true },
           );
+          rowsUpsertedTotal += rowsUpserted;
           workerLog(
             "info",
             `[mood-rollup-full-backfill] user=${userId} rows=${rowsUpserted} duration=${durationMs}ms`,
@@ -522,6 +622,10 @@ export async function registerRollupQueues(
           throw err;
         }
       }
+      return jobDone({
+        users: jobs.length,
+        rows_upserted: rowsUpsertedTotal,
+      });
     },
   );
 
@@ -530,15 +634,18 @@ export async function registerRollupQueues(
   // but zero rollup coverage; this handler folds the trailing 90-day
   // window per account. Concurrency-1 so the populator never crowds
   // the request pool.
-  await boss.work<MedicationComplianceBackfillPayload>(
+  await createAndWork<MedicationComplianceBackfillPayload>(
+    boss,
     MEDICATION_COMPLIANCE_BACKFILL_QUEUE,
     { localConcurrency: MEDICATION_COMPLIANCE_BACKFILL_CONCURRENCY },
     async (jobs) => {
+      let rowsUpsertedTotal = 0;
       for (const job of jobs) {
         const { userId } = job.data;
         try {
           const { rowsUpserted, durationMs } =
             await recomputeUserMedicationCompliance(userId);
+          rowsUpsertedTotal += rowsUpserted;
           workerLog(
             "info",
             `[medication-compliance-backfill] user=${userId} rows=${rowsUpserted} duration=${durationMs}ms`,
@@ -553,6 +660,10 @@ export async function registerRollupQueues(
           throw err;
         }
       }
+      return jobDone({
+        users: jobs.length,
+        rows_upserted: rowsUpsertedTotal,
+      });
     },
   );
 
@@ -563,10 +674,26 @@ export async function registerRollupQueues(
   // Concurrency-1 so the drain never crowds the dashboard request pool
   // and a long backfill on the maintainer's account (300 k+ measurement rows)
   // stays a single sequential walk.
-  await boss.work<DrainCumulativePayload>(
+  await createAndWork<DrainCumulativePayload>(
+    boss,
     DRAIN_CUMULATIVE_QUEUE,
     { localConcurrency: 1 },
     async (jobs) => {
+      // The three drains below are independent passes sharing one nightly
+      // tick, so one failing pass must not stop the other two from running.
+      // The first failure is held back and reported once the tick is over —
+      // that keeps the existing order and still fails the job, which is what
+      // the swallowed errors never did.
+      let firstFailure: { reason: string; cause: unknown } | undefined;
+      let passesFailed = 0;
+      let bucketsCollapsed = 0;
+      let perSampleRowsDeleted = 0;
+      let meanDaysConsolidated = 0;
+      let meanRowsSoftDeleted = 0;
+      let denseDaysConsolidated = 0;
+      let denseRowsSoftDeleted = 0;
+      let denseSkipped = false;
+
       for (const job of jobs) {
         try {
           const summary = await drainPerSampleCumulative(getWorkerPrisma(), {
@@ -574,6 +701,8 @@ export async function registerRollupQueues(
             cutoffHours: DRAIN_CUMULATIVE_CUTOFF_HOURS,
             log: (line) => workerLog("info", line),
           });
+          bucketsCollapsed += summary.totals.bucketsCollapsed;
+          perSampleRowsDeleted += summary.totals.perSampleRowsDeleted;
           workerLog(
             "info",
             `[drain-cumulative] triggeredAt=${job.data.triggeredAt} usersScanned=${summary.totals.usersScanned} bucketsCollapsed=${summary.totals.bucketsCollapsed} perSampleRowsDeleted=${summary.totals.perSampleRowsDeleted} dailyRowsUpserted=${summary.totals.dailyRowsUpserted}`,
@@ -581,6 +710,8 @@ export async function registerRollupQueues(
         } catch (err) {
           recordError();
           await reportWorkerError("drain-cumulative", err);
+          passesFailed++;
+          firstFailure ??= { reason: "cumulative drain failed", cause: err };
         }
 
         // v1.8.5 — fold the daily-MEAN drain onto the same nightly tick as
@@ -600,6 +731,8 @@ export async function registerRollupQueues(
             cutoffHours: MEAN_CONSOLIDATION_CUTOFF_HOURS,
             log: (line) => workerLog("info", line),
           });
+          meanDaysConsolidated += meanSummary.totals.daysConsolidated;
+          meanRowsSoftDeleted += meanSummary.totals.perSampleRowsSoftDeleted;
           workerLog(
             "info",
             `[mean-consolidation] triggeredAt=${job.data.triggeredAt} usersScanned=${meanSummary.totals.usersScanned} daysConsolidated=${meanSummary.totals.daysConsolidated} perSampleRowsSoftDeleted=${meanSummary.totals.perSampleRowsSoftDeleted} dailyRowsUpserted=${meanSummary.totals.dailyRowsUpserted} daysFailed=${meanSummary.totals.daysFailed}`,
@@ -609,6 +742,8 @@ export async function registerRollupQueues(
           await reportWorkerError("mean-consolidation", err, {
             tick: "nightly",
           });
+          passesFailed++;
+          firstFailure ??= { reason: "mean consolidation failed", cause: err };
         }
 
         // v1.10.0 WX-E — fold the dense intra-day retention drain onto the
@@ -624,6 +759,7 @@ export async function registerRollupQueues(
         // shipped.
         try {
           if (!DENSE_INTRADAY_RETENTION_ENABLED) {
+            denseSkipped = true;
             workerLog(
               "info",
               "[dense-intraday-retention] disabled via DENSE_INTRADAY_RETENTION_ENABLED — skipping the nightly walk (operator kill-switch)",
@@ -636,6 +772,9 @@ export async function registerRollupQueues(
                 log: (line) => workerLog("info", line),
               },
             );
+            denseDaysConsolidated += denseSummary.totals.daysConsolidated;
+            denseRowsSoftDeleted +=
+              denseSummary.totals.perSampleRowsSoftDeleted;
             workerLog(
               "info",
               `[dense-intraday-retention] triggeredAt=${job.data.triggeredAt} usersScanned=${denseSummary.totals.usersScanned} daysConsolidated=${denseSummary.totals.daysConsolidated} perSampleRowsSoftDeleted=${denseSummary.totals.perSampleRowsSoftDeleted} hourlyRowsUpserted=${denseSummary.totals.hourlyRowsUpserted} dailyRowsRetired=${denseSummary.totals.dailyRowsRetired}`,
@@ -646,8 +785,26 @@ export async function registerRollupQueues(
           await reportWorkerError("dense-intraday-retention", err, {
             tick: "nightly",
           });
+          passesFailed++;
+          firstFailure ??= { reason: "dense retention failed", cause: err };
         }
       }
+
+      const did = {
+        passes_failed: passesFailed,
+        buckets_collapsed: bucketsCollapsed,
+        per_sample_rows_deleted: perSampleRowsDeleted,
+        mean_days_consolidated: meanDaysConsolidated,
+        mean_rows_soft_deleted: meanRowsSoftDeleted,
+        dense_days_consolidated: denseDaysConsolidated,
+        dense_rows_soft_deleted: denseRowsSoftDeleted,
+        dense_skipped: denseSkipped,
+      };
+
+      if (firstFailure) {
+        return jobFailed(firstFailure.reason, firstFailure.cause, did);
+      }
+      return jobDone(did);
     },
   );
 

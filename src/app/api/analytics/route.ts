@@ -6,7 +6,8 @@ import { NO_STORE_BUT_BFCACHE } from "@/lib/http/cache-headers";
 import { cachedSwr, caches, type ServerCache } from "@/lib/cache/server-cache";
 import { summarize, type DataPoint } from "@/lib/analytics/trends";
 import { computeSummariesSlice } from "@/lib/analytics/summaries-slice";
-import { getBpTargets } from "@/lib/analytics/bp-targets";
+import { resolveEffectiveBpTargets } from "@/lib/analytics/effective-range";
+import { bpTargetsEqual, getBpTargets } from "@/lib/analytics/bp-targets";
 import { DEFAULT_TIMEZONE } from "@/lib/tz/resolver";
 import { reconstructSleepNights } from "@/lib/analytics/sleep-night";
 import { loadUserSourcePriority } from "@/lib/rollups/measurement-read";
@@ -16,10 +17,9 @@ import {
   computeBpInTargetFastPath,
   type BpInTargetEnvelope,
 } from "@/lib/analytics/bp-in-target-fast-path";
-import { computeUserHealthScoreFastPath } from "@/lib/analytics/health-score-fast-path";
+import { computeUserHealthScore } from "@/lib/analytics/score/reader";
 import { isModuleEnabled } from "@/lib/modules/gate";
 import { resolveRestMode } from "@/lib/illness/rest-mode";
-import { buildHealthScoreBpInputs } from "@/lib/analytics/health-score-inputs";
 import { deriveBpWindow90 } from "@/lib/analytics/window-confidence";
 import { computeCorrelationHypothesesFastPath } from "@/lib/analytics/correlations-fast-path";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
@@ -29,6 +29,11 @@ import {
   GLUCOSE_PANEL_WINDOW_DAYS,
   type GlucoseClinicalMetrics,
 } from "@/lib/analytics/glucose-metrics";
+import {
+  decisionForEvidence,
+  PATTERN_FAMILIES,
+  syncAcceptedPatterns,
+} from "@/lib/insights/correlation-patterns";
 
 export const dynamic = "force-dynamic";
 
@@ -289,7 +294,16 @@ async function buildAnalyticsResponse(user: AuthedUser, locale: Locale) {
   // these envelopes inside `buildHealthScoreBpInputs`.
   let bpEnvelope: BpInTargetEnvelope | null = null;
   let bpEnvelopePriorWeek: BpInTargetEnvelope | null = null;
-  const bpTargets = getBpTargets(user.dateOfBirth);
+  let bpEnvelopePriorTwoWeeks: BpInTargetEnvelope | null = null;
+  const bpTargets = resolveEffectiveBpTargets(
+    {
+      dateOfBirth: user.dateOfBirth,
+      gender: user.gender,
+      heightCm: user.heightCm ?? null,
+    },
+    user.thresholdsJson,
+  );
+  const clinicalBpTargets = getBpTargets(user.dateOfBirth);
   if (bpTargets) {
     const now = new Date();
     // v1.4.37 W2 — probe-gated dispatcher replaces the inline chunked
@@ -312,29 +326,67 @@ async function buildAnalyticsResponse(user: AuthedUser, locale: Locale) {
     // pair of `readRollupBuckets` reads on the rollup path and is a
     // no-op when the user has no BP rows at all.
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const [windows, windowsPriorWeek] = await Promise.all([
-      computeBpInTargetFastPath({
-        userId: user.id,
-        targets: bpTargets,
-        now,
-        coverage,
-        // v1.4.38 W-A — cross-tz runtime guard. The helper falls back
-        // to the live SQL path when the user is more than 3 hours
-        // from UTC, where the rollup table's UTC-midnight day-key
-        // would slip a calendar day relative to the live aggregator's
-        // window cuts.
-        userTz,
-      }),
-      computeBpInTargetFastPath({
-        userId: user.id,
-        targets: bpTargets,
-        now: sevenDaysAgo,
-        coverage,
-        userTz,
-      }),
-    ]);
-    bpEnvelope = windows;
-    bpEnvelopePriorWeek = windowsPriorWeek;
+    const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+    const [windows, windowsPriorWeek, windowsPriorTwoWeeks] = await Promise.all(
+      [
+        computeBpInTargetFastPath({
+          userId: user.id,
+          targets: bpTargets,
+          now,
+          coverage,
+          // v1.4.38 W-A — cross-tz runtime guard. The helper falls back
+          // to the live SQL path when the user is more than 3 hours
+          // from UTC, where the rollup table's UTC-midnight day-key
+          // would slip a calendar day relative to the live aggregator's
+          // window cuts.
+          userTz,
+        }),
+        computeBpInTargetFastPath({
+          userId: user.id,
+          targets: bpTargets,
+          now: sevenDaysAgo,
+          coverage,
+          userTz,
+        }),
+        computeBpInTargetFastPath({
+          userId: user.id,
+          targets: bpTargets,
+          now: fourteenDaysAgo,
+          coverage,
+          userTz,
+        }),
+      ],
+    );
+    if (bpTargetsEqual(bpTargets, clinicalBpTargets)) {
+      bpEnvelope = windows;
+      bpEnvelopePriorWeek = windowsPriorWeek;
+      bpEnvelopePriorTwoWeeks = windowsPriorTwoWeeks;
+    } else if (clinicalBpTargets) {
+      [bpEnvelope, bpEnvelopePriorWeek, bpEnvelopePriorTwoWeeks] =
+        await Promise.all([
+          computeBpInTargetFastPath({
+            userId: user.id,
+            targets: clinicalBpTargets,
+            now,
+            coverage,
+            userTz,
+          }),
+          computeBpInTargetFastPath({
+            userId: user.id,
+            targets: clinicalBpTargets,
+            now: sevenDaysAgo,
+            coverage,
+            userTz,
+          }),
+          computeBpInTargetFastPath({
+            userId: user.id,
+            targets: clinicalBpTargets,
+            now: fourteenDaysAgo,
+            coverage,
+            userTz,
+          }),
+        ]);
+    }
     // v1.17 W1d — the BD-Zielbereich headline standardises on the
     // trailing-90-day window (labelled "· 90 T" in the tile). All-time
     // remains carried below for the BP detail page's long view only.
@@ -415,51 +467,100 @@ async function buildAnalyticsResponse(user: AuthedUser, locale: Locale) {
     coverage,
     locale,
   });
+  const fixedDefinitions = [
+    {
+      key: "bpCompliance" as const,
+      factorKey: "HYPOTHESIS:MEDICATION_COMPLIANCE",
+      outcomeKey: "BLOOD_PRESSURE_SYS",
+    },
+    {
+      key: "moodPulse" as const,
+      factorKey: "HYPOTHESIS:MOOD",
+      outcomeKey: "RESTING_PULSE",
+    },
+    {
+      key: "weightWeekday" as const,
+      factorKey: "HYPOTHESIS:WEEKDAY",
+      outcomeKey: "WEIGHT",
+    },
+  ];
+  const acceptedFixed = fixedDefinitions.flatMap((definition) => {
+    const result = correlations[definition.key];
+    return result.status === "ok"
+      ? [
+          {
+            factorKey: definition.factorKey,
+            outcomeKey: definition.outcomeKey,
+            lagDays: 0,
+            sampleSize: result.n,
+            effectSize: result.statistic,
+            pValue: result.pValue,
+            qValue: null,
+          },
+        ]
+      : [];
+  });
+  const fixedDecisions = await syncAcceptedPatterns({
+    userId: user.id,
+    family: PATTERN_FAMILIES.fixed,
+    accepted: acceptedFixed,
+  });
+  const correlationsWithPatterns = { ...correlations };
+  for (const definition of fixedDefinitions) {
+    const result = correlations[definition.key];
+    if (result.status !== "ok") continue;
+    const decision = decisionForEvidence(fixedDecisions, {
+      factorKey: definition.factorKey,
+      outcomeKey: definition.outcomeKey,
+      lagDays: 0,
+    });
+    correlationsWithPatterns[definition.key] = decision
+      ? { ...result, ...decision }
+      : result;
+  }
 
-  // v1.4.20 phase B5 — Personal Health Score. Server-deterministic
-  // composite of BP-in-target % + weight-trend alignment + mood
-  // stability + medication compliance. The "vs last week" delta
-  // re-runs the same compute against a 7-day-shifted snapshot.
-  //
-  // v1.4.37 W2 — probe-gated helper. The weight pillar derives from
-  // DAY-bucket means on `measurement_rollups` when the user has full
-  // coverage; the source-attribution accordion still pulls a narrow
-  // 2-column projection from `measurements` for the ingest-path
-  // pills. Falls back to the legacy 37-day raw read on partial /
-  // missing coverage. Path annotate sits on `meta.healthScore.path`.
-  //
-  // v1.17 W1b — the BP-pillar inputs come from the ONE shared
-  // `buildHealthScoreBpInputs` builder the dashboard snapshot also uses, so
-  // the ring and the insights card grade the pillar off identical inputs
-  // (same 90-day window via W1d, same all-time fallback, same graded score,
-  // same prior-week delta values). The hand-rolled per-surface assembly that
-  // let the two diverge is gone.
-  const bpInputs = buildHealthScoreBpInputs(bpEnvelope, bpEnvelopePriorWeek);
-  // v1.18.0 R4 — resolve the `mood` module server-side so a disabled-mood
-  // account drops the mood-stability pillar from the ring instead of
-  // being silently scored on data hidden everywhere else. The dashboard
-  // already blanks the mood tile + the coach snapshot unions mood out;
-  // this closes the matching gap on the Health Score.
-  const moodEnabled = await isModuleEnabled(user.id, "mood");
-  // v1.18.0 B1 — resolve the `glucose` module server-side. The analytics
-  // route serves core metrics too, so a disabled-glucose account must NOT
-  // 403 the whole payload; instead the glucose-only surfaces (per-context
-  // summaries + the TIR/GMI/eA1C clinical panel) are nulled out so they
-  // never reach a hidden surface. Mirrors the mood-pillar gate above.
-  const glucoseEnabled = await isModuleEnabled(user.id, "glucose");
+  // v1.34 — the versioned cardiometabolic reference report. The shared reader
+  // admits only evidence-backed pillars with their own windows and coverage
+  // floors, then applies the three-domain breadth rule. Its BP envelopes come
+  // from the same rollup/live fast path the dashboard uses; every other domain
+  // resolves through the canonical reader and fails independently.
+  const [
+    glucoseEnabled,
+    labsEnabled,
+    sleepEnabled,
+    mentalHealthEnabled,
+    scoreSourcePriority,
+  ] = await Promise.all([
+    isModuleEnabled(user.id, "glucose"),
+    isModuleEnabled(user.id, "labs"),
+    isModuleEnabled(user.id, "sleep"),
+    isModuleEnabled(user.id, "mentalHealth"),
+    loadUserSourcePriority(user.id),
+  ]);
   const glucoseByContextOut = glucoseEnabled ? glucoseByContext : null;
   const glucoseClinicalOut = glucoseEnabled ? glucoseClinical : null;
-  // The reference instant the score is graded as-of. Reused below so the Rest
-  // Mode annotation resolves against the SAME window the score covers, not a
-  // fresh "now" that could fall outside it.
   const scoredAt = new Date();
-  const healthScore = await computeUserHealthScoreFastPath({
+  const healthScore = await computeUserHealthScore({
     userId: user.id,
-    ...bpInputs,
-    heightCm: user.heightCm ?? null,
     now: scoredAt,
-    coverage,
-    moodEnabled,
+    profile: {
+      dateOfBirth: user.dateOfBirth,
+      gender: user.gender,
+      heightCm: user.heightCm ?? null,
+      timezone: userTz,
+      sourcePriorityJson: scoreSourcePriority,
+      thresholdsJson: user.thresholdsJson ?? null,
+    },
+    modules: {
+      glucose: glucoseEnabled,
+      labs: labsEnabled,
+      sleep: sleepEnabled,
+      mentalHealth: mentalHealthEnabled,
+    },
+    bpTargets: clinicalBpTargets,
+    bpEnvelope,
+    bpEnvelopePriorWeek,
+    bpEnvelopePriorTwoWeeks,
   });
 
   // v1.18.1 P4 — Rest Mode annotation. When an illness/condition episode is
@@ -491,7 +592,7 @@ async function buildAnalyticsResponse(user: AuthedUser, locale: Locale) {
     bpInTargetSpanDays90,
     glucoseByContext: glucoseByContextOut,
     glucoseClinical: glucoseClinicalOut,
-    correlations,
+    correlations: correlationsWithPatterns,
     healthScore,
     sleepStages,
     // v1.28.x — the latest night's source-discrepancy annotation, computed
@@ -574,6 +675,7 @@ async function computeSleepStageBreakdown(
     .map((n) => {
       const nightStages: Record<string, number> = {};
       for (const [stage, mins] of Object.entries(n.stages)) {
+        if (mins == null) continue;
         nightStages[stage] = mins;
         stages[stage] = (stages[stage] ?? 0) + mins;
         totalMinutes += mins;
@@ -613,9 +715,3 @@ async function computeSleepStageBreakdown(
 // `src/lib/analytics/correlations-fast-path.ts`. They were only ever
 // used by the weight-weekday + day-key helpers inside the old inline
 // correlation builder.
-
-// v1.4.37 W2 — `mapMeasurementSourceToLabel`, `uniqueComponentSources`,
-// and the inline `computeUserHealthScore` body relocated to
-// `src/lib/analytics/health-score-fast-path.ts` so the probe-gated
-// rollup / live dispatcher can be unit-tested independently of the
-// route. The route now delegates through `computeUserHealthScoreFastPath`.

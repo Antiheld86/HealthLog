@@ -62,7 +62,7 @@ next-env.d.ts
 # COPY target always exists.
 /assets/geolite2/*.mmdb
 
-# AI session artefacts (kept locally, not committed)
+# Local workspace files, never committed
 /docs/superpowers/
 .claude/
 .cursor/

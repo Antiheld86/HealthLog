@@ -39,8 +39,14 @@ import {
   type NamedSeries,
 } from "@/lib/insights/correlation-discovery";
 import {
+  decisionForEvidence,
+  PATTERN_FAMILIES,
+  syncAcceptedPatterns,
+} from "@/lib/insights/correlation-patterns";
+import {
   buildMeasurementDailySeries,
   fetchComplianceSeries,
+  fetchCustomMetricBehaviourSeries,
   fetchEnvironmentSeries,
   fetchLabDraws,
   fetchMeasurementWindowSeries,
@@ -126,16 +132,22 @@ export const GET = apiHandler(async () => {
   // their own sources. Each degrades to an empty series when the user has no
   // data, so the discovery loop drops the channel (it cannot clear n ≥ 20).
   // v1.22 — lab draws (for the labs ↔ outcome pass) fetch alongside.
-  const [complianceSeries, symptomSeries, labDraws, environmentSeries] =
-    await Promise.all([
-      fetchComplianceSeries(user.id, tz, since),
-      fetchSymptomSeries(user.id, tz, since),
-      fetchLabDraws(user.id, tz, since),
-      // v1.25 (W-ENV) — environmental-exposure behaviour channels (weather /
-      // daylight). Empty when the module is off / no home set, so the channels
-      // degrade to absent. The module gate is implicit: no rows ⇒ no channels.
-      fetchEnvironmentSeries(user.id, since),
-    ]);
+  const [
+    complianceSeries,
+    symptomSeries,
+    labDraws,
+    environmentSeries,
+    customMetricSeries,
+  ] = await Promise.all([
+    fetchComplianceSeries(user.id, tz, since),
+    fetchSymptomSeries(user.id, tz, since),
+    fetchLabDraws(user.id, tz, since),
+    // v1.25 (W-ENV) — environmental-exposure behaviour channels (weather /
+    // daylight). Empty when the module is off / no home set, so the channels
+    // degrade to absent. The module gate is implicit: no rows ⇒ no channels.
+    fetchEnvironmentSeries(user.id, since),
+    fetchCustomMetricBehaviourSeries(user.id, tz, since),
+  ]);
 
   const points = (key: string): DailySeriesPoint[] =>
     key === "MOOD"
@@ -170,6 +182,9 @@ export const GET = apiHandler(async () => {
   for (const envSeries of environmentSeries) {
     series.push(envSeries);
   }
+  for (const customSeries of customMetricSeries) {
+    series.push(customSeries);
+  }
 
   const result = discoverCorrelations(series, { locale });
 
@@ -190,6 +205,46 @@ export const GET = apiHandler(async () => {
   const labCorrelations = discoverLabOutcomeCorrelations(labDraws, series, {
     locale,
   });
+
+  const toEvidence = (pattern: (typeof result.discovered)[number]) => ({
+    factorKey: pattern.behaviour,
+    outcomeKey: pattern.outcome,
+    lagDays: pattern.lagDays,
+    sampleSize: pattern.n,
+    effectSize: pattern.r,
+    pValue: pattern.pValue,
+    qValue: pattern.qValue,
+  });
+  const [retrospectiveDecisions, recentDecisions] = await Promise.all([
+    syncAcceptedPatterns({
+      userId: user.id,
+      family: PATTERN_FAMILIES.discoveryRetrospective,
+      accepted: result.discovered.map(toEvidence),
+      computedAt: now,
+    }),
+    syncAcceptedPatterns({
+      userId: user.id,
+      family: PATTERN_FAMILIES.discoveryRecent,
+      accepted: emerging.emerging.map(toEvidence),
+      computedAt: now,
+    }),
+  ]);
+  const attachPatternDecision = (
+    pattern: (typeof result.discovered)[number],
+    decisions: typeof retrospectiveDecisions,
+  ) => {
+    const decision = decisionForEvidence(decisions, toEvidence(pattern));
+    return decision ? { ...pattern, ...decision } : pattern;
+  };
+  const discovered = result.discovered.map((pattern) =>
+    attachPatternDecision(pattern, retrospectiveDecisions),
+  );
+  const emergingWithDecisions = {
+    ...emerging,
+    emerging: emerging.emerging.map((pattern) =>
+      attachPatternDecision(pattern, recentDecisions),
+    ),
+  };
 
   annotate({
     action: { name: "insights.correlations.discover" },
@@ -220,8 +275,18 @@ export const GET = apiHandler(async () => {
         (sum, s) => sum + s.points.length,
         0,
       ),
+      custom_metric_channels: customMetricSeries.length,
+      custom_metric_days: customMetricSeries.reduce(
+        (sum, channel) => sum + channel.points.length,
+        0,
+      ),
     },
   });
 
-  return apiSuccess({ ...result, emerging, labCorrelations });
+  return apiSuccess({
+    ...result,
+    discovered,
+    emerging: emergingWithDecisions,
+    labCorrelations,
+  });
 });

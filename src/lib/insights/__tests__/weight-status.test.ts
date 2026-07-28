@@ -8,6 +8,7 @@ vi.mock("@/lib/db", () => ({
     measurement: { findMany: vi.fn(), groupBy: vi.fn() },
     measurementRollup: { findMany: vi.fn() },
     moodEntry: { findMany: vi.fn(), aggregate: vi.fn() },
+    customMetric: { findMany: vi.fn() },
     // v1.11.1 — the rollup readers lazy-load the user's
     // `sourcePriorityJson` via `loadUserSourcePriority`. `null` here →
     // default rank ladders.
@@ -66,6 +67,7 @@ beforeEach(() => {
     _count: { _all: 0 },
     _max: { moodLoggedAt: null },
   } as never);
+  vi.mocked(prisma.customMetric.findMany).mockResolvedValue([] as never);
 });
 
 describe("generateWeightStatusForUser — graded payload", () => {

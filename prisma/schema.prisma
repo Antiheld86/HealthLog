@@ -770,6 +770,11 @@ model User {
   // granularity from the measurement write hooks; WEEK/MONTH/YEAR
   // are enqueued through pg-boss for the worker to fold.
   measurementRollups             MeasurementRollup[]
+  // v1.34.0 — per-(user, type, local day) cumulative hourly profile. The
+  // shape the nightly cumulative drain folds out of the per-sample rows
+  // immediately before deleting them, so a "typical by 21:00" comparison
+  // has a substrate for days older than the 36-hour grace window.
+  intradayCumulativeProfiles     IntradayCumulativeProfile[]
   // v0.5.4 ios-coord — per-day dedup ledger for MOOD_REMINDER pushes.
   // One row per (user, local date) the worker has nudged. Prevents
   // a second push when the cron rechecks the same hour later in the
@@ -836,10 +841,11 @@ model User {
   // marker); LabResult rows link to a Biomarker for the resolved range/unit.
   biomarkers                     Biomarker[]
   // v1.25.5 — user-defined custom metrics. A separate generic store
-  // (catalog + values), fully isolated from the closed MeasurementType
-  // system: not synced, not in FHIR, not in AI insights — log + chart only.
+  // (catalog + values), not synced and not in FHIR. Correlation discovery
+  // reads a metric only after the account explicitly opts it in.
   customMetrics                  CustomMetric[]
   customMetricEntries            CustomMetricEntry[]
+  correlationPatterns             CorrelationPattern[]
   // v1.19.0 — illness / condition journal (born-gated by the module system).
   // IllnessEpisode is the soft-deleted episode row; IllnessDayLog is the
   // per-day timeline mirroring the CycleDayLog shape.
@@ -914,6 +920,7 @@ model User {
   // v1.15.20 — user-authored "about me" context for the AI surfaces
   // (1:1, encrypted free text). See `UserHealthProfile`.
   healthProfile     UserHealthProfile?
+  healthProfileFactRevisions HealthProfileFactRevision[]
   // v1.15.20 — registration invite tokens (closed-registration flow).
   // `InviteCreator` = admin who minted the invite; `InviteConsumer` =
   // the account that registered through it (last consumer wins on a
@@ -1951,6 +1958,68 @@ model MeasurementRollup {
   @@id([userId, type, granularity, bucketStart, source])
   @@index([userId, type, granularity, bucketStart(sort: Desc)])
   @@map("measurement_rollups")
+}
+
+// ─── Intraday cumulative profiles (v1.34.0) ────────────────
+//
+// The shape a cumulative day had, kept before the fold destroys it.
+//
+// A cumulative metric has no meaningful "latest reading" — a partial
+// day's step count is a fragment, not a value — so the only honest
+// comparison is against the same person's own typical total AT THE
+// SAME LOCAL HOUR. That comparison needs an hourly substrate, and
+// there was none: the nightly cumulative drain collapses per-sample
+// Apple Health rows into one daily total after the 36-hour grace
+// window and hard-deletes the originals in the same transaction.
+// Today's curve was derivable; every older day's was already gone.
+//
+// So the drain now folds the rows it is about to delete into
+// twenty-four running totals — one per local hour, index `h` carrying
+// the total accumulated through the END of local hour `h` — and
+// writes them here first. One compact row per user × type × local
+// day, a few thousand rows a year across the supported types.
+//
+// This is a SIDECAR, never a reading. The canonical `stats:` daily
+// total stays the measurement of record; nothing reads a value off
+// this table that the measurement rows do not already carry. Days
+// still inside the grace window have no row yet and are folded live
+// from the raw rows on read, so the current day is always available.
+model IntradayCumulativeProfile {
+  id               String          @id @default(cuid())
+  userId           String          @map("user_id")
+  type             MeasurementType
+  /// Local calendar day the profile describes (`YYYY-MM-DD`), in the
+  /// user's timezone at fold time. Lexicographically ordered, so a
+  /// trailing-window read and the retention prune are both range scans.
+  dateKey          String          @map("date_key") @db.VarChar(10)
+  /// Twenty-four running totals in canonical units — element `h` is the
+  /// value accumulated from local midnight through the END of local hour
+  /// `h`, so the array is non-decreasing and `[23]` equals `dayTotal`.
+  /// A DST day still has exactly 24 slots: the repeated hour folds into
+  /// its slot and a skipped hour repeats its predecessor's running total,
+  /// which keeps every stored day index-comparable with every other.
+  hourlyCumulative Float[]         @map("hourly_cumulative")
+  /// The day's total — `hourlyCumulative[23]`, denormalised so a coverage
+  /// check never has to read the array.
+  dayTotal         Float           @map("day_total")
+  /// How many raw per-sample rows backed this profile. A day folded from
+  /// two rows is not a shape; the baseline reader uses this to refuse such
+  /// a day rather than let it drag the median.
+  sampleCount      Int             @map("sample_count")
+  /// The IANA zone the day was bucketed in. A user who later moves zones
+  /// leaves behind profiles cut on the old clock; carrying the zone lets
+  /// the reader drop the mismatched days instead of silently comparing
+  /// hours that mean different things.
+  timezone         String
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type, dateKey])
+  @@index([userId, type, dateKey(sort: Desc)])
+  @@index([dateKey])
+  @@map("intraday_cumulative_profiles")
 }
 
 // ─── Workouts (v1.4.25 W8d) ────────────────────────────────
@@ -4894,6 +4963,9 @@ model CustomMetric {
   decimals    Int?
   /// Optional free-text description ("what this measures"). Plaintext.
   description String?
+  /// Explicit opt-in to expose this metric as a bounded behaviour channel in
+  /// correlation discovery. False keeps the metric isolated.
+  correlationEnabled Boolean   @default(false) @map("correlation_enabled")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
   /// Soft-delete tombstone. NULL = live; non-NULL = deleted at the instant.
@@ -4926,6 +4998,38 @@ model CustomMetricEntry {
 
   @@index([userId, customMetricId, measuredAt])
   @@map("custom_metric_entries")
+}
+
+/// Persisted identity and latest accepted evidence for a user-scoped
+/// correlation finding. `canonicalKey` is derived from factor + outcome + lag;
+/// the named fields remain queryable and make the identity portable.
+model CorrelationPattern {
+  id                    String    @id @default(cuid())
+  userId                String    @map("user_id")
+  canonicalKey          String    @map("canonical_key")
+  family                String
+  factorKey             String    @map("factor_key")
+  outcomeKey            String    @map("outcome_key")
+  lagDays               Int       @map("lag_days")
+  sampleSize            Int       @map("sample_size")
+  effectSize            Float     @map("effect_size")
+  pValue                Float     @map("p_value")
+  qValue                Float?    @map("q_value")
+  evidenceHash          String    @map("evidence_hash")
+  isCurrent             Boolean   @default(true) @map("is_current")
+  lastComputedAt        DateTime  @map("last_computed_at")
+  dismissedAt           DateTime? @map("dismissed_at")
+  dismissedEvidenceHash String?   @map("dismissed_evidence_hash")
+  dismissedEffectSize   Float?    @map("dismissed_effect_size")
+  dismissedSampleSize   Int?      @map("dismissed_sample_size")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, canonicalKey])
+  @@index([userId, family, isCurrent])
+  @@map("correlation_patterns")
 }
 
 // ─── User Achievements ───────────────────────────────────────
@@ -5319,12 +5423,76 @@ model UserHealthProfile {
   // hints otherwise). Encrypted JSON string[]; the Coach composer
   // renders them as tappable suggestion chips. NULL = none pending.
   pendingQuestionsEncrypted Bytes?   @map("pending_questions_encrypted")
+  // Closed inclusion list for self-context sent to Coach and briefing prompts.
+  // The static default preserves every pre-existing prompt section for legacy
+  // rows without automatically opting future enum members in.
+  aiIncludedSections         HealthProfileAiSection[] @default([ABOUT_ME, CONDITIONS, ALLERGIES, COACH_FOCUS, FAMILY_HISTORY, SMOKING_STATUS, ALCOHOL_PATTERN, SHIFT_SCHEDULE]) @map("ai_included_sections")
   createdAt                 DateTime @default(now()) @map("created_at")
   updatedAt                 DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_health_profiles")
+}
+
+/// Sections of the health profile that may enter AI prompt context. This is an
+/// inclusion list: a section absent from the array is neither decrypted nor
+/// assembled for Coach or comprehensive briefings.
+enum HealthProfileAiSection {
+  ABOUT_ME
+  CONDITIONS
+  ALLERGIES
+  COACH_FOCUS
+  FAMILY_HISTORY
+  SMOKING_STATUS
+  ALCOHOL_PATTERN
+  SHIFT_SCHEDULE
+
+  @@map("health_profile_ai_section")
+}
+
+/// The three structured profile facts whose answers affect an existing
+/// interpretation path. The answer itself stays encrypted; this enum only
+/// identifies which closed validation set must be applied after decryption.
+enum HealthProfileFactKind {
+  SMOKING_STATUS
+  ALCOHOL_PATTERN
+  SHIFT_SCHEDULE
+
+  @@map("health_profile_fact_kind")
+}
+
+/// Provenance for an effective-dated fact revision.
+enum HealthProfileFactProvenance {
+  USER_REPORTED
+  USER_CORRECTION
+
+  @@map("health_profile_fact_provenance")
+}
+
+/// Effective-dated structured health-profile fact. Each non-superseded chain
+/// is half-open `[validFrom, validUntil)`, with exactly one current row per
+/// user and fact kind. Corrections close the current row and mint a replacement
+/// rather than overwriting encrypted history.
+model HealthProfileFactRevision {
+  id                       String                      @id @default(cuid())
+  userId                   String                      @map("user_id")
+  kind                     HealthProfileFactKind
+  valueEncrypted           Bytes                       @map("value_encrypted")
+  validFrom                DateTime                     @map("valid_from") @db.Timestamptz(6)
+  validUntil               DateTime?                    @map("valid_until") @db.Timestamptz(6)
+  provenance               HealthProfileFactProvenance @default(USER_REPORTED)
+  supersededByRevisionId   String?                      @map("superseded_by_revision_id")
+  createdAt                DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user         User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  supersededBy HealthProfileFactRevision? @relation("HealthProfileFactSupersession", fields: [supersededByRevisionId], references: [id], onDelete: SetNull)
+  supersedes   HealthProfileFactRevision[] @relation("HealthProfileFactSupersession")
+
+  @@unique([userId, kind, validFrom])
+  @@index([userId, kind, validFrom(sort: Desc)])
+  @@index([supersededByRevisionId])
+  @@map("health_profile_fact_revisions")
 }
 
 // Per-user, per-day token-spend ledger for the AI Coach. The dispatcher

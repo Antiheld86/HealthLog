@@ -53,6 +53,17 @@ export interface SparklineDeltaTileProps {
    * small fixed height.
    */
   series?: number[];
+  /**
+   * v1.34.0 — an optional second curve drawn behind `series` on the same
+   * axes, index-aligned with it. This is what turns the sparkline into the
+   * two-trajectory comparison the same-time baseline needs: today's running
+   * total against the person's typical one. Ignored unless it is exactly as
+   * long as `series` — two curves of different lengths would be read as
+   * aligned when they are not, which is worse than one curve.
+   */
+  comparisonSeries?: number[];
+  /** Accessible name for `comparisonSeries` (e.g. "your typical day"). */
+  comparisonLabel?: string;
   /** Signed delta vs the baseline; drives the arrow + the (Δ) caption. */
   delta?: number | null;
   /** Whether an up move is good / bad / neutral for this metric. */
@@ -90,6 +101,8 @@ export function SparklineDeltaTile({
   unit,
   icon: Icon,
   series,
+  comparisonSeries,
+  comparisonLabel,
   delta = null,
   directionSentiment = "neutral",
   framing,
@@ -117,8 +130,16 @@ export function SparklineDeltaTile({
     return `${sign}${fmt.number(Math.abs(d), precision)}`;
   };
 
+  // The comparison curve only rides along when it lines up point-for-point;
+  // a mismatched length would draw two curves that look aligned and are not.
+  const paired =
+    comparisonSeries && series && comparisonSeries.length === series.length
+      ? comparisonSeries
+      : null;
   const sparkData =
-    series && series.length >= 2 ? series.map((v, i) => ({ i, v })) : null;
+    series && series.length >= 2
+      ? series.map((v, i) => (paired ? { i, v, b: paired[i] } : { i, v }))
+      : null;
 
   // The sparkline tints with the trend sentiment so it reads "same signal"
   // as the arrow; neutral metrics ride the muted-foreground line.
@@ -199,7 +220,11 @@ export function SparklineDeltaTile({
           className="mt-3 h-10 w-full"
           data-slot="sparkline-delta-tile-spark"
         >
-          <DeltaSparkline data={sparkData} strokeVar={strokeVar} />
+          <DeltaSparkline
+            data={sparkData}
+            strokeVar={strokeVar}
+            comparisonLabel={comparisonLabel}
+          />
         </div>
       ) : null}
 

@@ -7,6 +7,7 @@
 import { type Job } from "pg-boss";
 import { fireAndForget } from "@/lib/logging/fire-and-forget";
 import { recordError, recordWithingsSync } from "@/lib/jobs/worker-status";
+import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import {
   retryDueWithingsWebhookSubscriptions,
@@ -50,15 +51,20 @@ export interface WithingsSleepSyncPayload {
  */
 export async function handleWithingsFallbackSync(
   jobs: Job<WithingsSyncPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent("job.withings_sync", async (evt) => {
+  return withBackgroundEvent("job.withings_sync", async (evt) => {
     const prisma = getWorkerPrisma();
     try {
       recordWithingsSync();
+      // The subscription repair is an auxiliary leg, not the pass this queue is
+      // named for. Failing the job on it would skip the fallback sync that every
+      // user relies on when a webhook goes missing, so it rides out as a fact.
+      let subscriptionRepairFailed = false;
       try {
         await retryDueWithingsWebhookSubscriptions();
       } catch {
+        subscriptionRepairFailed = true;
         evt.addWarning(
           "Withings subscription repair failed; continuing fallback sync",
         );
@@ -68,15 +74,22 @@ export async function handleWithingsFallbackSync(
       });
 
       if (connections.length === 0) {
-        return;
+        return jobDone({
+          total: 0,
+          users_synced: 0,
+          users_failed: 0,
+          measurements_imported: 0,
+          subscription_repair_failed: subscriptionRepairFailed,
+        });
       }
 
       let usersSynced = 0;
+      let usersFailed = 0;
       let measurementsImported = 0;
 
       for (const connection of connections) {
         try {
-          const imported = await syncUserMeasurements(connection.userId);
+          const { imported } = await syncUserMeasurements(connection.userId);
           usersSynced++;
           measurementsImported += imported;
           // v1.18.1 — a fresh reading landed; resolve this user's Vorsorge
@@ -87,6 +100,7 @@ export async function handleWithingsFallbackSync(
             });
           }
         } catch {
+          usersFailed++;
           evt.addWarning(`Fallback sync failed for user ${connection.userId}`);
         }
       }
@@ -98,6 +112,13 @@ export async function handleWithingsFallbackSync(
           total: connections.length,
           measurements_imported: measurementsImported,
         },
+      });
+      return jobDone({
+        total: connections.length,
+        users_synced: usersSynced,
+        users_failed: usersFailed,
+        measurements_imported: measurementsImported,
+        subscription_repair_failed: subscriptionRepairFailed,
       });
     } catch (err) {
       evt.setError(err);
@@ -127,8 +148,8 @@ export async function handleWithingsFallbackSync(
  */
 export async function handleWithingsEcgSync(
   jobs: Job<WithingsEcgSyncPayload>[],
-) {
-  await withBackgroundEvent("job.withings_ecg_sync", async (evt) => {
+): Promise<JobOutcome> {
+  return withBackgroundEvent("job.withings_ecg_sync", async (evt) => {
     const prisma = getWorkerPrisma();
     try {
       const targets: Array<{
@@ -152,9 +173,17 @@ export async function handleWithingsEcgSync(
         });
         targets.push(...connections);
       }
-      if (targets.length === 0) return;
+      if (targets.length === 0) {
+        return jobDone({
+          total: 0,
+          users_synced: 0,
+          users_failed: 0,
+          recordings_imported: 0,
+        });
+      }
 
       let usersSynced = 0;
+      let usersFailed = 0;
       let recordingsImported = 0;
       for (const { userId, startdate, enddate } of targets) {
         try {
@@ -165,6 +194,7 @@ export async function handleWithingsEcgSync(
           recordingsImported += await syncUserEcg(userId, options);
           usersSynced++;
         } catch (err) {
+          usersFailed++;
           evt.addWarning(`Withings ECG sync failed for user ${userId}: ${err}`);
         }
       }
@@ -176,6 +206,12 @@ export async function handleWithingsEcgSync(
           total: targets.length,
           recordings_imported: recordingsImported,
         },
+      });
+      return jobDone({
+        total: targets.length,
+        users_synced: usersSynced,
+        users_failed: usersFailed,
+        recordings_imported: recordingsImported,
       });
     } catch (err) {
       evt.setError(err);
@@ -203,8 +239,8 @@ export async function handleWithingsEcgSync(
  */
 export async function handleWithingsActivitySync(
   jobs: Job<WithingsActivitySyncPayload>[],
-) {
-  await withBackgroundEvent("job.withings_activity_sync", async (evt) => {
+): Promise<JobOutcome> {
+  return withBackgroundEvent("job.withings_activity_sync", async (evt) => {
     const prisma = getWorkerPrisma();
     try {
       const targets: Array<{ userId: string }> = [];
@@ -220,9 +256,17 @@ export async function handleWithingsActivitySync(
         });
         targets.push(...connections);
       }
-      if (targets.length === 0) return;
+      if (targets.length === 0) {
+        return jobDone({
+          total: 0,
+          users_synced: 0,
+          users_failed: 0,
+          measurements_imported: 0,
+        });
+      }
 
       let usersSynced = 0;
+      let usersFailed = 0;
       let measurementsImported = 0;
       for (const { userId } of targets) {
         try {
@@ -235,6 +279,7 @@ export async function handleWithingsActivitySync(
             });
           }
         } catch {
+          usersFailed++;
           evt.addWarning(`Withings activity sync failed for user ${userId}`);
         }
       }
@@ -246,6 +291,12 @@ export async function handleWithingsActivitySync(
           total: targets.length,
           measurements_imported: measurementsImported,
         },
+      });
+      return jobDone({
+        total: targets.length,
+        users_synced: usersSynced,
+        users_failed: usersFailed,
+        measurements_imported: measurementsImported,
       });
     } catch (err) {
       evt.setError(err);
@@ -262,8 +313,8 @@ export async function handleWithingsActivitySync(
  */
 export async function handleWithingsSleepSync(
   jobs: Job<WithingsSleepSyncPayload>[],
-) {
-  await withBackgroundEvent("job.withings_sleep_sync", async (evt) => {
+): Promise<JobOutcome> {
+  return withBackgroundEvent("job.withings_sleep_sync", async (evt) => {
     const prisma = getWorkerPrisma();
     try {
       const targets: Array<{ userId: string }> = [];
@@ -278,9 +329,17 @@ export async function handleWithingsSleepSync(
         });
         targets.push(...connections);
       }
-      if (targets.length === 0) return;
+      if (targets.length === 0) {
+        return jobDone({
+          total: 0,
+          users_synced: 0,
+          users_failed: 0,
+          measurements_imported: 0,
+        });
+      }
 
       let usersSynced = 0;
+      let usersFailed = 0;
       let measurementsImported = 0;
       for (const { userId } of targets) {
         try {
@@ -293,6 +352,7 @@ export async function handleWithingsSleepSync(
             });
           }
         } catch {
+          usersFailed++;
           evt.addWarning(`Withings sleep sync failed for user ${userId}`);
         }
       }
@@ -304,6 +364,12 @@ export async function handleWithingsSleepSync(
           total: targets.length,
           measurements_imported: measurementsImported,
         },
+      });
+      return jobDone({
+        total: targets.length,
+        users_synced: usersSynced,
+        users_failed: usersFailed,
+        measurements_imported: measurementsImported,
       });
     } catch (err) {
       evt.setError(err);

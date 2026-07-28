@@ -281,6 +281,14 @@ export const discoveredCorrelation = z
       .describe(
         "Outcome channel (lag target), e.g. SLEEP_DURATION, HEART_RATE_VARIABILITY.",
       ),
+    behaviourLabel: z
+      .string()
+      .optional()
+      .describe("Display label for a dynamic behaviour channel."),
+    outcomeLabel: z
+      .string()
+      .optional()
+      .describe("Display label for a dynamic outcome channel."),
     n: z
       .number()
       .int()
@@ -308,8 +316,56 @@ export const discoveredCorrelation = z
       .describe(
         "v1.22 — true for an emerging recent-window pair: fewer days, hedged as provisional rather than established.",
       ),
+    patternId: z
+      .string()
+      .optional()
+      .describe("Account-scoped persisted identity for dismissal."),
+    canonicalKey: z
+      .string()
+      .optional()
+      .describe("Stable factor + outcome + lag identity."),
+    dismissed: z
+      .boolean()
+      .optional()
+      .describe("Server decision to suppress unchanged evidence."),
   })
   .meta({ id: "DiscoveredCorrelation" });
+
+export const correlationPattern = z
+  .object({
+    id: z.string(),
+    canonicalKey: z.string(),
+    family: z.string(),
+    factorKey: z.string(),
+    outcomeKey: z.string(),
+    lagDays: z.number().int(),
+    sampleSize: z.number().int(),
+    effectSize: z.number(),
+    pValue: z.number(),
+    qValue: z.number().nullable(),
+    evidenceHash: z.string(),
+    lastComputedAt: z.string(),
+    dismissedAt: z.string().nullable(),
+  })
+  .meta({ id: "CorrelationPattern" });
+
+export const correlationPatternListResponse = z
+  .object({ patterns: z.array(correlationPattern) })
+  .meta({ id: "CorrelationPatternListResponse" });
+
+export const updateCorrelationPatternRequest = z
+  .strictObject({ dismissed: z.boolean() })
+  .meta({ id: "UpdateCorrelationPatternRequest" });
+
+export const updateCorrelationPatternResponse = z
+  .object({
+    id: z.string(),
+    canonicalKey: z.string(),
+    dismissed: z.boolean(),
+    dismissedAt: z.string().nullable(),
+    evidenceHash: z.string(),
+  })
+  .meta({ id: "UpdateCorrelationPatternResponse" });
 
 // v1.22 — one labs ↔ outcome association (point-vs-window over sparse draws).
 export const discoveredLabCorrelation = z
@@ -912,18 +968,65 @@ export const dashboardSnapshotResponse = z
       .describe(
         "Today's medication block: active-medication count, today-window tally (scheduled / taken / skipped), every active medication's current display-due candidate, and legacy scalar fields projected from candidate zero. `overdue: true` marks an OPEN overdue slot (anchor passed, still inside its catch-up band); `availableFrom` is the canonical cadence- and dose-window-derived attribution-band start. `dueCandidates` is optional so older cached snapshots remain valid. Medication ids let consumers deep-link straight to the relevant card.",
       ),
-    // Dashboard hero — health score (warm phase, nullable on a
-    // rollup-coverage miss). Score + band + delta only; the per-pillar
-    // component breakdown stays on the analytics route.
+    // Dashboard hero health score. The additive metadata lets clients suppress
+    // false change narratives when eligibility or the algorithm changes.
     healthScore: z
       .object({
-        score: z.number().int(),
+        score: z.number().int().min(0).max(100),
         band: z.enum(["green", "yellow", "red"]),
         delta: z.number().nullable(),
+        confidence: derivedConfidence.optional(),
+        composition: z
+          .array(
+            z.enum([
+              "BLOOD_PRESSURE",
+              "GLYCAEMIA",
+              "ACTIVITY",
+              "SLEEP",
+              "ADIPOSITY",
+              "WELLBEING",
+              "FITNESS",
+              "LIPIDS",
+            ]),
+          )
+          .optional(),
+        deltaReason: z
+          .enum([
+            "algorithm_changed",
+            "composition_changed",
+            "first_eligibility_window",
+            "below_noise_floor",
+            "no_previous_window",
+            "no_current_score",
+          ])
+          .nullable()
+          .optional(),
+        scoreVersion: z.number().int().positive().optional(),
+        bandSetter: z
+          .enum([
+            "BLOOD_PRESSURE",
+            "GLYCAEMIA",
+            "ACTIVITY",
+            "SLEEP",
+            "ADIPOSITY",
+            "WELLBEING",
+            "FITNESS",
+            "LIPIDS",
+          ])
+          .nullable()
+          .optional(),
+        restMode: z
+          .object({
+            active: z.boolean(),
+            since: z.string().nullable(),
+            episodeCount: z.number().int(),
+          })
+          .nullable()
+          .optional(),
       })
       .nullable()
       .describe(
-        "Personal health score summary (0..100 score, traffic-light band, week-over-week delta). Null on a rollup-coverage miss (it rides the thick phase alongside `extras`) and when no pillar is computable. Component breakdown is deliberately not serialised here.",
+        "Derived cardiometabolic reference score summary. Null until at least three eligible domains include a measured physiological domain. Additive metadata names confidence, ordered composition, the worst-pillar band setter, score version, and why a delta was suppressed. Rest Mode annotates but never changes the score.",
       ),
     // v1.27.7 — user-selected hero score rings (max 3), resolved
     // server-side next to the health score. Additive; optional so

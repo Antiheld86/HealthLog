@@ -37,6 +37,13 @@ const BACKUP_BUILDER = join(
   "export",
   "full-backup-payload.ts",
 );
+const PROFILE_BACKUP_BUILDER = join(
+  ROOT,
+  "src",
+  "lib",
+  "export",
+  "profile-backup.ts",
+);
 
 /**
  * Columns the backup is correct to omit, each with the reason.
@@ -110,6 +117,26 @@ function serialisedFields(source: string): Set<string> {
   );
 }
 
+function interfaceFields(source: string, name: string): Set<string> {
+  const start = source.indexOf(`export interface ${name} {`);
+  expect(start, `interface ${name} not found`).toBeGreaterThan(-1);
+  const end = source.indexOf("\n}", start);
+  expect(end).toBeGreaterThan(start);
+  return new Set(
+    [...source.slice(start, end).matchAll(/^ {2}([a-zA-Z_$][\w$]*)[?:]/gm)].map(
+      (match) => match[1],
+    ),
+  );
+}
+
+function emittedModelFields(source: string, variable: string): Set<string> {
+  return new Set(
+    [
+      ...source.matchAll(new RegExp(`${variable}\\.([a-zA-Z_$][\\w$]*)`, "g")),
+    ].map((match) => match[1]),
+  );
+}
+
 describe("measurement backup completeness", () => {
   const schema = readFileSync(SCHEMA, "utf8");
   const source = readFileSync(BACKUP_BUILDER, "utf8");
@@ -161,4 +188,34 @@ describe("measurement backup completeness", () => {
       expect(reason.length).toBeGreaterThan(20);
     }
   });
+});
+
+describe("health profile backup completeness", () => {
+  const schema = readFileSync(SCHEMA, "utf8");
+  const source = readFileSync(PROFILE_BACKUP_BUILDER, "utf8");
+  const models = declaredModels(schema);
+  const excluded = new Set(["userId"]);
+
+  it.each([
+    ["UserHealthProfile", "HealthProfileBackupEntry", "profileRow"],
+    ["HealthProfileFactRevision", "HealthProfileFactBackupEntry", "fact"],
+  ])(
+    "%s columns are represented and emitted by the profile backup",
+    (model, wireInterface, variable) => {
+      const columns = scalarFields(modelBlock(schema, model), models).filter(
+        (column) => !excluded.has(column),
+      );
+      const wire = interfaceFields(source, wireInterface);
+      const emitted = emittedModelFields(source, variable);
+
+      expect(
+        columns.filter((column) => !wire.has(column)),
+        `${wireInterface} omits stored ${model} columns`,
+      ).toEqual([]);
+      expect(
+        columns.filter((column) => !emitted.has(column)),
+        `${model} columns never reach either serialized arm`,
+      ).toEqual([]);
+    },
+  );
 });

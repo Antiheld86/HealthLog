@@ -105,11 +105,15 @@ const commitResponse = z
         reason: z.literal("duplicate"),
       }),
     ),
+    outcome: z.enum(["empty", "failed", "partial", "success"]).meta({
+      description:
+        "How the commit reads, resolved from the counts rather than the status code. `success` only when every confirmed row was written; `partial` when some were skipped; `failed` when nothing was written and at least one row was skipped; `empty` when there was nothing to write.",
+    }),
   })
   .meta({
     id: "OcrCommitResponse",
     description:
-      'The rows written (`source: "OCR"`) and those skipped as commit-time duplicates.',
+      'The rows written (`source: "OCR"`), those skipped as commit-time duplicates, and the resolved outcome.',
   });
 
 export const ocrPaths: NonNullable<ZodOpenApiObject["paths"]> = {

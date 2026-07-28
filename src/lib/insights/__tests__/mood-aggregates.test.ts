@@ -1090,11 +1090,13 @@ describe("computeTagMetricCrosstab", () => {
     type: string,
     presentValue: number,
     absentValue: number,
+    tag: StructuredTagRef = ALCOHOL_TAG,
   ) {
     const entries: MoodAggregateEntry[] = [];
     const measurements: CrossMetricMeasurement[] = [];
     for (let i = 1; i <= 12; i++) {
-      entries.push(structuredEntry(i, 3, [ALCOHOL_TAG]));
+      entries.push(structuredEntry(i, 3, [tag]));
+      // All built-in binary tags use this same branch and FDR family.
       measurements.push(
         meas(i - 1, type, presentValue + (i % 2 === 0 ? 2 : -2)),
       );
@@ -1148,6 +1150,35 @@ describe("computeTagMetricCrosstab", () => {
     expect(row!.withoutAvg).toBeCloseTo(55, 0);
     expect(row!.delta).toBeCloseTo(-17, 0);
   });
+
+  it.each([
+    ["alcohol", "mood.tag.alcohol", "Wine"],
+    ["caffeine", "mood.tag.caffeine", "Coffee"],
+    ["nicotine", "mood.tag.nicotine", "Cigarette"],
+  ])(
+    "runs the built-in %s tag through the same next-day crosstab and FDR family",
+    (key, labelKey, icon) => {
+      const { entries, measurements } = nextDayFixture(
+        "RESTING_HEART_RATE",
+        62,
+        54,
+        { key, categoryKey: "health", labelKey, icon },
+      );
+      const rows = computeTagMetricCrosstab({
+        entries,
+        measurements,
+        now: NOW,
+      });
+      const row = rows.find(
+        (candidate) =>
+          candidate.tag === key &&
+          candidate.metricKey === "nextDayRestingHeartRate",
+      );
+      expect(row).toBeDefined();
+      expect(row!.mode).toBe("nextDay");
+      expect(row!.qValue).toBeLessThanOrEqual(CROSSTAB_FDR_Q);
+    },
+  );
 
   it("reads both overnight vitals from the fetched channel set", () => {
     // The fetch filter is derived from the map, so a metric added to

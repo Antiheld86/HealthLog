@@ -7,6 +7,7 @@
 import { type Job } from "pg-boss";
 import { fireAndForget } from "@/lib/logging/fire-and-forget";
 import { recordError } from "@/lib/jobs/worker-status";
+import { jobDone, jobFailed, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import { runGoogleHealthPollCohort } from "@/lib/google-health/sync";
 import { enqueueReminderSatisfy } from "@/lib/jobs/reminder-satisfy";
@@ -26,8 +27,8 @@ export interface GoogleHealthSyncPayload {
 
 export async function handleGoogleHealthSync(
   jobs: Job<GoogleHealthSyncPayload>[],
-) {
-  await withBackgroundEvent("job.google_health_sync", async (evt) => {
+): Promise<JobOutcome> {
+  return withBackgroundEvent("job.google_health_sync", async (evt) => {
     const prisma = getWorkerPrisma();
     try {
       const targets: Array<{ userId: string }> = [];
@@ -40,19 +41,29 @@ export async function handleGoogleHealthSync(
         });
         targets.push(...connections);
       }
-      if (targets.length === 0) return;
+      if (targets.length === 0) {
+        return jobDone({
+          total: 0,
+          users_synced: 0,
+          users_failed: 0,
+          measurements_imported: 0,
+        });
+      }
 
       // Fan the cohort out with bounded concurrency + per-user error isolation:
       // one slow Google response can't stall the whole cohort, and a single
       // user's failure is warned without aborting the pass.
+      let usersFailed = 0;
       const { usersSynced, measurementsImported } =
         await runGoogleHealthPollCohort(
           targets.map((t) => t.userId),
           {
-            onUserError: (userId, err) =>
+            onUserError: (userId, err) => {
+              usersFailed++;
               evt.addWarning(
                 `job.google_health_sync failed for user ${userId}: ${err}`,
-              ),
+              );
+            },
             // A fresh reading landed; resolve the user's Vorsorge reminders
             // eventfully. Fire-and-forget; the cron is the net.
             onUserSynced: (userId, imported) => {
@@ -73,6 +84,14 @@ export async function handleGoogleHealthSync(
           measurements_imported: measurementsImported,
         },
       });
+      // The pass is the unit of success: a revoked grant belongs on that user's
+      // integration ledger, not in a queue failure that retries every account.
+      return jobDone({
+        total: targets.length,
+        users_synced: usersSynced,
+        users_failed: usersFailed,
+        measurements_imported: measurementsImported,
+      });
     } catch (err) {
       evt.setError(err);
       recordError();
@@ -87,17 +106,19 @@ export interface GoogleHealthOAuthStateCleanupPayload {
 
 export async function handleGoogleHealthOAuthStateCleanup(
   jobs: Job<GoogleHealthOAuthStateCleanupPayload>[],
-) {
+): Promise<JobOutcome> {
   void jobs;
-  await withBackgroundEvent(
+  return withBackgroundEvent(
     "job.google_health_oauth_state_cleanup",
     async (evt) => {
       const p = getWorkerPrisma();
       try {
         const deleted = await cleanupExpiredGoogleHealthOAuthStates(p);
         evt.addMeta("google_health_oauth_state_cleanup_deleted", deleted);
+        return jobDone({ deleted });
       } catch (err) {
         evt.addWarning(`google-health-oauth-state-cleanup failed: ${err}`);
+        return jobFailed("google health oauth state cleanup failed", err);
       }
     },
   );
