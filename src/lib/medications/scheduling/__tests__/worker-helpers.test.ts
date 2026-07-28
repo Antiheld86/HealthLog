@@ -8,10 +8,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildCanonicalSchedule,
   normaliseDoseWindows,
-  resolveSlotWindowDurationMinutes,
+  resolveSlotPhaseWindow,
   type WorkerScheduleRow,
 } from "../worker-helpers";
-import { DOSE_WINDOW_DEFAULTS } from "../dose-window-defaults";
 
 describe("normaliseDoseWindows", () => {
   it("returns null for null / non-array input", () => {
@@ -79,149 +78,238 @@ describe("normaliseDoseWindows", () => {
     };
     expect(buildCanonicalSchedule(row).doseWindows).toBeNull();
   });
+
+  it("normalises an empty legacy daily row to its windowStart slot", () => {
+    const row: WorkerScheduleRow = {
+      id: "legacy",
+      windowStart: "07:30",
+      windowEnd: "08:30",
+      daysOfWeek: null,
+      timesOfDay: [],
+      reminderGraceMinutes: null,
+      rrule: null,
+      rollingIntervalDays: null,
+    };
+
+    expect(buildCanonicalSchedule(row).timesOfDay).toEqual(["07:30"]);
+  });
 });
 
-/**
- * `resolveSlotWindowDurationMinutes` — closes the bug where a
- * multi-time-of-day schedule's reminder tick reused the WHOLE
- * schedule's `windowEnd - windowStart` span for every individual
- * slot, silently giving each dose a grace period equal to the gap
- * between the schedule's earliest and latest dose instead of its own
- * configured window. Reproduces the real-world case that surfaced it:
- * two identically-*intended* once/twice-daily medications
- * (Lansoprazole: one 08:00 dose; Metoprolol: 08:00 + 18:00 doses)
- * resolving to wildly different per-slot durations (60min vs 600min)
- * purely because one schedule had a sibling dose.
- */
-describe("resolveSlotWindowDurationMinutes", () => {
-  it("single-time-of-day schedule: unchanged legacy windowEnd - windowStart", () => {
-    const schedule: WorkerScheduleRow = {
-      id: "s1",
-      windowStart: "08:00",
-      windowEnd: "09:00",
-      daysOfWeek: null,
-      timesOfDay: ["08:00"],
-      reminderGraceMinutes: null,
-      rrule: null,
-      rollingIntervalDays: null,
-    };
-    expect(resolveSlotWindowDurationMinutes(schedule, "08:00", null)).toBe(60);
-  });
+describe("resolveSlotPhaseWindow", () => {
+  const base: WorkerScheduleRow = {
+    id: "schedule-1",
+    windowStart: "08:00",
+    windowEnd: "09:00",
+    daysOfWeek: null,
+    timesOfDay: ["08:00"],
+    reminderGraceMinutes: null,
+    rrule: "FREQ=DAILY",
+    rollingIntervalDays: null,
+  };
+  const utcSlot = new Date("2026-07-28T08:00:00.000Z");
 
-  it("REGRESSION (Lansoprazole real data): single 08:00-09:00 slot resolves to 60min, not inflated", () => {
-    const schedule: WorkerScheduleRow = {
-      id: "lansoprazole-schedule",
-      windowStart: "08:00",
-      windowEnd: "09:00",
-      daysOfWeek: null,
-      timesOfDay: ["08:00"],
-      reminderGraceMinutes: null,
-      rrule: "FREQ=DAILY",
-      rollingIntervalDays: null,
-    };
-    expect(resolveSlotWindowDurationMinutes(schedule, "08:00", null)).toBe(60);
-  });
-
-  it("REGRESSION (Metoprolol real data): a 08:00/18:00 schedule no longer gives the 08:00 slot a 600min window", () => {
-    const schedule: WorkerScheduleRow = {
-      id: "metoprolol-schedule",
-      windowStart: "08:00",
-      windowEnd: "18:00",
-      daysOfWeek: null,
-      timesOfDay: ["08:00", "18:00"],
-      reminderGraceMinutes: null,
-      rrule: "FREQ=DAILY",
-      rollingIntervalDays: null,
-    };
-    const morning = resolveSlotWindowDurationMinutes(schedule, "08:00", null);
-    const evening = resolveSlotWindowDurationMinutes(schedule, "18:00", null);
-    expect(morning).toBeLessThan(600);
-    expect(evening).toBeLessThan(600);
-    expect(morning).toBe(DOSE_WINDOW_DEFAULTS.dailyOnTimeMinutes * 2);
-    expect(evening).toBe(DOSE_WINDOW_DEFAULTS.dailyOnTimeMinutes * 2);
-  });
-
-  it("core requirement: an unconfigured dose resolves the SAME whether or not it has a sibling slot, once both use an explicit override", () => {
-    const single: WorkerScheduleRow = {
-      id: "single",
-      windowStart: "08:00",
-      windowEnd: "09:00",
-      daysOfWeek: null,
-      timesOfDay: ["08:00"],
-      reminderGraceMinutes: 180,
-      rrule: null,
-      rollingIntervalDays: null,
-    };
-    const multi: WorkerScheduleRow = {
-      id: "multi",
-      windowStart: "08:00",
-      windowEnd: "18:00",
-      daysOfWeek: null,
-      timesOfDay: ["08:00", "18:00"],
-      reminderGraceMinutes: 180,
-      rrule: null,
-      rollingIntervalDays: null,
-    };
-    // Same explicit reminderGraceMinutes, same slotTime — the presence
-    // of Metoprolol-style sibling slot must not change the 08:00
-    // dose's resolved duration at all.
-    expect(resolveSlotWindowDurationMinutes(single, "08:00", null)).toBe(
-      resolveSlotWindowDurationMinutes(multi, "08:00", null),
+  it("preserves a legacy single-slot schedule window", () => {
+    expect(resolveSlotPhaseWindow(base, "08:00", null, utcSlot, "UTC")).toEqual(
+      {
+        start: new Date("2026-07-28T08:00:00.000Z"),
+        end: new Date("2026-07-28T09:00:00.000Z"),
+      },
     );
-    expect(resolveSlotWindowDurationMinutes(multi, "08:00", null)).toBe(180);
   });
 
-  it("an explicit per-dose doseWindows entry wins over everything else, keyed by timeOfDay", () => {
-    const schedule: WorkerScheduleRow = {
-      id: "s1",
-      windowStart: "08:00",
+  it("uses the shared post-slot default for each unconfigured sibling", () => {
+    const schedule = {
+      ...base,
       windowEnd: "18:00",
-      daysOfWeek: null,
       timesOfDay: ["08:00", "18:00"],
-      reminderGraceMinutes: 180, // present but should be overridden for 08:00
-      rrule: null,
-      rollingIntervalDays: null,
     };
-    const doseWindows = [
-      { timeOfDay: "08:00", start: "07:30", end: "09:30" }, // 120min
-    ];
     expect(
-      resolveSlotWindowDurationMinutes(schedule, "08:00", doseWindows),
-    ).toBe(120);
-    // The 18:00 slot has no matching doseWindows entry, so it still
-    // falls through to reminderGraceMinutes.
+      resolveSlotPhaseWindow(schedule, "08:00", null, utcSlot, "UTC"),
+    ).toEqual({
+      start: utcSlot,
+      end: new Date("2026-07-28T09:00:00.000Z"),
+    });
+    const eveningSlot = new Date("2026-07-28T18:00:00.000Z");
     expect(
-      resolveSlotWindowDurationMinutes(schedule, "18:00", doseWindows),
-    ).toBe(180);
+      resolveSlotPhaseWindow(schedule, "18:00", null, eveningSlot, "UTC"),
+    ).toEqual({
+      start: eveningSlot,
+      end: new Date("2026-07-28T19:00:00.000Z"),
+    });
   });
 
-  it("caps the unconfigured-dose default at the minimum inter-slot gap so two close doses never overlap", () => {
-    const schedule: WorkerScheduleRow = {
-      id: "s1",
-      windowStart: "08:00",
-      windowEnd: "09:30", // legacy span irrelevant here — multi-slot ignores it
-      daysOfWeek: null,
-      timesOfDay: ["08:00", "09:30"], // only 90min apart — narrower than the 120min default
-      reminderGraceMinutes: null,
-      rrule: null,
-      rollingIntervalDays: null,
-    };
-    const duration = resolveSlotWindowDurationMinutes(schedule, "08:00", null);
-    expect(duration).toBe(90);
-    expect(duration).toBeLessThan(DOSE_WINDOW_DEFAULTS.dailyOnTimeMinutes * 2);
+  it("uses a configured reminder grace instead of the legacy span", () => {
+    expect(
+      resolveSlotPhaseWindow(
+        { ...base, reminderGraceMinutes: 45 },
+        "08:00",
+        null,
+        utcSlot,
+        "UTC",
+      ),
+    ).toEqual({
+      start: utcSlot,
+      end: new Date("2026-07-28T08:45:00.000Z"),
+    });
   });
 
-  it("caps by the midnight-wrap gap too, not just forward gaps", () => {
-    const schedule: WorkerScheduleRow = {
-      id: "s1",
-      windowStart: "23:00",
-      windowEnd: "23:30",
-      daysOfWeek: null,
-      timesOfDay: ["23:00", "23:30"], // 30min apart, wrapping close to midnight
-      reminderGraceMinutes: null,
-      rrule: null,
-      rollingIntervalDays: null,
+  it("honours a valid explicit range even when it excludes the nominal slot", () => {
+    expect(
+      resolveSlotPhaseWindow(
+        base,
+        "08:00",
+        [{ timeOfDay: "08:00", start: "09:00", end: "10:00" }],
+        utcSlot,
+        "UTC",
+      ),
+    ).toEqual({
+      start: new Date("2026-07-28T09:00:00.000Z"),
+      end: new Date("2026-07-28T10:00:00.000Z"),
+    });
+  });
+
+  it("caps the default phase grace at the next sibling", () => {
+    expect(
+      resolveSlotPhaseWindow(
+        { ...base, timesOfDay: ["08:00", "08:30"] },
+        "08:00",
+        null,
+        utcSlot,
+        "UTC",
+      ),
+    ).toEqual({
+      start: utcSlot,
+      end: new Date("2026-07-28T08:30:00.000Z"),
+    });
+  });
+
+  it("keeps a spring-forward-normalized sibling cap monotonic", () => {
+    const slot = new Date("2026-03-29T01:30:00.000Z"); // requested 02:30 -> 03:30
+    const window = resolveSlotPhaseWindow(
+      { ...base, timesOfDay: ["02:30", "03:00"] },
+      "02:30",
+      null,
+      slot,
+      "Europe/Berlin",
+    );
+
+    expect(window).toEqual({ start: slot, end: slot });
+    expect(window.end.getTime()).toBeGreaterThanOrEqual(window.start.getTime());
+  });
+
+  it("materialises configured bounds as wall-clock instants across DST", () => {
+    const berlinSlot = new Date("2026-03-29T00:30:00.000Z"); // 01:30 CET
+    expect(
+      resolveSlotPhaseWindow(
+        {
+          ...base,
+          windowStart: "01:30",
+          windowEnd: "03:30",
+          timesOfDay: ["01:30"],
+        },
+        "01:30",
+        null,
+        berlinSlot,
+        "Europe/Berlin",
+      ),
+    ).toEqual({
+      start: new Date("2026-03-29T00:30:00.000Z"),
+      end: new Date("2026-03-29T01:30:00.000Z"),
+    });
+  });
+
+  it("places a late-night overnight end on the following local day", () => {
+    const slot = new Date("2026-07-28T23:30:00.000Z");
+    expect(
+      resolveSlotPhaseWindow(
+        {
+          ...base,
+          windowStart: "23:30",
+          windowEnd: "00:15",
+          timesOfDay: ["23:30"],
+        },
+        "23:30",
+        null,
+        slot,
+        "UTC",
+      ),
+    ).toEqual({
+      start: new Date("2026-07-28T23:30:00.000Z"),
+      end: new Date("2026-07-29T00:15:00.000Z"),
+    });
+  });
+
+  it("places an after-midnight overnight start on the previous local day", () => {
+    const slot = new Date("2026-07-29T00:30:00.000Z");
+    expect(
+      resolveSlotPhaseWindow(
+        {
+          ...base,
+          windowStart: "23:00",
+          windowEnd: "01:00",
+          timesOfDay: ["00:30"],
+        },
+        "00:30",
+        null,
+        slot,
+        "UTC",
+      ),
+    ).toEqual({
+      start: new Date("2026-07-28T23:00:00.000Z"),
+      end: new Date("2026-07-29T01:00:00.000Z"),
+    });
+  });
+
+  it("anchors a stale one-slot legacy duration at its first-class slot", () => {
+    const slot = new Date("2026-07-28T20:00:00.000Z");
+    expect(
+      resolveSlotPhaseWindow(
+        { ...base, timesOfDay: ["20:00"] },
+        "20:00",
+        null,
+        slot,
+        "UTC",
+      ),
+    ).toEqual({
+      start: new Date("2026-07-28T20:00:00.000Z"),
+      end: new Date("2026-07-28T21:00:00.000Z"),
+    });
+  });
+
+  it("clamps spring-forward gap bounds instead of reversing the window", () => {
+    const slot = new Date("2026-03-29T01:30:00.000Z"); // requested 02:30 -> 03:30
+    const expected = {
+      start: new Date("2026-03-29T01:30:00.000Z"),
+      end: new Date("2026-03-29T01:30:00.000Z"),
     };
-    expect(resolveSlotWindowDurationMinutes(schedule, "23:00", null)).toBe(30);
+
+    const legacy = resolveSlotPhaseWindow(
+      {
+        ...base,
+        windowStart: "02:30",
+        windowEnd: "03:00",
+        timesOfDay: ["02:30"],
+      },
+      "02:30",
+      null,
+      slot,
+      "Europe/Berlin",
+    );
+    const explicit = resolveSlotPhaseWindow(
+      { ...base, timesOfDay: ["02:30"] },
+      "02:30",
+      [{ timeOfDay: "02:30", start: "02:30", end: "03:00" }],
+      slot,
+      "Europe/Berlin",
+    );
+
+    expect(legacy).toEqual(expected);
+    expect(explicit).toEqual(expected);
+    expect(
+      legacy.end.getTime() - legacy.start.getTime(),
+    ).toBeGreaterThanOrEqual(0);
+    expect(
+      explicit.end.getTime() - explicit.start.getTime(),
+    ).toBeGreaterThanOrEqual(0);
   });
 });

@@ -11,10 +11,14 @@ import { decrypt } from "@/lib/crypto";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import { dispatchNotification } from "@/lib/notifications/dispatcher";
 import { medicationDoseTag } from "@/lib/notifications/dose-tag";
+import { buildBandsForMedication } from "@/lib/medications/scheduling/band-minter";
+import { attributeIntakeToSlot } from "@/lib/medications/scheduling/attribution";
+import { nearestAnchorBand } from "@/lib/medications/scheduling/dose-history";
+import { occurrencesBetween } from "@/lib/medications/scheduling/recurrence";
 import {
   buildCanonicalSchedule,
   buildRecurrenceContext,
-  resolveSlotWindowDurationMinutes,
+  resolveSlotPhaseWindow,
   scheduleEmitsInWindow,
   shouldMintMissedDoseRow,
 } from "@/lib/medications/scheduling/worker-helpers";
@@ -165,6 +169,12 @@ export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
         include: {
           schedules: true,
           phaseConfig: true,
+          scheduleRevisions: {
+            where: { supersededByRevisionId: null },
+            orderBy: { validUntil: "desc" },
+            take: 1,
+            select: { validUntil: true },
+          },
           user: {
             select: {
               id: true,
@@ -183,13 +193,6 @@ export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
           now,
           userTz,
         );
-
-        const currentTime = now.toLocaleTimeString("en-GB", {
-          timeZone: userTz,
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        });
 
         // Get today's date string in user's timezone for message tracking
         const localDateStr = now.toLocaleDateString("sv-SE", {
@@ -215,18 +218,57 @@ export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
             deletedAt: null,
             scheduledFor: { gte: todayStart, lte: todayEnd },
           },
-          select: { scheduledFor: true, takenAt: true, skipped: true },
+          select: {
+            scheduledFor: true,
+            takenAt: true,
+            skipped: true,
+            attributionSource: true,
+            updatedAt: true,
+          },
         });
-        const loggedDoseInstants = todayEvents
-          .filter((e) => e.takenAt !== null || e.skipped)
-          .map((e) => (e.takenAt ?? e.scheduledFor).getTime());
+        // The worker reminds only the live schedule rows. The newest active
+        // revision ended when that live era began, so actions performed
+        // before its boundary belong to the archived cadence and cannot
+        // suppress a slot minted from today's replacement schedule. Explicit
+        // skips and USER_PIN decisions are mutations, whose Prisma @updatedAt
+        // timestamp records the decision. Ordinary takes use their takenAt.
+        const liveEraStart =
+          med.scheduleRevisions?.[0]?.validUntil.getTime() ?? null;
+        const liveEraEvents =
+          liveEraStart === null
+            ? todayEvents
+            : todayEvents.filter((event) => {
+                const actionAt =
+                  event.skipped || event.attributionSource === "USER_PIN"
+                    ? event.updatedAt
+                    : event.takenAt;
+                return actionAt !== null && actionAt.getTime() >= liveEraStart;
+              });
+        const anchoredActionSlotInstants = liveEraEvents.flatMap((event) => {
+          if (event.skipped) return [event.scheduledFor];
+          if (
+            event.takenAt !== null &&
+            event.attributionSource === "USER_PIN" &&
+            event.scheduledFor.getTime() !== event.takenAt.getTime()
+          ) {
+            return [event.scheduledFor];
+          }
+          return [];
+        });
+        const takenDoseInstants = liveEraEvents.flatMap((event) =>
+          event.takenAt !== null &&
+          !event.skipped &&
+          event.attributionSource !== "USER_PIN"
+            ? [event.takenAt]
+            : [],
+        );
 
-        // Resolve phase configuration
         const phaseConfig = med.phaseConfig ?? DEFAULT_PHASE_CONFIG;
 
-        // Slots a logged dose has already claimed (by index into the
-        // chronologically-sorted slotTimes) so one dose can't suppress two.
-        const claimedSlotInstants = new Set<number>();
+        // Each anchored or attributed action can suppress only one schedule
+        // row, including when separate rows emit at the same instant.
+        const claimedAnchoredActionIndexes = new Set<number>();
+        const claimedTakenDoseIndexes = new Set<number>();
 
         const sortedSchedules = [...med.schedules].sort((a, b) =>
           a.windowStart.localeCompare(b.windowStart),
@@ -260,7 +302,82 @@ export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
           lastIntakeAt = lastIntake?.takenAt ?? null;
         }
 
-        for (const schedule of sortedSchedules) {
+        const canonicalSchedules = sortedSchedules.map(buildCanonicalSchedule);
+        const recurrenceCtx = buildRecurrenceContext({
+          medication: med,
+          userTz,
+          lastIntakeAt,
+        });
+
+        // Attribute every action against one medication-wide pool. Each
+        // schedule still mints its own cadence-aware bands, preserving its
+        // late-tail shape, while the attribution primitive resolves overlaps
+        // by status and nearest anchor across all schedule rows.
+        //
+        // The retrospective rolling minter normally omits the still-open
+        // forward occurrence. Seed each rolling mint with the recurrence
+        // engine's actual open slot for this day. This keeps skipped rows,
+        // whose action instant is scheduledFor, attributable without treating
+        // a skip as the next cadence anchor.
+        const pooledOwnedSlotBands = canonicalSchedules.flatMap(
+          (canonicalSchedule) => {
+            const rollingOpenSlots =
+              canonicalSchedule.rollingIntervalDays === null
+                ? []
+                : occurrencesBetween(
+                    canonicalSchedule,
+                    todayStart,
+                    todayEnd,
+                    recurrenceCtx,
+                  ).map((occurrence) => occurrence.at);
+            const bands = buildBandsForMedication({
+              medication: med,
+              schedule: canonicalSchedule,
+              ctx: recurrenceCtx,
+              userTz,
+              range: { from: todayStart, to: todayEnd },
+              now,
+              intakeInstants: rollingOpenSlots,
+            }).bands;
+            return bands
+              .filter(
+                (band) =>
+                  liveEraStart === null || band.at.getTime() >= liveEraStart,
+              )
+              .map((band) => ({
+                scheduleId: canonicalSchedule.id,
+                band,
+              }));
+          },
+        );
+        const pooledSlotBands = pooledOwnedSlotBands.map((owned) => owned.band);
+        const scheduleIdByBand = new Map(
+          pooledOwnedSlotBands.map((owned) => [owned.band, owned.scheduleId]),
+        );
+        const attributedAnchoredActionSlots = anchoredActionSlotInstants.map(
+          (instant) => {
+            const band = nearestAnchorBand(instant, pooledSlotBands);
+            const scheduleId = band ? scheduleIdByBand.get(band) : undefined;
+            return band && scheduleId
+              ? { scheduleId, slotInstant: band.at.getTime() }
+              : null;
+          },
+        );
+        const attributedTakenDoseSlots = takenDoseInstants.map((instant) => {
+          const band = attributeIntakeToSlot(instant, pooledSlotBands)?.band;
+          const scheduleId = band ? scheduleIdByBand.get(band) : undefined;
+          return band && scheduleId
+            ? { scheduleId, slotInstant: band.at.getTime() }
+            : null;
+        });
+
+        for (
+          let scheduleIndex = 0;
+          scheduleIndex < sortedSchedules.length;
+          scheduleIndex++
+        ) {
+          const schedule = sortedSchedules[scheduleIndex];
+          const canonicalSchedule = canonicalSchedules[scheduleIndex];
           // v1.5.0 — route every "does today emit a slot?" decision
           // through the canonical recurrence engine. Replaces the
           // legacy weekday-only filter that silently ignored
@@ -269,12 +386,6 @@ export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
           // Wed). The engine honours RRULE / rolling / one-shot /
           // legacy-with-interval-weeks / `endsOn` cap; no special-
           // casing here.
-          const canonicalSchedule = buildCanonicalSchedule(schedule);
-          const recurrenceCtx = buildRecurrenceContext({
-            medication: med,
-            userTz,
-            lastIntakeAt,
-          });
           if (
             !scheduleEmitsInWindow(
               canonicalSchedule,
@@ -290,17 +401,14 @@ export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
           // with `timesOfDay = ["08:00","20:00"]` is two distinct dose
           // slots per day; the pre-v1.7 worker keyed phase + dedup on the
           // single `windowStart`, so the evening dose never reminded.
-          // Iterate every first-class time-of-day, each with its own
-          // window (anchored at the time, spanning its own resolved
-          // per-slot duration — see `resolveSlotWindowDurationMinutes`),
-          // phase, dedup key (now including the time-of-day), and
-          // RED-mint instant.
+          // Each slot resolves its own phase bounds. Logged-dose suppression
+          // uses the same dose bands as intake attribution and history.
           //
           // The legacy single-window contract is preserved: a schedule
           // with no first-class `timesOfDay` emits exactly one slot at
           // `windowStart` with `timeOfDay = ""`, which dedupes against
           // pre-v1.7 rows (backfilled to "") byte-for-byte.
-          const currentMins = parseTimeToMinutes(currentTime);
+          const nowMs = now.getTime();
 
           const hasFirstClassTimes =
             schedule.timesOfDay && schedule.timesOfDay.length > 0;
@@ -319,51 +427,72 @@ export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
             // schedule (byte-stable against pre-v1.7 rows), else the
             // explicit HH:mm.
             const dedupTimeOfDay = hasFirstClassTimes ? slotTime : "";
-            const slotStartMins = parseTimeToMinutes(slotTime);
-            // Per-slot, not per-schedule — see resolveSlotWindowDurationMinutes.
-            // A multi-time-of-day schedule's whole-span windowEnd-windowStart
-            // is not a safe per-slot duration; this resolves each slot's own
-            // explicit dose-window / reminderGraceMinutes override (or a
-            // shared unconfigured-dose default, bounded by the gap to the
-            // adjacent slot) so a dose's resolved window never depends on
-            // how many sibling doses its schedule has.
-            const windowDuration = resolveSlotWindowDurationMinutes(
+            // The UTC instant this slot is due (DST-safe).
+            const [slotH, slotM] = slotTime.split(":").map(Number);
+            const slotScheduledFor = localHmAsUtc(now, userTz, slotH, slotM);
+            const slotInstant = slotScheduledFor.getTime();
+            if (liveEraStart !== null && slotInstant < liveEraStart) {
+              continue;
+            }
+            const phaseWindow = resolveSlotPhaseWindow(
               schedule,
               slotTime,
               canonicalSchedule.doseWindows ?? null,
+              slotScheduledFor,
+              userTz,
             );
-            const slotEndMins = slotStartMins + windowDuration;
-            const minutesToEnd = slotEndMins - currentMins;
-            const minutesFromStart = currentMins - slotStartMins;
+            const minutesFromStart =
+              (nowMs - phaseWindow.start.getTime()) / 60_000;
+            const minutesToEnd = (phaseWindow.end.getTime() - nowMs) / 60_000;
+            const windowDuration =
+              (phaseWindow.end.getTime() - phaseWindow.start.getTime()) /
+              60_000;
 
-            // The UTC instant this slot is due (DST-safe).
-            const [slotH, slotM] = slotTime.split(":").map(Number);
-            const slotInstant = localHmAsUtc(
-              now,
-              med.user.timezone,
-              slotH,
-              slotM,
-            ).getTime();
+            // Skips and retained USER_PIN takes bind to the nearest canonical
+            // anchor inside the dose-history epsilon. A released pin has
+            // scheduledFor === takenAt and is deliberately ad-hoc, so it was
+            // excluded above.
+            let anchoredActionIdx = -1;
+            for (let ai = 0; ai < attributedAnchoredActionSlots.length; ai++) {
+              if (claimedAnchoredActionIndexes.has(ai)) continue;
+              const attributed = attributedAnchoredActionSlots[ai];
+              if (
+                attributed?.scheduleId !== canonicalSchedule.id ||
+                attributed.slotInstant !== slotInstant
+              ) {
+                continue;
+              }
+              anchoredActionIdx = ai;
+              break;
+            }
+            if (anchoredActionIdx >= 0) {
+              claimedAnchoredActionIndexes.add(anchoredActionIdx);
+              continue;
+            }
 
-            // Suppress this slot's reminder if a user-logged dose (taken
-            // or skipped) sits within half the window duration of the
-            // slot's due time. Matching by proximity — not a positional
-            // counter — means a partially-dosed day still reminds for the
-            // correct missing slot. Each logged dose claims at most one
-            // slot so two slots can't both be suppressed by one dose.
-            const matchRadiusMs = Math.max(windowDuration, 60) * 60_000 * 0.5;
+            // Taken actions do not necessarily land exactly on their slot, so
+            // they use medication-wide pooled band attribution.
             let matchedIdx = -1;
             let matchedDist = Infinity;
-            for (let li = 0; li < loggedDoseInstants.length; li++) {
-              if (claimedSlotInstants.has(li)) continue;
-              const dist = Math.abs(loggedDoseInstants[li] - slotInstant);
-              if (dist <= matchRadiusMs && dist < matchedDist) {
-                matchedDist = dist;
+            for (let li = 0; li < takenDoseInstants.length; li++) {
+              if (claimedTakenDoseIndexes.has(li)) continue;
+              const attributed = attributedTakenDoseSlots[li];
+              if (
+                attributed?.scheduleId !== canonicalSchedule.id ||
+                attributed.slotInstant !== slotInstant
+              ) {
+                continue;
+              }
+              const distance = Math.abs(
+                takenDoseInstants[li].getTime() - slotInstant,
+              );
+              if (distance < matchedDist) {
+                matchedDist = distance;
                 matchedIdx = li;
               }
             }
             if (matchedIdx >= 0) {
-              claimedSlotInstants.add(matchedIdx);
+              claimedTakenDoseIndexes.add(matchedIdx);
               continue;
             }
 
@@ -417,9 +546,6 @@ export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
 
             const doseInfo = schedule.dose ?? med.dose;
             const timeWindow = `${slotTime}`;
-
-            // DST-safe slot instant, computed once above.
-            const slotScheduledFor = new Date(slotInstant);
 
             // RED phase: create missed intake event for this slot.
             if (currentPhase === "RED") {
@@ -477,7 +603,7 @@ export async function handleReminderCheck(jobs: Job<ReminderCheckPayload>[]) {
                 med.name,
                 doseInfo,
                 timeWindow,
-                minutesToEnd,
+                Math.ceil(minutesToEnd),
                 med.user.locale,
               );
 
