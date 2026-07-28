@@ -23,7 +23,12 @@ import {
   type ScheduleType,
   occurrencesBetween,
 } from "@/lib/medications/scheduling/recurrence";
-import { hhmmToMinutes } from "@/lib/medications/scheduling/hhmm";
+import {
+  hhmmToMinutes,
+  hhmmToMinutesOrNull,
+} from "@/lib/medications/scheduling/hhmm";
+import { DOSE_WINDOW_DEFAULTS } from "@/lib/medications/scheduling/dose-window-defaults";
+import { localHmAsUtc } from "@/lib/tz/local-day";
 
 /**
  * Minimal Prisma-shape projection used by the worker. Mirrors the
@@ -75,16 +80,26 @@ export interface WorkerMedicationRow {
 export function buildCanonicalSchedule(
   schedule: WorkerScheduleRow,
 ): CanonicalSchedule {
+  const scheduleType = schedule.scheduleType ?? "SCHEDULED";
+  const isEmptyLegacyDaily =
+    scheduleType !== "PRN" &&
+    schedule.timesOfDay.length === 0 &&
+    schedule.rrule === null &&
+    schedule.rollingIntervalDays === null &&
+    (schedule.daysOfWeek === null || schedule.daysOfWeek.trim() === "");
+
   return {
     id: schedule.id,
     rrule: schedule.rrule,
     rollingIntervalDays: schedule.rollingIntervalDays,
-    timesOfDay: schedule.timesOfDay,
+    timesOfDay: isEmptyLegacyDaily
+      ? [schedule.windowStart]
+      : schedule.timesOfDay,
     daysOfWeek: schedule.daysOfWeek,
     windowStart: schedule.windowStart,
     windowEnd: schedule.windowEnd,
     reminderGraceMinutes: schedule.reminderGraceMinutes,
-    scheduleType: schedule.scheduleType ?? "SCHEDULED",
+    scheduleType,
     cyclicOnWeeks: schedule.cyclicOnWeeks ?? null,
     cyclicOffWeeks: schedule.cyclicOffWeeks ?? null,
     doseWindows: normaliseDoseWindows(schedule.doseWindows),
@@ -168,6 +183,162 @@ export function scheduleEmitsInWindow(
   windowEnd: Date,
 ): boolean {
   return occurrencesBetween(schedule, windowStart, windowEnd, ctx).length > 0;
+}
+
+/**
+ * Resolve one slot's phase bounds as real instants.
+ *
+ * Explicit dose windows and a containing legacy single-slot window are
+ * configured as wall-clock HH:mm values, so their endpoints are materialised
+ * independently in the user's timezone and overnight bounds select the
+ * adjacent local date around the slot. Deriving them as minute offsets from
+ * the slot would drift across a DST transition. When a first-class one-slot
+ * time has moved outside stale legacy clocks, their duration is instead
+ * anchored at the actual slot. A configured reminder grace remains an elapsed
+ * duration from the slot. Multi-slot defaults use the shared grace and are
+ * capped at the next sibling's wall-clock instant.
+ *
+ * Intake suppression deliberately does not use these bounds.
+ */
+export interface SlotPhaseWindow {
+  start: Date;
+  end: Date;
+}
+
+export function resolveSlotPhaseWindow(
+  schedule: Pick<
+    WorkerScheduleRow,
+    "windowStart" | "windowEnd" | "timesOfDay" | "reminderGraceMinutes"
+  >,
+  slotTime: string,
+  doseWindows: DoseWindowEntry[] | null,
+  slotInstant: Date,
+  userTz: string,
+): SlotPhaseWindow {
+  const slotMinute = hhmmToMinutesOrNull(slotTime);
+  const explicit = doseWindows?.find((window) => window.timeOfDay === slotTime);
+  if (explicit) {
+    const startMinute = hhmmToMinutesOrNull(explicit.start);
+    const endMinute = hhmmToMinutesOrNull(explicit.end);
+    if (
+      startMinute !== null &&
+      endMinute !== null &&
+      startMinute <= endMinute
+    ) {
+      const start = localMinuteAsUtc(slotInstant, userTz, startMinute);
+      const end = localMinuteAsUtc(slotInstant, userTz, endMinute);
+      return {
+        start,
+        end: end.getTime() < start.getTime() ? start : end,
+      };
+    }
+  }
+
+  const configuredGrace = schedule.reminderGraceMinutes;
+  if (
+    typeof configuredGrace === "number" &&
+    Number.isFinite(configuredGrace) &&
+    configuredGrace > 0
+  ) {
+    return {
+      start: slotInstant,
+      end: new Date(slotInstant.getTime() + configuredGrace * 60_000),
+    };
+  }
+
+  const slots = schedule.timesOfDay
+    .map(hhmmToMinutesOrNull)
+    .filter((minute): minute is number => minute !== null)
+    .sort((a, b) => a - b);
+  if (slots.length <= 1 || slotMinute === null) {
+    const startMinute = hhmmToMinutesOrNull(schedule.windowStart);
+    const endMinute = hhmmToMinutesOrNull(schedule.windowEnd);
+    if (slotMinute === null || startMinute === null || endMinute === null) {
+      return { start: slotInstant, end: slotInstant };
+    }
+
+    const wrapsMidnight = endMinute < startMinute;
+    const slotIsInsideConfiguredWindow = wrapsMidnight
+      ? slotMinute >= startMinute || slotMinute <= endMinute
+      : slotMinute >= startMinute && slotMinute <= endMinute;
+
+    // A first-class single slot may outlive stale legacy windowStart/windowEnd
+    // clocks. Preserve that legacy span as a duration, but anchor it at the
+    // actual slot instead of opening a phase at unrelated wall-clock times.
+    if (schedule.timesOfDay.length > 0 && !slotIsInsideConfiguredWindow) {
+      const durationMinutes =
+        (((endMinute - startMinute) % (24 * 60)) + 24 * 60) % (24 * 60);
+      return {
+        start: slotInstant,
+        end: new Date(slotInstant.getTime() + durationMinutes * 60_000),
+      };
+    }
+
+    if (!wrapsMidnight) {
+      const start = localMinuteAsUtc(slotInstant, userTz, startMinute);
+      const end = localMinuteAsUtc(slotInstant, userTz, endMinute);
+      return {
+        start,
+        end: end.getTime() < start.getTime() ? start : end,
+      };
+    }
+
+    const localNoon = localHmAsUtc(slotInstant, userTz, 12, 0);
+
+    if (slotMinute >= startMinute) {
+      return {
+        start: localMinuteAsUtc(slotInstant, userTz, startMinute),
+        end: localMinuteAsUtc(
+          new Date(localNoon.getTime() + 24 * 60 * 60_000),
+          userTz,
+          endMinute,
+        ),
+      };
+    }
+
+    return {
+      start: localMinuteAsUtc(
+        new Date(localNoon.getTime() - 24 * 60 * 60_000),
+        userTz,
+        startMinute,
+      ),
+      end: localMinuteAsUtc(slotInstant, userTz, endMinute),
+    };
+  }
+
+  const currentIndex = slots.indexOf(slotMinute);
+  const nextMinute =
+    currentIndex >= 0 && currentIndex < slots.length - 1
+      ? slots[currentIndex + 1]
+      : slots[0];
+  const nextReference =
+    nextMinute > slotMinute
+      ? slotInstant
+      : new Date(
+          localHmAsUtc(slotInstant, userTz, 12, 0).getTime() + 24 * 60 * 60_000,
+        );
+  const nextSlot = localMinuteAsUtc(nextReference, userTz, nextMinute);
+  const defaultEnd = new Date(
+    slotInstant.getTime() + DOSE_WINDOW_DEFAULTS.dailyOnTimeMinutes * 60_000,
+  );
+  const cappedEnd = Math.min(defaultEnd.getTime(), nextSlot.getTime());
+  return {
+    start: slotInstant,
+    end: new Date(Math.max(slotInstant.getTime(), cappedEnd)),
+  };
+}
+
+function localMinuteAsUtc(
+  dayReference: Date,
+  userTz: string,
+  minuteOfDay: number,
+): Date {
+  return localHmAsUtc(
+    dayReference,
+    userTz,
+    Math.floor(minuteOfDay / 60),
+    minuteOfDay % 60,
+  );
 }
 
 /**
