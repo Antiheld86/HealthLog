@@ -62,6 +62,12 @@ next-env.d.ts
 # COPY target always exists.
 /assets/geolite2/*.mmdb
 
+# Local workspace files, never committed
+/docs/superpowers/
+.claude/
+.cursor/
+.codex/
+.aider*
 
 # Planning scratch — all internal per-release reports, QA findings, ad-hoc
 # backlog, and the iOS coordination channel. These are internal working
