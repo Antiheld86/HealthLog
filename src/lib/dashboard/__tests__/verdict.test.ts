@@ -575,7 +575,12 @@ describe("rung 6 — silence", () => {
 describe("rung 7 — scoreDrop", () => {
   function scoreSnapshot(delta: number | null): DashboardSnapshot {
     return baseSnapshot({
-      healthScore: { score: 60, band: "yellow", delta },
+      healthScore: {
+        score: 60,
+        band: "yellow",
+        delta,
+        deltaReason: null,
+      },
     });
   }
 
@@ -709,7 +714,12 @@ describe("rung 9 — allQuiet + full-ladder precedence", () => {
           },
           mood: { summary: null, entries: [] },
         },
-        healthScore: { score: 40, band: "red", delta: -20 },
+        healthScore: {
+          score: 40,
+          band: "red",
+          delta: -20,
+          deltaReason: null,
+        },
         briefing: {
           paragraph: "Busy day.",
           keyFindings: [WATCH_FINDING],
@@ -725,7 +735,12 @@ describe("rung 9 — allQuiet + full-ladder precedence", () => {
   it("scoreDrop outranks the briefing teaser", () => {
     const verdict = resolveDashboardVerdict(
       baseSnapshot({
-        healthScore: { score: 50, band: "yellow", delta: -15 },
+        healthScore: {
+          score: 50,
+          band: "yellow",
+          delta: -15,
+          deltaReason: null,
+        },
         briefing: {
           paragraph: "Busy day.",
           keyFindings: [WATCH_FINDING],

@@ -28,6 +28,18 @@ export interface BpTargets {
   diaHigh: number;
 }
 
+export function bpTargetsEqual(
+  left: BpTargets | null,
+  right: BpTargets | null,
+): boolean {
+  return (
+    left?.sysLow === right?.sysLow &&
+    left?.sysHigh === right?.sysHigh &&
+    left?.diaLow === right?.diaLow &&
+    left?.diaHigh === right?.diaHigh
+  );
+}
+
 function getAge(dateOfBirth: Date): number {
   const today = new Date();
   let age = today.getFullYear() - dateOfBirth.getFullYear();

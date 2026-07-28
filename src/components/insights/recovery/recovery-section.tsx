@@ -16,7 +16,7 @@ import { useTranslations } from "@/lib/i18n/context";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ChartSkeleton } from "@/components/charts/chart-skeleton";
 import { RestModeBanner } from "@/components/insights/rest-mode-banner";
-import type { RestModeAnnotation } from "@/lib/analytics/health-score";
+import type { RestModeAnnotation } from "@/lib/analytics/score/types";
 import type { ChartOverlayKey } from "@/lib/dashboard-layout";
 import type { MetricStatusMetricId } from "@/lib/insights/metric-status-registry";
 import { RecoveryMetricBlock } from "@/components/insights/recovery/recovery-metric-block";

@@ -1,16 +1,15 @@
 "use client";
 
 import { useContext } from "react";
-import { QueryClientContext } from "@tanstack/react-query";
+import { QueryClientContext, type QueryClient } from "@tanstack/react-query";
 
 /**
  * v1.4.48 M4 — shared SSR-safety helper for hooks that delegate to
  * React Query under a `<QueryClientProvider>`.
  *
- * A long tail of legacy presentational components (`<HeroStrip>`,
- * `<SuggestedPrompts>`, `<LayoutCoachFab>`, `<InsightStatusCard>`,
- * `<HealthScoreDeltaExplainer>`, …) ships with unit tests that render
- * the component in isolation without wrapping it in
+ * Several presentational components (`<HeroStrip>`, `<SuggestedPrompts>`,
+ * `<LayoutCoachFab>`, and `<InsightStatusCard>`) ship with unit tests that
+ * render the component in isolation without wrapping it in
  * `<QueryClientProvider>`. Hooks that call `useQuery` directly crash
  * in that environment.
  *
@@ -30,4 +29,9 @@ export function useQueryClientMounted(): boolean {
     QueryClientContext as unknown as React.Context<unknown>,
   );
   return ctx != null;
+}
+
+/** Return the mounted client without throwing in isolated SSR renders. */
+export function useOptionalQueryClient(): QueryClient | undefined {
+  return useContext(QueryClientContext);
 }

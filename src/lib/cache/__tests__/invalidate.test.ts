@@ -11,6 +11,7 @@ import {
   invalidateUserDashboardWidgets,
   invalidateUserDashboardSnapshot,
   invalidateUserInsights,
+  invalidateUserHealthScore,
   invalidateUserMeasurements,
   invalidateUserMedications,
   invalidateUserMood,
@@ -109,6 +110,36 @@ async function primeAllCaches(): Promise<void> {
 function snapshotCell(userId: string, locale = "en"): string {
   return `${dashboardSnapshotCacheKey(userId)}|${locale}`;
 }
+
+describe("invalidateUserHealthScore", () => {
+  it("evicts analytics, dashboard snapshots, and derived batches for one user", async () => {
+    await cached(caches.analytics, `${USER_A}|default|en`, async () => ({}));
+    await cached(caches.analytics, snapshotCell(USER_A), async () => ({}));
+    await cached(
+      caches.insightsDerived,
+      `${USER_A}|batch|HEALTH_SCORE|en`,
+      async () => ({}),
+    );
+    await cached(caches.analytics, `${USER_B}|default|en`, async () => ({}));
+    await cached(
+      caches.insightsDerived,
+      `${USER_B}|batch|HEALTH_SCORE|en`,
+      async () => ({}),
+    );
+
+    invalidateUserHealthScore(USER_A);
+
+    expect(caches.analytics.get(`${USER_A}|default|en`)).toBeNull();
+    expect(caches.analytics.get(snapshotCell(USER_A))).toBeNull();
+    expect(
+      caches.insightsDerived.get(`${USER_A}|batch|HEALTH_SCORE|en`),
+    ).toBeNull();
+    expect(caches.analytics.get(`${USER_B}|default|en`)).not.toBeNull();
+    expect(
+      caches.insightsDerived.get(`${USER_B}|batch|HEALTH_SCORE|en`),
+    ).not.toBeNull();
+  });
+});
 
 describe("invalidateUserMeasurements", () => {
   it("evicts analytics + achievements + workouts for the target user only", async () => {

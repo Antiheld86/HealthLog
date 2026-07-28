@@ -250,6 +250,7 @@ export function resolveDashboardVerdict(
   if (
     score !== null &&
     score.delta !== null &&
+    score.deltaReason === null &&
     score.delta <= -SCORE_DROP_MIN_POINTS
   ) {
     return {

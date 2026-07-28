@@ -229,7 +229,9 @@ export function TodayHero({
                 />
               </Link>
             </div>
-            {digest.score && digest.score.delta !== null ? (
+            {digest.score &&
+            digest.score.delta !== null &&
+            digest.score.deltaReason === null ? (
               <span
                 data-slot="today-hero-score-delta"
                 className="text-muted-foreground text-xs tabular-nums"

@@ -188,4 +188,11 @@ export const METRIC_PROVENANCE: Record<DerivedMetricId, MetricProvenanceMeta> =
       },
       caveatKey: "insights.derived.composite.SAME_TIME_BASELINE.caveat",
     },
+    HEALTH_SCORE: {
+      methodKey: "insights.healthScore.method",
+      standard: {
+        name: "WHO HEARTS technical package",
+        url: "https://www.who.int/publications/i/item/9789240001367",
+      },
+    },
   };

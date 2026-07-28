@@ -36,6 +36,7 @@
 import type { DataSummary } from "@/lib/analytics/trends";
 import type { SleepSourceDiscrepancy } from "@/lib/analytics/sleep-night";
 import type { CorrelationResult } from "@/lib/insights/correlations";
+import type { HealthScoreReport } from "@/lib/analytics/score/types";
 
 /** Shape consumed by every `/insights/<metric>/page.tsx`. */
 export interface SubPageAnalyticsData {
@@ -133,48 +134,5 @@ export interface InsightsAnalyticsData {
     moodPulse: CorrelationResult;
     weightWeekday: CorrelationResult;
   } | null;
-  healthScore?: {
-    score: number;
-    band: "green" | "yellow" | "red";
-    components: {
-      // v1.4.25 W8e — the optional `source`/`asOf` slots feed the
-      // provenance accordion. Older clients reading this payload
-      // happily ignore the extras (additive contract).
-      bp: {
-        value: number | null;
-        weight: number;
-        source?: "manual" | "withings" | "appleHealth" | "mixed" | "none";
-        asOf?: string;
-      };
-      weight: {
-        value: number | null;
-        weight: number;
-        source?: "manual" | "withings" | "appleHealth" | "mixed" | "none";
-        asOf?: string;
-        /**
-         * v1.34 — which yardstick graded this row. `"user"` when the account
-         * has set an explicit weight target (`target` then carries that band
-         * in kg), `"none"` when the pillar scored the bare trend against no
-         * target at all. The card renders one disclosure line off this pair;
-         * until it existed the score graded weight against a BMI-22 band
-         * nobody chose and no surface named.
-         */
-        targetSource?: "user" | "none";
-        target?: { min: number; max: number } | null;
-      };
-      mood: {
-        value: number | null;
-        weight: number;
-        source?: "manual" | "withings" | "appleHealth" | "mixed" | "none";
-        asOf?: string;
-      };
-      compliance: {
-        value: number | null;
-        weight: number;
-        source?: "manual" | "withings" | "appleHealth" | "mixed" | "none";
-        asOf?: string;
-      };
-    };
-    delta: number | null;
-  } | null;
+  healthScore?: HealthScoreReport | null;
 }

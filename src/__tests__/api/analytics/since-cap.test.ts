@@ -94,8 +94,8 @@ vi.mock("@/lib/analytics/bp-in-target-fast-path", () => ({
   }),
 }));
 
-vi.mock("@/lib/analytics/health-score-fast-path", () => ({
-  computeUserHealthScoreFastPath: vi.fn().mockResolvedValue(null),
+vi.mock("@/lib/analytics/score/reader", () => ({
+  computeUserHealthScore: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@/lib/analytics/correlations-fast-path", () => ({
@@ -159,8 +159,8 @@ beforeEach(async () => {
     await import("@/lib/rollups/measurement-coverage");
   const { computeBpInTargetFastPath } =
     await import("@/lib/analytics/bp-in-target-fast-path");
-  const { computeUserHealthScoreFastPath } =
-    await import("@/lib/analytics/health-score-fast-path");
+  const { computeUserHealthScore } =
+    await import("@/lib/analytics/score/reader");
   const { computeCorrelationHypothesesFastPath } =
     await import("@/lib/analytics/correlations-fast-path");
   const { computeSummariesSlice } =
@@ -179,9 +179,7 @@ beforeEach(async () => {
     priorMonth: null,
     priorYear: null,
   });
-  (
-    computeUserHealthScoreFastPath as ReturnType<typeof vi.fn>
-  ).mockResolvedValue(null);
+  (computeUserHealthScore as ReturnType<typeof vi.fn>).mockResolvedValue(null);
   (
     computeCorrelationHypothesesFastPath as ReturnType<typeof vi.fn>
   ).mockResolvedValue({ hypotheses: [] });

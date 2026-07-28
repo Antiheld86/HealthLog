@@ -219,22 +219,9 @@ describe("aggregateWmyBuckets", () => {
 });
 
 /**
- * v1.4.40 W-WMY-WIRE — granularity-routing parity across the v1.4.40
- * consumers (summaries-slice + health-score-fast-path). Both consumers
- * now call `readBestGranularityRollups` for their long-window probes;
- * this pins:
- *   - 90 d → DAY (every coarser floor too high — DAY is canonical
- *     for the trailing quarter regardless of consumer),
- *   - 365 d → MONTH (clears MONTH floor 181 d, short of YEAR floor
- *     731 d) — the granularity health-score-fast-path's weight long-
- *     window read and summaries-slice's year-ago baseline both
- *     consume,
- *   - 1095 d → YEAR (clears the 731-day YEAR floor) — the v1.5
- *     multi-year trend card target.
- *
- * The parity assertion ensures the routing contract is a single
- * source of truth: any future floor adjustment forces both consumers
- * to re-pin in lock-step rather than silently diverging.
+ * Granularity-routing boundaries for the shared WMY reader:
+ * 90 days resolves to DAY, 365 days to MONTH, and 1095 days to YEAR.
+ * A floor adjustment must update this single routing contract.
  */
 describe("readBestGranularityRollups — cross-consumer routing parity", () => {
   it("pins the 90 / 365 / 1095 day routing targets the consumers depend on", async () => {

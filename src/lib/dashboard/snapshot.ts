@@ -43,7 +43,7 @@ import {
   type DataPoint,
   type DataSummary,
 } from "@/lib/analytics/trends";
-import { getBpTargets } from "@/lib/analytics/bp-targets";
+import { bpTargetsEqual, getBpTargets } from "@/lib/analytics/bp-targets";
 import {
   computeGlucoseClinicalMetrics,
   GLUCOSE_PANEL_WINDOW_DAYS,
@@ -54,12 +54,8 @@ import {
   type BpInTargetEnvelope,
 } from "@/lib/analytics/bp-in-target-fast-path";
 import {
-  buildHealthScoreBpInputs,
-  buildHealthScoreWeightTarget,
-} from "@/lib/analytics/health-score-inputs";
-import {
+  resolveEffectiveBpTargets,
   resolveWeightTargetOverride,
-  type ThresholdOverridesJson,
 } from "@/lib/analytics/effective-range";
 import { deriveBpWindow90 } from "@/lib/analytics/window-confidence";
 import {
@@ -81,15 +77,18 @@ import {
   buildMedsTodayBlock,
   type MedsTodayBlock,
 } from "@/lib/dashboard/meds-today";
-import { computeUserHealthScoreFastPath } from "@/lib/analytics/health-score-fast-path";
+import { computeUserHealthScore } from "@/lib/analytics/score/reader";
 import {
   buildDashboardBands as buildTargetBands,
   type DashboardTargetBands,
 } from "@/lib/dashboard/bands";
 import type {
-  HealthScoreBand,
   RestModeAnnotation,
-} from "@/lib/analytics/health-score";
+  ScoreBand,
+  ScoreDeltaReason,
+  ScorePillarId,
+} from "@/lib/analytics/score/types";
+import type { DerivedConfidence } from "@/lib/insights/derived/types";
 import { resolveRestMode } from "@/lib/illness/rest-mode";
 import { resolveModuleMap, type ModuleKey } from "@/lib/modules/gate";
 import {
@@ -326,8 +325,13 @@ export interface DashboardLayoutCatalogueEntry {
  */
 export interface DashboardSnapshotHealthScore {
   score: number;
-  band: HealthScoreBand;
+  band: ScoreBand;
   delta: number | null;
+  confidence?: DerivedConfidence;
+  composition?: ScorePillarId[];
+  deltaReason?: ScoreDeltaReason | null;
+  scoreVersion?: number;
+  bandSetter?: ScorePillarId | null;
   /**
    * v1.18.1 — Rest Mode annotation. When an illness/condition episode is
    * active the dashboard frames the score ("you were unwell during this
@@ -479,12 +483,11 @@ export interface SnapshotUserInput {
   insightsCachedText: string | null;
   insightsCachedAt: Date | null;
   dashboardWidgetsJson: unknown;
+  /** Raw source-priority settings already loaded with the authenticated user. */
+  sourcePriorityJson?: unknown;
   /**
-   * v1.34 — the raw `User.thresholdsJson` blob. The hero ring's weight
-   * pillar and the dashboard's weight bands both grade against the user's
-   * OWN target when one is set, so the builder needs the overrides the
-   * `/targets` editor writes. Parsed at the point of use through
-   * `ThresholdOverridesJson`.
+   * Raw personal targets used by the unscored weight-goal context row and
+   * dashboard reference bands.
    */
   thresholdsJson: unknown;
 }
@@ -593,15 +596,13 @@ async function buildNutrientWaterBlock(
  * this entirely and emits `extras: null` + `healthScore: null`
  * (per-tile shimmer until the boot backfill converges).
  *
- * The health score rides this warm phase because it reuses the BP
- * windows already computed here (`gradedScore` + `last30Days.pct`) and
- * the same coverage map, so the score's weight pillar also stays on
- * the rollup branch.
+ * The Health Score rides this warm phase because it reuses the BP windows and
+ * coverage map. Weight remains in the warm gate for the unscored personal-goal
+ * row, which must not force a dense live fallback while the rollup backfill is
+ * pending.
  *
- * v1.34 — takes the resolved module map. The hero ring used to score a
- * mood pillar for accounts that had switched the mood module off, while
- * the Insights card (which does resolve the module) dropped it: one
- * score, two compositions, two surfaces.
+ * v1.34 — takes the resolved module map so a disabled mental-assessment module
+ * cannot leave WELLBEING in this composition while Insights omits it.
  */
 async function buildExtras(
   prisma: PrismaClient,
@@ -628,32 +629,79 @@ async function buildExtras(
   // analytics route uses.
   let bpEnvelope: BpInTargetEnvelope | null = null;
   let bpEnvelopePriorWeek: BpInTargetEnvelope | null = null;
+  let bpEnvelopePriorTwoWeeks: BpInTargetEnvelope | null = null;
 
-  const bpTargets = getBpTargets(user.dateOfBirth);
+  const bpTargets = resolveEffectiveBpTargets(
+    {
+      dateOfBirth: user.dateOfBirth,
+      gender: user.gender,
+      heightCm: user.heightCm ?? null,
+    },
+    user.thresholdsJson,
+  );
+  const clinicalBpTargets = getBpTargets(user.dateOfBirth);
   if (bpTargets) {
     // v1.17 W1b — two runs (current + prior-week), identical to the
     // analytics route, so the dashboard ring's week-over-week delta reflects
     // BP movement instead of zeroing it out. Both reuse the already-probed
     // coverage map and share the rollup/live branch decision.
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const [windows, windowsPriorWeek] = await Promise.all([
-      computeBpInTargetFastPath({
-        userId: user.id,
-        targets: bpTargets,
-        now,
-        coverage,
-        userTz,
-      }),
-      computeBpInTargetFastPath({
-        userId: user.id,
-        targets: bpTargets,
-        now: sevenDaysAgo,
-        coverage,
-        userTz,
-      }),
-    ]);
-    bpEnvelope = windows;
-    bpEnvelopePriorWeek = windowsPriorWeek;
+    const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+    const [windows, windowsPriorWeek, windowsPriorTwoWeeks] = await Promise.all(
+      [
+        computeBpInTargetFastPath({
+          userId: user.id,
+          targets: bpTargets,
+          now,
+          coverage,
+          userTz,
+        }),
+        computeBpInTargetFastPath({
+          userId: user.id,
+          targets: bpTargets,
+          now: sevenDaysAgo,
+          coverage,
+          userTz,
+        }),
+        computeBpInTargetFastPath({
+          userId: user.id,
+          targets: bpTargets,
+          now: fourteenDaysAgo,
+          coverage,
+          userTz,
+        }),
+      ],
+    );
+    if (bpTargetsEqual(bpTargets, clinicalBpTargets)) {
+      bpEnvelope = windows;
+      bpEnvelopePriorWeek = windowsPriorWeek;
+      bpEnvelopePriorTwoWeeks = windowsPriorTwoWeeks;
+    } else if (clinicalBpTargets) {
+      [bpEnvelope, bpEnvelopePriorWeek, bpEnvelopePriorTwoWeeks] =
+        await Promise.all([
+          computeBpInTargetFastPath({
+            userId: user.id,
+            targets: clinicalBpTargets,
+            now,
+            coverage,
+            userTz,
+          }),
+          computeBpInTargetFastPath({
+            userId: user.id,
+            targets: clinicalBpTargets,
+            now: sevenDaysAgo,
+            coverage,
+            userTz,
+          }),
+          computeBpInTargetFastPath({
+            userId: user.id,
+            targets: clinicalBpTargets,
+            now: fourteenDaysAgo,
+            coverage,
+            userTz,
+          }),
+        ]);
+    }
     // v1.17 W1d — the headline standardises on the trailing-90-day
     // window (labelled "· 90 T" in the tile), identical to the analytics
     // route, so the dashboard tile and the insights surface never narrate
@@ -686,55 +734,63 @@ async function buildExtras(
   // ring and the insights card grade the pillar off identical inputs (same
   // 90-day window via W1d, same all-time fallback, same graded score, same
   // prior-week delta values). Closes the dashboard-vs-insights divergence.
-  const bpInputs = buildHealthScoreBpInputs(bpEnvelope, bpEnvelopePriorWeek);
-  // v1.34 — the weight yardstick, resolved through the same shared builder the
-  // analytics route uses. A target reaches the pillar only when the account
-  // set one; otherwise the pillar scores the bare trend on both surfaces.
-  const weightTargetInputs = buildHealthScoreWeightTarget(
-    {
-      heightCm: user.heightCm,
-      dateOfBirth: user.dateOfBirth,
-      gender: user.gender,
-    },
-    (user.thresholdsJson ?? null) as ThresholdOverridesJson | null,
-  );
+  const scoreSourcePriority = user.sourcePriorityJson ?? null;
   const scoreResult = await time("healthScore", () =>
-    computeUserHealthScoreFastPath({
+    computeUserHealthScore({
+      prisma,
       userId: user.id,
-      ...bpInputs,
-      ...weightTargetInputs,
       now,
-      coverage,
-      // v1.34 — the mood module gates the pillar here exactly as it does on
-      // `/api/analytics`. Before this the ring scored a pillar the account
-      // had switched off everywhere else.
-      moodEnabled: modules.mood !== false,
+      profile: {
+        dateOfBirth: user.dateOfBirth,
+        gender: user.gender,
+        heightCm: user.heightCm,
+        timezone: userTz,
+        sourcePriorityJson: scoreSourcePriority,
+        thresholdsJson: user.thresholdsJson,
+      },
+      modules: {
+        glucose: modules.glucose !== false,
+        labs: modules.labs !== false,
+        sleep: modules.sleep !== false,
+        mentalHealth: modules.mentalHealth !== false,
+      },
+      bpTargets: clinicalBpTargets,
+      bpEnvelope,
+      bpEnvelopePriorWeek,
+      bpEnvelopePriorTwoWeeks,
     }),
   );
   // v1.18.1 — resolve the value-free Rest Mode annotation alongside the score
   // so the dashboard hero can frame (never penalise) the number, matching the
   // `/api/analytics` payload + iOS. Fail-soft inside `resolveRestMode`, and
   // only resolved when a score actually rendered.
-  const restMode: RestModeAnnotation | null = scoreResult
-    ? await (async () => {
-        const ctx = await resolveRestMode(user.id, now);
-        return ctx.active
-          ? {
-              active: true,
-              since: ctx.since,
-              episodeCount: ctx.episodeCount,
-            }
-          : null;
-      })()
-    : null;
-  const healthScore: DashboardSnapshotHealthScore | null = scoreResult
-    ? {
-        score: scoreResult.score,
-        band: scoreResult.band,
-        delta: scoreResult.delta,
-        restMode,
-      }
-    : null;
+  const restMode: RestModeAnnotation | null =
+    scoreResult.composite.status === "ok"
+      ? await (async () => {
+          const ctx = await resolveRestMode(user.id, now);
+          return ctx.active
+            ? {
+                active: true,
+                since: ctx.since,
+                episodeCount: ctx.episodeCount,
+              }
+            : null;
+        })()
+      : null;
+  const healthScore: DashboardSnapshotHealthScore | null =
+    scoreResult.composite.status === "ok"
+      ? {
+          score: scoreResult.composite.value.score,
+          band: scoreResult.composite.value.band,
+          delta: scoreResult.delta,
+          confidence: scoreResult.composite.confidence,
+          composition: scoreResult.composite.value.composition,
+          deltaReason: scoreResult.deltaReason,
+          scoreVersion: scoreResult.scoreVersion,
+          bandSetter: scoreResult.composite.value.bandSetter,
+          restMode,
+        }
+      : null;
 
   const glucoseSince = new Date(
     Date.now() - GLUCOSE_PANEL_WINDOW_DAYS * 24 * 60 * 60 * 1000,
@@ -950,27 +1006,27 @@ function buildLayoutCatalogue(
  * DAY bucket — one fresh wearable reading whose async fold hadn't
  * landed yet zeroed the hero score, while the insights analytics
  * route (which calls the self-gating helpers unconditionally) kept
- * showing a score for the same account. Mirrors the v1.4.38.8
- * per-type pattern already inside `computeBpInTargetFastPath` and
- * `computeUserHealthScoreFastPath`: gate only on the types the thick
- * phase actually reads through the rollup tier — WEIGHT (score weight
- * pillar) + BLOOD_PRESSURE_SYS / _DIA (BP windows + BP pillar).
+ * showing a score for the same account. Gate only the dense types the thick
+ * phase might otherwise read live: blood-pressure pairs and activity slices.
+ * Sparse weight rows feed the unscored personal-goal disclosure and remain
+ * cheap; every other score input is naturally sparse.
  *
  * `!== false` rather than `=== true`: a type ABSENT from the map has
  * zero measurements, so the helpers' own live fallbacks are trivially
  * cheap (empty reads) and absence must not cold the phase. A type
- * present-but-`false` has live rows without buckets — for the three
- * gated types that is exactly the multi-second live fallback the
- * snapshot must never wait on, so the phase stays `null` until the
- * backfill converges. An empty map is a fresh account with no
- * measurements at all — nothing to compute, stay `null`.
+ * present-but-`false` has live rows without buckets — for these dense types
+ * that is exactly the multi-second live fallback the snapshot must never
+ * wait on, so the phase stays `null` until the backfill converges.
+ * An empty map is a fresh account with no measurements at all — nothing to
+ * compute, so the thick phase stays `null`.
  */
 function isThickPhaseWarm(coverage: RollupCoverageMap): boolean {
   if (coverage.size === 0) return false;
   return (
     coverage.get("WEIGHT") !== false &&
     coverage.get("BLOOD_PRESSURE_SYS") !== false &&
-    coverage.get("BLOOD_PRESSURE_DIA") !== false
+    coverage.get("BLOOD_PRESSURE_DIA") !== false &&
+    coverage.get("ACTIVITY_STEPS") !== false
   );
 }
 

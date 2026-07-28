@@ -3,7 +3,7 @@
 import { HeartPulse } from "lucide-react";
 
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
-import type { RestModeAnnotation } from "@/lib/analytics/health-score";
+import type { RestModeAnnotation } from "@/lib/analytics/score/types";
 
 /**
  * v1.18.1 — calm, neutral Rest Mode indicator.

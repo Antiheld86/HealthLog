@@ -18,6 +18,7 @@
  */
 import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import { prisma } from "@/lib/db";
+import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
 import { emitDataArrival } from "@/lib/arrivals/emit-shared";
 import { decryptFactData } from "@/lib/documents/store";
 import { resolveOrMintBiomarker } from "@/lib/labs/biomarker-store";
@@ -105,6 +106,7 @@ async function commitObservation(
       noteEncrypted: null,
     },
   });
+  invalidateUserHealthScore(userId);
 
   // v1.31.0 — the labs arm of the data-arrival spine. A "panel" has no
   // first-class entity in the schema (it is a nullable label plus a `takenAt`),

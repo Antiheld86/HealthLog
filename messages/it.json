@@ -2243,38 +2243,86 @@
     "heroActionAskCoach": "Chiedi al coach",
     "healthScore": {
       "label": "Punteggio di salute",
-      "progressAria": "Avanzamento del punteggio di salute",
-      "deltaVsLastWeek": "{delta} rispetto alla settimana scorsa",
-      "deltaUnavailable": "Ancora nessuno storico — ripassa la prossima settimana.",
-      "restModePaused": "In pausa durante la malattia — oggi il tuo punteggio non viene valutato.",
-      "componentBp": "PA",
-      "componentWeight": "Peso",
-      "componentMood": "Umore",
-      "componentCompliance": "Aderenza",
-      "weightTarget": {
-        "user": "Valutato rispetto al tuo obiettivo, {range}.",
-        "none": "Valutato solo sull'andamento, nessun obiettivo impostato."
+      "algorithmChanged": "Il punteggio usa ora intervalli di riferimento cardiometabolici pubblicati; il peso non è più incluso perché il vecchio obiettivo derivava dall'altezza anziché da un obiettivo personale, la variabilità quotidiana dell'umore e l'aderenza ai farmaci sono azioni anziché stati di salute, e la frequenza cardiaca a riposo e l'HRV non hanno un obiettivo universale. I progressi del peso restano visibili sotto come contesto personale, gli altri segnali conservano le proprie schede e un numero nuovo non significa che la tua salute sia cambiata.",
+      "dismissAlgorithmChanged": "Chiudi la nota sul metodo",
+      "band": {
+        "green": "Nell'intervallo di riferimento",
+        "yellow": "Alcuni pilastri richiedono attenzione",
+        "red": "Uno o più pilastri sono fuori dall'intervallo di riferimento"
       },
-      "deltaExplainer": {
-        "title": "Come si calcola la variazione",
-        "description": "Variazione rispetto alla settimana scorsa: {delta}",
-        "body": "Il punteggio combina PA, peso, umore e aderenza. Confrontiamo il punteggio di oggi con quello dello stesso momento della settimana scorsa. Registra una nuova misurazione o una nota di umore per spingerlo verso l'alto."
+      "method": "Media con peso uguale dei pilastri idonei. Il pilastro più basso determina la fascia complessiva.",
+      "insufficient": "{count} pilastri idonei. Il punteggio ne richiede almeno tre, incluso un pilastro fisiologico misurato.",
+      "composition": "Inclusi: {pillars}",
+      "bandSetter": "Fascia complessiva determinata da {pillar}",
+      "versionAndNoise": "Versione del metodo {version}. Soglia del confronto settimanale: {noise} punti.",
+      "methodVersion": "Versione del metodo {version}.",
+      "none": "nessuno",
+      "delta": "{delta} rispetto al periodo precedente confrontabile",
+      "deltaReason": {
+        "algorithm_changed": "Nessun confronto perché è cambiato il metodo di calcolo.",
+        "composition_changed": "Nessun confronto perché sono cambiati i pilastri inclusi.",
+        "first_eligibility_window": "Nessun confronto perché questo è il primo periodo idoneo.",
+        "below_noise_floor": "La variazione rientra nella fluttuazione combinata delle misurazioni.",
+        "no_previous_window": "Non è disponibile un periodo precedente confrontabile.",
+        "no_current_score": "Nessun confronto perché il periodo attuale non è idoneo."
       },
-      "provenance": {
-        "toggle": "Composto da",
-        "mixedBanner": "Alcuni componenti combinano più fonti. Il dettaglio mostra il valore più recente per componente.",
-        "footnote": "I pesi sono ricalcolati in base ai dati effettivamente disponibili.",
-        "asOfLabel": "al {date}",
-        "provisional": "Provvisorio — solo {count} di {total} valori disponibili",
-        "provisionalBadge": "Provvisorio",
-        "sourceAria": "Fonte: {source}",
-        "sources": {
-          "manual": "Manuale",
-          "withings": "Withings",
-          "appleHealth": "Apple Health",
-          "mixed": "Misto",
-          "none": "Nessun dato"
-        }
+      "restMode": "Modalità riposo attiva dal {since}. Il punteggio è mostrato come contesto e non viene penalizzato.",
+      "pillar": {
+        "bloodPressure": "Pressione arteriosa",
+        "glycaemia": "Glicemia",
+        "activity": "Attività",
+        "sleep": "Sonno",
+        "adiposity": "Adiposità",
+        "wellbeing": "Benessere",
+        "fitness": "Forma fisica misurata",
+        "lipids": "Lipidi"
+      },
+      "observed": "Osservato: {value}",
+      "reference": "Riferimento: {value}",
+      "fastingObserved": "Glicemia a digiuno: {value} {unit}",
+      "fastingReference": "Da {low} a {high} {unit} a digiuno",
+      "personalReference": "Il tuo obiettivo: {value}",
+      "source": "Fonte: {source}, al {date}",
+      "observedActivity": "{value} passi al giorno",
+      "observedSleep": "{value} minuti per notte",
+      "observedAdiposity": "Rapporto vita-altezza {value}",
+      "observedFitness": "{value} {unit}, misurato",
+      "referenceActivity": "Il beneficio si stabilizza a {high} passi al giorno",
+      "referenceSleep": "Almeno {low} minuti per notte; il sonno più lungo non viene penalizzato",
+      "referenceAdiposity": "Rapporto vita-altezza inferiore a {high}",
+      "referenceFitness": "Da {low} a {high} {unit}, intervallo di riferimento per età e sesso",
+      "referenceHba1c": "HbA1c da {low} a {high}%",
+      "referenceDetail": "{label} · {source} · {kind} · da {low} a {high}",
+      "openBound": "aperto",
+      "laboratoryReferenceSource": "Intervalli di riferimento del laboratorio",
+      "personalTargetSource": "Obiettivo personale",
+      "referenceKind": {
+        "clinical": "Soglia clinica",
+        "population": "Percentile della popolazione",
+        "guideline": "Intervallo delle linee guida"
+      },
+      "reason": {
+        "readFailed": "Impossibile caricare i dati",
+        "notTracked": "Non monitorato",
+        "missingProfile": "Manca l'età o il profilo di riferimento",
+        "missingHeight": "Manca l'altezza",
+        "incompletePanel": "È necessario un pannello recente completo con intervalli di riferimento",
+        "crisis": "Al posto del punteggio vengono mostrate indicazioni di sicurezza",
+        "insufficientHistory": "Dati recenti idonei insufficienti",
+        "unavailable": "Questo pilastro non è attualmente idoneo"
+      },
+      "pillarInsufficient": "Nessun punteggio per il pilastro: {reason}",
+      "tension": "I segnali di preparazione differiscono. Favorevoli: {positive}. Sotto sforzo: {negative}.",
+      "returnToBand": "{metric} è di nuovo nel tuo intervallo abituale da {days} giorni.",
+      "weightGoal": {
+        "title": "Obiettivo di peso personale",
+        "value": "Ora {current} {unit}. Obiettivo da {min} a {max} {unit}. Distanza dall'obiettivo: {distance} {unit}.",
+        "delta": "La distanza dall'obiettivo è cambiata di {delta} {unit} dalla misurazione precedente.",
+        "noDelta": "Non è disponibile una misurazione del peso precedente per il confronto.",
+        "no_personal_goal": "Imposta un obiettivo di peso personale per vedere qui i progressi.",
+        "weight_not_tracked": "Registra il peso per vedere i progressi verso il tuo obiettivo.",
+        "read_failed": "Non è stato possibile caricare i dati del peso. Riprova.",
+        "notScored": "I progressi verso l'obiettivo di peso sono un contesto personale e non influenzano il punteggio di salute."
       }
     },
     "suggestedPrompts": {

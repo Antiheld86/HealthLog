@@ -70,9 +70,8 @@ async function fetchFeatureFlags(): Promise<FeatureFlagsPayload> {
  * remount within a minute. The hook fails open — any network error
  * returns the all-on default so the user keeps seeing the surface.
  *
- * The hook is referenced from a long tail of legacy presentational
- * components (`<InsightStatusCard>`, `<HealthScoreDeltaExplainer>`)
- * whose unit tests render the component without a
+ * The hook is referenced from presentational components such as
+ * `<InsightStatusCard>` whose unit tests render without a
  * `<QueryClientProvider>`. To keep those tests valid we delegate
  * the React-Query call to a child hook that's only invoked when a
  * client is mounted. The branch is stable across the component's
