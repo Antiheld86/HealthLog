@@ -780,6 +780,8 @@
       "hydrated": "bevuto acqua",
       "walked": "camminato",
       "alcohol": "alcol",
+      "caffeine": "caffeina",
+      "nicotine": "nicotina",
       "family": "famiglia",
       "friends": "amici",
       "party": "festa",
@@ -2107,6 +2109,15 @@
     "notAvailableForCompliance": "Confronto non disponibile per l’aderenza"
   },
   "insights": {
+    "pattern": {
+      "dismiss": "Ignora",
+      "dismissed": "Questo schema resta ignorato finché i dati non cambiano.",
+      "restore": "Mostra di nuovo",
+      "dismissError": "Impossibile ignorare questo schema.",
+      "restoreError": "Impossibile ripristinare questo schema.",
+      "loadError": "Impossibile caricare gli schemi.",
+      "empty": "Nessuno schema attuale ha superato la soglia di evidenza."
+    },
     "correlation": {
       "direction": {
         "higher": "salire",
@@ -5327,6 +5338,7 @@
       "connected": "Connesso",
       "errorReconnect": "Errore — riconnetti",
       "warningServerError": "Sincronizzazione in errore",
+      "failureCount": "{count}/{threshold}",
       "parkedReconnect": "In pausa — riconnettere manualmente",
       "notConnected": "Non connesso",
       "justNow": "proprio ora",
@@ -8856,6 +8868,8 @@
       "description": "Descrizione",
       "descriptionPlaceholder": "Cosa misura (facoltativo)",
       "targetHint": "L'intervallo obiettivo è facoltativo e viene disegnato come una banda sul grafico.",
+      "correlationEnabled": "Usa nell’analisi delle correlazioni",
+      "correlationEnabledHint": "Aggiunge questa metrica come canale comportamentale giornaliero con un limite. È disattivata per impostazione predefinita.",
       "requiredError": "Nome e unità sono obbligatori",
       "rangeOrderError": "L'obiettivo minimo non può superare quello massimo",
       "save": "Salva",

@@ -43,6 +43,7 @@ import {
 
 import {
   IntegrationErrorMessage,
+  pillFailurePropsFor,
   pillStateFor,
   pillTimestampFor,
   type IntegrationStatusViewModel,
@@ -218,6 +219,7 @@ export function WhoopCard({
           <IntegrationStatusPill
             state={pillState}
             lastSyncAt={pillLastSyncAt}
+            {...pillFailurePropsFor(viewModel)}
           />
         }
       />

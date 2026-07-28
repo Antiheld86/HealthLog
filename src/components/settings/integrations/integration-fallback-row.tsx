@@ -29,6 +29,7 @@ import {
 import { useTranslations } from "@/lib/i18n/context";
 
 import {
+  pillFailurePropsFor,
   pillStateFor,
   pillTimestampFor,
   type IntegrationKey,
@@ -89,6 +90,7 @@ export function IntegrationFallbackRow({
           <IntegrationStatusPill
             state={pillState}
             lastSyncAt={pillTimestampFor(status)}
+            {...pillFailurePropsFor(status)}
             now={now}
           />
         }

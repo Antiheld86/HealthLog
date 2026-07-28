@@ -13,7 +13,11 @@ import { join, sep } from "node:path";
 import { globSync } from "node:fs";
 
 import type { SyncVerdict } from "@/lib/integrations/sync-verdict";
-import { pillStateForVerdict } from "../shared";
+import {
+  pickStatus,
+  pillFailurePropsFor,
+  pillStateForVerdict,
+} from "../shared";
 
 describe("pillStateForVerdict — the verdict→pill table", () => {
   const table: Array<[SyncVerdict | undefined, string]> = [
@@ -47,6 +51,61 @@ describe("pillStateForVerdict — the verdict→pill table", () => {
     expect(red).toEqual(["reauth_required"]);
     expect(pillStateForVerdict("failing")).not.toBe("error");
     expect(pillStateForVerdict("stalled")).not.toBe("error");
+  });
+});
+
+describe("pillFailurePropsFor", () => {
+  it("projects the active bucket and envelope threshold onto the pill", () => {
+    const status = pickStatus(
+      {
+        threshold: 3,
+        integrations: [
+          {
+            integration: "withings",
+            state: "error_transient",
+            lastSuccessAt: null,
+            lastAttemptAt: "2026-07-28T12:00:00.000Z",
+            lastError: "upstream unavailable",
+            consecutiveFailuresByKind: {
+              transient: 2,
+              reauth_required: 0,
+              persistent: 1,
+            },
+          },
+        ],
+      },
+      "withings",
+    );
+
+    expect(pillFailurePropsFor(status)).toEqual({
+      failureCount: 2,
+      failureThreshold: 3,
+    });
+  });
+
+  it("returns no ratio for a healthy zero-count status", () => {
+    const status = pickStatus(
+      {
+        threshold: 3,
+        integrations: [
+          {
+            integration: "withings",
+            state: "connected",
+            lastSuccessAt: "2026-07-28T12:00:00.000Z",
+            lastAttemptAt: "2026-07-28T12:00:00.000Z",
+            lastError: null,
+            consecutiveFailuresByKind: {
+              transient: 0,
+              reauth_required: 0,
+              persistent: 0,
+            },
+          },
+        ],
+      },
+      "withings",
+    );
+
+    expect(pillFailurePropsFor(status)).toEqual({});
   });
 });
 

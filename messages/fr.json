@@ -780,6 +780,8 @@
       "hydrated": "bu de l'eau",
       "walked": "marché",
       "alcohol": "alcool",
+      "caffeine": "caféine",
+      "nicotine": "nicotine",
       "family": "famille",
       "friends": "amis",
       "party": "fête",
@@ -2107,6 +2109,15 @@
     "notAvailableForCompliance": "Comparaison indisponible pour l’observance"
   },
   "insights": {
+    "pattern": {
+      "dismiss": "Ignorer",
+      "dismissed": "Ce schéma reste ignoré jusqu’à ce que les données changent.",
+      "restore": "Afficher à nouveau",
+      "dismissError": "Impossible d’ignorer ce schéma.",
+      "restoreError": "Impossible de restaurer ce schéma.",
+      "loadError": "Impossible de charger les schémas.",
+      "empty": "Aucun schéma actuel n’a franchi le seuil de preuve."
+    },
     "correlation": {
       "direction": {
         "higher": "augmenter",
@@ -5327,6 +5338,7 @@
       "connected": "Connecté",
       "errorReconnect": "Erreur — reconnecter",
       "warningServerError": "Échec de synchronisation",
+      "failureCount": "{count}/{threshold}",
       "parkedReconnect": "En pause — reconnecter manuellement",
       "notConnected": "Non connecté",
       "justNow": "à l’instant",
@@ -8856,6 +8868,8 @@
       "description": "Description",
       "descriptionPlaceholder": "Ce que cela mesure (facultatif)",
       "targetHint": "La plage cible est facultative et s'affiche comme une bande sur le graphique.",
+      "correlationEnabled": "Utiliser dans l’analyse des corrélations",
+      "correlationEnabledHint": "Ajoute cette mesure comme canal comportemental quotidien plafonné. Désactivé par défaut.",
       "requiredError": "Le nom et l'unité sont obligatoires",
       "rangeOrderError": "La cible basse ne doit pas dépasser la cible haute",
       "save": "Enregistrer",

@@ -9,6 +9,15 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const { addWarningMock } = vi.hoisted(() => ({
+  addWarningMock: vi.fn(),
+}));
+
+vi.mock("@/lib/logging/context", () => ({
+  annotate: vi.fn(),
+  getEvent: () => ({ addWarning: addWarningMock }),
+}));
+
 vi.mock("@/lib/db", () => ({
   prisma: {
     integrationStatus: {
@@ -28,7 +37,7 @@ vi.mock("@/lib/auth/audit", () => ({
 }));
 
 vi.mock("@/lib/notifications/dispatcher", () => ({
-  dispatchNotification: vi.fn().mockResolvedValue(undefined),
+  dispatchNotification: vi.fn(),
 }));
 
 vi.mock("@/lib/crypto", () => ({
@@ -56,6 +65,11 @@ import { dispatchNotification } from "@/lib/notifications/dispatcher";
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(dispatchNotification).mockResolvedValue({
+    dispatched: true,
+    channelsAttempted: 1,
+    channelsSucceeded: 1,
+  });
   delete process.env.INTEGRATION_FAILURE_ALERT_THRESHOLD;
 });
 
@@ -205,6 +219,90 @@ describe("recordSyncFailure — at threshold", () => {
         data: expect.objectContaining({ alertedAt: expect.any(Date) }),
       }),
     );
+  });
+
+  it("does not stamp alertedAt when no admin channel is available", async () => {
+    vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
+      consecutiveFailuresByKind: {
+        transient: 2,
+        reauth_required: 0,
+        persistent: 0,
+      },
+      persistentFailureStartedAt: null,
+      alertedAt: null,
+    } as never);
+    vi.mocked(prisma.integrationStatus.upsert).mockResolvedValueOnce({
+      alertedAt: null,
+    } as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      email: "user@example.com",
+    } as never);
+    vi.mocked(prisma.user.findMany).mockResolvedValueOnce([
+      { id: "admin-1" },
+    ] as never);
+    vi.mocked(dispatchNotification).mockResolvedValueOnce({
+      dispatched: false,
+      channelsAttempted: 0,
+      channelsSucceeded: 0,
+    });
+
+    await recordSyncFailure({
+      userId: "u1",
+      integration: "withings",
+      kind: "transient",
+      message: "Withings refresh error: 503 - upstream service down",
+      errorCode: "503",
+    });
+
+    expect(dispatchNotification).toHaveBeenCalledOnce();
+    expect(prisma.integrationStatus.update).not.toHaveBeenCalled();
+    expect(addWarningMock).toHaveBeenCalledWith(
+      "No admin notification channel available for withings failure alert",
+    );
+  });
+
+  it("stamps alertedAt after an attempted delivery that failed", async () => {
+    vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
+      consecutiveFailuresByKind: {
+        transient: 2,
+        reauth_required: 0,
+        persistent: 0,
+      },
+      persistentFailureStartedAt: null,
+      alertedAt: null,
+    } as never);
+    vi.mocked(prisma.integrationStatus.upsert).mockResolvedValueOnce({
+      alertedAt: null,
+    } as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      email: "user@example.com",
+    } as never);
+    vi.mocked(prisma.user.findMany).mockResolvedValueOnce([
+      { id: "admin-1" },
+    ] as never);
+    vi.mocked(dispatchNotification).mockResolvedValueOnce({
+      dispatched: false,
+      channelsAttempted: 1,
+      channelsSucceeded: 0,
+    });
+    vi.mocked(prisma.integrationStatus.update).mockResolvedValueOnce(
+      {} as never,
+    );
+
+    await recordSyncFailure({
+      userId: "u1",
+      integration: "withings",
+      kind: "transient",
+      message: "Withings refresh error: 503 - upstream service down",
+      errorCode: "503",
+    });
+
+    expect(prisma.integrationStatus.update).toHaveBeenCalledWith({
+      where: {
+        userId_integration: { userId: "u1", integration: "withings" },
+      },
+      data: { alertedAt: expect.any(Date) },
+    });
   });
 
   it("uses the custom threshold from INTEGRATION_FAILURE_ALERT_THRESHOLD", async () => {
@@ -398,8 +496,8 @@ describe("recordSyncFailure — persistent (v1.4.42 W6)", () => {
   });
 });
 
-describe("recordSyncFailure — admin Telegram skipped silently when no admins", () => {
-  it("logs a wide-event warning but does NOT throw when no admin users exist", async () => {
+describe("recordSyncFailure — no admin recipients", () => {
+  it("surfaces the unavailable delivery and leaves alertedAt unstamped", async () => {
     // Seed bucket at 2 so the in-memory increment hits the threshold
     // and the no-admins branch is the one being exercised.
     vi.mocked(prisma.integrationStatus.findUnique).mockResolvedValueOnce({
@@ -418,9 +516,6 @@ describe("recordSyncFailure — admin Telegram skipped silently when no admins",
       email: "u@example.com",
     } as never);
     vi.mocked(prisma.user.findMany).mockResolvedValueOnce([] as never);
-    vi.mocked(prisma.integrationStatus.update).mockResolvedValueOnce(
-      {} as never,
-    );
 
     await expect(
       recordSyncFailure({
@@ -432,6 +527,10 @@ describe("recordSyncFailure — admin Telegram skipped silently when no admins",
     ).resolves.toBeUndefined();
 
     expect(dispatchNotification).not.toHaveBeenCalled();
+    expect(prisma.integrationStatus.update).not.toHaveBeenCalled();
+    expect(addWarningMock).toHaveBeenCalledWith(
+      "No admin notification channel available for withings failure alert",
+    );
   });
 });
 

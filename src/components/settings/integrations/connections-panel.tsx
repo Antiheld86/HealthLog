@@ -185,6 +185,8 @@ function toOAuthStatus(
     lastAttemptAt: vm.lastAttemptAt,
     lastError: vm.lastError,
     legacyLastSyncedAt: vm.legacyLastSyncedAt,
+    consecutiveFailuresByKind: vm.consecutiveFailuresByKind,
+    failureThreshold: vm.failureThreshold,
     syncHealth: vm.syncHealth,
     metricFreshness: vm.metricFreshness,
   };
@@ -310,11 +312,16 @@ export function ConnectionsPanel() {
     pickStatus(integrationStatus, "strava"),
   );
   const nightscoutViewModel = pickStatus(integrationStatus, "nightscout");
-  const unclaimedIntegrations = (integrationStatus?.integrations ?? []).filter(
-    (entry) =>
-      !CARD_BACKED_INTEGRATIONS.has(entry.integration) &&
-      (entry.configured || entry.connected),
-  );
+  const unclaimedIntegrations = (integrationStatus?.integrations ?? [])
+    .filter(
+      (entry) =>
+        !CARD_BACKED_INTEGRATIONS.has(entry.integration) &&
+        (entry.configured || entry.connected),
+    )
+    .map((entry) => ({
+      ...entry,
+      failureThreshold: integrationStatus?.threshold,
+    }));
 
   return (
     <div className="space-y-6" data-slot="connections-panel">

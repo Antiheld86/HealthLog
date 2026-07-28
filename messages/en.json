@@ -780,6 +780,8 @@
       "hydrated": "hydrated",
       "walked": "walked",
       "alcohol": "alcohol",
+      "caffeine": "caffeine",
+      "nicotine": "nicotine",
       "family": "family",
       "friends": "friends",
       "party": "party",
@@ -2107,6 +2109,15 @@
     "notAvailableForCompliance": "Comparison N/A for adherence"
   },
   "insights": {
+    "pattern": {
+      "dismiss": "Dismiss",
+      "dismissed": "This pattern is dismissed until its evidence changes.",
+      "restore": "Show again",
+      "dismissError": "Could not dismiss this pattern.",
+      "restoreError": "Could not restore this pattern.",
+      "loadError": "Patterns could not be loaded.",
+      "empty": "No current pattern cleared the evidence threshold."
+    },
     "correlation": {
       "direction": {
         "higher": "higher",
@@ -5327,6 +5338,7 @@
       "connected": "Connected",
       "errorReconnect": "Error — reconnect",
       "warningServerError": "Sync failing",
+      "failureCount": "{count}/{threshold}",
       "parkedReconnect": "Paused — reconnect manually",
       "notConnected": "Not connected",
       "justNow": "just now",
@@ -8856,6 +8868,8 @@
       "description": "Description",
       "descriptionPlaceholder": "What this measures (optional)",
       "targetHint": "The target range is optional and is drawn as a band on the chart.",
+      "correlationEnabled": "Use in correlation discovery",
+      "correlationEnabledHint": "Adds this metric as a bounded daily behaviour channel. It remains off by default.",
       "requiredError": "Name and unit are required",
       "rangeOrderError": "Target low must not exceed target high",
       "save": "Save",

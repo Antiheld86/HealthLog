@@ -44,10 +44,16 @@ vi.mock("@/lib/jobs/worker-status", () => ({
   })),
 }));
 
+vi.mock("@/lib/jobs/job-failures", () => ({
+  JOB_FAILURE_WINDOW_HOURS: 72,
+  readFailingQueues: vi.fn(),
+}));
+
 // v1.4.25 W21 Fix-K — `/api/admin/status` now reads the legacy-form
 import { GET } from "../route";
 import { prisma } from "@/lib/db";
 import { requireAdmin, HttpError } from "@/lib/api-handler";
+import { readFailingQueues } from "@/lib/jobs/job-failures";
 
 const ADMIN_CTX = {
   authMethod: "cookie" as const,
@@ -69,6 +75,7 @@ beforeEach(() => {
   vi.mocked(prisma.apiToken.count).mockResolvedValue(0);
   vi.mocked(prisma.session.count).mockResolvedValue(0);
   vi.mocked(prisma.appSettings.findUnique).mockResolvedValue(null);
+  vi.mocked(readFailingQueues).mockResolvedValue([]);
 });
 
 describe("GET /api/admin/status (integration health summary)", () => {
@@ -148,7 +155,7 @@ describe("GET /api/admin/status (integration health summary)", () => {
     const body = (await res.json()) as {
       data: {
         counts: Record<string, number>;
-        worker: { running: boolean };
+        worker: { running: boolean; errors?: number };
         database: string;
       };
     };
@@ -161,10 +168,44 @@ describe("GET /api/admin/status (integration health summary)", () => {
       activeSessions: 0,
     });
     expect(body.data.worker.running).toBe(true);
+    expect(body.data.worker).not.toHaveProperty("errors");
     expect(body.data.database).toBe("connected");
 
     // Regression: only NON-revoked tokens are counted as "active".
     const tokenCallArgs = vi.mocked(prisma.apiToken.count).mock.calls[0]?.[0];
     expect(tokenCallArgs).toEqual({ where: { revoked: false } });
+  });
+
+  it("reports named failing queues through failingJobs only", async () => {
+    vi.mocked(readFailingQueues).mockResolvedValueOnce([
+      {
+        queue: "environment-fetch",
+        failures: 2,
+        lastFailedAt: "2026-07-28T12:00:00.000Z",
+        lastError: "upstream unavailable",
+      },
+    ]);
+
+    const res = await GET();
+    const body = (await res.json()) as {
+      data: {
+        worker: Record<string, unknown>;
+        failingJobs: {
+          windowHours: number;
+          queues: Array<{ queue: string; failures: number }>;
+        };
+      };
+    };
+
+    expect(body.data.worker).not.toHaveProperty("errors");
+    expect(body.data.failingJobs).toEqual({
+      windowHours: 72,
+      queues: [
+        expect.objectContaining({
+          queue: "environment-fetch",
+          failures: 2,
+        }),
+      ],
+    });
   });
 });

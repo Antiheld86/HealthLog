@@ -217,6 +217,33 @@ describe("IntegrationStatusPill — a failing provider states its age", () => {
     expect(html).toContain('data-state="warning"');
   });
 
+  it("renders the localized failure count against the server threshold", () => {
+    const html = render(
+      <IntegrationStatusPill
+        state="warning"
+        lastSyncAt={new Date()}
+        now={new Date()}
+        failureCount={2}
+        failureThreshold={3}
+      />,
+    );
+
+    expect(html).toContain("2/3");
+  });
+
+  it("omits a partial failure ratio", () => {
+    const html = render(
+      <IntegrationStatusPill
+        state="warning"
+        lastSyncAt={new Date()}
+        now={new Date()}
+        failureCount={2}
+      />,
+    );
+
+    expect(html).not.toContain("2/");
+  });
+
   it("keeps the German label free of a connection claim too", () => {
     const html = render(
       <IntegrationStatusPill

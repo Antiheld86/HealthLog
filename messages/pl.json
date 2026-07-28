@@ -780,6 +780,8 @@
       "hydrated": "piłem wodę",
       "walked": "spacer",
       "alcohol": "alkohol",
+      "caffeine": "kofeina",
+      "nicotine": "nikotyna",
       "family": "rodzina",
       "friends": "znajomi",
       "party": "impreza",
@@ -2107,6 +2109,15 @@
     "notAvailableForCompliance": "Porównanie niedostępne dla przestrzegania"
   },
   "insights": {
+    "pattern": {
+      "dismiss": "Odrzuć",
+      "dismissed": "Ten wzorzec pozostanie odrzucony, dopóki nie zmienią się dowody.",
+      "restore": "Pokaż ponownie",
+      "dismissError": "Nie udało się odrzucić tego wzorca.",
+      "restoreError": "Nie udało się przywrócić tego wzorca.",
+      "loadError": "Nie udało się wczytać wzorców.",
+      "empty": "Żaden aktualny wzorzec nie przekroczył progu dowodów."
+    },
     "correlation": {
       "direction": {
         "higher": "wzrostu",
@@ -5327,6 +5338,7 @@
       "connected": "Połączono",
       "errorReconnect": "Błąd — połącz ponownie",
       "warningServerError": "Synchronizacja nie działa",
+      "failureCount": "{count}/{threshold}",
       "parkedReconnect": "Wstrzymane — połącz ręcznie",
       "notConnected": "Nie połączono",
       "justNow": "przed chwilą",
@@ -8856,6 +8868,8 @@
       "description": "Opis",
       "descriptionPlaceholder": "Co to mierzy (opcjonalnie)",
       "targetHint": "Zakres docelowy jest opcjonalny i jest rysowany jako pasmo na wykresie.",
+      "correlationEnabled": "Używaj w analizie korelacji",
+      "correlationEnabledHint": "Dodaje tę metrykę jako ograniczony dzienny kanał zachowania. Domyślnie jest wyłączona.",
       "requiredError": "Nazwa i jednostka są wymagane",
       "rangeOrderError": "Cel dolny nie może przekraczać celu górnego",
       "save": "Zapisz",

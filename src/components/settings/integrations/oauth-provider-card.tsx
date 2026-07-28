@@ -58,7 +58,11 @@ import {
   useSyncOutcomeMessage,
   type SyncOutcomeState,
 } from "./sync-outcome";
-import { IntegrationErrorMessage, pillStateForVerdict } from "./shared";
+import {
+  IntegrationErrorMessage,
+  pillFailurePropsFor,
+  pillStateForVerdict,
+} from "./shared";
 import {
   IntegrationCardDescription,
   IntegrationRedirectGuide,
@@ -81,6 +85,12 @@ export interface OAuthProviderStatus {
   lastAttemptAt?: string | null;
   lastError?: string | null;
   legacyLastSyncedAt?: string | null;
+  consecutiveFailuresByKind?: {
+    transient: number;
+    reauth_required: number;
+    persistent: number;
+  } | null;
+  failureThreshold?: number;
   /** The server-resolved liveness verdict; the pill is a projection of it. */
   syncHealth?: SyncHealth;
   metricFreshness?: MetricFreshnessEntry[];
@@ -270,6 +280,7 @@ export function OAuthProviderCard({
                 ? (status?.syncHealth?.since ?? null)
                 : (status?.legacyLastSyncedAt ?? status?.lastSuccessAt ?? null)
             }
+            {...pillFailurePropsFor(status)}
           />
         }
       />

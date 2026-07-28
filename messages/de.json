@@ -780,6 +780,8 @@
       "hydrated": "Wasser getrunken",
       "walked": "spazieren",
       "alcohol": "Alkohol",
+      "caffeine": "Koffein",
+      "nicotine": "Nikotin",
       "family": "Familie",
       "friends": "Freunde",
       "party": "Party",
@@ -2107,6 +2109,15 @@
     "notAvailableForCompliance": "Vergleich für Therapietreue nicht verfügbar"
   },
   "insights": {
+    "pattern": {
+      "dismiss": "Ausblenden",
+      "dismissed": "Dieses Muster bleibt ausgeblendet, bis sich die Evidenz ändert.",
+      "restore": "Wieder anzeigen",
+      "dismissError": "Dieses Muster konnte nicht ausgeblendet werden.",
+      "restoreError": "Dieses Muster konnte nicht wiederhergestellt werden.",
+      "loadError": "Muster konnten nicht geladen werden.",
+      "empty": "Kein aktuelles Muster hat die Evidenzschwelle erreicht."
+    },
     "correlation": {
       "direction": {
         "higher": "höher",
@@ -5327,6 +5338,7 @@
       "connected": "Verbunden",
       "errorReconnect": "Fehler — neu verbinden",
       "warningServerError": "Sync fehlgeschlagen",
+      "failureCount": "{count}/{threshold}",
       "parkedReconnect": "Pausiert — manuell wieder verbinden",
       "notConnected": "Nicht verbunden",
       "justNow": "gerade eben",
@@ -8856,6 +8868,8 @@
       "description": "Beschreibung",
       "descriptionPlaceholder": "Was hier gemessen wird (optional)",
       "targetHint": "Der Zielbereich ist optional und wird als Band im Diagramm dargestellt.",
+      "correlationEnabled": "Für Korrelationssuche verwenden",
+      "correlationEnabledHint": "Fügt diese Metrik als begrenzten täglichen Verhaltenskanal hinzu. Standardmäßig ist dies ausgeschaltet.",
       "requiredError": "Name und Einheit sind erforderlich",
       "rangeOrderError": "Der untere Zielwert darf den oberen nicht überschreiten",
       "save": "Speichern",

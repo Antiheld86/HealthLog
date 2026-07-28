@@ -59,7 +59,7 @@ const HostMetricsChart = dynamic(
  * means quiet queues, which is why the "cannot ask" case renders its own line
  * rather than looking identical to health.
  */
-function FailingJobsCard({
+export function FailingJobsCard({
   failingJobs,
 }: {
   failingJobs: { windowHours: number; queues: FailingQueue[] } | null;

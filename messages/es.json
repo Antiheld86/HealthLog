@@ -780,6 +780,8 @@
       "hydrated": "bebí agua",
       "walked": "caminé",
       "alcohol": "alcohol",
+      "caffeine": "cafeína",
+      "nicotine": "nicotina",
       "family": "familia",
       "friends": "amigos",
       "party": "fiesta",
@@ -2107,6 +2109,15 @@
     "notAvailableForCompliance": "Comparación no disponible para el cumplimiento"
   },
   "insights": {
+    "pattern": {
+      "dismiss": "Descartar",
+      "dismissed": "Este patrón queda descartado hasta que cambie la evidencia.",
+      "restore": "Mostrar de nuevo",
+      "dismissError": "No se pudo descartar este patrón.",
+      "restoreError": "No se pudo restaurar este patrón.",
+      "loadError": "No se pudieron cargar los patrones.",
+      "empty": "Ningún patrón actual superó el umbral de evidencia."
+    },
     "correlation": {
       "direction": {
         "higher": "subir",
@@ -5327,6 +5338,7 @@
       "connected": "Conectado",
       "errorReconnect": "Error — reconectar",
       "warningServerError": "Sincronización con errores",
+      "failureCount": "{count}/{threshold}",
       "parkedReconnect": "Pausado — reconectar manualmente",
       "notConnected": "No conectado",
       "justNow": "ahora mismo",
@@ -8856,6 +8868,8 @@
       "description": "Descripción",
       "descriptionPlaceholder": "Qué mide esto (opcional)",
       "targetHint": "El rango objetivo es opcional y se dibuja como una banda en el gráfico.",
+      "correlationEnabled": "Usar en el análisis de correlaciones",
+      "correlationEnabledHint": "Añade esta métrica como canal diario de conducta con un límite. Está desactivado por defecto.",
       "requiredError": "El nombre y la unidad son obligatorios",
       "rangeOrderError": "El objetivo mínimo no puede superar al máximo",
       "save": "Guardar",

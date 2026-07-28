@@ -59,6 +59,7 @@ import {
 } from "./sync-outcome";
 import {
   IntegrationErrorMessage,
+  pillFailurePropsFor,
   pillStateForVerdict,
   pillTimestampFor,
   type IntegrationStatusViewModel,
@@ -210,6 +211,7 @@ export function NightscoutCard({
           <IntegrationStatusPill
             state={pillState}
             lastSyncAt={pillTimestampFor(status)}
+            {...pillFailurePropsFor(status)}
           />
         }
       />

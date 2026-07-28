@@ -75,7 +75,15 @@ export const GET = apiHandler(async () => {
     buildTime: BUILD_TIME,
     startTime: START_TIME,
     database: "connected",
-    worker: workerStatus,
+    worker: {
+      running: workerStatus.running,
+      startedAt: workerStatus.startedAt,
+      lastHeartbeat: workerStatus.lastHeartbeat,
+      lastReminderCheck: workerStatus.lastReminderCheck,
+      lastWithingsSync: workerStatus.lastWithingsSync,
+      lastInsightsRun: workerStatus.lastInsightsRun,
+      jobsProcessed: workerStatus.jobsProcessed,
+    },
     failingJobs:
       failingJobs === null
         ? null

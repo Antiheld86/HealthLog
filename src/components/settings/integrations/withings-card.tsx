@@ -43,6 +43,7 @@ import {
 import {
   IntegrationErrorMessage,
   pillStateFor,
+  pillFailurePropsFor,
   pillTimestampFor,
   type IntegrationStatusViewModel,
 } from "./shared";
@@ -230,6 +231,7 @@ export function WithingsCard({
           <IntegrationStatusPill
             state={pillState}
             lastSyncAt={pillLastSyncAt}
+            {...pillFailurePropsFor(viewModel)}
           />
         }
       />
