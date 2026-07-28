@@ -2865,7 +2865,8 @@
       "flights": "piętra",
       "falls": "upadki",
       "years": "lata",
-      "breathingEvents": "zdarzenia"
+      "breathingEvents": "zdarzenia",
+      "respiratoryRate": "oddechów/min"
     },
     "sleep": {
       "title": "Sen",

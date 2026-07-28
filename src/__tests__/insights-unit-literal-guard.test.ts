@@ -34,7 +34,6 @@ const LANGUAGE_NEUTRAL_UNITS = new Set([
   "%",
   "/10",
   "bpm",
-  "breaths/min",
   "dBA",
   "kcal",
   "kg/m²",

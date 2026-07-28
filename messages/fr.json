@@ -2865,7 +2865,8 @@
       "flights": "étages",
       "falls": "chutes",
       "years": "ans",
-      "breathingEvents": "événements"
+      "breathingEvents": "événements",
+      "respiratoryRate": "respirations/min"
     },
     "sleep": {
       "title": "Sommeil",

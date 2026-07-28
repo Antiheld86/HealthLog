@@ -2865,7 +2865,8 @@
       "flights": "Etagen",
       "falls": "Stürze",
       "years": "Jahre",
-      "breathingEvents": "Ereignisse"
+      "breathingEvents": "Ereignisse",
+      "respiratoryRate": "Atemzüge/min"
     },
     "sleep": {
       "title": "Schlaf",

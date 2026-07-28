@@ -2865,7 +2865,8 @@
       "flights": "flights",
       "falls": "falls",
       "years": "years",
-      "breathingEvents": "events"
+      "breathingEvents": "events",
+      "respiratoryRate": "breaths/min"
     },
     "sleep": {
       "title": "Sleep",

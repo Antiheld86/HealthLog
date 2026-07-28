@@ -2865,7 +2865,8 @@
       "flights": "pisos",
       "falls": "caídas",
       "years": "años",
-      "breathingEvents": "eventos"
+      "breathingEvents": "eventos",
+      "respiratoryRate": "respiraciones/min"
     },
     "sleep": {
       "title": "Sueño",

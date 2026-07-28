@@ -187,12 +187,15 @@ function relationFieldNames(model: string): string[] {
 
 const READ_OPS = /(findMany|findUnique|findFirst|findUniqueOrThrow|groupBy)/;
 const WRITE_OPS = /(create|createMany|upsert|update|updateMany)/;
+const READ_RELATION_OPS = /[{[t]/;
+const WRITE_RELATION_OPS = /\{\s*create\b/;
 
-/** Does any of `files` touch `model` with an operation matching `ops`? */
+/** Does any of `files` touch `model` through matching delegate and relation operations? */
 function touches(
   files: readonly string[],
   model: string,
-  ops: RegExp,
+  delegateOps: RegExp,
+  relationOps: RegExp,
 ): boolean {
   const delegate = delegateName(model);
   const relations = relationFieldNames(model);
@@ -202,16 +205,28 @@ function touches(
     for (const match of source.matchAll(
       new RegExp(`\\.${delegate}\\s*\\.\\s*(\\w+)`, "g"),
     )) {
-      if (ops.test(match[1])) return true;
+      if (delegateOps.test(match[1])) return true;
     }
-    // A nested relation key: `schedules: {`, `dayLogs: [`, `entries: true`.
     return relations.some((relation) =>
-      new RegExp(`\\b${relation}\\s*:\\s*[{[t]`).test(source),
+      new RegExp(`\\b${relation}\\s*:\\s*(?:${relationOps.source})`).test(
+        source,
+      ),
     );
   });
 }
 
 describe("every backed-up model travels both ways, or is named as debt", () => {
+  it("does not count a nested relation read as a restore write", () => {
+    expect(
+      touches(
+        ["src/app/api/admin/backups/[id]/restore/route.ts"],
+        "User",
+        WRITE_OPS,
+        WRITE_RELATION_OPS,
+      ),
+    ).toBe(false);
+  });
+
   it("declares writer and restore files that exist", () => {
     for (const file of [...BACKUP_WRITER_FILES, ...BACKUP_RESTORE_FILES]) {
       expect(() => read(file), `${file} is declared but missing`).not.toThrow();
@@ -250,7 +265,8 @@ describe("every backed-up model travels both ways, or is named as debt", () => {
 
   it("finds a payload reader for every model claimed two-ended", () => {
     const missing = TWO_ENDED_MODELS.filter(
-      (model) => !touches(BACKUP_WRITER_FILES, model, READ_OPS),
+      (model) =>
+        !touches(BACKUP_WRITER_FILES, model, READ_OPS, READ_RELATION_OPS),
     );
     expect(
       missing,
@@ -261,7 +277,8 @@ describe("every backed-up model travels both ways, or is named as debt", () => {
 
   it("finds a restore branch for every model claimed two-ended", () => {
     const missing = TWO_ENDED_MODELS.filter(
-      (model) => !touches(BACKUP_RESTORE_FILES, model, WRITE_OPS),
+      (model) =>
+        !touches(BACKUP_RESTORE_FILES, model, WRITE_OPS, WRITE_RELATION_OPS),
     );
     expect(
       missing,

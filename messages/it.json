@@ -2865,7 +2865,8 @@
       "flights": "piani",
       "falls": "cadute",
       "years": "anni",
-      "breathingEvents": "eventi"
+      "breathingEvents": "eventi",
+      "respiratoryRate": "respiri/min"
     },
     "sleep": {
       "title": "Sonno",

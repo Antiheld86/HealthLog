@@ -7,6 +7,8 @@
  * which is the failure mode the whole backup guard exists to make loud.
  */
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 // The slot-count module reaches for the global Prisma client at load; this
 // test only wants the constant off it.
@@ -73,6 +75,13 @@ function tx(created: Array<Record<string, unknown>>) {
 }
 
 describe("intraday profile backup", () => {
+  it("keeps the backup source reviewable as text", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "src/lib/export/intraday-profile-backup.ts"),
+    );
+    expect(source.includes(0)).toBe(false);
+  });
+
   it("carries the same slot count the reader indexes by", () => {
     // Re-declared rather than imported, so it is pinned here instead: a change
     // to one without the other would put rows in the table that every read
