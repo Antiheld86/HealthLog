@@ -4,6 +4,7 @@ import {
   getAllEffectiveRanges,
   METRIC_BOUNDS,
   resolveWeightTargetOverride,
+  resolveEffectiveBpTargets,
   type UserProfileForRange,
   type ThresholdOverridesJson,
 } from "../effective-range";
@@ -124,6 +125,48 @@ describe("getAllEffectiveRanges", () => {
     expect(keys).toContain("BONE_MASS");
     expect(keys).toContain("OXYGEN_SATURATION");
     expect(keys.length).toBeGreaterThanOrEqual(14);
+  });
+});
+
+describe("resolveEffectiveBpTargets", () => {
+  it("merges the user's systolic and diastolic target overrides", () => {
+    expect(
+      resolveEffectiveBpTargets(baseProfile, {
+        BLOOD_PRESSURE_SYS: { min: 115, max: 125 },
+        BLOOD_PRESSURE_DIA: { min: 65, max: 75 },
+      }),
+    ).toEqual({
+      sysLow: 115,
+      sysHigh: 125,
+      diaLow: 65,
+      diaHigh: 75,
+    });
+  });
+
+  it("uses the evidence default for an axis without an override", () => {
+    expect(
+      resolveEffectiveBpTargets(baseProfile, {
+        BLOOD_PRESSURE_SYS: { min: 115, max: 125 },
+      }),
+    ).toEqual({
+      sysLow: 115,
+      sysHigh: 125,
+      diaLow: 70,
+      diaHigh: 79,
+    });
+  });
+
+  it("rejects malformed target pairs without losing valid defaults", () => {
+    expect(
+      resolveEffectiveBpTargets(baseProfile, {
+        BLOOD_PRESSURE_SYS: { min: 130, max: 120 },
+      }),
+    ).toEqual({
+      sysLow: 120,
+      sysHigh: 129,
+      diaLow: 70,
+      diaHigh: 79,
+    });
   });
 });
 

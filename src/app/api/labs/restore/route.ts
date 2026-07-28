@@ -21,6 +21,7 @@ import {
   safeJson,
 } from "@/lib/api-response";
 import { prisma } from "@/lib/db";
+import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
 import { withIdempotency } from "@/lib/idempotency";
 import { annotate } from "@/lib/logging/context";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -66,6 +67,7 @@ async function postRestore(request: NextRequest): Promise<Response> {
     where: { id: { in: ids }, userId: user.id, deletedAt: { not: null } },
     data: { deletedAt: null },
   });
+  if (count > 0) invalidateUserHealthScore(user.id);
 
   annotate({ action: { name: "labs.restore" }, meta: { restored: count } });
 

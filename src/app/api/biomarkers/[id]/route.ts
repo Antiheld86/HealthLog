@@ -11,6 +11,7 @@ import {
 } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
+import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
 import {
   decryptContextFromBytes,
   encryptContextToBytes,
@@ -169,6 +170,7 @@ export const PUT = apiHandler(
     }
 
     const updated = await prisma.biomarker.update({ where: { id }, data });
+    invalidateUserHealthScore(user.id);
 
     await auditLog("biomarker.update", {
       userId: user.id,
@@ -206,6 +208,7 @@ export const DELETE = apiHandler(
       }),
       prisma.biomarker.delete({ where: { id } }),
     ]);
+    invalidateUserHealthScore(user.id);
 
     await auditLog("biomarker.delete", {
       userId: user.id,

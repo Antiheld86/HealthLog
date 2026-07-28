@@ -24,6 +24,10 @@ import type { ArrivalKind } from "@/lib/arrivals/types";
 import type { MedsTodayBlock } from "@/lib/dashboard/meds-today";
 import type { ModuleKey } from "@/lib/modules/registry";
 import type { ServerTranslator } from "@/lib/i18n/server-translator";
+import type {
+  ScoreDeltaReason,
+  ScorePillarId,
+} from "@/lib/analytics/score/types";
 import {
   MAX_PRIORITY_ACTIONS,
   type PriorityItem,
@@ -97,6 +101,10 @@ export interface DailyDigestScore {
   value: number;
   band: string;
   delta: number | null;
+  /** Additive score identity; omitted by older cached digests. */
+  deltaReason?: ScoreDeltaReason | null;
+  scoreVersion?: number;
+  composition?: ScorePillarId[];
 }
 
 /** A broken integration, deterministically derived from `IntegrationStatus`. */

@@ -12,6 +12,7 @@ import {
 } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
+import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
 import { withIdempotency } from "@/lib/idempotency";
 import { enqueueReminderSatisfy } from "@/lib/jobs/reminder-satisfy";
 import { emitDataArrival } from "@/lib/arrivals/emit-shared";
@@ -254,6 +255,7 @@ async function postLabResult(request: NextRequest) {
       noteEncrypted: note ? encryptNoteToBytes(note) : null,
     },
   });
+  invalidateUserHealthScore(user.id);
 
   await auditLog("labResult.create", {
     userId: user.id,

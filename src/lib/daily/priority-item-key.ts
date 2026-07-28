@@ -55,3 +55,8 @@ export function sameTimeBaselineItemKey(
 ): string {
   return `same_time_baseline:${localDayKey}:${type}`;
 }
+
+/** One persisted acknowledgement per Health Score algorithm version. */
+export function healthScoreAlgorithmItemKey(scoreVersion: number): string {
+  return `health_score_algorithm:${scoreVersion}`;
+}

@@ -2252,38 +2252,86 @@
     "heroActionAskCoach": "Zapytaj coacha",
     "healthScore": {
       "label": "Wynik zdrowia",
-      "progressAria": "Postęp wyniku zdrowia",
-      "deltaVsLastWeek": "{delta} w porównaniu z ubiegłym tygodniem",
-      "deltaUnavailable": "Brak historii — zajrzyj w przyszłym tygodniu.",
-      "restModePaused": "Wstrzymane podczas choroby — Twój wynik nie jest dziś oceniany.",
-      "componentBp": "RR",
-      "componentWeight": "Waga",
-      "componentMood": "Nastrój",
-      "componentCompliance": "Przestrzeganie",
-      "weightTarget": {
-        "user": "Oceniane względem Twojego celu, {range}.",
-        "none": "Oceniane tylko na podstawie trendu, brak ustawionego celu."
+      "algorithmChanged": "Wynik korzysta teraz z opublikowanych kardiometabolicznych zakresów referencyjnych; masa ciała nie jest już uwzględniana, ponieważ poprzedni cel wynikał ze wzrostu, a nie z celu ustawionego przez użytkownika, codzienna zmienność nastroju i przestrzeganie zaleceń lekowych są działaniami, a nie stanami zdrowia, zaś tętno spoczynkowe i HRV nie mają uniwersalnego celu. Postęp masy ciała pozostaje poniżej jako osobisty kontekst, pozostałe sygnały zachowują własne karty, a nowa liczba nie oznacza zmiany stanu zdrowia.",
+      "dismissAlgorithmChanged": "Zamknij informację o metodzie",
+      "band": {
+        "green": "W zakresie referencyjnym",
+        "yellow": "Niektóre filary wymagają uwagi",
+        "red": "Co najmniej jeden filar jest poza zakresem referencyjnym"
       },
-      "deltaExplainer": {
-        "title": "Jak liczona jest ta zmiana",
-        "description": "Zmiana względem ubiegłego tygodnia: {delta}",
-        "body": "Wynik łączy ciśnienie, wagę, nastrój i przyjmowanie leków. Porównujemy dzisiejszy wynik z tym samym momentem tydzień wcześniej. Dodaj świeży pomiar lub wpis o nastroju, żeby pchnąć go w górę."
+      "method": "Średnia z równą wagą kwalifikujących się filarów. Najniższy filar wyznacza ogólny zakres.",
+      "insufficient": "{count} kwalifikujące się filary. Wynik wymaga co najmniej trzech, w tym zmierzonego filaru fizjologicznego.",
+      "composition": "Uwzględniono: {pillars}",
+      "bandSetter": "Ogólny zakres wyznacza {pillar}",
+      "versionAndNoise": "Wersja metody {version}. Próg porównania tygodniowego: {noise} pkt.",
+      "methodVersion": "Wersja metody {version}.",
+      "none": "brak",
+      "delta": "{delta} względem poprzedniego porównywalnego okresu",
+      "deltaReason": {
+        "algorithm_changed": "Brak porównania, ponieważ zmieniła się metoda obliczeń.",
+        "composition_changed": "Brak porównania, ponieważ zmieniły się uwzględnione filary.",
+        "first_eligibility_window": "Brak porównania, ponieważ to pierwszy kwalifikujący się okres.",
+        "below_noise_floor": "Zmiana mieści się w łącznej zmienności pomiarów.",
+        "no_previous_window": "Brak wcześniejszego porównywalnego okresu.",
+        "no_current_score": "Brak porównania, ponieważ bieżący okres nie spełnia warunków."
       },
-      "provenance": {
-        "toggle": "Składa się z",
-        "mixedBanner": "Niektóre komponenty łączą wiele źródeł. Zestawienie pokazuje najświeższą wartość dla każdego komponentu.",
-        "footnote": "Wagi są przeskalowywane do dostępnych danych.",
-        "asOfLabel": "stan na {date}",
-        "provisional": "Wstępny — dostępne {count} z {total} danych",
-        "provisionalBadge": "Wstępne",
-        "sourceAria": "Źródło: {source}",
-        "sources": {
-          "manual": "Ręczne",
-          "withings": "Withings",
-          "appleHealth": "Apple Health",
-          "mixed": "Mieszane",
-          "none": "Brak danych"
-        }
+      "restMode": "Tryb odpoczynku aktywny od {since}. Wynik służy jako kontekst i nie jest obniżany.",
+      "pillar": {
+        "bloodPressure": "Ciśnienie krwi",
+        "glycaemia": "Glikemia",
+        "activity": "Aktywność",
+        "sleep": "Sen",
+        "adiposity": "Otłuszczenie",
+        "wellbeing": "Samopoczucie",
+        "fitness": "Zmierzona wydolność",
+        "lipids": "Lipidy"
+      },
+      "observed": "Zaobserwowano: {value}",
+      "reference": "Zakres referencyjny: {value}",
+      "fastingObserved": "Glukoza na czczo: {value} {unit}",
+      "fastingReference": "Od {low} do {high} {unit} na czczo",
+      "personalReference": "Twój cel: {value}",
+      "source": "Źródło: {source}, stan na {date}",
+      "observedActivity": "{value} kroków dziennie",
+      "observedSleep": "{value} minut na noc",
+      "observedAdiposity": "Stosunek obwodu talii do wzrostu {value}",
+      "observedFitness": "{value} {unit}, zmierzone",
+      "referenceActivity": "Korzyść stabilizuje się przy {high} krokach dziennie",
+      "referenceSleep": "Co najmniej {low} minut na noc; dłuższy sen nie obniża wyniku",
+      "referenceAdiposity": "Stosunek obwodu talii do wzrostu poniżej {high}",
+      "referenceFitness": "Od {low} do {high} {unit}, zakres odniesienia według wieku i płci",
+      "referenceHba1c": "HbA1c od {low} do {high}%",
+      "referenceDetail": "{label} · {source} · {kind} · od {low} do {high}",
+      "openBound": "otwarty",
+      "laboratoryReferenceSource": "Zakresy referencyjne laboratorium",
+      "personalTargetSource": "Osobisty cel",
+      "referenceKind": {
+        "clinical": "Próg kliniczny",
+        "population": "Percentyl populacji",
+        "guideline": "Zakres wytycznych"
+      },
+      "reason": {
+        "readFailed": "Nie udało się wczytać danych",
+        "notTracked": "Brak pomiarów",
+        "missingProfile": "Brakuje wieku lub profilu referencyjnego",
+        "missingHeight": "Brakuje wzrostu",
+        "incompletePanel": "Potrzebny jest aktualny pełny panel z zakresami referencyjnymi",
+        "crisis": "Zamiast wyniku wyświetlane są wskazówki bezpieczeństwa",
+        "insufficientHistory": "Za mało aktualnych danych spełniających kryteria",
+        "unavailable": "Ten filar obecnie nie spełnia kryteriów"
+      },
+      "pillarInsufficient": "Brak wyniku filaru: {reason}",
+      "tension": "Sygnały gotowości są rozbieżne. Sprzyjające: {positive}. Obciążone: {negative}.",
+      "returnToBand": "{metric} od {days} dni ponownie mieści się w typowym zakresie.",
+      "weightGoal": {
+        "title": "Osobisty cel wagowy",
+        "value": "Obecnie {current} {unit}. Cel od {min} do {max} {unit}. Odległość od celu: {distance} {unit}.",
+        "delta": "Odległość od celu zmieniła się o {delta} {unit} od poprzedniego pomiaru.",
+        "noDelta": "Brak wcześniejszego pomiaru masy ciała do porównania.",
+        "no_personal_goal": "Ustaw osobisty cel wagowy, aby zobaczyć tutaj postęp.",
+        "weight_not_tracked": "Zapisz pomiar masy ciała, aby zobaczyć postęp w kierunku celu.",
+        "read_failed": "Nie udało się wczytać danych masy ciała. Spróbuj ponownie.",
+        "notScored": "Postęp celu wagowego jest osobistym kontekstem i nie wpływa na wynik zdrowia."
       }
     },
     "suggestedPrompts": {

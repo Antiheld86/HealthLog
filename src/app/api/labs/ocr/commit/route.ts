@@ -28,6 +28,7 @@ import {
 } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
+import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
 import { withIdempotency } from "@/lib/idempotency";
 import { enqueueReminderSatisfy } from "@/lib/jobs/reminder-satisfy";
 import { emitDataArrival } from "@/lib/arrivals/emit-shared";
@@ -191,6 +192,7 @@ async function commitOcrRows(request: NextRequest) {
       takenAt: created.takenAt,
     });
   }
+  if (inserted.length > 0) invalidateUserHealthScore(user.id);
 
   // S9 — cross-link the freshly inserted labs to the vault document the client
   // filed the scanned bytes into. Best-effort: the labs are the authoritative

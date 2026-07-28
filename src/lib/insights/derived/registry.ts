@@ -55,6 +55,8 @@ export type DerivedMetricId =
   | "STAIR_DESCENT_SPEED_BASELINE"
   /** v1.10.3: estimated 6-minute-walk distance vs Enright-predicted (passthrough re-frame). */
   | "SIX_MINUTE_WALK_BAND"
+  /** Versioned cardiometabolic reference composite. */
+  | "HEALTH_SCORE"
   /** v1.11.0 (Epic B): short-horizon OLS projection with a widening prediction band. */
   | "TRAJECTORY"
   /** v1.34.0: today's running total for a cumulative metric vs this person's own typical total at the same local hour. */
@@ -334,6 +336,24 @@ const REGISTRY: Record<DerivedMetricId, DerivedMetricMeta> = {
     inputs: VITALS_BASELINE_TYPES,
     minHistoryDays: 14,
     minInputs: 1,
+    implemented: true,
+  },
+  HEALTH_SCORE: {
+    id: "HEALTH_SCORE",
+    displayName: "Cardiometabolic reference score",
+    archetype: "composite",
+    inputs: [
+      "BLOOD_PRESSURE",
+      "GLYCAEMIA",
+      "ACTIVITY",
+      "SLEEP",
+      "ADIPOSITY",
+      "WELLBEING",
+      "FITNESS",
+      "LIPIDS",
+    ],
+    minHistoryDays: 1,
+    minInputs: 3,
     implemented: true,
   },
   SAME_TIME_BASELINE: {

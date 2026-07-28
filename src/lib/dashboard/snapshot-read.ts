@@ -67,6 +67,7 @@ export async function readDashboardSnapshotCached(
     insightsCachedText: user.insightsCachedText,
     insightsCachedAt: user.insightsCachedAt,
     dashboardWidgetsJson: user.dashboardWidgetsJson,
+    sourcePriorityJson: user.sourcePriorityJson,
     thresholdsJson: user.thresholdsJson,
   };
 

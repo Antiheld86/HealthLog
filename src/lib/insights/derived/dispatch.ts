@@ -36,6 +36,7 @@ import {
   type WellnessScoreType,
 } from "./wellness-scores";
 import type { Derived } from "./types";
+import { computeHealthScoreDerived } from "@/lib/analytics/score/derived";
 
 export interface DerivedComputeArgs {
   metric: DerivedMetricId;
@@ -238,6 +239,10 @@ export async function computeDerivedMetric(
         now,
       }) as Promise<Derived<unknown>>;
     }
+    case "HEALTH_SCORE":
+      return computeHealthScoreDerived(args.userId) as Promise<
+        Derived<unknown>
+      >;
     case "RECOVERY_SCORE":
     case "STRESS_SCORE":
     case "STRAIN_SCORE":

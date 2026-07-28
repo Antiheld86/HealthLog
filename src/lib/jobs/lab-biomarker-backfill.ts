@@ -25,6 +25,7 @@
  * (the v1.4.37 dead-queue class).
  */
 import { prisma } from "@/lib/db";
+import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { integrationBackfillSourceOptions } from "@/lib/jobs/integration-backfill-admission";
 import { annotate } from "@/lib/logging/context";
@@ -151,6 +152,7 @@ export async function runLabBiomarkerBackfillForUser(
     });
     linked += count;
   }
+  if (linked > 0) invalidateUserHealthScore(userId);
 
   annotate({
     action: {

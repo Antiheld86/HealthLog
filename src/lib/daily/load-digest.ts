@@ -428,6 +428,9 @@ export async function loadDailyDigest(
         value: snapshot.healthScore.score,
         band: snapshot.healthScore.band,
         delta: snapshot.healthScore.delta,
+        deltaReason: snapshot.healthScore.deltaReason,
+        scoreVersion: snapshot.healthScore.scoreVersion,
+        composition: snapshot.healthScore.composition,
       }
     : null;
 

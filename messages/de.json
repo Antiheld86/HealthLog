@@ -2252,38 +2252,86 @@
     "heroActionAskCoach": "Coach fragen",
     "healthScore": {
       "label": "Gesundheitsscore",
-      "progressAria": "Gesundheitsscore-Fortschritt",
-      "deltaVsLastWeek": "{delta} im Vergleich zur Vorwoche",
-      "deltaUnavailable": "Noch keine Historie — schau nächste Woche wieder vorbei.",
-      "restModePaused": "Während einer Krankheitsphase pausiert — dein Score wird heute nicht bewertet.",
-      "componentBp": "Blutdruck",
-      "componentWeight": "Gewicht",
-      "componentMood": "Stimmung",
-      "componentCompliance": "Therapietreue",
-      "weightTarget": {
-        "user": "Gemessen an deinem Ziel, {range}.",
-        "none": "Nur am Verlauf gemessen, kein Ziel gesetzt."
+      "algorithmChanged": "Der Score nutzt jetzt veröffentlichte kardiometabolische Referenzbereiche; Gewicht ist nicht mehr enthalten, weil das frühere Ziel aus der Körpergröße statt aus einem selbst gesetzten Ziel abgeleitet wurde, tägliche Stimmungsschwankungen und Medikamententreue sind Handlungen statt Gesundheitszustände, und für Ruhepuls und HRV gibt es keinen allgemeinen Zielwert. Der Gewichtsfortschritt bleibt unten als persönlicher Kontext sichtbar, die anderen Signale bleiben auf ihren eigenen Karten, und eine neue Zahl bedeutet keine Veränderung deiner Gesundheit.",
+      "dismissAlgorithmChanged": "Hinweis zur Score-Methode schließen",
+      "band": {
+        "green": "Im Referenzbereich",
+        "yellow": "Einige Bereiche brauchen Aufmerksamkeit",
+        "red": "Mindestens ein Bereich liegt außerhalb des Referenzbereichs"
       },
-      "deltaExplainer": {
-        "title": "So wird die Veränderung berechnet",
-        "description": "Veränderung gegenüber letzter Woche: {delta}",
-        "body": "Der Score kombiniert Blutdruck, Gewicht, Stimmung und Therapietreue. Wir vergleichen den heutigen Stand mit demselben Zeitpunkt vor einer Woche. Erfasse eine frische Messung oder einen Stimmungs-Check, um den Wert nach oben zu schubsen."
+      "method": "Gleich gewichteter Mittelwert der geeigneten Bereiche. Der niedrigste Bereich bestimmt die Gesamtstufe.",
+      "insufficient": "{count} geeignete Bereiche. Der Score benötigt mindestens drei, darunter einen gemessenen physiologischen Bereich.",
+      "composition": "Einbezogen: {pillars}",
+      "bandSetter": "Gesamtstufe bestimmt durch {pillar}",
+      "versionAndNoise": "Methodenversion {version}. Schwelle für den Wochenvergleich: {noise} Punkte.",
+      "methodVersion": "Methodenversion {version}.",
+      "none": "keiner",
+      "delta": "{delta} gegenüber dem vorherigen vergleichbaren Zeitraum",
+      "deltaReason": {
+        "algorithm_changed": "Kein Vergleich, weil sich die Score-Methode geändert hat.",
+        "composition_changed": "Kein Vergleich, weil sich die einbezogenen Bereiche geändert haben.",
+        "first_eligibility_window": "Kein Vergleich, weil dies der erste geeignete Zeitraum ist.",
+        "below_noise_floor": "Die Veränderung liegt innerhalb der gemeinsamen Messschwankung.",
+        "no_previous_window": "Es ist kein früherer vergleichbarer Zeitraum verfügbar.",
+        "no_current_score": "Kein Vergleich, weil der aktuelle Zeitraum nicht geeignet ist."
       },
-      "provenance": {
-        "toggle": "Zusammensetzung",
-        "mixedBanner": "Einige Komponenten kombinieren mehrere Quellen. Die Aufschlüsselung zeigt den aktuellsten Wert je Komponente.",
-        "footnote": "Anteile sind nach verfügbaren Daten neu skaliert.",
-        "asOfLabel": "Stand {date}",
-        "provisional": "Vorläufig — nur {count} von {total} Datenpunkten verfügbar",
-        "provisionalBadge": "Vorläufig",
-        "sourceAria": "Quelle: {source}",
-        "sources": {
-          "manual": "Manuell",
-          "withings": "Withings",
-          "appleHealth": "Apple Health",
-          "mixed": "Gemischt",
-          "none": "Keine Daten"
-        }
+      "restMode": "Ruhemodus aktiv seit {since}. Der Score dient nur als Kontext und wird nicht verschlechtert.",
+      "pillar": {
+        "bloodPressure": "Blutdruck",
+        "glycaemia": "Blutzucker",
+        "activity": "Aktivität",
+        "sleep": "Schlaf",
+        "adiposity": "Körperfettverteilung",
+        "wellbeing": "Wohlbefinden",
+        "fitness": "Gemessene Fitness",
+        "lipids": "Blutfette"
+      },
+      "observed": "Beobachtet: {value}",
+      "reference": "Referenz: {value}",
+      "fastingObserved": "Nüchternglukose: {value} {unit}",
+      "fastingReference": "{low} bis {high} {unit} nüchtern",
+      "personalReference": "Dein Ziel: {value}",
+      "source": "Quelle: {source}, Stand {date}",
+      "observedActivity": "{value} Schritte pro Tag",
+      "observedSleep": "{value} Minuten pro Nacht",
+      "observedAdiposity": "Taille-zu-Körpergröße-Verhältnis {value}",
+      "observedFitness": "{value} {unit}, gemessen",
+      "referenceActivity": "Der Nutzen flacht bei {high} Schritten pro Tag ab",
+      "referenceSleep": "Mindestens {low} Minuten pro Nacht; längerer Schlaf wird nicht abgewertet",
+      "referenceAdiposity": "Taille-zu-Körpergröße-Verhältnis unter {high}",
+      "referenceFitness": "{low} bis {high} {unit}, Referenzbereich nach Alter und Geschlecht",
+      "referenceHba1c": "HbA1c {low} bis {high} %",
+      "referenceDetail": "{label} · {source} · {kind} · {low} bis {high}",
+      "openBound": "offen",
+      "laboratoryReferenceSource": "Referenzbereiche des auswertenden Labors",
+      "personalTargetSource": "Persönliches Ziel",
+      "referenceKind": {
+        "clinical": "Klinischer Schwellenwert",
+        "population": "Bevölkerungsperzentil",
+        "guideline": "Leitlinienbereich"
+      },
+      "reason": {
+        "readFailed": "Daten konnten nicht geladen werden",
+        "notTracked": "Nicht erfasst",
+        "missingProfile": "Alter oder Referenzprofil fehlt",
+        "missingHeight": "Körpergröße fehlt",
+        "incompletePanel": "Ein aktuelles vollständiges Panel mit Referenzbereichen ist erforderlich",
+        "crisis": "Anstelle eines Scores werden Sicherheitshinweise angezeigt",
+        "insufficientHistory": "Nicht genügend aktuelle geeignete Daten",
+        "unavailable": "Dieser Bereich kann derzeit nicht bewertet werden"
+      },
+      "pillarInsufficient": "Kein Bereichsscore: {reason}",
+      "tension": "Die Bereitschaftssignale unterscheiden sich. Unterstützend: {positive}. Belastet: {negative}.",
+      "returnToBand": "{metric} liegt seit {days} Tagen wieder im üblichen Bereich.",
+      "weightGoal": {
+        "title": "Persönliches Gewichtsziel",
+        "value": "Aktuell {current} {unit}. Ziel {min} bis {max} {unit}. Abstand zum Ziel: {distance} {unit}.",
+        "delta": "Der Abstand zum Ziel hat sich seit der vorherigen Messung um {delta} {unit} verändert.",
+        "noDelta": "Für einen Vergleich ist keine frühere Gewichtsmessung verfügbar.",
+        "no_personal_goal": "Lege ein persönliches Gewichtsziel fest, um hier den Fortschritt zu sehen.",
+        "weight_not_tracked": "Erfasse dein Gewicht, um den Fortschritt zum Ziel zu sehen.",
+        "read_failed": "Gewichtsdaten konnten nicht geladen werden. Versuche es erneut.",
+        "notScored": "Der Fortschritt zum Gewichtsziel ist persönlicher Kontext und beeinflusst den Gesundheitsscore nicht."
       }
     },
     "suggestedPrompts": {

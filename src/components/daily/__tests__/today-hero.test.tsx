@@ -52,7 +52,14 @@ function digest(over: Partial<DailyDigest> = {}): DailyDigest {
     generatedAt: "2026-07-16T06:00:00.000Z",
     phase: "final",
     sleepPending: false,
-    score: { value: 82, band: "green", delta: 3 },
+    score: {
+      value: 82,
+      band: "green",
+      delta: 3,
+      deltaReason: null,
+      scoreVersion: 2,
+      composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
+    },
     topSignal: {
       sourceMetric: "bp",
       tone: "watch",
@@ -89,6 +96,24 @@ describe("<TodayHero>", () => {
     expect(html).toContain('data-kind="sync_issue"');
     // The score delta chip.
     expect(html).toContain('data-slot="today-hero-score-delta"');
+  });
+
+  it("does not present a suppressed algorithm jump as score movement", () => {
+    const html = render(
+      <TodayHero
+        digest={digest({
+          score: {
+            value: 82,
+            band: "green",
+            delta: 20,
+            deltaReason: "algorithm_changed",
+            scoreVersion: 2,
+            composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
+          },
+        })}
+      />,
+    );
+    expect(html).not.toContain('data-slot="today-hero-score-delta"');
   });
 
   it("wires each PriorityItem action to its existing destination via href", () => {

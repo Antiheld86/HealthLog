@@ -968,18 +968,65 @@ export const dashboardSnapshotResponse = z
       .describe(
         "Today's medication block: active-medication count, today-window tally (scheduled / taken / skipped), every active medication's current display-due candidate, and legacy scalar fields projected from candidate zero. `overdue: true` marks an OPEN overdue slot (anchor passed, still inside its catch-up band); `availableFrom` is the canonical cadence- and dose-window-derived attribution-band start. `dueCandidates` is optional so older cached snapshots remain valid. Medication ids let consumers deep-link straight to the relevant card.",
       ),
-    // Dashboard hero — health score (warm phase, nullable on a
-    // rollup-coverage miss). Score + band + delta only; the per-pillar
-    // component breakdown stays on the analytics route.
+    // Dashboard hero health score. The additive metadata lets clients suppress
+    // false change narratives when eligibility or the algorithm changes.
     healthScore: z
       .object({
-        score: z.number().int(),
+        score: z.number().int().min(0).max(100),
         band: z.enum(["green", "yellow", "red"]),
         delta: z.number().nullable(),
+        confidence: derivedConfidence.optional(),
+        composition: z
+          .array(
+            z.enum([
+              "BLOOD_PRESSURE",
+              "GLYCAEMIA",
+              "ACTIVITY",
+              "SLEEP",
+              "ADIPOSITY",
+              "WELLBEING",
+              "FITNESS",
+              "LIPIDS",
+            ]),
+          )
+          .optional(),
+        deltaReason: z
+          .enum([
+            "algorithm_changed",
+            "composition_changed",
+            "first_eligibility_window",
+            "below_noise_floor",
+            "no_previous_window",
+            "no_current_score",
+          ])
+          .nullable()
+          .optional(),
+        scoreVersion: z.number().int().positive().optional(),
+        bandSetter: z
+          .enum([
+            "BLOOD_PRESSURE",
+            "GLYCAEMIA",
+            "ACTIVITY",
+            "SLEEP",
+            "ADIPOSITY",
+            "WELLBEING",
+            "FITNESS",
+            "LIPIDS",
+          ])
+          .nullable()
+          .optional(),
+        restMode: z
+          .object({
+            active: z.boolean(),
+            since: z.string().nullable(),
+            episodeCount: z.number().int(),
+          })
+          .nullable()
+          .optional(),
       })
       .nullable()
       .describe(
-        "Personal health score summary (0..100 score, traffic-light band, week-over-week delta). Null on a rollup-coverage miss (it rides the thick phase alongside `extras`) and when no pillar is computable. Component breakdown is deliberately not serialised here.",
+        "Derived cardiometabolic reference score summary. Null until at least three eligible domains include a measured physiological domain. Additive metadata names confidence, ordered composition, the worst-pillar band setter, score version, and why a delta was suppressed. Rest Mode annotates but never changes the score.",
       ),
     // v1.27.7 — user-selected hero score rings (max 3), resolved
     // server-side next to the health score. Additive; optional so

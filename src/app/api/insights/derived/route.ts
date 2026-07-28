@@ -104,11 +104,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     if (!gate.enabled) return gate.response;
   }
 
-  // Profile read once via the shared loader (the same one the batch route
-  // and the nightly score jobs use), passed into the pure compute function
-  // — never re-fetched per metric.
   const profile = await loadBaselineProfile(prisma, user.id);
-
   const derived = await computeDerivedMetric({
     metric,
     userId: user.id,

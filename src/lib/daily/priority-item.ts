@@ -81,9 +81,16 @@ export function isDismissibleKind(
  * builder (which stamps the key) and the dismiss route's Zod schema (which
  * rejects anything else structurally, before a lookup ever runs).
  */
+const DISMISSIBLE_NOTICE_PREFIXES = ["health_score_algorithm"] as const;
+
 export function isDismissibleItemKey(itemKey: string): boolean {
-  return DISMISSIBLE_PRIORITY_ITEM_KINDS.some((kind) =>
-    itemKey.startsWith(`${kind}:`),
+  return (
+    DISMISSIBLE_PRIORITY_ITEM_KINDS.some((kind) =>
+      itemKey.startsWith(`${kind}:`),
+    ) ||
+    DISMISSIBLE_NOTICE_PREFIXES.some((prefix) =>
+      itemKey.startsWith(`${prefix}:`),
+    )
   );
 }
 

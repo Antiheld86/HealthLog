@@ -2252,38 +2252,86 @@
     "heroActionAskCoach": "Ask the coach",
     "healthScore": {
       "label": "Health Score",
-      "progressAria": "Health Score progress",
-      "deltaVsLastWeek": "{delta} vs last week",
-      "deltaUnavailable": "No history yet — check back next week.",
-      "restModePaused": "Paused during illness — your score isn't being judged today.",
-      "componentBp": "BP",
-      "componentWeight": "Weight",
-      "componentMood": "Mood",
-      "componentCompliance": "Adherence",
-      "weightTarget": {
-        "user": "Graded against your target, {range}.",
-        "none": "Graded on the trend alone, no target set."
+      "algorithmChanged": "The score now uses published cardiometabolic reference ranges; weight left because its old target came from height, daily mood variability and medication adherence are actions rather than health states, and resting heart rate and HRV have no universal target. Weight progress remains below as personal context, the other signals remain on their own cards, and a new number does not mean your health changed.",
+      "dismissAlgorithmChanged": "Dismiss score method note",
+      "band": {
+        "green": "In the reference range",
+        "yellow": "Some pillars need attention",
+        "red": "One or more pillars are outside the reference range"
       },
-      "deltaExplainer": {
-        "title": "How the delta is computed",
-        "description": "Change vs last week: {delta}",
-        "body": "The score combines BP, weight, mood and medication adherence. We compare today's score with the same time last week. Log a fresh reading or a mood check to nudge it up."
+      "method": "Equal-weight average of eligible pillars. The lowest pillar sets the overall band.",
+      "insufficient": "{count} eligible pillars. The score needs at least three, including a measured physiological pillar.",
+      "composition": "Included: {pillars}",
+      "bandSetter": "Overall band set by {pillar}",
+      "versionAndNoise": "Method version {version}. Weekly comparison floor: {noise} points.",
+      "methodVersion": "Method version {version}.",
+      "none": "none",
+      "delta": "{delta} vs the previous comparable window",
+      "deltaReason": {
+        "algorithm_changed": "No comparison because the score method changed.",
+        "composition_changed": "No comparison because the included pillars changed.",
+        "first_eligibility_window": "No comparison because this is the first eligible window.",
+        "below_noise_floor": "Change is within the combined measurement noise.",
+        "no_previous_window": "No comparable earlier window is available.",
+        "no_current_score": "No comparison because the current window is not eligible."
       },
-      "provenance": {
-        "toggle": "Driven by",
-        "mixedBanner": "Some components blend multiple sources. The breakdown shows the most recent value per component.",
-        "footnote": "Weights are rescaled to the data that's actually available.",
-        "asOfLabel": "as of {date}",
-        "provisional": "Provisional — only {count} of {total} inputs available",
-        "provisionalBadge": "Provisional",
-        "sourceAria": "Source: {source}",
-        "sources": {
-          "manual": "Manual",
-          "withings": "Withings",
-          "appleHealth": "Apple Health",
-          "mixed": "Mixed",
-          "none": "No data"
-        }
+      "restMode": "Rest Mode active since {since}. The score is shown for context and is not penalised.",
+      "pillar": {
+        "bloodPressure": "Blood pressure",
+        "glycaemia": "Glycaemia",
+        "activity": "Activity",
+        "sleep": "Sleep",
+        "adiposity": "Adiposity",
+        "wellbeing": "Wellbeing",
+        "fitness": "Measured fitness",
+        "lipids": "Lipids"
+      },
+      "observed": "Observed: {value}",
+      "reference": "Reference: {value}",
+      "fastingObserved": "Fasting glucose: {value} {unit}",
+      "fastingReference": "{low} to {high} {unit} fasting",
+      "personalReference": "Your target: {value}",
+      "source": "Source: {source}, as of {date}",
+      "observedActivity": "{value} steps per day",
+      "observedSleep": "{value} minutes per night",
+      "observedAdiposity": "Waist-to-height ratio {value}",
+      "observedFitness": "{value} {unit}, measured",
+      "referenceActivity": "Benefit plateaus by {high} steps per day",
+      "referenceSleep": "At least {low} minutes per night; longer sleep is not penalised",
+      "referenceAdiposity": "Waist-to-height ratio below {high}",
+      "referenceFitness": "{low} to {high} {unit}, age and sex reference band",
+      "referenceHba1c": "HbA1c {low} to {high}%",
+      "referenceDetail": "{label} · {source} · {kind} · {low} to {high}",
+      "openBound": "open",
+      "laboratoryReferenceSource": "Reporting laboratory reference ranges",
+      "personalTargetSource": "Personal target",
+      "referenceKind": {
+        "clinical": "Clinical threshold",
+        "population": "Population percentile",
+        "guideline": "Guideline band"
+      },
+      "reason": {
+        "readFailed": "Data could not be loaded",
+        "notTracked": "Not tracked",
+        "missingProfile": "Age or reference profile is missing",
+        "missingHeight": "Height is missing",
+        "incompletePanel": "A recent complete panel with reference ranges is needed",
+        "crisis": "Safety guidance is shown instead of a score",
+        "insufficientHistory": "Not enough recent eligible data",
+        "unavailable": "This pillar is not currently eligible"
+      },
+      "pillarInsufficient": "No pillar score: {reason}",
+      "tension": "Readiness signals differ. Supportive: {positive}. Under strain: {negative}.",
+      "returnToBand": "{metric} has been back inside your usual range for {days} days.",
+      "weightGoal": {
+        "title": "Personal weight goal",
+        "value": "{current} {unit} now. Goal {min} to {max} {unit}. Distance to goal: {distance} {unit}.",
+        "delta": "Distance to goal changed by {delta} {unit} since the prior reading.",
+        "noDelta": "No earlier weight reading is available for comparison.",
+        "no_personal_goal": "Set a personal weight goal to see progress here.",
+        "weight_not_tracked": "Log a weight reading to see progress toward your goal.",
+        "read_failed": "Weight data could not be loaded. Try again.",
+        "notScored": "Weight-goal progress is personal context and does not affect the Health Score."
       }
     },
     "suggestedPrompts": {

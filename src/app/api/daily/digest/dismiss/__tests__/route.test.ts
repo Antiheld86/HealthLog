@@ -30,6 +30,10 @@ vi.mock("@/lib/rate-limit", () => ({
   rateLimitHeaders: vi.fn(() => ({})),
 }));
 
+vi.mock("@/lib/cache/invalidate", () => ({
+  invalidateUserHealthScore: vi.fn(),
+}));
+
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/auth/audit", () => ({
   auditLog: vi.fn().mockResolvedValue(undefined),
@@ -56,6 +60,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import { apiError } from "@/lib/api-response";
+import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -129,11 +134,13 @@ describe("POST /api/daily/digest/dismiss", () => {
     expect(prisma.dismissedPriorityItem.upsert).not.toHaveBeenCalled();
   });
 
-  it("upserts the dismissal scoped to the caller, for each dismissible kind", async () => {
+  it("upserts each approved observational or notice dismissal for the caller", async () => {
     for (const itemKey of [
       "milestone:record_first:WEIGHT:2026-07-16",
       "ecg_new_recording:2026-07-16T08:00:00.000Z",
       "tension_window:2026-07-16:afternoon",
+      "same_time_baseline:2026-07-16:ACTIVITY_STEPS",
+      "health_score_algorithm:2",
     ]) {
       vi.mocked(prisma.dismissedPriorityItem.upsert).mockClear();
       const res = await callPost(makeReq({ itemKey }));
@@ -160,5 +167,13 @@ describe("POST /api/daily/digest/dismiss", () => {
     );
     expect(res.status).toBe(429);
     expect(prisma.dismissedPriorityItem.upsert).not.toHaveBeenCalled();
+  });
+
+  it("evicts score-bearing server caches after the algorithm notice write", async () => {
+    const res = await callPost(
+      makeReq({ itemKey: "health_score_algorithm:2" }),
+    );
+    expect(res.status).toBe(200);
+    expect(invalidateUserHealthScore).toHaveBeenCalledWith("user-1");
   });
 });

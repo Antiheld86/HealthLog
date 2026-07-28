@@ -90,6 +90,8 @@ export interface ScoreAnatomyViewProps {
   insufficient?: boolean;
   /** Localised "not enough data" nudge for the insufficient state. */
   insufficientNote?: ReactNode;
+  /** Keep the shared provisional ring unless the caller requires rows only. */
+  showProvisionalRing?: boolean;
   className?: string;
 }
 
@@ -107,6 +109,7 @@ export function ScoreAnatomyView({
   standard,
   insufficient = false,
   insufficientNote,
+  showProvisionalRing = true,
   className,
 }: ScoreAnatomyViewProps) {
   const { t } = useTranslations();
@@ -142,15 +145,17 @@ export function ScoreAnatomyView({
       <div className="flex flex-col items-center gap-3 text-center">
         {/* v1.15.12 F2 — vertical breathing room so the ring's bloom/glow is
             never clipped top/bottom by the hero container. */}
-        <div className="py-2">
-          <ScoreRing
-            score={effectiveScore}
-            band={band}
-            hue={insufficient ? undefined : hue}
-            label={t("insights.derived.anatomy.outOf")}
-            size="lg"
-          />
-        </div>
+        {!insufficient || showProvisionalRing ? (
+          <div className="py-2">
+            <ScoreRing
+              score={effectiveScore}
+              band={band}
+              hue={insufficient ? undefined : hue}
+              label={t("insights.derived.anatomy.outOf")}
+              size="lg"
+            />
+          </div>
+        ) : null}
         {caption && !insufficient ? (
           <p
             data-slot="score-anatomy-caption"
@@ -174,7 +179,8 @@ export function ScoreAnatomyView({
             insufficientNote ?? t("insights.derived.anatomy.insufficient")
           }
         />
-      ) : (
+      ) : null}
+      {contributors.length > 0 ? (
         <div data-slot="score-anatomy-contributors" className="space-y-3">
           <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
             {t("insights.derived.anatomy.contributorsLabel")}
@@ -185,7 +191,7 @@ export function ScoreAnatomyView({
             ))}
           </ul>
         </div>
-      )}
+      ) : null}
 
       {/* The plain-language method caption closes the card, in normal flow.
           `ProvenanceExplainer` (v1.22) is no longer a top-right ⓘ glyph — it
