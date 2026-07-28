@@ -396,10 +396,6 @@
     },
     "welcomeBack": "{greeting}, bentornato.",
     "welcomeBackWithName": "{greeting} {name}, bentornato.",
-    "hero": {
-      "scoreLabel": "Health Score",
-      "ringDoses": "Dosi di oggi"
-    },
     "greetingSalutation": "Ciao, {name}",
     "streakLabel": "giorni di fila",
     "weight": "Peso",
@@ -452,11 +448,22 @@
     "compliance7d": "Aderenza (7 giorni)",
     "mood": "Umore",
     "customizeTitle": "Layout della dashboard",
-    "scoreRingsTitle": "Anelli dei punteggi",
-    "scoreRingsDescription": "Fino a tre anelli aggiuntivi accanto al punteggio di salute, ad esempio prontezza, recupero, sonno o aderenza. Trascina per riordinare; il punteggio di salute è primo per impostazione predefinita.",
+    "heroItemsTitle": "In evidenza oggi",
+    "heroItemsDescription": "Scegli quali tipi di elementi possono apparire nella sezione In evidenza oggi.",
+    "heroItemsNotificationNote": "Le impostazioni delle notifiche vengono gestite separatamente.",
+    "heroItems": {
+      "coach_checkin": "Verifiche con Coach",
+      "dose_window": "Dosi dei farmaci",
+      "preventive_care": "Prevenzione",
+      "sync_issue": "Problemi di sincronizzazione",
+      "milestone": "Traguardi",
+      "ecg_new_recording": "Nuove registrazioni ECG",
+      "tension_window": "Periodi di tensione",
+      "same_time_baseline": "Attività alla stessa ora"
+    },
     "layoutReset": "Ripristina i valori predefiniti",
     "layoutResetTitle": "Reimpostare il layout della dashboard?",
-    "layoutResetBody": "L’ordine dei riquadri, quelli che hai nascosto e gli anelli scelti tornano ai valori predefiniti. La disposizione non è salvata altrove.",
+    "layoutResetBody": "Il layout dei riquadri e le scelte per la sezione In evidenza oggi tornano ai valori predefiniti.",
     "layoutResetConfirm": "Reimposta layout",
     "layoutSaveSuccess": "Layout della dashboard salvato",
     "layoutSaveError": "Impossibile salvare il layout",
@@ -2081,7 +2088,6 @@
   },
   "comparison": {
     "toggleLabel": "Confronta con",
-    "toggleHint": "Confronta il periodo attuale con lo stesso periodo dell’anno precedente.",
     "baseline": {
       "none": "Disattivato",
       "lastMonth": "Mese precedente",

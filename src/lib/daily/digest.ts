@@ -27,6 +27,7 @@ import type { ServerTranslator } from "@/lib/i18n/server-translator";
 import {
   MAX_PRIORITY_ACTIONS,
   type PriorityItem,
+  type PriorityItemKind,
 } from "@/lib/daily/priority-item";
 import {
   ecgItemKey,
@@ -216,6 +217,8 @@ export const JUST_IN_WINDOW_MS = 3 * 60 * 60 * 1000;
 export interface DailyDigestInput {
   now: Date;
   modules: DigestModuleMap;
+  /** Item kinds allowed to appear in the Today hero rail. */
+  enabledHeroItemKinds: readonly PriorityItemKind[];
   score: DailyDigestScore | null;
   /** The cached daily briefing (paragraph + signals-of-day), or null. */
   briefing: DailyBriefing | null;
@@ -876,19 +879,24 @@ export function buildDailyDigest(
   );
   if (sameTime) worthALook.push(sameTime);
 
+  // Apply the account's hero-content visibility before the rail cap so a
+  // hidden high-priority item cannot crowd out an enabled later candidate.
+  const enabled = worthALook.filter((item) =>
+    input.enabledHeroItemKinds.includes(item.kind),
+  );
+
   // Defence-in-depth: no card ever exceeds the P1 action cap.
-  for (const item of worthALook) {
+  for (const item of enabled) {
     item.actions = item.actions.slice(0, MAX_PRIORITY_ACTIONS);
   }
 
-  // Drop anything the user already dismissed (observational kinds only — an
-  // actionable item never carries an `itemKey`, so it can never match here).
-  // Filtered BEFORE the bounded slice, so a dismissal reliably makes room for
-  // the next candidate rather than leaving a gap.
+  // Drop anything the user already dismissed (observational kinds only).
+  // This also runs before the bounded slice so a dismissal makes room for the
+  // next enabled candidate.
   const visible =
     input.dismissedItemKeys.size === 0
-      ? worthALook
-      : worthALook.filter(
+      ? enabled
+      : enabled.filter(
           (item) => !item.itemKey || !input.dismissedItemKeys.has(item.itemKey),
         );
 

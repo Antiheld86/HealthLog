@@ -396,10 +396,6 @@
     },
     "welcomeBack": "{greeting}, content de te revoir.",
     "welcomeBackWithName": "{greeting} {name}, content de te revoir.",
-    "hero": {
-      "scoreLabel": "Health Score",
-      "ringDoses": "Doses du jour"
-    },
     "greetingSalutation": "Bonjour, {name}",
     "streakLabel": "jours d’affilée",
     "weight": "Poids",
@@ -452,11 +448,22 @@
     "compliance7d": "Observance (7 jours)",
     "mood": "Humeur",
     "customizeTitle": "Mise en page du tableau",
-    "scoreRingsTitle": "Anneaux de score",
-    "scoreRingsDescription": "Jusqu’à trois anneaux supplémentaires à côté du score de santé — par exemple préparation, récupération, sommeil ou observance. Glissez pour réordonner ; le score de santé est placé en premier par défaut.",
+    "heroItemsTitle": "Temps forts du jour",
+    "heroItemsDescription": "Choisis les types d’éléments qui peuvent apparaître dans les temps forts du jour.",
+    "heroItemsNotificationNote": "Les réglages des notifications sont gérés séparément.",
+    "heroItems": {
+      "coach_checkin": "Bilan avec Coach",
+      "dose_window": "Doses de médicaments",
+      "preventive_care": "Prévention",
+      "sync_issue": "Problèmes de synchronisation",
+      "milestone": "Étapes franchies",
+      "ecg_new_recording": "Nouveaux enregistrements ECG",
+      "tension_window": "Périodes de tension",
+      "same_time_baseline": "Activité à la même heure"
+    },
     "layoutReset": "Rétablir les valeurs par défaut",
     "layoutResetTitle": "Réinitialiser la disposition du tableau de bord ?",
-    "layoutResetBody": "L’ordre de vos tuiles, celles que vous avez masquées et les anneaux choisis reviennent aux valeurs par défaut. Cette disposition n’est conservée nulle part ailleurs.",
+    "layoutResetBody": "La disposition de tes tuiles et tes choix pour les temps forts du jour reviennent aux valeurs par défaut.",
     "layoutResetConfirm": "Réinitialiser la disposition",
     "layoutSaveSuccess": "Mise en page enregistrée",
     "layoutSaveError": "Impossible d’enregistrer la mise en page",
@@ -2081,7 +2088,6 @@
   },
   "comparison": {
     "toggleLabel": "Comparer avec",
-    "toggleHint": "Compare la période actuelle avec la même période de l’année précédente.",
     "baseline": {
       "none": "Désactivé",
       "lastMonth": "Mois précédent",

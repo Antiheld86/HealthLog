@@ -18,7 +18,10 @@ import {
   COACH_CHECKIN_REVIEW_DAYS,
 } from "@/lib/daily/coach-checkin-intents";
 import type { Milestone } from "@/lib/daily/milestones";
-import type { PriorityItem } from "@/lib/daily/priority-item";
+import {
+  PRIORITY_ITEM_KINDS,
+  type PriorityItem,
+} from "@/lib/daily/priority-item";
 import {
   ecgItemKey,
   milestoneItemKey,
@@ -62,6 +65,7 @@ function input(over: Partial<DailyDigestInput> = {}): DailyDigestInput {
   return {
     now: NOW,
     modules: {},
+    enabledHeroItemKinds: [...PRIORITY_ITEM_KINDS],
     score: { value: 82, band: "good", delta: 3 },
     briefing,
     medsToday: meds(),
@@ -519,6 +523,40 @@ describe("buildDailyDigest — worth-a-look rail item builders", () => {
     );
     expect(d.worthALook.length).toBeLessThanOrEqual(MAX_WORTH_A_LOOK);
     expect(d.worthALook.length).toBe(3);
+  });
+
+  it("filters disabled kinds before the rail cap", () => {
+    const d = buildDailyDigest(
+      input({
+        enabledHeroItemKinds: ["preventive_care"],
+        medsToday: meds({ nextDueOverdue: true, nextDueMedicationName: "X" }),
+        syncIssues: [
+          { integration: "withings", state: "error_reauth" },
+          { integration: "nightscout", state: "parked" },
+          { integration: "fitbit", state: "error_reauth" },
+        ],
+        preventiveDue: [{ label: "Blood panel" }],
+      }),
+      t,
+    );
+
+    expect(d.worthALook.map((item) => item.kind)).toEqual(["preventive_care"]);
+  });
+
+  it("uses the existing all-clear treatment when every kind is off", () => {
+    const d = buildDailyDigest(
+      input({
+        enabledHeroItemKinds: [],
+        briefing: null,
+        score: null,
+        medsToday: meds({ nextDueOverdue: true, nextDueMedicationName: "X" }),
+        syncIssues: [{ integration: "withings", state: "error_reauth" }],
+      }),
+      t,
+    );
+
+    expect(d.worthALook).toEqual([]);
+    expect(d.line).toContain("Nothing needs your attention today");
   });
 
   it("returns an empty rail when nothing needs attention", () => {

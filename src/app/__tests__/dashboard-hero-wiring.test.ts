@@ -32,6 +32,16 @@ describe("dashboard hero — page wiring", () => {
     expect(stripIdx).toBeGreaterThan(heroIdx);
   });
 
+  it("asks an empty filtered digest to render its all-clear state", () => {
+    expect(src).toContain("renderFilteredHeroAllClear");
+    expect(src).toContain(
+      "renderFilteredAllClear={renderFilteredHeroAllClear}",
+    );
+    expect(src).toContain(
+      "(layout.enabledHeroItemKinds ?? PRIORITY_ITEM_KINDS).length",
+    );
+  });
+
   it("no longer references the retired legacy hero", () => {
     expect(src).not.toContain("DashboardHero");
     expect(src).not.toContain("DashboardHeroSkeleton");

@@ -23,6 +23,7 @@ import {
   SCORE_RING_IDS,
   HERO_RING_IDS,
 } from "@/lib/dashboard-layout";
+import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
 import {
   dataEnvelope,
   stdResponses,
@@ -47,10 +48,8 @@ const dashboardChartOverlayPrefs = z.object({
     .optional(),
 });
 
-// The layout shape shared by GET/PUT/DELETE. `widgets` (and the other
-// preserve-when-absent fields) are optional on the wire: the Settings
-// instant score-ring PUT omits `widgets` entirely so the server carries
-// forward whatever is currently stored (issue #581).
+// The layout shape shared by GET/PUT/DELETE. Every field except `version` is
+// optional so a partial client can preserve fields it does not own.
 const dashboardLayoutSchema = z
   .object({
     version: z.literal(1),
@@ -61,11 +60,18 @@ const dashboardLayoutSchema = z
       .optional(),
     selectedScoreRings: z.array(z.enum(SCORE_RING_IDS)).max(3).optional(),
     heroRingOrder: z.array(z.enum(HERO_RING_IDS)).max(4).optional(),
+    enabledHeroItemKinds: z
+      .array(z.enum(PRIORITY_ITEM_KINDS))
+      .max(PRIORITY_ITEM_KINDS.length)
+      .optional()
+      .describe(
+        "Today-highlight item kinds in catalogue order. Missing means every current kind is enabled; an empty array disables all kinds.",
+      ),
   })
   .meta({
     id: "DashboardLayoutBody",
     description:
-      "Per-user dashboard widget layout. `widgets` is the ordered tile/chart list (each with a visibility flag plus the independent `tileVisible` strip-tile flag); `comparisonBaseline`, `chartOverlayPrefs`, `selectedScoreRings`, and `heroRingOrder` are the additive dashboard-preference fields. Every field except `version` is optional on input and preserve-when-absent: an omitted field is carried forward from the stored layout rather than reset, so a single-surface PUT (e.g. the instant hero-ring toggle, which omits `widgets`) can never clobber a choice made on another surface. Widget ids are the closed 27-id catalogue (16 web + 11 iOS-only); unknown ids are dropped before validation.",
+      "Per-user dashboard widget layout. `widgets` is the ordered tile and chart list. `comparisonBaseline`, `chartOverlayPrefs`, `selectedScoreRings`, `heroRingOrder`, and `enabledHeroItemKinds` are additive dashboard preferences. Every field except `version` is optional on input and preserved when absent from PUT. Missing `enabledHeroItemKinds` resolves to every current kind, while an empty array hides every Today highlight. Widget ids use the closed dashboard catalogue; unknown ids are dropped before validation.",
   });
 
 const dashboardLayoutPutBody = dashboardLayoutSchema
@@ -143,10 +149,11 @@ export const dashboardWidgetPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Dashboard"],
       summary: "Reset the calling user's dashboard widget layout",
       description:
-        "Clears the persisted layout and returns the default layout. Idempotent.",
+        "Resets the tile layout and Today-highlight visibility. It preserves the stored comparison baseline, chart overlays, selected score rings, and hero ring order. Idempotent.",
       responses: {
         "200": {
-          description: "Layout reset; the default layout is returned.",
+          description:
+            "Web-controlled layout settings reset; preserved dashboard preferences are returned with the defaults.",
           content: {
             "application/json": {
               schema: dataEnvelope(

@@ -1,17 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
 import {
   DEFAULT_DASHBOARD_LAYOUT,
+  serializeDashboardLayout,
   DASHBOARD_IOS_ONLY_WIDGET_IDS,
   DASHBOARD_WIDGET_IDS,
   IOS_PIN_ONLY_WIDGET_IDS,
-  buildRingMutationPayload,
-  widgetWritesBusy,
   type DashboardLayout,
 } from "@/lib/dashboard-layout";
+import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
 import { NATIVE_ONLY_WIDGET_LABEL_KEYS } from "@/lib/dashboard/widget-modules";
 
 // v1.11.2 HIGH-1 — the web Settings list renders one row per WRITABLE id
@@ -75,6 +73,7 @@ import { I18nProvider } from "@/lib/i18n/context";
 import {
   DashboardLayoutSection,
   reorderWidgets,
+  setHeroItemKindEnabled,
 } from "../dashboard-layout-section";
 
 function render(node: React.ReactElement, locale: "en" | "de" = "en") {
@@ -165,13 +164,8 @@ describe("<DashboardLayoutSection> — drag-and-drop reorder", () => {
 
   it("keeps the arrow buttons present after the drag handle lands (a11y fallback)", () => {
     const html = render(<DashboardLayoutSection id="dashboard-layout" />);
-    // Move up + Move down translation keys resolve to the English
-    // strings — counted once per row. Both the widget rows and the
-    // score-ring reorder rows (health-score anchor + selected rings)
-    // carry the same arrow pair, so the total is one per row of either
-    // kind.
-    const ringRows = (html.match(/data-slot="score-ring-row"/g) ?? []).length;
-    const expected = WEB_RENDERABLE_ROW_COUNT + ringRows;
+    // Move up + Move down translation keys resolve once per widget row.
+    const expected = WEB_RENDERABLE_ROW_COUNT;
     const moveUpCount = (html.match(/aria-label="Move up"/g) ?? []).length;
     const moveDownCount = (html.match(/aria-label="Move down"/g) ?? []).length;
     expect(moveUpCount).toBe(expected);
@@ -495,237 +489,125 @@ describe("<DashboardLayoutSection> — disabled-module widget toggles", () => {
   });
 });
 
-/**
- * v1.27.7 — hero score-ring picker. Renders whenever the layout loads
- * (it configures the server-computed score rings the dashboard snapshot
- * carries); offers only rings whose owning module is enabled; caps the
- * selection at three via disabled switches. SSR smoke assertions,
- * matching the rest of this suite.
- */
-describe("<DashboardLayoutSection> — hero score-ring picker (v1.27.7)", () => {
-  it("renders for the default layout", () => {
+describe("<DashboardLayoutSection> — hero content", () => {
+  it("keeps the removed score and comparison controls out of the UI", () => {
     const html = render(<DashboardLayoutSection id="dashboard-layout" />);
-    expect(html).toContain('data-slot="score-rings-picker"');
+    for (const removedLabel of [
+      "Compare to",
+      "Last month",
+      "Last year",
+      "Readiness",
+      "Recovery score",
+      "Sleep score",
+    ]) {
+      expect(html).not.toContain(removedLabel);
+    }
   });
 
-  it("renders one switch per ring (fail-open module map)", () => {
-    queryState.layout = DEFAULT_DASHBOARD_LAYOUT;
+  it("renders one switch for every current priority-item kind", () => {
     const html = render(<DashboardLayoutSection id="dashboard-layout" />);
-    expect(html).toContain('data-slot="score-rings-picker"');
-    // v1.27.27 — one switch per score ring (4) plus the always-present
-    // health-score anchor row = 5.
-    const switches = html.match(/data-slot="score-ring-switch"/g) ?? [];
-    expect(switches).toHaveLength(5);
-    // The default selection (MED_COMPLIANCE) reads checked.
-    const compliance = html.match(
-      /<button[^>]*data-slot="score-ring-switch"[^>]*data-ring="MED_COMPLIANCE"[^>]*>/,
-    );
-    expect(compliance).not.toBeNull();
-    expect(compliance![0]).toContain('data-state="checked"');
+    expect(html).toContain('data-slot="hero-content-settings"');
+    const switches = html.match(/data-slot="hero-item-switch"/g) ?? [];
+    expect(switches).toHaveLength(PRIORITY_ITEM_KINDS.length);
+
+    for (const kind of PRIORITY_ITEM_KINDS) {
+      const control = html.match(
+        new RegExp(
+          `<button[^>]*data-slot="hero-item-switch"[^>]*data-kind="${kind}"[^>]*>`,
+        ),
+      );
+      expect(control, kind).not.toBeNull();
+      expect(control![0]).toContain('data-state="checked"');
+    }
   });
 
-  it("hides rings whose owning module is disabled (anchor stays)", () => {
-    queryState.layout = DEFAULT_DASHBOARD_LAYOUT;
-    authState.modules = { recovery: false, sleep: false };
+  it("treats a missing API field as every current kind enabled", () => {
+    const layoutWithoutHeroKinds: DashboardLayout = {
+      ...DEFAULT_DASHBOARD_LAYOUT,
+    };
+    delete layoutWithoutHeroKinds.enabledHeroItemKinds;
+    queryState.layout = layoutWithoutHeroKinds;
     const html = render(<DashboardLayoutSection id="dashboard-layout" />);
-    const switches = html.match(/data-slot="score-ring-switch"/g) ?? [];
-    // READINESS + RECOVERY_SCORE (recovery) and SLEEP_SCORE (sleep) are
-    // gone; the adherence ring plus the health-score anchor remain = 2.
-    expect(switches).toHaveLength(2);
-    expect(html).toContain('data-ring="MED_COMPLIANCE"');
-    expect(html).toContain('data-ring="HEALTH_SCORE"');
+    const switches =
+      html.match(/<button[^>]*data-slot="hero-item-switch"[^>]*>/g) ?? [];
+    expect(switches).toHaveLength(PRIORITY_ITEM_KINDS.length);
+    for (const control of switches) {
+      expect(control).toContain('data-state="checked"');
+    }
   });
 
-  it("hides the derived rings when the insights module is off (anchor stays)", () => {
-    queryState.layout = DEFAULT_DASHBOARD_LAYOUT;
-    authState.modules = { insights: false };
-    const html = render(<DashboardLayoutSection id="dashboard-layout" />);
-    const switches = html.match(/data-slot="score-ring-switch"/g) ?? [];
-    // Adherence ring + health-score anchor.
-    expect(switches).toHaveLength(2);
-    expect(html).toContain('data-ring="MED_COMPLIANCE"');
-  });
-
-  it("disables the remaining switches at the three-ring cap", () => {
+  it("permits an explicit all-off layout", () => {
     queryState.layout = {
       ...DEFAULT_DASHBOARD_LAYOUT,
-      selectedScoreRings: ["READINESS", "RECOVERY_SCORE", "SLEEP_SCORE"],
+      enabledHeroItemKinds: [],
     };
     const html = render(<DashboardLayoutSection id="dashboard-layout" />);
-    const compliance = html.match(
-      /<button[^>]*data-slot="score-ring-switch"[^>]*data-ring="MED_COMPLIANCE"[^>]*>/,
+    const switches = html.match(
+      /<button[^>]*data-slot="hero-item-switch"[^>]*>/g,
     );
-    expect(compliance).not.toBeNull();
-    // The rendered `disabled` HTML attribute — not the Tailwind
-    // `disabled:` variant prefixes that every switch class list carries.
-    expect(compliance![0]).toContain('disabled=""');
-    // The three selected rings stay enabled (unchecking must stay possible).
-    const readiness = html.match(
-      /<button[^>]*data-slot="score-ring-switch"[^>]*data-ring="READINESS"[^>]*>/,
-    );
-    expect(readiness).not.toBeNull();
-    expect(readiness![0]).not.toContain('disabled=""');
-  });
-});
-
-/**
- * v1.27.27 — the health-score ring is a first-class, always-present,
- * reorderable member of the hero ring row. The picker renders it as a
- * pinned row (no on/off toggle — a disabled, checked switch) that leads by
- * default and reorders with the same drag-handle + arrow-button pair as the
- * score rings and the widget list.
- */
-describe("<DashboardLayoutSection> — health-score anchor + reorder (v1.27.27)", () => {
-  it("renders the health-score anchor as a reorderable row, leading by default", () => {
-    queryState.layout = DEFAULT_DASHBOARD_LAYOUT;
-    const html = render(<DashboardLayoutSection id="dashboard-layout" />);
-    // A sortable ring row exists for the health-score anchor.
-    expect(html).toContain('data-slot="score-ring-row"');
-    const anchorRow = html.match(
-      /<div[^>]*data-slot="score-ring-row"[^>]*data-ring="HEALTH_SCORE"[^>]*>/,
-    );
-    expect(anchorRow).not.toBeNull();
-    // Default order leads with the anchor: its row precedes the adherence
-    // ring's row.
-    const anchorIdx = html.indexOf('data-ring="HEALTH_SCORE"');
-    const medIdx = html.indexOf(
-      'data-slot="score-ring-row" data-ring="MED_COMPLIANCE"',
-    );
-    expect(anchorIdx).toBeGreaterThan(-1);
-    // The anchor row appears before any selected score-ring row.
-    expect(anchorIdx).toBeLessThan(html.indexOf('data-ring="MED_COMPLIANCE"'));
-    expect(medIdx === -1 || anchorIdx < medIdx).toBe(true);
+    expect(switches).toHaveLength(PRIORITY_ITEM_KINDS.length);
+    for (const control of switches ?? []) {
+      expect(control).toContain('data-state="unchecked"');
+      expect(control).not.toContain('disabled=""');
+    }
+    expect(html).toContain("Custom layout active");
   });
 
-  it("the anchor switch is checked and disabled (locked-on, no toggle-off)", () => {
-    queryState.layout = DEFAULT_DASHBOARD_LAYOUT;
-    const html = render(<DashboardLayoutSection id="dashboard-layout" />);
-    const anchorSwitch = html.match(
-      /<button[^>]*data-slot="score-ring-switch"[^>]*data-ring="HEALTH_SCORE"[^>]*>/,
+  it("switches off the last enabled kind and persists an explicit empty array", () => {
+    const lastEnabled = ["coach_checkin"] as const;
+    const enabledHeroItemKinds = setHeroItemKindEnabled(
+      lastEnabled,
+      "coach_checkin",
+      false,
     );
-    expect(anchorSwitch).not.toBeNull();
-    expect(anchorSwitch![0]).toContain('data-state="checked"');
-    expect(anchorSwitch![0]).toContain('disabled=""');
-  });
+    expect(enabledHeroItemKinds).toEqual([]);
+    expect(lastEnabled).toEqual(["coach_checkin"]);
 
-  it("the anchor carries a drag handle + move arrows (reorderable)", () => {
-    queryState.layout = DEFAULT_DASHBOARD_LAYOUT;
-    const html = render(<DashboardLayoutSection id="dashboard-layout" />);
-    // The health-score row is a full sortable row: its drag handle exists.
-    const handles = html.match(/data-slot="score-ring-drag-handle"/g) ?? [];
-    // One handle per hero-order row = anchor + default MED_COMPLIANCE = 2.
-    expect(handles.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it("honours a persisted order that moves the anchor off the lead", () => {
-    queryState.layout = {
+    const serialized = serializeDashboardLayout({
       ...DEFAULT_DASHBOARD_LAYOUT,
-      selectedScoreRings: ["READINESS", "MED_COMPLIANCE"],
-      heroRingOrder: ["READINESS", "HEALTH_SCORE", "MED_COMPLIANCE"],
+      enabledHeroItemKinds,
+    });
+    expect(serialized.enabledHeroItemKinds).toEqual([]);
+  });
+
+  it("labels the switch collection and associates both explanatory texts", () => {
+    const html = render(<DashboardLayoutSection id="dashboard-layout" />);
+    const fieldset = html.match(
+      /<fieldset[^>]*data-slot="hero-content-settings"[^>]*>/,
+    );
+    expect(fieldset).not.toBeNull();
+    expect(fieldset![0]).toContain("rounded-lg");
+    const describedBy = fieldset![0].match(/aria-describedby="([^"]+)"/);
+    expect(describedBy).not.toBeNull();
+    const descriptionIds = describedBy![1].split(" ");
+    expect(descriptionIds).toHaveLength(2);
+    for (const descriptionId of descriptionIds) {
+      expect(html).toContain(`id="${descriptionId}"`);
+    }
+    expect(html).toContain("<legend");
+    expect(html).toContain("Today highlights");
+  });
+
+  it("keeps every kind visible when unrelated modules are disabled", () => {
+    authState.modules = {
+      coach: false,
+      medications: false,
+      insights: false,
     };
     const html = render(<DashboardLayoutSection id="dashboard-layout" />);
-    const readinessRow = html.indexOf(
-      'data-slot="score-ring-row" data-ring="READINESS"',
-    );
-    const anchorRow = html.indexOf(
-      'data-slot="score-ring-row" data-ring="HEALTH_SCORE"',
-    );
-    const medRow = html.indexOf(
-      'data-slot="score-ring-row" data-ring="MED_COMPLIANCE"',
-    );
-    expect(readinessRow).toBeGreaterThan(-1);
-    expect(anchorRow).toBeGreaterThan(readinessRow);
-    expect(medRow).toBeGreaterThan(anchorRow);
+    const switches = html.match(/data-slot="hero-item-switch"/g) ?? [];
+    expect(switches).toHaveLength(PRIORITY_ITEM_KINDS.length);
   });
 
-  it("the ring mutation PUTs both selectedScoreRings and heroRingOrder (source pin)", () => {
-    const src = readFileSync(
-      join(
-        process.cwd(),
-        "src/components/settings/dashboard-layout-section.tsx",
-      ),
-      "utf8",
-    );
-    expect(src).toContain("selectedScoreRings: next.selectedScoreRings");
-    expect(src).toContain("heroRingOrder: next.heroRingOrder");
-    // The order is the single source of truth: selection is derived from it.
-    expect(src).toMatch(/id !== HEALTH_SCORE_RING_ID/);
+  it("renders localized Today-highlight labels", () => {
+    const html = render(<DashboardLayoutSection id="dashboard-layout" />, "de");
+    expect(html).toContain("Highlights für heute");
+    expect(html).toContain("Medikamentendosen");
+    expect(html).toContain("Neue EKG-Aufzeichnungen");
   });
 
-  it("the ring mutation builds its body via buildRingMutationPayload, not a `...remote` spread (regression #581 source pin)", () => {
-    const src = readFileSync(
-      join(
-        process.cwd(),
-        "src/components/settings/dashboard-layout-section.tsx",
-      ),
-      "utf8",
-    );
-    // v1.32.16 — the ring body is built via `buildRingMutationPayload`,
-    // now also threading the optimistic-concurrency base token.
-    expect(src).toContain("buildRingMutationPayload({ ...next, baseUpdatedAt");
-    // The pre-fix shape must never come back: spreading a query-cache
-    // snapshot into the ring PUT body is exactly the stale-`widgets`
-    // race issue #581 reported.
-    expect(src).not.toMatch(/\.\.\.remote,/);
-  });
-});
-
-/**
- * v1.32.16 (issue #581) — a committed Save must stay authoritative against a
- * concurrent instant hero-ring write. The full DOM interaction (fire a ring
- * write, then a Save, assert the disabled/pending gate) can't run under this
- * suite's SSR-only convention, so the load-bearing client contract is pinned
- * as pure exported units plus source pins for the wiring the JSX depends on.
- */
-describe("dashboard layout — Save cannot be clobbered by a ring write (#581)", () => {
-  it("buildRingMutationPayload never carries widgets and threads the base token", () => {
-    const payload = buildRingMutationPayload({
-      selectedScoreRings: ["READINESS"],
-      heroRingOrder: ["HEALTH_SCORE", "READINESS"],
-      baseUpdatedAt: "2026-07-24T10:00:00.000Z",
-    });
-    // None of the fields a stale snapshot could carry and use to overwrite
-    // a fresher Save.
-    expect(payload).not.toHaveProperty("widgets");
-    expect(payload).not.toHaveProperty("comparisonBaseline");
-    expect(payload).not.toHaveProperty("chartOverlayPrefs");
-    // The ring selection + the guard token DO ride.
-    expect(payload.selectedScoreRings).toEqual(["READINESS"]);
-    expect(payload.baseUpdatedAt).toBe("2026-07-24T10:00:00.000Z");
-  });
-
-  it("buildRingMutationPayload omits the base-token key when none is known", () => {
-    const payload = buildRingMutationPayload({
-      selectedScoreRings: [],
-      heroRingOrder: ["HEALTH_SCORE"],
-    });
-    expect(payload).not.toHaveProperty("baseUpdatedAt");
-  });
-
-  it("widgetWritesBusy gates off EITHER write being in flight", () => {
-    expect(widgetWritesBusy(false, false)).toBe(false);
-    expect(widgetWritesBusy(true, false)).toBe(true); // Save pending
-    expect(widgetWritesBusy(false, true)).toBe(true); // ring pending
-    expect(widgetWritesBusy(true, true)).toBe(true);
-  });
-
-  it("the Save + ring controls bind the shared busy gate and serialise via one scope (source pin)", () => {
-    const src = readFileSync(
-      join(
-        process.cwd(),
-        "src/components/settings/dashboard-layout-section.tsx",
-      ),
-      "utf8",
-    );
-    // Save button + ring controls both read `widgetWritesBusy(...)` so the
-    // gate is one source of truth — the button can never disable on
-    // `saveMutation.isPending` alone (the pre-fix hole).
-    expect(src).toContain("widgetWritesBusy(");
-    // Both writes share a mutation scope so they run serially at the client.
-    expect(src).toContain("scope: { id: DASHBOARD_WIDGETS_MUTATION_SCOPE }");
-    // Each write sends the optimistic-concurrency base token.
-    expect(src).toContain("baseUpdatedAt: readBaseToken()");
-    // A 409 is handled (refetch + gentle nudge), not swallowed as a hard error.
-    expect(src).toContain("err.status === 409");
+  it("states that notification settings are managed separately", () => {
+    const html = render(<DashboardLayoutSection id="dashboard-layout" />);
+    expect(html).toContain("Notification settings are managed separately.");
   });
 });

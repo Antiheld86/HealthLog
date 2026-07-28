@@ -5,6 +5,11 @@
  * what the default layout is for new users. Null / missing = default.
  */
 import type { ModuleKey } from "@/lib/modules/registry";
+import {
+  PRIORITY_ITEM_KINDS,
+  isPriorityItemKind,
+  type PriorityItemKind,
+} from "@/lib/daily/priority-item";
 
 /**
  * Every widget the dashboard layout knows about. The order of
@@ -546,6 +551,20 @@ function coerceSelectedScoreRings(value: unknown): ScoreRingId[] {
   return out;
 }
 
+/**
+ * Resolve the Today hero's item-kind visibility against the current closed
+ * catalogue. Legacy or malformed values enable every current kind. Arrays are
+ * explicit choices, including an empty array, and resolve in catalogue order.
+ */
+function coerceEnabledHeroItemKinds(value: unknown): PriorityItemKind[] {
+  if (!Array.isArray(value)) return [...PRIORITY_ITEM_KINDS];
+  const enabled = new Set<PriorityItemKind>();
+  for (const entry of value) {
+    if (isPriorityItemKind(entry)) enabled.add(entry);
+  }
+  return PRIORITY_ITEM_KINDS.filter((kind) => enabled.has(kind));
+}
+
 export interface DashboardLayout {
   version: number;
   widgets: DashboardWidgetConfig[];
@@ -567,6 +586,11 @@ export interface DashboardLayout {
    * selected set on every read.
    */
   heroRingOrder?: HeroRingId[];
+  /**
+   * Item kinds allowed in the Today hero rail. Missing legacy data enables
+   * every current kind; an explicit empty array keeps the rail off.
+   */
+  enabledHeroItemKinds?: PriorityItemKind[];
 }
 
 /**
@@ -581,27 +605,11 @@ export interface DashboardLayout {
  *   "clear it". The route reads the stored layout and carries the existing
  *   value forward.
  *
- * The preserve set exists because clients legitimately don't know every
- * field. The per-chart overlay popover PUTs through
- * `/api/dashboard/chart-overlay-prefs`; the hero rings are a Settings-only
- * control; `comparisonBaseline` is web-only and the native client documents
- * that it never sends it. Without preserve-when-absent, a tile reorder on one
- * surface silently resets a choice made on another — which is exactly what
- * happened to `comparisonBaseline` before it joined this map: the serializer
- * clamps a missing value to `"none"`, so every native layout save wiped the
- * baseline the user had picked on the web.
- *
- * `widgets` moved from `"replace"` to `"preserve"` in v1.32.1 (issue #581).
- * The Settings page's instant score-ring toggle used to resend the FULL
- * layout — including `widgets` — built from the query cache's `remote`
- * snapshot. That snapshot can be stale by the time the ring request lands:
- * if a normal tile/chart Save committed a newer layout first, the
- * ring request's explicit (present, not omitted) stale `widgets` value
- * still won on write and silently reverted the just-saved layout. Making
- * `widgets` optional + preserve-when-absent lets the ring mutation omit it
- * entirely, so the field it never touches can no longer race a concurrent
- * Save — the route always carries forward whatever is CURRENTLY stored,
- * not a client-held copy.
+ * The preserve set exists because clients legitimately do not know every
+ * field. Chart overlays also write through their own endpoint. An omitted
+ * field must therefore keep the stored choice instead of falling through to
+ * a serializer default. `widgets` is preserved too so a partial client can
+ * update one preference without resending a potentially stale widget list.
  *
  * `satisfies Record<keyof DashboardLayout, …>` is the load-bearing part.
  * Adding a field to `DashboardLayout` without adding it here is a TYPE error,
@@ -615,6 +623,7 @@ export const LAYOUT_FIELD_MERGE_DISPOSITION = {
   chartOverlayPrefs: "preserve",
   selectedScoreRings: "preserve",
   heroRingOrder: "preserve",
+  enabledHeroItemKinds: "preserve",
 } as const satisfies Record<keyof DashboardLayout, "replace" | "preserve">;
 
 /**
@@ -660,84 +669,12 @@ export function mergePreservedLayoutFields(
 }
 
 /**
- * v1.32.1 — pure payload builder for the Settings page's instant score-ring
- * PUT (`ringMutation` in `dashboard-layout-section.tsx`). Lives in this
- * client-safe module (imported by both the client component and the server
- * route already) rather than the "use client" component file, so a
- * server-side regression test can import it without pulling the component's
- * UI dependency graph across the client/server boundary — see
- * `src/app/api/dashboard/widgets/__tests__/route.test.ts`.
- *
- * Deliberately returns ONLY the ring fields (plus `version`) — no
- * `widgets`, `comparisonBaseline`, or `chartOverlayPrefs`. Before v1.32.1 the
- * ring mutation resent the FULL layout built from the client's `remote`
- * query-cache snapshot, which can be stale by the time the request lands: if
- * a normal tile/chart Save committed a newer layout first, the ring
- * request's explicit — present, not omitted — stale `widgets` still won on
- * write and silently reverted the just-saved layout (issue #581). Those
- * three fields are all `"preserve"`-disposition here
- * (`LAYOUT_FIELD_MERGE_DISPOSITION`): omitting them means the route always
- * carries forward whatever is CURRENTLY stored, so this payload can no
- * longer race a concurrent Save no matter which request lands last.
- */
-/**
- * v1.32.16 (issue #581) — a `/api/dashboard/widgets` write payload plus the
- * optimistic-concurrency base token. `baseUpdatedAt` is the ISO
- * `User.updatedAt` the client read the layout at; the route writes only when
- * the stored row still carries it (else 409). It is request-only and never
- * lands in the persisted `dashboardWidgetsJson` blob.
- */
-export type DashboardLayoutWritePayload = Partial<DashboardLayout> & {
-  baseUpdatedAt?: string;
-};
-
-/**
- * v1.32.16 — the shape every GET / PUT `/api/dashboard/widgets` response
- * carries: the resolved layout plus the server-stamped `updatedAt`
- * concurrency token (mirrors `User.updatedAt`, never persisted inside the
- * blob). The client sends it back as `baseUpdatedAt` on the next write.
+ * The shape every GET / PUT `/api/dashboard/widgets` response returns.
+ * `updatedAt` is the optional optimistic-concurrency token.
  */
 export type DashboardLayoutWithToken = DashboardLayout & {
   updatedAt?: string;
 };
-
-export function buildRingMutationPayload(next: {
-  selectedScoreRings: ScoreRingId[];
-  heroRingOrder: HeroRingId[];
-  /**
-   * v1.32.16 (issue #581) — the base token the ring change was made
-   * against. Included when known so the guarded write can 409 rather than
-   * silently overwrite a Save that committed first. Omitted (not sent as
-   * `undefined`) when the client hasn't got a token yet.
-   */
-  baseUpdatedAt?: string;
-}): DashboardLayoutWritePayload {
-  return {
-    version: DASHBOARD_LAYOUT_VERSION,
-    selectedScoreRings: next.selectedScoreRings,
-    heroRingOrder: next.heroRingOrder,
-    ...(next.baseUpdatedAt !== undefined
-      ? { baseUpdatedAt: next.baseUpdatedAt }
-      : {}),
-  };
-}
-
-/**
- * v1.32.16 (issue #581) — the Save button and the instant hero-ring controls
- * both PUT the whole `/api/dashboard/widgets` layout. While EITHER write is in
- * flight the other must be disabled, so the two PUTs can never overlap at the
- * server and a committed Save cannot be reverted by a ring write that started
- * from the pre-Save snapshot. Belt-and-braces with the shared TanStack
- * mutation `scope` (which already serialises the two) and the server's
- * optimistic-concurrency token. Exported as a pure predicate so the JSX binds
- * one source of truth and a unit test can pin the gate.
- */
-export function widgetWritesBusy(
-  saving: boolean,
-  ringPending: boolean,
-): boolean {
-  return saving || ringPending;
-}
 
 const DASHBOARD_LAYOUT_VERSION = 1;
 
@@ -748,12 +685,11 @@ const DASHBOARD_LAYOUT_VERSION = 1;
  */
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
   version: DASHBOARD_LAYOUT_VERSION,
-  // One medication-adherence ring next to the health score by default —
-  // the successor of the hero dose row's information role.
+  // The stored score-ring contracts remain available to snapshot and native
+  // consumers even though the web layout settings do not edit them.
   selectedScoreRings: [...DEFAULT_SELECTED_SCORE_RINGS],
-  // v1.27.27 — the health-score ring leads the row by default; the user
-  // can reorder (see `resolveHeroRingOrder`).
   heroRingOrder: [...DEFAULT_HERO_RING_ORDER],
+  enabledHeroItemKinds: [...PRIORITY_ITEM_KINDS],
   widgets: [
     { id: "weight", visible: true, tileVisible: true, order: 0 },
     { id: "bp", visible: true, tileVisible: true, order: 1 },
@@ -921,6 +857,9 @@ export function resolveDashboardLayout(raw: unknown): DashboardLayout {
       candidate.heroRingOrder,
       resolvedSelectedScoreRings,
     ),
+    enabledHeroItemKinds: coerceEnabledHeroItemKinds(
+      candidate.enabledHeroItemKinds,
+    ),
   };
 }
 
@@ -929,6 +868,9 @@ export function serializeDashboardLayout(
 ): DashboardLayout {
   const resolvedSelectedScoreRings = coerceSelectedScoreRings(
     layout.selectedScoreRings,
+  );
+  const enabledHeroItemKinds = coerceEnabledHeroItemKinds(
+    layout.enabledHeroItemKinds,
   );
   return {
     version: DASHBOARD_LAYOUT_VERSION,
@@ -961,5 +903,10 @@ export function serializeDashboardLayout(
       layout.heroRingOrder,
       resolvedSelectedScoreRings,
     ),
+    // Every kind enabled is the forward-compatible default, so omit it from
+    // storage. Empty and partial arrays remain explicit user choices.
+    ...(enabledHeroItemKinds.length === PRIORITY_ITEM_KINDS.length
+      ? {}
+      : { enabledHeroItemKinds }),
   };
 }

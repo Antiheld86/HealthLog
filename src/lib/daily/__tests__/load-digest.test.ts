@@ -55,9 +55,11 @@ import { probeRollupCoverage } from "@/lib/rollups/measurement-coverage";
 import { loadIntradayPulse } from "@/lib/analytics/intraday-pulse-io";
 import { __resetAllCachesForTests } from "@/lib/cache/server-cache";
 import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
+import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
 
 const SNAPSHOT = {
   body: {
+    layout: { enabledHeroItemKinds: [...PRIORITY_ITEM_KINDS] },
     tiles: { lastSeenByType: {} },
     medsToday: {
       activeCount: 0,
@@ -149,5 +151,42 @@ describe("loadDailyDigest — S11/S12 extras cache", () => {
 
     expect(probeRollupCoverage).not.toHaveBeenCalled();
     expect(loadIntradayPulse).not.toHaveBeenCalled();
+  });
+  it("threads the resolved hero-item visibility into composition", async () => {
+    vi.mocked(readDashboardSnapshotCached).mockResolvedValueOnce({
+      ...SNAPSHOT,
+      body: {
+        ...SNAPSHOT.body,
+        layout: { enabledHeroItemKinds: [] },
+        medsToday: {
+          ...SNAPSHOT.body.medsToday,
+          nextDueOverdue: true,
+          nextDueMedicationName: "Morning dose",
+        },
+      },
+    } as never);
+
+    const digest = await loadDailyDigest(USER, NOW);
+    expect(digest.worthALook).toEqual([]);
+  });
+  it("lets non-hero consumers consider a candidate hidden by the dashboard", async () => {
+    vi.mocked(readDashboardSnapshotCached).mockResolvedValueOnce({
+      ...SNAPSHOT,
+      body: {
+        ...SNAPSHOT.body,
+        layout: { enabledHeroItemKinds: [] },
+        medsToday: {
+          ...SNAPSHOT.body.medsToday,
+          nextDueOverdue: true,
+          nextDueMedicationName: "Morning dose",
+        },
+      },
+    } as never);
+
+    const digest = await loadDailyDigest(USER, NOW, {
+      enabledItemKinds: PRIORITY_ITEM_KINDS,
+    });
+
+    expect(digest.worthALook.map((item) => item.kind)).toContain("dose_window");
   });
 });

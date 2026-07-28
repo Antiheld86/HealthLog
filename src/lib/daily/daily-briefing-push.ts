@@ -37,6 +37,7 @@ import { userDayKey } from "@/lib/tz/format";
 import { dispatchNotification } from "@/lib/notifications/dispatcher";
 import { loadDailyDigest } from "@/lib/daily/load-digest";
 import type { DailyDigest } from "@/lib/daily/digest";
+import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
 
 /**
  * The local-morning window this nudge may fire in, [earliest, latest). Both the
@@ -80,6 +81,12 @@ export interface DailyBriefingDispatchDeps {
   dispatch?: typeof dispatchNotification;
   loadDigest?: (user: User, now: Date) => Promise<DailyDigest>;
   isModuleEnabled?: typeof isModuleEnabled;
+}
+
+function loadDailyBriefingDigest(user: User, now: Date): Promise<DailyDigest> {
+  return loadDailyDigest(user, now, {
+    enabledItemKinds: PRIORITY_ITEM_KINDS,
+  });
 }
 
 function resolveLocale(locale: string | null | undefined): Locale {
@@ -142,7 +149,7 @@ export async function maybeDispatchDailyBriefing(
   deps: DailyBriefingDispatchDeps = {},
 ): Promise<DailyBriefingDispatchResult> {
   const dispatch = deps.dispatch ?? dispatchNotification;
-  const loadDigest = deps.loadDigest ?? loadDailyDigest;
+  const loadDigest = deps.loadDigest ?? loadDailyBriefingDigest;
   const moduleGate = deps.isModuleEnabled ?? isModuleEnabled;
 
   try {

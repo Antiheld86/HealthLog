@@ -396,10 +396,6 @@
     },
     "welcomeBack": "{greeting}, willkommen zurück.",
     "welcomeBackWithName": "{greeting} {name}, willkommen zurück.",
-    "hero": {
-      "scoreLabel": "Health Score",
-      "ringDoses": "Dosen heute"
-    },
     "greetingSalutation": "Hallo, {name}",
     "streakLabel": "Tage in Folge",
     "weight": "Gewicht",
@@ -452,11 +448,22 @@
     "compliance7d": "Therapietreue (7 Tage)",
     "mood": "Stimmung",
     "customizeTitle": "Dashboard-Layout",
-    "scoreRingsTitle": "Score-Ringe",
-    "scoreRingsDescription": "Bis zu drei zusätzliche Ringe neben dem Health Score – zum Beispiel Bereitschaft, Erholung, Schlaf oder Therapietreue. Zum Umsortieren ziehen; der Health Score steht standardmäßig vorne.",
+    "heroItemsTitle": "Highlights für heute",
+    "heroItemsDescription": "Wähle aus, welche Eintragstypen in den Highlights für heute erscheinen.",
+    "heroItemsNotificationNote": "Benachrichtigungseinstellungen werden separat verwaltet.",
+    "heroItems": {
+      "coach_checkin": "Coach-Check-ins",
+      "dose_window": "Medikamentendosen",
+      "preventive_care": "Vorsorge",
+      "sync_issue": "Synchronisierungsprobleme",
+      "milestone": "Meilensteine",
+      "ecg_new_recording": "Neue EKG-Aufzeichnungen",
+      "tension_window": "Anspannungsphasen",
+      "same_time_baseline": "Aktivität zur gleichen Tageszeit"
+    },
     "layoutReset": "Auf Defaults zurücksetzen",
     "layoutResetTitle": "Dashboard-Layout zurücksetzen?",
-    "layoutResetBody": "Deine Kachel-Reihenfolge, die ausgeblendeten Kacheln und die gewählten Ringe kehren zu den Standardwerten zurück. Die Anordnung wird nirgends sonst gespeichert.",
+    "layoutResetBody": "Dein Kachel-Layout und deine Auswahl für die Highlights für heute werden auf die Standardwerte zurückgesetzt.",
     "layoutResetConfirm": "Layout zurücksetzen",
     "layoutSaveSuccess": "Dashboard-Layout gespeichert",
     "layoutSaveError": "Layout konnte nicht gespeichert werden",
@@ -2081,7 +2088,6 @@
   },
   "comparison": {
     "toggleLabel": "Vergleichen mit",
-    "toggleHint": "Vergleicht den aktuellen Zeitraum mit dem Vorjahreszeitraum.",
     "baseline": {
       "none": "Aus",
       "lastMonth": "Vormonat",

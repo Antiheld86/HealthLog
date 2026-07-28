@@ -143,6 +143,29 @@ describe("<TodayHero>", () => {
     expect(html).toBe("");
   });
 
+  it("shows all-clear when layout filtering removes every candidate", () => {
+    const html = render(
+      <TodayHero
+        digest={digest({
+          score: null,
+          topSignal: null,
+          briefingLead: null,
+          line: "Nothing needs your attention today — everything's tracking normally.",
+          worthALook: [],
+          reactionLine: null,
+          justIn: null,
+        })}
+        renderFilteredAllClear
+      />,
+    );
+
+    expect(html).toContain('data-slot="today-hero"');
+    expect(html).toContain('data-slot="today-hero-all-clear"');
+    expect(html).not.toContain('data-slot="today-hero-rail"');
+    expect(html).not.toContain('data-slot="today-hero-signal"');
+    expect(html).not.toContain('data-slot="today-hero-just-in"');
+  });
+
   // v1.29.1 — the v1.29.0 selected-score-ring cluster was removed from the web
   // hero (Marc, live-use: uneven, wasted tile space). Only the main
   // health-score ring paints now; the cluster's data-slots are gone.

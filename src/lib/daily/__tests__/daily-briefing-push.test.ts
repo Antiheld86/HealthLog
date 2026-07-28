@@ -8,6 +8,8 @@
 import { describe, it, expect, vi } from "vitest";
 import type { PrismaClient } from "@/generated/prisma/client";
 
+vi.mock("@/lib/daily/load-digest", () => ({ loadDailyDigest: vi.fn() }));
+
 import {
   maybeDispatchDailyBriefing,
   buildDailyBriefingPush,
@@ -17,6 +19,8 @@ import {
 import type { DailyDigest } from "@/lib/daily/digest";
 import { isUrgentPayload } from "@/lib/notifications/types";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
+import { loadDailyDigest } from "@/lib/daily/load-digest";
+import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
 
 // 06:00Z → 08:00 in Europe/Berlin (summer) → inside the morning window AND the
 // fixed fallback hour. The tz-window cases move only this instant.
@@ -153,6 +157,51 @@ describe("maybeDispatchDailyBriefing", () => {
     const payload = deps.dispatch.mock.calls[0][0];
     expect(payload.eventType).toBe("DAILY_BRIEFING");
     expect(payload.metadata?.url).toBe("/");
+  });
+
+  it("uses canonical candidates when dashboard hero visibility hides the only item", async () => {
+    vi.mocked(loadDailyDigest).mockReset();
+    vi.mocked(loadDailyDigest).mockImplementation(
+      async (_user, _now, options) =>
+        makeDigest({
+          score: null,
+          briefingLead: null,
+          topSignal: null,
+          worthALook: options?.enabledItemKinds?.includes("dose_window")
+            ? [
+                {
+                  kind: "dose_window",
+                  title: "Medication due",
+                  body: "Morning dose is overdue.",
+                  status: "warning",
+                  actions: [
+                    {
+                      labelKey: "daily.action.logDose",
+                      intent: "dose.log",
+                    },
+                  ],
+                },
+              ]
+            : [],
+        }),
+    );
+    const deps = makeDeps();
+    delete deps.loadDigest;
+
+    const result = await maybeDispatchDailyBriefing(
+      makePrisma({}),
+      "u1",
+      IN_WINDOW,
+      deps,
+    );
+
+    expect(result).toBe("sent");
+    expect(loadDailyDigest).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "u1" }),
+      IN_WINDOW,
+      { enabledItemKinds: PRIORITY_ITEM_KINDS },
+    );
+    expect(deps.dispatch).toHaveBeenCalledOnce();
   });
 
   it("never routes as an alert: the payload is non-urgent", async () => {

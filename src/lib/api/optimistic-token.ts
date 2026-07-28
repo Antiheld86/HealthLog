@@ -40,9 +40,8 @@ export function readUpdatedAtToken(
 }
 
 /**
- * Attach the base token to a write payload — but only when it is known, so a
- * tokenless client transparently takes the server's unconditional write
- * (mirrors `buildRingMutationPayload`'s conditional spread).
+ * Attach the base token to a write payload only when it is known. A tokenless
+ * client transparently takes the server's unconditional write.
  */
 export function withBaseToken<T extends object>(
   payload: T,

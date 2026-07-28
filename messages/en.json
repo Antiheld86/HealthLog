@@ -396,10 +396,6 @@
     },
     "welcomeBack": "{greeting}, welcome back.",
     "welcomeBackWithName": "{greeting} {name}, welcome back.",
-    "hero": {
-      "scoreLabel": "Health Score",
-      "ringDoses": "Doses today"
-    },
     "greetingSalutation": "Hi, {name}",
     "streakLabel": "days in a row",
     "weight": "Weight",
@@ -452,11 +448,22 @@
     "compliance7d": "Adherence (7 days)",
     "mood": "Mood",
     "customizeTitle": "Dashboard layout",
-    "scoreRingsTitle": "Score rings",
-    "scoreRingsDescription": "Up to three additional rings next to the health score — for example readiness, recovery, sleep or adherence. Drag to reorder; the health score leads by default.",
+    "heroItemsTitle": "Today highlights",
+    "heroItemsDescription": "Choose which item types can appear in Today highlights.",
+    "heroItemsNotificationNote": "Notification settings are managed separately.",
+    "heroItems": {
+      "coach_checkin": "Coach check-ins",
+      "dose_window": "Medication doses",
+      "preventive_care": "Preventive care",
+      "sync_issue": "Sync issues",
+      "milestone": "Milestones",
+      "ecg_new_recording": "New ECG recordings",
+      "tension_window": "Tension windows",
+      "same_time_baseline": "Same-time activity"
+    },
     "layoutReset": "Reset to defaults",
     "layoutResetTitle": "Reset the dashboard layout?",
-    "layoutResetBody": "Your tile order, the tiles you hid and the rings you chose all go back to defaults. The arrangement is not stored anywhere else.",
+    "layoutResetBody": "Your tile layout and Today highlight choices return to their defaults.",
     "layoutResetConfirm": "Reset layout",
     "layoutSaveSuccess": "Dashboard layout saved",
     "layoutSaveError": "Could not save dashboard layout",
@@ -2081,7 +2088,6 @@
   },
   "comparison": {
     "toggleLabel": "Compare to",
-    "toggleHint": "Show the same period from last year alongside today's chart.",
     "baseline": {
       "none": "None",
       "lastMonth": "Last month",

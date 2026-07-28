@@ -21,12 +21,10 @@
 import type { ModuleKey } from "@/lib/modules/registry";
 
 /**
- * Closed set of rail-item kinds. It GROWS BY PR — a new rail item type is a new
- * entry here + a new server builder, nothing else. S1 ships builders for
- * `dose_window`, `preventive_care`, and `sync_issue`; the remaining kinds are
- * reserved for the slices that own them (coach check-in S3, milestone S12,
- * new-ECG S10, tension window S11) so their consumers can already type against
- * the union.
+ * Closed set of rail-item kinds. A new kind also needs its server builder and
+ * dashboard-layout label. Typed consumers derive from this tuple so stored
+ * visibility settings and API validation cannot accept vocabulary the current
+ * build does not understand.
  */
 export const PRIORITY_ITEM_KINDS = [
   "coach_checkin",
@@ -40,6 +38,13 @@ export const PRIORITY_ITEM_KINDS = [
 ] as const;
 
 export type PriorityItemKind = (typeof PRIORITY_ITEM_KINDS)[number];
+
+export function isPriorityItemKind(value: unknown): value is PriorityItemKind {
+  return (
+    typeof value === "string" &&
+    (PRIORITY_ITEM_KINDS as readonly string[]).includes(value)
+  );
+}
 
 /**
  * The OBSERVATIONAL kinds — a durable-state reward, a new-ECG pointer, an

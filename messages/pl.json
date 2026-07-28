@@ -396,10 +396,6 @@
     },
     "welcomeBack": "{greeting}, witaj ponownie.",
     "welcomeBackWithName": "{greeting} {name}, witaj ponownie.",
-    "hero": {
-      "scoreLabel": "Health Score",
-      "ringDoses": "Dzisiejsze dawki"
-    },
     "greetingSalutation": "Cześć, {name}",
     "streakLabel": "dni z rzędu",
     "weight": "Waga",
@@ -452,11 +448,22 @@
     "compliance7d": "Przestrzeganie (7 dni)",
     "mood": "Nastrój",
     "customizeTitle": "Układ panelu",
-    "scoreRingsTitle": "Pierścienie wyników",
-    "scoreRingsDescription": "Maksymalnie trzy dodatkowe pierścienie obok wskaźnika zdrowia — np. gotowość, regeneracja, sen lub przestrzeganie zaleceń. Przeciągnij, aby zmienić kolejność; wskaźnik zdrowia jest domyślnie na początku.",
+    "heroItemsTitle": "Dzisiejsze wyróżnienia",
+    "heroItemsDescription": "Wybierz typy elementów, które mogą pojawiać się w dzisiejszych wyróżnieniach.",
+    "heroItemsNotificationNote": "Ustawieniami powiadomień zarządzasz osobno.",
+    "heroItems": {
+      "coach_checkin": "Podsumowania z Coachem",
+      "dose_window": "Dawki leków",
+      "preventive_care": "Profilaktyka",
+      "sync_issue": "Problemy z synchronizacją",
+      "milestone": "Kamienie milowe",
+      "ecg_new_recording": "Nowe zapisy EKG",
+      "tension_window": "Okresy napięcia",
+      "same_time_baseline": "Aktywność o tej samej porze"
+    },
     "layoutReset": "Przywróć wartości domyślne",
     "layoutResetTitle": "Zresetować układ pulpitu?",
-    "layoutResetBody": "Kolejność kafelków, ukryte kafelki i wybrane pierścienie wracają do ustawień domyślnych. Ten układ nie jest nigdzie indziej zapisany.",
+    "layoutResetBody": "Układ kafelków i wybory dotyczące dzisiejszych wyróżnień wracają do ustawień domyślnych.",
     "layoutResetConfirm": "Zresetuj układ",
     "layoutSaveSuccess": "Układ panelu zapisany",
     "layoutSaveError": "Nie udało się zapisać układu",
@@ -2081,7 +2088,6 @@
   },
   "comparison": {
     "toggleLabel": "Porównaj z",
-    "toggleHint": "Porównuje bieżący okres z tym samym okresem rok wcześniej.",
     "baseline": {
       "none": "Wyłączone",
       "lastMonth": "Poprzedni miesiąc",

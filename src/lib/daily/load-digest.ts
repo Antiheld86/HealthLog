@@ -55,6 +55,10 @@ import {
 } from "@/lib/daily/milestones";
 import { loadIntradayPulse } from "@/lib/analytics/intraday-pulse-io";
 import { computeSameTimeBaseline } from "@/lib/insights/derived/same-time-baseline";
+import {
+  PRIORITY_ITEM_KINDS,
+  type PriorityItemKind,
+} from "@/lib/daily/priority-item";
 
 /** Integration states that mean "your action is needed to keep data flowing". */
 const SYNC_ISSUE_STATES = ["error_reauth", "parked"] as const;
@@ -325,9 +329,19 @@ function toDigestArrival(row: {
   };
 }
 
+export interface DailyDigestLoadOptions {
+  /**
+   * Overrides the dashboard's hero visibility for non-hero consumers.
+   * Passing `PRIORITY_ITEM_KINDS` keeps notification eligibility independent
+   * from which cards the user chose to display in the Today hero.
+   */
+  enabledItemKinds?: readonly PriorityItemKind[];
+}
+
 export async function loadDailyDigest(
   user: User,
   now: Date = new Date(),
+  options: DailyDigestLoadOptions = {},
 ): Promise<DailyDigest> {
   // Computed before the fan-out because the arrival read is keyed on it. Pure
   // (a tz format of `now`), so hoisting it costs nothing.
@@ -527,6 +541,10 @@ export async function loadDailyDigest(
     {
       now,
       modules,
+      enabledHeroItemKinds:
+        options.enabledItemKinds ??
+        snapshot.layout.enabledHeroItemKinds ??
+        PRIORITY_ITEM_KINDS,
       score,
       briefing: snapshot.briefing,
       medsToday: snapshot.medsToday,

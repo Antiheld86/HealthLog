@@ -11689,10 +11689,11 @@ paths:
       tags:
         - Dashboard
       summary: Reset the calling user's dashboard widget layout
-      description: Clears the persisted layout and returns the default layout. Idempotent.
+      description: Resets the tile layout and Today-highlight visibility. It preserves the stored comparison baseline, chart
+        overlays, selected score rings, and hero ring order. Idempotent.
       responses:
         "200":
-          description: Layout reset; the default layout is returned.
+          description: Web-controlled layout settings reset; preserved dashboard preferences are returned with the defaults.
           content:
             application/json:
               schema:
@@ -14377,6 +14378,22 @@ components:
               - RECOVERY_SCORE
               - SLEEP_SCORE
               - MED_COMPLIANCE
+        enabledHeroItemKinds:
+          description: Today-highlight item kinds in catalogue order. Missing means every current kind is enabled; an empty
+            array disables all kinds.
+          maxItems: 8
+          type: array
+          items:
+            type: string
+            enum:
+              - coach_checkin
+              - dose_window
+              - preventive_care
+              - sync_issue
+              - milestone
+              - ecg_new_recording
+              - tension_window
+              - same_time_baseline
         baseUpdatedAt:
           description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
             legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
@@ -33206,6 +33223,22 @@ components:
               - RECOVERY_SCORE
               - SLEEP_SCORE
               - MED_COMPLIANCE
+        enabledHeroItemKinds:
+          description: Today-highlight item kinds in catalogue order. Missing means every current kind is enabled; an empty
+            array disables all kinds.
+          maxItems: 8
+          type: array
+          items:
+            type: string
+            enum:
+              - coach_checkin
+              - dose_window
+              - preventive_care
+              - sync_issue
+              - milestone
+              - ecg_new_recording
+              - tension_window
+              - same_time_baseline
         updatedAt:
           description: "Optimistic-concurrency token: the stored row's `updatedAt` at read/write time. Echo it back as
             `baseUpdatedAt` on the next write. Opaque."

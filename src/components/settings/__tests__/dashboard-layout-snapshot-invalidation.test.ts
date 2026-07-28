@@ -131,18 +131,17 @@ describe("dashboard layout save — every layout source is covered (source pins)
     "utf8",
   );
 
-  it("all three snapshot invalidations (save / reset / rings) refetch inactive cells", () => {
-    const calls =
-      sectionSrc.match(
-        /invalidateQueries\(\{\s*queryKey: queryKeys\.dashboardSnapshot\(\),\s*refetchType: "all",\s*\}\)/g,
-      ) ?? [];
-    expect(calls).toHaveLength(3);
-    // No leftover default-refetchType snapshot invalidation.
-    const anySnapshotInvalidation =
-      sectionSrc.match(
-        /invalidateQueries\(\{\s*queryKey: queryKeys\.dashboardSnapshot\(\)/g,
-      ) ?? [];
-    expect(anySnapshotInvalidation).toHaveLength(3);
+  it("save and reset refetch inactive snapshot and daily-digest cells", () => {
+    for (const key of ["dashboardSnapshot", "dailyDigest"]) {
+      const calls =
+        sectionSrc.match(
+          new RegExp(
+            `invalidateQueries\\(\\{\\s*queryKey: queryKeys\\.${key}\\(\\),\\s*refetchType: "all",\\s*\\}\\)`,
+            "g",
+          ),
+        ) ?? [];
+      expect(calls).toHaveLength(2);
+    }
   });
 
   it("the legacy dashboardWidgets cell is written directly with the server response", () => {

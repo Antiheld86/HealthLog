@@ -33,6 +33,7 @@ import {
   resolveDashboardLayout,
   type DashboardLayout,
 } from "@/lib/dashboard-layout";
+import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
 import type { DashboardAnalyticsData as AnalyticsData } from "@/types/analytics";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -486,6 +487,9 @@ export default function DashboardPageClient({
 
   // Resolve full dashboard layout — controls visibility + order of every widget
   const layout = resolveDashboardLayout(layoutData);
+  const renderFilteredHeroAllClear =
+    (layout.enabledHeroItemKinds ?? PRIORITY_ITEM_KINDS).length <
+    PRIORITY_ITEM_KINDS.length;
   /**
    * v1.4.16 phase B8 — comparison baseline (Vormonat / Vorjahr) read
    * from the resolved layout so every chart + tile on the dashboard
@@ -926,7 +930,10 @@ export default function DashboardPageClient({
         // post-mount. DO NOT add `["daily", …]` to that allowlist, or render
         // the hero from any client-only source, without revisiting this gate.
         (digestQuery.data ? (
-          <TodayHero digest={digestQuery.data} />
+          <TodayHero
+            digest={digestQuery.data}
+            renderFilteredAllClear={renderFilteredHeroAllClear}
+          />
         ) : !mounted || digestQuery.isLoading ? (
           <TodayHeroSkeleton />
         ) : digestQuery.isError ? (

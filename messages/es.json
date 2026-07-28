@@ -396,10 +396,6 @@
     },
     "welcomeBack": "{greeting}, te damos la bienvenida de nuevo.",
     "welcomeBackWithName": "{greeting} {name}, te damos la bienvenida de nuevo.",
-    "hero": {
-      "scoreLabel": "Health Score",
-      "ringDoses": "Dosis de hoy"
-    },
     "greetingSalutation": "Hola, {name}",
     "streakLabel": "días seguidos",
     "weight": "Peso",
@@ -452,11 +448,22 @@
     "compliance7d": "Cumplimiento (7 días)",
     "mood": "Estado de ánimo",
     "customizeTitle": "Diseño del panel",
-    "scoreRingsTitle": "Anillos de puntuación",
-    "scoreRingsDescription": "Hasta tres anillos adicionales junto a la puntuación de salud, por ejemplo preparación, recuperación, sueño o cumplimiento. Arrastra para reordenar; la puntuación de salud va primero de forma predeterminada.",
+    "heroItemsTitle": "Destacados de hoy",
+    "heroItemsDescription": "Elige qué tipos de elementos pueden aparecer en los destacados de hoy.",
+    "heroItemsNotificationNote": "Los ajustes de notificaciones se gestionan por separado.",
+    "heroItems": {
+      "coach_checkin": "Revisión con Coach",
+      "dose_window": "Dosis de medicamentos",
+      "preventive_care": "Atención preventiva",
+      "sync_issue": "Problemas de sincronización",
+      "milestone": "Hitos",
+      "ecg_new_recording": "Nuevos registros de ECG",
+      "tension_window": "Periodos de tensión",
+      "same_time_baseline": "Actividad a la misma hora"
+    },
     "layoutReset": "Restablecer valores por defecto",
     "layoutResetTitle": "¿Restablecer el diseño del panel?",
-    "layoutResetBody": "El orden de tus tarjetas, las que ocultaste y los anillos que elegiste vuelven a los valores predeterminados. La disposición no se guarda en ningún otro sitio.",
+    "layoutResetBody": "El diseño de tus tarjetas y tus opciones para los destacados de hoy vuelven a los valores predeterminados.",
     "layoutResetConfirm": "Restablecer diseño",
     "layoutSaveSuccess": "Diseño del panel guardado",
     "layoutSaveError": "No se ha podido guardar el diseño",
@@ -2081,7 +2088,6 @@
   },
   "comparison": {
     "toggleLabel": "Comparar con",
-    "toggleHint": "Compara el periodo actual con el mismo periodo del año anterior.",
     "baseline": {
       "none": "Desactivado",
       "lastMonth": "Mes anterior",
