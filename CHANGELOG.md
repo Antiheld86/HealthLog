@@ -2,6 +2,40 @@
 
 ## [Unreleased]
 
+## [1.33.2] — 2026-07-28
+
+### The cycle-symptom fix in v1.33.1 did not work
+
+v1.33.1 said it had fixed custom cycle symptoms in backups. It had not. The
+fix was real in three places and missing from the one that decides what ends
+up in the file. The code that reads your cycle data returned the symptoms you
+created yourself. The file format declared a field to hold them. The restore
+knew how to put them back. But the step that assembles the file copies its
+contents across one field at a time, and that list was never extended, so
+every backup written since carried an empty list of custom symptoms.
+
+The same release also replaced a silent drop with an error. Before it, a
+backup referencing a symptom the restoring instance did not have lost that
+one link and finished. After it, the restore stops and reports a failure.
+Together with the empty list, that took an account with a symptom of its own
+from losing a single link to being unable to restore at all. That is the
+group the fix was written for.
+
+Nothing in your stored data was damaged. But a backup written by v1.33.1 or
+earlier does not hold the symptom definitions you created, and restoring one
+of those files on this version will fail at the first day-log referencing
+one. Take a fresh backup after updating and keep it alongside the older
+files.
+
+The assembly step no longer lists fields by hand. It copies each section
+whole, so a field added to a section reaches the file because of the way the
+code is written rather than because somebody remembered. Both ends of this
+were covered by tests that passed for the whole time it was broken, and
+nothing covered the join between them, so there is now a test that writes a
+real backup for an account with a symptom of its own, removes that symptom
+from the database, restores the file, and checks the row and its day-log link
+came back.
+
 ## [1.33.1] — 2026-07-27
 
 A patch release about the same thing as the one before it: places where the
