@@ -18,7 +18,13 @@
  * record where it belongs.
  */
 
-import { HeartPulse, ShieldAlert, Users } from "lucide-react";
+import {
+  ClipboardList,
+  EyeOff,
+  HeartPulse,
+  ShieldAlert,
+  Users,
+} from "lucide-react";
 
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
@@ -28,12 +34,26 @@ import { useModuleEnabled } from "@/hooks/use-module-enabled";
 import { AllergyManager } from "@/components/records/allergy-manager";
 import { ConditionsManager } from "@/components/records/conditions-manager";
 import { FamilyHistoryManager } from "@/components/records/family-history-manager";
+import { AiProfileInclusionManager } from "@/components/records/ai-profile-inclusion-manager";
+import { HealthProfileFactsManager } from "@/components/records/health-profile-facts-manager";
 
 export function AnamnesisSection() {
   const { t } = useTranslations();
   const coachEnabled = useModuleEnabled("coach");
+  const insightsEnabled = useModuleEnabled("insights");
   return (
     <div className="space-y-6">
+      {(coachEnabled || insightsEnabled) && (
+        <SettingsCard className="space-y-4">
+          <SettingsCardHeader
+            icon={EyeOff}
+            title={t("records.aiInclusion.cardTitle")}
+            description={t("records.aiInclusion.cardDescription")}
+          />
+          <AiProfileInclusionManager />
+        </SettingsCard>
+      )}
+
       {coachEnabled && (
         <SettingsCard className="space-y-4">
           <SettingsCardHeader
@@ -44,6 +64,14 @@ export function AnamnesisSection() {
           <ConditionsManager />
         </SettingsCard>
       )}
+      <SettingsCard className="space-y-4">
+        <SettingsCardHeader
+          icon={ClipboardList}
+          title={t("records.profileFacts.cardTitle")}
+          description={t("records.profileFacts.cardDescription")}
+        />
+        <HealthProfileFactsManager />
+      </SettingsCard>
 
       <SettingsCard className="space-y-4">
         <SettingsCardHeader

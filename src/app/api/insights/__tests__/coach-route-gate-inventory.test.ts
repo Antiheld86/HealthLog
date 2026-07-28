@@ -118,6 +118,10 @@ const NOT_COACH_OWNED_ROUTES: ReadonlyArray<string> = [
   // `insights` module, not the Coach surface. Same posture as health-status /
   // labs-changes directly above — disabling Coach must not wedge this read.
   "src/app/api/insights/pulse/intraday/route.ts",
+  // Persisted correlation decisions are deterministic Insights data. They
+  // gate on the Insights module and remain usable when Coach is disabled.
+  "src/app/api/insights/patterns/route.ts",
+  "src/app/api/insights/patterns/[id]/route.ts",
   // v1.29.x (S7) — the FENCED multi-document coach chat + its attach/detach
   // mutations. These live under /insights/chat for URL grouping but are
   // DOCUMENT-surface routes: they gate on the `inboundDocuments` module

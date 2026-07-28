@@ -20,6 +20,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
+import { Buffer } from "node:buffer";
 
 process.env.ENCRYPTION_KEY =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -48,6 +49,7 @@ vi.mock("@/lib/db", () => ({
     user: { findUnique: vi.fn() },
     $transaction: mocks.transaction,
   },
+  toJson: <T>(value: T) => value,
 }));
 
 // Only `decrypt` is stubbed — it stands in for reading the stored backup blob.
@@ -167,7 +169,34 @@ function sourceClient() {
     illnessEpisode: empty,
     allergy: empty,
     familyHistoryEntry: empty,
-    workout: empty,
+    workout: {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "workout-fitbit-1",
+          userId: OWNER,
+          sportType: "other",
+          startedAt: new Date("2026-07-18T08:00:00.000Z"),
+          endedAt: new Date("2026-07-18T08:30:00.000Z"),
+          durationSec: 1800,
+          totalEnergyKcal: 180,
+          totalDistanceM: null,
+          avgHeartRate: 125,
+          maxHeartRate: null,
+          minHeartRate: null,
+          stepCount: null,
+          elevationM: null,
+          pauseDurationSec: null,
+          source: "FITBIT",
+          externalId: "91002",
+          metadata: {
+            fitbitActivityName: "Activity Zeta",
+            fitbitActivityTypeId: 9002,
+          },
+          createdAt: new Date("2026-07-18T08:30:00.000Z"),
+          updatedAt: new Date("2026-07-18T08:30:00.000Z"),
+        },
+      ]),
+    },
     inboundDocument: empty,
     // The two domains this stream adds.
     userHealthProfile: {
@@ -179,9 +208,36 @@ function sourceClient() {
         allergiesEncrypted: encryptToBytes("penicillin"),
         coachFocusEncrypted: null,
         pendingQuestionsEncrypted: encryptToBytes('["How is your sleep?"]'),
+        aiIncludedSections: ["CONDITIONS", "SMOKING_STATUS"],
         createdAt: new Date("2026-07-01T00:00:00.000Z"),
         updatedAt: new Date("2026-07-19T00:00:00.000Z"),
       }),
+    },
+    healthProfileFactRevision: {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "fact-old",
+          userId: OWNER,
+          kind: "SMOKING_STATUS",
+          valueEncrypted: encryptToBytes("CURRENT"),
+          validFrom: new Date("2026-07-01T00:00:00.000Z"),
+          validUntil: new Date("2026-07-10T00:00:00.000Z"),
+          provenance: "USER_REPORTED",
+          supersededByRevisionId: "fact-current",
+          createdAt: new Date("2026-07-01T00:00:00.000Z"),
+        },
+        {
+          id: "fact-current",
+          userId: OWNER,
+          kind: "SMOKING_STATUS",
+          valueEncrypted: encryptToBytes("FORMER"),
+          validFrom: new Date("2026-07-10T00:00:00.000Z"),
+          validUntil: null,
+          provenance: "USER_CORRECTION",
+          supersededByRevisionId: null,
+          createdAt: new Date("2026-07-10T00:00:00.000Z"),
+        },
+      ]),
     },
     // The hourly shape of a drained day. The per-sample rows it was folded
     // from are already gone, so nothing but this row can rebuild it.
@@ -266,7 +322,17 @@ interface Written {
   data: Record<string, unknown>;
 }
 
-function recordingTx(written: Written[]) {
+/**
+ * `seed` lets a test answer `findUnique`/`findMany` reads with the live
+ * pre-restore state (the row set the restore's cache-invalidation check
+ * reads before it deletes and rebuilds), keyed by model name. Every other
+ * test leaves it empty, which reproduces the old "nothing lives here yet"
+ * behaviour exactly.
+ */
+function recordingTx(
+  written: Written[],
+  seed: Record<string, { findUnique?: unknown; findMany?: unknown[] }> = {},
+) {
   // Symptom definitions the restore has written back, so link resolution can
   // only succeed if the definitions actually rode the file.
   const restoredSymptoms = new Map<string, string>();
@@ -282,14 +348,21 @@ function recordingTx(written: Written[]) {
               if (model === "cycleSymptom") {
                 return [...restoredSymptoms].map(([key, id]) => ({ id, key }));
               }
-              return [];
+              return seed[model]?.findMany ?? [];
             }
-            if (op === "findFirst" || op === "findUnique") return null;
+            if (op === "findFirst" || op === "findUnique") {
+              return seed[model]?.findUnique ?? null;
+            }
             const data = (args.data ?? args.create ?? {}) as Record<
               string,
               unknown
             >;
-            if (op === "create" || op === "upsert" || op === "createMany") {
+            if (
+              op === "create" ||
+              op === "upsert" ||
+              op === "createMany" ||
+              op === "update"
+            ) {
               if (model === "cycleSymptom" && typeof data.key === "string") {
                 restoredSymptoms.set(data.key, (data.id as string) ?? "new-id");
               }
@@ -314,27 +387,45 @@ function request(): NextRequest {
   });
 }
 
-/** Build a real backup for the account above, then restore it. */
-async function roundTrip(): Promise<{ res: Response; written: Written[] }> {
-  const { payload } = await buildFullBackupPayload(
-    sourceClient() as never,
-    OWNER,
-    { purpose: "disaster-recovery" },
-  );
+/**
+ * Build a real backup for the account above, then restore it.
+ *
+ * `payloadOverride` lets a test build the payload once, derive a "live"
+ * seed from its exact bytes, and restore that SAME payload — rebuilding it
+ * would re-encrypt every ciphertext field with a fresh random IV, making an
+ * unchanged-scope restore look changed for reasons that have nothing to do
+ * with scope.
+ */
+async function roundTrip(
+  seed: Record<string, { findUnique?: unknown; findMany?: unknown[] }> = {},
+  payloadOverride?: Record<string, unknown>,
+): Promise<{
+  res: Response;
+  written: Written[];
+  payload: Record<string, unknown>;
+}> {
+  const payload =
+    payloadOverride ??
+    (
+      await buildFullBackupPayload(sourceClient() as never, OWNER, {
+        purpose: "disaster-recovery",
+      })
+    ).payload;
 
   // The file as it lands on disk: JSON, nothing else.
   mocks.decrypt.mockReturnValue(JSON.stringify(payload));
 
   const written: Written[] = [];
   mocks.transaction.mockImplementation(
-    async (fn: (tx: unknown) => Promise<unknown>) => fn(recordingTx(written)),
+    async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn(recordingTx(written, seed)),
   );
 
   const res = await (
     POST as unknown as (r: NextRequest, c: unknown) => Promise<Response>
   )(request(), { params: Promise.resolve({ id: "b-1" }) });
 
-  return { res, written };
+  return { res, written, payload };
 }
 
 beforeEach(() => {
@@ -372,6 +463,29 @@ describe("backup round trip — export, wire schema, restore", () => {
     expect(profile!.data.aboutMeEncrypted).toBeInstanceOf(Uint8Array);
     expect(profile!.data.conditionsEncrypted).toBeNull();
     expect(profile!.data.pendingQuestionsEncrypted).toBeInstanceOf(Uint8Array);
+    expect(profile!.data.aiIncludedSections).toEqual([
+      "CONDITIONS",
+      "SMOKING_STATUS",
+    ]);
+  });
+
+  it("writes every encrypted fact revision back", async () => {
+    const { written } = await roundTrip();
+    const facts = written.filter(
+      (write) =>
+        write.model === "healthProfileFactRevision" && write.op === "create",
+    );
+    expect(facts).toHaveLength(2);
+    expect(facts.map((write) => write.data.id)).toEqual([
+      "fact-old",
+      "fact-current",
+    ]);
+    expect(facts[0].data.valueEncrypted).toBeInstanceOf(Uint8Array);
+    expect(facts[1].data.valueEncrypted).toBeInstanceOf(Uint8Array);
+    expect(facts[0].data.validUntil).toEqual(
+      new Date("2026-07-10T00:00:00.000Z"),
+    );
+    expect(facts[1].data.validUntil).toBeNull();
   });
 
   it("writes each custom metric back with its readings", async () => {
@@ -424,6 +538,25 @@ describe("backup round trip — export, wire schema, restore", () => {
     );
   });
 
+  it("writes unknown Fitbit workout provenance back with the workout", async () => {
+    const { written } = await roundTrip();
+    const write = written.find(
+      (entry) => entry.model === "workout" && entry.op === "createMany",
+    );
+    const rows = write!.data as unknown as Array<Record<string, unknown>>;
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      source: "FITBIT",
+      sportType: "other",
+      externalId: "91002",
+      metadata: {
+        fitbitActivityName: "Activity Zeta",
+        fitbitActivityTypeId: 9002,
+      },
+    });
+  });
+
   it("writes the day's cumulative shape back, every hour of it", async () => {
     const { written } = await roundTrip();
 
@@ -469,5 +602,101 @@ describe("backup round trip — export, wire schema, restore", () => {
     // unresolvable key — the failure a real account hit while the fix was inert.
     expect(res.status).toBe(200);
     expect(written.find((w) => w.model === "cycleDayLog")).toBeDefined();
+  });
+
+  describe("cached briefing invalidation on AI-scope change", () => {
+    // The source account's backup carries `aiIncludedSections: ["CONDITIONS",
+    // "SMOKING_STATUS"]` and the two SMOKING_STATUS fact revisions from
+    // `sourceClient()`. Reused below to build a byte-identical "live" seed so
+    // the unchanged-scope case is a genuine no-op, not a coincidence of two
+    // separately encrypted ciphertexts happening to differ.
+    function liveFactRowsFromPayload(payload: Record<string, unknown>) {
+      const facts = payload.healthProfileFacts as Array<{
+        id: string;
+        kind: string;
+        valueEncrypted: string;
+        validFrom: string;
+        validUntil: string | null;
+        provenance: string;
+        supersededByRevisionId: string | null;
+      }>;
+      return facts.map((fact) => ({
+        id: fact.id,
+        userId: OWNER,
+        kind: fact.kind,
+        valueEncrypted: Buffer.from(fact.valueEncrypted, "base64"),
+        validFrom: new Date(fact.validFrom),
+        validUntil: fact.validUntil ? new Date(fact.validUntil) : null,
+        provenance: fact.provenance,
+        supersededByRevisionId: fact.supersededByRevisionId,
+      }));
+    }
+
+    it("clears the cached briefing when the restored scope narrows", async () => {
+      // Live account currently has every section included — strictly wider
+      // than the backup's ["CONDITIONS", "SMOKING_STATUS"], so the restore
+      // narrows scope and must invalidate the pre-restore cache.
+      const { written } = await roundTrip({
+        userHealthProfile: {
+          findUnique: {
+            aiIncludedSections: [
+              "ABOUT_ME",
+              "CONDITIONS",
+              "ALLERGIES",
+              "COACH_FOCUS",
+              "FAMILY_HISTORY",
+              "SMOKING_STATUS",
+              "ALCOHOL_PATTERN",
+              "SHIFT_SCHEDULE",
+            ],
+          },
+        },
+      });
+
+      const userUpdate = written.find(
+        (w) => w.model === "user" && w.op === "update",
+      );
+      expect(
+        userUpdate,
+        "a scope-narrowing restore must clear the cached briefing",
+      ).toBeDefined();
+      expect(userUpdate!.data).toEqual({
+        insightsCachedText: null,
+        insightsCachedAt: null,
+      });
+    });
+
+    it("leaves the cached briefing alone when the restored scope is unchanged", async () => {
+      const { payload } = await buildFullBackupPayload(
+        sourceClient() as never,
+        OWNER,
+        { purpose: "disaster-recovery" },
+      );
+      const liveSeed = {
+        userHealthProfile: {
+          findUnique: {
+            aiIncludedSections: (
+              payload.healthProfile as { aiIncludedSections: string[] }
+            ).aiIncludedSections,
+          },
+        },
+        healthProfileFactRevision: {
+          findMany: liveFactRowsFromPayload(payload),
+        },
+      };
+
+      // Restore that SAME payload — rebuilding it would re-encrypt every
+      // ciphertext field with a fresh IV, so the only variable this way is
+      // whether the restore over-invalidates on a genuine no-op.
+      const { written: writtenUnchanged } = await roundTrip(liveSeed, payload);
+
+      const userUpdate = writtenUnchanged.find(
+        (w) => w.model === "user" && w.op === "update",
+      );
+      expect(
+        userUpdate,
+        "an unchanged AI scope must not clear the cached briefing",
+      ).toBeUndefined();
+    });
   });
 });

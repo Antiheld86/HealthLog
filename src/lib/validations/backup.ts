@@ -54,6 +54,12 @@ import {
   SecondarySymptom,
   SleepStage,
 } from "@/generated/prisma/enums";
+import {
+  DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+  healthProfileAiSectionSchema,
+  healthProfileFactKindSchema,
+  isHealthProfileFactValue,
+} from "@/lib/validations/health-profile-facts";
 
 export const BACKUP_SCHEMA_VERSION = "2" as const;
 const LEGACY_BACKUP_SCHEMA_VERSION = "1" as const;
@@ -405,6 +411,9 @@ const healthProfileBackupSchema = z
     conditions: z.string().nullable().default(null),
     allergies: z.string().nullable().default(null),
     coachFocus: z.string().nullable().default(null),
+    aiIncludedSections: z
+      .array(healthProfileAiSectionSchema)
+      .default([...DEFAULT_HEALTH_PROFILE_AI_SECTIONS]),
     aboutMeEncrypted: base64BytesSchema.nullable().optional(),
     conditionsEncrypted: base64BytesSchema.nullable().optional(),
     allergiesEncrypted: base64BytesSchema.nullable().optional(),
@@ -414,6 +423,44 @@ const healthProfileBackupSchema = z
     updatedAt: isoDateTime.optional(),
   })
   .passthrough();
+
+const healthProfileFactBackupSchema = z
+  .object({
+    id: z.string().min(1),
+    kind: healthProfileFactKindSchema,
+    value: z.string().nullable().default(null),
+    valueEncrypted: base64BytesSchema.optional(),
+    validFrom: isoDateTime,
+    validUntil: isoDateTime.nullable(),
+    provenance: z.enum(["USER_REPORTED", "USER_CORRECTION"]),
+    supersededByRevisionId: z.string().min(1).nullable(),
+    createdAt: isoDateTime,
+  })
+  .passthrough()
+  .superRefine((fact, ctx) => {
+    if (fact.valueEncrypted === undefined) {
+      if (
+        fact.value === null ||
+        !isHealthProfileFactValue(fact.kind, fact.value)
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["value"],
+          message: "A portable profile fact requires a valid readable value",
+        });
+      }
+    }
+    if (
+      fact.validUntil !== null &&
+      Date.parse(fact.validUntil) <= Date.parse(fact.validFrom)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["validUntil"],
+        message: "validUntil must be later than validFrom",
+      });
+    }
+  });
 
 /** One reading of a user-defined metric, nested under the metric that owns it. */
 const customMetricEntryBackupSchema = z
@@ -693,6 +740,7 @@ const workoutBackupSchema = z
     pauseDurationSec: z.number().int().nullable().optional(),
     source: z.enum(MeasurementSource),
     externalId: z.string().nullable().optional(),
+    metadata: z.json().optional(),
     createdAt: isoDateTime.optional(),
     updatedAt: isoDateTime.optional(),
   })
@@ -777,6 +825,7 @@ export const backupPayloadSchema = z
     // before either rode the wire still parse; an account with neither writes
     // `null` / `[]`.
     healthProfile: healthProfileBackupSchema.nullable().default(null),
+    healthProfileFacts: z.array(healthProfileFactBackupSchema).default([]),
     customMetrics: z.array(customMetricBackupSchema).default([]),
     correlationPatterns: z.array(correlationPatternBackupSchema).default([]),
     // The hourly shape of a cumulative day. Defaulted for the same reason as
@@ -836,6 +885,8 @@ export interface BackupSummary {
   documents: number;
   /** 1 when the account's durable self-context rides the file, 0 otherwise. */
   healthProfile: number;
+  /** Effective-dated structured health-profile revisions. */
+  healthProfileFactRevisions: number;
   /** Metrics the account defined itself. */
   customMetrics: number;
   /** Readings across every user-defined metric. */
@@ -870,6 +921,7 @@ export function summarizeBackup(payload: BackupPayload): BackupSummary {
     workouts: payload.workouts.length,
     documents: payload.documents.length,
     healthProfile: payload.healthProfile ? 1 : 0,
+    healthProfileFactRevisions: payload.healthProfileFacts.length,
     customMetrics: payload.customMetrics.length,
     customMetricEntries: payload.customMetrics.reduce(
       (sum, metric) => sum + metric.entries.length,

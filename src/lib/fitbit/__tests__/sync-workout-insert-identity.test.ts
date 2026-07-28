@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   createManyAndReturn,
+  findUnique,
   update,
   emitInsertedWorkoutArrival,
   fetchActivityList,
@@ -9,6 +10,7 @@ const {
   mapWorkout,
   readActivityList,
 } = vi.hoisted(() => ({
+  findUnique: vi.fn(),
   createManyAndReturn: vi.fn(),
   update: vi.fn(),
   emitInsertedWorkoutArrival: vi.fn(async () => {}),
@@ -19,7 +21,8 @@ const {
 }));
 
 vi.mock("@/lib/db", () => ({
-  prisma: { workout: { createManyAndReturn, update } },
+  prisma: { workout: { createManyAndReturn, findUnique, update } },
+  toJson: <T>(value: T) => value,
 }));
 vi.mock("@/lib/arrivals/workout-emit", () => ({
   emitInsertedWorkoutArrival,
@@ -45,7 +48,7 @@ import { syncUserWorkout } from "../sync-workout";
 
 const startedAt = new Date("2026-07-19T08:00:00.000Z");
 const mapped = {
-  externalId: "fitbit-1",
+  externalId: "91001",
   sportType: "running",
   startedAt,
   endedAt: new Date("2026-07-19T09:00:00.000Z"),
@@ -55,6 +58,10 @@ const mapped = {
   avgHeartRate: 145,
   maxHeartRate: 170,
   minHeartRate: 90,
+  metadata: {
+    fitbitActivityName: "Run",
+    fitbitActivityTypeId: 9001,
+  },
 };
 
 beforeEach(() => {
@@ -63,6 +70,7 @@ beforeEach(() => {
   fetchActivityList.mockResolvedValue({});
   readActivityList.mockReturnValue([{}]);
   mapWorkout.mockReturnValue(mapped);
+  findUnique.mockResolvedValue({ metadata: {} });
   update.mockResolvedValue({ id: "existing" });
 });
 
@@ -79,10 +87,26 @@ describe("syncUserWorkout — exact inserted identity", () => {
       "fitbit",
     );
     expect(update).not.toHaveBeenCalled();
+    expect(createManyAndReturn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          metadata: {
+            fitbitActivityName: "Run",
+            fitbitActivityTypeId: 9001,
+          },
+        }),
+      }),
+    );
   });
 
   it("updates and counts an existing workout without emitting", async () => {
     createManyAndReturn.mockResolvedValue([]);
+    findUnique.mockResolvedValue({
+      metadata: {
+        retainedField: "retained-value",
+        fitbitActivityName: "Previous Activity",
+      },
+    });
 
     await expect(syncUserWorkout("user-1")).resolves.toBe(1);
 
@@ -92,13 +116,18 @@ describe("syncUserWorkout — exact inserted identity", () => {
           userId_source_externalId: {
             userId: "user-1",
             source: "FITBIT",
-            externalId: "fitbit-1",
+            externalId: "91001",
           },
         },
         data: expect.objectContaining({
           sportType: "running",
           startedAt,
           totalDistanceM: 10_000,
+          metadata: {
+            retainedField: "retained-value",
+            fitbitActivityName: "Run",
+            fitbitActivityTypeId: 9001,
+          },
         }),
       }),
     );

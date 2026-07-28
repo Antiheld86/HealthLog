@@ -168,6 +168,13 @@ export const ENCRYPTED_COLUMNS: readonly EncryptedColumn[] = [
     kind: "bytes",
   },
 
+  // ───── Effective-dated health profile facts (Bytes column) ─────
+  {
+    model: "HealthProfileFactRevision",
+    field: "valueEncrypted",
+    kind: "bytes",
+  },
+
   // ───── Insight narratives (Bytes column) ─────
   { model: "InsightNarrative", field: "encryptedContent", kind: "bytes" },
 

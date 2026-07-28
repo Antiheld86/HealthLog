@@ -102,6 +102,14 @@ describe("encrypted-column registry", () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
+  it("registers encrypted health profile fact values as bytes", () => {
+    expect(ENCRYPTED_COLUMNS).toContainEqual({
+      model: "HealthProfileFactRevision",
+      field: "valueEncrypted",
+      kind: "bytes",
+    });
+  });
+
   it("assigns the right storage kind for each column type", () => {
     const schema = parseSchemaColumns();
     const typeByKey = new Map<string, string>(

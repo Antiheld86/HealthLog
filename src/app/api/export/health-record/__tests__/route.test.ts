@@ -27,6 +27,8 @@ vi.mock("@/lib/db", () => ({
     illnessEpisode: { findMany: vi.fn() },
     allergy: { findMany: vi.fn() },
     familyHistoryEntry: { findMany: vi.fn() },
+    userHealthProfile: { findUnique: vi.fn() },
+    healthProfileFactRevision: { findMany: vi.fn() },
     user: { findUnique: vi.fn(), update: vi.fn() },
   },
   toJson: (value: unknown) => value,
@@ -48,6 +50,11 @@ vi.mock("@/lib/cycle/export-data", () => ({
   })),
 }));
 vi.mock("@/lib/crypto", () => ({ decrypt: vi.fn(() => "A123456789") }));
+vi.mock("@/lib/ai/coach/bytes-codec", () => ({
+  decryptFromBytes: vi.fn((payload: Uint8Array) =>
+    Buffer.from(payload).toString("utf8"),
+  ),
+}));
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: vi.fn() }));
 vi.mock("@/lib/auth/audit", () => ({
@@ -125,6 +132,15 @@ async function pdfText(res: Response): Promise<string> {
   }
 }
 
+async function pdfBytesText(bytes: Uint8Array): Promise<string> {
+  const parser = new PDFParse({ data: bytes });
+  try {
+    return (await parser.getText()).text;
+  } finally {
+    await parser.destroy();
+  }
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(resolveModuleMap).mockResolvedValue({} as never);
@@ -146,6 +162,12 @@ beforeEach(() => {
   vi.mocked(prisma.illnessEpisode.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.allergy.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.familyHistoryEntry.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.userHealthProfile.findUnique).mockResolvedValue(
+    null as never,
+  );
+  vi.mocked(prisma.healthProfileFactRevision.findMany).mockResolvedValue(
+    [] as never,
+  );
   // First findUnique = aggregator profile select; second = route KVNR select.
   vi.mocked(prisma.user.findUnique).mockResolvedValue({
     username: "sample",
@@ -582,6 +604,94 @@ describe("POST /api/export/health-record — the selection reaches every format"
     // The compliant PDF and the violating bundle used to travel together.
     expect(types).not.toContain("AllergyIntolerance");
     expect(types).not.toContain("FamilyMemberHistory");
+  });
+  it("ships selected anamnesis in both package artefacts and omits it otherwise", async () => {
+    const encrypted = (value: string) => new TextEncoder().encode(value);
+    vi.mocked(prisma.userHealthProfile.findUnique).mockResolvedValue({
+      conditionsEncrypted: encrypted("Asthma"),
+    } as never);
+    vi.mocked(prisma.healthProfileFactRevision.findMany).mockResolvedValue([
+      {
+        kind: "SMOKING_STATUS",
+        valueEncrypted: encrypted("FORMER"),
+      },
+      {
+        kind: "ALCOHOL_PATTERN",
+        valueEncrypted: encrypted("OCCASIONAL"),
+      },
+      {
+        kind: "SHIFT_SCHEDULE",
+        valueEncrypted: encrypted("ROTATING"),
+      },
+    ] as never);
+
+    const { POST } = await import("../route");
+    const selected = await POST(
+      mkReq({
+        format: "package",
+        locale: "en",
+        selection: sel("ANAMNESIS"),
+      }),
+    );
+    expect(selected.status).toBe(200);
+    const selectedFiles = unzipSync(
+      new Uint8Array(await selected.arrayBuffer()),
+    );
+    const selectedPdf = await pdfBytesText(selectedFiles["report.pdf"]!);
+    expect(selectedPdf).toContain("Asthma");
+    expect(selectedPdf).toContain("Former smoker");
+    expect(selectedPdf).toContain("Occasional");
+    expect(selectedPdf).toContain("Rotating shifts");
+
+    const selectedBundle = JSON.parse(
+      new TextDecoder().decode(selectedFiles["bundle.json"]!),
+    ) as {
+      entry: {
+        resource: {
+          resourceType: string;
+          code?: { coding?: { code?: string }[] };
+          valueCodeableConcept?: { text?: string };
+        };
+      }[];
+    };
+    const selectedFacts = selectedBundle.entry
+      .map((entry) => entry.resource)
+      .filter(
+        (resource) =>
+          resource.resourceType === "Observation" &&
+          ["72166-2", "11331-6", "74159-5"].includes(
+            resource.code?.coding?.[0]?.code ?? "",
+          ),
+      );
+    expect(
+      selectedFacts.map((fact) => fact.valueCodeableConcept?.text),
+    ).toEqual(["Former smoker", "Occasional", "Rotating shifts"]);
+
+    vi.mocked(prisma.userHealthProfile.findUnique).mockClear();
+    vi.mocked(prisma.healthProfileFactRevision.findMany).mockClear();
+    const omitted = await POST(
+      mkReq({
+        format: "package",
+        locale: "en",
+        selection: sel("PULSE"),
+      }),
+    );
+    expect(omitted.status).toBe(200);
+    const omittedFiles = unzipSync(new Uint8Array(await omitted.arrayBuffer()));
+    const omittedPdf = await pdfBytesText(omittedFiles["report.pdf"]!);
+    expect(omittedPdf).not.toContain("Asthma");
+    const omittedBundle = JSON.parse(
+      new TextDecoder().decode(omittedFiles["bundle.json"]!),
+    ) as typeof selectedBundle;
+    expect(
+      omittedBundle.entry.some((entry) =>
+        ["72166-2", "11331-6", "74159-5"].includes(
+          entry.resource.code?.coding?.[0]?.code ?? "",
+        ),
+      ),
+    ).toBe(false);
+    expect(prisma.userHealthProfile.findUnique).not.toHaveBeenCalled();
+    expect(prisma.healthProfileFactRevision.findMany).not.toHaveBeenCalled();
   });
 });
 

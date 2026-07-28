@@ -436,6 +436,16 @@ const RESULT_SURFACES: ReadonlyArray<{
     through: /toastWrittenOutcome/,
     forbidsMarkers: true,
   },
+  {
+    path: "src/components/records/ai-profile-inclusion-manager.tsx",
+    through: /toastWrittenOutcome/,
+    forbidsMarkers: true,
+  },
+  {
+    path: "src/components/records/health-profile-facts-manager.tsx",
+    through: /toastWrittenOutcome/,
+    forbidsMarkers: true,
+  },
 ];
 
 /** Code only — a comment naming a marker is prose, not an affordance. */

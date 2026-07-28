@@ -124,6 +124,15 @@
   },
   "doctorReport": {
     "title": "Rapporto sanitario",
+    "anamnesisTitle": "Profilo sanitario",
+    "anamnesisNotRecorded": "Non registrato",
+    "anamnesisUnreadable": "Impossibile leggere il valore salvato",
+    "anamnesisConditions": "Patologie croniche",
+    "anamnesisSmoking": "Abitudine al fumo",
+    "anamnesisAlcohol": "Consumo di alcol",
+    "anamnesisShiftSchedule": "Orario di lavoro",
+    "anamnesisColFact": "Voce del profilo",
+    "anamnesisColValue": "Valore registrato",
     "subtitle": "HealthLog — Rapporto personale di salute",
     "patient": "Paziente",
     "dateOfBirth": "Data di nascita",
@@ -8510,6 +8519,61 @@
     "historyLoadErrorHint": "Questo non significa che non ci siano risultati: non è stato possibile recuperare l'elenco. Riprova."
   },
   "records": {
+    "aiInclusion": {
+      "cardTitle": "Accesso dell'IA al profilo",
+      "cardDescription": "Scegli quali parti del tuo profilo sanitario possono usare il Coach e i riepiloghi completi.",
+      "sectionAboutMe": "Informazioni personali",
+      "sectionConditions": "Patologie croniche",
+      "sectionAllergies": "Allergie e intolleranze",
+      "sectionCoachFocus": "Priorità del Coach",
+      "sectionFamilyHistory": "Anamnesi familiare",
+      "sectionSmoking": "Abitudine al fumo",
+      "sectionAlcohol": "Consumo di alcol",
+      "sectionShiftSchedule": "Orario di lavoro",
+      "save": "Salva accesso",
+      "savedToast": "Accesso dell'IA al profilo salvato",
+      "saveError": "Impossibile salvare l'accesso dell'IA al profilo",
+      "loadError": "Impossibile caricare l'accesso dell'IA al profilo"
+    },
+    "profileFacts": {
+      "cardTitle": "Contesto dello stile di vita",
+      "cardDescription": "Registra i dati attuali che cambiano l'interpretazione delle tue misurazioni sanitarie.",
+      "smokingLabel": "Abitudine al fumo",
+      "alcoholLabel": "Consumo di alcol",
+      "shiftLabel": "Orario di lavoro",
+      "notRecorded": "Non registrato",
+      "unreadable": "Impossibile leggere il valore salvato",
+      "save": "Salva",
+      "correct": "Correggi",
+      "savedToast": "Contesto dello stile di vita salvato",
+      "saveError": "Impossibile salvare il contesto dello stile di vita",
+      "loadError": "Impossibile caricare il contesto dello stile di vita",
+      "remove": "Rimuovi {kind}",
+      "removeConfirmTitle": "Rimuovere {kind}?",
+      "removeConfirmDescription": "Il valore attuale risulterà non registrato. La cronologia datata verrà conservata.",
+      "removedToast": "{kind} rimosso dal contesto attuale dello stile di vita",
+      "removeError": "Impossibile rimuovere {kind}",
+      "historyTitle": "Valori precedenti",
+      "to": "a",
+      "values": {
+        "SMOKING_STATUS": {
+          "NEVER": "Non ha mai fumato",
+          "FORMER": "Ha smesso di fumare",
+          "CURRENT": "Fuma attualmente"
+        },
+        "ALCOHOL_PATTERN": {
+          "NONE": "Nessun consumo",
+          "OCCASIONAL": "Occasionale",
+          "WEEKLY": "Settimanale",
+          "MOST_DAYS": "Quasi ogni giorno"
+        },
+        "SHIFT_SCHEDULE": {
+          "NONE": "Nessun lavoro a turni",
+          "FIXED_SHIFT": "Turno fisso",
+          "ROTATING": "Turni a rotazione"
+        }
+      }
+    },
     "disclaimer": "Sono i tuoi dati, non una diagnosi medica. HealthLog non diagnostica, non cura e non li interpreta.",
     "allergies": {
       "cardTitle": "Allergie e intolleranze",
@@ -9102,6 +9166,7 @@
     }
   },
   "reportSelection": {
+    "leafAnamnesis": "Profilo sanitario",
     "groupIdentity": "Dati anagrafici",
     "groupVitals": "Parametri vitali",
     "groupCardio": "Cuore e circolazione",

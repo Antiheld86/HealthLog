@@ -244,6 +244,7 @@ export function BackupsSection() {
           // nothing rather than break the count.
           nutrientDays?: number;
           healthProfile?: number;
+          healthProfileFactRevisions?: number;
           customMetrics?: number;
           customMetricEntries?: number;
           intradayProfiles?: number;
@@ -272,6 +273,7 @@ export function BackupsSection() {
         // held — a smaller version of the same defect, on the reporting side.
         (data.summary.nutrientDays ?? 0) +
         (data.summary.healthProfile ?? 0) +
+        (data.summary.healthProfileFactRevisions ?? 0) +
         (data.summary.customMetrics ?? 0) +
         (data.summary.customMetricEntries ?? 0) +
         (data.summary.intradayProfiles ?? 0);

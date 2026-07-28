@@ -11,9 +11,8 @@
  *
  * Google Health broke that rule silently for three releases while the
  * comment above its type map asserted the opposite, and a user's workout
- * showed as "Other" with the original nowhere in the database. Three sibling
- * providers had carried the provenance write the whole time. Nothing
- * connected them, so nothing noticed.
+ * showed as "Other" with the original nowhere in the database. Other workout
+ * providers carried the provenance write, but nothing connected the paths.
  *
  * These are tripwires, not proofs. A grep cannot show that a metadata key
  * holds the right value — only that a registered ingest still writes one, and
@@ -110,28 +109,16 @@ const PROVIDER_INGESTS: ProviderIngest[] = [
     writeFile: "lib/measurements/import-apple-health-export.ts",
     metadataKey: "activityType",
   },
+  {
+    provider: "Fitbit",
+    mapper: "mapFitbitSportType",
+    mapperFile: "lib/fitbit/client.ts",
+    captureFile: "lib/fitbit/client.ts",
+    captureField: "activityName",
+    writeFile: "lib/fitbit/sync-workout.ts",
+    metadataKey: "fitbitActivityName",
+  },
 ];
-
-/**
- * Fitbit carries the identical defect Google Health just had: an unmapped
- * `activityName` collapses to `"other"` and the original is discarded. It is
- * excluded here deliberately, not overlooked. The standing rule for this
- * repository is that Fitbit changes ship as small isolated releases with
- * parity tests against a provider that already works, so it follows this one
- * rather than riding along inside it — the two providers share no code, so
- * deferring leaves nothing half-wired.
- *
- * The exception is written as an assertion rather than an omission: when
- * Fitbit gains the provenance write, this test fails and forces the entry to
- * move up into `PROVIDER_INGESTS`. An exception nobody has to retire is how
- * the original gap survived.
- */
-const FITBIT_EXCEPTION = {
-  provider: "Fitbit",
-  mapper: "mapFitbitSportType",
-  mapperFile: "lib/fitbit/client.ts",
-  writeFile: "lib/fitbit/sync-workout.ts",
-} as const;
 
 /**
  * Exported helpers whose name ends in `SportType` but which never see an
@@ -156,7 +143,6 @@ describe("T1 — the set of sport-label mappers is frozen", () => {
 
     const registered = [
       ...PROVIDER_INGESTS.map((p) => p.mapper),
-      FITBIT_EXCEPTION.mapper,
       ...READ_TIME_NARROWERS,
     ].sort();
 
@@ -166,7 +152,7 @@ describe("T1 — the set of sport-label mappers is frozen", () => {
   });
 
   it("each registered mapper lives where the registry says it does", () => {
-    for (const p of [...PROVIDER_INGESTS, FITBIT_EXCEPTION]) {
+    for (const p of PROVIDER_INGESTS) {
       expect(
         read(p.mapperFile).includes(`export function ${p.mapper}`),
         `${p.provider}: ${p.mapper} is no longer declared in ${p.mapperFile}`,
@@ -198,7 +184,6 @@ describe("T2 — the set of files writing Workout rows is frozen", () => {
 
     const expected = [
       ...PROVIDER_INGESTS.map((p) => p.writeFile),
-      FITBIT_EXCEPTION.writeFile,
       ...Object.keys(NON_MAPPING_WRITERS),
     ].sort();
 
@@ -229,24 +214,4 @@ describe("T3 — every mapping ingest preserves the raw label", () => {
       ).toBe(true);
     },
   );
-});
-
-describe("T4 — Fitbit is the one declared exception", () => {
-  it("still discards its raw activity name, and says so when it stops", () => {
-    const writer = read(FITBIT_EXCEPTION.writeFile);
-    expect(
-      /metadata[,:]/.test(writer),
-      "Fitbit now writes workout metadata — move it into PROVIDER_INGESTS " +
-        "with its provenance key and delete FITBIT_EXCEPTION.",
-    ).toBe(false);
-  });
-
-  it("is the only ingest allowed to be non-compliant", () => {
-    const nonCompliant = [
-      ...PROVIDER_INGESTS.map((p) => p.writeFile),
-      FITBIT_EXCEPTION.writeFile,
-    ].filter((rel) => !/metadata[,:]/.test(read(rel)));
-
-    expect(nonCompliant).toEqual([FITBIT_EXCEPTION.writeFile]);
-  });
 });

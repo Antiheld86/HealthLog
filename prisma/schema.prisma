@@ -920,6 +920,7 @@ model User {
   // v1.15.20 — user-authored "about me" context for the AI surfaces
   // (1:1, encrypted free text). See `UserHealthProfile`.
   healthProfile     UserHealthProfile?
+  healthProfileFactRevisions HealthProfileFactRevision[]
   // v1.15.20 — registration invite tokens (closed-registration flow).
   // `InviteCreator` = admin who minted the invite; `InviteConsumer` =
   // the account that registered through it (last consumer wins on a
@@ -5422,12 +5423,76 @@ model UserHealthProfile {
   // hints otherwise). Encrypted JSON string[]; the Coach composer
   // renders them as tappable suggestion chips. NULL = none pending.
   pendingQuestionsEncrypted Bytes?   @map("pending_questions_encrypted")
+  // Closed inclusion list for self-context sent to Coach and briefing prompts.
+  // The static default preserves every pre-existing prompt section for legacy
+  // rows without automatically opting future enum members in.
+  aiIncludedSections         HealthProfileAiSection[] @default([ABOUT_ME, CONDITIONS, ALLERGIES, COACH_FOCUS, FAMILY_HISTORY, SMOKING_STATUS, ALCOHOL_PATTERN, SHIFT_SCHEDULE]) @map("ai_included_sections")
   createdAt                 DateTime @default(now()) @map("created_at")
   updatedAt                 DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_health_profiles")
+}
+
+/// Sections of the health profile that may enter AI prompt context. This is an
+/// inclusion list: a section absent from the array is neither decrypted nor
+/// assembled for Coach or comprehensive briefings.
+enum HealthProfileAiSection {
+  ABOUT_ME
+  CONDITIONS
+  ALLERGIES
+  COACH_FOCUS
+  FAMILY_HISTORY
+  SMOKING_STATUS
+  ALCOHOL_PATTERN
+  SHIFT_SCHEDULE
+
+  @@map("health_profile_ai_section")
+}
+
+/// The three structured profile facts whose answers affect an existing
+/// interpretation path. The answer itself stays encrypted; this enum only
+/// identifies which closed validation set must be applied after decryption.
+enum HealthProfileFactKind {
+  SMOKING_STATUS
+  ALCOHOL_PATTERN
+  SHIFT_SCHEDULE
+
+  @@map("health_profile_fact_kind")
+}
+
+/// Provenance for an effective-dated fact revision.
+enum HealthProfileFactProvenance {
+  USER_REPORTED
+  USER_CORRECTION
+
+  @@map("health_profile_fact_provenance")
+}
+
+/// Effective-dated structured health-profile fact. Each non-superseded chain
+/// is half-open `[validFrom, validUntil)`, with exactly one current row per
+/// user and fact kind. Corrections close the current row and mint a replacement
+/// rather than overwriting encrypted history.
+model HealthProfileFactRevision {
+  id                       String                      @id @default(cuid())
+  userId                   String                      @map("user_id")
+  kind                     HealthProfileFactKind
+  valueEncrypted           Bytes                       @map("value_encrypted")
+  validFrom                DateTime                     @map("valid_from") @db.Timestamptz(6)
+  validUntil               DateTime?                    @map("valid_until") @db.Timestamptz(6)
+  provenance               HealthProfileFactProvenance @default(USER_REPORTED)
+  supersededByRevisionId   String?                      @map("superseded_by_revision_id")
+  createdAt                DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user         User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  supersededBy HealthProfileFactRevision? @relation("HealthProfileFactSupersession", fields: [supersededByRevisionId], references: [id], onDelete: SetNull)
+  supersedes   HealthProfileFactRevision[] @relation("HealthProfileFactSupersession")
+
+  @@unique([userId, kind, validFrom])
+  @@index([userId, kind, validFrom(sort: Desc)])
+  @@index([supersededByRevisionId])
+  @@map("health_profile_fact_revisions")
 }
 
 // Per-user, per-day token-spend ledger for the AI Coach. The dispatcher

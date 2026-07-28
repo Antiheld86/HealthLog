@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { Buffer } from "node:buffer";
 import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
+import { parseBackupPayload } from "@/lib/validations/backup";
 
 process.env.ENCRYPTION_KEY =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -32,6 +33,7 @@ vi.mock("@/lib/export/records-backup", () => ({
 }));
 
 import { buildFullBackupPayload } from "../full-backup-payload";
+import { restoreProfileData } from "../profile-backup";
 
 const deletedAt = new Date("2026-07-19T12:00:00.000Z");
 const measurementNote = encryptToBytes("canonical measurement note");
@@ -215,9 +217,25 @@ function makePrisma() {
         allergiesEncrypted: encryptToBytes("penicillin"),
         coachFocusEncrypted: null,
         pendingQuestionsEncrypted: encryptToBytes('["How is your sleep?"]'),
+        aiIncludedSections: ["ABOUT_ME", "CONDITIONS"],
         createdAt: new Date("2026-07-01T00:00:00.000Z"),
         updatedAt: new Date("2026-07-19T00:00:00.000Z"),
       }),
+    },
+    healthProfileFactRevision: {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "fact-1",
+          userId: "user-1",
+          kind: "SMOKING_STATUS",
+          valueEncrypted: encryptToBytes("FORMER"),
+          validFrom: new Date("2026-07-01T00:00:00.000Z"),
+          validUntil: null,
+          provenance: "USER_REPORTED",
+          supersededByRevisionId: null,
+          createdAt: new Date("2026-07-01T00:00:00.000Z"),
+        },
+      ]),
     },
     customMetric: {
       findMany: vi.fn().mockResolvedValue([
@@ -577,6 +595,7 @@ describe("buildFullBackupPayload — section keys reach the payload", () => {
       // The profile and intraday sections run for real, so their keys come
       // from the builders.
       "healthProfile",
+      "healthProfileFacts",
       "customMetrics",
       "correlationPatterns",
       "intradayProfiles",
@@ -642,6 +661,15 @@ describe("buildFullBackupPayload — profile and custom metrics", () => {
     expect(profile.conditionsEncrypted).toBeNull();
     expect(typeof profile.pendingQuestionsEncrypted).toBe("string");
     expect(counts.healthProfile).toBe(1);
+    expect(payload.healthProfileFacts).toEqual([
+      expect.objectContaining({
+        id: "fact-1",
+        kind: "SMOKING_STATUS",
+        value: null,
+        valueEncrypted: expect.any(String),
+      }),
+    ]);
+    expect(counts.healthProfileFactRevisions).toBe(1);
   });
 
   it("decrypts the profile free text into the portable export", async () => {
@@ -661,11 +689,260 @@ describe("buildFullBackupPayload — profile and custom metrics", () => {
     expect(profile.aboutMe).toBe("desk job, two kids");
     expect(profile.allergies).toBe("penicillin");
     expect(profile.conditions).toBeNull();
+    expect(payload.healthProfileFacts).toEqual([
+      expect.objectContaining({
+        id: "fact-1",
+        kind: "SMOKING_STATUS",
+        value: "FORMER",
+      }),
+    ]);
     // A portable file is the human-readable artefact; it carries no envelopes,
     // and it does not carry the server-derived pending questions at all.
     expect(profile).not.toHaveProperty("aboutMeEncrypted");
     expect(profile).not.toHaveProperty("pendingQuestionsEncrypted");
     expect(profile).not.toHaveProperty("id");
+  });
+
+  it("preserves readable fact segments around unreadable and invalid revisions", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+    const unreadableCiphertext = Uint8Array.from([0, 1, 2, 3]);
+    prisma.healthProfileFactRevision.findMany.mockResolvedValue([
+      {
+        id: "alcohol-old",
+        userId: "user-1",
+        kind: "ALCOHOL_PATTERN",
+        valueEncrypted: encryptToBytes("WEEKLY"),
+        validFrom: new Date("2026-04-01T00:00:00.000Z"),
+        validUntil: new Date("2026-05-01T00:00:00.000Z"),
+        provenance: "USER_REPORTED",
+        supersededByRevisionId: "alcohol-unreadable",
+        createdAt: new Date("2026-04-01T00:00:00.000Z"),
+      },
+      {
+        id: "alcohol-unreadable",
+        userId: "user-1",
+        kind: "ALCOHOL_PATTERN",
+        valueEncrypted: unreadableCiphertext,
+        validFrom: new Date("2026-05-01T00:00:00.000Z"),
+        validUntil: null,
+        provenance: "USER_CORRECTION",
+        supersededByRevisionId: null,
+        createdAt: new Date("2026-05-01T00:00:00.000Z"),
+      },
+      {
+        id: "smoking-old",
+        userId: "user-1",
+        kind: "SMOKING_STATUS",
+        valueEncrypted: encryptToBytes("CURRENT"),
+        validFrom: new Date("2026-01-01T00:00:00.000Z"),
+        validUntil: new Date("2026-02-01T00:00:00.000Z"),
+        provenance: "USER_REPORTED",
+        supersededByRevisionId: "smoking-unreadable",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      },
+      {
+        id: "smoking-unreadable",
+        userId: "user-1",
+        kind: "SMOKING_STATUS",
+        valueEncrypted: unreadableCiphertext,
+        validFrom: new Date("2026-02-01T00:00:00.000Z"),
+        validUntil: new Date("2026-03-01T00:00:00.000Z"),
+        provenance: "USER_CORRECTION",
+        supersededByRevisionId: "smoking-invalid",
+        createdAt: new Date("2026-02-01T00:00:00.000Z"),
+      },
+      {
+        id: "smoking-invalid",
+        userId: "user-1",
+        kind: "SMOKING_STATUS",
+        valueEncrypted: encryptToBytes("INVALID_SMOKING_STATUS"),
+        validFrom: new Date("2026-03-01T00:00:00.000Z"),
+        validUntil: new Date("2026-04-01T00:00:00.000Z"),
+        provenance: "USER_CORRECTION",
+        supersededByRevisionId: "smoking-current",
+        createdAt: new Date("2026-03-01T00:00:00.000Z"),
+      },
+      {
+        id: "smoking-current",
+        userId: "user-1",
+        kind: "SMOKING_STATUS",
+        valueEncrypted: encryptToBytes("NEVER"),
+        validFrom: new Date("2026-04-01T00:00:00.000Z"),
+        validUntil: null,
+        provenance: "USER_CORRECTION",
+        supersededByRevisionId: null,
+        createdAt: new Date("2026-04-01T00:00:00.000Z"),
+      },
+    ]);
+
+    const portable = await buildFullBackupPayload(prisma as never, "user-1", {
+      purpose: "portable-export",
+      exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+    });
+    const parsedPortable = parseBackupPayload(portable.payload);
+    expect(parsedPortable.healthProfileFacts).toEqual([
+      expect.objectContaining({
+        id: "alcohol-old",
+        supersededByRevisionId: null,
+      }),
+      expect.objectContaining({
+        id: "smoking-old",
+        supersededByRevisionId: null,
+      }),
+      expect.objectContaining({
+        id: "smoking-current",
+        supersededByRevisionId: null,
+      }),
+    ]);
+    expect(
+      parsedPortable.healthProfileFacts.map((fact) => fact.id),
+    ).not.toContain("smoking-invalid");
+    expect(portable.counts.healthProfileFactRevisions).toBe(3);
+
+    const restoredFacts: Array<Record<string, unknown>> = [];
+    const factDelegate = {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn(({ data }: { data: Record<string, unknown> }) => {
+        restoredFacts.push(data);
+        return data;
+      }),
+      update: vi.fn().mockResolvedValue({}),
+    };
+    const emptyDelegate = {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      findUnique: vi.fn().mockResolvedValue(null),
+    };
+    const userDelegate = { update: vi.fn().mockResolvedValue({}) };
+    await restoreProfileData(
+      {
+        healthProfileFactRevision: factDelegate,
+        userHealthProfile: emptyDelegate,
+        customMetric: emptyDelegate,
+        correlationPattern: emptyDelegate,
+        user: userDelegate,
+      } as never,
+      "restored-user",
+      {
+        healthProfile: null,
+        healthProfileFacts: parsedPortable.healthProfileFacts,
+        customMetrics: [],
+        correlationPatterns: [],
+      },
+    );
+    expect(factDelegate.create).toHaveBeenCalledTimes(3);
+    expect(factDelegate.update).not.toHaveBeenCalled();
+
+    const recovery = await buildFullBackupPayload(prisma as never, "user-1", {
+      purpose: "disaster-recovery",
+      exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+    });
+    const parsedRecovery = parseBackupPayload(recovery.payload);
+    expect(parsedRecovery.healthProfileFacts).toHaveLength(6);
+    for (const id of ["alcohol-unreadable", "smoking-unreadable"]) {
+      const envelope = parsedRecovery.healthProfileFacts.find(
+        (fact) => fact.id === id,
+      )?.valueEncrypted;
+      expect(Buffer.from(envelope!, "base64")).toEqual(
+        Buffer.from(unreadableCiphertext),
+      );
+    }
+    expect(recovery.counts.healthProfileFactRevisions).toBe(6);
+
+    prisma.healthProfileFactRevision.findMany.mockResolvedValue(
+      restoredFacts as never,
+    );
+    const roundTripped = await buildFullBackupPayload(
+      prisma as never,
+      "restored-user",
+      {
+        purpose: "portable-export",
+        exportedAt: new Date("2026-07-21T00:00:00.000Z"),
+      },
+    );
+    expect(parseBackupPayload(roundTripped.payload).healthProfileFacts).toEqual(
+      parsedPortable.healthProfileFacts,
+    );
+  });
+
+  it("preserves and restores a readable closed terminal fact revision", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+    prisma.healthProfileFactRevision.findMany.mockResolvedValue([
+      {
+        id: "shift-old",
+        userId: "user-1",
+        kind: "SHIFT_SCHEDULE",
+        valueEncrypted: encryptToBytes("FIXED_SHIFT"),
+        validFrom: new Date("2026-01-01T00:00:00.000Z"),
+        validUntil: new Date("2026-02-01T00:00:00.000Z"),
+        provenance: "USER_REPORTED",
+        supersededByRevisionId: "shift-closed",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      },
+      {
+        id: "shift-closed",
+        userId: "user-1",
+        kind: "SHIFT_SCHEDULE",
+        valueEncrypted: encryptToBytes("ROTATING"),
+        validFrom: new Date("2026-02-01T00:00:00.000Z"),
+        validUntil: new Date("2026-03-01T00:00:00.000Z"),
+        provenance: "USER_CORRECTION",
+        supersededByRevisionId: null,
+        createdAt: new Date("2026-02-01T00:00:00.000Z"),
+      },
+    ]);
+
+    const portable = await buildFullBackupPayload(prisma as never, "user-1", {
+      purpose: "portable-export",
+      exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+    });
+    const parsedPortable = parseBackupPayload(portable.payload);
+    expect(parsedPortable.healthProfileFacts).toEqual([
+      expect.objectContaining({
+        id: "shift-old",
+        supersededByRevisionId: "shift-closed",
+      }),
+      expect.objectContaining({
+        id: "shift-closed",
+        validUntil: "2026-03-01T00:00:00.000Z",
+        supersededByRevisionId: null,
+      }),
+    ]);
+
+    const factDelegate = {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn().mockResolvedValue({}),
+      update: vi.fn().mockResolvedValue({}),
+    };
+    const emptyDelegate = {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      findUnique: vi.fn().mockResolvedValue(null),
+    };
+    const userDelegate = { update: vi.fn().mockResolvedValue({}) };
+    await restoreProfileData(
+      {
+        healthProfileFactRevision: factDelegate,
+        userHealthProfile: emptyDelegate,
+        customMetric: emptyDelegate,
+        correlationPattern: emptyDelegate,
+        user: userDelegate,
+      } as never,
+      "restored-user",
+      {
+        healthProfile: null,
+        healthProfileFacts: parsedPortable.healthProfileFacts,
+        customMetrics: [],
+        correlationPatterns: [],
+      },
+    );
+    expect(factDelegate.create).toHaveBeenCalledTimes(2);
+    expect(factDelegate.update).toHaveBeenCalledExactlyOnceWith({
+      where: { id: "shift-old" },
+      data: { supersededByRevisionId: "shift-closed" },
+    });
   });
 
   it("carries each metric with its readings nested inside it", async () => {

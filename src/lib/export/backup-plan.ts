@@ -89,6 +89,7 @@ export const BACKED_UP_MODELS = [
   "IllnessSymptomLink",
   "EcgRecording",
   "UserHealthProfile",
+  "HealthProfileFactRevision",
   "MeasurementReminder",
 
   // ── Cycle ─────────────────────────────────────────────────────────────────
@@ -196,6 +197,7 @@ export const TWO_ENDED_MODELS: readonly string[] = [
   "IllnessDayLog",
   "IllnessSymptomLink",
   "UserHealthProfile",
+  "HealthProfileFactRevision",
   "CycleProfile",
   "MenstrualCycle",
   "CycleDayLog",

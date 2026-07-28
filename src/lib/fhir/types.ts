@@ -97,6 +97,11 @@ export interface FhirObservation {
   /** v1.15.0 — date-typed value (e.g. the LMP start date). */
   valueDateTime?: string;
   valueCodeableConcept?: FhirCodeableConcept;
+  /**
+   * R4 `Observation.dataAbsentReason`. Used when a selected fact has no
+   * readable value so omission cannot be mistaken for deselection.
+   */
+  dataAbsentReason?: FhirCodeableConcept;
   component?: FhirObservationComponent[];
   /** v1.10.0 — descriptive note (e.g. the wellness-score disclaimer). */
   note?: FhirAnnotation[];

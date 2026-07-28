@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n/context";
 import { MoodExplainerIcon } from "./mood-explainer-icon";
 import {
   PatternDismissButton,
   PatternDismissedNotice,
+  usePatternDismissalOverrides,
 } from "@/components/insights/pattern-dismiss-action";
 
 /**
@@ -90,23 +90,7 @@ export function MoodDiscoveredRelations({
   pairsTested: number;
 }) {
   const { t } = useTranslations();
-  const [dismissedIds, setDismissedIds] = useState(
-    () =>
-      new Set(
-        pairs
-          .filter((pair) => pair.dismissed && pair.patternId)
-          .map((pair) => pair.patternId as string),
-      ),
-  );
-  useEffect(() => {
-    setDismissedIds(
-      new Set(
-        pairs
-          .filter((pair) => pair.dismissed && pair.patternId)
-          .map((pair) => pair.patternId as string),
-      ),
-    );
-  }, [pairs]);
+  const dismissal = usePatternDismissalOverrides();
 
   if (pairs.length === 0) return null;
 
@@ -131,6 +115,7 @@ export function MoodDiscoveredRelations({
       </div>
       <ul className="divide-border divide-y">
         {pairs.map((pair) => {
+          const patternId = pair.patternId;
           const moodIsOutcome = pair.outcome === "MOOD";
           const channelKey = moodIsOutcome ? pair.behaviour : pair.outcome;
           const dynamicLabel = moodIsOutcome
@@ -138,19 +123,17 @@ export function MoodDiscoveredRelations({
             : pair.outcomeLabel;
           const factorLabel =
             dynamicLabel ?? t(CHANNEL_LABEL_KEY[channelKey] ?? channelKey);
-          if (pair.patternId && dismissedIds.has(pair.patternId)) {
+          if (
+            patternId &&
+            dismissal.isDismissed(patternId, pair.dismissed === true)
+          ) {
             return (
-              <li key={pair.canonicalKey ?? pair.patternId} className="py-2">
+              <li key={pair.canonicalKey ?? patternId} className="py-2">
                 <PatternDismissedNotice
                   compact
-                  patternId={pair.patternId}
-                  onRestored={() =>
-                    setDismissedIds((current) => {
-                      const next = new Set(current);
-                      next.delete(pair.patternId as string);
-                      return next;
-                    })
-                  }
+                  patternId={patternId}
+                  onRestored={() => dismissal.setDismissed(patternId, false)}
+                  onSettled={() => dismissal.clearDismissed(patternId, false)}
                 />
               </li>
             );
@@ -187,16 +170,11 @@ export function MoodDiscoveredRelations({
                   })}
                 />
               </span>
-              {pair.patternId ? (
+              {patternId ? (
                 <PatternDismissButton
-                  patternId={pair.patternId}
-                  onDismissed={() =>
-                    setDismissedIds((current) => {
-                      const next = new Set(current);
-                      next.add(pair.patternId as string);
-                      return next;
-                    })
-                  }
+                  patternId={patternId}
+                  onDismissed={() => dismissal.setDismissed(patternId, true)}
+                  onSettled={() => dismissal.clearDismissed(patternId, true)}
                   className="self-start"
                 />
               ) : null}

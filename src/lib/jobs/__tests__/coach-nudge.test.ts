@@ -34,6 +34,10 @@ import {
 } from "../coach-nudge";
 import { getAssistantFlags } from "@/lib/feature-flags";
 import { userRowHasProviderCredential } from "@/lib/ai/provider";
+import {
+  DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+  type HealthProfileAiSection,
+} from "@/lib/validations/health-profile-facts";
 
 vi.mock("@/lib/feature-flags", () => ({
   getAssistantFlags: vi.fn(async () => ({ coach: true })),
@@ -592,6 +596,7 @@ describe("runCoachNudgeTick — gates and prefs", () => {
     recentPersistedNudge?: unknown;
     recentEngagement?: unknown;
     coachFocusEncrypted?: Uint8Array | null;
+    aiIncludedSections?: string[];
   }) {
     return {
       user: {
@@ -623,9 +628,20 @@ describe("runCoachNudgeTick — gates and prefs", () => {
         findFirst: vi.fn(async () => overrides.recentEngagement ?? null),
       },
       userHealthProfile: {
-        findUnique: vi.fn(async () => ({
-          coachFocusEncrypted: overrides.coachFocusEncrypted ?? null,
-        })),
+        findUnique: vi.fn(
+          async (args?: { select?: Record<string, boolean> }) => {
+            if (args?.select?.aiIncludedSections) {
+              return {
+                aiIncludedSections:
+                  overrides.aiIncludedSections ??
+                  DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+              };
+            }
+            return {
+              coachFocusEncrypted: overrides.coachFocusEncrypted ?? null,
+            };
+          },
+        ),
       },
       $queryRaw: vi.fn(async () => [{ days: 0 }]),
     };
@@ -652,6 +668,39 @@ describe("runCoachNudgeTick — gates and prefs", () => {
       episodeCount: 0,
       episodes: [],
     });
+  });
+
+  it("does not inspect excluded fields for the self-context trigger", async () => {
+    const findUnique = vi.fn(
+      async (args?: { select?: Record<string, boolean> }) => {
+        expect(args?.select?.aboutMeEncrypted).toBe(true);
+        expect(args?.select?.conditionsEncrypted).toBeUndefined();
+        expect(args?.select?.allergiesEncrypted).toBeUndefined();
+        expect(args?.select?.coachFocusEncrypted).toBeUndefined();
+        return {
+          aboutMeEncrypted: new Uint8Array([1]),
+          updatedAt: now,
+        };
+      },
+    );
+    const prisma = {
+      measurement: { count: vi.fn(async () => 1) },
+      coachUsage: {
+        findFirst: vi.fn(async () => ({ updatedAt: now })),
+      },
+      userHealthProfile: { findUnique },
+    };
+
+    const trigger = await findTriggerForUser(
+      prisma as unknown as PrismaClient,
+      userRow(null),
+      now,
+      { medication: false, vitals: false, routine: true },
+      new Set<HealthProfileAiSection>(["ABOUT_ME"]),
+    );
+
+    expect(trigger).toBeNull();
+    expect(findUnique).toHaveBeenCalledOnce();
   });
 
   it("counts a master opt-out before touching provider or cap gates", async () => {
@@ -833,6 +882,41 @@ describe("runCoachNudgeTick — gates and prefs", () => {
     expect(payload.message).toContain("you said you wanted to keep an eye on");
     // The decrypted self-context sentence is NEVER read back verbatim.
     expect(payload.message).not.toContain("morning blood pressure");
+  });
+
+  it("does not read or derive a Coach focus when that section is excluded", async () => {
+    const dispatch = vi.fn(async (input: unknown) => {
+      void input;
+      return { dispatched: true };
+    });
+    const prisma = prismaMock({
+      users: [userRow(null)],
+      intakeRows: failingIntakes,
+      coachFocusEncrypted: new Uint8Array([1, 2, 3]),
+      aiIncludedSections: ["ABOUT_ME"],
+    });
+
+    const summary = await runCoachNudgeTick(
+      prisma as unknown as PrismaClient,
+      now,
+      { dispatch: dispatch as never },
+    );
+
+    expect(summary.dispatched).toBe(1);
+    const payload = dispatch.mock.calls[0]?.[0] as unknown as {
+      message: string;
+    };
+    expect(payload.message).not.toContain(
+      "you said you wanted to keep an eye on",
+    );
+    const selectedCoachFocus =
+      prisma.userHealthProfile.findUnique.mock.calls.some(([args]) =>
+        Boolean(
+          (args as { select?: Record<string, boolean> } | undefined)?.select
+            ?.coachFocusEncrypted,
+        ),
+      );
+    expect(selectedCoachFocus).toBe(false);
   });
 
   it("persists the nudge as a conversation before dispatching (CCH-02)", async () => {

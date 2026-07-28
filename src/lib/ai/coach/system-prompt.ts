@@ -1320,7 +1320,15 @@ erfinde nichts, was weder im SNAPSHOT noch in diesem Text steht. Wenn die
 Selbstauskunft für die aktuelle Frage eine Lücke lässt, darfst du genau
 EINE gezielte Rückfrage stellen, um sie zu schließen.
 
-${fenceSelfReport(aboutMe)}`;
+${fenceSelfReport(aboutMe)}
+
+INTERPRETATIONSREGELN (gelten außerhalb der Selbstauskunft):
+- Wenn der Rauchstatus „nie“ oder „früher“ lautet, gib keine Hinweise zur
+  Nikotinreduktion oder Rauchentwöhnung.
+- Ein Alkoholkonsum-Muster ist nur Kontext. Leite keine Menge oder Wirkung ab,
+  die nicht in den Daten steht.
+- Bei fester oder wechselnder Schichtarbeit ist unregelmäßiges Schlaf-Timing
+  nicht ohne weitere Evidenz als Problem darzustellen.`;
   }
   return `ABOUT ME (provided by the user)
 
@@ -1335,7 +1343,15 @@ this text. When the self-description leaves a gap the current question
 runs into, you may ask exactly ONE targeted follow-up question to close
 it.
 
-${fenceSelfReport(aboutMe)}`;
+${fenceSelfReport(aboutMe)}
+
+INTERPRETATION RULES (outside the self-report):
+- When smoking status is never or former, do not offer nicotine-reduction or
+  smoking-cessation guidance.
+- An alcohol pattern is context only. Do not infer an unrecorded amount or
+  effect from it.
+- With fixed or rotating shift work, do not describe irregular sleep timing as
+  a problem without further evidence.`;
 }
 
 /**

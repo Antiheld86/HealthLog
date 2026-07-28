@@ -14,7 +14,7 @@
 import { Buffer } from "node:buffer";
 
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/db";
+import { prisma, toJson } from "@/lib/db";
 import { apiHandler, HttpError, requireAdmin } from "@/lib/api-handler";
 import { apiError, apiSuccess, getClientIp } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
@@ -67,6 +67,7 @@ interface RestoreResponse {
     workouts: number;
     documents: number;
     healthProfile: number;
+    healthProfileFactRevisions: number;
     customMetrics: number;
     correlationPatterns: number;
     intradayProfiles: number;
@@ -1041,6 +1042,9 @@ const handler = apiHandler(
                 pauseDurationSec: workout.pauseDurationSec ?? null,
                 source: workout.source as never,
                 externalId: workout.externalId ?? null,
+                ...(workout.metadata == null
+                  ? {}
+                  : { metadata: toJson(workout.metadata) }),
                 ...(workout.createdAt
                   ? { createdAt: new Date(workout.createdAt) }
                   : {}),
@@ -1121,6 +1125,8 @@ const handler = apiHandler(
             workouts: workouts.count,
             documents: documents.count,
             healthProfile: profileCleared.healthProfile,
+            healthProfileFactRevisions:
+              profileCleared.healthProfileFactRevisions,
             customMetrics: profileCleared.customMetrics,
             correlationPatterns: profileCleared.correlationPatterns,
             intradayProfiles: intradayCleared.intradayProfiles,
@@ -1249,6 +1255,7 @@ const handler = apiHandler(
           workouts: summary.workouts,
           documents: summary.documents,
           healthProfile: summary.healthProfile,
+          healthProfileFactRevisions: summary.healthProfileFactRevisions,
           customMetrics: summary.customMetrics,
           customMetricEntries: summary.customMetricEntries,
           correlationPatterns: summary.correlationPatterns,

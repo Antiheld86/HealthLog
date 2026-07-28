@@ -188,6 +188,119 @@ export function MedicationsSection({
   );
 }
 
+/** Structured allergy records, rendered only when the frozen scope allows it. */
+export function AllergiesSection({
+  t,
+  report,
+  selection,
+}: {
+  t: Translate;
+  report: DoctorReportData;
+  selection: ReportSelection;
+}) {
+  const allergies = selection.has("ALLERGIES") ? report.allergies : null;
+  if (!allergies || allergies.length === 0) return null;
+
+  return (
+    <Section title={t("doctorReport.allergiesTitle")}>
+      <div className="space-y-4">
+        {allergies.map((allergy, index) => (
+          <div
+            key={`${allergy.substance}-${allergy.category}-${allergy.type}-${index}`}
+            className="border-border/60 rounded-md border px-3"
+          >
+            <StatRow
+              label={t("doctorReport.allergiesColSubstance")}
+              value={allergy.substance}
+            />
+            <StatRow
+              label={t("doctorReport.allergiesColCategory")}
+              value={t(`records.allergies.category.${allergy.category}`)}
+            />
+            <StatRow
+              label={t("doctorReport.allergiesColKind")}
+              value={t(`records.allergies.type.${allergy.type}`)}
+            />
+            <StatRow
+              label={t("doctorReport.allergiesColSeverity")}
+              value={
+                allergy.severity
+                  ? t(`records.allergies.severity.${allergy.severity}`)
+                  : "—"
+              }
+            />
+            <StatRow
+              label={t("doctorReport.allergiesColReaction")}
+              value={
+                allergy.reactionUnreadable
+                  ? t("doctorReport.reactionUnreadable")
+                  : (allergy.reaction ?? "—")
+              }
+            />
+            <StatRow
+              label={t("doctorReport.allergiesColStatus")}
+              value={t(`records.allergies.status.${allergy.status}`)}
+            />
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+/**
+ * The selected health-profile leaf. It deliberately renders all four rows:
+ * `not recorded` is different from a deselected leaf, while an unreadable
+ * ciphertext is different from both.
+ */
+export function AnamnesisSection({
+  t,
+  report,
+  selection,
+}: {
+  t: Translate;
+  report: DoctorReportData;
+  selection: ReportSelection;
+}) {
+  const anamnesis = selection.has("ANAMNESIS") ? report.anamnesis : null;
+  if (!anamnesis) return null;
+
+  const absent = t("doctorReport.anamnesisNotRecorded");
+  const unreadable = t("doctorReport.anamnesisUnreadable");
+  const factValue = (
+    kind: "SMOKING_STATUS" | "ALCOHOL_PATTERN" | "SHIFT_SCHEDULE",
+    value: string | null,
+  ): string => {
+    if (anamnesis.unreadableFacts.includes(kind)) return unreadable;
+    return value ? t(`records.profileFacts.values.${kind}.${value}`) : absent;
+  };
+
+  return (
+    <Section title={t("doctorReport.anamnesisTitle")}>
+      <StatRow
+        label={t("doctorReport.anamnesisConditions")}
+        value={
+          anamnesis.conditionsUnreadable
+            ? unreadable
+            : (anamnesis.conditions ?? absent)
+        }
+      />
+      <StatRow
+        label={t("doctorReport.anamnesisSmoking")}
+        value={factValue("SMOKING_STATUS", anamnesis.smokingStatus)}
+      />
+      <StatRow
+        label={t("doctorReport.anamnesisAlcohol")}
+        value={factValue("ALCOHOL_PATTERN", anamnesis.alcoholPattern)}
+      />
+      <StatRow
+        label={t("doctorReport.anamnesisShiftSchedule")}
+        value={factValue("SHIFT_SCHEDULE", anamnesis.shiftSchedule)}
+      />
+    </Section>
+  );
+}
+
 /**
  * The fenced wellness card. Descriptive composites, not clinical assessments —
  * the disclaimer is load-bearing and sits above the numbers, not under them.

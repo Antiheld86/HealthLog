@@ -124,6 +124,15 @@
   },
   "doctorReport": {
     "title": "Gesundheitsbericht",
+    "anamnesisTitle": "Gesundheitsprofil",
+    "anamnesisNotRecorded": "Nicht erfasst",
+    "anamnesisUnreadable": "Gespeicherter Wert konnte nicht gelesen werden",
+    "anamnesisConditions": "Chronische Erkrankungen",
+    "anamnesisSmoking": "Rauchstatus",
+    "anamnesisAlcohol": "Alkoholkonsummuster",
+    "anamnesisShiftSchedule": "Arbeitszeitmodell",
+    "anamnesisColFact": "Profilangabe",
+    "anamnesisColValue": "Erfasster Wert",
     "subtitle": "HealthLog — Persönlicher Gesundheitsbericht",
     "patient": "Patient",
     "dateOfBirth": "Geburtsdatum",
@@ -8510,6 +8519,61 @@
     "historyLoadErrorHint": "Das heißt nicht, dass keine Ergebnisse vorliegen — die Liste konnte nicht abgerufen werden. Versuche es erneut."
   },
   "records": {
+    "aiInclusion": {
+      "cardTitle": "KI-Zugriff auf das Profil",
+      "cardDescription": "Lege fest, welche Teile deines Gesundheitsprofils Coach und umfassende Briefings verwenden dürfen.",
+      "sectionAboutMe": "Über mich",
+      "sectionConditions": "Chronische Erkrankungen",
+      "sectionAllergies": "Allergien und Unverträglichkeiten",
+      "sectionCoachFocus": "Coach-Schwerpunkt",
+      "sectionFamilyHistory": "Familienanamnese",
+      "sectionSmoking": "Rauchstatus",
+      "sectionAlcohol": "Alkoholkonsummuster",
+      "sectionShiftSchedule": "Arbeitszeitmodell",
+      "save": "Zugriff speichern",
+      "savedToast": "KI-Zugriff auf das Profil gespeichert",
+      "saveError": "KI-Zugriff auf das Profil konnte nicht gespeichert werden",
+      "loadError": "KI-Zugriff auf das Profil konnte nicht geladen werden"
+    },
+    "profileFacts": {
+      "cardTitle": "Lebensstil-Kontext",
+      "cardDescription": "Erfasse aktuelle Angaben, die die Einordnung deiner Gesundheitswerte verändern.",
+      "smokingLabel": "Rauchstatus",
+      "alcoholLabel": "Alkoholkonsummuster",
+      "shiftLabel": "Arbeitszeitmodell",
+      "notRecorded": "Nicht erfasst",
+      "unreadable": "Gespeicherter Wert konnte nicht gelesen werden",
+      "save": "Speichern",
+      "correct": "Korrigieren",
+      "savedToast": "Lebensstil-Kontext gespeichert",
+      "saveError": "Lebensstil-Kontext konnte nicht gespeichert werden",
+      "loadError": "Lebensstil-Kontext konnte nicht geladen werden",
+      "remove": "{kind} entfernen",
+      "removeConfirmTitle": "{kind} entfernen?",
+      "removeConfirmDescription": "Der aktuelle Wert gilt danach als nicht erfasst. Der datierte Verlauf bleibt erhalten.",
+      "removedToast": "{kind} aus dem aktuellen Lebensstil-Kontext entfernt",
+      "removeError": "{kind} konnte nicht entfernt werden",
+      "historyTitle": "Frühere Werte",
+      "to": "bis",
+      "values": {
+        "SMOKING_STATUS": {
+          "NEVER": "Nie geraucht",
+          "FORMER": "Früher geraucht",
+          "CURRENT": "Raucht derzeit"
+        },
+        "ALCOHOL_PATTERN": {
+          "NONE": "Kein Alkohol",
+          "OCCASIONAL": "Gelegentlich",
+          "WEEKLY": "Wöchentlich",
+          "MOST_DAYS": "An den meisten Tagen"
+        },
+        "SHIFT_SCHEDULE": {
+          "NONE": "Keine Schichtarbeit",
+          "FIXED_SHIFT": "Feste Schicht",
+          "ROTATING": "Wechselschicht"
+        }
+      }
+    },
     "disclaimer": "Das sind deine eigenen Angaben, keine ärztliche Diagnose. HealthLog stellt keine Diagnose, behandelt nicht und deutet nichts.",
     "allergies": {
       "cardTitle": "Allergien & Unverträglichkeiten",
@@ -9102,6 +9166,7 @@
     }
   },
   "reportSelection": {
+    "leafAnamnesis": "Gesundheitsprofil",
     "groupIdentity": "Stammdaten",
     "groupVitals": "Vitalwerte",
     "groupCardio": "Herz & Kreislauf",

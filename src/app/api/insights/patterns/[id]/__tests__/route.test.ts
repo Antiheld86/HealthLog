@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import type * as ModuleGateModule from "@/lib/modules/gate";
 
 vi.mock("@/lib/db", () => ({
   prisma: {
@@ -15,6 +16,10 @@ vi.mock("@/lib/logging/transports", () => ({ emitIfSampled: vi.fn() }));
 vi.mock("@/lib/db-compat", () => ({
   ensureDbCompatibility: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@/lib/modules/gate", async (importOriginal) => ({
+  ...(await importOriginal<typeof ModuleGateModule>()),
+  requireModuleEnabled: vi.fn(),
+}));
 vi.mock("next/headers", () => ({
   headers: vi.fn(async () => ({ get: () => null })),
   cookies: vi.fn(async () => ({
@@ -27,6 +32,8 @@ vi.mock("next/headers", () => ({
 import { PATCH } from "../route";
 import { getSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { requireModuleEnabled } from "@/lib/modules/gate";
+import { apiError } from "@/lib/api-response";
 
 const SESSION = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -59,6 +66,19 @@ describe("PATCH /api/insights/patterns/[id]", () => {
     vi.resetAllMocks();
     vi.mocked(getSession).mockResolvedValue(SESSION as never);
     vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never);
+    vi.mocked(requireModuleEnabled).mockResolvedValue({ enabled: true });
+  });
+
+  it("refuses a dismissal when Insights is disabled", async () => {
+    vi.mocked(requireModuleEnabled).mockResolvedValueOnce({
+      enabled: false,
+      response: apiError('Module "insights" is not enabled', 403),
+    });
+
+    const response = await PATCH(request({ dismissed: true }), params);
+
+    expect(response.status).toBe(403);
+    expect(prisma.correlationPattern.findFirst).not.toHaveBeenCalled();
   });
 
   it("stores the current evidence as the account-scoped dismissal baseline", async () => {

@@ -61,6 +61,7 @@ import { emptyGlucoseClinical } from "./glucose-panel";
 import { buildAdministrationLedger, buildGlp1Block } from "./medications";
 import {
   loadAllergies,
+  loadAnamnesis,
   loadFamilyHistory,
   loadIllnessEpisodes,
   loadLabResults,
@@ -493,22 +494,29 @@ export async function collectDoctorReportData(
     wellnessScoreSummaries.length > 0 ? wellnessScoreSummaries : null;
 
   // Each remaining structured block: read only when its leaf was chosen.
-  const [cycle, labResults, illnessEpisodes, allergies, familyHistory] =
-    await Promise.all([
-      gate.admits("CYCLE")
-        ? buildCycleExportSummary(userId, end.toISOString().slice(0, 10))
-        : Promise.resolve(null),
-      gate.admits("LAB_RESULTS")
-        ? loadLabResults(userId, start, end)
-        : Promise.resolve(null),
-      gate.admits("ILLNESS_EPISODES")
-        ? loadIllnessEpisodes(userId, start, end)
-        : Promise.resolve(null),
-      gate.admits("ALLERGIES") ? loadAllergies(userId) : Promise.resolve(null),
-      gate.admits("FAMILY_HISTORY")
-        ? loadFamilyHistory(userId)
-        : Promise.resolve(null),
-    ]);
+  const [
+    cycle,
+    labResults,
+    illnessEpisodes,
+    allergies,
+    familyHistory,
+    anamnesis,
+  ] = await Promise.all([
+    gate.admits("CYCLE")
+      ? buildCycleExportSummary(userId, end.toISOString().slice(0, 10))
+      : Promise.resolve(null),
+    gate.admits("LAB_RESULTS")
+      ? loadLabResults(userId, start, end)
+      : Promise.resolve(null),
+    gate.admits("ILLNESS_EPISODES")
+      ? loadIllnessEpisodes(userId, start, end)
+      : Promise.resolve(null),
+    gate.admits("ALLERGIES") ? loadAllergies(userId) : Promise.resolve(null),
+    gate.admits("FAMILY_HISTORY")
+      ? loadFamilyHistory(userId)
+      : Promise.resolve(null),
+    gate.admits("ANAMNESIS") ? loadAnamnesis(userId) : Promise.resolve(null),
+  ]);
 
   const identityOn = gate.admits("PATIENT_IDENTITY");
   const insuranceOn = gate.admits("INSURANCE");
@@ -573,5 +581,6 @@ export async function collectDoctorReportData(
     illnessEpisodes,
     allergies,
     familyHistory,
+    anamnesis,
   };
 }

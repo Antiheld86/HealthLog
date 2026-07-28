@@ -124,6 +124,15 @@
   },
   "doctorReport": {
     "title": "Rapport de santé",
+    "anamnesisTitle": "Profil de santé",
+    "anamnesisNotRecorded": "Non renseigné",
+    "anamnesisUnreadable": "La valeur enregistrée n'a pas pu être lue",
+    "anamnesisConditions": "Maladies chroniques",
+    "anamnesisSmoking": "Tabagisme",
+    "anamnesisAlcohol": "Habitudes de consommation d'alcool",
+    "anamnesisShiftSchedule": "Organisation du travail",
+    "anamnesisColFact": "Élément du profil",
+    "anamnesisColValue": "Valeur enregistrée",
     "subtitle": "HealthLog — Rapport personnel de santé",
     "patient": "Patient",
     "dateOfBirth": "Date de naissance",
@@ -8510,6 +8519,61 @@
     "historyLoadErrorHint": "Cela ne veut pas dire que tu n'as aucun résultat : la liste n'a pas pu être récupérée. Réessaie."
   },
   "records": {
+    "aiInclusion": {
+      "cardTitle": "Accès du profil par l'IA",
+      "cardDescription": "Choisissez les parties de votre profil de santé que le Coach et les synthèses complètes peuvent utiliser.",
+      "sectionAboutMe": "À propos de moi",
+      "sectionConditions": "Maladies chroniques",
+      "sectionAllergies": "Allergies et intolérances",
+      "sectionCoachFocus": "Priorité du Coach",
+      "sectionFamilyHistory": "Antécédents familiaux",
+      "sectionSmoking": "Tabagisme",
+      "sectionAlcohol": "Habitudes de consommation d'alcool",
+      "sectionShiftSchedule": "Organisation du travail",
+      "save": "Enregistrer l'accès",
+      "savedToast": "Accès du profil par l'IA enregistré",
+      "saveError": "Impossible d'enregistrer l'accès du profil par l'IA",
+      "loadError": "Impossible de charger l'accès du profil par l'IA"
+    },
+    "profileFacts": {
+      "cardTitle": "Contexte du mode de vie",
+      "cardDescription": "Indiquez les faits actuels qui modifient l'interprétation de vos mesures de santé.",
+      "smokingLabel": "Tabagisme",
+      "alcoholLabel": "Habitudes de consommation d'alcool",
+      "shiftLabel": "Organisation du travail",
+      "notRecorded": "Non renseigné",
+      "unreadable": "La valeur enregistrée n'a pas pu être lue",
+      "save": "Enregistrer",
+      "correct": "Corriger",
+      "savedToast": "Contexte du mode de vie enregistré",
+      "saveError": "Impossible d'enregistrer le contexte du mode de vie",
+      "loadError": "Impossible de charger le contexte du mode de vie",
+      "remove": "Supprimer : {kind}",
+      "removeConfirmTitle": "Supprimer : {kind} ?",
+      "removeConfirmDescription": "La valeur actuelle sera considérée comme non renseignée. Son historique daté sera conservé.",
+      "removedToast": "{kind} supprimé du contexte actuel du mode de vie",
+      "removeError": "Impossible de supprimer : {kind}",
+      "historyTitle": "Valeurs précédentes",
+      "to": "à",
+      "values": {
+        "SMOKING_STATUS": {
+          "NEVER": "N'a jamais fumé",
+          "FORMER": "A arrêté de fumer",
+          "CURRENT": "Fume actuellement"
+        },
+        "ALCOHOL_PATTERN": {
+          "NONE": "Aucune consommation",
+          "OCCASIONAL": "Occasionnelle",
+          "WEEKLY": "Hebdomadaire",
+          "MOST_DAYS": "La plupart des jours"
+        },
+        "SHIFT_SCHEDULE": {
+          "NONE": "Pas de travail posté",
+          "FIXED_SHIFT": "Poste fixe",
+          "ROTATING": "Postes tournants"
+        }
+      }
+    },
     "disclaimer": "Ce sont vos propres informations, pas un diagnostic médical. HealthLog ne diagnostique pas, ne traite pas et ne les interprète pas.",
     "allergies": {
       "cardTitle": "Allergies & intolérances",
@@ -9102,6 +9166,7 @@
     }
   },
   "reportSelection": {
+    "leafAnamnesis": "Profil de santé",
     "groupIdentity": "Données personnelles",
     "groupVitals": "Signes vitaux",
     "groupCardio": "Cœur et circulation",

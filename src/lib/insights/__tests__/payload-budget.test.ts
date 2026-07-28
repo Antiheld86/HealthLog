@@ -21,6 +21,7 @@ vi.mock("@/lib/db", () => ({
     measurementRollup: { findMany: vi.fn() },
     medicationIntakeEvent: { findMany: vi.fn() },
     moodEntry: { findMany: vi.fn(), aggregate: vi.fn() },
+    customMetric: { findMany: vi.fn() },
   },
 }));
 
@@ -84,6 +85,7 @@ beforeEach(() => {
     _count: { _all: 0 },
     _max: { moodLoggedAt: null },
   } as never);
+  vi.mocked(prisma.customMetric.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.user.findUnique).mockResolvedValue({
     dateOfBirth: null,
     gender: null,

@@ -95,6 +95,8 @@ export const WIPE_MODELS = [
   // ── Context and engagement ──────────────────────────────────────────────
   "EnvironmentContext",
   "EnvironmentTravelLocation",
+  "HealthProfileFactRevision",
+  "CorrelationPattern",
   "UserHealthProfile",
   "UserAchievement",
   "ArrivalReaction",

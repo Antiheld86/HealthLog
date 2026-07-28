@@ -11,10 +11,9 @@
  * the Coach composer renders them as tappable chips
  * (`/api/coach/about-me/questions`).
  *
- * PUT field semantics: `aboutMe` is required (empty string clears).
- * The structured fields are optional — omitted leaves the stored value
- * untouched, an empty string clears it — so older clients that only
- * send `aboutMe` keep working unchanged.
+ * PUT field semantics: every text field is optional. An omitted field stays
+ * untouched; an empty string clears it. This also lets the inclusion controls
+ * change without resubmitting encrypted text that the current key cannot read.
  *
  * Plain text end to end: the client renders every value as a React
  * text child only — no markdown library exists in the tree and none
@@ -34,6 +33,7 @@ import {
 } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
+import { invalidateUserInsights } from "@/lib/cache/invalidate";
 import { prisma } from "@/lib/db";
 import { takeBaseToken, invalidBaseTokenError } from "@/lib/optimistic-lock";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
@@ -41,6 +41,7 @@ import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import {
   getPendingQuestionsForUser,
   getSelfContextForUser,
+  filterSelfContextForAi,
   setPendingQuestionsForUser,
 } from "@/lib/ai/coach/about-me";
 import { deriveClarifyingQuestions } from "@/lib/ai/coach/self-context-questions";
@@ -50,22 +51,42 @@ import {
   ABOUT_ME_MAX_CHARS,
   aboutMePutSchema,
 } from "@/lib/validations/about-me";
+import {
+  DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+  type HealthProfileAiSection,
+} from "@/lib/validations/health-profile-facts";
 
 const PUT_RATE_LIMIT = 30;
 const PUT_WINDOW_MS = 60_000;
 
+type SelfContextConsumerGate =
+  | { enabled: true; coachEnabled: boolean }
+  | { enabled: false; response: Response };
+
+async function requireSelfContextConsumer(
+  userId: string,
+): Promise<SelfContextConsumerGate> {
+  const coachGate = await requireModuleEnabled(userId, "coach");
+  if (coachGate.enabled) return { enabled: true, coachEnabled: true };
+
+  const insightsGate = await requireModuleEnabled(userId, "insights");
+  if (insightsGate.enabled) return { enabled: true, coachEnabled: false };
+
+  return coachGate;
+}
 export const GET = apiHandler(async () => {
   const { user } = await requireAuth();
-  // v1.18.0 — Coach module gate (operator availability + disableCoach).
-  const gate = await requireModuleEnabled(user.id, "coach");
+  const gate = await requireSelfContextConsumer(user.id);
   if (!gate.enabled) return gate.response;
 
   const [ctx, pendingQuestions, row] = await Promise.all([
     getSelfContextForUser(user.id),
-    getPendingQuestionsForUser(user.id),
+    gate.coachEnabled
+      ? getPendingQuestionsForUser(user.id)
+      : Promise.resolve<string[]>([]),
     prisma.userHealthProfile.findUnique({
       where: { userId: user.id },
-      select: { updatedAt: true },
+      select: { updatedAt: true, aiIncludedSections: true },
     }),
   ]);
 
@@ -86,6 +107,9 @@ export const GET = apiHandler(async () => {
     allergies: ctx.allergies,
     coachFocus: ctx.coachFocus,
     pendingQuestions,
+    aiIncludedSections:
+      (row?.aiIncludedSections as HealthProfileAiSection[] | undefined) ??
+      DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
     updatedAt: row?.updatedAt?.toISOString() ?? null,
     maxChars: ABOUT_ME_MAX_CHARS,
     fieldMaxChars: ABOUT_ME_FIELD_MAX_CHARS,
@@ -94,8 +118,7 @@ export const GET = apiHandler(async () => {
 
 export const PUT = apiHandler(async (req: Request) => {
   const { user } = await requireAuth();
-  // v1.18.0 — Coach module gate (operator availability + disableCoach).
-  const gate = await requireModuleEnabled(user.id, "coach");
+  const gate = await requireSelfContextConsumer(user.id);
   if (!gate.enabled) return gate.response;
 
   const rl = await checkRateLimit(
@@ -130,8 +153,14 @@ export const PUT = apiHandler(async (req: Request) => {
     return returnAllZodIssues(parsed.error, 422);
   }
 
-  const text = parsed.data.aboutMe.trim();
-  const cleared = text.length === 0;
+  const text = parsed.data.aboutMe?.trim();
+  const textFieldsChanged =
+    parsed.data.aboutMe !== undefined ||
+    parsed.data.conditions !== undefined ||
+    parsed.data.allergies !== undefined ||
+    parsed.data.coachFocus !== undefined;
+  const questionsNeedRefresh =
+    textFieldsChanged || parsed.data.aiIncludedSections !== undefined;
 
   // Field-by-field data assembly (no mass assignment): omitted fields
   // never appear in the update object, so they stay untouched.
@@ -143,13 +172,16 @@ export const PUT = apiHandler(async (req: Request) => {
     return value.length === 0 ? null : encryptToBytes(value);
   };
   const update: {
-    aboutMeEncrypted: Uint8Array<ArrayBuffer> | null;
+    aboutMeEncrypted?: Uint8Array<ArrayBuffer> | null;
     conditionsEncrypted?: Uint8Array<ArrayBuffer> | null;
     allergiesEncrypted?: Uint8Array<ArrayBuffer> | null;
     coachFocusEncrypted?: Uint8Array<ArrayBuffer> | null;
-  } = {
-    aboutMeEncrypted: cleared ? null : encryptToBytes(text),
-  };
+    aiIncludedSections?: HealthProfileAiSection[];
+  } = {};
+  const aboutMePayload = encryptOptional(parsed.data.aboutMe);
+  if (aboutMePayload !== undefined) {
+    update.aboutMeEncrypted = aboutMePayload;
+  }
   const conditionsPayload = encryptOptional(parsed.data.conditions);
   if (conditionsPayload !== undefined) {
     update.conditionsEncrypted = conditionsPayload;
@@ -162,8 +194,11 @@ export const PUT = apiHandler(async (req: Request) => {
   if (coachFocusPayload !== undefined) {
     update.coachFocusEncrypted = coachFocusPayload;
   }
+  if (parsed.data.aiIncludedSections !== undefined) {
+    update.aiIncludedSections = parsed.data.aiIncludedSections;
+  }
   const fieldLengths: Record<string, number> = {
-    aboutMe: text.length,
+    ...(text !== undefined ? { aboutMe: text.length } : {}),
     ...(parsed.data.conditions !== undefined
       ? { conditions: parsed.data.conditions.trim().length }
       : {}),
@@ -175,80 +210,163 @@ export const PUT = apiHandler(async (req: Request) => {
       : {}),
   };
 
-  // v1.32.21 (R5a) — optimistic concurrency on `UserHealthProfile.updatedAt`.
-  //   - no base token → today's upsert (backward-compat arm, byte-identical);
-  //   - base present + row still carries it → conditional update, echo fresh;
-  //   - base present + zero match → the row either vanished (deleted since the
-  //     read → create wins, nothing to clobber) or advanced (real conflict →
-  //     409, no write).
-  let updatedAtIso: string;
-  if (base === undefined) {
-    const row = await prisma.userHealthProfile.upsert({
-      where: { userId: user.id },
-      create: { userId: user.id, ...update },
-      update,
-      select: { updatedAt: true },
-    });
-    updatedAtIso = row.updatedAt.toISOString();
-  } else {
-    const guarded = await prisma.userHealthProfile.updateMany({
-      where: { userId: user.id, updatedAt: base },
-      data: update,
-    });
-    if (guarded.count === 0) {
-      const existing = await prisma.userHealthProfile.findUnique({
+  // Keep the profile write and the persistent Insights cache clear in the
+  // same transaction. If either write fails, an inclusion change cannot
+  // commit while an hour-fresh advisor payload still references excluded
+  // profile content.
+  const persistence = await prisma.$transaction(async (tx) => {
+    let updatedAtIso: string;
+    let savedProfileUpdatedAt: Date | null = null;
+
+    // v1.32.21 (R5a) — optimistic concurrency on
+    // `UserHealthProfile.updatedAt`.
+    //   - no base token → today's upsert (backward-compat arm);
+    //   - base present + row still carries it → conditional update;
+    //   - base present + zero match → create if the row vanished, otherwise
+    //     report a real conflict without clearing the cache.
+    if (base === undefined) {
+      const row = await tx.userHealthProfile.upsert({
         where: { userId: user.id },
+        create: { userId: user.id, ...update },
+        update,
         select: { updatedAt: true },
       });
-      if (existing) {
-        annotate({
-          action: { name: "coach.about_me.conflict" },
-          meta: { base_updated_at: base.toISOString() },
-        });
-        return apiError("Self-context changed since it was loaded", 409, {
-          errorCode: "about_me_conflict",
-        });
-      }
-      const created = await prisma.userHealthProfile.create({
-        data: { userId: user.id, ...update },
-        select: { updatedAt: true },
-      });
-      updatedAtIso = created.updatedAt.toISOString();
+      updatedAtIso = row.updatedAt.toISOString();
+      savedProfileUpdatedAt = row.updatedAt;
     } else {
-      const fresh = await prisma.userHealthProfile.findUnique({
-        where: { userId: user.id },
-        select: { updatedAt: true },
+      const guarded = await tx.userHealthProfile.updateMany({
+        where: { userId: user.id, updatedAt: base },
+        data: update,
       });
-      updatedAtIso = (fresh?.updatedAt ?? new Date()).toISOString();
+      if (guarded.count === 0) {
+        const existing = await tx.userHealthProfile.findUnique({
+          where: { userId: user.id },
+          select: { updatedAt: true },
+        });
+        if (existing) {
+          return {
+            conflict: true as const,
+            baseUpdatedAt: base.toISOString(),
+          };
+        }
+        const created = await tx.userHealthProfile.create({
+          data: { userId: user.id, ...update },
+          select: { updatedAt: true },
+        });
+        updatedAtIso = created.updatedAt.toISOString();
+        savedProfileUpdatedAt = created.updatedAt;
+      } else {
+        const fresh = await tx.userHealthProfile.findUnique({
+          where: { userId: user.id },
+          select: { updatedAt: true },
+        });
+        updatedAtIso = (fresh?.updatedAt ?? new Date()).toISOString();
+        savedProfileUpdatedAt = fresh?.updatedAt ?? null;
+      }
     }
+
+    if (parsed.data.aiIncludedSections !== undefined) {
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          insightsCachedAt: null,
+          insightsCachedText: null,
+        },
+      });
+    }
+
+    return {
+      conflict: false as const,
+      updatedAtIso,
+      savedProfileUpdatedAt,
+    };
+  });
+
+  if (persistence.conflict) {
+    annotate({
+      action: { name: "coach.about_me.conflict" },
+      meta: { base_updated_at: persistence.baseUpdatedAt },
+    });
+    return apiError("Self-context changed since it was loaded", 409, {
+      errorCode: "about_me_conflict",
+    });
+  }
+
+  let { updatedAtIso } = persistence;
+  const { savedProfileUpdatedAt } = persistence;
+  if (parsed.data.aiIncludedSections !== undefined) {
+    invalidateUserInsights(user.id);
   }
 
   // Read back the effective state (covers omitted fields) and derive
   // the clarifying questions. An entirely empty self-context clears
   // the pending questions instead of generating new ones.
-  const ctx = await getSelfContextForUser(user.id);
-  const isEmpty =
+  const [ctx, controlRow] = await Promise.all([
+    getSelfContextForUser(user.id),
+    prisma.userHealthProfile.findUnique({
+      where: { userId: user.id },
+      select: { aiIncludedSections: true },
+    }),
+  ]);
+  const aiIncludedSections = (controlRow?.aiIncludedSections as
+    HealthProfileAiSection[] | undefined) ?? [
+    ...DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+  ];
+  const aiContext = filterSelfContextForAi(ctx, aiIncludedSections);
+  const aiContextIsEmpty =
+    aiContext.aboutMe === null &&
+    aiContext.conditions === null &&
+    aiContext.allergies === null &&
+    aiContext.coachFocus === null;
+  const storedContextIsEmpty =
     ctx.aboutMe === null &&
     ctx.conditions === null &&
     ctx.allergies === null &&
     ctx.coachFocus === null;
 
   let pendingQuestions: string[] = [];
+  let questionsToPersist: string[] | null | undefined;
   let questionsSource: "ai" | "fallback" | "none" = "none";
-  if (isEmpty) {
-    await setPendingQuestionsForUser(user.id, null);
+  if (!gate.coachEnabled) {
+    if (parsed.data.aiIncludedSections !== undefined) {
+      questionsToPersist = null;
+    }
+  } else if (!questionsNeedRefresh) {
+    pendingQuestions = await getPendingQuestionsForUser(user.id);
+  } else if (aiContextIsEmpty) {
+    questionsToPersist = null;
   } else {
-    const derived = await deriveClarifyingQuestions(user.id, ctx, user.locale);
+    const derived = await deriveClarifyingQuestions(
+      user.id,
+      aiContext,
+      user.locale,
+      aiIncludedSections,
+    );
     pendingQuestions = derived.questions;
     questionsSource = derived.source;
-    await setPendingQuestionsForUser(user.id, pendingQuestions);
+    questionsToPersist = pendingQuestions;
   }
+
+  if (questionsToPersist !== undefined) {
+    const persisted =
+      savedProfileUpdatedAt !== null &&
+      (await setPendingQuestionsForUser(
+        user.id,
+        questionsToPersist,
+        savedProfileUpdatedAt,
+      ));
+    if (!persisted) {
+      pendingQuestions = await getPendingQuestionsForUser(user.id);
+      questionsSource = "none";
+    }
+  }
+  const cleared = textFieldsChanged && storedContextIsEmpty;
 
   // The audit row carries per-field lengths only — the text is
   // free-form health prose and must not land in the plaintext audit
   // details.
   await auditLog(
-    isEmpty ? "coach.about_me.cleared" : "coach.about_me.updated",
+    cleared ? "coach.about_me.cleared" : "coach.about_me.updated",
     {
       userId: user.id,
       ipAddress: getClientIp(req),
@@ -258,14 +376,22 @@ export const PUT = apiHandler(async (req: Request) => {
 
   annotate({
     action: {
-      name: isEmpty ? "coach.about_me.cleared" : "coach.about_me.updated",
+      name: cleared ? "coach.about_me.cleared" : "coach.about_me.updated",
     },
     meta: {
-      length: text.length,
+      length: text?.length,
       questions_source: questionsSource,
       questions_count: pendingQuestions.length,
     },
   });
+
+  const finalProfileRow = await prisma.userHealthProfile.findUnique({
+    where: { userId: user.id },
+    select: { updatedAt: true },
+  });
+  if (finalProfileRow) {
+    updatedAtIso = finalProfileRow.updatedAt.toISOString();
+  }
 
   return apiSuccess({
     aboutMe: ctx.aboutMe,
@@ -273,6 +399,7 @@ export const PUT = apiHandler(async (req: Request) => {
     allergies: ctx.allergies,
     coachFocus: ctx.coachFocus,
     pendingQuestions,
+    aiIncludedSections,
     updatedAt: updatedAtIso,
     maxChars: ABOUT_ME_MAX_CHARS,
     fieldMaxChars: ABOUT_ME_FIELD_MAX_CHARS,

@@ -26,6 +26,12 @@ import { Buffer } from "node:buffer";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { decryptFromBytes, encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import { getEvent } from "@/lib/logging/context";
+import {
+  DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+  isHealthProfileFactValue,
+  type HealthProfileAiSection,
+  type HealthProfileFactKind,
+} from "@/lib/validations/health-profile-facts";
 
 export interface ProfileBackupOptions {
   purpose?: "portable-export" | "disaster-recovery";
@@ -52,6 +58,7 @@ export interface HealthProfileBackupEntry {
   conditionsEncrypted?: string | null;
   allergiesEncrypted?: string | null;
   coachFocusEncrypted?: string | null;
+  aiIncludedSections: HealthProfileAiSection[];
   /**
    * Server-derived clarifying questions awaiting an answer, encrypted JSON.
    *
@@ -64,6 +71,20 @@ export interface HealthProfileBackupEntry {
   pendingQuestionsEncrypted?: string | null;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface HealthProfileFactBackupEntry {
+  id: string;
+  kind: HealthProfileFactKind;
+  /** Portable exports carry readable plaintext; DR payloads leave this null. */
+  value: string | null;
+  /** Base64 encrypted envelope, present only in disaster-recovery payloads. */
+  valueEncrypted?: string;
+  validFrom: string;
+  validUntil: string | null;
+  provenance: "USER_REPORTED" | "USER_CORRECTION";
+  supersededByRevisionId: string | null;
+  createdAt: string;
 }
 
 /** One reading of a user-defined metric. */
@@ -131,6 +152,7 @@ export interface CorrelationPatternBackupEntry {
 export interface ProfileBackupSection {
   healthProfile: HealthProfileBackupEntry | null;
   customMetrics: CustomMetricBackupEntry[];
+  healthProfileFacts: HealthProfileFactBackupEntry[];
   correlationPatterns: CorrelationPatternBackupEntry[];
 }
 
@@ -138,6 +160,7 @@ export interface ProfileBackupCounts {
   healthProfile: number;
   customMetrics: number;
   customMetricEntries: number;
+  healthProfileFactRevisions: number;
   correlationPatterns: number;
 }
 
@@ -182,14 +205,17 @@ function toBase64(buf: Uint8Array | null): string | null {
 export async function buildProfileBackupSection(
   prisma: Pick<
     PrismaClient,
-    "userHealthProfile" | "customMetric" | "correlationPattern"
+    | "userHealthProfile"
+    | "healthProfileFactRevision"
+    | "customMetric"
+    | "correlationPattern"
   >,
   userId: string,
   options: ProfileBackupOptions = {},
 ): Promise<ProfileBackupSection> {
   const disasterRecovery = options.purpose === "disaster-recovery";
 
-  const [profileRow, metricRows, patternRows] = await Promise.all([
+  const [profileRow, metricRows, factRows, patternRows] = await Promise.all([
     prisma.userHealthProfile.findUnique({ where: { userId } }),
     prisma.customMetric.findMany({
       // A portable export never resurrects a tombstone; a DR payload restores
@@ -199,6 +225,10 @@ export async function buildProfileBackupSection(
       include: {
         entries: { orderBy: { measuredAt: "asc" } },
       },
+    }),
+    prisma.healthProfileFactRevision.findMany({
+      where: { userId },
+      orderBy: [{ kind: "asc" }, { validFrom: "asc" }],
     }),
     prisma.correlationPattern.findMany({
       where: { userId },
@@ -214,6 +244,10 @@ export async function buildProfileBackupSection(
           conditions: null,
           allergies: null,
           coachFocus: null,
+          aiIncludedSections: (profileRow.aiIncludedSections as
+            HealthProfileAiSection[] | undefined) ?? [
+            ...DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+          ],
           aboutMeEncrypted: toBase64(profileRow.aboutMeEncrypted),
           conditionsEncrypted: toBase64(profileRow.conditionsEncrypted),
           allergiesEncrypted: toBase64(profileRow.allergiesEncrypted),
@@ -241,9 +275,75 @@ export async function buildProfileBackupSection(
             profileRow.coachFocusEncrypted,
             "coachFocus",
           ),
+          aiIncludedSections: (profileRow.aiIncludedSections as
+            HealthProfileAiSection[] | undefined) ?? [
+            ...DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+          ],
         }
     : null;
 
+  const healthProfileFacts: HealthProfileFactBackupEntry[] = [];
+  if (disasterRecovery) {
+    for (const fact of factRows) {
+      healthProfileFacts.push({
+        id: fact.id,
+        kind: fact.kind as HealthProfileFactKind,
+        value: null,
+        valueEncrypted: toBase64(fact.valueEncrypted)!,
+        validFrom: fact.validFrom.toISOString(),
+        validUntil: fact.validUntil?.toISOString() ?? null,
+        provenance: fact.provenance,
+        supersededByRevisionId: fact.supersededByRevisionId,
+        createdAt: fact.createdAt.toISOString(),
+      });
+    }
+  } else {
+    const sourceById = new Map(factRows.map((fact) => [fact.id, fact]));
+    const readableById = new Map<string, HealthProfileFactBackupEntry>();
+    for (const fact of factRows) {
+      const value = decryptProfileFieldSoft(
+        fact.valueEncrypted,
+        `fact.${fact.kind}`,
+      );
+      const kind = fact.kind as HealthProfileFactKind;
+      if (
+        value === null ||
+        !isHealthProfileFactValue(kind, value) ||
+        (fact.validUntil !== null && fact.validUntil <= fact.validFrom)
+      ) {
+        continue;
+      }
+      readableById.set(fact.id, {
+        id: fact.id,
+        kind,
+        value,
+        validFrom: fact.validFrom.toISOString(),
+        validUntil: fact.validUntil?.toISOString() ?? null,
+        provenance: fact.provenance,
+        supersededByRevisionId: null,
+        createdAt: fact.createdAt.toISOString(),
+      });
+    }
+
+    for (const fact of factRows) {
+      const readable = readableById.get(fact.id);
+      if (!readable) continue;
+
+      if (fact.supersededByRevisionId !== null) {
+        const successor = sourceById.get(fact.supersededByRevisionId);
+        if (
+          fact.validUntil !== null &&
+          successor &&
+          successor.kind === fact.kind &&
+          successor.validFrom.getTime() === fact.validUntil.getTime() &&
+          readableById.has(successor.id)
+        ) {
+          readable.supersededByRevisionId = successor.id;
+        }
+      }
+      healthProfileFacts.push(readable);
+    }
+  }
   const customMetrics: CustomMetricBackupEntry[] = metricRows.map((metric) => ({
     ...(disasterRecovery
       ? {
@@ -302,7 +402,12 @@ export async function buildProfileBackupSection(
     }),
   );
 
-  return { healthProfile, customMetrics, correlationPatterns };
+  return {
+    healthProfile,
+    healthProfileFacts,
+    customMetrics,
+    correlationPatterns,
+  };
 }
 
 /** Row counts for the audit trail, mirroring the other section counters. */
@@ -312,6 +417,7 @@ export function countProfileBackupSection(
   return {
     healthProfile: section.healthProfile ? 1 : 0,
     customMetrics: section.customMetrics.length,
+    healthProfileFactRevisions: section.healthProfileFacts.length,
     customMetricEntries: section.customMetrics.reduce(
       (sum, metric) => sum + metric.entries.length,
       0,
@@ -323,6 +429,7 @@ export function countProfileBackupSection(
 /** Counts the profile restore wiped, for the audit trail. */
 export interface ProfileRestoreCleared {
   healthProfile: number;
+  healthProfileFactRevisions: number;
   customMetrics: number;
   correlationPatterns: number;
 }
@@ -337,6 +444,7 @@ export interface ProfileRestoreCleared {
  */
 export interface ProfileRestoreInput {
   healthProfile: HealthProfileBackupEntry | null;
+  healthProfileFacts: HealthProfileFactBackupEntry[];
   customMetrics: CustomMetricBackupEntry[];
   correlationPatterns: CorrelationPatternBackupEntry[];
 }
@@ -380,6 +488,73 @@ function resolveProfileColumn(
   return plaintext == null ? null : encryptToBytes(plaintext);
 }
 
+function resolveFactValue(
+  entry: HealthProfileFactBackupEntry,
+): Uint8Array<ArrayBuffer> {
+  if (entry.valueEncrypted !== undefined) {
+    return decodeEncryptedField(entry.valueEncrypted, `fact.${entry.kind}`);
+  }
+  if (
+    entry.value === null ||
+    !isHealthProfileFactValue(entry.kind, entry.value)
+  ) {
+    throw new Error(
+      `Health profile fact '${entry.kind}' has no valid readable value`,
+    );
+  }
+  return encryptToBytes(entry.value);
+}
+
+/**
+ * One fact revision's prompt-affecting identity: everything the AI prompt
+ * would see differently if this revision changed. `createdAt` is
+ * deliberately excluded — it never reaches the model, so two revisions that
+ * differ only in when they were inserted still count as unchanged scope.
+ */
+interface HealthProfileFactScopeRow {
+  id: string;
+  kind: string;
+  valueEncrypted: Uint8Array;
+  validFrom: Date | string;
+  validUntil: Date | string | null;
+  provenance: string;
+  supersededByRevisionId: string | null;
+}
+
+function factScopeSignature(row: HealthProfileFactScopeRow): string {
+  const validFrom =
+    typeof row.validFrom === "string"
+      ? row.validFrom
+      : row.validFrom.toISOString();
+  const validUntil =
+    row.validUntil === null
+      ? ""
+      : typeof row.validUntil === "string"
+        ? row.validUntil
+        : row.validUntil.toISOString();
+  return [
+    row.id,
+    row.kind,
+    validFrom,
+    validUntil,
+    row.provenance,
+    row.supersededByRevisionId ?? "",
+    toBase64(row.valueEncrypted) ?? "",
+  ].join("|");
+}
+
+/** True when the two prompt-scope signature sets are not identical. */
+function scopeSignaturesDiffer(
+  live: Set<string>,
+  restored: Set<string>,
+): boolean {
+  if (live.size !== restored.size) return true;
+  for (const signature of live) {
+    if (!restored.has(signature)) return true;
+  }
+  return false;
+}
+
 /**
  * Re-create the account's self-context and user-defined metrics.
  *
@@ -392,6 +567,42 @@ export async function restoreProfileData(
   ownerId: string,
   payload: ProfileRestoreInput,
 ): Promise<ProfileRestoreCleared> {
+  // Snapshot the live AI-prompt scope before any restore write touches it,
+  // so it can be compared with what this restore leaves behind. A restore
+  // that narrows `aiIncludedSections` or changes which facts are live means
+  // a cached briefing may reference content this account no longer has —
+  // that comparison decides whether to clear it below, inside this same
+  // transaction so the clear can never outlive a rolled-back restore.
+  const liveProfileScope = await tx.userHealthProfile.findUnique({
+    where: { userId: ownerId },
+    select: { aiIncludedSections: true },
+  });
+  const liveFacts = await tx.healthProfileFactRevision.findMany({
+    where: { userId: ownerId },
+    select: {
+      id: true,
+      kind: true,
+      valueEncrypted: true,
+      validFrom: true,
+      validUntil: true,
+      provenance: true,
+      supersededByRevisionId: true,
+    },
+  });
+  const liveSections = (
+    (liveProfileScope?.aiIncludedSections as
+      HealthProfileAiSection[] | undefined) ??
+    DEFAULT_HEALTH_PROFILE_AI_SECTIONS
+  )
+    .slice()
+    .sort();
+  const liveFactSignatures = new Set(
+    liveFacts.map((fact) => factScopeSignature(fact)),
+  );
+
+  const factsCleared = await tx.healthProfileFactRevision.deleteMany({
+    where: { userId: ownerId },
+  });
   const profileCleared = await tx.userHealthProfile.deleteMany({
     where: { userId: ownerId },
   });
@@ -408,6 +619,7 @@ export async function restoreProfileData(
       data: {
         ...(p.id ? { id: p.id } : {}),
         userId: ownerId,
+        aiIncludedSections: p.aiIncludedSections,
         aboutMeEncrypted: resolveProfileColumn(
           p.aboutMeEncrypted,
           p.aboutMe,
@@ -442,6 +654,57 @@ export async function restoreProfileData(
         ...(p.createdAt ? { createdAt: new Date(p.createdAt) } : {}),
         ...(p.updatedAt ? { updatedAt: new Date(p.updatedAt) } : {}),
       },
+    });
+  }
+
+  const restoredSections = [
+    ...(payload.healthProfile?.aiIncludedSections ??
+      DEFAULT_HEALTH_PROFILE_AI_SECTIONS),
+  ].sort();
+
+  const factIds = new Set<string>();
+  const restoredFactSignatures = new Set<string>();
+  for (const fact of payload.healthProfileFacts) {
+    if (factIds.has(fact.id)) {
+      throw new Error(`Duplicate health profile fact revision id: ${fact.id}`);
+    }
+    factIds.add(fact.id);
+    const valueEncrypted = resolveFactValue(fact);
+    restoredFactSignatures.add(
+      factScopeSignature({
+        id: fact.id,
+        kind: fact.kind,
+        valueEncrypted,
+        validFrom: fact.validFrom,
+        validUntil: fact.validUntil,
+        provenance: fact.provenance,
+        supersededByRevisionId: fact.supersededByRevisionId,
+      }),
+    );
+    await tx.healthProfileFactRevision.create({
+      data: {
+        id: fact.id,
+        userId: ownerId,
+        kind: fact.kind,
+        valueEncrypted,
+        validFrom: new Date(fact.validFrom),
+        validUntil: fact.validUntil ? new Date(fact.validUntil) : null,
+        provenance: fact.provenance,
+        supersededByRevisionId: null,
+        createdAt: new Date(fact.createdAt),
+      },
+    });
+  }
+  for (const fact of payload.healthProfileFacts) {
+    if (!fact.supersededByRevisionId) continue;
+    if (!factIds.has(fact.supersededByRevisionId)) {
+      throw new Error(
+        `Health profile fact revision '${fact.id}' points to a missing successor`,
+      );
+    }
+    await tx.healthProfileFactRevision.update({
+      where: { id: fact.id },
+      data: { supersededByRevisionId: fact.supersededByRevisionId },
     });
   }
 
@@ -529,8 +792,29 @@ export async function restoreProfileData(
     });
   }
 
+  const sectionsChanged =
+    restoredSections.length !== liveSections.length ||
+    restoredSections.some((section, index) => section !== liveSections[index]);
+  const factsChanged = scopeSignaturesDiffer(
+    liveFactSignatures,
+    restoredFactSignatures,
+  );
+  if (sectionsChanged || factsChanged) {
+    // A narrower or altered AI-prompt scope means any cached briefing may
+    // reference profile content this restore just removed or changed.
+    // Clearing it here — inside the same transaction as the write that
+    // changed scope — keeps the clear atomic: a failed restore leaves the
+    // cache exactly as it was, and a committed one can never serve a
+    // pre-restore briefing against a narrower post-restore scope.
+    await tx.user.update({
+      where: { id: ownerId },
+      data: { insightsCachedText: null, insightsCachedAt: null },
+    });
+  }
+
   return {
     healthProfile: profileCleared.count,
+    healthProfileFactRevisions: factsCleared.count,
     customMetrics: metricsCleared.count,
     correlationPatterns: patternsCleared.count,
   };

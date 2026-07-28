@@ -33,6 +33,7 @@ vi.mock("@/lib/db", () => ({
     dataBackup: { findUnique: vi.fn() },
     user: { findUnique: vi.fn() },
   },
+  toJson: <T>(value: T) => value,
 }));
 
 vi.mock("@/lib/crypto", () => ({ decrypt: vi.fn(() => "{}") }));

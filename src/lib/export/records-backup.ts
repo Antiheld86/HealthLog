@@ -12,7 +12,7 @@
  * the restore importer.
  */
 import { Buffer } from "node:buffer";
-import type { PrismaClient } from "@/generated/prisma/client";
+import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { decryptNoteSoft } from "@/lib/labs/store";
 import { decryptContextSoft } from "@/lib/labs/biomarker-store";
 import { decryptDocumentSummary } from "@/lib/documents/store";
@@ -101,6 +101,8 @@ export interface WorkoutBackupEntry {
   pauseDurationSec: number | null;
   source: string;
   externalId: string | null;
+  /** Canonical DR only; portable workout summaries keep their existing shape. */
+  metadata?: Prisma.JsonValue;
 }
 
 export interface DocumentBackupEntry {
@@ -427,6 +429,7 @@ export async function buildRecordsBackupSection(
           id: w.id,
           createdAt: w.createdAt.toISOString(),
           updatedAt: w.updatedAt.toISOString(),
+          ...(w.metadata == null ? {} : { metadata: w.metadata }),
         }
       : {}),
     sportType: w.sportType,

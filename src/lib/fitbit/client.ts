@@ -1217,6 +1217,12 @@ export function mapFitbitSportType(raw: unknown): string {
   );
 }
 
+/** Raw Fitbit workout identity retained alongside the canonical sport type. */
+export interface FitbitWorkoutMetadata {
+  fitbitActivityName?: string;
+  fitbitActivityTypeId?: number;
+}
+
 /** One mapped Fitbit activity destined for a `Workout` row. */
 export interface FitbitMappedWorkout {
   externalId: string;
@@ -1229,6 +1235,7 @@ export interface FitbitMappedWorkout {
   avgHeartRate: number | null;
   maxHeartRate: number | null;
   minHeartRate: number | null;
+  metadata: FitbitWorkoutMetadata;
 }
 
 /**
@@ -1272,6 +1279,16 @@ export function mapWorkout(
     ? Math.round(entry.averageHeartRate)
     : null;
 
+  const metadata: FitbitWorkoutMetadata = {
+    ...(typeof entry.activityName === "string"
+      ? { fitbitActivityName: entry.activityName }
+      : {}),
+    ...(typeof entry.activityTypeId === "number" &&
+    Number.isFinite(entry.activityTypeId)
+      ? { fitbitActivityTypeId: entry.activityTypeId }
+      : {}),
+  };
+
   return {
     externalId,
     sportType: mapFitbitSportType(entry.activityName),
@@ -1283,6 +1300,7 @@ export function mapWorkout(
     avgHeartRate: avgHr,
     maxHeartRate: null,
     minHeartRate: null,
+    metadata,
   };
 }
 

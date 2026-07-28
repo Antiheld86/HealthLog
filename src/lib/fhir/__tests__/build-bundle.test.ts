@@ -1216,6 +1216,103 @@ describe("buildFhirDocumentBundle", () => {
     expect(titles).not.toContain("Patient");
     expect(titles).not.toContain("Observations");
   });
+  it("emits the selected anamnesis facts and matching section narrative", () => {
+    const bundle = buildFhirDocumentBundle(
+      makeData({
+        anamnesis: {
+          conditions: "Asthma & eczema",
+          conditionsUnreadable: false,
+          smokingStatus: "CURRENT",
+          alcoholPattern: "WEEKLY",
+          shiftSchedule: "ROTATING",
+          unreadableFacts: [],
+        },
+      }),
+      { insuranceNumber: null },
+      FIXED_NOW,
+    );
+    const facts = observationsOf(bundle).filter((observation) =>
+      observation.id.startsWith("obs-anamnesis-"),
+    );
+    expect(facts).toHaveLength(3);
+    expect(facts.map((fact) => fact.code.coding?.[0]?.code)).toEqual([
+      "72166-2",
+      "11331-6",
+      "74159-5",
+    ]);
+    expect(facts.map((fact) => fact.valueCodeableConcept?.text)).toEqual([
+      "Current smoker",
+      "Weekly",
+      "Rotating shifts",
+    ]);
+
+    const composition = bundle.entry[0].resource;
+    expect(composition.resourceType).toBe("Composition");
+    if (composition.resourceType !== "Composition") return;
+    const section = composition.section?.find(
+      (candidate) => candidate.title === "Anamnesis",
+    );
+    expect(
+      section?.entry?.map((ref) => refTarget(bundle, ref.reference)),
+    ).toEqual(facts.map((fact) => `Observation/${fact.id}`));
+    expect(section?.text?.div).toContain("Asthma &amp; eczema");
+    expect(section?.text?.div).toContain("Current smoker");
+    expect(section?.text?.div).toContain("Weekly");
+    expect(section?.text?.div).toContain("Rotating shift");
+  });
+
+  it("preserves not-recorded and unreadable anamnesis values distinctly", () => {
+    const bundle = buildFhirDocumentBundle(
+      makeData({
+        anamnesis: {
+          conditions: null,
+          conditionsUnreadable: true,
+          smokingStatus: null,
+          alcoholPattern: null,
+          shiftSchedule: null,
+          unreadableFacts: ["ALCOHOL_PATTERN"],
+        },
+      }),
+      { insuranceNumber: null },
+      FIXED_NOW,
+    );
+    const facts = observationsOf(bundle).filter((observation) =>
+      observation.id.startsWith("obs-anamnesis-"),
+    );
+    expect(
+      facts.map((fact) => fact.dataAbsentReason?.coding?.[0]?.code),
+    ).toEqual(["unknown", "error", "unknown"]);
+
+    const composition = bundle.entry[0].resource;
+    expect(composition.resourceType).toBe("Composition");
+    if (composition.resourceType !== "Composition") return;
+    const narrative = composition.section?.find(
+      (candidate) => candidate.title === "Anamnesis",
+    )?.text?.div;
+    expect(narrative).toContain("Conditions: unreadable");
+    expect(narrative).toContain("Smoking status: not recorded");
+    expect(narrative).toContain("Alcohol pattern: unreadable");
+    expect(narrative).toContain("Shift schedule: not recorded");
+  });
+
+  it("omits anamnesis resources and section when the leaf was not selected", () => {
+    const bundle = buildFhirDocumentBundle(
+      makeData({ anamnesis: null }),
+      { insuranceNumber: null },
+      FIXED_NOW,
+    );
+    expect(
+      observationsOf(bundle).filter((observation) =>
+        observation.id.startsWith("obs-anamnesis-"),
+      ),
+    ).toEqual([]);
+    const composition = bundle.entry[0].resource;
+    expect(composition.resourceType).toBe("Composition");
+    if (composition.resourceType !== "Composition") return;
+    expect(
+      composition.section?.some((section) => section.title === "Anamnesis"),
+    ).toBe(false);
+  });
 });
 
 describe("buildFhirDocumentBundle — illness episodes (v1.18.1 P4)", () => {

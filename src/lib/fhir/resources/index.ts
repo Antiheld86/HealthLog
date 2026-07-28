@@ -2,7 +2,7 @@
  * v1.11.0 — shared per-resource FHIR R4 emitters.
  *
  * The Observation / MedicationStatement / MedicationAdministration / Patient /
- * Coverage / Condition / Encounter / cycle builders (with their
+ * Coverage / Condition / Encounter / cycle / anamnesis builders (with their
  * LOINC/ATC/SNOMED/UCUM codings and the `survey` wellness split) are small pure
  * functions over the SAME `DoctorReportData` the document-bundle builder
  * consumes. This barrel is their one public face: `buildFhirDocumentBundle`
@@ -31,6 +31,10 @@ export {
 export { coverageResource } from "@/lib/fhir/resources/coverage";
 export { observationsFromReportData } from "@/lib/fhir/resources/observation";
 export { cycleObservationsFromReportData } from "@/lib/fhir/resources/cycle";
+export {
+  anamnesisNarrativeFromReportData,
+  anamnesisObservationsFromReportData,
+} from "@/lib/fhir/resources/anamnesis";
 export { conditionsFromReportData } from "@/lib/fhir/resources/conditions";
 export {
   medicationStatementsFromReportData,

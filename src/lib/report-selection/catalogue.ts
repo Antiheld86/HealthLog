@@ -48,9 +48,10 @@ export type StructuredLeafId =
   | "ILLNESS_EPISODES"
   | "FAMILY_HISTORY"
   | "MOOD"
-  | "CYCLE";
+  | "CYCLE"
+  | "ANAMNESIS";
 
-/** Every leaf id: the 77 measurement types plus the 13 structured sections. */
+/** Every leaf id: the measurement types plus closed structured sections. */
 export type ReportLeafId = MeasurementType | StructuredLeafId;
 
 /** The presentation groups, in the order the panel and the PDF render them. */
@@ -201,9 +202,10 @@ export const STRUCTURED_LEAF_GROUP: Record<StructuredLeafId, ReportGroupId> = {
   FAMILY_HISTORY: "sensitive",
   MOOD: "sensitive",
   CYCLE: "sensitive",
+  ANAMNESIS: "sensitive",
 };
 
-/** i18n label keys for the 13 structured leaves. */
+/** i18n label keys for the 14 structured leaves. */
 export const STRUCTURED_LEAF_LABEL_KEYS: Record<StructuredLeafId, string> = {
   PATIENT_IDENTITY: "reportSelection.leafPatientIdentity",
   INSURANCE: "reportSelection.leafInsurance",
@@ -218,6 +220,7 @@ export const STRUCTURED_LEAF_LABEL_KEYS: Record<StructuredLeafId, string> = {
   FAMILY_HISTORY: "reportSelection.leafFamilyHistory",
   MOOD: "reportSelection.leafMood",
   CYCLE: "reportSelection.leafCycle",
+  ANAMNESIS: "reportSelection.leafAnamnesis",
 };
 
 /** i18n label keys for the groups, including the fenced tier's heading. */

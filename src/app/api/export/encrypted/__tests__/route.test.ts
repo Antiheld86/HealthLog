@@ -19,7 +19,9 @@ vi.mock("@/lib/db", () => ({
     // Durable self-context + user-defined metrics, read by
     // `buildProfileBackupSection`.
     userHealthProfile: { findUnique: vi.fn().mockResolvedValue(null) },
+    healthProfileFactRevision: { findMany: vi.fn().mockResolvedValue([]) },
     customMetric: { findMany: vi.fn().mockResolvedValue([]) },
+    correlationPattern: { findMany: vi.fn().mockResolvedValue([]) },
     // The hourly shape of a cumulative day, read by
     // `buildIntradayProfileBackupSection`.
     intradayCumulativeProfile: { findMany: vi.fn().mockResolvedValue([]) },

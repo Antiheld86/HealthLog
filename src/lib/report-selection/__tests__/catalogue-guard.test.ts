@@ -50,8 +50,8 @@ function resolves(key: string): boolean {
 describe("report selection catalogue", () => {
   it("carries every measurement type and every structured leaf", () => {
     expect(MEASUREMENT_LEAF_IDS).toHaveLength(77);
-    expect(STRUCTURED_LEAF_IDS).toHaveLength(13);
-    expect(ALL_LEAF_IDS).toHaveLength(90);
+    expect(STRUCTURED_LEAF_IDS).toHaveLength(14);
+    expect(ALL_LEAF_IDS).toHaveLength(91);
   });
 
   it("resolves a label for every leaf", () => {
@@ -98,9 +98,10 @@ describe("template purity", () => {
     expect(unknown).toEqual([]);
   });
 
-  it("fences exactly the seven leaves the design names", () => {
+  it("fences exactly the eight leaves the design names", () => {
     expect([...SENSITIVE_LEAF_IDS].sort()).toEqual(
       [
+        "ANAMNESIS",
         "CYCLE",
         "FAMILY_HISTORY",
         "GAD7_SCORE",

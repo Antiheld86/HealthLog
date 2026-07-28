@@ -124,6 +124,15 @@
   },
   "doctorReport": {
     "title": "Raport zdrowotny",
+    "anamnesisTitle": "Profil zdrowotny",
+    "anamnesisNotRecorded": "Brak danych",
+    "anamnesisUnreadable": "Nie udało się odczytać zapisanej wartości",
+    "anamnesisConditions": "Choroby przewlekłe",
+    "anamnesisSmoking": "Palenie tytoniu",
+    "anamnesisAlcohol": "Wzorzec spożycia alkoholu",
+    "anamnesisShiftSchedule": "Harmonogram pracy",
+    "anamnesisColFact": "Pozycja profilu",
+    "anamnesisColValue": "Zapisana wartość",
     "subtitle": "HealthLog — Osobisty raport zdrowotny",
     "patient": "Pacjent",
     "dateOfBirth": "Data urodzenia",
@@ -8510,6 +8519,61 @@
     "historyLoadErrorHint": "To nie znaczy, że nie masz wyników — nie udało się pobrać listy. Spróbuj ponownie."
   },
   "records": {
+    "aiInclusion": {
+      "cardTitle": "Dostęp AI do profilu",
+      "cardDescription": "Wybierz części profilu zdrowotnego, z których mogą korzystać Coach i pełne podsumowania.",
+      "sectionAboutMe": "O mnie",
+      "sectionConditions": "Choroby przewlekłe",
+      "sectionAllergies": "Alergie i nietolerancje",
+      "sectionCoachFocus": "Priorytet Coacha",
+      "sectionFamilyHistory": "Historia rodzinna",
+      "sectionSmoking": "Palenie tytoniu",
+      "sectionAlcohol": "Wzorzec spożycia alkoholu",
+      "sectionShiftSchedule": "Harmonogram pracy",
+      "save": "Zapisz dostęp",
+      "savedToast": "Zapisano dostęp AI do profilu",
+      "saveError": "Nie udało się zapisać dostępu AI do profilu",
+      "loadError": "Nie udało się wczytać dostępu AI do profilu"
+    },
+    "profileFacts": {
+      "cardTitle": "Kontekst stylu życia",
+      "cardDescription": "Zapisz aktualne informacje, które zmieniają interpretację pomiarów zdrowotnych.",
+      "smokingLabel": "Palenie tytoniu",
+      "alcoholLabel": "Wzorzec spożycia alkoholu",
+      "shiftLabel": "Harmonogram pracy",
+      "notRecorded": "Brak danych",
+      "unreadable": "Nie udało się odczytać zapisanej wartości",
+      "save": "Zapisz",
+      "correct": "Popraw",
+      "savedToast": "Zapisano kontekst stylu życia",
+      "saveError": "Nie udało się zapisać kontekstu stylu życia",
+      "loadError": "Nie udało się wczytać kontekstu stylu życia",
+      "remove": "Usuń: {kind}",
+      "removeConfirmTitle": "Usunąć: {kind}?",
+      "removeConfirmDescription": "Bieżąca wartość zmieni się na brak danych. Historia z datami zostanie zachowana.",
+      "removedToast": "Usunięto {kind} z bieżącego kontekstu stylu życia",
+      "removeError": "Nie udało się usunąć: {kind}",
+      "historyTitle": "Poprzednie wartości",
+      "to": "do",
+      "values": {
+        "SMOKING_STATUS": {
+          "NEVER": "Nigdy nie pali",
+          "FORMER": "Były palacz",
+          "CURRENT": "Obecnie pali"
+        },
+        "ALCOHOL_PATTERN": {
+          "NONE": "Nie spożywa",
+          "OCCASIONAL": "Okazjonalnie",
+          "WEEKLY": "Co tydzień",
+          "MOST_DAYS": "Przez większość dni"
+        },
+        "SHIFT_SCHEDULE": {
+          "NONE": "Bez pracy zmianowej",
+          "FIXED_SHIFT": "Stała zmiana",
+          "ROTATING": "Zmiany rotacyjne"
+        }
+      }
+    },
     "disclaimer": "To Twoje własne wpisy, a nie diagnoza lekarska. HealthLog nie diagnozuje, nie leczy i ich nie interpretuje.",
     "allergies": {
       "cardTitle": "Alergie i nietolerancje",
@@ -9102,6 +9166,7 @@
     }
   },
   "reportSelection": {
+    "leafAnamnesis": "Profil zdrowotny",
     "groupIdentity": "Dane osobowe",
     "groupVitals": "Parametry życiowe",
     "groupCardio": "Serce i krążenie",

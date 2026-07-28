@@ -124,6 +124,15 @@
   },
   "doctorReport": {
     "title": "Health Report",
+    "anamnesisTitle": "Health profile",
+    "anamnesisNotRecorded": "Not recorded",
+    "anamnesisUnreadable": "Stored value could not be read",
+    "anamnesisConditions": "Chronic conditions",
+    "anamnesisSmoking": "Smoking status",
+    "anamnesisAlcohol": "Alcohol pattern",
+    "anamnesisShiftSchedule": "Work schedule",
+    "anamnesisColFact": "Profile item",
+    "anamnesisColValue": "Recorded value",
     "subtitle": "HealthLog — Personal Health Report",
     "patient": "Patient",
     "dateOfBirth": "Date of birth",
@@ -8510,6 +8519,61 @@
     "historyLoadErrorHint": "This does not mean you have no results — the list could not be fetched. Try again."
   },
   "records": {
+    "aiInclusion": {
+      "cardTitle": "AI profile access",
+      "cardDescription": "Choose which parts of your health profile may be used by Coach and comprehensive briefings.",
+      "sectionAboutMe": "About me",
+      "sectionConditions": "Chronic conditions",
+      "sectionAllergies": "Allergies and intolerances",
+      "sectionCoachFocus": "Coach focus",
+      "sectionFamilyHistory": "Family history",
+      "sectionSmoking": "Smoking status",
+      "sectionAlcohol": "Alcohol pattern",
+      "sectionShiftSchedule": "Work schedule",
+      "save": "Save access",
+      "savedToast": "AI profile access saved",
+      "saveError": "Could not save AI profile access",
+      "loadError": "Could not load AI profile access"
+    },
+    "profileFacts": {
+      "cardTitle": "Lifestyle context",
+      "cardDescription": "Record the current facts that change how your health readings should be interpreted.",
+      "smokingLabel": "Smoking status",
+      "alcoholLabel": "Alcohol pattern",
+      "shiftLabel": "Work schedule",
+      "notRecorded": "Not recorded",
+      "unreadable": "Stored value could not be read",
+      "save": "Save",
+      "correct": "Correct",
+      "savedToast": "Lifestyle context saved",
+      "saveError": "Could not save lifestyle context",
+      "loadError": "Could not load lifestyle context",
+      "remove": "Remove {kind}",
+      "removeConfirmTitle": "Remove {kind}?",
+      "removeConfirmDescription": "The current value will become not recorded. Its dated history will be retained.",
+      "removedToast": "{kind} removed from current lifestyle context",
+      "removeError": "Could not remove {kind}",
+      "historyTitle": "Previous values",
+      "to": "to",
+      "values": {
+        "SMOKING_STATUS": {
+          "NEVER": "Never smoked",
+          "FORMER": "Former smoker",
+          "CURRENT": "Currently smokes"
+        },
+        "ALCOHOL_PATTERN": {
+          "NONE": "None",
+          "OCCASIONAL": "Occasional",
+          "WEEKLY": "Weekly",
+          "MOST_DAYS": "Most days"
+        },
+        "SHIFT_SCHEDULE": {
+          "NONE": "No shift work",
+          "FIXED_SHIFT": "Fixed shift",
+          "ROTATING": "Rotating shifts"
+        }
+      }
+    },
     "disclaimer": "These are your own records, not a medical diagnosis. HealthLog does not diagnose, treat, or interpret them.",
     "allergies": {
       "cardTitle": "Allergies & intolerances",
@@ -9102,6 +9166,7 @@
     }
   },
   "reportSelection": {
+    "leafAnamnesis": "Health profile",
     "groupIdentity": "Personal details",
     "groupVitals": "Vital signs",
     "groupCardio": "Heart & circulation",

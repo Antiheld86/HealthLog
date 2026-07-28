@@ -21,7 +21,9 @@ vi.mock("@/lib/db", () => ({
     // Durable self-context + user-defined metrics, read by
     // `buildProfileBackupSection`.
     userHealthProfile: { findUnique: vi.fn().mockResolvedValue(null) },
+    healthProfileFactRevision: { findMany: vi.fn().mockResolvedValue([]) },
     customMetric: { findMany: vi.fn().mockResolvedValue([]) },
+    correlationPattern: { findMany: vi.fn().mockResolvedValue([]) },
     // The hourly shape of a cumulative day, read by
     // `buildIntradayProfileBackupSection`.
     intradayCumulativeProfile: { findMany: vi.fn().mockResolvedValue([]) },
@@ -86,7 +88,11 @@ beforeEach(() => {
   vi.mocked(prisma.userHealthProfile.findUnique).mockResolvedValue(
     null as never,
   );
+  vi.mocked(prisma.healthProfileFactRevision.findMany).mockResolvedValue(
+    [] as never,
+  );
   vi.mocked(prisma.customMetric.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.correlationPattern.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.intradayCumulativeProfile.findMany).mockResolvedValue(
     [] as never,
   );

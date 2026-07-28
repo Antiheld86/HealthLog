@@ -287,5 +287,78 @@ export function buildClinicalRecordsNotesSection(
         .finalY + 8;
   }
 
+  if (data.anamnesis) {
+    y = ensureSpace(y, 6 + 22);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(30, 30, 30);
+    doc.text(t("doctorReport.anamnesisTitle"), margin, y);
+    y += 6;
+
+    const absent = t("doctorReport.anamnesisNotRecorded");
+    const unreadable = t("doctorReport.anamnesisUnreadable");
+    const factValue = (
+      kind: "SMOKING_STATUS" | "ALCOHOL_PATTERN" | "SHIFT_SCHEDULE",
+      value: string | null,
+    ) => {
+      if (data.anamnesis!.unreadableFacts.includes(kind)) return unreadable;
+      return value ? t(`records.profileFacts.values.${kind}.${value}`) : absent;
+    };
+    const rows = [
+      [
+        t("doctorReport.anamnesisConditions"),
+        data.anamnesis.conditionsUnreadable
+          ? unreadable
+          : (data.anamnesis.conditions ?? absent),
+      ],
+      [
+        t("doctorReport.anamnesisSmoking"),
+        factValue("SMOKING_STATUS", data.anamnesis.smokingStatus),
+      ],
+      [
+        t("doctorReport.anamnesisAlcohol"),
+        factValue("ALCOHOL_PATTERN", data.anamnesis.alcoholPattern),
+      ],
+      [
+        t("doctorReport.anamnesisShiftSchedule"),
+        factValue("SHIFT_SCHEDULE", data.anamnesis.shiftSchedule),
+      ],
+    ];
+
+    autoTable(doc, {
+      startY: y,
+      head: [
+        [
+          t("doctorReport.anamnesisColFact"),
+          t("doctorReport.anamnesisColValue"),
+        ],
+      ],
+      body: rows,
+      theme: "grid",
+      styles: {
+        fontSize: 9,
+        cellPadding: 3,
+        textColor: [30, 30, 30],
+        lineColor: [200, 200, 200],
+        lineWidth: 0.3,
+      },
+      headStyles: {
+        fillColor: [245, 245, 245],
+        textColor: [30, 30, 30],
+        fontStyle: "bold",
+      },
+      alternateRowStyles: { fillColor: [252, 252, 252] },
+      margin: {
+        left: margin,
+        right: margin,
+        top: margin,
+        bottom: tableBottomMargin,
+      },
+    });
+    y =
+      (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable
+        .finalY + 8;
+  }
+
   return pdfCursorState(doc, y);
 }

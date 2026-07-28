@@ -299,14 +299,16 @@ describe("every backed-up model travels both ways, or is named as debt", () => {
     ).toEqual([]);
   });
 
-  it("proves the two named this release are on the covered side", () => {
-    // Prerequisites for the structured-profile work: both were classified
-    // BACKED_UP and carried by nothing, and the custom metric was live loss.
+  it("proves the structured-profile models are on the covered side", () => {
+    // These account-owned rows are exported and restored explicitly rather
+    // than being treated as reconstructible data.
     for (const model of [
       "UserHealthProfile",
+      "HealthProfileFactRevision",
       "CustomMetric",
       "CustomMetricEntry",
     ]) {
+      expect(BACKED_UP_MODELS).toContain(model);
       expect(TWO_ENDED_MODELS).toContain(model);
       expect(COVERAGE_PENDING).not.toHaveProperty(model);
     }

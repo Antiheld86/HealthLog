@@ -66,7 +66,7 @@ function render(
   extra?: Partial<
     Pick<
       React.ComponentProps<typeof ClinicianView>,
-      "documents" | "token" | "locale"
+      "documents" | "token" | "locale" | "selection"
     >
   >,
 ) {
@@ -84,6 +84,78 @@ function render(
 }
 
 describe("<ClinicianView>", () => {
+  it("renders selected anamnesis and allergy facts with the PDF vocabulary", () => {
+    const html = render(
+      makeReport({
+        allergies: [
+          {
+            substance: "Penicillin",
+            category: "MEDICATION",
+            type: "ALLERGY",
+            severity: "SEVERE",
+            status: "ACTIVE",
+            reaction: "Hives",
+            reactionUnreadable: false,
+          },
+        ],
+        anamnesis: {
+          conditions: "Hypertension",
+          conditionsUnreadable: false,
+          smokingStatus: "FORMER",
+          alcoholPattern: "OCCASIONAL",
+          shiftSchedule: "ROTATING",
+          unreadableFacts: [],
+        },
+      }),
+    );
+    expect(html).toContain("Health profile");
+    expect(html).toContain("Hypertension");
+    expect(html).toContain("Former smoker");
+    expect(html).toContain("Occasional");
+    expect(html).toContain("Rotating shifts");
+    expect(html).toContain("Penicillin");
+    expect(html).toContain("Hives");
+  });
+
+  it("labels absent anamnesis facts without inventing negative values", () => {
+    const html = render(
+      makeReport({
+        anamnesis: {
+          conditions: null,
+          conditionsUnreadable: false,
+          smokingStatus: null,
+          alcoholPattern: null,
+          shiftSchedule: null,
+          unreadableFacts: [],
+        },
+      }),
+    );
+    expect(html).toContain("Health profile");
+    expect(html.match(/Not recorded/g)).toHaveLength(4);
+    expect(html).not.toContain("Never smoker");
+    expect(html).not.toContain("No alcohol");
+    expect(html).not.toContain("No shift work");
+  });
+
+  it("does not render anamnesis carried outside the frozen selection", () => {
+    const html = render(
+      makeReport({
+        anamnesis: {
+          conditions: "Must stay private",
+          conditionsUnreadable: false,
+          smokingStatus: "CURRENT",
+          alcoholPattern: "MOST_DAYS",
+          shiftSchedule: "FIXED_SHIFT",
+          unreadableFacts: [],
+        },
+      }),
+      { selection: selectionFromLeaves(["PULSE"]) },
+    );
+    expect(html).not.toContain("Health profile");
+    expect(html).not.toContain("Must stay private");
+    expect(html).not.toContain("Current smoker");
+  });
+
   it("renders the fenced wellness card with the descriptive disclaimer", () => {
     const html = render(makeReport());
     expect(html).toContain("Wellness scores");

@@ -807,8 +807,9 @@ describe("workout mapping (activities list)", () => {
     const entries = readActivityList({
       activities: [
         {
-          logId: 123456,
+          logId: 91001,
           activityName: "Run",
+          activityTypeId: 9001,
           startTime: "2026-05-10T07:00:00.000",
           duration: 45 * 60 * 1000,
           calories: 410,
@@ -821,7 +822,7 @@ describe("workout mapping (activities list)", () => {
     const w = mapWorkout(entries[0]!);
     expect(w).not.toBeNull();
     expect(w).toMatchObject({
-      externalId: "123456",
+      externalId: "91001",
       sportType: "running",
       durationSec: 45 * 60,
       totalEnergyKcal: 410,
@@ -829,10 +830,33 @@ describe("workout mapping (activities list)", () => {
       avgHeartRate: 148,
       maxHeartRate: null,
       minHeartRate: null,
+      metadata: {
+        fitbitActivityName: "Run",
+        fitbitActivityTypeId: 9001,
+      },
     });
     expect(w!.startedAt.getTime()).toBe(
       new Date("2026-05-10T07:00:00.000").getTime(),
     );
+  });
+
+  it("keeps raw provenance when an unknown activity maps to other", () => {
+    const w = mapWorkout({
+      logId: 91002,
+      activityName: "Activity Zeta",
+      activityTypeId: 9002,
+      startTime: "2026-05-10T09:00:00.000",
+      duration: 20 * 60 * 1000,
+    });
+
+    expect(w).toMatchObject({
+      externalId: "91002",
+      sportType: "other",
+      metadata: {
+        fitbitActivityName: "Activity Zeta",
+        fitbitActivityTypeId: 9002,
+      },
+    });
   });
 
   it("falls back to a start-anchored externalId + 'other' sport when fields are absent", () => {
