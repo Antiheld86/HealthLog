@@ -1,4 +1,5 @@
 import dns from "node:dns";
+import { isIP } from "node:net";
 import { Agent } from "undici";
 import { isPublicIp } from "@/lib/validations/notifications";
 
@@ -40,7 +41,10 @@ import { isPublicIp } from "@/lib/validations/notifications";
  * Wired into `safeFetch` only when `opts.requirePublicHost` is true.
  * The outbound paths that accept a user-supplied host all use that flag.
  */
-function pinnedLookup(
+type AddressPolicy = "public" | "operator-approved";
+
+function pinnedLookupWithPolicy(
+  policy: AddressPolicy,
   hostname: string,
   options: dns.LookupOptions,
   callback: (
@@ -64,13 +68,20 @@ function pinnedLookup(
       callback(err, "");
       return;
     }
-    const allowed = addresses.filter((a) => isPublicIp(a.address));
+    const allowed = addresses.filter((address) =>
+      policy === "public"
+        ? isPublicIp(address.address)
+        : isIP(address.address) !== 0,
+    );
     if (allowed.length === 0) {
       const refused: NodeJS.ErrnoException = new Error(
         `safeFetch refused private resolved address for ${hostname}`,
       );
       refused.code = "ENOTFOUND";
-      callback(refused, "");
+      // Preserve the result shape Undici requested. Auto-select-family asks
+      // for `all: true`; handing that path a scalar empty string can mask the
+      // policy error behind an invalid-address error for IPv6 answers.
+      callback(refused, options.all ? [] : "");
       return;
     }
 
@@ -89,19 +100,44 @@ function pinnedLookup(
   });
 }
 
+function pinnedPublicLookup(
+  hostname: string,
+  options: dns.LookupOptions,
+  callback: (
+    err: NodeJS.ErrnoException | null,
+    address: string | dns.LookupAddress[],
+    family?: number,
+  ) => void,
+): void {
+  pinnedLookupWithPolicy("public", hostname, options, callback);
+}
+
+function pinnedOperatorApprovedLookup(
+  hostname: string,
+  options: dns.LookupOptions,
+  callback: (
+    err: NodeJS.ErrnoException | null,
+    address: string | dns.LookupAddress[],
+    family?: number,
+  ) => void,
+): void {
+  pinnedLookupWithPolicy("operator-approved", hostname, options, callback);
+}
+
 /**
  * Lazily-instantiated singleton. `undici.Agent` keeps an internal pool
  * per origin, so reusing one instance across calls preserves the keep-
  * alive benefit while still pinning each new connection through the
  * vetted lookup.
  */
-let cached: Agent | null = null;
+let cachedPublic: Agent | null = null;
+let cachedOperatorApproved: Agent | null = null;
 
-export function getPinnedPublicDispatcher(): Agent {
-  if (cached) return cached;
-  cached = new Agent({
+function createPinnedDispatcher(policy: AddressPolicy): Agent {
+  return new Agent({
     connect: {
-      lookup: pinnedLookup,
+      lookup:
+        policy === "public" ? pinnedPublicLookup : pinnedOperatorApprovedLookup,
       // RFC 8305 Happy Eyeballs across the vetted survivor set. Without
       // this undici pins the single first address and dies when that is
       // an unreachable IPv6 record on a v4-only host. With it, undici
@@ -114,7 +150,24 @@ export function getPinnedPublicDispatcher(): Agent {
       autoSelectFamilyAttemptTimeout: 250,
     },
   });
-  return cached;
+}
+
+export function getPinnedPublicDispatcher(): Agent {
+  cachedPublic ??= createPinnedDispatcher("public");
+  return cachedPublic;
+}
+
+/**
+ * Pinned dispatcher for an exact operator-approved origin.
+ *
+ * Private addresses are permitted only after the Nightscout origin policy has
+ * matched the complete canonical scheme/host/port trust grant. Resolution is
+ * still performed once inside Undici's connector and the vetted answer set is
+ * pinned to the socket, so a later DNS answer cannot replace the destination.
+ */
+export function getPinnedOperatorApprovedDispatcher(): Agent {
+  cachedOperatorApproved ??= createPinnedDispatcher("operator-approved");
+  return cachedOperatorApproved;
 }
 
 /**
@@ -123,6 +176,8 @@ export function getPinnedPublicDispatcher(): Agent {
  * binds the mock.
  */
 export function _resetPinnedDispatcherForTests(): void {
-  cached?.destroy().catch(() => {});
-  cached = null;
+  cachedPublic?.destroy().catch(() => {});
+  cachedOperatorApproved?.destroy().catch(() => {});
+  cachedPublic = null;
+  cachedOperatorApproved = null;
 }
