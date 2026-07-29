@@ -185,7 +185,7 @@ describe("<TodayHero>", () => {
             sourceMetric: "pulse",
             tone: "info",
             headline: "Pulse is settling lately",
-            nudge: null,
+            nudge: "",
             delta: null,
           },
         })}

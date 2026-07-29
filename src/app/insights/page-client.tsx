@@ -26,6 +26,7 @@ import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { HeroStrip } from "@/components/insights/hero-strip";
+import { HealthScoreCard } from "@/components/insights/health-score-card";
 import { useInsightsAdvisorQuery } from "@/components/insights/use-insights-advisor";
 import { useAnalyticsQuery } from "@/lib/queries/use-analytics-query";
 import { useDashboardSnapshot } from "@/lib/queries/use-dashboard-snapshot";
@@ -474,36 +475,41 @@ export default function InsightsPageClient() {
       />
     ),
     "daily-briefing": flags.briefing ? (
-      <DailyBriefing
-        briefing={briefingPayload}
-        updatedAt={heroStripUpdatedAt}
-        loading={advisor.isLoading}
-        onRegenerate={advisor.regenerate}
-        regenerating={advisor.isRegenerating}
-        // v1.15.20 — the read path reports a 422 (no provider configured)
-        // as its own outcome; swap the futile regenerate CTA for a quiet
-        // Settings → AI hint instead of an eternal "preparing" loop.
-        noProvider={advisor.readOutcome === "no-provider"}
-        // v1.18.9 (#4) — a (stale) cached briefing is shown but no provider
-        // is connected, so it can never refresh. Pair the relative-age
-        // footer with a discreet connect-provider hint. Only fires when a
-        // briefing is actually rendered (the empty-state path owns the
-        // `noProvider` branch above).
-        noProviderStale={briefingPayload !== null && !advisor.hasProvider}
-        // v1.25 — the last generation attempt failed. On a held briefing this
-        // adds a discreet "couldn't refresh — retry" footer hint; on an empty
-        // card it swaps the generic empty state for an honest "couldn't
-        // generate" one. Suppressed when no provider is configured (that hint
-        // owns the surface and a retry would be futile).
-        generationFailed={advisor.generationFailed && advisor.hasProvider}
-        // v1.25.3 — failure class points the empty-state hint at the right
-        // lever (raise the response timeout vs re-check the provider).
-        generationFailureClass={advisor.generationFailureClass}
-        // v1.28.28 (#470) — the grounding gate stripped the last regenerated
-        // briefing; the card explains the omission instead of "no briefing
-        // yet" (which made the regenerate button read as doing nothing).
-        omittedReason={advisor.briefingOmittedReason}
-      />
+      <>
+        <DailyBriefing
+          briefing={briefingPayload}
+          updatedAt={heroStripUpdatedAt}
+          loading={advisor.isLoading}
+          onRegenerate={advisor.regenerate}
+          regenerating={advisor.isRegenerating}
+          // v1.15.20 — the read path reports a 422 (no provider configured)
+          // as its own outcome; swap the futile regenerate CTA for a quiet
+          // Settings → AI hint instead of an eternal "preparing" loop.
+          noProvider={advisor.readOutcome === "no-provider"}
+          // v1.18.9 (#4) — a (stale) cached briefing is shown but no provider
+          // is connected, so it can never refresh. Pair the relative-age
+          // footer with a discreet connect-provider hint. Only fires when a
+          // briefing is actually rendered (the empty-state path owns the
+          // `noProvider` branch above).
+          noProviderStale={briefingPayload !== null && !advisor.hasProvider}
+          // v1.25 — the last generation attempt failed. On a held briefing this
+          // adds a discreet "couldn't refresh — retry" footer hint; on an empty
+          // card it swaps the generic empty state for an honest "couldn't
+          // generate" one. Suppressed when no provider is configured (that hint
+          // owns the surface and a retry would be futile).
+          generationFailed={advisor.generationFailed && advisor.hasProvider}
+          // v1.25.3 — failure class points the empty-state hint at the right
+          // lever (raise the response timeout vs re-check the provider).
+          generationFailureClass={advisor.generationFailureClass}
+          // v1.28.28 (#470) — the grounding gate stripped the last regenerated
+          // briefing; the card explains the omission instead of "no briefing
+          // yet" (which made the regenerate button read as doing nothing).
+          omittedReason={advisor.briefingOmittedReason}
+        />
+        {analytics?.healthScore ? (
+          <HealthScoreCard report={analytics.healthScore} className="mt-6" />
+        ) : null}
+      </>
     ) : null,
     vitals: <VitalsDashboard batch={dashboardDerived} layout={layout} />,
     trends: (

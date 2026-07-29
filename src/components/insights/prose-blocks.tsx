@@ -38,7 +38,10 @@ import { InlineLearnLink } from "@/components/ui/learn-more-link";
 /** Default paragraph styling shared by every prose surface + the Coach
  *  streaming tail, so the streamed and settled renders line up exactly. */
 export const PROSE_PARAGRAPH_CLASS =
-  "leading-relaxed break-words [&:not(:first-child)]:mt-3";
+  // Keep consecutive narrative blocks visually connected. The previous
+  // 12px paragraph step made short assessments look like separate cards on
+  // mobile, especially directly below a status pill or tile heading.
+  "leading-relaxed break-words [&:not(:first-child)]:mt-2";
 
 /**
  * Split a trusted-as-text string into real paragraphs on blank lines.

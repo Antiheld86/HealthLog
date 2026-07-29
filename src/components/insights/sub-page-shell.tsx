@@ -389,7 +389,7 @@ export function SubPageShell({
             </p>
           ) : null}
           {description && !explainerMetric ? (
-            <p className="text-muted-foreground text-sm">{description}</p>
+            <p className="text-foreground text-sm">{description}</p>
           ) : null}
         </header>
         {/* v1.12.6 — the Min / Max / Median / Mittelwert stat strip LEADS

@@ -14,6 +14,7 @@ import type {
 } from "@/lib/analytics/score/types";
 import { useTranslations } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
+import { ScoreRing } from "@/components/insights/derived/score-ring";
 
 const PILLAR_LABEL_KEY: Record<ScorePillarId, string> = {
   BLOOD_PRESSURE: "insights.healthScore.pillar.bloodPressure",
@@ -83,6 +84,8 @@ export interface HealthScoreCardProps {
     negative: string[];
   } | null;
   returnToBand?: { metricLabel: string; daysInside: number } | null;
+  /** Keep only the score face when the card is used above the fold. */
+  compact?: boolean;
   className?: string;
 }
 
@@ -90,6 +93,7 @@ export function HealthScoreCard({
   report,
   tension,
   returnToBand,
+  compact = false,
   className,
 }: HealthScoreCardProps) {
   const { t } = useTranslations();
@@ -223,6 +227,36 @@ export function HealthScoreCard({
         ? 1 / eligibleCount
         : 0,
   }));
+  if (compact) {
+    return (
+      <div
+        data-slot="health-score-card-compact"
+        className={cn(
+          "border-border/70 bg-card/80 flex min-w-0 flex-col items-center justify-center gap-2 rounded-xl border p-4",
+          className,
+        )}
+      >
+        <ScoreRing
+          score={composite.status === "ok" ? composite.value.score : null}
+          band={composite.status === "ok" ? composite.value.band : undefined}
+          size="md"
+          flat
+          label={t("insights.healthScore.label")}
+        />
+        {composite.status === "ok" ? (
+          <p className="text-muted-foreground text-xs">
+            {t(`insights.healthScore.band.${composite.value.band}`)}
+          </p>
+        ) : (
+          <p className="text-muted-foreground text-xs">
+            {t("insights.healthScore.insufficient", {
+              count: composite.coverage.presentInputs,
+            })}
+          </p>
+        )}
+      </div>
+    );
+  }
   return (
     <div
       data-slot="health-score-card"
