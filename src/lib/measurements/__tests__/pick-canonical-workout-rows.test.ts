@@ -7,6 +7,9 @@ interface RowFixture {
   startedAt: Date;
   sportType: string;
   source: "APPLE_HEALTH" | "WHOOP" | "WITHINGS" | "MANUAL" | "IMPORT";
+  avgHeartRate?: number | null;
+  maxHeartRate?: number | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 describe("pickCanonicalWorkoutRows", () => {
@@ -65,6 +68,163 @@ describe("pickCanonicalWorkoutRows", () => {
       },
     ];
     expect(pickCanonicalWorkoutRows(rows).map((r) => r.id)).toEqual(["apple"]);
+  });
+
+  it("enriches a canonical Apple workout from its matched WHOOP twin", () => {
+    const apple: RowFixture = {
+      id: "apple",
+      startedAt: new Date("2026-06-03T06:30:40Z"),
+      sportType: "running",
+      source: "APPLE_HEALTH",
+      avgHeartRate: null,
+      maxHeartRate: null,
+      metadata: { hkVersion: "1", owner: "apple" },
+    };
+    const whoop: RowFixture = {
+      id: "whoop",
+      startedAt: new Date("2026-06-03T06:30:00Z"),
+      sportType: "running",
+      source: "WHOOP",
+      avgHeartRate: 146,
+      maxHeartRate: 181,
+      metadata: {
+        zoneDurations: { zone_one_milli: 60_000 },
+        whoopWorkoutStrain: 12.3,
+      },
+    };
+
+    const [picked] = pickCanonicalWorkoutRows([whoop, apple]);
+
+    expect(picked).toMatchObject({
+      id: "apple",
+      source: "APPLE_HEALTH",
+      avgHeartRate: 146,
+      maxHeartRate: 181,
+      metadata: {
+        hkVersion: "1",
+        owner: "apple",
+        zoneDurations: { zone_one_milli: 60_000 },
+      },
+    });
+    expect(picked.metadata).not.toHaveProperty("whoopWorkoutStrain");
+    expect(apple).toEqual({
+      id: "apple",
+      startedAt: new Date("2026-06-03T06:30:40Z"),
+      sportType: "running",
+      source: "APPLE_HEALTH",
+      avgHeartRate: null,
+      maxHeartRate: null,
+      metadata: { hkVersion: "1", owner: "apple" },
+    });
+  });
+
+  it("never overwrites canonical HR or zones with WHOOP donor values", () => {
+    const rows: RowFixture[] = [
+      {
+        id: "apple",
+        startedAt: new Date("2026-06-03T06:30:40Z"),
+        sportType: "running",
+        source: "APPLE_HEALTH",
+        avgHeartRate: 140,
+        maxHeartRate: 175,
+        metadata: { zoneDurations: { zone_one_milli: 30_000 } },
+      },
+      {
+        id: "whoop",
+        startedAt: new Date("2026-06-03T06:30:00Z"),
+        sportType: "running",
+        source: "WHOOP",
+        avgHeartRate: 150,
+        maxHeartRate: 185,
+        metadata: { zoneDurations: { zone_one_milli: 90_000 } },
+      },
+    ];
+
+    expect(pickCanonicalWorkoutRows(rows)[0]).toMatchObject({
+      id: "apple",
+      avgHeartRate: 140,
+      maxHeartRate: 175,
+      metadata: { zoneDurations: { zone_one_milli: 30_000 } },
+    });
+  });
+
+  it("does not enrich across sport or fixed-window boundaries", () => {
+    const apple: RowFixture = {
+      id: "apple",
+      startedAt: new Date("2026-06-03T06:30:00Z"),
+      sportType: "running",
+      source: "APPLE_HEALTH",
+      avgHeartRate: null,
+      maxHeartRate: null,
+      metadata: null,
+    };
+    const wrongSport: RowFixture = {
+      id: "whoop-cycle",
+      startedAt: new Date("2026-06-03T06:30:30Z"),
+      sportType: "cycling",
+      source: "WHOOP",
+      avgHeartRate: 150,
+      maxHeartRate: 180,
+      metadata: { zoneDurations: { zone_two_milli: 60_000 } },
+    };
+    const wrongWindow: RowFixture = {
+      id: "whoop-later",
+      startedAt: new Date("2026-06-03T06:35:00Z"),
+      sportType: "running",
+      source: "WHOOP",
+      avgHeartRate: 155,
+      maxHeartRate: 185,
+      metadata: { zoneDurations: { zone_three_milli: 60_000 } },
+    };
+
+    const result = pickCanonicalWorkoutRows([
+      apple,
+      wrongSport,
+      wrongWindow,
+    ]);
+    expect(result.find((row) => row.id === "apple")).toMatchObject({
+      avgHeartRate: null,
+      maxHeartRate: null,
+      metadata: null,
+    });
+  });
+
+  it("does not enrich same-source winners or use a non-WHOOP donor", () => {
+    const apple: RowFixture = {
+      id: "apple",
+      startedAt: new Date("2026-06-03T06:30:00Z"),
+      sportType: "running",
+      source: "APPLE_HEALTH",
+      avgHeartRate: null,
+      maxHeartRate: null,
+      metadata: null,
+    };
+    const secondApple: RowFixture = {
+      ...apple,
+      id: "apple-2",
+      startedAt: new Date("2026-06-03T06:31:00Z"),
+      avgHeartRate: 145,
+      maxHeartRate: 178,
+    };
+    const withings: RowFixture = {
+      ...apple,
+      id: "withings",
+      source: "WITHINGS",
+      startedAt: new Date("2026-06-03T06:32:00Z"),
+      avgHeartRate: 150,
+      maxHeartRate: 182,
+    };
+
+    const sameSource = pickCanonicalWorkoutRows([apple, secondApple]);
+    expect(sameSource[0].avgHeartRate).toBeNull();
+    expect(sameSource[1].avgHeartRate).toBe(145);
+
+    const nonWhoop = pickCanonicalWorkoutRows([apple, withings]);
+    expect(nonWhoop[0]).toMatchObject({
+      id: "apple",
+      avgHeartRate: null,
+      maxHeartRate: null,
+    });
   });
 
   it("keeps the WHOOP run when no richer source logged the same session", () => {
