@@ -276,10 +276,13 @@ export function AppleHealthImportCard() {
             data-testid="import-apple-health-ecg-result"
             className="text-muted-foreground text-xs"
           >
-            ECGs: {ecg?.discovered ?? 0} discovered, {ecg?.imported ?? 0}{" "}
-            imported, {ecg?.updated ?? 0} updated, {ecg?.skipped ?? 0} skipped,{" "}
-            {ecg?.failed ?? 0} failed. ECG failures do not discard supported
-            records imported from export.xml.
+            {t("settings.sections.export.import.appleHealth.ecgResult", {
+              discovered: ecg?.discovered ?? 0,
+              imported: ecg?.imported ?? 0,
+              updated: ecg?.updated ?? 0,
+              skipped: ecg?.skipped ?? 0,
+              failed: ecg?.failed ?? 0,
+            })}
           </p>
         )}
         {isDone && (status?.result?.cumulativeEstimates?.days ?? 0) > 0 && (

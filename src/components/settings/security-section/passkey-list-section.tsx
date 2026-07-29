@@ -77,8 +77,7 @@ export function PasskeyListSection({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [reauthOpen, setReauthOpen] = useState(false);
-  const [reauthMethod, setReauthMethod] =
-    useState<ReauthMethod>("password");
+  const [reauthMethod, setReauthMethod] = useState<ReauthMethod>("password");
   const [reauthSecret, setReauthSecret] = useState("");
 
   const { data: passkeys } = useQuery({
@@ -361,23 +360,25 @@ export function PasskeyListSection({
           </div>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Confirm it&apos;s you</AlertDialogTitle>
+              <AlertDialogTitle>
+                {t("settings.passkeyReauth.title")}
+              </AlertDialogTitle>
               <AlertDialogDescription>
-                Verify an existing sign-in method before adding a new passkey.
+                {t("settings.passkeyReauth.description")}
               </AlertDialogDescription>
             </AlertDialogHeader>
 
             <div
               className="grid grid-cols-2 gap-2"
               role="group"
-              aria-label="Verification method"
+              aria-label={t("settings.passkeyReauth.methodLabel")}
             >
               {(
                 [
-                  ["password", "Password"],
-                  ["totp", "Authenticator code"],
-                  ["passkey", "Passkey"],
-                  ["webauthn", "Security key"],
+                  ["password", t("settings.passkeyReauth.methods.password")],
+                  ["totp", t("settings.passkeyReauth.methods.totp")],
+                  ["passkey", t("settings.passkeyReauth.methods.passkey")],
+                  ["webauthn", t("settings.passkeyReauth.methods.webauthn")],
                 ] satisfies Array<[ReauthMethod, string]>
               ).map(([method, label]) => (
                 <Button
@@ -406,8 +407,8 @@ export function PasskeyListSection({
                 autoComplete="current-password"
                 value={reauthSecret}
                 onChange={(event) => setReauthSecret(event.target.value)}
-                placeholder="Current password"
-                aria-label="Current password"
+                placeholder={t("settings.passkeyReauth.currentPassword")}
+                aria-label={t("settings.passkeyReauth.currentPassword")}
                 autoFocus
               />
             )}
@@ -421,8 +422,10 @@ export function PasskeyListSection({
                 onChange={(event) =>
                   setReauthSecret(event.target.value.replace(/\D/g, ""))
                 }
-                placeholder="6-digit authenticator code"
-                aria-label="Authenticator code"
+                placeholder={t(
+                  "settings.passkeyReauth.authenticatorPlaceholder",
+                )}
+                aria-label={t("settings.passkeyReauth.authenticatorCode")}
                 autoFocus
               />
             )}
@@ -444,8 +447,7 @@ export function PasskeyListSection({
               <AlertDialogAction
                 disabled={
                   add.isPending ||
-                  ((reauthMethod === "password" ||
-                    reauthMethod === "totp") &&
+                  ((reauthMethod === "password" || reauthMethod === "totp") &&
                     reauthSecret.length === 0)
                 }
                 aria-busy={add.isPending || undefined}
@@ -460,7 +462,7 @@ export function PasskeyListSection({
                 {add.isPending && (
                   <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
                 )}
-                Verify and add
+                {t("settings.passkeyReauth.verifyAndAdd")}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

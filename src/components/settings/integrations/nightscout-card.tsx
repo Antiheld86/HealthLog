@@ -229,10 +229,10 @@ export function NightscoutCard({
             className="border-warning/30 bg-warning/10 space-y-1 rounded-md border px-3 py-2"
           >
             <p className="text-warning text-sm font-medium">
-              Private Nightscout access requires server operator approval.
+              {t("settings.nightscoutPrivateOperatorTitle")}
             </p>
             <p className="text-muted-foreground text-xs">
-              Ask your server operator to approve this exact Nightscout origin.
+              {t("settings.nightscoutPrivateOperatorDescription")}
             </p>
           </div>
         )}
