@@ -73,6 +73,18 @@ import {
 } from "./sync-outcome";
 import { IntegrationCardDescription } from "./setup-guide-link";
 
+interface GoogleHealthTerminalResource {
+  resource?: unknown;
+  written?: unknown;
+}
+
+interface GoogleHealthTerminalProgress {
+  state:
+    "complete" | "partial" | "zero" | "truncated" | "failed" | "interrupted";
+  imported: number;
+  resources: GoogleHealthTerminalResource[];
+}
+
 export function GoogleHealthCard({
   viewModel,
 }: {
@@ -92,6 +104,92 @@ export function GoogleHealthCard({
   const queryClient = useQueryClient();
 
   const status = viewModel;
+
+  function invalidateCommittedWorkout(
+    resources: GoogleHealthTerminalResource[],
+  ) {
+    const workoutCommitted = resources.some(
+      (resource) =>
+        resource.resource === "workout" &&
+        typeof resource.written === "number" &&
+        resource.written > 0,
+    );
+    if (!workoutCommitted) return;
+    queryClient.invalidateQueries({ queryKey: queryKeys.workouts() });
+    // prettier-ignore
+    queryClient.invalidateQueries({ queryKey: queryKeys.dashboardSnapshot() });
+    queryClient.invalidateQueries({ queryKey: queryKeys.analytics() });
+  }
+
+  function readTerminalProgress(
+    body: unknown,
+  ): GoogleHealthTerminalProgress | null {
+    if (!body || typeof body !== "object") return null;
+    const data = (body as { data?: unknown }).data;
+    if (!data || typeof data !== "object") return null;
+    const record = data as Record<string, unknown>;
+    if (
+      record.state !== "complete" &&
+      record.state !== "partial" &&
+      record.state !== "zero" &&
+      record.state !== "truncated" &&
+      record.state !== "failed" &&
+      record.state !== "interrupted"
+    ) {
+      return null;
+    }
+    return {
+      state: record.state,
+      imported:
+        typeof record.imported === "number" && Number.isFinite(record.imported)
+          ? Math.max(0, Math.trunc(record.imported))
+          : 0,
+      resources: Array.isArray(record.resources)
+        ? record.resources.slice(0, 16)
+        : [],
+    };
+  }
+
+  async function pollSyncStatus(): Promise<GoogleHealthTerminalProgress | null> {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const response = await apiFetchRaw("/api/google-health/sync/status");
+        const progress = readTerminalProgress(await response.json());
+        if (response.ok && progress) return progress;
+      } catch {
+        // The POST may have committed even when its response was lost. Keep
+        // this short bounded poll best-effort; the next card refresh can retry.
+      }
+      await new Promise((resolve) => setTimeout(resolve, 750));
+    }
+    return null;
+  }
+
+  function showTerminalProgress(progress: GoogleHealthTerminalProgress): void {
+    const failed =
+      progress.state === "failed" || progress.state === "interrupted";
+    const outcome =
+      progress.state === "partial" || progress.state === "truncated"
+        ? "partial"
+        : failed
+          ? "failed"
+          : progress.imported > 0
+            ? "success"
+            : "empty";
+    const resolved = {
+      imported: progress.imported,
+      failed: failed || outcome === "partial",
+      outcome,
+    } as const;
+    setSyncResult({
+      outcome: resolved.outcome,
+      message: describeSyncOutcome(
+        resolved,
+        t("settings.googleHealthSyncResult", { count: progress.imported }),
+      ),
+    });
+    invalidateCommittedWorkout(progress.resources);
+  }
 
   const disconnect = useMutation({
     mutationFn: async () => {
@@ -148,17 +246,29 @@ export function GoogleHealthCard({
         queryClient.invalidateQueries({
           queryKey: queryKeys.integrationsStatus(),
         });
+        const terminal = readTerminalProgress(json);
+        if (terminal) invalidateCommittedWorkout(terminal.resources);
+      } else {
+        const terminal = await pollSyncStatus();
+        if (terminal) {
+          showTerminalProgress(terminal);
+        } else {
+          setSyncResult({
+            outcome: "failed",
+            message: json?.error || t("settings.googleHealthSyncFailed"),
+          });
+        }
+      }
+    } catch {
+      const terminal = await pollSyncStatus();
+      if (terminal) {
+        showTerminalProgress(terminal);
       } else {
         setSyncResult({
           outcome: "failed",
-          message: json?.error || t("settings.googleHealthSyncFailed"),
+          message: t("settings.googleHealthSyncFailed"),
         });
       }
-    } catch {
-      setSyncResult({
-        outcome: "failed",
-        message: t("settings.googleHealthSyncFailed"),
-      });
     } finally {
       setSyncing(false);
     }
