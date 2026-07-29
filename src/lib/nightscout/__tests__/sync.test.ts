@@ -141,6 +141,51 @@ describe("syncUserNightscout", () => {
     expect(recordSuccessMock).toHaveBeenCalledWith("u1", "nightscout");
   });
 
+  it("does not forward a legacy stored boolean as private-egress authority", async () => {
+    getCredsMock.mockResolvedValue({
+      baseUrl: "http://10.0.0.4:1337",
+      token: "tok",
+      allowPrivateHost: true,
+    });
+    fetchSgvEntriesMock.mockResolvedValue([]);
+
+    await syncUserNightscout("u1");
+
+    expect(fetchSgvEntriesMock).toHaveBeenCalledTimes(1);
+    expect(fetchSgvEntriesMock.mock.calls[0]![0]).not.toHaveProperty(
+      "allowPrivateHost",
+    );
+  });
+
+  it("records a stable operator-action reason when a legacy private row is no longer approved", async () => {
+    getCredsMock.mockResolvedValue({
+      baseUrl: "http://10.0.0.4:1337",
+      token: "tok",
+      allowPrivateHost: true,
+    });
+    fetchSgvEntriesMock.mockRejectedValue(
+      Object.assign(
+        new Error(
+          "GET http://10.0.0.4:1337/api/v1/entries.json?token=tok refused",
+        ),
+        { reasonCode: "private_origin_not_approved" },
+      ),
+    );
+
+    await expect(syncUserNightscout("u1")).rejects.toThrow();
+
+    expect(recordFailureMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        integration: "nightscout",
+        kind: "persistent",
+        message: "private_origin_not_approved",
+      }),
+    );
+    const recorded = JSON.stringify(recordFailureMock.mock.calls[0]![0]);
+    expect(recorded).not.toContain("10.0.0.4");
+    expect(recorded).not.toContain("tok");
+  });
+
   it("N-1 — counts only fresh inserts and emits ONLY the newly-inserted rows", async () => {
     fetchSgvEntriesMock.mockResolvedValue([ENTRY_A, ENTRY_B]);
     // ENTRY_A already exists (a re-confirm); ENTRY_B is genuinely new.
