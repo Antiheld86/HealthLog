@@ -222,6 +222,23 @@ export async function buildMedicationsList(
       resolvedSlots: resolvedSlotsByMedId.get(m.id) ?? [],
       eraStart: eraStartByMedId.get(m.id) ?? null,
     });
+    const displaySchedule =
+      display?.scheduleId === undefined
+        ? null
+        : m.schedules.find((schedule) => schedule.id === display.scheduleId) ??
+          null;
+    // A prior-day rolling occurrence can remain the one authoritative
+    // actionable dose while today's same HH:mm window has already passed.
+    // The client window reducer uses this count to decide whether a passed
+    // local clock window is uncovered. Account for exactly that one rolling
+    // window here so GLP-1/take-all keep the server's prior scheduledFor
+    // instead of rebinding it onto today's date. Other sibling windows remain
+    // uncovered because the adjustment is only +1.
+    const carriesPriorRollingOccurrence =
+      display?.overdue === true &&
+      display.at.getTime() < todayStartUtc.getTime() &&
+      displaySchedule?.rollingIntervalDays !== null &&
+      displaySchedule?.rollingIntervalDays !== undefined;
     // v1.16.10 — dose-derived stock for the table view. NULL when the
     // medication has no inventory items at all (tracking off); 0 when
     // tracking is on but every container is used up / expired.
@@ -245,9 +262,12 @@ export async function buildMedicationsList(
       // medication.
       externalSource: m.externalSource ?? null,
       lastTakenAt: lastTakenAtByMedicationId[m.id] ?? null,
-      todayEventCount: todayEventCountByMedId[m.id] ?? 0,
+      todayEventCount:
+        (todayEventCountByMedId[m.id] ?? 0) +
+        (carriesPriorRollingOccurrence ? 1 : 0),
       nextDueAt: display ? display.at.toISOString() : null,
       nextDueOverdue: display?.overdue ?? false,
+      nextDueScheduleId: display?.scheduleId ?? null,
       stockUnitsRemaining,
       stockDosesRemaining,
     };
