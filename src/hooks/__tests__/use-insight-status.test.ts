@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   nextStatusPollInterval,
@@ -64,5 +66,19 @@ describe("nextStatusPollInterval — v1.8.4 poll ceiling", () => {
     expect(
       nextStatusPollInterval(false, STATUS_POLL_MAX_ATTEMPTS + 5, true),
     ).toBe(false);
+  });
+
+  it("exposes poll exhaustion as a terminal state instead of leaving preparing true forever", () => {
+    const source = readFileSync(
+      join(process.cwd(), "src", "hooks", "use-insight-status.ts"),
+      "utf8",
+    );
+
+    // Stopping the timer is only half of the contract. Once the ceiling is
+    // reached, callers must be able to distinguish an exhausted attempt from
+    // an actively preparing response and must not keep painting the preparing
+    // skeleton forever.
+    expect(source).toContain("pollExhausted");
+    expect(source).toMatch(/preparing:\s*false/);
   });
 });

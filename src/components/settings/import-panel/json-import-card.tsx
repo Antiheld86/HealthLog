@@ -11,7 +11,10 @@ import { useTranslations } from "@/lib/i18n/context";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
 import { ImportCardShell } from "./import-card-shell";
 import { MAX_PASTE_CHARS } from "./constants";
-import { EXAMPLE_IMPORT, parseImportJson } from "./import-examples";
+import {
+  EXAMPLE_IMPORT_DOWNLOAD_HREF,
+  parseImportJson,
+} from "./import-examples";
 import { WrittenOutcomeLine } from "@/components/outcome/written-outcome-line";
 import { classifyWrittenOutcome } from "@/lib/outcome/written-outcome";
 
@@ -74,24 +77,6 @@ export function JsonImportCard() {
     } catch {
       setError(t("settings.sections.export.import.json.readFailed"));
     }
-  }
-
-  function downloadExample() {
-    const blob = new Blob([JSON.stringify(EXAMPLE_IMPORT, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "healthlog-import-example.json";
-    document.body.appendChild(a);
-    a.click();
-    // Defer cleanup a tick: revoking the blob URL in the same synchronous
-    // frame as click() races the browser's download start and can cancel it.
-    setTimeout(() => {
-      a.remove();
-      URL.revokeObjectURL(url);
-    }, 0);
   }
 
   async function handleImport() {
@@ -224,15 +209,19 @@ export function JsonImportCard() {
           {t("settings.sections.export.import.json.uploadFile")}
         </Button>
         <Button
-          type="button"
+          asChild
           variant="ghost"
           size="sm"
           className="min-h-11 sm:min-h-9"
-          onClick={downloadExample}
-          data-testid="import-json-download-example"
         >
-          <Download className="h-3.5 w-3.5" />
-          {t("settings.sections.export.import.json.downloadExample")}
+          <a
+            href={EXAMPLE_IMPORT_DOWNLOAD_HREF}
+            download="healthlog-import-example.json"
+            data-testid="import-json-download-example"
+          >
+            <Download className="h-3.5 w-3.5" />
+            {t("settings.sections.export.import.json.downloadExample")}
+          </a>
         </Button>
         <Button
           type="button"

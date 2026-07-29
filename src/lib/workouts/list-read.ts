@@ -77,6 +77,7 @@ interface CanonicalWorkoutRow {
   totalEnergyKcal: number | null;
   avgHeartRate: number | null;
   maxHeartRate: number | null;
+  metadata: unknown;
   createdAt: Date;
   // #67 list glyphs — cheap relation-id selects so the list can flag
   // which sessions open into a rich detail (map / HR curve).
@@ -158,6 +159,7 @@ export async function buildWorkoutsProjection(
         totalEnergyKcal: true,
         avgHeartRate: true,
         maxHeartRate: true,
+        metadata: true,
         createdAt: true,
         route: { select: { id: true } },
         samples: { select: { sampleCount: true } },

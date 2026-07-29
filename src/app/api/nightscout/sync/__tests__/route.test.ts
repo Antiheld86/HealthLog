@@ -160,4 +160,27 @@ describe("POST /api/nightscout/sync", () => {
     expect(serialised).not.toContain("cgm.example.org");
     expect(serialised).not.toContain("token=");
   });
+
+  it("returns a stable operator-action reason for an unapproved legacy private connection", async () => {
+    vi.mocked(syncUserNightscout).mockRejectedValue(
+      Object.assign(
+        new Error(
+          "GET http://10.0.0.4:1337/api/v1/entries.json?token=hunter2secret refused",
+        ),
+        { reasonCode: "private_origin_not_approved" },
+      ),
+    );
+
+    const response = await post(request());
+    const body = await envelope(response);
+    const serialised = JSON.stringify(body);
+
+    expect(response.status).toBe(422);
+    expect(body.error).toBe(
+      "Private Nightscout access requires server operator approval",
+    );
+    expect(body.meta?.errorCode).toBe("private_origin_not_approved");
+    expect(serialised).not.toContain("10.0.0.4");
+    expect(serialised).not.toContain("hunter2secret");
+  });
 });

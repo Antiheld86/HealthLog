@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 
 import {
+  clearOfflineCachesForSessionEnd,
   clearPersistedQueryCache,
   isPersistableKey,
   restorePersistedQueryCache,
@@ -83,6 +84,51 @@ describe("persister degrades gracefully without IndexedDB", () => {
 
   it("clear resolves without throwing", async () => {
     await expect(clearPersistedQueryCache()).resolves.toBeUndefined();
+  });
+});
+
+describe("session-end CacheStorage cleanup", () => {
+  const originalCaches = (globalThis as { caches?: CacheStorage }).caches;
+
+  afterEach(() => {
+    if (originalCaches === undefined) {
+      delete (globalThis as { caches?: CacheStorage }).caches;
+    } else {
+      (globalThis as { caches?: CacheStorage }).caches = originalCaches;
+    }
+  });
+
+  it("deletes current and legacy HealthLog static/page/data caches only", async () => {
+    const cacheNames = [
+      "healthlog-static-v1.34.0",
+      "healthlog-static-v1.15.20",
+      "healthlog-pages-v1.34.0",
+      "healthlog-pages-v1.15.20",
+      "healthlog-data-v1.34.0",
+      "healthlog-data-v1.15.20",
+      "unrelated-app-static-v7",
+      "workbox-precache-healthlog",
+    ];
+    const deleted: string[] = [];
+    (globalThis as { caches?: CacheStorage }).caches = {
+      keys: async () => cacheNames,
+      delete: async (name: string) => {
+        deleted.push(name);
+        return true;
+      },
+    } as CacheStorage;
+
+    await clearOfflineCachesForSessionEnd();
+
+    expect
+      .soft(deleted.sort())
+      .toEqual(
+        cacheNames
+          .filter((name) => /^healthlog-(?:static|pages|data)-/.test(name))
+          .sort(),
+      );
+    expect(deleted).not.toContain("unrelated-app-static-v7");
+    expect(deleted).not.toContain("workbox-precache-healthlog");
   });
 });
 

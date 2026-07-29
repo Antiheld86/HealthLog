@@ -50,6 +50,17 @@ interface PasskeyInfo {
   lastUsedAt: string | null;
 }
 
+type ReauthMethod = "password" | "passkey" | "totp" | "webauthn";
+
+type ExistingFactorProof =
+  | { method: "password"; password: string }
+  | { method: "totp"; code: string }
+  | {
+      method: "passkey" | "webauthn";
+      challengeId: string;
+      credential: unknown;
+    };
+
 /**
  * Primary-passkey management: list (name, device, backup, created, last used),
  * add (registration ceremony), rename, and delete. The passwordless-primary
@@ -65,6 +76,9 @@ export function PasskeyListSection({
   const [msg, setMsg] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [reauthOpen, setReauthOpen] = useState(false);
+  const [reauthMethod, setReauthMethod] = useState<ReauthMethod>("password");
+  const [reauthSecret, setReauthSecret] = useState("");
 
   const { data: passkeys } = useQuery({
     queryKey: queryKeys.passkeys(),
@@ -73,13 +87,46 @@ export function PasskeyListSection({
   });
 
   const add = useMutation({
-    mutationFn: async () => {
-      const { startRegistration } = await import("@simplewebauthn/browser");
+    mutationFn: async ({
+      method,
+      secret,
+    }: {
+      method: ReauthMethod;
+      secret: string;
+    }) => {
+      const webauthn = await import("@simplewebauthn/browser");
+      let freshFactor: ExistingFactorProof;
+
+      if (method === "password") {
+        freshFactor = { method, password: secret };
+      } else if (method === "totp") {
+        freshFactor = { method, code: secret };
+      } else {
+        const assertionChallenge = await apiPost<{
+          options: Parameters<
+            typeof webauthn.startAuthentication
+          >[0]["optionsJSON"];
+          challengeId: string;
+        }>("/api/auth/passkey/register-options", { method });
+        const credential = await webauthn.startAuthentication({
+          optionsJSON: assertionChallenge.options,
+        });
+        freshFactor = {
+          method,
+          challengeId: assertionChallenge.challengeId,
+          credential,
+        };
+      }
+
       const { options, challengeId } = await apiPost<{
-        options: Parameters<typeof startRegistration>[0]["optionsJSON"];
+        options: Parameters<
+          typeof webauthn.startRegistration
+        >[0]["optionsJSON"];
         challengeId: string;
-      }>("/api/auth/passkey/register-options");
-      const credential = await startRegistration({ optionsJSON: options });
+      }>("/api/auth/passkey/register-options", freshFactor);
+      const credential = await webauthn.startRegistration({
+        optionsJSON: options,
+      });
       await apiPost("/api/auth/passkey/register-verify", {
         challengeId,
         credential,
@@ -87,6 +134,9 @@ export function PasskeyListSection({
     },
     onSuccess: () => {
       setMsg(null);
+      setReauthOpen(false);
+      setReauthSecret("");
+      setReauthMethod("password");
       queryClient.invalidateQueries({ queryKey: queryKeys.passkeys() });
     },
     onError: (err) => {
@@ -283,24 +333,142 @@ export function PasskeyListSection({
           </ul>
         )}
 
-        <div className="mt-4">
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 sm:min-h-9"
-            onClick={() => add.mutate()}
-            disabled={add.isPending}
-          >
-            {add.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-            ) : (
-              <KeyRound className="h-4 w-4" />
-            )}
-            {t("settings.addPasskey")}
-          </Button>
-        </div>
+        <AlertDialog
+          open={reauthOpen}
+          onOpenChange={(open) => {
+            if (add.isPending) return;
+            setReauthOpen(open);
+            if (open) setMsg(null);
+          }}
+        >
+          <div className="mt-4">
+            <AlertDialogTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 sm:min-h-9"
+                disabled={add.isPending}
+              >
+                {add.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <KeyRound className="h-4 w-4" />
+                )}
+                {t("settings.addPasskey")}
+              </Button>
+            </AlertDialogTrigger>
+          </div>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {t("settings.passkeyReauth.title")}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {t("settings.passkeyReauth.description")}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
 
-        {msg && (
+            <div
+              className="grid grid-cols-2 gap-2"
+              role="group"
+              aria-label={t("settings.passkeyReauth.methodLabel")}
+            >
+              {(
+                [
+                  ["password", t("settings.passkeyReauth.methods.password")],
+                  ["totp", t("settings.passkeyReauth.methods.totp")],
+                  ["passkey", t("settings.passkeyReauth.methods.passkey")],
+                  ["webauthn", t("settings.passkeyReauth.methods.webauthn")],
+                ] satisfies Array<[ReauthMethod, string]>
+              ).map(([method, label]) => (
+                <Button
+                  key={method}
+                  type="button"
+                  variant={reauthMethod === method ? "secondary" : "outline"}
+                  aria-pressed={reauthMethod === method}
+                  disabled={
+                    add.isPending ||
+                    (method === "passkey" && (passkeys?.length ?? 0) === 0)
+                  }
+                  onClick={() => {
+                    setReauthMethod(method);
+                    setReauthSecret("");
+                    setMsg(null);
+                  }}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+
+            {reauthMethod === "password" && (
+              <Input
+                type="password"
+                autoComplete="current-password"
+                value={reauthSecret}
+                onChange={(event) => setReauthSecret(event.target.value)}
+                placeholder={t("settings.passkeyReauth.currentPassword")}
+                aria-label={t("settings.passkeyReauth.currentPassword")}
+                autoFocus
+              />
+            )}
+            {reauthMethod === "totp" && (
+              <Input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                value={reauthSecret}
+                onChange={(event) =>
+                  setReauthSecret(event.target.value.replace(/\D/g, ""))
+                }
+                placeholder={t(
+                  "settings.passkeyReauth.authenticatorPlaceholder",
+                )}
+                aria-label={t("settings.passkeyReauth.authenticatorCode")}
+                autoFocus
+              />
+            )}
+
+            {msg && (
+              <div
+                role="alert"
+                className="text-destructive flex items-center gap-2 text-sm"
+              >
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                {msg}
+              </div>
+            )}
+
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={add.isPending}>
+                {t("common.cancel")}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                disabled={
+                  add.isPending ||
+                  ((reauthMethod === "password" || reauthMethod === "totp") &&
+                    reauthSecret.length === 0)
+                }
+                aria-busy={add.isPending || undefined}
+                onClick={(event) => {
+                  event.preventDefault();
+                  add.mutate({
+                    method: reauthMethod,
+                    secret: reauthSecret,
+                  });
+                }}
+              >
+                {add.isPending && (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+                )}
+                {t("settings.passkeyReauth.verifyAndAdd")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {msg && !reauthOpen && (
           <div
             role="alert"
             className="text-destructive mt-3 flex items-center gap-2 text-sm"

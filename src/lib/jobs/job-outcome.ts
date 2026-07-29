@@ -25,7 +25,7 @@
  * what makes them visible at all — today they are visible nowhere.
  *
  * `did` is the small pinned-shape bag of facts about the run — counts,
- * identifiers, booleans. It rides into the failure report and, once the
+ * stable codes, booleans. It rides into the failure report and, once the
  * failure ledger lands, into the operator surface. Keep it to scalars that
  * a dashboard can key on; it is not a place for payload data or free text.
  */
@@ -35,6 +35,186 @@ export type JobFact = string | number | boolean;
 
 /** The pinned-shape bag of facts a handler reports about its run. */
 export type JobFacts = Readonly<Record<string, JobFact>>;
+
+/**
+ * Facts cross a persistence/observability boundary. Keep their vocabulary
+ * explicit so a caller cannot attach an identifier, credential, URL,
+ * free-form error, or health value to a durable job result.
+ */
+export const JOB_FACT_ALLOWLIST: ReadonlySet<string> = new Set([
+  "access_tokens_deleted",
+  "assessments_warmed",
+  "auto_resolved",
+  "backed",
+  "buckets_collapsed",
+  "buckets_recomputed",
+  "budget_blocked",
+  "cached",
+  "candidates_scanned",
+  "connect_tickets_deleted",
+  "connections_deleted",
+  "considered",
+  "created",
+  "daily_rows_retired",
+  "days_consolidated",
+  "days_rebuilt",
+  "days_recomputed",
+  "days_skipped",
+  "days_skipped_no_tombstones",
+  "days_stored",
+  "deleted",
+  "dense_days_consolidated",
+  "dense_rows_soft_deleted",
+  "dense_skipped",
+  "derived_resting_rows_upserted",
+  "discovery_enqueued",
+  "discovery_failed",
+  "discovery_skipped",
+  "dispatched",
+  "dispatched_period_confirm",
+  "dispatched_period_soon",
+  "document_purge_deleted",
+  "documents",
+  "documents_indexed",
+  "dose_changes_migrated",
+  "downstream_failed",
+  "drained",
+  "duration_ms",
+  "errored",
+  "failed",
+  "failures",
+  "feedback_buckets",
+  "feedback_total_rows",
+  "feedback_window_days",
+  "fetches",
+  "finalised",
+  "finalized",
+  "forced",
+  "generated",
+  "geo_backfill_carrier_resolved",
+  "geo_backfill_located",
+  "geo_backfill_scanned",
+  "geo_backfill_skipped",
+  "geo_backfill_still_unresolved",
+  "host_metric_pruned",
+  "hourly_rows_upserted",
+  "imported",
+  "in_slot",
+  "in_window",
+  "insufficient",
+  "intake_auto_skip_count",
+  "intakes_pruned",
+  "inventory_expired_count",
+  "inventory_items_migrated",
+  "jobs",
+  "legacy_rows_soft_deleted",
+  "linked",
+  "malformed",
+  "manual_mints_removed",
+  "markers",
+  "mean_days_consolidated",
+  "mean_rows_soft_deleted",
+  "measurements_imported",
+  "measurements_migrated",
+  "measurements_pruned",
+  "medications",
+  "medications_evaluated",
+  "metric_assessments_warmed",
+  "missed_doses_minted",
+  "mood_entries_migrated",
+  "mood_pruned",
+  "notifications_dispatched",
+  "notifications_failed",
+  "notified",
+  "offhost_backup_configured",
+  "offhost_backup_failed",
+  "offhost_backup_total_users",
+  "offhost_backup_uploaded",
+  "outcome",
+  "passes_failed",
+  "per_sample_rows_deleted",
+  "per_sample_rows_soft_deleted",
+  "persisted",
+  "plan_reviews_minted",
+  "pr_detection_inserted",
+  "pr_detection_jobs",
+  "pr_detection_ties",
+  "pr_detection_users",
+  "pr_detection_users_failed",
+  "processed",
+  "provider",
+  "queued",
+  "rearmed",
+  "records_read",
+  "refreshed",
+  "reminders_due",
+  "removed",
+  "restore_drill_age_days",
+  "restore_drill_ciphertext_bytes",
+  "restore_drill_intake_events",
+  "restore_drill_measurements",
+  "restore_drill_medications",
+  "restore_drill_mood_entries",
+  "restore_drill_plaintext_bytes",
+  "restore_drill_stale",
+  "retried",
+  "reviewed",
+  "rollup_failed",
+  "rotate_errors",
+  "rotate_rotated",
+  "rotate_scanned",
+  "rows_deleted",
+  "rows_normalised",
+  "rows_reinserted",
+  "rows_resurrected",
+  "rows_soft_deleted",
+  "rows_upserted",
+  "satisfied",
+  "scheduled",
+  "sent",
+  "served",
+  "side_effects_migrated",
+  "single_user",
+  "skipped",
+  "skipped_already_dispatched",
+  "skipped_already_logged",
+  "skipped_already_notified",
+  "skipped_incomplete",
+  "skipped_no_channel",
+  "skipped_not_due",
+  "skipped_outside_window",
+  "slots_collapsed",
+  "states_deleted",
+  "stored",
+  "subscription_repair_failed",
+  "summaries_enqueued",
+  "suppressed_client_managed",
+  "suppressed_discreet",
+  "thumbnails_enqueued",
+  "tls_pin_monitor_known_count",
+  "tls_pin_monitor_outcome",
+  "total",
+  "unchanged",
+  "updated",
+  "users",
+  "users_clean_zero",
+  "users_complete",
+  "users_enqueued",
+  "users_failed",
+  "users_parked",
+  "users_partial",
+  "users_retryable",
+  "users_scanned",
+  "users_skipped",
+  "users_synced",
+  "users_useful",
+  "wedge_skipped",
+]);
+
+export const MAX_JOB_FACTS = 32;
+export const MAX_JOB_OUTCOME_BYTES = 2_048;
+
+const STABLE_CODE_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 
 /**
  * What a handler did. `ok: true` means the work named by the queue actually
@@ -78,4 +258,79 @@ export function jobFailed(
   did?: JobFacts,
 ): JobOutcome {
   return { ok: false, reason, cause, did };
+}
+
+export type SerializedJobOutcome =
+  | { readonly ok: true; readonly did: JobFacts }
+  | {
+      readonly ok: false;
+      readonly reason_code: string;
+      readonly did?: JobFacts;
+    };
+
+function assertStableCode(value: string, label: string): void {
+  if (!STABLE_CODE_PATTERN.test(value)) {
+    throw new TypeError(`${label} must be a stable lowercase code`);
+  }
+}
+
+function validateFacts(facts: JobFacts): JobFacts {
+  const entries = Object.entries(facts);
+
+  if (entries.length > MAX_JOB_FACTS) {
+    throw new RangeError(`job outcome exceeds ${MAX_JOB_FACTS} facts`);
+  }
+
+  for (const [key, value] of entries) {
+    if (!JOB_FACT_ALLOWLIST.has(key)) {
+      throw new TypeError(`job fact key is not allowed: ${key}`);
+    }
+
+    if (typeof value === "number") {
+      if (!Number.isSafeInteger(value) || value < 0) {
+        throw new TypeError(
+          `job fact ${key} must be a non-negative safe integer`,
+        );
+      }
+      continue;
+    }
+
+    if (typeof value === "string") {
+      assertStableCode(value, `job fact ${key}`);
+      continue;
+    }
+
+    if (typeof value !== "boolean") {
+      throw new TypeError(`job fact ${key} must be a bounded scalar`);
+    }
+  }
+
+  return Object.freeze(Object.fromEntries(entries)) as JobFacts;
+}
+
+/**
+ * Produce the only representation suitable for persistence or structured
+ * logging. The raw `cause` deliberately remains in-process for retry handling.
+ */
+export function serializeJobOutcome(outcome: JobOutcome): SerializedJobOutcome {
+  const did = validateFacts(outcome.did ?? {});
+  const serialized: SerializedJobOutcome = outcome.ok
+    ? { ok: true, did }
+    : (() => {
+        assertStableCode(outcome.reason, "job failure reason");
+        return outcome.did === undefined
+          ? { ok: false, reason_code: outcome.reason }
+          : { ok: false, reason_code: outcome.reason, did };
+      })();
+
+  const byteLength = new TextEncoder().encode(
+    JSON.stringify(serialized),
+  ).length;
+  if (byteLength > MAX_JOB_OUTCOME_BYTES) {
+    throw new RangeError(
+      `serialized job outcome exceeds ${MAX_JOB_OUTCOME_BYTES} bytes`,
+    );
+  }
+
+  return serialized;
 }

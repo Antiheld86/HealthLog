@@ -74,13 +74,13 @@ describe("apple health import — pg-boss send policy", () => {
 });
 
 describe("apple health import — parser revision boundary", () => {
-  it("isolates revision-2 sends from legacy workers", () => {
-    expect(APPLE_HEALTH_IMPORT_PARSER_REVISION).toBe(2);
+  it("isolates revision-3 sends from legacy workers", () => {
+    expect(APPLE_HEALTH_IMPORT_PARSER_REVISION).toBe(3);
     expect(APPLE_HEALTH_IMPORT_V2_QUEUE).toBe("apple-health-import-v2");
     expect(APPLE_HEALTH_IMPORT_LEGACY_QUEUE).toBe("apple-health-import");
   });
 
-  it("drains revision-2 jobs separately while bridging legacy backlog", () => {
+  it("drains current-parser jobs separately while bridging legacy backlog", () => {
     const allQueues = maintenanceSource.match(
       /const allQueues\s*=\s*\[([\s\S]*?)\];/,
     );
@@ -110,7 +110,7 @@ describe("apple health import — parser revision boundary", () => {
     );
   });
 
-  it("explicitly creates revision-2 stand-ins and reconciles only revision-2 mirrors", () => {
+  it("explicitly creates current-revision stand-ins and reconciles only current-revision mirrors", () => {
     expect(workerSource).toMatch(
       /importJob\.create\([\s\S]{0,400}parserRevision:\s*APPLE_HEALTH_IMPORT_PARSER_REVISION/,
     );

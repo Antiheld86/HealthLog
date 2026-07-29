@@ -139,3 +139,52 @@ describe("metric subpages — retired range row + Letzte-Messung are gone", () =
     });
   }
 });
+
+describe("assessment presentation contract", () => {
+  it("uses the shared readable foreground and compact rhythm for populated prose", () => {
+    const cardSource = readFileSync(
+      join(
+        process.cwd(),
+        "src",
+        "components",
+        "insights",
+        "insight-status-card.tsx",
+      ),
+      "utf8",
+    );
+    const moodSource = readFileSync(
+      join(
+        process.cwd(),
+        "src",
+        "components",
+        "insights",
+        "mood",
+        "mood-insights-sections.tsx",
+      ),
+      "utf8",
+    );
+    const moodBodySource = readFileSync(
+      join(
+        process.cwd(),
+        "src",
+        "components",
+        "insights",
+        "mood",
+        "mood-better-days.tsx",
+      ),
+      "utf8",
+    );
+
+    expect(cardSource).toContain(
+      'className="animate-insight-in gap-2 py-3 md:py-4"',
+    );
+    expect(cardSource).toContain('className="text-foreground text-sm"');
+    expect(moodSource).toContain(
+      'className="animate-insight-in gap-2 py-3 md:py-4"',
+    );
+    expect(moodSource).toContain('data-slot="insight-assessment"');
+    expect(moodBodySource).toContain(
+      'className="text-foreground mb-2 text-sm"',
+    );
+  });
+});

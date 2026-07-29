@@ -75,34 +75,68 @@ async function main() {
   const client = new pg.Client({ connectionString: databaseUrl });
   await client.connect();
   try {
-    // Case-insensitive match on username OR email, mirroring the login lookup.
-    // Scope to a single user: zero or multiple matches is a hard error so an
-    // operator never silently resets the wrong account.
-    const found = await client.query(
-      `SELECT id, username FROM users
-       WHERE lower(username) = lower($1) OR lower(email) = lower($1)`,
-      [identifier],
-    );
-
-    if (found.rowCount === 0) {
-      fail(`no user matches "${identifier}"`);
-    }
-    if (found.rowCount > 1) {
-      fail(
-        `"${identifier}" matches ${found.rowCount} users — refusing to guess; reset by exact username`,
+    await client.query("BEGIN");
+    try {
+      // Case-insensitive match on username OR email, mirroring the login
+      // lookup. Lock every match until commit so identity resolution and the
+      // credential-family revocation are one serialized account operation.
+      const found = await client.query(
+        `SELECT id, username FROM users
+         WHERE lower(username) = lower($1) OR lower(email) = lower($1)
+         FOR UPDATE`,
+        [identifier],
       );
+
+      if (found.rowCount === 0) {
+        throw new Error(`no user matches "${identifier}"`);
+      }
+      if (found.rowCount > 1) {
+        throw new Error(
+          `"${identifier}" matches ${found.rowCount} users — refusing to guess; reset by exact username`,
+        );
+      }
+
+      const user = found.rows[0];
+      const passwordHash = await hash(newPassword, ARGON2_HASH_OPTIONS);
+
+      await client.query(
+        `UPDATE users
+         SET password_hash = $1, updated_at = now()
+         WHERE id = $2`,
+        [passwordHash, user.id],
+      );
+      const elevations = await client.query(
+        `DELETE FROM step_up_elevations WHERE user_id = $1`,
+        [user.id],
+      );
+      const apiTokens = await client.query(
+        `UPDATE api_tokens SET revoked = true WHERE user_id = $1`,
+        [user.id],
+      );
+      const refreshTokens = await client.query(
+        `UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1`,
+        [user.id],
+      );
+      const trustedDevices = await client.query(
+        `DELETE FROM trusted_devices WHERE user_id = $1`,
+        [user.id],
+      );
+      const sessions = await client.query(
+        `DELETE FROM sessions WHERE user_id = $1`,
+        [user.id],
+      );
+
+      await client.query("COMMIT");
+
+      // Never echo the password or credential material. Counts are safe
+      // operator confirmation that every credential family was addressed.
+      console.log(
+        `reset-password: password updated for "${user.username}"; revoked ${sessions.rowCount} sessions, ${apiTokens.rowCount} API tokens, ${refreshTokens.rowCount} refresh tokens, ${trustedDevices.rowCount} trusted devices, and ${elevations.rowCount} step-up elevations`,
+      );
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
     }
-
-    const user = found.rows[0];
-    const passwordHash = await hash(newPassword, ARGON2_HASH_OPTIONS);
-
-    await client.query(
-      `UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2`,
-      [passwordHash, user.id],
-    );
-
-    // Never echo the password; confirm by username only.
-    console.log(`reset-password: password updated for "${user.username}"`);
   } finally {
     await client.end();
   }

@@ -43,6 +43,8 @@ export type IntakeImportResultState =
       imported: number;
       skipped: number;
       skipReasons: IntakeImportSkipGroup[];
+      skipDetails?: Array<{ line: number; reason: string }>;
+      skippedDetailsOmitted?: number;
     };
 
 /**
@@ -119,6 +121,7 @@ export function IntakeImportResultView({
   result: IntakeImportResultState;
 }) {
   const { t } = useTranslations();
+  const labelFor = useSkipReasonLabel();
 
   if (result.kind === "notice") {
     return (
@@ -136,10 +139,20 @@ export function IntakeImportResultView({
     written: result.imported,
     skipped: result.skipped,
   });
+  const alreadyRecorded = result.skipReasons.find(
+    (group) => group.reason === "already_recorded",
+  );
+  const replayWithNoWrites =
+    result.imported === 0 && (alreadyRecorded?.count ?? 0) > 0;
 
   const message = (() => {
     if (outcome === "empty") return t("medications.import.resultEmpty");
     if (outcome === "failed") {
+      if (replayWithNoWrites) {
+        return t("medications.import.resultAlreadyRecorded", {
+          recorded: alreadyRecorded?.count ?? 0,
+        });
+      }
       return t("medications.import.resultNothing", { skipped: result.skipped });
     }
     if (outcome === "partial") {
@@ -159,6 +172,35 @@ export function IntakeImportResultView({
         testId="intake-import-outcome"
       />
       <IntakeImportSkipGroups groups={result.skipReasons} />
+      {(result.skipDetails?.length ?? 0) > 0 && (
+        <details
+          data-testid="intake-import-skip-details"
+          className="text-muted-foreground text-xs"
+        >
+          <summary className="cursor-pointer">
+            {t("medications.import.showSkipDetails", {
+              count: result.skipDetails?.length ?? 0,
+            })}
+          </summary>
+          <ul className="mt-1 max-h-48 space-y-0.5 overflow-y-auto pl-4">
+            {result.skipDetails?.map((detail) => (
+              <li key={`${detail.line}:${detail.reason}`}>
+                {t("medications.import.skipDetailLine", {
+                  line: detail.line,
+                  reason: labelFor(detail.reason),
+                })}
+              </li>
+            ))}
+          </ul>
+          {(result.skippedDetailsOmitted ?? 0) > 0 && (
+            <p className="mt-1">
+              {t("medications.import.skipDetailsOmitted", {
+                count: result.skippedDetailsOmitted ?? 0,
+              })}
+            </p>
+          )}
+        </details>
+      )}
     </div>
   );
 }

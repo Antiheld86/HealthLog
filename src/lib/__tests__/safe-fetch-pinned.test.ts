@@ -32,6 +32,11 @@ import http from "node:http";
 import dns from "node:dns";
 import type { AddressInfo } from "node:net";
 
+const notificationMocks = vi.hoisted(() => ({
+  isPublicIp: vi.fn((_ip: string) => true),
+  isPublicUrl: vi.fn((_url: string) => true),
+}));
+
 // Treat every address/URL as public so the harness can reach a loopback server
 // through the requirePublicHost guard. The transport coupling under test is
 // orthogonal to IP classification (covered by safe-fetch-dispatcher.test.ts).
@@ -40,8 +45,8 @@ vi.mock("@/lib/validations/notifications", async (importOriginal) => {
     await importOriginal<typeof import("@/lib/validations/notifications")>();
   return {
     ...actual,
-    isPublicIp: () => true,
-    isPublicUrl: () => true,
+    isPublicIp: notificationMocks.isPublicIp,
+    isPublicUrl: notificationMocks.isPublicUrl,
   };
 });
 
@@ -50,6 +55,7 @@ import { _resetPinnedDispatcherForTests } from "../safe-fetch-dispatcher";
 
 let server: http.Server;
 let port: number;
+const requestedPaths: string[] = [];
 
 function mockLookupTo(addresses: dns.LookupAddress[]): void {
   vi.spyOn(dns, "lookup").mockImplementation(((
@@ -66,6 +72,14 @@ function mockLookupTo(addresses: dns.LookupAddress[]): void {
 
 beforeAll(async () => {
   server = http.createServer((req, res) => {
+    requestedPaths.push(req.url ?? "");
+    if (req.url === "/redirect") {
+      res.writeHead(302, {
+        location: `http://redirect-target.test:${port}/api`,
+      });
+      res.end();
+      return;
+    }
     if (req.url === "/stream") {
       res.writeHead(200, { "content-type": "text/plain" });
       res.write("chunk-1;");
@@ -94,6 +108,11 @@ afterAll(async () => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  notificationMocks.isPublicIp.mockReset();
+  notificationMocks.isPublicIp.mockImplementation((_ip: string) => true);
+  notificationMocks.isPublicUrl.mockReset();
+  notificationMocks.isPublicUrl.mockImplementation((_url: string) => true);
+  requestedPaths.length = 0;
   _resetPinnedDispatcherForTests();
 });
 
@@ -112,12 +131,12 @@ describe("safeFetch pinned path — real transport", () => {
     expect(body.ok).toBe(true);
   }, 20_000);
 
-  it("falls back across families when the first address is a black-holed IPv6", async () => {
-    // First record is an unreachable IPv6 (RFC 6666 discard prefix); the
-    // working IPv4 record is behind it. Pre-fix this failed instantly; with
-    // Happy Eyeballs the connect falls back to v4 and succeeds.
+  it("retains fallback connectivity across public native IPv6 and IPv4", async () => {
+    // The first record is a genuinely public native IPv6 address, while the
+    // harness server is reachable through the IPv4 record behind it. The
+    // dispatcher must preserve both vetted families for Happy Eyeballs.
     mockLookupTo([
-      { address: "0100::1", family: 6 },
+      { address: "2606:4700:4700::1111", family: 6 },
       { address: "127.0.0.1", family: 4 },
     ]);
 
@@ -128,6 +147,49 @@ describe("safeFetch pinned path — real transport", () => {
     );
 
     expect(res.status).toBe(200);
+  }, 20_000);
+
+  it("re-runs the pinned DNS verdict for a followed redirect destination", async () => {
+    const deniedRedirectAddress = "64:ff9b::7f00:1";
+    const lookupHosts: string[] = [];
+    notificationMocks.isPublicIp.mockImplementation(
+      (ip: string) => ip !== deniedRedirectAddress,
+    );
+    vi.spyOn(dns, "lookup").mockImplementation(((
+      hostname: string,
+      _opts: dns.LookupAllOptions,
+      callback: (
+        err: NodeJS.ErrnoException | null,
+        addrs: dns.LookupAddress[],
+      ) => void,
+    ) => {
+      lookupHosts.push(hostname);
+      callback(
+        null,
+        hostname === "redirect-target.test"
+          ? [{ address: deniedRedirectAddress, family: 6 }]
+          : [{ address: "127.0.0.1", family: 4 }],
+      );
+    }) as unknown as typeof dns.lookup);
+
+    await expect(
+      safeFetch(
+        `http://pinned.test:${port}/redirect`,
+        {},
+        {
+          requirePublicHost: true,
+          followRedirects: true,
+          timeoutMs: 5000,
+        },
+      ),
+    ).rejects.toMatchObject({ kind: "private_host" });
+
+    expect(lookupHosts).toContain("pinned.test");
+    expect(lookupHosts).toContain("redirect-target.test");
+    expect(notificationMocks.isPublicIp).toHaveBeenCalledWith(
+      deniedRedirectAddress,
+    );
+    expect(requestedPaths).toEqual(["/redirect"]);
   }, 20_000);
 
   it("streams a chunked response body via getReader() on the pinned path", async () => {

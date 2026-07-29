@@ -28,8 +28,12 @@ import Link from "next/link";
  * `#credits` still clear the sticky header on iPhones with a notch.
  */
 
-export const dynamic = "force-static";
-export const revalidate = false;
+// The edge CSP carries a fresh nonce on every response. Rendering this route
+// statically would freeze Next's inline streaming scripts without that
+// request nonce, so the browser would reject them and leave only the root
+// Suspense fallback visible. Keep the public page request-rendered instead of
+// weakening the CSP with `unsafe-inline`.
+export const dynamic = "force-dynamic";
 
 const LAST_UPDATED = "2026-05-15";
 

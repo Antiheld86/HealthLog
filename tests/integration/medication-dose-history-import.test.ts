@@ -108,6 +108,8 @@ async function enqueue(userId: string) {
         total: plan.entries.length,
         imported: 0,
         skippedByReason: plan.skippedByReason,
+        skipDetails: plan.skipDetails,
+        skippedDetailsOmitted: plan.skippedDetailsOmitted,
         touchedDays: [],
         rollupProcessed: 0,
       }),
@@ -120,7 +122,7 @@ describe("dose-history import — the reported export end to end", () => {
   it("lands every dose the file records a decision for", async () => {
     const prisma = getPrismaClient();
     const user = await seedRegimen();
-    const { jobId } = await enqueue(user.id);
+    const { jobId, plan } = await enqueue(user.id);
 
     const result = await processMedicationIntakeImportJob(jobId);
 
@@ -130,6 +132,8 @@ describe("dose-history import — the reported export end to end", () => {
       // The eight `Not Interacted` rows: the file states no decision about those
       // doses, so there is nothing honest to write, and the count says which.
       skipReasons: [{ reason: "status_no_dose_information", count: 8 }],
+      skipDetails: plan.skipDetails,
+      skippedDetailsOmitted: 0,
     });
     // Every row of the file is accounted for by one of the two numbers.
     expect(result!.imported + result!.skipped).toBe(3395);
@@ -218,7 +222,7 @@ describe("dose-history import — the reported export end to end", () => {
     const second = await enqueue(user.id);
     const result = await processMedicationIntakeImportJob(second.jobId);
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       imported: 0,
       skipped: 3395,
       skipReasons: [
@@ -226,6 +230,13 @@ describe("dose-history import — the reported export end to end", () => {
         { reason: "status_no_dose_information", count: 8 },
       ],
     });
+    expect(result?.skipDetails).toHaveLength(200);
+    expect(result?.skipDetails?.slice(0, 8)).toEqual(second.plan.skipDetails);
+    expect(result?.skippedDetailsOmitted).toBe(3195);
+    const detailWire = JSON.stringify(result?.skipDetails);
+    expect(detailWire).not.toContain("Med_");
+    expect(detailWire).not.toContain("scheduledFor");
+    expect(detailWire).not.toContain("takenAt");
     await expect(
       prisma.medicationIntakeEvent.count({ where: { userId: user.id } }),
     ).resolves.toBe(3387);

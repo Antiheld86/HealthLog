@@ -51,6 +51,16 @@ const PAGE_CACHE = `healthlog-pages-${CACHE_VERSION}`;
 // next paint. Network-first restores read-after-write freshness while keeping
 // the offline fallback.
 const DATA_CACHE = `healthlog-data-${CACHE_VERSION}`;
+// Keep this ownership contract aligned with
+// `clearOfflineCachesForSessionEnd()` in `query-persister.ts`. Cache cleanup
+// must cover every current/legacy HealthLog cache without deleting unrelated
+// CacheStorage namespaces owned by another app on the same origin.
+const HEALTHLOG_CACHE_NAME_RE = /^healthlog-(?:static|pages|data)-/;
+const CURRENT_HEALTHLOG_CACHES = new Set([
+  STATIC_CACHE,
+  PAGE_CACHE,
+  DATA_CACHE,
+]);
 const MAX_STATIC_ENTRIES = 150;
 const MAX_PAGE_ENTRIES = 30;
 const MAX_DATA_ENTRIES = 60;
@@ -103,15 +113,24 @@ function isCacheableApiResponse(response, bodyText) {
   return true;
 }
 
-// App shell files to precache on install
-const PRECACHE_URLS = ["/", "/logo-192.png", "/logo-512.png", "/favicon.svg"];
+// Public immutable assets to precache on install. Never include `/`: installing
+// while signed in would fetch the authenticated Dashboard document with the
+// browser's session cookies and persist that health-bearing HTML in
+// CacheStorage for replay after logout.
+const PRECACHE_URLS = ["/logo-192.png", "/logo-512.png", "/favicon.svg"];
 
-// ── Install: precache app shell ──────────────────────────────────────────────
+// ── Install: precache public immutable assets ────────────────────────────────
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(STATIC_CACHE)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .then(async (cache) => {
+        // An updated worker can reuse the same release-scoped cache when its
+        // source changes without a version bump. Remove a root document left
+        // by the previous worker before adding the safe public asset set.
+        await cache.delete("/");
+        await cache.addAll(PRECACHE_URLS);
+      })
       .then(() => self.skipWaiting()),
   );
 });
@@ -127,7 +146,8 @@ self.addEventListener("activate", (event) => {
             keys
               .filter(
                 (k) =>
-                  k !== STATIC_CACHE && k !== PAGE_CACHE && k !== DATA_CACHE,
+                  HEALTHLOG_CACHE_NAME_RE.test(k) &&
+                  !CURRENT_HEALTHLOG_CACHES.has(k),
               )
               .map((k) => caches.delete(k)),
           ),

@@ -30,6 +30,13 @@ interface JobStatus {
     totals?: { recordsRead?: number; rowsUpserted?: number };
     clinical?: { skipped?: number };
     cumulativeEstimates?: { days?: number; rows?: number };
+    ecg?: {
+      discovered?: number;
+      imported?: number;
+      updated?: number;
+      skipped?: number;
+      failed?: number;
+    };
   } | null;
   failureReason: string | null;
 }
@@ -152,6 +159,8 @@ export function AppleHealthImportCard() {
   const isFailed = status?.status === "failed";
   const busy = uploading || isRunning;
   const percent = status?.progress?.percent ?? null;
+  const ecg = status?.result?.ecg;
+  const ecgWritten = (ecg?.imported ?? 0) + (ecg?.updated ?? 0);
 
   return (
     <ImportCardShell
@@ -241,7 +250,7 @@ export function AppleHealthImportCard() {
         {isDone && (
           <WrittenOutcomeLine
             outcome={classifyWrittenOutcome({
-              written: status?.result?.totals?.rowsUpserted ?? 0,
+              written: (status?.result?.totals?.rowsUpserted ?? 0) + ecgWritten,
               // The clinical count is a documented, deliberate exclusion
               // (electrocardiograms, lab documents), not a refused row — it
               // must not tip the archive into a warning. Only "nothing
@@ -261,6 +270,20 @@ export function AppleHealthImportCard() {
             }
             testId="import-apple-health-result"
           />
+        )}
+        {isDone && (ecg?.discovered ?? 0) > 0 && (
+          <p
+            data-testid="import-apple-health-ecg-result"
+            className="text-muted-foreground text-xs"
+          >
+            {t("settings.sections.export.import.appleHealth.ecgResult", {
+              discovered: ecg?.discovered ?? 0,
+              imported: ecg?.imported ?? 0,
+              updated: ecg?.updated ?? 0,
+              skipped: ecg?.skipped ?? 0,
+              failed: ecg?.failed ?? 0,
+            })}
+          </p>
         )}
         {isDone && (status?.result?.cumulativeEstimates?.days ?? 0) > 0 && (
           <AppleHealthEstimateWarning

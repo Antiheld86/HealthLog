@@ -3,8 +3,63 @@ import { apiSuccess, apiError } from "@/lib/api-response";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { annotate } from "@/lib/logging/context";
 import { syncUserGoogleHealth } from "@/lib/google-health/sync";
+import type {
+  GoogleHealthReasonCode,
+  GoogleHealthResourceOutcome,
+  GoogleHealthResourceStatus,
+} from "@/lib/google-health/sync-progress";
 import { resolveSyncOutcome } from "@/lib/outcome/written-outcome";
 import { NextRequest } from "next/server";
+
+const RESOURCE_STATUSES = new Set<GoogleHealthResourceStatus>([
+  "pending",
+  "complete",
+  "partial",
+  "empty",
+  "truncated",
+  "failed",
+]);
+const REASON_CODES = new Set<GoogleHealthReasonCode>([
+  "collection_failed",
+  "token_failed",
+  "upsert_failed",
+  "rollup_failed",
+  "existing_page_limit",
+]);
+
+function boundedInteger(value: unknown, maximum = 2_147_483_647): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(maximum, Math.max(0, Math.trunc(value)))
+    : 0;
+}
+
+function publicResourceOutcome(value: unknown): GoogleHealthResourceOutcome {
+  const item =
+    value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
+  return {
+    resource:
+      typeof item.resource === "string"
+        ? item.resource
+            .toLowerCase()
+            .replace(/[^a-z0-9-]/g, "-")
+            .slice(0, 48)
+        : "unknown",
+    pages: boundedInteger(item.pages),
+    fetched: boundedInteger(item.fetched),
+    mapped: boundedInteger(item.mapped),
+    written: boundedInteger(item.written),
+    status: RESOURCE_STATUSES.has(item.status as GoogleHealthResourceStatus)
+      ? (item.status as GoogleHealthResourceStatus)
+      : "failed",
+    durationMs: boundedInteger(item.durationMs, 86_400_000),
+    truncated: item.truncated === true,
+    reasonCode: REASON_CODES.has(item.reasonCode as GoogleHealthReasonCode)
+      ? (item.reasonCode as GoogleHealthReasonCode)
+      : null,
+  };
+}
 
 /**
  * Manually trigger a Google Health sync for the current user (v1.26.0).
@@ -63,5 +118,14 @@ export const POST = apiHandler(async (request: NextRequest) => {
   if (result.failed && result.imported === 0) {
     return apiError("Google Health sync failed", 502);
   }
-  return apiSuccess({ ...resolveSyncOutcome(result), fullSync });
+  const resources = Array.isArray(result.resources)
+    ? result.resources.slice(0, 16).map(publicResourceOutcome)
+    : undefined;
+  return apiSuccess({
+    ...resolveSyncOutcome(result),
+    ...(result.runId ? { runId: result.runId.slice(0, 128) } : {}),
+    ...(result.state ? { state: result.state } : {}),
+    fullSync,
+    ...(resources ? { resources } : {}),
+  });
 });

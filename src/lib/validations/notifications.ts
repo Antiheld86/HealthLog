@@ -1,4 +1,5 @@
 import { z } from "zod/v4";
+import { isIP } from "node:net";
 import { EVENT_TYPES } from "@/lib/notifications/types";
 
 export const notificationPreferenceSchema = z.object({
@@ -66,6 +67,109 @@ function isPrivateIpv4(ip: [number, number, number, number]): boolean {
 }
 
 /**
+ * Parse an IPv6 literal into its canonical 16 bytes.
+ *
+ * Node's `net.isIP` supplies the syntax verdict. The small expansion below is
+ * only for policy inspection: comparing normalized bytes avoids the compressed
+ * and mixed-spelling bypasses that string-prefix checks cannot cover.
+ */
+function parseIpv6Bytes(input: string): Uint8Array | null {
+  if (isIP(input) !== 6) return null;
+
+  let value = input.toLowerCase();
+  const dottedTail = value.match(/(\d+\.\d+\.\d+\.\d+)$/)?.[1];
+  if (dottedTail) {
+    const ipv4 = parseIpv4Strict(dottedTail);
+    if (!ipv4) return null;
+    const high = ((ipv4[0] << 8) | ipv4[1]).toString(16);
+    const low = ((ipv4[2] << 8) | ipv4[3]).toString(16);
+    value = `${value.slice(0, -dottedTail.length)}${high}:${low}`;
+  }
+
+  const compressed = value.split("::");
+  if (compressed.length > 2) return null;
+  const left = compressed[0] ? compressed[0].split(":") : [];
+  const right =
+    compressed.length === 2 && compressed[1] ? compressed[1].split(":") : [];
+  const missing = 8 - left.length - right.length;
+  if (
+    missing < 0 ||
+    (compressed.length === 1 && missing !== 0) ||
+    (compressed.length === 2 && missing < 1)
+  ) {
+    return null;
+  }
+
+  const words = [
+    ...left,
+    ...Array.from({ length: missing }, () => "0"),
+    ...right,
+  ].map((word) => Number.parseInt(word, 16));
+  if (
+    words.length !== 8 ||
+    words.some((word) => !Number.isInteger(word) || word < 0 || word > 0xffff)
+  ) {
+    return null;
+  }
+
+  const bytes = new Uint8Array(16);
+  words.forEach((word, index) => {
+    bytes[index * 2] = word >> 8;
+    bytes[index * 2 + 1] = word & 0xff;
+  });
+  return bytes;
+}
+
+function bytesEqual(
+  bytes: Uint8Array,
+  offset: number,
+  expected: readonly number[],
+): boolean {
+  return expected.every((value, index) => bytes[offset + index] === value);
+}
+
+/**
+ * Extract the embedded IPv4 address from standard transition formats.
+ *
+ * The local-use `64:ff9b:1::/48` layout follows the repository's RFC8215
+ * fixtures: the first two IPv4 octets occupy bytes 6–7 and the final two
+ * occupy bytes 10–11 around the reserved zero field.
+ */
+function embeddedIpv4(
+  bytes: Uint8Array,
+): [number, number, number, number] | null {
+  const firstTenZero = bytesEqual(bytes, 0, Array(10).fill(0));
+  if (firstTenZero && bytes[10] === 0xff && bytes[11] === 0xff) {
+    return [bytes[12], bytes[13], bytes[14], bytes[15]];
+  }
+
+  if (bytesEqual(bytes, 0, Array(12).fill(0))) {
+    return [bytes[12], bytes[13], bytes[14], bytes[15]];
+  }
+
+  if (bytes[0] === 0x20 && bytes[1] === 0x02) {
+    return [bytes[2], bytes[3], bytes[4], bytes[5]];
+  }
+
+  if (
+    bytesEqual(bytes, 0, [0x00, 0x64, 0xff, 0x9b]) &&
+    bytesEqual(bytes, 4, Array(8).fill(0))
+  ) {
+    return [bytes[12], bytes[13], bytes[14], bytes[15]];
+  }
+
+  if (
+    bytesEqual(bytes, 0, [0x00, 0x64, 0xff, 0x9b, 0x00, 0x01]) &&
+    bytes[8] === 0 &&
+    bytes[9] === 0
+  ) {
+    return [bytes[6], bytes[7], bytes[10], bytes[11]];
+  }
+
+  return null;
+}
+
+/**
  * Decide whether a raw IP address string (as returned by `dns.lookup`)
  * points at a public range — i.e. is safe to dial.
  *
@@ -86,45 +190,27 @@ export function isPublicIp(ip: string): boolean {
   if (!ip) return false;
   const lower = ip.toLowerCase();
 
-  // IPv4 dotted-quad (what dns.lookup with family=4 returns).
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(lower)) {
+  const family = isIP(lower);
+  if (family === 4) {
     const parsed = parseIpv4Strict(lower);
     if (!parsed) return false;
     return !isPrivateIpv4(parsed);
   }
 
-  // IPv6. Only strings with a colon make it past the previous check.
-  if (lower.includes(":")) {
-    if (lower === "::1" || lower === "::") return false;
-    if (lower.startsWith("fe80:")) return false;
-    if (/^fc[0-9a-f]{0,2}:/.test(lower)) return false;
-    if (/^fd[0-9a-f]{0,2}:/.test(lower)) return false;
+  if (family === 6) {
+    const bytes = parseIpv6Bytes(lower);
+    if (!bytes) return false;
 
-    // IPv4-mapped IPv6 dotted form ("::ffff:127.0.0.1"). Some resolvers
-    // emit this when an AAAA falls through to a synthesized A.
-    const mappedDotted = lower.match(/^(?:::ffff:)(\d+\.\d+\.\d+\.\d+)$/);
-    if (mappedDotted) {
-      const parsed = parseIpv4Strict(mappedDotted[1]);
-      if (!parsed || isPrivateIpv4(parsed)) return false;
-      return true;
+    // Unspecified, loopback, link-local, and unique-local IPv6.
+    if (bytesEqual(bytes, 0, Array(16).fill(0))) return false;
+    if (bytesEqual(bytes, 0, Array(15).fill(0)) && bytes[15] === 1) {
+      return false;
     }
+    if (bytes[0] === 0xfe && (bytes[1] & 0xc0) === 0x80) return false;
+    if ((bytes[0] & 0xfe) === 0xfc) return false;
 
-    // IPv4-mapped IPv6 hex pair form ("::ffff:7f00:1").
-    const mappedHex = lower.match(
-      /^(?:::ffff:)([0-9a-f]{1,4}):([0-9a-f]{1,4})$/,
-    );
-    if (mappedHex) {
-      const high = parseInt(mappedHex[1], 16);
-      const low = parseInt(mappedHex[2], 16);
-      const parsed: [number, number, number, number] = [
-        (high >> 8) & 0xff,
-        high & 0xff,
-        (low >> 8) & 0xff,
-        low & 0xff,
-      ];
-      if (isPrivateIpv4(parsed)) return false;
-      return true;
-    }
+    const embedded = embeddedIpv4(bytes);
+    if (embedded && isPrivateIpv4(embedded)) return false;
     return true;
   }
 
@@ -176,55 +262,9 @@ export function isPublicUrl(url: string): boolean {
       return false;
     }
 
-    // IPv6 loopback / unspecified / link-local / unique-local. Must be
-    // gated on a colon — the previous `startsWith("fc")` falsely blocked
-    // any DNS hostname starting with "fc" or "fd" (e.g. fcm.googleapis.com).
-    if (h === "::1" || h === "::") {
-      return false;
-    }
-    if (h.includes(":")) {
-      if (
-        h.startsWith("fe80:") ||
-        /^fc[0-9a-f]{0,2}:/.test(h) ||
-        /^fd[0-9a-f]{0,2}:/.test(h)
-      ) {
-        return false;
-      }
-    }
-
-    // IPv4-mapped IPv6 ("::ffff:127.0.0.1" or "::ffff:7f00:1") and
-    // 6to4 / NAT64 with embedded private IPv4. Extract the trailing
-    // dotted-quad if present, otherwise extract the last 32 bits as
-    // hex pairs and reconstruct.
-    if (h.includes(":")) {
-      const ipv4MappedDotted = h.match(/^(?:::ffff:)(\d+\.\d+\.\d+\.\d+)$/);
-      if (ipv4MappedDotted) {
-        const ip = parseIpv4Strict(ipv4MappedDotted[1]);
-        if (!ip || isPrivateIpv4(ip)) return false;
-      }
-      const ipv4MappedHex = h.match(
-        /^(?:::ffff:)([0-9a-f]{1,4}):([0-9a-f]{1,4})$/,
-      );
-      if (ipv4MappedHex) {
-        const high = parseInt(ipv4MappedHex[1], 16);
-        const low = parseInt(ipv4MappedHex[2], 16);
-        const ip: [number, number, number, number] = [
-          (high >> 8) & 0xff,
-          high & 0xff,
-          (low >> 8) & 0xff,
-          low & 0xff,
-        ];
-        if (isPrivateIpv4(ip)) return false;
-      }
-    }
-
-    // Strict IPv4 parsing: reject malformed forms outright (better a false
-    // positive than an SSRF) and apply RFC1918 / CGNAT / loopback bans.
-    if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) {
-      const ip = parseIpv4Strict(h);
-      if (!ip) return false;
-      if (isPrivateIpv4(ip)) return false;
-    }
+    // One normalized byte-level verdict for every literal IP. DNS hostnames
+    // deliberately fall through to the pinned resolver boundary.
+    if (isIP(h) !== 0) return isPublicIp(h);
 
     return true;
   } catch {

@@ -79,6 +79,17 @@ describe("public/sw.js offline fallback locale neutrality (F-7, 2026-05-16)", ()
   });
 });
 
+describe("public/sw.js authenticated install isolation (SEC-02)", () => {
+  it("precaches public immutable assets but never the authenticated root route", () => {
+    const sw = readSw();
+    const precache = /const PRECACHE_URLS = \[([^\]]+)\]/.exec(sw)?.[1];
+
+    expect(precache).toBeDefined();
+    expect.soft(precache).not.toMatch(/["']\/["']/);
+    expect(precache).toMatch(/\/(?:logo|icons)\/?[^"']*\.(?:png|svg)/);
+  });
+});
+
 describe("public/manifest.json PWA identity hygiene (F-7, 2026-05-16)", () => {
   it("declares an explicit scope, id, and display_override", () => {
     const raw = readFileSync(MANIFEST_PATH, "utf-8");

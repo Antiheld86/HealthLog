@@ -2,13 +2,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createHash } from "node:crypto";
 
 /**
- * v1.19.1 (C4) — token-efficiency contract. The full SNAPSHOT block (the
- * expensive grounding prefix) must ride the prompt only ONCE per conversation:
- * on the first turn (no prior turns on disk). A follow-up turn that still sits
- * inside the verbatim history window must send a short pointer in place of the
- * figures, so typing one word no longer re-ships ~15k tokens of snapshot. This
- * suite captures the `userPrompt` handed to the provider runner on each turn
- * and pins both the first-turn-full and follow-up-cheap shapes.
+ * Stateless-provider grounding contract.
+ *
+ * The no-tools completion API does not retain a prior HTTP request's prompt.
+ * Its persisted transcript contains user/assistant prose, not the SNAPSHOT
+ * block. Every request therefore carries the current authoritative snapshot;
+ * otherwise a short follow-up can only lean on model-authored prose and may
+ * silently drift away from the user's data. Tool-capable providers use the
+ * separate compact inventory + retrieval loop and are unaffected.
  */
 
 const SNAPSHOT_JSON = '{"bp":{"aggregate":{"mean":128}}}';
@@ -204,7 +205,7 @@ function lastProviderRequest(): { system: string; user: string } {
   };
 }
 
-describe("coach chat — snapshot sent once per conversation (C4)", () => {
+describe("coach chat — stateless no-tools snapshot grounding", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     runStreamingRawCompletionWithFallback.mockResolvedValue({
@@ -234,7 +235,7 @@ describe("coach chat — snapshot sent once per conversation (C4)", () => {
     });
   });
 
-  it("does NOT re-ship the snapshot figures on a follow-up turn", async () => {
+  it("re-ships the authoritative snapshot on a follow-up turn", async () => {
     fetchConversationWithMessages.mockResolvedValue({
       id: "c1",
       summary: null,
@@ -246,29 +247,19 @@ describe("coach chat — snapshot sent once per conversation (C4)", () => {
 
     await postAndDrain({ conversationId: "c1", message: "High?" });
     const prompt = lastUserPrompt();
-    // The expensive figures + grounding must be gone …
-    expect(prompt).not.toContain(SNAPSHOT_JSON);
-    expect(prompt).not.toContain(GROUNDING);
-    // … replaced by the cheap pointer back to the earlier snapshot, and the
-    // prior turns still ride the transcript so grounding is preserved.
-    expect(prompt).toContain("provided earlier in this conversation");
+    expect(prompt).toContain(SNAPSHOT_JSON);
+    expect(prompt).toContain(GROUNDING);
+    expect(prompt).not.toContain("provided earlier in this conversation");
     expect(prompt).toContain("Your BP looks stable.");
   });
 });
 
 /**
- * The erosion guard.
- *
- * The re-ground condition used to be the open-ended `allTurns.length >
- * TURN_CAP`, which is true for EVERY turn past the history cap — not just the
- * one that crosses it. So a conversation that ran long re-shipped the full
- * ~15k-token snapshot on turn 21, 22, 23, … permanently, reinstating exactly
- * the per-turn cost the snapshot-once design removes, and paying it on the
- * longest (most expensive) conversations. The intent was always to re-ground
- * ONCE, at the boundary where the original snapshot scrolls out of the
- * verbatim window.
+ * Long conversations remain grounded after transcript elision. The rolling
+ * summary replaces old conversational prose, never the authoritative health
+ * snapshot.
  */
-describe("coach chat — snapshot re-grounds at the elision boundary only", () => {
+describe("coach chat — snapshot stays grounded across transcript elision", () => {
   const TURN_CAP = 20;
 
   beforeEach(() => {
@@ -293,19 +284,17 @@ describe("coach chat — snapshot re-grounds at the elision boundary only", () =
     return lastUserPrompt();
   }
 
-  it("re-grounds on the turn that crosses the cap", async () => {
+  it("remains grounded on the turn that crosses the cap", async () => {
     expect(await turnWithPriorCount(TURN_CAP)).toContain(SNAPSHOT_JSON);
   });
 
-  it("does NOT re-ship the snapshot on every turn past the cap", async () => {
-    // Well past the boundary — these are the turns that used to pay the full
-    // snapshot cost forever.
+  it("remains grounded on every later stateless request", async () => {
     for (const prior of [TURN_CAP + 2, TURN_CAP + 6, TURN_CAP + 20, 58]) {
-      expect(await turnWithPriorCount(prior)).not.toContain(SNAPSHOT_JSON);
+      expect(await turnWithPriorCount(prior)).toContain(SNAPSHOT_JSON);
     }
   });
 
-  it("ships the full snapshot only twice across a 60-turn conversation", async () => {
+  it("ships the current snapshot across a 60-turn conversation", async () => {
     let shipped = 0;
     const shippedAt: number[] = [];
 
@@ -326,10 +315,11 @@ describe("coach chat — snapshot re-grounds at the elision boundary only", () =
       }
     }
 
-    // Turn 1 (grounding) + the single crossing at the cap. Under the old
-    // predicate this was 1 + every turn from 20 to 60 — 21 full snapshots.
-    expect(shippedAt).toEqual([0, TURN_CAP]);
-    expect(shipped).toBe(2);
+    expect(shippedAt).toEqual([
+      0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38,
+      40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60,
+    ]);
+    expect(shipped).toBe(31);
   });
 
   /**
@@ -340,7 +330,7 @@ describe("coach chat — snapshot re-grounds at the elision boundary only", () =
    * conversation and would then never re-ground at all. The window must catch
    * the crossing from either parity.
    */
-  it("still re-grounds when a lost reply shifts the turn parity", async () => {
+  it("stays grounded when a lost reply shifts the turn parity", async () => {
     expect(await turnWithPriorCount(TURN_CAP + 1)).toContain(SNAPSHOT_JSON);
   });
 });

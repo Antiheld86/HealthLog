@@ -20,7 +20,6 @@ import {
   buildCanonicalSchedule,
   buildRecurrenceContext,
   resolveSlotPhaseWindow,
-  scheduleEmitsInWindow,
   shouldMintMissedDoseRow,
 } from "@/lib/medications/scheduling/worker-helpers";
 import { deleteMessage } from "@/lib/telegram";
@@ -36,10 +35,7 @@ import {
   medicationReminderDedupKey,
   writeReminderDedupAnchor,
 } from "@/lib/notifications/reminder-dedup";
-import {
-  getUserTodayBounds as getUserTodayBoundsUtil,
-  localHmAsUtc,
-} from "@/lib/tz/local-day";
+import { getUserTodayBounds as getUserTodayBoundsUtil } from "@/lib/tz/local-day";
 import { getWorkerPrisma, parseTimeToMinutes } from "./shared";
 
 export interface ReminderCheckPayload {
@@ -202,11 +198,13 @@ export async function handleReminderCheck(
           now,
           userTz,
         );
-
-        // Get today's date string in user's timezone for message tracking
-        const localDateStr = now.toLocaleDateString("sv-SE", {
-          timeZone: userTz,
-        }); // YYYY-MM-DD format
+        // A dose window may cross local midnight. Look back far enough to
+        // retain yesterday's canonical occurrence on 23/25-hour DST days;
+        // candidate filtering below admits a prior-day slot only when its
+        // own resolved window reaches into today.
+        const reminderOccurrenceStart = new Date(
+          todayStart.getTime() - 48 * 60 * 60 * 1000,
+        );
 
         // v1.7.0 code-correctness M4 — fetch today's intake events so a
         // logged dose suppresses the reminder for the SLOT it belongs to,
@@ -225,7 +223,10 @@ export async function handleReminderCheck(
             // v1.7.0 sync — a tombstoned dose is no longer a logged
             // action, so it must not suppress today's reminder.
             deletedAt: null,
-            scheduledFor: { gte: todayStart, lte: todayEnd },
+            scheduledFor: {
+              gte: reminderOccurrenceStart,
+              lte: todayEnd,
+            },
           },
           select: {
             scheduledFor: true,
@@ -317,6 +318,17 @@ export async function handleReminderCheck(
           userTz,
           lastIntakeAt,
         });
+        const occurrencesByScheduleId = new Map(
+          canonicalSchedules.map((canonicalSchedule) => [
+            canonicalSchedule.id,
+            occurrencesBetween(
+              canonicalSchedule,
+              reminderOccurrenceStart,
+              todayEnd,
+              recurrenceCtx,
+            ),
+          ]),
+        );
 
         // Attribute every action against one medication-wide pool. Each
         // schedule still mints its own cadence-aware bands, preserving its
@@ -335,7 +347,7 @@ export async function handleReminderCheck(
                 ? []
                 : occurrencesBetween(
                     canonicalSchedule,
-                    todayStart,
+                    reminderOccurrenceStart,
                     todayEnd,
                     recurrenceCtx,
                   ).map((occurrence) => occurrence.at);
@@ -344,7 +356,7 @@ export async function handleReminderCheck(
               schedule: canonicalSchedule,
               ctx: recurrenceCtx,
               userTz,
-              range: { from: todayStart, to: todayEnd },
+              range: { from: reminderOccurrenceStart, to: todayEnd },
               now,
               intakeInstants: rollingOpenSlots,
             }).bands;
@@ -387,24 +399,9 @@ export async function handleReminderCheck(
         ) {
           const schedule = sortedSchedules[scheduleIndex];
           const canonicalSchedule = canonicalSchedules[scheduleIndex];
-          // v1.5.0 — route every "does today emit a slot?" decision
-          // through the canonical recurrence engine. Replaces the
-          // legacy weekday-only filter that silently ignored
-          // `intervalWeeks` (the pre-v1.5 bi-weekly bug — a Wed
-          // bi-weekly schedule fired every Wed instead of every other
-          // Wed). The engine honours RRULE / rolling / one-shot /
-          // legacy-with-interval-weeks / `endsOn` cap; no special-
-          // casing here.
-          if (
-            !scheduleEmitsInWindow(
-              canonicalSchedule,
-              recurrenceCtx,
-              todayStart,
-              todayEnd,
-            )
-          ) {
-            continue;
-          }
+          const scheduleOccurrences =
+            occurrencesByScheduleId.get(canonicalSchedule.id) ?? [];
+          if (scheduleOccurrences.length === 0) continue;
 
           // v1.7.0 SB-SCHED-4 — multi-time-of-day dispatch. A schedule
           // with `timesOfDay = ["08:00","20:00"]` is two distinct dose
@@ -436,26 +433,63 @@ export async function handleReminderCheck(
             // schedule (byte-stable against pre-v1.7 rows), else the
             // explicit HH:mm.
             const dedupTimeOfDay = hasFirstClassTimes ? slotTime : "";
-            // The UTC instant this slot is due (DST-safe).
-            const [slotH, slotM] = slotTime.split(":").map(Number);
-            const slotScheduledFor = localHmAsUtc(now, userTz, slotH, slotM);
+            // Select the latest canonical occurrence whose own phase window
+            // is active for this tick. A prior-day occurrence is eligible
+            // only when its resolved window crosses today's local boundary;
+            // ordinary stale yesterday slots must not become new reminders.
+            const phaseCandidate = scheduleOccurrences
+              .filter((occurrence) => occurrence.timeOfDay === slotTime)
+              .map((occurrence) => {
+                const phaseWindow = resolveSlotPhaseWindow(
+                  schedule,
+                  slotTime,
+                  canonicalSchedule.doseWindows ?? null,
+                  occurrence.at,
+                  userTz,
+                );
+                if (
+                  occurrence.at.getTime() < todayStart.getTime() &&
+                  phaseWindow.end.getTime() < todayStart.getTime()
+                ) {
+                  return null;
+                }
+                const minutesFromStart =
+                  (nowMs - phaseWindow.start.getTime()) / 60_000;
+                const minutesToEnd =
+                  (phaseWindow.end.getTime() - nowMs) / 60_000;
+                const windowDuration =
+                  (phaseWindow.end.getTime() - phaseWindow.start.getTime()) /
+                  60_000;
+                const thresholds = resolvePhaseThresholds(
+                  phaseConfig,
+                  windowDuration,
+                );
+                const currentPhase = determinePhase(
+                  minutesToEnd,
+                  minutesFromStart,
+                  thresholds,
+                );
+                return currentPhase
+                  ? {
+                      slotScheduledFor: occurrence.at,
+                      minutesToEnd,
+                      currentPhase,
+                    }
+                  : null;
+              })
+              .filter((candidate) => candidate !== null)
+              .sort(
+                (a, b) =>
+                  b.slotScheduledFor.getTime() - a.slotScheduledFor.getTime(),
+              )[0];
+            if (!phaseCandidate) continue;
+
+            const { slotScheduledFor, minutesToEnd, currentPhase } =
+              phaseCandidate;
             const slotInstant = slotScheduledFor.getTime();
             if (liveEraStart !== null && slotInstant < liveEraStart) {
               continue;
             }
-            const phaseWindow = resolveSlotPhaseWindow(
-              schedule,
-              slotTime,
-              canonicalSchedule.doseWindows ?? null,
-              slotScheduledFor,
-              userTz,
-            );
-            const minutesFromStart =
-              (nowMs - phaseWindow.start.getTime()) / 60_000;
-            const minutesToEnd = (phaseWindow.end.getTime() - nowMs) / 60_000;
-            const windowDuration =
-              (phaseWindow.end.getTime() - phaseWindow.start.getTime()) /
-              60_000;
 
             // Skips and retained USER_PIN takes bind to the nearest canonical
             // anchor inside the dose-history epsilon. A released pin has
@@ -510,23 +544,6 @@ export async function handleReminderCheck(
               continue;
             }
 
-            // Resolve phase thresholds
-            const thresholds = resolvePhaseThresholds(
-              phaseConfig,
-              windowDuration,
-            );
-
-            // Determine current phase for this slot's window.
-            const currentPhase = determinePhase(
-              minutesToEnd,
-              minutesFromStart,
-              thresholds,
-            );
-
-            if (!currentPhase) {
-              continue;
-            }
-
             // Already notified for this slot, phase and local day? The
             // anchor lives in `push_attempts` and is stamped for every
             // dispatched slot regardless of which channels delivered. It
@@ -539,7 +556,9 @@ export async function handleReminderCheck(
               scheduleId: schedule.id,
               slotTime,
               phase: currentPhase,
-              localDate: localDateStr,
+              localDate: slotScheduledFor.toLocaleDateString("sv-SE", {
+                timeZone: userTz,
+              }),
             });
 
             if (
@@ -651,7 +670,9 @@ export async function handleReminderCheck(
                     medicationId: med.id,
                     scheduleId: schedule.id,
                     phase: currentPhase,
-                    date: localDateStr,
+                    date: slotScheduledFor.toLocaleDateString("sv-SE", {
+                      timeZone: userTz,
+                    }),
                     // v1.7.0 SB-SCHED-4 — carry the dedup time-of-day so
                     // the Telegram-message ledger keys per slot.
                     timeOfDay: dedupTimeOfDay,

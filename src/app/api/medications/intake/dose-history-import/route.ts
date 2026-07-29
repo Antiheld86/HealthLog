@@ -183,6 +183,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
     total: plan.entries.length,
     imported: 0,
     skippedByReason: plan.skippedByReason,
+    skipDetails: plan.skipDetails,
+    skippedDetailsOmitted: plan.skippedDetailsOmitted,
     touchedDays: [],
     rollupProcessed: 0,
   };

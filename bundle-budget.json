@@ -1,11 +1,11 @@
 {
-  "$comment": "Client-bundle budgets, enforced by scripts/check-bundle-budget.mjs (--check) after `next build` in CI. Values are KB gzip and include the shared rootMainFiles baseline. Re-measured at v1.34.0: / 430, /insights 417, /measurements 417, /insights/mood 435, total 3130, baseline 130. The aggregate rose 70 KB from v1.33.2's 3060 for the same reason the v1.33.0 raise did: new surfaces, not a duplicated library. This release adds the reference-composite health-score card (per-pillar detail cards, method notes), the structured anamnesis facts editor, custom-metric correlation opt-in, and pattern-dismissal controls on two card types. Every per-route cap still passes with 23-30 KB headroom, and the Recharts chunk count is still 1 and structurally guarded. Raised 3120 to 3140 for that reason, not to make a red gate pass — the per-route budgets are the real ceiling on any single page; the aggregate exists to catch exactly the duplicated-library case that did not happen here.",
+  "$comment": "Client-bundle budgets, enforced by scripts/check-bundle-budget.mjs (--check) after `next build` in CI. Values are KB gzip and include every emitted lazy route and locale chunk, while route budgets include the shared rootMainFiles baseline. Re-measured at v1.34.1: / 431, /insights 420, /measurements 417, /insights/mood 438, total 3238, baseline 130, lazy catalogs 792. The 108 KB aggregate rise from v1.34.0's 3130 is not one user load: the explicit assessment error/timeout/poll-exhaustion contract adds 2.7-4.4 KB to each of roughly forty mutually exclusive metric route chunks, which the whole-build sum counts independently. Catalogs account for only about 2 KB of the delta, no catalog is statically route-referenced, and Recharts remains exactly one fingerprinted chunk. A measured single next/dynamic assessment boundary was reverted because it raised the artifact further to 3243 KB while saving only about 1 KB per route. The aggregate cap therefore moves narrowly from 3140 to 3260 (22 KB headroom); per-route ceilings, the static-catalog guard, and the one-Recharts-chunk guard remain unchanged.",
   "routesKbGz": {
     "/page": 460,
     "/insights/page": 445,
     "/measurements/page": 445,
     "/insights/mood/page": 460
   },
-  "totalClientKbGz": 3140,
+  "totalClientKbGz": 3260,
   "maxRechartsChunks": 1
 }

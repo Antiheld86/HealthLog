@@ -6,7 +6,8 @@
 // card reads the consolidated `/api/integrations/status` envelope like every
 // sibling — it was the last card firing its own status round-trip, and the
 // last place a fourth status dialect could hide. Warm copy, mobile-first, the
-// private-network opt-in toggle maps to `nightscoutAllowPrivateHost`.
+// private-network access is operator-owned through an exact-origin server
+// allowlist; ordinary users cannot weaken the outbound-request policy.
 
 import { useRef, useState } from "react";
 import Link from "next/link";
@@ -36,7 +37,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
-import { Switch } from "@/components/ui/switch";
 import { TagChip } from "@/components/ui/tag-chip";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
@@ -77,7 +77,6 @@ export function NightscoutCard({
 
   const [url, setUrl] = useState("");
   const [token, setToken] = useState("");
-  const [allowPrivateHost, setAllowPrivateHost] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [msgType, setMsgType] = useState<"success" | "error" | null>(null);
@@ -95,7 +94,6 @@ export function NightscoutCard({
     onSuccess: () => {
       setUrl("");
       setToken("");
-      setAllowPrivateHost(false);
       // The card reads the consolidated envelope, so that is the one key a
       // disconnect has to invalidate for the pill to flip back.
       queryClient.invalidateQueries({
@@ -116,7 +114,6 @@ export function NightscoutCard({
         body: JSON.stringify({
           url: url.trim(),
           token: token.trim(),
-          allowPrivateHost,
         }),
       });
       if (res.ok) {
@@ -184,6 +181,8 @@ export function NightscoutCard({
   }
 
   const pillState = pillStateForVerdict(status?.syncHealth?.verdict);
+  const operatorApprovalRequired =
+    status?.lastError?.startsWith("private_origin_not_approved") ?? false;
   // `warning` joins the set now that a transient failure paints amber rather
   // than red — the detail belongs on this line, not in a colour that tells the
   // user to reconnect against something reconnecting cannot fix.
@@ -191,7 +190,8 @@ export function NightscoutCard({
     (pillState === "error" ||
       pillState === "parked" ||
       pillState === "warning") &&
-    status?.lastError
+    status?.lastError &&
+    !operatorApprovalRequired
       ? status.lastError
       : null;
 
@@ -223,6 +223,19 @@ export function NightscoutCard({
 
       <div className="mt-4 space-y-4 pl-7">
         {errorMessage && <IntegrationErrorMessage message={errorMessage} />}
+        {operatorApprovalRequired && (
+          <div
+            data-testid="nightscout-private-operator-required"
+            className="border-warning/30 bg-warning/10 space-y-1 rounded-md border px-3 py-2"
+          >
+            <p className="text-warning text-sm font-medium">
+              {t("settings.nightscoutPrivateOperatorTitle")}
+            </p>
+            <p className="text-muted-foreground text-xs">
+              {t("settings.nightscoutPrivateOperatorDescription")}
+            </p>
+          </div>
+        )}
 
         {/* Parked-integration resume CTA. Surfaces only when the row state
             is `parked` (>24h of persistent failures). Nightscout has no OAuth
@@ -313,22 +326,6 @@ export function NightscoutCard({
             </p>
           </div>
 
-          <div className="border-border/60 flex items-start justify-between gap-3 rounded-lg border p-3">
-            <div className="space-y-0.5">
-              <Label htmlFor="nightscout-private" className="text-sm">
-                {t("settings.nightscoutPrivateHost")}
-              </Label>
-              <p className="text-muted-foreground text-xs">
-                {t("settings.nightscoutPrivateHostHelp")}
-              </p>
-            </div>
-            <Switch
-              id="nightscout-private"
-              checked={allowPrivateHost}
-              onCheckedChange={setAllowPrivateHost}
-            />
-          </div>
-
           <div className="flex justify-end">
             <Button
               type="submit"
@@ -363,26 +360,30 @@ export function NightscoutCard({
         {status?.connected && (
           <>
             <div className="flex flex-wrap items-start gap-2 [&>*]:min-w-[10rem] sm:[&>*]:min-w-0">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="min-h-11"
-                onClick={handleSync}
-                disabled={syncing}
-                data-testid="nightscout-sync"
-              >
-                {syncing ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-                {t("settings.nightscoutSync")}
-              </Button>
-              <TestConnectionButton
-                endpoint="/api/nightscout/test"
-                disabled={!status?.connected}
-              />
+              {!operatorApprovalRequired && (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="min-h-11"
+                    onClick={handleSync}
+                    disabled={syncing}
+                    data-testid="nightscout-sync"
+                  >
+                    {syncing ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+                    ) : (
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    )}
+                    {t("settings.nightscoutSync")}
+                  </Button>
+                  <TestConnectionButton
+                    endpoint="/api/nightscout/test"
+                    disabled={!status?.connected}
+                  />
+                </>
+              )}
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button

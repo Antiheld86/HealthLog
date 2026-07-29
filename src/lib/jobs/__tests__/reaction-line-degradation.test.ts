@@ -235,7 +235,7 @@ describe("reaction line — degradation", () => {
       { providerType: "openai", instance: { generateCompletion } },
     ]);
 
-    await runReactionLine({ ...JOB, kind: "weight" });
+    const outcome = await runReactionLine({ ...JOB, kind: "weight" });
 
     const request = generateCompletion.mock.calls[0][0] as {
       messages: Array<{ content: string }>;
@@ -243,6 +243,68 @@ describe("reaction line — degradation", () => {
     expect(request.messages[0].content).toContain(
       "Newly arrived reading: WEIGHT 81.4 kg.",
     );
+    expect(outcome).toEqual({ status: "generated" });
+    const commit = updateMany.mock.calls.find(
+      ([arg]) =>
+        (arg as { data?: { lineEncrypted?: Uint8Array } }).data
+          ?.lineEncrypted instanceof Uint8Array,
+    )?.[0] as { data: { lineEncrypted: Uint8Array } };
+    expect(new TextDecoder().decode(commit.data.lineEncrypted)).toBe(
+      "Your new 81.4 kg reading is in.",
+    );
+  });
+
+  it("rejects a number that does not occur in the exact evidence block", async () => {
+    measurementFindMany.mockResolvedValue([
+      { type: "WEIGHT", value: 81.4, unit: "kg" },
+    ]);
+    const generateCompletion = vi.fn().mockResolvedValue({
+      content: "Your new 91.4 kg reading is in.",
+      tokensUsed: 300,
+      cachedInputTokens: 0,
+    });
+    resolveProviderChain.mockResolvedValue([
+      { providerType: "openai", instance: { generateCompletion } },
+    ]);
+
+    const outcome = await runReactionLine({ ...JOB, kind: "weight" });
+
+    expect(outcome).toEqual({
+      status: "skipped",
+      reason: "ungrounded_output",
+    });
+    expect(updateMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          lineEncrypted: expect.any(Uint8Array),
+        }),
+      }),
+    );
+    expectSurfaceStillWorks();
+  });
+
+  it("rejects a numeric verdict when the arrival evidence has no figures", async () => {
+    loadDailyDigest.mockResolvedValue({
+      score: null,
+      topSignal: null,
+      briefingLead: "Steady week.",
+    });
+    const generateCompletion = vi.fn().mockResolvedValue({
+      content: "The new reading came in at 91.",
+      tokensUsed: 300,
+      cachedInputTokens: 0,
+    });
+    resolveProviderChain.mockResolvedValue([
+      { providerType: "openai", instance: { generateCompletion } },
+    ]);
+
+    const outcome = await runReactionLine({ ...JOB, kind: "weight" });
+
+    expect(outcome).toEqual({
+      status: "skipped",
+      reason: "ungrounded_output",
+    });
+    expectSurfaceStillWorks();
   });
 
   it("fences free-text lab fields as data, never prompt instructions", async () => {

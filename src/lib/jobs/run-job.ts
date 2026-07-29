@@ -20,7 +20,13 @@
  */
 import type { Job, JobWithMetadata } from "pg-boss";
 
-import type { JobFact, JobFacts, JobOutcome } from "./job-outcome";
+import {
+  serializeJobOutcome,
+  type JobFact,
+  type JobFacts,
+  type JobOutcome,
+  type SerializedJobOutcome,
+} from "./job-outcome";
 import { reportWorkerError } from "./report-worker-error";
 
 /** A converted handler: it says what it did instead of just finishing. */
@@ -61,8 +67,9 @@ function factMeta(did: JobFacts | undefined): Record<string, JobFact> {
 }
 
 /**
- * Wrap a handler for `boss.work`. Resolves on `ok: true`; reports and
- * rethrows on `ok: false`.
+ * Wrap a handler for `boss.work`. Resolves with the bounded, redacted
+ * persistence representation on `ok: true`; reports and rethrows on
+ * `ok: false`.
  *
  * A handler that throws is left alone — the throw already fails the job, and
  * re-wrapping it would only bury the original stack. `runJob` exists for the
@@ -71,10 +78,10 @@ function factMeta(did: JobFacts | undefined): Record<string, JobFact> {
 export function runJob<J>(
   queue: string,
   handler: (jobs: J[]) => Promise<JobOutcome>,
-): (jobs: J[]) => Promise<void> {
-  return async (jobs: J[]): Promise<void> => {
+): (jobs: J[]) => Promise<SerializedJobOutcome> {
+  return async (jobs: J[]): Promise<SerializedJobOutcome> => {
     const outcome = await handler(jobs);
-    if (outcome.ok) return;
+    if (outcome.ok) return serializeJobOutcome(outcome);
 
     const failure = new JobFailure(queue, outcome.reason, outcome.cause);
     const causeMessage =

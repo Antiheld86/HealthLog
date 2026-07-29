@@ -21,6 +21,51 @@ describe("readSyncOutcome", () => {
     ).toEqual({ imported: 0, failed: true, outcome: "failed" });
   });
 
+  it("preserves only bounded, sanitized per-resource outcomes", () => {
+    expect(
+      readSyncOutcome({
+        data: {
+          imported: 4,
+          failed: true,
+          outcome: "partial",
+          resources: [
+            {
+              resource: "Sleep",
+              written: 4,
+              status: "partial",
+              reasonCode: "collection_failed",
+            },
+            {
+              resource: "../raw secret",
+              written: -4,
+              status: "failed",
+              reasonCode: "provider error: token=secret",
+            },
+            { resource: "ignored", status: "unknown" },
+          ],
+        },
+      }),
+    ).toEqual({
+      imported: 4,
+      failed: true,
+      outcome: "partial",
+      resources: [
+        {
+          resource: "sleep",
+          written: 4,
+          status: "partial",
+          reasonCode: "collection_failed",
+        },
+        {
+          resource: "-raw-secret",
+          written: 0,
+          status: "failed",
+          reasonCode: null,
+        },
+      ],
+    });
+  });
+
   it("refuses an envelope that carries only the count", () => {
     // The pre-fix shape. A card that accepted it would be back to reporting a
     // number with no verdict attached.

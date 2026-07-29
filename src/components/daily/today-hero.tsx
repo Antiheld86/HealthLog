@@ -65,6 +65,28 @@ function formatDelta(
 }
 
 /**
+ * The ring already owns the headline number. AI briefing copy can still carry
+ * an older lead sentence that repeats that exact score, so remove only the
+ * sentence containing the displayed number and retain every other useful
+ * sentence verbatim. If the score sentence was the whole lead, render no lead
+ * rather than inventing replacement prose.
+ */
+function withoutRepeatedScore(
+  text: string | null,
+  score: number | null,
+): string | null {
+  if (!text || score === null) return text;
+  const shownScore = String(Math.round(score));
+  const scorePattern = new RegExp(
+    `(^|[^0-9])${shownScore.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}([^0-9]|$)`,
+  );
+  const sentences = text.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g) ?? [text];
+  const retained = sentences.filter((sentence) => !scorePattern.test(sentence));
+  const result = retained.join(" ").replace(/\s+/g, " ").trim();
+  return result.length > 0 ? result : null;
+}
+
+/**
  * The "just in" chip's clock face.
  *
  * Formatted CLIENT-side, and only after mount. `justIn.at` crosses the wire as
@@ -128,9 +150,24 @@ export function TodayHero({
   // paragraph, so the hero stays exactly one lead line tall and nothing below
   // it shifts. The briefing lead is the standing read; the deterministic
   // `line` is the floor a keyless self-hoster still gets.
-  const lead = digest.reactionLine ?? digest.briefingLead ?? digest.line;
+  const rawLead =
+    digest.reactionLine ??
+    digest.briefingLead ??
+    // The deterministic line is a useful floor only once the ring has a real
+    // score. A provisional/null ring must not pair with a fabricated score
+    // sentence from that fallback.
+    (hasScore ? digest.line : null);
+  const lead = withoutRepeatedScore(rawLead, digest.score?.value ?? null);
   const topSignal = digest.topSignal;
   const justInTime = digest.justIn ? formatJustInTime(digest.justIn.at) : null;
+  // A score-only all-clear digest has no narrative content for the leading
+  // column. Keeping the full md ring in that two-column shell left a blank
+  // column beside a 168 px dial and pushed the actual all-clear read below it.
+  // Treat that honest fallback as its own compact composition: the all-clear
+  // copy occupies the leading column and a smaller version of the SAME score
+  // ring remains the one numeric face. This branch depends only on the
+  // server-delivered digest, so SSR and hydration choose it identically.
+  const compactAllClear = !lead && !topSignal && !hasItems;
 
   // Calm degrade (plan §3): a genuinely empty account — no score, no rail
   // items, no cached briefing lead, and no fresh arrival — surfaces nothing
@@ -157,6 +194,7 @@ export function TodayHero({
     <section
       data-slot="today-hero"
       data-phase={digest.phase}
+      data-layout={compactAllClear ? "compact-all-clear" : "narrative"}
       className={cn(
         // The tile strip's surface plus the ONE sanctioned Today atmosphere:
         // `.today-hero-wash` leans a faint `--primary` mix over the theme
@@ -175,16 +213,25 @@ export function TodayHero({
         {/* The day's read — the numeric face on the trailing edge, the
             narrative lead leading. On md+ the lead sits flush-top with the
             score ring (items-start) rather than floating centred beside it. */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
+        <div
+          className={cn(
+            "flex gap-4",
+            compactAllClear
+              ? "flex-row items-center justify-between"
+              : "flex-col md:flex-row md:items-start md:justify-between md:gap-6",
+          )}
+        >
           <div className="min-w-0 flex-1 space-y-2">
             {/* Hero numeric face: the read leads large in the foreground
                 token, calm and legible — the day's read, not a slogan. */}
-            <div
-              data-slot="today-hero-lead"
-              className="text-foreground text-lg leading-snug font-semibold tracking-tight sm:text-xl"
-            >
-              <ProseBlocks text={lead} strip linkify={false} />
-            </div>
+            {lead ? (
+              <div
+                data-slot="today-hero-lead"
+                className="text-foreground text-lg leading-snug font-semibold tracking-tight sm:text-xl"
+              >
+                <ProseBlocks text={lead} strip linkify={false} />
+              </div>
+            ) : null}
             {/* Top signal — present-tense headline + optional delta, one
                 muted step down so it supports the lead without competing. */}
             {topSignal ? (
@@ -200,6 +247,42 @@ export function TodayHero({
                   </span>
                 ) : null}
               </p>
+            ) : null}
+            {compactAllClear ? (
+              <p
+                data-slot="today-hero-all-clear"
+                className="text-muted-foreground text-sm"
+              >
+                {t("daily.today.allClear")}
+              </p>
+            ) : null}
+
+            {/* In the compact fallback the quiet freshness tier belongs next
+                to the smaller ring. That uses the otherwise-empty leading
+                space and avoids adding a second row below the dial. */}
+            {compactAllClear && (digest.sleepPending || digest.justIn) ? (
+              <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                {digest.sleepPending ? (
+                  <p
+                    data-slot="today-hero-sleep-pending"
+                    className="flex items-center gap-1.5"
+                  >
+                    <Moon className="size-3.5 shrink-0" aria-hidden="true" />
+                    {t("daily.today.sleepPending")}
+                  </p>
+                ) : null}
+                {digest.justIn ? (
+                  <p
+                    data-slot="today-hero-just-in"
+                    data-just-in-kind={digest.justIn.kind}
+                    className="flex items-center gap-1.5"
+                  >
+                    {mounted && justInTime
+                      ? t("daily.today.justInAt", { time: justInTime })
+                      : t("daily.today.justIn")}
+                  </p>
+                ) : null}
+              </div>
             ) : null}
           </div>
 
@@ -223,7 +306,7 @@ export function TodayHero({
                   band={
                     digest.score ? (digest.score.band as ScoreBand) : undefined
                   }
-                  size="md"
+                  size={compactAllClear ? "sm" : "md"}
                   flat
                   label={t("daily.today.scoreLabel")}
                 />
@@ -248,7 +331,7 @@ export function TodayHero({
             they can legitimately co-occur (a weight landed while last night's
             sleep is still pending), so they share one wrapping row rather than
             competing for the same slot. */}
-        {digest.sleepPending || digest.justIn ? (
+        {!compactAllClear && (digest.sleepPending || digest.justIn) ? (
           <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             {/* Freshness note (plan §2.4) — provisional day, last night's
                 sleep not yet folded in. Muted, non-blocking, refreshes in
@@ -307,14 +390,14 @@ export function TodayHero({
               ))}
             </div>
           </div>
-        ) : (
+        ) : !compactAllClear ? (
           <p
             data-slot="today-hero-all-clear"
             className="text-muted-foreground text-sm"
           >
             {t("daily.today.allClear")}
           </p>
-        )}
+        ) : null}
       </div>
     </section>
   );

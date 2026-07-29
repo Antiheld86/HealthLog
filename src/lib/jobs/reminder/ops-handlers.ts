@@ -149,11 +149,11 @@ export async function handleTlsPinMonitor(
       evt.addMeta("tls_pin_monitor_outcome", summary.outcome);
       evt.addMeta("tls_pin_monitor_host", summary.host);
       evt.addMeta("tls_pin_monitor_known_count", summary.knownPinCount);
-      // No configured target leaves `host` null; the empty string keeps the
-      // fact shape scalar, and `outcome: "skipped"` already names that case.
+      // The configured host remains in the scoped operator event above. It is
+      // deliberately excluded from the durable pg-boss result, which carries
+      // only the stable outcome code and non-identifying pin count.
       return jobDone({
         tls_pin_monitor_outcome: summary.outcome,
-        tls_pin_monitor_host: summary.host ?? "",
         tls_pin_monitor_known_count: summary.knownPinCount,
       });
     } catch (err) {

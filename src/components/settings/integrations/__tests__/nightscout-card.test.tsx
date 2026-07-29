@@ -144,3 +144,69 @@ describe("NightscoutCard — sync-now action", () => {
     ).not.toContain('data-testid="nightscout-sync"');
   });
 });
+
+describe("NightscoutCard — operator-owned private access", () => {
+  it("does not offer an ordinary user a private-host enforcement bypass", () => {
+    const html = render({
+      connected: false,
+      configured: false,
+      state: "disconnected",
+      syncHealth: { verdict: "disconnected", since: null },
+    });
+
+    expect(html).not.toContain('id="nightscout-private"');
+    expect(html).not.toContain("This site runs on a private network");
+    expect(html).not.toContain("Enable only if your Nightscout instance");
+  });
+
+  it("shows a redacted operator-action state for an unapproved legacy private connection", () => {
+    const html = render({
+      connected: true,
+      configured: true,
+      state: "error_reauth",
+      lastError:
+        "private_origin_not_approved: http://10.0.0.4:1337/api/v1/entries.json?token=ns-secret",
+      syncHealth: { verdict: "failing", since: null },
+      allowPrivateHost: true,
+    });
+
+    expect(html).toContain(
+      'data-testid="nightscout-private-operator-required"',
+    );
+    expect(html).toContain(
+      "Private Nightscout access requires server operator approval.",
+    );
+    expect(html).toContain(
+      "Ask your server operator to approve this exact Nightscout origin.",
+    );
+    expect(html).not.toContain("private_origin_not_approved");
+    expect(html).not.toContain("10.0.0.4");
+    expect(html).not.toContain("ns-secret");
+    expect(html).not.toContain('data-testid="nightscout-sync"');
+    expect(html).not.toContain("Test connection");
+    expect(html).toContain("Disconnect");
+  });
+
+  it.each([
+    ["public", false],
+    ["operator-approved private", true],
+  ])("keeps a healthy %s connection usable", (_label, allowPrivateHost) => {
+    const html = render({
+      connected: true,
+      configured: true,
+      state: "connected",
+      lastError: null,
+      syncHealth: { verdict: "fresh", since: null },
+      // Compatibility/display metadata only; it is not the authority asserted
+      // by this positive flow.
+      allowPrivateHost,
+    });
+
+    expect(html).toContain('data-testid="nightscout-sync"');
+    expect(html).toContain("Test connection");
+    expect(html).toContain("Disconnect");
+    expect(html).not.toContain(
+      'data-testid="nightscout-private-operator-required"',
+    );
+  });
+});

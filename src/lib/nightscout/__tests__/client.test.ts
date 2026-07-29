@@ -42,12 +42,20 @@ const SAMPLE: NightscoutSgvEntry[] = [
   },
 ];
 
+const ORIGINAL_PRIVATE_ORIGINS = process.env.NIGHTSCOUT_PRIVATE_ORIGINS;
+
 beforeEach(() => {
   safeFetchMock.mockReset();
+  delete process.env.NIGHTSCOUT_PRIVATE_ORIGINS;
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  if (ORIGINAL_PRIVATE_ORIGINS === undefined) {
+    delete process.env.NIGHTSCOUT_PRIVATE_ORIGINS;
+  } else {
+    process.env.NIGHTSCOUT_PRIVATE_ORIGINS = ORIGINAL_PRIVATE_ORIGINS;
+  }
 });
 
 describe("parseSgvEntries", () => {
@@ -143,16 +151,84 @@ describe("fetchSgvEntries — SSRF gating", () => {
     expect(opts.requirePublicHost).toBe(true);
   });
 
-  it("relaxes the public-host pin only when the private-host flag is set", async () => {
+  it("keeps an exact operator-approved private origin functional", async () => {
+    process.env.NIGHTSCOUT_PRIVATE_ORIGINS = "http://192.168.1.50:1337";
     safeFetchMock.mockResolvedValue(jsonResponse(200, SAMPLE));
-    await fetchSgvEntries({
+    const entries = await fetchSgvEntries({
       baseUrl: "http://192.168.1.50:1337",
       token: "",
       count: 10,
+      // Compatibility metadata is deliberately false: operator configuration,
+      // not this user-controlled field, grants the private connection.
+      allowPrivateHost: false,
+    });
+
+    expect(entries).toHaveLength(2);
+    expect(safeFetchMock).toHaveBeenCalledTimes(1);
+    const safeFetchOptions = safeFetchMock.mock.calls[0]![2];
+    expect(safeFetchOptions).toMatchObject({
+      requirePublicHost: false,
+      operatorApprovedPrivateOrigin: "http://192.168.1.50:1337",
+    });
+  });
+
+  it("does not let the legacy user boolean authorize private egress", async () => {
+    delete process.env.NIGHTSCOUT_PRIVATE_ORIGINS;
+
+    await expect(
+      fetchSgvEntries({
+        baseUrl: "http://192.168.1.50:1337",
+        token: "",
+        count: 10,
+        allowPrivateHost: true,
+      }),
+    ).rejects.toMatchObject({
+      reasonCode: "private_origin_not_approved",
+    });
+
+    expect(safeFetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects the same private host on a different port before any network call", async () => {
+    process.env.NIGHTSCOUT_PRIVATE_ORIGINS = "http://192.168.1.50:1337";
+
+    await expect(
+      fetchSgvEntries({
+        baseUrl: "http://192.168.1.50:8080",
+        token: "",
+        count: 10,
+        allowPrivateHost: true,
+      }),
+    ).rejects.toMatchObject({
+      reasonCode: "private_origin_not_approved",
+    });
+
+    expect(safeFetchMock).not.toHaveBeenCalled();
+  });
+
+  it("maps a denied DNS answer or connect-time drift to one redacted policy reason", async () => {
+    process.env.NIGHTSCOUT_PRIVATE_ORIGINS = "https://cgm.example.test";
+    safeFetchMock.mockRejectedValue(
+      new SafeFetchError(
+        "safeFetch refused private resolved address for cgm.example.test/api/v1/entries.json?token=ns-secret",
+        "private_host",
+      ),
+    );
+
+    const rejected = fetchSgvEntries({
+      baseUrl: "https://cgm.example.test",
+      token: "ns-secret",
+      count: 10,
       allowPrivateHost: true,
     });
-    const opts = safeFetchMock.mock.calls[0]![2];
-    expect(opts.requirePublicHost).toBe(false);
+
+    await expect(rejected).rejects.toMatchObject({
+      message: "private_origin_not_approved",
+      reasonCode: "private_origin_not_approved",
+    });
+    await expect(rejected).rejects.not.toMatchObject({
+      message: expect.stringContaining("ns-secret"),
+    });
   });
 
   it("pins redirect:manual + a timeout on every call", async () => {

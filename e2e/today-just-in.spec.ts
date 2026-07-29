@@ -50,35 +50,53 @@ test("a fresh arrival surfaces the just-in chip and flips the day in place", asy
   test.skip(!dbUrl, "DATABASE_URL is required to seed the arrival marker");
 
   const pool = new pg.Pool({ connectionString: dbUrl });
+  const client = await pool.connect();
 
   try {
-    const { rows } = await pool.query<{ id: string; timezone: string | null }>(
-      "SELECT id, timezone FROM users WHERE username = $1",
-      [E2E_USER.username],
+    // Both Playwright projects deliberately exercise this real-data flow, but
+    // they share the one authenticated fixture user. Keep the two viewport
+    // runs from deleting/inserting the same arrival marker concurrently; the
+    // lock is scoped to this database session and releases even if the test
+    // fails. This preserves real Desktop + Mobile coverage instead of hiding
+    // the race behind a project skip.
+    await client.query(
+      "SELECT pg_advisory_lock(hashtext('e2e:today-just-in'))",
     );
+
+    const { rows } = await client.query<{
+      id: string;
+      timezone: string | null;
+    }>("SELECT id, timezone FROM users WHERE username = $1", [
+      E2E_USER.username,
+    ]);
     expect(rows.length, "seeded e2e user must exist").toBe(1);
     const userId = rows[0].id;
     const timezone = rows[0].timezone ?? "UTC";
 
-    // A clean slate: no marker, and last night's sleep not yet in. Both are
-    // preconditions for the "before" assertion to mean anything.
-    await pool.query("DELETE FROM arrival_reactions WHERE user_id = $1", [
+    // A clean reaction slate: no marker and no final morning-refresh stamp.
+    // Older health data may remain, but it must not masquerade as newly
+    // arrived data before this scenario records its own sleep sample.
+    await client.query("DELETE FROM arrival_reactions WHERE user_id = $1", [
       userId,
     ]);
-    await pool.query(
+    await client.query(
       "UPDATE users SET morning_digest_refreshed_on = NULL WHERE id = $1",
       [userId],
     );
 
     // ── BEFORE ────────────────────────────────────────────────────────────
-    // The globally-seeded account is intentionally empty. Wait until the
-    // digest settles, then prove there is no stale hero or arrival chip.
+    // Wait until the digest settles, then prove there is no stale arrival
+    // reaction. Other browser specs deliberately reuse this account and may
+    // have recorded older health data already, so an ordinary briefing Hero
+    // is a valid baseline; the invariant here is that it has no just-in chip.
     await page.goto("/");
     await expect(page.locator('[data-slot="today-hero-skeleton"]')).toHaveCount(
       0,
     );
     const hero = page.locator('[data-slot="today-hero"]');
-    await expect(hero).toHaveCount(0);
+    await expect(page.locator('[data-slot="today-hero-just-in"]')).toHaveCount(
+      0,
+    );
 
     // ── NEW DATA LANDS ────────────────────────────────────────────────────
     // Last night's sleep through the real ingest route, on the session the
@@ -111,7 +129,7 @@ test("a fresh arrival surfaces the just-in chip and flips the day in place", asy
     // morning-refresh stamp it rides alongside — the two rows that together
     // make the day final and the arrival news.
     const localDate = localDayKey(now, timezone);
-    await pool.query(
+    await client.query(
       `INSERT INTO arrival_reactions
          (id, user_id, kind, local_date, occurred_at, arrived_at, created_at)
        VALUES ($1, $2, 'sleep_night', $3, $4, NOW(), NOW())
@@ -120,7 +138,7 @@ test("a fresh arrival surfaces the just-in chip and flips the day in place", asy
              arrived_at = NOW()`,
       [`c${now.getTime()}justin000000`, userId, localDate, wokeAt],
     );
-    await pool.query(
+    await client.query(
       "UPDATE users SET morning_digest_refreshed_on = $2 WHERE id = $1",
       [userId, localDate],
     );
@@ -146,6 +164,7 @@ test("a fresh arrival surfaces the just-in chip and flips the day in place", asy
       hero.locator('[data-slot="today-hero-just-in"]'),
     ).toHaveAttribute("data-just-in-kind", "sleep_night");
   } finally {
+    client.release();
     await pool.end();
   }
 });

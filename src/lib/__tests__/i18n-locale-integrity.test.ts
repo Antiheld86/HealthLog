@@ -360,13 +360,11 @@ describe("i18n locale file integrity", () => {
     }
   });
 
-  it("Health Score transparency keys resolve in every locale", () => {
+  it("retained Health Score transparency keys resolve in every locale", () => {
     const transparencyKeys = [
-      "insights.healthScore.algorithmChanged",
-      "insights.healthScore.method",
-      "insights.healthScore.composition",
       "insights.healthScore.bandSetter",
       "insights.healthScore.versionAndNoise",
+      "insights.healthScore.methodVersion",
       "insights.healthScore.observed",
       "insights.healthScore.reference",
       "insights.healthScore.source",

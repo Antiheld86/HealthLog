@@ -150,6 +150,8 @@ export interface RecurrenceContext {
 }
 
 export interface Occurrence {
+  /** Canonical schedule owner; part of the occurrence identity. */
+  scheduleId: string;
   /**
    * The start instant of this occurrence. The `timeOfDay` is applied
    * to the day in the user's timezone, with DST handled correctly via
@@ -306,18 +308,14 @@ export function nextOccurrenceAfter(
   // of its due day instead of silently rolling it forward by N.
   if (schedule.rollingIntervalDays !== null) {
     const dayFloor = startOfLocalDayInTz(after, ctx.timeZone);
-    // With no intake logged the first dose anchors at `startsOn ?? createdAt`.
-    // When that anchor is on a PRIOR calendar day the dose is overdue by ≥1
-    // day and must still surface ("take now"); flooring only to the start of
-    // the user's current day dropped it out of existence (null next-due AND
-    // no reminder). Reach the floor back to the first-dose instant in that
-    // case so a multi-day-overdue start dose is returned. After an intake the
-    // re-anchor (`lastIntakeAt + N`) is always in the future, so the dayFloor
-    // is the correct, tighter bound there.
-    const floor =
-      ctx.lastIntakeAt === null
-        ? new Date(Math.min(dayFloor.getTime(), firstRollingDoseDayFloor(ctx)))
-        : dayFloor;
+    // The immediately-next rolling occurrence is an identity, not "whatever
+    // falls on the worker's current day". Keep its local day in the search
+    // even after midnight; display/band callers decide whether its actionable
+    // tail is still open. Flooring only to today created a gap where an
+    // unresolved weekly dose vanished on the morning after it was due.
+    const floor = new Date(
+      Math.min(dayFloor.getTime(), rollingDoseDayFloor(schedule, ctx)),
+    );
     const slots = expandRolling(schedule, ctx, floor, limit);
     for (const s of slots) {
       if (s.at.getTime() < floor.getTime()) continue;
@@ -434,8 +432,21 @@ function expandOneShot(
  * to the anchor's start-of-day keeps the time-of-day slot (e.g. 08:00) within
  * the window rather than ahead of a raw-instant floor.
  */
-function firstRollingDoseDayFloor(ctx: RecurrenceContext): number {
-  const anchor = ctx.medication.startsOn ?? ctx.medication.createdAt;
+function rollingDoseAnchor(
+  schedule: CanonicalSchedule,
+  ctx: RecurrenceContext,
+): Date {
+  const intervalDays = schedule.rollingIntervalDays ?? 0;
+  return ctx.lastIntakeAt !== null
+    ? new Date(ctx.lastIntakeAt.getTime() + intervalDays * DAY_MS)
+    : (ctx.medication.startsOn ?? ctx.medication.createdAt);
+}
+
+function rollingDoseDayFloor(
+  schedule: CanonicalSchedule,
+  ctx: RecurrenceContext,
+): number {
+  const anchor = rollingDoseAnchor(schedule, ctx);
   return startOfLocalDayInTz(anchor, ctx.timeZone).getTime();
 }
 
@@ -450,10 +461,7 @@ function expandRolling(
 
   // After an intake the next dose is N days out. With no intake yet the
   // FIRST dose is the start date itself (no `+ N`) — see the doc comment.
-  const nextDue =
-    ctx.lastIntakeAt !== null
-      ? new Date(ctx.lastIntakeAt.getTime() + n * DAY_MS)
-      : (ctx.medication.startsOn ?? ctx.medication.createdAt);
+  const nextDue = rollingDoseAnchor(schedule, ctx);
 
   // endsOn cap.
   if (
@@ -468,6 +476,31 @@ function expandRolling(
   if (at.getTime() < from.getTime() || at.getTime() > to.getTime()) return [];
 
   return [buildOccurrence(at, time, schedule)];
+}
+
+/**
+ * Advance from one canonical rolling occurrence to the next grid occurrence
+ * without pretending a skip/auto-miss was a new intake anchor. Used only after
+ * the current exact occurrence is resolved; unresolved recurrence remains the
+ * single `lastIntakeAt + N` slot.
+ */
+export function advanceRollingOccurrence(
+  schedule: CanonicalSchedule,
+  occurrence: Occurrence,
+  ctx: RecurrenceContext,
+): Occurrence | null {
+  const n = schedule.rollingIntervalDays;
+  if (n === null || n <= 0) return null;
+  const time = schedule.timesOfDay[0] ?? schedule.windowStart;
+  const nextDay = new Date(occurrence.at.getTime() + n * DAY_MS);
+  const at = applyTimeOfDayToDate(nextDay, time, ctx.timeZone);
+  if (
+    ctx.medication.endsOn &&
+    at.getTime() > endOfUtcDay(ctx.medication.endsOn).getTime()
+  ) {
+    return null;
+  }
+  return buildOccurrence(at, time, schedule);
 }
 
 /**
@@ -803,6 +836,7 @@ function buildOccurrence(
   schedule: CanonicalSchedule,
 ): Occurrence {
   return {
+    scheduleId: schedule.id,
     at,
     timeOfDay,
     graceUntil: new Date(at.getTime() + graceWindowMs(schedule)),

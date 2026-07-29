@@ -80,6 +80,12 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(prisma.appSettings.findUnique).mockResolvedValue(null as never);
   vi.mocked(requireModuleEnabled).mockResolvedValue({ enabled: true });
+  vi.mocked(generateBiomarkerStatus).mockResolvedValue({
+    hasProvider: true,
+    text: "ok",
+    cached: true,
+    updatedAt: new Date().toISOString(),
+  });
 });
 
 describe("GET /api/insights/biomarker-assessment", () => {
@@ -129,5 +135,69 @@ describe("GET /api/insights/biomarker-assessment", () => {
     expect(res.status).toBe(403);
     const body = (await res.json()) as { meta?: { errorCode?: string } };
     expect(body.meta?.errorCode).toBe("assistant.disabled.insightStatus");
+  });
+
+  it("preserves the safe terminal fallback produced when a causal claim is screened", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    vi.mocked(generateBiomarkerStatus).mockResolvedValueOnce({
+      hasProvider: false,
+      text: "The assessment could not be completed safely. Your recorded measurements remain available.",
+      cached: true,
+      updatedAt: null,
+    });
+
+    const res = await callGet(makeReq("bm-screened"));
+    const body = (await res.json()) as {
+      data: {
+        hasProvider: boolean;
+        text: string | null;
+        cached: boolean;
+        updatedAt: string | null;
+      };
+    };
+
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({
+      hasProvider: false,
+      text: "The assessment could not be completed safely. Your recorded measurements remain available.",
+      cached: true,
+      updatedAt: null,
+    });
+    expect(JSON.stringify(body)).not.toContain("medication caused");
+    expect(JSON.stringify(body)).not.toContain("causal_claim");
+  });
+
+  it("keeps a preparing cache miss distinct from a terminal negative cache", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    vi.mocked(generateBiomarkerStatus)
+      .mockResolvedValueOnce({
+        hasProvider: true,
+        text: null,
+        cached: false,
+        updatedAt: null,
+        preparing: true,
+      })
+      .mockResolvedValueOnce({
+        hasProvider: false,
+        text: "Assessment temporarily unavailable. Your recorded measurements remain available.",
+        cached: true,
+        updatedAt: null,
+      });
+
+    const preparing = await (await callGet(makeReq("bm-preparing"))).json();
+    const negativeCache = await (await callGet(makeReq("bm-negative"))).json();
+
+    expect(preparing.data).toMatchObject({
+      hasProvider: true,
+      text: null,
+      cached: false,
+      preparing: true,
+    });
+    expect(negativeCache.data).toMatchObject({
+      hasProvider: false,
+      cached: true,
+      text: expect.stringContaining("temporarily unavailable"),
+    });
+    expect(negativeCache.data).not.toHaveProperty("preparing", true);
   });
 });

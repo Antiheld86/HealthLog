@@ -27,7 +27,12 @@ import {
   recomputeBucketsForMeasurement,
 } from "@/lib/rollups/measurement-rollups";
 import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
-import { refreshAccessToken } from "./client";
+import {
+  noteGoogleHealthMapped,
+  noteGoogleHealthOutcomeFailure,
+  noteGoogleHealthWritten,
+  refreshAccessToken,
+} from "./client";
 import { getUserGoogleHealthCredentials } from "./credentials";
 import {
   GoogleHealthApiError,
@@ -227,6 +232,13 @@ export const GOOGLE_HEALTH_TOKEN_HARD_FAIL = "token";
 export function noteHardFailure(label: string): void {
   const tracker = hardFailStorage.getStore();
   if (tracker) tracker.failures.push(label);
+  noteGoogleHealthOutcomeFailure(
+    label === GOOGLE_HEALTH_TOKEN_HARD_FAIL
+      ? "token_failed"
+      : label.includes("rollup")
+        ? "rollup_failed"
+        : "upsert_failed",
+  );
 }
 
 /**
@@ -314,6 +326,7 @@ export async function handleCollectionFetchError(
     if (tracker) tracker.count += 1;
     return 0;
   }
+  noteGoogleHealthOutcomeFailure("collection_failed");
   await recordGoogleHealthSyncFailure(userId, err);
   getEvent()?.addWarning(
     `google-health ${resource} failed for ${userId}: ${err}`,
@@ -485,6 +498,7 @@ export async function upsertGoogleHealthMeasurements(
     measuredAt: Date;
   }>;
 }> {
+  noteGoogleHealthMapped(readings.length);
   if (readings.length === 0) return { imported: 0, touched: [], inserted: [] };
 
   // Probe EVERY existing row (live AND tombstoned) for the batch's externalIds
@@ -796,6 +810,7 @@ export async function upsertGoogleHealthMeasurements(
     if (tracker) {
       for (const t of touched) tracker.keys.push(t);
     }
+    noteGoogleHealthWritten(imported);
     return { imported, touched, inserted: insertedRows };
   }
 
@@ -816,8 +831,10 @@ export async function upsertGoogleHealthMeasurements(
     getEvent()?.addWarning(
       `google-health: rollup recompute failed for ${userId}: ${err}`,
     );
+    noteHardFailure("rollup");
   }
 
+  noteGoogleHealthWritten(imported);
   return { imported, touched, inserted: insertedRows };
 }
 

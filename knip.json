@@ -62,12 +62,15 @@
     "tailwindcss",
     "testcontainers",
     "tw-animate-css",
-    "@napi-rs/canvas"
+    "@napi-rs/canvas",
+    "@openai/codex-security"
   ],
   "ignoreBinaries": ["docker", "docker-compose", "pg_isready", "tsx", "cosign"],
   "ignoreExportsUsedInFile": true,
   "ignoreIssues": {
     "src/components/ui/**": ["exports", "types"],
-    "src/lib/validations/**": ["types"]
+    "src/lib/validations/**": ["types"],
+    "src/hooks/_internal/use-query-client-safe.ts": ["exports"],
+    "src/lib/google-health/sync.ts": ["exports"]
   }
 }

@@ -31,6 +31,7 @@ import {
 } from "./sync-core";
 import { prisma } from "@/lib/db";
 import { emitInsertedWorkoutArrival } from "@/lib/arrivals/workout-emit";
+import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
 import { annotate, getEvent } from "@/lib/logging/context";
 import { resolveUserTimezone } from "@/lib/tz/resolver";
 
@@ -127,6 +128,10 @@ export async function syncUserWorkout(
       // tick re-fetches it. No rethrow: sibling sessions keep upserting.
       noteHardFailure("workout:upsert");
     }
+  }
+
+  if (imported > 0) {
+    await invalidateUserMeasurements(userId);
   }
 
   // `markSynced` is owned by the orchestrator (`syncUserGoogleHealth`).

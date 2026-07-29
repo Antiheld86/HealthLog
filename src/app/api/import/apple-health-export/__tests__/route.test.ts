@@ -172,7 +172,7 @@ describe("POST /api/import/apple-health-export — dedup by content hash (issue 
     expect(mocks.importJobCreate).toHaveBeenCalledTimes(1);
     expect(mocks.importJobCreate).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ parserRevision: 2 }),
+        data: expect.objectContaining({ parserRevision: 3 }),
       }),
     );
     expect(mocks.bossSend).toHaveBeenCalledWith(
@@ -189,7 +189,7 @@ describe("POST /api/import/apple-health-export — dedup by content hash (issue 
       expect.objectContaining({
         where: expect.objectContaining({
           status: { not: "failed" },
-          parserRevision: 2,
+          parserRevision: 3,
         }),
       }),
     );
@@ -215,7 +215,7 @@ describe("POST /api/import/apple-health-export — dedup by content hash (issue 
     expect(mocks.unlink).toHaveBeenCalledWith(STAGED_PATH);
     expect(mocks.importJobFindFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ parserRevision: 2 }),
+        where: expect.objectContaining({ parserRevision: 3 }),
       }),
     );
   });

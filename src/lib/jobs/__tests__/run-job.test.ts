@@ -28,21 +28,60 @@ beforeEach(() => {
 });
 
 describe("runJob", () => {
-  it("resolves and reports nothing when the handler says it did the work", async () => {
+  it("returns a bounded useful result and reports nothing on success", async () => {
     const wrapped = runJob("rate-limit-cleanup", async () =>
-      jobDone({ deleted: 12 }),
+      jobDone({ outcome: "useful", deleted: 12 }),
     );
 
-    await expect(wrapped(noJobs)).resolves.toBeUndefined();
+    await expect(wrapped(noJobs)).resolves.toEqual({
+      ok: true,
+      did: { outcome: "useful", deleted: 12 },
+    });
     expect(reportWorkerError).not.toHaveBeenCalled();
   });
 
-  it("treats a run with nothing to do as a success", async () => {
+  it("returns a durable clean-zero result when there was nothing to do", async () => {
     const wrapped = runJob("mood-reminder-cleanup", async () =>
-      jobDone({ deleted: 0 }),
+      jobDone({ outcome: "clean_zero", deleted: 0 }),
     );
 
-    await expect(wrapped(noJobs)).resolves.toBeUndefined();
+    await expect(wrapped(noJobs)).resolves.toEqual({
+      ok: true,
+      did: { outcome: "clean_zero", deleted: 0 },
+    });
+    expect(reportWorkerError).not.toHaveBeenCalled();
+  });
+
+  it("preserves an honest bounded partial outcome", async () => {
+    const wrapped = runJob("google-health-sync", async () =>
+      jobDone({
+        outcome: "partial",
+        users_complete: 2,
+        users_partial: 1,
+        users_failed: 1,
+      }),
+    );
+
+    await expect(wrapped(noJobs)).resolves.toEqual({
+      ok: true,
+      did: {
+        outcome: "partial",
+        users_complete: 2,
+        users_partial: 1,
+        users_failed: 1,
+      },
+    });
+    expect(reportWorkerError).not.toHaveBeenCalled();
+  });
+
+  it("refuses to persist credentials or unbounded facts on success", async () => {
+    const wrapped = runJob("google-health-sync", async () =>
+      jobDone({
+        refresh_token: "private-token",
+      } as unknown as Record<string, string>),
+    );
+
+    await expect(wrapped(noJobs)).rejects.toThrow(/fact key is not allowed/i);
     expect(reportWorkerError).not.toHaveBeenCalled();
   });
 

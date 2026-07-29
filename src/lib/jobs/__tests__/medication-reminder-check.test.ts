@@ -643,3 +643,109 @@ describe("handleReminderCheck configured wall-clock phase bounds", () => {
     );
   });
 });
+
+describe("issue #664 — exact occurrence identity survives local midnight", () => {
+  function crossMidnightMedication(timezone: string) {
+    const medication = medicationWithSchedule({
+      windowStart: "23:45",
+      windowEnd: "00:30",
+      timesOfDay: ["23:45"],
+      rrule: "FREQ=DAILY",
+    }) as {
+      user: { id: string; timezone: string; locale: string };
+    };
+    medication.user.timezone = timezone;
+    return medication;
+  }
+
+  it.each([
+    {
+      label: "UTC",
+      timezone: "UTC",
+      occurrence: "2026-07-28T23:45:00.000Z",
+      tick: "2026-07-29T00:15:00.000Z",
+    },
+    {
+      label: "Berlin summer time",
+      timezone: "Europe/Berlin",
+      occurrence: "2026-07-28T21:45:00.000Z",
+      tick: "2026-07-28T22:15:00.000Z",
+    },
+    {
+      label: "Berlin DST fall-back eve",
+      timezone: "Europe/Berlin",
+      occurrence: "2026-10-24T21:45:00.000Z",
+      tick: "2026-10-24T22:15:00.000Z",
+    },
+    {
+      label: "positive-offset Auckland",
+      timezone: "Pacific/Auckland",
+      occurrence: "2026-07-28T11:45:00.000Z",
+      tick: "2026-07-28T12:15:00.000Z",
+    },
+  ])(
+    "keeps an untaken $label 23:45 occurrence actionable after midnight",
+    async ({ timezone, occurrence, tick }) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(tick));
+      prismaMock.medication.findMany.mockResolvedValue([
+        crossMidnightMedication(timezone),
+      ] as never);
+      prismaMock.medicationIntakeEvent.findMany.mockResolvedValue([]);
+
+      await handleReminderCheck([]);
+
+      expect(dispatchNotification).toHaveBeenCalledTimes(1);
+      expect(dispatchNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            scheduledAt: occurrence,
+            timeOfDay: "23:45",
+          }),
+        }),
+      );
+    },
+  );
+
+  it("reads and suppresses the prior-day occurrence, but not tomorrow's distinct dose", async () => {
+    vi.useFakeTimers();
+    const priorOccurrence = new Date("2026-07-28T21:45:00.000Z");
+    const action = {
+      scheduledFor: priorOccurrence,
+      takenAt: new Date("2026-07-28T21:50:00.000Z"),
+      skipped: false,
+      attributionSource: "AUTO",
+      updatedAt: new Date("2026-07-28T21:50:00.000Z"),
+    };
+    prismaMock.medication.findMany.mockResolvedValue([
+      crossMidnightMedication("Europe/Berlin"),
+    ] as never);
+    prismaMock.medicationIntakeEvent.findMany.mockResolvedValue([action]);
+
+    vi.setSystemTime(new Date("2026-07-28T22:15:00.000Z")); // 00:15 Jul 29
+    await handleReminderCheck([]);
+    expect(dispatchNotification).not.toHaveBeenCalled();
+
+    const postMidnightRead = prismaMock.medicationIntakeEvent.findMany.mock
+      .calls[0][0] as {
+      where: { scheduledFor: { gte: Date; lte: Date } };
+    };
+    expect(
+      postMidnightRead.where.scheduledFor.gte.getTime(),
+    ).toBeLessThanOrEqual(priorOccurrence.getTime());
+    expect(
+      postMidnightRead.where.scheduledFor.lte.getTime(),
+    ).toBeGreaterThanOrEqual(priorOccurrence.getTime());
+
+    vi.setSystemTime(new Date("2026-07-29T21:50:00.000Z")); // 23:50 Jul 29
+    await handleReminderCheck([]);
+    expect(dispatchNotification).toHaveBeenCalledTimes(1);
+    expect(dispatchNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          scheduledAt: "2026-07-29T21:45:00.000Z",
+        }),
+      }),
+    );
+  });
+});

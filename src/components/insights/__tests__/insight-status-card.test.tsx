@@ -82,20 +82,30 @@ describe("<InsightStatusCard>", () => {
     expect(html).toContain("Pulse stayed inside the band.");
   });
 
-  it("renders the no-provider state without touching the strip path", () => {
+  it("renders the no-provider setup state when no terminal text exists", () => {
     const html = render(
-      <InsightStatusCard
-        {...baseProps}
-        hasProvider={false}
-        text="ignored when hasProvider is false"
-      />,
+      <InsightStatusCard {...baseProps} hasProvider={false} text={null} />,
     );
     // v1.18.6 — the no-provider tile is a guided-setup explainer + a
     // Settings link, not a bare "unavailable" line.
     expect(html).toContain("Connect an AI provider");
     expect(html).toContain("Open AI settings");
     expect(html).toContain("/settings/ai");
-    expect(html).not.toContain("ignored when hasProvider is false");
+  });
+
+  it("renders a screened terminal fallback even when its envelope has no provider", () => {
+    const html = render(
+      <InsightStatusCard
+        {...baseProps}
+        hasProvider={false}
+        text="The assessment could not be completed safely. Your recorded measurements remain available."
+      />,
+    );
+
+    expect(html).toContain("could not be completed safely");
+    expect(html).toContain("recorded measurements remain available");
+    expect(html).not.toContain("Connect an AI provider");
+    expect(html).not.toContain("because your medication caused");
   });
 
   it("renders the empty-text state without crashing on null", () => {
@@ -147,5 +157,37 @@ describe("<InsightStatusCard>", () => {
     // The classic Loader2 + visible "common.loading" copy retired so
     // we do not double-paint the announcement.
     expect(html).not.toContain("animate-spin");
+  });
+
+  it("keeps loading, preparing, no-provider, empty, and populated states distinct with stable compact geometry", () => {
+    const loading = render(
+      <InsightStatusCard {...baseProps} text={null} loading />,
+    );
+    const preparing = render(
+      <InsightStatusCard {...baseProps} text={null} preparing />,
+    );
+    const noProvider = render(
+      <InsightStatusCard {...baseProps} hasProvider={false} text={null} />,
+    );
+    const empty = render(<InsightStatusCard {...baseProps} text={null} />);
+    const populated = render(
+      <InsightStatusCard
+        {...baseProps}
+        text="Pulse stayed inside the expected range."
+      />,
+    );
+
+    expect(loading).toContain('data-testid="insight-status-card-loading"');
+    expect(preparing).toContain('data-testid="insight-status-card-preparing"');
+    expect(noProvider).toContain('data-slot="insight-status-no-provider-cta"');
+    expect(empty).toContain("No assessment yet.");
+    expect(populated).toContain('data-slot="insight-assessment"');
+
+    for (const html of [loading, preparing, noProvider, empty, populated]) {
+      expect(html).toContain("gap-2");
+      expect(html).toContain("py-3");
+      expect(html).toContain("md:py-4");
+    }
+    expect(populated).toContain("text-foreground");
   });
 });

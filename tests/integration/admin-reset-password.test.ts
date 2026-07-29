@@ -12,7 +12,8 @@
  *   - 404 when the target user does not exist
  *   - 422 when the new password is weak
  *   - happy path wipes the target user's sessions, API tokens, refresh
- *     tokens and writes an `admin.user.reset-password` audit row
+ *     tokens, trusted devices and step-up elevations while preserving the
+ *     unrelated admin credential family
  */
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -179,8 +180,8 @@ describe("POST /api/admin/users/[id]/reset-password (real Postgres)", () => {
     expect(after!.passwordHash).toBe(before!.passwordHash);
   });
 
-  it("wipes the target user's sessions, API tokens and refresh tokens and writes an audit row", async () => {
-    const { callerId } = await seedCaller("ADMIN");
+  it("revokes the complete target credential family while preserving the admin", async () => {
+    const { callerId, sessionId: adminSessionId } = await seedCaller("ADMIN");
     const targetId = await seedTargetUser();
     const prisma = getPrismaClient();
 
@@ -204,6 +205,30 @@ describe("POST /api/admin/users/[id]/reset-password (real Postgres)", () => {
         tokenHash: "hashed-target-refresh",
         expiresAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
         revokedAt: null,
+      },
+    });
+    const targetTrustedDevice = await prisma.trustedDevice.create({
+      data: {
+        userId: targetId,
+        tokenHash: "hashed-target-trusted-device",
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+    });
+    const targetElevation = await prisma.stepUpElevation.create({
+      data: {
+        userId: targetId,
+        apiTokenId: targetApiToken.id,
+        tokenHash: "hashed-target-elevation",
+        method: "passkey",
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+      },
+    });
+    const adminApiToken = await prisma.apiToken.create({
+      data: {
+        userId: callerId,
+        name: "Admin device",
+        tokenHash: "hashed-admin-token",
+        revoked: false,
       },
     });
 
@@ -233,6 +258,26 @@ describe("POST /api/admin/users/[id]/reset-password (real Postgres)", () => {
       where: { id: targetRefresh.id },
     });
     expect(refreshedRefresh?.revokedAt).not.toBeNull();
+
+    // Trusted-device and fresh-factor proofs are credentials too.
+    expect(
+      await prisma.trustedDevice.findUnique({
+        where: { id: targetTrustedDevice.id },
+      }),
+    ).toBeNull();
+    expect(
+      await prisma.stepUpElevation.findUnique({
+        where: { id: targetElevation.id },
+      }),
+    ).toBeNull();
+
+    // The administrator's unrelated credentials remain usable.
+    expect(
+      await prisma.session.findUnique({ where: { id: adminSessionId } }),
+    ).not.toBeNull();
+    expect(
+      await prisma.apiToken.findUnique({ where: { id: adminApiToken.id } }),
+    ).toMatchObject({ revoked: false });
 
     // Audit row exists and is attributed to the admin caller.
     const audit = await prisma.auditLog.findFirst({

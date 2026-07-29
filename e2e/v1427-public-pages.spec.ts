@@ -1,4 +1,5 @@
 import { expect, test } from "./setup/test";
+import { STORAGE_STATE_PATH } from "./setup/global-setup";
 
 /**
  * v1.4.27 MB6 — public surfaces.
@@ -8,10 +9,9 @@ import { expect, test } from "./setup/test";
  *   1. `/about` — added to `PUBLIC_PATHS` in `src/proxy.ts` for the
  *      GeoLite2 CC BY-SA 4.0 attribution. A logged-out visitor must
  *      load the page (HTTP 200) and see the attribution copy.
- *   2. `/this-route-does-not-exist` — Next.js renders
- *      `src/app/not-found.tsx`, a branded 404 page with the logo, a
- *      headline, and a "Back to dashboard" link. The proxy must NOT
- *      bounce the missing route to `/auth/login`.
+ *   2. `/this-route-does-not-exist` — the proxy keeps an anonymous visitor
+ *      behind the login boundary, while an authenticated visitor reaches
+ *      Next.js's branded `src/app/not-found.tsx`.
  *   3. `/privacy` — the page mounts a collapsible `<details>` TOC
  *      (`data-slot="privacy-toc"`); clicking the summary opens it
  *      and the anchor links inside navigate to the right section.
@@ -24,11 +24,7 @@ test.describe("v1.4.27 — public pages", () => {
   // Force no storage state so we run as an anonymous visitor.
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  // v1.4.28 backlog: selectors below describe the intent (about page
-  // heading, GeoLite2 attribution copy, MaxMind reference, CC BY-SA
-  // text) but do not yet match the actual rendered DOM. Re-implement
-  // against the live page once the surface is verified.
-  test.fixme("/about returns 200 and renders the GeoLite2 attribution", async ({
+  test("/about returns 200 and renders the GeoLite2 attribution", async ({
     page,
   }) => {
     const response = await page.goto("/about", {
@@ -43,42 +39,26 @@ test.describe("v1.4.27 — public pages", () => {
     ).toBeVisible();
 
     // GeoLite2 attribution is the load-bearing reason this page exists.
-    await expect(page.getByText(/GeoLite2/)).toBeVisible();
-    await expect(page.getByText(/MaxMind/)).toBeVisible();
+    await expect(page.getByText(/GeoLite2/).first()).toBeVisible();
+    await expect(page.getByText(/MaxMind/).first()).toBeVisible();
     await expect(page.getByText(/Attribution-ShareAlike 4\.0/i)).toBeVisible();
   });
 
-  // v1.4.28 backlog: Next.js's `not-found.tsx` may return 200 or 404
-  // depending on rendering pipeline; the branded body selectors below
-  // need a sanity pass against the actual page output. Re-enable once
-  // the contract is verified.
-  test.fixme("/this-route-does-not-exist renders the branded 404 page", async ({
+  test("/this-route-does-not-exist keeps an anonymous visitor behind login", async ({
     page,
   }) => {
     const response = await page.goto("/this-route-does-not-exist", {
       waitUntil: "domcontentloaded",
     });
-    // Next.js returns 404 for `not-found.tsx` — the page must render
-    // its own body, not redirect to `/auth/login`.
-    expect(response?.status()).toBe(404);
-    expect(page.url()).not.toMatch(/\/auth\/login/);
-
-    // Branded splash: small "404" eyebrow + headline + back link.
-    await expect(page.getByText(/^404$/i)).toBeVisible();
+    // `page.goto` follows the proxy's 307 and returns the final login response.
+    expect(response?.status()).toBe(200);
+    await expect(page).toHaveURL(/\/auth\/login(?:\?|$)/);
     await expect(
-      page.getByRole("heading", { name: /page not found/i }),
+      page.getByRole("button", { name: /sign in with passkey/i }),
     ).toBeVisible();
-
-    const back = page.getByRole("link", { name: /back to dashboard/i });
-    await expect(back).toBeVisible();
-    await expect(back).toHaveAttribute("href", "/");
   });
 
-  // v1.4.28 backlog: the privacy TOC `<details>` slot selector
-  // does not yet match what MB6 actually shipped. Re-implement once
-  // the data-slot attribute and anchor targets are verified against
-  // the live page.
-  test.fixme("/privacy renders the TOC and the anchor links jump to sections", async ({
+  test("/privacy renders the TOC and the anchor links jump to sections", async ({
     page,
   }) => {
     const response = await page.goto("/privacy", {
@@ -119,5 +99,32 @@ test.describe("v1.4.27 — public pages", () => {
     );
     expect(introTop).toBeGreaterThanOrEqual(0);
     expect(introTop).toBeLessThan(800);
+  });
+});
+
+test.describe("v1.4.27 — authenticated not-found page", () => {
+  test.use({ storageState: STORAGE_STATE_PATH });
+
+  test("/this-route-does-not-exist renders the branded 404 page", async ({
+    page,
+  }) => {
+    const response = await page.goto("/this-route-does-not-exist", {
+      waitUntil: "domcontentloaded",
+    });
+    expect(response?.status()).toBe(404);
+    expect(page.url()).not.toMatch(/\/auth\/login/);
+
+    await expect(page.getByText(/^404$/i)).toBeVisible();
+    await expect(
+      page.getByRole("heading", {
+        name: /this page doesn't exist|diese seite existiert nicht/i,
+      }),
+    ).toBeVisible();
+
+    const back = page.getByRole("link", {
+      name: /back to dashboard|zurück zum dashboard/i,
+    });
+    await expect(back).toBeVisible();
+    await expect(back).toHaveAttribute("href", "/");
   });
 });

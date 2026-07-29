@@ -45,6 +45,10 @@ import {
 } from "@/lib/ai/coach/budget";
 import { AI_BUDGETS } from "@/lib/ai/ai-budgets";
 import { screenCoachReply } from "@/lib/ai/coach/outbound-guard";
+import {
+  findUnverifiedCoachNumbersInLedger,
+  registerTextEntries,
+} from "@/lib/ai/coach/coach-prose-grounding";
 import { extractAssessmentSummary } from "@/lib/insights/status-shared";
 import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import { fenceUserText } from "@/lib/ai/coach/data-fence";
@@ -595,6 +599,7 @@ export async function runReactionLine(
     return { status: "skipped", reason: "claim_lost" };
   }
 
+  const evidence = buildEvidence(arrived, digest);
   let result: CompletionResult;
   try {
     result = await chain[0].instance.generateCompletion(
@@ -603,7 +608,7 @@ export async function runReactionLine(
         user: getArrivalReactionUserPrompt(
           {
             kind: job.kind,
-            evidence: buildEvidence(arrived, digest),
+            evidence,
             openerHint: openerArchetypeHint(
               `${job.userId}:reaction:${job.kind}:${job.localDate}`,
               locale,
@@ -651,6 +656,20 @@ export async function runReactionLine(
   if (!line) {
     await finishTerminalAttempt().catch(() => {});
     return { status: "skipped", reason: "unusable_output" };
+  }
+  // Prompt instructions are not an enforcement boundary. Grade every numeric
+  // claim in the hero line against the exact evidence block shown on this
+  // request, using the same typed reconciler as Coach replies. If the evidence
+  // has no figures at all, any digit is necessarily invented. Refuse the whole
+  // garnish rather than publishing an edited sentence; the deterministic hero
+  // lead remains complete and honest.
+  const evidenceLedger = registerTextEntries(evidence, "guided");
+  const hasUngroundedNumber =
+    (evidenceLedger.length === 0 && /\d/.test(line)) ||
+    findUnverifiedCoachNumbersInLedger(line, evidenceLedger, locale).length > 0;
+  if (hasUngroundedNumber) {
+    await finishTerminalAttempt().catch(() => {});
+    return { status: "skipped", reason: "ungrounded_output" };
   }
 
   const committed = await prisma.arrivalReaction.updateMany({

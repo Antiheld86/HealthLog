@@ -36,6 +36,32 @@ interface ImportJobStatusResponse {
   failureReason: string | null;
 }
 
+function boundedCount(value: unknown): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : 0;
+}
+
+function privacySafeResult(
+  value: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!value) return null;
+  const ecg =
+    typeof value.ecg === "object" && value.ecg !== null
+      ? (value.ecg as Record<string, unknown>)
+      : {};
+  return {
+    ...value,
+    ecg: {
+      discovered: boundedCount(ecg.discovered),
+      imported: boundedCount(ecg.imported),
+      updated: boundedCount(ecg.updated),
+      skipped: boundedCount(ecg.skipped),
+      failed: boundedCount(ecg.failed),
+    },
+  };
+}
+
 export const GET = apiHandler(
   async (_request: NextRequest, ctx: RouteContext) => {
     const { user } = await requireAuth();
@@ -68,7 +94,9 @@ export const GET = apiHandler(
       uploadBytes: row.uploadBytes,
       exportedAt: row.exportedAt?.toISOString() ?? null,
       progress: (row.progress as Record<string, unknown>) ?? {},
-      result: (row.result as Record<string, unknown> | null) ?? null,
+      result: privacySafeResult(
+        (row.result as Record<string, unknown> | null) ?? null,
+      ),
       failureReason: row.failureReason,
     };
 

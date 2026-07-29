@@ -31,10 +31,10 @@ import {
   withOutputLanguage,
 } from "@/lib/ai/prompts/output-language";
 import {
-  extractAssessmentSummary,
+  finalizeStatusSummary,
   normalizeLocale,
-  normalizeSummaryText,
   persistStatusInsight,
+  type AssessmentStatus,
 } from "@/lib/insights/status-shared";
 import { runStatusCompletion } from "@/lib/insights/status-provider";
 import {
@@ -227,11 +227,19 @@ export async function generateDerivedScoreAssessment(args: {
   derived: Derived<unknown>;
   locale: string | null | undefined;
   now?: Date;
-}): Promise<void> {
+}): Promise<AssessmentStatus | null> {
   const now = args.now ?? new Date();
   const locale = normalizeLocale(args.locale);
-  if (!isAssessableDerivedScore(args.metric)) return;
-  if (args.derived.status !== "ok") return;
+  if (!isAssessableDerivedScore(args.metric)) return null;
+  if (args.derived.status !== "ok") return null;
+
+  const deterministic = resolveDeterministicAssessment(
+    args.metric,
+    args.derived,
+    instructionLocale(locale),
+    now,
+  );
+  if (!deterministic) return null;
 
   // The deterministic signal labels ship de/en templates only; route them
   // through the same instruction-body rule rather than a German default.
@@ -240,7 +248,7 @@ export async function generateDerivedScoreAssessment(args: {
     args.derived.value,
     instructionLocale(locale),
   );
-  if (!signal) return;
+  if (!signal) return null;
   const band = (args.derived.value as { band?: string }).band ?? "yellow";
 
   const scope = derivedScoreScope(args.metric);
@@ -280,7 +288,13 @@ export async function generateDerivedScoreAssessment(args: {
       action: { name: "insights.derived-assessment.input_unchanged" },
       meta: { metric: args.metric },
     });
-    return;
+    return {
+      kind: "generated",
+      text: unchangedInput.text,
+      hasProvider: true,
+      updatedAt: unchangedInput.updatedAt,
+      retryable: false,
+    };
   }
 
   const outcome = await runStatusCompletion({
@@ -308,23 +322,53 @@ export async function generateDerivedScoreAssessment(args: {
       action: { name: "insights.derived-assessment.skip" },
       meta: { metric: args.metric, reason: outcome.kind },
     });
-    return;
+    if (outcome.kind === "none") {
+      return {
+        kind: "no-provider",
+        text: null,
+        hasProvider: false,
+        updatedAt: null,
+        retryable: false,
+      };
+    }
+    return {
+      kind: outcome.kind,
+      text: null,
+      hasProvider: true,
+      updatedAt: null,
+      retryable: true,
+    };
   }
 
-  // A malformed / truncated / summary-less structured envelope must never
-  // persist as the derived-score assessment (the raw-JSON class of bug). On an
-  // unparseable envelope persist nothing — the route keeps serving the
-  // always-grounded deterministic fallback, so the field stays honest.
-  const extracted = extractAssessmentSummary(outcome.content);
-  if (extracted.kind === "unparseable") {
+  // Parse and screen through the same fail-closed chokepoint as every other
+  // assessment. The prior derived-only path parsed the envelope but skipped
+  // the causal/dose/fabrication screen, allowing blocked prose to persist.
+  const finalized = finalizeStatusSummary(outcome.content, locale);
+  if (!finalized.ok) {
     annotate({
-      action: { name: "insights.derived-assessment.unparseable" },
-      meta: { metric: args.metric },
+      action: { name: "insights.derived-assessment.screened" },
+      meta: { metric: args.metric, reason: finalized.reason },
     });
-    return;
+    return {
+      kind: "screened-fallback",
+      text: deterministic.text,
+      hasProvider: true,
+      updatedAt: null,
+      retryable: true,
+      reason: finalized.reason,
+    };
   }
-  const text = normalizeSummaryText(extracted.text);
-  if (!text) return;
+  const text = finalized.text;
+  if (!text) {
+    return {
+      kind: "screened-fallback",
+      text: deterministic.text,
+      hasProvider: true,
+      updatedAt: null,
+      retryable: true,
+      reason: "unparseable_output",
+    };
+  }
 
   // v1.22 (W6) — score number-grounding gate. The only numbers the prose may
   // state are the score and its contributor values. On a miss we do NOT persist
@@ -341,10 +385,17 @@ export async function generateDerivedScoreAssessment(args: {
         sample: ungrounded[0]?.source,
       },
     });
-    return;
+    return {
+      kind: "screened-fallback",
+      text: deterministic.text,
+      hasProvider: true,
+      updatedAt: null,
+      retryable: true,
+      reason: "ungrounded_output",
+    };
   }
 
-  await persistStatusInsight({
+  const updatedAt = await persistStatusInsight({
     userId: args.userId,
     cacheAction,
     todayKey,
@@ -361,4 +412,11 @@ export async function generateDerivedScoreAssessment(args: {
     action: { name: "insights.derived-assessment.warmed" },
     meta: { metric: args.metric, provider: outcome.providerType },
   });
+  return {
+    kind: "generated",
+    text,
+    hasProvider: true,
+    updatedAt,
+    retryable: false,
+  };
 }

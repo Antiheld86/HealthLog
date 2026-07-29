@@ -112,6 +112,13 @@ export interface BuildBandsInput {
    * other cadence. Pre-fetched by the caller — the minter has no DB access.
    */
   intakeInstants?: Date[];
+  /**
+   * Include the single canonical unresolved rolling occurrence even before
+   * the compliance engine's half-cycle "genuinely missed" threshold.
+   * Display-due/reminder attribution opt in; retrospective compliance keeps
+   * its existing denominator semantics.
+   */
+  includeOpenRollingOccurrence?: boolean;
 }
 
 export interface BandMinterResult {
@@ -161,7 +168,7 @@ export function buildBandsForMedication(
 
   // Rolling (GLP-1) — retrospective bands anchored AT each logged intake.
   if (schedule.rollingIntervalDays !== null) {
-    const occ = expandRollingRetrospective(
+    const retrospective = expandRollingRetrospective(
       schedule,
       ctx,
       range.from,
@@ -169,6 +176,20 @@ export function buildBandsForMedication(
       input.intakeInstants ?? [],
       now,
     );
+    const open = input.includeOpenRollingOccurrence
+      ? occurrencesBetween(schedule, range.from, range.to, ctx)
+      : [];
+    const occ = [...retrospective];
+    for (const candidate of open) {
+      if (
+        !occ.some(
+          (existing) => existing.at.getTime() === candidate.at.getTime(),
+        )
+      ) {
+        occ.push(candidate);
+      }
+    }
+    occ.sort((a, b) => a.at.getTime() - b.at.getTime());
     // The canonical rolling case is a once-weekly+ injection (day-scale). A
     // degenerate ≤1-day rolling interval is effectively daily, so a ±1-day
     // on-time window would over-widen and let one take claim adjacent slots —
@@ -211,6 +232,7 @@ export function buildBandsForSchedules(input: {
   windowConfig?: DoseWindowConfig;
   /** Per-medication intake instants (the rolling anchors). */
   intakeInstants?: Date[];
+  includeOpenRollingOccurrence?: boolean;
 }): ScheduleBandGroup[] {
   return input.schedules.map((schedule) => {
     const result = buildBandsForMedication({
@@ -222,6 +244,7 @@ export function buildBandsForSchedules(input: {
       now: input.now,
       windowConfig: input.windowConfig,
       intakeInstants: input.intakeInstants,
+      includeOpenRollingOccurrence: input.includeOpenRollingOccurrence,
     });
     return { scheduleId: schedule.id, ...result };
   });

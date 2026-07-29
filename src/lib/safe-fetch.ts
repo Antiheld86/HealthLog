@@ -1,6 +1,9 @@
 import { fetch as undiciFetch } from "undici";
 import { isPublicUrl } from "@/lib/validations/notifications";
-import { getPinnedPublicDispatcher } from "@/lib/safe-fetch-dispatcher";
+import {
+  getPinnedOperatorApprovedDispatcher,
+  getPinnedPublicDispatcher,
+} from "@/lib/safe-fetch-dispatcher";
 
 /**
  * Defaults applied to every `safeFetch` call. Centralised so the values
@@ -37,6 +40,16 @@ export interface SafeFetchOptions {
    */
   requirePublicHost?: boolean;
   /**
+   * Exact server-approved origin for a deliberately private destination.
+   *
+   * This is a server-side trust grant, not request metadata: callers must
+   * derive it from operator configuration after exact-origin validation.
+   * `safeFetch` verifies the target still has this origin, forbids redirects,
+   * and routes the connect through the private-capable pinned dispatcher.
+   * It is mutually exclusive with `requirePublicHost`.
+   */
+  operatorApprovedPrivateOrigin?: string;
+  /**
    * Optional caller-owned signal. Composed with the timeout signal so a
    * caller-side abort still wins even when the timeout has not yet
    * elapsed.
@@ -72,6 +85,20 @@ function composeSignals(
   return AbortSignal.any([caller, timeout]);
 }
 
+function hasPrivateHostPolicyCause(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const value = error as {
+    safeFetchKind?: unknown;
+    cause?: unknown;
+    errors?: unknown[];
+  };
+  return (
+    value.safeFetchKind === "private_host" ||
+    hasPrivateHostPolicyCause(value.cause) ||
+    (value.errors ?? []).some(hasPrivateHostPolicyCause)
+  );
+}
+
 /**
  * Default-safe outbound fetch wrapper.
  *
@@ -101,8 +128,48 @@ export async function safeFetch(
   opts: SafeFetchOptions = {},
 ): Promise<Response> {
   const target = url.toString();
+  const operatorApprovedOrigin = opts.operatorApprovedPrivateOrigin;
 
-  if (opts.requirePublicHost && !isPublicUrl(target)) {
+  if (opts.requirePublicHost && operatorApprovedOrigin !== undefined) {
+    throw new SafeFetchError(
+      "safeFetch received mutually exclusive destination policies",
+      "private_host",
+    );
+  }
+
+  if (operatorApprovedOrigin !== undefined) {
+    let targetOrigin: string;
+    let approvedOrigin: string;
+    try {
+      targetOrigin = new URL(target).origin;
+      const approvedUrl = new URL(operatorApprovedOrigin);
+      if (
+        (approvedUrl.protocol !== "http:" &&
+          approvedUrl.protocol !== "https:") ||
+        approvedUrl.username ||
+        approvedUrl.password ||
+        approvedUrl.pathname !== "/" ||
+        approvedUrl.search ||
+        approvedUrl.hash ||
+        operatorApprovedOrigin !== approvedUrl.origin
+      ) {
+        throw new TypeError("approval must be one canonical http(s) origin");
+      }
+      approvedOrigin = approvedUrl.origin;
+    } catch {
+      throw new SafeFetchError(
+        "safeFetch received an invalid operator-approved origin",
+        "private_host",
+      );
+    }
+
+    if (targetOrigin !== approvedOrigin) {
+      throw new SafeFetchError(
+        "safeFetch target does not match the operator-approved origin",
+        "private_host",
+      );
+    }
+  } else if (opts.requirePublicHost && !isPublicUrl(target)) {
     throw new SafeFetchError(
       `safeFetch refused private or non-public host: ${target}`,
       "private_host",
@@ -111,6 +178,13 @@ export async function safeFetch(
 
   const redirect: RequestRedirect =
     init.redirect ?? (opts.followRedirects ? "follow" : "manual");
+
+  if (operatorApprovedOrigin !== undefined && redirect !== "manual") {
+    throw new SafeFetchError(
+      "safeFetch forbids redirects for an operator-approved private origin",
+      "private_host",
+    );
+  }
 
   const signal = composeSignals(
     init.signal ?? opts.signal ?? undefined,
@@ -122,7 +196,9 @@ export async function safeFetch(
   // between the input-time `isPublicUrl` accept and the connect call.
   const dispatcher = opts.requirePublicHost
     ? getPinnedPublicDispatcher()
-    : undefined;
+    : operatorApprovedOrigin !== undefined
+      ? getPinnedOperatorApprovedDispatcher()
+      : undefined;
 
   const finalInit = {
     ...init,
@@ -149,6 +225,13 @@ export async function safeFetch(
     }
     return await fetch(target, finalInit);
   } catch (err) {
+    if (hasPrivateHostPolicyCause(err)) {
+      throw new SafeFetchError(
+        "safeFetch refused a private resolved destination",
+        "private_host",
+        err,
+      );
+    }
     // `AbortSignal.timeout` aborts with `TimeoutError` (`DOMException`
     // named "TimeoutError"); a caller-side abort surfaces as
     // `AbortError`. Both manifest as the same `err.name` check.

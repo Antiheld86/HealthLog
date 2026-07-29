@@ -51,6 +51,13 @@ interface DoseHistoryKickoff {
   file: DoseHistoryFileVerdict;
 }
 
+/** A final result supersedes the preflight counts so skips are stated once. */
+export function shouldShowDoseHistoryVerdict(
+  outcome: IntakeImportResultState | null,
+): boolean {
+  return outcome === null;
+}
+
 /**
  * Plain language per machine-readable file-level refusal. Literal `t()` calls so
  * the i18n call-site guard sees every one.
@@ -182,6 +189,8 @@ export function DoseHistoryImportCard() {
         imported: result.imported,
         skipped: result.skipped,
         skipReasons: result.skipReasons,
+        skipDetails: result.skipDetails,
+        skippedDetailsOmitted: result.skippedDetailsOmitted,
       });
       void invalidateMedicationReads(queryClient);
     } catch (err) {
@@ -243,7 +252,7 @@ export function DoseHistoryImportCard() {
       <DoseHistoryColumnRulings />
 
       <div aria-live="polite" className="space-y-2">
-        {verdict && (
+        {verdict && shouldShowDoseHistoryVerdict(outcome) && (
           <DoseHistoryVerdictView verdict={verdict} previewOnly={previewOnly} />
         )}
         {outcome && <IntakeImportResultView result={outcome} />}

@@ -1,28 +1,29 @@
 /**
- * v1.4.35 — integration coverage for the passkey registration ceremony.
+ * SEC-05 / SEC-08 — primary-passkey enrollment security boundary.
  *
- * F-2 in the test coverage audit flagged
- * `/api/auth/passkey/register-options` and `register-verify` as having
- * zero route tests. The ceremony is purely server-side — a regression
- * in the challenge-store roundtrip ships silently. This file pins:
+ * These are deliberately RED contracts for v1.34.1. A registration ceremony
+ * is not authorized by possession of an ambient cookie or any Bearer token.
+ * The caller must re-prove an existing account factor in the same cookie
+ * session, and the resulting WebAuthn challenge must remain bound to that
+ * user, purpose, session, expiry, and one redemption.
  *
- *   - register-options issues a challenge, persists it in
- *     `auth_challenges`, and returns the RP-ID derived from APP_URL
- *   - register-verify with a valid (mocked) attestation persists a
- *     Passkey row and consumes the challenge
- *   - register-verify with a tampered attestation responds 400 and
- *     does NOT persist a Passkey
- *
- * `@simplewebauthn/server` runs cryptographic verification we can't
- * fake against real WebAuthn output in a unit-test setting; the helper
- * module that wraps it (`src/lib/auth/passkey.ts`) is mocked so the
- * test exercises the route handler + DB write path end-to-end.
+ * WebAuthn cryptography is mocked because a test process cannot manufacture a
+ * hardware attestation. Authentication policy, challenge persistence, route
+ * handling, and Passkey insertion all run against the real PostgreSQL
+ * Testcontainer.
  */
 import { NextRequest } from "next/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as OTPAuth from "otpauth";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { cookieJar, headerJar } from "./mock-next-headers";
 import { getPrismaClient, truncateAllTables } from "./setup";
+
+process.env.API_TOKEN_HMAC_KEY ??=
+  "test-hmac-key-passkey-enrollment-32-bytes-minimum-123456789";
+
+const { hashToken } = await import("@/lib/auth/hmac");
+const { hashPassword } = await import("@/lib/auth/password");
 
 vi.mock("next/headers", async () => {
   const { cookieJar, headerJar } = await import("./mock-next-headers");
@@ -35,12 +36,8 @@ vi.mock("next/headers", async () => {
         const value = cookieJar.get(name);
         return value ? { name, value } : undefined;
       },
-      set: (name: string, value: string) => {
-        cookieJar.set(name, value);
-      },
-      delete: (name: string) => {
-        cookieJar.delete(name);
-      },
+      set: (name: string, value: string) => cookieJar.set(name, value),
+      delete: (name: string) => cookieJar.delete(name),
     })),
   };
 });
@@ -49,10 +46,6 @@ vi.mock("@/lib/db-compat", () => ({
   ensureDbCompatibility: vi.fn().mockResolvedValue(undefined),
 }));
 
-// `verifyRegistration` runs the upstream attestation verification that
-// requires real WebAuthn credentials. Stub the helper so the test owns
-// the success / failure branch shape; the route handler's
-// challenge-lookup + Passkey insertion still runs against real Postgres.
 vi.mock("@/lib/auth/passkey", async () => {
   const actual =
     await vi.importActual<typeof import("@/lib/auth/passkey")>(
@@ -60,190 +53,452 @@ vi.mock("@/lib/auth/passkey", async () => {
     );
   return {
     ...actual,
+    verifyAuthentication: vi.fn(),
     verifyRegistration: vi.fn(),
   };
 });
 
-const TEST_USER_ID = "user-passkey-register";
+vi.mock("@/lib/auth/mfa/webauthn", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/auth/mfa/webauthn")
+  >("@/lib/auth/mfa/webauthn");
+  return {
+    ...actual,
+    verifyMfaAuthentication: vi.fn(),
+  };
+});
+
+const USER_ID = "user-passkey-register";
+const OTHER_USER_ID = "user-passkey-register-other";
+const PASSWORD = "Correct horse battery staple!42";
+
+type RouteFn = (request: NextRequest) => Promise<Response>;
+
+function request(path: string, body?: unknown): NextRequest {
+  const headers: Record<string, string> = {};
+  const authorization = headerJar.get("authorization");
+  if (authorization) headers.authorization = authorization;
+  if (body !== undefined) {
+    headers["content-type"] = "application/json";
+  }
+  return new NextRequest(`http://localhost${path}`, {
+    method: "POST",
+    headers,
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+}
+
+async function registerOptions(proof?: Record<string, unknown>) {
+  const { POST } =
+    await import("@/app/api/auth/passkey/register-options/route");
+  return (POST as unknown as RouteFn)(
+    request("/api/auth/passkey/register-options", proof),
+  );
+}
+
+async function registerVerify(challengeId: string, credentialId: string) {
+  const { POST } = await import("@/app/api/auth/passkey/register-verify/route");
+  return POST(
+    request("/api/auth/passkey/register-verify", {
+      challengeId,
+      credential: {
+        id: credentialId,
+        rawId: credentialId,
+        type: "public-key",
+        response: {
+          clientDataJSON: "client-data",
+          attestationObject: "attestation",
+          transports: ["internal"],
+        },
+        clientExtensionResults: {},
+      },
+    }),
+  );
+}
+
+function assertionCredential(id: string) {
+  return {
+    id,
+    rawId: id,
+    type: "public-key",
+    response: {
+      clientDataJSON: "client-data",
+      authenticatorData: "authenticator-data",
+      signature: "signature",
+    },
+    clientExtensionResults: {},
+  };
+}
+
+async function currentSessionId(): Promise<string> {
+  const session = await getPrismaClient().session.findFirstOrThrow({
+    where: { userId: USER_ID },
+    select: { id: true },
+  });
+  return session.id;
+}
+
+async function issueOptions(proof: Record<string, unknown>) {
+  const response = await registerOptions(proof);
+  expect(response.status).toBe(200);
+  const body = (await response.json()) as {
+    data: { challengeId: string; options: { challenge: string } };
+  };
+  return body.data;
+}
+
+async function expectNoCredential(): Promise<void> {
+  expect(await getPrismaClient().passkey.count()).toBe(0);
+}
+
+async function mintBearer(
+  permissions: string[],
+  label: string,
+): Promise<string> {
+  const raw = `hlk_${label}${"0".repeat(64 - label.length)}`;
+  await getPrismaClient().apiToken.create({
+    data: {
+      userId: USER_ID,
+      name: label,
+      tokenHash: hashToken(raw),
+      permissions,
+    },
+  });
+  return raw;
+}
+
+async function seedTotp(): Promise<string> {
+  const { generateTotpSecret } = await import("@/lib/auth/mfa/totp");
+  const { encrypt } = await import("@/lib/crypto");
+  const secret = generateTotpSecret();
+  await getPrismaClient().user.update({
+    where: { id: USER_ID },
+    data: {
+      totpSecretEncrypted: encrypt(secret),
+      totpConfirmedAt: new Date(),
+      totpLastStep: null,
+    },
+  });
+  return secret;
+}
+
+function currentTotpCode(secret: string): string {
+  return new OTPAuth.TOTP({
+    issuer: "HealthLog",
+    label: "HealthLog",
+    algorithm: "SHA1",
+    digits: 6,
+    period: 30,
+    secret: OTPAuth.Secret.fromBase32(secret),
+  }).generate({ timestamp: Date.now() });
+}
 
 beforeEach(async () => {
+  vi.clearAllMocks();
   await truncateAllTables(getPrismaClient());
   cookieJar.clear();
   headerJar.clear();
 
-  // The RP-ID derives from APP_URL / NEXT_PUBLIC_APP_URL; pin both so
-  // the assertion below can compare literal hostnames.
   process.env.APP_URL = "http://localhost:3000";
   process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
 
   const prisma = getPrismaClient();
-  await prisma.user.create({
-    data: {
-      id: TEST_USER_ID,
-      username: "passkey-user",
-      email: "passkey@example.test",
-      role: "USER",
-    },
+  await prisma.user.createMany({
+    data: [
+      {
+        id: USER_ID,
+        username: "passkey-user",
+        email: "passkey@example.test",
+        role: "USER",
+        passwordHash: await hashPassword(PASSWORD),
+      },
+      {
+        id: OTHER_USER_ID,
+        username: "passkey-other",
+        email: "passkey-other@example.test",
+        role: "USER",
+        passwordHash: await hashPassword(PASSWORD),
+      },
+    ],
   });
   const session = await prisma.session.create({
     data: {
-      userId: TEST_USER_ID,
+      userId: USER_ID,
       expiresAt: new Date(Date.now() + 60 * 60 * 1000),
     },
   });
   cookieJar.set("healthlog_session", session.id);
-});
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
-describe("Passkey registration (real Postgres)", () => {
-  it("register-options persists a challenge and returns the RP-ID from APP_URL", async () => {
-    const { POST } =
-      await import("@/app/api/auth/passkey/register-options/route");
-    // The route handler takes no arguments at the TS level (the wrapper
-    // ignores the request) — cast to a no-arg callable for clarity.
-    const res = await (POST as unknown as () => Promise<Response>)();
-
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as {
-      data: {
-        options: {
-          challenge: string;
-          rp: { name: string; id: string };
-        };
-        challengeId: string;
-      };
-    };
-
-    expect(body.data.challengeId).toBeTruthy();
-    expect(body.data.options.challenge).toBeTruthy();
-    expect(body.data.options.rp.id).toBe("localhost");
-    expect(body.data.options.rp.name).toBe("HealthLog");
-
-    // The challenge row landed in `auth_challenges` and is tied to the
-    // calling user with type=registration and a future expiry.
-    const prisma = getPrismaClient();
-    const stored = await prisma.authChallenge.findUnique({
-      where: { id: body.data.challengeId },
-    });
-    expect(stored).not.toBeNull();
-    expect(stored?.userId).toBe(TEST_USER_ID);
-    expect(stored?.type).toBe("registration");
-    expect(stored!.expiresAt.getTime()).toBeGreaterThan(Date.now());
-  });
-
-  it("register-verify persists a Passkey row on a verified attestation", async () => {
-    const { verifyRegistration } = await import("@/lib/auth/passkey");
-    const credentialIdRaw = "valid-credential-id";
-    vi.mocked(verifyRegistration).mockResolvedValue({
-      verified: true,
-      registrationInfo: {
-        credential: {
-          id: credentialIdRaw,
-          publicKey: new Uint8Array([1, 2, 3, 4, 5]),
-          counter: 0,
-        },
-        credentialDeviceType: "singleDevice",
-        credentialBackedUp: false,
-      },
-    } as never);
-
-    const prisma = getPrismaClient();
-    // Seed a challenge row so the verify path can resolve `challengeId`.
-    const challenge = await prisma.authChallenge.create({
-      data: {
-        userId: TEST_USER_ID,
-        challenge: "fake-server-challenge",
-        type: "registration",
-        expiresAt: new Date(Date.now() + 5 * 60 * 1000),
-      },
-    });
-
-    const { POST } =
-      await import("@/app/api/auth/passkey/register-verify/route");
-    const res = await POST(
-      new NextRequest("http://localhost/api/auth/passkey/register-verify", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          challengeId: challenge.id,
+  const { verifyAuthentication, verifyRegistration } =
+    await import("@/lib/auth/passkey");
+  vi.mocked(verifyAuthentication).mockResolvedValue({
+    verification: { verified: true },
+    passkey: { userId: USER_ID },
+  } as never);
+  vi.mocked(verifyRegistration).mockImplementation(
+    async (_challengeId, credential) => {
+      const id = (credential as { id: string }).id;
+      return {
+        verified: true,
+        registrationInfo: {
           credential: {
-            id: credentialIdRaw,
-            response: { transports: ["internal"] },
+            id,
+            publicKey: new Uint8Array([1, 2, 3, 4]),
+            counter: 0,
           },
-        }),
-      }),
-    );
+          credentialDeviceType: "multiDevice",
+          credentialBackedUp: true,
+        },
+      } as never;
+    },
+  );
+  const { verifyMfaAuthentication } = await import("@/lib/auth/mfa/webauthn");
+  vi.mocked(verifyMfaAuthentication).mockResolvedValue(true);
+});
 
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { data: { verified: boolean } };
-    expect(body.data.verified).toBe(true);
-
-    // Passkey row exists and is tied to this user.
-    const passkeys = await prisma.passkey.findMany({
-      where: { userId: TEST_USER_ID },
+describe("passkey register-options existing-factor proof (real Postgres)", () => {
+  it("accepts a fresh password proof and binds the new challenge to the cookie session", async () => {
+    const data = await issueOptions({ method: "password", password: PASSWORD });
+    const challenge = await getPrismaClient().authChallenge.findUniqueOrThrow({
+      where: { id: data.challengeId },
     });
-    expect(passkeys).toHaveLength(1);
-    expect(passkeys[0].credentialId).toBe(credentialIdRaw);
-    expect(passkeys[0].transports).toEqual(["internal"]);
 
-    // Audit row for the register action.
-    const audit = await prisma.auditLog.findFirst({
-      where: { userId: TEST_USER_ID, action: "auth.passkey.register" },
-    });
-    expect(audit).not.toBeNull();
+    expect(challenge.userId).toBe(USER_ID);
+    expect(challenge.type).toMatch(/^passkey-registration:v1:/);
+    expect(challenge.type).not.toContain(await currentSessionId());
+    await expectNoCredential();
   });
 
-  it("register-verify returns 400 on a tampered attestation and writes no Passkey", async () => {
-    const { verifyRegistration } = await import("@/lib/auth/passkey");
-    vi.mocked(verifyRegistration).mockResolvedValue({
-      verified: false,
-    } as never);
+  it("accepts a fresh TOTP proof", async () => {
+    const secret = await seedTotp();
+    const data = await issueOptions({
+      method: "totp",
+      code: currentTotpCode(secret),
+    });
+    const challenge = await getPrismaClient().authChallenge.findUniqueOrThrow({
+      where: { id: data.challengeId },
+    });
 
+    expect(challenge.type).toMatch(/^passkey-registration:v1:/);
+    await expectNoCredential();
+  });
+
+  it("accepts an existing primary passkey proof", async () => {
     const prisma = getPrismaClient();
-    const challenge = await prisma.authChallenge.create({
+    await prisma.passkey.create({
       data: {
-        userId: TEST_USER_ID,
-        challenge: "fake-server-challenge",
-        type: "registration",
-        expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+        userId: USER_ID,
+        credentialId: "existing-primary-passkey",
+        credentialPublicKey: Buffer.from([4, 3, 2, 1]),
+        counter: 0,
+        credentialDeviceType: "multiDevice",
+        credentialBackedUp: true,
+        transports: ["internal"],
+      },
+    });
+    const proofChallenge = await prisma.authChallenge.create({
+      data: {
+        userId: USER_ID,
+        challenge: "primary-proof",
+        type: "authentication",
+        expiresAt: new Date(Date.now() + 5 * 60_000),
       },
     });
 
-    const { POST } =
-      await import("@/app/api/auth/passkey/register-verify/route");
-    const res = await POST(
-      new NextRequest("http://localhost/api/auth/passkey/register-verify", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          challengeId: challenge.id,
-          credential: { id: "tampered-credential" },
-        }),
-      }),
-    );
-
-    expect(res.status).toBe(400);
-
-    const passkeys = await prisma.passkey.findMany({
-      where: { userId: TEST_USER_ID },
+    const data = await issueOptions({
+      method: "passkey",
+      challengeId: proofChallenge.id,
+      credential: assertionCredential("existing-primary-passkey"),
     });
-    expect(passkeys).toHaveLength(0);
+    const challenge = await prisma.authChallenge.findUniqueOrThrow({
+      where: { id: data.challengeId },
+    });
+
+    expect(challenge.type).toMatch(/^passkey-registration:v1:/);
+    expect(await prisma.passkey.count({ where: { userId: USER_ID } })).toBe(1);
   });
 
-  it("register-verify returns 422 when challengeId is missing", async () => {
-    const { POST } =
-      await import("@/app/api/auth/passkey/register-verify/route");
-    const res = await POST(
-      new NextRequest("http://localhost/api/auth/passkey/register-verify", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ credential: { id: "x" } }),
-      }),
-    );
+  it("accepts an existing MFA WebAuthn proof", async () => {
+    const prisma = getPrismaClient();
+    await prisma.webauthnMfaCredential.create({
+      data: {
+        userId: USER_ID,
+        credentialId: "existing-mfa-key",
+        credentialPublicKey: Buffer.from([9, 8, 7, 6]),
+        counter: 0,
+        transports: ["usb"],
+      },
+    });
+    const proofChallenge = await prisma.authChallenge.create({
+      data: {
+        userId: USER_ID,
+        challenge: "mfa-proof",
+        type: "mfa_authentication",
+        expiresAt: new Date(Date.now() + 5 * 60_000),
+      },
+    });
 
-    expect(res.status).toBe(422);
+    const data = await issueOptions({
+      method: "webauthn",
+      challengeId: proofChallenge.id,
+      credential: assertionCredential("existing-mfa-key"),
+    });
+    const challenge = await prisma.authChallenge.findUniqueOrThrow({
+      where: { id: data.challengeId },
+    });
+
+    expect(challenge.type).toMatch(/^passkey-registration:v1:/);
+    await expectNoCredential();
+  });
+
+  it("rejects an ambient cookie that presents no fresh existing-factor proof", async () => {
+    const response = await registerOptions();
+
+    expect(response.status).toBe(401);
+    expect(await getPrismaClient().authChallenge.count()).toBe(0);
+    await expectNoCredential();
+  });
+
+  it.each([
+    ["wildcard", ["*"]],
+    ["narrow", ["medication:ingest"]],
+  ])(
+    "rejects a %s Bearer token even with the account password",
+    async (_, permissions) => {
+      cookieJar.clear();
+      const raw = await mintBearer(permissions, `bearer-${permissions[0]}`);
+      headerJar.set("authorization", `Bearer ${raw}`);
+
+      const response = await registerOptions({
+        method: "password",
+        password: PASSWORD,
+      });
+
+      expect([401, 403]).toContain(response.status);
+      expect(await getPrismaClient().authChallenge.count()).toBe(0);
+      await expectNoCredential();
+    },
+  );
+});
+
+describe("register-verify repeats cookie/fresh-factor and challenge binding", () => {
+  it("persists one credential for a fresh same-session password ceremony", async () => {
+    const { challengeId } = await issueOptions({
+      method: "password",
+      password: PASSWORD,
+    });
+
+    const response = await registerVerify(challengeId, "new-credential");
+
+    expect(response.status).toBe(200);
+    expect(
+      await getPrismaClient().passkey.count({ where: { userId: USER_ID } }),
+    ).toBe(1);
+  });
+
+  it("rejects verify after the proof becomes stale", async () => {
+    const { challengeId } = await issueOptions({
+      method: "password",
+      password: PASSWORD,
+    });
+    await getPrismaClient().session.update({
+      where: { id: await currentSessionId() },
+      data: { mfaVerifiedAt: new Date(Date.now() - 6 * 60_000) },
+    });
+
+    const response = await registerVerify(challengeId, "stale-proof");
+
+    expect(response.status).toBe(401);
+    await expectNoCredential();
+  });
+
+  it("rejects a challenge from another cookie session", async () => {
+    const { challengeId } = await issueOptions({
+      method: "password",
+      password: PASSWORD,
+    });
+    const foreignSession = await getPrismaClient().session.create({
+      data: {
+        userId: USER_ID,
+        expiresAt: new Date(Date.now() + 60 * 60_000),
+        mfaVerifiedAt: new Date(),
+      },
+    });
+    cookieJar.set("healthlog_session", foreignSession.id);
+
+    const response = await registerVerify(challengeId, "foreign-session");
+
+    expect(response.status).toBe(401);
+    await expectNoCredential();
+  });
+
+  it("rejects a challenge from another user", async () => {
+    const { challengeId } = await issueOptions({
+      method: "password",
+      password: PASSWORD,
+    });
+    const foreignSession = await getPrismaClient().session.create({
+      data: {
+        userId: OTHER_USER_ID,
+        expiresAt: new Date(Date.now() + 60 * 60_000),
+        mfaVerifiedAt: new Date(),
+      },
+    });
+    cookieJar.set("healthlog_session", foreignSession.id);
+
+    const response = await registerVerify(challengeId, "foreign-user");
+
+    expect(response.status).toBe(401);
+    await expectNoCredential();
+  });
+
+  it("rejects a challenge with the wrong purpose", async () => {
+    const { challengeId } = await issueOptions({
+      method: "password",
+      password: PASSWORD,
+    });
+    await getPrismaClient().authChallenge.update({
+      where: { id: challengeId },
+      data: { type: "authentication" },
+    });
+
+    const response = await registerVerify(challengeId, "wrong-purpose");
+
+    expect(response.status).toBe(400);
+    await expectNoCredential();
+  });
+
+  it("rejects an expired enrollment challenge", async () => {
+    const { challengeId } = await issueOptions({
+      method: "password",
+      password: PASSWORD,
+    });
+    await getPrismaClient().authChallenge.update({
+      where: { id: challengeId },
+      data: { expiresAt: new Date(Date.now() - 1_000) },
+    });
+
+    const response = await registerVerify(challengeId, "expired");
+
+    expect(response.status).toBe(400);
+    await expectNoCredential();
+  });
+
+  it("consumes the challenge once so replay cannot create a second credential", async () => {
+    const { challengeId } = await issueOptions({
+      method: "password",
+      password: PASSWORD,
+    });
+
+    expect((await registerVerify(challengeId, "first")).status).toBe(200);
+    const replay = await registerVerify(challengeId, "second");
+
+    expect([400, 401]).toContain(replay.status);
+    expect(await getPrismaClient().passkey.count()).toBe(1);
+    expect(
+      await getPrismaClient().authChallenge.findUnique({
+        where: { id: challengeId },
+      }),
+    ).toBeNull();
   });
 });

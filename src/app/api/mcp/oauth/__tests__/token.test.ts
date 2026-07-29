@@ -7,6 +7,20 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 process.env.API_TOKEN_HMAC_KEY = "x".repeat(48);
 process.env.APP_URL = "https://health.example";
 
+const { transactionClient, transaction } = vi.hoisted(() => {
+  const transactionClient = { marker: "mcp-refresh-transaction" };
+  return {
+    transactionClient,
+    transaction: vi.fn(
+      async (callback: (tx: typeof transactionClient) => unknown) =>
+        callback(transactionClient),
+    ),
+  };
+});
+
+vi.mock("@/lib/db", () => ({
+  prisma: { $transaction: transaction },
+}));
 vi.mock("@/lib/logging/background", () => ({
   withBackgroundEvent: (_n: string, fn: () => unknown) => fn(),
 }));
@@ -51,7 +65,7 @@ import {
   createConnection,
   rotateConnection,
 } from "@/lib/mcp/oauth/connections";
-import { signArtifact } from "@/lib/mcp/oauth/artifacts";
+import { signArtifact, verifyArtifact } from "@/lib/mcp/oauth/artifacts";
 import { s256Challenge } from "@/lib/mcp/oauth/pkce";
 
 const CLIENT_ID = "https://app.example/client.json";
@@ -95,6 +109,10 @@ beforeEach(() => {
   vi.mocked(isApiGloballyEnabled).mockResolvedValue(true);
   vi.mocked(createConnection).mockResolvedValue("conn-1");
   vi.mocked(rotateConnection).mockResolvedValue({ ok: true });
+  transaction.mockImplementation(
+    async (callback: (tx: typeof transactionClient) => unknown) =>
+      callback(transactionClient),
+  );
 });
 
 function refreshToken(overrides: Record<string, unknown> = {}): string {
@@ -217,10 +235,11 @@ describe("authorization_code grant", () => {
 
 describe("refresh_token grant", () => {
   it("rotates: issues a new access + refresh pair against a live connection", async () => {
+    const presented = refreshToken({ jti: "presented-jti" });
     const res = await POST(
       tokenReq({
         grant_type: "refresh_token",
-        refresh_token: refreshToken(),
+        refresh_token: presented,
         client_id: CLIENT_ID,
       }) as never,
     );
@@ -228,9 +247,86 @@ describe("refresh_token grant", () => {
     const body = await res.json();
     expect(body.access_token).toMatch(/^hlk_/);
     expect(body.refresh_token).toMatch(/^hlrt_/);
-    expect(rotateConnection).toHaveBeenCalledWith(
-      expect.objectContaining({ connectionId: "conn-1", clientId: CLIENT_ID }),
+    expect(vi.mocked(rotateConnection).mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        connectionId: "conn-1",
+        clientId: CLIENT_ID,
+        presentedJti: "presented-jti",
+      }),
     );
+
+    const successor = verifyArtifact<{
+      cid: string;
+      jti: string;
+      sub: string;
+    }>("refreshToken", body.refresh_token);
+    expect(successor.ok).toBe(true);
+    if (successor.ok) {
+      expect(successor.claims.cid).toBe("conn-1");
+      expect(successor.claims.sub).toBe("user-1");
+      expect(successor.claims.jti).not.toBe("presented-jti");
+    }
+  });
+
+  it("rotates and inserts the successor access token inside one transaction", async () => {
+    const res = await POST(
+      tokenReq({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken({ jti: "transactional-jti" }),
+        client_id: CLIENT_ID,
+      }) as never,
+    );
+
+    expect(res.status).toBe(200);
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(rotateConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ presentedJti: "transactional-jti" }),
+      transactionClient,
+    );
+    expect(issueApiToken).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user-1",
+        mcpConnectionId: "conn-1",
+      }),
+      transactionClient,
+    );
+  });
+
+  it("rolls back JTI advancement and access revocation when successor insertion fails", async () => {
+    const state = { currentJti: "rollback-jti", accessRevoked: false };
+    vi.mocked(rotateConnection).mockImplementationOnce(async (args) => {
+      state.currentJti = args.newJti;
+      state.accessRevoked = true;
+      return { ok: true };
+    });
+    vi.mocked(issueApiToken).mockRejectedValueOnce(
+      new Error("injected successor insertion failure"),
+    );
+    transaction.mockImplementationOnce(async (callback) => {
+      const snapshot = { ...state };
+      try {
+        return await callback(transactionClient);
+      } catch (error) {
+        Object.assign(state, snapshot);
+        throw error;
+      }
+    });
+
+    await expect(
+      POST(
+        tokenReq({
+          grant_type: "refresh_token",
+          refresh_token: refreshToken({ jti: "rollback-jti" }),
+          client_id: CLIENT_ID,
+        }) as never,
+      ),
+    ).rejects.toThrow("injected successor insertion failure");
+
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(state).toEqual({
+      currentJti: "rollback-jti",
+      accessRevoked: false,
+    });
   });
 
   it("rejects a refresh whose connection was revoked (H2 — settings revoke)", async () => {

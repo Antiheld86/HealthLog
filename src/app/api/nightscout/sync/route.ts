@@ -39,7 +39,19 @@ export const POST = apiHandler(async () => {
   try {
     const result = await syncUserNightscout(user.id);
     return apiSuccess(resolveSyncOutcome(result));
-  } catch {
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "reasonCode" in error &&
+      error.reasonCode === "private_origin_not_approved"
+    ) {
+      return apiError(
+        "Private Nightscout access requires server operator approval",
+        422,
+        { errorCode: "private_origin_not_approved" },
+      );
+    }
     return apiError("Nightscout sync failed", 502);
   }
 });

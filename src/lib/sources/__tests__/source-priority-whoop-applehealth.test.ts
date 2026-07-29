@@ -10,9 +10,17 @@
  * summary), keep a real scale ahead of WHOOP's body-measurement estimate for
  * weight, and rank WHOOP's device-native Recovery above the COMPUTED proxy.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { pickCanonicalSourceRows } from "@/lib/analytics/source-priority";
+import { mapAppleHealthEntry } from "@/lib/measurements/apple-health-mapping";
+
+const appleImporterSource = readFileSync(
+  join(process.cwd(), "src/lib/measurements/import-apple-health-export.ts"),
+  "utf8",
+);
 
 function isoDayKey(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -117,5 +125,47 @@ describe("cross-source priority — WHOOP + Apple Health", () => {
     expect(out.canonicalRows).toHaveLength(1);
     expect(out.canonicalRows[0].source).toBe("WHOOP");
     expect(out.canonicalRows[0].value).toBe(71);
+  });
+});
+
+describe("WHOOP-written HealthKit records remain source-agnostic", () => {
+  it("maps a supported HealthKit type independently of its writer label", () => {
+    const input = {
+      hkIdentifier: "HKQuantityTypeIdentifierHeartRate",
+      value: 64,
+      unit: "count/min",
+      startDate: "2026-07-18 08:14:03 +0200",
+      endDate: "2026-07-18 08:14:04 +0200",
+    };
+
+    const whoopWritten = mapAppleHealthEntry(input);
+    const appleWritten = mapAppleHealthEntry(input);
+    expect(whoopWritten).toEqual(appleWritten);
+    expect(whoopWritten).toMatchObject({
+      type: "PULSE",
+      value: 64,
+    });
+    expect(whoopWritten).not.toHaveProperty("sourceName");
+    expect(whoopWritten).not.toHaveProperty("writer");
+  });
+
+  it("persists supported export.xml rows as APPLE_HEALTH, never as a raw writer label", () => {
+    expect(appleImporterSource).toMatch(
+      /measurement\.createManyAndReturn\([\s\S]*source:\s*"APPLE_HEALTH"/,
+    );
+    expect(appleImporterSource).not.toMatch(
+      /source:\s*attrs\.(?:sourceName|device)/,
+    );
+  });
+
+  it("does not treat WHOOP writer metadata as evidence of a WHOOP ECG export", () => {
+    const ecgMapping = mapAppleHealthEntry({
+      hkIdentifier: "HKElectrocardiogram",
+      value: 1,
+      unit: "count",
+      startDate: "2026-07-18 08:14:03 +0200",
+      endDate: "2026-07-18 08:14:04 +0200",
+    });
+    expect(ecgMapping).toBeNull();
   });
 });

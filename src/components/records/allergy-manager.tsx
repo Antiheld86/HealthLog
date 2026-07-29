@@ -123,10 +123,12 @@ export function AllergyManager() {
         <p className="text-muted-foreground text-sm">
           {t("records.allergies.description")}
         </p>
-        <Button size="sm" onClick={openNew} className="shrink-0">
-          <Plus className="h-4 w-4" />
-          {t("records.allergies.add")}
-        </Button>
+        {rows.length > 0 ? (
+          <Button size="sm" onClick={openNew} className="shrink-0">
+            <Plus className="h-4 w-4" />
+            {t("records.allergies.add")}
+          </Button>
+        ) : null}
       </div>
 
       {isLoading ? (

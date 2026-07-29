@@ -73,6 +73,55 @@ describe("<IntakeImportResultView> — an import that wrote nothing", () => {
     expect(html).toContain("another entry in the same file");
     expect(countListItems(html)).toBe(2);
   });
+
+  it("calls an all-existing replay already recorded instead of a failed import", () => {
+    const html = render({
+      kind: "outcome",
+      imported: 0,
+      skipped: 3386,
+      skipReasons: [{ reason: "already_recorded", count: 3386 }],
+    });
+    expect(html).toContain("3386 intakes are already recorded");
+    expect(html).toContain("Nothing new was added");
+    expect(html).not.toContain("Nothing was imported");
+  });
+
+  it("uses the already-recorded headline when preflight refusals also exist", () => {
+    const html = render({
+      kind: "outcome",
+      imported: 0,
+      skipped: 3395,
+      skipReasons: [
+        { reason: "already_recorded", count: 3386 },
+        { reason: "status_no_dose_information", count: 8 },
+        { reason: "duplicate_in_file", count: 1 },
+      ],
+    });
+    expect(html).toContain("3386 intakes are already recorded");
+    expect(html).toContain("8 entries skipped");
+    expect(html).toContain("1 entry skipped");
+    expect(html).not.toContain("Nothing was imported");
+  });
+
+  it("shows bounded line-and-reason detail without health data", () => {
+    const html = render({
+      kind: "outcome",
+      imported: 0,
+      skipped: 3,
+      skipReasons: [{ reason: "already_recorded", count: 3 }],
+      skipDetails: [
+        { line: 2, reason: "already_recorded" },
+        { line: 9, reason: "already_recorded" },
+      ],
+      skippedDetailsOmitted: 1,
+    });
+    expect(html).toContain('data-testid="intake-import-skip-details"');
+    expect(html).toContain("Line 2");
+    expect(html).toContain("Line 9");
+    expect(html).toContain("1 more skipped rows");
+    expect(html).not.toContain("medicationId");
+    expect(html).not.toContain("takenAt");
+  });
 });
 
 describe("<IntakeImportResultView> — the other outcomes", () => {

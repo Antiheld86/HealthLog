@@ -37,6 +37,18 @@ const CONN = {
   revokedAt: null as Date | null,
 };
 
+const TX = {
+  mcpOAuthConnection: {
+    create: vi.fn(),
+    findUnique: vi.fn(),
+    updateMany: vi.fn(),
+    findMany: vi.fn(),
+  },
+  apiToken: {
+    updateMany: vi.fn(),
+  },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(prisma.apiToken.updateMany).mockResolvedValue({
@@ -45,6 +57,8 @@ beforeEach(() => {
   vi.mocked(prisma.mcpOAuthConnection.updateMany).mockResolvedValue({
     count: 1,
   } as never);
+  TX.mcpOAuthConnection.updateMany.mockResolvedValue({ count: 1 });
+  TX.apiToken.updateMany.mockResolvedValue({ count: 0 });
 });
 
 describe("createConnection", () => {
@@ -95,6 +109,33 @@ describe("rotateConnection — happy path", () => {
         data: { revoked: true },
       }),
     );
+  });
+
+  it("uses the supplied transaction client for the entire rotation", async () => {
+    TX.mcpOAuthConnection.findUnique.mockResolvedValue({ ...CONN });
+
+    const out = await rotateConnection(
+      {
+        connectionId: "conn-1",
+        presentedJti: "jti-current",
+        newJti: "jti-next",
+        clientId: CONN.clientId,
+        userId: "user-1",
+      },
+      TX as never,
+    );
+
+    expect(out.ok).toBe(true);
+    expect(TX.mcpOAuthConnection.findUnique).toHaveBeenCalledTimes(1);
+    expect(TX.mcpOAuthConnection.updateMany).toHaveBeenCalledTimes(1);
+    expect(TX.apiToken.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { mcpConnectionId: "conn-1", revoked: false },
+      }),
+    );
+    expect(prisma.mcpOAuthConnection.findUnique).not.toHaveBeenCalled();
+    expect(prisma.mcpOAuthConnection.updateMany).not.toHaveBeenCalled();
+    expect(prisma.apiToken.updateMany).not.toHaveBeenCalled();
   });
 });
 
@@ -157,6 +198,37 @@ describe("rotateConnection — reuse detection revokes the family", () => {
       userId: "user-1",
     });
     expect(out).toEqual({ ok: false, reason: "not_found" });
+  });
+
+  it("revokes the family and linked access tokens when the CAS contender loses", async () => {
+    vi.mocked(prisma.mcpOAuthConnection.findUnique).mockResolvedValue({
+      ...CONN,
+    } as never);
+    vi.mocked(prisma.mcpOAuthConnection.updateMany)
+      .mockResolvedValueOnce({ count: 0 } as never)
+      .mockResolvedValueOnce({ count: 1 } as never);
+
+    const out = await rotateConnection({
+      connectionId: "conn-1",
+      presentedJti: "jti-current",
+      newJti: "jti-loser",
+      clientId: CONN.clientId,
+      userId: "user-1",
+    });
+
+    expect(out).toEqual({ ok: false, reason: "reuse_detected" });
+    expect(prisma.mcpOAuthConnection.updateMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: { id: "conn-1", revokedAt: null },
+        data: expect.objectContaining({ revokedAt: expect.any(Date) }),
+      }),
+    );
+    expect(prisma.apiToken.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { mcpConnectionId: "conn-1", revoked: false },
+        data: { revoked: true },
+      }),
+    );
   });
 });
 

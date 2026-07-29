@@ -5,6 +5,7 @@
  * cookie. The raw `hlk_<hex>` value is returned exactly once.
  */
 import { randomBytes } from "node:crypto";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { hashToken } from "@/lib/auth/hmac";
 
@@ -44,6 +45,7 @@ export interface IssueTokenOptions {
  */
 export async function issueApiToken(
   opts: IssueTokenOptions,
+  db: Pick<Prisma.TransactionClient, "apiToken"> = prisma,
 ): Promise<IssuedToken> {
   const rawToken = `hlk_${randomBytes(32).toString("hex")}`;
   const tokenHashValue = hashToken(rawToken);
@@ -52,7 +54,7 @@ export async function issueApiToken(
       ? new Date(Date.now() + opts.expiresInMinutes * 60 * 1000)
       : new Date(Date.now() + (opts.expiresInDays ?? 90) * 24 * 60 * 60 * 1000);
 
-  const created = await prisma.apiToken.create({
+  const created = await db.apiToken.create({
     data: {
       userId: opts.userId,
       name: opts.name,

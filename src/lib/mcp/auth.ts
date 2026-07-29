@@ -28,7 +28,7 @@ export interface McpAuthContext {
   scopes: string[];
   /** `<user_id>:<token_id>` — the session binding (REQ-SEC-11). */
   binding: string;
-  /** Whether this session may read (always true for a valid token). */
+  /** Whether this session may read (requires `health:read` or wildcard). */
   canRead: boolean;
   /** Whether this session may write (requires `health:write`; gates the live write tools). */
   canWrite: boolean;
@@ -61,7 +61,7 @@ export async function resolveMcpAuthContext(
     tokenId,
     scopes: permissions,
     binding: sessionBinding(user.id, tokenId),
-    canRead: tokenAllowsRead(),
+    canRead: tokenAllowsRead(permissions),
     canWrite: tokenAllowsWrite(permissions),
   };
 }

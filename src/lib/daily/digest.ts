@@ -815,13 +815,21 @@ export function buildDailyDigest(
   // composer allocation-free and total over an empty list.
   const newestArrival = (
     input.arrivals ?? []
-  ).reduce<DailyDigestArrival | null>(
-    (newest, candidate) =>
-      newest === null || candidate.arrivedAt > newest.arrivedAt
-        ? candidate
-        : newest,
-    null,
-  );
+  ).reduce<DailyDigestArrival | null>((newest, candidate) => {
+    // `arrivedAt` is server-owned, but a restored/corrupt/future-version row
+    // can still carry an impossible future instant. It is not "just in" yet
+    // and its line must not displace today's grounded lead. Ignore it rather
+    // than letting a negative age pass the `< JUST_IN_WINDOW_MS` check.
+    if (
+      Number.isNaN(candidate.arrivedAt.getTime()) ||
+      candidate.arrivedAt.getTime() > input.now.getTime()
+    ) {
+      return newest;
+    }
+    return newest === null || candidate.arrivedAt > newest.arrivedAt
+      ? candidate
+      : newest;
+  }, null);
   const arrivalAgeMs = newestArrival
     ? input.now.getTime() - newestArrival.arrivedAt.getTime()
     : null;

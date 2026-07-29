@@ -8,16 +8,101 @@
  */
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
+import {
+  MEDICATION_IMPORT_SKIP_REASONS,
+  parseMedicationImportSkipDetails,
+  type MedicationImportResult,
+} from "@/lib/jobs/medication-intake-import";
 
 export interface MedicationIntakeImportJobStatus {
   jobId: string;
   status: string;
   progress: Prisma.JsonValue;
-  result: Prisma.JsonValue | null;
+  result: MedicationImportResult | null;
   failureReason: string | null;
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
+}
+
+/**
+ * Project the persisted result through a strict allowlist before it reaches a
+ * polling response. A compromised or legacy JSON blob cannot smuggle raw file
+ * data, credentials, medication names, timestamps or arbitrary error prose.
+ */
+export function projectMedicationImportResult(
+  value: Prisma.JsonValue | null,
+): MedicationImportResult | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const imported = Number(value.imported);
+  const skipped = Number(value.skipped);
+  if (
+    !Number.isInteger(imported) ||
+    imported < 0 ||
+    !Number.isInteger(skipped) ||
+    skipped < 0 ||
+    !Array.isArray(value.skipReasons)
+  ) {
+    return null;
+  }
+  const skipReasons = value.skipReasons.flatMap((group) => {
+    if (
+      typeof group !== "object" ||
+      group === null ||
+      Array.isArray(group) ||
+      typeof group.reason !== "string" ||
+      !(MEDICATION_IMPORT_SKIP_REASONS as readonly string[]).includes(
+        group.reason,
+      ) ||
+      !Number.isInteger(group.count) ||
+      Number(group.count) < 1
+    ) {
+      return [];
+    }
+    return [
+      {
+        reason: group.reason as (typeof MEDICATION_IMPORT_SKIP_REASONS)[number],
+        count: Number(group.count),
+      },
+    ];
+  });
+  if (
+    skipReasons.length !== value.skipReasons.length ||
+    skipReasons.reduce((sum, group) => sum + group.count, 0) !== skipped
+  ) {
+    return null;
+  }
+
+  const rawDetails = value.skipDetails;
+  const skipDetails =
+    rawDetails === undefined
+      ? undefined
+      : parseMedicationImportSkipDetails(rawDetails);
+  const skippedDetailsOmitted =
+    value.skippedDetailsOmitted === undefined
+      ? undefined
+      : Number(value.skippedDetailsOmitted);
+  if (
+    (rawDetails !== undefined && skipDetails === null) ||
+    (skippedDetailsOmitted !== undefined &&
+      (!Number.isInteger(skippedDetailsOmitted) ||
+        skippedDetailsOmitted < 0)) ||
+    (skipDetails?.length ?? 0) + (skippedDetailsOmitted ?? 0) > skipped
+  ) {
+    return null;
+  }
+
+  return {
+    imported,
+    skipped,
+    skipReasons,
+    ...(skipDetails === undefined || skipDetails === null
+      ? {}
+      : { skipDetails }),
+    ...(skippedDetailsOmitted === undefined ? {} : { skippedDetailsOmitted }),
+  };
 }
 
 /**
@@ -46,7 +131,7 @@ export async function readMedicationIntakeImportJob(
     jobId: row.id,
     status: row.status,
     progress: row.progress,
-    result: row.result,
+    result: projectMedicationImportResult(row.result),
     failureReason: row.failureReason,
     createdAt: row.createdAt.toISOString(),
     startedAt: row.startedAt?.toISOString() ?? null,

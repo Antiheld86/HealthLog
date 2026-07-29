@@ -33,6 +33,37 @@ describe("chat request builder", () => {
     expect(context.includeFullSnapshot).toBe(true);
   });
 
+  it("keeps stateless follow-up requests grounded in the current snapshot", () => {
+    const turnContext = buildCoachTurnContext({
+      priorTurns: [
+        { role: "user", content: "How is my blood pressure?" },
+        { role: "assistant", content: "It looks steady." },
+      ],
+      priorSummary: null,
+      message: "Check again.",
+      guidedQuestion: undefined,
+    });
+
+    const prompts = buildCoachProviderPrompts({
+      baseSystemPrompt: "SYSTEM",
+      rememberAddendum: "REMEMBER",
+      suggestActionAddendum: "ACTION",
+      languageName: "English",
+      snapshotJson: '{"bloodPressure":{"systolic":128,"diastolic":78}}',
+      referenceGrounding: "REFERENCE BP RANGE",
+      workoutEvidence: null,
+      turnContext,
+    });
+
+    expect(prompts.userPrompt).toContain(
+      '{"bloodPressure":{"systolic":128,"diastolic":78}}',
+    );
+    expect(prompts.userPrompt).toContain("REFERENCE BP RANGE");
+    expect(prompts.userPrompt).not.toContain(
+      "provided earlier in this conversation",
+    );
+  });
+
   it("assembles the legacy provider prompt byte-for-byte", () => {
     const turnContext = buildCoachTurnContext({
       priorTurns: [{ role: "assistant", content: "Earlier reply." }],

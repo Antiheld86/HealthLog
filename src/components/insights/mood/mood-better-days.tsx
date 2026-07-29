@@ -74,7 +74,7 @@ export function MoodBetterDays({
 
   return (
     <div data-slot="mood-better-days">
-      <p className="text-muted-foreground mb-2 text-sm">
+      <p className="text-foreground mb-2 text-sm">
         {t("insights.mood.betterDays.description")}
       </p>
       <ul className="divide-border divide-y">

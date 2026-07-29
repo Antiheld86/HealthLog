@@ -11,6 +11,8 @@
  * The write half (the stamp on a verified assertion) is pinned in
  * `src/lib/auth/__tests__/passkey.test.ts`.
  */
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/api-handler", () => ({
@@ -78,5 +80,34 @@ describe("GET /api/auth/passkeys", () => {
 
     expect(Object.keys(body.data[0])).toContain("lastUsedAt");
     expect(body.data[0].lastUsedAt).toBeNull();
+  });
+});
+
+describe("primary-passkey enrollment route guards", () => {
+  const optionsSource = readFileSync(
+    resolve(__dirname, "../../passkey/register-options/route.ts"),
+    "utf8",
+  );
+  const verifySource = readFileSync(
+    resolve(__dirname, "../../passkey/register-verify/route.ts"),
+    "utf8",
+  );
+
+  it("keeps both registration legs cookie-only", () => {
+    for (const source of [optionsSource, verifySource]) {
+      expect(source).toContain("requireCookieAuth");
+      expect(source).not.toMatch(/\brequireAuth\b/);
+      expect(source).not.toContain("requireMfaManagementAuth");
+      expect(source).not.toContain("requireBearerAuth");
+    }
+  });
+
+  it("requires existing-factor proof before options and repeats freshness on verify", () => {
+    expect(optionsSource).toMatch(
+      /password|totp|webauthn|passkey-registration/,
+    );
+    expect(optionsSource).toMatch(/session\.id/);
+    expect(verifySource).toMatch(/session\.id/);
+    expect(verifySource).toMatch(/fresh|reauth|proof/i);
   });
 });

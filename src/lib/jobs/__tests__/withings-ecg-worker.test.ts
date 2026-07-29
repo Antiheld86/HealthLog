@@ -11,6 +11,7 @@ const { syncUserEcg } = vi.hoisted(() => ({
       ) => Promise<number>
     >(),
 }));
+const isReauthRequired = vi.hoisted(() => vi.fn(async () => false));
 
 vi.mock("@/lib/withings/sync-ecg", () => ({
   syncUserEcg: (
@@ -33,6 +34,9 @@ vi.mock("@/lib/jobs/reminder-satisfy", () => ({
 vi.mock("@/lib/jobs/worker-status", () => ({
   recordError: vi.fn(),
   recordWithingsSync: vi.fn(),
+}));
+vi.mock("@/lib/integrations/status", () => ({
+  isReauthRequired,
 }));
 vi.mock("@/lib/logging/background", () => ({
   withBackgroundEvent: async (
@@ -76,6 +80,7 @@ function job(data: WithingsEcgSyncPayload): Job<WithingsEcgSyncPayload> {
 beforeEach(() => {
   vi.clearAllMocks();
   ecgFindMany.mockResolvedValue([]);
+  isReauthRequired.mockResolvedValue(false);
 });
 const registrarSource = readFileSync(
   join(process.cwd(), "src/lib/jobs/reminder/register-integration-sync.ts"),
@@ -96,10 +101,20 @@ describe("handleWithingsEcgSync", () => {
     await expect(handleWithingsEcgSync([queued])).resolves.toEqual({
       ok: true,
       did: {
+        provider: "withings",
+        outcome: "useful",
         total: 1,
         users_synced: 1,
+        users_complete: 1,
+        users_partial: 0,
         users_failed: 0,
-        recordings_imported: 1,
+        users_parked: 0,
+        users_skipped: 0,
+        users_useful: 1,
+        users_clean_zero: 0,
+        users_retryable: 0,
+        downstream_failed: 0,
+        measurements_imported: 1,
       },
     });
 
@@ -140,10 +155,20 @@ describe("handleWithingsEcgSync", () => {
     ).resolves.toEqual({
       ok: true,
       did: {
+        provider: "withings",
+        outcome: "clean_zero",
         total: 2,
         users_synced: 1,
+        users_complete: 1,
+        users_partial: 0,
         users_failed: 1,
-        recordings_imported: 0,
+        users_parked: 0,
+        users_skipped: 0,
+        users_useful: 0,
+        users_clean_zero: 1,
+        users_retryable: 1,
+        downstream_failed: 0,
+        measurements_imported: 0,
       },
     });
     expect(syncUserEcg).toHaveBeenCalledTimes(2);

@@ -1,10 +1,11 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
 import type { MetricStatusMetricId } from "@/lib/insights/metric-status-registry";
+import type { AssessmentStatus } from "@/lib/insights/status-shared";
 import { queryKeys } from "@/lib/query-keys";
 import { apiGet } from "@/lib/api/api-fetch";
 
@@ -41,6 +42,10 @@ export interface InsightStatusData {
    * card upgrades to the fresh text in the same session.
    */
   revalidating?: boolean;
+  /** Explicit terminal/pending state consumed by every assessment wrapper. */
+  assessment?: AssessmentStatus;
+  /** True only after this query identity reaches the bounded poll ceiling. */
+  pollExhausted?: boolean;
 }
 
 /**
@@ -97,6 +102,159 @@ export function nextStatusPollInterval(
 }
 
 /**
+ * Normalize the legacy route DTO into the shared discriminated contract.
+ * Existing routes can roll forward independently because the old scalar
+ * fields remain intact; consumers branch on `assessment.kind`.
+ */
+export function assessmentStatusFromData(
+  data: Pick<
+    InsightStatusData,
+    "hasProvider" | "text" | "updatedAt" | "preparing" | "revalidating"
+  >,
+): AssessmentStatus {
+  if (data.text) {
+    if (data.revalidating) {
+      return {
+        kind: "revalidating",
+        text: data.text,
+        hasProvider: true,
+        updatedAt: data.updatedAt,
+        retryable: true,
+      };
+    }
+    if (!data.hasProvider) {
+      // Legacy endpoints encode deterministic timeout/screening fallbacks as
+      // `hasProvider:false` plus safe text. Text outranks provider metadata:
+      // never hide it behind the provider-setup CTA.
+      return {
+        kind: "screened-fallback",
+        text: data.text,
+        hasProvider: false,
+        updatedAt: null,
+        retryable: true,
+        reason: "unparseable_output",
+      };
+    }
+    return {
+      kind: "generated",
+      text: data.text,
+      hasProvider: true,
+      updatedAt: data.updatedAt,
+      retryable: false,
+    };
+  }
+  if (data.preparing || data.revalidating) {
+    return {
+      kind: "preparing",
+      text: null,
+      hasProvider: true,
+      updatedAt: null,
+      retryable: true,
+    };
+  }
+  if (!data.hasProvider) {
+    return {
+      kind: "no-provider",
+      text: null,
+      hasProvider: false,
+      updatedAt: null,
+      retryable: false,
+    };
+  }
+  return {
+    kind: "error",
+    text: null,
+    hasProvider: true,
+    updatedAt: null,
+    retryable: true,
+  };
+}
+
+function normalizeStatusData(data: InsightStatusData): InsightStatusData {
+  return {
+    ...data,
+    assessment: data.assessment ?? assessmentStatusFromData(data),
+  };
+}
+
+function failureStatusData(kind: "timeout" | "error"): InsightStatusData {
+  return {
+    hasProvider: true,
+    text: null,
+    cached: false,
+    updatedAt: null,
+    preparing: false,
+    revalidating: false,
+    assessment: {
+      kind,
+      text: null,
+      hasProvider: true,
+      updatedAt: null,
+      retryable: true,
+    },
+  };
+}
+
+async function fetchStatusData(
+  url: string,
+  querySignal: AbortSignal,
+): Promise<InsightStatusData> {
+  const controller = new AbortController();
+  const abortOnUnmount = () => controller.abort();
+  querySignal.addEventListener("abort", abortOnUnmount, { once: true });
+  const timeoutHandle = setTimeout(() => controller.abort(), STATUS_TIMEOUT_MS);
+  try {
+    const data = await apiGet<InsightStatusData>(url, {
+      signal: controller.signal,
+    });
+    return normalizeStatusData(data);
+  } catch {
+    const timedOut =
+      controller.signal.aborted && !querySignal.aborted ? "timeout" : "error";
+    return failureStatusData(timedOut);
+  } finally {
+    clearTimeout(timeoutHandle);
+    querySignal.removeEventListener("abort", abortOnUnmount);
+  }
+}
+
+function useStatusPollAttemptCount(queryKey: readonly unknown[]): number {
+  const queryClient = useQueryClient();
+  return (
+    queryClient.getQueryState<InsightStatusData>(queryKey)?.dataUpdateCount ?? 0
+  );
+}
+
+/**
+ * Replace a capped pending payload with an honest terminal state. Keeping the
+ * legacy flags false ensures older consumers also stop painting preparation.
+ */
+export function applyStatusPollExhaustion(
+  data: InsightStatusData | undefined,
+  dataUpdateCount: number,
+): InsightStatusData | undefined {
+  if (!data) return data;
+  const status = data.assessment ?? assessmentStatusFromData(data);
+  const pending = status.kind === "preparing" || status.kind === "revalidating";
+  const pollExhausted = pending && dataUpdateCount >= STATUS_POLL_MAX_ATTEMPTS;
+  if (!pollExhausted) return normalizeStatusData(data);
+  return {
+    ...data,
+    text: status.kind === "revalidating" ? status.text : null,
+    preparing: false,
+    revalidating: false,
+    pollExhausted: true,
+    assessment: {
+      kind: "exhausted",
+      text: null,
+      hasProvider: true,
+      updatedAt: null,
+      retryable: false,
+    },
+  };
+}
+
+/**
  * Metric slugs the sub-pages render. Each slug is paired with the
  * Insights-status endpoint and the matching `queryKeys.*` factory so
  * the cache keys stay aligned across the whole app — a hard-coded
@@ -138,28 +296,15 @@ const QUERY_KEY_FACTORY: Record<
 export function useInsightStatus(metric: InsightStatusMetric) {
   const { isAuthenticated } = useAuth();
   const { locale } = useTranslations();
+  const queryKey = QUERY_KEY_FACTORY[metric](locale);
 
-  return useQuery({
-    queryKey: QUERY_KEY_FACTORY[metric](locale),
-    queryFn: async (): Promise<InsightStatusData> => {
-      // v1.8.3 — bound the fetch on the client. AbortController + 8 s
-      // timeout so a degraded network can't pin the navigation thread.
-      // The card surfaces its preparing / empty state on abort exactly as
-      // it does for a `preparing` payload, and the bounded poll retries.
-      const controller = new AbortController();
-      const timeoutHandle = setTimeout(
-        () => controller.abort(),
-        STATUS_TIMEOUT_MS,
-      );
-      try {
-        return await apiGet<InsightStatusData>(
-          `/api/insights/${metric}-status?locale=${locale}`,
-          { signal: controller.signal },
-        );
-      } finally {
-        clearTimeout(timeoutHandle);
-      }
-    },
+  const query = useQuery({
+    queryKey,
+    queryFn: ({ signal }): Promise<InsightStatusData> =>
+      fetchStatusData(
+        `/api/insights/${metric}-status?locale=${locale}`,
+        signal,
+      ),
     enabled: isAuthenticated,
     staleTime: 60 * 1000,
     // v1.4.28 FB-D2 — the status route returns a deterministic envelope on
@@ -178,6 +323,11 @@ export function useInsightStatus(metric: InsightStatusMetric) {
         query.state.data?.revalidating,
       ),
   });
+  const pollAttempts = useStatusPollAttemptCount(queryKey);
+  return {
+    ...query,
+    data: applyStatusPollExhaustion(query.data, pollAttempts),
+  };
 }
 
 /**
@@ -210,26 +360,17 @@ export function useInsightMetricStatus(
 ) {
   const { isAuthenticated } = useAuth();
   const { locale } = useTranslations();
+  const queryKey = queryKeys.insightsMetricStatus(metric, locale);
 
-  return useQuery({
-    queryKey: queryKeys.insightsMetricStatus(metric, locale),
-    queryFn: async (): Promise<InsightStatusData> => {
-      const controller = new AbortController();
-      const timeoutHandle = setTimeout(
-        () => controller.abort(),
-        STATUS_TIMEOUT_MS,
-      );
-      try {
-        return await apiGet<InsightStatusData>(
-          `/api/insights/metric-status?metric=${encodeURIComponent(
-            metric,
-          )}&locale=${locale}`,
-          { signal: controller.signal },
-        );
-      } finally {
-        clearTimeout(timeoutHandle);
-      }
-    },
+  const query = useQuery({
+    queryKey,
+    queryFn: ({ signal }): Promise<InsightStatusData> =>
+      fetchStatusData(
+        `/api/insights/metric-status?metric=${encodeURIComponent(
+          metric,
+        )}&locale=${locale}`,
+        signal,
+      ),
     enabled: isAuthenticated && enabled,
     staleTime: 60 * 1000,
     retry: 0,
@@ -240,6 +381,11 @@ export function useInsightMetricStatus(
         query.state.data?.revalidating,
       ),
   });
+  const pollAttempts = useStatusPollAttemptCount(queryKey);
+  return {
+    ...query,
+    data: applyStatusPollExhaustion(query.data, pollAttempts),
+  };
 }
 
 /**
@@ -264,26 +410,17 @@ export function useInsightBiomarkerAssessment(
 ) {
   const { isAuthenticated } = useAuth();
   const { locale } = useTranslations();
+  const queryKey = queryKeys.insightsBiomarkerAssessment(biomarkerId, locale);
 
-  return useQuery({
-    queryKey: queryKeys.insightsBiomarkerAssessment(biomarkerId, locale),
-    queryFn: async (): Promise<InsightStatusData> => {
-      const controller = new AbortController();
-      const timeoutHandle = setTimeout(
-        () => controller.abort(),
-        STATUS_TIMEOUT_MS,
-      );
-      try {
-        return await apiGet<InsightStatusData>(
-          `/api/insights/biomarker-assessment?biomarkerId=${encodeURIComponent(
-            biomarkerId,
-          )}&locale=${locale}`,
-          { signal: controller.signal },
-        );
-      } finally {
-        clearTimeout(timeoutHandle);
-      }
-    },
+  const query = useQuery({
+    queryKey,
+    queryFn: ({ signal }): Promise<InsightStatusData> =>
+      fetchStatusData(
+        `/api/insights/biomarker-assessment?biomarkerId=${encodeURIComponent(
+          biomarkerId,
+        )}&locale=${locale}`,
+        signal,
+      ),
     enabled: isAuthenticated && enabled && biomarkerId.length > 0,
     staleTime: 60 * 1000,
     retry: 0,
@@ -294,4 +431,9 @@ export function useInsightBiomarkerAssessment(
         query.state.data?.revalidating,
       ),
   });
+  const pollAttempts = useStatusPollAttemptCount(queryKey);
+  return {
+    ...query,
+    data: applyStatusPollExhaustion(query.data, pollAttempts),
+  };
 }

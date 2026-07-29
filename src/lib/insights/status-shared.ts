@@ -37,6 +37,65 @@ export type SupportedLocale = Locale;
 
 const SUPPORTED_LOCALES: ReadonlySet<string> = new Set(locales);
 
+/**
+ * The presentation contract shared by assessment producers and consumers.
+ *
+ * `kind` is the only branch discriminator. In particular, provider
+ * availability is metadata: it must never hide safe deterministic text.
+ * Provider/error details deliberately do not belong in this envelope.
+ */
+export type AssessmentStatus =
+  | {
+      kind: "generated";
+      text: string;
+      hasProvider: true;
+      updatedAt: string | null;
+      retryable: false;
+    }
+  | {
+      kind: "screened-fallback";
+      text: string;
+      hasProvider: boolean;
+      updatedAt: null;
+      retryable: true;
+      reason: OutboundReason | "unparseable_output" | "ungrounded_output";
+    }
+  | {
+      kind: "no-provider";
+      text: null;
+      hasProvider: false;
+      updatedAt: null;
+      retryable: false;
+    }
+  | {
+      kind: "preparing";
+      text: null;
+      hasProvider: true;
+      updatedAt: null;
+      retryable: true;
+    }
+  | {
+      kind: "revalidating";
+      text: string;
+      hasProvider: true;
+      updatedAt: string | null;
+      retryable: true;
+    }
+  | {
+      kind: "timeout" | "error";
+      text: null;
+      hasProvider: true;
+      updatedAt: null;
+      retryable: true;
+    }
+  | {
+      kind: "exhausted";
+      text: null;
+      hasProvider: true;
+      updatedAt: null;
+      retryable: false;
+    };
+
 /** Round to `digits` decimal places. */
 export function round(value: number, digits = 1): number {
   const factor = 10 ** digits;
@@ -305,6 +364,12 @@ export async function persistStatusInsight(args: {
         providerType: args.providerType,
         model: args.model,
         tokensUsed: args.tokensUsed,
+        statusKind: "generated",
+        retryable: false,
+        // Freshness is defined by the user's calendar day. Keeping the
+        // boundary in the payload makes expiry explicit without inventing a
+        // UTC timestamp for a day key that belongs to another timezone.
+        expiresAfterDateKey: args.todayKey,
         ...(args.snapshotHash ? { snapshotHash: args.snapshotHash } : {}),
         ...(args.inputHash ? { inputHash: args.inputHash } : {}),
       }),
@@ -320,8 +385,12 @@ export async function persistStatusInsight(args: {
  * withholds.
  */
 export type StatusSummaryOutcome =
-  | { ok: true; text: string }
-  | { ok: false; reason: OutboundReason | "unparseable_output" };
+  | { ok: true; kind: "generated"; text: string }
+  | {
+      ok: false;
+      kind: "screened-fallback";
+      reason: OutboundReason | "unparseable_output";
+    };
 
 /**
  * The single finalize step every per-metric / biomarker / derived-score status
@@ -359,13 +428,21 @@ export function finalizeStatusSummary(
   // text to render. WITHHOLD — the caller serves its deterministic stub. Only
   // the `unparseable` discriminator is logged, never the assessment content.
   if (extracted.kind === "unparseable") {
-    return { ok: false, reason: "unparseable_output" };
+    return {
+      ok: false,
+      kind: "screened-fallback",
+      reason: "unparseable_output",
+    };
   }
   const text = normalizeSummaryText(extracted.text);
-  if (!text) return { ok: true, text: "" };
+  if (!text) return { ok: true, kind: "generated", text: "" };
   const decision = screenModelOutput(text, locale, INSIGHTS_CONTRACTS);
   if (decision.block && decision.reason) {
-    return { ok: false, reason: decision.reason };
+    return {
+      ok: false,
+      kind: "screened-fallback",
+      reason: decision.reason,
+    };
   }
-  return { ok: true, text };
+  return { ok: true, kind: "generated", text };
 }

@@ -70,6 +70,16 @@ scope — it is the least-privilege MCP scope and nothing more, and it is
 bound to the MCP surface: it is refused on every REST route. The same
 list shows last-used time and lets you revoke any token.
 
+MCP reads now require an explicit MCP read capability. A token must carry
+`health:read` (or the legacy/native `*` wildcard) before the server registers
+or invokes any read tool. `health:write`, `fhir:read`,
+`medication:ingest`, notification scopes, and every other unrelated scope do
+not imply `health:read`; presenting one of those narrow tokens to `/mcp` is
+rejected before health data is accessed. Likewise, `health:read` does not
+grant a regular REST read or any write. When upgrading, check any manually
+provisioned connector token and mint a replacement with `health:read` instead
+of broadening an unrelated credential.
+
 Cloud connectors that use OAuth (next section) mint the same
 `health:read` scope automatically, so for Claude.ai / ChatGPT you do not
 need to mint a token by hand — the manual token is for the stdio / power-

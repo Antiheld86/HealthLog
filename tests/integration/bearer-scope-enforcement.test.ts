@@ -27,6 +27,8 @@ process.env.API_TOKEN_HMAC_KEY ??=
 const { hashToken } = await import("@/lib/auth/hmac");
 
 const USER_ID = "user-bearer-scope-test";
+const MCP_RESOURCE = "https://health.example/mcp";
+process.env.APP_URL = "https://health.example";
 
 vi.mock("next/headers", async () => {
   const { cookieJar, headerJar } = await import("./mock-next-headers");
@@ -63,12 +65,13 @@ beforeEach(async () => {
       username: "bearer-scope",
       email: "bearer-scope@example.test",
       timezone: "UTC",
+      modulePreferencesJson: { mcp: true },
     },
   });
 });
 
 /** Mint a real `ApiToken` row with the given scopes and arm the Bearer header. */
-async function useToken(permissions: string[], label = "t"): Promise<string> {
+async function armToken(permissions: string[], label = "t"): Promise<string> {
   const raw = `hlk_${label}_${"0".repeat(48)}`;
   await getPrismaClient().apiToken.create({
     data: {
@@ -80,6 +83,40 @@ async function useToken(permissions: string[], label = "t"): Promise<string> {
   });
   headerJar.set("authorization", `Bearer ${raw}`);
   return raw;
+}
+
+async function armExpiringToken(
+  permissions: string[],
+  label: string,
+  state: { expiresAt?: Date; revoked?: boolean } = {},
+): Promise<string> {
+  const raw = await armToken(permissions, label);
+  await getPrismaClient().apiToken.update({
+    where: { tokenHash: hashToken(raw) },
+    data: state,
+  });
+  return raw;
+}
+
+function mcpReq(
+  rawToken: string,
+  method: "initialize" | "tools/list" | "tools/call",
+  params?: Record<string, unknown>,
+): Request {
+  return new Request(MCP_RESOURCE, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${rawToken}`,
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method,
+      ...(params ? { params } : {}),
+    }),
+  });
 }
 
 /** Arm a real cookie session instead of a Bearer token. */
@@ -112,7 +149,7 @@ describe("B1 — a narrow token cannot read the full-account export", () => {
     // The vulnerability in one request: this is the token the settings card
     // told users to hand to third-party automations, reading every row the
     // account holds.
-    await useToken(["medication:ingest"], "narrow");
+    await armToken(["medication:ingest"], "narrow");
     const { GET } = await import("@/app/api/export/full-backup/route");
 
     const res = await GET(req("/api/export/full-backup"));
@@ -129,7 +166,7 @@ describe("B1 — a narrow token cannot read the full-account export", () => {
   });
 
   it("refuses the same token on GET /api/labs with 403", async () => {
-    await useToken(["medication:ingest"], "narrow2");
+    await armToken(["medication:ingest"], "narrow2");
     const { GET } = await import("@/app/api/labs/route");
     const res = await GET(req("/api/labs"));
     expect(res.status).toBe(403);
@@ -150,7 +187,7 @@ describe("B2/B3 — the medication-ingest surface is unchanged", () => {
     // resolution — so the fail-closed default cannot reach it. This is the
     // one flow a fail-closed default could plausibly have broken.
     const medId = await seedMedication();
-    await useToken(["medication:ingest", `medication:${medId}:ingest`], "pair");
+    await armToken(["medication:ingest", `medication:${medId}:ingest`], "pair");
     const { POST } = await import("@/app/api/ingest/medication/route");
 
     const request = new NextRequest(
@@ -180,7 +217,7 @@ describe("B2/B3 — the medication-ingest surface is unchanged", () => {
     // The pre-existing second gate. This is why the retired `/api/tokens`
     // mint never worked for its advertised purpose.
     await seedMedication();
-    await useToken(["medication:ingest"], "familyonly");
+    await armToken(["medication:ingest"], "familyonly");
     const { POST } = await import("@/app/api/ingest/medication/route");
 
     const request = new NextRequest(
@@ -208,14 +245,14 @@ describe("B4 — the native client is not broken", () => {
     // Login, passkey login-verify and refresh rotation all mint `["*"]`, so
     // this is exactly the credential the iOS app holds. If this case ever
     // goes red, the native client is down.
-    await useToken(["*"], "wildcard");
+    await armToken(["*"], "wildcard");
     const { GET } = await import("@/app/api/export/full-backup/route");
     const res = await GET(req("/api/export/full-backup"));
     expect(res.status).toBe(200);
   });
 
   it("admits a ['*'] token on a batch ingest route", async () => {
-    await useToken(["*"], "wildcardbatch");
+    await armToken(["*"], "wildcardbatch");
     const { POST } = await import("@/app/api/measurements/batch/route");
     const request = new NextRequest(
       "https://health.example/api/measurements/batch",
@@ -248,14 +285,14 @@ describe("B5 — an MCP token is audience-bound to /mcp", () => {
   it("refuses ['health:read'] on a REST read", async () => {
     // Narrowing, not breakage: the token's REST read leg was never a feature
     // an MCP client used. Its audience is now /mcp alone.
-    await useToken(["health:read"], "mcpread");
+    await armToken(["health:read"], "mcpread");
     const { GET } = await import("@/app/api/export/full-backup/route");
     const res = await GET(req("/api/export/full-backup"));
     expect(res.status).toBe(403);
   });
 
   it("still resolves the same token on the /mcp wire", async () => {
-    const raw = await useToken(["health:read"], "mcpread2");
+    const raw = await armToken(["health:read"], "mcpread2");
     const { resolveMcpAuthContext } = await import("@/lib/mcp/auth");
 
     const ctx = await resolveMcpAuthContext(raw);
@@ -267,16 +304,90 @@ describe("B5 — an MCP token is audience-bound to /mcp", () => {
   });
 
   it("grants write on /mcp only for a consented health:write token", async () => {
-    const raw = await useToken(["health:read", "health:write"], "mcprw");
+    const raw = await armToken(["health:read", "health:write"], "mcprw");
     const { resolveMcpAuthContext } = await import("@/lib/mcp/auth");
     const ctx = await resolveMcpAuthContext(raw);
     expect(ctx.canWrite).toBe(true);
   });
 });
 
+describe("B5b — MCP health reads require an explicit read grant", () => {
+  async function postMcp(
+    rawToken: string,
+    method: "initialize" | "tools/list" | "tools/call",
+    params?: Record<string, unknown>,
+  ): Promise<Response> {
+    const { POST } = await import("@/app/mcp/route");
+    return POST(mcpReq(rawToken, method, params));
+  }
+
+  it.each([
+    ["health:read", ["health:read"]],
+    ["wildcard", ["*"]],
+  ])("admits %s through capability registration", async (_label, scopes) => {
+    const raw = await armToken(scopes, `mcp-positive-${_label}`);
+
+    const res = await postMcp(raw, "tools/list");
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      result: { tools: Array<{ name: string }> };
+    };
+    expect(body.result.tools.map((tool) => tool.name)).toContain("get_labs");
+  });
+
+  it.each([
+    ["medication ingest", ["medication:ingest"]],
+    ["notifications", ["notifications:send"]],
+    ["FHIR", ["fhir:read"]],
+    ["write-only", ["health:write"]],
+    ["unrelated", ["profile:read"]],
+  ])(
+    "denies a same-user %s token before a real lab read",
+    async (_label, scopes) => {
+      const raw = await armToken(scopes, `mcp-negative-${_label}`);
+      await getPrismaClient().labResult.create({
+        data: {
+          userId: USER_ID,
+          analyte: "LDL",
+          value: 177,
+          unit: "mg/dL",
+          takenAt: new Date("2026-07-20T08:00:00.000Z"),
+        },
+      });
+
+      const res = await postMcp(raw, "tools/call", {
+        name: "get_labs",
+        arguments: {},
+      });
+
+      expect([401, 403]).toContain(res.status);
+      expect(await res.text()).not.toContain("177");
+    },
+  );
+
+  it.each([
+    ["expired", { expiresAt: new Date("2020-01-01T00:00:00.000Z") }],
+    ["revoked", { revoked: true }],
+  ])(
+    "denies an explicit but %s health:read credential",
+    async (_label, state) => {
+      const raw = await armExpiringToken(
+        ["health:read"],
+        `mcp-${_label}`,
+        state,
+      );
+
+      const res = await postMcp(raw, "tools/list");
+
+      expect([401, 403]).toContain(res.status);
+    },
+  );
+});
+
 describe("B6 — a declared scope grants only what it names", () => {
   it("admits ['fhir:read'] on the FHIR face", async () => {
-    await useToken(["fhir:read"], "fhir");
+    await armToken(["fhir:read"], "fhir");
     const { GET } = await import("@/app/api/fhir/Observation/route");
     const res = await GET(req("/api/fhir/Observation"));
     expect(res.status).toBe(200);
@@ -285,7 +396,7 @@ describe("B6 — a declared scope grants only what it names", () => {
   it("refuses the same token on /api/labs, which declares no scope", async () => {
     // The whole point of the inversion: holding a scope buys the routes that
     // name it, and nothing else.
-    await useToken(["fhir:read"], "fhir2");
+    await armToken(["fhir:read"], "fhir2");
     const { GET } = await import("@/app/api/labs/route");
     const res = await GET(req("/api/labs"));
     expect(res.status).toBe(403);
@@ -314,7 +425,7 @@ describe("B7 — cookie sessions are untouched", () => {
       where: { id: USER_ID },
       data: { role: "ADMIN" },
     });
-    await useToken(["*"], "adminwild");
+    await armToken(["*"], "adminwild");
 
     const { requireAdmin, HttpError } = await import("@/lib/api-handler");
     await expect(requireAdmin()).rejects.toBeInstanceOf(HttpError);

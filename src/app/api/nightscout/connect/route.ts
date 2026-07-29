@@ -11,10 +11,16 @@ import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { markReconnected } from "@/lib/integrations/status";
 import { NIGHTSCOUT_SYNC_QUEUE } from "@/lib/jobs/integration-poll-queues";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
-import { SafeFetchError } from "@/lib/safe-fetch";
-import { fetchSgvEntries, NightscoutApiError } from "@/lib/nightscout/client";
-import { nightscoutConnectSchema } from "@/lib/validations/nightscout";
-import { isPublicUrl } from "@/lib/validations/notifications";
+import {
+  fetchSgvEntries,
+  NightscoutApiError,
+  NightscoutPolicyError,
+} from "@/lib/nightscout/client";
+import {
+  configuredNightscoutPrivateOrigins,
+  evaluateNightscoutOrigin,
+  nightscoutConnectSchema,
+} from "@/lib/validations/nightscout";
 
 /**
  * Connect (or update) the user's Nightscout instance (v1.17.0).
@@ -50,7 +56,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
     return apiError("A valid Nightscout URL is required", 422);
   }
 
-  const { url, token, allowPrivateHost } = result.data;
+  const { url, token } = result.data;
+  const policy = evaluateNightscoutOrigin(
+    url,
+    configuredNightscoutPrivateOrigins(),
+  );
 
   // SSRF floor at INPUT time, not merely as a side effect of the live probe
   // below. `fetchSgvEntries` does route through `safeFetch` with the same
@@ -61,13 +71,13 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // Assert it here so the thing that gets encrypted onto the row is the
   // thing that was validated.
   //
-  // Gated on the same explicit opt-in the fetch path uses: a self-hoster who
-  // deliberately points at a LAN instance has asked for the private host and
-  // must still be able to connect.
-  if (!allowPrivateHost && !isPublicUrl(url)) {
+  // The legacy request boolean is intentionally ignored. Only the server-owned
+  // exact canonical origin set may authorize private egress.
+  if (!policy.allowed || !policy.canonicalOrigin) {
     return apiError(
-      "That instance is on a private network. Enable the private-network option to connect to it.",
+      "Private network Nightscout access requires server operator approval",
       422,
+      { errorCode: "private_origin_not_approved" },
     );
   }
 
@@ -78,13 +88,16 @@ export const POST = apiHandler(async (request: NextRequest) => {
       baseUrl: url,
       token,
       count: 1,
-      allowPrivateHost,
+      // Compatibility shape for older callers/tests. The client deliberately
+      // ignores this field and re-evaluates server policy on every fetch.
+      allowPrivateHost: false,
     });
   } catch (err) {
-    if (err instanceof SafeFetchError && err.kind === "private_host") {
+    if (err instanceof NightscoutPolicyError) {
       return apiError(
-        "That instance is on a private network. Enable the private-network option to connect to it.",
+        "Private network Nightscout access requires server operator approval",
         422,
+        { errorCode: err.reasonCode },
       );
     }
     if (err instanceof NightscoutApiError) {
@@ -111,7 +124,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
       // Build the data object field-by-field — never spread the parsed body.
       nightscoutUrlEncrypted: encrypt(url),
       nightscoutTokenEncrypted: token ? encrypt(token) : null,
-      nightscoutAllowPrivateHost: allowPrivateHost,
+      // Compatibility/display metadata only. Server policy is rechecked from
+      // NIGHTSCOUT_PRIVATE_ORIGINS before every request.
+      nightscoutAllowPrivateHost: policy.privateOriginApproved,
     },
   });
 

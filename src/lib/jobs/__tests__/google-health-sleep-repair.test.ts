@@ -56,7 +56,11 @@ vi.mock("@/lib/insights/comprehensive-generate", () => ({
 vi.mock("@/lib/google-health/credentials", () => ({
   getUserGoogleHealthCredentials: vi.fn(async () => null),
 }));
-vi.mock("@/lib/google-health/client", () => ({ refreshAccessToken: vi.fn() }));
+vi.mock("@/lib/google-health/client", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/google-health/client")>();
+  return { ...actual, refreshAccessToken: vi.fn() };
+});
 
 import {
   GOOGLE_HEALTH_TOKEN_HARD_FAIL,

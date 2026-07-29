@@ -43,7 +43,16 @@ vi.mock("@/lib/rate-limit", () => ({
 
 vi.mock("@/lib/api-response", () => ({
   apiSuccess: (data: unknown) => ({ data, error: null, status: 200 }),
-  apiError: (error: string, status: number) => ({ data: null, error, status }),
+  apiError: (
+    error: string,
+    status: number,
+    options?: { errorCode?: string },
+  ) => ({
+    data: null,
+    error,
+    status,
+    meta: options?.errorCode ? { errorCode: options.errorCode } : undefined,
+  }),
   safeJson: async (req: NextRequest) => {
     try {
       return { data: await req.json(), error: null };
@@ -67,11 +76,17 @@ function req(body: unknown): NextRequest {
   });
 }
 
-type RouteResult = { data: unknown; error: string | null; status: number };
+type RouteResult = {
+  data: unknown;
+  error: string | null;
+  status: number;
+  meta?: { errorCode?: string };
+};
 const post = POST as unknown as (r: NextRequest) => Promise<RouteResult>;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  delete process.env.NIGHTSCOUT_PRIVATE_ORIGINS;
   rateLimitMock.mockResolvedValue({ allowed: true, remaining: 9, resetAt: 0 });
   fetchSgvEntriesMock.mockResolvedValue([{ id: "x", sgv: 100, date: 1 }]);
   bossSend.mockResolvedValue("job-1");
@@ -108,16 +123,51 @@ describe("POST /api/nightscout/connect", () => {
     expect(data.nightscoutTokenEncrypted).toBeNull();
   });
 
-  it("passes the private-host opt-in through to the test fetch", async () => {
-    await post(
+  it("rejects an ordinary user's private-host boolean before the probe", async () => {
+    const res = await post(
       req({
         url: "http://192.168.1.5:1337",
         token: "tok",
         allowPrivateHost: true,
       }),
     );
-    const fetchArg = fetchSgvEntriesMock.mock.calls[0]![0];
-    expect(fetchArg.allowPrivateHost).toBe(true);
+
+    expect(res.status).toBe(422);
+    expect(res.meta?.errorCode).toBe("private_origin_not_approved");
+    expect(fetchSgvEntriesMock).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
+  });
+
+  it("connects an exact operator-approved private origin without a user bypass", async () => {
+    process.env.NIGHTSCOUT_PRIVATE_ORIGINS = "http://192.168.1.5:1337";
+
+    const res = await post(
+      req({
+        url: "http://192.168.1.5:1337",
+        token: "tok",
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(fetchSgvEntriesMock).toHaveBeenCalledTimes(1);
+    expect(userUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects an approved private host on a different port", async () => {
+    process.env.NIGHTSCOUT_PRIVATE_ORIGINS = "http://192.168.1.5:1337";
+
+    const res = await post(
+      req({
+        url: "http://192.168.1.5:8080",
+        token: "tok",
+        allowPrivateHost: true,
+      }),
+    );
+
+    expect(res.status).toBe(422);
+    expect(res.meta?.errorCode).toBe("private_origin_not_approved");
+    expect(fetchSgvEntriesMock).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
   });
 
   it("refuses a private host when the opt-in is off (clear 422, no store)", async () => {
@@ -183,14 +233,13 @@ describe("POST /api/nightscout/connect", () => {
       expect(userUpdate).not.toHaveBeenCalled();
     });
 
-    it("still lets the explicit self-hoster opt-in through to the probe", async () => {
-      // The floor is gated, not absolute: a LAN instance stays reachable for
-      // the operator who asked for it. Without this the opt-in is dead code.
+    it("lets an exact operator-approved self-hosted origin through to the probe", async () => {
+      process.env.NIGHTSCOUT_PRIVATE_ORIGINS = "http://192.168.1.5:1337";
+
       const res = await post(
         req({
           url: "http://192.168.1.5:1337",
           token: "tok",
-          allowPrivateHost: true,
         }),
       );
 

@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  MEDICATION_IMPORT_SKIP_DETAIL_LIMIT,
   MEDICATION_INTAKE_IMPORT_CHUNK_SIZE,
   MEDICATION_INTAKE_IMPORT_ROLLUP_CHUNK_SIZE,
   _setMedicationIntakeImportPrismaForTests,
   advanceMedicationImportProgress,
+  appendMedicationImportSkipDetails,
   groupMedicationImportSkips,
   medicationImportChunk,
   processMedicationIntakeImportJob,
@@ -244,5 +246,27 @@ describe("medication import skip reporting (#650)", () => {
       { reason: "duplicate_in_file", count: 10 },
       { reason: "already_recorded", count: 5 },
     ]);
+  });
+
+  it("bounds retained row detail and counts the remainder", () => {
+    const details = Array.from(
+      { length: MEDICATION_IMPORT_SKIP_DETAIL_LIMIT + 37 },
+      (_, index) => ({
+        line: index + 1,
+        reason: "already_recorded" as const,
+      }),
+    );
+    const accumulated = appendMedicationImportSkipDetails(
+      { skipDetails: [], skippedDetailsOmitted: 0 },
+      details,
+    );
+
+    expect(accumulated.skipDetails).toHaveLength(
+      MEDICATION_IMPORT_SKIP_DETAIL_LIMIT,
+    );
+    expect(accumulated.skippedDetailsOmitted).toBe(37);
+    expect(Buffer.byteLength(JSON.stringify(accumulated), "utf8")).toBeLessThan(
+      16 * 1024,
+    );
   });
 });

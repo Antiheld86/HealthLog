@@ -1,10 +1,36 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import dns from "node:dns";
+import { fetch as undiciFetch } from "undici";
 import { isPublicIp } from "@/lib/validations/notifications";
 import {
   getPinnedPublicDispatcher,
   _resetPinnedDispatcherForTests,
 } from "../safe-fetch-dispatcher";
+
+const EMBEDDED_PRIVATE_DNS_ANSWERS = [
+  ["IPv4-compatible loopback", "::7f00:1"],
+  ["IPv4-compatible metadata", "::a9fe:a9fe"],
+  ["6to4 RFC1918", "2002:a00:1::"],
+  ["6to4 metadata", "2002:a9fe:a9fe::"],
+  ["NAT64 WKP RFC1918", "64:ff9b::c0a8:101"],
+  ["NAT64 WKP metadata", "64:ff9b::a9fe:a9fe"],
+  ["RFC8215 local-use RFC1918", "64:ff9b:1:ac10:0:1::"],
+  ["RFC8215 local-use metadata", "64:ff9b:1:a9fe:0:a9fe::"],
+] as const;
+
+function errorCodes(error: unknown): string[] {
+  if (!error || typeof error !== "object") return [];
+  const value = error as {
+    code?: unknown;
+    cause?: unknown;
+    errors?: unknown[];
+  };
+  return [
+    ...(typeof value.code === "string" ? [value.code] : []),
+    ...errorCodes(value.cause),
+    ...(value.errors ?? []).flatMap(errorCodes),
+  ];
+}
 
 describe("isPublicIp", () => {
   it("accepts a public IPv4 address", () => {
@@ -79,17 +105,19 @@ describe("pinnedPublicDispatcher", () => {
     }) as unknown as typeof dns.lookup);
 
     const dispatcher = getPinnedPublicDispatcher();
-    // Drive the dispatcher through `fetch` so the integration mirrors
-    // what safeFetch does. The expected outcome is a connect error
-    // (the lookup wrapper raised ENOTFOUND).
-    await expect(
-      fetch(
-        "https://attacker-controlled.example.test/probe",
-        // Node's fetch RequestInit accepts undici's `dispatcher`; the
-        // DOM types do not, hence the cast.
-        { dispatcher } as RequestInit & { dispatcher: typeof dispatcher },
-      ),
-    ).rejects.toThrow();
+    let caught: unknown;
+    try {
+      await undiciFetch("https://attacker-controlled.example.test/probe", {
+        dispatcher,
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    // A known-denied plain IPv4 answer proves the harness can distinguish
+    // policy refusal from a later socket failure.
+    expect(caught).toBeDefined();
+    expect(errorCodes(caught)).toContain("ENOTFOUND");
   }, 20_000);
 
   it("forwards a public-resolving hostname to the real connector", async () => {
@@ -161,4 +189,35 @@ describe("pinnedPublicDispatcher", () => {
     const code = (caught as NodeJS.ErrnoException)?.code;
     expect(code === "ENOTFOUND").toBe(false);
   }, 20_000);
+
+  it.each(EMBEDDED_PRIVATE_DNS_ANSWERS)(
+    "refuses a hostname whose resolver returns %s before Undici connects",
+    async (_label, address) => {
+      vi.spyOn(dns, "lookup").mockImplementation(((
+        _hostname: string,
+        _opts: dns.LookupAllOptions,
+        callback: (
+          err: NodeJS.ErrnoException | null,
+          addresses: dns.LookupAddress[],
+        ) => void,
+      ) => {
+        callback(null, [{ address, family: 6 }]);
+      }) as unknown as typeof dns.lookup);
+
+      const dispatcher = getPinnedPublicDispatcher();
+      let caught: unknown;
+      try {
+        await undiciFetch("http://transition-answer.example.test:8089/probe", {
+          dispatcher,
+          signal: AbortSignal.timeout(750),
+        });
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBeDefined();
+      expect(errorCodes(caught)).toContain("ENOTFOUND");
+    },
+    5_000,
+  );
 });

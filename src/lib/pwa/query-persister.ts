@@ -39,6 +39,10 @@ const STORE = "kv";
 const KEY = "react-query";
 const VERSION_KEY = "react-query-version";
 const MAX_AGE_MS = 24 * 60 * 60 * 1000; // discard anything older than a day
+// Keep this ownership contract aligned with `public/sw.js`. Session-end
+// cleanup removes every current/legacy HealthLog cache family while leaving
+// unrelated CacheStorage namespaces on the same origin untouched.
+const HEALTHLOG_CACHE_NAME_RE = /^healthlog-(?:static|pages|data)-/;
 
 /**
  * Upper bound on the serialized snapshot. The allowlist already caps WHAT is
@@ -326,11 +330,7 @@ export async function clearOfflineCachesForSessionEnd(): Promise<void> {
       const keys = await caches.keys();
       await Promise.all(
         keys
-          .filter(
-            (k) =>
-              k.startsWith("healthlog-data-") ||
-              k.startsWith("healthlog-pages-"),
-          )
+          .filter((k) => HEALTHLOG_CACHE_NAME_RE.test(k))
           .map((k) => caches.delete(k)),
       );
     } catch {

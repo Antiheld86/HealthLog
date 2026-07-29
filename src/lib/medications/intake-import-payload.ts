@@ -16,6 +16,7 @@ export interface MedicationImportQueueEntry {
   scheduledFor: string;
   takenAt: string;
   idempotencyKey: string;
+  sourceLine: number;
 }
 
 /**
@@ -58,7 +59,7 @@ export function buildMedicationImportEntries(
   medicationId: string,
   rows: readonly MedicationImportRow[],
 ): MedicationImportQueueEntry[] {
-  return rows.map((row) => {
+  return rows.map((row, index) => {
     const takenAt = new Date(`${row.datum}T${row.uhrzeit}`);
     return {
       // This body carries one time per row and nothing to say which slot it
@@ -68,6 +69,7 @@ export function buildMedicationImportEntries(
       scheduledFor: takenAt.toISOString(),
       takenAt: takenAt.toISOString(),
       idempotencyKey: medicationImportIdempotencyKey(medicationId, takenAt),
+      sourceLine: index + 1,
     };
   });
 }
