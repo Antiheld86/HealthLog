@@ -312,3 +312,50 @@ describe("medication reminder — client-managed suppression is APNs-only", () =
     expect(dispatchNotification).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("issue #664 — dedup follows the scheduled occurrence across midnight", () => {
+  it("dispatches an untreated overnight occurrence once and anchors its own local date", async () => {
+    const med = medicationFixture();
+    med.schedules[0] = {
+      ...med.schedules[0],
+      windowStart: "23:45",
+      windowEnd: "00:30",
+      timesOfDay: ["23:45"],
+      rrule: "FREQ=DAILY",
+    };
+    med.user.timezone = "Europe/Berlin";
+    prismaMock.medication.findMany.mockResolvedValue([med]);
+
+    // 00:15 and 00:30 on Jul 29 in Berlin are still the Jul 28 23:45
+    // occurrence's open window.
+    await tickAt("2026-07-28T22:15:00.000Z");
+    await tickAt("2026-07-28T22:30:00.000Z");
+
+    expect(dispatchNotification).toHaveBeenCalledTimes(1);
+    expect(pushAttempts).toHaveLength(1);
+    expect(pushAttempts[0]?.reason).toBe(
+      "med:med-1:sched-1:23:45:YELLOW:2026-07-28",
+    );
+  });
+
+  it("keeps consecutive 23:45 occurrences distinct", async () => {
+    const { medicationReminderDedupKey } =
+      await import("@/lib/notifications/reminder-dedup");
+    const first = medicationReminderDedupKey({
+      medicationId: "med-1",
+      scheduleId: "sched-1",
+      slotTime: "23:45",
+      phase: "YELLOW",
+      localDate: "2026-07-28",
+    });
+    const second = medicationReminderDedupKey({
+      medicationId: "med-1",
+      scheduleId: "sched-1",
+      slotTime: "23:45",
+      phase: "YELLOW",
+      localDate: "2026-07-29",
+    });
+
+    expect(first).not.toBe(second);
+  });
+});
