@@ -26,7 +26,13 @@
  * The access tokens themselves stay ordinary `hlk_` `ApiToken` rows, linked
  * back through `ApiToken.mcpConnectionId`.
  */
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
+
+type ConnectionDb = Pick<
+  Prisma.TransactionClient,
+  "mcpOAuthConnection" | "apiToken" | "$queryRaw"
+>;
 
 export interface ConnectionRotation {
   /** The connection id (`cid`) embedded in the refresh artifact. */
@@ -82,8 +88,22 @@ export async function createConnection(args: {
  */
 export async function rotateConnection(
   args: ConnectionRotation,
+  db: ConnectionDb = prisma,
 ): Promise<RotationOutcome> {
-  const connection = await prisma.mcpOAuthConnection.findUnique({
+  // PostgreSQL has no Prisma model-level row-lock primitive. Inside the token
+  // route's interactive transaction this serializes every decision for one
+  // refresh family before we re-read its current state. The runtime guard keeps
+  // lightweight unit doubles compatible while production clients always lock.
+  if (typeof db.$queryRaw === "function") {
+    await db.$queryRaw`
+      SELECT id
+      FROM mcp_oauth_connections
+      WHERE id = ${args.connectionId}
+      FOR UPDATE
+    `;
+  }
+
+  const connection = await db.mcpOAuthConnection.findUnique({
     where: { id: args.connectionId },
     select: {
       id: true,
@@ -106,13 +126,13 @@ export async function rotateConnection(
   if (connection.currentJti !== args.presentedJti) {
     // Replay of an already-rotated refresh token — treat as theft and revoke
     // the whole connection (reuse-detection family revocation).
-    await revokeConnectionRow(connection.id);
+    await revokeConnectionRow(connection.id, db);
     return { ok: false, reason: "reuse_detected" };
   }
 
   // Advance the chain atomically: only the caller presenting the current jti
   // wins, so two concurrent refreshes cannot both rotate the same row.
-  const advanced = await prisma.mcpOAuthConnection.updateMany({
+  const advanced = await db.mcpOAuthConnection.updateMany({
     where: {
       id: connection.id,
       currentJti: args.presentedJti,
@@ -121,12 +141,16 @@ export async function rotateConnection(
     data: { currentJti: args.newJti, lastUsedAt: new Date() },
   });
   if (advanced.count === 0) {
+    // A contender that loses the guarded advancement is a replay signal just
+    // like a stale JTI observed after taking the row lock. Revoke the complete
+    // family before returning; the surrounding transaction commits this deny.
+    await revokeConnectionRow(connection.id, db);
     return { ok: false, reason: "reuse_detected" };
   }
 
   // L4 — revoke the access tokens minted before this rotation so a leaked
   // 60-minute access token cannot outlive the refresh that spawned it.
-  await prisma.apiToken.updateMany({
+  await db.apiToken.updateMany({
     where: { mcpConnectionId: connection.id, revoked: false },
     data: { revoked: true },
   });
@@ -135,12 +159,15 @@ export async function rotateConnection(
 }
 
 /** Internal — stamp `revokedAt` and revoke every linked access token. */
-async function revokeConnectionRow(connectionId: string): Promise<void> {
-  await prisma.mcpOAuthConnection.updateMany({
+async function revokeConnectionRow(
+  connectionId: string,
+  db: Pick<ConnectionDb, "mcpOAuthConnection" | "apiToken"> = prisma,
+): Promise<void> {
+  await db.mcpOAuthConnection.updateMany({
     where: { id: connectionId, revokedAt: null },
     data: { revokedAt: new Date() },
   });
-  await prisma.apiToken.updateMany({
+  await db.apiToken.updateMany({
     where: { mcpConnectionId: connectionId, revoked: false },
     data: { revoked: true },
   });

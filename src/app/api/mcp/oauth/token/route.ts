@@ -29,6 +29,8 @@ import { randomUUID } from "node:crypto";
 
 import { NextRequest } from "next/server";
 
+import type { Prisma } from "@/generated/prisma/client";
+import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import { auditLog } from "@/lib/auth/audit";
@@ -109,6 +111,16 @@ interface RefreshClaims {
   resource: string;
 }
 
+type TokenPairArgs = {
+  userId: string;
+  clientId: string;
+  scope: string;
+  resource: string;
+  grant: "authorization_code" | "refresh_token";
+  connectionId?: string;
+  refreshJti?: string;
+};
+
 /**
  * Mint the access token (+ refresh artifact when `offline_access` is granted).
  *
@@ -119,15 +131,15 @@ interface RefreshClaims {
  * the connection seeded with it; for `refresh_token` the caller has just
  * advanced the connection to it.
  */
-async function mintTokenPair(args: {
-  userId: string;
-  clientId: string;
-  scope: string;
-  resource: string;
-  grant: "authorization_code" | "refresh_token";
-  connectionId?: string;
-  refreshJti?: string;
-}): Promise<Response> {
+async function mintTokenPair(args: TokenPairArgs): Promise<Response> {
+  const access = await persistAccessToken(args);
+  return finalizeTokenPair(args, access);
+}
+
+async function persistAccessToken(
+  args: TokenPairArgs,
+  db?: Pick<Prisma.TransactionClient, "apiToken">,
+) {
   // Grant EXACTLY the scopes the authorization code carried (read, or
   // read+write). `health:read` is always present; `health:write` is added
   // only when the user consented to it at the authorize step. The token is
@@ -139,14 +151,20 @@ async function mintTokenPair(args: {
     permissions.push(SCOPE_HEALTH_WRITE);
   }
 
-  const access = await issueApiToken({
+  const options = {
     userId: args.userId,
     name: "MCP connector",
     permissions,
     expiresInMinutes: ACCESS_TOKEN_TTL_MINUTES,
     ...(args.connectionId ? { mcpConnectionId: args.connectionId } : {}),
-  });
+  };
+  return db ? issueApiToken(options, db) : issueApiToken(options);
+}
 
+async function finalizeTokenPair(
+  args: TokenPairArgs,
+  access: Awaited<ReturnType<typeof issueApiToken>>,
+): Promise<Response> {
   const refresh =
     args.connectionId && args.refreshJti
       ? signArtifact(
@@ -367,14 +385,42 @@ export async function POST(request: NextRequest): Promise<Response> {
         );
       }
       const newJti = randomUUID();
-      const rotation = await rotateConnection({
+      const rotationArgs = {
         connectionId: claims.cid,
         presentedJti: claims.jti,
         newJti,
         clientId: claims.client_id,
         userId: claims.sub,
-      });
-      if (!rotation.ok) {
+      };
+      const pairArgs: TokenPairArgs = {
+        userId: claims.sub,
+        clientId: claims.client_id,
+        scope: claims.scope,
+        resource: claims.resource,
+        grant: "refresh_token",
+        connectionId: claims.cid,
+        refreshJti: newJti,
+      };
+
+      // Rotation and successor insertion are one serialized state transition.
+      // A replay transaction commits family revocation; a successful
+      // transaction commits both JTI advancement and the successor access row.
+      // Any insertion error rejects the callback and PostgreSQL rolls every
+      // earlier state change back. No artifact is signed inside this callback.
+      const exchange = await prisma.$transaction(
+        async (tx) => {
+          const rotation = await rotateConnection(rotationArgs, tx);
+          if (!rotation.ok) {
+            return { ok: false as const, rotation };
+          }
+          const access = await persistAccessToken(pairArgs, tx);
+          return { ok: true as const, access };
+        },
+        { timeout: 10_000 },
+      );
+
+      if (!exchange.ok) {
+        const { rotation } = exchange;
         annotate({
           action: {
             name:
@@ -392,15 +438,9 @@ export async function POST(request: NextRequest): Promise<Response> {
         );
       }
 
-      return mintTokenPair({
-        userId: claims.sub,
-        clientId: claims.client_id,
-        scope: claims.scope,
-        resource: claims.resource,
-        grant: "refresh_token",
-        connectionId: claims.cid,
-        refreshJti: newJti,
-      });
+      // The transaction has committed. Only now may the stateless successor
+      // refresh artifact be signed and returned to the client.
+      return finalizeTokenPair(pairArgs, exchange.access);
     }
 
     return oauthError(
