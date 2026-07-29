@@ -88,6 +88,14 @@ interface ParsedStatusCache {
   timeout?: boolean;
   /** v1.8.3 — ISO timestamp before which a timeout stub suppresses re-enqueue. */
   retryAt?: string;
+  /** Explicit generated/negative cache classification for new rows. */
+  statusKind?: "generated" | "negative";
+  /** Whether the producer may be retried at the time this row is read. */
+  retryable?: boolean;
+  /** Generated rows expire once the caller's current day differs. */
+  expiresAfterDateKey?: string;
+  /** Stable non-sensitive negative-cache reason code. */
+  reason?: "timeout" | "error" | "screened";
   /** v1.16.8 — fingerprint of the data snapshot the text was generated from. */
   snapshotHash?: string;
   /** v1.18.11 (P6) — cheap fingerprint of the salient inputs (count + newest). */
@@ -107,8 +115,11 @@ export function isTimeoutStub(parsed: {
 }
 
 export interface FreshStatusCacheHit {
+  kind: "generated";
   text: string;
   updatedAt: string;
+  retryable: false;
+  expiresAfterDateKey: string;
 }
 
 /**
@@ -145,8 +156,11 @@ export async function readFreshStatusText(args: {
       return null;
     }
     return {
+      kind: "generated",
       text: parsed.text,
       updatedAt: latestCache.createdAt.toISOString(),
+      retryable: false,
+      expiresAfterDateKey: parsed.expiresAfterDateKey ?? parsed.dateKey,
     };
   } catch {
     // Malformed cache payload — treat as a miss and regenerate.
@@ -230,7 +244,13 @@ export async function refreshUnchangedStatusInsight(args: {
     action: { name: "insights.status.skipped_unchanged" },
     meta: { cache_action: args.cacheAction },
   });
-  return { text: parsed.text, updatedAt: created.createdAt.toISOString() };
+  return {
+    kind: "generated",
+    text: parsed.text,
+    updatedAt: created.createdAt.toISOString(),
+    retryable: false,
+    expiresAfterDateKey: args.todayKey,
+  };
 }
 
 /**
@@ -433,7 +453,13 @@ export async function gateUnchangedStatusInput(args: {
     action: { name: "insights.status.skipped_unchanged" },
     meta: { cache_action: args.cacheAction, gate: "input" },
   });
-  return { text: parsed.text, updatedAt: created.createdAt.toISOString() };
+  return {
+    kind: "generated",
+    text: parsed.text,
+    updatedAt: created.createdAt.toISOString(),
+    retryable: false,
+    expiresAfterDateKey: args.todayKey,
+  };
 }
 
 export interface LastGoodStatusHit {
@@ -566,7 +592,11 @@ export async function resolveReadOnlyStatusMiss(args: {
   // navigation while the provider is still degraded would be a storm. While
   // the stub is fresh, stay in `preparing` without enqueuing; once it goes
   // stale (or never existed) enqueue a fresh generation.
-  if (await hasFreshTimeoutStub({ userId: args.userId, cacheAction })) {
+  const negativeCache = await readStatusNegativeCache({
+    userId: args.userId,
+    cacheAction,
+  });
+  if (negativeCache && !negativeCache.retryable) {
     annotate({
       action: { name: "insights.status.preparing" },
       meta: { metric: args.metric, suppressed_enqueue: true },
@@ -602,22 +632,46 @@ export async function resolveReadOnlyStatusMiss(args: {
  * degraded. A stub without `retryAt` (legacy) is treated as stale so the
  * resolver retries, matching the pre-v1.8.3 "transient miss" behaviour.
  */
-async function hasFreshTimeoutStub(args: {
+export interface StatusNegativeCache {
+  kind: "negative";
+  reason: "timeout" | "error" | "screened";
+  retryAt: string;
+  retryable: boolean;
+}
+
+/**
+ * Read the latest negative-cache policy without exposing provider errors or
+ * assessment content. `retryable` flips only when the explicit `retryAt`
+ * boundary has passed; legacy/malformed stubs are treated as absent so the
+ * next request may recover.
+ */
+export async function readStatusNegativeCache(args: {
   userId: string;
   cacheAction: string;
-}): Promise<boolean> {
+}): Promise<StatusNegativeCache | null> {
   const latest = await prisma.auditLog.findFirst({
     where: { userId: args.userId, action: args.cacheAction },
     orderBy: { createdAt: "desc" },
     select: { details: true },
   });
-  if (!latest?.details) return false;
+  if (!latest?.details) return null;
   try {
     const parsed = JSON.parse(latest.details) as ParsedStatusCache;
-    if (!isTimeoutStub(parsed)) return false;
-    if (typeof parsed.retryAt !== "string") return false;
-    return new Date(parsed.retryAt).getTime() > Date.now();
+    if (!isTimeoutStub(parsed)) return null;
+    if (typeof parsed.retryAt !== "string") return null;
+    const retryAtMs = new Date(parsed.retryAt).getTime();
+    if (!Number.isFinite(retryAtMs)) return null;
+    const reason =
+      parsed.reason === "error" || parsed.reason === "screened"
+        ? parsed.reason
+        : "timeout";
+    return {
+      kind: "negative",
+      reason,
+      retryAt: parsed.retryAt,
+      retryable: retryAtMs <= Date.now(),
+    };
   } catch {
-    return false;
+    return null;
   }
 }
