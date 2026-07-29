@@ -396,7 +396,7 @@ export async function handleAppleHealthImport(
       }
     } catch {
       const completed = ecg.imported + ecg.updated + ecg.skipped + ecg.failed;
-      ecg.failed += Math.max(1, ecg.discovered - completed);
+      ecg.failed += Math.max(0, ecg.discovered - completed);
     }
 
     // Done. Persist the terminal envelope.
