@@ -8,13 +8,11 @@
  * the entry→Measurement mapping. No SDK — hand-rolled fetch over `safeFetch`,
  * mirroring the Withings / WHOOP / Fitbit clients.
  *
- * SSRF (critical): every outbound call routes through `safeFetch` with
- * `requirePublicHost: true` BY DEFAULT — public instances are the norm, and a
- * malicious URL pointing at `169.254.169.254` / an RFC1918 admin panel must be
- * refused. Only when the user has flipped `nightscoutAllowPrivateHost` (the
- * explicit self-hoster opt-in for a LAN instance) does the public-host pin
- * come off. Redirects are pinned to `manual` and a timeout is always composed
- * so a tar-pit instance can't hold a worker.
+ * SSRF (critical): every outbound call re-evaluates the exact server-owned
+ * origin policy. Public instances use safeFetch's input and DNS-pinned public
+ * verdict. A private origin is reachable only when its complete canonical
+ * scheme/host/port is in NIGHTSCOUT_PRIVATE_ORIGINS. The legacy user boolean
+ * is accepted as compatibility input but never grants egress.
  *
  * Auth: Nightscout accepts the API secret two ways — the `api-secret` HTTP
  * header carrying the SHA1 hex of the secret, OR a `token` query param (a
@@ -26,6 +24,12 @@ import { createHash } from "node:crypto";
 
 import type { MeasurementType } from "@/generated/prisma/client";
 import { safeFetch } from "@/lib/safe-fetch";
+import {
+  configuredNightscoutPrivateOrigins,
+  evaluateNightscoutOrigin,
+  NIGHTSCOUT_PRIVATE_ORIGIN_REASON,
+} from "@/lib/validations/nightscout";
+import { SafeFetchError } from "@/lib/safe-fetch";
 
 /** Default per-request timeout for a Nightscout fetch. */
 const NIGHTSCOUT_TIMEOUT_MS = 15_000;
@@ -71,7 +75,8 @@ export interface FetchSgvOptions {
   baseUrl: string;
   token: string;
   count: number;
-  allowPrivateHost: boolean;
+  /** @deprecated Compatibility metadata only; never egress authority. */
+  allowPrivateHost?: boolean;
   /** Defaults to `token` (query param). `header` uses the api-secret SHA1. */
   authMode?: NightscoutAuthMode;
   /** Override the default timeout (tests). */
@@ -176,6 +181,15 @@ export class NightscoutApiError extends Error {
   }
 }
 
+export class NightscoutPolicyError extends Error {
+  readonly reasonCode = NIGHTSCOUT_PRIVATE_ORIGIN_REASON;
+
+  constructor() {
+    super(NIGHTSCOUT_PRIVATE_ORIGIN_REASON);
+    this.name = "NightscoutPolicyError";
+  }
+}
+
 /**
  * Fetch the most recent `count` SGV entries from the user's instance.
  *
@@ -188,6 +202,14 @@ export class NightscoutApiError extends Error {
 export async function fetchSgvEntries(
   opts: FetchSgvOptions,
 ): Promise<ParsedSgvEntry[]> {
+  const policy = evaluateNightscoutOrigin(
+    opts.baseUrl,
+    configuredNightscoutPrivateOrigins(),
+  );
+  if (!policy.allowed || !policy.canonicalOrigin) {
+    throw new NightscoutPolicyError();
+  }
+
   const authMode: NightscoutAuthMode = opts.authMode ?? "token";
   const headers: Record<string, string> = { Accept: "application/json" };
   let url: string;
@@ -195,22 +217,35 @@ export async function fetchSgvEntries(
   if (authMode === "header" && opts.token) {
     // Classic `API_SECRET` instances: the SHA1 hex in the api-secret header.
     headers["api-secret"] = sha1Hex(opts.token);
-    url = buildEntriesUrl(opts.baseUrl, opts.count);
+    url = buildEntriesUrl(policy.canonicalOrigin, opts.count);
   } else {
     // Token query-param path (role-scoped access token; the default).
-    url = buildEntriesUrl(opts.baseUrl, opts.count, opts.token || undefined);
+    url = buildEntriesUrl(
+      policy.canonicalOrigin,
+      opts.count,
+      opts.token || undefined,
+    );
   }
 
-  const res = await safeFetch(
-    url,
-    { method: "GET", headers },
-    {
-      // Default-on public-host pin; relaxed ONLY when the user opted a
-      // private/LAN instance in. `followRedirects` defaults false (manual).
-      requirePublicHost: !opts.allowPrivateHost,
-      timeoutMs: opts.timeoutMs ?? NIGHTSCOUT_TIMEOUT_MS,
-    },
-  );
+  let res: Response;
+  try {
+    res = await safeFetch(
+      url,
+      { method: "GET", headers },
+      {
+        // Public origins receive the full literal + DNS-pinned classifier.
+        // An exact operator origin may resolve privately; redirects remain
+        // manual, so no response can move the request outside that grant.
+        requirePublicHost: !policy.privateOriginApproved,
+        timeoutMs: opts.timeoutMs ?? NIGHTSCOUT_TIMEOUT_MS,
+      },
+    );
+  } catch (error) {
+    if (error instanceof SafeFetchError && error.kind === "private_host") {
+      throw new NightscoutPolicyError();
+    }
+    throw error;
+  }
 
   if (res.status < 200 || res.status >= 300) {
     throw new NightscoutApiError(

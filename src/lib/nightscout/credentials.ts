@@ -14,6 +14,7 @@ import { decrypt } from "@/lib/crypto";
 export interface NightscoutCredentials {
   baseUrl: string;
   token: string;
+  /** @deprecated Compatibility/display metadata; never egress authority. */
   allowPrivateHost: boolean;
 }
 

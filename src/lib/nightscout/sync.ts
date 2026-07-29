@@ -44,6 +44,7 @@ import {
   fetchSgvEntries,
   mapSgvEntryToMeasurement,
   NightscoutApiError,
+  NightscoutPolicyError,
   type ParsedSgvEntry,
 } from "./client";
 import { getUserNightscoutCredentials } from "./credentials";
@@ -92,15 +93,24 @@ export async function recordNightscoutSyncFailure(
   userId: string,
   err: unknown,
 ): Promise<void> {
+  const policyDenied =
+    err instanceof NightscoutPolicyError ||
+    (typeof err === "object" &&
+      err !== null &&
+      "reasonCode" in err &&
+      err.reasonCode === "private_origin_not_approved");
   await recordSyncFailure({
     userId,
     integration: "nightscout",
     kind: classifyNightscoutFailure(err),
-    message: redactNightscoutSecret(
-      err instanceof Error ? err.message : String(err),
-    ),
-    errorCode:
-      err instanceof NightscoutApiError && err.status != null
+    message: policyDenied
+      ? "private_origin_not_approved"
+      : redactNightscoutSecret(
+          err instanceof Error ? err.message : String(err),
+        ),
+    errorCode: policyDenied
+      ? "private_origin_not_approved"
+      : err instanceof NightscoutApiError && err.status != null
         ? String(err.status)
         : undefined,
   });
@@ -109,7 +119,15 @@ export async function recordNightscoutSyncFailure(
 /** Map a Nightscout HTTP status / network error onto the shared ledger kind. */
 export function classifyNightscoutFailure(err: unknown): FailureKind {
   let classification: IntegrationClassification = "transient";
-  if (err instanceof NightscoutApiError && err.status != null) {
+  if (
+    err instanceof NightscoutPolicyError ||
+    (typeof err === "object" &&
+      err !== null &&
+      "reasonCode" in err &&
+      err.reasonCode === "private_origin_not_approved")
+  ) {
+    classification = "persistent";
+  } else if (err instanceof NightscoutApiError && err.status != null) {
     // Wrong / missing token, or a token whose role can't read SGV.
     if (err.status === 401 || err.status === 403) {
       classification = "reauth_required";
@@ -152,7 +170,6 @@ export async function syncUserNightscout(
       baseUrl: creds.baseUrl,
       token: creds.token,
       count: opts.count ?? NIGHTSCOUT_SYNC_COUNT,
-      allowPrivateHost: creds.allowPrivateHost,
     });
   } catch (err) {
     // Recorded here (token-redacted), then marked so the poll-cohort boundary
