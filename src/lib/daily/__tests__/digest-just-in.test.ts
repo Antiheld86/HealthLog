@@ -120,6 +120,37 @@ describe("buildDailyDigest — justIn", () => {
     expect(outside.justIn).toBeNull();
   });
 
+  it("does not surface a future or invalid arrival as current news", () => {
+    const future = arrival(-60_000, {
+      kind: "weight",
+      line: "This line has not landed yet.",
+    });
+    const invalid = arrival(60_000, {
+      arrivedAt: new Date(Number.NaN),
+      line: "Invalid timestamps cannot lead the day.",
+    });
+
+    const digest = buildDailyDigest(input({ arrivals: [future, invalid] }), t);
+
+    expect(digest.justIn).toBeNull();
+    expect(digest.reactionLine).toBeNull();
+  });
+
+  it("ignores a future row and keeps the newest valid arrival", () => {
+    const digest = buildDailyDigest(
+      input({
+        arrivals: [
+          arrival(5 * 60_000, { kind: "workout", line: "Grounded arrival." }),
+          arrival(-60_000, { kind: "weight", line: "Future row." }),
+        ],
+      }),
+      t,
+    );
+
+    expect(digest.justIn?.kind).toBe("workout");
+    expect(digest.reactionLine).toBe("Grounded arrival.");
+  });
+
   it("keeps the reaction line after the chip has expired", () => {
     // The load-bearing asymmetry: past the window the record is no longer
     // NEWS, but the sentence is still the day's READ and must survive.

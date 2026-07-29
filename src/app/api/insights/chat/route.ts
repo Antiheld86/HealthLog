@@ -720,9 +720,9 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
             streamedDeltas += 1;
           },
           // v1.20.0 — the no-tools path still builds one assembled user turn (the
-          // transcript-flattening preserves the once-per-conversation snapshot
-          // trick + grounding exactly), so it ships as a single user message. The
-          // stable persona/grounding rides `system` and is now cache-eligible.
+          // transcript-flattening includes the current authoritative snapshot
+          // on every stateless no-tools request), so it ships as a single user
+          // message. The stable persona rides `system` and is cache-eligible.
           params: singleUserTurn({
             system: systemPrompt,
             user: userPrompt,
@@ -745,11 +745,9 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
         workingProviderType = fallback.workingProvider.providerType;
         totalTokensSpent = result.tokensUsed ?? 0;
         cachedTokensSpent = result.cachedInputTokens ?? 0;
-        // v1.21.2 (A8) — the no-tools path showed the model the full SNAPSHOT only
-        // when `includeFullSnapshot` was set; otherwise it shipped the
-        // grounded-elsewhere pointer with no fresh figures, so there is nothing to
-        // grade. When figures WERE delivered, the authoritative set is the
-        // structured snapshot record (incl. the correlations block).
+        // v1.21.2 (A8) — the no-tools path grades only when it delivered the
+        // full SNAPSHOT. Stateless provider requests always do; retaining the
+        // conditional keeps the builder contract explicit and testable.
         if (includeFullSnapshot) {
           noToolsSnapshotPayloads = [
             snapshot.sections,
