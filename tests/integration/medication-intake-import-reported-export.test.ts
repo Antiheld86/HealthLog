@@ -162,6 +162,11 @@ describe("medication intake import — the reported 28-dose export", () => {
       imported: 0,
       skipped: 28,
       skipReasons: [{ reason: "already_recorded", count: 28 }],
+      skipDetails: Array.from({ length: 28 }, (_, index) => ({
+        line: index + 1,
+        reason: "already_recorded",
+      })),
+      skippedDetailsOmitted: 0,
     });
     await expect(
       prisma.medicationIntakeEvent.count({
