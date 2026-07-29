@@ -158,6 +158,11 @@ export function WorkoutList({
                       {formatEnergy(workout.activeEnergyKcal, locale)} kcal
                     </span>
                   ) : null}
+                  {workout.avgHr != null ? (
+                    <span data-slot="workout-list-avg-hr">
+                      {workout.avgHr} bpm
+                    </span>
+                  ) : null}
                 </span>
               </div>
             </Link>
