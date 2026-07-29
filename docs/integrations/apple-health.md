@@ -30,8 +30,10 @@ re-uploading the same archive merges instead of duplicating.
 
 The archive contains `apple_health_export/export.xml` (the canonical
 record stream) plus a handful of auxiliary files (workout routes,
-clinical records, electrocardiograms). The importer reads
-`export.xml` and ignores the rest.
+clinical records, electrocardiograms). The importer reads `export.xml`
+and supported ECG CSVs under
+`apple_health_export/electrocardiograms/`; unsupported auxiliary files
+remain ignored.
 
 ## 2. Upload to HealthLog
 
@@ -76,7 +78,15 @@ canonical envelope:
     "uploadBytes": 412345678,
     "exportedAt": "2026-04-30T18:12:00.000Z",
     "progress": { "records_seen": 124000, "workouts_seen": 230 },
-    "result": null,
+    "result": {
+      "ecg": {
+        "discovered": 2,
+        "imported": 1,
+        "updated": 0,
+        "skipped": 0,
+        "failed": 1
+      }
+    },
     "failureReason": null
   },
   "error": null
@@ -94,8 +104,8 @@ they triggered.
 
 ## What gets imported
 
-The parser folds four XML element types into the existing HealthLog
-schema (CHANGELOG v1.4.34):
+The parser folds four XML element types and supported auxiliary ECG
+CSVs into the existing HealthLog schema (CHANGELOG v1.4.34):
 
 | XML element        | Maps to                                | Notes                                                                                                                                                                         |
 | ------------------ | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -103,11 +113,45 @@ schema (CHANGELOG v1.4.34):
 | `<Workout>`        | `Workout` rows                         | Activity type + duration + energy + distance.                                                                                                                                 |
 | `<Correlation>`    | `Measurement` rows                     | Compound samples like blood pressure (systolic + diastolic) explode into their per-metric children.                                                                           |
 | `<ClinicalRecord>` | `Measurement` rows where the type maps | Health-record FHIR snapshots; only the metric-typed fields are ingested.                                                                                                      |
+| ECG CSV            | `EcgRecording` rows                    | The source-provided waveform is encrypted before persistence; descriptors and the device's classification are stored without diagnostic inference.                            |
 
 The HK quantity types that map to HealthLog metric types live in
 `src/lib/measurements/apple-health-mapping.ts`. Anything outside the
-mapped set (workout routes, ECG voltage traces) is counted in
-`progress.records_skipped` but not stored.
+mapped set (for example workout routes) is counted as unsupported and
+not stored.
+
+### ECG archive safety, privacy, and idempotency
+
+ECG support is source-agnostic: if HealthKit includes a valid
+`HKElectrocardiogram` CSV, HealthLog can import it regardless of which
+compatible device originally wrote it. Archive member names are never
+used as filesystem paths and ECGs are never extracted to plaintext
+temporary files.
+
+The auxiliary reader enforces limits before and during decompression:
+
+- at most 20,000 total archive members and 2,000 ECG CSV members;
+- at most 16 MiB per decompressed ECG CSV and 512 MiB across all ECG CSVs;
+- at most a 200:1 declared compression ratio; and
+- at most 2,000,000 waveform samples per recording.
+
+Encrypted ZIP members, unsupported compression, unsafe or duplicate
+paths, forged size metadata, malformed timestamps or samples, and
+limit overruns are rejected. An ECG failure is fail-soft: valid
+`export.xml` measurements and workouts still commit, while the
+terminal result reports only
+`discovered/imported/updated/skipped/failed` ECG counts. It never
+returns filenames, source labels, sample values, or raw parser errors.
+
+Waveforms are converted to integer microvolts and encrypted with the
+existing AES-256-GCM ECG codec before the transaction writes an
+`EcgRecording` with `source=APPLE_HEALTH`. Stable identity is derived
+from normalized recording content rather than the CSV filename, so a
+renamed re-export updates the same user-scoped row while distinct
+recordings and different users remain independent. Known Apple
+device classifications are preserved as source-reported facts;
+unknown or localized classifications are stored as `null`. HealthLog
+does not inspect the waveform to infer AFib or make a diagnosis.
 
 ### Cumulative HK type → daily aggregate
 
@@ -148,8 +192,8 @@ The two-axis idempotency story:
 
 1. **File-level** — re-uploading the same `export.zip` (same SHA-256
    of bytes) short-circuits to the previous job only when that job
-   used the current parser revision. Existing jobs are revision 1;
-   new jobs use revision 2, so a pre-fix successful archive can be
+   used the current parser revision. Existing jobs may use revisions 1
+   or 2; new jobs use revision 3, so an earlier successful archive can be
    deliberately processed again under the corrected aggregation.
 2. **Record-level** — when an older `export.zip` is re-exported from
    iOS (same history, slightly newer device timestamps), every
@@ -161,6 +205,21 @@ Practically: a user who exports monthly and re-imports each archive
 sees fresh data merged in without duplicates. The job result line
 in the status response reports `recordsInserted` and
 `recordsUpdated` separately.
+
+### WHOOP records and current export limits
+
+Supported measurements written into HealthKit by another app are
+handled by HealthKit type, not by a raw writer label. For example, a
+supported heart-rate record written by WHOOP is imported as an
+Apple Health measurement and participates in the normal source
+priority rules.
+
+WHOOP currently exports neither ECG recordings nor Blood Pressure
+Insights to Apple Health. Those two WHOOP data classes therefore
+cannot arrive through an Apple Health `export.zip`; a WHOOP writer
+label on some other HealthKit record is not evidence of a WHOOP ECG
+export. HealthLog's direct WHOOP OAuth/API integration remains
+supported for the WHOOP data the API exposes.
 
 ## Admin variant — import on behalf of another user
 
