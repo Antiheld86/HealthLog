@@ -89,8 +89,12 @@ None - the implementation followed the planned bounded outcome and cohort-foldin
 
 ## Issues Encountered
 
-- The exact focused verification command reports 51 passing tests and one static failure because `src/lib/google-health/sync.ts` still contains the pre-existing verdict-collapsing `runGoogleHealthPollCohort` adapter. That file was explicitly outside Plan 22 ownership, and the production Plan 22 handler no longer uses the adapter.
-- Repository typecheck reports only seven errors in concurrently delivered Plan 21 Google sync-progress tests and its missing status route; no Plan 22 file reports a type error.
+- During isolated Plan 22 execution, the exact focused command initially
+  reported 51 passing tests and one static failure in the adjacent
+  `src/lib/google-health/sync.ts` adapter. Plan 21 subsequently replaced that
+  adapter in commit `5ec1a3836`; the combined Plan 14/22 gate now passes 52/52.
+- The concurrent Plan 21 type errors were closed in `5bc213c5b`; the repository
+  TypeScript check now passes.
 - Targeted ESLint, Prettier, and `git diff --check` pass for all four Plan 22 implementation files.
 
 ## User Setup Required
@@ -100,7 +104,8 @@ None - no external service configuration required.
 ## Next Phase Readiness
 
 - The bounded outcome contract is ready for operator-surface persistence and display.
-- Final integration verification requires the adjacent Google core adapter to retain its resolved verdict instead of collapsing it to `imported`.
+- The adjacent Google core adapter now retains its resolved verdict, and the
+  merged Plan 21/22 verification is green.
 
 ## Self-Check: PASSED
 
