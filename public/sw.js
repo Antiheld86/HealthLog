@@ -51,6 +51,16 @@ const PAGE_CACHE = `healthlog-pages-${CACHE_VERSION}`;
 // next paint. Network-first restores read-after-write freshness while keeping
 // the offline fallback.
 const DATA_CACHE = `healthlog-data-${CACHE_VERSION}`;
+// Keep this ownership contract aligned with
+// `clearOfflineCachesForSessionEnd()` in `query-persister.ts`. Cache cleanup
+// must cover every current/legacy HealthLog cache without deleting unrelated
+// CacheStorage namespaces owned by another app on the same origin.
+const HEALTHLOG_CACHE_NAME_RE = /^healthlog-(?:static|pages|data)-/;
+const CURRENT_HEALTHLOG_CACHES = new Set([
+  STATIC_CACHE,
+  PAGE_CACHE,
+  DATA_CACHE,
+]);
 const MAX_STATIC_ENTRIES = 150;
 const MAX_PAGE_ENTRIES = 30;
 const MAX_DATA_ENTRIES = 60;
@@ -136,7 +146,8 @@ self.addEventListener("activate", (event) => {
             keys
               .filter(
                 (k) =>
-                  k !== STATIC_CACHE && k !== PAGE_CACHE && k !== DATA_CACHE,
+                  HEALTHLOG_CACHE_NAME_RE.test(k) &&
+                  !CURRENT_HEALTHLOG_CACHES.has(k),
               )
               .map((k) => caches.delete(k)),
           ),
