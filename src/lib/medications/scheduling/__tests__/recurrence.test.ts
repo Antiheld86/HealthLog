@@ -473,6 +473,44 @@ describe("occurrencesBetween — rolling", () => {
   });
 });
 
+describe("rolling occurrence identity across a local-day change", () => {
+  it.each([
+    {
+      label: "ordinary Berlin week",
+      lastIntake: "2026-07-21T06:00:00.000Z",
+      now: "2026-07-29T10:00:00.000Z",
+      expected: "2026-07-28T06:00:00.000Z",
+    },
+    {
+      label: "Berlin spring DST week",
+      lastIntake: "2026-03-22T07:00:00.000Z",
+      now: "2026-03-30T10:00:00.000Z",
+      expected: "2026-03-29T06:00:00.000Z",
+    },
+  ])(
+    "retains the unresolved prior-day slot for an $label",
+    ({ lastIntake, now, expected }) => {
+      const schedule = makeSchedule({
+        id: "mounjaro-weekly",
+        rollingIntervalDays: 7,
+        timesOfDay: ["08:00"],
+      });
+      const ctx = makeCtx({
+        lastIntakeAt: d(lastIntake),
+        medication: { startsOn: d("2026-01-01T00:00:00.000Z") },
+      });
+
+      const occurrence = nextOccurrenceAfter(schedule, d(now), ctx);
+
+      expect(occurrence).toMatchObject({
+        scheduleId: "mounjaro-weekly",
+        at: d(expected),
+        timeOfDay: "08:00",
+      });
+    },
+  );
+});
+
 // ────────────────────────────────────────────────────────────────────
 // One-shot
 // ────────────────────────────────────────────────────────────────────

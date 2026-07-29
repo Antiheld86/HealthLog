@@ -558,3 +558,144 @@ describe("as-needed (zero schedules) — never due", () => {
     expect(display).toBeNull();
   });
 });
+
+describe("Mounjaro rolling weekly — canonical overdue band after day change", () => {
+  const lastTaken = d("2026-07-21T06:00:00.000Z"); // Jul 21 08:00 Berlin
+  const missedOccurrence = d("2026-07-28T06:00:00.000Z"); // Jul 28 08:00
+  const nextOccurrence = d("2026-08-04T06:00:00.000Z"); // Aug 4 08:00
+  const medication = makeMedication({
+    startsOn: d("2026-01-01T00:00:00.000Z"),
+  });
+  const schedule = makeRollingSchedule({
+    id: "mounjaro-weekly",
+    timesOfDay: ["08:00"],
+  });
+  const identifiedMark = (
+    at: Date,
+    identity: Record<string, unknown>,
+  ): ResolvedSlotMark =>
+    ({
+      ...mark(at),
+      ...identity,
+    }) as ResolvedSlotMark;
+
+  it("keeps yesterday's unresolved occurrence overdue on the following local day", () => {
+    const display = computeDisplayDue({
+      medication,
+      schedules: [schedule],
+      now: d("2026-07-29T10:00:00.000Z"),
+      userTz: BERLIN,
+      lastIntakeAt: lastTaken,
+      resolvedSlots: [],
+    });
+
+    expect(display).toMatchObject({
+      at: missedOccurrence,
+      overdue: true,
+    });
+  });
+
+  it("keeps the occurrence through the exact canonical band end, then closes it", () => {
+    const atBandEnd = computeDisplayDue({
+      medication,
+      schedules: [schedule],
+      now: d("2026-08-02T06:00:00.000Z"),
+      userTz: BERLIN,
+      lastIntakeAt: lastTaken,
+      resolvedSlots: [],
+    });
+    expect(atBandEnd).toMatchObject({
+      at: missedOccurrence,
+      overdue: true,
+    });
+
+    const afterBandEnd = computeDisplayDue({
+      medication,
+      schedules: [schedule],
+      now: d("2026-08-02T06:00:00.001Z"),
+      userTz: BERLIN,
+      lastIntakeAt: lastTaken,
+      resolvedSlots: [],
+    });
+    expect(afterBandEnd).toBeNull();
+  });
+
+  it.each(["taken", "skipped", "autoMissed"] as const)(
+    "an exact %s row suppresses only this occurrence and advances",
+    (status) => {
+      const display = computeDisplayDue({
+        medication,
+        schedules: [schedule],
+        now: d("2026-07-29T10:00:00.000Z"),
+        userTz: BERLIN,
+        lastIntakeAt:
+          status === "taken"
+            ? d("2026-07-28T06:10:00.000Z")
+            : lastTaken,
+        resolvedSlots: [
+          identifiedMark(missedOccurrence, {
+            scheduleId: "mounjaro-weekly",
+            status,
+          }),
+        ],
+      });
+
+      expect(display).toMatchObject({
+        at: nextOccurrence,
+        overdue: false,
+      });
+    },
+  );
+
+  it("does not let a sibling schedule's resolved occurrence suppress this schedule", () => {
+    const sibling = makeRollingSchedule({
+      id: "mounjaro-sibling",
+      timesOfDay: ["10:00"],
+      windowStart: "10:00",
+      windowEnd: "10:00",
+    });
+    const display = computeDisplayDue({
+      medication,
+      schedules: [schedule, sibling],
+      now: d("2026-07-29T10:00:00.000Z"),
+      userTz: BERLIN,
+      lastIntakeAt: lastTaken,
+      resolvedSlots: [
+        identifiedMark(missedOccurrence, {
+          scheduleId: "mounjaro-weekly",
+          status: "skipped",
+        }),
+      ],
+    });
+
+    expect(display).toMatchObject({
+      at: d("2026-07-28T08:00:00.000Z"),
+      overdue: true,
+      scheduleId: "mounjaro-sibling",
+    });
+  });
+
+  it("does not let an action from the archived era suppress the live-era occurrence", () => {
+    const liveEraStart = d("2026-07-27T12:00:00.000Z");
+    const display = computeDisplayDue({
+      medication,
+      schedules: [schedule],
+      now: d("2026-07-29T10:00:00.000Z"),
+      userTz: BERLIN,
+      lastIntakeAt: lastTaken,
+      eraStart: liveEraStart,
+      resolvedSlots: [
+        identifiedMark(missedOccurrence, {
+          scheduleId: "mounjaro-weekly",
+          actionAt: d("2026-07-27T11:59:59.000Z"),
+        }),
+      ],
+    });
+
+    expect(display).toMatchObject({
+      at: missedOccurrence,
+      overdue: true,
+      scheduleId: "mounjaro-weekly",
+    });
+  });
+});
