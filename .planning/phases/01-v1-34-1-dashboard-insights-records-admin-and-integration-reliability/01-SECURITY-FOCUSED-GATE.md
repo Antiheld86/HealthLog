@@ -1,9 +1,9 @@
 # Phase 01 focused security gate
 
-**Date:** 2026-07-29  
-**Started:** 2026-07-29T12:01:29Z  
-**Source commit:** `ddbfcb4588f22f29f807a42c437847de9e811b24`  
-**Branch:** `release/v1.34.1`  
+**Date:** 2026-07-29
+**Started:** 2026-07-29T12:01:29Z
+**Source commit:** `ddbfcb4588f22f29f807a42c437847de9e811b24`
+**Branch:** `release/v1.34.1`
 **Verdict:** **BLOCKED by the plan's test-script forwarding syntax; focused security boundaries are green**
 
 ## Results
@@ -57,3 +57,51 @@ remaining blocker is outside Plans 01-05 through 01-08:
 
 This report does not authorize release. The final merged-tree release gate
 must supersede it.
+
+## Security scope freeze
+
+The immutable execution baseline was recomputed immediately before this
+attestation and matched exactly:
+
+| Baseline item | Required and observed value |
+| --- | --- |
+| Branch | `release/v1.34.1` |
+| Binary package/workspace diff SHA-256 | `b1206decc31f09b621676ac558919caf23a2190869d948fbc585fa3f38170f95` |
+| `package.json` SHA-256 | `7a6dbc488beaf210808bf959b84717be462781f2aca74a5fbc157699d7b3668a` |
+| `pnpm-lock.yaml` SHA-256 | `d9fa8c99e86eb4977f55395c43ca2c1781de26400870003c783e7112405970d6` |
+| `pnpm-workspace.yaml` SHA-256 | `979d04c351ba838e6c8da97aa34545c9a76513710f86d84f6c07d1289d0cd054` |
+
+The package/workspace changes remain the user-owned
+`@openai/codex-security` installation baseline. Plan 01-09 did not reinstall,
+upgrade, normalize, stage, or otherwise change those files.
+
+The security-remediation scope is frozen as follows:
+
+- no migration is added for the security work at this gate;
+- no package, lockfile, or workspace change is made;
+- no dependency upgrade is performed;
+- no Deep scan is run; and
+- the five accepted Low scanner findings receive no code change in v1.34.1.
+
+Plan 21 may later add only the safe additive
+`0287_google_health_sync_progress` migration for GH-07: one nullable JSONB
+`sync_progress` column on `google_health_connections`, with bounded
+current-run-only status. That planned correctness migration is not a security
+remediation and does not relax this freeze.
+
+Plan 24 still requires the final merged standard working-tree security scan
+and dated dependency reconciliation. Until that later gate is green, the
+current scanner and dependency evidence is provisional.
+
+## Superseding execution sequence
+
+1. Complete this focused security gate first.
+2. Wave 3 establishes RED contracts in Plans 10–13.
+3. Wave 4 establishes the cohort contract and baseline, then implements the
+   disjoint UI/navigation work in Plans 14–17.
+4. Wave 5 implements correctness, Apple Health, AI, and Google Health work in
+   Plans 18–21.
+5. Wave 6 implements cohort behavior in Plan 22.
+6. Wave 7 reconciles locale copy in Plan 23.
+7. Only Plan 24's merged-tree re-audit supersedes the pre-implementation
+   correctness, live, and performance reports and can authorize release.
