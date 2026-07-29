@@ -1,14 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { X } from "lucide-react";
-
 import { ScoreAnatomyView } from "@/components/insights/derived/score-anatomy-view";
 import { CoverageMeter } from "@/components/insights/derived/coverage-meter";
-import { Button } from "@/components/ui/button";
-import { apiPost } from "@/lib/api/api-fetch";
-import { useOptionalQueryClient } from "@/hooks/_internal/use-query-client-safe";
-import { queryKeys } from "@/lib/query-keys";
 import { useAuth } from "@/hooks/use-auth";
 import { useUnitDisplay } from "@/hooks/use-unit-display";
 import { convertGlucose, resolveGlucoseUnit } from "@/lib/glucose";
@@ -102,10 +95,6 @@ export function HealthScoreCard({
   const { t } = useTranslations();
   const { user } = useAuth();
   const glucoseUnit = resolveGlucoseUnit(user?.glucoseUnit);
-  const queryClient = useOptionalQueryClient();
-  const [noticeDismissed, setNoticeDismissed] = useState(
-    report.algorithmNotice?.dismissed ?? false,
-  );
 
   function reasonText(reason: string): string {
     const key = REASON_KEY[reason] ?? "unavailable";
@@ -234,55 +223,11 @@ export function HealthScoreCard({
         ? 1 / eligibleCount
         : 0,
   }));
-  const algorithmNotice = report.algorithmNotice;
-
-  async function dismissAlgorithmNotice() {
-    if (!algorithmNotice) return;
-    setNoticeDismissed(true);
-    try {
-      await apiPost("/api/daily/digest/dismiss", {
-        itemKey: algorithmNotice.itemKey,
-      });
-      queryClient?.setQueriesData(
-        { queryKey: queryKeys.analytics() },
-        (payload) =>
-          markAlgorithmNoticeDismissed(payload, algorithmNotice.itemKey),
-      );
-      await queryClient?.invalidateQueries({
-        queryKey: queryKeys.analytics(),
-        refetchType: "active",
-      });
-    } catch {
-      setNoticeDismissed(false);
-    }
-  }
-
   return (
     <div
       data-slot="health-score-card"
       className={cn("flex min-w-0 flex-col gap-3", className)}
     >
-      {algorithmNotice && !noticeDismissed ? (
-        <div
-          data-slot="health-score-algorithm-notice"
-          className="border-border/70 bg-muted/35 flex items-start gap-3 rounded-lg border px-3 py-2.5"
-        >
-          <p className="text-muted-foreground min-w-0 flex-1 text-xs leading-relaxed">
-            {t("insights.healthScore.algorithmChanged")}
-          </p>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="-mt-1 -mr-2 h-9 w-9 shrink-0"
-            aria-label={t("insights.healthScore.dismissAlgorithmChanged")}
-            onClick={() => void dismissAlgorithmNotice()}
-          >
-            <X className="h-4 w-4" aria-hidden />
-          </Button>
-        </div>
-      ) : null}
-
       <ScoreAnatomyView
         title={t("insights.healthScore.label")}
         score={composite.status === "ok" ? composite.value.score : null}
@@ -296,7 +241,7 @@ export function HealthScoreCard({
         coverage={composite.coverage}
         confidence={composite.status === "ok" ? composite.confidence : null}
         provenance={composite.provenance}
-        method={t("insights.healthScore.method")}
+        method={null}
         insufficient={composite.status !== "ok"}
         insufficientNote={
           composite.status === "insufficient"
@@ -315,13 +260,6 @@ export function HealthScoreCard({
         <div className="border-border/70 bg-card/80 space-y-2 rounded-xl border p-4">
           {composite.status === "ok" ? (
             <>
-              <p className="text-foreground text-xs font-semibold">
-                {t("insights.healthScore.composition", {
-                  pillars: composite.value.composition
-                    .map((id) => t(PILLAR_LABEL_KEY[id]))
-                    .join(", "),
-                })}
-              </p>
               <p className="text-muted-foreground text-xs">
                 {t("insights.healthScore.bandSetter", {
                   pillar: composite.value.bandSetter

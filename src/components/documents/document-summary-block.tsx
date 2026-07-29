@@ -27,7 +27,7 @@
  * provider call. With no AI provider configured the block renders the state
  * without an action rather than an button that would 422.
  */
-import { FileText, RefreshCw } from "lucide-react";
+import { FileText } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useTranslations } from "@/lib/i18n/context";
@@ -63,9 +63,8 @@ export function DocumentSummaryBlock({
 }) {
   const { t } = useTranslations();
 
-  // A stored summary wins over every state: it is shown from storage. The
-  // adjacent action is explicit, so opening the sheet never spends a provider
-  // call; a successful replacement is persisted by the summary route.
+  // A stored summary wins over every state and is shown read-only from storage.
+  // Generation remains available only for absent terminal states below.
   if (summary) {
     return (
       <section className="space-y-2" data-slot="document-detail-summary">
@@ -76,28 +75,6 @@ export function DocumentSummaryBlock({
           <p className="text-sm leading-none font-medium">
             {t("documents.detail.summary.title")}
           </p>
-          {aiEnabled ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              data-slot="document-detail-summary-regenerate"
-              onClick={onGenerate}
-              disabled={isGenerating || actionsDisabled}
-            >
-              <RefreshCw
-                className={
-                  isGenerating
-                    ? "size-4 animate-spin motion-reduce:animate-none"
-                    : "size-4"
-                }
-                aria-hidden
-              />
-              {isGenerating
-                ? t("documents.detail.summary.generating")
-                : t("documents.detail.summary.regenerate")}
-            </Button>
-          ) : null}
         </div>
         <p className="text-foreground text-sm">{summary}</p>
         {generatedAtLabel ? (
