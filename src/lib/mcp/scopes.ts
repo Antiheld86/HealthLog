@@ -28,12 +28,15 @@ export const SCOPE_HEALTH_READ = "health:read";
 export const SCOPE_HEALTH_WRITE = "health:write";
 
 /**
- * Whether a token's scopes admit the read surface. Any valid token qualifies —
- * the underlying reads are unscoped — so this is permissive by design and exists
- * to document the contract and to give a single place to tighten later.
+ * Whether a token's scopes admit the read surface. Reads require the explicit
+ * `health:read` grant or the wildcard; write and unrelated grants never imply
+ * read access.
  */
-export function tokenAllowsRead(): boolean {
-  return true;
+export function tokenAllowsRead(permissions: readonly string[]): boolean {
+  return (
+    permissions.includes(SCOPE_WILDCARD) ||
+    permissions.includes(SCOPE_HEALTH_READ)
+  );
 }
 
 /**

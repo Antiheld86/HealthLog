@@ -45,7 +45,11 @@
  */
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 
-import { createMcpServer, resolveMcpAuthContext } from "@/lib/mcp";
+import {
+  createMcpServer,
+  resolveMcpAuthContext,
+  SCOPE_HEALTH_READ,
+} from "@/lib/mcp";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import { annotate } from "@/lib/logging/context";
 import { isModuleEnabled } from "@/lib/modules/gate";
@@ -161,6 +165,14 @@ async function handleMcp(request: Request): Promise<Response> {
       // Do not echo the token or the rejection reason — one blunt 401.
       annotate({ action: { name: "mcp.auth.rejected" } });
       return unauthorized(request);
+    }
+
+    // Authorization is distinct from credential validity. A write-only or
+    // unrelated bearer is still a real token, but it must not reach rate
+    // limiting, module discovery, server construction, or any health reader.
+    if (!ctx.canRead) {
+      annotate({ action: { name: "mcp.auth.insufficient_scope" } });
+      return unauthorized(request, SCOPE_HEALTH_READ);
     }
 
     // 2. RATE LIMIT — per `<userId>:<tokenId>` credential binding.
