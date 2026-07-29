@@ -256,7 +256,7 @@ export default function InsightsMedikamentePage() {
                   ) : null}
                 </div>
               </CardHeader>
-              <CardContent className="space-y-2.5">
+              <CardContent className="space-y-2">
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs">
                     <span>{t("insights.compliance7d")}</span>
@@ -297,7 +297,7 @@ export default function InsightsMedikamentePage() {
                 </div>
                 <MedicationComplianceCalendar medicationId={med.id} />
                 {medicationSummary ? (
-                  <p className="text-muted-foreground text-sm leading-6">
+                  <p className="text-foreground text-sm leading-6">
                     {medicationSummary}
                   </p>
                 ) : null}

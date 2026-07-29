@@ -226,7 +226,7 @@ export function HealthScoreCard({
   return (
     <div
       data-slot="health-score-card"
-      className={cn("flex min-w-0 flex-col gap-3", className)}
+      className={cn("flex min-w-0 flex-col gap-2", className)}
     >
       <ScoreAnatomyView
         title={t("insights.healthScore.label")}
