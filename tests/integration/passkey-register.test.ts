@@ -78,12 +78,14 @@ function request(path: string, body?: unknown): NextRequest {
   const headers: Record<string, string> = {};
   const authorization = headerJar.get("authorization");
   if (authorization) headers.authorization = authorization;
-  const init: RequestInit = { method: "POST", headers };
   if (body !== undefined) {
     headers["content-type"] = "application/json";
-    init.body = JSON.stringify(body);
   }
-  return new NextRequest(`http://localhost${path}`, init);
+  return new NextRequest(`http://localhost${path}`, {
+    method: "POST",
+    headers,
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
 }
 
 async function registerOptions(proof?: Record<string, unknown>) {
