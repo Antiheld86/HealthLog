@@ -126,6 +126,38 @@ function report(overrides: Partial<HealthScoreReport> = {}): HealthScoreReport {
   };
 }
 
+function scoredReport(
+  overrides: Partial<HealthScoreReport> = {},
+): HealthScoreReport {
+  return report({
+    composite: {
+      status: "ok",
+      value: {
+        score: 86,
+        band: "green",
+        bandSetter: null,
+        composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
+        noiseFloor: 3,
+        scoreVersion: 2,
+      },
+      coverage: {
+        requiredInputs: 3,
+        presentInputs: 3,
+        historyDays: 28,
+        missing: [],
+      },
+      confidence: { score: 100, band: "high" },
+      provenance: {
+        ...provenance,
+        inputs: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
+      },
+    },
+    delta: 2,
+    deltaReason: null,
+    ...overrides,
+  });
+}
+
 beforeEach(() => {
   mockAuthUser = { unitPreference: "metric", glucoseUnit: "mg/dL" };
 });
@@ -253,17 +285,28 @@ describe("<HealthScoreCard>", () => {
     expect(html).not.toContain("70 to 99 mg/dL");
   });
 
-  it("renders the one-time method note and every score identity field", () => {
+  it("shows one headline score without algorithm, method, or composition copy", () => {
     const html = render(
-      report({
+      scoredReport({
         algorithmNotice: {
           itemKey: "health_score_algorithm:2",
           dismissed: false,
         },
       }),
     );
-    expect(html).toContain('data-slot="health-score-algorithm-notice"');
-    expect(html).toContain("cardiometabolic reference ranges");
+
+    expect(html.match(/>86</g)).toHaveLength(1);
+    expect(html).not.toContain('data-slot="health-score-algorithm-notice"');
+    expect(html).not.toContain("cardiometabolic reference ranges");
+    expect(html).not.toContain("Equal-weight average of eligible pillars");
+    expect(html).not.toContain("The lowest pillar sets the overall band");
+    expect(html).not.toContain("Included:");
+
+    // Presentation cleanup must not sever score identity or source detail.
+    expect(html).toContain("Method version 2");
+    expect(html).toContain('data-slot="health-score-pillars"');
+    expect(html).toContain("ESH 2023");
+    expect(html).toContain('data-slot="health-score-delta"');
   });
 
   it("localises structured activity labels, references, and reasons", () => {

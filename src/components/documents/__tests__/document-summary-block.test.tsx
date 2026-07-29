@@ -55,10 +55,13 @@ describe("DocumentSummaryBlock — a stored summary", () => {
     expect(html).toContain("A discharge letter from a city hospital.");
     expect(html).toContain("14 Feb 2026");
     expect(html).toContain('data-slot="document-detail-summary"');
-    // A stored result stays visible and can be explicitly regenerated.
+    // Opening a stored result is read-only: the detail surface no longer
+    // exposes the redundant regenerate action.
     expect(html).not.toContain("being prepared");
-    expect(html).toContain('data-slot="document-detail-summary-regenerate"');
-    expect(html).toContain("Generate again");
+    expect(html).not.toContain(
+      'data-slot="document-detail-summary-regenerate"',
+    );
+    expect(html).not.toContain("Generate again");
     const header = html.match(
       /<div[^>]*data-slot="document-detail-summary-header"[^>]*>/,
     );
@@ -67,18 +70,18 @@ describe("DocumentSummaryBlock — a stored summary", () => {
     expect(html).not.toContain("document-detail-summary-generate");
   });
 
-  it("disables regeneration while a replacement is being generated", () => {
+  it("keeps stored prose visible without surfacing replacement state", () => {
     const html = base({
       summary: "Stored prose.",
       summaryState: "READY",
       isGenerating: true,
     });
 
-    const action = html.match(
-      /<button[^>]*data-slot="document-detail-summary-regenerate"[^>]*>/,
+    expect(html).toContain("Stored prose.");
+    expect(html).not.toContain(
+      'data-slot="document-detail-summary-regenerate"',
     );
-    expect(action?.[0]).toMatch(/\sdisabled(=""|\s|>)/);
-    expect(html).toContain("Generating");
+    expect(html).not.toContain("Generating");
   });
 
   it("shows a stored summary even if the state disagrees", () => {

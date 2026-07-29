@@ -76,6 +76,13 @@ function digest(over: Partial<DailyDigest> = {}): DailyDigest {
   };
 }
 
+function visibleText(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 describe("<TodayHero>", () => {
   it("renders the score, the lead read, and the worth-a-look rail", () => {
     const html = render(<TodayHero digest={digest()} />);
@@ -148,6 +155,45 @@ describe("<TodayHero>", () => {
     expect(html).toContain('data-provisional="true"');
     // The score ring stays the only route to Insights.
     expect(html).not.toContain('data-slot="today-hero-briefing-link"');
+  });
+
+  it("keeps the useful loaded narrative without repeating the ring's numeric score", () => {
+    const html = render(
+      <TodayHero
+        digest={digest({
+          briefingLead:
+            "Your health score is 82. Your week is trending steady.",
+          line: "Your health score is 82. Your week is trending steady.",
+        })}
+      />,
+    );
+    const text = visibleText(html);
+
+    expect(text).toContain("Your week is trending steady.");
+    expect(text.match(/\b82\b/g)).toHaveLength(1);
+    expect(html).toContain('data-slot="today-hero-score"');
+    expect(html).toContain('data-slot="today-hero-lead"');
+  });
+
+  it("does not invent a score narrative while the digest is provisional", () => {
+    const html = render(
+      <TodayHero
+        digest={digest({
+          phase: "provisional",
+          sleepPending: true,
+          score: null,
+          briefingLead: null,
+          reactionLine: null,
+          line: "Your health score today is 82.",
+          worthALook: [doseItem],
+        })}
+      />,
+    );
+
+    expect(html).toContain('data-slot="today-hero-sleep-pending"');
+    expect(html).toContain('data-provisional="true"');
+    expect(html).not.toContain("Your health score today is 82.");
+    expect(html).not.toContain('data-slot="today-hero-lead"');
   });
 
   it("degrades to nothing on a genuinely empty account", () => {
