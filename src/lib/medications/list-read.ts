@@ -225,8 +225,8 @@ export async function buildMedicationsList(
     const displaySchedule =
       display?.scheduleId === undefined
         ? null
-        : m.schedules.find((schedule) => schedule.id === display.scheduleId) ??
-          null;
+        : (m.schedules.find((schedule) => schedule.id === display.scheduleId) ??
+          null);
     // A prior-day rolling occurrence can remain the one authoritative
     // actionable dose while today's same HH:mm window has already passed.
     // The client window reducer uses this count to decide whether a passed

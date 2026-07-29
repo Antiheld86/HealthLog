@@ -458,8 +458,7 @@ export async function handleReminderCheck(
                 const minutesToEnd =
                   (phaseWindow.end.getTime() - nowMs) / 60_000;
                 const windowDuration =
-                  (phaseWindow.end.getTime() -
-                    phaseWindow.start.getTime()) /
+                  (phaseWindow.end.getTime() - phaseWindow.start.getTime()) /
                   60_000;
                 const thresholds = resolvePhaseThresholds(
                   phaseConfig,
@@ -481,16 +480,12 @@ export async function handleReminderCheck(
               .filter((candidate) => candidate !== null)
               .sort(
                 (a, b) =>
-                  b.slotScheduledFor.getTime() -
-                  a.slotScheduledFor.getTime(),
+                  b.slotScheduledFor.getTime() - a.slotScheduledFor.getTime(),
               )[0];
             if (!phaseCandidate) continue;
 
-            const {
-              slotScheduledFor,
-              minutesToEnd,
-              currentPhase,
-            } = phaseCandidate;
+            const { slotScheduledFor, minutesToEnd, currentPhase } =
+              phaseCandidate;
             const slotInstant = slotScheduledFor.getTime();
             if (liveEraStart !== null && slotInstant < liveEraStart) {
               continue;

@@ -314,10 +314,7 @@ export function nextOccurrenceAfter(
     // tail is still open. Flooring only to today created a gap where an
     // unresolved weekly dose vanished on the morning after it was due.
     const floor = new Date(
-      Math.min(
-        dayFloor.getTime(),
-        rollingDoseDayFloor(schedule, ctx),
-      ),
+      Math.min(dayFloor.getTime(), rollingDoseDayFloor(schedule, ctx)),
     );
     const slots = expandRolling(schedule, ctx, floor, limit);
     for (const s of slots) {

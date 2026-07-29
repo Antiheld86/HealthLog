@@ -175,10 +175,7 @@ function computeNextDueCandidate(input: {
     for (let step = 0; step < 64; step++) {
       if (next === null) break;
       if (!isResolved(next.at)) {
-        if (
-          earliest === null ||
-          next.at.getTime() < earliest.at.getTime()
-        ) {
+        if (earliest === null || next.at.getTime() < earliest.at.getTime()) {
           earliest = { at: next.at, scheduleId: canonical.id };
         }
         break;
