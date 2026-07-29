@@ -21,6 +21,11 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const { createMcpServerSpy, executeCoachTool } = vi.hoisted(() => ({
+  createMcpServerSpy: vi.fn(),
+  executeCoachTool: vi.fn(async () => ({ present: false, reason: "no_data" })),
+}));
+
 // The surface fails closed without a pinned origin (M1); pin it for the suite.
 process.env.APP_URL = "http://localhost";
 
@@ -43,10 +48,21 @@ vi.mock("@/lib/rate-limit", () => ({
 // The factory pulls the Coach retrieval layer through `tools.ts`; stub the
 // heavy executor + inventory so importing the route never reaches a DB. The
 // list/reject paths never execute a tool, so the stubs are never called.
-vi.mock("@/lib/ai/coach/tools/executor", () => ({ executeCoachTool: vi.fn() }));
+vi.mock("@/lib/ai/coach/tools/executor", () => ({ executeCoachTool }));
 vi.mock("@/lib/ai/coach/tools/inventory", () => ({
   buildCoachDataInventory: vi.fn(),
 }));
+vi.mock("@/lib/mcp/server", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/mcp/server")>();
+  return {
+    ...actual,
+    createMcpServer: (...args: Parameters<typeof actual.createMcpServer>) => {
+      createMcpServerSpy(...args);
+      return actual.createMcpServer(...args);
+    },
+  };
+});
 // A cookie path must NEVER be reached from the MCP wire. Mock both cookie
 // sources so the test can assert they are never consulted.
 const getSession = vi.fn();
@@ -123,6 +139,12 @@ function postRpc(body: unknown, headers: Record<string, string> = {}): Request {
 }
 
 const TOOLS_LIST = { jsonrpc: "2.0", id: 1, method: "tools/list" };
+const GET_LABS = {
+  jsonrpc: "2.0",
+  id: 2,
+  method: "tools/call",
+  params: { name: "get_labs", arguments: {} },
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -136,6 +158,7 @@ beforeEach(() => {
     remaining: 119,
     resetAt: Date.now() + 60_000,
   });
+  executeCoachTool.mockResolvedValue({ present: false, reason: "no_data" });
 });
 
 describe("/mcp — happy path", () => {
@@ -176,6 +199,22 @@ describe("/mcp — happy path", () => {
     expect(body.result.serverInfo.name).toBe("healthlog");
     // Tools + resources are advertised; no admin capability exists.
     expect(body.result.capabilities.tools).toBeDefined();
+  });
+
+  it.each([
+    ["health:read", ["health:read"]],
+    ["wildcard", ["*"]],
+  ])("lets a %s token reach a real health reader", async (_label, scopes) => {
+    validToken(scopes);
+
+    const res = await POST(postRpc(GET_LABS));
+
+    expect(res.status).toBe(200);
+    expect(executeCoachTool).toHaveBeenCalledWith({
+      userId: "user-1",
+      name: "get_labs",
+      rawArguments: "{}",
+    });
   });
 });
 
@@ -269,7 +308,29 @@ describe("/mcp — authentication", () => {
     expect(JSON.stringify(body)).not.toMatch(/revoked|expired|hlk_/);
     // A rejected token never reaches the module gate or the transport.
     expect(isModuleEnabled).not.toHaveBeenCalled();
+    expect(createMcpServerSpy).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ["medication ingest", ["medication:ingest"]],
+    ["notifications", ["notifications:send"]],
+    ["FHIR", ["fhir:read"]],
+    ["write-only", ["health:write"]],
+    ["unrelated", ["profile:read"]],
+  ])(
+    "denies a valid %s token before server registration or health reads",
+    async (_label, scopes) => {
+      validToken(scopes);
+
+      const res = await POST(postRpc(GET_LABS));
+
+      expect([401, 403]).toContain(res.status);
+      expect(createMcpServerSpy).not.toHaveBeenCalled();
+      expect(executeCoachTool).not.toHaveBeenCalled();
+      expect(checkMcpRateLimit).not.toHaveBeenCalled();
+      expect(isModuleEnabled).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("/mcp — module gate (off by default)", () => {

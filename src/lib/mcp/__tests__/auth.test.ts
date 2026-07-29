@@ -14,7 +14,7 @@ beforeEach(() => {
 });
 
 describe("resolveMcpAuthContext", () => {
-  it("binds the session to <userId>:<tokenId> (REQ-SEC-11) via the canonical Bearer path", async () => {
+  it("binds a health:read session to <userId>:<tokenId> via the canonical Bearer path", async () => {
     vi.mocked(resolveBearerToken).mockResolvedValue({
       user: FAKE_USER,
       tokenId: "token-9",
@@ -24,11 +24,6 @@ describe("resolveMcpAuthContext", () => {
 
     const ctx = await resolveMcpAuthContext("  hlk_abc  ");
 
-    // Trimmed token resolved through the shared validator (no requiredPermission for reads).
-    // `any-valid-token` is the one deliberate fail-open posture in the tree:
-    // `/mcp` authenticates here and authorises downstream (audience binding +
-    // `tokenAllowsWrite`). Asserted explicitly so a silent switch to another
-    // posture — in either direction — shows up as a failing test.
     expect(resolveBearerToken).toHaveBeenCalledWith("hlk_abc", {
       kind: "any-valid-token",
     });
@@ -39,7 +34,19 @@ describe("resolveMcpAuthContext", () => {
     expect(ctx.canWrite).toBe(false);
   });
 
-  it("grants write capability only when the token carries health:write", async () => {
+  it("admits wildcard read capability and preserves wildcard write capability", async () => {
+    vi.mocked(resolveBearerToken).mockResolvedValue({
+      user: FAKE_USER,
+      tokenId: "token-wild",
+      permissions: ["*"],
+      expiresAt: new Date(),
+    });
+    const ctx = await resolveMcpAuthContext("hlk_wild");
+    expect(ctx.canRead).toBe(true);
+    expect(ctx.canWrite).toBe(true);
+  });
+
+  it("does not infer read capability from health:write", async () => {
     vi.mocked(resolveBearerToken).mockResolvedValue({
       user: FAKE_USER,
       tokenId: "token-w",
@@ -47,7 +54,27 @@ describe("resolveMcpAuthContext", () => {
       expiresAt: new Date(),
     });
     const ctx = await resolveMcpAuthContext("hlk_xyz");
+    expect(ctx.canRead).toBe(false);
     expect(ctx.canWrite).toBe(true);
+  });
+
+  it.each([
+    ["medication ingest", ["medication:ingest"]],
+    ["notification delivery", ["notifications:send"]],
+    ["FHIR read", ["fhir:read"]],
+    ["unrelated", ["profile:read"]],
+    ["empty", []],
+  ])("does not grant MCP reads to a valid %s token", async (_label, scopes) => {
+    vi.mocked(resolveBearerToken).mockResolvedValue({
+      user: FAKE_USER,
+      tokenId: "token-narrow",
+      permissions: scopes,
+      expiresAt: new Date(),
+    });
+
+    const ctx = await resolveMcpAuthContext("hlk_narrow");
+
+    expect(ctx.canRead).toBe(false);
   });
 
   it("rejects an empty token without calling the validator", async () => {

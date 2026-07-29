@@ -27,6 +27,8 @@ process.env.API_TOKEN_HMAC_KEY ??=
 const { hashToken } = await import("@/lib/auth/hmac");
 
 const USER_ID = "user-bearer-scope-test";
+const MCP_RESOURCE = "https://health.example/mcp";
+process.env.APP_URL = "https://health.example";
 
 vi.mock("next/headers", async () => {
   const { cookieJar, headerJar } = await import("./mock-next-headers");
@@ -63,6 +65,7 @@ beforeEach(async () => {
       username: "bearer-scope",
       email: "bearer-scope@example.test",
       timezone: "UTC",
+      modulePreferencesJson: { mcp: true },
     },
   });
 });
@@ -80,6 +83,40 @@ async function useToken(permissions: string[], label = "t"): Promise<string> {
   });
   headerJar.set("authorization", `Bearer ${raw}`);
   return raw;
+}
+
+async function useExpiringToken(
+  permissions: string[],
+  label: string,
+  state: { expiresAt?: Date; revoked?: boolean } = {},
+): Promise<string> {
+  const raw = await useToken(permissions, label);
+  await getPrismaClient().apiToken.update({
+    where: { tokenHash: hashToken(raw) },
+    data: state,
+  });
+  return raw;
+}
+
+function mcpReq(
+  rawToken: string,
+  method: "initialize" | "tools/list" | "tools/call",
+  params?: Record<string, unknown>,
+): Request {
+  return new Request(MCP_RESOURCE, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${rawToken}`,
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method,
+      ...(params ? { params } : {}),
+    }),
+  });
 }
 
 /** Arm a real cookie session instead of a Bearer token. */
@@ -271,6 +308,80 @@ describe("B5 — an MCP token is audience-bound to /mcp", () => {
     const { resolveMcpAuthContext } = await import("@/lib/mcp/auth");
     const ctx = await resolveMcpAuthContext(raw);
     expect(ctx.canWrite).toBe(true);
+  });
+});
+
+describe("B5b — MCP health reads require an explicit read grant", () => {
+  async function postMcp(
+    rawToken: string,
+    method: "initialize" | "tools/list" | "tools/call",
+    params?: Record<string, unknown>,
+  ): Promise<Response> {
+    const { POST } = await import("@/app/mcp/route");
+    return POST(mcpReq(rawToken, method, params));
+  }
+
+  it.each([
+    ["health:read", ["health:read"]],
+    ["wildcard", ["*"]],
+  ])("admits %s through capability registration", async (_label, scopes) => {
+    const raw = await useToken(scopes, `mcp-positive-${_label}`);
+
+    const res = await postMcp(raw, "tools/list");
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      result: { tools: Array<{ name: string }> };
+    };
+    expect(body.result.tools.map((tool) => tool.name)).toContain("get_labs");
+  });
+
+  it.each([
+    ["medication ingest", ["medication:ingest"]],
+    ["notifications", ["notifications:send"]],
+    ["FHIR", ["fhir:read"]],
+    ["write-only", ["health:write"]],
+    ["unrelated", ["profile:read"]],
+  ])(
+    "denies a same-user %s token before a real lab read",
+    async (_label, scopes) => {
+      const raw = await useToken(scopes, `mcp-negative-${_label}`);
+      await getPrismaClient().labResult.create({
+        data: {
+          userId: USER_ID,
+          analyte: "LDL",
+          value: 177,
+          unit: "mg/dL",
+          takenAt: new Date("2026-07-20T08:00:00.000Z"),
+        },
+      });
+
+      const res = await postMcp(raw, "tools/call", {
+        name: "get_labs",
+        arguments: {},
+      });
+
+      expect([401, 403]).toContain(res.status);
+      expect(await res.text()).not.toContain("177");
+    },
+  );
+
+  it.each([
+    [
+      "expired",
+      { expiresAt: new Date("2020-01-01T00:00:00.000Z") },
+    ],
+    ["revoked", { revoked: true }],
+  ])("denies an explicit but %s health:read credential", async (_label, state) => {
+    const raw = await useExpiringToken(
+      ["health:read"],
+      `mcp-${_label}`,
+      state,
+    );
+
+    const res = await postMcp(raw, "tools/list");
+
+    expect([401, 403]).toContain(res.status);
   });
 });
 
