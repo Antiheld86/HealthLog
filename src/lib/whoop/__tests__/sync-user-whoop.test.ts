@@ -10,6 +10,8 @@
  * enabled resource soft-skipped and nothing imported.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const {
   recordSyncSuccess,
@@ -79,6 +81,11 @@ import {
 } from "../sync-core";
 import { syncUserWhoop } from "../sync";
 import { WhoopApiError } from "../response-classifier";
+
+const directWhoopSyncSource = readFileSync(
+  join(process.cwd(), "src/lib/whoop/sync.ts"),
+  "utf8",
+);
 
 /** A resource sync that 403s its collection and soft-skips, like the real one. */
 async function softSkip403(...args: unknown[]): Promise<number> {
@@ -223,5 +230,37 @@ describe("syncWhoopResourceWithStatus — per-resource lastSuccessAt stamp", () 
       }),
     ).rejects.toThrow("boom");
     expect(recordSyncSuccess).not.toHaveBeenCalled();
+  });
+});
+
+describe("direct WHOOP API regression beside Apple Health ECG support", () => {
+  it("keeps every established direct WHOOP resource in the orchestration gate", async () => {
+    syncUserRecovery.mockResolvedValue(1);
+    syncUserSleep.mockResolvedValue(1);
+    syncUserCycle.mockResolvedValue(1);
+    syncUserWorkout.mockResolvedValue(1);
+    syncUserBody.mockResolvedValue(1);
+
+    await expect(syncUserWhoop("user-direct-whoop")).resolves.toMatchObject({
+      imported: 5,
+    });
+    for (const resource of [
+      syncUserRecovery,
+      syncUserSleep,
+      syncUserCycle,
+      syncUserWorkout,
+      syncUserBody,
+    ]) {
+      expect(resource).toHaveBeenCalledWith(
+        "user-direct-whoop",
+        expect.any(Object),
+      );
+    }
+  });
+
+  it("makes no direct WHOOP ECG support claim", () => {
+    expect(directWhoopSyncSource).not.toMatch(
+      /syncUser(?:Ecg|Electrocardiogram)|sync-(?:ecg|electrocardiogram)/i,
+    );
   });
 });
