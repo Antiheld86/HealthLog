@@ -190,7 +190,7 @@ describe("POST /api/admin/import-apple-health-export", () => {
     expect(mocks.importJobCreate).toHaveBeenCalledTimes(1);
     expect(mocks.importJobCreate).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ parserRevision: 2 }),
+        data: expect.objectContaining({ parserRevision: 3 }),
       }),
     );
     expect(mocks.bossSend).toHaveBeenCalledWith(
@@ -209,7 +209,7 @@ describe("POST /api/admin/import-apple-health-export", () => {
       expect.objectContaining({
         where: expect.objectContaining({
           status: { not: "failed" },
-          parserRevision: 2,
+          parserRevision: 3,
         }),
       }),
     );
@@ -233,7 +233,7 @@ describe("POST /api/admin/import-apple-health-export", () => {
     expect(mocks.unlink).toHaveBeenCalledWith(STAGED_PATH);
     expect(mocks.importJobFindFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ parserRevision: 2 }),
+        where: expect.objectContaining({ parserRevision: 3 }),
       }),
     );
   });

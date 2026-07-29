@@ -129,6 +129,7 @@ import type { MeasurementSource, SleepStage } from "@/generated/prisma/client";
 import { userDayKey } from "@/lib/tz/format";
 import { summarize, type DataSummary } from "@/lib/analytics/trends";
 import {
+  getDeviceTypeLadder,
   getSourceLadder,
   parseSourcePriority,
 } from "@/lib/validations/source-priority";
@@ -363,6 +364,12 @@ function sourceOfWriterKey(key: string): string {
   return i === -1 ? key : key.slice(0, i);
 }
 
+/** The device part of a writer key; legacy/bare writers rank as unknown. */
+function deviceOfWriterKey(key: string): string {
+  const i = key.indexOf(WRITER_KEY_SEP);
+  return i === -1 ? "unknown" : key.slice(i + WRITER_KEY_SEP.length);
+}
+
 /**
  * Thresholds for the per-session source-discrepancy annotation. Two writer
  * buckets "clearly disagree" on a night only when the spread of their asleep
@@ -460,13 +467,16 @@ function granularStageCount(rows: readonly SleepStageRow[]): number {
  * phone's in-bed detection next to the watch's stages) can mask the
  * fullest hypnogram available for the night. Among equally rich writers
  * the user's `sleep` source-priority ladder decides (lowest ladder index =
- * highest priority); writers whose source is absent from the ladder fall
- * back to "most asleep minutes", then a stable key tiebreak. Single-writer
- * (or source-less) sessions resolve to that one bucket with no work.
+ * highest priority), then the `SLEEP_DURATION` device-type ladder decides
+ * between writers behind that same source. Writers absent from both ladders
+ * fall back to "most asleep minutes", then a stable key tiebreak.
+ * Single-writer (or source-less) sessions resolve to that one bucket with no
+ * work.
  */
 function pickSessionWriter(
   rows: SleepStageRow[],
   sleepLadder: readonly MeasurementSource[],
+  deviceLadder: readonly string[],
 ): string {
   // Group rows by writer, then sum each writer's asleep minutes with the
   // granular-over-bare rule so a writer that stores BOTH a bare ASLEEP
@@ -538,11 +548,18 @@ function pickSessionWriter(
     const i = sleepLadder.indexOf(sourceOfWriterKey(key) as MeasurementSource);
     return i === -1 ? Number.MAX_SAFE_INTEGER : i;
   };
+  const deviceRankOf = (key: string): number => {
+    const i = deviceLadder.indexOf(deviceOfWriterKey(key));
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+  };
   return writers.sort((a, b) => {
     const ra = rankOf(a);
     const rb = rankOf(b);
     if (ra !== rb) return ra - rb;
-    // Neither (or both) on the ladder — most asleep minutes wins, then key.
+    const da = deviceRankOf(a);
+    const db = deviceRankOf(b);
+    if (da !== db) return da - db;
+    // Neither (or both) on both ladders — most asleep minutes wins, then key.
     const ma = asleepByWriter.get(a) ?? 0;
     const mb = asleepByWriter.get(b) ?? 0;
     if (ma !== mb) return mb - ma;
@@ -567,10 +584,9 @@ export function reconstructSleepNights(
   priorityJson: unknown = null,
 ): SleepNight[] {
   if (rows.length === 0) return [];
-  const sleepLadder = getSourceLadder(
-    parseSourcePriority(priorityJson),
-    "sleep",
-  );
+  const resolvedPriority = parseSourcePriority(priorityJson);
+  const sleepLadder = getSourceLadder(resolvedPriority, "sleep");
+  const deviceLadder = getDeviceTypeLadder(resolvedPriority, "SLEEP_DURATION");
 
   // Cluster into sessions by the gap between a segment's START and the latest
   // END seen so far in the current session. `measuredAt` is the segment END;
@@ -613,7 +629,7 @@ export function reconstructSleepNights(
     Array<{ pool: SleepStageRow[]; all: SleepStageRow[] }>
   >();
   for (const session of sessions) {
-    const canonical = pickSessionWriter(session, sleepLadder);
+    const canonical = pickSessionWriter(session, sleepLadder, deviceLadder);
     const kept = session.filter((r) => writerKeyOf(r) === canonical);
     const pool = kept.length > 0 ? kept : session;
     // The wake day is the LATEST segment END in the session (Apple Health
@@ -958,10 +974,9 @@ export function reconstructSleepSessions(
   priorityJson: unknown = null,
 ): SleepSession[] {
   if (rows.length === 0) return [];
-  const sleepLadder = getSourceLadder(
-    parseSourcePriority(priorityJson),
-    "sleep",
-  );
+  const resolvedPriority = parseSourcePriority(priorityJson);
+  const sleepLadder = getSourceLadder(resolvedPriority, "sleep");
+  const deviceLadder = getDeviceTypeLadder(resolvedPriority, "SLEEP_DURATION");
 
   const startOf = (r: SleepStageRow): number =>
     r.measuredAt.getTime() - (Number.isFinite(r.value) ? r.value : 0) * 60_000;
@@ -984,7 +999,7 @@ export function reconstructSleepSessions(
 
   const sessions: SleepSession[] = [];
   for (const session of rawSessions) {
-    const canonical = pickSessionWriter(session, sleepLadder);
+    const canonical = pickSessionWriter(session, sleepLadder, deviceLadder);
     const kept = session.filter((r) => writerKeyOf(r) === canonical);
     const pool = kept.length > 0 ? kept : session;
     // v1.11.5 — drop the redundant bare ASLEEP aggregate (and stage-less

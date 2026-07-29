@@ -61,7 +61,10 @@ vi.mock("@/lib/insights/comprehensive-generate", () => ({
 vi.mock("../credentials", () => ({
   getUserGoogleHealthCredentials: getUserGoogleHealthCredentialsMock,
 }));
-vi.mock("../client", () => ({ refreshAccessToken: refreshAccessTokenMock }));
+vi.mock("../client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../client")>();
+  return { ...actual, refreshAccessToken: refreshAccessTokenMock };
+});
 
 vi.mock("../sync-metrics", () => ({ syncUserMetrics: resourceFake }));
 vi.mock("../sync-activity", () => ({ syncUserActivity: resourceFake }));
@@ -223,7 +226,20 @@ describe("getValidToken — dead-token cycle verdict", () => {
 
     const res = await syncUserGoogleHealth("user-1");
 
-    expect(res).toEqual({ imported: 0, failed: true });
+    expect(res).toEqual(
+      expect.objectContaining({
+        imported: 0,
+        failed: true,
+        state: "failed",
+        resources: expect.arrayContaining([
+          expect.objectContaining({
+            status: "failed",
+            reasonCode: "token_failed",
+            written: 0,
+          }),
+        ]),
+      }),
+    );
     expect(recordSyncSuccessMock).not.toHaveBeenCalled();
     // No connection write may carry the watermark stamp.
     for (const call of prismaMock.googleHealthConnection.update.mock.calls) {

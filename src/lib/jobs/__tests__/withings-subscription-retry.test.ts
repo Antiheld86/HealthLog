@@ -9,6 +9,7 @@ const syncUserMeasurements = vi.hoisted(() =>
 );
 const findMany = vi.hoisted(() => vi.fn().mockResolvedValue([]));
 const addWarning = vi.hoisted(() => vi.fn());
+const isReauthRequired = vi.hoisted(() => vi.fn(async () => false));
 
 vi.mock("@/lib/withings/sync", () => ({
   retryDueWithingsWebhookSubscriptions,
@@ -29,6 +30,9 @@ vi.mock("@/lib/jobs/reminder-satisfy", () => ({
 vi.mock("@/lib/jobs/worker-status", () => ({
   recordError: vi.fn(),
   recordWithingsSync: vi.fn(),
+}));
+vi.mock("@/lib/integrations/status", () => ({
+  isReauthRequired,
 }));
 vi.mock("@/lib/logging/fire-and-forget", () => ({
   fireAndForget: vi.fn(),
@@ -66,6 +70,7 @@ beforeEach(() => {
   findMany.mockResolvedValue([]);
   retryDueWithingsWebhookSubscriptions.mockResolvedValue(0);
   syncUserMeasurements.mockResolvedValue({ imported: 0, failed: false });
+  isReauthRequired.mockResolvedValue(false);
 });
 
 describe("handleWithingsFallbackSync subscription repair", () => {
@@ -77,11 +82,20 @@ describe("handleWithingsFallbackSync subscription repair", () => {
     await expect(handleWithingsFallbackSync([queued])).resolves.toEqual({
       ok: true,
       did: {
+        provider: "withings",
+        outcome: "clean_zero",
         total: 0,
         users_synced: 0,
+        users_complete: 0,
+        users_partial: 0,
         users_failed: 0,
+        users_parked: 0,
+        users_skipped: 0,
+        users_useful: 0,
+        users_clean_zero: 0,
+        users_retryable: 0,
+        downstream_failed: 0,
         measurements_imported: 0,
-        subscription_repair_failed: false,
       },
     });
 
@@ -106,11 +120,20 @@ describe("handleWithingsFallbackSync subscription repair", () => {
     await expect(handleWithingsFallbackSync([queued])).resolves.toEqual({
       ok: true,
       did: {
+        provider: "withings",
+        outcome: "clean_zero",
         total: 2,
         users_synced: 2,
+        users_complete: 2,
+        users_partial: 0,
         users_failed: 0,
+        users_parked: 0,
+        users_skipped: 0,
+        users_useful: 0,
+        users_clean_zero: 2,
+        users_retryable: 0,
+        downstream_failed: 1,
         measurements_imported: 0,
-        subscription_repair_failed: true,
       },
     });
 

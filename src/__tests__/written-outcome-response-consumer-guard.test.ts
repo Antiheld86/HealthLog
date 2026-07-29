@@ -168,6 +168,11 @@ interface ApiSuccessBranch {
   resolveCalls: number;
 }
 
+interface ApiSuccessSpread {
+  fields: string[];
+  resolveCalls: number;
+}
+
 function apiSuccessBranches(
   path: string,
   writtenOutcomeFields: readonly string[],
@@ -183,6 +188,60 @@ function apiSuccessBranches(
       ts.isIdentifier(expression.expression) &&
       expression.expression.text === "resolveSyncOutcome"
     );
+  }
+
+  function inspectObjectLiteralSpread(
+    object: ts.ObjectLiteralExpression,
+  ): ApiSuccessSpread {
+    const fields: string[] = [];
+    for (const property of object.properties) {
+      expect(
+        ts.isPropertyAssignment(property) ||
+          ts.isShorthandPropertyAssignment(property),
+        `${path} has unsupported conditional spread syntax: ${property.getText(file)}`,
+      ).toBe(true);
+      if (
+        !ts.isPropertyAssignment(property) &&
+        !ts.isShorthandPropertyAssignment(property)
+      ) {
+        continue;
+      }
+      const name = propertyName(property.name, file);
+      expect(name, `${path} has a computed conditional spread field`).not.toBe(
+        null,
+      );
+      if (name !== null) fields.push(name);
+    }
+    return { fields, resolveCalls: 0 };
+  }
+
+  function inspectSpread(expression: ts.Expression): ApiSuccessSpread | null {
+    if (isWrittenOutcomeCall(expression)) {
+      return { fields: [...writtenOutcomeFields], resolveCalls: 1 };
+    }
+    if (ts.isParenthesizedExpression(expression)) {
+      return inspectSpread(expression.expression);
+    }
+    if (ts.isObjectLiteralExpression(expression)) {
+      return inspectObjectLiteralSpread(expression);
+    }
+    if (ts.isConditionalExpression(expression)) {
+      const whenTrue = inspectSpread(expression.whenTrue);
+      const whenFalse = inspectSpread(expression.whenFalse);
+      if (
+        whenTrue === null ||
+        whenFalse === null ||
+        whenTrue.resolveCalls !== 0 ||
+        whenFalse.resolveCalls !== 0
+      ) {
+        return null;
+      }
+      return {
+        fields: [...new Set([...whenTrue.fields, ...whenFalse.fields])],
+        resolveCalls: 0,
+      };
+    }
+    return null;
   }
 
   function visit(node: ts.Node): void {
@@ -205,13 +264,22 @@ function apiSuccessBranches(
       } else if (payload && ts.isObjectLiteralExpression(payload)) {
         for (const property of payload.properties) {
           if (ts.isSpreadAssignment(property)) {
+            const spread = inspectSpread(property.expression);
             expect(
-              isWrittenOutcomeCall(property.expression),
+              spread,
               `${path} has an unsupported apiSuccess spread: ${property.getText(file)}`,
-            ).toBe(true);
-            if (isWrittenOutcomeCall(property.expression)) {
-              resolveCalls += 1;
-              fields.push(...writtenOutcomeFields);
+            ).not.toBeNull();
+            if (spread !== null) {
+              for (const name of spread.fields) {
+                if (resolveCalls > 0) {
+                  expect(
+                    writtenOutcomeFields,
+                    `${path} overrides ${name} after resolveSyncOutcome(...)`,
+                  ).not.toContain(name);
+                }
+                fields.push(name);
+              }
+              resolveCalls += spread.resolveCalls;
             }
             continue;
           }
@@ -564,6 +632,12 @@ interface SyncRouteSpec {
 
 const FULL_SYNC_EXCEPTION =
   "The boolean intentionally echoes the requested sync mode for programmatic callers; the web card already owns that mode as request state and does not read the echo.";
+const GOOGLE_HEALTH_RESOURCES_EXCEPTION =
+  "The bounded resource array is consumed by both readSyncOutcome and readGoogleHealthProgress so partial writes, actionable failures, and workout cache invalidation survive the response boundary.";
+const GOOGLE_HEALTH_STATE_EXCEPTION =
+  "The bounded terminal state is consumed by readGoogleHealthProgress and drives the Google Health card's complete, partial, truncated, interrupted, and failed presentation.";
+const GOOGLE_HEALTH_RUN_ID_EXCEPTION =
+  "The bounded opaque run identifier is a wire-level correlation token for programmatic callers and the status endpoint; the web card does not render or persist it.";
 
 const SYNC_ROUTES: readonly SyncRouteSpec[] = [
   {
@@ -578,7 +652,12 @@ const SYNC_ROUTES: readonly SyncRouteSpec[] = [
     path: join(ROOT, "src/app/api/google-health/sync/route.ts"),
     responseClass: "resolved-with-full-sync-echo",
     card: join(SYNC_CARD_ROOT, "google-health-card.tsx"),
-    exceptions: { fullSync: FULL_SYNC_EXCEPTION },
+    exceptions: {
+      fullSync: FULL_SYNC_EXCEPTION,
+      resources: GOOGLE_HEALTH_RESOURCES_EXCEPTION,
+      runId: GOOGLE_HEALTH_RUN_ID_EXCEPTION,
+      state: GOOGLE_HEALTH_STATE_EXCEPTION,
+    },
   },
   {
     id: "nightscout",
@@ -1015,18 +1094,16 @@ describe("written-outcome response consumer guard", () => {
         const extras = branch.fields.filter(
           (field) => !sharedFields.includes(field),
         );
-        const classifiedExtras =
-          route.responseClass === "resolved-with-full-sync-echo"
-            ? ["fullSync"]
-            : [];
+        const classifiedExtras = Object.keys(route.exceptions);
         expect(
           extras.sort(),
           `${route.id} branch ${index + 1} must match its response classification`,
-        ).toEqual(classifiedExtras);
-        expect(
-          Object.keys(route.exceptions).sort(),
-          `${route.id} branch ${index + 1} extras need an exact consumer or documented exception`,
-        ).toEqual(extras.sort());
+        ).toEqual(classifiedExtras.sort());
+        if (route.responseClass === "resolved-with-full-sync-echo") {
+          expect(extras).toContain("fullSync");
+        } else {
+          expect(extras).not.toContain("fullSync");
+        }
         for (const field of extras) {
           expect(route.exceptions[field].length).toBeGreaterThan(40);
         }

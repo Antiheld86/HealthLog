@@ -355,24 +355,24 @@ describe("buildMedsTodayBlock — next due (real engine)", () => {
 
     expect(block.dueCandidates).toEqual([
       {
+        medicationId: "med-mounjaro",
+        medicationName: "Mounjaro",
+        dueAt: "2026-06-10T09:00:00.000Z",
+        overdue: true,
+        availableFrom: "2026-06-09T08:00:00.000Z",
+      },
+      {
         medicationId: "med-ramipril",
         medicationName: "Ramipril",
         dueAt: "2026-06-10T09:00:00.000Z",
         overdue: true,
         availableFrom: "2026-06-10T07:00:00.000Z",
       },
-      {
-        medicationId: "med-mounjaro",
-        medicationName: "Mounjaro",
-        dueAt: "2026-06-10T09:00:00.000Z",
-        overdue: false,
-        availableFrom: "2026-06-09T08:00:00.000Z",
-      },
     ]);
     expect(block.nextDueAt).toBe("2026-06-10T09:00:00.000Z");
     expect(block.nextDueOverdue).toBe(true);
-    expect(block.nextDueMedicationName).toBe("Ramipril");
-    expect(block.nextDueMedicationId).toBe("med-ramipril");
+    expect(block.nextDueMedicationName).toBe("Mounjaro");
+    expect(block.nextDueMedicationId).toBe("med-mounjaro");
   });
 
   it("returns null next-due when no schedule has an upcoming slot", async () => {

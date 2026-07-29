@@ -70,7 +70,9 @@ describe("makePollCohortHandler — marker-aware recordFailure boundary", () => 
       "boom",
       expect.objectContaining({ message: "unmarked write failure" }),
     );
-    expect(warnings.some((w) => w.includes("boom"))).toBe(true);
+    expect(warnings).toContain("job.test_sync failed for one cohort member");
+    expect(warnings.join(" ")).not.toContain("boom");
+    expect(warnings.join(" ")).not.toContain("unmarked write failure");
   });
 
   it("does NOT record a MARKED error (the source already recorded it)", async () => {
@@ -88,8 +90,10 @@ describe("makePollCohortHandler — marker-aware recordFailure boundary", () => 
     await handler([job()]);
 
     expect(recordFailure).not.toHaveBeenCalled();
-    // Still warned so the cohort event carries the failure.
-    expect(warnings.some((w) => w.includes("already recorded"))).toBe(true);
+    // Still warned so the cohort event carries the failure, without copying
+    // provider/user details into the shared job log.
+    expect(warnings).toContain("job.test_sync failed for one cohort member");
+    expect(warnings.join(" ")).not.toContain("already recorded at source");
   });
 
   it("a recorder rejection never breaks the cohort loop", async () => {
