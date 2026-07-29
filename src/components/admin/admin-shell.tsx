@@ -47,7 +47,19 @@ interface AdminSection {
   /** i18n key under `admin.section.<slug>.title`. */
   titleKey: string;
   icon: LucideIcon;
+  group: AdminSectionGroup;
 }
+
+type AdminSectionGroup =
+  "system" | "connectivity" | "ai" | "account" | "yourData";
+
+const ADMIN_SECTION_GROUP_LABEL_KEYS: Record<AdminSectionGroup, string> = {
+  system: "settings.shell.groups.system",
+  connectivity: "settings.shell.groups.connectivity",
+  ai: "settings.shell.groups.ai",
+  account: "settings.shell.groups.account",
+  yourData: "settings.shell.groups.yourData",
+};
 
 /**
  * Source of truth for the admin section list. Order matches the in-app
@@ -59,21 +71,38 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     slug: "system-status",
     titleKey: "admin.section.system-status.title",
     icon: Server,
+    group: "system",
   },
   {
     slug: "general",
     titleKey: "admin.section.general.title",
     icon: Settings,
+    group: "system",
   },
   {
     slug: "services",
     titleKey: "admin.section.services.title",
     icon: Radio,
+    group: "system",
+  },
+  // v1.4.36 W4e — About / version / update check folded into Admin.
+  {
+    slug: "about",
+    titleKey: "admin.section.about.title",
+    icon: Info,
+    group: "system",
   },
   {
     slug: "integrations",
     titleKey: "admin.section.integrations.title",
     icon: Plug,
+    group: "connectivity",
+  },
+  {
+    slug: "api-tokens",
+    titleKey: "admin.section.api-tokens.title",
+    icon: KeyRound,
+    group: "connectivity",
   },
   // v1.18.1 — single "Coach" entry replacing the former ai-quality,
   // assistant, and coach-feedback trio. The section body stacks all
@@ -82,6 +111,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     slug: "coach",
     titleKey: "admin.section.coach.title",
     icon: Sparkles,
+    group: "ai",
   },
   // v1.18.6 (W9) — server-wide module availability split out of Coach into
   // its own entry, sitting next to it.
@@ -89,16 +119,19 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     slug: "module-availability",
     titleKey: "admin.section.module-availability.title",
     icon: Blocks,
+    group: "ai",
   },
   {
     slug: "reminders",
     titleKey: "admin.section.reminders.title",
     icon: Bell,
+    group: "ai",
   },
   {
     slug: "users",
     titleKey: "admin.section.users.title",
     icon: Users,
+    group: "account",
   },
   // v1.16.0 — invites as their own section, directly after Users
   // (admission lives next to the accounts it creates).
@@ -106,43 +139,38 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     slug: "invites",
     titleKey: "admin.section.invites.title",
     icon: Ticket,
-  },
-  {
-    slug: "api-tokens",
-    titleKey: "admin.section.api-tokens.title",
-    icon: KeyRound,
+    group: "account",
   },
   {
     slug: "login-overview",
     titleKey: "admin.section.login-overview.title",
     icon: ScrollText,
+    group: "account",
   },
   {
     slug: "app-logs",
     titleKey: "admin.section.app-logs.title",
     icon: FileText,
+    group: "yourData",
   },
   {
     slug: "backups",
     titleKey: "admin.section.backups.title",
     icon: Database,
+    group: "yourData",
   },
   // v1.23 — encryption coverage + key-rotation status / safe trigger.
   {
     slug: "encryption",
     titleKey: "admin.section.encryption.title",
     icon: ShieldCheck,
+    group: "yourData",
   },
   {
     slug: "danger-zone",
     titleKey: "admin.section.danger-zone.title",
     icon: ShieldAlert,
-  },
-  // v1.4.36 W4e — About / version / update check folded into Admin.
-  {
-    slug: "about",
-    titleKey: "admin.section.about.title",
-    icon: Info,
+    group: "yourData",
   },
 ] as const;
 
@@ -175,6 +203,11 @@ export function AdminShell({ active, children }: AdminShellProps) {
   const { t } = useTranslations();
   const { user } = useAuth();
   const activeSlug = deriveActiveSlug(pathname, active);
+  const isConfirmedAdmin = user?.role === "ADMIN";
+  // Apply the existing fail-closed authorization predicate before grouping.
+  // The filtered list is the only render source, so an unavailable item can
+  // never leave a group heading without an allowed destination below it.
+  const visibleSections = isConfirmedAdmin ? ADMIN_SECTIONS : [];
 
   // v1.4.34 IW-G — mirror the settings-shell auto-scroll pattern so
   // the active chip stays in view when the user lands on a deeper
@@ -205,7 +238,7 @@ export function AdminShell({ active, children }: AdminShellProps) {
   // non-admin during the frames between auth resolving and AuthShell's
   // redirect effect replacing the route. Render nothing — frame AND
   // children — until the role is confirmed ADMIN.
-  if (!user || user.role !== "ADMIN") return null;
+  if (!isConfirmedAdmin) return null;
 
   // v1.18.6.1 — the heading lives in the shell so it can occupy its own grid
   // row spanning only the content column; the nav's first item then lines up
@@ -274,28 +307,41 @@ export function AdminShell({ active, children }: AdminShellProps) {
               {t("admin.shell.overview")}
             </Link>
           </li>
-          {ADMIN_SECTIONS.map((section) => {
+          {visibleSections.map((section, index) => {
             const isActive = section.slug === activeSlug;
             const Icon = section.icon;
+            const startsNewGroup =
+              index > 0 && visibleSections[index - 1].group !== section.group;
             return (
-              <li key={section.slug} className="snap-start">
-                <Link
-                  href={`/admin/${section.slug}`}
-                  aria-current={isActive ? "page" : undefined}
-                  className={cn(
-                    // v1.4.25 W8 — chip strip is the primary mobile-admin
-                    // navigation surface. Pad to WCAG 2.5.5 44 px so the
-                    // chips can be tapped without zoom on a Pixel-5.
-                    "flex min-h-11 items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
-                    isActive
-                      ? "border-primary/40 bg-primary/10 text-primary"
-                      : "border-border text-foreground hover:bg-accent",
-                  )}
-                >
-                  <Icon className="h-4 w-4" aria-hidden="true" />
-                  {t(section.titleKey)}
-                </Link>
-              </li>
+              <React.Fragment key={section.slug}>
+                {startsNewGroup ? (
+                  <li
+                    aria-hidden="true"
+                    data-slot="admin-nav-group-separator"
+                    className="shrink-0"
+                  >
+                    <span className="bg-border block h-6 w-px" />
+                  </li>
+                ) : null}
+                <li className="snap-start">
+                  <Link
+                    href={`/admin/${section.slug}`}
+                    aria-current={isActive ? "page" : undefined}
+                    className={cn(
+                      // v1.4.25 W8 — chip strip is the primary mobile-admin
+                      // navigation surface. Pad to WCAG 2.5.5 44 px so the
+                      // chips can be tapped without zoom on a Pixel-5.
+                      "flex min-h-11 items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
+                      isActive
+                        ? "border-primary/40 bg-primary/10 text-primary"
+                        : "border-border text-foreground hover:bg-accent",
+                    )}
+                  >
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                    {t(section.titleKey)}
+                  </Link>
+                </li>
+              </React.Fragment>
             );
           })}
         </ul>
@@ -348,25 +394,39 @@ export function AdminShell({ active, children }: AdminShellProps) {
                 {t("admin.shell.overview")}
               </Link>
             </li>
-            {ADMIN_SECTIONS.map((section) => {
+            {visibleSections.map((section, index) => {
               const isActive = section.slug === activeSlug;
               const Icon = section.icon;
+              const startsNewGroup =
+                index === 0 ||
+                visibleSections[index - 1].group !== section.group;
               return (
-                <li key={section.slug}>
-                  <Link
-                    href={`/admin/${section.slug}`}
-                    aria-current={isActive ? "page" : undefined}
-                    className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                      isActive
-                        ? "bg-primary/10 text-primary"
-                        : "text-foreground hover:bg-accent",
-                    )}
-                  >
-                    <Icon className="h-4 w-4" aria-hidden="true" />
-                    {t(section.titleKey)}
-                  </Link>
-                </li>
+                <React.Fragment key={section.slug}>
+                  {startsNewGroup ? (
+                    <li
+                      data-slot="admin-nav-group"
+                      data-group={section.group}
+                      className="text-muted-foreground px-3 pt-4 pb-1 text-xs font-medium tracking-wide uppercase"
+                    >
+                      {t(ADMIN_SECTION_GROUP_LABEL_KEYS[section.group])}
+                    </li>
+                  ) : null}
+                  <li>
+                    <Link
+                      href={`/admin/${section.slug}`}
+                      aria-current={isActive ? "page" : undefined}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                        isActive
+                          ? "bg-primary/10 text-primary"
+                          : "text-foreground hover:bg-accent",
+                      )}
+                    >
+                      <Icon className="h-4 w-4" aria-hidden="true" />
+                      {t(section.titleKey)}
+                    </Link>
+                  </li>
+                </React.Fragment>
               );
             })}
           </ul>
