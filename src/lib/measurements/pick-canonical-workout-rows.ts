@@ -44,9 +44,13 @@ import {
  * other column they fetched alongside.
  */
 export interface WorkoutPickerRow {
+  userId?: string;
   startedAt: Date;
   sportType: string;
   source: MeasurementSource;
+  avgHeartRate?: number | null;
+  maxHeartRate?: number | null;
+  metadata?: unknown;
 }
 
 /**
@@ -64,7 +68,98 @@ const BUCKET_SLOT_MS = 5 * 60 * 1000;
 
 function bucketKey(row: WorkoutPickerRow): string {
   const slot = Math.floor(row.startedAt.getTime() / BUCKET_SLOT_MS);
-  return `${slot}:${row.sportType}`;
+  return `${row.userId ?? ""}:${slot}:${row.sportType}`;
+}
+
+function jsonRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function enrichFromWhoopTwin<T extends WorkoutPickerRow>(
+  winner: T,
+  donor: T,
+): T {
+  const winnerMetadata = jsonRecord(winner.metadata);
+  const donorMetadata = jsonRecord(donor.metadata);
+  const donorZones = donorMetadata?.zoneDurations;
+  const needsZones =
+    donorZones != null && winnerMetadata?.zoneDurations == null;
+  const needsAvg =
+    winner.avgHeartRate == null && donor.avgHeartRate != null;
+  const needsMax =
+    winner.maxHeartRate == null && donor.maxHeartRate != null;
+
+  if (!needsAvg && !needsMax && !needsZones) return winner;
+
+  return {
+    ...winner,
+    ...(needsAvg ? { avgHeartRate: donor.avgHeartRate } : {}),
+    ...(needsMax ? { maxHeartRate: donor.maxHeartRate } : {}),
+    ...(needsZones
+      ? {
+          metadata: {
+            ...(winnerMetadata ?? {}),
+            zoneDurations: donorZones,
+          },
+        }
+      : {}),
+  };
+}
+
+/**
+ * Pair winners and WHOOP donors one-to-one by nearest start time. A single
+ * donor can never enrich two same-source occurrences that happen to share a
+ * fixed slot. Stable input indexes break equal-distance ties.
+ */
+function enrichWinnersFromWhoop<T extends WorkoutPickerRow>(
+  winners: readonly T[],
+  donors: readonly T[],
+): T[] {
+  if (winners.length === 0 || donors.length === 0) return [...winners];
+
+  const candidates: Array<{
+    winnerIndex: number;
+    donorIndex: number;
+    deltaMs: number;
+  }> = [];
+  winners.forEach((winner, winnerIndex) => {
+    donors.forEach((donor, donorIndex) => {
+      candidates.push({
+        winnerIndex,
+        donorIndex,
+        deltaMs: Math.abs(
+          winner.startedAt.getTime() - donor.startedAt.getTime(),
+        ),
+      });
+    });
+  });
+  candidates.sort(
+    (left, right) =>
+      left.deltaMs - right.deltaMs ||
+      left.winnerIndex - right.winnerIndex ||
+      left.donorIndex - right.donorIndex,
+  );
+
+  const enriched = [...winners];
+  const matchedWinners = new Set<number>();
+  const matchedDonors = new Set<number>();
+  for (const candidate of candidates) {
+    if (
+      matchedWinners.has(candidate.winnerIndex) ||
+      matchedDonors.has(candidate.donorIndex)
+    ) {
+      continue;
+    }
+    enriched[candidate.winnerIndex] = enrichFromWhoopTwin(
+      winners[candidate.winnerIndex],
+      donors[candidate.donorIndex],
+    );
+    matchedWinners.add(candidate.winnerIndex);
+    matchedDonors.add(candidate.donorIndex);
+  }
+  return enriched;
 }
 
 /**
@@ -134,9 +229,12 @@ export function pickCanonicalWorkoutRows<T extends WorkoutPickerRow>(
       continue;
     }
 
-    for (const row of slot.rows) {
-      if (row.source === picked) canonical.push(row);
-    }
+    const winners = slot.rows.filter((row) => row.source === picked);
+    const whoopDonors =
+      picked === "WHOOP"
+        ? []
+        : slot.rows.filter((row) => row.source === "WHOOP");
+    canonical.push(...enrichWinnersFromWhoop(winners, whoopDonors));
   }
 
   // Re-sort to preserve input order — the bucket map iterates in

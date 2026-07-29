@@ -4,6 +4,7 @@ import { pickCanonicalWorkoutRows } from "../pick-canonical-workout-rows";
 
 interface RowFixture {
   id: string;
+  userId?: string;
   startedAt: Date;
   sportType: string;
   source: "APPLE_HEALTH" | "WHOOP" | "WITHINGS" | "MANUAL" | "IMPORT";
@@ -225,6 +226,60 @@ describe("pickCanonicalWorkoutRows", () => {
       avgHeartRate: null,
       maxHeartRate: null,
     });
+  });
+
+  it("does not collapse or enrich rows belonging to different users", () => {
+    const result = pickCanonicalWorkoutRows<RowFixture>([
+      {
+        id: "apple-u1",
+        userId: "u1",
+        startedAt: new Date("2026-06-03T06:30:00Z"),
+        sportType: "running",
+        source: "APPLE_HEALTH",
+        avgHeartRate: null,
+      },
+      {
+        id: "whoop-u2",
+        userId: "u2",
+        startedAt: new Date("2026-06-03T06:30:30Z"),
+        sportType: "running",
+        source: "WHOOP",
+        avgHeartRate: 150,
+      },
+    ]);
+
+    expect(result).toHaveLength(2);
+    expect(result.find((row) => row.id === "apple-u1")?.avgHeartRate).toBeNull();
+  });
+
+  it("uses each WHOOP twin at most once for same-slot occurrences", () => {
+    const result = pickCanonicalWorkoutRows<RowFixture>([
+      {
+        id: "apple-near",
+        startedAt: new Date("2026-06-03T06:30:10Z"),
+        sportType: "running",
+        source: "APPLE_HEALTH",
+        avgHeartRate: null,
+      },
+      {
+        id: "apple-far",
+        startedAt: new Date("2026-06-03T06:33:30Z"),
+        sportType: "running",
+        source: "APPLE_HEALTH",
+        avgHeartRate: null,
+      },
+      {
+        id: "whoop",
+        startedAt: new Date("2026-06-03T06:30:00Z"),
+        sportType: "running",
+        source: "WHOOP",
+        avgHeartRate: 150,
+      },
+    ]);
+
+    expect(
+      result.filter((row) => row.avgHeartRate === 150).map((row) => row.id),
+    ).toEqual(["apple-near"]);
   });
 
   it("keeps the WHOOP run when no richer source logged the same session", () => {
