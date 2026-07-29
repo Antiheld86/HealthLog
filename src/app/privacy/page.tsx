@@ -27,15 +27,14 @@ import Link from "next/link";
  * `<AuthShell>` PUBLIC_PATHS so an unauthenticated visitor (or App-Store
  * reviewer) lands directly on the content without an auth redirect.
  *
- * Static-rendered (`force-static`, no `revalidate`). The bilingual body
- * is inlined verbatim instead of routed through the i18n provider so the
- * page works without a client-side context — a legal document should
- * never depend on JavaScript to display its non-default-locale text to a
- * reviewer.
+ * The bilingual body is inlined verbatim instead of routed through the i18n
+ * provider, so the legal text itself never depends on client-side locale
+ * state. The route is request-rendered because the edge CSP carries a fresh
+ * nonce: a static document would freeze Next's inline streaming scripts
+ * without that request nonce and strand visitors on the Suspense fallback.
  */
 
-export const dynamic = "force-static";
-export const revalidate = false;
+export const dynamic = "force-dynamic";
 
 const POLICY_VERSION = "1.4.40";
 const LAST_UPDATED = "2026-05-18";
