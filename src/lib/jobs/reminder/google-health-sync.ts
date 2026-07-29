@@ -10,7 +10,10 @@ import { fireAndForget } from "@/lib/logging/fire-and-forget";
 import { recordError } from "@/lib/jobs/worker-status";
 import { jobDone, jobFailed, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { withBackgroundEvent } from "@/lib/logging/background";
-import { syncUserGoogleHealth } from "@/lib/google-health/sync";
+import {
+  GOOGLE_HEALTH_POLL_CONCURRENCY,
+  syncUserGoogleHealth,
+} from "@/lib/google-health/sync";
 import { isReauthRequired } from "@/lib/integrations/status";
 import { enqueueReminderSatisfy } from "@/lib/jobs/reminder-satisfy";
 import { cleanupExpiredGoogleHealthOAuthStates } from "@/lib/jobs/google-health-oauth-state-cleanup";
@@ -57,7 +60,7 @@ export async function handleGoogleHealthSync(
       // Fan the cohort out with bounded concurrency + per-user error isolation:
       // one slow Google response can't stall the whole cohort, and a single
       // user's failure is warned without aborting the pass.
-      const limit = pLimit(4);
+      const limit = pLimit(GOOGLE_HEALTH_POLL_CONCURRENCY);
       const verdicts = await Promise.all(
         targets.map(({ userId }) =>
           limit(async (): Promise<IntegrationUserVerdict> => {
