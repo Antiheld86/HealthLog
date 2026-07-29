@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 
 import { expect, test } from "./setup/test";
 
@@ -214,17 +215,19 @@ test.describe("Settings → Export & Import", () => {
 
   test("JSON import 'Download example' fires a real download", async ({
     page,
-    isMobile,
   }) => {
-    // Playwright's mobile emulation (Pixel 5 / isMobile) does not reliably
-    // emit a `download` event for a Blob + anchor click — the click is treated
-    // as a navigation, so `waitForEvent("download")` times out. The download
-    // wiring is engine behaviour, not viewport-dependent, and is covered on the
-    // chromium-desktop project; skip it on mobile rather than chase a flake.
-    test.skip(isMobile, "downloads aren't observable under mobile emulation");
     await page.goto("/settings/export", { waitUntil: "domcontentloaded" });
     const exampleBtn = page.getByTestId("import-json-download-example");
     await expect(exampleBtn).toBeVisible({ timeout: 10_000 });
+
+    const a11y = await new AxeBuilder({ page })
+      .include('[data-testid="import-card-json"]')
+      .analyze();
+    expect(
+      a11y.violations.filter(
+        ({ impact }) => impact === "serious" || impact === "critical",
+      ),
+    ).toEqual([]);
 
     const downloadPromise = page.waitForEvent("download", { timeout: 30_000 });
     await exampleBtn.click();

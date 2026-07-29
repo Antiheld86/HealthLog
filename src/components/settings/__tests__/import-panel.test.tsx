@@ -32,6 +32,7 @@ import { I18nProvider } from "@/lib/i18n/context";
 import {
   ImportPanel,
   EXAMPLE_IMPORT,
+  EXAMPLE_IMPORT_DOWNLOAD_HREF,
   EXAMPLE_CSV,
   parseImportJson,
 } from "../import-panel";
@@ -138,6 +139,23 @@ describe("EXAMPLE_IMPORT payload", () => {
     expect(["SUPER_GUT", "GUT", "OKAY", "SCHLECHT", "LAUSIG"]).toContain(
       mood.mood,
     );
+  });
+
+  it("exposes a self-contained, inert JSON download target", () => {
+    expect(EXAMPLE_IMPORT_DOWNLOAD_HREF).toMatch(
+      /^data:application\/json;charset=utf-8,/,
+    );
+    expect(EXAMPLE_IMPORT_DOWNLOAD_HREF).not.toMatch(
+      /(?:javascript:|blob:|<script)/i,
+    );
+
+    const encoded = EXAMPLE_IMPORT_DOWNLOAD_HREF.split(",", 2)[1];
+    expect(encoded).toBeTruthy();
+    expect(JSON.parse(decodeURIComponent(encoded!))).toEqual(EXAMPLE_IMPORT);
+
+    const html = render(<ImportPanel />);
+    expect(html).toContain('download="healthlog-import-example.json"');
+    expect(html).toContain('href="data:application/json;charset=utf-8,');
   });
 });
 

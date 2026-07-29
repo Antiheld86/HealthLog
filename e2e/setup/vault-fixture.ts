@@ -299,8 +299,15 @@ async function upsertDocs(
                $8, 'binary2', $9, 'STORED',
                $10::timestamp, NOW(), NOW(), NULL)
        ON CONFLICT (id) DO UPDATE SET
+         user_id = EXCLUDED.user_id,
          kind = EXCLUDED.kind,
          title = EXCLUDED.title,
+         filename = EXCLUDED.filename,
+         mime_type = EXCLUDED.mime_type,
+         byte_size = EXCLUDED.byte_size,
+         content_encrypted = EXCLUDED.content_encrypted,
+         content_codec = EXCLUDED.content_codec,
+         content_sha256 = EXCLUDED.content_sha256,
          document_date = EXCLUDED.document_date,
          status = 'STORED',
          deleted_at = NULL,

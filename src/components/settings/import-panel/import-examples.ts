@@ -40,6 +40,18 @@ export const EXAMPLE_IMPORT = {
 };
 
 /**
+ * Stable, browser-native download target for the JSON example.
+ *
+ * A data URL is intentionally used instead of a short-lived Blob URL. It lets
+ * the browser own the download directly from the anchor activation and avoids
+ * a create/revoke race when the page is busy or Chromium delays consumption of
+ * a synthetic Blob URL. The payload is small and contains example data only.
+ */
+export const EXAMPLE_IMPORT_DOWNLOAD_HREF =
+  "data:application/json;charset=utf-8," +
+  encodeURIComponent(JSON.stringify(EXAMPLE_IMPORT, null, 2));
+
+/**
  * Client-side parse guard for the JSON-import textarea. Returns the
  * parsed value when the text is valid JSON, otherwise a failure marker —
  * we never POST an unparseable body. Exported for unit testing so the
