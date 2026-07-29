@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/db";
-import { verifyRegistration } from "@/lib/auth/passkey";
+import {
+  consumeRegistrationChallenge,
+  verifyRegistration,
+} from "@/lib/auth/passkey";
 import { auditLog } from "@/lib/auth/audit";
 import {
   apiSuccess,
@@ -8,11 +11,11 @@ import {
   safeJson,
 } from "@/lib/api-response";
 import { NextRequest } from "next/server";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireCookieAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  const { user, session } = await requireCookieAuth();
 
   const { data: body, error: jsonError } = await safeJson<
     Record<string, unknown>
@@ -26,7 +29,43 @@ export const POST = apiHandler(async (request: NextRequest) => {
     return apiError("challengeId and credential required", 422);
   }
 
-  const verification = await verifyRegistration(challengeId, credential);
+  // Read the live session row so a stale fresh-factor stamp cannot be carried
+  // through a registration ceremony after it has been downgraded/revoked.
+  const freshSession = await prisma.session.findUnique({
+    where: { id: session.id },
+    select: { mfaVerifiedAt: true },
+  });
+  if (
+    !freshSession ||
+    (freshSession.mfaVerifiedAt &&
+      freshSession.mfaVerifiedAt.getTime() < Date.now() - 5 * 60 * 1000)
+  ) {
+    return apiError("Fresh reauthentication proof required", 401);
+  }
+
+  const claim = await consumeRegistrationChallenge({
+    challengeId,
+    userId: user.id,
+    sessionId: session.id,
+  });
+  if (!claim.ok) {
+    return apiError(
+      claim.reason === "wrong_context"
+        ? "Fresh reauthentication proof required"
+        : "Registration challenge invalid or expired",
+      claim.reason === "wrong_context" ? 401 : 400,
+    );
+  }
+
+  let verification;
+  try {
+    verification = await verifyRegistration(
+      claim.expectedChallenge,
+      credential,
+    );
+  } catch {
+    return apiError("Passkey verification failed", 400);
+  }
 
   if (!verification.verified || !verification.registrationInfo) {
     return apiError("Passkey verification failed", 400);

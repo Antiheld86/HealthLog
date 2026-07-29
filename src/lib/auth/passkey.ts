@@ -15,6 +15,7 @@ import {
   getRpId,
   getExpectedOrigin,
 } from "@/lib/auth/webauthn-rp";
+import { hashToken } from "@/lib/auth/hmac";
 
 // v1.4.43 W13 L-3 — explicit Zod narrowing in front of
 // `verifyAuthentication`. Replaces the raw
@@ -75,6 +76,12 @@ const registrationResponseSchema = z
 type Transport =
   "ble" | "cable" | "hybrid" | "internal" | "nfc" | "smart-card" | "usb";
 
+const PASSKEY_REGISTRATION_CHALLENGE_PREFIX = "passkey-registration:v1:";
+
+function registrationChallengeType(sessionId: string): string {
+  return `${PASSKEY_REGISTRATION_CHALLENGE_PREFIX}${hashToken(sessionId)}`;
+}
+
 // The relying-party config (`rpName` / `getRpId` / `getExpectedOrigin`) is
 // shared with the second-factor security-key path via `@/lib/auth/webauthn-rp`
 // so both ceremonies bind credentials to the identical RP.
@@ -90,6 +97,7 @@ async function cleanupExpiredChallenges() {
 export async function createRegistrationOptions(
   userId: string,
   username: string,
+  sessionId: string,
 ) {
   await cleanupExpiredChallenges();
 
@@ -124,7 +132,7 @@ export async function createRegistrationOptions(
     data: {
       userId,
       challenge: options.challenge,
-      type: "registration",
+      type: registrationChallengeType(sessionId),
       expiresAt: new Date(Date.now() + 5 * 60 * 1000),
     },
   });
@@ -132,43 +140,84 @@ export async function createRegistrationOptions(
   return { options, challengeId: challenge.id };
 }
 
-export async function verifyRegistration(
-  challengeId: string,
-  response: unknown,
-): Promise<VerifiedRegistrationResponse> {
-  const challenge = await prisma.authChallenge.findUnique({
-    where: { id: challengeId },
+export type RegistrationChallengeClaim =
+  | { ok: true; expectedChallenge: string; createdAt: Date }
+  | { ok: false; reason: "invalid" | "wrong_context" };
+
+/**
+ * Claim a registration challenge for exactly one cookie session.
+ *
+ * The preliminary lookup is used only to classify a foreign account/session
+ * without consuming its challenge. The guarded DELETE is the actual claim:
+ * concurrent requests cannot both receive the challenge material.
+ */
+export async function consumeRegistrationChallenge(input: {
+  challengeId: string;
+  userId: string;
+  sessionId: string;
+}): Promise<RegistrationChallengeClaim> {
+  const row = await prisma.authChallenge.findUnique({
+    where: { id: input.challengeId },
+    select: { userId: true, type: true, expiresAt: true },
   });
 
-  if (!challenge || challenge.expiresAt < new Date()) {
-    throw new Error("Challenge expired or not found");
+  if (!row) return { ok: false, reason: "invalid" };
+
+  const expectedType = registrationChallengeType(input.sessionId);
+  if (
+    row.userId !== input.userId ||
+    (row.type.startsWith(PASSKEY_REGISTRATION_CHALLENGE_PREFIX) &&
+      row.type !== expectedType)
+  ) {
+    return { ok: false, reason: "wrong_context" };
   }
 
-  try {
-    // v1.4.43 W10 senior-dev L-1 — Zod narrow at the boundary before
-    // delegating to SimpleWebAuthn's full cryptographic validation.
-    // A malformed body now fails fast with a structured Zod error
-    // rather than crashing on a follow-up `.id` deref deeper in the
-    // verifier. Mirrors the v1.4.43 W13 L-3 narrowing on the
-    // authentication side.
-    const parsed = registrationResponseSchema.safeParse(response);
-    if (!parsed.success) {
-      throw new Error("Registration response shape invalid");
-    }
-    const verification = await verifyRegistrationResponse({
-      response: parsed.data as RegistrationResponseJSON,
-      expectedChallenge: challenge.challenge,
-      expectedOrigin: getExpectedOrigin(),
-      expectedRPID: getRpId(),
-    });
-
-    return verification;
-  } finally {
-    // Invalidate challenge after first verification attempt (success or failure)
-    await prisma.authChallenge
-      .delete({ where: { id: challengeId } })
-      .catch(() => {});
+  if (row.type !== expectedType || row.expiresAt <= new Date()) {
+    return { ok: false, reason: "invalid" };
   }
+
+  const claimed = await prisma.$queryRaw<
+    Array<{ challenge: string; created_at: Date }>
+  >`
+    DELETE FROM auth_challenges
+    WHERE id = ${input.challengeId}
+      AND user_id = ${input.userId}
+      AND type = ${expectedType}
+      AND expires_at > NOW()
+    RETURNING challenge, created_at
+  `;
+
+  if (claimed.length !== 1) {
+    return { ok: false, reason: "invalid" };
+  }
+
+  return {
+    ok: true,
+    expectedChallenge: claimed[0].challenge,
+    createdAt: claimed[0].created_at,
+  };
+}
+
+export async function verifyRegistration(
+  expectedChallenge: string,
+  response: unknown,
+): Promise<VerifiedRegistrationResponse> {
+  // v1.4.43 W10 senior-dev L-1 — Zod narrow at the boundary before
+  // delegating to SimpleWebAuthn's full cryptographic validation.
+  // A malformed body now fails fast with a structured Zod error
+  // rather than crashing on a follow-up `.id` deref deeper in the
+  // verifier. Mirrors the v1.4.43 W13 L-3 narrowing on the
+  // authentication side.
+  const parsed = registrationResponseSchema.safeParse(response);
+  if (!parsed.success) {
+    throw new Error("Registration response shape invalid");
+  }
+  return verifyRegistrationResponse({
+    response: parsed.data as RegistrationResponseJSON,
+    expectedChallenge,
+    expectedOrigin: getExpectedOrigin(),
+    expectedRPID: getRpId(),
+  });
 }
 
 // ── Authentication ───────────────────────────────────────
