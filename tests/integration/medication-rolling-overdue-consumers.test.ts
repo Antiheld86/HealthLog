@@ -91,7 +91,7 @@ async function createMounjaro(): Promise<string> {
 
 async function readConsumerOccurrence(
   medicationId: string,
-  complianceStatus: "overdue" | "on_track" = "overdue",
+  complianceStatus: "overdue" | "upcoming" = "overdue",
 ) {
   const prisma = getPrismaClient();
   const list = await buildMedicationsList(USER_ID, USER_TZ);
@@ -187,7 +187,7 @@ describe("rolling weekly overdue occurrence — shared consumers", () => {
         },
       });
 
-      const state = await readConsumerOccurrence(medicationId, "on_track");
+      const state = await readConsumerOccurrence(medicationId, "upcoming");
       expect(state.list).toEqual({
         occurrence: NEXT_OCCURRENCE.toISOString(),
         overdue: false,
