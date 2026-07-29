@@ -1,6 +1,7 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 import { Loader2 } from "lucide-react";
 
@@ -12,6 +13,7 @@ import { CoachLaunchButton } from "@/components/insights/coach-launch-button";
 import { SubPageShell } from "@/components/insights/sub-page-shell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryErrorCard } from "@/components/ui/query-error-card";
+import { canonicalWorkoutDetailHref } from "@/lib/workouts/canonical-detail-route";
 import {
   WorkoutDetailHeader,
   WorkoutDetailStats,
@@ -47,8 +49,14 @@ export default function InsightsWorkoutDetailPage({
 }) {
   const { t } = useTranslations();
   const { id } = use(params);
+  const router = useRouter();
   const { ready } = useModulePageGuard("workouts");
   const { data, isLoading, error, refetch } = useWorkoutDetail(id);
+  const canonicalHref = canonicalWorkoutDetailHref(id, data?.canonicalId);
+
+  useEffect(() => {
+    if (canonicalHref) router.replace(canonicalHref);
+  }, [canonicalHref, router]);
 
   // v1.18.0 B1 — bounce a direct URL hit on a disabled-workouts account.
   if (!ready) {
@@ -71,7 +79,7 @@ export default function InsightsWorkoutDetailPage({
         />
       }
     >
-      {isLoading ? (
+      {isLoading || canonicalHref ? (
         <div data-slot="workout-detail-loading" className="space-y-3">
           <Skeleton className="h-20 w-full rounded-lg" />
           <Skeleton className="h-40 w-full rounded-lg" />

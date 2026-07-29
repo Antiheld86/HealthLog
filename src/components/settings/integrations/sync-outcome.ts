@@ -18,6 +18,56 @@ export interface SyncOutcomeResponse {
   failed: boolean;
   /** The resolved verdict — the card never recomputes this. */
   outcome: WrittenOutcome;
+  /** Optional bounded per-resource evidence for providers that expose it. */
+  resources?: SyncOutcomeResource[];
+}
+
+export interface SyncOutcomeResource {
+  resource: string;
+  written: number;
+  status: "pending" | "complete" | "partial" | "empty" | "truncated" | "failed";
+  reasonCode: string | null;
+}
+
+const RESOURCE_STATUSES = new Set<SyncOutcomeResource["status"]>([
+  "pending",
+  "complete",
+  "partial",
+  "empty",
+  "truncated",
+  "failed",
+]);
+
+export function readSyncOutcomeResource(
+  value: unknown,
+): SyncOutcomeResource | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record.resource !== "string" ||
+    !RESOURCE_STATUSES.has(record.status as SyncOutcomeResource["status"])
+  ) {
+    return null;
+  }
+  const resource = record.resource
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 48);
+  if (!resource) return null;
+  return {
+    resource,
+    written:
+      typeof record.written === "number" && Number.isFinite(record.written)
+        ? Math.max(0, Math.min(2_147_483_647, Math.trunc(record.written)))
+        : 0,
+    status: record.status as SyncOutcomeResource["status"],
+    reasonCode:
+      typeof record.reasonCode === "string" &&
+      /^[a-z0-9_-]{1,48}$/.test(record.reasonCode)
+        ? record.reasonCode
+        : null,
+  };
 }
 
 /** What a card holds after a sync attempt, transport failures included. */
@@ -46,7 +96,16 @@ export function readSyncOutcome(body: unknown): SyncOutcomeResponse | null {
   ) {
     return null;
   }
-  return { imported, failed, outcome };
+  const rawResources = (data as Record<string, unknown>).resources;
+  const resources = Array.isArray(rawResources)
+    ? rawResources
+        .slice(0, 16)
+        .map(readSyncOutcomeResource)
+        .filter(
+          (resource): resource is SyncOutcomeResource => resource !== null,
+        )
+    : undefined;
+  return { imported, failed, outcome, ...(resources ? { resources } : {}) };
 }
 
 /**

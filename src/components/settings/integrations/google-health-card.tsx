@@ -67,23 +67,19 @@ import {
 } from "./shared";
 import { MetricFreshnessDisclosure } from "./metric-freshness-disclosure";
 import {
+  completedGoogleHealthResourceCount,
+  failedGoogleHealthResources,
+  googleHealthReasonCode,
+  readGoogleHealthProgress,
+  type GoogleHealthProgress,
+} from "./google-health-progress-view";
+import {
   readSyncOutcome,
   useSyncOutcomeMessage,
+  type SyncOutcomeResource,
   type SyncOutcomeState,
 } from "./sync-outcome";
 import { IntegrationCardDescription } from "./setup-guide-link";
-
-interface GoogleHealthTerminalResource {
-  resource?: unknown;
-  written?: unknown;
-}
-
-interface GoogleHealthTerminalProgress {
-  state:
-    "complete" | "partial" | "zero" | "truncated" | "failed" | "interrupted";
-  imported: number;
-  resources: GoogleHealthTerminalResource[];
-}
 
 export function GoogleHealthCard({
   viewModel,
@@ -94,6 +90,9 @@ export function GoogleHealthCard({
   const describeSyncOutcome = useSyncOutcomeMessage();
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncOutcomeState | null>(null);
+  const [syncProgress, setSyncProgress] = useState<GoogleHealthProgress | null>(
+    null,
+  );
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [credsSaving, setCredsSaving] = useState(false);
@@ -105,9 +104,7 @@ export function GoogleHealthCard({
 
   const status = viewModel;
 
-  function invalidateCommittedWorkout(
-    resources: GoogleHealthTerminalResource[],
-  ) {
+  function invalidateCommittedWorkout(resources: SyncOutcomeResource[]) {
     const workoutCommitted = resources.some(
       (resource) =>
         resource.resource === "workout" &&
@@ -121,51 +118,37 @@ export function GoogleHealthCard({
     queryClient.invalidateQueries({ queryKey: queryKeys.analytics() });
   }
 
-  function readTerminalProgress(
-    body: unknown,
-  ): GoogleHealthTerminalProgress | null {
-    if (!body || typeof body !== "object") return null;
-    const data = (body as { data?: unknown }).data;
-    if (!data || typeof data !== "object") return null;
-    const record = data as Record<string, unknown>;
-    if (
-      record.state !== "complete" &&
-      record.state !== "partial" &&
-      record.state !== "zero" &&
-      record.state !== "truncated" &&
-      record.state !== "failed" &&
-      record.state !== "interrupted"
-    ) {
-      return null;
-    }
-    return {
-      state: record.state,
-      imported:
-        typeof record.imported === "number" && Number.isFinite(record.imported)
-          ? Math.max(0, Math.trunc(record.imported))
-          : 0,
-      resources: Array.isArray(record.resources)
-        ? record.resources.slice(0, 16)
-        : [],
-    };
-  }
-
-  async function pollSyncStatus(): Promise<GoogleHealthTerminalProgress | null> {
-    for (let attempt = 0; attempt < 4; attempt++) {
+  async function pollSyncStatus(
+    maxAttempts = 20,
+  ): Promise<GoogleHealthProgress | null> {
+    let latest: GoogleHealthProgress | null = null;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         const response = await apiFetchRaw("/api/google-health/sync/status");
-        const progress = readTerminalProgress(await response.json());
-        if (response.ok && progress) return progress;
+        const progress = readGoogleHealthProgress(await response.json());
+        if (response.ok && progress) {
+          latest = progress;
+          setSyncProgress(progress);
+          if (progress.state !== "in_progress") return progress;
+        }
       } catch {
         // The POST may have committed even when its response was lost. Keep
-        // this short bounded poll best-effort; the next card refresh can retry.
+        // this bounded poll best-effort; the status CTA can retry it.
       }
-      await new Promise((resolve) => setTimeout(resolve, 750));
+      if (attempt + 1 < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, 750));
+      }
     }
-    return null;
+    return latest;
   }
 
-  function showTerminalProgress(progress: GoogleHealthTerminalProgress): void {
+  function showProgress(progress: GoogleHealthProgress): void {
+    setSyncProgress(progress);
+    invalidateCommittedWorkout(progress.resources);
+    if (progress.state === "in_progress") {
+      setSyncResult(null);
+      return;
+    }
     const failed =
       progress.state === "failed" || progress.state === "interrupted";
     const outcome =
@@ -188,7 +171,40 @@ export function GoogleHealthCard({
         t("settings.googleHealthSyncResult", { count: progress.imported }),
       ),
     });
-    invalidateCommittedWorkout(progress.resources);
+  }
+
+  function progressFromOutcome(
+    result: ReturnType<typeof readSyncOutcome>,
+  ): GoogleHealthProgress | null {
+    if (!result?.resources) return null;
+    return {
+      state:
+        result.outcome === "failed"
+          ? "failed"
+          : result.outcome === "partial"
+            ? "partial"
+            : result.outcome === "empty"
+              ? "zero"
+              : "complete",
+      imported: result.imported,
+      resources: result.resources,
+    };
+  }
+
+  async function refreshSyncStatus() {
+    setSyncing(true);
+    try {
+      const progress = await pollSyncStatus(4);
+      if (progress) showProgress(progress);
+      else {
+        setSyncResult({
+          outcome: "failed",
+          message: t("settings.googleHealthSyncFailed"),
+        });
+      }
+    } finally {
+      setSyncing(false);
+    }
   }
 
   const disconnect = useMutation({
@@ -224,6 +240,7 @@ export function GoogleHealthCard({
   async function handleSync(fullSync = false) {
     setSyncing(true);
     setSyncResult(null);
+    setSyncProgress(null);
     try {
       const res = await apiFetchRaw("/api/google-health/sync", {
         method: "POST",
@@ -246,12 +263,13 @@ export function GoogleHealthCard({
         queryClient.invalidateQueries({
           queryKey: queryKeys.integrationsStatus(),
         });
-        const terminal = readTerminalProgress(json);
-        if (terminal) invalidateCommittedWorkout(terminal.resources);
+        const progress =
+          readGoogleHealthProgress(json) ?? progressFromOutcome(result);
+        if (progress) showProgress(progress);
       } else {
-        const terminal = await pollSyncStatus();
-        if (terminal) {
-          showTerminalProgress(terminal);
+        const progress = await pollSyncStatus();
+        if (progress) {
+          showProgress(progress);
         } else {
           setSyncResult({
             outcome: "failed",
@@ -260,9 +278,9 @@ export function GoogleHealthCard({
         }
       }
     } catch {
-      const terminal = await pollSyncStatus();
-      if (terminal) {
-        showTerminalProgress(terminal);
+      const progress = await pollSyncStatus();
+      if (progress) {
+        showProgress(progress);
       } else {
         setSyncResult({
           outcome: "failed",
@@ -271,6 +289,40 @@ export function GoogleHealthCard({
       }
     } finally {
       setSyncing(false);
+    }
+  }
+
+  function resourceLabel(resource: string): string {
+    switch (resource) {
+      case "workout":
+        return t("settings.googleHealthResource.workout");
+      case "sleep":
+        return t("settings.googleHealthResource.sleep");
+      case "bounded-metrics":
+        return t("settings.googleHealthResource.boundedMetrics");
+      case "activity":
+        return t("settings.googleHealthResource.activity");
+      case "dense-heart-rate":
+        return t("settings.googleHealthResource.heartRate");
+      default:
+        return t("settings.googleHealthResource.other");
+    }
+  }
+
+  function resourceFailureMessage(resource: SyncOutcomeResource): string {
+    switch (googleHealthReasonCode(resource)) {
+      case "collection_failed":
+        return t("settings.googleHealthReason.collectionFailed");
+      case "token_failed":
+        return t("settings.googleHealthReason.tokenFailed");
+      case "upsert_failed":
+        return t("settings.googleHealthReason.upsertFailed");
+      case "rollup_failed":
+        return t("settings.googleHealthReason.rollupFailed");
+      case "existing_page_limit":
+        return t("settings.googleHealthReason.pageLimit");
+      default:
+        return t("settings.googleHealthReason.generic");
     }
   }
 
@@ -328,6 +380,8 @@ export function GoogleHealthCard({
   // a disconnected card has no token to renew. `needsReauth` is the 7-day
   // Testing-mode expiry (or a revoked grant) surfaced by the status route.
   const showReauth = Boolean(status?.connected && status?.needsReauth);
+  const resourceFailures = failedGoogleHealthResources(syncProgress);
+  const completedResources = completedGoogleHealthResourceCount(syncProgress);
 
   return (
     <SettingsCard data-testid="google-health-card">
@@ -541,7 +595,13 @@ export function GoogleHealthCard({
                 variant="outline"
                 size="sm"
                 className="min-h-11"
-                onClick={() => handleSync(false)}
+                onClick={() => {
+                  if (syncProgress?.state === "in_progress") {
+                    void refreshSyncStatus();
+                  } else {
+                    void handleSync(false);
+                  }
+                }}
                 disabled={syncing}
               >
                 {syncing ? (
@@ -549,7 +609,9 @@ export function GoogleHealthCard({
                 ) : (
                   <RefreshCw className="h-3.5 w-3.5" />
                 )}
-                {t("settings.googleHealthSync")}
+                {syncProgress?.state === "in_progress"
+                  ? t("settings.googleHealthSyncCheckStatus")
+                  : t("settings.googleHealthSync")}
               </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
@@ -557,7 +619,7 @@ export function GoogleHealthCard({
                     variant="outline"
                     size="sm"
                     className="min-h-11"
-                    disabled={syncing}
+                    disabled={syncing || syncProgress?.state === "in_progress"}
                   >
                     {syncing ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
@@ -625,12 +687,48 @@ export function GoogleHealthCard({
                 {t("settings.googleHealthBackfillInProgress")}
               </p>
             )}
+            {syncProgress?.state === "in_progress" && (
+              <p
+                role="status"
+                aria-live="polite"
+                className="text-muted-foreground text-xs"
+                data-testid="google-health-sync-progress"
+              >
+                {t("settings.googleHealthSyncInProgress", {
+                  count: syncProgress.imported,
+                  completed: completedResources,
+                  total: syncProgress.resources.length,
+                })}
+              </p>
+            )}
             {syncResult && (
               <WrittenOutcomeLine
                 outcome={syncResult.outcome}
                 message={syncResult.message}
                 testId="google-health-sync-result"
               />
+            )}
+            {resourceFailures.length > 0 && (
+              <div
+                role="alert"
+                data-testid="google-health-resource-failures"
+                className="border-warning/30 bg-warning/10 rounded-md border px-3 py-2"
+              >
+                <p className="text-foreground text-xs font-medium">
+                  {t("settings.googleHealthResourceFailuresTitle")}
+                </p>
+                <ul className="text-muted-foreground mt-1 space-y-1 text-xs">
+                  {resourceFailures.map((resource) => (
+                    <li key={resource.resource}>
+                      <span className="text-foreground font-medium">
+                        {resourceLabel(resource.resource)}
+                      </span>
+                      {": "}
+                      {resourceFailureMessage(resource)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
             {/* connect→data loop: a discreet link to where this provider's
                 readings now surface — doubles as the "your data is richer"

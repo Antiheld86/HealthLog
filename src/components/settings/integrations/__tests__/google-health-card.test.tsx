@@ -20,6 +20,22 @@ describe("GoogleHealthCard manual-sync terminal contract", () => {
     expect(source).toMatch(/partial/);
     expect(source).toMatch(/failed/);
     expect(source).toMatch(/interrupted/);
+    expect(source).toContain("google-health-sync-progress");
+    expect(source).toContain("settings.googleHealthSyncInProgress");
+    expect(source).toMatch(
+      /syncProgress\?\.state === "in_progress"[\s\S]{0,180}refreshSyncStatus/,
+    );
+  });
+
+  it("renders actionable, allowlisted per-resource failure details", () => {
+    expect(source).toContain("google-health-resource-failures");
+    expect(source).toContain("failedGoogleHealthResources(syncProgress)");
+    expect(source).toContain("googleHealthReasonCode(resource)");
+    expect(source).toContain("settings.googleHealthReason.tokenFailed");
+    expect(source).toContain("settings.googleHealthReason.upsertFailed");
+    expect(source).not.toMatch(
+      /resourceFailureMessage[\s\S]{0,160}(resource\.reasonCode|\$\{[^}]*reasonCode)/,
+    );
   });
 
   it("invalidates every affected client query after a committed workout outcome", () => {
