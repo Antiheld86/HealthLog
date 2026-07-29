@@ -71,7 +71,7 @@ beforeEach(async () => {
 });
 
 /** Mint a real `ApiToken` row with the given scopes and arm the Bearer header. */
-async function useToken(permissions: string[], label = "t"): Promise<string> {
+async function armToken(permissions: string[], label = "t"): Promise<string> {
   const raw = `hlk_${label}_${"0".repeat(48)}`;
   await getPrismaClient().apiToken.create({
     data: {
@@ -85,12 +85,12 @@ async function useToken(permissions: string[], label = "t"): Promise<string> {
   return raw;
 }
 
-async function useExpiringToken(
+async function armExpiringToken(
   permissions: string[],
   label: string,
   state: { expiresAt?: Date; revoked?: boolean } = {},
 ): Promise<string> {
-  const raw = await useToken(permissions, label);
+  const raw = await armToken(permissions, label);
   await getPrismaClient().apiToken.update({
     where: { tokenHash: hashToken(raw) },
     data: state,
@@ -149,7 +149,7 @@ describe("B1 — a narrow token cannot read the full-account export", () => {
     // The vulnerability in one request: this is the token the settings card
     // told users to hand to third-party automations, reading every row the
     // account holds.
-    await useToken(["medication:ingest"], "narrow");
+    await armToken(["medication:ingest"], "narrow");
     const { GET } = await import("@/app/api/export/full-backup/route");
 
     const res = await GET(req("/api/export/full-backup"));
@@ -166,7 +166,7 @@ describe("B1 — a narrow token cannot read the full-account export", () => {
   });
 
   it("refuses the same token on GET /api/labs with 403", async () => {
-    await useToken(["medication:ingest"], "narrow2");
+    await armToken(["medication:ingest"], "narrow2");
     const { GET } = await import("@/app/api/labs/route");
     const res = await GET(req("/api/labs"));
     expect(res.status).toBe(403);
@@ -187,7 +187,7 @@ describe("B2/B3 — the medication-ingest surface is unchanged", () => {
     // resolution — so the fail-closed default cannot reach it. This is the
     // one flow a fail-closed default could plausibly have broken.
     const medId = await seedMedication();
-    await useToken(["medication:ingest", `medication:${medId}:ingest`], "pair");
+    await armToken(["medication:ingest", `medication:${medId}:ingest`], "pair");
     const { POST } = await import("@/app/api/ingest/medication/route");
 
     const request = new NextRequest(
@@ -217,7 +217,7 @@ describe("B2/B3 — the medication-ingest surface is unchanged", () => {
     // The pre-existing second gate. This is why the retired `/api/tokens`
     // mint never worked for its advertised purpose.
     await seedMedication();
-    await useToken(["medication:ingest"], "familyonly");
+    await armToken(["medication:ingest"], "familyonly");
     const { POST } = await import("@/app/api/ingest/medication/route");
 
     const request = new NextRequest(
@@ -245,14 +245,14 @@ describe("B4 — the native client is not broken", () => {
     // Login, passkey login-verify and refresh rotation all mint `["*"]`, so
     // this is exactly the credential the iOS app holds. If this case ever
     // goes red, the native client is down.
-    await useToken(["*"], "wildcard");
+    await armToken(["*"], "wildcard");
     const { GET } = await import("@/app/api/export/full-backup/route");
     const res = await GET(req("/api/export/full-backup"));
     expect(res.status).toBe(200);
   });
 
   it("admits a ['*'] token on a batch ingest route", async () => {
-    await useToken(["*"], "wildcardbatch");
+    await armToken(["*"], "wildcardbatch");
     const { POST } = await import("@/app/api/measurements/batch/route");
     const request = new NextRequest(
       "https://health.example/api/measurements/batch",
@@ -285,14 +285,14 @@ describe("B5 — an MCP token is audience-bound to /mcp", () => {
   it("refuses ['health:read'] on a REST read", async () => {
     // Narrowing, not breakage: the token's REST read leg was never a feature
     // an MCP client used. Its audience is now /mcp alone.
-    await useToken(["health:read"], "mcpread");
+    await armToken(["health:read"], "mcpread");
     const { GET } = await import("@/app/api/export/full-backup/route");
     const res = await GET(req("/api/export/full-backup"));
     expect(res.status).toBe(403);
   });
 
   it("still resolves the same token on the /mcp wire", async () => {
-    const raw = await useToken(["health:read"], "mcpread2");
+    const raw = await armToken(["health:read"], "mcpread2");
     const { resolveMcpAuthContext } = await import("@/lib/mcp/auth");
 
     const ctx = await resolveMcpAuthContext(raw);
@@ -304,7 +304,7 @@ describe("B5 — an MCP token is audience-bound to /mcp", () => {
   });
 
   it("grants write on /mcp only for a consented health:write token", async () => {
-    const raw = await useToken(["health:read", "health:write"], "mcprw");
+    const raw = await armToken(["health:read", "health:write"], "mcprw");
     const { resolveMcpAuthContext } = await import("@/lib/mcp/auth");
     const ctx = await resolveMcpAuthContext(raw);
     expect(ctx.canWrite).toBe(true);
@@ -325,7 +325,7 @@ describe("B5b — MCP health reads require an explicit read grant", () => {
     ["health:read", ["health:read"]],
     ["wildcard", ["*"]],
   ])("admits %s through capability registration", async (_label, scopes) => {
-    const raw = await useToken(scopes, `mcp-positive-${_label}`);
+    const raw = await armToken(scopes, `mcp-positive-${_label}`);
 
     const res = await postMcp(raw, "tools/list");
 
@@ -345,7 +345,7 @@ describe("B5b — MCP health reads require an explicit read grant", () => {
   ])(
     "denies a same-user %s token before a real lab read",
     async (_label, scopes) => {
-      const raw = await useToken(scopes, `mcp-negative-${_label}`);
+      const raw = await armToken(scopes, `mcp-negative-${_label}`);
       await getPrismaClient().labResult.create({
         data: {
           userId: USER_ID,
@@ -373,7 +373,7 @@ describe("B5b — MCP health reads require an explicit read grant", () => {
     ],
     ["revoked", { revoked: true }],
   ])("denies an explicit but %s health:read credential", async (_label, state) => {
-    const raw = await useExpiringToken(
+    const raw = await armExpiringToken(
       ["health:read"],
       `mcp-${_label}`,
       state,
@@ -387,7 +387,7 @@ describe("B5b — MCP health reads require an explicit read grant", () => {
 
 describe("B6 — a declared scope grants only what it names", () => {
   it("admits ['fhir:read'] on the FHIR face", async () => {
-    await useToken(["fhir:read"], "fhir");
+    await armToken(["fhir:read"], "fhir");
     const { GET } = await import("@/app/api/fhir/Observation/route");
     const res = await GET(req("/api/fhir/Observation"));
     expect(res.status).toBe(200);
@@ -396,7 +396,7 @@ describe("B6 — a declared scope grants only what it names", () => {
   it("refuses the same token on /api/labs, which declares no scope", async () => {
     // The whole point of the inversion: holding a scope buys the routes that
     // name it, and nothing else.
-    await useToken(["fhir:read"], "fhir2");
+    await armToken(["fhir:read"], "fhir2");
     const { GET } = await import("@/app/api/labs/route");
     const res = await GET(req("/api/labs"));
     expect(res.status).toBe(403);
@@ -425,7 +425,7 @@ describe("B7 — cookie sessions are untouched", () => {
       where: { id: USER_ID },
       data: { role: "ADMIN" },
     });
-    await useToken(["*"], "adminwild");
+    await armToken(["*"], "adminwild");
 
     const { requireAdmin, HttpError } = await import("@/lib/api-handler");
     await expect(requireAdmin()).rejects.toBeInstanceOf(HttpError);
