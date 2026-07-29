@@ -95,11 +95,7 @@ function readCatalog(locale: (typeof LOCALES)[number]): Catalog {
 function resolveLeaf(catalog: Catalog, dottedKey: string): string | undefined {
   let value: unknown = catalog;
   for (const segment of dottedKey.split(".")) {
-    if (
-      typeof value !== "object" ||
-      value === null ||
-      !(segment in value)
-    ) {
+    if (typeof value !== "object" || value === null || !(segment in value)) {
       return undefined;
     }
     value = (value as Record<string, unknown>)[segment];
@@ -123,7 +119,7 @@ describe("v1.34.1 locale reconciliation", () => {
       const source = readFileSync(join(ROOT, relativePath), "utf8");
       for (const key of keys) {
         expect(source, `${relativePath} must translate ${key}`).toMatch(
-          new RegExp(`\\bt\\(["']${key.replaceAll(".", "\\.")}["']`),
+          new RegExp(`\\bt\\(\\s*["']${key.replaceAll(".", "\\.")}["']`),
         );
       }
     }

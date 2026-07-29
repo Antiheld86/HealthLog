@@ -2252,16 +2252,12 @@
     "heroActionAskCoach": "Chiedi al coach",
     "healthScore": {
       "label": "Punteggio di salute",
-      "algorithmChanged": "Il punteggio usa ora intervalli di riferimento cardiometabolici pubblicati; il peso non è più incluso perché il vecchio obiettivo derivava dall'altezza anziché da un obiettivo personale, la variabilità quotidiana dell'umore e l'aderenza ai farmaci sono azioni anziché stati di salute, e la frequenza cardiaca a riposo e l'HRV non hanno un obiettivo universale. I progressi del peso restano visibili sotto come contesto personale, gli altri segnali conservano le proprie schede e un numero nuovo non significa che la tua salute sia cambiata.",
-      "dismissAlgorithmChanged": "Chiudi la nota sul metodo",
       "band": {
         "green": "Nell'intervallo di riferimento",
         "yellow": "Alcuni pilastri richiedono attenzione",
         "red": "Uno o più pilastri sono fuori dall'intervallo di riferimento"
       },
-      "method": "Media con peso uguale dei pilastri idonei. Il pilastro più basso determina la fascia complessiva.",
       "insufficient": "{count} pilastri idonei. Il punteggio ne richiede almeno tre, incluso un pilastro fisiologico misurato.",
-      "composition": "Inclusi: {pillars}",
       "bandSetter": "Fascia complessiva determinata da {pillar}",
       "versionAndNoise": "Versione del metodo {version}. Soglia del confronto settimanale: {noise} punti.",
       "methodVersion": "Versione del metodo {version}.",
@@ -4614,6 +4610,7 @@
             "rowsImported": "{count} righe importate finora",
             "doneSummary": "Fatto: {imported} di {read} record importati, {skipped} record clinici saltati.",
             "doneNothing": "Da questo archivio non è stato importato nulla: sono arrivati 0 record su {read}.",
+            "ecgResult": "ECG: {discovered} rilevati, {imported} importati, {updated} aggiornati, {skipped} ignorati e {failed} non riusciti. Gli errori ECG non eliminano i record supportati importati da export.xml.",
             "estimateWarning": "I totali cumulativi di {count} giorno/i sono stati stimati dalla fonte di esportazione più alta. Le statistiche native di Apple Salute restano autorevoli.",
             "phase": {
               "queued": "In coda…",
@@ -4930,6 +4927,21 @@
     "passwordUpdated": "Password aggiornata correttamente",
     "passkeys": "Passkeys",
     "passkeysDescription": "Le passkey consentono un accesso sicuro senza password.",
+    "passkeyReauth": {
+      "title": "Conferma la tua identità",
+      "description": "Verifica un metodo di accesso esistente prima di aggiungere una nuova passkey.",
+      "methodLabel": "Metodo di verifica",
+      "methods": {
+        "password": "Password",
+        "totp": "Codice dell’app di autenticazione",
+        "passkey": "Passkey",
+        "webauthn": "Chiave di sicurezza"
+      },
+      "currentPassword": "Password attuale",
+      "authenticatorCode": "Codice dell’app di autenticazione",
+      "authenticatorPlaceholder": "Codice a 6 cifre dell’app di autenticazione",
+      "verifyAndAdd": "Verifica e aggiungi"
+    },
     "passkeyName": "Nome",
     "noPasskeys": "Nessuna passkey registrata.",
     "addPasskey": "Aggiungi passkey",
@@ -5622,8 +5634,8 @@
     "nightscoutTokenOptional": "Facoltativo per un sito pubblico",
     "nightscoutTokenSavedPlaceholder": "Salvato — inserisci un nuovo token per sostituirlo",
     "nightscoutTokenHelp": "Incolla un token di accesso dagli strumenti di amministrazione di Nightscout. Lascia vuoto se il tuo sito è leggibile pubblicamente.",
-    "nightscoutPrivateHost": "Questo sito è su una rete privata",
-    "nightscoutPrivateHostHelp": "Attiva solo se la tua istanza Nightscout è su un indirizzo LAN, VPN o Tailscale. Disattivato per i siti pubblici.",
+    "nightscoutPrivateOperatorTitle": "L’accesso a un Nightscout privato richiede l’approvazione dell’amministratore del server.",
+    "nightscoutPrivateOperatorDescription": "Chiedi all’amministratore del server di approvare esattamente questa origine Nightscout.",
     "nightscoutConnect": "Connetti",
     "nightscoutUpdate": "Salva modifiche",
     "nightscoutConnected": "Nightscout connesso.",
@@ -8581,7 +8593,6 @@
       "notRecorded": "Non registrato",
       "unreadable": "Impossibile leggere il valore salvato",
       "save": "Salva",
-      "correct": "Correggi",
       "savedToast": "Contesto dello stile di vita salvato",
       "saveError": "Impossibile salvare il contesto dello stile di vita",
       "loadError": "Impossibile caricare il contesto dello stile di vita",
@@ -8823,7 +8834,6 @@
         "withheld": "Un riepilogo è stato generato ma non ha superato il controllo di sicurezza, quindi non viene mostrato. Puoi riprovare o leggere il documento stesso.",
         "unavailable": "Non è stato possibile generare un riepilogo per questo documento.",
         "generate": "Genera riepilogo",
-        "regenerate": "Genera di nuovo",
         "generating": "Generazione…"
       },
       "loadError": "Impossibile caricare questo documento.",

@@ -2252,16 +2252,12 @@
     "heroActionAskCoach": "Zapytaj coacha",
     "healthScore": {
       "label": "Wynik zdrowia",
-      "algorithmChanged": "Wynik korzysta teraz z opublikowanych kardiometabolicznych zakresów referencyjnych; masa ciała nie jest już uwzględniana, ponieważ poprzedni cel wynikał ze wzrostu, a nie z celu ustawionego przez użytkownika, codzienna zmienność nastroju i przestrzeganie zaleceń lekowych są działaniami, a nie stanami zdrowia, zaś tętno spoczynkowe i HRV nie mają uniwersalnego celu. Postęp masy ciała pozostaje poniżej jako osobisty kontekst, pozostałe sygnały zachowują własne karty, a nowa liczba nie oznacza zmiany stanu zdrowia.",
-      "dismissAlgorithmChanged": "Zamknij informację o metodzie",
       "band": {
         "green": "W zakresie referencyjnym",
         "yellow": "Niektóre filary wymagają uwagi",
         "red": "Co najmniej jeden filar jest poza zakresem referencyjnym"
       },
-      "method": "Średnia z równą wagą kwalifikujących się filarów. Najniższy filar wyznacza ogólny zakres.",
       "insufficient": "{count} kwalifikujące się filary. Wynik wymaga co najmniej trzech, w tym zmierzonego filaru fizjologicznego.",
-      "composition": "Uwzględniono: {pillars}",
       "bandSetter": "Ogólny zakres wyznacza {pillar}",
       "versionAndNoise": "Wersja metody {version}. Próg porównania tygodniowego: {noise} pkt.",
       "methodVersion": "Wersja metody {version}.",
@@ -4614,6 +4610,7 @@
             "rowsImported": "Zaimportowano dotąd {count} wierszy",
             "doneSummary": "Gotowe — zaimportowano {imported} z {read} rekordów, pominięto {skipped} rekordów klinicznych.",
             "doneNothing": "Z tego archiwum nic nie zaimportowano: dotarło 0 z {read} rekordów.",
+            "ecgResult": "EKG: wykryto {discovered}, zaimportowano {imported}, zaktualizowano {updated}, pominięto {skipped}, nie powiodło się {failed}. Błędy EKG nie usuwają obsługiwanych rekordów zaimportowanych z pliku export.xml.",
             "estimateWarning": "Łączne wartości dla {count} dni oszacowano na podstawie największego źródła w eksporcie. Natywne statystyki Apple Health pozostają nadrzędne.",
             "phase": {
               "queued": "W kolejce…",
@@ -4930,6 +4927,21 @@
     "passwordUpdated": "Hasło zaktualizowane pomyślnie",
     "passkeys": "Passkeys",
     "passkeysDescription": "Klucze dostępu umożliwiają bezpieczne logowanie bez hasła.",
+    "passkeyReauth": {
+      "title": "Potwierdź swoją tożsamość",
+      "description": "Przed dodaniem nowego klucza dostępu zweryfikuj jedną z istniejących metod logowania.",
+      "methodLabel": "Metoda weryfikacji",
+      "methods": {
+        "password": "Hasło",
+        "totp": "Kod z aplikacji uwierzytelniającej",
+        "passkey": "Klucz dostępu",
+        "webauthn": "Klucz bezpieczeństwa"
+      },
+      "currentPassword": "Aktualne hasło",
+      "authenticatorCode": "Kod z aplikacji uwierzytelniającej",
+      "authenticatorPlaceholder": "6-cyfrowy kod z aplikacji uwierzytelniającej",
+      "verifyAndAdd": "Zweryfikuj i dodaj"
+    },
     "passkeyName": "Nazwa",
     "noPasskeys": "Brak zarejestrowanych kluczy dostępu.",
     "addPasskey": "Dodaj klucz dostępu",
@@ -5622,8 +5634,8 @@
     "nightscoutTokenOptional": "Opcjonalny dla witryny publicznej",
     "nightscoutTokenSavedPlaceholder": "Zapisano — wpisz nowy token, aby go zastąpić",
     "nightscoutTokenHelp": "Wklej token dostępu z narzędzi administracyjnych Nightscout. Pozostaw puste, jeśli witryna jest publicznie czytelna.",
-    "nightscoutPrivateHost": "Ta witryna działa w sieci prywatnej",
-    "nightscoutPrivateHostHelp": "Włącz tylko, jeśli instancja Nightscout znajduje się pod adresem LAN, VPN lub Tailscale. Wyłączone dla witryn publicznych.",
+    "nightscoutPrivateOperatorTitle": "Dostęp do prywatnego serwera Nightscout wymaga zgody administratora serwera.",
+    "nightscoutPrivateOperatorDescription": "Poproś administratora serwera o zatwierdzenie dokładnie tego pochodzenia Nightscout.",
     "nightscoutConnect": "Połącz",
     "nightscoutUpdate": "Zapisz zmiany",
     "nightscoutConnected": "Nightscout połączony.",
@@ -8581,7 +8593,6 @@
       "notRecorded": "Brak danych",
       "unreadable": "Nie udało się odczytać zapisanej wartości",
       "save": "Zapisz",
-      "correct": "Popraw",
       "savedToast": "Zapisano kontekst stylu życia",
       "saveError": "Nie udało się zapisać kontekstu stylu życia",
       "loadError": "Nie udało się wczytać kontekstu stylu życia",
@@ -8823,7 +8834,6 @@
         "withheld": "Podsumowanie zostało wygenerowane, ale nie przeszło kontroli bezpieczeństwa, więc nie jest wyświetlane. Możesz spróbować ponownie lub przeczytać sam dokument.",
         "unavailable": "Nie udało się wygenerować podsumowania dla tego dokumentu.",
         "generate": "Wygeneruj podsumowanie",
-        "regenerate": "Wygeneruj ponownie",
         "generating": "Generowanie…"
       },
       "loadError": "Nie udało się wczytać tego dokumentu.",

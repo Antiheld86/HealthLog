@@ -2252,16 +2252,12 @@
     "heroActionAskCoach": "Demander au coach",
     "healthScore": {
       "label": "Score de santé",
-      "algorithmChanged": "Le score utilise désormais des plages de référence cardiométaboliques publiées; le poids n'est plus inclus car son ancienne cible provenait de la taille plutôt que d'un objectif personnel, les variations quotidiennes de l'humeur et l'observance médicamenteuse sont des actions plutôt que des états de santé, et la fréquence cardiaque au repos comme la VFC n'ont pas de cible universelle. La progression du poids reste affichée ci-dessous comme contexte personnel, les autres signaux conservent leurs propres cartes et un nouveau chiffre ne signifie pas que ta santé a changé.",
-      "dismissAlgorithmChanged": "Fermer la note sur la méthode",
       "band": {
         "green": "Dans la plage de référence",
         "yellow": "Certains piliers demandent une attention",
         "red": "Un ou plusieurs piliers sont hors de la plage de référence"
       },
-      "method": "Moyenne à poids égal des piliers admissibles. Le pilier le plus bas fixe la catégorie globale.",
       "insufficient": "{count} piliers admissibles. Le score en requiert au moins trois, dont un pilier physiologique mesuré.",
-      "composition": "Inclus : {pillars}",
       "bandSetter": "Catégorie globale fixée par {pillar}",
       "versionAndNoise": "Version de la méthode {version}. Seuil de comparaison hebdomadaire : {noise} points.",
       "methodVersion": "Version de la méthode {version}.",
@@ -4614,6 +4610,7 @@
             "rowsImported": "{count} lignes importées jusqu'ici",
             "doneSummary": "Terminé — {imported} enregistrements sur {read} importés, {skipped} enregistrements cliniques ignorés.",
             "doneNothing": "Rien n'a été importé de cette archive : 0 enregistrement sur {read} est arrivé.",
+            "ecgResult": "ECG : {discovered} détectés, {imported} importés, {updated} mis à jour, {skipped} ignorés et {failed} échoués. Les erreurs d’ECG n’annulent pas les enregistrements compatibles importés depuis export.xml.",
             "estimateWarning": "Les totaux cumulés de {count} jour(s) ont été estimés à partir de la source d’export la plus élevée. Les statistiques Apple Santé natives restent la référence.",
             "phase": {
               "queued": "En file d'attente…",
@@ -4930,6 +4927,21 @@
     "passwordUpdated": "Mot de passe mis à jour",
     "passkeys": "Passkeys",
     "passkeysDescription": "Les clés d’accès permettent une connexion sécurisée sans mot de passe.",
+    "passkeyReauth": {
+      "title": "Confirmez votre identité",
+      "description": "Vérifiez une méthode de connexion existante avant d’ajouter une nouvelle clé d’accès.",
+      "methodLabel": "Méthode de vérification",
+      "methods": {
+        "password": "Mot de passe",
+        "totp": "Code d’authentification",
+        "passkey": "Clé d’accès",
+        "webauthn": "Clé de sécurité"
+      },
+      "currentPassword": "Mot de passe actuel",
+      "authenticatorCode": "Code d’authentification",
+      "authenticatorPlaceholder": "Code d’authentification à 6 chiffres",
+      "verifyAndAdd": "Vérifier et ajouter"
+    },
     "passkeyName": "Nom",
     "noPasskeys": "Aucune clé d’accès enregistrée.",
     "addPasskey": "Ajouter une clé d’accès",
@@ -5622,8 +5634,8 @@
     "nightscoutTokenOptional": "Facultatif pour un site public",
     "nightscoutTokenSavedPlaceholder": "Enregistré — saisissez un nouveau jeton pour le remplacer",
     "nightscoutTokenHelp": "Collez un jeton d'accès depuis les outils d'administration de Nightscout. Laissez vide si votre site est lisible publiquement.",
-    "nightscoutPrivateHost": "Ce site fonctionne sur un réseau privé",
-    "nightscoutPrivateHostHelp": "Activez uniquement si votre instance Nightscout est sur une adresse LAN, VPN ou Tailscale. Désactivé pour les sites publics.",
+    "nightscoutPrivateOperatorTitle": "L’accès à un Nightscout privé nécessite l’autorisation de l’administrateur du serveur.",
+    "nightscoutPrivateOperatorDescription": "Demandez à l’administrateur du serveur d’autoriser précisément cette origine Nightscout.",
     "nightscoutConnect": "Connecter",
     "nightscoutUpdate": "Enregistrer les modifications",
     "nightscoutConnected": "Nightscout connecté.",
@@ -8581,7 +8593,6 @@
       "notRecorded": "Non renseigné",
       "unreadable": "La valeur enregistrée n'a pas pu être lue",
       "save": "Enregistrer",
-      "correct": "Corriger",
       "savedToast": "Contexte du mode de vie enregistré",
       "saveError": "Impossible d'enregistrer le contexte du mode de vie",
       "loadError": "Impossible de charger le contexte du mode de vie",
@@ -8823,7 +8834,6 @@
         "withheld": "Un résumé a été généré mais n’a pas passé le contrôle de sécurité, il n’est donc pas affiché. Vous pouvez réessayer ou lire le document lui-même.",
         "unavailable": "Aucun résumé n’a pu être généré pour ce document.",
         "generate": "Générer le résumé",
-        "regenerate": "Regénérer",
         "generating": "Génération…"
       },
       "loadError": "Impossible de charger ce document.",
