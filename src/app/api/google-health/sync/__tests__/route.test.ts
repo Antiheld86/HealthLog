@@ -99,4 +99,111 @@ describe("POST /api/google-health/sync", () => {
       fullSync: false,
     });
   });
+
+  it("preserves bounded per-resource terminal outcomes for the manual-sync client", async () => {
+    vi.mocked(syncUserGoogleHealth).mockResolvedValue({
+      runId: "run-terminal-1",
+      state: "partial",
+      imported: 3,
+      failed: true,
+      resources: [
+        {
+          resource: "workout",
+          pages: 1,
+          fetched: 2,
+          mapped: 2,
+          written: 2,
+          status: "complete",
+          durationMs: 18,
+          truncated: false,
+          reasonCode: null,
+        },
+        {
+          resource: "dense-heart-rate",
+          pages: 786,
+          fetched: 1,
+          mapped: 1,
+          written: 1,
+          status: "partial",
+          durationMs: 323_849,
+          truncated: false,
+          reasonCode: "collection_failed",
+        },
+      ],
+    } as never);
+
+    const response = await POST(request());
+    const envelope = (await response.json()) as {
+      data: Record<string, unknown>;
+      error: string | null;
+    };
+
+    expect(response.status).toBe(200);
+    expect(envelope.error).toBeNull();
+    expect(envelope.data).toEqual({
+      runId: "run-terminal-1",
+      state: "partial",
+      imported: 3,
+      failed: true,
+      outcome: "partial",
+      fullSync: false,
+      resources: [
+        {
+          resource: "workout",
+          pages: 1,
+          fetched: 2,
+          mapped: 2,
+          written: 2,
+          status: "complete",
+          durationMs: 18,
+          truncated: false,
+          reasonCode: null,
+        },
+        {
+          resource: "dense-heart-rate",
+          pages: 786,
+          fetched: 1,
+          mapped: 1,
+          written: 1,
+          status: "partial",
+          durationMs: 323_849,
+          truncated: false,
+          reasonCode: "collection_failed",
+        },
+      ],
+    });
+  });
+
+  it("does not serialize provider payloads, URLs, tokens, or health values", async () => {
+    vi.mocked(syncUserGoogleHealth).mockResolvedValue({
+      runId: "run-private",
+      state: "failed",
+      imported: 1,
+      failed: true,
+      resources: [
+        {
+          resource: "workout",
+          pages: 1,
+          fetched: 2,
+          mapped: 2,
+          written: 1,
+          status: "partial",
+          durationMs: 20,
+          truncated: false,
+          reasonCode: "upsert_failed",
+          accessToken: "raw-access-token",
+          url: "https://health.googleapis.com/private",
+          rawError: "provider response body",
+          samples: [{ bpm: 181 }],
+        },
+      ],
+    } as never);
+
+    const response = await POST(request());
+    const serialized = JSON.stringify(await response.json());
+
+    expect(serialized).not.toMatch(
+      /raw-access-token|health\.googleapis\.com|provider response body|samples|bpm|181/,
+    );
+  });
 });
