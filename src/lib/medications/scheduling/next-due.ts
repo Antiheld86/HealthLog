@@ -16,7 +16,10 @@ import {
   type WorkerMedicationRow,
   type WorkerScheduleRow,
 } from "@/lib/medications/scheduling/worker-helpers";
-import { nextOccurrenceAfter } from "@/lib/medications/scheduling/recurrence";
+import {
+  advanceRollingOccurrence,
+  nextOccurrenceAfter,
+} from "@/lib/medications/scheduling/recurrence";
 import { buildBandsForMedication } from "@/lib/medications/scheduling/band-minter";
 import { DOSE_WINDOW_DEFAULTS } from "@/lib/medications/scheduling/dose-window-defaults";
 
@@ -51,6 +54,12 @@ const ADHOC_RESOLVE_EPSILON_MS = 60 * 1000;
 export interface ResolvedSlotMark {
   at: Date;
   slotAnchored: boolean;
+  /** Canonical schedule owner when attribution could identify it. */
+  scheduleId?: string;
+  /** When the action was made; used to isolate replacement schedule eras. */
+  actionAt?: Date;
+  /** Diagnostic state carried by exact occurrence-aware callers. */
+  status?: "taken" | "skipped" | "autoMissed";
 }
 
 /**
@@ -73,10 +82,21 @@ export function toResolvedSlotMark(row: {
 
 function buildIsResolved(
   resolved: ResolvedSlotMark[],
+  identity?: { scheduleId: string; eraStart?: Date | null },
 ): (slotAt: Date) => boolean {
   return (slotAt: Date): boolean => {
     const slot = slotAt.getTime();
     for (const r of resolved) {
+      if (r.scheduleId !== undefined && r.scheduleId !== identity?.scheduleId) {
+        continue;
+      }
+      if (
+        identity?.eraStart &&
+        r.actionAt &&
+        r.actionAt.getTime() < identity.eraStart.getTime()
+      ) {
+        continue;
+      }
       const radius = r.slotAnchored
         ? RESOLVE_RADIUS_MS
         : ADHOC_RESOLVE_EPSILON_MS;
@@ -118,29 +138,57 @@ export function computeNextDueAt(input: {
    * anchoring shape; ad-hoc rows only resolve on a near-exact match.
    */
   resolvedSlots?: ResolvedSlotMark[];
+  eraStart?: Date | null;
 }): Date | null {
+  return computeNextDueCandidate(input)?.at ?? null;
+}
+
+interface DueCandidate {
+  at: Date;
+  scheduleId: string;
+}
+
+function computeNextDueCandidate(input: {
+  medication: WorkerMedicationRow;
+  schedules: WorkerScheduleRow[];
+  now: Date;
+  userTz: string;
+  lastIntakeAt: Date | null;
+  resolvedSlots?: ResolvedSlotMark[];
+  eraStart?: Date | null;
+}): DueCandidate | null {
   const { medication, schedules, now, userTz, lastIntakeAt } = input;
   if (schedules.length === 0) return null;
 
-  const isResolved = buildIsResolved(input.resolvedSlots ?? []);
-
   const ctx = buildRecurrenceContext({ medication, userTz, lastIntakeAt });
-  let earliest: Date | null = null;
+  let earliest: DueCandidate | null = null;
   for (const schedule of schedules) {
     const canonical = buildCanonicalSchedule(schedule);
+    const isResolved = buildIsResolved(input.resolvedSlots ?? [], {
+      scheduleId: canonical.id,
+      eraStart: input.eraStart,
+    });
     // Walk forward past slots the user has already resolved. Bounded so a
     // fully-logged-ahead history can't spin.
     let after = now;
+    let next = nextOccurrenceAfter(canonical, after, ctx);
     for (let step = 0; step < 64; step++) {
-      const next = nextOccurrenceAfter(canonical, after, ctx);
       if (next === null) break;
       if (!isResolved(next.at)) {
-        if (earliest === null || next.at.getTime() < earliest.getTime()) {
-          earliest = next.at;
+        if (
+          earliest === null ||
+          next.at.getTime() < earliest.at.getTime()
+        ) {
+          earliest = { at: next.at, scheduleId: canonical.id };
         }
         break;
       }
+      if (canonical.rollingIntervalDays !== null) {
+        next = advanceRollingOccurrence(canonical, next, ctx);
+        continue;
+      }
       after = new Date(next.at.getTime());
+      next = nextOccurrenceAfter(canonical, after, ctx);
     }
   }
   return earliest;
@@ -149,6 +197,8 @@ export function computeNextDueAt(input: {
 /** The instant a medication card should surface, plus its canonical band state. */
 export interface DisplayDue {
   at: Date;
+  /** Canonical owner of this occurrence (sibling schedules stay distinct). */
+  scheduleId?: string;
   /**
    * Earliest instant at which the canonical attribution band accepts this
    * slot. This is cadence- and per-dose-window-aware.
@@ -196,22 +246,26 @@ export function computeDisplayDue(
 ): DisplayDue | null {
   const open = findOpenOverdueSlot(input);
   if (open) return { ...open, overdue: true };
-  const next = computeNextDueAt(input);
+  const next = computeNextDueCandidate(input);
   if (!next) return null;
+  // A rolling occurrence whose actionable band has closed remains the same
+  // unresolved identity until a real take re-anchors it. Do not relabel that
+  // stale past occurrence as a non-overdue "next" dose.
+  if (next.at.getTime() < input.now.getTime()) return null;
   return {
-    at: next,
-    availableFrom: findAvailabilityStart(input, next) ?? next,
+    at: next.at,
+    scheduleId: next.scheduleId,
+    availableFrom:
+      findAvailabilityStart(input, next.at, next.scheduleId) ?? next.at,
     overdue: false,
   };
 }
 
 function findOpenOverdueSlot(
   input: ComputeDisplayDueInput,
-): { at: Date; availableFrom: Date } | null {
+): { at: Date; availableFrom: Date; scheduleId: string } | null {
   const { medication, schedules, now, userTz, lastIntakeAt } = input;
   if (schedules.length === 0) return null;
-
-  const isResolved = buildIsResolved(input.resolvedSlots ?? []);
 
   let floor = new Date(now.getTime() - OVERDUE_LOOKBACK_MS);
   if (input.eraStart && input.eraStart.getTime() > floor.getTime()) {
@@ -220,8 +274,16 @@ function findOpenOverdueSlot(
   if (floor.getTime() >= now.getTime()) return null;
 
   const ctx = buildRecurrenceContext({ medication, userTz, lastIntakeAt });
-  let latest: { at: Date; availableFrom: Date } | null = null;
+  let latest: {
+    at: Date;
+    availableFrom: Date;
+    scheduleId: string;
+  } | null = null;
   for (const schedule of schedules) {
+    const isResolved = buildIsResolved(input.resolvedSlots ?? [], {
+      scheduleId: schedule.id,
+      eraStart: input.eraStart,
+    });
     const { bands } = buildBandsForMedication({
       medication,
       schedule: buildCanonicalSchedule(schedule),
@@ -230,6 +292,7 @@ function findOpenOverdueSlot(
       range: { from: floor, to: now },
       now,
       intakeInstants: lastIntakeAt ? [lastIntakeAt] : [],
+      includeOpenRollingOccurrence: true,
     });
     for (const band of bands) {
       const anchor = band.at.getTime();
@@ -247,7 +310,11 @@ function findOpenOverdueSlot(
         (anchor === latest.at.getTime() &&
           band.earlyStart.getTime() < latest.availableFrom.getTime())
       ) {
-        latest = { at: band.at, availableFrom: band.earlyStart };
+        latest = {
+          at: band.at,
+          availableFrom: band.earlyStart,
+          scheduleId: schedule.id,
+        };
       }
     }
   }
@@ -257,6 +324,7 @@ function findOpenOverdueSlot(
 function findAvailabilityStart(
   input: ComputeDisplayDueInput,
   at: Date,
+  scheduleId?: string,
 ): Date | null {
   const ctx = buildRecurrenceContext({
     medication: input.medication,
@@ -267,6 +335,7 @@ function findAvailabilityStart(
   let earliest: Date | null = null;
 
   for (const scheduleRow of input.schedules) {
+    if (scheduleId !== undefined && scheduleRow.id !== scheduleId) continue;
     const schedule = buildCanonicalSchedule(scheduleRow);
     const intakeInstants =
       schedule.rollingIntervalDays === null
