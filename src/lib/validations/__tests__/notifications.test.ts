@@ -1,5 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { isPublicUrl, webPushSubscriptionSchema } from "../notifications";
+import {
+  isPublicIp,
+  isPublicUrl,
+  webPushSubscriptionSchema,
+} from "../notifications";
+
+const EMBEDDED_PRIVATE_IPV4_CASES = [
+  ["IPv4-mapped mixed loopback", "::ffff:127.0.0.1"],
+  ["IPv4-mapped compressed RFC1918", "::ffff:a00:1"],
+  ["IPv4-compatible mixed loopback", "::127.0.0.1"],
+  ["IPv4-compatible compressed metadata", "::a9fe:a9fe"],
+  ["6to4 compressed RFC1918", "2002:a00:1::"],
+  ["6to4 expanded metadata", "2002:a9fe:a9fe:0:0:0:0:1"],
+  ["NAT64 WKP mixed RFC1918", "64:ff9b::192.168.1.1"],
+  ["NAT64 WKP compressed RFC1918", "64:ff9b::c0a8:101"],
+  ["RFC8215 local-use compressed RFC1918", "64:ff9b:1:ac10:0:1::"],
+  ["RFC8215 local-use expanded RFC1918", "64:ff9b:1:c0a8:0:101:0:0"],
+] as const;
+
+const PUBLIC_ADDRESS_CASES = [
+  ["public IPv4", "8.8.8.8"],
+  ["public native IPv6", "2606:4700:4700::1111"],
+  ["public IPv4-mapped IPv6", "::ffff:8.8.8.8"],
+  ["public IPv4-compatible IPv6", "::808:808"],
+  ["public 6to4 IPv6", "2002:808:808::"],
+  ["public NAT64 WKP IPv6", "64:ff9b::808:808"],
+  ["public RFC8215 local-use IPv6", "64:ff9b:1:808:0:808::"],
+] as const;
+
+function literalUrl(ip: string): string {
+  return ip.includes(":") ? `https://[${ip}]/push` : `https://${ip}/push`;
+}
 
 describe("isPublicUrl SSRF guard", () => {
   describe("allows public addresses", () => {
@@ -146,6 +177,39 @@ describe("isPublicUrl SSRF guard", () => {
       expect(isPublicUrl("")).toBe(false);
     });
   });
+});
+
+describe("canonical IPv4-embedded IPv6 transition matrix (SEC-03)", () => {
+  it.each(EMBEDDED_PRIVATE_IPV4_CASES)(
+    "rejects %s at both literal URL and raw-IP boundaries",
+    (_label, ip) => {
+      expect.soft(isPublicIp(ip)).toBe(false);
+      expect(isPublicUrl(literalUrl(ip))).toBe(false);
+    },
+  );
+
+  it.each(PUBLIC_ADDRESS_CASES)(
+    "preserves %s at both literal URL and raw-IP boundaries",
+    (_label, ip) => {
+      expect.soft(isPublicIp(ip)).toBe(true);
+      expect(isPublicUrl(literalUrl(ip))).toBe(true);
+    },
+  );
+
+  it.each(["not-an-ip", "2001:::1", "12345::1"])(
+    "denies invalid raw IP syntax: %s",
+    (ip) => {
+      expect(isPublicIp(ip)).toBe(false);
+    },
+  );
+
+  it.each(["::", "::1", "fe80::1", "fd12:3456::1"])(
+    "continues denying ordinary IPv6 special-use address %s",
+    (ip) => {
+      expect.soft(isPublicIp(ip)).toBe(false);
+      expect(isPublicUrl(literalUrl(ip))).toBe(false);
+    },
+  );
 });
 
 // V3 audit: webPushSubscriptionSchema previously accepted any URL,
