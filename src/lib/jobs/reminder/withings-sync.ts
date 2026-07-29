@@ -7,8 +7,9 @@
 import { type Job } from "pg-boss";
 import { fireAndForget } from "@/lib/logging/fire-and-forget";
 import { recordError, recordWithingsSync } from "@/lib/jobs/worker-status";
-import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
+import { type JobOutcome } from "@/lib/jobs/job-outcome";
 import { withBackgroundEvent } from "@/lib/logging/background";
+import { isReauthRequired } from "@/lib/integrations/status";
 import {
   retryDueWithingsWebhookSubscriptions,
   syncUserMeasurements,
@@ -18,6 +19,10 @@ import { syncUserSleep } from "@/lib/withings/sync-sleep";
 import { syncUserEcg } from "@/lib/withings/sync-ecg";
 import type { WithingsEcgSyncPayload } from "@/lib/jobs/withings-ecg-queue";
 import { enqueueReminderSatisfy } from "@/lib/jobs/reminder-satisfy";
+import {
+  foldIntegrationCohortOutcomes,
+  type IntegrationUserVerdict,
+} from "./poll-cohort";
 import { getWorkerPrisma } from "./shared";
 export type { WithingsEcgSyncPayload } from "@/lib/jobs/withings-ecg-queue";
 
@@ -74,52 +79,61 @@ export async function handleWithingsFallbackSync(
       });
 
       if (connections.length === 0) {
-        return jobDone({
-          total: 0,
-          users_synced: 0,
-          users_failed: 0,
-          measurements_imported: 0,
-          subscription_repair_failed: subscriptionRepairFailed,
+        return foldIntegrationCohortOutcomes({
+          provider: "withings",
+          verdicts: [],
+          downstreamFailures: subscriptionRepairFailed ? 1 : 0,
         });
       }
 
-      let usersSynced = 0;
-      let usersFailed = 0;
-      let measurementsImported = 0;
+      const verdicts: IntegrationUserVerdict[] = [];
 
       for (const connection of connections) {
+        if (await isReauthRequired(connection.userId, "withings")) {
+          verdicts.push({ status: "parked", imported: 0 });
+          continue;
+        }
+
         try {
-          const { imported } = await syncUserMeasurements(connection.userId);
-          usersSynced++;
-          measurementsImported += imported;
+          const result = await syncUserMeasurements(connection.userId);
+          const parked =
+            result.failed &&
+            result.imported === 0 &&
+            (await isReauthRequired(connection.userId, "withings"));
+          verdicts.push({
+            status: parked
+              ? "parked"
+              : result.failed
+                ? result.imported > 0
+                  ? "partial"
+                  : "failed"
+                : "complete",
+            imported: result.imported,
+            retryable: result.failed && !parked,
+          });
           // v1.18.1 — a fresh reading landed; resolve this user's Vorsorge
           // reminders eventfully. Fire-and-forget; the cron is the net.
-          if (imported > 0) {
+          if (result.imported > 0) {
             fireAndForget(enqueueReminderSatisfy(connection.userId), {
               action: "reminder.satisfy.enqueue",
             });
           }
         } catch {
-          usersFailed++;
-          evt.addWarning(`Fallback sync failed for user ${connection.userId}`);
+          verdicts.push({ status: "failed", imported: 0, retryable: true });
+          evt.addWarning("Fallback sync failed for one cohort member");
         }
       }
 
+      const outcome = foldIntegrationCohortOutcomes({
+        provider: "withings",
+        verdicts,
+        downstreamFailures: subscriptionRepairFailed ? 1 : 0,
+      });
       evt.setBackground({
         task_name: "job.withings_sync",
-        result: {
-          users_synced: usersSynced,
-          total: connections.length,
-          measurements_imported: measurementsImported,
-        },
+        result: outcome.did,
       });
-      return jobDone({
-        total: connections.length,
-        users_synced: usersSynced,
-        users_failed: usersFailed,
-        measurements_imported: measurementsImported,
-        subscription_repair_failed: subscriptionRepairFailed,
-      });
+      return outcome;
     } catch (err) {
       evt.setError(err);
       recordError();
@@ -174,45 +188,46 @@ export async function handleWithingsEcgSync(
         targets.push(...connections);
       }
       if (targets.length === 0) {
-        return jobDone({
-          total: 0,
-          users_synced: 0,
-          users_failed: 0,
-          recordings_imported: 0,
+        return foldIntegrationCohortOutcomes({
+          provider: "withings",
+          verdicts: [],
         });
       }
 
-      let usersSynced = 0;
-      let usersFailed = 0;
-      let recordingsImported = 0;
+      const verdicts: IntegrationUserVerdict[] = [];
       for (const { userId, startdate, enddate } of targets) {
+        if (await isReauthRequired(userId, "withings")) {
+          verdicts.push({ status: "parked", imported: 0 });
+          continue;
+        }
+
         try {
           const options =
             startdate === undefined && enddate === undefined
               ? {}
               : { startdate, enddate };
-          recordingsImported += await syncUserEcg(userId, options);
-          usersSynced++;
-        } catch (err) {
-          usersFailed++;
-          evt.addWarning(`Withings ECG sync failed for user ${userId}: ${err}`);
+          const imported = await syncUserEcg(userId, options);
+          const parked =
+            imported === 0 && (await isReauthRequired(userId, "withings"));
+          verdicts.push({
+            status: parked ? "parked" : "complete",
+            imported,
+          });
+        } catch {
+          verdicts.push({ status: "failed", imported: 0, retryable: true });
+          evt.addWarning("Withings ECG sync failed for one cohort member");
         }
       }
 
+      const outcome = foldIntegrationCohortOutcomes({
+        provider: "withings",
+        verdicts,
+      });
       evt.setBackground({
         task_name: "job.withings_ecg_sync",
-        result: {
-          users_synced: usersSynced,
-          total: targets.length,
-          recordings_imported: recordingsImported,
-        },
+        result: outcome.did,
       });
-      return jobDone({
-        total: targets.length,
-        users_synced: usersSynced,
-        users_failed: usersFailed,
-        recordings_imported: recordingsImported,
-      });
+      return outcome;
     } catch (err) {
       evt.setError(err);
       recordError();
@@ -257,47 +272,47 @@ export async function handleWithingsActivitySync(
         targets.push(...connections);
       }
       if (targets.length === 0) {
-        return jobDone({
-          total: 0,
-          users_synced: 0,
-          users_failed: 0,
-          measurements_imported: 0,
+        return foldIntegrationCohortOutcomes({
+          provider: "withings",
+          verdicts: [],
         });
       }
 
-      let usersSynced = 0;
-      let usersFailed = 0;
-      let measurementsImported = 0;
+      const verdicts: IntegrationUserVerdict[] = [];
       for (const { userId } of targets) {
+        if (await isReauthRequired(userId, "withings")) {
+          verdicts.push({ status: "parked", imported: 0 });
+          continue;
+        }
+
         try {
           const imported = await syncUserActivity(userId);
-          usersSynced++;
-          measurementsImported += imported;
+          const parked =
+            imported === 0 && (await isReauthRequired(userId, "withings"));
+          verdicts.push({
+            status: parked ? "parked" : "complete",
+            imported,
+          });
           if (imported > 0) {
             fireAndForget(enqueueReminderSatisfy(userId), {
               action: "reminder.satisfy.enqueue",
             });
           }
         } catch {
-          usersFailed++;
-          evt.addWarning(`Withings activity sync failed for user ${userId}`);
+          verdicts.push({ status: "failed", imported: 0, retryable: true });
+          evt.addWarning("Withings activity sync failed for one cohort member");
         }
       }
 
+      const outcome = foldIntegrationCohortOutcomes({
+        provider: "withings",
+        verdicts,
+      });
       evt.setBackground({
         task_name: "job.withings_activity_sync",
-        result: {
-          users_synced: usersSynced,
-          total: targets.length,
-          measurements_imported: measurementsImported,
-        },
+        result: outcome.did,
       });
-      return jobDone({
-        total: targets.length,
-        users_synced: usersSynced,
-        users_failed: usersFailed,
-        measurements_imported: measurementsImported,
-      });
+      return outcome;
     } catch (err) {
       evt.setError(err);
       recordError();
@@ -330,47 +345,47 @@ export async function handleWithingsSleepSync(
         targets.push(...connections);
       }
       if (targets.length === 0) {
-        return jobDone({
-          total: 0,
-          users_synced: 0,
-          users_failed: 0,
-          measurements_imported: 0,
+        return foldIntegrationCohortOutcomes({
+          provider: "withings",
+          verdicts: [],
         });
       }
 
-      let usersSynced = 0;
-      let usersFailed = 0;
-      let measurementsImported = 0;
+      const verdicts: IntegrationUserVerdict[] = [];
       for (const { userId } of targets) {
+        if (await isReauthRequired(userId, "withings")) {
+          verdicts.push({ status: "parked", imported: 0 });
+          continue;
+        }
+
         try {
           const imported = await syncUserSleep(userId);
-          usersSynced++;
-          measurementsImported += imported;
+          const parked =
+            imported === 0 && (await isReauthRequired(userId, "withings"));
+          verdicts.push({
+            status: parked ? "parked" : "complete",
+            imported,
+          });
           if (imported > 0) {
             fireAndForget(enqueueReminderSatisfy(userId), {
               action: "reminder.satisfy.enqueue",
             });
           }
         } catch {
-          usersFailed++;
-          evt.addWarning(`Withings sleep sync failed for user ${userId}`);
+          verdicts.push({ status: "failed", imported: 0, retryable: true });
+          evt.addWarning("Withings sleep sync failed for one cohort member");
         }
       }
 
+      const outcome = foldIntegrationCohortOutcomes({
+        provider: "withings",
+        verdicts,
+      });
       evt.setBackground({
         task_name: "job.withings_sleep_sync",
-        result: {
-          users_synced: usersSynced,
-          total: targets.length,
-          measurements_imported: measurementsImported,
-        },
+        result: outcome.did,
       });
-      return jobDone({
-        total: targets.length,
-        users_synced: usersSynced,
-        users_failed: usersFailed,
-        measurements_imported: measurementsImported,
-      });
+      return outcome;
     } catch (err) {
       evt.setError(err);
       recordError();

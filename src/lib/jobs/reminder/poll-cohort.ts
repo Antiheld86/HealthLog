@@ -27,6 +27,129 @@ import { enqueueReminderSatisfy } from "@/lib/jobs/reminder-satisfy";
 import { isSyncFailureRecorded } from "@/lib/integrations/status";
 import { getWorkerPrisma } from "./shared";
 
+export type IntegrationCohortProvider = "google_health" | "withings";
+
+export type IntegrationUserVerdict = Readonly<{
+  status: "complete" | "partial" | "failed" | "parked" | "skipped";
+  imported: number;
+  downstreamFailed?: boolean;
+  retryable?: boolean;
+  reasonCode?: string;
+}>;
+
+export type IntegrationCohortFacts = Readonly<{
+  provider: IntegrationCohortProvider;
+  outcome: "useful" | "clean_zero";
+  total: number;
+  users_synced: number;
+  users_complete: number;
+  users_partial: number;
+  users_failed: number;
+  users_parked: number;
+  users_skipped: number;
+  users_useful: number;
+  users_clean_zero: number;
+  users_retryable: number;
+  downstream_failed: number;
+  measurements_imported: number;
+}>;
+
+export function foldIntegrationCohortOutcomes(input: {
+  provider: IntegrationCohortProvider;
+  verdicts: readonly IntegrationUserVerdict[];
+  downstreamFailures?: number;
+}): { readonly ok: true; readonly did: IntegrationCohortFacts } {
+  let usersComplete = 0;
+  let usersPartial = 0;
+  let usersFailed = 0;
+  let usersParked = 0;
+  let usersSkipped = 0;
+  let usersUseful = 0;
+  let usersCleanZero = 0;
+  let usersRetryable = 0;
+  if (
+    input.downstreamFailures !== undefined &&
+    (!Number.isSafeInteger(input.downstreamFailures) ||
+      input.downstreamFailures < 0)
+  ) {
+    throw new TypeError(
+      "cohort downstream failure count must be a non-negative safe integer",
+    );
+  }
+  let downstreamFailed = input.downstreamFailures ?? 0;
+  let measurementsImported = 0;
+
+  for (const verdict of input.verdicts) {
+    if (!Number.isSafeInteger(verdict.imported) || verdict.imported < 0) {
+      throw new TypeError(
+        "cohort imported count must be a non-negative safe integer",
+      );
+    }
+
+    switch (verdict.status) {
+      case "complete":
+        usersComplete++;
+        if (verdict.imported === 0) usersCleanZero++;
+        break;
+      case "partial":
+        usersPartial++;
+        break;
+      case "failed":
+        usersFailed++;
+        break;
+      case "parked":
+        usersParked++;
+        break;
+      case "skipped":
+        usersSkipped++;
+        break;
+      default: {
+        const exhaustive: never = verdict.status;
+        throw new TypeError(`unsupported cohort status: ${String(exhaustive)}`);
+      }
+    }
+
+    if (
+      (verdict.status === "complete" || verdict.status === "partial") &&
+      verdict.imported > 0
+    ) {
+      usersUseful++;
+    }
+    if (verdict.retryable === true) usersRetryable++;
+    if (verdict.downstreamFailed === true) {
+      if (!Number.isSafeInteger(downstreamFailed + 1)) {
+        throw new RangeError(
+          "cohort downstream failure total exceeds safe integer range",
+        );
+      }
+      downstreamFailed++;
+    }
+
+    const nextImported = measurementsImported + verdict.imported;
+    if (!Number.isSafeInteger(nextImported)) {
+      throw new RangeError("cohort imported total exceeds safe integer range");
+    }
+    measurementsImported = nextImported;
+  }
+
+  return jobDone({
+    provider: input.provider,
+    outcome: usersUseful > 0 ? "useful" : "clean_zero",
+    total: input.verdicts.length,
+    users_synced: usersComplete,
+    users_complete: usersComplete,
+    users_partial: usersPartial,
+    users_failed: usersFailed,
+    users_parked: usersParked,
+    users_skipped: usersSkipped,
+    users_useful: usersUseful,
+    users_clean_zero: usersCleanZero,
+    users_retryable: usersRetryable,
+    downstream_failed: downstreamFailed,
+    measurements_imported: measurementsImported,
+  }) as { readonly ok: true; readonly did: IntegrationCohortFacts };
+}
+
 /** Every poll-cohort handler accepts an optional single-user payload. */
 export interface PollCohortPayload {
   userId?: string;
@@ -113,14 +236,12 @@ export function makePollCohortHandler({
             // Only an UNMARKED escape — today's Oura / Polar write-path throw,
             // or any future provider path — is recorded here.
             if (!isSyncFailureRecorded(err)) {
-              await recordFailure(userId, err).catch((recErr) => {
-                evt.addWarning(
-                  `${taskName} recordFailure failed for user ${userId}: ${recErr}`,
-                );
+              await recordFailure(userId, err).catch(() => {
+                evt.addWarning(`${taskName} recordFailure failed`);
               });
             }
             usersFailed++;
-            evt.addWarning(`${taskName} failed for user ${userId}: ${err}`);
+            evt.addWarning(`${taskName} failed for one cohort member`);
           }
         }
 

@@ -25,7 +25,7 @@
  * what makes them visible at all — today they are visible nowhere.
  *
  * `did` is the small pinned-shape bag of facts about the run — counts,
- * identifiers, booleans. It rides into the failure report and, once the
+ * stable codes, booleans. It rides into the failure report and, once the
  * failure ledger lands, into the operator surface. Keep it to scalars that
  * a dashboard can key on; it is not a place for payload data or free text.
  */
@@ -35,6 +35,45 @@ export type JobFact = string | number | boolean;
 
 /** The pinned-shape bag of facts a handler reports about its run. */
 export type JobFacts = Readonly<Record<string, JobFact>>;
+
+/**
+ * Facts cross a persistence/observability boundary. Keep their vocabulary
+ * explicit so a caller cannot attach an identifier, credential, URL,
+ * free-form error, or health value to a durable job result.
+ */
+export const JOB_FACT_ALLOWLIST: ReadonlySet<string> = new Set([
+  "provider",
+  "outcome",
+  "total",
+  "users_synced",
+  "users_complete",
+  "users_partial",
+  "users_failed",
+  "users_parked",
+  "users_skipped",
+  "users_useful",
+  "users_clean_zero",
+  "users_retryable",
+  "downstream_failed",
+  "measurements_imported",
+  "deleted",
+  "generated",
+  "jobs",
+  "skipped",
+  "processed",
+  "created",
+  "updated",
+  "failed",
+  "retried",
+  "queued",
+  "sent",
+  "subscription_repair_failed",
+]);
+
+export const MAX_JOB_FACTS = 32;
+export const MAX_JOB_OUTCOME_BYTES = 2_048;
+
+const STABLE_CODE_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 
 /**
  * What a handler did. `ok: true` means the work named by the queue actually
@@ -78,4 +117,79 @@ export function jobFailed(
   did?: JobFacts,
 ): JobOutcome {
   return { ok: false, reason, cause, did };
+}
+
+export type SerializedJobOutcome =
+  | { readonly ok: true; readonly did: JobFacts }
+  | {
+      readonly ok: false;
+      readonly reason_code: string;
+      readonly did?: JobFacts;
+    };
+
+function assertStableCode(value: string, label: string): void {
+  if (!STABLE_CODE_PATTERN.test(value)) {
+    throw new TypeError(`${label} must be a stable lowercase code`);
+  }
+}
+
+function validateFacts(facts: JobFacts): JobFacts {
+  const entries = Object.entries(facts);
+
+  if (entries.length > MAX_JOB_FACTS) {
+    throw new RangeError(`job outcome exceeds ${MAX_JOB_FACTS} facts`);
+  }
+
+  for (const [key, value] of entries) {
+    if (!JOB_FACT_ALLOWLIST.has(key)) {
+      throw new TypeError(`job fact key is not allowed: ${key}`);
+    }
+
+    if (typeof value === "number") {
+      if (!Number.isSafeInteger(value) || value < 0) {
+        throw new TypeError(
+          `job fact ${key} must be a non-negative safe integer`,
+        );
+      }
+      continue;
+    }
+
+    if (typeof value === "string") {
+      assertStableCode(value, `job fact ${key}`);
+      continue;
+    }
+
+    if (typeof value !== "boolean") {
+      throw new TypeError(`job fact ${key} must be a bounded scalar`);
+    }
+  }
+
+  return Object.freeze(Object.fromEntries(entries)) as JobFacts;
+}
+
+/**
+ * Produce the only representation suitable for persistence or structured
+ * logging. The raw `cause` deliberately remains in-process for retry handling.
+ */
+export function serializeJobOutcome(outcome: JobOutcome): SerializedJobOutcome {
+  const did = validateFacts(outcome.did ?? {});
+  const serialized: SerializedJobOutcome = outcome.ok
+    ? { ok: true, did }
+    : (() => {
+        assertStableCode(outcome.reason, "job failure reason");
+        return outcome.did === undefined
+          ? { ok: false, reason_code: outcome.reason }
+          : { ok: false, reason_code: outcome.reason, did };
+      })();
+
+  const byteLength = new TextEncoder().encode(
+    JSON.stringify(serialized),
+  ).length;
+  if (byteLength > MAX_JOB_OUTCOME_BYTES) {
+    throw new RangeError(
+      `serialized job outcome exceeds ${MAX_JOB_OUTCOME_BYTES} bytes`,
+    );
+  }
+
+  return serialized;
 }

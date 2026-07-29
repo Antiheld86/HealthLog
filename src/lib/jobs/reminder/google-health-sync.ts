@@ -5,13 +5,19 @@
  * queue names, cron schedules, and boss.work registrations.
  */
 import { type Job } from "pg-boss";
+import pLimit from "p-limit";
 import { fireAndForget } from "@/lib/logging/fire-and-forget";
 import { recordError } from "@/lib/jobs/worker-status";
 import { jobDone, jobFailed, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { withBackgroundEvent } from "@/lib/logging/background";
-import { runGoogleHealthPollCohort } from "@/lib/google-health/sync";
+import { syncUserGoogleHealth } from "@/lib/google-health/sync";
+import { isReauthRequired } from "@/lib/integrations/status";
 import { enqueueReminderSatisfy } from "@/lib/jobs/reminder-satisfy";
 import { cleanupExpiredGoogleHealthOAuthStates } from "@/lib/jobs/google-health-oauth-state-cleanup";
+import {
+  foldIntegrationCohortOutcomes,
+  type IntegrationUserVerdict,
+} from "./poll-cohort";
 import { getWorkerPrisma } from "./shared";
 
 /**
@@ -42,56 +48,69 @@ export async function handleGoogleHealthSync(
         targets.push(...connections);
       }
       if (targets.length === 0) {
-        return jobDone({
-          total: 0,
-          users_synced: 0,
-          users_failed: 0,
-          measurements_imported: 0,
+        return foldIntegrationCohortOutcomes({
+          provider: "google_health",
+          verdicts: [],
         });
       }
 
       // Fan the cohort out with bounded concurrency + per-user error isolation:
       // one slow Google response can't stall the whole cohort, and a single
       // user's failure is warned without aborting the pass.
-      let usersFailed = 0;
-      const { usersSynced, measurementsImported } =
-        await runGoogleHealthPollCohort(
-          targets.map((t) => t.userId),
-          {
-            onUserError: (userId, err) => {
-              usersFailed++;
-              evt.addWarning(
-                `job.google_health_sync failed for user ${userId}: ${err}`,
-              );
-            },
-            // A fresh reading landed; resolve the user's Vorsorge reminders
-            // eventfully. Fire-and-forget; the cron is the net.
-            onUserSynced: (userId, imported) => {
-              if (imported > 0) {
+      const limit = pLimit(4);
+      const verdicts = await Promise.all(
+        targets.map(({ userId }) =>
+          limit(async (): Promise<IntegrationUserVerdict> => {
+            if (await isReauthRequired(userId, "google-health")) {
+              return { status: "parked", imported: 0 };
+            }
+
+            try {
+              const result = await syncUserGoogleHealth(userId);
+              const parked =
+                result.failed &&
+                result.imported === 0 &&
+                (await isReauthRequired(userId, "google-health"));
+              const status = parked
+                ? "parked"
+                : result.failed
+                  ? result.imported > 0
+                    ? "partial"
+                    : "failed"
+                  : "complete";
+
+              if (result.imported > 0) {
                 fireAndForget(enqueueReminderSatisfy(userId), {
                   action: "reminder.satisfy.enqueue",
                 });
               }
-            },
-          },
-        );
+
+              return {
+                status,
+                imported: result.imported,
+                retryable: result.failed && !parked,
+              };
+            } catch {
+              evt.addWarning(
+                "job.google_health_sync failed for one cohort member",
+              );
+              return { status: "failed", imported: 0, retryable: true };
+            }
+          }),
+        ),
+      );
+      const outcome = foldIntegrationCohortOutcomes({
+        provider: "google_health",
+        verdicts,
+      });
 
       evt.setBackground({
         task_name: "job.google_health_sync",
-        result: {
-          users_synced: usersSynced,
-          total: targets.length,
-          measurements_imported: measurementsImported,
-        },
+        result: outcome.did,
       });
       // The pass is the unit of success: a revoked grant belongs on that user's
       // integration ledger, not in a queue failure that retries every account.
-      return jobDone({
-        total: targets.length,
-        users_synced: usersSynced,
-        users_failed: usersFailed,
-        measurements_imported: measurementsImported,
-      });
+      return outcome;
     } catch (err) {
       evt.setError(err);
       recordError();
@@ -117,8 +136,8 @@ export async function handleGoogleHealthOAuthStateCleanup(
         evt.addMeta("google_health_oauth_state_cleanup_deleted", deleted);
         return jobDone({ deleted });
       } catch (err) {
-        evt.addWarning(`google-health-oauth-state-cleanup failed: ${err}`);
-        return jobFailed("google health oauth state cleanup failed", err);
+        evt.addWarning("google-health-oauth-state-cleanup failed");
+        return jobFailed("google_health_oauth_state_cleanup_failed", err);
       }
     },
   );
