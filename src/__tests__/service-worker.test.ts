@@ -45,6 +45,8 @@ class FakeCache {
   putDelay: Promise<void> | undefined;
   onPut: (() => void) | undefined;
   keysError: Error | undefined;
+  addAllResponse:
+    ((request: Request) => Promise<Response> | Response) | undefined;
 
   private keyOf(request: RequestInfo | URL): string {
     if (typeof request === "string") return new URL(request, ORIGIN).href;
@@ -65,7 +67,13 @@ class FakeCache {
 
   async addAll(urls: string[]): Promise<void> {
     for (const url of urls) {
-      this.map.set(this.keyOf(url), new Response(`precached:${url}`));
+      const request = new Request(new URL(url, ORIGIN), {
+        credentials: "same-origin",
+      });
+      const response = this.addAllResponse
+        ? await this.addAllResponse(request)
+        : new Response(`precached:${url}`);
+      this.map.set(this.keyOf(request), response);
     }
   }
 
@@ -192,6 +200,16 @@ function bootServiceWorker(): SwHarness {
 async function dispatchActivate(harness: SwHarness): Promise<void> {
   let settled: Promise<unknown> = Promise.resolve();
   harness.listeners.get("activate")!({
+    waitUntil: (p: Promise<unknown>) => {
+      settled = p;
+    },
+  });
+  await settled;
+}
+
+async function dispatchInstall(harness: SwHarness): Promise<void> {
+  let settled: Promise<unknown> = Promise.resolve();
+  harness.listeners.get("install")!({
     waitUntil: (p: Promise<unknown>) => {
       settled = p;
     },
@@ -471,6 +489,43 @@ describe("sw.js — activate", () => {
     );
     expect(harness.cacheStorage.stores.has(CURRENT_PAGE_CACHE)).toBe(true);
     expect(harness.navPreload.enabled).toBe(true);
+  });
+});
+
+describe("sw.js — authenticated install cache isolation", () => {
+  it("never requests or stores signed-in root HTML while retaining public immutable assets", async () => {
+    const harness = bootServiceWorker();
+    const statics = await harness.cacheStorage.open(CURRENT_STATIC_CACHE);
+    const requested: Request[] = [];
+    const healthSentinel = "PRIVATE_DASHBOARD_WEIGHT_81_7_KG";
+    statics.addAllResponse = async (request) => {
+      requested.push(request);
+      return new Response(
+        new URL(request.url).pathname === "/"
+          ? `<html><body>${healthSentinel}</body></html>`
+          : `public-asset:${new URL(request.url).pathname}`,
+      );
+    };
+
+    await dispatchInstall(harness);
+
+    expect
+      .soft(requested.map((request) => new URL(request.url).pathname))
+      .not.toContain("/");
+    expect
+      .soft(requested.every((request) => request.credentials === "same-origin"))
+      .toBe(true);
+    const cachedBodies = await Promise.all(
+      [...statics.map.values()].map((response) => response.clone().text()),
+    );
+    expect.soft(cachedBodies.join("\n")).not.toContain(healthSentinel);
+    expect(await statics.match(`${ORIGIN}/logo-192.png`)).toBeDefined();
+
+    const offline = await dispatchNavigationFetch(harness, "/");
+    const offlineBody = await offline.text();
+    expect.soft(offline.status).toBe(503);
+    expect.soft(offlineBody).toContain("Offline");
+    expect(offlineBody).not.toContain(healthSentinel);
   });
 });
 
