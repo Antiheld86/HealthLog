@@ -4,33 +4,36 @@
 **Started:** 2026-07-29T12:01:29Z
 **Source commit:** `ddbfcb4588f22f29f807a42c437847de9e811b24`
 **Branch:** `release/v1.34.1`
-**Verdict:** **BLOCKED by the plan's test-script forwarding syntax; focused security boundaries are green**
+**Verdict:** **GREEN — all focused security boundaries pass with zero skipped tests**
 
 ## Results
 
 | Boundary | Command | Files | Passed | Failed | Skipped | Result |
 | --- | --- | ---: | ---: | ---: | ---: | --- |
-| Literal Plan 01-09 unit command | `TZ=UTC pnpm test -- <20 security files>` | 1,629 | 18,905 | 1 | 12 | Blocked |
-| Focused unit/component correction | `TZ=UTC pnpm exec vitest run <20 security files>` | 20 | 305 | 0 | 0 | Pass |
-| Literal Plan 01-09 integration command | `pnpm test:integration -- <5 security files>` | not focused | not used | not used | not used | Stopped after confirming unintended full-catalog execution |
-| Focused real-PostgreSQL correction | `pnpm exec vitest run --config vitest.integration.config.mts <5 security files>` | 5 | 46 | 0 | 0 | Pass |
+| Focused unit/component gate | `TZ=UTC pnpm exec vitest run <20 security files>` | 20 | 305 | 0 | 0 | Pass |
+| Focused real-PostgreSQL gate | `pnpm exec vitest run --config vitest.integration.config.mts <5 security files>` | 5 | 46 | 0 | 0 | Pass |
 | Types | `pnpm typecheck` | — | — | 0 | 0 | Pass |
-| Production lint | `pnpm exec eslint <18 exact security production paths>` | 18 | — | 0 | 0 | Pass |
+| Focused lint | `pnpm exec eslint <19 exact security paths>` | 19 | — | 0 errors | 0 skipped | Pass (4 pre-existing test-fixture warnings) |
 
-The literal commands insert a standalone `--` after Vitest's `run` command.
-With Vitest 4.1.5 that does not forward the following paths as a file
-allowlist. Both package scripts therefore select their entire configured test
-catalog instead of the named files.
+The first draft of Plan 01-09 inserted a standalone `--` after Vitest's `run`
+command. With Vitest 4.1.5 that did not forward the following paths as a file
+allowlist; both package scripts selected their entire configured test catalog
+instead of the named files. The planner corrected the commands to the direct
+forms shown above, which are the exact revised Plan 01-09 gate commands.
 
-The resulting repository-wide unit run completed with 1,629 files and 18,918
-tests. Its only failure was the out-of-scope
+For auditability, the unintended repository-wide unit run completed with 1,629
+files and 18,918 tests: 18,905 passed, 1 failed, and 12 unrelated tests were
+skipped. Its only failure was the out-of-scope
 `src/__tests__/i18n-reverse-coverage.test.ts`, which found the two unused
 locale keys `settings.nightscoutPrivateHost` and
-`settings.nightscoutPrivateHostHelp`; it also contained 12 unrelated skips.
-Because Plan 01-09 declares any failure or skip a blocker, the literal chained
-command stopped before PostgreSQL, typecheck, and lint. No locale file or
-out-of-scope source was edited. The direct commands above are the
-authoritative focused security evidence.
+`settings.nightscoutPrivateHostHelp`. The obsolete chained command stopped
+before PostgreSQL, typecheck, and lint. No locale file or out-of-scope source
+was edited. The corrected focused commands above contain no test skip or
+failure and are the authoritative security evidence.
+
+The exact revised ESLint allowlist exits zero. Its only diagnostics are four
+pre-existing `@typescript-eslint/no-unused-vars` warnings in
+`src/lib/__tests__/safe-fetch-pinned.test.ts`; there are no lint errors.
 
 ## Requirement evidence
 
@@ -45,18 +48,15 @@ authoritative focused security evidence.
 | SEC-07 | A valid operator reset changes the target password and revokes sessions, API tokens, refresh tokens, trusted devices, and elevations while preserving unrelated users. | Weak, unauthorized, missing-user, and injected-failure paths do not leave partial password or credential-family state. | Real PostgreSQL operator-reset and admin-reset suites |
 | SEC-08 | All named final enforcement boundaries retain their public or authorized positive behavior. | The focused 20-file and 5-file runs contain zero failures, zero skips, and no surviving replay/session/race branch. | 305 unit/component plus 46 PostgreSQL tests |
 
-## Blocker
+## Corrected command deviation
 
-The focused implementation does not require a security-source fix. The
-remaining blocker is outside Plans 01-05 through 01-08:
+No security-source fix was required. The planner corrected the test invocation
+after the first draft's wrapper syntax selected the full catalogs. The
+unrelated reverse-i18n orphan keys remain outside Plans 01-05 through 01-08
+and were not edited here; Plan 23 owns locale reconciliation.
 
-1. correct the plan/package invocation so Vitest receives the file allowlist
-   without the extra `--`; and
-2. resolve or intentionally schedule the unrelated reverse-i18n orphan keys
-   before claiming the literal repository-wide run is green.
-
-This report does not authorize release. The final merged-tree release gate
-must supersede it.
+This focused gate is green but does not authorize release. The final
+merged-tree release gate must supersede it.
 
 ## Security scope freeze
 
