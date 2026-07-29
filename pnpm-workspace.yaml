@@ -25,3 +25,4 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - "@next/bundle-analyzer@16.2.12"
   - lucide-react@1.27.0
+  - "@openai/codex-security@0.1.1"

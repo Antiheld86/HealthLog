@@ -1,6 +1,6 @@
 {
   "name": "healthlog",
-  "version": "1.34.0",
+  "version": "1.34.1",
   "description": "Self-hosted personal-health-tracking PWA with Withings integration, AI insights, and doctor-report PDF export.",
   "license": "PolyForm-Noncommercial-1.0.0",
   "homepage": "https://healthlog.dev",
@@ -108,6 +108,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
     "@next/bundle-analyzer": "^16.2.12",
+    "@openai/codex-security": "^0.1.1",
     "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@testcontainers/postgresql": "^12.0.3",
