@@ -579,6 +579,55 @@ describe("POST /api/medications/[id]/intake — v1.8.2 reconcile (M2 inventory)"
       expect.objectContaining({ where: { id: "row-raced" } }),
     );
   });
+
+  it("does not treat a different occurrence, sibling, or archived row as an already-taken exact slot", async () => {
+    vi.mocked(prisma.medication.findFirst).mockResolvedValueOnce(
+      SCHEDULED_MED as never,
+    );
+    // The shared write probe must be scoped to the exact medication,
+    // canonical occurrence, and live row. An action at 07:00, on a sibling
+    // medication, or in an archived/tombstoned era is therefore not a
+    // candidate for this 19:00 write.
+    vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValueOnce(
+      [] as never,
+    );
+    vi.mocked(prisma.medicationIntakeEvent.create).mockResolvedValueOnce({
+      id: "row-evening-distinct",
+      takenAt: new Date("2026-06-15T17:02:00Z"),
+      skipped: false,
+      idempotencyKey: "evening-distinct",
+      scheduledFor: new Date("2026-06-15T17:00:00Z"),
+      source: "WEB",
+      createdAt: new Date("2026-06-15T17:02:00Z"),
+    } as never);
+    vi.mocked(prisma.medication.findUnique).mockResolvedValue({
+      oneShot: false,
+      active: true,
+    } as never);
+
+    const res = await POST(
+      postReq({
+        scheduledFor: "2026-06-15T17:00:30.000Z",
+        takenAt: "2026-06-15T17:02:00.000Z",
+        idempotencyKey: "evening-distinct",
+      }),
+      ROUTE_PARAMS,
+    );
+
+    expect(res.status).toBe(201);
+    expect(prisma.medicationIntakeEvent.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId: "user-1",
+          medicationId: "med-1",
+          scheduledFor: new Date("2026-06-15T17:00:00.000Z"),
+          deletedAt: null,
+        },
+      }),
+    );
+    expect(prisma.medicationIntakeEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.medicationIntakeEvent.update).not.toHaveBeenCalled();
+  });
 });
 
 // ────────────────────────────────────────────────────────────────────
