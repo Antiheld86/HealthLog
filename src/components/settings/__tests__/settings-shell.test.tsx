@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 // `<SettingsShell>` reads the active route from `usePathname()`. We stub
 // next/navigation so the SSR test render works without an App-Router
@@ -153,6 +155,43 @@ describe("SETTINGS_SECTION_SLUGS", () => {
 });
 
 describe("<SettingsShell>", () => {
+  it("keeps meaningful non-interactive desktop groups while the mobile strip uses quiet separators", () => {
+    const html = renderShell({ active: "account" });
+    for (const label of [
+      "Account",
+      "Your data",
+      "Display",
+      "Health profile",
+      "AI",
+      "Connectivity",
+      "System",
+    ]) {
+      expect(html).toContain(`>${label}</li>`);
+    }
+    // Seven groups produce six quiet separators in the mobile strip.
+    expect(
+      html.match(/aria-hidden="true"/g)?.length ?? 0,
+    ).toBeGreaterThanOrEqual(6);
+  });
+
+  it("starts the sticky desktop sidebar on the heading row", () => {
+    const source = readFileSync(
+      join(
+        process.cwd(),
+        "src",
+        "components",
+        "settings",
+        "settings-shell.tsx",
+      ),
+      "utf8",
+    );
+
+    expect(source).toMatch(
+      /<aside[\s\S]*?md:sticky[\s\S]*?md:col-start-1[\s\S]*?md:row-start-1/,
+    );
+    expect(source).not.toMatch(/<aside[\s\S]*?md:row-start-2/);
+  });
+
   it("renders every navigable section link — once for the mobile strip and once for the desktop sidebar", () => {
     const html = renderShell({ active: "account" });
     // Every slug — including `about`, which returned to the shell nav

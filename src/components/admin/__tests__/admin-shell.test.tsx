@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * `<AdminShell>` mirrors `<SettingsShell>`: a sticky desktop sidebar
@@ -34,9 +36,6 @@ vi.mock("@/hooks/use-auth", () => ({
   useAuth: () => ({ user: mockUserRef.value }),
 }));
 
-import { readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
-
 import { I18nProvider } from "@/lib/i18n/context";
 import { ADMIN_SECTION_SLUGS } from "../section-slugs";
 import { ADMIN_SECTIONS, AdminShell } from "../admin-shell";
@@ -59,6 +58,30 @@ function renderShell(props: {
 }
 
 describe("<AdminShell>", () => {
+  it("groups operational domains with non-interactive desktop headings and quiet mobile separators", () => {
+    const html = renderShell({ active: "system-status" });
+    const groupHeaders =
+      html.match(/data-slot="admin-nav-group"[^>]*data-group="[^"]+"/g) ?? [];
+    const separators =
+      html.match(/data-slot="admin-nav-group-separator"/g) ?? [];
+
+    expect(groupHeaders.length).toBeGreaterThanOrEqual(4);
+    expect(new Set(groupHeaders).size).toBe(groupHeaders.length);
+    expect(separators).toHaveLength(groupHeaders.length - 1);
+  });
+
+  it("starts the sticky desktop sidebar on the heading row", () => {
+    const source = readFileSync(
+      join(process.cwd(), "src", "components", "admin", "admin-shell.tsx"),
+      "utf8",
+    );
+
+    expect(source).toMatch(
+      /<aside[\s\S]*?md:sticky[\s\S]*?md:col-start-1[\s\S]*?md:row-start-1/,
+    );
+    expect(source).not.toMatch(/<aside[\s\S]*?md:row-start-2/);
+  });
+
   it("renders every section link in both the mobile strip and the desktop sidebar", () => {
     const html = renderShell({ active: "system-status" });
     for (const section of ADMIN_SECTIONS) {
