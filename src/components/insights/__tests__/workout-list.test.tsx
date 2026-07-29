@@ -47,15 +47,27 @@ describe("<WorkoutList>", () => {
     expect(html).toContain("320 kcal");
   });
 
+  it("renders aggregate average HR without claiming an HR series", () => {
+    const html = render(
+      <WorkoutList workouts={[{ ...ROW, hasHrSeries: false }]} />,
+    );
+
+    expect(html).toContain('data-slot="workout-list-avg-hr"');
+    expect(html).toContain("145 bpm");
+    expect(html).not.toContain('data-slot="workout-list-glyph-hr"');
+  });
+
   it("omits the chip when the field is null", () => {
     const noDistance: WorkoutListEntry = {
       ...ROW,
       distanceM: null,
       activeEnergyKcal: null,
+      avgHr: null,
     };
     const html = render(<WorkoutList workouts={[noDistance]} />);
     expect(html).not.toContain('data-slot="workout-list-distance"');
     expect(html).not.toContain('data-slot="workout-list-energy"');
+    expect(html).not.toContain('data-slot="workout-list-avg-hr"');
   });
 
   it("falls back to the canonical sport string for unknown sport types", () => {

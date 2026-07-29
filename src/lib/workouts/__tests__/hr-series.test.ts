@@ -121,6 +121,31 @@ describe("buildWorkoutHrSeries", () => {
     expect(result).toBeNull();
   });
 
+  it("does not synthesize a curve from aggregate HR or zone durations", async () => {
+    findMany.mockResolvedValue([]);
+    const result = await buildWorkoutHrSeries({
+      ...base,
+      storedSamples: null,
+      // Aggregate-only WHOOP fields deliberately are not inputs to the
+      // curve builder. Keep them on this structural fixture to pin that a
+      // future widening cannot silently fabricate time-series points.
+      avgHeartRate: 145,
+      maxHeartRate: 180,
+      metadata: {
+        zoneDurations: {
+          zone_two_milli: 300_000,
+          zone_three_milli: 300_000,
+        },
+      },
+    } as Parameters<typeof buildWorkoutHrSeries>[0] & {
+      avgHeartRate: number;
+      maxHeartRate: number;
+      metadata: unknown;
+    });
+
+    expect(result).toBeNull();
+  });
+
   it("hides when bucket coverage is below 40 %", async () => {
     // 10 samples all clustered in the first minute of a 10-minute run →
     // enough raw samples, but coverage is ~1 bucket of ~75.
