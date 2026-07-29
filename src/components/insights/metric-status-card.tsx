@@ -66,6 +66,7 @@ export function MetricStatusCard({
       text={status?.text ?? null}
       hasProvider={status?.hasProvider ?? false}
       updatedAt={status?.updatedAt ?? null}
+      assessment={status?.assessment}
       coachQuestion={coachQuestion}
       coachScope={coachSource ? { metric: coachSource } : undefined}
       coachAutoSend

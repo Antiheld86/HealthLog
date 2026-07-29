@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { useFeatureFlags } from "@/hooks/use-feature-flags";
 import { AskCoachIconButton } from "@/components/insights/ask-coach-action";
 import type { CoachLaunchScope } from "@/lib/insights/coach-launch-context";
+import type { AssessmentStatus } from "@/lib/insights/status-shared";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -63,6 +64,12 @@ interface InsightStatusCardProps {
    */
   preparing?: boolean;
   /**
+   * Explicit producer/hook state. Legacy scalar props remain supported for
+   * direct mounts while routes roll forward, but this discriminator owns
+   * branch ordering whenever it is present.
+   */
+  assessment?: AssessmentStatus;
+  /**
    * v1.21.0 (C4 H2) — opt-in "Ask the Coach about this assessment" hand-off.
    * When `coachQuestion` is set (the metric-aware caller supplies it), the
    * populated card renders a discreet Coach action seeded with that opener
@@ -88,6 +95,7 @@ export function InsightStatusCard({
   updatedAt,
   loading = false,
   preparing = false,
+  assessment,
   coachQuestion,
   coachScope,
   coachAutoSend,
@@ -99,12 +107,22 @@ export function InsightStatusCard({
   // suppressed in full so the layout collapses naturally.
   if (!flags.insightStatus) return null;
 
+  const displayText =
+    assessment?.kind === "generated" ||
+    assessment?.kind === "screened-fallback" ||
+    assessment?.kind === "revalidating"
+      ? assessment.text
+      : text;
+  const isPreparing =
+    assessment?.kind === "preparing" ||
+    (!assessment && preparing && hasProvider && !displayText);
+
   // v1.8.3 — preparing: the read-only route enqueued a generation and the
   // client is polling. Render the loading skeleton geometry with a
   // preparing caption so the card reads as "assembling", not stuck. Only
   // shown when a provider is configured (the route returns the no-key
   // fallback otherwise).
-  if (preparing && hasProvider && !text) {
+  if (isPreparing) {
     return (
       <Card
         aria-busy="true"
@@ -165,7 +183,40 @@ export function InsightStatusCard({
     );
   }
 
-  if (!hasProvider) {
+  const terminalKind =
+    assessment?.kind === "timeout" ||
+    assessment?.kind === "error" ||
+    assessment?.kind === "exhausted"
+      ? assessment.kind
+      : null;
+  if (terminalKind) {
+    const message =
+      terminalKind === "error"
+        ? t("common.loadFailed")
+        : terminalKind === "timeout"
+          ? t("common.networkError")
+          : t("insights.noAnalysisYet");
+    return (
+      <Card
+        aria-live="polite"
+        role="status"
+        data-testid={`insight-status-card-${terminalKind}`}
+        className="gap-2 py-3 md:py-4"
+      >
+        <CardHeader>
+          <TileHeader icon={nodeIcon(icon)} title={title} />
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground text-sm">{message}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const isNoProvider =
+    assessment?.kind === "no-provider" ||
+    (!assessment && !hasProvider && !displayText);
+  if (isNoProvider) {
     return (
       <Card className="gap-2 py-3 opacity-80 md:py-4">
         <CardHeader>
@@ -187,7 +238,7 @@ export function InsightStatusCard({
     );
   }
 
-  if (!text) {
+  if (!displayText) {
     return (
       <Card className="gap-2 py-3 md:py-4">
         <CardHeader>
@@ -255,7 +306,7 @@ export function InsightStatusCard({
             token surfaces verbatim. The producer side now strips too;
             this consumer-side wrap keeps existing caches clean while
             they roll forward. */}
-        <StatusBody text={stripChartTokens(text)} />
+        <StatusBody text={stripChartTokens(displayText)} />
         <LastUpdatedFooter updatedAt={updatedAt} />
       </CardContent>
     </Card>

@@ -71,6 +71,7 @@ export function SlugInsightStatusCard({
       text={status?.text ?? null}
       hasProvider={status?.hasProvider ?? false}
       updatedAt={status?.updatedAt ?? null}
+      assessment={status?.assessment}
       coachQuestion={t("insights.coach.assessmentPrompt", {
         metric: t(coach.labelKey),
       })}
