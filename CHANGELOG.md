@@ -4,46 +4,42 @@
 
 ## [1.34.1] — 2026-07-29
 
-Security and reliability point release. This release preserves the existing
-authentication, consent and health-data boundaries while hardening the MCP
-scope contract, refresh replay, passkey step-up, SSRF/private-origin checks,
-password-reset revocation and PWA cache isolation.
+Security and reliability point release.
 
-### Highlights
+### Added
 
-- Google Health now shows bounded per-resource progress and terminal outcomes;
-  workouts resolve to canonical WHOOP-enriched records without synthetic pulse
-  curves or duplicate full syncs.
-- Medication reminders retain unresolved rolling occurrences as overdue until
-  their exact actionable band ends; exact occurrence identity prevents repeats
-  and duplicate intakes.
-- Intake imports now distinguish source-file capability, completed writes and
-  already-recorded replays. Bounded row details never expose medication facts,
-  credentials, keys or raw health rows.
-- Coach follow-ups and Hero numbers use the current authoritative evidence;
-  future/invalid arrival timestamps cannot win freshness selection.
-- Shared documents, native JSON downloads, public pages under nonce CSP and
-  authenticated PWA cache policy are covered by desktop/mobile regression and
-  accessibility gates.
+- Google Health imports now show bounded progress and a clear final result.
+- Workouts keep their provider details and can be enriched with available WHOOP
+  data without inventing pulse curves.
+- Medication reminders retain overdue occurrences until their actionable window
+  has ended and identify each occurrence uniquely.
+- Intake imports report completed writes and already-recorded entries clearly.
 
-### Boundaries and residuals
+### Changed
 
-- Nightscout private-network access now requires the exact operator-approved
-  origin and pinned final socket. This is a breaking policy for arbitrary
-  user-selected private origins.
-- Apple ECG remains encrypted, bounded and source-labelled; WHOOP ECG is not
-  inferred. WHOOP pulse aggregates do not create a sample curve.
-- Antonios's provider-specific Google full-sync error remains an open reporter
-  confirmation; this release does not claim that exact external incident is
-  resolved.
-- The five accepted Low paths remain documented in the audit ledger:
-  Coach plaintext titles/provenance, GlitchTip capability URLs, Nightscout
-  token-warning logs and Codex response-body/PHI logs. The Nightscout warning
-  sink is incidentally mitigated by bounded cohort logging in this tree, but
-  still needs a dedicated regression before it is considered closed.
-- Dependency advisories are intentionally deferred to v1.34.2. The dated audit
-  records 19 transitive advisories (9 High, 9 Moderate, 1 Low) without changing
-  the dependency tree in this release.
+- Dashboard scores, follow-up suggestions and hero metrics use the latest
+  authoritative readings.
+- Public pages, documents and downloads now behave consistently on desktop and
+  mobile, with tighter spacing and clearer empty states.
+- The administration and settings areas use a more consistent navigation and
+  grouping structure.
+
+### Fixed
+
+- Prevented duplicate medication intakes and reminders for the same occurrence.
+- Fixed stale or future readings replacing newer measurements.
+- Fixed cache isolation for authenticated PWA pages.
+- Fixed passkey step-up, password-reset session revocation and refresh replay
+  edge cases.
+- Restricted private-network integration requests to approved origins and final
+  sockets.
+
+### Security
+
+- Hardened MCP read permissions, refresh handling, passkey verification and
+  server-side request validation.
+- Apple ECG data remains encrypted and source-labelled. WHOOP ECG is not
+  inferred from pulse data.
 
 ## [1.34.0] — 2026-07-28
 
