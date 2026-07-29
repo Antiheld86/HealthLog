@@ -114,6 +114,9 @@ export const GET = apiHandler(
         source: true,
         startedAt: true,
         sportType: true,
+        avgHeartRate: true,
+        maxHeartRate: true,
+        metadata: true,
       },
     });
 
@@ -132,6 +135,10 @@ export const GET = apiHandler(
       canonicalCluster.find((c) => c.id === row.id) ??
       canonicalCluster[0] ??
       null;
+    const effectiveAvgHeartRate =
+      canonical?.avgHeartRate ?? row.avgHeartRate;
+    const effectiveMaxHeartRate =
+      canonical?.maxHeartRate ?? row.maxHeartRate;
 
     // ── Enrichment reads (all over existing tables — no migration) ────
 
@@ -159,7 +166,9 @@ export const GET = apiHandler(
       hrMax: hrMaxFromAge(ageYears),
       series: hrSeries?.points ?? [],
       bucketSec: hrSeries?.bucketSec ?? 0,
-      whoopZoneDurations: parseWhoopZoneDurations(row.metadata),
+      whoopZoneDurations: parseWhoopZoneDurations(
+        canonical?.metadata ?? row.metadata,
+      ),
     });
 
     // Per-km splits computed server-side from the geometry + timestamps
@@ -241,8 +250,8 @@ export const GET = apiHandler(
       durationSec: row.durationSec,
       distanceM: row.totalDistanceM,
       activeEnergyKcal: row.totalEnergyKcal,
-      avgHr: row.avgHeartRate,
-      maxHr: row.maxHeartRate,
+      avgHr: effectiveAvgHeartRate,
+      maxHr: effectiveMaxHeartRate,
       minHr: row.minHeartRate,
       stepCount: row.stepCount,
       elevationM: row.elevationM,
