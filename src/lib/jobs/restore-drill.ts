@@ -189,7 +189,6 @@ export async function handleRestoreDrill(
       // above already reached the operator. Failing the job here would retry a
       // reading that cannot change until the next upload lands.
       return jobDone({
-        restore_drill_object_key: report.objectKey,
         restore_drill_age_days: report.ageDays,
         restore_drill_ciphertext_bytes: report.ciphertextBytes,
         restore_drill_plaintext_bytes: report.plaintextBytes,
@@ -204,7 +203,7 @@ export async function handleRestoreDrill(
         evt.addWarning(`restore-drill skipped: ${err.message}`);
         // Most self-hosters never set the S3 vars. Nothing to verify is not a
         // failed verification, and a monthly failed job would be noise.
-        return jobDone({ skipped: "offhost backup not configured" });
+        return jobDone({ skipped: "offhost_backup_not_configured" });
       }
       evt.addWarning(`restore-drill failed: ${err}`);
       await reportWorkerError(RESTORE_DRILL_QUEUE, err);

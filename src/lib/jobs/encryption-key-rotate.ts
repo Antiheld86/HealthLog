@@ -83,7 +83,6 @@ export async function handleEncryptionKeyRotate(
       // deployment no longer configures. The pass still ran, so they ride out
       // as a count rather than failing (and retrying) the whole corpus.
       return jobDone({
-        rotate_active_key_id: result.activeKeyId,
         rotate_scanned: result.totalScanned,
         rotate_rotated: result.totalRotated,
         rotate_errors: result.totalErrors,

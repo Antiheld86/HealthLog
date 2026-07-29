@@ -6,7 +6,7 @@
  * test deliberately registers the production wrapper as the real worker
  * callback and reads the completed row back through pg-boss.
  */
-import { PgBoss, type Job } from "pg-boss";
+import { PgBoss } from "pg-boss";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { jobDone } from "@/lib/jobs/job-outcome";
@@ -51,7 +51,7 @@ describe("runJob durable pg-boss success output", () => {
     await boss.work<object, Record<string, unknown>>(
       QUEUE,
       { pollingIntervalSeconds: 0.5 },
-      runJob(QUEUE, async (_jobs: Job<object>[]) =>
+      runJob(QUEUE, async () =>
         jobDone({
           provider: "google_health",
           outcome: "useful",

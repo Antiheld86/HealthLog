@@ -169,7 +169,7 @@ export async function handleEnvironmentFetch(
       "info",
       `[environment-fetch] user=${userId} module disabled — skipping`,
     );
-    return jobDone({ skipped: "environment module disabled" });
+    return jobDone({ skipped: "environment_module_disabled" });
   }
 
   const { startDate, endDate } = resolveRange(payload);

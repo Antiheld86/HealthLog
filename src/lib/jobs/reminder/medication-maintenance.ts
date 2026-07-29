@@ -64,7 +64,6 @@ export async function handleIntakeAutoSkip(
       evt.addMeta("intake_auto_skip_cutoff", result.cutoff.toISOString());
       return jobDone({
         intake_auto_skip_count: result.skippedCount,
-        intake_auto_skip_cutoff: result.cutoff.toISOString(),
       });
     } catch (err) {
       evt.addWarning(

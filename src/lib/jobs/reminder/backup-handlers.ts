@@ -52,8 +52,6 @@ export async function handleOffhostBackup(
         offhost_backup_uploaded: report.uploaded,
         offhost_backup_failed: report.failed,
         offhost_backup_total_users: report.totalUsers,
-        offhost_backup_endpoint: report.config.endpoint,
-        offhost_backup_bucket: report.config.bucket,
       });
     } catch (err) {
       // Not configured ⇒ skip silently with a warning, not an error: most
