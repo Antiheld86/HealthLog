@@ -83,6 +83,7 @@ interface FakeWorkoutRow {
   avgHeartRate: number | null;
   maxHeartRate: number | null;
   totalEnergyKcal: number | null;
+  metadata: Record<string, unknown> | null;
   createdAt: Date;
 }
 
@@ -105,6 +106,7 @@ function makeRow(
     avgHeartRate: 145,
     maxHeartRate: 170,
     totalEnergyKcal: 320,
+    metadata: null,
     createdAt: start,
   };
 }
@@ -144,6 +146,40 @@ describe("GET /api/workouts — canonical dedup", () => {
     expect(res.status).toBe(200);
     expect(body.data.workouts).toHaveLength(1);
     expect(body.data.workouts[0].id).toBe("w-apple");
+    expect(body.data.meta.droppedDuplicates).toBe(1);
+  });
+
+  it("backfills missing Apple HR aggregates from its WHOOP twin", async () => {
+    const apple = {
+      ...makeRow("w-apple", "APPLE_HEALTH", "2026-05-15T07:00:00Z"),
+      avgHeartRate: null,
+      maxHeartRate: null,
+      metadata: { hkVersion: "1" },
+    };
+    const whoop = {
+      ...makeRow("w-whoop", "WHOOP", "2026-05-15T07:00:30Z"),
+      avgHeartRate: 148,
+      maxHeartRate: 181,
+      metadata: {
+        zoneDurations: { zone_two_milli: 120_000 },
+        whoopWorkoutStrain: 12.3,
+      },
+    };
+    vi.mocked(prisma.workout.findMany).mockResolvedValueOnce([
+      apple,
+      whoop,
+    ] as never);
+
+    const res = await GET(makeRequest());
+    const body = await res.json();
+
+    expect(body.data.workouts).toHaveLength(1);
+    expect(body.data.workouts[0]).toMatchObject({
+      id: "w-apple",
+      source: "APPLE_HEALTH",
+      avgHr: 148,
+      maxHr: 181,
+    });
     expect(body.data.meta.droppedDuplicates).toBe(1);
   });
 

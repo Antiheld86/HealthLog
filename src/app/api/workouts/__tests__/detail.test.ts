@@ -153,6 +153,103 @@ describe("GET /api/workouts/{id}", () => {
     expect(body.data.route).toBeNull();
   });
 
+  it("enriches the Apple winner with only matched WHOOP HR and zones", async () => {
+    const routeGeometry = {
+      type: "LineString",
+      coordinates: [
+        [11.0, 49.0],
+        [11.01, 49.01],
+      ],
+    };
+    vi.mocked(prisma.workout.findUnique).mockResolvedValueOnce({
+      ...BASE_ROW,
+      avgHeartRate: null,
+      maxHeartRate: null,
+      metadata: { hkVersion: "1", owner: "apple" },
+      route: {
+        id: "wr-apple",
+        geometry: routeGeometry,
+        sampleTimestamps: null,
+        createdAt: BASE_ROW.createdAt,
+      },
+    } as never);
+    vi.mocked(prisma.workout.findMany).mockResolvedValueOnce([
+      {
+        id: "w-1",
+        source: "APPLE_HEALTH",
+        startedAt: BASE_ROW.startedAt,
+        sportType: "RUNNING",
+        avgHeartRate: null,
+        maxHeartRate: null,
+        metadata: { hkVersion: "1", owner: "apple" },
+      },
+      {
+        id: "w-whoop",
+        source: "WHOOP",
+        startedAt: new Date(BASE_ROW.startedAt.getTime() + 30_000),
+        sportType: "RUNNING",
+        avgHeartRate: 148,
+        maxHeartRate: 181,
+        metadata: {
+          zoneDurations: {
+            zone_one_milli: 60_000,
+            zone_two_milli: 300_000,
+          },
+          whoopWorkoutStrain: 12.3,
+        },
+      },
+    ] as never);
+
+    const res = await GET(makeRequest(), makeParams("w-1"));
+    const body = await res.json();
+
+    expect(body.data).toMatchObject({
+      id: "w-1",
+      source: "APPLE_HEALTH",
+      canonicalId: "w-1",
+      avgHr: 148,
+      maxHr: 181,
+      route: { geometry: routeGeometry },
+      metadata: { hkVersion: "1", owner: "apple" },
+    });
+    expect(body.data.metadata).not.toHaveProperty("whoopWorkoutStrain");
+    expect(body.data.metadata).not.toHaveProperty("zoneDurations");
+    expect(body.data.zones.model).toBe("whoop");
+    expect(body.data.hrSeries).toBeNull();
+  });
+
+  it("does not overwrite the canonical winner's existing HR values", async () => {
+    vi.mocked(prisma.workout.findUnique).mockResolvedValueOnce(
+      BASE_ROW as never,
+    );
+    vi.mocked(prisma.workout.findMany).mockResolvedValueOnce([
+      {
+        id: "w-1",
+        source: "APPLE_HEALTH",
+        startedAt: BASE_ROW.startedAt,
+        sportType: "RUNNING",
+        avgHeartRate: BASE_ROW.avgHeartRate,
+        maxHeartRate: BASE_ROW.maxHeartRate,
+        metadata: BASE_ROW.metadata,
+      },
+      {
+        id: "w-whoop",
+        source: "WHOOP",
+        startedAt: new Date(BASE_ROW.startedAt.getTime() + 30_000),
+        sportType: "RUNNING",
+        avgHeartRate: 155,
+        maxHeartRate: 190,
+        metadata: null,
+      },
+    ] as never);
+
+    const res = await GET(makeRequest(), makeParams("w-1"));
+    const body = await res.json();
+
+    expect(body.data.avgHr).toBe(145);
+    expect(body.data.maxHr).toBe(170);
+  });
+
   it("returns 401 without a session", async () => {
     vi.mocked(getSession).mockResolvedValueOnce(null);
     const res = await GET(makeRequest(), makeParams("w-1"));
