@@ -133,12 +133,18 @@ for (const { route, file } of manifests) {
 const chunkDir = join(BUILD_DIR, "static", "chunks");
 let totalGz = 0;
 let rechartsChunks = 0;
+let catalogChunks = 0;
+let catalogGz = 0;
 let largest = { file: "-", gz: 0 };
 for (const f of readdirSync(chunkDir)) {
   if (!f.endsWith(".js")) continue;
   const info = chunkInfo(join("static", "chunks", f));
   totalGz += info.gz;
   if (info.recharts) rechartsChunks += 1;
+  if (info.catalog) {
+    catalogChunks += 1;
+    catalogGz += info.gz;
+  }
   if (info.gz > largest.gz) largest = { file: f, gz: info.gz };
 }
 const rootCatalogRef = rootFiles.some((f) => chunkInfo(f).catalog);
@@ -150,6 +156,10 @@ const budget = existsSync(BUDGET_PATH)
 
 console.log(`shared baseline (rootMainFiles): ${fmt(rootGz)} gz`);
 console.log(`all client chunks:               ${fmt(totalGz)} gz`);
+console.log(
+  `  lazy message catalogs:         ${fmt(catalogGz)} gz  (${catalogChunks} chunks)`,
+);
+console.log(`  other client chunks:           ${fmt(totalGz - catalogGz)} gz`);
 console.log(
   `largest chunk:                   ${fmt(largest.gz)} gz  ${largest.file}`,
 );

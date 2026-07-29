@@ -74,7 +74,10 @@ jobs:
       # the versioned service-worker stamp AND the static i18n catalog
       # assets (public/i18n/<locale>.js) the client boots from — without
       # them every UI interaction waits on missing catalogs.
-      - run: pnpm build
+      # The repository-wide Next type worker exceeds V8's ~4 GiB default
+      # old-space ceiling. Keep the larger heap scoped to this production
+      # build only; tests and the runtime retain their normal limits.
+      - run: NODE_OPTIONS=--max-old-space-size=8192 pnpm build
 
       # Client-bundle budget gate — rides this job because it is the one
       # place CI already has a production build on disk. Catches the
