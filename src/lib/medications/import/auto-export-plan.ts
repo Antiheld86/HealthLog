@@ -11,8 +11,10 @@
 import type {
   MedicationImportEntry,
   MedicationImportSkipCounts,
+  MedicationImportSkipDetail,
   MedicationImportSkipReason,
 } from "@/lib/jobs/medication-intake-import";
+import { appendMedicationImportSkipDetails } from "@/lib/jobs/medication-intake-import";
 
 import { medicationImportIdempotencyKey } from "@/lib/medications/intake-import-payload";
 import { normaliseMedicationName } from "./auto-export-format";
@@ -43,6 +45,9 @@ export interface AutoExportPlan {
    * that reached the database.
    */
   skippedByReason: MedicationImportSkipCounts;
+  /** Bounded line + reason detail, safe to persist through the job result. */
+  skipDetails: MedicationImportSkipDetail[];
+  skippedDetailsOmitted: number;
   /**
    * Names the file used that match nothing on the record, deduplicated and in
    * first-seen order. Surfaced verbatim so the person can rename or add the
@@ -100,7 +105,23 @@ export function planAutoExportImport(
   medications: readonly MedicationMatchCandidate[],
 ): AutoExportPlan {
   const skippedByReason: MedicationImportSkipCounts = {};
-  for (const refusal of parsed.refusals) bump(skippedByReason, refusal.reason);
+  let skipDetails: MedicationImportSkipDetail[] = [];
+  let skippedDetailsOmitted = 0;
+  const recordSkip = (
+    line: number,
+    reason: MedicationImportSkipReason,
+  ): void => {
+    bump(skippedByReason, reason);
+    const next = appendMedicationImportSkipDetails(
+      { skipDetails, skippedDetailsOmitted },
+      [{ line, reason }],
+    );
+    skipDetails = next.skipDetails;
+    skippedDetailsOmitted = next.skippedDetailsOmitted;
+  };
+  for (const refusal of parsed.refusals) {
+    recordSkip(refusal.line, refusal.reason);
+  }
 
   const byName = new Map<string, MedicationMatchCandidate[]>();
   for (const medication of medications) {
@@ -154,7 +175,7 @@ export function planAutoExportImport(
   for (const dose of parsed.doses) {
     const match = resolve(dose);
     if (!match.ok) {
-      bump(skippedByReason, match.reason);
+      recordSkip(dose.line, match.reason);
       const label = dose.medicationName;
       if (!namedSeen[match.reason].has(label)) {
         namedSeen[match.reason].add(label);
@@ -172,7 +193,7 @@ export function planAutoExportImport(
     // it exactly, instead of leaving the second row to surface later as though
     // the record had already held that dose.
     if (seenKeys.has(idempotencyKey)) {
-      bump(skippedByReason, "duplicate_in_file");
+      recordSkip(dose.line, "duplicate_in_file");
       continue;
     }
     seenKeys.add(idempotencyKey);
@@ -182,6 +203,7 @@ export function planAutoExportImport(
       scheduledFor: dose.scheduledFor.toISOString(),
       takenAt: dose.takenAt === null ? null : dose.takenAt.toISOString(),
       idempotencyKey,
+      sourceLine: dose.line,
       ...(dose.doseTaken === null ? {} : { doseTaken: dose.doseTaken }),
     });
   }
@@ -189,6 +211,8 @@ export function planAutoExportImport(
   return {
     entries,
     skippedByReason,
+    skipDetails,
+    skippedDetailsOmitted,
     unmatchedMedications: named.medication_not_found,
     ambiguousMedications: named.medication_ambiguous,
     mirroredMedications: named.medication_is_mirrored,

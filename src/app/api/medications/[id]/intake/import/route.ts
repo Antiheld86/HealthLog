@@ -175,6 +175,8 @@ export const POST = apiHandler(
       total: normalized.entries.length,
       imported: 0,
       skippedByReason: {},
+      skipDetails: [],
+      skippedDetailsOmitted: 0,
       touchedDays: [],
       rollupProcessed: 0,
     };

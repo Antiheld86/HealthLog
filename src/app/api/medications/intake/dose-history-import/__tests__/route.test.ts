@@ -154,12 +154,14 @@ describe("POST /api/medications/intake/dose-history-import", () => {
               scheduledFor: "2024-12-31T21:30:00.000Z",
               takenAt: "2024-12-31T21:50:00.000Z",
               idempotencyKey: `import-med-1-${Date.parse("2024-12-31T21:30:00.000Z")}`,
+              sourceLine: 2,
             },
             {
               medicationId: "med-1",
               scheduledFor: "2025-01-01T21:30:00.000Z",
               takenAt: "2025-01-01T21:35:00.000Z",
               idempotencyKey: `import-med-1-${Date.parse("2025-01-01T21:30:00.000Z")}`,
+              sourceLine: 3,
               // 0.5 against a scheduled 1.0 — a real deviation, so it is kept.
               doseTaken: "0.5",
             },
@@ -171,6 +173,8 @@ describe("POST /api/medications/intake/dose-history-import", () => {
           imported: 0,
           // Seeded, so the count at the end of the run covers the whole file.
           skippedByReason: { status_no_dose_information: 1 },
+          skipDetails: [{ line: 4, reason: "status_no_dose_information" }],
+          skippedDetailsOmitted: 0,
           touchedDays: [],
           rollupProcessed: 0,
         },

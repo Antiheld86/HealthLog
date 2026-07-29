@@ -124,6 +124,7 @@ describe("planAutoExportImport — the reported export", () => {
       scheduledFor: "2023-02-15T21:30:00.000Z",
       takenAt: "2023-02-15T22:08:00.000Z",
       idempotencyKey: `import-id-Med_13-${Date.parse("2023-02-15T21:30:00.000Z")}`,
+      sourceLine: 2,
     });
   });
 });
@@ -212,7 +213,27 @@ describe("planAutoExportImport — matching", () => {
         scheduledFor: "2025-01-01T08:00:00.000Z",
         takenAt: null,
         idempotencyKey: `import-id-Ramipril-${Date.parse("2025-01-01T08:00:00.000Z")}`,
+        sourceLine: 2,
       },
     ]);
+  });
+
+  it("keeps only safe line-and-reason detail for every refusal", () => {
+    const plan = planRows(
+      [
+        "2025-01-01 08:00:00 +0000,2025-01-01 08:00:00 +0000,Ramipril,,1.0,1.0,count,Taken,No,",
+        "2025-01-01 08:30:00 +0000,2025-01-01 08:00:00 +0000,Ramipril,,1.0,1.0,count,Taken,No,",
+        "2025-01-02 08:00:00 +0000,,Unknown medicine,,1.0,1.0,count,Taken,No,",
+      ],
+      [medication("Ramipril")],
+    );
+
+    expect(plan.skipDetails).toEqual([
+      { line: 3, reason: "duplicate_in_file" },
+      { line: 4, reason: "medication_not_found" },
+    ]);
+    expect(plan.skippedDetailsOmitted).toBe(0);
+    expect(JSON.stringify(plan.skipDetails)).not.toContain("Ramipril");
+    expect(JSON.stringify(plan.skipDetails)).not.toContain("2025-01");
   });
 });

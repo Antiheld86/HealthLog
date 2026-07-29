@@ -103,9 +103,12 @@ export function DoseHistoryVerdictView({
           className="text-muted-foreground"
           data-testid="dose-history-archived"
         >
-          {t("settings.sections.export.import.doseHistory.archivedRows", {
-            count: verdict.fromArchivedMedications,
-          })}
+          {t(
+            "settings.sections.export.import.doseHistory.archivedRowsPresent",
+            {
+              count: verdict.fromArchivedMedications,
+            },
+          )}
         </p>
       )}
     </div>

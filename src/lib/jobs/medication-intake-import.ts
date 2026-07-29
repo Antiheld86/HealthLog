@@ -47,6 +47,12 @@ export interface MedicationImportEntry {
    * absence is how `MedicationIntakeEvent.doseTaken` already says so.
    */
   doseTaken?: string;
+  /**
+   * 1-based row in the submitted file. This is the only source-row identity
+   * persisted for result details: never carry medication, dose, timestamp or
+   * raw file content into the status response.
+   */
+  sourceLine?: number;
 }
 
 export interface MedicationImportPayload {
@@ -105,11 +111,28 @@ export type MedicationImportSkipCounts = Partial<
   Record<MedicationImportSkipReason, number>
 >;
 
+/** Maximum source rows returned through the background-job status response. */
+export const MEDICATION_IMPORT_SKIP_DETAIL_LIMIT = 200;
+export const MEDICATION_IMPORT_MAX_SOURCE_LINE = 30_001;
+
+/**
+ * Safe per-row detail. The allowlisted reason and ordinal are enough to find a
+ * row in the person's own file without persisting health data from that row.
+ */
+export interface MedicationImportSkipDetail {
+  line: number;
+  reason: MedicationImportSkipReason;
+}
+
 export interface MedicationImportProgress {
   processed: number;
   total: number;
   imported: number;
   skippedByReason: MedicationImportSkipCounts;
+  /** First bounded source-row details; absent on legacy jobs. */
+  skipDetails?: MedicationImportSkipDetail[];
+  /** Details beyond the hard cap, counted without retaining their contents. */
+  skippedDetailsOmitted?: number;
   touchedDays: string[];
   rollupProcessed: number;
 }
@@ -128,6 +151,36 @@ export interface MedicationImportResult {
    * sentence repeated per row. Empty when nothing was skipped.
    */
   skipReasons: MedicationImportSkipGroup[];
+  /** Bounded, redacted source-row details. */
+  skipDetails?: MedicationImportSkipDetail[];
+  /** Number of additional skipped rows not retained in `skipDetails`. */
+  skippedDetailsOmitted?: number;
+}
+
+export interface MedicationImportSkipDetailAccumulator {
+  skipDetails: MedicationImportSkipDetail[];
+  skippedDetailsOmitted: number;
+}
+
+/**
+ * Append safe row details without ever letting the persisted/status payload
+ * grow with the input file. Callers must already have reduced rows to the
+ * allowlisted ordinal + reason shape.
+ */
+export function appendMedicationImportSkipDetails(
+  current: MedicationImportSkipDetailAccumulator,
+  incoming: readonly MedicationImportSkipDetail[],
+): MedicationImportSkipDetailAccumulator {
+  const capacity = Math.max(
+    0,
+    MEDICATION_IMPORT_SKIP_DETAIL_LIMIT - current.skipDetails.length,
+  );
+  const retained = incoming.slice(0, capacity);
+  return {
+    skipDetails: [...current.skipDetails, ...retained],
+    skippedDetailsOmitted:
+      current.skippedDetailsOmitted + incoming.length - retained.length,
+  };
 }
 
 /** Collapse the running counts into the wire shape, in a stable order. */
@@ -161,6 +214,7 @@ export interface MedicationImportChunkResult {
   processed: number;
   imported: number;
   skippedByReason: MedicationImportSkipCounts;
+  skipDetails?: MedicationImportSkipDetail[];
   touchedDays: string[];
 }
 
@@ -212,11 +266,29 @@ export function advanceMedicationImportProgress(
     skippedByReason[reason] = (skippedByReason[reason] ?? 0) + added;
   }
 
+  const detailAccumulator = appendMedicationImportSkipDetails(
+    {
+      skipDetails: previous.skipDetails ?? [],
+      skippedDetailsOmitted: previous.skippedDetailsOmitted ?? 0,
+    },
+    chunk.skipDetails ?? [],
+  );
+  const includeDetails =
+    previous.skipDetails !== undefined ||
+    previous.skippedDetailsOmitted !== undefined ||
+    (chunk.skipDetails?.length ?? 0) > 0;
+
   return {
     processed,
     total: previous.total,
     imported: previous.imported + Math.max(0, Math.trunc(chunk.imported)),
     skippedByReason,
+    ...(includeDetails
+      ? {
+          skipDetails: detailAccumulator.skipDetails,
+          skippedDetailsOmitted: detailAccumulator.skippedDetailsOmitted,
+        }
+      : {}),
     rollupProcessed: previous.rollupProcessed,
     touchedDays,
   };
@@ -278,6 +350,15 @@ function parsePayload(value: Prisma.JsonValue): MedicationImportPayload {
     if (entry.doseTaken !== undefined && typeof entry.doseTaken !== "string") {
       throw new Error("Medication intake import entry is malformed");
     }
+    if (
+      entry.sourceLine !== undefined &&
+      (typeof entry.sourceLine !== "number" ||
+        !Number.isInteger(entry.sourceLine) ||
+        entry.sourceLine < 1 ||
+        entry.sourceLine > MEDICATION_IMPORT_MAX_SOURCE_LINE)
+    ) {
+      throw new Error("Medication intake import entry is malformed");
+    }
     return {
       scheduledFor: rawScheduledFor,
       takenAt: takenAt as string | null,
@@ -286,6 +367,9 @@ function parsePayload(value: Prisma.JsonValue): MedicationImportPayload {
         ? {}
         : { medicationId: entry.medicationId }),
       ...(entry.doseTaken === undefined ? {} : { doseTaken: entry.doseTaken }),
+      ...(entry.sourceLine === undefined
+        ? {}
+        : { sourceLine: entry.sourceLine }),
     };
   });
   return { entries };
@@ -335,6 +419,15 @@ function parseProgress(
       : null;
   const rollupProcessed =
     value.rollupProcessed === undefined ? 0 : Number(value.rollupProcessed);
+  const rawSkipDetails = value.skipDetails;
+  const skipDetails =
+    rawSkipDetails === undefined
+      ? undefined
+      : parseMedicationImportSkipDetails(rawSkipDetails);
+  const skippedDetailsOmitted =
+    value.skippedDetailsOmitted === undefined
+      ? undefined
+      : Number(value.skippedDetailsOmitted);
   if (
     !Number.isInteger(processed) ||
     processed < 0 ||
@@ -345,7 +438,10 @@ function parseProgress(
     touchedDays === null ||
     !Number.isInteger(rollupProcessed) ||
     rollupProcessed < 0 ||
-    rollupProcessed > (touchedDays?.length ?? 0)
+    rollupProcessed > (touchedDays?.length ?? 0) ||
+    (rawSkipDetails !== undefined && skipDetails === null) ||
+    (skippedDetailsOmitted !== undefined &&
+      (!Number.isInteger(skippedDetailsOmitted) || skippedDetailsOmitted < 0))
   ) {
     throw new Error("Medication intake import progress is malformed");
   }
@@ -354,9 +450,47 @@ function parseProgress(
     total,
     imported,
     skippedByReason,
+    ...(skipDetails === undefined || skipDetails === null
+      ? {}
+      : { skipDetails }),
+    ...(skippedDetailsOmitted === undefined ? {} : { skippedDetailsOmitted }),
     touchedDays,
     rollupProcessed,
   };
+}
+
+/** Strictly parse only the two safe fields permitted in a row detail. */
+export function parseMedicationImportSkipDetails(
+  value: Prisma.JsonValue,
+): MedicationImportSkipDetail[] | null {
+  if (
+    !Array.isArray(value) ||
+    value.length > MEDICATION_IMPORT_SKIP_DETAIL_LIMIT
+  ) {
+    return null;
+  }
+  const details: MedicationImportSkipDetail[] = [];
+  for (const detail of value) {
+    if (
+      typeof detail !== "object" ||
+      detail === null ||
+      Array.isArray(detail) ||
+      !Number.isInteger(detail.line) ||
+      Number(detail.line) < 1 ||
+      Number(detail.line) > MEDICATION_IMPORT_MAX_SOURCE_LINE ||
+      typeof detail.reason !== "string" ||
+      !(MEDICATION_IMPORT_SKIP_REASONS as readonly string[]).includes(
+        detail.reason,
+      )
+    ) {
+      return null;
+    }
+    details.push({
+      line: Number(detail.line),
+      reason: detail.reason as MedicationImportSkipReason,
+    });
+  }
+  return details;
 }
 
 interface ProcessChunkOutcome {
@@ -502,6 +636,12 @@ async function processNextChunk(
           imported: progress.imported,
           skipped: totalMedicationImportSkips(progress.skippedByReason),
           skipReasons: groupMedicationImportSkips(progress.skippedByReason),
+          ...(progress.skipDetails === undefined
+            ? {}
+            : { skipDetails: progress.skipDetails }),
+          ...(progress.skippedDetailsOmitted === undefined
+            ? {}
+            : { skippedDetailsOmitted: progress.skippedDetailsOmitted }),
         };
         const completedAt = new Date();
         await tx.auditLog.create({
@@ -541,11 +681,21 @@ async function processNextChunk(
         payload.entries,
         progress.processed,
       );
-      const uniqueEntries = [
-        ...new Map(
-          entries.map((entry) => [entry.idempotencyKey, entry]),
-        ).values(),
-      ];
+      const uniqueByKey = new Map<string, MedicationImportEntry>();
+      const duplicateDetails: MedicationImportSkipDetail[] = [];
+      for (const entry of entries) {
+        if (uniqueByKey.has(entry.idempotencyKey)) {
+          if (entry.sourceLine !== undefined) {
+            duplicateDetails.push({
+              line: entry.sourceLine,
+              reason: "duplicate_in_file",
+            });
+          }
+          continue;
+        }
+        uniqueByKey.set(entry.idempotencyKey, entry);
+      }
+      const uniqueEntries = [...uniqueByKey.values()];
       // An entry names its own medication when the job came from an export file
       // covering a whole regimen; the per-medication route's jobs name it on the
       // job row instead. One of the two must be there, and a payload with
@@ -589,8 +739,22 @@ async function processNextChunk(
           medicationId: true,
           takenAt: true,
           scheduledFor: true,
+          idempotencyKey: true,
         },
       });
+      const createdKeys = new Set(created.map((event) => event.idempotencyKey));
+      const alreadyRecordedDetails: MedicationImportSkipDetail[] = [];
+      for (const entry of uniqueEntries) {
+        if (
+          !createdKeys.has(entry.idempotencyKey) &&
+          entry.sourceLine !== undefined
+        ) {
+          alreadyRecordedDetails.push({
+            line: entry.sourceLine,
+            reason: "already_recorded",
+          });
+        }
+      }
 
       // Inventory is per medication and a skip consumes nothing, so the created
       // rows are grouped and the skips left out. `consumeImportedIntakesBatch`
@@ -636,6 +800,7 @@ async function processNextChunk(
           duplicate_in_file: entries.length - uniqueEntries.length,
           already_recorded: uniqueEntries.length - created.length,
         },
+        skipDetails: [...duplicateDetails, ...alreadyRecordedDetails],
         touchedDays,
       });
       const heartbeatAt = new Date();

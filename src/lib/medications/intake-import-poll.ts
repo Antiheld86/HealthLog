@@ -5,6 +5,9 @@ export interface MedicationIntakeImportResult {
   skipped: number;
   /** One entry per reason with its count — never the same line per row. */
   skipReasons: Array<{ reason: string; count: number }>;
+  /** Bounded source row ordinals and allowlisted reasons only. */
+  skipDetails?: Array<{ line: number; reason: string }>;
+  skippedDetailsOmitted?: number;
 }
 
 interface MedicationIntakeImportStatus {

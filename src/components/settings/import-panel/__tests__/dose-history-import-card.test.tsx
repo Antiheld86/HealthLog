@@ -26,7 +26,10 @@ import { AUTO_EXPORT_COLUMN_RULINGS } from "@/lib/medications/import/auto-export
 import { IntakeImportSkipGroups } from "@/components/medications/intake-import-result";
 
 import { DoseHistoryColumnRulings } from "../dose-history-columns";
-import { DoseHistoryImportCard } from "../dose-history-import-card";
+import {
+  DoseHistoryImportCard,
+  shouldShowDoseHistoryVerdict,
+} from "../dose-history-import-card";
 import {
   DoseHistoryVerdictView,
   type DoseHistoryFileVerdict,
@@ -84,6 +87,21 @@ describe("<DoseHistoryImportCard>", () => {
     expect(html).not.toContain('data-outcome="success"');
     expect(html).not.toContain("text-success");
   });
+
+  it("replaces preflight counts with the final result instead of repeating skips", () => {
+    expect(shouldShowDoseHistoryVerdict(null)).toBe(true);
+    expect(
+      shouldShowDoseHistoryVerdict({
+        kind: "outcome",
+        imported: 0,
+        skipped: 9,
+        skipReasons: [
+          { reason: "status_no_dose_information", count: 8 },
+          { reason: "duplicate_in_file", count: 1 },
+        ],
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("<DoseHistoryVerdictView>", () => {
@@ -115,13 +133,15 @@ describe("<DoseHistoryVerdictView>", () => {
     expect(html).not.toContain("intake-import-outcome");
   });
 
-  it("reports the archived rows as imported rather than as a reason to drop them", () => {
+  it("reports archived rows as file content without claiming they were written", () => {
     const html = render(
       <DoseHistoryVerdictView verdict={verdict} previewOnly={false} />,
     );
     expect(html).toContain('data-testid="dose-history-archived"');
     expect(html).toContain("1462");
-    expect(html).toContain("imported anyway");
+    expect(html).toContain("neither skips nor reactivates");
+    expect(html).toContain("final result");
+    expect(html).not.toContain("imported anyway");
     // Archived rows are reported, never refused.
     expect(html).not.toContain("dose-history-unmatched");
   });
