@@ -120,6 +120,14 @@ export interface ImportJobResult {
     /** Estimated `(measurement type, local day)` aggregate rows considered. */
     rows: number;
   };
+  /** Bounded auxiliary ECG outcomes. Never contains filenames or waveform data. */
+  ecg: {
+    discovered: number;
+    imported: number;
+    updated: number;
+    skipped: number;
+    failed: number;
+  };
   totals: {
     recordsRead: number;
     rowsUpserted: number;
@@ -1085,6 +1093,13 @@ export async function streamParseExportXml(
     cumulativeEstimates: {
       days: cumulativeEstimatedDays.size,
       rows: cumulativeEstimatedRows,
+    },
+    ecg: {
+      discovered: 0,
+      imported: 0,
+      updated: 0,
+      skipped: 0,
+      failed: 0,
     },
     totals: {
       recordsRead,

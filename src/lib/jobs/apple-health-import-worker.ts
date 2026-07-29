@@ -29,6 +29,9 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { prisma, toJson } from "@/lib/db";
 import type { Job } from "pg-boss";
 
+import { streamAppleHealthEcgMembers } from "@/lib/apple-health/archive-stream";
+import { parseAppleHealthEcgCsv } from "@/lib/apple-health/ecg-csv";
+import { importAppleHealthEcg } from "@/lib/apple-health/ecg-import";
 import { extractExportXml } from "@/lib/import/unzip-export-xml";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { jobDone, jobFailed, type JobOutcome } from "@/lib/jobs/job-outcome";
@@ -98,7 +101,16 @@ export const APPLE_HEALTH_IMPORT_V2_QUEUE = "apple-health-import-v2";
 export const APPLE_HEALTH_IMPORT_LEGACY_QUEUE = "apple-health-import";
 
 /** Parser semantics carried by every newly-created ImportJob. */
-export const APPLE_HEALTH_IMPORT_PARSER_REVISION = 2;
+export const APPLE_HEALTH_IMPORT_PARSER_REVISION = 3;
+
+const APPLE_HEALTH_ECG_ARCHIVE_LIMITS = {
+  maxMembers: 20_000,
+  maxEcgMembers: 2_000,
+  maxMemberBytes: 16 * 1024 * 1024,
+  maxTotalEcgBytes: 512 * 1024 * 1024,
+  maxCompressionRatio: 200,
+} as const;
+const APPLE_HEALTH_ECG_MAX_SAMPLES = 2_000_000;
 
 /** Concurrency cap per worker host. */
 export const APPLE_HEALTH_IMPORT_CONCURRENCY = 1;
@@ -326,23 +338,66 @@ export async function handleAppleHealthImport(
       elapsedMs: 0,
     });
 
-    const result: ImportJobResult = await streamParseExportXml({
-      xmlPath: unzip.xmlPath,
-      userId,
-      userTimezone,
-      prisma,
-      onProgress: async (snapshot) => {
-        // The phase label here is what the polling endpoint surfaces;
-        // map "parsing" / "upserting" through verbatim.
-        await prisma.importJob.update({
-          where: { id: importJobId },
-          data: {
-            status: snapshot.currentPhase,
-            progress: toJson(snapshot),
-          },
-        });
+    const result: ImportJobResult = {
+      ...(await streamParseExportXml({
+        xmlPath: unzip.xmlPath,
+        userId,
+        userTimezone,
+        prisma,
+        onProgress: async (snapshot) => {
+          // The phase label here is what the polling endpoint surfaces;
+          // map "parsing" / "upserting" through verbatim.
+          await prisma.importJob.update({
+            where: { id: importJobId },
+            data: {
+              status: snapshot.currentPhase,
+              progress: toJson(snapshot),
+            },
+          });
+        },
+      })),
+      ecg: {
+        discovered: 0,
+        imported: 0,
+        updated: 0,
+        skipped: 0,
+        failed: 0,
       },
-    });
+    };
+
+    // Auxiliary ECGs are intentionally fail-soft. The canonical export.xml
+    // transaction has already completed; malformed, oversized, or unwritable
+    // ECG members affect only bounded scalar counters in the terminal result.
+    const ecg = result.ecg;
+    ecg.discovered = unzip.otherMembers.filter((member) => {
+      const lower = member.name.toLowerCase();
+      return lower.includes("electrocardiograms/") && lower.endsWith(".csv");
+    }).length;
+    try {
+      for await (const member of streamAppleHealthEcgMembers({
+        archivePath: uploadPath,
+        limits: APPLE_HEALTH_ECG_ARCHIVE_LIMITS,
+      })) {
+        try {
+          const parsed = await parseAppleHealthEcgCsv({
+            memberName: member.name,
+            stream: member.stream,
+            maxSamples: APPLE_HEALTH_ECG_MAX_SAMPLES,
+          });
+          const outcome = await importAppleHealthEcg({
+            userId,
+            ecg: parsed,
+            prisma,
+          });
+          ecg[outcome] += 1;
+        } catch {
+          ecg.failed += 1;
+        }
+      }
+    } catch {
+      const completed = ecg.imported + ecg.updated + ecg.skipped + ecg.failed;
+      ecg.failed += Math.max(1, ecg.discovered - completed);
+    }
 
     // Done. Persist the terminal envelope.
     await prisma.importJob.update({
