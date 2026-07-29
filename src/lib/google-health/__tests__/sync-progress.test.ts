@@ -7,12 +7,17 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type UpdateManyArg = {
+  where: Record<string, unknown>;
+  data: Record<string, unknown>;
+};
+
 const { prismaMock } = vi.hoisted(() => ({
   prismaMock: {
     googleHealthConnection: {
       findUnique: vi.fn(),
       update: vi.fn(async ({ data }) => data),
-      updateMany: vi.fn(async () => ({ count: 1 })),
+      updateMany: vi.fn(async (_args: UpdateManyArg) => ({ count: 1 })),
     },
   },
 }));
@@ -38,6 +43,13 @@ type ProgressModule = {
 
 async function progressModule(): Promise<ProgressModule> {
   return (await import("../sync-progress")) as unknown as ProgressModule;
+}
+
+function firstUpdateManyArg(): UpdateManyArg {
+  const arg =
+    prismaMock.googleHealthConnection.updateMany.mock.calls.at(0)?.[0];
+  if (!arg) throw new Error("Expected one guarded progress update");
+  return arg;
 }
 
 beforeEach(() => {
@@ -87,8 +99,7 @@ describe("Google Health current-run progress", () => {
       ),
     ).resolves.toBe(true);
 
-    const updateArg =
-      prismaMock.googleHealthConnection.updateMany.mock.calls[0][0];
+    const updateArg = firstUpdateManyArg();
     const serializedGuard = JSON.stringify(updateArg.where);
     expect(serializedGuard).toContain("owner");
     expect(serializedGuard).toContain("run-current");
@@ -125,11 +136,7 @@ describe("Google Health current-run progress", () => {
       state: "interrupted",
       terminalAt: expect.any(String),
     });
-    expect(
-      JSON.stringify(
-        prismaMock.googleHealthConnection.updateMany.mock.calls[0][0].where,
-      ),
-    ).toContain("run-stale");
+    expect(JSON.stringify(firstUpdateManyArg().where)).toContain("run-stale");
   });
 
   it("drops secret, URL, raw-error, health-value, and sample-shaped fields", async () => {
@@ -146,9 +153,7 @@ describe("Google Health current-run progress", () => {
       })),
     });
 
-    const persisted = JSON.stringify(
-      prismaMock.googleHealthConnection.updateMany.mock.calls[0][0].data,
-    );
+    const persisted = JSON.stringify(firstUpdateManyArg().data);
     expect(persisted).not.toMatch(
       /secret-token|provider\\.invalid|provider body|healthValue|bpm|samples/,
     );
