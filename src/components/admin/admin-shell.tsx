@@ -253,9 +253,19 @@ export function AdminShell({ active, children }: AdminShellProps) {
       ? t("admin.subtitle")
       : t(`admin.section.${activeSlug}.subtitle`);
 
-  const headingBlock = (
+  const headingBlock = (mobile = false) => (
     <div>
-      <h1 className="text-2xl font-bold tracking-tight">{headingTitle}</h1>
+      {mobile ? (
+        <div
+          role="heading"
+          aria-level={1}
+          className="text-2xl font-bold tracking-tight"
+        >
+          {headingTitle}
+        </div>
+      ) : (
+        <h1 className="text-2xl font-bold tracking-tight">{headingTitle}</h1>
+      )}
       <p className="text-muted-foreground text-sm">{headingSubtitle}</p>
     </div>
   );
@@ -269,7 +279,7 @@ export function AdminShell({ active, children }: AdminShellProps) {
     <div className="mx-auto w-full max-w-screen-xl">
       {/* v1.18.6.1 — heading above the chip strip on mobile; on desktop it
           renders inside the grid (row 1 / content column). */}
-      <div className="mb-4 md:hidden">{headingBlock}</div>
+      <div className="mb-4 md:hidden">{headingBlock(true)}</div>
 
       {/* Mobile section strip — horizontal scroll, hidden on md+.
           `no-scrollbar` (defined in `globals.css`) suppresses the
@@ -359,10 +369,13 @@ export function AdminShell({ active, children }: AdminShellProps) {
       >
         {/* Heading — desktop only (mobile renders it above the strip). */}
         <div className="hidden md:col-start-2 md:row-start-1 md:block">
-          {headingBlock}
+          {headingBlock()}
         </div>
 
-        {/* Desktop sticky sidebar — starts at the cards row (row 2).
+        {/* Desktop sticky sidebar — starts on the heading row and spans the
+            two desktop rows. Its top therefore shares the heading's grid
+            line while the content column keeps the natural heading-to-card
+            gap in row 2.
 
             The sticky lives on the `<aside>` grid item itself, with
             `self-start` so it shrinks to its content instead of stretching
@@ -376,7 +389,7 @@ export function AdminShell({ active, children }: AdminShellProps) {
             pinned panel on short viewports. */}
         <aside
           aria-label={t("admin.shell.sectionsNav")}
-          className="no-scrollbar hidden max-h-[calc(100dvh-5.5rem)] overflow-y-auto md:sticky md:top-6 md:col-start-1 md:row-start-2 md:block md:self-start"
+          className="no-scrollbar hidden max-h-[calc(100dvh-10.5rem)] overflow-y-auto md:sticky md:top-6 md:col-start-1 md:row-span-2 md:row-start-1 md:block md:self-start"
         >
           <ul className="space-y-1">
             <li>
@@ -440,7 +453,7 @@ export function AdminShell({ active, children }: AdminShellProps) {
             to carry) over-reserves on short sections and on mobile, scrolling
             the page into a dark band below the last card. AuthShell already
             owns the page's single `<main>` landmark. */}
-        <div className="min-w-0 md:col-start-2 md:row-start-2">{children}</div>
+        <div className="min-w-0 md:col-start-2">{children}</div>
       </div>
     </div>
   );

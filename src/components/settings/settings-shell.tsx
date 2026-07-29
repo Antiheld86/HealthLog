@@ -476,29 +476,41 @@ export function SettingsShell({
         }
       : null);
 
-  const headingBlock = resolvedHeading ? (
-    <div className="space-y-6">
-      {resolvedHeading.topSlot ? <div>{resolvedHeading.topSlot}</div> : null}
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h1
-            id={resolvedHeading.headingId}
-            className="text-2xl font-bold tracking-tight"
-          >
-            {resolvedHeading.title}
-          </h1>
-          {resolvedHeading.subtitle ? (
-            <p className="text-muted-foreground text-sm">
-              {resolvedHeading.subtitle}
-            </p>
+  const headingBlock = (mobile = false) =>
+    resolvedHeading ? (
+      <div className="space-y-6">
+        {resolvedHeading.topSlot ? <div>{resolvedHeading.topSlot}</div> : null}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            {mobile ? (
+              <div
+                id={`${resolvedHeading.headingId}-mobile`}
+                role="heading"
+                aria-level={1}
+                className="text-2xl font-bold tracking-tight"
+              >
+                {resolvedHeading.title}
+              </div>
+            ) : (
+              <h1
+                id={resolvedHeading.headingId}
+                className="text-2xl font-bold tracking-tight"
+              >
+                {resolvedHeading.title}
+              </h1>
+            )}
+            {resolvedHeading.subtitle ? (
+              <p className="text-muted-foreground text-sm">
+                {resolvedHeading.subtitle}
+              </p>
+            ) : null}
+          </div>
+          {resolvedHeading.headingAccessory ? (
+            <div className="shrink-0">{resolvedHeading.headingAccessory}</div>
           ) : null}
         </div>
-        {resolvedHeading.headingAccessory ? (
-          <div className="shrink-0">{resolvedHeading.headingAccessory}</div>
-        ) : null}
       </div>
-    </div>
-  ) : null;
+    ) : null;
 
   // v1.4.25 W8 — AuthShell wraps the page in `px-4 py-6 md:px-6`
   // already, so this inner shell only carries the wider max-width.
@@ -510,8 +522,8 @@ export function SettingsShell({
       {/* v1.18.6.1 — on mobile the heading sits above the chip strip; on
           desktop it is rendered inside the grid (row 1 / content column) so
           it does not paint twice. */}
-      {headingBlock ? (
-        <div className="mb-4 md:hidden">{headingBlock}</div>
+      {resolvedHeading ? (
+        <div className="mb-4 md:hidden">{headingBlock(true)}</div>
       ) : null}
 
       {/* Mobile section strip — horizontal scroll, hidden on md+.
@@ -588,13 +600,16 @@ export function SettingsShell({
         )}
       >
         {/* Heading — desktop only here (mobile renders it above the strip). */}
-        {headingBlock ? (
+        {resolvedHeading ? (
           <div className="hidden md:col-start-2 md:row-start-1 md:block">
-            {headingBlock}
+            {headingBlock()}
           </div>
         ) : null}
 
-        {/* Desktop sticky sidebar — starts at the cards row (row 2).
+        {/* Desktop sticky sidebar — starts on the heading row and spans the
+            two desktop rows. Its top therefore shares the heading's grid
+            line while the content column keeps the natural heading-to-card
+            gap in row 2.
 
             The sticky lives on the `<aside>` grid item itself, with
             `self-start` so it shrinks to its content instead of stretching
@@ -608,7 +623,7 @@ export function SettingsShell({
             pinned panel on short viewports. */}
         <aside
           aria-label={t("settings.shell.sectionsNav")}
-          className="no-scrollbar hidden max-h-[calc(100dvh-5.5rem)] overflow-y-auto md:sticky md:top-6 md:col-start-1 md:row-start-2 md:block md:self-start"
+          className="no-scrollbar hidden max-h-[calc(100dvh-10.5rem)] overflow-y-auto md:sticky md:top-6 md:col-start-1 md:row-span-2 md:row-start-1 md:block md:self-start"
         >
           <ul className="space-y-1">
             {visibleSections.map((section, index) => {
@@ -680,7 +695,7 @@ export function SettingsShell({
             v1.16.4 — a `<div>`, not `<main>`: the surrounding AuthShell
             already provides the page's single `<main>` landmark and a
             nested second one is an a11y violation. */}
-        <div className="min-w-0 md:col-start-2 md:row-start-2">{children}</div>
+        <div className="min-w-0 md:col-start-2">{children}</div>
       </div>
     </div>
   );
