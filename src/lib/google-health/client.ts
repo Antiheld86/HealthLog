@@ -33,6 +33,7 @@
  * `mappers.ts` and are imported here type-only — that direction keeps the
  * module graph acyclic (`client` → `mappers`, never back).
  */
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomBytes } from "node:crypto";
 import { annotate, getEvent } from "@/lib/logging/context";
 import { safeFetch } from "@/lib/safe-fetch";
@@ -49,6 +50,75 @@ import type {
 } from "./mappers";
 
 export * from "./mappers";
+
+export interface GoogleHealthClientOutcome {
+  pages: number;
+  fetched: number;
+  mapped: number;
+  written: number;
+  truncated: boolean;
+  reasonCode:
+    | "collection_failed"
+    | "token_failed"
+    | "upsert_failed"
+    | "rollup_failed"
+    | "existing_page_limit"
+    | null;
+}
+
+const clientOutcomeStorage = new AsyncLocalStorage<GoogleHealthClientOutcome>();
+
+function addOutcomeCount(current: number, value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return current;
+  return Math.min(2_147_483_647, current + Math.trunc(value));
+}
+
+function notePagination(
+  pages: number,
+  fetched: number,
+  truncated: boolean,
+): void {
+  const tracker = clientOutcomeStorage.getStore();
+  if (!tracker) return;
+  tracker.pages = addOutcomeCount(tracker.pages, pages);
+  tracker.fetched = addOutcomeCount(tracker.fetched, fetched);
+  if (truncated) {
+    tracker.truncated = true;
+    tracker.reasonCode = "existing_page_limit";
+  }
+}
+
+export function noteGoogleHealthMapped(count: number): void {
+  const tracker = clientOutcomeStorage.getStore();
+  if (tracker) tracker.mapped = addOutcomeCount(tracker.mapped, count);
+}
+
+export function noteGoogleHealthWritten(count: number): void {
+  const tracker = clientOutcomeStorage.getStore();
+  if (tracker) tracker.written = addOutcomeCount(tracker.written, count);
+}
+
+export function noteGoogleHealthOutcomeFailure(
+  reasonCode: Exclude<GoogleHealthClientOutcome["reasonCode"], null>,
+): void {
+  const tracker = clientOutcomeStorage.getStore();
+  if (tracker && !tracker.reasonCode) tracker.reasonCode = reasonCode;
+}
+
+export async function runWithGoogleHealthClientOutcome<T>(
+  fn: () => Promise<T>,
+): Promise<{ result: T; outcome: GoogleHealthClientOutcome }> {
+  const outcome: GoogleHealthClientOutcome = {
+    pages: 0,
+    fetched: 0,
+    mapped: 0,
+    written: 0,
+    truncated: false,
+    reasonCode: null,
+  };
+  const result = await clientOutcomeStorage.run(outcome, fn);
+  return { result, outcome };
+}
 
 export const GOOGLE_HEALTH_API_BASE = "https://health.googleapis.com/v4";
 const GOOGLE_OAUTH_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -711,6 +781,7 @@ export async function fetchDataPoints(
       pageCount += 1;
     } while (pageToken && pageCount < maxPages);
 
+    notePagination(pageCount, points.length, Boolean(pageToken));
     return points;
   };
 
@@ -935,6 +1006,8 @@ export async function fetchDailyRollUp(
   const walk = async (maxDays: number): Promise<GoogleHealthRollupPoint[]> => {
     const points: GoogleHealthRollupPoint[] = [];
     let chunkIndex = 0;
+    let totalPages = 0;
+    let truncated = false;
     for (const chunk of chunkCivilRange(startCivil, endCivil, maxDays)) {
       let pageToken: string | null | undefined;
       let pageCount = 0;
@@ -998,8 +1071,11 @@ export async function fetchDailyRollUp(
         pageToken = json?.nextPageToken ?? null;
         pageCount += 1;
       } while (pageToken && pageCount < 100);
+      totalPages += pageCount;
+      truncated ||= Boolean(pageToken);
       chunkIndex += 1;
     }
+    notePagination(totalPages, points.length, truncated);
     return points;
   };
 
