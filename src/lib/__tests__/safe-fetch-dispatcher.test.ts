@@ -207,7 +207,7 @@ describe("pinnedPublicDispatcher", () => {
       const dispatcher = getPinnedPublicDispatcher();
       let caught: unknown;
       try {
-        await undiciFetch("http://transition-answer.example.test:9/probe", {
+        await undiciFetch("http://transition-answer.example.test:8089/probe", {
           dispatcher,
           signal: AbortSignal.timeout(750),
         });
