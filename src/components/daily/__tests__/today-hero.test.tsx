@@ -260,4 +260,42 @@ describe("<TodayHero>", () => {
     expect(html).toContain('data-slot="today-hero-all-clear"');
     expect(html).not.toContain('data-slot="today-hero-rail"');
   });
+
+  it("uses the compact score-only composition when all-clear has no narrative", () => {
+    const html = render(
+      <TodayHero
+        digest={digest({
+          topSignal: null,
+          briefingLead: null,
+          reactionLine: null,
+          line: "Your health score today is 82.",
+          worthALook: [],
+        })}
+      />,
+    );
+    const text = visibleText(html);
+
+    expect(html).toContain('data-layout="compact-all-clear"');
+    expect(html).toContain('data-slot="today-hero-all-clear"');
+    expect(html).not.toContain('data-slot="today-hero-lead"');
+    expect(html).toContain('style="width:120px;height:120px"');
+    // The compact fallback keeps exactly one score face: the ring.
+    expect(text.match(/\b82\b/g)).toHaveLength(1);
+  });
+
+  it("keeps the full narrative composition and md score ring when a lead exists", () => {
+    const html = render(
+      <TodayHero
+        digest={digest({
+          topSignal: null,
+          worthALook: [],
+        })}
+      />,
+    );
+
+    expect(html).toContain('data-layout="narrative"');
+    expect(html).toContain('data-slot="today-hero-lead"');
+    expect(html).toContain('style="width:168px;height:168px"');
+    expect(html).not.toContain('data-layout="compact-all-clear"');
+  });
 });

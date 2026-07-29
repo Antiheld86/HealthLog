@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page, TestInfo } from "@playwright/test";
+import type { DailyDigest } from "@/lib/daily/digest";
 
 import { expect, test } from "./setup/test";
 import { STORAGE_STATE_PATH } from "./setup/global-setup";
@@ -12,6 +13,26 @@ import { mockPopulatedInsights } from "./utils/mock-populated-insights";
 import { settleBeforeMeasure } from "./utils/settle";
 
 const EVIDENCE_DIR = join(process.cwd(), "test-results", "v1341");
+
+const NARRATIVE_DIGEST: DailyDigest = {
+  generatedAt: "2026-07-29T08:30:00.000Z",
+  phase: "final",
+  sleepPending: false,
+  score: {
+    value: 84,
+    band: "green",
+    delta: -2,
+    deltaReason: null,
+    scoreVersion: 2,
+    composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
+  },
+  topSignal: LONG_HEADLINE_BRIEFING.signalsOfDay?.[0] ?? null,
+  briefingLead: LONG_HEADLINE_BRIEFING.paragraph,
+  line: LONG_HEADLINE_BRIEFING.paragraph,
+  worthALook: [],
+  justIn: null,
+  reactionLine: null,
+};
 
 async function settleAndCapture(
   page: Page,
@@ -46,14 +67,70 @@ test.describe("v1.34.1 deterministic UI evidence", () => {
     await mkdir(EVIDENCE_DIR, { recursive: true });
 
     await page.setViewportSize({ width: 1440, height: 900 });
+    let dailyDigest = NARRATIVE_DIGEST;
+    // TodayHero reads the unified digest endpoint, not the dashboard
+    // snapshot's legacy briefing field. Keep a mutable, deterministic reader
+    // so this evidence covers both the narrative composition captured below
+    // and the compact score-only fallback through the exact production seam.
+    await page.route(/\/api\/daily\/digest(\?|$)/, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: dailyDigest, error: null }),
+      }),
+    );
     await mockDashboardSnapshot(page, {
       briefing: LONG_HEADLINE_BRIEFING,
     });
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.locator("#main-content")).toBeVisible();
+    const hero = page.locator('[data-slot="today-hero"]');
+    await expect(hero).toHaveAttribute("data-layout", "narrative");
+    await expect(hero.locator('[data-slot="today-hero-lead"]')).toContainText(
+      "Dein systolischer Blutdruck",
+    );
+    await expect(hero.locator('[data-slot="score-ring"]')).toHaveCSS(
+      "width",
+      "168px",
+    );
     await settleAndCapture(page, testInfo, "dashboard-desktop.png");
 
+    dailyDigest = {
+      ...NARRATIVE_DIGEST,
+      topSignal: null,
+      briefingLead: null,
+      line: "Dein Gesundheitsscore liegt heute bei 84.",
+      reactionLine: null,
+    };
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(hero).toHaveAttribute("data-layout", "compact-all-clear");
+    await expect(hero.locator('[data-slot="today-hero-lead"]')).toHaveCount(0);
+    await expect(
+      hero.locator('[data-slot="today-hero-all-clear"]'),
+    ).toBeVisible();
+    await expect(hero.locator('[data-slot="score-ring"]')).toHaveCSS(
+      "width",
+      "120px",
+    );
+    await expect(
+      hero.locator('[data-slot="score-ring"]').getByText("84", { exact: true }),
+    ).toHaveCount(1);
+    await settleAndCapture(page, testInfo, "dashboard-score-only-desktop.png");
+
     await page.setViewportSize({ width: 390, height: 844 });
+    const compactHeroBox = await hero.boundingBox();
+    expect(compactHeroBox).not.toBeNull();
+    expect(
+      compactHeroBox?.width ?? Number.POSITIVE_INFINITY,
+    ).toBeLessThanOrEqual(390);
+    expect(
+      await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth <=
+          document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+
     await mockPopulatedInsights(page);
     await page.goto("/insights", { waitUntil: "domcontentloaded" });
     await expect(
