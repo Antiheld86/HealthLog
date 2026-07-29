@@ -103,15 +103,24 @@ function isCacheableApiResponse(response, bodyText) {
   return true;
 }
 
-// App shell files to precache on install
-const PRECACHE_URLS = ["/", "/logo-192.png", "/logo-512.png", "/favicon.svg"];
+// Public immutable assets to precache on install. Never include `/`: installing
+// while signed in would fetch the authenticated Dashboard document with the
+// browser's session cookies and persist that health-bearing HTML in
+// CacheStorage for replay after logout.
+const PRECACHE_URLS = ["/logo-192.png", "/logo-512.png", "/favicon.svg"];
 
-// ── Install: precache app shell ──────────────────────────────────────────────
+// ── Install: precache public immutable assets ────────────────────────────────
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(STATIC_CACHE)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .then(async (cache) => {
+        // An updated worker can reuse the same release-scoped cache when its
+        // source changes without a version bump. Remove a root document left
+        // by the previous worker before adding the safe public asset set.
+        await cache.delete("/");
+        await cache.addAll(PRECACHE_URLS);
+      })
       .then(() => self.skipWaiting()),
   );
 });
