@@ -107,6 +107,27 @@ beforeEach(() => {
 });
 
 describe("health-profile fact removal control", () => {
+  it("uses one Save label for new and existing lifestyle facts", () => {
+    render();
+
+    const actionLabels = renderedButtons
+      .filter(
+        (props) =>
+          props.type === "button" &&
+          props.variant === "outline" &&
+          typeof props.onClick === "function",
+      )
+      .map((props) => {
+        const children = Array.isArray(props.children)
+          ? props.children
+          : [props.children];
+        return children.filter((child) => typeof child === "string").join("");
+      });
+
+    expect(actionLabels).toEqual(["Save", "Save", "Save"]);
+    expect(actionLabels).not.toContain("Correct");
+  });
+
   it("renders a confirmed removal action only for each recorded current fact", () => {
     const { html } = render();
 
