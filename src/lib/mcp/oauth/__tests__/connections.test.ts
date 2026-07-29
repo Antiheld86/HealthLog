@@ -114,7 +114,11 @@ describe("rotateConnection — happy path", () => {
   it("uses the supplied transaction client for the entire rotation", async () => {
     TX.mcpOAuthConnection.findUnique.mockResolvedValue({ ...CONN });
 
-    const out = await rotateConnection(
+    const transactionalRotate = rotateConnection as unknown as (
+      args: Parameters<typeof rotateConnection>[0],
+      tx: typeof TX,
+    ) => ReturnType<typeof rotateConnection>;
+    const out = await transactionalRotate(
       {
         connectionId: "conn-1",
         presentedJti: "jti-current",
@@ -122,7 +126,7 @@ describe("rotateConnection — happy path", () => {
         clientId: CONN.clientId,
         userId: "user-1",
       },
-      TX as never,
+      TX,
     );
 
     expect(out.ok).toBe(true);
