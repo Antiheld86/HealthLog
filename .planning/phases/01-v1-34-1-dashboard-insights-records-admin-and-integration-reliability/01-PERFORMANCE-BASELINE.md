@@ -1,8 +1,11 @@
 # v1.34.1 Performance Baseline
 
-**Generated:** 2026-07-29T12:30:52.301Z  
-**Commit:** `c0af97ce4`  
-**Exit status:** PASS  
+**Generated:** 2026-07-29T12:38:03.677Z
+
+**Commit:** `efe203212a7269c2bd3d16f011985dd888e35679`
+
+**Exit status:** PASS
+
 **Mode:** deterministic local fixture only
 
 ## Safety and interpretation
@@ -22,7 +25,7 @@
 | Architecture | arm64 |
 | Logical CPUs | 14 |
 | Process | single local Node process |
-| Total harness duration | 100.435 ms |
+| Total harness duration | 152.805 ms |
 
 ## Fixture scale
 
@@ -36,9 +39,9 @@
 
 | Local path shape | Cold | Warm median | Warm p95 | Warm max | Cold heap delta | Max warm heap delta |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Google history pagination shape | 7.462 ms | 5.283 ms | 5.860 ms | 5.860 ms | 2.00 MiB | 6.19 MiB |
-| Medication reminder cohort shape | 0.773 ms | 0.080 ms | 0.971 ms | 0.971 ms | 0.19 MiB | 0.07 MiB |
-| Health Score read/canonicalization shape | 3.982 ms | 2.280 ms | 3.384 ms | 3.384 ms | 7.09 MiB | 7.30 MiB |
+| Google history pagination shape | 8.539 ms | 7.499 ms | 10.600 ms | 10.600 ms | 2.00 MiB | 6.19 MiB |
+| Medication reminder cohort shape | 2.723 ms | 0.083 ms | 1.586 ms | 1.586 ms | 0.18 MiB | 0.06 MiB |
+| Health Score read/canonicalization shape | 6.232 ms | 4.141 ms | 5.758 ms | 5.758 ms | 7.20 MiB | 8.17 MiB |
 
 ### Determinism and bounded counters
 
@@ -65,3 +68,47 @@
 ## Reproduction
 
 `node scripts/v1341-performance-baseline.mjs --fixture --output .planning/phases/01-v1-34-1-dashboard-insights-records-admin-and-integration-reliability/01-PERFORMANCE-BASELINE.md`
+
+## Release build and bundle evidence
+
+The production build, fixture timings above, and bundle report below were
+generated from one isolated archive of commit
+`efe203212a7269c2bd3d16f011985dd888e35679`. Generated Prisma artifacts and the
+existing local dependency store were supplied as build prerequisites; no
+uncommitted product source was copied into the snapshot.
+
+| Bundle signal | Measured | Budget / gate | Result |
+| --- | ---: | ---: | --- |
+| Shared root baseline | 130 KB gzip | informational | measured |
+| All client chunks | 3,133 KB gzip | 3,140 KB gzip | pass; 7 KB headroom |
+| Largest emitted chunk | 387 KB gzip | informational | measured |
+| Recharts fingerprint chunks | 1 | maximum 1 | pass |
+| Dashboard route (`/page`) | 431 KB gzip | 460 KB gzip | pass; 29 KB headroom |
+| Insights route (`/insights/page`) | 417 KB gzip | 445 KB gzip | pass; 28 KB headroom |
+| Measurements route (`/measurements/page`) | 417 KB gzip | 445 KB gzip | pass; 28 KB headroom |
+| Mood route (`/insights/mood/page`) | 435 KB gzip | 460 KB gzip | pass; 25 KB headroom |
+| Static message-catalog references | none reported | none allowed | pass |
+
+Commands:
+
+- `NODE_OPTIONS=--max-old-space-size=8192 ./node_modules/.bin/next build`
+- `node scripts/check-bundle-budget.mjs`
+- `node scripts/check-bundle-budget.mjs --check`
+
+The normal 4 GiB Node heap compiled the shared workspace but exhausted memory
+during TypeScript verification. The isolated snapshot passed after raising only
+the build-process heap to 8 GiB; repository configuration and runtime limits
+were not changed.
+
+### Bundle interpretation
+
+- The existing budget checker emits the four budgeted route entries above. It
+  does not currently publish per-route gzip rows for Settings, Admin, or
+  Documents when a budget file is present, so this report does not invent
+  comparable figures for them.
+- Passing the aggregate gate does not refute the earlier hypothesis that eager
+  Settings/Admin section imports create avoidable route cost. That hypothesis
+  remains unmeasured by the current watched-route output.
+- The 7 KB aggregate headroom is narrow enough that the final merged release
+  should rerun the same gate. It is evidence of the measured snapshot, not
+  permission to raise a budget or a claim about browser parse/hydration time.

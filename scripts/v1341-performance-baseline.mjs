@@ -258,9 +258,12 @@ try {
   const generatedAt = new Date().toISOString();
   const markdown = `# v1.34.1 Performance Baseline
 
-**Generated:** ${generatedAt}  
-**Commit:** \`${commitSha()}\`  
-**Exit status:** PASS  
+**Generated:** ${generatedAt}
+
+**Commit:** \`${commitSha()}\`
+
+**Exit status:** PASS
+
 **Mode:** deterministic local fixture only
 
 ## Safety and interpretation
