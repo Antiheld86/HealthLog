@@ -2252,16 +2252,12 @@
     "heroActionAskCoach": "Ask the coach",
     "healthScore": {
       "label": "Health Score",
-      "algorithmChanged": "The score now uses published cardiometabolic reference ranges; weight left because its old target came from height, daily mood variability and medication adherence are actions rather than health states, and resting heart rate and HRV have no universal target. Weight progress remains below as personal context, the other signals remain on their own cards, and a new number does not mean your health changed.",
-      "dismissAlgorithmChanged": "Dismiss score method note",
       "band": {
         "green": "In the reference range",
         "yellow": "Some pillars need attention",
         "red": "One or more pillars are outside the reference range"
       },
-      "method": "Equal-weight average of eligible pillars. The lowest pillar sets the overall band.",
       "insufficient": "{count} eligible pillars. The score needs at least three, including a measured physiological pillar.",
-      "composition": "Included: {pillars}",
       "bandSetter": "Overall band set by {pillar}",
       "versionAndNoise": "Method version {version}. Weekly comparison floor: {noise} points.",
       "methodVersion": "Method version {version}.",
@@ -4614,6 +4610,7 @@
             "rowsImported": "{count} rows imported so far",
             "doneSummary": "Done — {imported} of {read} records imported, {skipped} clinical records skipped.",
             "doneNothing": "Nothing was imported from that archive: 0 of {read} records landed.",
+            "ecgResult": "ECGs: {discovered} discovered, {imported} imported, {updated} updated, {skipped} skipped, {failed} failed. ECG failures do not discard supported records imported from export.xml.",
             "estimateWarning": "Cumulative totals for {count} day(s) were estimated from the largest export source. Native Apple Health statistics remain authoritative.",
             "phase": {
               "queued": "Queued…",
@@ -4930,6 +4927,21 @@
     "passwordUpdated": "Password updated successfully",
     "passkeys": "Passkeys",
     "passkeysDescription": "Passkeys allow secure login without a password.",
+    "passkeyReauth": {
+      "title": "Confirm it's you",
+      "description": "Verify an existing sign-in method before adding a new passkey.",
+      "methodLabel": "Verification method",
+      "methods": {
+        "password": "Password",
+        "totp": "Authenticator code",
+        "passkey": "Passkey",
+        "webauthn": "Security key"
+      },
+      "currentPassword": "Current password",
+      "authenticatorCode": "Authenticator code",
+      "authenticatorPlaceholder": "6-digit authenticator code",
+      "verifyAndAdd": "Verify and add"
+    },
     "passkeyName": "Name",
     "noPasskeys": "No passkeys registered.",
     "addPasskey": "Add passkey",
@@ -5622,8 +5634,8 @@
     "nightscoutTokenOptional": "Optional for a public site",
     "nightscoutTokenSavedPlaceholder": "Saved — enter a new token to replace it",
     "nightscoutTokenHelp": "Paste an access token from your Nightscout admin tools. Leave empty if your site is publicly readable.",
-    "nightscoutPrivateHost": "This site runs on a private network",
-    "nightscoutPrivateHostHelp": "Enable only if your Nightscout instance is on a LAN, VPN, or Tailscale address. Off for public sites.",
+    "nightscoutPrivateOperatorTitle": "Private Nightscout access requires server approval.",
+    "nightscoutPrivateOperatorDescription": "Ask your server administrator to approve this exact Nightscout origin.",
     "nightscoutConnect": "Connect",
     "nightscoutUpdate": "Save changes",
     "nightscoutConnected": "Nightscout connected.",
@@ -8581,7 +8593,6 @@
       "notRecorded": "Not recorded",
       "unreadable": "Stored value could not be read",
       "save": "Save",
-      "correct": "Correct",
       "savedToast": "Lifestyle context saved",
       "saveError": "Could not save lifestyle context",
       "loadError": "Could not load lifestyle context",
@@ -8823,7 +8834,6 @@
         "withheld": "A summary was generated but did not pass the safety check, so it is not shown. You can try again, or read the document itself.",
         "unavailable": "No summary could be generated for this document.",
         "generate": "Generate summary",
-        "regenerate": "Generate again",
         "generating": "Generating…"
       },
       "loadError": "Couldn't load this document.",

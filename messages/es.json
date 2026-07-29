@@ -2252,16 +2252,12 @@
     "heroActionAskCoach": "Preguntar al coach",
     "healthScore": {
       "label": "Puntuación de salud",
-      "algorithmChanged": "La puntuación ahora usa intervalos de referencia cardiometabólicos publicados; el peso ya no se incluye porque el objetivo anterior se derivaba de la estatura en vez de un objetivo personal, la variabilidad diaria del ánimo y la adherencia a la medicación son acciones y no estados de salud, y no existe un objetivo universal para la frecuencia cardiaca en reposo ni la VFC. El progreso de peso sigue apareciendo abajo como contexto personal, las demás señales conservan sus propias tarjetas y una cifra nueva no significa que tu salud haya cambiado.",
-      "dismissAlgorithmChanged": "Cerrar la nota sobre el método",
       "band": {
         "green": "Dentro del intervalo de referencia",
         "yellow": "Algunos pilares requieren atención",
         "red": "Uno o más pilares están fuera del intervalo de referencia"
       },
-      "method": "Media con el mismo peso para los pilares aptos. El pilar más bajo determina la categoría general.",
       "insufficient": "{count} pilares aptos. La puntuación necesita al menos tres, incluido un pilar fisiológico medido.",
-      "composition": "Incluidos: {pillars}",
       "bandSetter": "Categoría general determinada por {pillar}",
       "versionAndNoise": "Versión del método {version}. Umbral de comparación semanal: {noise} puntos.",
       "methodVersion": "Versión del método {version}.",
@@ -4614,6 +4610,7 @@
             "rowsImported": "{count} filas importadas hasta ahora",
             "doneSummary": "Listo: {imported} de {read} registros importados, {skipped} registros clínicos omitidos.",
             "doneNothing": "No se importó nada de ese archivo: llegaron 0 de {read} registros.",
+            "ecgResult": "ECG: {discovered} detectados, {imported} importados, {updated} actualizados, {skipped} omitidos y {failed} fallidos. Los errores de ECG no descartan los registros compatibles importados desde export.xml.",
             "estimateWarning": "Los totales acumulados de {count} día(s) se estimaron a partir de la mayor fuente de la exportación. Las estadísticas nativas de Apple Health siguen siendo la referencia.",
             "phase": {
               "queued": "En cola…",
@@ -4930,6 +4927,21 @@
     "passwordUpdated": "Contraseña actualizada correctamente",
     "passkeys": "Passkeys",
     "passkeysDescription": "Las claves de acceso permiten iniciar sesión de forma segura sin contraseña.",
+    "passkeyReauth": {
+      "title": "Confirma tu identidad",
+      "description": "Verifica un método de inicio de sesión existente antes de añadir una nueva clave de acceso.",
+      "methodLabel": "Método de verificación",
+      "methods": {
+        "password": "Contraseña",
+        "totp": "Código del autenticador",
+        "passkey": "Clave de acceso",
+        "webauthn": "Llave de seguridad"
+      },
+      "currentPassword": "Contraseña actual",
+      "authenticatorCode": "Código del autenticador",
+      "authenticatorPlaceholder": "Código de seis dígitos del autenticador",
+      "verifyAndAdd": "Verificar y añadir"
+    },
     "passkeyName": "Nombre",
     "noPasskeys": "No hay claves de acceso registradas.",
     "addPasskey": "Añadir clave de acceso",
@@ -5622,8 +5634,8 @@
     "nightscoutTokenOptional": "Opcional para un sitio público",
     "nightscoutTokenSavedPlaceholder": "Guardado: introduce un token nuevo para reemplazarlo",
     "nightscoutTokenHelp": "Pega un token de acceso de las herramientas de administración de Nightscout. Déjalo vacío si tu sitio es de lectura pública.",
-    "nightscoutPrivateHost": "Este sitio funciona en una red privada",
-    "nightscoutPrivateHostHelp": "Actívalo solo si tu instancia de Nightscout está en una dirección LAN, VPN o Tailscale. Desactivado para sitios públicos.",
+    "nightscoutPrivateOperatorTitle": "El acceso privado a Nightscout requiere la aprobación del administrador del servidor.",
+    "nightscoutPrivateOperatorDescription": "Pide al administrador del servidor que apruebe exactamente este origen de Nightscout.",
     "nightscoutConnect": "Conectar",
     "nightscoutUpdate": "Guardar cambios",
     "nightscoutConnected": "Nightscout conectado.",
@@ -8581,7 +8593,6 @@
       "notRecorded": "No registrado",
       "unreadable": "No se pudo leer el valor guardado",
       "save": "Guardar",
-      "correct": "Corregir",
       "savedToast": "Contexto del estilo de vida guardado",
       "saveError": "No se pudo guardar el contexto del estilo de vida",
       "loadError": "No se pudo cargar el contexto del estilo de vida",
@@ -8823,7 +8834,6 @@
         "withheld": "Se generó un resumen, pero no superó la comprobación de seguridad, así que no se muestra. Puedes intentarlo de nuevo o leer el documento.",
         "unavailable": "No se pudo generar ningún resumen para este documento.",
         "generate": "Generar resumen",
-        "regenerate": "Volver a generar",
         "generating": "Generando…"
       },
       "loadError": "No se pudo cargar este documento.",

@@ -2252,16 +2252,12 @@
     "heroActionAskCoach": "Coach fragen",
     "healthScore": {
       "label": "Gesundheitsscore",
-      "algorithmChanged": "Der Score nutzt jetzt veröffentlichte kardiometabolische Referenzbereiche; Gewicht ist nicht mehr enthalten, weil das frühere Ziel aus der Körpergröße statt aus einem selbst gesetzten Ziel abgeleitet wurde, tägliche Stimmungsschwankungen und Medikamententreue sind Handlungen statt Gesundheitszustände, und für Ruhepuls und HRV gibt es keinen allgemeinen Zielwert. Der Gewichtsfortschritt bleibt unten als persönlicher Kontext sichtbar, die anderen Signale bleiben auf ihren eigenen Karten, und eine neue Zahl bedeutet keine Veränderung deiner Gesundheit.",
-      "dismissAlgorithmChanged": "Hinweis zur Score-Methode schließen",
       "band": {
         "green": "Im Referenzbereich",
         "yellow": "Einige Bereiche brauchen Aufmerksamkeit",
         "red": "Mindestens ein Bereich liegt außerhalb des Referenzbereichs"
       },
-      "method": "Gleich gewichteter Mittelwert der geeigneten Bereiche. Der niedrigste Bereich bestimmt die Gesamtstufe.",
       "insufficient": "{count} geeignete Bereiche. Der Score benötigt mindestens drei, darunter einen gemessenen physiologischen Bereich.",
-      "composition": "Einbezogen: {pillars}",
       "bandSetter": "Gesamtstufe bestimmt durch {pillar}",
       "versionAndNoise": "Methodenversion {version}. Schwelle für den Wochenvergleich: {noise} Punkte.",
       "methodVersion": "Methodenversion {version}.",
@@ -4614,6 +4610,7 @@
             "rowsImported": "Bisher {count} Einträge importiert",
             "doneSummary": "Fertig — {imported} von {read} Datensätzen importiert, {skipped} klinische Datensätze übersprungen.",
             "doneNothing": "Aus diesem Archiv wurde nichts importiert: 0 von {read} Datensätzen sind angekommen.",
+            "ecgResult": "EKGs: {discovered} gefunden, {imported} importiert, {updated} aktualisiert, {skipped} übersprungen, {failed} fehlgeschlagen. Fehler bei EKGs verwerfen keine unterstützten Datensätze, die aus export.xml importiert wurden.",
             "estimateWarning": "Kumulative Summen für {count} Tag(e) wurden anhand der größten Exportquelle geschätzt. Native Apple-Health-Statistiken bleiben maßgeblich.",
             "phase": {
               "queued": "In Warteschlange…",
@@ -4930,6 +4927,21 @@
     "passwordUpdated": "Passwort erfolgreich geändert",
     "passkeys": "Passkeys",
     "passkeysDescription": "Passkeys ermöglichen sicheres Anmelden ohne Passwort.",
+    "passkeyReauth": {
+      "title": "Bestätige deine Identität",
+      "description": "Bestätige vor dem Hinzufügen eines neuen Passkeys eine vorhandene Anmeldemethode.",
+      "methodLabel": "Bestätigungsmethode",
+      "methods": {
+        "password": "Passwort",
+        "totp": "Authenticator-Code",
+        "passkey": "Passkey",
+        "webauthn": "Sicherheitsschlüssel"
+      },
+      "currentPassword": "Aktuelles Passwort",
+      "authenticatorCode": "Authenticator-Code",
+      "authenticatorPlaceholder": "Sechsstelliger Authenticator-Code",
+      "verifyAndAdd": "Bestätigen und hinzufügen"
+    },
     "passkeyName": "Name",
     "noPasskeys": "Keine Passkeys registriert.",
     "addPasskey": "Passkey hinzufügen",
@@ -5622,8 +5634,8 @@
     "nightscoutTokenOptional": "Optional bei einer öffentlichen Seite",
     "nightscoutTokenSavedPlaceholder": "Gespeichert — neuen Token eingeben zum Ersetzen",
     "nightscoutTokenHelp": "Füge einen Zugriffstoken aus deinen Nightscout-Admin-Tools ein. Leer lassen, wenn deine Seite öffentlich lesbar ist.",
-    "nightscoutPrivateHost": "Diese Seite läuft in einem privaten Netzwerk",
-    "nightscoutPrivateHostHelp": "Nur aktivieren, wenn deine Nightscout-Instanz unter einer LAN-, VPN- oder Tailscale-Adresse läuft. Aus bei öffentlichen Seiten.",
+    "nightscoutPrivateOperatorTitle": "Der Zugriff auf ein privates Nightscout benötigt die Freigabe der Serveradministration.",
+    "nightscoutPrivateOperatorDescription": "Bitte die Serveradministration, genau diesen Nightscout-Ursprung freizugeben.",
     "nightscoutConnect": "Verbinden",
     "nightscoutUpdate": "Änderungen speichern",
     "nightscoutConnected": "Nightscout verbunden.",
@@ -8581,7 +8593,6 @@
       "notRecorded": "Nicht erfasst",
       "unreadable": "Gespeicherter Wert konnte nicht gelesen werden",
       "save": "Speichern",
-      "correct": "Korrigieren",
       "savedToast": "Lebensstil-Kontext gespeichert",
       "saveError": "Lebensstil-Kontext konnte nicht gespeichert werden",
       "loadError": "Lebensstil-Kontext konnte nicht geladen werden",
@@ -8823,7 +8834,6 @@
         "withheld": "Eine Zusammenfassung wurde erstellt, hat die Sicherheitsprüfung aber nicht bestanden und wird deshalb nicht angezeigt. Du kannst es erneut versuchen oder das Dokument selbst lesen.",
         "unavailable": "Für dieses Dokument konnte keine Zusammenfassung erstellt werden.",
         "generate": "Zusammenfassung erstellen",
-        "regenerate": "Neu erstellen",
         "generating": "Wird erstellt…"
       },
       "loadError": "Dieses Dokument konnte nicht geladen werden.",
