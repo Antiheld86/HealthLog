@@ -209,9 +209,9 @@ describe("MCP OAuth refresh rotation (real PostgreSQL)", () => {
       responses.map((response) => response.json() as Promise<TokenBody>),
     );
     const returnedSuccessors = bodies.filter(
-      (body): body is Required<
-        Pick<TokenBody, "access_token" | "refresh_token">
-      > =>
+      (
+        body,
+      ): body is Required<Pick<TokenBody, "access_token" | "refresh_token">> =>
         typeof body.access_token === "string" &&
         typeof body.refresh_token === "string",
     );

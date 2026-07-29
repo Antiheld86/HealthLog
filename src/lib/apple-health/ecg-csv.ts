@@ -106,10 +106,7 @@ export async function parseAppleHealthEcgCsv(input: {
       }
       const [key, value] = pair;
       if (!inSamples) {
-        if (
-          key.toLowerCase() === "lead" &&
-          value.toLowerCase() === "voltage"
-        ) {
+        if (key.toLowerCase() === "lead" && value.toLowerCase() === "voltage") {
           inSamples = true;
           continue;
         }

@@ -367,22 +367,22 @@ describe("B5b — MCP health reads require an explicit read grant", () => {
   );
 
   it.each([
-    [
-      "expired",
-      { expiresAt: new Date("2020-01-01T00:00:00.000Z") },
-    ],
+    ["expired", { expiresAt: new Date("2020-01-01T00:00:00.000Z") }],
     ["revoked", { revoked: true }],
-  ])("denies an explicit but %s health:read credential", async (_label, state) => {
-    const raw = await armExpiringToken(
-      ["health:read"],
-      `mcp-${_label}`,
-      state,
-    );
+  ])(
+    "denies an explicit but %s health:read credential",
+    async (_label, state) => {
+      const raw = await armExpiringToken(
+        ["health:read"],
+        `mcp-${_label}`,
+        state,
+      );
 
-    const res = await postMcp(raw, "tools/list");
+      const res = await postMcp(raw, "tools/list");
 
-    expect([401, 403]).toContain(res.status);
-  });
+      expect([401, 403]).toContain(res.status);
+    },
+  );
 });
 
 describe("B6 — a declared scope grants only what it names", () => {

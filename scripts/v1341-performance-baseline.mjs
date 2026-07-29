@@ -34,7 +34,9 @@ function fail(message) {
 }
 
 if (!fixtureMode) {
-  fail("refusing to run without --fixture; live and production probes are unsupported");
+  fail(
+    "refusing to run without --fixture; live and production probes are unsupported",
+  );
 }
 if (process.env.NODE_ENV === "production") {
   fail("refusing to run with NODE_ENV=production");
@@ -43,7 +45,9 @@ if (!outputPath) {
   fail("--output <markdown-path> is required");
 }
 if (args.some((arg) => /^(--url|--host|--database|--token|--live)/.test(arg))) {
-  fail("network, database, credential, and live-target arguments are unsupported");
+  fail(
+    "network, database, credential, and live-target arguments are unsupported",
+  );
 }
 
 const startedAt = performance.now();
@@ -63,7 +67,9 @@ function seededNumber(index, salt) {
 }
 
 function percentile(sorted, fraction) {
-  return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)];
+  return sorted[
+    Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)
+  ];
 }
 
 function formatMs(value) {
@@ -94,7 +100,10 @@ function benchmark(name, operation) {
   }
   const elapsed = warm.map((sample) => sample.elapsedMs).sort((a, b) => a - b);
   const heaps = warm.map((sample) => sample.heapDeltaBytes);
-  const checksums = new Set([cold.result.checksum, ...warm.map((sample) => sample.result.checksum)]);
+  const checksums = new Set([
+    cold.result.checksum,
+    ...warm.map((sample) => sample.result.checksum),
+  ]);
   if (checksums.size !== 1) {
     throw new Error(`${name} fixture produced a non-deterministic checksum`);
   }
@@ -213,7 +222,8 @@ function healthScoreFixture() {
     domainCounts[row.domain] += 1;
   }
   let checksum = 0;
-  for (const row of dailyCanonical.values()) checksum = (checksum + row.value) >>> 0;
+  for (const row of dailyCanonical.values())
+    checksum = (checksum + row.value) >>> 0;
   for (let domain = 0; domain < domainTotals.length; domain += 1) {
     const normalized = Math.round(domainTotals[domain] / domainCounts[domain]);
     checksum = (checksum * 31 + normalized) >>> 0;

@@ -18,8 +18,7 @@ vi.mock("@/lib/rollups/medication-compliance-rollups", () => ({
   recomputeMedicationComplianceForEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
-const { dispatchNotification } =
-  await import("@/lib/notifications/dispatcher");
+const { dispatchNotification } = await import("@/lib/notifications/dispatcher");
 const { handleReminderCheck } =
   await import("@/lib/jobs/reminder/medication-reminder-check");
 

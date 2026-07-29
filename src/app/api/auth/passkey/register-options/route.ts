@@ -56,7 +56,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   if (parsed.data.method === "password") {
     proved = Boolean(
       user.passwordHash &&
-        (await verifyPassword(user.passwordHash, parsed.data.password)),
+      (await verifyPassword(user.passwordHash, parsed.data.password)),
     );
   } else if (parsed.data.method === "totp") {
     const result = await verifyMfaFactor(user, "totp", parsed.data.code);

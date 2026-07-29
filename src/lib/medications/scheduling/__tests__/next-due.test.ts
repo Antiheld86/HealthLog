@@ -629,9 +629,7 @@ describe("Mounjaro rolling weekly — canonical overdue band after day change", 
         now: d("2026-07-29T10:00:00.000Z"),
         userTz: BERLIN,
         lastIntakeAt:
-          status === "taken"
-            ? d("2026-07-28T06:10:00.000Z")
-            : lastTaken,
+          status === "taken" ? d("2026-07-28T06:10:00.000Z") : lastTaken,
         resolvedSlots: [
           identifiedMark(missedOccurrence, {
             scheduleId: "mounjaro-weekly",

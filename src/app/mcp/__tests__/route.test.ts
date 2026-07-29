@@ -53,8 +53,7 @@ vi.mock("@/lib/ai/coach/tools/inventory", () => ({
   buildCoachDataInventory: vi.fn(),
 }));
 vi.mock("@/lib/mcp/server", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/lib/mcp/server")>();
+  const actual = await importOriginal<typeof import("@/lib/mcp/server")>();
   return {
     ...actual,
     createMcpServer: (...args: Parameters<typeof actual.createMcpServer>) => {

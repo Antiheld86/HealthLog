@@ -25,7 +25,13 @@ const REQUIRED_FIELDS = [
   "Confidence",
   "Unresolved",
 ];
-const ALLOWED_STATUS = new Set(["confirmed", "suspected", "blocked", "cleared", "refuted"]);
+const ALLOWED_STATUS = new Set([
+  "confirmed",
+  "suspected",
+  "blocked",
+  "cleared",
+  "refuted",
+]);
 const ALLOWED_SEVERITY = new Set(["critical", "high", "medium", "low", "info"]);
 const ALLOWED_CONFIDENCE = new Set(["high", "medium", "low"]);
 const REQUIRED_SOURCES = ["research:", "correctness:", "live:", "performance:"];
@@ -41,7 +47,10 @@ const PRIVACY_PATTERNS = [
     name: "email address",
     pattern: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,
   },
-  { name: "authorization credential", pattern: /\bBearer\s+[A-Za-z0-9._~+/=-]+/i },
+  {
+    name: "authorization credential",
+    pattern: /\bBearer\s+[A-Za-z0-9._~+/=-]+/i,
+  },
   {
     name: "secret assignment",
     pattern:
@@ -90,7 +99,8 @@ try {
 }
 
 for (const check of PRIVACY_PATTERNS) {
-  if (check.pattern.test(source)) errors.push(`privacy-dangerous ${check.name} detected`);
+  if (check.pattern.test(source))
+    errors.push(`privacy-dangerous ${check.name} detected`);
 }
 
 const headingPattern = /^## (AUD-\d{3}) — (.+)$/gm;
@@ -149,7 +159,8 @@ for (let index = 0; index < headings.length; index += 1) {
     errors.push(`${id}: ${status} findings must set Unresolved to no`);
   }
   if (sourceField) {
-    if (sourceRecords.has(sourceField)) errors.push(`${id}: duplicate Source record`);
+    if (sourceRecords.has(sourceField))
+      errors.push(`${id}: duplicate Source record`);
     sourceRecords.add(sourceField);
   }
 
@@ -164,7 +175,9 @@ for (let index = 0; index < records.length; index += 1) {
 }
 
 for (const prefix of REQUIRED_SOURCES) {
-  if (!records.some((record) => record.fields.get("Source")?.includes(prefix))) {
+  if (
+    !records.some((record) => record.fields.get("Source")?.includes(prefix))
+  ) {
     errors.push(`missing source family ${prefix}`);
   }
 }

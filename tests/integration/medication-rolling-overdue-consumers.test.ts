@@ -100,25 +100,21 @@ async function readConsumerOccurrence(
   const medication = raw as unknown as DueDerivationMedication;
   const listOccurrence = medication.nextDueAt ?? null;
 
-  const dashboard = await buildMedsTodayBlock(
-    prisma,
-    USER_ID,
-    USER_TZ,
-    NOW,
-  );
+  const dashboard = await buildMedsTodayBlock(prisma, USER_ID, USER_TZ, NOW);
 
   // A prior-day rolling slot is outside today's clock window. The GLP-1
   // card therefore displays the server's canonical nextDueAt verbatim.
-  const glp1Occurrence = resolveDisplayedSlotInstant({
-    currentWindowStatus: {
-      status: null,
-      schedule: null,
-      window: null,
-    },
-    nextDueAt: listOccurrence,
-    now: NOW,
-    timeZone: USER_TZ,
-  })?.toISOString() ?? null;
+  const glp1Occurrence =
+    resolveDisplayedSlotInstant({
+      currentWindowStatus: {
+        status: null,
+        schedule: null,
+        window: null,
+      },
+      nextDueAt: listOccurrence,
+      now: NOW,
+      timeZone: USER_TZ,
+    })?.toISOString() ?? null;
 
   const takeAll = deriveDueMedications([medication], {
     now: NOW,
@@ -144,8 +140,10 @@ async function readConsumerOccurrence(
         )?.overdue ?? false,
     },
     glp1Card: glp1Occurrence,
-    takeAllDue: takeAll.find((entry) => entry.id === medicationId)
-      ?.scheduledFor?.toISOString() ?? null,
+    takeAllDue:
+      takeAll
+        .find((entry) => entry.id === medicationId)
+        ?.scheduledFor?.toISOString() ?? null,
   };
 }
 
@@ -178,9 +176,7 @@ describe("rolling weekly overdue occurrence — shared consumers", () => {
           medicationId,
           scheduledFor: OVERDUE_OCCURRENCE,
           takenAt:
-            status === "taken"
-              ? new Date("2026-07-28T06:10:00.000Z")
-              : null,
+            status === "taken" ? new Date("2026-07-28T06:10:00.000Z") : null,
           skipped: status === "skipped",
           autoMissed: status === "autoMissed",
           source: "WEB",
