@@ -193,11 +193,12 @@ export class NightscoutPolicyError extends Error {
 /**
  * Fetch the most recent `count` SGV entries from the user's instance.
  *
- * SSRF floor: `requirePublicHost` is `true` unless the user opted a private
- * host in via `allowPrivateHost`. Redirects pinned to manual + a timeout
- * always composed. Throws `NightscoutApiError` on a non-2xx response; re-raises
- * a `SafeFetchError` (private host / timeout / network) unchanged so the caller
- * can classify it.
+ * SSRF floor: public origins use `requirePublicHost`; an exact private origin
+ * approved by server configuration uses SafeFetch's private-capable pinned
+ * dispatcher. The legacy `allowPrivateHost` user boolean is never authority.
+ * Redirects are pinned to manual and a timeout is always composed. Throws
+ * `NightscoutApiError` on a non-2xx response; re-raises a `SafeFetchError`
+ * (private host / timeout / network) unchanged so the caller can classify it.
  */
 export async function fetchSgvEntries(
   opts: FetchSgvOptions,
@@ -234,9 +235,13 @@ export async function fetchSgvEntries(
       { method: "GET", headers },
       {
         // Public origins receive the full literal + DNS-pinned classifier.
-        // An exact operator origin may resolve privately; redirects remain
-        // manual, so no response can move the request outside that grant.
+        // An exact operator origin receives the private-capable connect-time
+        // pin. The grant comes only from the server-side exact-origin policy;
+        // the legacy request boolean never reaches SafeFetch.
         requirePublicHost: !policy.privateOriginApproved,
+        ...(policy.privateOriginApproved
+          ? { operatorApprovedPrivateOrigin: policy.canonicalOrigin }
+          : {}),
         timeoutMs: opts.timeoutMs ?? NIGHTSCOUT_TIMEOUT_MS,
       },
     );

@@ -165,6 +165,11 @@ describe("fetchSgvEntries — SSRF gating", () => {
 
     expect(entries).toHaveLength(2);
     expect(safeFetchMock).toHaveBeenCalledTimes(1);
+    const safeFetchOptions = safeFetchMock.mock.calls[0]![2];
+    expect(safeFetchOptions).toMatchObject({
+      requirePublicHost: false,
+      operatorApprovedPrivateOrigin: "http://192.168.1.50:1337",
+    });
   });
 
   it("does not let the legacy user boolean authorize private egress", async () => {

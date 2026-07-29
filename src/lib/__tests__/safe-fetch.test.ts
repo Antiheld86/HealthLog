@@ -119,6 +119,60 @@ describe("safeFetch", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   }, 20_000);
 
+  it("rejects mutually exclusive public and private destination policies", async () => {
+    await expect(
+      safeFetch(
+        "https://example.com/api",
+        {},
+        {
+          requirePublicHost: true,
+          operatorApprovedPrivateOrigin: "https://example.com",
+        },
+      ),
+    ).rejects.toMatchObject({ kind: "private_host" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("rejects a target outside the exact operator-approved origin", async () => {
+    await expect(
+      safeFetch(
+        "http://192.168.1.51:1337/api",
+        {},
+        {
+          operatorApprovedPrivateOrigin: "http://192.168.1.50:1337",
+        },
+      ),
+    ).rejects.toMatchObject({ kind: "private_host" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("rejects a path-shaped value masquerading as an origin grant", async () => {
+    await expect(
+      safeFetch(
+        "http://192.168.1.50:1337/api",
+        {},
+        {
+          operatorApprovedPrivateOrigin:
+            "http://192.168.1.50:1337/api?from=request",
+        },
+      ),
+    ).rejects.toMatchObject({ kind: "private_host" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("forbids redirects on an operator-approved private origin", async () => {
+    await expect(
+      safeFetch(
+        "http://192.168.1.50:1337/api",
+        { redirect: "follow" },
+        {
+          operatorApprovedPrivateOrigin: "http://192.168.1.50:1337",
+        },
+      ),
+    ).rejects.toMatchObject({ kind: "private_host" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("wraps a native network error as kind: 'network'", async () => {
     fetchSpy.mockRejectedValueOnce(new TypeError("network down"));
 

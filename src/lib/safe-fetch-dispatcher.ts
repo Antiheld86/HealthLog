@@ -74,10 +74,15 @@ function pinnedLookupWithPolicy(
         : isIP(address.address) !== 0,
     );
     if (allowed.length === 0) {
-      const refused: NodeJS.ErrnoException = new Error(
+      const refused = new Error(
         `safeFetch refused private resolved address for ${hostname}`,
-      );
+      ) as NodeJS.ErrnoException & { safeFetchKind: "private_host" };
       refused.code = "ENOTFOUND";
+      // Undici wraps connector errors below `TypeError("fetch failed")`.
+      // Preserve an explicit machine-readable marker so SafeFetch can
+      // distinguish a policy refusal from an ordinary NXDOMAIN result and
+      // return the redacted `private_host` classification to its caller.
+      refused.safeFetchKind = "private_host";
       // Preserve the result shape Undici requested. Auto-select-family asks
       // for `all: true`; handing that path a scalar empty string can mask the
       // policy error behind an invalid-address error for IPv6 answers.

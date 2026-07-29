@@ -182,7 +182,7 @@ describe("safeFetch pinned path — real transport", () => {
           timeoutMs: 5000,
         },
       ),
-    ).rejects.toMatchObject({ kind: "network" });
+    ).rejects.toMatchObject({ kind: "private_host" });
 
     expect(lookupHosts).toContain("pinned.test");
     expect(lookupHosts).toContain("redirect-target.test");
