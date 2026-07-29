@@ -316,13 +316,12 @@ describe("medication reminder — client-managed suppression is APNs-only", () =
 describe("issue #664 — dedup follows the scheduled occurrence across midnight", () => {
   it("dispatches an untreated overnight occurrence once and anchors its own local date", async () => {
     const med = medicationFixture();
-    med.schedules[0] = {
-      ...med.schedules[0],
+    Object.assign(med.schedules[0], {
       windowStart: "23:45",
       windowEnd: "00:30",
       timesOfDay: ["23:45"],
       rrule: "FREQ=DAILY",
-    };
+    });
     med.user.timezone = "Europe/Berlin";
     prismaMock.medication.findMany.mockResolvedValue([med]);
 
