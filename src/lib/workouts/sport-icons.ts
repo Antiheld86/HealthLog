@@ -32,6 +32,7 @@ export const SPORT_TYPE_ICON: Record<string, LucideIcon> = {
   hiit: Activity,
   dance: Activity,
   golf: Activity,
+  badminton: Activity,
   tennis: Activity,
   basketball: Activity,
   soccer: Activity,

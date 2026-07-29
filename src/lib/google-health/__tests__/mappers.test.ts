@@ -41,6 +41,13 @@ import {
   mapWristTemperature,
 } from "../client";
 
+describe("mapGoogleHealthSportType", () => {
+  it("keeps Badminton as a first-class workout sport", () => {
+    expect(mapGoogleHealthSportType("BADMINTON")).toBe("badminton");
+    expect(mapGoogleHealthSportType("Badminton")).toBe("badminton");
+  });
+});
+
 describe("mapWeight — spot sample", () => {
   it("maps a weightGrams sample to a WEIGHT reading in kg anchored on its physical time", () => {
     const rows = mapWeight({
