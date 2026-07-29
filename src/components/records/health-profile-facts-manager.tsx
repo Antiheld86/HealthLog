@@ -243,9 +243,7 @@ export function HealthProfileFactsManager() {
                       aria-hidden
                     />
                   )}
-                  {current
-                    ? t("records.profileFacts.correct")
-                    : t("records.profileFacts.save")}
+                  {t("records.profileFacts.save")}
                 </Button>
                 {current ? (
                   <ConfirmButton
