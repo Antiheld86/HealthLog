@@ -96,11 +96,7 @@ function sanitizedWhoopZoneDurations(
   for (const key of WHOOP_ZONE_DURATION_KEYS) {
     const value = raw[key];
     if (value === undefined) continue;
-    if (
-      typeof value !== "number" ||
-      !Number.isFinite(value) ||
-      value < 0
-    ) {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
       return null;
     }
     sanitized[key] = value;
@@ -116,10 +112,8 @@ function enrichFromWhoopTwin<T extends WorkoutPickerRow>(
   const donorZones = sanitizedWhoopZoneDurations(donor.metadata);
   const needsZones =
     donorZones != null && winnerMetadata?.zoneDurations == null;
-  const needsAvg =
-    winner.avgHeartRate == null && donor.avgHeartRate != null;
-  const needsMax =
-    winner.maxHeartRate == null && donor.maxHeartRate != null;
+  const needsAvg = winner.avgHeartRate == null && donor.avgHeartRate != null;
+  const needsMax = winner.maxHeartRate == null && donor.maxHeartRate != null;
 
   if (!needsAvg && !needsMax && !needsZones) return winner;
 

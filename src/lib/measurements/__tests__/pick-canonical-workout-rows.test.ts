@@ -111,9 +111,7 @@ describe("pickCanonicalWorkoutRows", () => {
         zoneDurations: { zone_one_milli: 60_000 },
       },
     });
-    expect(
-      (picked.metadata as Record<string, unknown>).zoneDurations,
-    ).toEqual({
+    expect((picked.metadata as Record<string, unknown>).zoneDurations).toEqual({
       zone_one_milli: 60_000,
     });
     expect(picked.metadata).not.toHaveProperty("whoopWorkoutStrain");
@@ -213,11 +211,7 @@ describe("pickCanonicalWorkoutRows", () => {
       metadata: { zoneDurations: { zone_three_milli: 60_000 } },
     };
 
-    const result = pickCanonicalWorkoutRows([
-      apple,
-      wrongSport,
-      wrongWindow,
-    ]);
+    const result = pickCanonicalWorkoutRows([apple, wrongSport, wrongWindow]);
     expect(result.find((row) => row.id === "apple")).toMatchObject({
       avgHeartRate: null,
       maxHeartRate: null,
@@ -284,7 +278,9 @@ describe("pickCanonicalWorkoutRows", () => {
     ]);
 
     expect(result).toHaveLength(2);
-    expect(result.find((row) => row.id === "apple-u1")?.avgHeartRate).toBeNull();
+    expect(
+      result.find((row) => row.id === "apple-u1")?.avgHeartRate,
+    ).toBeNull();
   });
 
   it("uses each WHOOP twin at most once for same-slot occurrences", () => {

@@ -135,10 +135,8 @@ export const GET = apiHandler(
       canonicalCluster.find((c) => c.id === row.id) ??
       canonicalCluster[0] ??
       null;
-    const effectiveAvgHeartRate =
-      canonical?.avgHeartRate ?? row.avgHeartRate;
-    const effectiveMaxHeartRate =
-      canonical?.maxHeartRate ?? row.maxHeartRate;
+    const effectiveAvgHeartRate = canonical?.avgHeartRate ?? row.avgHeartRate;
+    const effectiveMaxHeartRate = canonical?.maxHeartRate ?? row.maxHeartRate;
 
     // ── Enrichment reads (all over existing tables — no migration) ────
 
