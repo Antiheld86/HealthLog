@@ -77,13 +77,43 @@ function jsonRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+const WHOOP_ZONE_DURATION_KEYS = [
+  "zone_zero_milli",
+  "zone_one_milli",
+  "zone_two_milli",
+  "zone_three_milli",
+  "zone_four_milli",
+  "zone_five_milli",
+] as const;
+
+function sanitizedWhoopZoneDurations(
+  metadata: unknown,
+): Record<string, number> | null {
+  const raw = jsonRecord(jsonRecord(metadata)?.zoneDurations);
+  if (!raw) return null;
+
+  const sanitized: Record<string, number> = {};
+  for (const key of WHOOP_ZONE_DURATION_KEYS) {
+    const value = raw[key];
+    if (value === undefined) continue;
+    if (
+      typeof value !== "number" ||
+      !Number.isFinite(value) ||
+      value < 0
+    ) {
+      return null;
+    }
+    sanitized[key] = value;
+  }
+  return Object.keys(sanitized).length > 0 ? sanitized : null;
+}
+
 function enrichFromWhoopTwin<T extends WorkoutPickerRow>(
   winner: T,
   donor: T,
 ): T {
   const winnerMetadata = jsonRecord(winner.metadata);
-  const donorMetadata = jsonRecord(donor.metadata);
-  const donorZones = donorMetadata?.zoneDurations;
+  const donorZones = sanitizedWhoopZoneDurations(donor.metadata);
   const needsZones =
     donorZones != null && winnerMetadata?.zoneDurations == null;
   const needsAvg =

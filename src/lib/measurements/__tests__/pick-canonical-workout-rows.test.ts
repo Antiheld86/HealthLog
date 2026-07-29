@@ -89,7 +89,11 @@ describe("pickCanonicalWorkoutRows", () => {
       avgHeartRate: 146,
       maxHeartRate: 181,
       metadata: {
-        zoneDurations: { zone_one_milli: 60_000 },
+        zoneDurations: {
+          zone_one_milli: 60_000,
+          nestedSecret: { mustNotFlow: true },
+          zone_six_milli: 90_000,
+        },
         whoopWorkoutStrain: 12.3,
       },
     };
@@ -106,6 +110,11 @@ describe("pickCanonicalWorkoutRows", () => {
         owner: "apple",
         zoneDurations: { zone_one_milli: 60_000 },
       },
+    });
+    expect(
+      (picked.metadata as Record<string, unknown>).zoneDurations,
+    ).toEqual({
+      zone_one_milli: 60_000,
     });
     expect(picked.metadata).not.toHaveProperty("whoopWorkoutStrain");
     expect(apple).toEqual({
@@ -147,6 +156,32 @@ describe("pickCanonicalWorkoutRows", () => {
       maxHeartRate: 175,
       metadata: { zoneDurations: { zone_one_milli: 30_000 } },
     });
+  });
+
+  it("rejects malformed WHOOP zone durations instead of partially copying them", () => {
+    const result = pickCanonicalWorkoutRows<RowFixture>([
+      {
+        id: "apple",
+        startedAt: new Date("2026-06-03T06:30:00Z"),
+        sportType: "running",
+        source: "APPLE_HEALTH",
+        metadata: { owner: "apple" },
+      },
+      {
+        id: "whoop",
+        startedAt: new Date("2026-06-03T06:30:30Z"),
+        sportType: "running",
+        source: "WHOOP",
+        metadata: {
+          zoneDurations: {
+            zone_one_milli: 60_000,
+            zone_two_milli: -1,
+          },
+        },
+      },
+    ]);
+
+    expect(result[0].metadata).toEqual({ owner: "apple" });
   });
 
   it("does not enrich across sport or fixed-window boundaries", () => {
