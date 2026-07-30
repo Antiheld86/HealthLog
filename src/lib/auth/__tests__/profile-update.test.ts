@@ -262,3 +262,23 @@ describe("applyProfileUpdate top-level error message", () => {
     }
   });
 });
+
+describe("applyProfileUpdate email conflict", () => {
+  it("carries an errorCode alongside the specific 409 message", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "someone-else",
+    } as never);
+
+    const result = await applyProfileUpdate(USER_ID, {
+      email: "taken@example.com",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(409);
+      expect(result.errorCode).toBe("profile.update.emailInUse");
+      expect(result.issues).toBeUndefined();
+    }
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+});

@@ -38,8 +38,10 @@ import { CycleTrackingCard } from "@/components/settings/cycle-tracking-card";
 import { detectBrowserTimezone } from "@/lib/tz/format";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
 import {
+  describeRejectedProfileField,
   resolveInitialTimezone,
   statusText,
+  type RejectedProfileField,
   type StatusMessage,
 } from "./account-section-utils";
 import { AvatarSection } from "./avatar-section";
@@ -85,9 +87,9 @@ export function AccountSection() {
   });
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<StatusMessage | null>(null);
-  const [saveMsgType, setSaveMsgType] = useState<"success" | "error" | null>(
-    null,
-  );
+  const [saveMsgType, setSaveMsgType] = useState<
+    "success" | "warning" | "error" | null
+  >(null);
 
   // Password change dialog state.
   const [currentPassword, setCurrentPassword] = useState("");
@@ -227,14 +229,34 @@ export function AccountSection() {
       if (user && timezone && timezone !== user.timezone) {
         storeTimezone(timezone);
       }
-      setSaveMsg({ key: "settings.profileSaved" });
-      setSaveMsgType("success");
-      setEmail(savedProfile.email);
-      setFullName(savedProfile.fullName);
-      setInsurerName(savedProfile.insurerName);
-      setInsuranceNumber(savedProfile.insuranceNumber);
-      setProfileSeed(savedProfile);
-      await refetch();
+      const profileJson = (await profileRes.json().catch(() => null)) as {
+        data?: { rejectedFields?: RejectedProfileField[] };
+      } | null;
+      const rejected = profileJson?.data?.rejectedFields;
+
+      if (rejected && rejected.length > 0) {
+        // The write is field-independent: everything but the rejected
+        // field(s) landed. Name the field instead of implying full
+        // success, and reseed the form from what the server actually
+        // persisted — the client's optimistic value for the rejected
+        // field was never written, so it must not read as saved.
+        setSaveMsg({
+          key: "settings.profilePartiallySaved",
+          params: { field: describeRejectedProfileField(rejected, t) ?? "" },
+        });
+        setSaveMsgType("warning");
+        await refetch();
+        setSeededUserId(null);
+      } else {
+        setSaveMsg({ key: "settings.profileSaved" });
+        setSaveMsgType("success");
+        setEmail(savedProfile.email);
+        setFullName(savedProfile.fullName);
+        setInsurerName(savedProfile.insurerName);
+        setInsuranceNumber(savedProfile.insuranceNumber);
+        setProfileSeed(savedProfile);
+        await refetch();
+      }
     } else if (!tzRes.ok) {
       // The dedicated tz endpoint owns the IANA validation error
       // text. Surface its message verbatim so the user sees
@@ -252,10 +274,22 @@ export function AccountSection() {
       }
       setSaveMsgType("error");
     } else {
-      const json = await profileRes.json();
-      setSaveMsg(
-        json.error ? { text: json.error } : { key: "settings.savingError" },
-      );
+      // The server's top-level `error` string is intentionally generic
+      // (never a raw validator message); resolve the specific, localized
+      // reason through `meta.errorCode` instead of echoing it verbatim.
+      const json = (await profileRes.json().catch(() => null)) as {
+        meta?: { errorCode?: string };
+        details?: { issues?: RejectedProfileField[] };
+      } | null;
+      const errorCode = json?.meta?.errorCode;
+      const field = describeRejectedProfileField(json?.details?.issues, t);
+      if (errorCode === "profile.update.nothingSaved" && field) {
+        setSaveMsg({ key: "settings.profileNothingSaved", params: { field } });
+      } else if (errorCode) {
+        setSaveMsg({ key: `apiErrors.${errorCode}` });
+      } else {
+        setSaveMsg({ key: "settings.savingError" });
+      }
       setSaveMsgType("error");
     }
     setSaving(false);
@@ -512,7 +546,11 @@ export function AccountSection() {
             <p
               role="alert"
               className={`text-sm ${
-                saveMsgType === "success" ? "text-success" : "text-destructive"
+                saveMsgType === "success"
+                  ? "text-success"
+                  : saveMsgType === "warning"
+                    ? "text-warning"
+                    : "text-destructive"
               }`}
             >
               {statusText(saveMsg, t)}
