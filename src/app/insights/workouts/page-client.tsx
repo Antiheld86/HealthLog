@@ -121,7 +121,10 @@ export default function InsightsWorkoutsPageClient() {
               data-slot="workout-sport-filter"
               role="group"
               aria-label={t("insights.workouts.filterLabel")}
-              className="flex flex-wrap gap-2"
+              // Borderless page-level blocks track the shell heading's own
+              // card inset, so the row, the count line and the h1 above them
+              // share one left edge.
+              className="flex flex-wrap gap-2 px-4 md:px-6"
             >
               {[undefined, ...sportOptions].map((sport) => {
                 const active = sport === sportType;
@@ -150,9 +153,9 @@ export default function InsightsWorkoutsPageClient() {
             <>
               <p
                 data-slot="workout-list-count"
-                className="text-muted-foreground text-xs"
+                className="text-muted-foreground px-4 text-xs md:px-6"
               >
-                {tCount("insights.workouts.count", total, { count: total })}
+                {tCount("insights.workouts.count", total)}
               </p>
               <WorkoutList
                 workouts={workouts}
@@ -165,7 +168,7 @@ export default function InsightsWorkoutsPageClient() {
           ) : (
             <p
               data-slot="workout-list-filter-empty"
-              className="text-muted-foreground text-sm"
+              className="text-muted-foreground px-4 text-sm md:px-6"
             >
               {t("insights.workouts.filterEmpty")}
             </p>

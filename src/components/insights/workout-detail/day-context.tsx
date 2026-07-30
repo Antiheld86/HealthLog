@@ -84,6 +84,10 @@ export function WorkoutDetailDayContext({
     <section data-slot="workout-detail-day-context" className="space-y-3">
       <SectionHeading
         icon={CalendarDays}
+        // `SubPageShell` tracks the card body edge for its own heading
+        // rather than the container edge, so this heading takes the same
+        // responsive card inset and every text run on the page shares one x.
+        className="px-4 md:px-6"
         title={t("insights.workouts.detail.thatDayTitle")}
         action={
           <span className="text-muted-foreground text-xs">
