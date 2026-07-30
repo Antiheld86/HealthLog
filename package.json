@@ -28,7 +28,7 @@
     "dev": "next dev",
     "predev": "node scripts/generate-i18n-boot.mjs",
     "prebuild": "node scripts/generate-sw-version.mjs && node scripts/generate-i18n-boot.mjs",
-    "build": "next build",
+    "build": "NODE_OPTIONS=--max-old-space-size=8192 next build",
     "analyze": "ANALYZE=1 next build",
     "bundle-report": "node scripts/check-bundle-budget.mjs",
     "bundle-check": "node scripts/check-bundle-budget.mjs --check",
