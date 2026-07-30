@@ -211,6 +211,47 @@ export const GET = apiHandler(
       row.id,
     );
 
+    // The session before this one in the same sport. "How does this compare
+    // to last time?" is the most likely next question after reading a
+    // workout, and today it costs a trip back to the list plus a scan.
+    // Scoped to rows that start before this cluster's slot, so a twin of THIS
+    // session can never be offered as the previous one, and run through the
+    // same canonical picker so the link lands on the row the list shows.
+    const previousRows = await prisma.workout.findMany({
+      where: {
+        userId: user.id,
+        sportType: row.sportType,
+        startedAt: { lt: slotStart },
+      },
+      orderBy: [{ startedAt: "desc" }, { id: "desc" }],
+      // Enough to survive a run of same-session twins and re-sends without
+      // reading the whole history; the picker collapses them to a handful.
+      take: 20,
+      select: {
+        id: true,
+        source: true,
+        startedAt: true,
+        sportType: true,
+        durationSec: true,
+        avgHeartRate: true,
+        maxHeartRate: true,
+        metadata: true,
+      },
+    });
+    // The picker takes rows in ascending order and does not promise to hand
+    // them back sorted, so pick the newest survivor explicitly.
+    const previousWorkoutId =
+      pickCanonicalWorkoutRows(
+        [...previousRows].reverse(),
+        userRow?.sourcePriorityJson ?? null,
+      ).reduce<{ id: string; startedAt: Date } | null>(
+        (newest, candidate) =>
+          newest === null || candidate.startedAt > newest.startedAt
+            ? candidate
+            : newest,
+        null,
+      )?.id ?? null;
+
     const route = row.route
       ? {
           geometry: row.route.geometry,
@@ -295,6 +336,10 @@ export const GET = apiHandler(
       // winner. `canonicalId === id` when the requested row already
       // is the winner.
       canonicalId: canonical?.id ?? row.id,
+      // The canonical previous session in this sport, or null when this is
+      // the first one on record. Additive; a client that does not read it is
+      // unaffected.
+      previousWorkoutId,
     });
   },
 );

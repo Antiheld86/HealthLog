@@ -199,6 +199,12 @@ const workoutDetailResponse = z
     // a provider reachable. Reading this endpoint never generates one.
     aiInsight: workoutActivityInsight.nullable(),
     canonicalId: z.string(),
+    /**
+     * The canonical session before this one in the same sport, or null when
+     * this is the first on record. Resolved through the same source-priority
+     * picker as the list, so the id always addresses a row the list shows.
+     */
+    previousWorkoutId: z.string().nullable(),
   })
   .meta({ id: "WorkoutDetailResponse" });
 

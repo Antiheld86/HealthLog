@@ -319,6 +319,12 @@ export interface WorkoutDetailPayload extends WorkoutListEntry {
   sportContext: WorkoutSportContextDto | null;
   aiInsight: WorkoutActivityInsight;
   canonicalId: string;
+  /**
+   * The canonical session before this one in the same sport, `null` when
+   * this is the first on record. Server-resolved through the same picker
+   * the list uses, so the link never lands on a duplicate row.
+   */
+  previousWorkoutId: string | null;
 }
 
 async function fetchWorkoutDetail(id: string): Promise<WorkoutDetailPayload> {

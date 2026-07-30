@@ -20073,6 +20073,10 @@ components:
             - type: "null"
         canonicalId:
           type: string
+        previousWorkoutId:
+          anyOf:
+            - type: string
+            - type: "null"
       required:
         - id
         - sportType
@@ -20099,6 +20103,7 @@ components:
         - sportContext
         - aiInsight
         - canonicalId
+        - previousWorkoutId
       additionalProperties: false
     WorkoutRouteGeometry:
       type: object

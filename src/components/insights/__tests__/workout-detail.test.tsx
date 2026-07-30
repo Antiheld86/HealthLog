@@ -80,6 +80,7 @@ const FIXTURE: WorkoutDetailPayload = {
   sportContext: null,
   aiInsight: null,
   canonicalId: "w-1",
+  previousWorkoutId: null,
 };
 
 describe("<WorkoutDetailHeader>", () => {
@@ -102,6 +103,18 @@ describe("<WorkoutDetailStats>", () => {
     expect(html).toContain("145 bpm");
     expect(html).toContain("Steps");
     expect(html).toContain("Pace");
+  });
+
+  it("links to the previous session only when the server resolved one", () => {
+    expect(render(<WorkoutDetailStats workout={FIXTURE} />)).not.toContain(
+      'data-slot="workout-detail-previous-link"',
+    );
+
+    const html = render(
+      <WorkoutDetailStats workout={{ ...FIXTURE, previousWorkoutId: "w-0" }} />,
+    );
+    expect(html).toContain('href="/insights/workouts/w-0"');
+    expect(html).toContain("Previous session");
   });
 
   it("omits tiles for null fields", () => {

@@ -1,7 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Link from "next/link";
 import {
+  ArrowRight,
   Flame,
   Footprints,
   HeartPulse,
@@ -11,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { TileHeader } from "@/components/insights/tile-header";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "@/lib/i18n/context";
 import type { WorkoutDetailPayload } from "@/hooks/use-workouts";
@@ -157,12 +160,12 @@ export function WorkoutDetailStats({ workout }: WorkoutDetailStatsProps) {
   return (
     <Card data-slot="workout-detail-stats">
       <CardHeader>
-        <h2
-          data-slot="card-title"
-          className="text-base leading-none font-semibold"
-        >
-          {t("insights.workouts.detail.statsTitle")}
-        </h2>
+        {/* Icon-less `TileHeader`, not a hand-rolled h2 — the standards
+            allow exactly three header patterns and this card is a tile. */}
+        <TileHeader
+          title={t("insights.workouts.detail.statsTitle")}
+          titleAs="h2"
+        />
       </CardHeader>
       <CardContent className="space-y-3">
         <div
@@ -175,14 +178,32 @@ export function WorkoutDetailStats({ workout }: WorkoutDetailStatsProps) {
             <StatTile key={tile.label} {...tile} />
           ))}
         </div>
-        {averageLine ? (
-          <p
-            data-slot="workout-detail-sport-average"
-            className="text-muted-foreground text-xs"
-          >
-            {t("insights.workouts.detail.sportAverageLabel")}{" "}
-            <span className="tabular-nums">{averageLine}</span>
-          </p>
+        {averageLine || workout.previousWorkoutId ? (
+          // One row, per the inline-action shape: the sentence wraps
+          // internally, the link stays beside it.
+          <div className="flex items-start justify-between gap-3">
+            {averageLine ? (
+              <p
+                data-slot="workout-detail-sport-average"
+                className="text-muted-foreground min-w-0 flex-1 text-xs"
+              >
+                {t("insights.workouts.detail.sportAverageLabel")}{" "}
+                <span className="tabular-nums">{averageLine}</span>
+              </p>
+            ) : (
+              <span className="min-w-0 flex-1" />
+            )}
+            {workout.previousWorkoutId ? (
+              <Link
+                href={`/insights/workouts/${workout.previousWorkoutId}`}
+                data-slot="workout-detail-previous-link"
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 inline-flex shrink-0 items-center gap-1.5 text-xs underline-offset-4 transition-colors hover:underline focus-visible:ring-[3px] focus-visible:outline-none"
+              >
+                {t("insights.workouts.detail.previousSessionLink")}
+                <ArrowRight className="size-3.5" aria-hidden="true" />
+              </Link>
+            ) : null}
+          </div>
         ) : null}
       </CardContent>
     </Card>
