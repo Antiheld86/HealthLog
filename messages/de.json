@@ -3139,7 +3139,13 @@
       "loadError": "Deine Workouts konnten nicht geladen werden",
       "loadMore": "Weitere Workouts laden",
       "loadingMore": "Weitere Workouts werden geladen",
-      "loadMoreError": "Weitere Workouts konnten nicht geladen werden"
+      "loadMoreError": "Weitere Workouts konnten nicht geladen werden",
+      "countOne": "{count} Workout",
+      "countOther": "{count} Workouts",
+      "countFew": "{count} Workouts",
+      "filterLabel": "Nach Sportart filtern",
+      "filterAll": "Alle Sportarten",
+      "filterEmpty": "Keine Einheiten dieser Sportart in deinem Verlauf."
     },
     "bloodGlucose": {
       "title": "Blutzucker",

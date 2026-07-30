@@ -3139,7 +3139,13 @@
       "loadError": "Your workouts could not be loaded",
       "loadMore": "Load more workouts",
       "loadingMore": "Loading more workouts",
-      "loadMoreError": "More workouts could not be loaded"
+      "loadMoreError": "More workouts could not be loaded",
+      "countOne": "{count} workout",
+      "countOther": "{count} workouts",
+      "countFew": "{count} workouts",
+      "filterLabel": "Filter by sport",
+      "filterAll": "All sports",
+      "filterEmpty": "No sessions of this sport in your history."
     },
     "bloodGlucose": {
       "title": "Blood Glucose",

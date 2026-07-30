@@ -3139,7 +3139,13 @@
       "loadError": "No se pudieron cargar tus entrenamientos",
       "loadMore": "Cargar más entrenamientos",
       "loadingMore": "Cargando más entrenamientos",
-      "loadMoreError": "No se pudieron cargar más entrenamientos"
+      "loadMoreError": "No se pudieron cargar más entrenamientos",
+      "countOne": "{count} entrenamiento",
+      "countOther": "{count} entrenamientos",
+      "countFew": "{count} entrenamientos",
+      "filterLabel": "Filtrar por deporte",
+      "filterAll": "Todos los deportes",
+      "filterEmpty": "No hay sesiones de este deporte en tu historial."
     },
     "bloodGlucose": {
       "title": "Glucosa en sangre",

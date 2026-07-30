@@ -3139,7 +3139,13 @@
       "loadError": "Tes séances n'ont pas pu être chargées",
       "loadMore": "Charger plus de séances",
       "loadingMore": "Chargement de séances supplémentaires",
-      "loadMoreError": "Les séances supplémentaires n'ont pas pu être chargées"
+      "loadMoreError": "Les séances supplémentaires n'ont pas pu être chargées",
+      "countOne": "{count} séance",
+      "countOther": "{count} séances",
+      "countFew": "{count} séances",
+      "filterLabel": "Filtrer par sport",
+      "filterAll": "Tous les sports",
+      "filterEmpty": "Aucune séance de ce sport dans votre historique."
     },
     "bloodGlucose": {
       "title": "Glycémie",

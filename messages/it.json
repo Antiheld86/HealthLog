@@ -3139,7 +3139,13 @@
       "loadError": "Non è stato possibile caricare i tuoi allenamenti",
       "loadMore": "Carica altri allenamenti",
       "loadingMore": "Caricamento di altri allenamenti",
-      "loadMoreError": "Non è stato possibile caricare altri allenamenti"
+      "loadMoreError": "Non è stato possibile caricare altri allenamenti",
+      "countOne": "{count} allenamento",
+      "countOther": "{count} allenamenti",
+      "countFew": "{count} allenamenti",
+      "filterLabel": "Filtra per sport",
+      "filterAll": "Tutti gli sport",
+      "filterEmpty": "Nessuna sessione di questo sport nella tua cronologia."
     },
     "bloodGlucose": {
       "title": "Glicemia",

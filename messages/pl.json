@@ -3139,7 +3139,13 @@
       "loadError": "Nie udało się wczytać treningów",
       "loadMore": "Wczytaj więcej treningów",
       "loadingMore": "Wczytywanie kolejnych treningów",
-      "loadMoreError": "Nie udało się wczytać kolejnych treningów"
+      "loadMoreError": "Nie udało się wczytać kolejnych treningów",
+      "countOne": "{count} trening",
+      "countOther": "{count} treningów",
+      "countFew": "{count} treningi",
+      "filterLabel": "Filtruj według sportu",
+      "filterAll": "Wszystkie sporty",
+      "filterEmpty": "Brak treningów tego sportu w Twojej historii."
     },
     "bloodGlucose": {
       "title": "Poziom glukozy",
