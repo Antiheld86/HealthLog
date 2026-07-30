@@ -46,8 +46,12 @@ import {
 export interface WorkoutPickerRow {
   userId?: string;
   startedAt: Date;
-  /** Optional exact-session fields used to collapse repeated same-source sync rows. */
-  endedAt?: Date;
+  /**
+   * Session length. Together with `sportType` + `startedAt` this is the
+   * exact-session identity used to collapse repeated same-source sync rows.
+   * Optional only so fixtures can omit it; every production call site MUST
+   * select it, and `workout-canonical-identity-guard.test.ts` freezes that set.
+   */
   durationSec?: number;
   sportType: string;
   source: MeasurementSource;
@@ -60,18 +64,31 @@ export interface WorkoutPickerRow {
  * HealthKit can resend the same session with a new external UUID. The source
  * ladder correctly chooses Apple over WHOOP, but previously kept every Apple
  * row in that winning bucket, which made the web list show the same workout
- * two or three times. Only collapse rows when the exact session identity is
- * available; fixtures and legacy callers without end/duration remain
- * governed by the original bucket contract.
+ * two or three times.
+ *
+ * The identity is `(sportType, startedAt, durationSec)`. `endedAt` was part of
+ * this key when the collapse first shipped and has been dropped deliberately:
+ *
+ *   - It is not a free extra check. On a workout with pauses, `endedAt` is the
+ *     wall-clock end while `durationSec` counts only moving time, so the two
+ *     legitimately disagree, and a stored row can carry either convention. Two
+ *     re-sends of one session can therefore differ in `endedAt` alone, and the
+ *     stricter key let that duplicate through.
+ *   - It bought nothing in exchange. Nobody starts a second workout of the
+ *     same sport in the same instant with the same duration, so start plus
+ *     duration already identifies the session uniquely.
+ *   - Requiring it split the callers. Four of the five call sites select
+ *     `durationSec` but not `endedAt`, so the collapse ran on the workout list
+ *     and silently did nothing for the Coach narration, the per-sport baseline
+ *     and the deep-link cluster. One list, one number, two answers.
+ *
+ * A row without `durationSec` cannot be identified and passes through
+ * uncollapsed. That is a fixture-only path: every production call site selects
+ * the field and `workout-canonical-identity-guard.test.ts` keeps it that way.
  */
 function exactSessionKey(row: WorkoutPickerRow): string | null {
-  if (row.endedAt == null || row.durationSec == null) return null;
-  return [
-    row.sportType,
-    row.startedAt.getTime(),
-    row.endedAt.getTime(),
-    row.durationSec,
-  ].join(":");
+  if (row.durationSec == null) return null;
+  return [row.sportType, row.startedAt.getTime(), row.durationSec].join(":");
 }
 
 function rowRichness(row: WorkoutPickerRow): number {

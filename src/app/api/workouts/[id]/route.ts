@@ -114,6 +114,11 @@ export const GET = apiHandler(
         source: true,
         startedAt: true,
         sportType: true,
+        // Part of the canonical session identity consulted by
+        // `pickCanonicalWorkoutRows` below — without it a HealthKit re-send of
+        // this very workout stays in the cluster and the deep link can resolve
+        // to the duplicate instead of the row the list shows.
+        durationSec: true,
         avgHeartRate: true,
         maxHeartRate: true,
         metadata: true,
