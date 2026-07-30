@@ -176,11 +176,11 @@ describe("assessment presentation contract", () => {
     );
 
     expect(cardSource).toContain(
-      'className="animate-insight-in gap-2 py-3 md:py-4"',
+      'className="animate-insight-in gap-1.5 py-3 md:py-4"',
     );
     expect(cardSource).toContain('className="text-foreground text-sm"');
     expect(moodSource).toContain(
-      'className="animate-insight-in gap-2 py-3 md:py-4"',
+      'className="animate-insight-in gap-1.5 py-3 md:py-4"',
     );
     expect(moodSource).toContain('data-slot="insight-assessment"');
     expect(moodBodySource).toContain(
