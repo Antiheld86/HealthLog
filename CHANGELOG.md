@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+## [1.34.2] — 2026-07-30
+
+Point release. One workout that arrived more than once, and several surfaces
+that were reading the same record differently from one another.
+
+### Fixed
+
+- Badminton recorded through Google Health keeps its sport instead of arriving
+  as "Other". Reported by @tarantila.
+- A workout the same source sent twice is now counted once everywhere. The
+  workout list already collapsed the repeat, and the Coach narration, the
+  per-sport comparison and the workout deep link did not, so one session could
+  be folded two or three times into the averages a person is measured against.
+  The three that missed it were fetching the workout without its duration, and
+  the identity check needed that field.
+- Insights prose renders at full contrast, and the two assessment cards share
+  one internal rhythm again after one of them drifted away from it.
+- The dashboard headline survives for anyone who has switched the score lead
+  off.
+- The service worker's fallback cache version follows the release again. It had
+  slipped a version behind, which only shows up in a browser that cannot load
+  the version file, and that browser then kept serving the previous release's
+  cached pages.
+
+### Credit
+
+Reported by @tarantila, directly rather than on the tracker: the badminton
+mapping, following on from the workout-type loss in v1.34.0.
+
 ## [1.34.1] — 2026-07-29
 
 Security and reliability point release.

@@ -277,6 +277,68 @@ describe("pickCanonicalWorkoutRows", () => {
     expect(result[0].id).toBe("duplicate-b");
   });
 
+  it("collapses a re-send whose endedAt disagrees with the first arrival", () => {
+    // A workout with pauses has a wall-clock end that is longer than the
+    // counted duration, and the two sources of that number do not always agree
+    // across re-sends. `endedAt` was part of the session key when the collapse
+    // first shipped, so this exact pair survived as two rows.
+    const base = {
+      startedAt: new Date("2026-07-29T12:54:00Z"),
+      durationSec: 480,
+      sportType: "cycling",
+      source: "APPLE_HEALTH" as const,
+    };
+    const result = pickCanonicalWorkoutRows<RowFixture>([
+      {
+        ...base,
+        id: "first-arrival",
+        endedAt: new Date("2026-07-29T13:02:00Z"),
+      },
+      {
+        ...base,
+        id: "resend",
+        endedAt: new Date("2026-07-29T13:09:00Z"),
+        avgHeartRate: 132,
+      },
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("resend");
+  });
+
+  it("keeps two same-source sessions whose durations differ", () => {
+    // The counterpart guarantee: the looser key must not merge genuinely
+    // distinct sessions that happen to share a bucket slot and a sport.
+    const base = {
+      startedAt: new Date("2026-07-29T12:54:00Z"),
+      sportType: "strength",
+      source: "APPLE_HEALTH" as const,
+    };
+    const result = pickCanonicalWorkoutRows<RowFixture>([
+      { ...base, id: "short", durationSec: 480 },
+      { ...base, id: "long", durationSec: 1800 },
+    ]);
+
+    expect(result.map((row) => row.id).sort()).toEqual(["long", "short"]);
+  });
+
+  it("passes rows without a duration through rather than guessing", () => {
+    // Fixture-only path: a row with no duration carries no session identity, so
+    // it cannot be collapsed. Every production caller selects the field and
+    // `workout-canonical-identity-guard.test.ts` keeps that true.
+    const base = {
+      startedAt: new Date("2026-07-29T12:54:00Z"),
+      sportType: "yoga",
+      source: "APPLE_HEALTH" as const,
+    };
+    const result = pickCanonicalWorkoutRows<RowFixture>([
+      { ...base, id: "no-duration-a" },
+      { ...base, id: "no-duration-b" },
+    ]);
+
+    expect(result).toHaveLength(2);
+  });
+
   it("does not collapse or enrich rows belonging to different users", () => {
     const result = pickCanonicalWorkoutRows<RowFixture>([
       {
