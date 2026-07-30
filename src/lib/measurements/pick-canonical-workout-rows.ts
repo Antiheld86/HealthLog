@@ -46,11 +46,57 @@ import {
 export interface WorkoutPickerRow {
   userId?: string;
   startedAt: Date;
+  /** Optional exact-session fields used to collapse repeated same-source sync rows. */
+  endedAt?: Date;
+  durationSec?: number;
   sportType: string;
   source: MeasurementSource;
   avgHeartRate?: number | null;
   maxHeartRate?: number | null;
   metadata?: unknown;
+}
+
+/**
+ * HealthKit can resend the same session with a new external UUID. The source
+ * ladder correctly chooses Apple over WHOOP, but previously kept every Apple
+ * row in that winning bucket, which made the web list show the same workout
+ * two or three times. Only collapse rows when the exact session identity is
+ * available; fixtures and legacy callers without end/duration remain
+ * governed by the original bucket contract.
+ */
+function exactSessionKey(row: WorkoutPickerRow): string | null {
+  if (row.endedAt == null || row.durationSec == null) return null;
+  return [
+    row.sportType,
+    row.startedAt.getTime(),
+    row.endedAt.getTime(),
+    row.durationSec,
+  ].join(":");
+}
+
+function rowRichness(row: WorkoutPickerRow): number {
+  return (
+    (row.avgHeartRate != null ? 2 : 0) +
+    (row.maxHeartRate != null ? 2 : 0) +
+    (row.metadata != null ? 1 : 0)
+  );
+}
+
+function deduplicateWinningRows<T extends WorkoutPickerRow>(rows: T[]): T[] {
+  const bySession = new Map<string, T>();
+  const passthrough: T[] = [];
+  for (const row of rows) {
+    const key = exactSessionKey(row);
+    if (key == null) {
+      passthrough.push(row);
+      continue;
+    }
+    const existing = bySession.get(key);
+    if (!existing || rowRichness(row) > rowRichness(existing)) {
+      bySession.set(key, row);
+    }
+  }
+  return [...passthrough, ...bySession.values()];
 }
 
 /**
@@ -253,7 +299,9 @@ export function pickCanonicalWorkoutRows<T extends WorkoutPickerRow>(
       continue;
     }
 
-    const winners = slot.rows.filter((row) => row.source === picked);
+    const winners = deduplicateWinningRows(
+      slot.rows.filter((row) => row.source === picked),
+    );
     const whoopDonors =
       picked === "WHOOP"
         ? []

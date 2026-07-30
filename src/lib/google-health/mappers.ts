@@ -1027,6 +1027,7 @@ const GOOGLE_HEALTH_EXERCISE_TYPE_MAP: Record<string, string> = {
   dance: "dance",
   dancing: "dance",
   golf: "golf",
+  badminton: "badminton",
   tennis: "tennis",
   basketball: "basketball",
   soccer: "soccer",

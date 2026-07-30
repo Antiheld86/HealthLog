@@ -159,6 +159,13 @@ export function TodayHero({
     (hasScore ? digest.line : null);
   const lead = withoutRepeatedScore(rawLead, digest.score?.value ?? null);
   const topSignal = digest.topSignal;
+  // A score-only briefing can legitimately lose its lead when the only
+  // sentence repeated the number already printed inside the ring. Keep the
+  // day's signal as the visible headline in that case instead of leaving the
+  // hero with a muted, orphaned subtitle below an empty bold slot.
+  const signalFallbackLead =
+    hasScore && !lead ? topSignal?.headline?.trim() || null : null;
+  const displayLead = lead ?? signalFallbackLead;
   const justInTime = digest.justIn ? formatJustInTime(digest.justIn.at) : null;
   // A score-only all-clear digest has no narrative content for the leading
   // column. Keeping the full md ring in that two-column shell left a blank
@@ -224,17 +231,17 @@ export function TodayHero({
           <div className="min-w-0 flex-1 space-y-2">
             {/* Hero numeric face: the read leads large in the foreground
                 token, calm and legible — the day's read, not a slogan. */}
-            {lead ? (
+            {displayLead ? (
               <div
                 data-slot="today-hero-lead"
                 className="text-foreground text-lg leading-snug font-semibold tracking-tight sm:text-xl"
               >
-                <ProseBlocks text={lead} strip linkify={false} />
+                <ProseBlocks text={displayLead} strip linkify={false} />
               </div>
             ) : null}
             {/* Top signal — present-tense headline + optional delta, one
                 muted step down so it supports the lead without competing. */}
-            {topSignal ? (
+            {topSignal && lead ? (
               <p
                 data-slot="today-hero-signal"
                 className="text-muted-foreground text-sm"

@@ -183,11 +183,15 @@ describe("<InsightStatusCard>", () => {
     expect(empty).toContain("No assessment yet.");
     expect(populated).toContain('data-slot="insight-assessment"');
 
-    for (const html of [loading, preparing, noProvider, empty, populated]) {
+    for (const html of [loading, preparing, noProvider, empty]) {
       expect(html).toContain("gap-2");
       expect(html).toContain("py-3");
       expect(html).toContain("md:py-4");
     }
+    expect(populated).toContain("gap-1.5");
+    expect(populated).toContain("space-y-1.5");
+    expect(populated).toContain("py-3");
+    expect(populated).toContain("md:py-4");
     expect(populated).toContain("text-foreground");
   });
 });

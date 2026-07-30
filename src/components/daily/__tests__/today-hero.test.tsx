@@ -175,6 +175,28 @@ describe("<TodayHero>", () => {
     expect(html).toContain('data-slot="today-hero-lead"');
   });
 
+  it("promotes the top signal when score de-duplication removes the only lead", () => {
+    const html = render(
+      <TodayHero
+        digest={digest({
+          briefingLead: "Your health score is 82.",
+          line: "Your health score is 82.",
+          topSignal: {
+            sourceMetric: "pulse",
+            tone: "info",
+            headline: "Pulse is settling lately",
+            nudge: "",
+            delta: null,
+          },
+        })}
+      />,
+    );
+
+    expect(html).toContain('data-slot="today-hero-lead"');
+    expect(html).toContain("Pulse is settling lately");
+    expect(html).not.toContain('data-slot="today-hero-signal"');
+  });
+
   it("does not invent a score narrative while the digest is provisional", () => {
     const html = render(
       <TodayHero

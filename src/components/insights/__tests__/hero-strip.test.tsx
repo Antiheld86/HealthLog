@@ -301,7 +301,7 @@ describe("<HeroStrip>", () => {
         healthScore={SCORE_REPORT}
       />,
     );
-    expect(html).toMatch(/data-slot="health-score-card"/);
+    expect(html).toMatch(/data-slot="health-score-card-compact"/);
     expect(html).toMatch(/data-band="green"/);
     expect(html).toContain(">86<");
   });
@@ -406,7 +406,7 @@ describe("<HeroStrip>", () => {
         healthScore={SCORE_REPORT}
       />,
     );
-    expect(html).toContain('data-slot="health-score-card"');
+    expect(html).toContain('data-slot="health-score-card-compact"');
     expect(html).not.toContain('data-slot="health-score-card-skeleton"');
   });
 });

@@ -326,7 +326,7 @@ function TargetReferencePanel({
     <Card
       data-slot="metric-target-summary"
       data-target-type={target.type}
-      className="gap-2 py-3 md:py-4"
+      className="gap-1.5 py-3 md:py-4"
     >
       {/* Row 1: the canonical tile header — a single-word "Ziel" / "Target"
           heading (the range numbers live on the range bar below, so the

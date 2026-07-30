@@ -33,6 +33,7 @@ export const workoutSportTypeEnum = z.enum([
   "hiit",
   "dance",
   "golf",
+  "badminton",
   "tennis",
   "basketball",
   "soccer",

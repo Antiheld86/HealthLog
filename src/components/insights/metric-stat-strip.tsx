@@ -197,7 +197,7 @@ function SeriesBlock({
       data-slot="metric-stat-series"
       data-series={dataKey}
       data-windowed={windowed ? "true" : undefined}
-      className="space-y-2"
+      className="space-y-1.5"
     >
       {seriesLabel ? (
         <TileHeader
@@ -207,9 +207,7 @@ function SeriesBlock({
         />
       ) : null}
       {description ? (
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          {description}
-        </p>
+        <p className="text-foreground text-sm leading-relaxed">{description}</p>
       ) : null}
       <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4 [&>div]:min-h-[44px]">
         {cells.map((cell) => (
@@ -260,7 +258,7 @@ export function MetricStatStrip({
         data-multi-series="true"
         role="group"
         aria-label={groupLabel ?? t("insights.subPage.stats.label")}
-        className="gap-2 py-3 md:py-4"
+        className="gap-1.5 py-3 md:py-4"
       >
         <CardContent>
           <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
@@ -293,7 +291,7 @@ export function MetricStatStrip({
           ? `${t("insights.subPage.stats.label")} — ${seriesLabel}`
           : t("insights.subPage.stats.label")
       }
-      className="gap-2 py-3 md:py-4"
+      className="gap-1.5 py-3 md:py-4"
     >
       <CardContent>
         <SeriesBlock

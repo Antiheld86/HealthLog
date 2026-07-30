@@ -6,6 +6,8 @@ interface RowFixture {
   id: string;
   userId?: string;
   startedAt: Date;
+  endedAt?: Date;
+  durationSec?: number;
   sportType: string;
   source: "APPLE_HEALTH" | "WHOOP" | "WITHINGS" | "MANUAL" | "IMPORT";
   avgHeartRate?: number | null;
@@ -255,6 +257,24 @@ describe("pickCanonicalWorkoutRows", () => {
       avgHeartRate: null,
       maxHeartRate: null,
     });
+  });
+
+  it("collapses repeated same-source sync rows with the same exact session", () => {
+    const base = {
+      startedAt: new Date("2026-07-29T12:54:00Z"),
+      endedAt: new Date("2026-07-29T13:02:00Z"),
+      durationSec: 480,
+      sportType: "strength",
+      source: "APPLE_HEALTH" as const,
+    };
+    const result = pickCanonicalWorkoutRows<RowFixture>([
+      { ...base, id: "duplicate-a" },
+      { ...base, id: "duplicate-b", avgHeartRate: 90 },
+      { ...base, id: "duplicate-c" },
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("duplicate-b");
   });
 
   it("does not collapse or enrich rows belonging to different users", () => {
