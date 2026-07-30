@@ -6,7 +6,10 @@
  * runtime request parsing, so the wire contract stays single-source.
  */
 import { z } from "zod/v4";
-import { measurementTypeEnum } from "@/lib/validations/measurement";
+import {
+  measurementTypeEnum,
+  measurementSourceEnum,
+} from "@/lib/validations/measurement";
 import { METRIC_STATUS_IDS } from "@/lib/insights/metric-status-registry";
 import {
   DERIVED_METRIC_IDS,
@@ -1249,4 +1252,74 @@ export const ecgDetailResponse = z
     id: "EcgDetailResponse",
     description:
       "One ECG recording's decrypted waveform plus metadata and the DEVICE's verbatim classification. Ownership is narrowed in the query where — a foreign / unknown id 404s. The waveform is AES-256-GCM at rest, decrypted through the fail-closed codec. HealthLog does not interpret the trace, measure intervals, annotate beats, or emit a verdict of its own. no-store.",
+  });
+
+// v1.10.0 — device-flagged event timeline (rhythm-events, WX-B). Deliberately
+// a SEPARATE enum from `ecgClassification` above: an EVENT row's
+// `rhythmClassification` carries the FULL RhythmClassification set (the
+// three ECG verdicts + the two walking-steadiness severities + the neutral
+// "event occurred" verdict), not just the three ECG-only values. Reusing
+// `ecgClassification` here would silently drop LOW / VERY_LOW / FIRED for
+// any client that generates its type from this schema.
+const rhythmEventType = z
+  .enum([
+    "IRREGULAR_RHYTHM_NOTIFICATION",
+    "HIGH_HEART_RATE_EVENT",
+    "LOW_HEART_RATE_EVENT",
+    "WALKING_STEADINESS_EVENT",
+    "BREATHING_DISTURBANCE_EVENT",
+  ])
+  .describe(
+    "The HealthKit category the device flagged. IRREGULAR_RHYTHM_NOTIFICATION (`HKCategoryTypeIdentifierIrregularHeartRhythmEvent` + ScanWatch AFib screening), HIGH_HEART_RATE_EVENT / LOW_HEART_RATE_EVENT (a sustained heart rate above / below the user's configured threshold while apparently inactive), WALKING_STEADINESS_EVENT (`HKCategoryTypeIdentifierAppleWalkingSteadinessEvent`; the severity rides in `classification`), BREATHING_DISTURBANCE_EVENT (`HKCategoryTypeIdentifierSleepApneaEvent` + `AppleSleepingBreathingDisturbances`, an elevated breathing-disturbance / possible sleep-apnea screening signal).",
+  );
+
+const rhythmEventClassification = z
+  .enum([
+    "IRREGULAR",
+    "NOT_DETECTED",
+    "INCONCLUSIVE",
+    "LOW",
+    "VERY_LOW",
+    "FIRED",
+  ])
+  .nullable()
+  .describe(
+    "The RECORDING DEVICE's own verdict, surfaced verbatim. IRREGULAR / NOT_DETECTED / INCONCLUSIVE are the ECG-style rhythm verdicts (device flagged a possible irregular rhythm / algorithm ran and found nothing / signal too poor to classify) and occur on an `IRREGULAR_RHYTHM_NOTIFICATION` row. LOW / VERY_LOW are walking-steadiness severities and occur on a `WALKING_STEADINESS_EVENT` row. FIRED is the neutral \"event occurred\" verdict with no severity gradient, and occurs on a `HIGH_HEART_RATE_EVENT` / `LOW_HEART_RATE_EVENT` / `BREATHING_DISTURBANCE_EVENT` row. Null when the source reported none. HealthLog never re-classifies — this is the device's certified on-device result. Distinct from `EcgRecordingListItem.classification` / `EcgDetailResponse.classification` above, which are scoped to the three ECG-only values.",
+  );
+
+const rhythmEventListItem = z
+  .object({
+    id: z.string().describe("Measurement row id (cuid)."),
+    type: rhythmEventType,
+    classification: rhythmEventClassification,
+    occurredAt: z.iso
+      .datetime({ offset: true })
+      .describe("Device-reported event time (`measuredAt`)."),
+    source: measurementSourceEnum,
+    deviceType: z
+      .string()
+      .nullable()
+      .describe(
+        "Device class that reported the event (`watch | band | ring | phone | scale | other | unknown`); null when the source omitted it (treated as `unknown`).",
+      ),
+  })
+  .meta({ id: "RhythmEventListItem" });
+
+export const rhythmEventsResponse = z
+  .object({
+    events: z
+      .array(rhythmEventListItem)
+      .describe(
+        "The user's device-flagged events, newest first (capped at 200).",
+      ),
+    hasEvents: z
+      .boolean()
+      .describe(
+        "False for an account with no event rows — the client un-mounts the whole surface (data-availability floor).",
+      ),
+  })
+  .meta({
+    id: "RhythmEventsResponse",
+    description:
+      "Timeline of device-flagged EVENT rows (irregular-rhythm / high-HR / low-HR / walking-steadiness / breathing-disturbance) the user's wearable (Apple Watch / Withings ScanWatch) already produced and synced. AWARENESS / SCREENING of the DEVICE's own decision — HealthLog stores and reflects the classification result verbatim, never a raw waveform, and never re-classifies. Read-only; no LLM call.",
   });

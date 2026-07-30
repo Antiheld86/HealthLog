@@ -7743,6 +7743,31 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a3
         "429": *a4
+  /api/insights/rhythm-events:
+    get:
+      tags:
+        - Insights
+      summary: Device-flagged rhythm/HR/steadiness event timeline
+      description: "v1.10.0 (WX-B) — the authenticated user's timeline of device-flagged EVENT rows: irregular-rhythm /
+        high-HR / low-HR / walking-steadiness / breathing-disturbance notifications the user's wearable (Apple Watch /
+        Withings ScanWatch) already produced and synced. AWARENESS / SCREENING of the DEVICE's own decision — HealthLog
+        stores and reflects ONLY the classification result the device's certified on-device algorithm emitted, verbatim;
+        it never re-classifies and never produces a HealthLog diagnosis. `classification` carries the full six-value
+        verdict set (the three ECG verdicts plus the two walking-steadiness severities plus the neutral FIRED verdict) —
+        a distinct, wider enum than the three-value one on GET /api/insights/ecg. Data-availability-gated: an account
+        with no event rows returns `hasEvents: false`. Module-gated on `insights` and the operator `insightStatus`
+        assistant surface; no LLM call. Auth via cookie or Bearer."
+      responses:
+        "200":
+          description: The device-flagged event timeline (possibly empty).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RhythmEventsResponseEnvelope"
+        "401": *a1
+        "403": *a5
+        "422": *a3
+        "429": *a4
   /api/insights/correlations:
     get:
       tags:
@@ -28508,6 +28533,119 @@ components:
         narrowed in the query where — a foreign / unknown id 404s. The waveform is AES-256-GCM at rest, decrypted
         through the fail-closed codec. HealthLog does not interpret the trace, measure intervals, annotate beats, or
         emit a verdict of its own. no-store.
+    RhythmEventsResponseEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/RhythmEventsResponse"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    RhythmEventsResponse:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/RhythmEventListItem"
+          description: The user's device-flagged events, newest first (capped at 200).
+        hasEvents:
+          type: boolean
+          description: False for an account with no event rows — the client un-mounts the whole surface (data-availability floor).
+      required:
+        - events
+        - hasEvents
+      additionalProperties: false
+      description: Timeline of device-flagged EVENT rows (irregular-rhythm / high-HR / low-HR / walking-steadiness /
+        breathing-disturbance) the user's wearable (Apple Watch / Withings ScanWatch) already produced and synced.
+        AWARENESS / SCREENING of the DEVICE's own decision — HealthLog stores and reflects the classification result
+        verbatim, never a raw waveform, and never re-classifies. Read-only; no LLM call.
+    RhythmEventListItem:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Measurement row id (cuid).
+        type:
+          type: string
+          enum:
+            - IRREGULAR_RHYTHM_NOTIFICATION
+            - HIGH_HEART_RATE_EVENT
+            - LOW_HEART_RATE_EVENT
+            - WALKING_STEADINESS_EVENT
+            - BREATHING_DISTURBANCE_EVENT
+          description: The HealthKit category the device flagged. IRREGULAR_RHYTHM_NOTIFICATION
+            (`HKCategoryTypeIdentifierIrregularHeartRhythmEvent` + ScanWatch AFib screening), HIGH_HEART_RATE_EVENT /
+            LOW_HEART_RATE_EVENT (a sustained heart rate above / below the user's configured threshold while apparently
+            inactive), WALKING_STEADINESS_EVENT (`HKCategoryTypeIdentifierAppleWalkingSteadinessEvent`; the severity
+            rides in `classification`), BREATHING_DISTURBANCE_EVENT (`HKCategoryTypeIdentifierSleepApneaEvent` +
+            `AppleSleepingBreathingDisturbances`, an elevated breathing-disturbance / possible sleep-apnea screening
+            signal).
+        classification:
+          anyOf:
+            - type: string
+              enum:
+                - IRREGULAR
+                - NOT_DETECTED
+                - INCONCLUSIVE
+                - LOW
+                - VERY_LOW
+                - FIRED
+            - type: "null"
+          description: The RECORDING DEVICE's own verdict, surfaced verbatim. IRREGULAR / NOT_DETECTED / INCONCLUSIVE are the
+            ECG-style rhythm verdicts (device flagged a possible irregular rhythm / algorithm ran and found nothing /
+            signal too poor to classify) and occur on an `IRREGULAR_RHYTHM_NOTIFICATION` row. LOW / VERY_LOW are
+            walking-steadiness severities and occur on a `WALKING_STEADINESS_EVENT` row. FIRED is the neutral "event
+            occurred" verdict with no severity gradient, and occurs on a `HIGH_HEART_RATE_EVENT` /
+            `LOW_HEART_RATE_EVENT` / `BREATHING_DISTURBANCE_EVENT` row. Null when the source reported none. HealthLog
+            never re-classifies — this is the device's certified on-device result. Distinct from
+            `EcgRecordingListItem.classification` / `EcgDetailResponse.classification` above, which are scoped to the
+            three ECG-only values.
+        occurredAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: Device-reported event time (`measuredAt`).
+        source:
+          type: string
+          enum:
+            - MANUAL
+            - WITHINGS
+            - IMPORT
+            - APPLE_HEALTH
+            - COMPUTED
+            - WHOOP
+            - FITBIT
+            - NIGHTSCOUT
+            - POLAR
+            - OURA
+            - TELEGRAM
+            - MCP
+            - GOOGLE_HEALTH
+            - STRAVA
+        deviceType:
+          anyOf:
+            - type: string
+            - type: "null"
+          description: Device class that reported the event (`watch | band | ring | phone | scale | other | unknown`); null when
+            the source omitted it (treated as `unknown`).
+      required:
+        - id
+        - type
+        - classification
+        - occurredAt
+        - source
+        - deviceType
+      additionalProperties: false
     CorrelationDiscoveryResponseEnvelope:
       type: object
       properties:
