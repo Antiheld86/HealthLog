@@ -154,6 +154,17 @@ const bulkIntakeResponse = z
   })
   .meta({ id: "BulkMedicationIntakeResponse" });
 
+// Two paths poll the identical job-status projection — the per-medication
+// import and the account-wide dose-history import (which narrows to a
+// `medicationId: null` job through the SAME `readMedicationIntakeImportJob`
+// helper). Building the envelope once and reusing the object keeps both
+// `200` responses pointing at one `MedicationIntakeImportJobStatusEnvelope`
+// component instead of two separately-generated copies.
+const medicationIntakeImportJobStatusEnvelope = dataEnvelope(
+  medicationIntakeImportJobStatusResponse,
+  "MedicationIntakeImportJobStatusEnvelope",
+);
+
 export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   "/api/medications/intake/bulk": {
     post: {
@@ -1009,16 +1020,40 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           description: "Current job status.",
           content: {
             "application/json": {
-              schema: dataEnvelope(
-                medicationIntakeImportJobStatusResponse,
-                "MedicationIntakeImportJobStatusEnvelope",
-              ),
+              schema: medicationIntakeImportJobStatusEnvelope,
             },
           },
         },
         "404": {
           description:
             "No such job for this medication (or owned by another user).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/medications/intake/dose-history-import/{jobId}/status": {
+    get: {
+      tags: ["Medications"],
+      summary: "Poll an account-wide dose-history-import job",
+      description:
+        "Returns the queued/running/finished state of a dose-history-import job created by `POST /api/medications/intake/dose-history-import` — the `statusUrl` that create response carries. Identical response projection to the per-medication `/api/medications/{id}/intake/import/{jobId}/status` (both read through the same `readMedicationIntakeImportJob` helper); this path narrows to the account-wide job (`medicationId: null`), so a per-medication job id 404s here and vice versa. A foreign or unknown job id is sealed as 404. Auth via cookie or Bearer.",
+      requestParams: {
+        path: z.object({ jobId: z.string() }),
+      },
+      responses: {
+        "200": {
+          description: "Current job status.",
+          content: {
+            "application/json": {
+              schema: medicationIntakeImportJobStatusEnvelope,
+            },
+          },
+        },
+        "404": {
+          description:
+            "No such job for this account (or owned by another user).",
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,

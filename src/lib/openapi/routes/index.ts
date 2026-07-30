@@ -65,6 +65,7 @@ import { profilePaths } from "./profile";
 import { settingsPaths } from "./settings";
 import { syncPaths } from "./sync";
 import { workoutPaths } from "./workouts";
+import { coachPrefsSchema } from "@/lib/validations/coach-prefs";
 
 export const openApiPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   ...cyclePaths,
@@ -132,10 +133,17 @@ export const openApiComponents: NonNullable<ZodOpenApiObject["components"]> = {
   // shared by every route, so nothing ever `$ref`s the enum itself. Without
   // this forced registration the schema the description points to would be
   // silently absent from the published spec.
+  //
+  // `CoachPrefs` is the same shape: the PUT `/api/auth/me/coach-prefs`
+  // description tells the reader "Body is validated against `CoachPrefs`",
+  // but every actual consumer is a `.extend()` of it (`PutCoachPrefsRequest`,
+  // `CoachPrefsResponse`) — `.extend()` builds a new object, so the base
+  // never carries forward to a $ref on its own.
   schemas: {
     Medication: medicationResource,
     MedicationDoseHistoryImportFatalReason:
       medicationDoseHistoryImportFatalReasonEnum,
+    CoachPrefs: coachPrefsSchema,
   },
   securitySchemes: {
     bearerAuth: {

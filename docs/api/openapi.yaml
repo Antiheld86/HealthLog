@@ -4590,6 +4590,39 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a3
         "429": *a4
+  /api/medications/intake/dose-history-import/{jobId}/status:
+    get:
+      tags:
+        - Medications
+      summary: Poll an account-wide dose-history-import job
+      description: "Returns the queued/running/finished state of a dose-history-import job created by `POST
+        /api/medications/intake/dose-history-import` — the `statusUrl` that create response carries. Identical response
+        projection to the per-medication `/api/medications/{id}/intake/import/{jobId}/status` (both read through the
+        same `readMedicationIntakeImportJob` helper); this path narrows to the account-wide job (`medicationId: null`),
+        so a per-medication job id 404s here and vice versa. A foreign or unknown job id is sealed as 404. Auth via
+        cookie or Bearer."
+      parameters:
+        - in: path
+          name: jobId
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Current job status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicationIntakeImportJobStatusEnvelope"
+        "401": *a1
+        "404":
+          description: No such job for this account (or owned by another user).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422": *a3
+        "429": *a4
   /api/user/ai-provider:
     get:
       tags:
@@ -35606,6 +35639,103 @@ components:
         CSV header is missing a column the parser needs. unreadable_json — the body did not parse as JSON.
         json_not_an_array — parsed JSON is not an array (and no nested array was found under any key).
         json_carries_no_intake_time — well-formed JSON export input, refused by design (see above).
+    CoachPrefs:
+      type: object
+      properties:
+        tone:
+          default: warm
+          type: string
+          enum:
+            - warm
+            - neutral
+            - concise
+        verbosity:
+          default: default
+          type: string
+          enum:
+            - brief
+            - default
+            - detailed
+        excludeMetrics:
+          default: []
+          maxItems: 11
+          type: array
+          items:
+            type: string
+            enum:
+              - bp
+              - weight
+              - pulse
+              - mood
+              - compliance
+              - hrv
+              - sleep
+              - resting_hr
+              - steps
+              - medications
+              - anthropometrics
+        showEvidenceByDefault:
+          default: false
+          type: boolean
+        defaultWindow:
+          default: allTime
+          type: string
+          enum:
+            - last7days
+            - last30days
+            - last90days
+            - allTime
+        dataClusters:
+          maxItems: 10
+          type: array
+          items:
+            type: string
+            enum:
+              - cardio
+              - body
+              - activity
+              - workouts
+              - sleep
+              - mood
+              - glucose
+              - medication
+              - mobility
+              - environment
+        reminderSuggestions:
+          type: object
+          properties:
+            enabled:
+              default: true
+              type: boolean
+            stopped:
+              default: false
+              type: boolean
+            dismissedCadences:
+              default: []
+              maxItems: 32
+              type: array
+              items:
+                type: string
+                maxLength: 64
+            lastSuggestedAt:
+              default: null
+              anyOf:
+                - type: string
+                  maxLength: 40
+                - type: "null"
+          required:
+            - enabled
+            - stopped
+            - dismissedCadences
+            - lastSuggestedAt
+          additionalProperties: false
+      required:
+        - tone
+        - verbosity
+        - excludeMetrics
+        - showEvidenceByDefault
+        - defaultWindow
+      additionalProperties: false
   securitySchemes:
     bearerAuth:
       type: http
