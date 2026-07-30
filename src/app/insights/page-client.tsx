@@ -26,7 +26,10 @@ import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { HeroStrip } from "@/components/insights/hero-strip";
-import { HealthScoreCard } from "@/components/insights/health-score-card";
+import {
+  HealthScoreCard,
+  HealthScoreCardSkeleton,
+} from "@/components/insights/health-score-card";
 import { useInsightsAdvisorQuery } from "@/components/insights/use-insights-advisor";
 import { useAnalyticsQuery } from "@/lib/queries/use-analytics-query";
 import { useDashboardSnapshot } from "@/lib/queries/use-dashboard-snapshot";
@@ -475,41 +478,36 @@ export default function InsightsPageClient() {
       />
     ),
     "daily-briefing": flags.briefing ? (
-      <>
-        <DailyBriefing
-          briefing={briefingPayload}
-          updatedAt={heroStripUpdatedAt}
-          loading={advisor.isLoading}
-          onRegenerate={advisor.regenerate}
-          regenerating={advisor.isRegenerating}
-          // v1.15.20 — the read path reports a 422 (no provider configured)
-          // as its own outcome; swap the futile regenerate CTA for a quiet
-          // Settings → AI hint instead of an eternal "preparing" loop.
-          noProvider={advisor.readOutcome === "no-provider"}
-          // v1.18.9 (#4) — a (stale) cached briefing is shown but no provider
-          // is connected, so it can never refresh. Pair the relative-age
-          // footer with a discreet connect-provider hint. Only fires when a
-          // briefing is actually rendered (the empty-state path owns the
-          // `noProvider` branch above).
-          noProviderStale={briefingPayload !== null && !advisor.hasProvider}
-          // v1.25 — the last generation attempt failed. On a held briefing this
-          // adds a discreet "couldn't refresh — retry" footer hint; on an empty
-          // card it swaps the generic empty state for an honest "couldn't
-          // generate" one. Suppressed when no provider is configured (that hint
-          // owns the surface and a retry would be futile).
-          generationFailed={advisor.generationFailed && advisor.hasProvider}
-          // v1.25.3 — failure class points the empty-state hint at the right
-          // lever (raise the response timeout vs re-check the provider).
-          generationFailureClass={advisor.generationFailureClass}
-          // v1.28.28 (#470) — the grounding gate stripped the last regenerated
-          // briefing; the card explains the omission instead of "no briefing
-          // yet" (which made the regenerate button read as doing nothing).
-          omittedReason={advisor.briefingOmittedReason}
-        />
-        {analytics?.healthScore ? (
-          <HealthScoreCard report={analytics.healthScore} className="mt-6" />
-        ) : null}
-      </>
+      <DailyBriefing
+        briefing={briefingPayload}
+        updatedAt={heroStripUpdatedAt}
+        loading={advisor.isLoading}
+        onRegenerate={advisor.regenerate}
+        regenerating={advisor.isRegenerating}
+        // v1.15.20 — the read path reports a 422 (no provider configured)
+        // as its own outcome; swap the futile regenerate CTA for a quiet
+        // Settings → AI hint instead of an eternal "preparing" loop.
+        noProvider={advisor.readOutcome === "no-provider"}
+        // v1.18.9 (#4) — a (stale) cached briefing is shown but no provider
+        // is connected, so it can never refresh. Pair the relative-age
+        // footer with a discreet connect-provider hint. Only fires when a
+        // briefing is actually rendered (the empty-state path owns the
+        // `noProvider` branch above).
+        noProviderStale={briefingPayload !== null && !advisor.hasProvider}
+        // v1.25 — the last generation attempt failed. On a held briefing this
+        // adds a discreet "couldn't refresh — retry" footer hint; on an empty
+        // card it swaps the generic empty state for an honest "couldn't
+        // generate" one. Suppressed when no provider is configured (that hint
+        // owns the surface and a retry would be futile).
+        generationFailed={advisor.generationFailed && advisor.hasProvider}
+        // v1.25.3 — failure class points the empty-state hint at the right
+        // lever (raise the response timeout vs re-check the provider).
+        generationFailureClass={advisor.generationFailureClass}
+        // v1.28.28 (#470) — the grounding gate stripped the last regenerated
+        // briefing; the card explains the omission instead of "no briefing
+        // yet" (which made the regenerate button read as doing nothing).
+        omittedReason={advisor.briefingOmittedReason}
+      />
     ) : null,
     vitals: <VitalsDashboard batch={dashboardDerived} layout={layout} />,
     trends: (
@@ -558,27 +556,37 @@ export default function InsightsPageClient() {
         briefing={briefingPayload}
         updatedAt={heroStripUpdatedAt}
         userName={heroGreetingName}
-        healthScore={analytics?.healthScore ?? undefined}
-        // v1.16.8 — reserve the score card's column while the thick
-        // analytics payload is in flight. Every overview query
-        // (comprehensive, advisor, analytics, derived batch, layout)
-        // already fires in parallel at mount; the "greeting first,
-        // score card later" stagger came from the right column not
-        // existing until the slowest payload resolved. `isPending`
-        // settles false on success AND error, so a no-score account
-        // collapses the column exactly once.
-        healthScorePending={analyticsQuery.isPending && !analytics}
         // v1.18.9 (#4) — the hero subtitle is the cached briefing paragraph;
         // when it can never refresh (no AI provider) pair the "Generated
         // <relative>" line with a discreet connect-provider hint, matching
         // the briefing card footer. Only when a briefing is actually shown.
         noProviderStale={briefingPayload !== null && !advisor.hasProvider}
-        // v1.21.2 (A5 / A6) — server-resolved Tension Verdict + return-to-
-        // baseline off the dashboard snapshot. The hero localises the keys and
-        // forwards them to the score card; null leaves the card quiet.
-        tension={heroTension}
-        returnToBand={heroReturnToBand}
       />
+
+      {/* The Health Score is PINNED here, between the greeting and the
+          customizable region, and is deliberately NOT a registry section: an
+          id a saved layout has never seen merges in as default-INVISIBLE
+          (`orderedVisibleSectionIds`), so registering it would silently delete
+          the score for every account that has ever customised this page. It
+          also used to render inside the daily-briefing branch, which meant an
+          instance with the briefing switched off lost the whole breakdown.
+          `isPending` settles false on success AND error, so a no-score account
+          drops the reserve exactly once. */}
+      {analyticsQuery.isPending && !analytics ? (
+        <HealthScoreCardSkeleton />
+      ) : analytics?.healthScore ? (
+        <HealthScoreCard
+          report={analytics.healthScore}
+          // v1.21.2 (A5 / A6) — server-resolved Tension Verdict + return-to-
+          // baseline off the dashboard snapshot. The card localises the keys;
+          // null leaves it quiet.
+          tension={heroTension}
+          returnToBand={heroReturnToBand}
+          // A pillar whose read FAILED is an error row inside the card, and a
+          // retry there refetches the payload that carries every pillar.
+          onRetry={() => void analyticsQuery.refetch()}
+        />
+      ) : null}
 
       {/* v1.15.18 — the inline "Anpassen" toggle was removed. Customising the
           overview (section show/hide + order) and sorting the nav pills now

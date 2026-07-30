@@ -268,22 +268,42 @@ describe("v1.16.8 — insights overview cold paint", () => {
     expect(src).not.toMatch(/useDashboardDerived\([^)]*data/);
   });
 
-  it("reserves the health-score column while the analytics payload is pending", () => {
+  it("reserves the health-score card's footprint while the payload is pending", () => {
     const src = load(INSIGHTS_PATH);
-    // The hero receives the pending flag so the score card's slot holds
-    // its footprint from first paint (skeleton in `<HeroStrip>`).
+    // The pinned slot holds the collapsed card's footprint from first paint,
+    // so the resolved card is a swap rather than a push.
     expect(src).toMatch(
-      /healthScorePending=\{analyticsQuery\.isPending && !analytics\}/,
+      /analyticsQuery\.isPending && !analytics \? \(\s*<HealthScoreCardSkeleton/,
     );
   });
 
-  it("hero strip renders the score-card skeleton in the reserved column", () => {
+  it("pins the health score under the hero, outside the section registry", () => {
+    const src = load(INSIGHTS_PATH);
+    // An id a saved layout has never seen merges in as default-INVISIBLE, so
+    // registering the score would delete it for every customised page. It is
+    // also no longer inside the briefing branch, which used to take the whole
+    // breakdown down with the flag.
+    const hero = src.indexOf("<HeroStrip");
+    const score = src.indexOf("<HealthScoreCard");
+    const region = src.indexOf("orderedSectionIds.map");
+    expect(hero).toBeGreaterThan(-1);
+    expect(score).toBeGreaterThan(hero);
+    expect(score).toBeLessThan(region);
+    expect(src).not.toMatch(/"health-score":/);
+    const briefingBranch = src.slice(
+      src.indexOf('"daily-briefing": flags.briefing'),
+      src.indexOf("vitals: <VitalsDashboard"),
+    );
+    expect(briefingBranch).not.toContain("HealthScoreCard");
+  });
+
+  it("hero strip carries no score surface at all", () => {
     const heroSrc = readFileSync(
       join(ROOT, "src/components/insights/hero-strip.tsx"),
       "utf8",
     );
-    expect(heroSrc).toContain('data-slot="health-score-card-skeleton"');
-    // The two-column split keys on score-or-pending, not score alone.
-    expect(heroSrc).toMatch(/\(healthScore \|\| healthScorePending\) &&/);
+    expect(heroSrc).not.toContain("HealthScoreCard");
+    expect(heroSrc).not.toContain("health-score-card-skeleton");
+    expect(heroSrc).not.toContain("healthScorePending");
   });
 });

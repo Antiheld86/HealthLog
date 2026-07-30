@@ -2262,6 +2262,9 @@
         "red": "Uno o più pilastri sono fuori dall'intervallo di riferimento"
       },
       "insufficient": "{count} pilastri idonei. Il punteggio ne richiede almeno tre, incluso un pilastro fisiologico misurato.",
+      "anatomyToggle": "Come nasce questo punteggio",
+      "notScored": "Non ancora valutato ({count})",
+      "method": "Il punteggio è la media a peso uguale di tutti i pilastri con dati recenti sufficienti, su una scala da 0 a 100. Ogni pilastro viene confrontato con un intervallo di riferimento pubblicato e il pilastro più debole può determinare la fascia complessiva. Un pilastro senza dati sufficienti resta escluso invece di contare come zero.",
       "bandSetter": "Fascia complessiva determinata da {pillar}",
       "versionAndNoise": "Versione del metodo {version}. Soglia del confronto settimanale: {noise} punti.",
       "methodVersion": "Versione del metodo {version}.",
@@ -2320,7 +2323,6 @@
         "insufficientHistory": "Dati recenti idonei insufficienti",
         "unavailable": "Questo pilastro non è attualmente idoneo"
       },
-      "pillarInsufficient": "Nessun punteggio per il pilastro: {reason}",
       "tension": "I segnali di preparazione differiscono. Favorevoli: {positive}. Sotto sforzo: {negative}.",
       "returnToBand": "{metric} è di nuovo nel tuo intervallo abituale da {days} giorni.",
       "weightGoal": {

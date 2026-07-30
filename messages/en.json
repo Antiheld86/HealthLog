@@ -2262,6 +2262,9 @@
         "red": "One or more pillars are outside the reference range"
       },
       "insufficient": "{count} eligible pillars. The score needs at least three, including a measured physiological pillar.",
+      "anatomyToggle": "How this score comes about",
+      "notScored": "Not scored yet ({count})",
+      "method": "The score is the equal-weighted average of every pillar that has enough recent data, on a 0 to 100 scale. Each pillar is graded against a published reference band, and the weakest pillar can set the overall band. A pillar without enough data is left out rather than counted as a zero.",
       "bandSetter": "Overall band set by {pillar}",
       "versionAndNoise": "Method version {version}. Weekly comparison floor: {noise} points.",
       "methodVersion": "Method version {version}.",
@@ -2320,7 +2323,6 @@
         "insufficientHistory": "Not enough recent eligible data",
         "unavailable": "This pillar is not currently eligible"
       },
-      "pillarInsufficient": "No pillar score: {reason}",
       "tension": "Readiness signals differ. Supportive: {positive}. Under strain: {negative}.",
       "returnToBand": "{metric} has been back inside your usual range for {days} days.",
       "weightGoal": {

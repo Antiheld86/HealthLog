@@ -2262,6 +2262,9 @@
         "red": "Co najmniej jeden filar jest poza zakresem referencyjnym"
       },
       "insufficient": "{count} kwalifikujące się filary. Wynik wymaga co najmniej trzech, w tym zmierzonego filaru fizjologicznego.",
+      "anatomyToggle": "Jak powstaje ten wynik",
+      "notScored": "Jeszcze bez oceny ({count})",
+      "method": "Wynik to średnia o równych wagach ze wszystkich filarów, które mają wystarczająco dużo aktualnych danych, w skali od 0 do 100. Każdy filar jest porównywany z opublikowanym zakresem referencyjnym, a najsłabszy filar może wyznaczyć ogólny zakres. Filar bez wystarczających danych jest pomijany, a nie liczony jako zero.",
       "bandSetter": "Ogólny zakres wyznacza {pillar}",
       "versionAndNoise": "Wersja metody {version}. Próg porównania tygodniowego: {noise} pkt.",
       "methodVersion": "Wersja metody {version}.",
@@ -2320,7 +2323,6 @@
         "insufficientHistory": "Za mało aktualnych danych spełniających kryteria",
         "unavailable": "Ten filar obecnie nie spełnia kryteriów"
       },
-      "pillarInsufficient": "Brak wyniku filaru: {reason}",
       "tension": "Sygnały gotowości są rozbieżne. Sprzyjające: {positive}. Obciążone: {negative}.",
       "returnToBand": "{metric} od {days} dni ponownie mieści się w typowym zakresie.",
       "weightGoal": {

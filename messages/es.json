@@ -2262,6 +2262,9 @@
         "red": "Uno o más pilares están fuera del intervalo de referencia"
       },
       "insufficient": "{count} pilares aptos. La puntuación necesita al menos tres, incluido un pilar fisiológico medido.",
+      "anatomyToggle": "Cómo se forma esta puntuación",
+      "notScored": "Aún sin puntuar ({count})",
+      "method": "La puntuación es la media con igual peso de todos los pilares que tienen suficientes datos recientes, en una escala de 0 a 100. Cada pilar se compara con un rango de referencia publicado, y el pilar más débil puede fijar el rango general. Un pilar sin datos suficientes queda fuera en lugar de contar como cero.",
       "bandSetter": "Categoría general determinada por {pillar}",
       "versionAndNoise": "Versión del método {version}. Umbral de comparación semanal: {noise} puntos.",
       "methodVersion": "Versión del método {version}.",
@@ -2320,7 +2323,6 @@
         "insufficientHistory": "No hay suficientes datos recientes aptos",
         "unavailable": "Este pilar no reúne los requisitos actualmente"
       },
-      "pillarInsufficient": "Sin puntuación del pilar: {reason}",
       "tension": "Las señales de preparación difieren. Favorables: {positive}. Con tensión: {negative}.",
       "returnToBand": "{metric} lleva {days} días de nuevo dentro de tu intervalo habitual.",
       "weightGoal": {

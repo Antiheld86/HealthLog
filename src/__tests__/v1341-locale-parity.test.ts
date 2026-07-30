@@ -37,6 +37,12 @@ const REQUIRED_KEYS = [
   "settings.syncOutcome.partial",
   "settings.syncOutcome.failed",
   // Retained score, records, and navigation contracts.
+  // `insights.healthScore.method` was listed obsolete in v1.34.1 because its
+  // only reference was `METRIC_PROVENANCE.HEALTH_SCORE.methodKey`, which the
+  // card then passed as `method={null}` — a dangling reference, not a dead
+  // one. The score card now renders that method paragraph in its disclosure
+  // footer, so the key is a live contract again.
+  "insights.healthScore.method",
   "insights.healthScore.bandSetter",
   "insights.healthScore.versionAndNoise",
   "insights.healthScore.methodVersion",
@@ -53,7 +59,6 @@ const REQUIRED_KEYS = [
 const OBSOLETE_KEYS = [
   "insights.healthScore.algorithmChanged",
   "insights.healthScore.dismissAlgorithmChanged",
-  "insights.healthScore.method",
   "insights.healthScore.composition",
   "documents.detail.summary.regenerate",
   "records.profileFacts.correct",

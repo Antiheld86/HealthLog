@@ -2262,6 +2262,9 @@
         "red": "Mindestens ein Bereich liegt außerhalb des Referenzbereichs"
       },
       "insufficient": "{count} geeignete Bereiche. Der Score benötigt mindestens drei, darunter einen gemessenen physiologischen Bereich.",
+      "anatomyToggle": "Wie dieser Score zustande kommt",
+      "notScored": "Noch nicht bewertet ({count})",
+      "method": "Der Score ist der gleich gewichtete Mittelwert aller Säulen mit ausreichend aktuellen Daten, auf einer Skala von 0 bis 100. Jede Säule wird an einem veröffentlichten Referenzbereich gemessen, und die schwächste Säule kann den Gesamtbereich bestimmen. Eine Säule ohne ausreichende Daten bleibt außen vor und zählt nicht als null.",
       "bandSetter": "Gesamtstufe bestimmt durch {pillar}",
       "versionAndNoise": "Methodenversion {version}. Schwelle für den Wochenvergleich: {noise} Punkte.",
       "methodVersion": "Methodenversion {version}.",
@@ -2320,7 +2323,6 @@
         "insufficientHistory": "Nicht genügend aktuelle geeignete Daten",
         "unavailable": "Dieser Bereich kann derzeit nicht bewertet werden"
       },
-      "pillarInsufficient": "Kein Bereichsscore: {reason}",
       "tension": "Die Bereitschaftssignale unterscheiden sich. Unterstützend: {positive}. Belastet: {negative}.",
       "returnToBand": "{metric} liegt seit {days} Tagen wieder im üblichen Bereich.",
       "weightGoal": {

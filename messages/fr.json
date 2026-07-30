@@ -2262,6 +2262,9 @@
         "red": "Un ou plusieurs piliers sont hors de la plage de référence"
       },
       "insufficient": "{count} piliers admissibles. Le score en requiert au moins trois, dont un pilier physiologique mesuré.",
+      "anatomyToggle": "Comment ce score est établi",
+      "notScored": "Pas encore évalué ({count})",
+      "method": "Le score est la moyenne à poids égal de tous les piliers disposant d'assez de données récentes, sur une échelle de 0 à 100. Chaque pilier est comparé à une plage de référence publiée, et le pilier le plus faible peut déterminer la plage globale. Un pilier sans données suffisantes est écarté plutôt que compté comme un zéro.",
       "bandSetter": "Catégorie globale fixée par {pillar}",
       "versionAndNoise": "Version de la méthode {version}. Seuil de comparaison hebdomadaire : {noise} points.",
       "methodVersion": "Version de la méthode {version}.",
@@ -2320,7 +2323,6 @@
         "insufficientHistory": "Pas assez de données récentes admissibles",
         "unavailable": "Ce pilier n'est pas admissible actuellement"
       },
-      "pillarInsufficient": "Aucun score pour ce pilier : {reason}",
       "tension": "Les signaux de préparation diffèrent. Favorables : {positive}. Sous tension : {negative}.",
       "returnToBand": "{metric} est revenu dans ta plage habituelle depuis {days} jours.",
       "weightGoal": {

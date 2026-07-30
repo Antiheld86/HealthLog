@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { I18nProvider } from "@/lib/i18n/context";
 import { HeroStrip } from "../hero-strip";
 import type { DailyBriefing as DailyBriefingPayload } from "@/lib/ai/schema";
-import type { HealthScoreReport } from "@/lib/analytics/score/types";
 
 // The "generated" freshness line reads the profile timezone via `useAuth`; stub
 // it so the SSR render does not reach for a QueryClient the test omits.
@@ -41,54 +40,6 @@ const sampleBriefing: DailyBriefingPayload = {
 const morningLocal = new Date("2026-05-10T07:00:00Z"); // 09:00 Berlin
 const afternoonLocal = new Date("2026-05-10T12:00:00Z"); // 14:00 Berlin
 const eveningLocal = new Date("2026-05-10T18:00:00Z"); // 20:00 Berlin
-const SCORE_REPORT: HealthScoreReport = {
-  composite: {
-    status: "ok",
-    value: {
-      score: 86,
-      band: "green",
-      bandSetter: null,
-      composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
-      noiseFloor: 3,
-      scoreVersion: 2,
-    },
-    coverage: {
-      requiredInputs: 3,
-      presentInputs: 3,
-      historyDays: 28,
-      missing: [],
-    },
-    confidence: { score: 100, band: "high" },
-    provenance: {
-      inputs: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
-      source: "live",
-      windowDays: 90,
-      computedAt: "2026-05-10T07:00:00.000Z",
-    },
-  },
-  pillars: [],
-  delta: 5,
-  deltaReason: null,
-  scoreVersion: 2,
-  weightGoal: {
-    status: "insufficient",
-    coverage: {
-      requiredInputs: 2,
-      presentInputs: 0,
-      historyDays: 0,
-      missing: ["weight reading", "personal weight target"],
-    },
-    provenance: {
-      inputs: ["WEIGHT"],
-      source: "none",
-      windowDays: 90,
-      computedAt: "2026-05-10T07:00:00.000Z",
-    },
-    reason: "no_personal_goal",
-  },
-  algorithmNotice: null,
-};
-
 describe("<HeroStrip>", () => {
   it("renders the slot wrapper + Dracula gradient utility", () => {
     const html = render(<HeroStrip briefing={null} now={morningLocal} />);
@@ -287,126 +238,35 @@ describe("<HeroStrip>", () => {
     expect(html).not.toContain('data-slot="insights-hero-strip-weekly-banner"');
   });
 
-  // ── B5 — Health Score panel ────────────────────────────────────────
-  it("does NOT render the Health Score panel when healthScore is omitted", () => {
+  // ── B5 — the Health Score left the hero band ──────────────────────
+  // The score used to mount twice: a compact face in this band and the full
+  // breakdown below it. The breakdown is now one pinned card under the band
+  // (`page-client.tsx`), so the hero carries no score surface at all — no
+  // panel, no reserved column, no skeleton.
+  it("never renders a Health Score surface in the band", () => {
     const html = render(<HeroStrip briefing={null} now={morningLocal} />);
     expect(html).not.toContain('data-slot="health-score-card"');
+    expect(html).not.toContain('data-slot="health-score-card-compact"');
+    expect(html).not.toContain('data-slot="health-score-card-skeleton"');
   });
 
-  it("renders the Health Score panel when the score is supplied", () => {
-    const html = render(
-      <HeroStrip
-        briefing={null}
-        now={morningLocal}
-        healthScore={SCORE_REPORT}
-      />,
-    );
-    expect(html).toMatch(/data-slot="health-score-card-compact"/);
-    expect(html).toMatch(/data-band="green"/);
-    expect(html).toContain(">86<");
+  it("keeps the greeting on the full width with no reserved second column", () => {
+    // With the panel gone the band is single-column on every breakpoint; the
+    // `md:`/`lg:` split + stretch contract it carried for the score column
+    // must not come back, or the greeting reflows around an empty slot.
+    const html = render(<HeroStrip briefing={null} now={morningLocal} />);
+    expect(html).not.toContain("md:flex-row");
+    expect(html).not.toContain("lg:flex-row");
+    expect(html).not.toContain("md:items-stretch");
+    expect(html).not.toContain("md:basis-[22rem]");
   });
 
   it("does not render any Ask-the-Coach affordance in the hero band", () => {
     // v1.4.27 F8 — the inline HSC Ask-the-Coach button was retired.
     // v1.18.7 — the hero action-row coach button was removed too; the
-    // Coach is the bottom-right drawer, not a hero affordance. Neither
-    // the score card nor the band surfaces a coach button.
-    const html = render(
-      <HeroStrip
-        briefing={null}
-        now={morningLocal}
-        healthScore={SCORE_REPORT}
-      />,
-    );
+    // Coach is the bottom-right drawer, not a hero affordance.
+    const html = render(<HeroStrip briefing={null} now={morningLocal} />);
     expect(html).not.toContain('data-slot="health-score-card-ask-coach"');
     expect(html).not.toContain('data-slot="insights-hero-strip-action-coach"');
-  });
-
-  it("uses the lg row layout when healthScore is supplied (smoke test on container class)", () => {
-    const html = render(
-      <HeroStrip
-        briefing={null}
-        now={morningLocal}
-        healthScore={SCORE_REPORT}
-      />,
-    );
-    // The wrapper picks up the `lg:flex-row` modifier when the score
-    // is present so the panel sits beside the title block on desktop.
-    expect(html).toContain("lg:flex-row");
-  });
-
-  // ── v1.4.28 R3c-Insights — equal-height contract (FB-H1/H2) ───────
-  it("stretches the row's cross-axis when the HealthScore card mounts (md+/lg+)", () => {
-    // Per Inv-4 the right column painted 75-110 px shorter than the
-    // left column on desktop. Switching the parent flex row from
-    // `items-start` to `items-stretch` gives the card a stretched
-    // shell to grow into. The class is load-bearing for FB-H1/H2 —
-    // if a future refactor reverts to `items-start` the height gap
-    // returns.
-    const html = render(
-      <HeroStrip
-        briefing={null}
-        now={morningLocal}
-        healthScore={SCORE_REPORT}
-      />,
-    );
-    expect(html).toContain("md:items-stretch");
-    expect(html).toContain("lg:items-stretch");
-    expect(html).not.toContain("md:items-start");
-  });
-
-  it("does NOT stretch the row when healthScore is omitted", () => {
-    // Pin the negative case so a future refactor can't blanket-apply
-    // the stretch contract on the no-score layout (no right column
-    // means nothing to stretch toward).
-    const html = render(<HeroStrip briefing={null} now={morningLocal} />);
-    expect(html).not.toContain("md:items-stretch");
-  });
-
-  // ── v1.16.8 — score-column reservation while analytics is pending ──
-  it("reserves the score column with a skeleton while the payload is pending", () => {
-    const html = render(
-      <HeroStrip briefing={null} now={morningLocal} healthScorePending />,
-    );
-    // The placeholder mirrors the card's column footprint so the band
-    // paints at its final geometry from the first frame.
-    expect(html).toContain('data-slot="health-score-card-skeleton"');
-    expect(html).toContain("md:basis-[22rem]");
-    expect(html).toContain('aria-hidden="true"');
-    // The real card stays absent until the payload lands.
-    expect(html).not.toContain('data-slot="health-score-card" ');
-  });
-
-  it("keeps the two-column split active while pending", () => {
-    const html = render(
-      <HeroStrip briefing={null} now={morningLocal} healthScorePending />,
-    );
-    expect(html).toContain("md:flex-row");
-    expect(html).toContain("md:items-stretch");
-  });
-
-  it("drops the skeleton once the payload resolves without a score", () => {
-    const html = render(
-      <HeroStrip
-        briefing={null}
-        now={morningLocal}
-        healthScorePending={false}
-      />,
-    );
-    expect(html).not.toContain('data-slot="health-score-card-skeleton"');
-    expect(html).not.toContain("md:items-stretch");
-  });
-
-  it("renders the real card, never the skeleton, when a score is present", () => {
-    const html = render(
-      <HeroStrip
-        briefing={null}
-        now={morningLocal}
-        healthScorePending
-        healthScore={SCORE_REPORT}
-      />,
-    );
-    expect(html).toContain('data-slot="health-score-card-compact"');
-    expect(html).not.toContain('data-slot="health-score-card-skeleton"');
   });
 });
