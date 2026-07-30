@@ -166,6 +166,13 @@ const workoutDetailResponse = z
     sportType: z.string(),
     startedAt: z.iso.datetime({ offset: true }),
     endedAt: z.iso.datetime({ offset: true }),
+    /**
+     * The local calendar day the session belongs to, `YYYY-MM-DD`, resolved
+     * server-side from `startedAt` in the user's timezone. Clients address
+     * the day-scoped reads with it instead of deriving a day from the
+     * timestamp in their own zone.
+     */
+    dayKey: z.string(),
     durationSec: z.number().int().nonnegative(),
     distanceM: z.number().nullable(),
     activeEnergyKcal: z.number().nullable(),

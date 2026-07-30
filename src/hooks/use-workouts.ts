@@ -290,6 +290,14 @@ export type WorkoutActivityInsight = {
 } | null;
 
 export interface WorkoutDetailPayload extends WorkoutListEntry {
+  /**
+   * The session's local calendar day, `YYYY-MM-DD`. Computed server-side
+   * from `startedAt` in the user's timezone — never re-derived here, so a
+   * browser in a different zone can't move the workout to another day. It
+   * addresses the day-scoped reads the detail page renders around the
+   * session.
+   */
+  dayKey: string;
   minHr: number | null;
   stepCount: number | null;
   elevationM: number | null;

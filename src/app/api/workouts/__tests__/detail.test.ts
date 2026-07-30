@@ -15,7 +15,10 @@
  *   - the optional `route` field flows through GeoJSON geometry when a
  *     `WorkoutRoute` row is attached, and is null when missing;
  *   - `aiInsight` is a pure READ: it serves a stored paragraph when one
- *     exists, null when none does, and never generates one.
+ *     exists, null when none does, and never generates one;
+ *   - `dayKey` dates the session in the user's timezone, so a session that
+ *     starts late in the UTC evening lands on the local day the person
+ *     actually trained on.
  */
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
@@ -65,6 +68,7 @@ import { GET } from "../[id]/route";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { isModuleEnabled, requireModuleEnabled } from "@/lib/modules/gate";
+import { invalidateUserTimezone } from "@/lib/tz/resolver";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -125,6 +129,9 @@ describe("GET /api/workouts/{id}", () => {
       enabled: true,
     } as never);
     vi.mocked(isModuleEnabled).mockResolvedValue(true);
+    // The timezone resolver caches per user for 60 s in process; drop the
+    // entry so a test that pins a zone is not served the previous one.
+    invalidateUserTimezone(SESSION_OK.user.id);
   });
 
   it("returns the workout with iOS-contract field names", async () => {
@@ -151,6 +158,36 @@ describe("GET /api/workouts/{id}", () => {
     expect(body.data.maxHr).toBe(170);
     expect(body.data.canonicalId).toBe("w-1");
     expect(body.data.route).toBeNull();
+  });
+
+  it("dates the session by the user's timezone, not by UTC", async () => {
+    // 20:00 UTC is already the NEXT calendar day in Auckland. A client that
+    // sliced the ISO timestamp would read 2026-05-15 and then pull the wrong
+    // day's pulse, sleep and mood around the session.
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      sourcePriorityJson: null,
+      dateOfBirth: null,
+      timezone: "Pacific/Auckland",
+    } as never);
+    vi.mocked(prisma.workout.findUnique).mockResolvedValueOnce({
+      ...BASE_ROW,
+      startedAt: new Date("2026-05-15T20:00:00Z"),
+      endedAt: new Date("2026-05-15T20:30:00Z"),
+    } as never);
+    vi.mocked(prisma.workout.findMany).mockResolvedValueOnce([
+      {
+        id: "w-1",
+        source: "APPLE_HEALTH",
+        startedAt: new Date("2026-05-15T20:00:00Z"),
+        sportType: "RUNNING",
+      },
+    ] as never);
+
+    const res = await GET(makeRequest(), makeParams("w-1"));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data.dayKey).toBe("2026-05-16");
   });
 
   it("enriches the Apple winner with only matched WHOOP HR and zones", async () => {

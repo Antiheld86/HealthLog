@@ -41,6 +41,8 @@ import {
 import { computeSplits } from "@/lib/workouts/splits";
 import { buildSportContext } from "@/lib/workouts/sport-context";
 import type { RouteCoordinate } from "@/lib/workouts/route-svg";
+import { resolveUserTimezone } from "@/lib/tz/resolver";
+import { userDayKey } from "@/lib/tz/format";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -129,6 +131,14 @@ export const GET = apiHandler(
       where: { id: user.id },
       select: { sourcePriorityJson: true, dateOfBirth: true },
     });
+    // The local calendar day this session belongs to. Resolved here, in the
+    // user's timezone, so the day linkage stays server-authoritative — a
+    // client that derived it from `startedAt` would fall back to the browser
+    // zone and put a late-evening session on the wrong day whenever the two
+    // disagree.
+    const timezone = await resolveUserTimezone(user.id);
+    const dayKey = userDayKey(row.startedAt, timezone);
+
     const canonicalCluster = pickCanonicalWorkoutRows(
       clusterRows,
       userRow?.sourcePriorityJson ?? null,
@@ -250,6 +260,10 @@ export const GET = apiHandler(
       sportType: row.sportType,
       startedAt: row.startedAt,
       endedAt: row.endedAt,
+      // `YYYY-MM-DD` in the user's timezone. Additive; it addresses the
+      // day-scoped reads (intraday pulse, that night's sleep, the day's
+      // mood) the detail surface renders around the session.
+      dayKey,
       durationSec: row.durationSec,
       distanceM: row.totalDistanceM,
       activeEnergyKcal: row.totalEnergyKcal,
