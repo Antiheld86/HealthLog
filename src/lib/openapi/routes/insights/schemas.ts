@@ -303,6 +303,16 @@ export const discoveredCorrelation = z
       .describe(
         "Benjamini-Hochberg FDR-adjusted q-value (≤ the surface threshold).",
       ),
+    shrunkR: z
+      .number()
+      .describe(
+        "Sample-size-shrunk effect (r shrunk toward null by depth), used for ranking and the effect-size floor. Display still uses raw `r`.",
+      ),
+    tier: z
+      .enum(["high", "moderate", "faint"])
+      .describe(
+        "Phrasing-confidence tier the narration honours: `faint` is hedged, `high` is stated plainly, `moderate` sits between. A below-floor pair never reaches this list.",
+      ),
     interpretation: z
       .string()
       .describe("Conservative, descriptive interpretation — never causal."),

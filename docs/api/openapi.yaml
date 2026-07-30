@@ -29870,6 +29870,18 @@ components:
         qValue:
           type: number
           description: Benjamini-Hochberg FDR-adjusted q-value (≤ the surface threshold).
+        shrunkR:
+          type: number
+          description: Sample-size-shrunk effect (r shrunk toward null by depth), used for ranking and the effect-size floor.
+            Display still uses raw `r`.
+        tier:
+          type: string
+          enum:
+            - high
+            - moderate
+            - faint
+          description: "Phrasing-confidence tier the narration honours: `faint` is hedged, `high` is stated plainly, `moderate`
+            sits between. A below-floor pair never reaches this list."
         interpretation:
           type: string
           description: Conservative, descriptive interpretation — never causal.
@@ -29904,6 +29916,8 @@ components:
         - r
         - pValue
         - qValue
+        - shrunkR
+        - tier
         - interpretation
         - lagDays
       additionalProperties: false
