@@ -8,7 +8,7 @@
  */
 import { z } from "zod/v4";
 import type { ZodOpenApiObject } from "zod-openapi";
-import { dataEnvelope, stdResponses } from "./shared";
+import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
 
 // Mirror the route's `directionEnum` — per-metric sync direction.
 const healthKitDirectionEnum = z
@@ -141,6 +141,111 @@ const healthKitPatchRequest = z
       "Merge-by-`id` update of the HealthKit metric config. Unknown ids are silently ignored; omitted fields fall back to the stored (or default) value for that entry. Up to 50 entries per call.",
   });
 
+// v1.32.28 — on-demand provider sync trigger. Identical response shape
+// across Oura / Polar / Strava / Nightscout (`resolveSyncOutcome`), so a
+// client renders one outcome card for all four. `outcome` is the
+// server-resolved tone, never derived from the HTTP status alone: 200 is the
+// transport succeeding, not the write — a run where every row was refused
+// still answers 200 with `outcome: "failed"`.
+const providerSyncOutcome = z
+  .object({
+    imported: z
+      .number()
+      .int()
+      .describe("Rows that reached the database this run."),
+    failed: z
+      .boolean()
+      .describe(
+        "True when any part of the run did not land — a row, a collection, a leg.",
+      ),
+    outcome: z
+      .enum(["empty", "failed", "partial", "success"])
+      .describe(
+        "`empty` — nothing new, nothing refused. `failed` — nothing written, something refused. `partial` — some written, some refused. `success` — everything written.",
+      ),
+  })
+  .meta({
+    id: "ProviderSyncOutcome",
+    description:
+      "The result of an on-demand provider sync trigger. No request body; the sync window is derived server-side from the newest row already held, never a client-supplied lookback.",
+  });
+
+// v1.32.x — Google Health background sync progress. Mirrors
+// `GoogleHealthResourceOutcome` / the route's `resource()` sanitiser
+// (`src/app/api/google-health/sync/status/route.ts`): every field is
+// re-clamped/re-checked against a closed enum on read, so this documents
+// the SANITISED wire shape, not the raw stored blob.
+const googleHealthResourceOutcome = z
+  .object({
+    resource: z
+      .string()
+      .describe(
+        "Resource collection name, lower-cased and slug-sanitised (`[^a-z0-9-]` stripped), capped at 48 chars. `unknown` when the stored value was not a string.",
+      ),
+    pages: z.number().int().min(0),
+    fetched: z.number().int().min(0),
+    mapped: z.number().int().min(0),
+    written: z.number().int().min(0),
+    status: z
+      .enum(["pending", "complete", "partial", "empty", "truncated", "failed"])
+      .describe(
+        "Falls back to `failed` when the stored value is not one of this closed set.",
+      ),
+    durationMs: z.number().int().min(0),
+    truncated: z.boolean(),
+    reasonCode: z
+      .enum([
+        "collection_failed",
+        "token_failed",
+        "upsert_failed",
+        "rollup_failed",
+        "existing_page_limit",
+      ])
+      .nullable()
+      .describe(
+        "Null when the stored value is not one of this closed set, or when the resource did not fail.",
+      ),
+  })
+  .meta({ id: "GoogleHealthResourceOutcome" });
+
+const googleHealthSyncStatusResponse = z
+  .object({
+    runId: z.string().describe("Truncated to 128 chars."),
+    state: z
+      .enum([
+        "in_progress",
+        "complete",
+        "partial",
+        "zero",
+        "truncated",
+        "failed",
+        "interrupted",
+      ])
+      .describe(
+        "Falls back to `failed` when the stored value is not one of this closed set.",
+      ),
+    startedAt: z.string().describe("ISO instant, or empty string when unset."),
+    updatedAt: z.string().describe("ISO instant, or empty string when unset."),
+    terminalAt: z
+      .string()
+      .optional()
+      .describe(
+        "ISO instant the run reached a terminal state. Present only once the run has finished; absent while `state` is `in_progress`.",
+      ),
+    imported: z.number().int().min(0),
+    failed: z.boolean(),
+    resources: z
+      .array(googleHealthResourceOutcome)
+      .max(16)
+      .describe("Per-collection outcome for this run, capped at 16 entries."),
+  })
+  .nullable()
+  .meta({
+    id: "GoogleHealthSyncStatusResponse",
+    description:
+      "The caller's current/most-recent Google Health sync run, or null when none has ever run. `data` carries this shape directly (not nested under a named key).",
+  });
+
 export const integrationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   "/api/integrations/healthkit": {
     get: {
@@ -182,6 +287,133 @@ export const integrationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
               schema: dataEnvelope(
                 healthKitConfigResponse,
                 "HealthKitConfigPatchEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/oura/sync": {
+    post: {
+      tags: ["Integrations"],
+      summary: "Trigger an on-demand Oura sync",
+      description:
+        "Runs the same sync entry point the hourly cron uses. No body: the window is derived from the newest row already held, not a client-supplied lookback. Rate-limited 5 requests / 60s per user.",
+      responses: {
+        "200": {
+          description: "Sync run complete.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(providerSyncOutcome, "OuraSyncEnvelope"),
+            },
+          },
+        },
+        "502": {
+          description:
+            "The sync failed upstream. The classified failure is already recorded on the `oura` ledger; the response body carries no upstream detail.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/polar/sync": {
+    post: {
+      tags: ["Integrations"],
+      summary: "Trigger an on-demand Polar sync",
+      description:
+        "Runs both Polar legs (vitals then workouts) through the same entry point the hourly poll uses, each with its own failure recording. No body: there is no full-history arm to call. Rate-limited 5 requests / 60s per user.",
+      responses: {
+        "200": {
+          description: "Sync run complete.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(providerSyncOutcome, "PolarSyncEnvelope"),
+            },
+          },
+        },
+        "502": {
+          description:
+            "The sync failed upstream. The classified failure is already recorded on the `polar` ledger; the response body carries no upstream detail.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/strava/sync": {
+    post: {
+      tags: ["Integrations"],
+      summary: "Trigger an on-demand Strava sync",
+      description:
+        "Incremental from the stored Strava cursor (`stravaLastActivityAt` minus an overlap) — a manual run picks up wherever the last one stopped. No body and no full-history arm; deep history belongs to the connect-time backfill queue. `failed` is always `false` on a 200: the underlying walk rethrows on the first row error rather than settling partially, so reaching a 200 means every fetched activity was written. Rate-limited 5 requests / 60s per user.",
+      responses: {
+        "200": {
+          description: "Sync run complete.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(providerSyncOutcome, "StravaSyncEnvelope"),
+            },
+          },
+        },
+        "502": {
+          description:
+            "The sync failed upstream. The classified failure is already recorded on the `strava` ledger; the response body carries no upstream detail.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/nightscout/sync": {
+    post: {
+      tags: ["Integrations"],
+      summary: "Trigger an on-demand Nightscout sync",
+      description:
+        "Pulls the recent SGV window from the configured Nightscout instance. No body: there is no full-history arm to call. The error body is always a fixed message, never the caught error's own — a Nightscout base URL carries its API token as a query parameter, so an upstream message could leak it. Rate-limited 5 requests / 60s per user.",
+      responses: {
+        "200": {
+          description: "Sync run complete.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                providerSyncOutcome,
+                "NightscoutSyncEnvelope",
+              ),
+            },
+          },
+        },
+        "502": {
+          description:
+            "The sync failed upstream. The classified failure is already recorded on the `nightscout` ledger; the response body carries no upstream detail.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+        "422": {
+          description:
+            "The configured Nightscout origin is private (RFC 1918 / loopback / link-local) and the server operator has not approved private-origin access for this deployment.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
+  "/api/google-health/sync/status": {
+    get: {
+      tags: ["Integrations"],
+      summary: "Read the caller's Google Health sync progress",
+      description:
+        'Returns only the authenticated user\'s own bounded current/most-recent sync run; there is no way to address another run or another connection\'s progress by query parameter (query parameters are ignored by construction). Every field is re-clamped and re-checked against its closed enum on read, so a malformed or legacy stored blob degrades to safe defaults (e.g. `state: "failed"`, `resource: "unknown"`) rather than reaching the client verbatim. Auth via cookie or Bearer.',
+      responses: {
+        "200": {
+          description:
+            "The current/most-recent run, or `data: null` when none has ever run.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                googleHealthSyncStatusResponse,
+                "GoogleHealthSyncStatusEnvelope",
               ),
             },
           },

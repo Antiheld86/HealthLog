@@ -11889,6 +11889,134 @@ paths:
         "401": *a1
         "422": *a3
         "429": *a4
+  /api/oura/sync:
+    post:
+      tags:
+        - Integrations
+      summary: Trigger an on-demand Oura sync
+      description: "Runs the same sync entry point the hourly cron uses. No body: the window is derived from the newest row
+        already held, not a client-supplied lookback. Rate-limited 5 requests / 60s per user."
+      responses:
+        "200":
+          description: Sync run complete.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OuraSyncEnvelope"
+        "401": *a1
+        "422": *a3
+        "429": *a4
+        "502":
+          description: The sync failed upstream. The classified failure is already recorded on the `oura` ledger; the response
+            body carries no upstream detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /api/polar/sync:
+    post:
+      tags:
+        - Integrations
+      summary: Trigger an on-demand Polar sync
+      description: "Runs both Polar legs (vitals then workouts) through the same entry point the hourly poll uses, each with
+        its own failure recording. No body: there is no full-history arm to call. Rate-limited 5 requests / 60s per
+        user."
+      responses:
+        "200":
+          description: Sync run complete.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolarSyncEnvelope"
+        "401": *a1
+        "422": *a3
+        "429": *a4
+        "502":
+          description: The sync failed upstream. The classified failure is already recorded on the `polar` ledger; the response
+            body carries no upstream detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /api/strava/sync:
+    post:
+      tags:
+        - Integrations
+      summary: Trigger an on-demand Strava sync
+      description: "Incremental from the stored Strava cursor (`stravaLastActivityAt` minus an overlap) — a manual run picks
+        up wherever the last one stopped. No body and no full-history arm; deep history belongs to the connect-time
+        backfill queue. `failed` is always `false` on a 200: the underlying walk rethrows on the first row error rather
+        than settling partially, so reaching a 200 means every fetched activity was written. Rate-limited 5 requests /
+        60s per user."
+      responses:
+        "200":
+          description: Sync run complete.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StravaSyncEnvelope"
+        "401": *a1
+        "422": *a3
+        "429": *a4
+        "502":
+          description: The sync failed upstream. The classified failure is already recorded on the `strava` ledger; the response
+            body carries no upstream detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /api/nightscout/sync:
+    post:
+      tags:
+        - Integrations
+      summary: Trigger an on-demand Nightscout sync
+      description: "Pulls the recent SGV window from the configured Nightscout instance. No body: there is no full-history arm
+        to call. The error body is always a fixed message, never the caught error's own — a Nightscout base URL carries
+        its API token as a query parameter, so an upstream message could leak it. Rate-limited 5 requests / 60s per
+        user."
+      responses:
+        "200":
+          description: Sync run complete.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NightscoutSyncEnvelope"
+        "401": *a1
+        "422":
+          description: The configured Nightscout origin is private (RFC 1918 / loopback / link-local) and the server operator has
+            not approved private-origin access for this deployment.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429": *a4
+        "502":
+          description: The sync failed upstream. The classified failure is already recorded on the `nightscout` ledger; the
+            response body carries no upstream detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /api/google-health/sync/status:
+    get:
+      tags:
+        - Integrations
+      summary: Read the caller's Google Health sync progress
+      description: "Returns only the authenticated user's own bounded current/most-recent sync run; there is no way to address
+        another run or another connection's progress by query parameter (query parameters are ignored by construction).
+        Every field is re-clamped and re-checked against its closed enum on read, so a malformed or legacy stored blob
+        degrades to safe defaults (e.g. `state: \"failed\"`, `resource: \"unknown\"`) rather than reaching the client
+        verbatim. Auth via cookie or Bearer."
+      responses:
+        "200":
+          description: "The current/most-recent run, or `data: null` when none has ever run."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoogleHealthSyncStatusEnvelope"
+        "401": *a1
+        "422": *a3
+        "429": *a4
   /api/daily/digest:
     get:
       tags:
@@ -33970,6 +34098,231 @@ components:
       required:
         - data
         - error
+      additionalProperties: false
+    OuraSyncEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ProviderSyncOutcome"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    ProviderSyncOutcome:
+      type: object
+      properties:
+        imported:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: Rows that reached the database this run.
+        failed:
+          type: boolean
+          description: True when any part of the run did not land — a row, a collection, a leg.
+        outcome:
+          type: string
+          enum:
+            - empty
+            - failed
+            - partial
+            - success
+          description: "`empty` — nothing new, nothing refused. `failed` — nothing written, something refused. `partial` — some
+            written, some refused. `success` — everything written."
+      required:
+        - imported
+        - failed
+        - outcome
+      additionalProperties: false
+      description: The result of an on-demand provider sync trigger. No request body; the sync window is derived server-side
+        from the newest row already held, never a client-supplied lookback.
+    PolarSyncEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ProviderSyncOutcome"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    StravaSyncEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ProviderSyncOutcome"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    NightscoutSyncEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ProviderSyncOutcome"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    GoogleHealthSyncStatusEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/GoogleHealthSyncStatusResponse"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    GoogleHealthSyncStatusResponse:
+      anyOf:
+        - type: object
+          properties:
+            runId:
+              type: string
+              description: Truncated to 128 chars.
+            state:
+              type: string
+              enum:
+                - in_progress
+                - complete
+                - partial
+                - zero
+                - truncated
+                - failed
+                - interrupted
+              description: Falls back to `failed` when the stored value is not one of this closed set.
+            startedAt:
+              type: string
+              description: ISO instant, or empty string when unset.
+            updatedAt:
+              type: string
+              description: ISO instant, or empty string when unset.
+            terminalAt:
+              description: ISO instant the run reached a terminal state. Present only once the run has finished; absent while `state`
+                is `in_progress`.
+              type: string
+            imported:
+              type: integer
+              minimum: 0
+              maximum: 9007199254740991
+            failed:
+              type: boolean
+            resources:
+              maxItems: 16
+              type: array
+              items:
+                $ref: "#/components/schemas/GoogleHealthResourceOutcome"
+              description: Per-collection outcome for this run, capped at 16 entries.
+          required:
+            - runId
+            - state
+            - startedAt
+            - updatedAt
+            - imported
+            - failed
+            - resources
+          additionalProperties: false
+        - type: "null"
+      description: The caller's current/most-recent Google Health sync run, or null when none has ever run. `data` carries
+        this shape directly (not nested under a named key).
+    GoogleHealthResourceOutcome:
+      type: object
+      properties:
+        resource:
+          type: string
+          description: Resource collection name, lower-cased and slug-sanitised (`[^a-z0-9-]` stripped), capped at 48 chars.
+            `unknown` when the stored value was not a string.
+        pages:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        fetched:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        mapped:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        written:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        status:
+          type: string
+          enum:
+            - pending
+            - complete
+            - partial
+            - empty
+            - truncated
+            - failed
+          description: Falls back to `failed` when the stored value is not one of this closed set.
+        durationMs:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        truncated:
+          type: boolean
+        reasonCode:
+          anyOf:
+            - type: string
+              enum:
+                - collection_failed
+                - token_failed
+                - upsert_failed
+                - rollup_failed
+                - existing_page_limit
+            - type: "null"
+          description: Null when the stored value is not one of this closed set, or when the resource did not fail.
+      required:
+        - resource
+        - pages
+        - fetched
+        - mapped
+        - written
+        - status
+        - durationMs
+        - truncated
+        - reasonCode
       additionalProperties: false
     DailyDigestEnvelope:
       type: object
