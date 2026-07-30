@@ -12,11 +12,17 @@ import {
   invalidateUserMedications,
   invalidateUserProfile,
 } from "@/lib/cache/invalidate";
+import { sanitiseZodIssues, type SanitisedZodIssue } from "@/lib/api-response";
 import { z } from "zod/v4";
 
 const extendedProfileSchema = profileSchema.extend({
   displayName: z.string().min(1).max(80).nullable().optional(),
-  locale: z.enum(["de", "en"]).nullable().optional(),
+  locale: z
+    .enum(["de", "en"], {
+      error: "Locale must be de or en.",
+    })
+    .nullable()
+    .optional(),
   timezone: z
     .string()
     .min(1)
@@ -26,11 +32,57 @@ const extendedProfileSchema = profileSchema.extend({
   moodReminderEnabled: z.boolean().optional(),
   // Hour-cycle display preference. AUTO follows the locale convention,
   // H12 forces AM/PM, H24 forces 24-hour.
-  timeFormat: z.enum(["AUTO", "H12", "H24"]).optional(),
+  timeFormat: z
+    .enum(["AUTO", "H12", "H24"], {
+      error: "Time format must be AUTO, H12 or H24.",
+    })
+    .optional(),
   // Date-order display preference. AUTO follows the locale convention,
   // DMY pins day-month-year, MDY month-day-year, YMD ISO yyyy-MM-dd.
-  dateFormat: z.enum(["AUTO", "DMY", "MDY", "YMD"]).optional(),
+  dateFormat: z
+    .enum(["AUTO", "DMY", "MDY", "YMD"], {
+      error: "Date format must be AUTO, DMY, MDY or YMD.",
+    })
+    .optional(),
 });
+
+type ExtendedProfileInput = z.infer<typeof extendedProfileSchema>;
+
+/**
+ * The profile schema has no cross-field `.refine()` — every field is an
+ * independent scalar column. That means a rejected `gender` has no
+ * bearing on whether `heightCm` is safe to write, so a single bad field
+ * no longer has to take every sibling change down with it (the report:
+ * "editing height and gender together lost both").
+ *
+ * Re-validates each key present in `body` against its own field schema
+ * (`extendedProfileSchema.shape[key]`), independent of the others.
+ * Fields that pass land in `valid`; fields that fail land in `issues`
+ * with `path` set to the field name (a field-level `safeParse` reports
+ * an empty path, since it never saw the parent object). Unknown keys
+ * are silently dropped, matching `z.object`'s own default behaviour.
+ */
+function splitValidProfileFields(body: Record<string, unknown>): {
+  valid: Partial<ExtendedProfileInput>;
+  issues: SanitisedZodIssue[];
+} {
+  const shape = extendedProfileSchema.shape as Record<string, z.ZodTypeAny>;
+  const valid: Record<string, unknown> = {};
+  const issues: SanitisedZodIssue[] = [];
+  for (const key of Object.keys(body)) {
+    const fieldSchema = shape[key];
+    if (!fieldSchema) continue;
+    const result = fieldSchema.safeParse(body[key]);
+    if (result.success) {
+      valid[key] = result.data;
+    } else {
+      for (const issue of result.error.issues) {
+        issues.push({ path: key, code: issue.code, message: issue.message });
+      }
+    }
+  }
+  return { valid: valid as Partial<ExtendedProfileInput>, issues };
+}
 
 export interface ApplyProfileResult {
   ok: true;
@@ -58,18 +110,53 @@ export interface ApplyProfileResult {
     insurerIkNumber: string | null;
     hasInsuranceNumber: boolean;
   };
+  /**
+   * Present only when the caller sent at least one invalid field
+   * alongside at least one valid one. The fields named here were NOT
+   * written — everything absent from this list landed. Empty/undefined
+   * means every touched field saved cleanly. The web client resolves
+   * `path` against its own field labels to name the rejected field(s);
+   * the message stays machine-readable, never shown verbatim.
+   */
+  rejectedFields?: SanitisedZodIssue[];
 }
 
 export interface ApplyProfileError {
   ok: false;
   status: number;
+  /**
+   * A sentence safe for a person to read — never a raw Zod message (no
+   * enum literals, no validator prose). Native/non-i18n callers that
+   * ignore `errorCode` still get something a person can act on.
+   */
   message: string;
+  /**
+   * Stable code the web client resolves through `apiErrors.<errorCode>`
+   * for a localized sentence (see `localizedApiError`). Absent for
+   * non-validation failures (e.g. the 409 email-conflict below) that
+   * already carry a safe, specific message.
+   */
+  errorCode?: string;
+  /**
+   * Full per-field detail, relocated (not deleted) from the top-level
+   * `message`. Matches the `details.issues` multi-issue envelope the
+   * iOS contract already expects from other write routes.
+   */
+  issues?: SanitisedZodIssue[];
 }
 
 /**
  * Validate and persist profile updates for `userId`. Returns either an
  * `ApplyProfileResult` on success or `ApplyProfileError` with a status
  * code so callers can shape the wire response themselves.
+ *
+ * The profile schema has no cross-field dependency, so an invalid field
+ * never has to block its valid siblings: a full-object parse is tried
+ * first (the common case), and only on failure does the update fall
+ * back to `splitValidProfileFields` to salvage whatever validated. If
+ * NOTHING in the payload validates, nothing is written — an honest
+ * all-or-nothing rejection naming the field that blocked it, rather
+ * than a raw validator string.
  */
 export async function applyProfileUpdate(
   userId: string,
@@ -77,15 +164,44 @@ export async function applyProfileUpdate(
   ipAddress?: string | null,
 ): Promise<ApplyProfileResult | ApplyProfileError> {
   const parsed = extendedProfileSchema.safeParse(body);
-  if (!parsed.success) {
-    return {
-      ok: false,
-      status: 422,
-      message: parsed.error.issues[0]?.message ?? "Validation error",
-    };
+
+  let data: Partial<ExtendedProfileInput>;
+  let rejectedFields: SanitisedZodIssue[] = [];
+
+  if (parsed.success) {
+    data = parsed.data;
+  } else {
+    if (typeof body !== "object" || body === null || Array.isArray(body)) {
+      return {
+        ok: false,
+        status: 422,
+        message: "Nothing was saved. The profile update was not an object.",
+        errorCode: "profile.update.invalidBody",
+        issues: sanitiseZodIssues(parsed.error.issues),
+      };
+    }
+
+    const split = splitValidProfileFields(body as Record<string, unknown>);
+    data = split.valid;
+    rejectedFields = split.issues;
+
+    if (Object.keys(data).length === 0) {
+      // Every touched field failed — there is nothing to salvage.
+      // Name the field that blocked it so the person fixes one thing
+      // instead of re-entering everything.
+      const first = rejectedFields[0];
+      return {
+        ok: false,
+        status: 422,
+        message: first
+          ? `Nothing was saved. Fix the "${first.path}" field and try again.`
+          : "Nothing was saved. The submitted profile data was invalid.",
+        errorCode: "profile.update.nothingSaved",
+        issues: rejectedFields,
+      };
+    }
   }
 
-  const data = parsed.data;
   const normalizedEmail = data.email ? data.email.trim().toLowerCase() : null;
 
   if (data.email !== undefined && normalizedEmail) {
@@ -218,5 +334,6 @@ export async function applyProfileUpdate(
       insurerIkNumber: updatedUser.insurerIkNumber,
       hasInsuranceNumber: updatedUser.insuranceNumberEncrypted != null,
     },
+    ...(rejectedFields.length > 0 ? { rejectedFields } : {}),
   };
 }
