@@ -207,9 +207,7 @@ function SeriesBlock({
         />
       ) : null}
       {description ? (
-        <p className="text-foreground text-sm leading-relaxed">
-          {description}
-        </p>
+        <p className="text-foreground text-sm leading-relaxed">{description}</p>
       ) : null}
       <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4 [&>div]:min-h-[44px]">
         {cells.map((cell) => (
