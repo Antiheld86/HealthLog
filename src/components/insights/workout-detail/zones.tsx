@@ -85,7 +85,7 @@ export function WorkoutDetailZones({ workout }: WorkoutDetailZonesProps) {
                 {formatMinutes(z.seconds)}
               </span>
               {z.lowBpm != null ? (
-                <span className="text-muted-foreground text-[10px] tabular-nums">
+                <span className="text-muted-foreground text-2xs tabular-nums">
                   {z.lowBpm}
                   {z.highBpm != null ? `–${z.highBpm}` : "+"}
                 </span>
