@@ -124,7 +124,8 @@
     "profile": {
       "update": {
         "nothingSaved": "Nothing was saved. Check the highlighted field and try again.",
-        "invalidBody": "The profile update could not be read."
+        "invalidBody": "The profile update could not be read.",
+        "emailInUse": "This email address is already in use."
       }
     }
   },

@@ -210,7 +210,12 @@ export async function applyProfileUpdate(
       select: { id: true },
     });
     if (existing && existing.id !== userId) {
-      return { ok: false, status: 409, message: "Email already in use" };
+      return {
+        ok: false,
+        status: 409,
+        message: "Email already in use",
+        errorCode: "profile.update.emailInUse",
+      };
     }
   }
 

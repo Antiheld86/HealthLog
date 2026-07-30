@@ -124,7 +124,8 @@
     "profile": {
       "update": {
         "nothingSaved": "Non è stato salvato nulla. Controlla il campo evidenziato e riprova.",
-        "invalidBody": "Impossibile leggere l'aggiornamento del profilo."
+        "invalidBody": "Impossibile leggere l'aggiornamento del profilo.",
+        "emailInUse": "Questo indirizzo email è già in uso."
       }
     }
   },

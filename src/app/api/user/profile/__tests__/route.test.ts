@@ -368,13 +368,73 @@ describe("PATCH /api/user/profile", () => {
     expect(body.data.gender).toBe("OTHER");
   });
 
-  it("still refuses an unsupported gender, with a message that names the field", async () => {
+  it("still refuses an unsupported gender alone, with a message that names the field", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-    const res = await PATCH(req({ timeFormat: "H24", gender: "diverse" }));
+    const res = await PATCH(req({ gender: "diverse" }));
     expect(res.status).toBe(422);
     expect(prisma.user.update).not.toHaveBeenCalled();
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain("Gender must be MALE, FEMALE or OTHER");
+    const body = (await res.json()) as {
+      error: string;
+      details?: { issues?: Array<{ path: string; message: string }> };
+    };
+    // The top-level message is a sentence for a person — it names the
+    // field but never repeats the validator's own enum-literal prose.
+    expect(body.error).toMatch(/nothing was saved/i);
+    expect(body.error).toContain("gender");
     expect(body.error).not.toContain("Invalid option");
+    // The specific reason is relocated, not deleted.
+    expect(body.details?.issues?.[0]).toMatchObject({ path: "gender" });
+  });
+
+  // Reported regression: a rejected `gender` took a sibling `timeFormat`
+  // edit down with it because the whole PATCH was one transaction. The
+  // schema has no cross-field dependency, so the valid field must now
+  // land even when `gender` is rejected in the same body.
+  it("persists a valid sibling field even when gender in the same body is unsupported", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
+    vi.mocked(prisma.user.update).mockResolvedValue({
+      id: "user-1",
+      username: "testuser",
+      displayName: null,
+      email: null,
+      role: "USER",
+      heightCm: null,
+      dateOfBirth: null,
+      gender: null,
+      timezone: "Europe/Berlin",
+      locale: null,
+      timeFormat: "H24",
+      dateFormat: "AUTO",
+      moodReminderEnabled: false,
+      fullName: null,
+      insurerName: null,
+      insurerIkNumber: null,
+      insuranceNumberEncrypted: null,
+    } as never);
+
+    const res = await PATCH(req({ timeFormat: "H24", gender: "diverse" }));
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ timeFormat: "H24" }),
+      }),
+    );
+    const arg = vi.mocked(prisma.user.update).mock.calls[0][0] as {
+      data: Record<string, unknown>;
+    };
+    expect("gender" in arg.data).toBe(false);
+    const body = (await res.json()) as {
+      error: string | null;
+      data: {
+        timeFormat: string;
+        rejectedFields?: Array<{ path: string }>;
+      };
+    };
+    expect(body.error).toBeNull();
+    expect(body.data.timeFormat).toBe("H24");
+    expect(body.data.rejectedFields).toEqual([
+      expect.objectContaining({ path: "gender" }),
+    ]);
   });
 });

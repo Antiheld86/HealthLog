@@ -124,7 +124,8 @@
     "profile": {
       "update": {
         "nothingSaved": "Nic nie zostało zapisane. Sprawdź oznaczone pole i spróbuj ponownie.",
-        "invalidBody": "Nie udało się odczytać aktualizacji profilu."
+        "invalidBody": "Nie udało się odczytać aktualizacji profilu.",
+        "emailInUse": "Ten adres e-mail jest już używany."
       }
     }
   },

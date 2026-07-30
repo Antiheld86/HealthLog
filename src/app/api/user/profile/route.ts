@@ -102,14 +102,10 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
 
   const result = await applyProfileUpdate(user.id, body, getClientIp(request));
   if (!result.ok) {
+    const meta = result.errorCode ? { errorCode: result.errorCode } : undefined;
     return result.issues
-      ? apiValidationError(
-          result.message,
-          result.issues,
-          result.status,
-          result.errorCode ? { errorCode: result.errorCode } : undefined,
-        )
-      : apiError(result.message, result.status);
+      ? apiValidationError(result.message, result.issues, result.status, meta)
+      : apiError(result.message, result.status, meta);
   }
 
   annotate({ action: { name: "user.profile.update" } });
