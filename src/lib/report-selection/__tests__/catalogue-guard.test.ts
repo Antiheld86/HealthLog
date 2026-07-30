@@ -25,7 +25,9 @@ import {
   REPORT_GROUPS,
   REPORT_GROUP_LABEL_KEYS,
   REPORT_GROUP_ORDER,
+  SENSITIVE_GROUP_ID,
   SENSITIVE_LEAF_IDS,
+  SHARE_GROUPS,
   STRUCTURED_LEAF_IDS,
   leafLabelKey,
 } from "../catalogue";
@@ -77,6 +79,49 @@ describe("report selection catalogue", () => {
     // The fenced tier is last, so it sits below every group control rather
     // than among them.
     expect(REPORT_GROUP_ORDER[REPORT_GROUP_ORDER.length - 1]).toBe("sensitive");
+  });
+});
+
+/**
+ * `SHARE_GROUPS` is what `GET /api/meta/capabilities` publishes as
+ * `share.groups` — the membership a native client needs to mirror the
+ * sensitive-tier fence itself. It is derived from `REPORT_GROUPS`, so these
+ * checks are the invariant that makes that fence trustworthy: every leaf in
+ * the flat `ALL_LEAF_IDS` set lands in exactly one group, no group carries a
+ * leaf the flat set doesn't have, and exactly one group — the one whose id is
+ * `SENSITIVE_GROUP_ID` — carries `sensitive: true`.
+ *
+ * Mutation check (verified red, then reverted): push a leaf into two groups
+ * in `SHARE_GROUPS` by hand → the "exactly one group" assertion goes red
+ * naming the duplicated leaf.
+ */
+describe("share-group membership (GET /api/meta/capabilities share.groups)", () => {
+  it("covers exactly the flat leaf set, no leaf in more than one group", () => {
+    const seen = new Set<string>();
+    for (const group of SHARE_GROUPS) {
+      for (const leaf of group.leaves) {
+        expect(seen.has(leaf), `${leaf} appears in more than one group`).toBe(
+          false,
+        );
+        seen.add(leaf);
+      }
+    }
+    expect([...seen].sort()).toEqual([...ALL_LEAF_IDS].sort());
+  });
+
+  it("flags sensitive: true on exactly the fenced group", () => {
+    const flagged = SHARE_GROUPS.filter((g) => g.sensitive);
+    expect(flagged).toHaveLength(1);
+    expect(flagged[0]?.id).toBe(SENSITIVE_GROUP_ID);
+  });
+
+  it("orders groups and leaves identically to REPORT_GROUPS", () => {
+    expect(SHARE_GROUPS.map((g) => g.id)).toEqual(
+      REPORT_GROUPS.map((g) => g.id),
+    );
+    for (const [i, group] of SHARE_GROUPS.entries()) {
+      expect(group.leaves).toEqual(REPORT_GROUPS[i]!.leaves);
+    }
   });
 });
 

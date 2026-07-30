@@ -16096,8 +16096,24 @@ components:
             groups:
               type: array
               items:
-                type: string
-              description: Selection group ids, in presentation order.
+                type: object
+                properties:
+                  id:
+                    type: string
+                    description: Group id.
+                  leaves:
+                    type: array
+                    items:
+                      type: string
+                    description: Member leaf ids, in the order the panel renders them.
+                  sensitive:
+                    description: "Present and true only on the fenced tier: no single control may switch on more than one of its leaves."
+                    type: boolean
+                required:
+                  - id
+                  - leaves
+                additionalProperties: false
+              description: Selection groups, in presentation order, each carrying its member leaf ids.
             leaves:
               type: array
               items:

@@ -344,6 +344,28 @@ export const ALL_LEAF_IDS: readonly ReportLeafId[] = REPORT_GROUPS.flatMap(
   (group) => group.leaves,
 );
 
+/**
+ * The wire shape for `GET /api/meta/capabilities` `share.groups`: each group
+ * carries its own member leaves, and the fenced tier carries `sensitive:
+ * true`, derived from `SENSITIVE_GROUP_ID` rather than a second string
+ * literal. A native client that cannot see group membership cannot mirror the
+ * fence (no single control switching on more than one sensitive leaf), so
+ * this — not `REPORT_GROUP_ORDER` alone — is what the endpoint should ship.
+ *
+ * Order matches `REPORT_GROUPS` exactly: group order is `REPORT_GROUP_ORDER`,
+ * leaf order within a group is structured-then-measurement, so this shape and
+ * the flat `ALL_LEAF_IDS` list agree leaf-for-leaf.
+ */
+export const SHARE_GROUPS: ReadonlyArray<{
+  id: ReportGroupId;
+  leaves: readonly ReportLeafId[];
+  sensitive?: true;
+}> = REPORT_GROUPS.map((group) => ({
+  id: group.id,
+  leaves: group.leaves,
+  ...(group.id === SENSITIVE_GROUP_ID ? { sensitive: true as const } : {}),
+}));
+
 const ALL_LEAF_SET = new Set<string>(ALL_LEAF_IDS);
 
 /** Whether a raw string is a leaf id this build knows. */
