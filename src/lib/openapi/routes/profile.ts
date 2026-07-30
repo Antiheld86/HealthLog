@@ -12,6 +12,7 @@ import { notificationPrefsSchema } from "@/lib/validations/notification-prefs";
 import { sourcePrioritySchema } from "@/lib/validations/source-priority";
 import { modulePrefsPatchSchema } from "@/lib/validations/modules";
 import { MODULE_KEYS } from "@/lib/modules/registry";
+import { savedReportProfileSchema } from "@/lib/report-selection/profile-shape";
 import {
   dataEnvelope,
   errorEnvelope,
@@ -198,6 +199,33 @@ const coachPrefsPutRequest = coachPrefsSchema
     description:
       "Coach prompt-tuning preferences to persist, plus the optional optimistic-concurrency `baseUpdatedAt` token. The guarded write covers both `coachPrefsJson` and the mirrored `insightsExcludeMetrics` column atomically. Omit the token for the legacy unconditional write.",
   });
+
+// v1.28-era — the owner's saved doctor-report selection (leaf list plus the
+// render choices the export panel restores). `v` is the report-selection
+// schema version (currently locked at 2); `leaves` is a closed catalogue of
+// section/field ids, canonicalised to a fixed order server-side so two
+// clients that chose the same scope persist the same bytes. This is the ONLY
+// request body for the PUT — it replaces the stored profile whole, it never
+// merges.
+const savedReportProfile = savedReportProfileSchema.meta({
+  id: "SavedReportProfile",
+  description:
+    "A saved doctor-report scope: which leaves are included plus the export format, trailing window and chart toggle. Replace-only — there is no partial-merge write.",
+});
+
+const reportSelectionGetResponse = z
+  .object({
+    profile: savedReportProfile
+      .nullable()
+      .describe(
+        "The saved profile, or null when the account has never saved one, or when the stored blob no longer parses against the current leaf catalogue. Null is never resolved to a default scope server-side — the client applies its own named template and shows that as a visible choice.",
+      ),
+  })
+  .meta({ id: "GetReportSelectionResponse" });
+
+const reportSelectionPutResponse = z
+  .object({ profile: savedReportProfile })
+  .meta({ id: "PutReportSelectionResponse" });
 
 // v1.8.6 — profile read/write surface for the native client. The
 // runtime validation lives in `src/lib/validations/auth.ts`
@@ -846,6 +874,52 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
           "Notification preferences",
           "notification_prefs_conflict",
         ),
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/me/report-selection": {
+    get: {
+      tags: ["Auth"],
+      summary: "Read the owner's saved doctor-report selection",
+      description:
+        "Returns the saved report-scope profile, or `profile: null` when the account has never saved one (or the stored blob no longer parses against the current leaf catalogue). Replaces the retired `GET /api/auth/me/doctor-report-prefs`. Auth via cookie or Bearer.",
+      responses: {
+        "200": {
+          description: "The saved profile, or null.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                reportSelectionGetResponse,
+                "GetReportSelectionResponseEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    put: {
+      tags: ["Auth"],
+      summary: "Replace the owner's saved doctor-report selection",
+      description:
+        "Replace, not merge — the body states the whole scope or it is not a scope; a leaf omitted from the body is a leaf removed from the saved profile. An unknown leaf id is refused with a 422 that names it. The saved selection is also what the FHIR REST face and the MCP doctor-visit surfaces replay for a caller that cannot ask a human, so every write is audit-logged. Auth via cookie or Bearer.",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: savedReportProfile } },
+      },
+      responses: {
+        "200": {
+          description: "The saved profile, echoed back.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                reportSelectionPutResponse,
+                "PutReportSelectionResponseEnvelope",
+              ),
+            },
+          },
+        },
         ...stdResponses,
       },
     },

@@ -5699,6 +5699,48 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a3
         "429": *a4
+  /api/auth/me/report-selection:
+    get:
+      tags:
+        - Auth
+      summary: Read the owner's saved doctor-report selection
+      description: "Returns the saved report-scope profile, or `profile: null` when the account has never saved one (or the
+        stored blob no longer parses against the current leaf catalogue). Replaces the retired `GET
+        /api/auth/me/doctor-report-prefs`. Auth via cookie or Bearer."
+      responses:
+        "200":
+          description: The saved profile, or null.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetReportSelectionResponseEnvelope"
+        "401": *a1
+        "422": *a3
+        "429": *a4
+    put:
+      tags:
+        - Auth
+      summary: Replace the owner's saved doctor-report selection
+      description: Replace, not merge — the body states the whole scope or it is not a scope; a leaf omitted from the body is
+        a leaf removed from the saved profile. An unknown leaf id is refused with a 422 that names it. The saved
+        selection is also what the FHIR REST face and the MCP doctor-visit surfaces replay for a caller that cannot ask
+        a human, so every write is audit-logged. Auth via cookie or Bearer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavedReportProfile"
+      responses:
+        "200":
+          description: The saved profile, echoed back.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PutReportSelectionResponseEnvelope"
+        "401": *a1
+        "422": *a3
+        "429": *a4
   /api/insights/chat:
     get:
       tags:
@@ -13691,6 +13733,40 @@ components:
         `null` switches the alert off. `baseUpdatedAt` is the optional optimistic-concurrency token: echo it to have the
         server refuse (409) a write that would silently revert a category another writer set from a fresher read (e.g.
         iOS `medication.clientManaged`). Omit it for the legacy unconditional write."
+    SavedReportProfile:
+      type: object
+      properties:
+        v:
+          type: number
+          const: 2
+        leaves:
+          maxItems: 91
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        format:
+          type: string
+          enum:
+            - pdf
+            - fhir
+            - package
+        rangeDays:
+          type: integer
+          minimum: 1
+          maximum: 365
+        includeCharts:
+          type: boolean
+      required:
+        - v
+        - leaves
+        - format
+        - rangeDays
+        - includeCharts
+      additionalProperties: false
+      description: "A saved doctor-report scope: which leaves are included plus the export format, trailing window and chart
+        toggle. Replace-only — there is no partial-merge write."
     FencedCoachChatRequest:
       type: object
       properties:
@@ -24685,6 +24761,61 @@ components:
       required:
         - data
         - error
+      additionalProperties: false
+    GetReportSelectionResponseEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/GetReportSelectionResponse"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    GetReportSelectionResponse:
+      type: object
+      properties:
+        profile:
+          anyOf:
+            - $ref: "#/components/schemas/SavedReportProfile"
+            - type: "null"
+          description: The saved profile, or null when the account has never saved one, or when the stored blob no longer parses
+            against the current leaf catalogue. Null is never resolved to a default scope server-side — the client
+            applies its own named template and shows that as a visible choice.
+      required:
+        - profile
+      additionalProperties: false
+    PutReportSelectionResponseEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/PutReportSelectionResponse"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    PutReportSelectionResponse:
+      type: object
+      properties:
+        profile:
+          $ref: "#/components/schemas/SavedReportProfile"
+      required:
+        - profile
       additionalProperties: false
     CoachConversationsPageResponse:
       type: object
