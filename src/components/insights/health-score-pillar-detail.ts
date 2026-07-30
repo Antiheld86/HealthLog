@@ -92,7 +92,7 @@ export function pillarObservedText(
 }
 
 /** The scored reference band, already converted into the account unit. */
-export function pillarReferenceText(
+function pillarReferenceText(
   pillar: ScorePillarResult,
   { t, glucoseUnit }: PillarDetailContext,
 ): string {
