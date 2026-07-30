@@ -16160,6 +16160,8 @@ components:
               type: boolean
             documentCount:
               type: number
+            documentOnly:
+              type: boolean
             needsReselection:
               type: boolean
             allowFhirApi:
@@ -16204,6 +16206,7 @@ components:
             - rangeEnd
             - protected
             - documentCount
+            - documentOnly
             - needsReselection
             - allowFhirApi
             - resourceTypes
@@ -16255,6 +16258,8 @@ components:
                     type: boolean
                   documentCount:
                     type: number
+                  documentOnly:
+                    type: boolean
                   needsReselection:
                     type: boolean
                   allowFhirApi:
@@ -16286,6 +16291,7 @@ components:
                   - rangeEnd
                   - protected
                   - documentCount
+                  - documentOnly
                   - needsReselection
                   - allowFhirApi
                   - resourceTypes
