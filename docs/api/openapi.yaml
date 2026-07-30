@@ -27668,6 +27668,199 @@ components:
             `walkingDoubleSupportPercentage`, `environmentalAudioExposure`, `headphoneAudioExposure`,
             `activeEnergyBurned`). Each entry carries `value`, `measuredAt` (ISO8601), and the canonical `unit`. Types
             the user has never logged are omitted."
+        targetBands:
+          type: object
+          properties:
+            bpTargets:
+              anyOf:
+                - type: object
+                  properties:
+                    sysLow:
+                      type: number
+                    sysHigh:
+                      type: number
+                    diaLow:
+                      type: number
+                    diaHigh:
+                      type: number
+                  required:
+                    - sysLow
+                    - sysHigh
+                    - diaLow
+                    - diaHigh
+                  additionalProperties: false
+                - type: "null"
+              description: Personalised blood-pressure target numbers. Null when the profile has no date of birth.
+            bpSysRange:
+              anyOf:
+                - type: object
+                  properties:
+                    greenMin:
+                      type: number
+                    greenMax:
+                      type: number
+                    orangeMin:
+                      type: number
+                    orangeMax:
+                      type: number
+                  required:
+                    - greenMin
+                    - greenMax
+                    - orangeMin
+                    - orangeMax
+                  additionalProperties: false
+                - type: "null"
+              description: Systolic traffic-light range. Null when the profile has no date of birth.
+            bpDiaRange:
+              anyOf:
+                - type: object
+                  properties:
+                    greenMin:
+                      type: number
+                    greenMax:
+                      type: number
+                    orangeMin:
+                      type: number
+                    orangeMax:
+                      type: number
+                  required:
+                    - greenMin
+                    - greenMax
+                    - orangeMin
+                    - orangeMax
+                  additionalProperties: false
+                - type: "null"
+              description: Diastolic traffic-light range. Null when the profile has no date of birth.
+            pulseDisplayRange:
+              type: object
+              properties:
+                greenMin:
+                  type: number
+                greenMax:
+                  type: number
+                orangeMin:
+                  type: number
+                orangeMax:
+                  type: number
+              required:
+                - greenMin
+                - greenMax
+                - orangeMin
+                - orangeMax
+              additionalProperties: false
+              description: Resting-pulse display range. Always present — falls back to the AHA reference range with no date of birth.
+            pulseBands:
+              type: array
+              items:
+                type: object
+                properties:
+                  min:
+                    type: number
+                  max:
+                    type: number
+                  color:
+                    type: string
+                  opacity:
+                    type: number
+                  strokeOpacity:
+                    type: number
+                required:
+                  - min
+                  - max
+                  - color
+                additionalProperties: false
+              description: Resting-pulse chart bands. Always present — AHA fallback with no date of birth.
+            bodyFatRange:
+              type: object
+              properties:
+                min:
+                  type: number
+                max:
+                  type: number
+              required:
+                - min
+                - max
+              additionalProperties: false
+              description: Gender-aware body-fat target range. Always present.
+            bodyFatBands:
+              type: array
+              items:
+                type: object
+                properties:
+                  min:
+                    type: number
+                  max:
+                    type: number
+                  color:
+                    type: string
+                  opacity:
+                    type: number
+                  strokeOpacity:
+                    type: number
+                required:
+                  - min
+                  - max
+                  - color
+                additionalProperties: false
+              description: Body-fat chart bands. Always present.
+            weightRange:
+              anyOf:
+                - type: object
+                  properties:
+                    greenMin:
+                      type: number
+                    greenMax:
+                      type: number
+                    orangeMin:
+                      type: number
+                    orangeMax:
+                      type: number
+                  required:
+                    - greenMin
+                    - greenMax
+                    - orangeMin
+                    - orangeMax
+                  additionalProperties: false
+                - type: "null"
+              description: "Weight traffic-light range: the user's own target band when set, else the height-derived WHO band, else
+                null (no height and no target)."
+            weightBands:
+              anyOf:
+                - type: array
+                  items:
+                    type: object
+                    properties:
+                      min:
+                        type: number
+                      max:
+                        type: number
+                      color:
+                        type: string
+                      opacity:
+                        type: number
+                      strokeOpacity:
+                        type: number
+                    required:
+                      - min
+                      - max
+                      - color
+                    additionalProperties: false
+                - type: "null"
+              description: Weight chart bands, from the same range. Null when `weightRange` is null.
+          required:
+            - bpTargets
+            - bpSysRange
+            - bpDiaRange
+            - pulseDisplayRange
+            - pulseBands
+            - bodyFatRange
+            - bodyFatBands
+            - weightRange
+            - weightBands
+          additionalProperties: false
+          description: Server-computed band / target math resolved from the user's profile facts, so the client reads these
+            numbers instead of recomputing them. Every sub-field is null only when the driving profile fact is missing
+            (no date of birth for blood pressure, no height and no weight target for weight).
         tiles:
           type: object
           properties:
@@ -27967,6 +28160,144 @@ components:
                         - episodeCount
                       additionalProperties: false
                     - type: "null"
+                tension:
+                  description: "Locale-agnostic tension verdict: present only when the readiness composite's contributors disagree.
+                    `positive`/`negative` carry readiness contributor keys the client maps to localised labels. Null on
+                    a coherent day or when a clinical red-flag suppresses it. Optional so older cached snapshots without
+                    the field stay valid."
+                  anyOf:
+                    - type: object
+                      properties:
+                        band:
+                          type: string
+                          enum:
+                            - green
+                            - yellow
+                            - red
+                        positive:
+                          type: array
+                          items:
+                            type: string
+                            enum:
+                              - rhr
+                              - hrv
+                              - sleep
+                              - respiratory
+                              - mood
+                        negative:
+                          type: array
+                          items:
+                            type: string
+                            enum:
+                              - rhr
+                              - hrv
+                              - sleep
+                              - respiratory
+                              - mood
+                      required:
+                        - band
+                        - positive
+                        - negative
+                      additionalProperties: false
+                    - type: "null"
+                returnToBand:
+                  description: "Locale-agnostic return-to-baseline event: present only when a salient metric (resting heart rate, HRV,
+                    respiratory rate, or weight) has come back inside the user's own personal range after a genuine
+                    prior out-of-band run. At most one, the most salient. `metricType` is the measurement type the
+                    client maps to a localised metric name; `daysInside` is how long it has now sat back inside range.
+                    Null otherwise. Optional so older cached snapshots without the field stay valid."
+                  anyOf:
+                    - type: object
+                      properties:
+                        metricType:
+                          type: string
+                          enum:
+                            - WEIGHT
+                            - BLOOD_PRESSURE_SYS
+                            - BLOOD_PRESSURE_DIA
+                            - PULSE
+                            - BODY_FAT
+                            - SLEEP_DURATION
+                            - ACTIVITY_STEPS
+                            - BLOOD_GLUCOSE
+                            - TOTAL_BODY_WATER
+                            - BONE_MASS
+                            - OXYGEN_SATURATION
+                            - HEART_RATE_VARIABILITY
+                            - RESTING_HEART_RATE
+                            - ACTIVE_ENERGY_BURNED
+                            - FLIGHTS_CLIMBED
+                            - WALKING_RUNNING_DISTANCE
+                            - VO2_MAX
+                            - BODY_TEMPERATURE
+                            - FAT_FREE_MASS
+                            - FAT_MASS
+                            - MUSCLE_MASS
+                            - SKIN_TEMPERATURE
+                            - PULSE_WAVE_VELOCITY
+                            - VASCULAR_AGE
+                            - VISCERAL_FAT
+                            - AUDIO_EXPOSURE_ENV
+                            - AUDIO_EXPOSURE_HEADPHONE
+                            - TIME_IN_DAYLIGHT
+                            - WALKING_STEADINESS
+                            - AUDIO_EXPOSURE_EVENT
+                            - RESPIRATORY_RATE
+                            - BODY_MASS_INDEX
+                            - LEAN_BODY_MASS
+                            - WALKING_HEART_RATE_AVERAGE
+                            - WALKING_ASYMMETRY
+                            - WALKING_DOUBLE_SUPPORT
+                            - WALKING_STEP_LENGTH
+                            - WALKING_SPEED
+                            - CARDIO_RECOVERY
+                            - WRIST_TEMPERATURE
+                            - FALL_COUNT
+                            - SIX_MINUTE_WALK_DISTANCE
+                            - STAIR_ASCENT_SPEED
+                            - STAIR_DESCENT_SPEED
+                            - BREATHING_DISTURBANCES
+                            - IRREGULAR_RHYTHM_NOTIFICATION
+                            - HIGH_HEART_RATE_EVENT
+                            - LOW_HEART_RATE_EVENT
+                            - WALKING_STEADINESS_EVENT
+                            - BREATHING_DISTURBANCE_EVENT
+                            - RECOVERY_SCORE
+                            - STRESS_SCORE
+                            - STRAIN_SCORE
+                            - HRV_RMSSD
+                            - DAY_STRAIN
+                            - WORKOUT_STRAIN
+                            - SLEEP_PERFORMANCE
+                            - SLEEP_EFFICIENCY
+                            - SLEEP_CONSISTENCY
+                            - SLEEP_NEED
+                            - ENERGY_EXPENDITURE_KJ
+                            - AVERAGE_HEART_RATE
+                            - MAX_HEART_RATE
+                            - SLEEP_DISTURBANCE_COUNT
+                            - ANS_CHARGE
+                            - CARDIO_LOAD
+                            - SLEEP_SCORE
+                            - BODY_TEMPERATURE_DEVIATION
+                            - RESILIENCE
+                            - PHQ9_SCORE
+                            - GAD7_SCORE
+                            - GRIP_STRENGTH
+                            - PAIN_NRS
+                            - WAIST_CIRCUMFERENCE
+                            - WAIST_TO_HEIGHT
+                            - WHO5_SCORE
+                            - SCI_SCORE
+                        daysInside:
+                          type: integer
+                          minimum: -9007199254740991
+                          maximum: 9007199254740991
+                      required:
+                        - metricType
+                        - daysInside
+                      additionalProperties: false
+                    - type: "null"
               required:
                 - score
                 - band
@@ -28034,6 +28365,23 @@ components:
                 type: string
               additionalProperties: {}
             - type: "null"
+        briefingMemory:
+          description: "The briefing recall + forward-look: `recall` is the prior period's narrative headline, `forward` points
+            ahead to the most salient trend drift (or a calm 'holding steady' line). Both are already-localised prose
+            the client renders verbatim. Null when no prior narrative is on file or no briefing is shown. Optional so
+            older cached snapshots without the field stay valid."
+          anyOf:
+            - type: object
+              properties:
+                recall:
+                  type: string
+                forward:
+                  type: string
+              required:
+                - recall
+                - forward
+              additionalProperties: false
+            - type: "null"
         briefingState:
           type: string
           enum:
@@ -28057,6 +28405,7 @@ components:
         - layout
         - layoutCatalogue
         - metricStates
+        - targetBands
         - tiles
         - extras
         - medsToday
@@ -34326,9 +34675,28 @@ components:
               - latestAmount
               - daysWithData
             additionalProperties: false
+        lastAttempt:
+          anyOf:
+            - type: object
+              properties:
+                at:
+                  type: string
+                  format: date-time
+                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                topReason:
+                  type: string
+              required:
+                - at
+                - topReason
+              additionalProperties: false
+            - type: "null"
+          description: Non-null only when `nutrients` is empty AND the most recent nutrient-batch call landed nothing — the most
+            common skip reason from that call, so the client can say a sync arrived and why instead of a bare empty
+            state.
       required:
         - windowDays
         - nutrients
+        - lastAttempt
       additionalProperties: false
       description: "Per-nutrient window summary in catalog order: latest synced day + total, and the count of days carrying
         data inside the window. Nutrients without data in the window are omitted."
