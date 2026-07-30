@@ -228,7 +228,7 @@ describe("<CoachInput>", () => {
     expect(html).toContain('data-slot="coach-input-send"');
   });
 
-  it("puts the textarea above a split control row on phones", () => {
+  it("keeps the textarea and its controls on one row at every width", () => {
     const html = render(
       <CoachInput
         value=""
@@ -258,10 +258,20 @@ describe("<CoachInput>", () => {
     const controls = html.match(
       /<div[^>]*data-slot="coach-input-controls"[^>]*>/,
     );
-    expect(controls?.[0]).toMatch(/\bw-full\b/);
-    expect(controls?.[0]).toMatch(/\bjustify-between\b/);
-    expect(controls?.[0]).toMatch(/\bsm:w-auto\b/);
-    expect(controls?.[0]).not.toMatch(/\bsm:contents\b/);
+    // The controls sit BESIDE the textarea, not under it. Stacking them made an
+    // empty composer two rows tall — a text line plus a 44 px tap-target row —
+    // which is roughly a tenth of a phone screen before anyone has typed. The
+    // controls must therefore never claim the full width or push themselves
+    // onto their own line.
+    expect(controls?.[0]).not.toMatch(/\bw-full\b/);
+    expect(controls?.[0]).not.toMatch(/\bjustify-between\b/);
+    expect(controls?.[0]).toMatch(/\bshrink-0\b/);
+
+    // And the row itself is a row at every width, bottom-aligned so the send
+    // button stays beside the last line as the textarea grows.
+    const shell = html.match(/<div[^>]*class="[^"]*\bflex-row\b[^"]*"[^>]*>/);
+    expect(shell?.[0]).toMatch(/\bitems-end\b/);
+    expect(shell?.[0]).not.toMatch(/\bflex-col\b/);
   });
 
   it("sizes the hub actions trigger to the 44px tap-target floor on phones", () => {

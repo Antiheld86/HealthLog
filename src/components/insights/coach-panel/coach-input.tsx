@@ -419,9 +419,17 @@ export function CoachInput({
           "border-border/60 bg-muted/40 group rounded-2xl border",
           "shadow-sm transition-colors",
           "focus-within:border-primary/50 focus-within:ring-primary/50 focus-within:bg-background focus-within:ring-2",
-          // Mobile uses two rows. Desktop keeps the same DOM and visual order
-          // (textarea, actions, Send) so keyboard focus never jumps backwards.
-          "flex flex-col gap-1.5 p-1.5 sm:flex-row sm:items-end",
+          // One row at every width. Mobile used to stack the controls under the
+          // textarea, which made an EMPTY composer two rows tall: a 44 px line
+          // plus a 44 px touch-target row plus padding, around a tenth of a
+          // phone screen before anyone had typed anything. The stacking was
+          // there to protect keyboard focus order, but that argument does not
+          // hold: focus follows DOM order, and the DOM order (textarea,
+          // actions, Send) is identical in both layouts. Nothing jumps.
+          //
+          // `items-end` keeps the controls beside the LAST line as the textarea
+          // grows, so the send button stays where the thumb left it.
+          "flex flex-row items-end gap-1.5 p-1.5",
         )}
       >
         <textarea
@@ -447,7 +455,7 @@ export function CoachInput({
         />
         <div
           data-slot="coach-input-controls"
-          className="order-2 flex w-full items-center justify-between gap-1.5 sm:w-auto sm:shrink-0 sm:justify-start"
+          className="order-2 flex shrink-0 items-center gap-1.5"
         >
           <div
             data-slot="coach-input-leading"
