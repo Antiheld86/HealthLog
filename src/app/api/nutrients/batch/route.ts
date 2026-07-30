@@ -306,17 +306,40 @@ async function postBatch(request: NextRequest): Promise<Response> {
     }
   }
 
+  // v1.34.3 — per-reason skip breakdown, durable AND ephemeral. Computed
+  // once from the closed `reason` set (never raw exception text — see the
+  // upsert `catch` blocks above), so this carries only counts and reason
+  // codes, never a per-entry health value or anything user-typed.
+  const skippedByReason: Record<string, number> = {};
+  for (const s of skipped) {
+    skippedByReason[s.reason] = (skippedByReason[s.reason] ?? 0) + 1;
+  }
+
+  // v1.34.3 — audit UNCONDITIONALLY. This used to fire only when
+  // `inserted + updated > 0`, which made it the ONLY durable trace of the
+  // call — so a batch where every entry was skipped (say, a systemic unit
+  // mismatch) left the exact same empty AuditLog record as a phone that
+  // never posted at all. An operator investigating an empty
+  // `nutrient_intake_days` table could not tell "the client never called"
+  // from "the client called and every entry was rejected" without that
+  // record. Mirrors `measurement.batch.ingest` / `workout.batch.ingest`
+  // (unconditional, counts-only, no per-entry health values) plus the
+  // aggregate skip-reason breakdown so "did it post, and why did nothing
+  // land" is answerable from the durable row alone, without a Wide-Event
+  // trail that (unlike this table) isn't guaranteed to still exist.
+  await auditLog("nutrient.batch.ingest", {
+    userId: user.id,
+    ipAddress: getClientIp(request),
+    details: {
+      processed: entries.length,
+      inserted,
+      updated,
+      skipped: skipped.length,
+      skippedByReason,
+    },
+  });
+
   if (inserted + updated > 0) {
-    await auditLog("nutrient.batch.ingest", {
-      userId: user.id,
-      ipAddress: getClientIp(request),
-      details: {
-        processed: entries.length,
-        inserted,
-        updated,
-        skipped: skipped.length,
-      },
-    });
     // v1.30.3 (QA F9) — a landed row changes the dashboard's water/nutrient
     // tile; without this the snapshot kept serving the pre-sync figure
     // until the analytics fresh TTL lapsed (~3 min). Mirrors the manual
@@ -333,6 +356,7 @@ async function postBatch(request: NextRequest): Promise<Response> {
       inserted,
       updated,
       skipped: skipped.length,
+      skipped_by_reason: skippedByReason,
     },
   });
 

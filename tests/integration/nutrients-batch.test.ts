@@ -187,6 +187,49 @@ describe("POST /api/nutrients/batch (real Postgres)", () => {
     expect(count).toBe(0);
   });
 
+  // Before this, `nutrient.batch.ingest` audited only when
+  // `inserted + updated > 0` — the ONLY durable record of the call — so a
+  // batch where every entry was rejected left the exact same empty
+  // AuditLog trail as a phone that never posted at all. An operator could
+  // not tell the two apart from the durable record.
+  it("records an audit-log row even when every entry is rejected", async () => {
+    const { POST } = await import("@/app/api/nutrients/batch/route");
+    const res = await POST(
+      postReq({
+        entries: [
+          { day: recentDay(1), nutrient: "vitamin_d", unit: "mg", amount: 20 },
+          { day: recentDay(2), nutrient: "iron", unit: "mg", amount: 999 },
+        ],
+      }),
+    );
+    const json = (await res.json()) as BatchEnvelope;
+    expect(json.data.inserted).toBe(0);
+    expect(json.data.updated).toBe(0);
+    expect(json.data.skipped).toHaveLength(2);
+
+    const rows = await getPrismaClient().auditLog.findMany({
+      where: { userId: OPTED_IN_USER, action: "nutrient.batch.ingest" },
+    });
+    expect(rows).toHaveLength(1);
+    const details = JSON.parse(rows[0].details ?? "{}") as {
+      processed: number;
+      inserted: number;
+      updated: number;
+      skipped: number;
+      skippedByReason: Record<string, number>;
+    };
+    expect(details).toMatchObject({
+      processed: 2,
+      inserted: 0,
+      updated: 0,
+      skipped: 2,
+    });
+    expect(details.skippedByReason).toMatchObject({
+      unit_mismatch: 1,
+      value_out_of_range: 1,
+    });
+  });
+
   it("refuses ingest 403 module.disabled for an account that never opted in", async () => {
     const { POST } = await import("@/app/api/nutrients/batch/route");
     cookieJar.clear();
