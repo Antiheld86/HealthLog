@@ -4473,6 +4473,123 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a3
         "429": *a4
+  /api/medications/intake/dose-history-import:
+    post:
+      tags:
+        - Medications
+      summary: Import a dose history exported from another medication tracker
+      description: "Reads a ten-column CSV export covering a whole regimen (multiple medications in one file), matching each
+        row against the caller's existing medications by name — a medication is NEVER created from an import file.
+        `text/csv` carries the actual dose history (`Date`/`Scheduled Date` in separate columns, mapped onto
+        `takenAt`/`scheduledFor`). `application/json` is accepted at the content-type check but the documented JSON
+        export shape always refuses at 422 (`json_carries_no_intake_time`): it has no field for when a dose was actually
+        taken, and inferring one from the scheduled time would manufacture an on-time history the file never claimed.
+        Body capped at 16 MB and 30 000 importable rows. `?dryRun=1` parses, matches, and returns the file verdict
+        WITHOUT writing. A real submission queues the write onto the same background job the per-medication import uses
+        (chunked, heartbeated, resumable) and returns 202 with a `statusUrl` to poll. Shares the 5/hour `import:` rate
+        bucket with every other bulk import surface. Auth via cookie or Bearer."
+      parameters:
+        - name: dryRun
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - "1"
+              - "true"
+          description: When `1` / `true`, parse + match + return the file verdict without queuing a write.
+      requestBody:
+        required: true
+        content:
+          text/csv:
+            schema:
+              type: string
+          application/json:
+            schema:
+              type: string
+      responses:
+        "200":
+          description: Dry-run verdict (nothing written).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicationDoseHistoryImportDryRunEnvelope"
+        "202":
+          description: Import queued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicationDoseHistoryImportQueuedEnvelope"
+        "401": *a1
+        "409":
+          description: A dose-history import is already in progress.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "413":
+          description: File exceeds the 16 MB limit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "415":
+          description: Content-Type must be text/csv or application/json.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422":
+          description: "The file could not be read (see `MedicationDoseHistoryImportFatalReason` for the closed `errorCode` set),
+            or it holds more than 30 000 importable rows (`errorCode: too_many_rows`)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429": *a4
+        "503":
+          description: Background worker is not available.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /api/medications/{id}/intake/import/{jobId}/status:
+    get:
+      tags:
+        - Medications
+      summary: Poll a per-medication intake-import job
+      description: Returns the queued/running/finished state of a per-medication intake-import job, scoped to the caller's own
+        medication. A job created by the account-wide dose-history import (which carries no `medicationId`) never
+        resolves through this path — poll its own `statusUrl` instead. v1.33.0 widened `result.skipReasons[].reason` /
+        `progress.skipDetails[].reason` to the full 16-value `MedicationImportSkipReason` set. A foreign or unknown
+        job/medication id is sealed as 404. Auth via cookie or Bearer.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+        - in: path
+          name: jobId
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Current job status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicationIntakeImportJobStatusEnvelope"
+        "401": *a1
+        "404":
+          description: No such job for this medication (or owned by another user).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422": *a3
+        "429": *a4
   /api/user/ai-provider:
     get:
       tags:
@@ -22436,6 +22553,359 @@ components:
         - data
         - error
       additionalProperties: false
+    MedicationDoseHistoryImportDryRunEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/MedicationDoseHistoryImportResponse"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    MedicationDoseHistoryImportResponse:
+      type: object
+      properties:
+        dryRun:
+          type: boolean
+        jobId:
+          anyOf:
+            - type: string
+            - type: "null"
+          description: Null on a dry run (nothing was queued).
+        status:
+          description: Present only on a real (non-dry-run) submission.
+          type: string
+          const: queued
+        statusUrl:
+          anyOf:
+            - type: string
+            - type: "null"
+          description: Relative poll path (`/api/medications/intake/dose-history-import/{jobId}/status`). Null on a dry run.
+        file:
+          $ref: "#/components/schemas/MedicationDoseHistoryImportFile"
+      required:
+        - dryRun
+        - jobId
+        - statusUrl
+        - file
+      additionalProperties: false
+      description: The file-level verdict, plus the queued job pointer on a real submission. A dry run (`?dryRun=1`) returns
+        the same `file` verdict with `jobId`/`statusUrl` null and no `status` field — parses, matches, and reports
+        without writing anything.
+    MedicationDoseHistoryImportFile:
+      type: object
+      properties:
+        rowsRead:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: Data rows read from the file, refusals included.
+        queued:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: Rows that parsed and matched a medication.
+        refused:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: Total rows that did not queue, across every reason.
+        refusedByReason:
+          type: array
+          items:
+            $ref: "#/components/schemas/MedicationImportSkipGroup"
+          description: One entry per reason that actually occurred, count descending then reason.
+        unmatchedMedications:
+          maxItems: 50
+          type: array
+          items:
+            type: string
+          description: Medication names the file used that match nothing on the record, deduplicated, first-seen order, capped at
+            50.
+        ambiguousMedications:
+          maxItems: 50
+          type: array
+          items:
+            type: string
+          description: Names that match more than one medication, so no single one can be meant. Capped at 50.
+        mirroredMedications:
+          maxItems: 50
+          type: array
+          items:
+            type: string
+          description: Names that match only a medication mirrored from an external list. Capped at 50.
+        unknownColumns:
+          maxItems: 50
+          type: array
+          items:
+            type: string
+          description: Header cells the importer has no verdict for. Capped at 50.
+        codingsNotRead:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: Rows whose `Codings` cell held something left unread.
+        fromArchivedMedications:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: Rows the file marked as belonging to a medication archived in the source.
+      required:
+        - rowsRead
+        - queued
+        - refused
+        - refusedByReason
+        - unmatchedMedications
+        - ambiguousMedications
+        - mirroredMedications
+        - unknownColumns
+        - codingsNotRead
+        - fromArchivedMedications
+      additionalProperties: false
+    MedicationImportSkipGroup:
+      type: object
+      properties:
+        reason:
+          $ref: "#/components/schemas/MedicationImportSkipReason"
+        count:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+      required:
+        - reason
+        - count
+      additionalProperties: false
+    MedicationImportSkipReason:
+      type: string
+      enum:
+        - duplicate_in_file
+        - already_recorded
+        - medication_not_found
+        - medication_ambiguous
+        - medication_is_mirrored
+        - status_no_dose_information
+        - status_reminder_event
+        - status_notification_not_sent
+        - status_unknown
+        - missing_timestamp
+        - missing_timezone_offset
+        - unreadable_timestamp
+        - implausible_timestamp
+        - missing_medication
+        - unreadable_dosage
+        - unreadable_row
+      description: "Why one source row did not become an intake row. Closed 16-value set: duplicate_in_file, already_recorded,
+        medication_not_found, medication_ambiguous, medication_is_mirrored, status_no_dose_information,
+        status_reminder_event, status_notification_not_sent, status_unknown, missing_timestamp, missing_timezone_offset,
+        unreadable_timestamp, implausible_timestamp, missing_medication, unreadable_dosage, unreadable_row."
+    MedicationDoseHistoryImportQueuedEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/MedicationDoseHistoryImportResponse"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    MedicationIntakeImportJobStatusEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/MedicationIntakeImportJobStatusResponse"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    MedicationIntakeImportJobStatusResponse:
+      type: object
+      properties:
+        jobId:
+          type: string
+        status:
+          type: string
+          enum:
+            - queued
+            - running
+            - done
+            - failed
+          description: queued — admitted, not yet picked up. running — the worker is walking entries. done — finished (see
+            `result` for the outcome, even a fully-refused run). failed — the worker could not complete the run (see
+            `failureReason`).
+        progress:
+          $ref: "#/components/schemas/MedicationImportProgress"
+        result:
+          anyOf:
+            - $ref: "#/components/schemas/MedicationImportResult"
+            - type: "null"
+          description: Set only once `status` is `done`; null before that.
+        failureReason:
+          anyOf:
+            - type: string
+            - type: "null"
+          description: Set only when `status` is `failed`; null otherwise.
+        createdAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        startedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+          description: When the worker picked the job up; null while still queued.
+        completedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+          description: When the job reached `done` or `failed`; null while active.
+      required:
+        - jobId
+        - status
+        - progress
+        - result
+        - failureReason
+        - createdAt
+        - startedAt
+        - completedAt
+      additionalProperties: false
+      description: Poll target for a queued intake-import job — shared by the per-medication import and the account-wide
+        dose-history import, so a client polls both through one shape.
+    MedicationImportProgress:
+      type: object
+      properties:
+        processed:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: Entries the worker has walked so far, in file order.
+        total:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: Entries queued for this job.
+        imported:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: Entries that have reached the database so far.
+        skippedByReason:
+          type: object
+          propertyNames:
+            $ref: "#/components/schemas/MedicationImportSkipReason"
+          additionalProperties:
+            type: integer
+            minimum: 1
+            maximum: 9007199254740991
+          description: Running skip tally by reason. A reason with no skips yet is absent from the object, never present as 0.
+        skipDetails:
+          description: Same bounded detail list as the finished `result`.
+          type: array
+          items:
+            $ref: "#/components/schemas/MedicationImportSkipDetail"
+        skippedDetailsOmitted:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        touchedDays:
+          type: array
+          items:
+            type: string
+          description: Local calendar days (YYYY-MM-DD) touched so far, driving the chunked rollup recompute behind the write.
+        rollupProcessed:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: Of `touchedDays`, how many have had their rollup recomputed.
+      required:
+        - processed
+        - total
+        - imported
+        - skippedByReason
+        - touchedDays
+        - rollupProcessed
+      additionalProperties: false
+      description: "In-flight job progress, written whole at admission and advanced in place by the worker. Present from the
+        moment the job is created (queued), so `processed: 0, total: N` is the shape a client sees immediately after
+        kickoff, not an empty object."
+    MedicationImportSkipDetail:
+      type: object
+      properties:
+        line:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: 1-based source-file row ordinal.
+        reason:
+          $ref: "#/components/schemas/MedicationImportSkipReason"
+      required:
+        - line
+        - reason
+      additionalProperties: false
+      description: One refused source row, reduced to the ordinal + reason — never the row's own content (no medication name,
+        timestamp, or dosage text).
+    MedicationImportResult:
+      type: object
+      properties:
+        imported:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        skipped:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: Total entries that did not become a row.
+        skipReasons:
+          type: array
+          items:
+            $ref: "#/components/schemas/MedicationImportSkipGroup"
+          description: One entry per reason that actually occurred, count descending then reason — never the same sentence
+            repeated per row. Empty when nothing was skipped.
+        skipDetails:
+          description: First bounded source-row details (capped at 200). Absent on a legacy job run before this field existed.
+          type: array
+          items:
+            $ref: "#/components/schemas/MedicationImportSkipDetail"
+        skippedDetailsOmitted:
+          description: Count of additional skipped rows beyond the `skipDetails` cap, counted without retaining their contents.
+            Absent when nothing was omitted.
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+      required:
+        - imported
+        - skipped
+        - skipReasons
+      additionalProperties: false
+      description: The finished job's outcome. Null while the job is still queued or running — `status` + `progress` are the
+        fields to read meanwhile.
     GetAiProviderResponse:
       type: object
       properties:
@@ -35124,6 +35594,18 @@ components:
       description: Server-shaped medication row returned by GET / POST / PUT endpoints. Carries the v1.5 course-window fields
         (`startsOn`, `endsOn`, `oneShot`) at the medication level and the per-schedule cadence fields on the nested
         `schedules` array.
+    MedicationDoseHistoryImportFatalReason:
+      type: string
+      enum:
+        - empty_file
+        - missing_required_columns
+        - unreadable_json
+        - json_not_an_array
+        - json_carries_no_intake_time
+      description: Whole-file refusal reason on the 422 `errorCode`. empty_file — no data rows. missing_required_columns — the
+        CSV header is missing a column the parser needs. unreadable_json — the body did not parse as JSON.
+        json_not_an_array — parsed JSON is not an array (and no nested array was found under any key).
+        json_carries_no_intake_time — well-formed JSON export input, refused by design (see above).
   securitySchemes:
     bearerAuth:
       type: http

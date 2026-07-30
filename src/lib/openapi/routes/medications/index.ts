@@ -3,5 +3,8 @@
  *
  * Part of the OpenAPI route table; aggregated in `../index.ts`.
  */
-export { medicationResource } from "./schemas";
+export {
+  medicationResource,
+  medicationDoseHistoryImportFatalReasonEnum,
+} from "./schemas";
 export { medicationPaths } from "./paths";

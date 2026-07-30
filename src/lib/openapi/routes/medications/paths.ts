@@ -56,6 +56,8 @@ import {
   medicationListLayoutResult,
   doseHistoryQuery,
   doseHistoryResponse,
+  medicationIntakeImportJobStatusResponse,
+  medicationDoseHistoryImportResponse,
 } from "./schemas";
 
 // ── Bulk intake backfill (iOS SyncMode) — mirrors the route's
@@ -916,6 +918,107 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "409": {
           description:
             "The revision is a write-path archive (`ARCHIVED`) and cannot be deleted.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/medications/intake/dose-history-import": {
+    post: {
+      tags: ["Medications"],
+      summary: "Import a dose history exported from another medication tracker",
+      description:
+        "Reads a ten-column CSV export covering a whole regimen (multiple medications in one file), matching each row against the caller's existing medications by name — a medication is NEVER created from an import file. `text/csv` carries the actual dose history (`Date`/`Scheduled Date` in separate columns, mapped onto `takenAt`/`scheduledFor`). `application/json` is accepted at the content-type check but the documented JSON export shape always refuses at 422 (`json_carries_no_intake_time`): it has no field for when a dose was actually taken, and inferring one from the scheduled time would manufacture an on-time history the file never claimed. Body capped at 16 MB and 30 000 importable rows. `?dryRun=1` parses, matches, and returns the file verdict WITHOUT writing. A real submission queues the write onto the same background job the per-medication import uses (chunked, heartbeated, resumable) and returns 202 with a `statusUrl` to poll. Shares the 5/hour `import:` rate bucket with every other bulk import surface. Auth via cookie or Bearer.",
+      parameters: [
+        {
+          name: "dryRun",
+          in: "query",
+          required: false,
+          schema: { type: "string", enum: ["1", "true"] },
+          description:
+            "When `1` / `true`, parse + match + return the file verdict without queuing a write.",
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          "text/csv": { schema: { type: "string" } },
+          "application/json": { schema: { type: "string" } },
+        },
+      },
+      responses: {
+        "200": {
+          description: "Dry-run verdict (nothing written).",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                medicationDoseHistoryImportResponse,
+                "MedicationDoseHistoryImportDryRunEnvelope",
+              ),
+            },
+          },
+        },
+        "202": {
+          description: "Import queued.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                medicationDoseHistoryImportResponse,
+                "MedicationDoseHistoryImportQueuedEnvelope",
+              ),
+            },
+          },
+        },
+        "409": {
+          description: "A dose-history import is already in progress.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "413": {
+          description: "File exceeds the 16 MB limit.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "415": {
+          description: "Content-Type must be text/csv or application/json.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "503": {
+          description: "Background worker is not available.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+        "422": {
+          description:
+            "The file could not be read (see `MedicationDoseHistoryImportFatalReason` for the closed `errorCode` set), or it holds more than 30 000 importable rows (`errorCode: too_many_rows`).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
+  "/api/medications/{id}/intake/import/{jobId}/status": {
+    get: {
+      tags: ["Medications"],
+      summary: "Poll a per-medication intake-import job",
+      description:
+        "Returns the queued/running/finished state of a per-medication intake-import job, scoped to the caller's own medication. A job created by the account-wide dose-history import (which carries no `medicationId`) never resolves through this path — poll its own `statusUrl` instead. v1.33.0 widened `result.skipReasons[].reason` / `progress.skipDetails[].reason` to the full 16-value `MedicationImportSkipReason` set. A foreign or unknown job/medication id is sealed as 404. Auth via cookie or Bearer.",
+      requestParams: {
+        path: z.object({ id: z.string(), jobId: z.string() }),
+      },
+      responses: {
+        "200": {
+          description: "Current job status.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                medicationIntakeImportJobStatusResponse,
+                "MedicationIntakeImportJobStatusEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description:
+            "No such job for this medication (or owned by another user).",
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,

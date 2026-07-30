@@ -52,7 +52,11 @@ import { ocrPaths } from "./ocr";
 import { measurementPaths } from "./measurements";
 import { measurementReminderPaths } from "./measurement-reminders";
 import { mentalHealthPaths } from "./mental-health";
-import { medicationPaths, medicationResource } from "./medications";
+import {
+  medicationPaths,
+  medicationResource,
+  medicationDoseHistoryImportFatalReasonEnum,
+} from "./medications";
 import { metaPaths } from "./meta";
 import { moodPaths } from "./mood";
 import { nutrientPaths } from "./nutrients";
@@ -121,8 +125,17 @@ export const openApiComponents: NonNullable<ZodOpenApiObject["components"]> = {
   // registration the standalone `Medication` component would never
   // emit. The iOS codegen reads from `Medication` directly for the
   // shared Swift struct backing both variants.
+  //
+  // `MedicationDoseHistoryImportFatalReason` lives here for the same reason:
+  // the dose-history-import 422 description names it as the closed set
+  // behind `errorCode`, but `ErrorEnvelope.meta.errorCode` is a bare string
+  // shared by every route, so nothing ever `$ref`s the enum itself. Without
+  // this forced registration the schema the description points to would be
+  // silently absent from the published spec.
   schemas: {
     Medication: medicationResource,
+    MedicationDoseHistoryImportFatalReason:
+      medicationDoseHistoryImportFatalReasonEnum,
   },
   securitySchemes: {
     bearerAuth: {
