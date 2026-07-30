@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { SubPageShell } from "@/components/insights/sub-page-shell";
 import { HydrationCard } from "@/components/insights/nutrients/hydration-card";
 import { CaffeineCard } from "@/components/insights/nutrients/caffeine-card";
@@ -33,6 +34,16 @@ const WINDOW_DAYS = 30;
  *     on the device is not visible consent to a server / Coach holding
  *     a supplement pattern); this page just makes the toggle
  *     discoverable in context instead of buried in Settings.
+ *   - module on, the overview read failed → a `QueryErrorCard` with a
+ *     retry. This branch has to sit ABOVE the empty-state check below:
+ *     `overview.data` is `undefined` on a failed read exactly like it is
+ *     before the first response lands, so without this the page told a
+ *     self-hoster who granted every HealthKit permission "no nutrient
+ *     data yet" when the read had actually failed — a guess dressed up
+ *     as an honest absence. `<MicronutrientsCard>` reads this SAME
+ *     `queryKeys.nutrientIntake(WINDOW_DAYS)` query and already renders
+ *     its own error card, but this page's old empty-state branch
+ *     short-circuited before that card ever mounted.
  *   - module on, zero rows anywhere in the window → one EmptyState
  *     explaining where data comes from (phone health-app sync or
  *     manual water entry) instead of three near-empty cards.
@@ -78,6 +89,20 @@ export default function InsightsNutrientsPage() {
               {t("nutrients.page.moduleOffCta")}
             </Button>
           }
+        />
+      </SubPageShell>
+    );
+  }
+
+  if (overview.isError) {
+    return (
+      <SubPageShell
+        title={t("nutrients.page.title")}
+        description={t("nutrients.page.description")}
+      >
+        <QueryErrorCard
+          title={t("nutrients.page.loadError")}
+          onRetry={() => void overview.refetch()}
         />
       </SubPageShell>
     );

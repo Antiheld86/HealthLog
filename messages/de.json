@@ -9087,7 +9087,8 @@
       "moduleOffDescription": "Aktiviere das Nährstoffe-Modul, um Flüssigkeits- und Vitamin-/Mineralstoffaufnahme hier zu sehen. Synchronisierte Werte werden Teil der Aufzeichnung, die der Coach lesen kann.",
       "moduleOffCta": "Nährstoffe aktivieren",
       "emptyTitle": "Noch keine Nährstoffdaten",
-      "emptyDescription": "Daten kommen aus der Synchronisierung der Gesundheits-App deines Telefons oder einem manuellen Wassereintrag."
+      "emptyDescription": "Daten kommen aus der Synchronisierung der Gesundheits-App deines Telefons oder einem manuellen Wassereintrag.",
+      "loadError": "Deine Nährstoffdaten konnten nicht geladen werden"
     },
     "hydration": {
       "referenceMeta": "Richtwert {value} {unit}/Tag · EFSA",

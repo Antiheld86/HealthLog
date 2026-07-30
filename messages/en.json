@@ -9087,7 +9087,8 @@
       "moduleOffDescription": "Turn on the nutrients module to see hydration and vitamin/mineral intake here. Synced intake becomes part of the record the Coach can read.",
       "moduleOffCta": "Turn on nutrients",
       "emptyTitle": "No nutrient data yet",
-      "emptyDescription": "Data arrives from your phone's health app sync or a manual water entry."
+      "emptyDescription": "Data arrives from your phone's health app sync or a manual water entry.",
+      "loadError": "Your nutrient data could not be loaded"
     },
     "hydration": {
       "referenceMeta": "Reference intake {value} {unit}/day · EFSA",

@@ -9087,7 +9087,8 @@
       "moduleOffDescription": "Activez le module nutriments pour voir ici l'hydratation et les apports en vitamines/minéraux. Les données synchronisées feront partie du dossier que le Coach peut lire.",
       "moduleOffCta": "Activer les nutriments",
       "emptyTitle": "Pas encore de données nutritionnelles",
-      "emptyDescription": "Les données proviennent de la synchronisation de l'appli santé de votre téléphone ou d'une saisie manuelle d'eau."
+      "emptyDescription": "Les données proviennent de la synchronisation de l'appli santé de votre téléphone ou d'une saisie manuelle d'eau.",
+      "loadError": "Tes données de nutriments n'ont pas pu être chargées"
     },
     "hydration": {
       "referenceMeta": "Apport de référence {value} {unit}/jour · EFSA",

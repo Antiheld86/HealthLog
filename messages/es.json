@@ -9087,7 +9087,8 @@
       "moduleOffDescription": "Activa el módulo de nutrientes para ver aquí la hidratación y la ingesta de vitaminas/minerales. Los datos sincronizados pasarán a formar parte del registro que el Coach puede leer.",
       "moduleOffCta": "Activar nutrientes",
       "emptyTitle": "Aún no hay datos de nutrientes",
-      "emptyDescription": "Los datos llegan desde la sincronización de la app de salud de tu teléfono o desde una entrada manual de agua."
+      "emptyDescription": "Los datos llegan desde la sincronización de la app de salud de tu teléfono o desde una entrada manual de agua.",
+      "loadError": "No se pudieron cargar tus datos de nutrientes"
     },
     "hydration": {
       "referenceMeta": "Ingesta de referencia {value} {unit}/día · EFSA",

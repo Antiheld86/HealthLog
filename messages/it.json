@@ -9087,7 +9087,8 @@
       "moduleOffDescription": "Attiva il modulo nutrienti per vedere qui idratazione e apporto di vitamine/minerali. I dati sincronizzati diventano parte dei dati che il Coach può leggere.",
       "moduleOffCta": "Attiva nutrienti",
       "emptyTitle": "Ancora nessun dato sui nutrienti",
-      "emptyDescription": "I dati arrivano dalla sincronizzazione dell'app salute del telefono o da una voce di acqua inserita manualmente."
+      "emptyDescription": "I dati arrivano dalla sincronizzazione dell'app salute del telefono o da una voce di acqua inserita manualmente.",
+      "loadError": "Non è stato possibile caricare i tuoi dati sui nutrienti"
     },
     "hydration": {
       "referenceMeta": "Apporto di riferimento {value} {unit}/giorno · EFSA",

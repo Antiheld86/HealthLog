@@ -32,8 +32,11 @@ vi.mock("@/lib/api/api-fetch", () => ({
 }));
 
 vi.mock("@/hooks/use-auth", () => ({
+  // `modules.nutrients: true` so the `/insights/nutrients` page tests below
+  // reach their query instead of short-circuiting on the module-off branch;
+  // no other surface in this file reads `user.modules`.
   useAuth: () => ({
-    user: { gender: "FEMALE", modules: {} },
+    user: { gender: "FEMALE", modules: { nutrients: true } },
     isAuthenticated: true,
     isLoading: false,
   }),
@@ -41,6 +44,7 @@ vi.mock("@/hooks/use-auth", () => ({
 
 import { MentalWellbeing } from "@/components/mental-health/mental-wellbeing";
 import { MicronutrientsCard } from "@/components/insights/nutrients/micronutrients-card";
+import InsightsNutrientsPage from "@/app/insights/nutrients/page";
 
 function makeClient() {
   return new QueryClient({
@@ -140,6 +144,40 @@ describe("micronutrients card", () => {
   });
 });
 
+describe("/insights/nutrients page — overview read shares the micronutrients queryKey", () => {
+  const np = en.nutrients.page;
+
+  // The page's overview query and `<MicronutrientsCard>` read the exact same
+  // `queryKeys.nutrientIntake(30)` cache entry. Before this branch existed, a
+  // failed read left `overview.data` undefined — indistinguishable from the
+  // pre-response state — so the page's empty-state check fired first and
+  // returned "no nutrient data yet" without ever mounting the three cards
+  // below (including `<MicronutrientsCard>`'s own, already-correct error
+  // card).
+  it("renders the page-level error card, not the empty state, when the overview read fails", async () => {
+    const client = makeClient();
+    await seedFailure(client, queryKeys.nutrientIntake(30));
+    const html = render(<InsightsNutrientsPage />, client);
+
+    expect(html).toContain('data-slot="query-error-card"');
+    expect(html).toContain(np.loadError);
+    expect(html).toContain(en.common.retry);
+    expect(html).not.toContain(np.emptyTitle);
+    // The three-card spine must not mount alongside the error notice.
+    expect(html).not.toContain('data-slot="nutrients-hydration-card"');
+    expect(html).not.toContain('data-slot="nutrients-micronutrients-card"');
+  });
+
+  it("still renders the honest empty state when the window genuinely has no rows", () => {
+    const client = makeClient();
+    client.setQueryData(queryKeys.nutrientIntake(30), { nutrients: [] });
+    const html = render(<InsightsNutrientsPage />, client);
+
+    expect(html).not.toContain('data-slot="query-error-card"');
+    expect(html).toContain(np.emptyTitle);
+  });
+});
+
 /**
  * The remaining surfaces in the sweep are pages whose render depends on the
  * router / module gate, which the SSR-only convention cannot drive. Pin their
@@ -155,6 +193,11 @@ describe("read-failure branch is wired on every swept surface", () => {
     "src/components/custom-metrics/custom-metric-values-list.tsx",
     "src/app/achievements/page.tsx",
     "src/components/insights/nutrients/micronutrients-card.tsx",
+    // The page shares `MicronutrientsCard`'s exact queryKey and used to
+    // short-circuit to the "no nutrient data yet" EmptyState on a failed
+    // read, before that card's own (already-correct) error branch ever
+    // got a chance to mount.
+    "src/app/insights/nutrients/page.tsx",
     // A failed comprehensive read used to fall through to "you haven't added
     // any medications yet" — with a CTA inviting someone on a full daily
     // regimen to re-enter what the app already holds.

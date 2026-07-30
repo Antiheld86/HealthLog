@@ -9087,7 +9087,8 @@
       "moduleOffDescription": "Włącz moduł składników odżywczych, aby zobaczyć tu nawodnienie i spożycie witamin/minerałów. Zsynchronizowane dane staną się częścią zapisu, który może odczytać Coach.",
       "moduleOffCta": "Włącz składniki odżywcze",
       "emptyTitle": "Brak jeszcze danych o składnikach odżywczych",
-      "emptyDescription": "Dane pochodzą z synchronizacji aplikacji zdrowia telefonu lub z ręcznego wpisu wody."
+      "emptyDescription": "Dane pochodzą z synchronizacji aplikacji zdrowia telefonu lub z ręcznego wpisu wody.",
+      "loadError": "Nie udało się wczytać danych o składnikach odżywczych"
     },
     "hydration": {
       "referenceMeta": "Zalecane spożycie {value} {unit}/dzień · EFSA",
