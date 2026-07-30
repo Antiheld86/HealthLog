@@ -120,6 +120,12 @@
         "outOfOrder": "Votre progression a changé. Actualisez la page et continuez.",
         "concurrent": "Votre progression a changé. Actualisez la page et continuez."
       }
+    },
+    "profile": {
+      "update": {
+        "nothingSaved": "Rien n'a été enregistré. Corrigez le champ signalé et réessayez.",
+        "invalidBody": "La mise à jour du profil n'a pas pu être lue."
+      }
     }
   },
   "doctorReport": {
@@ -4920,6 +4926,8 @@
     "timezoneHint": "Utilisé pour les libellés des axes des graphiques, les heures de rappel, les horodatages d’export et le contexte du Coach. Les données stockées restent inchangées.",
     "timezoneInvalid": "Fuseau horaire IANA non valide.",
     "profileSaved": "Profil enregistré",
+    "profilePartiallySaved": "Profil enregistré, mais {field} n'a pas pu être mis à jour.",
+    "profileNothingSaved": "Rien n'a été enregistré. Corrigez {field} et réessayez.",
     "avatar": {
       "title": "Photo de profil",
       "description": "Téléverse une photo stockée sur ton propre serveur. Elle apparaît dans toute l'application à la place d'un service d'avatar externe.",

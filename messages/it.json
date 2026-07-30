@@ -120,6 +120,12 @@
         "outOfOrder": "I tuoi progressi sono cambiati. Aggiorna la pagina e continua.",
         "concurrent": "I tuoi progressi sono cambiati. Aggiorna la pagina e continua."
       }
+    },
+    "profile": {
+      "update": {
+        "nothingSaved": "Non è stato salvato nulla. Controlla il campo evidenziato e riprova.",
+        "invalidBody": "Impossibile leggere l'aggiornamento del profilo."
+      }
     }
   },
   "doctorReport": {
@@ -4920,6 +4926,8 @@
     "timezoneHint": "Usato per le etichette degli assi dei grafici, gli orari dei promemoria, gli orari di esportazione e il contesto del Coach. I dati memorizzati restano invariati.",
     "timezoneInvalid": "Non è un fuso orario IANA valido.",
     "profileSaved": "Profilo salvato",
+    "profilePartiallySaved": "Profilo salvato, ma non è stato possibile aggiornare {field}.",
+    "profileNothingSaved": "Non è stato salvato nulla. Correggi {field} e riprova.",
     "avatar": {
       "title": "Foto del profilo",
       "description": "Carica una foto archiviata sul tuo server. Appare in tutta l'app al posto di un servizio di avatar esterno.",

@@ -120,6 +120,12 @@
         "outOfOrder": "Dein Onboarding-Fortschritt hat sich geändert. Lade die Seite neu und fahre fort.",
         "concurrent": "Dein Onboarding-Fortschritt hat sich geändert. Lade die Seite neu und fahre fort."
       }
+    },
+    "profile": {
+      "update": {
+        "nothingSaved": "Es wurde nichts gespeichert. Bitte das markierte Feld korrigieren und erneut versuchen.",
+        "invalidBody": "Die Profilaktualisierung konnte nicht gelesen werden."
+      }
     }
   },
   "doctorReport": {
@@ -4920,6 +4926,8 @@
     "timezoneHint": "Wird für Diagrammachsen, Erinnerungszeiten, Export-Zeitstempel und den Coach-Kontext verwendet. Gespeicherte Daten bleiben unverändert.",
     "timezoneInvalid": "Keine gültige IANA-Zeitzone.",
     "profileSaved": "Profil gespeichert",
+    "profilePartiallySaved": "Profil gespeichert, aber {field} konnte nicht aktualisiert werden.",
+    "profileNothingSaved": "Es wurde nichts gespeichert. Bitte {field} korrigieren und erneut versuchen.",
     "avatar": {
       "title": "Profilfoto",
       "description": "Lade ein Foto hoch, das auf deinem eigenen Server gespeichert wird. Es erscheint überall in der App anstelle eines externen Avatar-Dienstes.",

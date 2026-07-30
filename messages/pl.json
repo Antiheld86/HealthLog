@@ -120,6 +120,12 @@
         "outOfOrder": "Twój postęp się zmienił. Odśwież stronę i kontynuuj.",
         "concurrent": "Twój postęp się zmienił. Odśwież stronę i kontynuuj."
       }
+    },
+    "profile": {
+      "update": {
+        "nothingSaved": "Nic nie zostało zapisane. Sprawdź oznaczone pole i spróbuj ponownie.",
+        "invalidBody": "Nie udało się odczytać aktualizacji profilu."
+      }
     }
   },
   "doctorReport": {
@@ -4920,6 +4926,8 @@
     "timezoneHint": "Używane do etykiet osi wykresów, godzin przypomnień, znaczników czasu eksportu i kontekstu Coacha. Zapisane dane pozostają niezmienione.",
     "timezoneInvalid": "To nie jest prawidłowa strefa czasowa IANA.",
     "profileSaved": "Profil zapisany",
+    "profilePartiallySaved": "Profil zapisany, ale nie udało się zaktualizować pola {field}.",
+    "profileNothingSaved": "Nic nie zostało zapisane. Popraw {field} i spróbuj ponownie.",
     "avatar": {
       "title": "Zdjęcie profilowe",
       "description": "Prześlij zdjęcie przechowywane na własnym serwerze. Pojawia się w całej aplikacji zamiast zewnętrznej usługi awatarów.",

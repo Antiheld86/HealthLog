@@ -120,6 +120,12 @@
         "outOfOrder": "Tu progreso ha cambiado. Actualiza la página y continúa.",
         "concurrent": "Tu progreso ha cambiado. Actualiza la página y continúa."
       }
+    },
+    "profile": {
+      "update": {
+        "nothingSaved": "No se guardó nada. Revisa el campo marcado e inténtalo de nuevo.",
+        "invalidBody": "No se pudo leer la actualización del perfil."
+      }
     }
   },
   "doctorReport": {
@@ -4920,6 +4926,8 @@
     "timezoneHint": "Se usa para las etiquetas de los ejes de los gráficos, las horas de recordatorio, las marcas de tiempo de exportación y el contexto del Coach. Los datos almacenados no cambian.",
     "timezoneInvalid": "No es una zona horaria IANA válida.",
     "profileSaved": "Perfil guardado",
+    "profilePartiallySaved": "Perfil guardado, pero no se pudo actualizar {field}.",
+    "profileNothingSaved": "No se guardó nada. Corrige {field} e inténtalo de nuevo.",
     "avatar": {
       "title": "Foto de perfil",
       "description": "Sube una foto que se almacena en tu propio servidor. Aparece en toda la aplicación en lugar de un servicio de avatares externo.",

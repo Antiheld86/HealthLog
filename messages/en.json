@@ -120,6 +120,12 @@
         "outOfOrder": "Your onboarding progress changed. Refresh and continue.",
         "concurrent": "Your onboarding progress changed. Refresh and continue."
       }
+    },
+    "profile": {
+      "update": {
+        "nothingSaved": "Nothing was saved. Check the highlighted field and try again.",
+        "invalidBody": "The profile update could not be read."
+      }
     }
   },
   "doctorReport": {
@@ -4920,6 +4926,8 @@
     "timezoneHint": "Used for chart axis labels, reminder times, export timestamps, and Coach context. Stored data is unchanged.",
     "timezoneInvalid": "Not a valid IANA timezone.",
     "profileSaved": "Profile saved",
+    "profilePartiallySaved": "Profile saved, but {field} could not be updated.",
+    "profileNothingSaved": "Nothing was saved. Fix {field} and try again.",
     "avatar": {
       "title": "Profile photo",
       "description": "Upload a photo stored on your own server. It appears across the app in place of an external avatar service.",
