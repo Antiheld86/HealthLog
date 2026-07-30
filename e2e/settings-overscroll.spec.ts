@@ -68,12 +68,22 @@ test.describe("settings + admin vertical over-scroll guard", () => {
         // long when the page is ready and too short on a loaded runner, and
         // it never says what it is waiting for. Gate on the element the
         // measurement reads instead.
-        await settleBeforeMeasure(page, page.locator("#main-content"));
+        const wrapperLocator = page.locator(
+          '#main-content [data-slot="main-content-wrapper"]',
+        );
+        await settleBeforeMeasure(page, wrapperLocator);
 
         const dims = await page.evaluate(() => {
           const main = document.getElementById("main-content");
           if (!main) return null;
-          const wrapper = main.firstElementChild as HTMLElement | null;
+          // Selected by the stable `data-slot` (auth-shell.tsx), not by
+          // birth order: `firstElementChild` would resolve to whatever
+          // lazily-mounted sibling (portal, toast, hydrating region) landed
+          // first, silently measuring the wrong subtree instead of the
+          // real content wrapper.
+          const wrapper = main.querySelector<HTMLElement>(
+            '[data-slot="main-content-wrapper"]',
+          );
           if (!wrapper) return null;
           // Lowest content edge: max CONTENT-box bottom over the wrapper's
           // visible, non-fixed descendants, in the scroll container's

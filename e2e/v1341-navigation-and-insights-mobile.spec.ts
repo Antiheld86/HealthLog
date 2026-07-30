@@ -21,25 +21,38 @@ test.describe("v1.34.1 navigation geometry", () => {
 
         const heading = page.getByRole("heading", { level: 1 });
         const sidebar = page.locator("aside").first();
+        // The wrapper carries a stable `data-slot` (auth-shell.tsx) so both
+        // reads below measure the same DOM node instead of resolving
+        // `firstElementChild` twice — a lazily-mounted sibling (portal,
+        // toast, hydrating region) landing ahead of it between the two
+        // reads used to substitute a different element into the second
+        // measurement, producing an unrelated number rather than a
+        // drifted one. Resolving the handle once removes the second
+        // resolution step entirely.
+        const wrapper = page.locator('[data-slot="main-content-wrapper"]');
         await settleBeforeMeasure(page, heading);
         await expect(sidebar).toBeVisible();
+        await expect(wrapper).toBeVisible();
+        const wrapperHandle = await wrapper.elementHandle();
+        if (!wrapperHandle) {
+          throw new Error("main content wrapper not found");
+        }
 
-        const before = await page.evaluate(() => {
+        const before = await page.evaluate((wrapperEl) => {
           const main = document.getElementById("main-content");
           const heading = main?.querySelector("h1");
           const aside = main?.querySelector("aside");
-          const wrapper = main?.firstElementChild;
-          if (!main || !heading || !aside || !wrapper) return null;
+          if (!main || !heading || !aside || !wrapperEl) return null;
           return {
             headingTop: heading.getBoundingClientRect().top,
             asideTop: aside.getBoundingClientRect().top,
-            wrapperLeft: wrapper.getBoundingClientRect().left,
+            wrapperLeft: wrapperEl.getBoundingClientRect().left,
             mainWidth: main.clientWidth,
             documentScrollable:
               document.documentElement.scrollHeight >
               document.documentElement.clientHeight + 1,
           };
-        });
+        }, wrapperHandle);
 
         expect(before).not.toBeNull();
         if (!before) return;
@@ -51,26 +64,33 @@ test.describe("v1.34.1 navigation geometry", () => {
         await page.locator("#main-content").evaluate((main) => {
           main.scrollTop = Math.min(320, main.scrollHeight - main.clientHeight);
         });
-        await page.waitForFunction(() => {
+        // Gate on the wrapper being present and laid out (not just on
+        // scroll state) — the measurement below reads it, so the wait
+        // must cover everything that measurement depends on.
+        await page.waitForFunction((wrapperEl) => {
           const main = document.getElementById("main-content");
+          if (!main) return true;
+          const wrapperReady =
+            !!wrapperEl &&
+            wrapperEl.isConnected &&
+            wrapperEl.getBoundingClientRect().width > 0;
           return (
-            !main ||
-            main.scrollTop > 0 ||
-            main.scrollHeight <= main.clientHeight
+            wrapperReady &&
+            (main.scrollTop > 0 || main.scrollHeight <= main.clientHeight)
           );
-        });
+        }, wrapperHandle);
 
-        const after = await page.evaluate(() => {
+        const after = await page.evaluate((wrapperEl) => {
           const main = document.getElementById("main-content");
           const aside = main?.querySelector("aside");
-          const wrapper = main?.firstElementChild;
-          if (!main || !aside || !wrapper) return null;
+          if (!main || !aside || !wrapperEl) return null;
           return {
             asideTop: aside.getBoundingClientRect().top,
-            wrapperLeft: wrapper.getBoundingClientRect().left,
+            wrapperLeft: wrapperEl.getBoundingClientRect().left,
             mainWidth: main.clientWidth,
           };
-        });
+        }, wrapperHandle);
+        await wrapperHandle.dispose();
 
         expect(after).not.toBeNull();
         if (!after) return;
