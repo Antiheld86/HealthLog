@@ -7,6 +7,12 @@
  * does the server hold". Catalog order, no pagination (≤ 26 rows).
  * Module-gated like the ingest path: 403 `module.disabled` when the
  * opt-in `nutrients` module is off. `userId` is narrowed from auth.
+ *
+ * `lastAttempt` (v1.34.3): non-null only when the window is empty AND the
+ * most recent `nutrient.batch.ingest` audit row shows a call that landed
+ * nothing, so `/insights/nutrients` can say a sync arrived and why instead
+ * of a bare "no data yet". See the lookup below for the AuditLog-retention
+ * coupling this introduces.
  */
 import { NextRequest } from "next/server";
 
@@ -20,6 +26,70 @@ import { nutrientOverviewQuerySchema } from "@/lib/validations/nutrients";
 import { DEFAULT_TIMEZONE, shiftDateKey, userDayKey } from "@/lib/tz/format";
 
 export const dynamic = "force-dynamic";
+
+/** Highest-count skip reason; ties break on this fixed declaration order. */
+const SKIP_REASON_PRIORITY = [
+  "unit_mismatch",
+  "value_out_of_range",
+  "day_invalid",
+  "upsert_failed",
+] as const;
+
+interface LastIngestDetails {
+  inserted: number;
+  updated: number;
+  skipped: number;
+  skippedByReason: Record<string, number>;
+}
+
+/**
+ * `AuditLog.details` is a free-form JSON string; parse it back into the
+ * shape `nutrient.batch.ingest` (`src/app/api/nutrients/batch/route.ts`)
+ * writes, rejecting anything that doesn't match rather than trusting the
+ * blob.
+ */
+function parseLastIngestDetails(raw: string | null): LastIngestDetails | null {
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const obj = parsed as Record<string, unknown>;
+  const { inserted, updated, skipped } = obj;
+  if (
+    typeof inserted !== "number" ||
+    typeof updated !== "number" ||
+    typeof skipped !== "number"
+  ) {
+    return null;
+  }
+  const skippedByReason: Record<string, number> = {};
+  const rawByReason = obj.skippedByReason;
+  if (rawByReason && typeof rawByReason === "object") {
+    for (const [reason, count] of Object.entries(
+      rawByReason as Record<string, unknown>,
+    )) {
+      if (typeof count === "number") skippedByReason[reason] = count;
+    }
+  }
+  return { inserted, updated, skipped, skippedByReason };
+}
+
+function pickTopSkipReason(byReason: Record<string, number>): string | null {
+  let best: string | null = null;
+  let bestCount = 0;
+  for (const reason of SKIP_REASON_PRIORITY) {
+    const count = byReason[reason] ?? 0;
+    if (count > bestCount) {
+      best = reason;
+      bestCount = count;
+    }
+  }
+  return best;
+}
 
 export const GET = apiHandler(async (request: NextRequest) => {
   const { user } = await requireAuth();
@@ -106,6 +176,37 @@ export const GET = apiHandler(async (request: NextRequest) => {
     };
   });
 
+  // The account holder's only signal that a sync ever arrived is this
+  // lookup — the read path stays honest instead of a bare "no data yet"
+  // when a batch actually landed and every entry was rejected. Gated on
+  // the zero-rows path ONLY: an AuditLog read must never run on the happy
+  // path just to serve a read endpoint. COUPLING: this depends on the row
+  // still existing — `cleanupOldAuditLogs` (`src/lib/jobs/audit-log-cleanup.ts`)
+  // prunes AuditLog nightly past `AUDIT_LOG_RETENTION_DAYS` (365 days by
+  // default), so a dormant account whose last failed attempt ages past
+  // that window silently loses the explanation and falls back to the
+  // plain empty state — anyone changing that retention job should know a
+  // user-facing message depends on it.
+  let lastAttempt: { at: string; topReason: string } | null = null;
+  if (nutrients.length === 0) {
+    const lastIngest = await prisma.auditLog.findFirst({
+      where: { userId: user.id, action: "nutrient.batch.ingest" },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true, details: true },
+    });
+    const details = parseLastIngestDetails(lastIngest?.details ?? null);
+    // Only surface a reason when the last attempt landed NOTHING: a
+    // succeeded attempt whose day just falls outside this window is a
+    // different, unrelated situation — showing a failure notice over it
+    // would be the very false claim this feature exists to prevent.
+    if (details && details.inserted === 0 && details.updated === 0) {
+      const topReason = pickTopSkipReason(details.skippedByReason);
+      if (topReason) {
+        lastAttempt = { at: lastIngest!.createdAt.toISOString(), topReason };
+      }
+    }
+  }
+
   annotate({
     action: { name: "nutrient.intake.read" },
     meta: {
@@ -115,5 +216,5 @@ export const GET = apiHandler(async (request: NextRequest) => {
     },
   });
 
-  return apiSuccess({ windowDays: days, nutrients });
+  return apiSuccess({ windowDays: days, nutrients, lastAttempt });
 });

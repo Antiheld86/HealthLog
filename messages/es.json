@@ -9111,7 +9111,16 @@
       "moduleOffCta": "Activar nutrientes",
       "emptyTitle": "Aún no hay datos de nutrientes",
       "emptyDescription": "Los datos llegan desde la sincronización de la app de salud de tu teléfono o desde una entrada manual de agua.",
-      "loadError": "No se pudieron cargar tus datos de nutrientes"
+      "loadError": "No se pudieron cargar tus datos de nutrientes",
+      "lastAttemptTitle": "Se recibió una sincronización, pero no se pudo guardar nada",
+      "lastAttemptAt": "Último intento: {date}",
+      "lastAttemptReason": {
+        "unitMismatch": "Los valores recibidos no coincidían con las unidades que esta app espera para estos nutrientes, así que no se pudieron guardar.",
+        "valueOutOfRange": "Las cantidades recibidas eran superiores a lo que esta app puede almacenar de forma plausible, así que no se pudieron guardar.",
+        "dayInvalid": "Las entradas llevaban una fecha que el servidor no pudo aceptar. Esto puede ocurrir cuando el reloj o la zona horaria del lado que envía los datos están mal configurados; merece la pena revisarlo.",
+        "upsertFailed": "Estas entradas llegaron al servidor, pero un problema de nuestro lado impidió guardarlas. No tienes que hacer nada.",
+        "unknown": "Estas entradas llegaron, pero no se pudieron guardar."
+      }
     },
     "hydration": {
       "referenceMeta": "Ingesta de referencia {value} {unit}/día · EFSA",

@@ -9111,7 +9111,16 @@
       "moduleOffCta": "Activer les nutriments",
       "emptyTitle": "Pas encore de données nutritionnelles",
       "emptyDescription": "Les données proviennent de la synchronisation de l'appli santé de votre téléphone ou d'une saisie manuelle d'eau.",
-      "loadError": "Tes données de nutriments n'ont pas pu être chargées"
+      "loadError": "Tes données de nutriments n'ont pas pu être chargées",
+      "lastAttemptTitle": "Une synchronisation est arrivée, mais rien n'a pu être enregistré",
+      "lastAttemptAt": "Dernière tentative : {date}",
+      "lastAttemptReason": {
+        "unitMismatch": "Les valeurs reçues ne correspondaient pas aux unités attendues par l'appli pour ces nutriments, elles n'ont donc pas pu être enregistrées.",
+        "valueOutOfRange": "Les quantités reçues étaient supérieures à ce que l'appli peut raisonnablement enregistrer, elles n'ont donc pas pu être sauvegardées.",
+        "dayInvalid": "Les entrées portaient une date que le serveur n'a pas pu accepter. Cela peut arriver quand l'horloge ou le fuseau horaire du côté qui envoie les données est incorrect — cela vaut la peine de vérifier.",
+        "upsertFailed": "Ces entrées sont arrivées jusqu'au serveur, mais un problème de notre côté a empêché leur enregistrement. Tu n'as rien à faire.",
+        "unknown": "Ces entrées sont arrivées mais n'ont pas pu être enregistrées."
+      }
     },
     "hydration": {
       "referenceMeta": "Apport de référence {value} {unit}/jour · EFSA",

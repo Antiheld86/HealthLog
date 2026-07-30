@@ -9111,7 +9111,16 @@
       "moduleOffCta": "Nährstoffe aktivieren",
       "emptyTitle": "Noch keine Nährstoffdaten",
       "emptyDescription": "Daten kommen aus der Synchronisierung der Gesundheits-App deines Telefons oder einem manuellen Wassereintrag.",
-      "loadError": "Deine Nährstoffdaten konnten nicht geladen werden"
+      "loadError": "Deine Nährstoffdaten konnten nicht geladen werden",
+      "lastAttemptTitle": "Eine Synchronisierung ist angekommen, aber nichts konnte gespeichert werden",
+      "lastAttemptAt": "Letzter Versuch: {date}",
+      "lastAttemptReason": {
+        "unitMismatch": "Die übermittelten Werte entsprachen nicht den Einheiten, die diese App für diese Nährstoffe erwartet, daher konnten sie nicht gespeichert werden.",
+        "valueOutOfRange": "Die übermittelten Mengen lagen höher, als diese App plausibel speichern kann, daher konnten sie nicht gesichert werden.",
+        "dayInvalid": "Die Einträge trugen ein Datum, das der Server nicht akzeptieren konnte. Das kann passieren, wenn Uhrzeit oder Zeitzone auf der sendenden Seite falsch eingestellt sind — das lohnt sich zu prüfen.",
+        "upsertFailed": "Diese Einträge haben den Server erreicht, aber ein Problem auf unserer Seite hat verhindert, dass sie gespeichert wurden. Du musst nichts weiter tun.",
+        "unknown": "Diese Einträge sind angekommen, konnten aber nicht gespeichert werden."
+      }
     },
     "hydration": {
       "referenceMeta": "Richtwert {value} {unit}/Tag · EFSA",

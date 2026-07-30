@@ -9111,7 +9111,16 @@
       "moduleOffCta": "Attiva nutrienti",
       "emptyTitle": "Ancora nessun dato sui nutrienti",
       "emptyDescription": "I dati arrivano dalla sincronizzazione dell'app salute del telefono o da una voce di acqua inserita manualmente.",
-      "loadError": "Non è stato possibile caricare i tuoi dati sui nutrienti"
+      "loadError": "Non è stato possibile caricare i tuoi dati sui nutrienti",
+      "lastAttemptTitle": "È arrivata una sincronizzazione, ma non è stato possibile salvare nulla",
+      "lastAttemptAt": "Ultimo tentativo: {date}",
+      "lastAttemptReason": {
+        "unitMismatch": "I valori ricevuti non corrispondevano alle unità che questa app si aspetta per questi nutrienti, quindi non è stato possibile salvarli.",
+        "valueOutOfRange": "Le quantità ricevute erano superiori a quanto questa app può plausibilmente memorizzare, quindi non è stato possibile salvarle.",
+        "dayInvalid": "Le voci riportavano una data che il server non ha potuto accettare. Questo può succedere quando l'orologio o il fuso orario dal lato che invia i dati non sono corretti: vale la pena controllare.",
+        "upsertFailed": "Queste voci hanno raggiunto il server, ma un problema da questa parte ne ha impedito il salvataggio. Non devi fare nulla.",
+        "unknown": "Queste voci sono arrivate ma non è stato possibile salvarle."
+      }
     },
     "hydration": {
       "referenceMeta": "Apporto di riferimento {value} {unit}/giorno · EFSA",

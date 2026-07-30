@@ -9111,7 +9111,16 @@
       "moduleOffCta": "Włącz składniki odżywcze",
       "emptyTitle": "Brak jeszcze danych o składnikach odżywczych",
       "emptyDescription": "Dane pochodzą z synchronizacji aplikacji zdrowia telefonu lub z ręcznego wpisu wody.",
-      "loadError": "Nie udało się wczytać danych o składnikach odżywczych"
+      "loadError": "Nie udało się wczytać danych o składnikach odżywczych",
+      "lastAttemptTitle": "Synchronizacja dotarła, ale nic nie udało się zapisać",
+      "lastAttemptAt": "Ostatnia próba: {date}",
+      "lastAttemptReason": {
+        "unitMismatch": "Otrzymane wartości nie pasowały do jednostek, których ta aplikacja oczekuje dla tych składników odżywczych, więc nie udało się ich zapisać.",
+        "valueOutOfRange": "Otrzymane ilości były wyższe, niż ta aplikacja może wiarygodnie zapisać, więc nie udało się ich zapisać.",
+        "dayInvalid": "Wpisy zawierały datę, której serwer nie mógł zaakceptować. Może się to zdarzyć, gdy zegar lub strefa czasowa po stronie wysyłającej są nieprawidłowe — warto to sprawdzić.",
+        "upsertFailed": "Te wpisy dotarły do serwera, ale problem po naszej stronie uniemożliwił ich zapisanie. Nie musisz nic robić.",
+        "unknown": "Te wpisy dotarły, ale nie udało się ich zapisać."
+      }
     },
     "hydration": {
       "referenceMeta": "Zalecane spożycie {value} {unit}/dzień · EFSA",

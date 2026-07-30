@@ -9111,7 +9111,16 @@
       "moduleOffCta": "Turn on nutrients",
       "emptyTitle": "No nutrient data yet",
       "emptyDescription": "Data arrives from your phone's health app sync or a manual water entry.",
-      "loadError": "Your nutrient data could not be loaded"
+      "loadError": "Your nutrient data could not be loaded",
+      "lastAttemptTitle": "A sync arrived, but nothing could be stored",
+      "lastAttemptAt": "Last attempt: {date}",
+      "lastAttemptReason": {
+        "unitMismatch": "The values that arrived didn't match the units this app expects for these nutrients, so they couldn't be stored.",
+        "valueOutOfRange": "The amounts that arrived were higher than this app can plausibly store, so they couldn't be saved.",
+        "dayInvalid": "The entries carried a date the server couldn't accept. This can happen when the clock or time zone on the sending side is wrong — it's worth checking.",
+        "upsertFailed": "These entries reached the server, but a problem on this end kept them from being saved. There's nothing you need to do.",
+        "unknown": "These entries arrived but couldn't be stored."
+      }
     },
     "hydration": {
       "referenceMeta": "Reference intake {value} {unit}/day · EFSA",

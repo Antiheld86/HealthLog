@@ -85,6 +85,11 @@ function render(node: React.ReactNode, client: QueryClient): string {
   );
 }
 
+/** React's SSR serialiser escapes `'` as `&#x27;` in text nodes. */
+function htmlEscaped(text: string): string {
+  return text.replace(/'/g, "&#x27;");
+}
+
 describe("mental wellbeing — screening history", () => {
   const mh = en.mentalHealth;
 
@@ -170,11 +175,56 @@ describe("/insights/nutrients page — overview read shares the micronutrients q
 
   it("still renders the honest empty state when the window genuinely has no rows", () => {
     const client = makeClient();
-    client.setQueryData(queryKeys.nutrientIntake(30), { nutrients: [] });
+    client.setQueryData(queryKeys.nutrientIntake(30), {
+      nutrients: [],
+      lastAttempt: null,
+    });
     const html = render(<InsightsNutrientsPage />, client);
 
     expect(html).not.toContain('data-slot="query-error-card"');
     expect(html).toContain(np.emptyTitle);
+    expect(html).not.toContain(np.lastAttemptTitle);
+  });
+
+  // `GET /api/nutrients` returns `lastAttempt` non-null only when the window
+  // is empty AND the most recent `nutrient.batch.ingest` audit row shows a
+  // call that landed nothing — a batch CAN arrive and have every entry
+  // rejected, which used to read on this page exactly like nothing ever
+  // synced. The reason must render as the mapped human sentence, never the
+  // raw wire code.
+  it("names the sync attempt and its reason instead of the generic empty state", () => {
+    const client = makeClient();
+    client.setQueryData(queryKeys.nutrientIntake(30), {
+      nutrients: [],
+      lastAttempt: {
+        at: "2026-07-15T09:30:00.000Z",
+        topReason: "unit_mismatch",
+      },
+    });
+    const html = render(<InsightsNutrientsPage />, client);
+
+    expect(html).toContain(np.lastAttemptTitle);
+    expect(html).toContain(htmlEscaped(np.lastAttemptReason.unitMismatch));
+    // The date line renders around a formatted timestamp; assert the fixed
+    // prefix rather than the locale-formatted date itself.
+    expect(html).toContain(np.lastAttemptAt.split("{date}")[0]);
+    expect(html).not.toContain(np.emptyTitle);
+    expect(html).not.toContain("unit_mismatch");
+  });
+
+  it("falls back to the generic reason sentence for an unmapped code", () => {
+    const client = makeClient();
+    client.setQueryData(queryKeys.nutrientIntake(30), {
+      nutrients: [],
+      lastAttempt: {
+        at: "2026-07-15T09:30:00.000Z",
+        topReason: "some_future_reason",
+      },
+    });
+    const html = render(<InsightsNutrientsPage />, client);
+
+    expect(html).toContain(np.lastAttemptTitle);
+    expect(html).toContain(htmlEscaped(np.lastAttemptReason.unknown));
   });
 });
 
