@@ -5643,7 +5643,6 @@
     "cycleTracking": {
       "title": "Suivi du cycle",
       "description": "Suivez votre cycle menstruel, les prédictions, les symptômes et les analyses de phases. Activé par défaut pour les comptes définis comme féminins ; disponible pour tous.",
-      "disclaimer": "Les prévisions et les phases sont des estimations descriptives issues de tes données enregistrées : ce ne sont ni un avis médical ni une méthode de contraception. Elles n'indiquent jamais qu'un rapport non protégé est sans risque. La précision s'améliore à mesure que tu enregistres plus de cycles. Pour la contraception ou toute décision médicale, consulte un professionnel de santé.",
       "enable": "Activer le suivi du cycle",
       "manage": "Ouvrir le suivi du cycle",
       "error": "Impossible de mettre à jour le suivi du cycle."

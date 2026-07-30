@@ -5643,7 +5643,6 @@
     "cycleTracking": {
       "title": "Seguimiento del ciclo",
       "description": "Registra tu ciclo menstrual, predicciones, síntomas e información de fases. Activado por defecto en cuentas configuradas como femeninas; disponible para todos.",
-      "disclaimer": "Las predicciones y las fases son estimaciones descriptivas a partir de tus datos registrados, no son consejo médico ni un método anticonceptivo. Nunca indican que sea seguro tener relaciones sin protección. La precisión mejora a medida que registras más ciclos. Para la anticoncepción o cualquier decisión médica, consulta a un profesional sanitario.",
       "enable": "Activar el seguimiento del ciclo",
       "manage": "Abrir seguimiento del ciclo",
       "error": "No se pudo actualizar el seguimiento del ciclo."

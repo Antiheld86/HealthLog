@@ -5643,7 +5643,6 @@
     "cycleTracking": {
       "title": "Cycle tracking",
       "description": "Track your menstrual cycle, predictions, symptoms, and phase insights. On by default for accounts set to female; available to everyone.",
-      "disclaimer": "Predictions and phases are descriptive estimates from your logged data — not medical advice and not a contraceptive method. They never indicate that it is safe to have unprotected sex. Accuracy improves as you log more cycles. For contraception or any medical decision, consult a healthcare professional.",
       "enable": "Enable cycle tracking",
       "manage": "Open cycle tracking",
       "error": "Couldn't update cycle tracking."

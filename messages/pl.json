@@ -5643,7 +5643,6 @@
     "cycleTracking": {
       "title": "Śledzenie cyklu",
       "description": "Śledź swój cykl menstruacyjny, prognozy, objawy i analizy faz. Domyślnie włączone dla kont ustawionych jako kobiece; dostępne dla wszystkich.",
-      "disclaimer": "Prognozy i fazy to opisowe szacunki na podstawie zarejestrowanych danych — nie są poradą medyczną ani metodą antykoncepcji. Nigdy nie wskazują, że współżycie bez zabezpieczenia jest bezpieczne. Dokładność rośnie wraz z liczbą zarejestrowanych cykli. W sprawach antykoncepcji lub decyzji medycznych skonsultuj się z pracownikiem ochrony zdrowia.",
       "enable": "Włącz śledzenie cyklu",
       "manage": "Otwórz śledzenie cyklu",
       "error": "Nie udało się zaktualizować śledzenia cyklu."

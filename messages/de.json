@@ -5643,7 +5643,6 @@
     "cycleTracking": {
       "title": "Zyklus-Tracking",
       "description": "Verfolge deinen Menstruationszyklus, Vorhersagen, Symptome und Phasen-Insights. Standardmäßig an für als weiblich eingestellte Konten; für alle verfügbar.",
-      "disclaimer": "Vorhersagen und Phasen sind beschreibende Schätzungen aus deinen erfassten Daten – keine medizinische Beratung und keine Verhütungsmethode. Sie zeigen nie an, dass ungeschützter Geschlechtsverkehr sicher ist. Die Genauigkeit steigt, je mehr Zyklen du erfasst. Wende dich für Verhütung oder medizinische Entscheidungen an eine medizinische Fachperson.",
       "enable": "Zyklus-Tracking aktivieren",
       "manage": "Zyklus-Tracking öffnen",
       "error": "Zyklus-Tracking konnte nicht aktualisiert werden."
