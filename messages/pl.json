@@ -3102,9 +3102,14 @@
         "splitsTime": "Czas",
         "splitsPace": "Tempo",
         "thatDayTitle": "Tego dnia",
-        "dayPulse": "Tętno",
-        "daySleep": "Sen",
-        "dayMood": "Nastrój",
+        "daySleepTitle": "Noc wcześniej",
+        "daySleepNone": "Brak zapisanego snu tej nocy",
+        "daySleepAwakeningsOne": "{count} przebudzenie",
+        "daySleepAwakeningsMany": "{count} przebudzeń",
+        "dayMoodTitle": "Nastrój tego dnia",
+        "dayMoodNone": "Brak zapisanego nastroju tego dnia",
+        "sleepTrendsLink": "Trendy snu",
+        "moodHistoryLink": "Historia nastroju",
         "insightTitle": "Analiza aktywności"
       },
       "sport": {

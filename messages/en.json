@@ -3102,9 +3102,14 @@
         "splitsTime": "Time",
         "splitsPace": "Pace",
         "thatDayTitle": "That day",
-        "dayPulse": "Pulse",
-        "daySleep": "Sleep",
-        "dayMood": "Mood",
+        "daySleepTitle": "The night before",
+        "daySleepNone": "No sleep recorded for that night",
+        "daySleepAwakeningsOne": "{count} awakening",
+        "daySleepAwakeningsMany": "{count} awakenings",
+        "dayMoodTitle": "Mood that day",
+        "dayMoodNone": "No mood logged that day",
+        "sleepTrendsLink": "Sleep trends",
+        "moodHistoryLink": "Mood history",
         "insightTitle": "Activity insight"
       },
       "sport": {

@@ -3102,9 +3102,14 @@
         "splitsTime": "Tiempo",
         "splitsPace": "Ritmo",
         "thatDayTitle": "Ese día",
-        "dayPulse": "Pulso",
-        "daySleep": "Sueño",
-        "dayMood": "Ánimo",
+        "daySleepTitle": "La noche anterior",
+        "daySleepNone": "No hay sueño registrado esa noche",
+        "daySleepAwakeningsOne": "{count} despertar",
+        "daySleepAwakeningsMany": "{count} despertares",
+        "dayMoodTitle": "Ánimo ese día",
+        "dayMoodNone": "No hay ánimo registrado ese día",
+        "sleepTrendsLink": "Tendencias de sueño",
+        "moodHistoryLink": "Historial de ánimo",
         "insightTitle": "Análisis de la actividad"
       },
       "sport": {

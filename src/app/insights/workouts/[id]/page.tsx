@@ -21,7 +21,7 @@ import {
   WorkoutDetailZones,
   WorkoutDetailRoute,
   WorkoutDetailSplits,
-  WorkoutDetailDayLinks,
+  WorkoutDetailDayContext,
   WorkoutInsightCard,
 } from "@/components/insights/workout-detail";
 
@@ -31,7 +31,12 @@ import {
  * Layout, top to bottom (mobile-first single column):
  *   hero header → reserved Activity-Insight seam (renders nothing today)
  *   → stats grid + sport-average line → HR curve → effort zones → GPS
- *   route → per-km splits → "that day" cross-links → coach launch.
+ *   route → per-km splits → "that day" → coach launch.
+ *
+ * "That day" answers the last question the page is for: what the rest of
+ * the day looked like around the session. It renders the day's own pulse
+ * shape, that night's sleep and the day's mood inline, all addressed by
+ * the server-resolved `dayKey`.
  *
  * Every data-less section returns `null` (hide, don't render empty), so
  * an aggregates-only workout (a Strava ride with no wearable, a manual
@@ -70,7 +75,9 @@ export default function InsightsWorkoutDetailPage({
   return (
     <SubPageShell
       title={t("insights.workouts.title")}
-      description={t("insights.workouts.description")}
+      // No description. The one this page used to carry belongs to the LIST
+      // ("Recent runs, rides, walks…, deduped…") and describes a surface
+      // this is not — a detail page must not claim to be the list.
       backLink={
         <BackLink
           href="/insights/workouts"
@@ -112,7 +119,7 @@ export default function InsightsWorkoutDetailPage({
           <WorkoutDetailZones workout={data} />
           <WorkoutDetailRoute workout={data} />
           <WorkoutDetailSplits workout={data} />
-          <WorkoutDetailDayLinks workout={data} />
+          <WorkoutDetailDayContext workout={data} />
           {/* 2026-07-17 UX-flows audit F6-1 — `workouts` narrows the
               snapshot the first coach turn reads. v1.31.0 — `workoutId` pins
               THIS session's own numbers as one additional snapshot section, so

@@ -77,11 +77,19 @@ const AXIS_TICKS = [0, 360, 720, 1080, 1440];
  * hourly day (it needs per-sample resolution to stay honest). A failed fetch
  * renders `<QueryErrorCard>` with a retry action instead of falling through
  * to the empty-day copy.
+ *
+ * `initialDateKey` pins the first day shown, for callers that already know
+ * which day they are talking about — the workout detail page seeds it with
+ * the session's `dayKey` so the chart opens on the day of the workout. The
+ * navigator still works from there, so "the day before" stays one tap away.
+ * Absent, the view opens on today and keeps tracking it.
  */
 export function IntradayPulseChart({
   userTimezone,
+  initialDateKey,
 }: {
   userTimezone?: string;
+  initialDateKey?: string;
 }) {
   const { isAuthenticated } = useAuth();
   const { t } = useTranslations();
@@ -90,8 +98,11 @@ export function IntradayPulseChart({
   const todayKey = userDayKey(new Date(), tz);
   // `null` tracks "today" live (so a session left open across midnight keeps
   // following the current day); a non-null value pins the viewed day once
-  // the user has navigated away from today.
-  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
+  // the user has navigated away from today — or from the start, when the
+  // caller seeded a day of its own.
+  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(
+    initialDateKey ?? null,
+  );
   const dateKey = selectedDateKey ?? todayKey;
   const isToday = dateKey === todayKey;
 

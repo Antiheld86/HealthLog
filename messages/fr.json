@@ -3102,9 +3102,14 @@
         "splitsTime": "Temps",
         "splitsPace": "Allure",
         "thatDayTitle": "Ce jour-là",
-        "dayPulse": "Pouls",
-        "daySleep": "Sommeil",
-        "dayMood": "Humeur",
+        "daySleepTitle": "La nuit précédente",
+        "daySleepNone": "Aucun sommeil enregistré cette nuit-là",
+        "daySleepAwakeningsOne": "{count} réveil",
+        "daySleepAwakeningsMany": "{count} réveils",
+        "dayMoodTitle": "Humeur ce jour-là",
+        "dayMoodNone": "Aucune humeur enregistrée ce jour-là",
+        "sleepTrendsLink": "Tendances du sommeil",
+        "moodHistoryLink": "Historique d'humeur",
         "insightTitle": "Analyse de l'activité"
       },
       "sport": {
