@@ -159,6 +159,48 @@ function formatDayTick(
   });
 }
 
+/** One Recharts row: the day's label plus a numeric key per drawn band. */
+export type CompositionRow = Record<string, number | string>;
+
+/**
+ * Turn the trailing window of nights into the chart's rows.
+ *
+ * A day without a nap gets a plain `NAP: 0`, which draws as nothing. Pulled
+ * out of the component because Recharts renders no markup under SSR, so this
+ * is the only place the nap decision can actually be pinned by a test.
+ */
+export function buildCompositionRows(
+  perNight: readonly SleepStageNight[],
+  windowDays: number,
+  formatLabel: (dayKey: string) => string,
+): { rows: CompositionRow[] } {
+  const trailing = perNight.slice(-windowDays);
+  const rows = trailing.map((night) => {
+    const row: CompositionRow = {
+      dayKey: night.dayKey,
+      label: formatLabel(night.dayKey),
+    };
+    for (const stage of STAGE_ORDER) {
+      row[stage] = night.stages[stage] ?? 0;
+    }
+    row[NAP_KEY] = night.napMinutes ?? 0;
+    row.napCount = night.napCount ?? 0;
+    return row;
+  });
+  return { rows };
+}
+
+/**
+ * Whether the visible window holds a nap at all. When it does not, the nap
+ * band is never mounted — so there is no bar, no legend entry, and no tooltip
+ * row saying a nap did not happen.
+ */
+export function windowHasNap(rows: readonly CompositionRow[]): boolean {
+  return rows.some(
+    (row) => typeof row[NAP_KEY] === "number" && (row[NAP_KEY] as number) > 0,
+  );
+}
+
 export function SleepStageStackedBar({ breakdown }: SleepStageStackedBarProps) {
   const { t, locale } = useTranslations();
 
@@ -197,33 +239,13 @@ export function SleepStageStackedBar({ breakdown }: SleepStageStackedBarProps) {
       }
       return [fallbackRow];
     }
-    const trailing = perNight.slice(-windowDays);
-    return trailing.map((night) => {
-      const row: Record<string, number | string> = {
-        dayKey: night.dayKey,
-        label: formatDayTick(night.dayKey, windowDays, locale),
-      };
-      for (const stage of STAGE_ORDER) {
-        row[stage] = night.stages[stage] ?? 0;
-      }
-      // A day without a nap carries a plain 0 here, which Recharts draws as
-      // nothing; the band itself is only mounted when some day in the window
-      // has one, so the legend stays clean on a nap-less week.
-      row[NAP_KEY] = night.napMinutes ?? 0;
-      row.napCount = night.napCount ?? 0;
-      return row;
-    });
+    return buildCompositionRows(perNight, windowDays, (dayKey) =>
+      formatDayTick(dayKey, windowDays, locale),
+    ).rows;
   }, [breakdown, windowDays, locale, t]);
 
   // Mount the nap band only when the VISIBLE window holds one.
-  const hasNap = useMemo(
-    () =>
-      data.some(
-        (row) =>
-          typeof row[NAP_KEY] === "number" && (row[NAP_KEY] as number) > 0,
-      ),
-    [data],
-  );
+  const hasNap = useMemo(() => windowHasNap(data), [data]);
 
   // Empty-state guard — no perNight rows AND no aggregate.
   const hasData =
