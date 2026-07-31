@@ -38,6 +38,15 @@ export const settingsKeys = {
    */
   modulesPrefs: () => ["settings", "modules"] as const,
 
+  /**
+   * v1.35.0 — which pillars count toward the Health Score, behind
+   * `GET/PATCH /api/auth/me/health-score-config`. Its own cell rather than
+   * a slice of `authMe()`: the payload carries the optimistic-concurrency
+   * token the save echoes, and folding it into the account payload would
+   * make every unrelated profile write advance the token.
+   */
+  healthScoreConfig: () => ["settings", "health-score-config"] as const,
+
   apiVersion: () => ["api", "version"] as const,
   publicVersion: () => ["public", "version"] as const,
   /** v1.15.12 H1 — admin overview "update available" check against the

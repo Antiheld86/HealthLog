@@ -2268,7 +2268,7 @@
         "yellow": "Alcuni pilastri richiedono attenzione",
         "red": "Uno o più pilastri sono fuori dall'intervallo di riferimento"
       },
-      "insufficient": "{count} pilastri idonei. Il punteggio ne richiede almeno tre, incluso un pilastro fisiologico misurato.",
+      "insufficient": "{count} ambiti di salute su {required} hanno abbastanza dati recenti. Il punteggio ne richiede {required}, di cui almeno uno misurato fisicamente.",
       "anatomyToggle": "Come nasce questo punteggio",
       "notScored": "Non ancora valutato ({count})",
       "method": "Il punteggio è la media a peso uguale di tutti i pilastri con dati recenti sufficienti, su una scala da 0 a 100. Ogni pilastro viene confrontato con un intervallo di riferimento pubblicato e il pilastro più debole può determinare la fascia complessiva. Un pilastro senza dati sufficienti resta escluso invece di contare come zero.",
@@ -2347,6 +2347,11 @@
         "weight_not_tracked": "Registra il peso per vedere i progressi verso il tuo obiettivo.",
         "read_failed": "Non è stato possibile caricare i dati del peso. Riprova.",
         "notScored": "I progressi verso l'obiettivo di peso sono un contesto personale e non influenzano il punteggio di salute."
+      },
+      "configureLink": "Scegli cosa conta nel tuo punteggio",
+      "coverage": {
+        "minimumMet": "Copre i tre ambiti richiesti dal punteggio",
+        "areas": "{present} ambiti di salute su {required}"
       }
     },
     "suggestedPrompts": {
@@ -3608,7 +3613,8 @@
         "summary": "{present} di {required} input · {percent}%",
         "ratioLabel": "{present}/{required}",
         "historyDays": "Basato su {count} giorni di cronologia",
-        "missing": "Registra questi per affinare il valore: {list}"
+        "missing": "Registra questi per affinare il valore: {list}",
+        "summaryLabelled": "{label} · {percent}%"
       },
       "scoreRing": {
         "aria": "Punteggio {score} su 100, {band}",
@@ -4897,6 +4903,68 @@
         "fetchFailedOne": "L’ultimo aggiornamento meteo in background non è riuscito ({when}).",
         "fetchFailedFew": "Gli ultimi {count} aggiornamenti meteo in background non sono riusciti, il più recente {when}.",
         "fetchFailedOther": "Gli ultimi {count} aggiornamenti meteo in background non sono riusciti, il più recente {when}."
+      },
+      "score": {
+        "title": "Punteggio di salute",
+        "subtitle": "Scegli quali pilastri contano per il tuo punteggio.",
+        "card": {
+          "title": "Cosa conta per il tuo punteggio",
+          "description": "Ogni pilastro che registri conta, a meno che tu non dica diversamente qui."
+        },
+        "threeAxes": "Registrare, mostrare e contare sono tre cose diverse. Questa pagina cambia solo l'ultima. Un pilastro che disattivi qui continua a essere registrato e resta visibile ovunque in HealthLog, smette solo di muovere il numero.",
+        "axis": {
+          "recorded": "Viene registrato",
+          "shown": "Mostrato nell'app",
+          "countsFor": "Conta {pillar} nel punteggio"
+        },
+        "domain": {
+          "cardiometabolic": "Cuore e metabolismo",
+          "activity": "Attività",
+          "sleep": "Sonno",
+          "adiposity": "Forma corporea",
+          "wellbeing": "Benessere",
+          "fitness": "Forma fisica misurata"
+        },
+        "domainNote": {
+          "cardiometabolic": "Tre pilastri, un solo ambito di salute. Ogni pilastro pesa allo stesso modo nel punteggio, quindi questo ambito pesa il triplo di uno con un solo pilastro."
+        },
+        "state": {
+          "counting": "Conta nel tuo punteggio",
+          "waiting": "Selezionato, in attesa di dati",
+          "crisis": "Al posto di un punteggio viene mostrata un'indicazione di sicurezza. La tua selezione va bene.",
+          "readFailed": "Questo pilastro non è stato letto nell'ultimo calcolo.",
+          "unavailable": "Non ancora disponibile",
+          "unavailableDetail": "HealthLog non sa ancora distinguere un test di forma fisica misurato da una stima del dispositivo, perciò questo pilastro non ha mai prodotto un punteggio. Resta in elenco perché tu veda che non conta."
+        },
+        "presets": {
+          "label": "Punto di partenza",
+          "all": "Tutti i pilastri",
+          "current": "La tua selezione salvata"
+        },
+        "save": "Salva",
+        "saved": "Salvato.",
+        "error": "Non è stato possibile salvare. Riprova.",
+        "loadFailed": "Non è stato possibile caricare la tua selezione.",
+        "eligibilityFailed": "Non è stato possibile verificare quali pilastri hanno dati al momento. Gli interruttori qui sotto funzionano comunque.",
+        "omitted": "{count} pilastri non compaiono perché il loro monitoraggio è disattivato. Riattiva un modulo e il suo pilastro torna.",
+        "omittedLink": "Apri i moduli",
+        "refusal": {
+          "physiological": "Un punteggio di salute ha bisogno di almeno una misurazione fisica. Tieni nella selezione la pressione, la glicemia, il sonno, la forma corporea o il colesterolo, oltre a ciò che scegli d'altro.",
+          "domains": "Un punteggio di salute ha bisogno di almeno tre ambiti di salute diversi. Pressione, glicemia e colesterolo descrivono lo stesso ambito, quindi una selezione fatta solo di questi conta come uno."
+        },
+        "notice": {
+          "upgrade": {
+            "title": "Ora sei tu a decidere cosa conta",
+            "body": "Quali pilastri contassero nel tuo Health Score dipendeva prima dai moduli che avevi attivi. Ora è una scelta a parte, e la fai qui. Il tuo numero non si è mosso con questo cambiamento: conta ancora esattamente quello che contava prima."
+          },
+          "changed": {
+            "title": "Hai cambiato cosa conta",
+            "body": "Dal {date} il tuo punteggio è calcolato su un insieme di pilastri diverso. I giorni precedenti vengono dall'insieme vecchio, quindi i due non vengono confrontati e la variazione settimanale resta sospesa finché la finestra di confronto non ha superato il cambiamento. Lo storico di ogni singolo pilastro prosegue senza interruzioni.",
+            "bodyUndated": "Il tuo punteggio è calcolato su un insieme di pilastri diverso da prima. I giorni precedenti vengono dall'insieme vecchio, quindi i due non vengono confrontati e la variazione settimanale resta sospesa finché la finestra di confronto non ha superato il cambiamento. Lo storico di ogni singolo pilastro prosegue senza interruzioni."
+          },
+          "dismiss": "Ho capito",
+          "dismissError": "Non è stato possibile salvare. Riprova."
+        }
       }
     },
     "profile": "Profilo",

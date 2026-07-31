@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
+import Link from "next/link";
 import { AlertTriangle, ChevronDown, RotateCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -27,11 +28,11 @@ import { useUnitDisplay } from "@/hooks/use-unit-display";
 import { resolveGlucoseUnit } from "@/lib/glucose";
 import type {
   HealthScoreReport,
-  ScorePillarId,
   ScoreBand,
   ScorePillarResult,
 } from "@/lib/analytics/score/types";
 import { useTranslations } from "@/lib/i18n/context";
+import { SCORE_PILLAR_LABEL_KEYS } from "@/lib/score-config/labels";
 import { cn } from "@/lib/utils";
 
 /**
@@ -64,16 +65,12 @@ import { cn } from "@/lib/utils";
  * composite's colour, which painted a pillar scoring 92 red on a red day.
  */
 
-const PILLAR_LABEL_KEY: Record<ScorePillarId, string> = {
-  BLOOD_PRESSURE: "insights.healthScore.pillar.bloodPressure",
-  GLYCAEMIA: "insights.healthScore.pillar.glycaemia",
-  ACTIVITY: "insights.healthScore.pillar.activity",
-  SLEEP: "insights.healthScore.pillar.sleep",
-  ADIPOSITY: "insights.healthScore.pillar.adiposity",
-  WELLBEING: "insights.healthScore.pillar.wellbeing",
-  FITNESS: "insights.healthScore.pillar.fitness",
-  LIPIDS: "insights.healthScore.pillar.lipids",
-};
+/**
+ * v1.35.0 — the map moved to `@/lib/score-config/labels` so the settings
+ * surface that decides what counts and this panel name the same pillar the
+ * same way. Aliased here because every reference below reads this name.
+ */
+const PILLAR_LABEL_KEY = SCORE_PILLAR_LABEL_KEYS;
 
 const REASON_KEY: Record<string, string> = {
   read_failed: "readFailed",
@@ -386,8 +383,16 @@ export function HealthScoreCard({
           <LearningGate
             compact
             bodySlot="health-score-insufficient"
+            // `presentInputs` on the composite counts DISTINCT DOMAINS,
+            // not pillars. It said "pillars" for its whole life, which
+            // told someone recording blood pressure, glycaemia and lipids
+            // that they had one eligible pillar when they had three. The
+            // count is right; the noun was wrong. `required` rides along
+            // so the sentence tracks the rule's own constant instead of
+            // spelling "three" into six locales.
             message={t("insights.healthScore.insufficient", {
               count: composite.coverage.presentInputs,
+              required: composite.coverage.requiredInputs,
             })}
           />
         )}
@@ -515,12 +520,30 @@ export function HealthScoreCard({
       {/* 7 — the foot. `mt-auto` collects the slack here rather than under the
           number, so a short report and a long one both end on the same line. */}
       <div className="mt-auto space-y-3 pt-1">
+        {/* The composite's meter names its own axis. Its fraction counts
+            distinct DOMAINS against the three the score requires, and a
+            scored account has cleared that floor by definition, so the
+            default "3/3" would read as full coverage of the person's data
+            for everyone who has a score at all. Below the floor the
+            fraction is a real, moving number and is shown as one; at or
+            above it, the floor is stated instead. The dots and percentage
+            are untouched either way: they track history depth, which does
+            vary, and they are the part of this meter that was always
+            telling the truth. */}
         <CoverageMeter
           coverage={composite.coverage}
           confidence={
             composite.status === "ok" ? composite.confidence : undefined
           }
           size="sm"
+          axisLabel={
+            composite.status === "ok"
+              ? t("insights.healthScore.coverage.minimumMet")
+              : t("insights.healthScore.coverage.areas", {
+                  present: composite.coverage.presentInputs,
+                  required: composite.coverage.requiredInputs,
+                })
+          }
         />
 
         {/* Progressive disclosure. No Collapsible primitive exists in the UI
@@ -608,6 +631,18 @@ export function HealthScoreCard({
                 standard={METRIC_PROVENANCE.HEALTH_SCORE.standard}
                 className="block"
               />
+              {/* v1.35.0 — the one way into the surface that decides what
+                  counts. It sits at the foot of the disclosure that already
+                  explains how the score comes about, which keeps the
+                  configuration owned by the score rather than by the modules
+                  screen, and leaves the panel itself otherwise untouched. */}
+              <Link
+                href="/settings/score"
+                data-slot="health-score-configure-link"
+                className="text-foreground/80 hover:text-foreground inline-block text-xs underline underline-offset-2"
+              >
+                {t("insights.healthScore.configureLink")}
+              </Link>
             </div>
           </div>
         </div>

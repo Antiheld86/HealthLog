@@ -44,6 +44,20 @@ export interface CoverageMeterProps {
   dots?: number;
   /** Visual size. `sm` rides inside a grid tile, `md` on the anatomy view. */
   size?: "sm" | "md";
+  /**
+   * Replaces the bare `{present}/{required}` fraction, in the visible
+   * label, the `aria-label` and the tooltip heading alike.
+   *
+   * The default fraction reads as a proportion of the reader's own data,
+   * and for one caller it is not: the Health Score's composite counts
+   * DISTINCT DOMAINS against the three the score requires, and a scored
+   * account has met that floor by definition, so the fraction is pinned
+   * at "3/3" however much or little the person records. The dots and the
+   * percentage stay meaningful there because they track history depth;
+   * only the fraction lies. A caller in that position names its axis
+   * instead. Everyone else leaves this alone and keeps the fraction.
+   */
+  axisLabel?: string;
   /** Optional className applied to the outer wrapper. */
   className?: string;
 }
@@ -75,6 +89,7 @@ export function CoverageMeter({
   confidence,
   dots = 5,
   size = "sm",
+  axisLabel,
   className,
 }: CoverageMeterProps) {
   const { t } = useTranslations();
@@ -100,11 +115,16 @@ export function CoverageMeter({
 
   const dotSize = size === "md" ? "h-2.5 w-2.5" : "h-2 w-2";
 
-  const summaryLabel = t("insights.derived.coverage.summary", {
-    present,
-    required,
-    percent,
-  });
+  const summaryLabel = axisLabel
+    ? t("insights.derived.coverage.summaryLabelled", {
+        label: axisLabel,
+        percent,
+      })
+    : t("insights.derived.coverage.summary", {
+        present,
+        required,
+        percent,
+      });
 
   return (
     <TooltipProvider>
@@ -156,7 +176,11 @@ export function CoverageMeter({
                 size === "md" ? "text-xs" : "text-[11px]",
               )}
             >
-              {t("insights.derived.coverage.ratioLabel", { present, required })}
+              {axisLabel ??
+                t("insights.derived.coverage.ratioLabel", {
+                  present,
+                  required,
+                })}
             </span>
           </button>
         </TooltipTrigger>

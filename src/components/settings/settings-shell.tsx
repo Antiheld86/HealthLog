@@ -25,6 +25,7 @@ import {
   CloudSun,
   Download,
   FileHeart,
+  Gauge,
   Info,
   KeyRound,
   Plug,
@@ -234,6 +235,15 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     group: "display",
   },
   // ── Health profile ──
+  // v1.35.0 — which pillars count toward the Health Score. Sits at the top
+  // of the health-profile cluster: it is a statement about the person's own
+  // health picture, not about how the app looks or what it records.
+  {
+    slug: "score",
+    titleKey: "settings.sections.score.title",
+    icon: Gauge,
+    group: "healthProfile",
+  },
   // v1.25 (W-RECORDS) — Anamnese (medical history): the structured-record
   // home for allergies + family history. NOT module-gated (like Vorsorge) —
   // these are foundational health-profile records, always available.
