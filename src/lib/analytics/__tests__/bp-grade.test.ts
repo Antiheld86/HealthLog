@@ -230,3 +230,247 @@ describe("gradeBpScoreFromSeries", () => {
     expect(Math.abs(live!.score - rollup!.score)).toBeLessThanOrEqual(1);
   });
 });
+
+/**
+ * v1.34.5 — the basis published with the score. The pillar scores the
+ * WORSE of the two axes; these pin which axis that was, what it was
+ * measured against, and that the three relations the popover can render
+ * are the only three that exist.
+ */
+describe("gradeBpScore — the basis", () => {
+  // Hypotension floors, mirrored from `bp-in-target` so the sweep below
+  // can reconstruct the boundary the grader must have used.
+  const SYS_FLOOR = 90;
+  const DIA_FLOOR = 50;
+
+  it("names the systolic axis when it is the worse one", () => {
+    // 137/84: sys 8 over its ceiling, dia 5 over its own — systolic worse.
+    const { score, basis } = gradeBpScore({
+      sys: 137,
+      dia: 84,
+      target: UNDER65,
+    });
+    expect(basis).toEqual({
+      axis: "systolic",
+      relation: "above_ceiling",
+      offsetMmHg: 8,
+      boundaryMmHg: 129,
+    });
+    expect(score).toBe(57);
+  });
+
+  it("names the diastolic axis when it is the worse one", () => {
+    // 132/88: sys 3 over, dia 9 over — diastolic worse, and the basis
+    // must say so rather than defaulting to the axis people read first.
+    const { score, basis } = gradeBpScore({
+      sys: 132,
+      dia: 88,
+      target: UNDER65,
+    });
+    expect(basis).toEqual({
+      axis: "diastolic",
+      relation: "above_ceiling",
+      offsetMmHg: 9,
+      boundaryMmHg: 79,
+    });
+    expect(score).toBe(55);
+  });
+
+  it("breaks a tie toward systolic", () => {
+    // Both axes sit exactly 5 mmHg over their own ceiling, so both grade
+    // 65 and the score cannot say which one it came from. The documented
+    // rule picks systolic.
+    const { basis } = gradeBpScore({ sys: 134, dia: 84, target: UNDER65 });
+    expect(basis.axis).toBe("systolic");
+    expect(basis.boundaryMmHg).toBe(129);
+    // …and at the ceiling itself, where both axes grade 85.
+    expect(gradeBpScore({ sys: 129, dia: 79, target: UNDER65 }).basis).toEqual({
+      axis: "systolic",
+      relation: "in_band",
+      offsetMmHg: 0,
+      boundaryMmHg: 129,
+    });
+  });
+
+  it("reports a reading inside the band as in_band, measured from the ceiling", () => {
+    const { score, basis } = gradeBpScore({
+      sys: 124,
+      dia: 74,
+      target: UNDER65,
+    });
+    expect(basis.relation).toBe("in_band");
+    expect(basis.boundaryMmHg).toBe(129);
+    expect(basis.offsetMmHg).toBe(5); // five below the ceiling
+    expect(score).toBeGreaterThanOrEqual(85);
+  });
+
+  it("reports a hypotensive reading as below_floor, measured from the floor", () => {
+    // 86/70: systolic 4 under the 90 floor; diastolic comfortably in band.
+    const { basis } = gradeBpScore({ sys: 86, dia: 70, target: UNDER65 });
+    expect(basis).toEqual({
+      axis: "systolic",
+      relation: "below_floor",
+      offsetMmHg: 4,
+      boundaryMmHg: SYS_FLOOR,
+    });
+  });
+
+  it("keeps below_floor even when the score is still high — the curve is gentle near the floor", () => {
+    // Worth pinning because it is easy to assume "below the floor" implies
+    // a poor score: two mmHg under reads 94, comfortably green. The
+    // relation is decided by where the value sits, never by the score.
+    const { score, basis } = gradeBpScore({
+      sys: 88,
+      dia: 70,
+      target: UNDER65,
+    });
+    expect(basis.relation).toBe("below_floor");
+    expect(score).toBeGreaterThanOrEqual(85);
+  });
+
+  it("keeps the relation with the score when the rounded offset reads zero", () => {
+    // 129.4 is above the ceiling and scores below 85, but rounds to a
+    // 0 mmHg offset. The relation follows the unrounded value, so the
+    // sentence can never claim "in band" about a sub-85 number.
+    const { score, basis } = gradeBpScore({
+      sys: 129.4,
+      dia: 70,
+      target: UNDER65,
+    });
+    expect(basis.relation).toBe("above_ceiling");
+    expect(basis.offsetMmHg).toBe(0);
+    expect(score).toBeLessThan(85);
+  });
+
+  it("reproduces the worked 137.5/87 example — systolic, ~9 over, 56", () => {
+    const { score, basis } = gradeBpScore({
+      sys: 137.5,
+      dia: 87,
+      target: UNDER65,
+    });
+    expect(score).toBe(56);
+    expect(basis).toEqual({
+      axis: "systolic",
+      relation: "above_ceiling",
+      offsetMmHg: 9,
+      boundaryMmHg: 129,
+    });
+  });
+
+  it("uses the targets it was handed, not a fixed band", () => {
+    const over65: BpTargets = {
+      sysLow: 130,
+      sysHigh: 139,
+      diaLow: 70,
+      diaHigh: 79,
+    };
+    const { basis } = gradeBpScore({ sys: 137, dia: 70, target: over65 });
+    expect(basis).toEqual({
+      axis: "systolic",
+      relation: "in_band",
+      offsetMmHg: 2,
+      boundaryMmHg: 139,
+    });
+  });
+
+  it("has exactly three relations, and each one reconstructs its own reading", () => {
+    // The design asserts the three relations are exhaustive; this pins it
+    // against the anchors instead of trusting the prose. Every integer
+    // reading across the whole plausible range must land in exactly one
+    // relation, and axis + relation + boundary + offset together must
+    // reconstruct the value that produced the score.
+    const seen = new Set<string>();
+    for (let sys = 60; sys <= 220; sys += 1) {
+      for (let dia = 30; dia <= 140; dia += 1) {
+        const { score, basis } = gradeBpScore({ sys, dia, target: UNDER65 });
+        seen.add(basis.relation);
+        const value = basis.axis === "systolic" ? sys : dia;
+        const floor = basis.axis === "systolic" ? SYS_FLOOR : DIA_FLOOR;
+        const ceiling =
+          basis.axis === "systolic" ? UNDER65.sysHigh : UNDER65.diaHigh;
+
+        if (basis.relation === "below_floor") {
+          expect(value).toBeLessThan(floor);
+          expect(basis.boundaryMmHg).toBe(floor);
+          expect(floor - value).toBe(basis.offsetMmHg);
+        } else {
+          expect(value).toBeGreaterThanOrEqual(floor);
+          expect(basis.boundaryMmHg).toBe(ceiling);
+          expect(Math.abs(value - ceiling)).toBe(basis.offsetMmHg);
+          if (basis.relation === "in_band") {
+            expect(value).toBeLessThanOrEqual(ceiling);
+            // The scale line only makes sense if in_band never reads red.
+            expect(score).toBeGreaterThanOrEqual(85);
+          } else {
+            expect(basis.relation).toBe("above_ceiling");
+            expect(value).toBeGreaterThan(ceiling);
+            expect(score).toBeLessThan(85);
+          }
+        }
+
+        // The named axis alone carries the score: replace the other axis
+        // with an optimal value and the number must not move.
+        const optimalOther = gradeBpScore(
+          basis.axis === "systolic"
+            ? { sys, dia: UNDER65.diaHigh - 12, target: UNDER65 }
+            : { sys: UNDER65.sysHigh - 12, dia, target: UNDER65 },
+        );
+        expect(optimalOther.score).toBe(score);
+      }
+    }
+    expect([...seen].sort()).toEqual([
+      "above_ceiling",
+      "below_floor",
+      "in_band",
+    ]);
+  });
+});
+
+describe("gradeBpScoreFromSeries — the basis travels with the score", () => {
+  const NOW = new Date("2026-06-07T12:00:00.000Z");
+
+  it("returns the basis of the representative it graded, not of any single pair", () => {
+    // Two readings, one at each end. The representative is their mean
+    // (both same-day, so equal weight): 130/85. The basis must describe
+    // that mean, which matches neither reading.
+    const graded = gradeBpScoreFromSeries({
+      pairs: [
+        { at: NOW, sys: 120, dia: 80 },
+        { at: NOW, sys: 140, dia: 90 },
+      ],
+      target: UNDER65,
+      now: NOW,
+    });
+    expect(graded).not.toBeNull();
+    expect(graded!.basis).toEqual({
+      axis: "diastolic",
+      relation: "above_ceiling",
+      offsetMmHg: 6,
+      boundaryMmHg: 79,
+    });
+    expect(graded!.score).toBe(
+      gradeBpScore({ sys: 130, dia: 85, target: UNDER65 }).score,
+    );
+  });
+
+  it("grades the basis against the targets it was given", () => {
+    // The analytics route re-runs this helper with the CLINICAL targets
+    // when the user keeps a personal one. Same series, two bands: both
+    // the score and the basis must move together.
+    const pairs: BpPairPoint[] = [{ at: NOW, sys: 132, dia: 88 }];
+    const clinical = gradeBpScoreFromSeries({
+      pairs,
+      target: UNDER65,
+      now: NOW,
+    })!;
+    const personal = gradeBpScoreFromSeries({
+      pairs,
+      target: { sysLow: 120, sysHigh: 135, diaLow: 70, diaHigh: 90 },
+      now: NOW,
+    })!;
+    expect(clinical.basis.boundaryMmHg).toBe(79);
+    expect(clinical.basis.relation).toBe("above_ceiling");
+    expect(personal.basis.relation).toBe("in_band");
+    expect(personal.score).toBeGreaterThan(clinical.score);
+  });
+});
