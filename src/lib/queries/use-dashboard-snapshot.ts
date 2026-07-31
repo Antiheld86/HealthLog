@@ -99,15 +99,25 @@ export function prefetchDashboardSnapshot(queryClient: QueryClient) {
   }
   // A fresh handoff is already in flight / parked.
   if (preloadedSnapshot) return;
-  // Cache already warm (return-to-dashboard within staleTime) — the
-  // mounted cell serves it without ever calling `queryFn`; fetching here
-  // would be a wasted request parked in the slot.
+  // The handoff exists to cut the COLD first-load waterfall, so it is only
+  // ever warranted when no snapshot cell has produced data yet. Once a cell
+  // carries data the page paints from it immediately and there is no waterfall
+  // left to cut — but the parked response would still sit in the slot, because
+  // `refetchOnMount: false` means a remount never calls `queryFn` to consume
+  // it. The next `queryFn` run is then whatever comes along: the 120 s poll, a
+  // focus refetch, or the invalidation that follows the user's own write. All
+  // three exist to fetch data that is NEWER than what the cell holds, and all
+  // three would instead be handed a response whose request was issued BEFORE
+  // the write. That is how a just-recorded dose kept reading as still due
+  // until the following poll cleared it.
+  //
   // v1.21.3 (b) — the live cell is locale-keyed (`["dashboard","snapshot",
   // locale]`), but the preloader runs before the locale context is in scope.
-  // Probe ALL `["dashboard","snapshot"]` cells (prefix) and treat the freshest
-  // as the warm-slot signal: if any locale's cell is fresh, skip the preload;
-  // otherwise warm the request through the handoff and let the mounted cell
-  // commit it under whichever locale the user lands on.
+  // Probe ALL `["dashboard","snapshot"]` cells (prefix): if ANY locale's cell
+  // has data, skip the preload; otherwise warm the request through the handoff
+  // and let the mounted cell commit it under whichever locale the user lands
+  // on. A cell that exists but never resolved (an error slot) reports
+  // `dataUpdatedAt === 0` and correctly still warms.
   const states = queryClient
     .getQueriesData({ queryKey: queryKeys.dashboardSnapshot() })
     .map(([key]) => queryClient.getQueryState(key));
@@ -115,7 +125,7 @@ export function prefetchDashboardSnapshot(queryClient: QueryClient) {
     (max, s) => (s ? Math.max(max, s.dataUpdatedAt) : max),
     0,
   );
-  if (freshest > 0 && Date.now() - freshest < PRELOAD_MAX_AGE_MS) {
+  if (freshest > 0) {
     return;
   }
   const promise = fetchDashboardSnapshot();
