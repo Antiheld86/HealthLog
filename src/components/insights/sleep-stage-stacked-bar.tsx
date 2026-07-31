@@ -107,6 +107,36 @@ export const STAGE_ORDER = ["DEEP", "REM", "CORE", "ASLEEP", "AWAKE"] as const;
 const NAP_KEY = "NAP";
 
 /**
+ * The nap band is drawn with a card-coloured outline, and that outline is
+ * load-bearing rather than decoration.
+ *
+ * No flat fill can carry this on its own. To clear the 3:1 that WCAG 1.4.11
+ * asks between adjacent graphical objects, a nap colour would have to beat
+ * all five stage colours AND the card it sits on. In the dark theme the five
+ * stages span luminance 0.385–0.890, which forces the nap below 0.095, while
+ * clearing the card (0.014) forces it above 0.143 — no value satisfies both.
+ * The light theme is the same bind mirrored: the stages sit at 0.088–0.161,
+ * forcing the nap above 0.583, while the card (0.966) forces it below 0.289.
+ * Both are empty ranges, so this is arithmetic, not a shortage of tokens.
+ *
+ * A separator is the sanctioned way out, and it measures comfortably:
+ *
+ *            stroke vs  DEEP   REM   CORE  ASLEEP  AWAKE   nap fill
+ *   dark             6.78  6.86  11.82  11.92  14.65      9.60
+ *   light            6.04  7.37   5.80   5.90   4.81      5.60
+ *
+ * Lowest pair 4.81:1, against a light-theme wake bout — the neighbour the
+ * nap most often lands on, since AWAKE is the top of the stage stack.
+ *
+ * The stage tokens themselves are untouched; they are shared with the
+ * hypnogram and the charts-visual-identity rule keeps them put.
+ */
+const NAP_SEPARATOR = {
+  stroke: "var(--card)",
+  strokeWidth: 2,
+} as const;
+
+/**
  * Dracula stage palette. Exported so the last-night hypnogram
  * (`sleep-hypnogram.tsx`) reuses the exact same tokens — per the
  * charts-visual-identity rule, no token reshuffle.
@@ -436,9 +466,18 @@ export function SleepStageStackedBar({ breakdown }: SleepStageStackedBarProps) {
                     dataKey={NAP_KEY}
                     stackId="stages"
                     fill={STAGE_COLORS[NAP_KEY]}
+                    // The outline is what separates the nap from the stage
+                    // beneath it; the two fills alone measure as low as
+                    // 1.04:1. See NAP_SEPARATOR.
+                    stroke={NAP_SEPARATOR.stroke}
+                    strokeWidth={NAP_SEPARATOR.strokeWidth}
                     isAnimationActive={false}
                   >
-                    <Cell fill={STAGE_COLORS[NAP_KEY]} />
+                    <Cell
+                      fill={STAGE_COLORS[NAP_KEY]}
+                      stroke={NAP_SEPARATOR.stroke}
+                      strokeWidth={NAP_SEPARATOR.strokeWidth}
+                    />
                   </Bar>
                 )}
               </BarChart>
