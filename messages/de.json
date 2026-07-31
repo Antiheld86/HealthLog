@@ -2271,7 +2271,7 @@
       "insufficient": "{count} geeignete Bereiche. Der Score benötigt mindestens drei, darunter einen gemessenen physiologischen Bereich.",
       "anatomyToggle": "Wie dieser Score zustande kommt",
       "notScored": "Noch nicht bewertet ({count})",
-      "method": "Der Score ist der gleich gewichtete Mittelwert aller Säulen mit ausreichend aktuellen Daten, auf einer Skala von 0 bis 100. Jede Säule wird an einem veröffentlichten Referenzbereich gemessen, und die schwächste Säule kann den Gesamtbereich bestimmen. Eine Säule ohne ausreichende Daten bleibt außen vor und zählt nicht als null.",
+      "method": "Der Score ist der gleich gewichtete Mittelwert der Säulen, die für ihn zählen, auf einer Skala von 0 bis 100. Jede Säule wird an einem veröffentlichten Referenzbereich gemessen, und die schwächste Säule kann den Gesamtbereich bestimmen. Eine Säule ohne ausreichend aktuelle Daten bleibt außen vor und zählt nicht als null. Die Referenzbereiche stammen aus veröffentlichten Quellen; welche Säulen zählen, entscheidest du selbst, deshalb ist die zusammengefasste Zahl selbst kein klinischer Standard.",
       "bandSetter": "Gesamtstufe bestimmt durch {pillar}",
       "versionAndNoise": "Methodenversion {version}. Schwelle für den Wochenvergleich: {noise} Punkte.",
       "methodVersion": "Methodenversion {version}.",

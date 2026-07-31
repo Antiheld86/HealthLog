@@ -2271,7 +2271,7 @@
       "insufficient": "{count} kwalifikujące się filary. Wynik wymaga co najmniej trzech, w tym zmierzonego filaru fizjologicznego.",
       "anatomyToggle": "Jak powstaje ten wynik",
       "notScored": "Jeszcze bez oceny ({count})",
-      "method": "Wynik to średnia o równych wagach ze wszystkich filarów, które mają wystarczająco dużo aktualnych danych, w skali od 0 do 100. Każdy filar jest porównywany z opublikowanym zakresem referencyjnym, a najsłabszy filar może wyznaczyć ogólny zakres. Filar bez wystarczających danych jest pomijany, a nie liczony jako zero.",
+      "method": "Wynik to średnia o równych wagach z filarów, które się do niego liczą, w skali od 0 do 100. Każdy filar jest porównywany z opublikowanym zakresem referencyjnym, a najsłabszy filar może wyznaczyć ogólny zakres. Filar bez wystarczających aktualnych danych jest pomijany, a nie liczony jako zero. Zakresy referencyjne pochodzą z opublikowanych źródeł; to ty decydujesz, które filary się liczą, więc łączna liczba sama w sobie nie jest standardem klinicznym.",
       "bandSetter": "Ogólny zakres wyznacza {pillar}",
       "versionAndNoise": "Wersja metody {version}. Próg porównania tygodniowego: {noise} pkt.",
       "methodVersion": "Wersja metody {version}.",

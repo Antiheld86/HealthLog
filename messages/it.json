@@ -2271,7 +2271,7 @@
       "insufficient": "{count} pilastri idonei. Il punteggio ne richiede almeno tre, incluso un pilastro fisiologico misurato.",
       "anatomyToggle": "Come nasce questo punteggio",
       "notScored": "Non ancora valutato ({count})",
-      "method": "Il punteggio è la media a peso uguale di tutti i pilastri con dati recenti sufficienti, su una scala da 0 a 100. Ogni pilastro viene confrontato con un intervallo di riferimento pubblicato e il pilastro più debole può determinare la fascia complessiva. Un pilastro senza dati sufficienti resta escluso invece di contare come zero.",
+      "method": "Il punteggio è la media a peso uguale dei pilastri che contano per esso, su una scala da 0 a 100. Ogni pilastro viene confrontato con un intervallo di riferimento pubblicato e il pilastro più debole può determinare la fascia complessiva. Un pilastro senza dati recenti sufficienti resta escluso invece di contare come zero. Gli intervalli di riferimento provengono da fonti pubblicate; quali pilastri contano lo scegli tu, quindi il numero combinato non è di per sé uno standard clinico.",
       "bandSetter": "Fascia complessiva determinata da {pillar}",
       "versionAndNoise": "Versione del metodo {version}. Soglia del confronto settimanale: {noise} punti.",
       "methodVersion": "Versione del metodo {version}.",

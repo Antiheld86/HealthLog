@@ -2271,7 +2271,7 @@
       "insufficient": "{count} piliers admissibles. Le score en requiert au moins trois, dont un pilier physiologique mesuré.",
       "anatomyToggle": "Comment ce score est établi",
       "notScored": "Pas encore évalué ({count})",
-      "method": "Le score est la moyenne à poids égal de tous les piliers disposant d'assez de données récentes, sur une échelle de 0 à 100. Chaque pilier est comparé à une plage de référence publiée, et le pilier le plus faible peut déterminer la plage globale. Un pilier sans données suffisantes est écarté plutôt que compté comme un zéro.",
+      "method": "Le score est la moyenne à poids égal des piliers qui comptent pour lui, sur une échelle de 0 à 100. Chaque pilier est comparé à une plage de référence publiée, et le pilier le plus faible peut déterminer la plage globale. Un pilier sans données récentes suffisantes est écarté plutôt que compté comme un zéro. Les plages de référence proviennent de sources publiées ; les piliers qui comptent sont ceux que vous choisissez, donc le nombre combiné n'est pas lui-même une norme clinique.",
       "bandSetter": "Catégorie globale fixée par {pillar}",
       "versionAndNoise": "Version de la méthode {version}. Seuil de comparaison hebdomadaire : {noise} points.",
       "methodVersion": "Version de la méthode {version}.",

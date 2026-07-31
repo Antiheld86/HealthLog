@@ -12,6 +12,16 @@
  *
  * Client-safe: a string-keyed metadata map + i18n key names, no compute, no
  * server imports — a `"use client"` surface value-imports it freely.
+ *
+ * One thing to know before trusting `standard` to reach a reader: it does
+ * not, everywhere. `ProvenanceExplainer` accepts the prop and renders only
+ * the method caption (v1.22 folded the cited-standard line out along with
+ * the ⓘ popover it lived in), so a surface that goes through that component
+ * shows the method copy and nothing else. `InfoPopover` still renders the
+ * link, which is why the vitals dashboard does surface citations. The
+ * Health Score is on the first path, so its honesty about what the number
+ * covers has to live in `insights.healthScore.method` — the standard entry
+ * alone would say it to nobody.
  */
 import type { ProvenanceStandard } from "./provenance-explainer";
 import type { DerivedMetricId } from "@/lib/insights/derived/registry";
@@ -191,7 +201,17 @@ export const METRIC_PROVENANCE: Record<DerivedMetricId, MetricProvenanceMeta> =
     HEALTH_SCORE: {
       methodKey: "insights.healthScore.method",
       standard: {
-        name: "WHO HEARTS technical package",
+        // Cited for the risk-factor set the pillars are drawn from, and for
+        // nothing beyond it. HEARTS names the cardiometabolic factors worth
+        // following; it does not prescribe an equal-weighted average of
+        // them, and since v1.35.0 it could not, because which pillars enter
+        // that average is the account's own selection. Naming the package
+        // plainly, as this entry used to, reads as a standard endorsing
+        // whatever recipe the person happens to have chosen, which is a
+        // claim nobody can make. The pillar-level citations elsewhere in
+        // this map are unaffected: each of those really does describe the
+        // band its pillar is graded against.
+        name: "WHO HEARTS technical package (risk-factor set)",
         url: "https://www.who.int/publications/i/item/9789240001367",
       },
     },
