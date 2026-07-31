@@ -11,8 +11,14 @@ import { formatUpdatedLabel } from "@/lib/i18n/relative-time";
 import { useAuth } from "@/hooks/use-auth";
 import { hourInTz, DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import { ProseBlocks } from "@/components/insights/prose-blocks";
+import {
+  HealthScoreCard,
+  HealthScoreCardSkeleton,
+  type ReadinessContributorKey,
+} from "@/components/insights/health-score-card";
 import { cn } from "@/lib/utils";
 import type { DailyBriefing as DailyBriefingPayload } from "@/lib/ai/schema";
+import type { HealthScoreReport, ScoreBand } from "@/lib/analytics/score/types";
 
 /**
  * Insights redesign hero strip.
@@ -33,14 +39,14 @@ import type { DailyBriefing as DailyBriefingPayload } from "@/lib/ai/schema";
  * overview now leads with the present-focused daily briefing, not a
  * coach prompt.
  *
- * The right-side Health Score panel is gone too. The score had two mounts,
- * a compact face here and the full breakdown below; the breakdown is now one
- * progressive-disclosure card pinned directly under this band, which needs
- * the full page width when it opens. The hero is back to the full-width
- * greeting + subtitle + baseline meta — the shape it already had for an
- * account without a score.
+ * The Health Score is back in the band's right column, where it lived for
+ * eleven weeks. It is the score's ONLY mount on the overview — there is no
+ * second card below the greeting any more. The band splits into two columns
+ * from `md` up, and only when there is a score (or one on its way): an
+ * account without a score keeps the full-width greeting exactly as it is.
+ * Below `md` the panel stacks under the greeting at full width.
  *
- * Pure presentational — the page owns the briefing data.
+ * Pure presentational — the page owns the briefing and the score data.
  */
 
 interface HeroStripProps {
@@ -68,6 +74,24 @@ interface HeroStripProps {
    * footer hint below.
    */
   noProviderStale?: boolean;
+  /**
+   * The Health Score report. Non-null paints the right column; null with
+   * `scorePending` paints the reserve; null without it keeps the band
+   * full-width, which is the shape an account without a score already had.
+   */
+  healthScore?: HealthScoreReport | null;
+  /** True while the analytics payload is in flight and nothing is cached. */
+  scorePending?: boolean;
+  /** Server-resolved Tension Verdict, forwarded to the panel. */
+  tension?: {
+    band: ScoreBand;
+    positive: ReadinessContributorKey[];
+    negative: ReadinessContributorKey[];
+  } | null;
+  /** Server-resolved return-to-baseline, forwarded to the panel. */
+  returnToBand?: { metricType: string; daysInside: number } | null;
+  /** Retry for a pillar whose read failed — refetches the whole payload. */
+  onScoreRetry?: () => void;
 }
 
 /**
@@ -94,6 +118,11 @@ export function HeroStrip({
   userName,
   now,
   noProviderStale = false,
+  healthScore = null,
+  scorePending = false,
+  tension = null,
+  returnToBand = null,
+  onScoreRetry,
 }: HeroStripProps) {
   const { t } = useTranslations();
   const fmt = useFormatters();
@@ -134,12 +163,17 @@ export function HeroStrip({
         "relative isolate overflow-hidden rounded-xl px-4 py-4 md:px-6 md:py-6",
       )}
     >
-      {/* One column. The band carried a right-hand score panel from v1.4.20
-          until the score moved to its own pinned card below; with the panel
-          gone the greeting owns the full width on every breakpoint, which is
-          the shape this band already had for an account without a score. */}
-      <div className="flex min-w-0 flex-col gap-4">
-        <div className="flex flex-col gap-3">
+      {/* Two columns from `md` up, and only when the score column has
+          something to show. Without a score the band stays one column, which
+          is the shape it already had for an account that has none. */}
+      <div
+        className={cn(
+          "flex min-w-0 flex-col gap-4",
+          (healthScore || scorePending) &&
+            "md:flex-row md:items-stretch md:gap-6",
+        )}
+      >
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
           <div className="flex items-center gap-2">
             {/* Header glyph stays in the foreground tier — UI-STANDARDS §1
                   reserves primary/accent for actions, not decorative header
@@ -214,6 +248,20 @@ export function HeroStrip({
          * untouched — only the hero entry points are gone, so the band
          * is now greeting + subtitle + baseline meta.
          */}
+
+        {/* The score column. The reserve holds the column's footprint while
+            the payload is in flight so the greeting beside it does not shift
+            when the score lands. Both wear the same width classes. */}
+        {healthScore ? (
+          <HealthScoreCard
+            report={healthScore}
+            tension={tension}
+            returnToBand={returnToBand}
+            onRetry={onScoreRetry}
+          />
+        ) : scorePending ? (
+          <HealthScoreCardSkeleton />
+        ) : null}
       </div>
     </div>
   );
