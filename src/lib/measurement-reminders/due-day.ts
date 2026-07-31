@@ -15,6 +15,7 @@
  * this file touches the database or the network, so a client component can
  * import it directly.
  */
+import { DEFAULT_TIMEZONE, isValidTimezone } from "@/lib/tz/format";
 import { startOfLocalDayInTz } from "@/lib/tz/local-day";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -31,23 +32,38 @@ export interface RelativeDue {
  * reverse-coverage guard at that bare namespace, which marks every key under
  * it reachable and turns the guard into a no-op for the whole namespace. The
  * guard now refuses that shape outright, so the key is built whole here.
+ *
+ * `timeZone` is required on purpose. It used to be implicit — the day floor
+ * silently took the DEVICE clock while the date printed next to it took the
+ * profile clock, so on a laptop set to another zone the card could print a
+ * date and a phrase that contradicted each other. Naming the zone is how a
+ * caller says which of those two clocks it means, and there is no default
+ * because the missing answer was the whole bug: a silent caller got something
+ * plausible-looking rather than an error. Pass what the neighbouring date
+ * label renders in — `useDisplayTimezone()` on the client.
  */
 export function relativeDueKey(
   nextDueAt: string | null,
   now: number,
+  timeZone: string,
 ): RelativeDue {
   if (!nextDueAt) return { key: "measurementReminders.nextDue.none", days: 0 };
   const due = new Date(nextDueAt);
   if (Number.isNaN(due.getTime()))
     return { key: "measurementReminders.nextDue.none", days: 0 };
-  // v1.18.9 (recon) — compare CALENDAR-day deltas in the user's local zone,
-  // not a rolling-24h delta. A reminder due at 09:00 viewed the same evening
-  // at 20:00 must still read "heute", and one whose due calendar-day is before
+  // Resolve exactly as `relativeCalendarDate` and `fmt.date` do (issue #490):
+  // a usable zone stands, anything else lands on Berlin. Note where it does
+  // NOT land — the device. Falling back to the host clock is what let the two
+  // halves of this card drift apart, and a zone the profile mirror could not
+  // make sense of has to end up wherever the printed date ends up.
+  const zone = isValidTimezone(timeZone) ? timeZone : DEFAULT_TIMEZONE;
+  // v1.18.9 (recon) — compare CALENDAR-day deltas in the user's zone, not a
+  // rolling-24h delta. A reminder due at 09:00 viewed the same evening at
+  // 20:00 must still read "heute", and one whose due calendar-day is before
   // today must read "überfällig" — a raw `(due - now) / DAY_MS` round would
-  // mis-bucket both. Floor each instant to its local day start (host-local zone
-  // = the browser user's zone for this client component) before differencing.
-  const dueDay = startOfLocalDayInTz(due, undefined).getTime();
-  const nowDay = startOfLocalDayInTz(new Date(now), undefined).getTime();
+  // mis-bucket both. Floor each instant to its local day start first.
+  const dueDay = startOfLocalDayInTz(due, zone).getTime();
+  const nowDay = startOfLocalDayInTz(new Date(now), zone).getTime();
   const deltaDays = Math.round((dueDay - nowDay) / DAY_MS);
   if (deltaDays < 0)
     return {

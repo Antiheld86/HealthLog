@@ -19,7 +19,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CalendarClock, CheckCircle2, Plus } from "lucide-react";
 
-import { useTranslations } from "@/lib/i18n/context";
+import { useTranslations, useDisplayTimezone } from "@/lib/i18n/context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,6 +50,9 @@ function resolveLabel(
 
 export function VorsorgeDashboardCard() {
   const { t } = useTranslations();
+  // Issue #490 — the same profile zone the checkups page derives its due
+  // phrase in, so the two screens still agree when the device sits elsewhere.
+  const displayTz = useDisplayTimezone();
   const router = useRouter();
   const { data: reminders, isLoading } = useMeasurementReminders();
   const { satisfy } = useMeasurementReminderMutations();
@@ -112,7 +115,7 @@ export function VorsorgeDashboardCard() {
         ) : (
           <ul className="space-y-2">
             {upcoming.map((reminder) => {
-              const due = relativeDueKey(reminder.nextDueAt, now);
+              const due = relativeDueKey(reminder.nextDueAt, now, displayTz);
               const isLinked = reminder.measurementType != null;
               const isScreening = isScreeningReminderType(
                 reminder.measurementType,
