@@ -332,9 +332,10 @@ describe("writing the row", () => {
    * not a comment.
    */
   function delegate(count: number) {
-    const createMany = vi.fn(async (_args: { skipDuplicates?: boolean }) => ({
-      count,
-    }));
+    const createMany = vi.fn(async (args: { skipDuplicates?: boolean }) => {
+      void args;
+      return { count };
+    });
     return {
       db: { healthScoreRecord: { createMany } } as never,
       createMany,
