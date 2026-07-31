@@ -490,6 +490,12 @@ export interface SnapshotUserInput {
    * dashboard reference bands.
    */
   thresholdsJson: unknown;
+  /**
+   * Raw per-user Health Score recipe. Part of the number's identity, so
+   * it is required rather than optional: a snapshot built without it
+   * would show a score composed from someone else's rules.
+   */
+  healthScoreConfigJson: unknown;
 }
 
 /** Wall-clock hour in `tz`, used for the server-side greeting. */
@@ -754,6 +760,7 @@ async function buildExtras(
         sleep: modules.sleep !== false,
         mentalHealth: modules.mentalHealth !== false,
       },
+      healthScoreConfigJson: user.healthScoreConfigJson,
       bpTargets: clinicalBpTargets,
       bpEnvelope,
       bpEnvelopePriorWeek,

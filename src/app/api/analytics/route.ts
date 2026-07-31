@@ -571,6 +571,7 @@ async function buildAnalyticsResponse(user: AuthedUser, locale: Locale) {
       sleep: sleepEnabled,
       mentalHealth: mentalHealthEnabled,
     },
+    healthScoreConfigJson: user.healthScoreConfigJson,
     bpTargets: clinicalBpTargets,
     bpEnvelope,
     bpEnvelopePriorWeek,

@@ -23,6 +23,7 @@ export async function computeHealthScoreDerived(
       heightCm: true,
       timezone: true,
       thresholdsJson: true,
+      healthScoreConfigJson: true,
     },
   });
   const now = new Date();
@@ -67,6 +68,7 @@ export async function computeHealthScoreDerived(
       sleep: modules.sleep !== false,
       mentalHealth: modules.mentalHealth !== false,
     },
+    healthScoreConfigJson: user.healthScoreConfigJson,
     bpTargets,
     bpEnvelope,
     bpEnvelopePriorWeek,
