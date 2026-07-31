@@ -103,6 +103,7 @@ describe("buildPeriodNarrativeContext — grain (QA F3)", () => {
     const result = await buildPeriodNarrativeContext("u1", {
       period: "week",
       now,
+      locale: "en",
     });
 
     expect(result.status).toBe("ready");
@@ -122,7 +123,11 @@ describe("buildPeriodNarrativeContext — grain (QA F3)", () => {
     const now = new Date("2026-06-30T12:00:00.000Z");
     measurementFindMany.mockResolvedValue([]);
 
-    await buildPeriodNarrativeContext("u1", { period: "week", now });
+    await buildPeriodNarrativeContext("u1", {
+      period: "week",
+      now,
+      locale: "en",
+    });
 
     expect(measurementFindMany).toHaveBeenCalledWith(
       expect.objectContaining({

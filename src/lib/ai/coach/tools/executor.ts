@@ -62,6 +62,7 @@ import {
   METRIC_SERIES_EXCLUDED_SOURCES,
 } from "./source-keys";
 import { readCoachCorrelations } from "./correlations-read";
+import { resolveLocaleForUser } from "@/lib/i18n/user-locale";
 import {
   resolveEmptyRead,
   subjectForTool,
@@ -599,7 +600,12 @@ async function getCorrelations(
   // days, and the reader already reports WHY nothing survived (its own reason
   // code). "No pattern survived the correction" is an honest absence of a
   // finding, not an absence of data, and nothing older would change it.
-  const result = await readCoachCorrelations(userId);
+  // The reader's language, from their stored preference — the executor is
+  // reached from the chat loop and from MCP, neither of which carries a request
+  // of its own. The notes below are finished sentences; some MCP clients show
+  // them to the person verbatim rather than letting the model re-word them.
+  const locale = await resolveLocaleForUser(userId);
+  const result = await readCoachCorrelations(userId, locale);
   if (!result.present) {
     return { present: false, reason: result.reason ?? "no_pattern" };
   }

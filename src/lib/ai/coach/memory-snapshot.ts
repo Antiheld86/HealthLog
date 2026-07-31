@@ -168,6 +168,7 @@ export async function buildCoachMemoryBlock(
     const ctx = await buildPeriodNarrativeContext(userId, {
       period: MEMORY_PERIOD,
       now,
+      locale,
     });
     if (ctx.status === "ready") {
       for (const transition of ctx.bandTransitions) {

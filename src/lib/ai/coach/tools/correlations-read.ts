@@ -24,6 +24,7 @@
  */
 import type { MeasurementType } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
+import type { Locale } from "@/lib/i18n/config";
 import { annotate } from "@/lib/logging/context";
 import { isModuleEnabled } from "@/lib/modules/gate";
 import { wallClockInTz } from "@/lib/tz/wall-clock";
@@ -151,6 +152,15 @@ function humanise(key: string): string {
  */
 export async function readCoachCorrelations(
   userId: string,
+  /**
+   * The reader's locale. Every `note` this returns is a finished sentence that
+   * some surface prints verbatim — the metric page's "Coach read" strip does
+   * exactly that — so the language has to be decided by whoever knows who is
+   * reading. No default: a caller that cannot name a locale is a caller that
+   * does not know, and guessing English is how the strip came to answer a
+   * German page in English.
+   */
+  locale: Locale,
 ): Promise<CoachCorrelationsResult> {
   // v1.30.22 — the `insights` gate lives HERE, at the read, not at each
   // caller. This reader is reached from four places (the Coach
@@ -271,7 +281,7 @@ export async function readCoachCorrelations(
       },
     });
 
-    const discovery = discoverCorrelations(series);
+    const discovery = discoverCorrelations(series, { locale });
     const drivers: CoachCorrelationDriver[] = discovery.discovered.map((d) => ({
       behaviour: humanise(d.behaviour),
       outcome: humanise(d.outcome),
@@ -292,6 +302,7 @@ export async function readCoachCorrelations(
     );
     const emergingResult = discoverEmergingCorrelations(series, discovery, {
       recentFromDayKey,
+      locale,
     });
     const emerging: CoachEmergingDriver[] = emergingResult.emerging.map(
       (d) => ({
@@ -307,7 +318,9 @@ export async function readCoachCorrelations(
     );
 
     // v1.22 — labs ↔ outcome pass (point-vs-window over sparse draws).
-    const labResult = discoverLabOutcomeCorrelations(labDraws, series);
+    const labResult = discoverLabOutcomeCorrelations(labDraws, series, {
+      locale,
+    });
     const labDrivers: CoachLabCorrelation[] = labResult.discovered.map((d) => ({
       lab: d.lab.startsWith("LAB:") ? d.lab.slice("LAB:".length) : d.lab,
       outcome: humanise(d.outcome),

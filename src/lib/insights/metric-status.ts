@@ -454,6 +454,7 @@ export async function generateMetricStatus(args: {
   const relations = await getRelevantCorrelationsForMetric(
     args.userId,
     meta.measurementType,
+    locale,
   );
   const contextBlock = buildAssessmentContextBlock(
     {

@@ -42,7 +42,7 @@ beforeEach(() => {
 describe("getRelevantCorrelationsForMetric", () => {
   it("returns [] without any DB read for a non-discovery metric", async () => {
     // VO2_MAX is not part of the curated discovery matrix.
-    const out = await getRelevantCorrelationsForMetric("u-1", "VO2_MAX");
+    const out = await getRelevantCorrelationsForMetric("u-1", "VO2_MAX", "en");
     expect(out).toEqual([]);
     expect(prisma.measurement.findMany).not.toHaveBeenCalled();
   });
@@ -70,6 +70,7 @@ describe("getRelevantCorrelationsForMetric", () => {
     const out = await getRelevantCorrelationsForMetric(
       "u-1",
       "RESTING_HEART_RATE",
+      "en",
     );
     expect(out.length).toBeGreaterThan(0);
     // Every surfaced relation mentions resting heart rate (the metric's channel).
@@ -87,6 +88,7 @@ describe("getRelevantCorrelationsForMetric", () => {
     const out = await getRelevantCorrelationsForMetric(
       "u-1",
       "RESTING_HEART_RATE",
+      "en",
     );
     expect(out).toEqual([]);
   });

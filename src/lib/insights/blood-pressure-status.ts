@@ -678,6 +678,7 @@ export async function prepareBloodPressureStatusForUser(
   const relations = await getRelevantCorrelationsForMetric(
     userId,
     "BLOOD_PRESSURE_SYS",
+    locale,
   );
   const assessmentContextBlock = buildAssessmentContextBlock(
     {

@@ -77,7 +77,7 @@ export function CoachReadStrip({
   const resolvedUnit = transformed ? unitDisplay.unitFor(metricType) : unit;
 
   const { data } = useQuery({
-    queryKey: queryKeys.insightsCoachRead(metricType),
+    queryKey: queryKeys.insightsCoachRead(metricType, locale),
     queryFn: () =>
       apiGet<CoachReadStripData>(
         `/api/insights/coach-read?metric=${encodeURIComponent(metricType)}`,
@@ -120,6 +120,10 @@ export function CoachReadStrip({
     });
   })();
 
+  // Only the wrapper is translated here. `note` is a finished sentence the
+  // server wrote in the reader's language, so it goes in as it arrived — which
+  // is exactly why the route has to know the language, and why this query is
+  // keyed by locale.
   const driverLine = data.driver
     ? t("insights.coach.readStrip.driver", { note: data.driver.note })
     : null;

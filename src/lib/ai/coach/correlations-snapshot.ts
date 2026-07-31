@@ -18,6 +18,7 @@
  * Server-only — `readCoachCorrelations` reads `@/lib/db`. Fail-soft: a null
  * return (no surviving driver / read hiccup) attaches nothing.
  */
+import type { Locale } from "@/lib/i18n/config";
 import {
   readCoachCorrelations,
   type CoachCorrelationDriver,
@@ -45,8 +46,15 @@ export interface CorrelationsSnapshotBlock {
  */
 export async function buildCorrelationsSnapshotBlock(
   userId: string,
+  /**
+   * The Coach's resolved UI locale. The driver notes go into the prompt as
+   * finished sentences, and a model handed English prose for a German
+   * conversation echoes English phrasings back. Required — the snapshot knows
+   * the locale, so it says it.
+   */
+  locale: Locale,
 ): Promise<CorrelationsSnapshotBlock | null> {
-  const result = await readCoachCorrelations(userId);
+  const result = await readCoachCorrelations(userId, locale);
   if (!result.present || !result.drivers || result.drivers.length === 0) {
     return null;
   }
