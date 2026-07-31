@@ -846,6 +846,10 @@ model User {
   customMetrics                  CustomMetric[]
   customMetricEntries            CustomMetricEntry[]
   correlationPatterns             CorrelationPattern[]
+  // v1.35.0 — one row per local day holding the health score as it was shown
+  // that day. Append-only: a later recomputation of the same day never
+  // rewrites the row it finds.
+  healthScoreRecords             HealthScoreRecord[]
   // v1.19.0 — illness / condition journal (born-gated by the module system).
   // IllnessEpisode is the soft-deleted episode row; IllnessDayLog is the
   // per-day timeline mirroring the CycleDayLog shape.
@@ -5048,6 +5052,84 @@ model UserAchievement {
   @@unique([userId, achievementId])
   @@index([userId])
   @@map("user_achievements")
+}
+
+// ─── Health Score record ──────
+
+/// The health score as it was SHOWN to the account on one local day.
+///
+/// Not a cache and not a derived tier: nothing can rebuild it. The live
+/// computation always answers for today from today's rows, so once the rows
+/// behind an old day have been edited, re-synced, corrected or simply grown,
+/// the number the person actually saw that day is gone unless it was written
+/// down. That is what this table is, and it is why the write is append-only:
+/// the FIRST score computed on a local day is the one that is kept, and a
+/// later computation of the same day leaves the row exactly as it found it.
+///
+/// It never overrides the live computation either. Every surface keeps
+/// reading the live score; this table is read only where a past day is the
+/// question.
+model HealthScoreRecord {
+  id     String @id @default(cuid())
+  userId String @map("user_id")
+  /// The LOCAL calendar day (`YYYY-MM-DD`) the score was computed for, cut in
+  /// `timezone`. Lexicographically ordered, so a trailing-window read is a
+  /// range scan.
+  dayKey String @map("day_key") @db.VarChar(10)
+  /// The IANA zone the day was cut in. An account that moves zones leaves
+  /// behind days cut on the old clock; carrying the zone is what lets a
+  /// reader see that rather than silently compare days of different lengths.
+  timezone String
+
+  /// The composite 0-100 as shown. Integer, matching the composite's own
+  /// rounding.
+  composite Int
+  /// The band as shown (`green` / `yellow` / `red`). Stored rather than
+  /// re-derived from `composite`, because the worst pillar can pull the band
+  /// below the one the mean alone would give, so the number does not
+  /// determine the band.
+  band String @db.VarChar(8)
+  /// Algorithm identity the row was computed under.
+  scoreVersion Int @map("score_version")
+  /// Registry-ordered pillar ids that produced the composite. Part of the
+  /// number's identity: the same value under a different composition is a
+  /// different measurement.
+  composition String[]
+  /// Each counted pillar's own 0-100 score, keyed by pillar id. The composite
+  /// breaks across a composition change; these stay comparable through one,
+  /// which is the whole reason they are stored beside it rather than folded
+  /// away.
+  pillarScores Json @map("pillar_scores")
+  /// SHA-256 over exactly what the stored composite and band depend on: the
+  /// score version, the composition, and every counted pillar's score with
+  /// its scoring-mode identity. Two rows with the same fingerprint were
+  /// computed from the same standing; two rows that differ, were not.
+  inputFingerprint String @db.VarChar(64) @map("input_fingerprint")
+
+  /// The account's health-score configuration version in force when the row
+  /// was written, and when that configuration last changed. Written by
+  /// whoever computes the score; today nothing supplies them, because the
+  /// per-user configuration itself lands beside this table and its delta
+  /// guard lands after it. They are here now so that guard does not need a
+  /// second migration over a table that will already hold rows.
+  /// @pending-consumer(score delta guard) suppresses the week-over-week delta
+  /// across a configuration change instead of narrating a settings action as
+  /// a health event.
+  configVersion Int? @map("config_version")
+  /// @pending-consumer(score delta guard) dates the series break on the first
+  /// record written after a configuration change.
+  configChangedAt DateTime? @map("config_changed_at") @db.Timestamptz(3)
+
+  /// When the score was computed. Distinct from `dayKey`: the day says which
+  /// day was scored, this says when the scoring ran.
+  computedAt DateTime @default(now()) @map("computed_at") @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dayKey])
+  @@index([userId, dayKey(sort: Desc)])
+  @@map("health_score_records")
 }
 
 // ─── Host Metrics (admin system-status host-load chart) ──────
