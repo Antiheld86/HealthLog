@@ -2968,6 +2968,8 @@
         "asleep": "Addormentato",
         "awake": "Sveglio",
         "inBed": "A letto",
+        "nap": "Pisolino",
+        "napCount": "{count} pisolini",
         "unavailable": "Ancora nessun dato sulle fasi — le fasi del sonno appariranno qui non appena una fonte collegata le fornirà."
       },
       "empty": {

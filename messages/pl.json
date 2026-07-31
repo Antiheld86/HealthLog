@@ -2968,6 +2968,8 @@
         "asleep": "Śpi",
         "awake": "Czuwa",
         "inBed": "W łóżku",
+        "nap": "Drzemka",
+        "napCount": "{count} drzemki/ek",
         "unavailable": "Brak danych o fazach — fazy snu pojawią się tutaj, gdy tylko dostarczy je połączone źródło."
       },
       "empty": {

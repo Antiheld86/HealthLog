@@ -2968,6 +2968,8 @@
         "asleep": "Schlafend",
         "awake": "Wach",
         "inBed": "Im Bett",
+        "nap": "Nickerchen",
+        "napCount": "{count} Nickerchen",
         "unavailable": "Noch keine Phasen-Daten – Schlafphasen erscheinen hier, sobald eine verbundene Quelle sie liefert."
       },
       "empty": {
