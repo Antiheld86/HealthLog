@@ -189,21 +189,35 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // user-facing message depends on it.
   let lastAttempt: { at: string; topReason: string } | null = null;
   if (nutrients.length === 0) {
-    const lastIngest = await prisma.auditLog.findFirst({
-      where: { userId: user.id, action: "nutrient.batch.ingest" },
-      orderBy: { createdAt: "desc" },
-      select: { createdAt: true, details: true },
-    });
-    const details = parseLastIngestDetails(lastIngest?.details ?? null);
-    // Only surface a reason when the last attempt landed NOTHING: a
-    // succeeded attempt whose day just falls outside this window is a
-    // different, unrelated situation — showing a failure notice over it
-    // would be the very false claim this feature exists to prevent.
-    if (details && details.inserted === 0 && details.updated === 0) {
-      const topReason = pickTopSkipReason(details.skippedByReason);
-      if (topReason) {
-        lastAttempt = { at: lastIngest!.createdAt.toISOString(), topReason };
+    // Fail soft, deliberately. This lookup exists only to explain an empty
+    // page; it is not the page. If it throws — a ledger read that errors, a
+    // shape nobody expected — the nutrients read must still answer, with the
+    // plain empty state rather than a 500. An explanation that can take down
+    // the thing it explains is worse than no explanation.
+    try {
+      const lastIngest = await prisma.auditLog.findFirst({
+        where: { userId: user.id, action: "nutrient.batch.ingest" },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true, details: true },
+      });
+      const details = parseLastIngestDetails(lastIngest?.details ?? null);
+      // Only surface a reason when the last attempt landed NOTHING: a
+      // succeeded attempt whose day just falls outside this window is a
+      // different, unrelated situation — showing a failure notice over it
+      // would be the very false claim this feature exists to prevent.
+      if (details && details.inserted === 0 && details.updated === 0) {
+        const topReason = pickTopSkipReason(details.skippedByReason);
+        if (topReason) {
+          lastAttempt = { at: lastIngest!.createdAt.toISOString(), topReason };
+        }
       }
+    } catch (err) {
+      // Recorded, never rendered: the operator sees it, the person sees the
+      // ordinary empty state.
+      annotate({
+        action: { name: "nutrient.intake.last_attempt_lookup_failed" },
+        meta: { reason: err instanceof Error ? err.name : "unknown" },
+      });
     }
   }
 

@@ -96,7 +96,15 @@ describe("GET /api/nutrients", () => {
     const res = await GET(getReq());
     expect(res.status).toBe(200);
     const body = (await res.json()) as OverviewResponse;
-    expect(body.data).toEqual({ windowDays: 14, nutrients: [] });
+    // `lastAttempt` is null, not absent: a fresh account has no ingest in the
+    // ledger, and the empty page says "nothing yet" rather than naming a failure
+    // that never happened. Kept as an exact shape check so a field cannot appear
+    // on this response without someone deciding it should.
+    expect(body.data).toEqual({
+      windowDays: 14,
+      nutrients: [],
+      lastAttempt: null,
+    });
   });
 
   it("folds rows into catalog-ordered summaries with latest day/amount and day counts", async () => {
