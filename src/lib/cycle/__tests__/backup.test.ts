@@ -87,7 +87,11 @@ describe("buildCycleBackupSection disaster-recovery mode", () => {
             deletedAt,
             createdAt,
             updatedAt,
-            symptomLinks: [{ symptom: { key: "cramps" } }],
+            // One symptom the person put a number on, one they did not.
+            symptomLinks: [
+              { severity: 4, symptom: { key: "cramps" } },
+              { severity: null, symptom: { key: "fatigue" } },
+            ],
           },
         ]),
       },
@@ -160,7 +164,10 @@ describe("buildCycleBackupSection disaster-recovery mode", () => {
       deletedAt: deletedAt.toISOString(),
       createdAt: createdAt.toISOString(),
       updatedAt: updatedAt.toISOString(),
-      symptomKeys: ["cramps"],
+      symptomKeys: ["cramps", "fatigue"],
+      // Only the rated link is listed. An unrated one is left out rather than
+      // written as a zero, so the file says "never rated" and not "rated none".
+      symptomSeverities: [{ key: "cramps", severity: 4 }],
     });
   });
 });
