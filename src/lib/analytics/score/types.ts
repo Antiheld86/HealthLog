@@ -29,6 +29,27 @@ export type ScoreDomain =
   | "wellbeing"
   | "fitness";
 
+/**
+ * Which domain each pillar speaks to. The composite needs three
+ * distinct domains, so this map is part of the breadth rule and not
+ * decoration: three of the eight pillars share the cardiometabolic
+ * domain, which is why a selection of five pillars can still fail.
+ *
+ * One map, read by the scorer when it builds a pillar result and by the
+ * breadth rule when it judges a selection, so the two can never drift
+ * into disagreeing about what counts as a distinct area.
+ */
+export const SCORE_PILLAR_DOMAINS: Record<ScorePillarId, ScoreDomain> = {
+  BLOOD_PRESSURE: "cardiometabolic",
+  GLYCAEMIA: "cardiometabolic",
+  ACTIVITY: "activity",
+  SLEEP: "sleep",
+  ADIPOSITY: "adiposity",
+  WELLBEING: "wellbeing",
+  FITNESS: "fitness",
+  LIPIDS: "cardiometabolic",
+};
+
 export type PillarReferenceKind =
   "clinical-threshold" | "population-percentile" | "guideline-band";
 

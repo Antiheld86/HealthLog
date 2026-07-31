@@ -15,18 +15,14 @@ import {
   type ScorePillarResult,
 } from "./types";
 import { mean, provenance, scoreBand } from "./shared";
+import { evaluateScoreBreadth, SCORE_MIN_ELIGIBLE_DOMAINS } from "./breadth";
 
 export const SCORE_ALGORITHM_CHANGED_AT = "2026-07-28T00:00:00.000Z";
-export const SCORE_MIN_ELIGIBLE_DOMAINS = 3;
 
-const PHYSIOLOGICAL_PILLARS: ReadonlySet<ScorePillarId> = new Set([
-  "BLOOD_PRESSURE",
-  "GLYCAEMIA",
-  "SLEEP",
-  "ADIPOSITY",
-  "FITNESS",
-  "LIPIDS",
-]);
+// The rule itself lives in `./breadth`, where the settings write reads it
+// too. Re-exported here because this is where every existing caller looks
+// for it.
+export { SCORE_MIN_ELIGIBLE_DOMAINS };
 
 const BAND_RANK: Record<ScoreBand, number> = {
   green: 2,
@@ -57,9 +53,7 @@ export function computeComposite(
     );
   const composition = eligible.map((pillar) => pillar.id);
   const eligibleDomains = new Set(eligible.map((pillar) => pillar.domain));
-  const hasPhysiological = composition.some((id) =>
-    PHYSIOLOGICAL_PILLARS.has(id),
-  );
+  const breadth = evaluateScoreBreadth(composition);
   const availableDomains = new Set(
     input.pillars
       .filter((pillar) => available.includes(pillar.id))
@@ -102,13 +96,11 @@ export function computeComposite(
     asOf: input.asOf,
   });
 
-  if (eligibleDomains.size < SCORE_MIN_ELIGIBLE_DOMAINS || !hasPhysiological) {
+  if (!breadth.ok) {
     return buildInsufficient({
       coverage,
       provenance: compositeProvenance,
-      reason: !hasPhysiological
-        ? "measured_physiological_domain_required"
-        : "three_domains_required",
+      reason: breadth.reason,
     });
   }
 
