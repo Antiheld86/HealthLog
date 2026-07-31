@@ -142,6 +142,8 @@ describe("Health Score coverage contract", () => {
     const composite = computeComposite({
       pillars: allPillars(selection),
       availablePillars,
+      // An authored recipe: the person took four pillars out.
+      configured: true,
       asOf: NOW,
     });
 
@@ -175,6 +177,8 @@ describe("Health Score coverage contract", () => {
     const composite = computeComposite({
       pillars: allPillars(selection),
       availablePillars: compositionFor(selection),
+      // An authored recipe.
+      configured: true,
       asOf: NOW,
     });
 
@@ -193,6 +197,8 @@ describe("Health Score coverage contract", () => {
     const composite = computeComposite({
       pillars: allPillars(withData),
       availablePillars: compositionFor(SCORE_PILLAR_IDS),
+      // The full catalogue is this account's default, not a choice.
+      configured: false,
       asOf: NOW,
     });
 
