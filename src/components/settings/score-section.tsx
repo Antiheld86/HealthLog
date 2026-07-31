@@ -43,6 +43,8 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+
+import { toastWrittenOutcome } from "@/components/outcome/outcome-toast";
 import { Gauge, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -206,7 +208,7 @@ export function ScoreSection() {
         queryKey: queryKeys.dashboardSnapshot(),
       });
       void queryClient.invalidateQueries({ queryKey: queryKeys.dailyDigest() });
-      toast.success(t("settings.sections.score.saved"));
+      toastWrittenOutcome("success", t("settings.sections.score.saved"));
     },
     onError: (err) => {
       if (isConflict(err)) {
