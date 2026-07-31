@@ -602,6 +602,30 @@ model User {
   // `GET /api/auth/me` as a `modules: { <key>: boolean }` map.
   modulePreferencesJson Json? @map("module_preferences_json")
 
+  // v1.35.0 — which pillars count toward the composite Health Score.
+  //
+  // A DESELECTION list, the same posture as `modulePreferencesJson`:
+  //   { "excludedPillars": ["SLEEP"], "version": 2, "changedAt": "<ISO>" }
+  //
+  // A pillar shipped after the person made their choice is absent from
+  // the list and therefore counts, so the score keeps its "everything
+  // eligible" starting point with no backfill. Storing the positive
+  // selection instead would make a newly shipped pillar look exactly
+  // like one the person deliberately removed.
+  //
+  // NULL means the person never chose and is deliberately distinct from
+  // a list naming every pillar ("count nothing"): only the first may
+  // inherit a later change of defaults.
+  //
+  // `version` increments on every accepted write and, with `changedAt`,
+  // is the per-user recipe identity a score record and the weekly delta
+  // read to tell an authored change apart from a health movement.
+  //
+  // Schema + resolver: `src/lib/analytics/score/config.ts`. Written by
+  // `PATCH /api/auth/me/health-score-config` with field-by-field merge
+  // (no mass assignment) under the write-time breadth rule.
+  healthScoreConfigJson Json? @map("health_score_config_json")
+
   // Document vault — per-user storage-quota override in bytes. NULL = the
   // instance default (`AppSettings.documentQuotaBytes`) applies. Admin-set
   // only (the admin user PUT); resolved by
