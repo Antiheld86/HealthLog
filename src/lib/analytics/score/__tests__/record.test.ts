@@ -15,6 +15,7 @@ import type { Derived } from "@/lib/insights/derived/types";
 
 import { computeComposite } from "../composite";
 
+import { UNCONFIGURED_SCORE_BOUNDARY } from "../config";
 import {
   buildHealthScoreRecord,
   healthScoreInputFingerprint,
@@ -241,6 +242,7 @@ describe("building the row", () => {
     const draft = buildHealthScoreRecord(built, {
       timezone: "Europe/Berlin",
       now: NOW,
+      config: UNCONFIGURED_SCORE_BOUNDARY,
     });
     expect(draft).not.toBeNull();
     expect(built.composite.status).toBe("ok");
@@ -265,12 +267,14 @@ describe("building the row", () => {
       buildHealthScoreRecord(built, {
         timezone: "Pacific/Auckland",
         now: lateEvening,
+        config: UNCONFIGURED_SCORE_BOUNDARY,
       })!.dayKey,
     ).toBe("2026-08-21");
     expect(
       buildHealthScoreRecord(built, {
         timezone: "UTC",
         now: lateEvening,
+        config: UNCONFIGURED_SCORE_BOUNDARY,
       })!.dayKey,
     ).toBe("2026-08-20");
   });
@@ -286,6 +290,7 @@ describe("building the row", () => {
     const draft = buildHealthScoreRecord(built, {
       timezone: "UTC",
       now: NOW,
+      config: UNCONFIGURED_SCORE_BOUNDARY,
     })!;
     expect(Object.keys(draft.pillarScores)).not.toContain("ACTIVITY");
     expect(draft.composition).not.toContain("ACTIVITY");
@@ -298,28 +303,36 @@ describe("building the row", () => {
     const thin = report([pillar("ACTIVITY", 90), pillar("WELLBEING", 80)]);
     expect(thin.composite.status).toBe("insufficient");
     expect(
-      buildHealthScoreRecord(thin, { timezone: "UTC", now: NOW }),
+      buildHealthScoreRecord(thin, {
+        timezone: "UTC",
+        now: NOW,
+        config: UNCONFIGURED_SCORE_BOUNDARY,
+      }),
     ).toBeNull();
   });
 
   it("carries the configuration version and its change date through", () => {
-    const changedAt = new Date("2026-08-19T09:00:00.000Z");
+    const changedAt = "2026-08-19T09:00:00.000Z";
     const draft = buildHealthScoreRecord(report(HEALTHY), {
       timezone: "UTC",
       now: NOW,
-      configVersion: 4,
-      configChangedAt: changedAt,
+      config: { version: 4, changedAt },
     })!;
     expect(draft.configVersion).toBe(4);
-    expect(draft.configChangedAt).toEqual(changedAt);
+    expect(draft.configChangedAt).toEqual(new Date(changedAt));
   });
 
-  it("defaults the configuration columns to absent, never to a made-up version", () => {
+  it("writes an honest zero for an account that never chose, never a made-up version", () => {
+    // Version 0 is a real answer — "this person never opened the surface" —
+    // and it is what the seam derivation compares the first authored day
+    // against. A null here would make the account's very first recipe look
+    // like a row whose basis is unknown.
     const draft = buildHealthScoreRecord(report(HEALTHY), {
       timezone: "UTC",
       now: NOW,
+      config: UNCONFIGURED_SCORE_BOUNDARY,
     })!;
-    expect(draft.configVersion).toBeNull();
+    expect(draft.configVersion).toBe(0);
     expect(draft.configChangedAt).toBeNull();
   });
 });
@@ -347,6 +360,7 @@ describe("writing the row", () => {
     const outcome = await recordHealthScore(db, "user-1", report(HEALTHY), {
       timezone: "UTC",
       now: NOW,
+      config: UNCONFIGURED_SCORE_BOUNDARY,
     });
     expect(outcome).toBe("written");
     expect(createMany).toHaveBeenCalledTimes(1);
@@ -359,6 +373,7 @@ describe("writing the row", () => {
       await recordHealthScore(db, "user-1", report(HEALTHY), {
         timezone: "UTC",
         now: NOW,
+        config: UNCONFIGURED_SCORE_BOUNDARY,
       }),
     ).toBe("already_recorded");
   });
@@ -370,6 +385,7 @@ describe("writing the row", () => {
       await recordHealthScore(db, "user-1", thin, {
         timezone: "UTC",
         now: NOW,
+        config: UNCONFIGURED_SCORE_BOUNDARY,
       }),
     ).toBe("no_score");
     expect(createMany).not.toHaveBeenCalled();
@@ -387,6 +403,7 @@ describe("writing the row", () => {
       recordHealthScore(db, "user-1", report(HEALTHY), {
         timezone: "UTC",
         now: NOW,
+        config: UNCONFIGURED_SCORE_BOUNDARY,
       }),
     ).resolves.toBe("failed");
   });

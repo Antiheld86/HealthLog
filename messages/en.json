@@ -2279,6 +2279,7 @@
       "delta": "{delta} vs the previous comparable window",
       "deltaReason": {
         "algorithm_changed": "No comparison because the score method changed.",
+        "config_changed": "No comparison because you changed what counts toward your score.",
         "composition_changed": "No comparison because the included pillars changed.",
         "first_eligibility_window": "No comparison because this is the first eligible window.",
         "below_noise_floor": "Change is within the combined measurement noise.",

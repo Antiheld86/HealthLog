@@ -2279,6 +2279,7 @@
       "delta": "{delta} frente al periodo comparable anterior",
       "deltaReason": {
         "algorithm_changed": "No hay comparación porque cambió el método de puntuación.",
+        "config_changed": "No hay comparación porque cambiaste lo que cuenta para tu puntuación.",
         "composition_changed": "No hay comparación porque cambiaron los pilares incluidos.",
         "first_eligibility_window": "No hay comparación porque este es el primer periodo apto.",
         "below_noise_floor": "El cambio está dentro de la variación conjunta de las mediciones.",

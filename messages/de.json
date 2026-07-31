@@ -2279,6 +2279,7 @@
       "delta": "{delta} gegenüber dem vorherigen vergleichbaren Zeitraum",
       "deltaReason": {
         "algorithm_changed": "Kein Vergleich, weil sich die Score-Methode geändert hat.",
+        "config_changed": "Kein Vergleich, weil du geändert hast, was in deinen Score einfließt.",
         "composition_changed": "Kein Vergleich, weil sich die einbezogenen Bereiche geändert haben.",
         "first_eligibility_window": "Kein Vergleich, weil dies der erste geeignete Zeitraum ist.",
         "below_noise_floor": "Die Veränderung liegt innerhalb der gemeinsamen Messschwankung.",

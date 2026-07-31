@@ -2279,6 +2279,7 @@
       "delta": "{delta} względem poprzedniego porównywalnego okresu",
       "deltaReason": {
         "algorithm_changed": "Brak porównania, ponieważ zmieniła się metoda obliczeń.",
+        "config_changed": "Brak porównania, ponieważ zmieniono, co wlicza się do wyniku.",
         "composition_changed": "Brak porównania, ponieważ zmieniły się uwzględnione filary.",
         "first_eligibility_window": "Brak porównania, ponieważ to pierwszy kwalifikujący się okres.",
         "below_noise_floor": "Zmiana mieści się w łącznej zmienności pomiarów.",

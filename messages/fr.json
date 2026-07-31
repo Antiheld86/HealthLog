@@ -2279,6 +2279,7 @@
       "delta": "{delta} par rapport à la période comparable précédente",
       "deltaReason": {
         "algorithm_changed": "Aucune comparaison car la méthode de calcul a changé.",
+        "config_changed": "Aucune comparaison car vous avez modifié ce qui compte dans votre score.",
         "composition_changed": "Aucune comparaison car les piliers inclus ont changé.",
         "first_eligibility_window": "Aucune comparaison car il s'agit de la première période admissible.",
         "below_noise_floor": "La variation reste dans la marge de fluctuation combinée des mesures.",

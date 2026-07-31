@@ -37,6 +37,11 @@ import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { annotate, getEvent } from "@/lib/logging/context";
 import { userDayKey } from "@/lib/tz/format";
 
+import {
+  resolveHealthScoreConfig,
+  scoreConfigBoundary,
+  type ScoreConfigBoundary,
+} from "./config";
 import { computeUserHealthScore, type UserHealthScoreInput } from "./reader";
 import type {
   HealthScoreReport,
@@ -80,7 +85,8 @@ export interface HealthScoreRecordDraft {
   composition: ScorePillarId[];
   pillarScores: Record<string, number>;
   inputFingerprint: string;
-  configVersion: number | null;
+  /** The recipe version in force. 0 when the account never chose. */
+  configVersion: number;
   configChangedAt: Date | null;
   computedAt: Date;
 }
@@ -92,13 +98,16 @@ export interface HealthScoreRecordContext {
   /** The instant the score was computed for. */
   now: Date;
   /**
-   * The account's health-score configuration version in force for this
-   * computation, and when it last changed. Both stay `null` until the
-   * per-user configuration exists; the parameters are here so threading them
-   * through later is a caller change and not a migration.
+   * The recipe this day was scored under: the account's own
+   * configuration version, and when that configuration last changed.
+   *
+   * Required, and deliberately not optional. This is what a later
+   * reader compares one day against the next to find the seam, so a
+   * caller allowed to stay silent would write a row that claims a
+   * recipe it does not know. A never-configured account passes
+   * `{ version: 0, changedAt: null }` — an honest zero, not an absence.
    */
-  configVersion?: number | null;
-  configChangedAt?: Date | null;
+  config: ScoreConfigBoundary;
 }
 
 /**
@@ -204,8 +213,10 @@ export function buildHealthScoreRecord(
       composition: composite.composition,
       pillars: report.pillars,
     }),
-    configVersion: context.configVersion ?? null,
-    configChangedAt: context.configChangedAt ?? null,
+    configVersion: context.config.version,
+    configChangedAt: context.config.changedAt
+      ? new Date(context.config.changedAt)
+      : null,
     computedAt: context.now,
   };
 }
@@ -295,14 +306,21 @@ export async function recordHealthScore(
  */
 export async function computeAndRecordUserHealthScore(
   input: UserHealthScoreInput,
-  record?: Pick<HealthScoreRecordContext, "configVersion" | "configChangedAt">,
 ): Promise<HealthScoreReport> {
   const report = await computeUserHealthScore(input);
+  // The recipe is resolved here rather than asked of the caller. Three
+  // routes call this function and every one of them already holds the
+  // raw blob, so a parameter would have been three chances to pass
+  // nothing and write a row that names no recipe. `resolveHealthScoreConfig`
+  // is pure over that same blob, so the version stamped on the row and
+  // the composition the reader scored are the same recipe by
+  // construction, not by two callers agreeing.
   await recordHealthScore(input.prisma ?? globalPrisma, input.userId, report, {
     timezone: input.profile.timezone,
     now: input.now,
-    configVersion: record?.configVersion ?? null,
-    configChangedAt: record?.configChangedAt ?? null,
+    config: scoreConfigBoundary(
+      resolveHealthScoreConfig(input.healthScoreConfigJson),
+    ),
   });
   return report;
 }

@@ -1112,6 +1112,7 @@ export const dashboardSnapshotResponse = z
         deltaReason: z
           .enum([
             "algorithm_changed",
+            "config_changed",
             "composition_changed",
             "first_eligibility_window",
             "below_noise_floor",

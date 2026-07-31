@@ -126,6 +126,16 @@ export interface CompositeValue {
 
 export type ScoreDeltaReason =
   | "algorithm_changed"
+  /**
+   * The person changed their own recipe inside the comparison window.
+   * Distinct from `algorithm_changed` (we changed the method for
+   * everybody) and from `composition_changed` (the two windows ended up
+   * with different pillar sets): here both windows are computed under
+   * the NEW recipe in one request, so the sets agree and the arithmetic
+   * looks comparable when it is not. Without this reason the settings
+   * action reads as a health event.
+   */
+  | "config_changed"
   | "composition_changed"
   | "first_eligibility_window"
   | "below_noise_floor"

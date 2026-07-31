@@ -60,3 +60,36 @@ export function sameTimeBaselineItemKey(
 export function healthScoreAlgorithmItemKey(scoreVersion: number): string {
   return `health_score_algorithm:${scoreVersion}`;
 }
+
+/**
+ * The Health Score notice key for one account, folding in the person's
+ * OWN recipe version beside the global method version.
+ *
+ * Two things can change what a score means, and the person needs
+ * telling once about each: we change the method (`scoreVersion`), or
+ * they change what counts (`configVersion`). One ledger key carrying
+ * only the first would leave a recipe change unannounced, and a key
+ * carrying only the second would swallow the next method change for
+ * everybody who ever opened the settings page. Both dimensions ride the
+ * key, so a move in either raises the notice exactly once and a
+ * dismissal of one never dismisses the other.
+ *
+ * An account that never chose keeps the bare
+ * `health_score_algorithm:<v>` key unchanged. That is not cosmetic:
+ * lengthening the key for everyone would leave every existing
+ * acknowledgement pointing at a key nothing looks up, and the method
+ * notice would reappear for every account on upgrade.
+ *
+ * The `health_score_algorithm:` prefix is deliberate — it is the
+ * dismiss ledger's namespace (`isDismissibleItemKey`, the dismiss
+ * route's score-cache eviction), not user-facing copy, and reusing it
+ * is what lets the recipe notice ride machinery that already dismisses
+ * and evicts correctly instead of growing a second one beside it.
+ */
+export function healthScoreNoticeItemKey(
+  scoreVersion: number,
+  configVersion: number,
+): string {
+  const base = healthScoreAlgorithmItemKey(scoreVersion);
+  return configVersion >= 1 ? `${base}:config:${configVersion}` : base;
+}

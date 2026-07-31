@@ -21,13 +21,13 @@ import { pickCumulativeDaySum } from "@/lib/measurements/cumulative-day-sum";
 import { userDayKey } from "@/lib/tz/format";
 import { getAgeFromDateOfBirth } from "@/lib/analytics/pulse-targets";
 import { toProfileSex } from "@/lib/profile/sex";
-import { healthScoreAlgorithmItemKey } from "@/lib/daily/priority-item-key";
+import { healthScoreNoticeItemKey } from "@/lib/daily/priority-item-key";
 import { annotate, getEvent } from "@/lib/logging/context";
 
 import { ACTIVITY_WINDOW_DAYS } from "./activity";
 import { SLEEP_WINDOW_DAYS } from "./sleep";
 import { attachScoreDelta } from "./composite";
-import { resolveHealthScoreConfig } from "./config";
+import { resolveHealthScoreConfig, scoreConfigBoundary } from "./config";
 import { pillarsWithModuleData, type ScoreReaderModules } from "./modules";
 import { computeHealthScore } from "./index";
 import type { HealthScoreReport, PillarInputs, ScorePillarId } from "./types";
@@ -868,15 +868,25 @@ export async function computeUserHealthScore(
     }),
     weightGoal,
   });
+  // All three windows above were computed under the recipe in force
+  // right now, which is exactly why the guard needs the recipe's own
+  // dated identity: nothing in the three composites can show that last
+  // Tuesday was scored on a different set. Resolved once, from the same
+  // blob the composition came from, so the number and the boundary that
+  // judges its movement can never describe two different recipes.
   const delta = attachScoreDelta(
     current.composite,
     previous.composite,
     previousPrevious.composite,
     input.now,
+    scoreConfigBoundary(config),
     current.pillars,
     previous.pillars,
   );
-  const itemKey = healthScoreAlgorithmItemKey(current.scoreVersion);
+  const itemKey = healthScoreNoticeItemKey(
+    current.scoreVersion,
+    config.version,
+  );
   const dismissal = await capture(
     db.dismissedPriorityItem.findUnique({
       where: { userId_itemKey: { userId: input.userId, itemKey } },

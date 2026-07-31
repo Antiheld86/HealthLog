@@ -5141,15 +5141,17 @@ model HealthScoreRecord {
   inputFingerprint String @db.VarChar(64) @map("input_fingerprint")
 
   /// The account's health-score configuration version in force when the row
-  /// was written, and when that configuration last changed. The write path
-  /// takes both as parameters and persists whatever it is given; today
-  /// nothing supplies them, because the per-user configuration itself lands
-  /// beside this table and the guard that reads them lands after it. They are
-  /// here now so that guard does not need a second migration over a table
-  /// that will already hold rows.
-  /// @pending-consumer(score delta guard) suppresses the week-over-week delta across a configuration change, so a settings action is never narrated as a health event.
+  /// was written, and when that configuration last changed. Supplied on every
+  /// write by `computeAndRecordUserHealthScore`, which resolves them from the
+  /// same stored recipe the composition came from; an account that never chose
+  /// records version 0 with no date, which is a real answer and not an absence.
+  ///
+  /// Read by `scoreSeriesSeams` (`src/lib/analytics/score/series.ts`), which
+  /// marks the first row after a version move as a series break, refuses to
+  /// join the composite line across it, and keeps the per-pillar rows running
+  /// through it. Nullable only because the columns predate the writer by one
+  /// release; nothing written since supplies null.
   configVersion Int? @map("config_version")
-  /// @pending-consumer(score delta guard) dates the series break on the first record written after a configuration change.
   configChangedAt DateTime? @map("config_changed_at") @db.Timestamptz(3)
 
   /// When the score was computed. Distinct from `dayKey`: the day says which

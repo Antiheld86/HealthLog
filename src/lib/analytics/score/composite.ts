@@ -16,6 +16,7 @@ import {
 } from "./types";
 import { mean, provenance, scoreBand } from "./shared";
 import { evaluateScoreBreadth, SCORE_MIN_ELIGIBLE_DOMAINS } from "./breadth";
+import type { ScoreConfigBoundary } from "./config";
 
 export const SCORE_ALGORITHM_CHANGED_AT = "2026-07-28T00:00:00.000Z";
 
@@ -208,11 +209,50 @@ function comparableDynamicPillars(
   };
 }
 
+/**
+ * Whether the person's own recipe changed BETWEEN the two windows being
+ * compared.
+ *
+ * The exact shape of the global algorithm boundary one function below,
+ * for the same reason and with the same arithmetic: a dated change, and
+ * a comparison that straddles the date. What makes the per-user version
+ * necessary at all is that the two windows are computed in ONE request
+ * under whatever recipe is in force right now. Both sides therefore
+ * carry the new composition, `sameComposition` agrees, and the
+ * subtraction looks legitimate. Nothing inside the two composites can
+ * see the change; only the recipe's own `changedAt` can.
+ *
+ * `version` is what says a recipe was ever authored. An account that
+ * never chose has no boundary to straddle, and a stored blob that
+ * somehow carries no `changedAt` gives nothing to compare, so neither
+ * suppresses: refusing every delta forever on an unreadable date would
+ * trade one silent lie for a permanent silence.
+ */
+export function crossesConfigBoundary(
+  boundary: ScoreConfigBoundary,
+  previousAt: Date,
+  asOf: Date,
+): boolean {
+  if (boundary.version < 1 || boundary.changedAt === null) return false;
+  const changedAt = new Date(boundary.changedAt);
+  if (Number.isNaN(changedAt.getTime())) return false;
+  return asOf >= changedAt && previousAt < changedAt;
+}
+
+/**
+ * `config` is required and has no default on purpose. Every caller has
+ * to state which recipe the two windows were computed under, and the
+ * account that authored none says so with
+ * {@link UNCONFIGURED_SCORE_BOUNDARY}. A defaulted boundary would let a
+ * future caller thread nothing and get the pre-v1.35.0 behaviour back —
+ * a false drop narrated at a person who had just used the settings page.
+ */
 export function attachScoreDelta(
   current: Derived<CompositeValue>,
   previous: Derived<CompositeValue>,
   previousPrevious: Derived<CompositeValue>,
   asOf: Date,
+  config: ScoreConfigBoundary,
   currentPillars: ScorePillarResult[] = [],
   previousPillars: ScorePillarResult[] = [],
 ): Pick<HealthScoreReport, "delta" | "deltaReason"> {
@@ -230,6 +270,13 @@ export function attachScoreDelta(
     (asOf >= boundary && previousAt < boundary)
   ) {
     return { delta: null, deltaReason: "algorithm_changed" };
+  }
+  // Ahead of the composition check deliberately. When both fire, the
+  // person changed what counts and that is the truer sentence; "the
+  // included pillars changed" would describe the consequence and leave
+  // out the act.
+  if (crossesConfigBoundary(config, previousAt, asOf)) {
+    return { delta: null, deltaReason: "config_changed" };
   }
   if (!sameComposition(current, previous)) {
     return { delta: null, deltaReason: "composition_changed" };

@@ -137,6 +137,40 @@ export function resolveHealthScoreConfig(
 }
 
 /**
+ * The recipe's identity, reduced to the two things a comparison needs:
+ * which version of the person's own recipe produced a number, and when
+ * that recipe last moved.
+ *
+ * Carried separately from the full resolved config because the delta
+ * guard and the stored record have no business seeing the pillar list —
+ * they compare recipes, they do not apply them.
+ */
+export interface ScoreConfigBoundary {
+  /** Per-user recipe version. 0 while the person never chose. */
+  version: number;
+  /** When the recipe last changed, ISO 8601, or null while it never has. */
+  changedAt: string | null;
+}
+
+/**
+ * The boundary of an account that never authored a recipe.
+ *
+ * Exported so a caller that genuinely has no configuration says so by
+ * name instead of leaving an argument out. A guard parameter with a
+ * plausible default is how a caller stays silent and the guard stays
+ * quiet about it.
+ */
+export const UNCONFIGURED_SCORE_BOUNDARY: Readonly<ScoreConfigBoundary> =
+  Object.freeze({ version: 0, changedAt: null });
+
+/** Narrow a resolved config to the identity a comparison reads. */
+export function scoreConfigBoundary(
+  config: Pick<ResolvedHealthScoreConfig, "version" | "changedAt">,
+): ScoreConfigBoundary {
+  return { version: config.version, changedAt: config.changedAt };
+}
+
+/**
  * Turn the positive selection a person made into the blob the column
  * stores. Unknown ids are dropped on the way in, so the stored
  * deselection list only ever names pillars this build knows.
