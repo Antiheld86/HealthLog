@@ -48,7 +48,7 @@ export function computeBloodPressurePillar(
 
   if (
     presentPairs < BLOOD_PRESSURE_MIN_PAIRS ||
-    input.gradedScore == null ||
+    input.graded == null ||
     input.representative == null ||
     input.latestAt == null
   ) {
@@ -81,7 +81,10 @@ export function computeBloodPressurePillar(
       historyDays,
     }),
     value: {
-      score: input.gradedScore,
+      score: input.graded.score,
+      // Same object the score came out of, so the popover can only ever
+      // explain the number beside it.
+      scoreBasis: input.graded.basis,
       observed: {
         value: representativeSys,
         unit: "mmHg",

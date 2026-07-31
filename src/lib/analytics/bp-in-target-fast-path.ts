@@ -69,7 +69,11 @@ import {
   isBpReadingInTarget,
   type BpReading,
 } from "./bp-in-target";
-import { gradeBpScoreFromSeries, representativeBpFromSeries } from "./bp-grade";
+import {
+  gradeBpScoreFromSeries,
+  representativeBpFromSeries,
+  type BpGrade,
+} from "./bp-grade";
 import type { BpTargets } from "./bp-targets";
 
 /**
@@ -109,9 +113,16 @@ export interface BpInTargetEnvelope {
    * recency-weighted representative reading over the trailing window.
    * Feeds the Health-Score BP pillar value, replacing the binary
    * in-target rate AS THE SCORE. `null` when no pairs formed.
+   *
+   * v1.34.5 — the score and the basis that explains it travel as ONE
+   * object, from the one `gradeBpScoreFromSeries` call that produced
+   * both. The route re-runs this whole helper against the clinical
+   * targets when the user has a personal target; carrying the pair
+   * together is what makes it impossible for the explanation to belong
+   * to a different run than the number.
    */
-  gradedScore: number | null;
-  /** Same recency-weighted pair that `gradedScore` grades. */
+  graded: BpGrade | null;
+  /** Same recency-weighted pair that `graded` grades. */
   representative: { sys: number; dia: number } | null;
   /** Freshest paired reading in the trailing 90-day score window. */
   last90LatestAt: Date | null;
@@ -377,7 +388,7 @@ async function computeFromRollups(
       dia: pair.dia,
       count: pair.perDayPairCount,
     }));
-  const gradedScore = gradeBpScoreFromSeries({
+  const graded = gradeBpScoreFromSeries({
     pairs: scorePairs,
     target: targets,
     now,
@@ -398,7 +409,7 @@ async function computeFromRollups(
     priorYear,
     path: "rollup",
     rowCount,
-    gradedScore,
+    graded,
     representative,
   };
 }
@@ -545,7 +556,7 @@ async function computeFromLive(
   const scorePairs = collectBpPairs(sysData, diaData, userTz).filter(
     (pair) => pair.at >= new Date(now.getTime() - 90 * DAY_MS) && pair.at < now,
   );
-  const gradedScore = gradeBpScoreFromSeries({
+  const graded = gradeBpScoreFromSeries({
     pairs: scorePairs,
     target: targets,
     now,
@@ -568,7 +579,7 @@ async function computeFromLive(
     priorYear: windows.priorYear,
     path: "live",
     rowCount,
-    gradedScore,
+    graded,
     representative,
   };
 }

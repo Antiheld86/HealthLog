@@ -85,6 +85,49 @@ const HYPO_ANCHORS: ReadonlyArray<readonly [below: number, score: number]> = [
 ] as const;
 
 /**
+ * Which axis set the score, measured against which boundary, and by how
+ * far. Published with the score (never beside it) so the surface can
+ * answer "why this number" without recomputing anything client-side.
+ *
+ * `relation` is a trichotomy on the binding axis' own value:
+ *
+ *   value <  floor                → `below_floor`   (boundary = floor)
+ *   value <= ceiling              → `in_band`       (boundary = ceiling)
+ *   otherwise                     → `above_ceiling` (boundary = ceiling)
+ *
+ * so the three relations are exhaustive and mutually exclusive by
+ * construction, whatever the anchors say. `offsetMmHg` is the distance
+ * from that boundary as a NON-NEGATIVE integer (rounded); the relation
+ * carries the direction, so the number never needs a sign. The relation
+ * is decided on the unrounded value, so it always agrees with the score
+ * even when the rounded offset reads 0.
+ */
+export type BpScoreAxis = "systolic" | "diastolic";
+export type BpScoreRelation = "above_ceiling" | "below_floor" | "in_band";
+
+export interface BpScoreBasis {
+  /** The axis whose sub-score the pillar took — the worse of the two. */
+  axis: BpScoreAxis;
+  relation: BpScoreRelation;
+  /** Rounded, non-negative distance from `boundaryMmHg`. */
+  offsetMmHg: number;
+  /** The ceiling the axis was graded against, or its hypotension floor. */
+  boundaryMmHg: number;
+}
+
+/**
+ * A graded BP reading: the score AND the basis that produced it, as one
+ * value. They are returned together, and carried together through every
+ * envelope down to the pillar, precisely so no caller can ever pair a
+ * score from one run with a basis from another (different representative
+ * pair, or — the live trap — different targets).
+ */
+export interface BpGrade {
+  score: number;
+  basis: BpScoreBasis;
+}
+
+/**
  * Generic piecewise-linear interpolation over a monotonic-x anchor table.
  * Clamps to the first / last anchor outside the table range.
  */
@@ -127,38 +170,63 @@ function interpolateAxisScore(offset: number): number {
  *   the over-target branch holds at the floor, then descends smoothly —
  *   no boundary cliff.
  */
-function gradeAxis(value: number, ceiling: number, floor: number): number {
+function gradeAxis(
+  value: number,
+  ceiling: number,
+  floor: number,
+): { score: number; relation: BpScoreRelation; boundary: number } {
   if (value < floor) {
-    return interpolateAnchors(HYPO_ANCHORS, floor - value);
+    return {
+      score: interpolateAnchors(HYPO_ANCHORS, floor - value),
+      relation: "below_floor",
+      boundary: floor,
+    };
   }
-  return interpolateAxisScore(value - ceiling);
+  const offset = value - ceiling;
+  return {
+    score: interpolateAxisScore(offset),
+    relation: offset > 0 ? "above_ceiling" : "in_band",
+    boundary: ceiling,
+  };
 }
 
 /**
- * Map a representative blood-pressure reading to a smooth 0-100 score.
+ * Map a representative blood-pressure reading to a smooth 0-100 score,
+ * together with the basis that produced it.
  *
  * Takes the WORSE of the systolic and diastolic axis sub-scores so a
  * high diastolic counts against the score (it should) without
  * binary-zeroing the result the way the all-time in-target rate did.
  *
- * @returns integer 0-100.
+ * **Tie rule**: when both axes grade identically, the basis names the
+ * SYSTOLIC axis. The two are interchangeable for the number, so the
+ * choice is arbitrary in arithmetic but must not be arbitrary in the
+ * text; systolic is the axis clinicians lead with and the one the app
+ * shows first everywhere else.
+ *
+ * @returns integer score 0-100 plus the binding axis, its relation to
+ *          its boundary, and the distance to it.
  */
 export function gradeBpScore(input: {
   sys: number;
   dia: number;
   target: BpTargets;
-}): number {
-  const sysScore = gradeAxis(
-    input.sys,
-    input.target.sysHigh,
-    SYS_HYPOTENSION_FLOOR,
-  );
-  const diaScore = gradeAxis(
-    input.dia,
-    input.target.diaHigh,
-    DIA_HYPOTENSION_FLOOR,
-  );
-  return Math.round(Math.max(0, Math.min(100, Math.min(sysScore, diaScore))));
+}): BpGrade {
+  const sys = gradeAxis(input.sys, input.target.sysHigh, SYS_HYPOTENSION_FLOOR);
+  const dia = gradeAxis(input.dia, input.target.diaHigh, DIA_HYPOTENSION_FLOOR);
+  // `<=` puts a tie on systolic — see the tie rule above.
+  const bindingIsSystolic = sys.score <= dia.score;
+  const binding = bindingIsSystolic ? sys : dia;
+  const bindingValue = bindingIsSystolic ? input.sys : input.dia;
+  return {
+    score: Math.round(Math.max(0, Math.min(100, binding.score))),
+    basis: {
+      axis: bindingIsSystolic ? "systolic" : "diastolic",
+      relation: binding.relation,
+      offsetMmHg: Math.round(Math.abs(bindingValue - binding.boundary)),
+      boundaryMmHg: binding.boundary,
+    },
+  };
 }
 
 /**
@@ -228,11 +296,21 @@ export function representativeBpFromSeries(input: {
   };
 }
 
+/**
+ * Grade the recency-weighted representative of a pair series.
+ *
+ * Returns the score and its basis as ONE value. Callers must carry that
+ * value on, never split it: a score stored beside a basis that came from
+ * a second evaluation (or from a second set of targets — the analytics
+ * route deliberately re-runs this with the CLINICAL targets when the user
+ * has a personal one) would let the surface explain a number that is not
+ * the number on screen.
+ */
 export function gradeBpScoreFromSeries(input: {
   pairs: ReadonlyArray<BpPairPoint>;
   target: BpTargets;
   now: Date;
-}): number | null {
+}): BpGrade | null {
   const representative = representativeBpFromSeries(input);
   return representative
     ? gradeBpScore({ ...representative, target: input.target })

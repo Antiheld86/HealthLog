@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { gradeBpScore } from "@/lib/analytics/bp-grade";
 import { computeActivityPillar } from "../activity";
 import { computeAdiposityPillar } from "../adiposity";
 import { computeBloodPressurePillar } from "../blood-pressure";
@@ -30,7 +31,11 @@ describe("reference-score pillars", () => {
     const below = computeBloodPressurePillar({
       ...live,
       pairCount: 11,
-      gradedScore: 85,
+      graded: gradeBpScore({
+        sys: 129,
+        dia: 79,
+        target: { sysLow: 120, sysHigh: 129, diaLow: 70, diaHigh: 79 },
+      }),
       representative: { sys: 129, dia: 79 },
       oldestAt: new Date("2026-07-01T08:00:00Z"),
       latestAt: new Date("2026-07-27T08:00:00Z"),
@@ -44,7 +49,11 @@ describe("reference-score pillars", () => {
     const eligible = computeBloodPressurePillar({
       ...live,
       pairCount: 12,
-      gradedScore: 85,
+      graded: gradeBpScore({
+        sys: 129,
+        dia: 79,
+        target: { sysLow: 120, sysHigh: 129, diaLow: 70, diaHigh: 79 },
+      }),
       representative: { sys: 129, dia: 79 },
       oldestAt: new Date("2026-07-01T08:00:00Z"),
       latestAt: new Date("2026-07-27T08:00:00Z"),
@@ -63,7 +72,11 @@ describe("reference-score pillars", () => {
     const result = computeBloodPressurePillar({
       ...live,
       pairCount: 12,
-      gradedScore: 85,
+      graded: gradeBpScore({
+        sys: 129,
+        dia: 79,
+        target: { sysLow: 120, sysHigh: 129, diaLow: 70, diaHigh: 79 },
+      }),
       representative: { sys: 129, dia: 79 },
       oldestAt: new Date("2026-07-01T08:00:00Z"),
       latestAt: new Date("2026-07-27T08:00:00Z"),

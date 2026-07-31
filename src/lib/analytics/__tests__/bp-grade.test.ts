@@ -22,49 +22,58 @@ const UNDER65: BpTargets = {
   diaHigh: 79,
 };
 
+/**
+ * The score alone, for the arithmetic pins below. `gradeBpScore` returns
+ * the score together with the basis that produced it; the basis has its
+ * own describe block further down.
+ */
+function bpScore(input: { sys: number; dia: number; target: BpTargets }) {
+  return gradeBpScore(input).score;
+}
+
 describe("gradeBpScore", () => {
   it("grades the maintainer's 134/87 into the borderline band [45,60]", () => {
-    const score = gradeBpScore({ sys: 134, dia: 87, target: UNDER65 });
+    const score = bpScore({ sys: 134, dia: 87, target: UNDER65 });
     expect(score).toBeGreaterThanOrEqual(45);
     expect(score).toBeLessThanOrEqual(60);
   });
 
   it("grades a well-controlled 120/78 at or above 85", () => {
     expect(
-      gradeBpScore({ sys: 120, dia: 78, target: UNDER65 }),
+      bpScore({ sys: 120, dia: 78, target: UNDER65 }),
     ).toBeGreaterThanOrEqual(85);
   });
 
   it("grades a textbook-normal 118/76 very high (≈100)", () => {
     expect(
-      gradeBpScore({ sys: 118, dia: 76, target: UNDER65 }),
+      bpScore({ sys: 118, dia: 76, target: UNDER65 }),
     ).toBeGreaterThanOrEqual(88);
   });
 
   it("grades an uncontrolled 160/100 at or below 30", () => {
     expect(
-      gradeBpScore({ sys: 160, dia: 100, target: UNDER65 }),
+      bpScore({ sys: 160, dia: 100, target: UNDER65 }),
     ).toBeLessThanOrEqual(30);
   });
 
   it("takes the WORSE axis — a single high diastolic drags the score down", () => {
     // sys perfect (118), dia far over (95): the worst axis should win.
-    const sysOk = gradeBpScore({ sys: 118, dia: 78, target: UNDER65 });
-    const diaHigh = gradeBpScore({ sys: 118, dia: 95, target: UNDER65 });
+    const sysOk = bpScore({ sys: 118, dia: 78, target: UNDER65 });
+    const diaHigh = bpScore({ sys: 118, dia: 95, target: UNDER65 });
     expect(diaHigh).toBeLessThan(sysOk);
   });
 
   it("is monotonic — higher BP never scores better", () => {
-    const a = gradeBpScore({ sys: 130, dia: 82, target: UNDER65 });
-    const b = gradeBpScore({ sys: 140, dia: 88, target: UNDER65 });
-    const c = gradeBpScore({ sys: 150, dia: 95, target: UNDER65 });
+    const a = bpScore({ sys: 130, dia: 82, target: UNDER65 });
+    const b = bpScore({ sys: 140, dia: 88, target: UNDER65 });
+    const c = bpScore({ sys: 150, dia: 95, target: UNDER65 });
     expect(a).toBeGreaterThan(b);
     expect(b).toBeGreaterThan(c);
   });
 
   it("has no cliff — a one-mmHg change moves the score by a small amount", () => {
-    const at = gradeBpScore({ sys: 129, dia: 79, target: UNDER65 });
-    const justOver = gradeBpScore({ sys: 130, dia: 79, target: UNDER65 });
+    const at = bpScore({ sys: 129, dia: 79, target: UNDER65 });
+    const justOver = bpScore({ sys: 130, dia: 79, target: UNDER65 });
     expect(at - justOver).toBeLessThanOrEqual(5);
     expect(at).toBeGreaterThanOrEqual(justOver);
   });
@@ -73,11 +82,11 @@ describe("gradeBpScore", () => {
     // 85/45 is 5 mmHg below both floors (sys 90 / dia 50). The continuous
     // hypo curve gives a gentle penalty near the floor (5 below ≈ 85),
     // clearly below the optimal plateau of 100.
-    const low = gradeBpScore({ sys: 85, dia: 45, target: UNDER65 });
+    const low = bpScore({ sys: 85, dia: 45, target: UNDER65 });
     expect(low).toBeLessThan(100);
     expect(low).toBeGreaterThanOrEqual(80);
     // A markedly low reading is penalised much harder.
-    const veryLow = gradeBpScore({ sys: 70, dia: 40, target: UNDER65 });
+    const veryLow = bpScore({ sys: 70, dia: 40, target: UNDER65 });
     expect(veryLow).toBeLessThan(low);
     expect(veryLow).toBeLessThanOrEqual(45);
   });
@@ -90,7 +99,7 @@ describe("gradeBpScore", () => {
     // dia 66 sits on the optimal plateau (offset −13 → 100) so the
     // systolic axis is the worst-of(sys,dia) winner across the walk.
     const sysWalk = [92, 91, 90, 89, 88].map((sys) =>
-      gradeBpScore({ sys, dia: 66, target: UNDER65 }),
+      bpScore({ sys, dia: 66, target: UNDER65 }),
     );
     // AT and ABOVE the floor sit on the plateau (100).
     expect(sysWalk[2]).toBe(100); // sys 90
@@ -109,7 +118,7 @@ describe("gradeBpScore", () => {
     // sys 117 sits on the optimal plateau (offset −12 → 100) so the
     // diastolic axis is the worst-of(sys,dia) winner across the walk.
     const diaWalk = [52, 51, 50, 49, 48].map((dia) =>
-      gradeBpScore({ sys: 117, dia, target: UNDER65 }),
+      bpScore({ sys: 117, dia, target: UNDER65 }),
     );
     expect(diaWalk[2]).toBe(100); // dia 50
     expect(diaWalk[1]).toBe(100); // dia 51
@@ -124,19 +133,19 @@ describe("gradeBpScore", () => {
   it("descends smoothly further below the floor (mirrors over-target steepness)", () => {
     // floor → 100, floor−10 → ~70, floor−20 → ~45, floor−30 → ~20.
     // dia 66 stays on the plateau so the systolic axis is the winner.
-    expect(gradeBpScore({ sys: 90, dia: 66, target: UNDER65 })).toBe(100);
-    expect(gradeBpScore({ sys: 80, dia: 66, target: UNDER65 })).toBe(70);
-    expect(gradeBpScore({ sys: 70, dia: 66, target: UNDER65 })).toBe(45);
-    expect(gradeBpScore({ sys: 60, dia: 66, target: UNDER65 })).toBe(20);
+    expect(bpScore({ sys: 90, dia: 66, target: UNDER65 })).toBe(100);
+    expect(bpScore({ sys: 80, dia: 66, target: UNDER65 })).toBe(70);
+    expect(bpScore({ sys: 70, dia: 66, target: UNDER65 })).toBe(45);
+    expect(bpScore({ sys: 60, dia: 66, target: UNDER65 })).toBe(20);
     // Never negative on an extreme low.
     expect(
-      gradeBpScore({ sys: 30, dia: 20, target: UNDER65 }),
+      bpScore({ sys: 30, dia: 20, target: UNDER65 }),
     ).toBeGreaterThanOrEqual(0);
   });
 
   it("preserves the audit fairness anchors (134/87 → 57, 165/105 → 22)", () => {
-    expect(gradeBpScore({ sys: 134, dia: 87, target: UNDER65 })).toBe(57);
-    expect(gradeBpScore({ sys: 165, dia: 105, target: UNDER65 })).toBe(22);
+    expect(bpScore({ sys: 134, dia: 87, target: UNDER65 })).toBe(57);
+    expect(bpScore({ sys: 165, dia: 105, target: UNDER65 })).toBe(22);
   });
 });
 
@@ -169,7 +178,7 @@ describe("gradeBpScoreFromSeries", () => {
     // recency-weighted representative should read close to the recent
     // well-controlled cluster.
     expect(recencyWeighted).not.toBeNull();
-    expect(recencyWeighted as number).toBeGreaterThanOrEqual(80);
+    expect(recencyWeighted!.score).toBeGreaterThanOrEqual(80);
   });
 
   it("matches the single-reading grade when every pair is today", () => {
@@ -177,9 +186,9 @@ describe("gradeBpScoreFromSeries", () => {
       { at: NOW, sys: 134, dia: 87 },
       { at: NOW, sys: 134, dia: 87 },
     ];
-    expect(gradeBpScoreFromSeries({ pairs, target: UNDER65, now: NOW })).toBe(
-      gradeBpScore({ sys: 134, dia: 87, target: UNDER65 }),
-    );
+    expect(
+      gradeBpScoreFromSeries({ pairs, target: UNDER65, now: NOW }),
+    ).toEqual(gradeBpScore({ sys: 134, dia: 87, target: UNDER65 }));
   });
 
   it("rollup (per-day-mean + count) and live (per-event) agree on the same data", () => {
@@ -218,8 +227,6 @@ describe("gradeBpScoreFromSeries", () => {
     });
     expect(live).not.toBeNull();
     expect(rollup).not.toBeNull();
-    expect(Math.abs((live as number) - (rollup as number))).toBeLessThanOrEqual(
-      1,
-    );
+    expect(Math.abs(live!.score - rollup!.score)).toBeLessThanOrEqual(1);
   });
 });
