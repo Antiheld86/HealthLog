@@ -51,6 +51,7 @@ import {
 import { round } from "@/lib/insights/status-shared";
 import type { MeasurementType } from "@/generated/prisma/enums";
 import type { CyclePhase } from "@/lib/cycle/types";
+import type { Locale } from "@/lib/i18n/config";
 
 /** Stable channel key for the continuous CYCLE_PHASE discovery series. */
 export const CYCLE_PHASE_CHANNEL_KEY = "CYCLE_PHASE";
@@ -292,8 +293,15 @@ export function discoverPhaseCorrelations(args: {
   phaseByDay: Map<string, CyclePhase>;
   measurements: CrossMetricMeasurement[];
   userPriorityJson?: unknown;
+  /**
+   * The reader's locale. Each surviving row carries a finished `interpretation`
+   * sentence that the cycle route serves straight to the client, so it has to
+   * be written in the reader's language. Required — no default, because a
+   * default is what let the metric page's driver line ship in English.
+   */
+  locale: Locale;
 }): CorrelationDiscoveryResult {
-  const { phaseByDay, measurements } = args;
+  const { phaseByDay, measurements, locale } = args;
   const userPriorityJson = args.userPriorityJson ?? null;
 
   const phaseSeries = buildPhaseDiscoverySeries(phaseByDay);
@@ -307,7 +315,7 @@ export function discoverPhaseCorrelations(args: {
     outcomeSeries.push({ key: cfg.type, role: "outcome", points });
   }
 
-  return discoverCorrelations([phaseSeries, ...outcomeSeries]);
+  return discoverCorrelations([phaseSeries, ...outcomeSeries], { locale });
 }
 
 /**

@@ -18,13 +18,16 @@ vi.mock("@/lib/rollups/measurement-read-wmy", async (importOriginal) => {
     await importOriginal<typeof import("@/lib/rollups/measurement-read-wmy")>();
   return { ...actual, readBestGranularityRollups: vi.fn() };
 });
-const { labResult, measurement } = vi.hoisted(() => ({
+const { labResult, measurement, user } = vi.hoisted(() => ({
   labResult: { findMany: vi.fn() },
   // `withHrvFallback`'s presence probe (`count`) + the discovery presence
   // query (`groupBy`). Unused by metrics that don't exercise them.
   measurement: { count: vi.fn(), groupBy: vi.fn(async () => []) },
+  // The rich reads resolve the account's language before asking for a
+  // narrated sentence, which reads the stored preference.
+  user: { findUnique: vi.fn(async () => ({ locale: "de" })) },
 }));
-vi.mock("@/lib/db", () => ({ prisma: { labResult, measurement } }));
+vi.mock("@/lib/db", () => ({ prisma: { labResult, measurement, user } }));
 
 import {
   getCorrelation,
@@ -215,6 +218,10 @@ describe("get_correlation", () => {
     expect(res.pair?.r).toBe(-0.42);
     expect(res.association).toBe("descriptive");
     expect(res.windowDays).toBe(180);
+    // The `note` on the pair is a finished sentence an MCP client shows as it
+    // stands, so the account's language has to reach the reader. Nothing else
+    // in this file would notice if the read went back to asking in English.
+    expect(readCoachCorrelations).toHaveBeenCalledWith(USER, "de");
   });
 
   it("honest-null when the pair has no surviving association", async () => {
@@ -396,7 +403,7 @@ describe("get_metric_baseline", () => {
     const res = await getMetricBaseline(USER, { metric: "hrv" });
 
     expect(res.present).toBe(true);
-    expect(buildCoachReadStrip).toHaveBeenCalledWith(USER, "HRV_RMSSD");
+    expect(buildCoachReadStrip).toHaveBeenCalledWith(USER, "HRV_RMSSD", "de");
   });
 
   it("stays on SDNN when the user has any HEART_RATE_VARIABILITY rows", async () => {
@@ -419,6 +426,7 @@ describe("get_metric_baseline", () => {
     expect(buildCoachReadStrip).toHaveBeenCalledWith(
       USER,
       "HEART_RATE_VARIABILITY",
+      "de",
     );
   });
 });

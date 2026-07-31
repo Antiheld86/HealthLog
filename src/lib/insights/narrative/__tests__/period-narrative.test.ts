@@ -40,6 +40,7 @@ function monthInput(
     },
     seriesByMetric,
     discoverySeries,
+    locale: "en",
     computedAt: "2026-04-30T12:00:00.000Z",
   };
 }

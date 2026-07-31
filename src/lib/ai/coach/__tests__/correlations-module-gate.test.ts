@@ -45,14 +45,14 @@ beforeEach(() => {
 
 describe("readCoachCorrelations — insights module gate", () => {
   it("gates on `insights`, not on a per-domain key", async () => {
-    await readCoachCorrelations(USER);
+    await readCoachCorrelations(USER, "en");
     expect(isModuleEnabled).toHaveBeenCalledWith(USER, "insights");
   });
 
   it("omits with the module OFF, and reads nothing at all", async () => {
     vi.mocked(isModuleEnabled).mockImplementation(async () => false);
 
-    const res = await readCoachCorrelations(USER);
+    const res = await readCoachCorrelations(USER, "en");
 
     expect(res.present).toBe(false);
     // Distinct from `no_data`: the assistant is told the domain is switched
@@ -67,7 +67,7 @@ describe("readCoachCorrelations — insights module gate", () => {
   });
 
   it("proceeds to the engine with the module ON", async () => {
-    const res = await readCoachCorrelations(USER);
+    const res = await readCoachCorrelations(USER, "en");
     // The synthetic fixture has no paired data, so the honest answer is a
     // miss — but it must be the ENGINE's miss, reached after the real reads
     // ran, not the gate's.
@@ -85,7 +85,7 @@ describe("readCoachCorrelations — insights module gate", () => {
       async (_u: string, key: string) => key !== "insights",
     );
 
-    const res = await readCoachCorrelations(USER);
+    const res = await readCoachCorrelations(USER, "en");
 
     expect(res.present).toBe(false);
     expect(res.reason).toBe("module_disabled");
@@ -99,6 +99,8 @@ describe("readCoachCorrelations — insights module gate", () => {
     // loud, not silently indistinguishable from "no pattern found".
     vi.mocked(isModuleEnabled).mockRejectedValue(new Error("gate down"));
 
-    await expect(readCoachCorrelations(USER)).rejects.toThrow("gate down");
+    await expect(readCoachCorrelations(USER, "en")).rejects.toThrow(
+      "gate down",
+    );
   });
 });

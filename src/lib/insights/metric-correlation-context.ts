@@ -22,6 +22,7 @@
  */
 import type { MeasurementType } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
+import type { Locale } from "@/lib/i18n/config";
 import {
   discoverCorrelations,
   discoveryMeasurementTypes,
@@ -82,6 +83,13 @@ function channelKeyForType(type: MeasurementType): string | null {
 export async function getRelevantCorrelationsForMetric(
   userId: string,
   measurementType: MeasurementType,
+  /**
+   * The reader's locale. These interpretations are finished sentences that go
+   * into the assessment prompt as grounded context; handing a German card's
+   * prompt English prose invites the model to echo it. Required — every caller
+   * is a status builder that already knows the reader's language.
+   */
+  locale: Locale,
 ): Promise<RelevantCorrelation[]> {
   const channel = channelKeyForType(measurementType);
   if (!channel) return [];
@@ -162,7 +170,7 @@ export async function getRelevantCorrelationsForMetric(
     }
     series.push(...environmentSeries, ...customMetricSeries);
 
-    const result = discoverCorrelations(series);
+    const result = discoverCorrelations(series, { locale });
     const decisions = await syncAcceptedPatterns({
       userId,
       family: PATTERN_FAMILIES.discoveryRetrospective,

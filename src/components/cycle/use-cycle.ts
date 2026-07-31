@@ -204,8 +204,12 @@ export function useCycleProfile() {
  * insights tab.
  */
 export function useCycleInsights() {
+  // The lagged rows come back with a narrated `interpretation` in the reader's
+  // language, so the cache cell belongs to one language — otherwise a switch
+  // would keep serving the sentence written for the previous one.
+  const { locale } = useTranslations();
   return useQuery({
-    queryKey: queryKeys.cycleInsights(),
+    queryKey: queryKeys.cycleInsights(locale),
     queryFn: () => apiGet<CycleInsightsResponse>("/api/cycle/insights"),
     staleTime: 5 * 60_000,
   });

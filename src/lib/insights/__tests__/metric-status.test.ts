@@ -411,6 +411,7 @@ describe("generateMetricStatus — generation path", () => {
     expect(getRelevantCorrelationsForMetric).toHaveBeenCalledWith(
       "user-1",
       "RESTING_HEART_RATE",
+      "en",
     );
   });
 

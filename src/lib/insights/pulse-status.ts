@@ -427,7 +427,11 @@ export async function preparePulseStatusForUser(
   // v1.12.7 — diversity / anti-repetition block (see blood-pressure-status).
   const varietyLead = pickVarietyLead(userId, "pulse", todayKey);
   const steadyRun = computeSteadyRun(pulseGraded.weekly, pulseGraded.monthly);
-  const relations = await getRelevantCorrelationsForMetric(userId, "PULSE");
+  const relations = await getRelevantCorrelationsForMetric(
+    userId,
+    "PULSE",
+    locale,
+  );
   const assessmentContextBlock = buildAssessmentContextBlock(
     {
       varietyLead,

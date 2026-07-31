@@ -39,7 +39,7 @@
  * link. The series builders live in `correlation-series-builders.ts`.
  */
 import { pearson, MIN_PAIRED_N } from "@/lib/insights/correlations";
-import { defaultLocale, type Locale } from "@/lib/i18n/config";
+import { type Locale } from "@/lib/i18n/config";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 
 /**
@@ -447,21 +447,25 @@ export function discoverCorrelations(
     minPairs?: number;
     fdrQ?: number;
     /**
-     * Reader's locale for the narrated `interpretation`. Defaults to English
-     * so the many server callers that feed the string into an LLM prompt (which
-     * re-localises) keep their existing behaviour; the user-facing correlations
-     * route passes the resolved locale so the card renders in the reader's
-     * language.
+     * Reader's locale for the narrated `interpretation`.
+     *
+     * REQUIRED, and it must stay required. It used to be optional with an
+     * English default, and the default is what shipped the bug: a caller could
+     * say nothing and still get a finished sentence back, so the "Coach read"
+     * strip on a German metric page printed its second line in English under a
+     * German first line for months. Nobody had to write anything wrong for that
+     * to happen — silence was enough. With no default, a caller that forgets
+     * cannot compile, which is the only version of this that stays fixed.
      */
-    locale?: Locale;
-  } = {},
+    locale: Locale;
+  },
 ): CorrelationDiscoveryResult {
   const lagDays = opts.lagDays ?? 1;
   const minPairs = opts.minPairs ?? MIN_PAIRED_N;
   const fdrQ = opts.fdrQ ?? FDR_Q;
   // Named `translate` (not `t`) — the pair-mapping callbacks below bind `t` to
   // the RawPair element, so the translator must not shadow-collide with them.
-  const { t: translate } = getServerTranslator(opts.locale ?? defaultLocale);
+  const { t: translate } = getServerTranslator(opts.locale);
 
   const behaviours = series.filter((s) => s.role === "behaviour");
   const outcomes = series.filter((s) => s.role === "outcome");
@@ -717,8 +721,12 @@ export function discoverEmergingCorrelations(
     lagDays?: number;
     minPairs?: number;
     fdrQ?: number;
-    /** Reader's locale, threaded to the inner scan's narration. */
-    locale?: Locale;
+    /**
+     * Reader's locale, threaded to the inner scan's narration. Required for the
+     * same reason it is required on {@link discoverCorrelations} — an optional
+     * locale here would put the English default straight back, one call deeper.
+     */
+    locale: Locale;
   },
 ): EmergingCorrelationResult {
   const windowDays = opts.windowDays ?? EARLY_WINDOW_DAYS;
@@ -880,16 +888,20 @@ export function discoverLabOutcomeCorrelations(
     minDraws?: number;
     minWindowPoints?: number;
     fdrQ?: number;
-    /** Reader's locale for the narrated `interpretation`. Defaults to English. */
-    locale?: Locale;
-  } = {},
+    /**
+     * Reader's locale for the narrated `interpretation`. Required — see
+     * {@link discoverCorrelations}; a lab sentence leaks English just as
+     * happily as a daily one.
+     */
+    locale: Locale;
+  },
 ): LabCorrelationResult {
   const windowDays = opts.windowDays ?? LAB_OUTCOME_WINDOW_DAYS;
   const minDraws = opts.minDraws ?? LAB_MIN_DRAWS;
   const minWindowPoints = opts.minWindowPoints ?? LAB_MIN_WINDOW_POINTS;
   const fdrQ = opts.fdrQ ?? FDR_Q;
   // Named `translate` — the pair-mapping callback below binds `t` to its element.
-  const { t: translate } = getServerTranslator(opts.locale ?? defaultLocale);
+  const { t: translate } = getServerTranslator(opts.locale);
 
   // Group draws by biomarker key (newest-irrelevant; Pearson is order-free).
   const drawsByLab = new Map<string, LabDrawPoint[]>();

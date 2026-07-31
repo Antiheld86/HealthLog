@@ -1,4 +1,5 @@
 import type { BpTargets } from "@/lib/analytics/bp-targets";
+import type { BpGrade, BpScoreBasis } from "@/lib/analytics/bp-grade";
 import type {
   Derived,
   DerivedProvenanceSource,
@@ -56,6 +57,14 @@ export interface PillarValue {
   reference: PillarReference;
   /** Optional user-authored yardstick, displayed beside the scored reference. */
   personalReference?: PillarReference;
+  /**
+   * Which input set this score and by how much, resolved on the server so
+   * no client ever re-derives it. Blood pressure only for now: it is the
+   * one pillar that scores the WORSE of two axes, so the number alone
+   * cannot say which one it came from. Optional by design — a pillar that
+   * has nothing of the kind to say says nothing.
+   */
+  scoreBasis?: BpScoreBasis;
   /** Score points that a weekly move must clear before it is narrated. */
   noiseFloor: number;
   /** Slow markers contribute to level but never to the weekly delta. */
@@ -125,7 +134,11 @@ export interface DomainReadState {
 export interface BloodPressurePillarInput extends DomainReadState {
   asOf: Date;
   pairCount: number;
-  gradedScore: number | null;
+  /**
+   * The graded score together with the basis that produced it — one
+   * value, from one grading run against one set of targets.
+   */
+  graded: BpGrade | null;
   representative: { sys: number; dia: number } | null;
   oldestAt: Date | null;
   latestAt: Date | null;

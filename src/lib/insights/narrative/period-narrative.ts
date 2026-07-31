@@ -31,6 +31,7 @@
  */
 import type { MeasurementType } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
+import type { Locale } from "@/lib/i18n/config";
 import { annotate } from "@/lib/logging/context";
 import { wallClockInTz } from "@/lib/tz/wall-clock";
 import {
@@ -286,6 +287,12 @@ export interface AssembleInput {
   seriesByMetric: Map<string, DailySeriesPoint[]>;
   /** Named series feeding the discovery matrix (same window). */
   discoverySeries: NamedSeries[];
+  /**
+   * The reader's locale for the drivers' narrated `interpretation`. Required —
+   * the assembler writes sentences, so it has to be told which language they
+   * are in rather than assuming one.
+   */
+  locale: Locale;
   /** Compute time (ISO). */
   computedAt: string;
 }
@@ -305,6 +312,7 @@ export function assemblePeriodNarrativeContext(
     window,
     seriesByMetric,
     discoverySeries,
+    locale,
     computedAt,
   } = input;
 
@@ -380,7 +388,7 @@ export function assemblePeriodNarrativeContext(
   }
 
   // ── drivers (FDR-surviving correlations, descriptive-only) ──────────────
-  const discovery = discoverCorrelations(discoverySeries);
+  const discovery = discoverCorrelations(discoverySeries, { locale });
   const drivers: NarrativeDriver[] = discovery.discovered.map((d) => ({
     behaviour: d.behaviour,
     outcome: d.outcome,
@@ -486,6 +494,14 @@ export interface BuildPeriodNarrativeContextOpts {
   period: NarrativePeriod;
   /** Injected clock for deterministic behaviour; defaults to now. */
   now?: Date;
+  /**
+   * The reader's locale, for the drivers' narrated `interpretation`. Required:
+   * those are finished sentences that reach the prompt and the deterministic
+   * fallback, and both callers already know which language the narrative is
+   * being written in. An optional locale here would mean an English driver line
+   * inside a German summary whenever a caller stayed quiet.
+   */
+  locale: Locale;
 }
 
 /**
@@ -673,6 +689,7 @@ export async function buildPeriodNarrativeContext(
     window: { from: since.toISOString(), to: now.toISOString() },
     seriesByMetric,
     discoverySeries,
+    locale: opts.locale,
     computedAt: now.toISOString(),
   });
 }

@@ -360,6 +360,17 @@ async function buildAnalyticsResponse(user: AuthedUser, locale: Locale) {
         }),
       ],
     );
+    // The pillar is graded against the CLINICAL band even when the user
+    // keeps a personal target (that band is the number's identity; the
+    // personal one is displayed beside it and scores nothing). So when the
+    // two differ we re-run the whole helper against the clinical targets
+    // and the score comes from that second run.
+    //
+    // v1.34.5 — the "why this number" basis rides the same envelope, so it
+    // is the same run, the same representative pair and the same ceilings
+    // by construction. Assign envelopes WHOLE here; picking `graded.score`
+    // off one run and a basis off the other would let the popover explain
+    // a number nobody is looking at, and it would look correct in review.
     if (bpTargetsEqual(bpTargets, clinicalBpTargets)) {
       bpEnvelope = windows;
       bpEnvelopePriorWeek = windowsPriorWeek;

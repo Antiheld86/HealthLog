@@ -91,7 +91,7 @@ describe("readCoachCorrelations", () => {
       fdrQ: 0.1,
       minPairs: 20,
     });
-    const result = await readCoachCorrelations("u1");
+    const result = await readCoachCorrelations("u1", "en");
     expect(result.present).toBe(true);
     expect(result.drivers).toHaveLength(1);
     expect(result.drivers?.[0]).toMatchObject({
@@ -111,7 +111,7 @@ describe("readCoachCorrelations", () => {
       fdrQ: 0.1,
       minPairs: 20,
     });
-    const result = await readCoachCorrelations("u1");
+    const result = await readCoachCorrelations("u1", "en");
     expect(result.present).toBe(false);
     expect(result.reason).toBe("no_significant_pattern");
   });
@@ -149,7 +149,7 @@ describe("readCoachCorrelations", () => {
         computedAt: "x",
       },
     });
-    const result = await readCoachCorrelations("u1");
+    const result = await readCoachCorrelations("u1", "en");
     expect(result.present).toBe(true);
     expect(result.coincident?.fired).toBe(true);
     expect(result.coincident?.contributing).toEqual([
@@ -160,7 +160,7 @@ describe("readCoachCorrelations", () => {
 
   it("degrades to present:false on a read failure", async () => {
     loadBaselineProfile.mockRejectedValue(new Error("db down"));
-    const result = await readCoachCorrelations("u1");
+    const result = await readCoachCorrelations("u1", "en");
     expect(result.present).toBe(false);
     expect(result.reason).toBe("retrieval_failed");
   });
@@ -175,7 +175,7 @@ describe("readCoachCorrelations", () => {
       fdrQ: 0.1,
       minPairs: 20,
     });
-    await readCoachCorrelations("u1");
+    await readCoachCorrelations("u1", "en");
     const where = measurementFindMany.mock.calls[0]?.[0]?.where as {
       type: { in: string[] };
     };
@@ -198,6 +198,7 @@ describe("readCoachCorrelations", () => {
     discoverCorrelations.mockImplementation((series) =>
       real.discoverCorrelations(
         series as Parameters<typeof real.discoverCorrelations>[0],
+        { locale: "en" },
       ),
     );
 
@@ -248,7 +249,7 @@ describe("readCoachCorrelations", () => {
     ]);
     illnessDayLogFindMany.mockResolvedValue(dayLogs);
 
-    const result = await readCoachCorrelations("u1");
+    const result = await readCoachCorrelations("u1", "en");
 
     expect(result.present).toBe(true);
     const symptomDriver = result.drivers?.find(

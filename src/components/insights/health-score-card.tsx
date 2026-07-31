@@ -1,22 +1,21 @@
 "use client";
 
 import { useId, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { AlertTriangle, ChevronDown, RotateCw } from "lucide-react";
 
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { InfoPopover } from "@/components/ui/info-popover";
 import { LearningGate } from "@/components/ui/learning-gate";
-import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TileHeader } from "@/components/insights/tile-header";
 import {
+  BAND_BORDER_CLASS,
+  BAND_NUMBER_CLASS,
   BAND_PROGRESS_CLASS,
   bandForScore,
   clampScore,
 } from "@/components/insights/derived/band-tokens";
 import { CoverageMeter } from "@/components/insights/derived/coverage-meter";
 import { ProvenanceExplainer } from "@/components/insights/derived/provenance-explainer";
-import { ScoreRing } from "@/components/insights/derived/score-ring";
 import { METRIC_PROVENANCE } from "@/components/insights/derived/standards";
 import {
   pillarDetailLines,
@@ -36,23 +35,33 @@ import { useTranslations } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 
 /**
- * The Health Score surface: one card, one score, one place.
+ * The Health Score panel: the hero band's right-hand column.
  *
- * Pre-rework the score had two mounts — a compact face in the hero band and a
- * nine-block stack further down the overview that only rendered while the
- * daily-briefing flag was on. The stack is now a single progressive-disclosure
- * card pinned directly under the hero, and the hero band is the full-width
- * greeting again.
+ * The score belongs beside the greeting, not under it. It sat there for
+ * eleven weeks — big number at the top of a narrow column, thin contributor
+ * rows directly beneath it inside the same card — and three arrangements in
+ * four days moved it away, ending in a full-width card pinned below the
+ * greeting that spent most of its height on things that do not count toward
+ * the number. This is the original arrangement, restored, with the eight
+ * pillars the composite now carries instead of the four it had then.
  *
- * Collapsed reads as the score face: the ring, the band sentence, the weekly
- * delta (or the honest reason there is none), Rest Mode, the two ambient
- * context lines, and the coverage meter. Expanded adds the pillar grid, the
- * named list of pillars that are not scored yet, the personal weight goal, and
- * the method footer with its cited standard.
+ * The rules the intervening work established are all kept:
  *
- * Absence stays absence: a pillar the server gated as `insufficient` is listed
- * by name with its reason instead of being drawn as a zero, and a pillar whose
- * read FAILED is a visible error row with a retry, never silence.
+ *   - One mount. This panel is the only score surface on the overview.
+ *   - It renders whether or not the daily briefing is switched on.
+ *   - It is not a customisable section, so a saved layout cannot hide it.
+ *   - The column reserves its own height while the payload is in flight,
+ *     so the band does not reflow when the score lands.
+ *
+ * Only a pillar that carries a score gets a row. A pillar that contributes
+ * nothing is one quiet line: a failed read is named with a retry, safety
+ * signposting is named in full, and everything else that is simply not
+ * recorded yet is counted, with the names and reasons one tap away in the
+ * foot disclosure. Each pillar has exactly one home — a row, the failed-read
+ * line, the safety line, or the count — and never two.
+ *
+ * Each contributor row is tinted by ITS OWN band. The old rows took the
+ * composite's colour, which painted a pillar scoring 92 red on a red day.
  */
 
 const PILLAR_LABEL_KEY: Record<ScorePillarId, string> = {
@@ -81,6 +90,39 @@ const REASON_KEY: Record<string, string> = {
   below_night_floor_or_stale: "insufficientHistory",
   stale: "insufficientHistory",
 };
+
+/**
+ * The column geometry, shared by the panel and by its loading reserve so the
+ * two can never drift apart. `basis` rather than a width so the column flexes
+ * inside the hero band's `md:flex-row` split (~36 % at md, ~40 % at xl), and
+ * `w-full` below `md` where the column stacks under the greeting.
+ */
+const PANEL_COLUMN_CLASS =
+  "w-full md:shrink-0 md:grow-0 md:basis-[22rem] xl:basis-[26rem]";
+
+/** The card chrome the panel wears inside the gradient band. */
+const PANEL_CHROME_CLASS =
+  "bg-card/65 rounded-xl border p-4 shadow-sm backdrop-blur-sm md:p-6";
+
+/**
+ * Height the reserve holds while the payload is in flight, so the band does
+ * not jump when the score lands.
+ *
+ * The rule, not a remembered number: the reserve sits between the shortest
+ * and the tallest panel the report actually produces (three to six scored
+ * rows), so a short report is not pushed down and a long one does not leave a
+ * gap that collapses. It is deliberately near the middle of that range, which
+ * is the best a single number can do when the panel's height depends on how
+ * many pillars an account scores.
+ *
+ * `health-score-card-geometry.test.tsx` measures all of it in a browser
+ * against the compiled stylesheet and fails if this value leaves that range —
+ * and also if the value stops binding at all. It did stop: the blocks below
+ * added up to more than the minimum declared here, so the reserve was
+ * whatever the blocks happened to be and this constant was decoration. The
+ * blocks were trimmed to sit under it again.
+ */
+const PANEL_RESERVE_CLASS = "min-h-[28rem]";
 
 /**
  * v1.21.2 (A5) — readiness contributor keys the Tension Verdict surfaces.
@@ -202,24 +244,34 @@ export function HealthScoreCard({
     return t(`insights.healthScore.reason.${key}`);
   }
 
+  function labelsOf(pillars: ScorePillarResult[]): string {
+    return pillars.map((p) => t(PILLAR_LABEL_KEY[p.id])).join(", ");
+  }
+
   const composite = report.composite;
+  // Four homes, one pillar each. A pillar that scores gets a row; a pillar
+  // whose read failed joins the one coalesced failure line; a pillar gated
+  // for safety signposting is named in full at rest; everything else gated
+  // is counted, and named a tap away. The sets are disjoint by construction
+  // and each pillar falls into exactly one of them.
   const scored = report.pillars.filter((p) => p.result.status === "ok");
   const readFailed = report.pillars.filter(
     (p) => gateReason(p) === "read_failed",
   );
+  const crisis = report.pillars.filter(
+    (p) => gateReason(p) === "crisis_signposting",
+  );
   // A failed read is not absence, so it never joins the "not scored yet" list;
-  // it gets its own error row above. Safety copy leads the list — signposting
-  // is content, never buried meta.
-  const notScored = report.pillars
-    .filter((p) => {
-      const reason = gateReason(p);
-      return reason !== null && reason !== "read_failed";
-    })
-    .sort(
-      (a, b) =>
-        Number(gateReason(b) === "crisis_signposting") -
-        Number(gateReason(a) === "crisis_signposting"),
+  // it gets its own line above. Safety copy is content, so it is named at rest
+  // rather than counted — which is also why it is not in this list twice.
+  const notScored = report.pillars.filter((p) => {
+    const reason = gateReason(p);
+    return (
+      reason !== null &&
+      reason !== "read_failed" &&
+      reason !== "crisis_signposting"
     );
+  });
 
   // Only forwarded when a real disagreement is present on BOTH sides; the
   // server resolver already enforces that, but the guard keeps the card from
@@ -245,122 +297,252 @@ export function HealthScoreCard({
       })
     : null;
 
+  const compositeScore =
+    composite.status === "ok" ? clampScore(composite.value.score) : null;
+  const compositeBand = composite.status === "ok" ? composite.value.band : null;
+
   return (
-    <Card
+    <div
       data-slot="health-score-card"
       data-status={composite.status}
-      className={cn("animate-insight-in", className)}
+      data-band={compositeBand ?? "none"}
+      className={cn(
+        "animate-insight-in",
+        PANEL_CHROME_CLASS,
+        compositeBand ? BAND_BORDER_CLASS[compositeBand] : null,
+        PANEL_COLUMN_CLASS,
+        // `h-full` lets the hero band's `items-stretch` equalise the column
+        // against the greeting; `mt-auto` on the foot collects the slack.
+        "flex h-full flex-col gap-3.5",
+        className,
+      )}
     >
-      <CardHeader>
-        <TileHeader title={t("insights.healthScore.label")} titleAs="h2" />
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* The score face. The ring keeps its own identity block; everything
-            that qualifies the number sits beside it, so a person reads the
-            score and the reason for it in one pass. */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-          <div className="flex justify-center sm:justify-start">
-            <ScoreRing
-              score={composite.status === "ok" ? composite.value.score : null}
-              band={
-                composite.status === "ok" ? composite.value.band : undefined
-              }
-              size="md"
-              label={t("insights.derived.anatomy.outOf")}
-            />
-          </div>
-          <div className="min-w-0 flex-1 space-y-1">
-            {composite.status === "ok" ? (
-              <p
-                data-slot="health-score-band"
-                className="text-foreground text-sm"
-              >
-                {t(`insights.healthScore.band.${composite.value.band}`)}
-              </p>
-            ) : null}
-            {report.delta != null ? (
-              <p
-                data-slot="health-score-delta"
-                className="text-muted-foreground text-xs tabular-nums"
-              >
-                {t("insights.healthScore.delta", {
-                  delta: report.delta > 0 ? `+${report.delta}` : report.delta,
-                })}
-              </p>
-            ) : report.deltaReason ? (
-              <p
-                data-slot="health-score-delta-reason"
-                className="text-muted-foreground text-xs"
-              >
-                {t(`insights.healthScore.deltaReason.${report.deltaReason}`)}
-              </p>
-            ) : null}
-            {report.restMode?.active ? (
-              <p
-                data-slot="health-score-rest-mode"
-                className="text-muted-foreground text-xs"
-              >
-                {t("insights.healthScore.restMode", {
-                  since:
-                    report.restMode.since ?? t("insights.healthScore.none"),
-                })}
-              </p>
-            ) : null}
-            {tensionLine ? (
-              <p
-                data-slot="health-score-tension"
-                className="text-muted-foreground text-xs"
-              >
-                {tensionLine}
-              </p>
-            ) : null}
-            {returnToBandLine ? (
-              <p
-                data-slot="health-score-return-to-band"
-                className="text-muted-foreground text-xs"
-              >
-                {returnToBandLine}
-              </p>
-            ) : null}
-          </div>
-        </div>
+      {/* 1 — the label, and the weekly gain when there is one. */}
+      <div className="flex items-center justify-between gap-2">
+        <p
+          data-slot="health-score-card-label"
+          className="text-muted-foreground text-xs font-semibold tracking-[0.18em] uppercase"
+        >
+          {t("insights.healthScore.label")}
+        </p>
+        {report.delta != null && report.delta > 0 ? (
+          <span
+            data-slot="health-score-card-delta-chip"
+            className="bg-success/15 text-success shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums"
+          >
+            +{report.delta}
+          </span>
+        ) : null}
+      </div>
 
-        {composite.status !== "ok" ? (
+      {/* 2 — the number. The reason the panel exists. */}
+      <div className="flex items-baseline gap-1">
+        <span
+          data-slot="health-score-card-number"
+          className={cn(
+            "text-5xl leading-none font-semibold tabular-nums sm:text-6xl",
+            compositeBand
+              ? BAND_NUMBER_CLASS[compositeBand]
+              : "text-muted-foreground",
+          )}
+        >
+          {compositeScore == null ? "—" : Math.round(compositeScore)}
+        </span>
+        {compositeScore == null ? null : (
+          <span
+            aria-hidden="true"
+            className="text-muted-foreground text-sm tabular-nums"
+          >
+            / 100
+          </span>
+        )}
+      </div>
+
+      {/* 3 — the composite bar. */}
+      {compositeScore != null && compositeBand ? (
+        <div
+          data-slot="health-score-card-progress"
+          role="progressbar"
+          aria-label={t("insights.healthScore.label")}
+          aria-valuenow={Math.round(compositeScore)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          className="bg-muted/50 h-2 w-full overflow-hidden rounded-full"
+        >
+          <div
+            className={cn("h-full", BAND_PROGRESS_CLASS[compositeBand])}
+            style={{ width: `${compositeScore}%` }}
+          />
+        </div>
+      ) : null}
+
+      {/* 4 — the lines that qualify the number, one each, only when true. */}
+      <div className="space-y-1">
+        {compositeBand ? (
+          <p data-slot="health-score-band" className="text-foreground text-xs">
+            {t(`insights.healthScore.band.${compositeBand}`)}
+          </p>
+        ) : (
           <LearningGate
-            variant="bordered"
+            compact
             bodySlot="health-score-insufficient"
             message={t("insights.healthScore.insufficient", {
               count: composite.coverage.presentInputs,
             })}
           />
+        )}
+        {report.delta != null ? (
+          <p
+            data-slot="health-score-delta"
+            className="text-muted-foreground text-xs tabular-nums"
+          >
+            {t("insights.healthScore.delta", {
+              delta: report.delta > 0 ? `+${report.delta}` : report.delta,
+            })}
+          </p>
+        ) : report.deltaReason ? (
+          <p
+            data-slot="health-score-delta-reason"
+            className="text-muted-foreground text-xs"
+          >
+            {t(`insights.healthScore.deltaReason.${report.deltaReason}`)}
+          </p>
         ) : null}
+        {report.restMode?.active ? (
+          <p
+            data-slot="health-score-rest-mode"
+            className="text-muted-foreground text-xs"
+          >
+            {t("insights.healthScore.restMode", {
+              since: report.restMode.since ?? t("insights.healthScore.none"),
+            })}
+          </p>
+        ) : null}
+        {tensionLine ? (
+          <p
+            data-slot="health-score-tension"
+            className="text-muted-foreground text-xs"
+          >
+            {tensionLine}
+          </p>
+        ) : null}
+        {returnToBandLine ? (
+          <p
+            data-slot="health-score-return-to-band"
+            className="text-muted-foreground text-xs"
+          >
+            {returnToBandLine}
+          </p>
+        ) : null}
+      </div>
 
+      {/* 5 — the contributing factors, always visible, directly under the
+          number. Server registry order; no re-ranking. */}
+      {scored.length > 0 ? (
+        <ul
+          data-slot="health-score-pillars"
+          className="border-border/60 space-y-2 border-t pt-3"
+        >
+          {scored.map((pillar) => (
+            <PillarRow key={pillar.id} pillar={pillar} detail={detail} />
+          ))}
+        </ul>
+      ) : null}
+
+      {/* 6 — what is not contributing. One weight class, two faces: the
+          failure carries the glyph and the only retry on the surface, the
+          absence is muted and actionless. */}
+      {readFailed.length > 0 || crisis.length > 0 || notScored.length > 0 ? (
+        <div className="space-y-1.5">
+          {readFailed.length > 0 ? (
+            <div
+              data-slot="health-score-pillar-error"
+              data-pillars={readFailed.map((p) => p.id).join(",")}
+              role="alert"
+              className="text-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
+            >
+              <AlertTriangle
+                aria-hidden="true"
+                className="text-muted-foreground size-3.5 shrink-0"
+              />
+              <span className="min-w-0">
+                {labelsOf(readFailed)}
+                {": "}
+                {reasonText("read_failed")}
+              </span>
+              {onRetry ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={onRetry}
+                  data-slot="health-score-pillar-retry"
+                  className="h-7 gap-1.5 px-2 text-xs"
+                >
+                  <RotateCw className="size-3.5" aria-hidden="true" />
+                  <span>{t("common.retry")}</span>
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {crisis.length > 0 ? (
+            <p
+              data-slot="health-score-crisis"
+              data-pillars={crisis.map((p) => p.id).join(",")}
+              className="text-foreground text-xs"
+            >
+              {labelsOf(crisis)}
+              {": "}
+              {reasonText("crisis_signposting")}
+            </p>
+          ) : null}
+
+          {notScored.length > 0 ? (
+            <p
+              data-slot="health-score-not-scored-count"
+              data-count={notScored.length}
+              className="text-muted-foreground text-xs"
+            >
+              {t("insights.healthScore.notScored", {
+                count: notScored.length,
+              })}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* 7 — the foot. `mt-auto` collects the slack here rather than under the
+          number, so a short report and a long one both end on the same line. */}
+      <div className="mt-auto space-y-3 pt-1">
         <CoverageMeter
           coverage={composite.coverage}
           confidence={
             composite.status === "ok" ? composite.confidence : undefined
           }
-          size="md"
+          size="sm"
         />
 
         {/* Progressive disclosure. No Collapsible primitive exists in the UI
             kit, so this is the same accessible button + region shape the
             glucose panel ships: `aria-expanded` on the trigger,
             `aria-controls` + `hidden` on the region. */}
-        <div className="border-border border-t pt-3">
+        <div className="border-border/60 border-t pt-1">
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
             aria-controls={regionId}
             data-slot="health-score-anatomy-toggle"
-            className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex min-h-11 w-full items-center justify-between gap-2 rounded-sm text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
+            className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex min-h-11 w-full items-center justify-between gap-2 rounded-sm text-left text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
           >
-            <span>{t("insights.healthScore.anatomyToggle")}</span>
+            <span className="min-w-0">
+              {t("insights.healthScore.anatomyToggle")}
+            </span>
             <ChevronDown
               aria-hidden="true"
               className={cn(
-                "h-4 w-4 transition-transform",
+                "size-4 shrink-0 transition-transform",
                 open && "rotate-180",
               )}
             />
@@ -370,71 +552,28 @@ export function HealthScoreCard({
             id={regionId}
             hidden={!open}
             data-slot="health-score-anatomy-region"
-            className="space-y-4 pt-3"
+            className="space-y-3 pt-1 pb-1"
           >
-            {scored.length > 0 ? (
-              <ul
-                data-slot="health-score-pillars"
-                className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
-              >
-                {scored.map((pillar) => (
-                  <PillarCell key={pillar.id} pillar={pillar} detail={detail} />
-                ))}
-              </ul>
-            ) : null}
-
-            {readFailed.map((pillar) => (
-              <QueryErrorRow
-                key={pillar.id}
-                slot="health-score-pillar-error"
-                retrySlot="health-score-pillar-retry"
-                message={
-                  <>
-                    {t(PILLAR_LABEL_KEY[pillar.id])}
-                    {": "}
-                    {reasonText("read_failed")}
-                  </>
-                }
-                onRetry={onRetry}
-              />
-            ))}
-
             {notScored.length > 0 ? (
-              <div data-slot="health-score-not-scored" className="space-y-2">
-                <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-                  {t("insights.healthScore.notScored", {
-                    count: notScored.length,
-                  })}
-                </p>
-                <ul className="space-y-1">
-                  {notScored.map((pillar) => {
-                    const reason = gateReason(pillar) ?? "";
-                    const crisis = reason === "crisis_signposting";
-                    return (
-                      <li
-                        key={pillar.id}
-                        data-pillar={pillar.id}
-                        data-reason={reason}
-                        className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-2"
-                      >
-                        <span className="text-foreground text-xs font-medium">
-                          {t(PILLAR_LABEL_KEY[pillar.id])}
-                        </span>
-                        <span
-                          className={cn(
-                            "text-xs",
-                            crisis
-                              ? "text-foreground"
-                              : "text-muted-foreground",
-                          )}
-                        >
-                          {reasonText(reason)}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
+              <ul data-slot="health-score-not-scored" className="space-y-1">
+                {notScored.map((pillar) => {
+                  const reason = gateReason(pillar) ?? "";
+                  return (
+                    <li
+                      key={pillar.id}
+                      data-pillar={pillar.id}
+                      data-reason={reason}
+                      className="text-muted-foreground text-xs"
+                    >
+                      <span className="text-foreground font-medium">
+                        {t(PILLAR_LABEL_KEY[pillar.id])}
+                      </span>
+                      {": "}
+                      {reasonText(reason)}
+                    </li>
+                  );
+                })}
+              </ul>
             ) : null}
 
             <WeightGoalRow report={report} />
@@ -472,18 +611,23 @@ export function HealthScoreCard({
             </div>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
 /**
- * One scored pillar: name + score, a band-tinted impact bar, and the observed
- * line with its detail popover and coverage meter. The reference band, the
- * personal target and the source live in the popover — the same strings as
- * before, one tap away instead of four permanent lines per pillar.
+ * One scored pillar, one line: a truncating name, a thin fill bar, the score,
+ * and the (i) that opens everything else. The bar takes the pillar's OWN band
+ * colour — a pillar at 92 reads green even when the composite is red, which
+ * is the point of showing the contributors at all.
+ *
+ * The observed value, the reference band, the personal target, the source and
+ * the per-pillar confidence all live in the popover. That is one tap more
+ * than the pinned card charged for the observed line, and it is what buys the
+ * column back.
  */
-function PillarCell({
+function PillarRow({
   pillar,
   detail,
 }: {
@@ -494,25 +638,28 @@ function PillarCell({
   if (pillar.result.status !== "ok") return null;
   const score = clampScore(pillar.result.value.score);
   const band = bandForScore(score);
+  const observed = pillarObservedText(pillar, detail);
   const lines = pillarDetailLines(pillar, detail);
 
   return (
     <li
       data-pillar={pillar.id}
       data-status="ok"
-      className="border-border/70 space-y-2 rounded-lg border p-3"
+      className="grid grid-cols-[minmax(0,7rem)_1fr_2rem_auto] items-center gap-2 text-xs"
     >
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-foreground min-w-0 text-sm font-medium">
-          {t(PILLAR_LABEL_KEY[pillar.id])}
-        </span>
-        <span className="text-foreground text-lg font-semibold tabular-nums">
-          {Math.round(score)}
-        </span>
-      </div>
+      {/* The label truncates; the row never grows. `minmax(0,…)` plus
+          `min-w-0 truncate` is what makes that structural rather than a
+          promise — drop either and the track grows to the longest word and
+          pushes the row. Widening the column does not rescue the long names:
+          the longest label in five of the six locales overruns any column
+          this panel can afford, so the extra width would come off the fill
+          bar and buy a few more characters of one language. */}
+      <span className="text-muted-foreground min-w-0 truncate">
+        {t(PILLAR_LABEL_KEY[pillar.id])}
+      </span>
       <div
-        className="bg-muted/40 h-1.5 w-full overflow-hidden rounded-full"
-        role="presentation"
+        className="bg-muted/50 h-1.5 min-w-0 overflow-hidden rounded-full"
+        aria-hidden="true"
       >
         <div
           data-slot="health-score-pillar-bar"
@@ -520,36 +667,41 @@ function PillarCell({
           style={{ width: `${score}%` }}
         />
       </div>
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-muted-foreground min-w-0 text-xs">
-          {t("insights.healthScore.observed", {
-            value: pillarObservedText(pillar, detail),
-          })}
-        </span>
-        <span className="flex shrink-0 items-center gap-2">
-          <InfoPopover
-            content={lines.map((line) => (
+      <span className="text-foreground text-right tabular-nums">
+        {Math.round(score)}
+      </span>
+      <InfoPopover
+        content={
+          <>
+            {observed ? (
+              <span className="block">
+                {t("insights.healthScore.observed", { value: observed })}
+              </span>
+            ) : null}
+            {lines.map((line) => (
               <span key={line} className="block">
                 {line}
               </span>
             ))}
-            bodyDataSlot="health-score-pillar-detail"
-          />
-          <CoverageMeter
-            coverage={pillar.result.coverage}
-            confidence={pillar.result.confidence}
-            size="sm"
-          />
-        </span>
-      </div>
+            <span className="mt-1.5 block">
+              <CoverageMeter
+                coverage={pillar.result.coverage}
+                confidence={pillar.result.confidence}
+                size="sm"
+              />
+            </span>
+          </>
+        }
+        bodyDataSlot="health-score-pillar-detail"
+      />
     </li>
   );
 }
 
 /**
  * The personal weight goal: an inner tile inside the disclosure, deliberately
- * NOT a pillar cell, because it is context the user set for themselves and it
- * never moves the score.
+ * NOT a contributor row, because it is context the user set for themselves and
+ * it never moves the score. That is also why it left the at-rest column.
  */
 function WeightGoalRow({ report }: { report: HealthScoreReport }) {
   const { t } = useTranslations();
@@ -610,38 +762,49 @@ function WeightGoalRow({ report }: { report: HealthScoreReport }) {
 }
 
 /**
- * The pinned slot's reserve while the analytics payload is in flight. Mirrors
- * the COLLAPSED footprint — header, ring, face lines, coverage meter, trigger
- * row — so first paint lands at the card's real height and the resolved card
- * is a swap rather than a push. Decorative: the card announces nothing while
- * it loads.
+ * The hero column's reserve while the analytics payload is in flight. Wears
+ * the panel's own column classes and chrome and holds a measured minimum
+ * height, so the greeting beside it does not reflow when the score lands —
+ * the reason this reserve was added in the first place.
  */
 export function HealthScoreCardSkeleton({ className }: { className?: string }) {
   return (
-    <Card
+    <div
       data-slot="health-score-card-skeleton"
       aria-hidden="true"
-      className={className}
+      className={cn(
+        PANEL_CHROME_CLASS,
+        "border-border/60",
+        PANEL_COLUMN_CLASS,
+        "flex h-full flex-col gap-3.5",
+        PANEL_RESERVE_CLASS,
+        className,
+      )}
     >
-      <CardHeader>
-        <Skeleton className="h-5 w-32" />
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-          {/* The `md` ring paints at a fixed 168 px box; the reserve matches it
-              exactly so the swap moves nothing. */}
-          <Skeleton className="size-[168px] shrink-0 self-center rounded-full sm:self-auto" />
-          <div className="min-w-0 flex-1 space-y-2">
-            <Skeleton className="h-4 w-48" />
-            <Skeleton className="h-3 w-40" />
-            <Skeleton className="h-3 w-32" />
-          </div>
-        </div>
-        <Skeleton className="h-3 w-28" />
-        <div className="border-border border-t pt-3">
+      {/* Block for block, the panel above: label, number, bar, two qualifier
+          lines, three contributor rows, one not-contributing line, and the
+          foot with its meter and toggle. Three rows rather than five is what
+          keeps these blocks under the minimum above, so the minimum is the
+          thing that decides the height. */}
+      <Skeleton className="h-4 w-24" />
+      <Skeleton className="h-15 w-28" />
+      <Skeleton className="h-2 w-full rounded-full" />
+      <div className="space-y-1">
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-4 w-32" />
+      </div>
+      <div className="border-border/60 space-y-2 border-t pt-3">
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-full" />
+      </div>
+      <Skeleton className="h-4 w-36" />
+      <div className="mt-auto space-y-3 pt-1">
+        <Skeleton className="h-11 w-28 rounded-sm" />
+        <div className="border-border/60 border-t pt-1">
           <Skeleton className="h-11 w-full rounded-sm" />
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

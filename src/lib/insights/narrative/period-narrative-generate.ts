@@ -329,7 +329,7 @@ export async function generatePeriodNarrative(
     }
   }
 
-  const context = await buildContext(userId, { period, now });
+  const context = await buildContext(userId, { period, now, locale });
   if (context.status === "insufficient") {
     annotate({
       action: { name: "insights.narrative.insufficient" },

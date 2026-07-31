@@ -56,7 +56,15 @@ function emptyAggregate() {
 
 const readCoachCorrelations = vi.fn();
 vi.mock("@/lib/ai/coach/tools/correlations-read", () => ({
-  readCoachCorrelations: (userId: string) => readCoachCorrelations(userId),
+  readCoachCorrelations: (userId: string, locale: string) =>
+    readCoachCorrelations(userId, locale),
+}));
+
+// The executor asks for the account's language before it asks for a narrated
+// correlation, so the sentences it hands the model are not silently English.
+const resolveLocaleForUser = vi.fn(async (_userId: string) => "de");
+vi.mock("@/lib/i18n/user-locale", () => ({
+  resolveLocaleForUser: (userId: string) => resolveLocaleForUser(userId),
 }));
 
 // v1.21.0 (NEW-B B-2) — the illness-recovery tool augments its snapshot blocks
@@ -357,6 +365,9 @@ describe("executeCoachTool", () => {
       drivers: [{ behaviour: "time in daylight", n: 42 }],
       pairsTested: 18,
     });
+    // The account's language reached the reader — the notes are finished
+    // sentences, and an MCP client shows some of them as they stand.
+    expect(readCoachCorrelations).toHaveBeenCalledWith("u1", "de");
   });
 
   it("returns a clean { present: false } for get_correlations on no pattern", async () => {

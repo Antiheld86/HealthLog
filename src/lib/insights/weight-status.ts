@@ -586,7 +586,11 @@ export async function prepareWeightStatusForUser(
   // v1.12.7 — diversity / anti-repetition block (see blood-pressure-status).
   const varietyLead = pickVarietyLead(userId, "weight", todayKey);
   const steadyRun = computeSteadyRun(weightGraded.weekly, weightGraded.monthly);
-  const relations = await getRelevantCorrelationsForMetric(userId, "WEIGHT");
+  const relations = await getRelevantCorrelationsForMetric(
+    userId,
+    "WEIGHT",
+    locale,
+  );
   const assessmentContextBlock = buildAssessmentContextBlock(
     {
       varietyLead,
