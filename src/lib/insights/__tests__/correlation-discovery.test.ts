@@ -56,7 +56,9 @@ describe("discoverCorrelations", () => {
         points: series([400, 410, 420]),
       },
     ];
-    const result = discoverCorrelations([...behaviours, ...outcomes]);
+    const result = discoverCorrelations([...behaviours, ...outcomes], {
+      locale: "en",
+    });
     expect(result.discovered).toHaveLength(0);
     expect(result.pairsTested).toBe(0);
   });
@@ -79,7 +81,7 @@ describe("discoverCorrelations", () => {
         },
         { key: "SLEEP_DURATION", role: "outcome", points: series(outcomeVals) },
       ],
-      { fdrQ: 0.1 },
+      { fdrQ: 0.1, locale: "en" },
     );
     expect(result.pairsTested).toBe(1);
     expect(result.discovered).toHaveLength(1);
@@ -100,10 +102,13 @@ describe("discoverCorrelations", () => {
       { length: 30 },
       (_, i) => Math.cos(i * 1.7) * 10 + 50,
     );
-    const result = discoverCorrelations([
-      { key: "BLOOD_GLUCOSE", role: "behaviour", points: series(noiseA) },
-      { key: "WEIGHT", role: "outcome", points: series(noiseB) },
-    ]);
+    const result = discoverCorrelations(
+      [
+        { key: "BLOOD_GLUCOSE", role: "behaviour", points: series(noiseA) },
+        { key: "WEIGHT", role: "outcome", points: series(noiseB) },
+      ],
+      { locale: "en" },
+    );
     // It is tested (n ≥ 20) but should not survive p < 0.05 + FDR.
     expect(result.pairsTested).toBe(1);
     expect(result.discovered).toHaveLength(0);
@@ -122,7 +127,7 @@ describe("discoverCorrelations", () => {
         { key: "FACTOR:work", role: "behaviour", points: series(factorVals) },
         { key: "SLEEP_DURATION", role: "outcome", points: series(sleepVals) },
       ],
-      { fdrQ: 0.1 },
+      { fdrQ: 0.1, locale: "en" },
     );
     expect(result.discovered).toHaveLength(1);
     const pair = result.discovered[0];
@@ -153,10 +158,17 @@ describe("MOOD as outcome (F3)", () => {
       const driver = i === 0 ? 60 : 60 + ((i - 1) % 10) * 5;
       return 1 + (driver - 60) / 45 + (i % 2 === 0 ? 0.02 : -0.02);
     });
-    const result = discoverCorrelations([
-      { key: "TIME_IN_DAYLIGHT", role: "behaviour", points: series(daylight) },
-      { key: "MOOD", role: "outcome", points: series(mood) },
-    ]);
+    const result = discoverCorrelations(
+      [
+        {
+          key: "TIME_IN_DAYLIGHT",
+          role: "behaviour",
+          points: series(daylight),
+        },
+        { key: "MOOD", role: "outcome", points: series(mood) },
+      ],
+      { locale: "en" },
+    );
     const pair = result.discovered.find(
       (p) => p.behaviour === "TIME_IN_DAYLIGHT" && p.outcome === "MOOD",
     );
@@ -167,10 +179,13 @@ describe("MOOD as outcome (F3)", () => {
   it("never tests the MOOD → MOOD self-pair", () => {
     const n = 30;
     const mood = Array.from({ length: n }, (_, i) => 3 + (i % 3));
-    const result = discoverCorrelations([
-      { key: "MOOD", role: "behaviour", points: series(mood) },
-      { key: "MOOD", role: "outcome", points: series(mood) },
-    ]);
+    const result = discoverCorrelations(
+      [
+        { key: "MOOD", role: "behaviour", points: series(mood) },
+        { key: "MOOD", role: "outcome", points: series(mood) },
+      ],
+      { locale: "en" },
+    );
     expect(
       result.discovered.find(
         (p) => p.behaviour === "MOOD" && p.outcome === "MOOD",
@@ -222,10 +237,13 @@ describe("D2-1 — same-family lagged pairs are excluded from discovery", () => 
     const n = 40;
     const factor = Array.from({ length: n }, (_, i) => 1 + (i % 5));
     const mood = [3, ...factor.slice(0, n - 1).map((v) => v)];
-    const result = discoverCorrelations([
-      { key: "FACTOR:work", role: "behaviour", points: longSeries(factor) },
-      { key: "MOOD", role: "outcome", points: longSeries(mood) },
-    ]);
+    const result = discoverCorrelations(
+      [
+        { key: "FACTOR:work", role: "behaviour", points: longSeries(factor) },
+        { key: "MOOD", role: "outcome", points: longSeries(mood) },
+      ],
+      { locale: "en" },
+    );
     expect(result.pairsTested).toBe(0);
     expect(result.discovered).toHaveLength(0);
   });
@@ -283,14 +301,17 @@ describe("D2-2 — effect-size floor on discovered drivers", () => {
         .slice(0, n - 1)
         .map((v, i) => v * 0.12 + Math.cos(i * 1.3) * 40 + 100),
     ];
-    const result = discoverCorrelations([
-      {
-        key: "TIME_IN_DAYLIGHT",
-        role: "behaviour",
-        points: longSeries(behaviour),
-      },
-      { key: "SLEEP_DURATION", role: "outcome", points: longSeries(outcome) },
-    ]);
+    const result = discoverCorrelations(
+      [
+        {
+          key: "TIME_IN_DAYLIGHT",
+          role: "behaviour",
+          points: longSeries(behaviour),
+        },
+        { key: "SLEEP_DURATION", role: "outcome", points: longSeries(outcome) },
+      ],
+      { locale: "en" },
+    );
     // Either it failed significance, or it was floored out — either way no
     // confident driver row reaches the Coach.
     const surfaced = result.discovered.find(
@@ -309,14 +330,17 @@ describe("D2-2 — effect-size floor on discovered drivers", () => {
     const n = 90;
     const behaviour = Array.from({ length: n }, (_, i) => i + (i % 4));
     const outcome = [0, ...behaviour.slice(0, n - 1).map((v) => v * 2 + 5)];
-    const result = discoverCorrelations([
-      {
-        key: "TIME_IN_DAYLIGHT",
-        role: "behaviour",
-        points: longSeries(behaviour),
-      },
-      { key: "SLEEP_DURATION", role: "outcome", points: longSeries(outcome) },
-    ]);
+    const result = discoverCorrelations(
+      [
+        {
+          key: "TIME_IN_DAYLIGHT",
+          role: "behaviour",
+          points: longSeries(behaviour),
+        },
+        { key: "SLEEP_DURATION", role: "outcome", points: longSeries(outcome) },
+      ],
+      { locale: "en" },
+    );
     const pair = result.discovered.find(
       (p) =>
         p.behaviour === "TIME_IN_DAYLIGHT" && p.outcome === "SLEEP_DURATION",
@@ -343,14 +367,17 @@ describe("D2-2 — effect-size floor on discovered drivers", () => {
         .slice(0, n - 1)
         .map((v, i) => v * 0.35 + Math.cos(i * 2.1) * 9 + 100),
     ];
-    const result = discoverCorrelations([
-      {
-        key: "TIME_IN_DAYLIGHT",
-        role: "behaviour",
-        points: longSeries(behaviour),
-      },
-      { key: "SLEEP_DURATION", role: "outcome", points: longSeries(outcome) },
-    ]);
+    const result = discoverCorrelations(
+      [
+        {
+          key: "TIME_IN_DAYLIGHT",
+          role: "behaviour",
+          points: longSeries(behaviour),
+        },
+        { key: "SLEEP_DURATION", role: "outcome", points: longSeries(outcome) },
+      ],
+      { locale: "en" },
+    );
     const pair = result.discovered.find(
       (p) =>
         p.behaviour === "TIME_IN_DAYLIGHT" && p.outcome === "SLEEP_DURATION",
@@ -462,18 +489,21 @@ describe("compliance + symptom channels (FDREXTEND)", () => {
         // pair is not a perfect line (a real-world-shaped strong link).
         .map((a, i) => ((100 - a) / 20) * (i % 2 === 0 ? 1.0 : 0.98)),
     ];
-    const result = discoverCorrelations([
-      {
-        key: MEDICATION_COMPLIANCE_CHANNEL_KEY,
-        role: "behaviour",
-        points: longSeries(adherence),
-      },
-      {
-        key: SYMPTOM_SEVERITY_CHANNEL_KEY,
-        role: "outcome",
-        points: longSeries(symptom),
-      },
-    ]);
+    const result = discoverCorrelations(
+      [
+        {
+          key: MEDICATION_COMPLIANCE_CHANNEL_KEY,
+          role: "behaviour",
+          points: longSeries(adherence),
+        },
+        {
+          key: SYMPTOM_SEVERITY_CHANNEL_KEY,
+          role: "outcome",
+          points: longSeries(symptom),
+        },
+      ],
+      { locale: "en" },
+    );
     const pair = result.discovered.find(
       (p) =>
         p.behaviour === MEDICATION_COMPLIANCE_CHANNEL_KEY &&
@@ -500,18 +530,21 @@ describe("compliance + symptom channels (FDREXTEND)", () => {
       0,
       ...adherence.slice(0, n - 1).map((a) => (100 - a) / 30),
     ];
-    const result = discoverCorrelations([
-      {
-        key: MEDICATION_COMPLIANCE_CHANNEL_KEY,
-        role: "behaviour",
-        points: longSeries(adherence),
-      },
-      {
-        key: SYMPTOM_SEVERITY_CHANNEL_KEY,
-        role: "outcome",
-        points: longSeries(symptom),
-      },
-    ]);
+    const result = discoverCorrelations(
+      [
+        {
+          key: MEDICATION_COMPLIANCE_CHANNEL_KEY,
+          role: "behaviour",
+          points: longSeries(adherence),
+        },
+        {
+          key: SYMPTOM_SEVERITY_CHANNEL_KEY,
+          role: "outcome",
+          points: longSeries(symptom),
+        },
+      ],
+      { locale: "en" },
+    );
     // Below the floor the pair is never even tested.
     expect(result.pairsTested).toBe(0);
     expect(result.discovered).toHaveLength(0);
@@ -520,18 +553,21 @@ describe("compliance + symptom channels (FDREXTEND)", () => {
   it("never tests the symptom → symptom self-lag", () => {
     const n = 40;
     const symptom = Array.from({ length: n }, (_, i) => (i % 4) / 2);
-    const result = discoverCorrelations([
-      {
-        key: SYMPTOM_SEVERITY_CHANNEL_KEY,
-        role: "behaviour",
-        points: longSeries(symptom),
-      },
-      {
-        key: SYMPTOM_SEVERITY_CHANNEL_KEY,
-        role: "outcome",
-        points: longSeries(symptom),
-      },
-    ]);
+    const result = discoverCorrelations(
+      [
+        {
+          key: SYMPTOM_SEVERITY_CHANNEL_KEY,
+          role: "behaviour",
+          points: longSeries(symptom),
+        },
+        {
+          key: SYMPTOM_SEVERITY_CHANNEL_KEY,
+          role: "outcome",
+          points: longSeries(symptom),
+        },
+      ],
+      { locale: "en" },
+    );
     expect(
       result.discovered.find(
         (p) =>
@@ -555,18 +591,21 @@ describe("compliance + symptom channels (FDREXTEND)", () => {
         .slice(0, n - 1)
         .map((a, i) => 55 + (100 - a) / 6 + (i % 2 === 0 ? 0.1 : -0.1)),
     ];
-    const result = discoverCorrelations([
-      {
-        key: MEDICATION_COMPLIANCE_CHANNEL_KEY,
-        role: "behaviour",
-        points: longSeries(adherence),
-      },
-      {
-        key: "RESTING_HEART_RATE",
-        role: "outcome",
-        points: longSeries(rhr),
-      },
-    ]);
+    const result = discoverCorrelations(
+      [
+        {
+          key: MEDICATION_COMPLIANCE_CHANNEL_KEY,
+          role: "behaviour",
+          points: longSeries(adherence),
+        },
+        {
+          key: "RESTING_HEART_RATE",
+          role: "outcome",
+          points: longSeries(rhr),
+        },
+      ],
+      { locale: "en" },
+    );
     const pair = result.discovered.find(
       (p) =>
         p.behaviour === MEDICATION_COMPLIANCE_CHANNEL_KEY &&
@@ -621,17 +660,24 @@ describe("v1.22 — new curated linkages", () => {
         .slice(0, n - 1)
         .map((a, i) => 160 - a / 4 + (i % 2 ? 0.2 : -0.2)),
     ];
-    const result = discoverCorrelations([
-      {
-        key: MEDICATION_COMPLIANCE_CHANNEL_KEY,
-        role: "behaviour",
-        points: longSeries(adherence),
-      },
-      // BP is both a behaviour and an outcome in the real matrix; the
-      // same-family guard must keep BP_SYS(behaviour)→BP_SYS(outcome) out.
-      { key: "BLOOD_PRESSURE_SYS", role: "behaviour", points: longSeries(sys) },
-      { key: "BLOOD_PRESSURE_SYS", role: "outcome", points: longSeries(sys) },
-    ]);
+    const result = discoverCorrelations(
+      [
+        {
+          key: MEDICATION_COMPLIANCE_CHANNEL_KEY,
+          role: "behaviour",
+          points: longSeries(adherence),
+        },
+        // BP is both a behaviour and an outcome in the real matrix; the
+        // same-family guard must keep BP_SYS(behaviour)→BP_SYS(outcome) out.
+        {
+          key: "BLOOD_PRESSURE_SYS",
+          role: "behaviour",
+          points: longSeries(sys),
+        },
+        { key: "BLOOD_PRESSURE_SYS", role: "outcome", points: longSeries(sys) },
+      ],
+      { locale: "en" },
+    );
     expect(
       result.discovered.find(
         (p) =>
@@ -681,12 +727,13 @@ describe("discoverEmergingCorrelations (early detection)", () => {
         points: longSeries(out),
       },
     ];
-    const retrospective = discoverCorrelations(series);
+    const retrospective = discoverCorrelations(series, { locale: "en" });
     expect(retrospective.discovered).toHaveLength(0); // n too low for the floor
 
     const cutoff = longSeries(beh)[0].day; // whole (short) window
     const { emerging } = discoverEmergingCorrelations(series, retrospective, {
       recentFromDayKey: cutoff,
+      locale: "en",
       minPairs: 10,
     });
     const pair = emerging.find(
@@ -711,7 +758,7 @@ describe("discoverEmergingCorrelations (early detection)", () => {
         points: longSeries(out),
       },
     ];
-    const retrospective = discoverCorrelations(series);
+    const retrospective = discoverCorrelations(series, { locale: "en" });
     expect(
       retrospective.discovered.some(
         (p) => p.behaviour === "MOOD" && p.outcome === "HEART_RATE_VARIABILITY",
@@ -724,6 +771,7 @@ describe("discoverEmergingCorrelations (early detection)", () => {
       .slice(0, 10);
     const { emerging } = discoverEmergingCorrelations(series, retrospective, {
       recentFromDayKey: cutoff,
+      locale: "en",
       minPairs: 10,
     });
     expect(
@@ -745,10 +793,11 @@ describe("discoverEmergingCorrelations (early detection)", () => {
         points: longSeries(out),
       },
     ];
-    const retrospective = discoverCorrelations(series);
+    const retrospective = discoverCorrelations(series, { locale: "en" });
     const cutoff = longSeries(beh)[Math.max(0, n - EARLY_WINDOW_DAYS)].day;
     const { emerging } = discoverEmergingCorrelations(series, retrospective, {
       recentFromDayKey: cutoff,
+      locale: "en",
       minPairs: 10,
     });
     expect(emerging).toHaveLength(0);
@@ -778,6 +827,7 @@ describe("discoverLabOutcomeCorrelations (labs ↔ outcomes)", () => {
       draws.push({ key: "LAB:HbA1c", day, value: v });
     }
     const result = discoverLabOutcomeCorrelations(draws, [weight], {
+      locale: "en",
       minDraws: 5,
       minWindowPoints: 5,
     });
@@ -799,6 +849,7 @@ describe("discoverLabOutcomeCorrelations (labs ↔ outcomes)", () => {
       value: 5 + i,
     }));
     const result = discoverLabOutcomeCorrelations(draws, [weight], {
+      locale: "en",
       minDraws: 5,
     });
     expect(result.discovered).toHaveLength(0);
@@ -820,6 +871,7 @@ describe("discoverLabOutcomeCorrelations (labs ↔ outcomes)", () => {
       value: 5 + i,
     }));
     const result = discoverLabOutcomeCorrelations(draws, [hrv], {
+      locale: "en",
       minDraws: 5,
     });
     // HRV is not a curated lab-outcome target → no pair tested.

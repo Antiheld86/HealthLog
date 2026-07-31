@@ -36,6 +36,7 @@ import { isModuleEnabled } from "@/lib/modules/gate";
 import { moduleForMeasurementType } from "@/lib/modules/measurement-scope";
 import { readCoachCorrelations } from "@/lib/ai/coach/tools/correlations-read";
 import { buildCoachReadStrip } from "@/lib/insights/derived/coach-read";
+import { resolveLocaleForUser } from "@/lib/i18n/user-locale";
 import {
   readBestGranularityRollups,
   aggregateWmyBuckets,
@@ -668,7 +669,12 @@ export async function getCorrelation(
 ): Promise<CorrelationResult> {
   const a = norm(args.metricA);
   const b = norm(args.metricB);
-  const result = await readCoachCorrelations(userId);
+  // The `note` on each driver is a finished sentence the MCP client shows as
+  // it stands, so it is written in the account's language, not English.
+  const result = await readCoachCorrelations(
+    userId,
+    await resolveLocaleForUser(userId),
+  );
 
   if (!result.present || !result.drivers || result.drivers.length === 0) {
     annotate({
@@ -973,7 +979,11 @@ export async function getMetricBaseline(
   }
   const metric = resolved.metric;
 
-  const strip = await buildCoachReadStrip(userId, metric.measurementType);
+  const strip = await buildCoachReadStrip(
+    userId,
+    metric.measurementType,
+    await resolveLocaleForUser(userId),
+  );
 
   if (!strip.baseline) {
     annotate({

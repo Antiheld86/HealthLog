@@ -20,6 +20,7 @@ import { annotate } from "@/lib/logging/context";
 import { apiSuccess, apiError } from "@/lib/api-response";
 import { requireCycleEnabled } from "@/lib/cycle/gate";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { resolveServerLocale } from "@/lib/i18n/server-locale";
 import { predictCycle, type NightlyTempInput } from "@/lib/cycle";
 import { LUTEAL_DEFAULT } from "@/lib/cycle/types";
 import {
@@ -208,10 +209,16 @@ export const GET = apiHandler(async () => {
     userPriorityJson,
   });
   const headline = selectHeadlinePhaseRow(rows);
+  // The lagged rows are served with their narrated `interpretation` intact, so
+  // the reader's language is resolved here the same way the correlations route
+  // resolves it. This surface had the same silent-English gap the metric-page
+  // strip had.
+  const locale = await resolveServerLocale({ userLocale: user.locale ?? null });
   const lagged = discoverPhaseCorrelations({
     phaseByDay,
     measurements,
     userPriorityJson,
+    locale,
   });
 
   // Cycle-NATIVE insight: where each logged symptom clusters across the phases.

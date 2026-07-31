@@ -47,7 +47,7 @@ describe("buildCorrelationsSnapshotBlock (D5-5)", () => {
       pairsTested: 16,
       windowDays: 180,
     });
-    const block = await buildCorrelationsSnapshotBlock("user-1");
+    const block = await buildCorrelationsSnapshotBlock("user-1", "en");
     expect(block).not.toBeNull();
     expect(block!.drivers).toHaveLength(2);
     expect(block!.drivers[0].behaviour).toBe("time in daylight");
@@ -65,7 +65,7 @@ describe("buildCorrelationsSnapshotBlock (D5-5)", () => {
       pairsTested: 30,
       windowDays: 180,
     });
-    const block = await buildCorrelationsSnapshotBlock("user-1");
+    const block = await buildCorrelationsSnapshotBlock("user-1", "en");
     expect(block!.drivers).toHaveLength(SNAPSHOT_DRIVER_CAP);
     // Order preserved from the already-ranked tool output (highest effect first).
     expect(block!.drivers[0].behaviour).toBe("behaviour 0");
@@ -76,7 +76,7 @@ describe("buildCorrelationsSnapshotBlock (D5-5)", () => {
       present: false,
       reason: "no_significant_pattern",
     });
-    expect(await buildCorrelationsSnapshotBlock("user-1")).toBeNull();
+    expect(await buildCorrelationsSnapshotBlock("user-1", "en")).toBeNull();
   });
 
   it("attaches nothing when present but the driver list is empty (coincident-only)", async () => {
@@ -89,6 +89,6 @@ describe("buildCorrelationsSnapshotBlock (D5-5)", () => {
       pairsTested: 12,
       windowDays: 180,
     });
-    expect(await buildCorrelationsSnapshotBlock("user-1")).toBeNull();
+    expect(await buildCorrelationsSnapshotBlock("user-1", "en")).toBeNull();
   });
 });

@@ -23,6 +23,7 @@ import { requireModuleEnabled } from "@/lib/modules/gate";
 import { requireAssistantSurface } from "@/lib/feature-flags";
 import { measurementTypeEnum } from "@/lib/validations/measurement";
 import { buildCoachReadStrip } from "@/lib/insights/derived/coach-read";
+import { resolveServerLocale } from "@/lib/i18n/server-locale";
 import type { MeasurementType } from "@/generated/prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -60,12 +61,20 @@ export const GET = apiHandler(async (request: NextRequest) => {
   }
   const metric = parsed.data.metric as MeasurementType;
 
-  const strip = await buildCoachReadStrip(user.id, metric);
+  // Line 2 of the strip is a finished sentence the clients print verbatim, so
+  // the reader's language is decided here — same resolution the correlations
+  // and analytics routes use (cookie, then the stored preference, then the
+  // Accept-Language header). Without it the strip answered a German page in
+  // English, one line under the other.
+  const locale = await resolveServerLocale({ userLocale: user.locale ?? null });
+
+  const strip = await buildCoachReadStrip(user.id, metric, locale);
 
   annotate({
     action: { name: "insights.coach-read" },
     meta: {
       metric,
+      locale,
       has_baseline: strip.baseline !== null,
       learning: strip.learning,
       has_driver: strip.driver !== null,

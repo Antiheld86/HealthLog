@@ -843,7 +843,7 @@ async function buildCoachSnapshotImpl(
   // instead of getting only the coincident flag. Gated on `derivedActive` (it
   // is the recovery / cross-metric layer) and fail-soft to null.
   const correlationsBlockPromise = derivedActive
-    ? buildCorrelationsSnapshotBlock(userId)
+    ? buildCorrelationsSnapshotBlock(userId, coachLocale)
     : null;
   const memoryBlockPromise = buildCoachMemoryBlock(
     userId,

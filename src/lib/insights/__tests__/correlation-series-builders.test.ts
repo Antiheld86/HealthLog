@@ -185,7 +185,9 @@ describe("integration — built series flow through the discovery gates", () => 
       role: "outcome",
     });
 
-    const result = discoverCorrelations([compliance, symptom]);
+    const result = discoverCorrelations([compliance, symptom], {
+      locale: "en",
+    });
     expect(result.pairsTested).toBe(0);
     expect(result.discovered).toHaveLength(0);
   });
@@ -222,7 +224,9 @@ describe("integration — built series flow through the discovery gates", () => 
       role: "outcome",
     });
 
-    const result = discoverCorrelations([compliance, symptom]);
+    const result = discoverCorrelations([compliance, symptom], {
+      locale: "en",
+    });
     const pair = result.discovered.find(
       (p) =>
         p.behaviour === MEDICATION_COMPLIANCE_CHANNEL_KEY &&
@@ -256,7 +260,7 @@ describe("integration — built series flow through the discovery gates", () => 
         value: 55 + (i > 0 && (i - 1) % 4 === 0 ? 8 : 0) + (i % 2) * 0.1,
       })),
     });
-    const result = discoverCorrelations(series);
+    const result = discoverCorrelations(series, { locale: "en" });
     for (const p of result.discovered) {
       expect(p.interpretation).toMatch(/not a cause|never a cause/);
     }

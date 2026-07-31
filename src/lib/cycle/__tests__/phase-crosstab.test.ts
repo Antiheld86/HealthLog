@@ -286,7 +286,11 @@ describe("discoverPhaseCorrelations", () => {
         ),
       );
     }
-    const result = discoverPhaseCorrelations({ phaseByDay, measurements });
+    const result = discoverPhaseCorrelations({
+      phaseByDay,
+      measurements,
+      locale: "en",
+    });
     const pair = result.discovered.find(
       (p) => p.behaviour === CYCLE_PHASE_CHANNEL_KEY,
     );
@@ -315,7 +319,11 @@ describe("discoverPhaseCorrelations", () => {
       phaseByDay.set(key, phases[i % phases.length]);
       measurements.push(m("RESTING_HEART_RATE", key, 60)); // constant → no variance
     }
-    const result = discoverPhaseCorrelations({ phaseByDay, measurements });
+    const result = discoverPhaseCorrelations({
+      phaseByDay,
+      measurements,
+      locale: "en",
+    });
     expect(result.discovered).toEqual([]);
   });
 });

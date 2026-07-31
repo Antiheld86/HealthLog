@@ -172,9 +172,16 @@ export const insightsKeys = {
    * MeasurementType. Pure compute over the baseline + correlation engines —
    * the `["insights"]` prefix keeps it in the standard invalidation fan-out
    * (a measurement write busts it so the placement refreshes).
+   *
+   * Keyed by locale as well: the strip's second line is prose the server
+   * writes in the reader's language, so a cache entry belongs to one language
+   * only. Without the segment, switching language re-used the German page's
+   * cached English sentence — the fix on the server would have been invisible
+   * to anyone who switched rather than reloaded. Same reason
+   * `insightsMetricStatus` carries it.
    */
-  insightsCoachRead: (metric: string) =>
-    ["insights", "coach-read", metric] as const,
+  insightsCoachRead: (metric: string, locale: string) =>
+    ["insights", "coach-read", metric, locale] as const,
 
   /**
    * v1.25 — baseline-drift read (`/api/insights/health-status`). Combines the

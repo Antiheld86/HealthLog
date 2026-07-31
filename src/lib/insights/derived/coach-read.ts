@@ -23,6 +23,7 @@
  */
 import type { MeasurementType } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
+import type { Locale } from "@/lib/i18n/config";
 import {
   loadBaselineProfile,
   computeVitalsBaseline,
@@ -71,6 +72,15 @@ async function readLatestValue(
 export async function buildCoachReadStrip(
   userId: string,
   type: MeasurementType,
+  /**
+   * The reader's locale. Line 2 arrives as a finished sentence and is printed
+   * verbatim by both clients, so it has to be written in the reader's language
+   * HERE — the strip component only translates the wrapper around it. Required
+   * on purpose: while this parameter did not exist, the route said nothing and
+   * the sentence came back in English, which is how a German weight page ended
+   * up with a German first line and an English second one.
+   */
+  locale: Locale,
 ): Promise<CoachReadStripData> {
   const profile = await loadBaselineProfile(prisma, userId);
 
@@ -78,7 +88,9 @@ export async function buildCoachReadStrip(
     computeVitalsBaseline(userId, profile, { type }),
     readLatestValue(userId, type),
     // Line 2 is best-effort: a correlation failure must never sink the band.
-    readCoachCorrelations(userId).catch(() => ({ present: false }) as const),
+    readCoachCorrelations(userId, locale).catch(
+      () => ({ present: false }) as const,
+    ),
   ]);
 
   let baseline: CoachReadBaseline | null = null;
