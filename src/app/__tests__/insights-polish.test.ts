@@ -268,42 +268,55 @@ describe("v1.16.8 — insights overview cold paint", () => {
     expect(src).not.toMatch(/useDashboardDerived\([^)]*data/);
   });
 
-  it("reserves the health-score card's footprint while the payload is pending", () => {
+  it("reserves the score column's footprint while the payload is pending", () => {
     const src = load(INSIGHTS_PATH);
-    // The pinned slot holds the collapsed card's footprint from first paint,
-    // so the resolved card is a swap rather than a push.
+    // The reserve holds the column from first paint, so the resolved panel is
+    // a swap rather than a push.
     expect(src).toMatch(
-      /analyticsQuery\.isPending && !analytics \? \(\s*<HealthScoreCardSkeleton/,
+      /scorePending=\{analyticsQuery\.isPending && !analytics\}/,
     );
   });
 
-  it("pins the health score under the hero, outside the section registry", () => {
+  it("mounts the health score once, in the hero, outside the section registry", () => {
     const src = load(INSIGHTS_PATH);
     // An id a saved layout has never seen merges in as default-INVISIBLE, so
     // registering the score would delete it for every customised page. It is
-    // also no longer inside the briefing branch, which used to take the whole
+    // also outside the briefing branch, which used to take the whole
     // breakdown down with the flag.
-    const hero = src.indexOf("<HeroStrip");
-    const score = src.indexOf("<HealthScoreCard");
-    const region = src.indexOf("orderedSectionIds.map");
+    // The JSX mount, not the `<HeroStrip>` mentioned in the file's header
+    // comment — matching the comment would have made the slice below read a
+    // block of prose and pass on nothing.
+    const hero = src.search(/\n\s*<HeroStrip\n/);
     expect(hero).toBeGreaterThan(-1);
-    expect(score).toBeGreaterThan(hero);
-    expect(score).toBeLessThan(region);
     expect(src).not.toMatch(/"health-score":/);
+
+    // Exactly one score surface on the page, and it is the hero's prop.
+    expect(src.match(/healthScore=\{/g) ?? []).toHaveLength(1);
+    expect(src).not.toContain("<HealthScoreCard");
+    expect(src).not.toContain("<HealthScoreCardSkeleton");
+
     const briefingBranch = src.slice(
       src.indexOf('"daily-briefing": flags.briefing'),
       src.indexOf("vitals: <VitalsDashboard"),
     );
-    expect(briefingBranch).not.toContain("HealthScoreCard");
+    expect(briefingBranch).not.toContain("healthScore");
+    // The band itself is not gated on the briefing flag either.
+    const heroCall = src.slice(hero, src.indexOf("/>", hero));
+    expect(heroCall).toContain("healthScore={analytics?.healthScore ?? null}");
+    expect(heroCall).not.toContain("flags.briefing");
   });
 
-  it("hero strip carries no score surface at all", () => {
+  it("hero strip owns the one score surface", () => {
     const heroSrc = readFileSync(
       join(ROOT, "src/components/insights/hero-strip.tsx"),
       "utf8",
     );
-    expect(heroSrc).not.toContain("HealthScoreCard");
-    expect(heroSrc).not.toContain("health-score-card-skeleton");
-    expect(heroSrc).not.toContain("healthScorePending");
+    expect(heroSrc).toContain("<HealthScoreCard");
+    expect(heroSrc).toContain("<HealthScoreCardSkeleton");
+    // The split appears only when the column has something in it.
+    expect(heroSrc).toContain("md:flex-row md:items-stretch");
+    expect(heroSrc).toMatch(
+      /\(healthScore \|\| scorePending\) &&\s*"md:flex-row/,
+    );
   });
 });

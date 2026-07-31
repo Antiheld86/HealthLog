@@ -26,10 +26,6 @@ import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { HeroStrip } from "@/components/insights/hero-strip";
-import {
-  HealthScoreCard,
-  HealthScoreCardSkeleton,
-} from "@/components/insights/health-score-card";
 import { useInsightsAdvisorQuery } from "@/components/insights/use-insights-advisor";
 import { useAnalyticsQuery } from "@/lib/queries/use-analytics-query";
 import { useDashboardSnapshot } from "@/lib/queries/use-dashboard-snapshot";
@@ -561,32 +557,26 @@ export default function InsightsPageClient() {
         // <relative>" line with a discreet connect-provider hint, matching
         // the briefing card footer. Only when a briefing is actually shown.
         noProviderStale={briefingPayload !== null && !advisor.hasProvider}
+        // The Health Score lives in the band's right column and NOWHERE else
+        // on this page. It is deliberately not a registry section: an id a
+        // saved layout has never seen merges in as default-INVISIBLE
+        // (`orderedVisibleSectionIds`), so registering it would silently
+        // delete the score for every account that has ever customised this
+        // page. It is also outside the daily-briefing branch, so an instance
+        // with the briefing switched off keeps the whole breakdown.
+        healthScore={analytics?.healthScore ?? null}
+        // `isPending` settles false on success AND error, so a no-score
+        // account drops the reserve exactly once.
+        scorePending={analyticsQuery.isPending && !analytics}
+        // v1.21.2 (A5 / A6) — server-resolved Tension Verdict + return-to-
+        // baseline off the dashboard snapshot. The panel localises the keys;
+        // null leaves it quiet.
+        tension={heroTension}
+        returnToBand={heroReturnToBand}
+        // A pillar whose read FAILED is a named line inside the panel, and the
+        // retry there refetches the payload that carries every pillar.
+        onScoreRetry={() => void analyticsQuery.refetch()}
       />
-
-      {/* The Health Score is PINNED here, between the greeting and the
-          customizable region, and is deliberately NOT a registry section: an
-          id a saved layout has never seen merges in as default-INVISIBLE
-          (`orderedVisibleSectionIds`), so registering it would silently delete
-          the score for every account that has ever customised this page. It
-          also used to render inside the daily-briefing branch, which meant an
-          instance with the briefing switched off lost the whole breakdown.
-          `isPending` settles false on success AND error, so a no-score account
-          drops the reserve exactly once. */}
-      {analyticsQuery.isPending && !analytics ? (
-        <HealthScoreCardSkeleton />
-      ) : analytics?.healthScore ? (
-        <HealthScoreCard
-          report={analytics.healthScore}
-          // v1.21.2 (A5 / A6) — server-resolved Tension Verdict + return-to-
-          // baseline off the dashboard snapshot. The card localises the keys;
-          // null leaves it quiet.
-          tension={heroTension}
-          returnToBand={heroReturnToBand}
-          // A pillar whose read FAILED is an error row inside the card, and a
-          // retry there refetches the payload that carries every pillar.
-          onRetry={() => void analyticsQuery.refetch()}
-        />
-      ) : null}
 
       {/* v1.15.18 — the inline "Anpassen" toggle was removed. Customising the
           overview (section show/hide + order) and sorting the nav pills now

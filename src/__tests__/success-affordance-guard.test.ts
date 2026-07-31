@@ -174,6 +174,11 @@ const PINNED_AFFORDANCES: Record<
   "src/components/insights/confidence-badge.ts": { "text-success": 1 },
   "src/components/insights/daily-briefing.tsx": { "text-success": 1 },
   "src/components/insights/derived/band-tokens.ts": { "text-success": 1 },
+  // The green `+N` chip beside the Health Score label. It reports a week that
+  // went up, not an action that succeeded, and it wears the same band token
+  // the score's own number does — there is no outcome here to route through
+  // the outcome module.
+  "src/components/insights/health-score-card.tsx": { "text-success": 1 },
   "src/components/insights/insights-edit-mode.tsx": { "toast.success": 2 },
   "src/components/insights/insights-tab-strip.tsx": { "toast.success": 1 },
   "src/components/insights/mood/mood-better-days.tsx": { "text-success": 1 },
