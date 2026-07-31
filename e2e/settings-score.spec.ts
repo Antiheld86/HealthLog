@@ -101,10 +101,21 @@ test.describe("Settings → Health Score", () => {
     await settleBeforeMeasure(page, card);
 
     // The heading + subheading pair the settings IA requires, owned by the
-    // shell and not re-declared inside the card.
-    await expect(page.locator("#settings-section-score-title")).toBeVisible();
+    // shell and not re-declared inside the card. The shell renders the pair
+    // twice under distinct ids — `…-title` inside a `hidden md:block` column
+    // and `…-title-mobile` inside an `md:hidden` one — so exactly one of them
+    // is on screen at any width. Asserting the desktop id alone passed on the
+    // wide project and failed on the narrow one against a heading that is
+    // hidden by design.
+    const heading = page
+      .locator(
+        "#settings-section-score-title, #settings-section-score-title-mobile",
+      )
+      .filter({ has: page.locator(":scope:visible") });
+    await expect(heading).toHaveCount(1);
+    await expect(heading.first()).toBeVisible();
     await expect(
-      page.locator("#settings-section-score-title + p"),
+      heading.first().locator("xpath=following-sibling::p[1]"),
     ).toBeVisible();
 
     // One concept, one card. A second card beside it would be the
