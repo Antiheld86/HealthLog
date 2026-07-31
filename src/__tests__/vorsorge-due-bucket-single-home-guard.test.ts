@@ -138,11 +138,16 @@ describe("the due-day bucket asks the same clock as the date beside it", () => {
     // `startOfLocalDayInTz(instant, undefined)` means "whatever zone this
     // machine is set to". That is the reading the phrase used to take while
     // the date next to it took the profile zone.
+    //
+    // The check is the bare word rather than a shape like
+    // `startOfLocalDayInTz(…, undefined)`, because the first draft of it
+    // matched only the inline form and sailed straight past a mutation that
+    // put the same `undefined` in a variable one line up. There is no honest
+    // use for the word in a file whose whole job is to name a zone; if one
+    // ever appears, that is worth coming here and arguing for.
     const home = read(HOME);
 
-    expect(home, FIX_THE_ZONE).not.toMatch(
-      /startOfLocalDayInTz\([^)]*undefined/,
-    );
+    expect(home, FIX_THE_ZONE).not.toContain("undefined");
   });
 
   it("takes the zone as an argument with no default to fall back on", () => {

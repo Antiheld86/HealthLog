@@ -98,6 +98,28 @@ describe("relativeDueKey", () => {
     });
   });
 
+  it("keeps a whole clock-change day as one day", () => {
+    // The two days of the year that are not twenty-four hours long. On the
+    // October day Berlin gains an hour, 01:00 and 23:00 sit twenty-three hours
+    // apart; on the March day it loses one, 00:30 and 23:30 sit twenty-two
+    // apart. Both are one calendar date, and on both an hour count rounds up
+    // and calls the evening "tomorrow".
+    expect(
+      relativeDueKey(
+        "2026-10-25T22:00:00Z", // 23:00 Berlin, after the clocks go back
+        Date.parse("2026-10-25T00:00:00Z"), // 02:00 Berlin, before they do
+        ZONE,
+      ),
+    ).toEqual(TODAY);
+    expect(
+      relativeDueKey(
+        "2026-03-29T21:30:00Z", // 23:30 Berlin, after the clocks go forward
+        Date.parse("2026-03-28T23:30:00Z"), // 00:30 Berlin, before they do
+        ZONE,
+      ),
+    ).toEqual(TODAY);
+  });
+
   it("says nothing is scheduled rather than crashing on a date it cannot read", () => {
     expect(relativeDueKey("not-a-date", at(FRIDAY, 12), ZONE)).toEqual(NONE);
   });
@@ -134,5 +156,49 @@ describe("relativeDueKey answers in the zone it is given", () => {
     );
     expect(relativeDueKey(due, now, "Not/AZone")).toEqual(TODAY);
     expect(relativeDueKey(due, now, "UTC")).toEqual(TOMORROW);
+  });
+
+  /**
+   * The machine's own clock, moved under the function's feet. Whatever the
+   * device is set to, the answer must not move — that is the whole difference
+   * between reading the profile and reading the laptop. Asserting it this way
+   * rather than by running the suite in a different zone means the property
+   * holds on the CI box and on a laptop alike, and it stays proven if someone
+   * reinstates a device-clock fallback for either the given zone or the
+   * unreadable one.
+   */
+  const HOST_ZONES = ["UTC", "Pacific/Auckland", "America/Los_Angeles"];
+
+  function underEachHostZone(fn: () => unknown): unknown[] {
+    const original = process.env.TZ;
+    try {
+      return HOST_ZONES.map((hostZone) => {
+        process.env.TZ = hostZone;
+        return fn();
+      });
+    } finally {
+      process.env.TZ = original;
+    }
+  }
+
+  it("ignores the zone the machine itself is set to", () => {
+    // 22:30 UTC: the 17th in Los Angeles, the 18th in Auckland and in Berlin.
+    const now = Date.parse("2026-07-17T22:30:00Z");
+    const due = "2026-07-18T00:30:00Z";
+
+    expect(underEachHostZone(() => relativeDueKey(due, now, ZONE))).toEqual([
+      TODAY,
+      TODAY,
+      TODAY,
+    ]);
+  });
+
+  it("ignores the machine's zone even when the given one is unreadable", () => {
+    const now = Date.parse("2026-07-17T22:30:00Z");
+    const due = "2026-07-18T00:30:00Z";
+
+    expect(
+      underEachHostZone(() => relativeDueKey(due, now, "Not/AZone")),
+    ).toEqual([TODAY, TODAY, TODAY]);
   });
 });
