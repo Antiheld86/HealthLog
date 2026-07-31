@@ -63,7 +63,8 @@
     "testcontainers",
     "tw-animate-css",
     "@napi-rs/canvas",
-    "@openai/codex-security"
+    "@openai/codex-security",
+    "postcss"
   ],
   "ignoreBinaries": ["docker", "docker-compose", "pg_isready", "tsx", "cosign"],
   "ignoreExportsUsedInFile": true,
