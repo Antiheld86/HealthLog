@@ -32,11 +32,14 @@ vi.mock("@/lib/rollups/measurement-read-wmy", async (importOriginal) => {
     await importOriginal<typeof import("@/lib/rollups/measurement-read-wmy")>();
   return { ...actual, readBestGranularityRollups: vi.fn() };
 });
-const { labResult, measurement } = vi.hoisted(() => ({
+const { labResult, measurement, user } = vi.hoisted(() => ({
   labResult: { findMany: vi.fn() },
   measurement: { count: vi.fn(async () => 0), groupBy: vi.fn(async () => []) },
+  // The rich reads resolve the account's language before asking for a
+  // narrated sentence, which reads the stored preference.
+  user: { findUnique: vi.fn(async () => ({ locale: "de" })) },
 }));
-vi.mock("@/lib/db", () => ({ prisma: { labResult, measurement } }));
+vi.mock("@/lib/db", () => ({ prisma: { labResult, measurement, user } }));
 
 import {
   compareMetric,
