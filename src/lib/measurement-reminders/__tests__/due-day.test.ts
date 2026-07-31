@@ -1,53 +1,57 @@
 /**
  * The due line on a checkup is a CALENDAR-day statement. "Tomorrow" means the
  * next date on the wall calendar, not roughly twenty-four hours from now, and
- * every case below is one where those two answers differ.
+ * most of the cases below are ones where those two answers differ.
  *
- * Each instant is built from local wall-clock components rather than a UTC
- * string, so the suite says the same thing whatever zone it runs in — the CI
- * box is on UTC and a laptop is not.
+ * The calendar in question is the one the person's PROFILE is set to — the
+ * same clock the date printed beside the phrase is rendered in. The last group
+ * of tests pins that, because it was the second half of this defect: the
+ * phrase used to follow the device while the date beside it followed the
+ * profile, so a laptop set to another zone could show a date and a phrase that
+ * contradicted each other.
+ *
+ * Every instant here carries an explicit offset, so the suite says the same
+ * thing whatever zone the machine running it is set to — the CI box is on UTC
+ * and a laptop is not.
  */
 import { describe, it, expect } from "vitest";
 
 import { relativeDueKey } from "../due-day";
 
-/** A local wall-clock instant, as the ISO string the API hands the client. */
-function localIso(
-  year: number,
-  month: number,
-  day: number,
-  hour: number,
-  minute = 0,
-): string {
-  return new Date(year, month - 1, day, hour, minute, 0, 0).toISOString();
-}
+/**
+ * The profile zone under test. July is deliberate: no IANA zone shifts its
+ * clocks mid-July, so a fixed offset stands for the whole month and building
+ * 00:01 or 23:59 can never land on a skipped or repeated hour.
+ */
+const ZONE = "Europe/Berlin";
+const ZONE_OFFSET = "+02:00";
 
-/** The same wall clock as the epoch millis a component reads off `Date.now()`. */
-function localNow(
-  year: number,
-  month: number,
-  day: number,
-  hour: number,
-  minute = 0,
-): number {
-  return new Date(year, month - 1, day, hour, minute, 0, 0).getTime();
-}
+const TODAY = { key: "measurementReminders.nextDue.today", days: 0 };
+const TOMORROW = { key: "measurementReminders.nextDue.tomorrow", days: 1 };
+const NONE = { key: "measurementReminders.nextDue.none", days: 0 };
 
-// A July week, deliberately: no IANA zone shifts its clocks mid-July, so
-// building 01:00 or 23:59 from local components can never land on a skipped or
-// repeated hour. Fri 17th, Sat 18th, Sun 19th.
+// Fri 17th, Sat 18th, Sun 19th of July 2026.
 const FRIDAY = 17;
 const SATURDAY = 18;
 const SUNDAY = 19;
 
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** A wall-clock time in {@link ZONE}, as the ISO string the API hands over. */
+function zoned(day: number, hour: number, minute = 0): string {
+  return `2026-07-${pad(day)}T${pad(hour)}:${pad(minute)}:00${ZONE_OFFSET}`;
+}
+
+/** The same wall clock as the epoch millis a component reads off `Date.now()`. */
+function at(day: number, hour: number, minute = 0): number {
+  return Date.parse(zoned(day, hour, minute));
+}
+
 describe("relativeDueKey", () => {
   it("still reads 'today' in the evening for a checkup that was due this morning", () => {
-    expect(
-      relativeDueKey(
-        localIso(2026, 7, FRIDAY, 9),
-        localNow(2026, 7, FRIDAY, 20),
-      ),
-    ).toEqual({ key: "measurementReminders.nextDue.today", days: 0 });
+    expect(relativeDueKey(zoned(FRIDAY, 9), at(FRIDAY, 20), ZONE)).toEqual(
+      TODAY,
+    );
   });
 
   it("holds 'today' from first thing to last thing, either side of the due hour", () => {
@@ -55,71 +59,80 @@ describe("relativeDueKey", () => {
     // which is where a rolling-hours delta tips into the neighbouring day: it
     // would call the 07:00 checkup overdue by bedtime, and the 21:00 one
     // tomorrow at breakfast.
-    expect(
-      relativeDueKey(
-        localIso(2026, 7, FRIDAY, 7),
-        localNow(2026, 7, FRIDAY, 22),
-      ),
-    ).toEqual({ key: "measurementReminders.nextDue.today", days: 0 });
-    expect(
-      relativeDueKey(
-        localIso(2026, 7, FRIDAY, 21),
-        localNow(2026, 7, FRIDAY, 6),
-      ),
-    ).toEqual({ key: "measurementReminders.nextDue.today", days: 0 });
+    expect(relativeDueKey(zoned(FRIDAY, 7), at(FRIDAY, 22), ZONE)).toEqual(
+      TODAY,
+    );
+    expect(relativeDueKey(zoned(FRIDAY, 21), at(FRIDAY, 6), ZONE)).toEqual(
+      TODAY,
+    );
   });
 
   it("calls a Sunday 01:00 checkup two days out when read late on Friday", () => {
     // Twenty-six hours apart, so a rolling-hours delta rounds to one day and
     // says "tomorrow". Two dates separate them on the calendar.
-    expect(
-      relativeDueKey(
-        localIso(2026, 7, SUNDAY, 1),
-        localNow(2026, 7, FRIDAY, 23),
-      ),
-    ).toEqual({ key: "measurementReminders.nextDue.inDays", days: 2 });
+    expect(relativeDueKey(zoned(SUNDAY, 1), at(FRIDAY, 23), ZONE)).toEqual({
+      key: "measurementReminders.nextDue.inDays",
+      days: 2,
+    });
   });
 
   it("calls a Saturday 23:59 checkup tomorrow when read just after Friday midnight", () => {
     // Just under forty-eight hours apart, so a rolling-hours delta rounds to
     // two days. It is the very next date on the calendar.
     expect(
-      relativeDueKey(
-        localIso(2026, 7, SATURDAY, 23, 59),
-        localNow(2026, 7, FRIDAY, 0, 1),
-      ),
-    ).toEqual({ key: "measurementReminders.nextDue.tomorrow", days: 1 });
+      relativeDueKey(zoned(SATURDAY, 23, 59), at(FRIDAY, 0, 1), ZONE),
+    ).toEqual(TOMORROW);
   });
 
   it("counts a checkup from yesterday as one day overdue, however recent", () => {
     // Forty-five minutes in the past. It was still yesterday's checkup.
     expect(
-      relativeDueKey(
-        localIso(2026, 7, FRIDAY, 23, 30),
-        localNow(2026, 7, SATURDAY, 0, 15),
-      ),
+      relativeDueKey(zoned(FRIDAY, 23, 30), at(SATURDAY, 0, 15), ZONE),
     ).toEqual({ key: "measurementReminders.overdueByDays", days: 1 });
   });
 
   it("counts whole calendar days for a checkup further out", () => {
-    expect(
-      relativeDueKey(
-        localIso(2026, 7, FRIDAY + 7, 6),
-        localNow(2026, 7, FRIDAY, 22),
-      ),
-    ).toEqual({ key: "measurementReminders.nextDue.inDays", days: 7 });
+    expect(relativeDueKey(zoned(FRIDAY + 7, 6), at(FRIDAY, 22), ZONE)).toEqual({
+      key: "measurementReminders.nextDue.inDays",
+      days: 7,
+    });
   });
 
   it("says nothing is scheduled rather than crashing on a date it cannot read", () => {
-    expect(relativeDueKey("not-a-date", localNow(2026, 7, FRIDAY, 12))).toEqual(
-      { key: "measurementReminders.nextDue.none", days: 0 },
-    );
+    expect(relativeDueKey("not-a-date", at(FRIDAY, 12), ZONE)).toEqual(NONE);
   });
 
   it("says nothing is scheduled when there is no due date at all", () => {
-    expect(relativeDueKey(null, localNow(2026, 7, FRIDAY, 12))).toEqual({
-      key: "measurementReminders.nextDue.none",
-      days: 0,
-    });
+    expect(relativeDueKey(null, at(FRIDAY, 12), ZONE)).toEqual(NONE);
+  });
+});
+
+describe("relativeDueKey answers in the zone it is given", () => {
+  // One instant, read from two profiles on opposite sides of midnight. At
+  // 23:30 UTC on the 17th the checkup at 02:00 UTC on the 18th is tomorrow's;
+  // in Auckland it is already the 18th for both, so it is today's. Asserting
+  // BOTH in one test is what makes this bite: an implementation that ignores
+  // the argument and reads the machine's own clock returns the same answer
+  // twice, whatever zone that machine happens to be in.
+  const NOW = Date.parse("2026-07-17T23:30:00Z");
+  const DUE = "2026-07-18T02:00:00Z";
+
+  it("gives two profiles either side of midnight two different answers", () => {
+    expect(relativeDueKey(DUE, NOW, "UTC")).toEqual(TOMORROW);
+    expect(relativeDueKey(DUE, NOW, "Pacific/Auckland")).toEqual(TODAY);
+  });
+
+  it("falls back to the printed date's zone, never the machine's, on a zone it cannot read", () => {
+    // 22:30 UTC is already the 18th in Berlin, so Berlin says today and UTC
+    // says tomorrow. A zone the profile mirror could not make sense of has to
+    // land where the date beside it lands, which is Berlin.
+    const now = Date.parse("2026-07-17T22:30:00Z");
+    const due = "2026-07-18T00:30:00Z";
+
+    expect(relativeDueKey(due, now, "Not/AZone")).toEqual(
+      relativeDueKey(due, now, "Europe/Berlin"),
+    );
+    expect(relativeDueKey(due, now, "Not/AZone")).toEqual(TODAY);
+    expect(relativeDueKey(due, now, "UTC")).toEqual(TOMORROW);
   });
 });

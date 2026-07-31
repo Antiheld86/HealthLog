@@ -789,9 +789,12 @@ function VorsorgeCard({
   const fmt = useFormatters();
   // Issue #490 — day-boundary zone for the relative "today / yesterday"
   // bucket must match the zone `fmt.date` renders in (mirror → Berlin).
+  // The next-due phrase reads off the SAME zone as the last-done date below
+  // it; they used to disagree by a day for anyone whose device sat in another
+  // zone from their profile.
   const displayTz = useDisplayTimezone();
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const due = relativeDueKey(reminder.nextDueAt, now);
+  const due = relativeDueKey(reminder.nextDueAt, now, displayTz);
   const cadence =
     reminder.intervalDays != null
       ? t("measurementReminders.cadence.everyNDays", {
