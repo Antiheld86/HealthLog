@@ -350,7 +350,7 @@ describe("<HealthScoreCard> pillars", () => {
     expect(rest).toContain('data-pillar="BLOOD_PRESSURE" data-status="ok"');
     expect(rest).not.toContain('data-pillar="ACTIVITY" data-status="ok"');
     // One line per row: a truncating label column, a thin bar, the score.
-    expect(rest).toContain("grid-cols-[minmax(0,8rem)_1fr_2rem_auto]");
+    expect(rest).toContain("grid-cols-[minmax(0,7rem)_1fr_2rem_auto]");
     expect(rest).toContain("width:82%");
   });
 
@@ -839,9 +839,12 @@ describe("<HealthScoreCardSkeleton>", () => {
     // A reserve that is not the panel's width is not a reserve.
     expect(html).toContain("md:basis-[22rem]");
     expect(html).toContain("xl:basis-[26rem]");
-    // 480 px: measured against the built panel, which resolves to 440 px at
-    // three rows and 524 px at six, so the reserve sits in the middle.
-    expect(html).toContain("min-h-[30rem]");
+    // That it declares a floor at all is what this file can honestly check;
+    // whether the floor is the RIGHT height is a browser question, and
+    // `health-score-card-geometry.test.tsx` answers it by measuring the panel
+    // and the reserve side by side. Pinning the literal here would only mean
+    // the two places have to be edited together.
+    expect(html).toMatch(/min-h-\[[\d.]+rem\]/);
   });
 
   it("holds the same column geometry the resolved panel does", () => {

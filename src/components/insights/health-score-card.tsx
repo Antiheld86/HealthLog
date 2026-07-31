@@ -106,16 +106,23 @@ const PANEL_CHROME_CLASS =
 
 /**
  * Height the reserve holds while the payload is in flight, so the band does
- * not jump when the score lands. Not a guess: the panel was rendered with the
- * app's own stylesheet and typeface and measured in a browser at the `md`
- * column width of 352 px. A three-row account resolves to 440 px, four rows
- * 468, five rows 496, six rows 524 — so 480 px sits in the middle of the 3-to-6
- * row range the report actually produces, and the reserve above and below it
- * is symmetric rather than always one-sided. The blocks in the reserve below
- * mirror the panel's own, which brings its natural height to 484 px, within
- * four pixels of the floor.
+ * not jump when the score lands.
+ *
+ * The rule, not a remembered number: the reserve sits between the shortest
+ * and the tallest panel the report actually produces (three to six scored
+ * rows), so a short report is not pushed down and a long one does not leave a
+ * gap that collapses. It is deliberately near the middle of that range, which
+ * is the best a single number can do when the panel's height depends on how
+ * many pillars an account scores.
+ *
+ * `health-score-card-geometry.test.tsx` measures all of it in a browser
+ * against the compiled stylesheet and fails if this value leaves that range —
+ * and also if the value stops binding at all. It did stop: the blocks below
+ * added up to more than the minimum declared here, so the reserve was
+ * whatever the blocks happened to be and this constant was decoration. The
+ * blocks were trimmed to sit under it again.
  */
-const PANEL_RESERVE_CLASS = "min-h-[30rem]";
+const PANEL_RESERVE_CLASS = "min-h-[28rem]";
 
 /**
  * v1.21.2 (A5) — readiness contributor keys the Tension Verdict surfaces.
@@ -638,14 +645,15 @@ function PillarRow({
     <li
       data-pillar={pillar.id}
       data-status="ok"
-      className="grid grid-cols-[minmax(0,8rem)_1fr_2rem_auto] items-center gap-2 text-xs"
+      className="grid grid-cols-[minmax(0,7rem)_1fr_2rem_auto] items-center gap-2 text-xs"
     >
-      {/* 8rem, not 7: rendered in all six locales, 7rem clipped the longest
-          label in five of them — "Körperfettverteilung" and "Forma física
-          medida" by two pixels each, which reads as a bug rather than as a
-          truncation. 8rem clears every label except the French "Condition
-          physique mesurée", which needs 161 px and would not fit any column
-          width this panel can afford. */}
+      {/* The label truncates; the row never grows. `minmax(0,…)` plus
+          `min-w-0 truncate` is what makes that structural rather than a
+          promise — drop either and the track grows to the longest word and
+          pushes the row. Widening the column does not rescue the long names:
+          the longest label in five of the six locales overruns any column
+          this panel can afford, so the extra width would come off the fill
+          bar and buy a few more characters of one language. */}
       <span className="text-muted-foreground min-w-0 truncate">
         {t(PILLAR_LABEL_KEY[pillar.id])}
       </span>
@@ -774,8 +782,10 @@ export function HealthScoreCardSkeleton({ className }: { className?: string }) {
       )}
     >
       {/* Block for block, the panel above: label, number, bar, two qualifier
-          lines, five contributor rows, one not-contributing line, and the
-          foot with its meter and toggle. */}
+          lines, three contributor rows, one not-contributing line, and the
+          foot with its meter and toggle. Three rows rather than five is what
+          keeps these blocks under the minimum above, so the minimum is the
+          thing that decides the height. */}
       <Skeleton className="h-4 w-24" />
       <Skeleton className="h-15 w-28" />
       <Skeleton className="h-2 w-full rounded-full" />
@@ -784,8 +794,6 @@ export function HealthScoreCardSkeleton({ className }: { className?: string }) {
         <Skeleton className="h-4 w-32" />
       </div>
       <div className="border-border/60 space-y-2 border-t pt-3">
-        <Skeleton className="h-3 w-full" />
-        <Skeleton className="h-3 w-full" />
         <Skeleton className="h-3 w-full" />
         <Skeleton className="h-3 w-full" />
         <Skeleton className="h-3 w-full" />
