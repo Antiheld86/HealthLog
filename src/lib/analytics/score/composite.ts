@@ -222,18 +222,27 @@ function comparableDynamicPillars(
  * subtraction looks legitimate. Nothing inside the two composites can
  * see the change; only the recipe's own `changedAt` can.
  *
- * `version` is what says a recipe was ever authored. An account that
- * never chose has no boundary to straddle, and a stored blob that
- * somehow carries no `changedAt` gives nothing to compare, so neither
- * suppresses: refusing every delta forever on an unreadable date would
- * trade one silent lie for a permanent silence.
+ * The date is the whole signal, and the boundary's `version` is
+ * deliberately NOT consulted here. An earlier draft also required
+ * `version >= 1`, which reads like defence in depth and is not: the
+ * resolver hands back a version below 1 only on the path that also
+ * hands back a null date, so no input could ever reach that arm and no
+ * test could make it fail. A condition nothing can trip is decoration
+ * on a guard. The version earns its keep elsewhere — it identifies the
+ * recipe on the stored row and in the notice key — but the question
+ * "did the recipe move inside this window" has one honest answer and it
+ * is a date.
+ *
+ * No date means nothing to compare, and that does not suppress:
+ * refusing every delta forever over an unreadable timestamp would trade
+ * one silent lie for a permanent silence.
  */
 export function crossesConfigBoundary(
   boundary: ScoreConfigBoundary,
   previousAt: Date,
   asOf: Date,
 ): boolean {
-  if (boundary.version < 1 || boundary.changedAt === null) return false;
+  if (boundary.changedAt === null) return false;
   const changedAt = new Date(boundary.changedAt);
   if (Number.isNaN(changedAt.getTime())) return false;
   return asOf >= changedAt && previousAt < changedAt;

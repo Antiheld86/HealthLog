@@ -176,6 +176,52 @@ describe("the recipe boundary", () => {
     expect(report.delta).toBe(-20);
   });
 
+  it("names the act rather than its consequence when both would fire", () => {
+    // A change that also moved the composition trips two rules at once.
+    // The order matters to the sentence a person reads: "the included
+    // pillars changed" describes what happened to the number and leaves
+    // out who did it, which is the whole confusion this guard exists to
+    // remove.
+    const narrower = buildOk<CompositeValue>({
+      value: {
+        score: 60,
+        band: "green",
+        bandSetter: null,
+        composition: ["BLOOD_PRESSURE", "ACTIVITY"],
+        noiseFloor: 1,
+        scoreVersion: 2,
+      },
+      coverage: {
+        requiredInputs: 3,
+        presentInputs: 2,
+        historyDays: 28,
+        missing: [],
+      },
+      confidence: { score: 80, band: "high" },
+      provenance: {
+        inputs: ["BLOOD_PRESSURE", "ACTIVITY"],
+        source: "live",
+        windowDays: 28,
+        computedAt: NOW.toISOString(),
+      },
+    });
+
+    const report = attachScoreDelta(
+      narrower,
+      composite(80, new Date(NOW.getTime() - 7 * DAY_MS)),
+      composite(80, new Date(NOW.getTime() - 14 * DAY_MS)),
+      NOW,
+      {
+        version: 2,
+        changedAt: new Date(NOW.getTime() - 3 * DAY_MS).toISOString(),
+      },
+      CURRENT_PILLARS,
+      EARLIER_PILLARS,
+    );
+
+    expect(report.deltaReason).toBe("config_changed");
+  });
+
   it("suppresses at the boundary instant and not one moment past it", () => {
     const previousAt = new Date(NOW.getTime() - 7 * DAY_MS);
     const boundary = (changedAt: Date) =>
@@ -210,6 +256,35 @@ describe("the recipe boundary", () => {
         NOW,
       ),
     ).toBe(false);
+  });
+
+  it("never resolves a recipe version without the date the guard reads", () => {
+    // The invariant the boundary rests on. `crossesConfigBoundary` asks
+    // only about the date, which is safe exactly because a resolved
+    // config never carries a version without one — an authored recipe
+    // always has both, and a never-authored one has neither. If a
+    // resolver path ever produced a version with no date, the guard
+    // would wave that account's recipe change straight through.
+    const blobs: unknown[] = [
+      null,
+      undefined,
+      "not an object",
+      {},
+      { excludedPillars: [] },
+      { excludedPillars: ["SLEEP"] },
+      { excludedPillars: ["SLEEP"], version: 2 },
+      { excludedPillars: ["nonsense"], version: 9 },
+      { excludedPillars: [], changedAt: "2026-08-01T00:00:00.000Z" },
+      { version: 4, changedAt: "2026-08-01T00:00:00.000Z" },
+    ];
+
+    for (const blob of blobs) {
+      const resolved = resolveHealthScoreConfig(blob);
+      expect(
+        resolved.version >= 1 || resolved.changedAt === null,
+        `version without a change date for ${JSON.stringify(blob)}`,
+      ).toBe(true);
+    }
   });
 
   it("carries the resolver's own answer, not a second reading of the blob", () => {
