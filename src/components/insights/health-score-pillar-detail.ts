@@ -152,10 +152,59 @@ function pillarReferenceText(
 }
 
 /**
- * The lines behind the cell's info popover: the scored reference, the
- * user-authored target when one exists, and the source with its as-of date.
- * Ordered as they render; an absent personal target contributes no line
- * rather than an empty one.
+ * Blood pressure only: how the number came about.
+ *
+ * The BP pillar scores the WORSE of the two axes against a reference
+ * ceiling, so the score on its own cannot say which axis it came from,
+ * how far over the ceiling that axis sat, or why a reading sitting
+ * exactly at the ceiling reads 85 rather than 100. All three were
+ * invisible, which is what made a defensible number feel arbitrary.
+ *
+ * The basis is resolved on the server and travels with the score, so
+ * nothing here recomputes anything: this reads `scoreBasis` and writes
+ * sentences. A pillar without a basis contributes no lines at all.
+ */
+function bpBasisLines(
+  pillar: ScorePillarResult,
+  { t }: PillarDetailContext,
+): string[] {
+  if (pillar.id !== "BLOOD_PRESSURE" || pillar.result.status !== "ok") {
+    return [];
+  }
+  const basis = pillar.result.value.scoreBasis;
+  if (!basis) return [];
+  // `charts.systolic` / `charts.diastolic` ship in all six locales and are
+  // already the words the BP chart uses for these axes.
+  const axis =
+    basis.axis === "systolic" ? t("charts.systolic") : t("charts.diastolic");
+  const params = {
+    axis,
+    offset: basis.offsetMmHg,
+    boundary: basis.boundaryMmHg,
+  };
+  const basisLine =
+    basis.relation === "above_ceiling"
+      ? t("insights.healthScore.bpBasisAbove", params)
+      : basis.relation === "below_floor"
+        ? t("insights.healthScore.bpBasisBelowFloor", params)
+        : t("insights.healthScore.bpBasisInBand");
+  return [
+    basisLine,
+    t("insights.healthScore.bpScale"),
+    // The observed pair is a recency-weighted mean over the pillar's own
+    // window, not a reading anyone ever took. Saying so is what keeps the
+    // observed line from reading as "I never had that reading".
+    t("insights.healthScore.bpRepresentative", {
+      days: pillar.result.provenance.windowDays,
+    }),
+  ];
+}
+
+/**
+ * The lines behind the cell's info popover: for blood pressure the basis
+ * of the score, then the scored reference, the user-authored target when
+ * one exists, and the source with its as-of date. Ordered as they render;
+ * an absent personal target contributes no line rather than an empty one.
  */
 export function pillarDetailLines(
   pillar: ScorePillarResult,
@@ -165,6 +214,7 @@ export function pillarDetailLines(
   const { t } = ctx;
   const value = pillar.result.value;
   const lines = [
+    ...bpBasisLines(pillar, ctx),
     t("insights.healthScore.reference", {
       value: pillarReferenceText(pillar, ctx),
     }),

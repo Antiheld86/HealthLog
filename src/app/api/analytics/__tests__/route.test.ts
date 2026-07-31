@@ -450,3 +450,183 @@ describe("GET /api/analytics", () => {
   // contract (the chunked findMany must never re-appear on the default
   // slice critical path).
 });
+
+/**
+ * v1.34.5 — the blood-pressure score's basis has to ARRIVE, not merely exist.
+ *
+ * The grader returns `{ score, basis }` and the pillar builder copies the
+ * basis onto the pillar value, and both of those ends have their own unit
+ * tests. Neither of them sees the assembly in between: the route's envelope
+ * hand-off, the score reader's envelope narrowing, the pillar list, the JSON
+ * envelope. A field can be produced correctly, consumed correctly, and still
+ * never reach a client, which is precisely how v1.33.1 shipped a payload
+ * field that nothing on the wire ever carried.
+ *
+ * So these drive the REAL route. Nothing about the score is stubbed — the
+ * fixture seeds raw blood-pressure rows on the same `$queryRawUnsafe` the
+ * live BP path issues, and the route does its own pairing, its own
+ * recency-weighting, its own grading and its own serialisation. The whole
+ * payload is read back off `res.json()`.
+ */
+describe("GET /api/analytics — blood-pressure score basis on the wire", () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  /**
+   * ESH 2023 band for the fixture's date of birth (age < 65).
+   */
+  const CLINICAL = { sysHigh: 129, diaHigh: 79 } as const;
+
+  interface WirePillar {
+    id: string;
+    result: {
+      status: string;
+      value?: {
+        score: number;
+        scoreBasis?: {
+          axis: string;
+          relation: string;
+          offsetMmHg: number;
+          boundaryMmHg: number;
+        };
+        observed: { label: string };
+        reference: { label: string };
+        personalReference?: { label: string };
+      };
+    };
+  }
+
+  /**
+   * Seed one blood-pressure pair per day over the trailing `pairs` days.
+   * Every pair carries the same reading, so the recency-weighted
+   * representative is that reading exactly and the expected score can be
+   * stated as a literal instead of a tolerance.
+   */
+  function seedBpSeries(input: { sys: number; dia: number; pairs: number }) {
+    const seriesOf = (value: number) =>
+      Array.from({ length: input.pairs }, (_, i) => ({
+        measured_at: new Date(Date.now() - (i + 1) * DAY_MS),
+        value,
+      }));
+    const sysRows = seriesOf(input.sys);
+    const diaRows = seriesOf(input.dia);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(prisma.$queryRawUnsafe as any).mockImplementation(
+      async (sql: unknown) => {
+        if (typeof sql !== "string") return [];
+        if (sql.includes(`m."type" = 'BLOOD_PRESSURE_SYS'`)) return sysRows;
+        if (sql.includes(`m."type" = 'BLOOD_PRESSURE_DIA'`)) return diaRows;
+        return [];
+      },
+    );
+  }
+
+  function signInWith(thresholdsJson: unknown) {
+    vi.mocked(getSession).mockResolvedValue({
+      session: SESSION_OK.session,
+      user: { ...SESSION_USER, thresholdsJson },
+    } as never);
+  }
+
+  async function readBloodPressurePillar(): Promise<WirePillar> {
+    const res = await (
+      GET as unknown as (...args: never[]) => Promise<Response>
+    )();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { healthScore: { pillars: WirePillar[] } | null };
+    };
+    const pillar = body.data.healthScore?.pillars.find(
+      (p) => p.id === "BLOOD_PRESSURE",
+    );
+    if (!pillar) throw new Error("no BLOOD_PRESSURE pillar in the payload");
+    return pillar;
+  }
+
+  it("carries the basis onto the pillar the client actually receives", async () => {
+    // 137/91 against the 129/79 band: systolic sits 8 over its ceiling and
+    // grades 57, diastolic sits 12 over and grades 50. The pillar takes the
+    // worse of the two, so diastolic is the axis that set the number.
+    seedBpSeries({ sys: 137, dia: 91, pairs: 14 });
+    const pillar = await readBloodPressurePillar();
+
+    expect(pillar.result.status).toBe("ok");
+    expect(pillar.result.value?.observed.label).toBe("137/91 mmHg");
+    expect(pillar.result.value?.score).toBe(50);
+    expect(pillar.result.value?.scoreBasis).toEqual({
+      axis: "diastolic",
+      relation: "above_ceiling",
+      offsetMmHg: 12,
+      boundaryMmHg: CLINICAL.diaHigh,
+    });
+  });
+
+  it("says the reading is in band when it is", async () => {
+    // 126/68 clears both ceilings, so no axis is over anything and the
+    // relation has to say so rather than reporting a distance from a ceiling
+    // the reading never reached. Systolic is the nearer of the two to its
+    // own ceiling here, so this also puts the other axis on the wire.
+    seedBpSeries({ sys: 126, dia: 68, pairs: 14 });
+    const pillar = await readBloodPressurePillar();
+
+    expect(pillar.result.value?.observed.label).toBe("126/68 mmHg");
+    expect(pillar.result.value?.scoreBasis).toEqual({
+      axis: "systolic",
+      relation: "in_band",
+      offsetMmHg: 3,
+      boundaryMmHg: CLINICAL.sysHigh,
+    });
+  });
+
+  it("omits the basis entirely when the pillar has no score to explain", async () => {
+    // Eleven pairs is one short of the floor, so the pillar is insufficient
+    // and carries no value at all — the popover must fall back to the
+    // shipped lines rather than to an explanation of a number nobody has.
+    seedBpSeries({ sys: 137, dia: 91, pairs: 11 });
+    const pillar = await readBloodPressurePillar();
+
+    expect(pillar.result.status).toBe("insufficient");
+    expect(pillar.result.value).toBeUndefined();
+  });
+
+  /**
+   * The coupling the two-ended tests cannot see.
+   *
+   * A user with a personal target gets the whole BP helper run twice: once
+   * against their own band for the in-target percentages on the dashboard,
+   * once against the clinical band for the score. The score comes from the
+   * second run. So does the basis, and it has to, because the two runs
+   * disagree on every field of it — different binding axis, different
+   * ceiling, different distance. Picking the score off one run and the
+   * basis off the other reads as correct in review and produces a popover
+   * that explains a number the user is not looking at.
+   *
+   * The fixture is chosen so the two runs share NOTHING: 137/91 against the
+   * personal 135/95 band binds on systolic 2 over 135 and scores 77; against
+   * the clinical 129/79 band it binds on diastolic 12 over 79 and scores 50.
+   */
+  it("takes the basis from the same run as the score when a personal target differs", async () => {
+    signInWith({
+      BLOOD_PRESSURE_SYS: { min: 110, max: 135 },
+      BLOOD_PRESSURE_DIA: { min: 65, max: 95 },
+    });
+    seedBpSeries({ sys: 137, dia: 91, pairs: 14 });
+    const pillar = await readBloodPressurePillar();
+
+    // The personal band is genuinely in play — this account really does take
+    // the route's second-run branch, so the assertions below are about the
+    // coupling and not about a user who has no personal target at all.
+    expect(pillar.result.value?.personalReference?.label).toBe(
+      "110–135/65–95 mmHg",
+    );
+
+    expect(pillar.result.value?.score).toBe(50);
+    expect(pillar.result.value?.scoreBasis).toEqual({
+      axis: "diastolic",
+      relation: "above_ceiling",
+      offsetMmHg: 12,
+      boundaryMmHg: CLINICAL.diaHigh,
+    });
+    // Stated negatively as well: nothing from the personal run may leak in.
+    expect(pillar.result.value?.scoreBasis?.boundaryMmHg).not.toBe(135);
+  });
+});

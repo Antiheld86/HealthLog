@@ -11,6 +11,7 @@ import { collectBpPairs } from "@/lib/analytics/bp-in-target";
 import {
   gradeBpScoreFromSeries,
   representativeBpFromSeries,
+  type BpGrade,
 } from "@/lib/analytics/bp-grade";
 import type { BpTargets } from "@/lib/analytics/bp-targets";
 import { resolveWeightTargetOverride } from "@/lib/analytics/effective-range";
@@ -86,7 +87,12 @@ interface ActivityRead {
 interface ScoreBpEnvelope {
   path: "rollup" | "live" | undefined;
   last90Days: { pairs: number } | null;
-  gradedScore: number | null;
+  /**
+   * v1.34.5 — score AND basis as one value, straight off the envelope
+   * the route built. Never re-graded here: a second evaluation is how
+   * the popover would end up explaining a different number.
+   */
+  graded: BpGrade | null;
   representative: { sys: number; dia: number } | null;
   last90EarliestAt: Date | null;
   last90LatestAt: Date | null;
@@ -329,7 +335,7 @@ function scoreBpEnvelope(args: {
       envelope: {
         path: args.base.path,
         last90Days: args.base.last90Days,
-        gradedScore: args.base.gradedScore,
+        graded: args.base.graded,
         representative: args.base.representative,
         last90EarliestAt: args.base.last90EarliestAt,
         last90LatestAt: args.base.last90LatestAt,
@@ -352,7 +358,7 @@ function scoreBpEnvelope(args: {
       envelope: {
         path: undefined,
         last90Days: null,
-        gradedScore: null,
+        graded: null,
         representative: null,
         last90EarliestAt: null,
         last90LatestAt: null,
@@ -385,7 +391,7 @@ function scoreBpEnvelope(args: {
     envelope: {
       path: "live",
       last90Days: { pairs: pairs.length },
-      gradedScore: target
+      graded: target
         ? gradeBpScoreFromSeries({
             pairs,
             target,
@@ -492,7 +498,7 @@ function scoreInputsFor(args: {
       readFailed: args.bp.readFailed,
       asOf,
       pairCount: args.bp.last90Days?.pairs ?? 0,
-      gradedScore: args.bp.gradedScore,
+      graded: args.bp.graded,
       representative: args.bp.representative,
       oldestAt: args.bp.last90EarliestAt,
       latestAt: args.bp.last90LatestAt,
