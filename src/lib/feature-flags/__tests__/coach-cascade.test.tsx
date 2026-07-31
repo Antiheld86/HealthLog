@@ -82,7 +82,6 @@ function buildClient(flags: Partial<AssistantFlagSet>): QueryClient {
       briefing: true,
       insightStatus: true,
       correlations: true,
-      healthScoreExplainer: true,
       ...flags,
     },
   });

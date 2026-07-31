@@ -23,7 +23,7 @@ import { describe, expect, it } from "vitest";
  *                      `requireAssistantSurface("coach")`.
  *   2. Other-gated   — file invokes `requireAssistantSurface()` with a
  *                      different surface (`insightStatus`,
- *                      `correlations`, `briefing`, `healthScoreExplainer`).
+ *                      `correlations`, `briefing`).
  *   3. Allowlisted   — non-Coach Insights routes that don't gate on
  *                      the matrix at all (provider chain, settings,
  *                      targets, glp1-timeline, feedback). Allowlist

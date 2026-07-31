@@ -13,8 +13,7 @@
  *         "coach": true,
  *         "briefing": true,
  *         "insightStatus": true,
- *         "correlations": true,
- *         "healthScoreExplainer": true
+ *         "correlations": true
  *       }
  *     },
  *     "error": null

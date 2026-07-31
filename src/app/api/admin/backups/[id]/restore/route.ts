@@ -391,8 +391,6 @@ const handler = apiHandler(
                 settings.assistantInsightStatusEnabled,
               assistantCorrelationsEnabled:
                 settings.assistantCorrelationsEnabled,
-              assistantHealthScoreExplainerEnabled:
-                settings.assistantHealthScoreExplainerEnabled,
               moduleAvailabilityJson: settings.moduleAvailabilityJson as never,
               documentMaxFileBytes: settings.documentMaxFileBytes,
               documentQuotaBytes: BigInt(settings.documentQuotaBytes),

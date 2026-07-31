@@ -33,7 +33,6 @@ function makeClient(flags: {
   briefing: boolean;
   insightStatus: boolean;
   correlations: boolean;
-  healthScoreExplainer: boolean;
 }): QueryClient {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: 0 } },
@@ -52,7 +51,6 @@ describe("<InsightStatusCard> — assistant.insightStatus gate", () => {
         briefing: true,
         insightStatus: true,
         correlations: true,
-        healthScoreExplainer: true,
       }),
     );
     expect(html).toContain("Your pulse is stable");
@@ -67,7 +65,6 @@ describe("<InsightStatusCard> — assistant.insightStatus gate", () => {
         briefing: true,
         insightStatus: false,
         correlations: true,
-        healthScoreExplainer: true,
       }),
     );
     expect(html).toBe("");
@@ -82,7 +79,6 @@ describe("<InsightStatusCard> — assistant.insightStatus gate", () => {
         briefing: false,
         insightStatus: false,
         correlations: false,
-        healthScoreExplainer: false,
       }),
     );
     expect(html).toBe("");

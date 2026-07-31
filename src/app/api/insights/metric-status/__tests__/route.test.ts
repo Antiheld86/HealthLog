@@ -134,7 +134,6 @@ describe("GET /api/insights/metric-status", () => {
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: false,
       assistantCorrelationsEnabled: true,
-      assistantHealthScoreExplainerEnabled: true,
     } as never);
     const res = await callGet(makeReq("SLEEP_DURATION"));
     expect(res.status).toBe(403);

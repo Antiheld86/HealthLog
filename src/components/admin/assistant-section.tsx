@@ -12,11 +12,10 @@ import { SettingsToggle } from "./_shared";
 import { apiGet, apiPut } from "@/lib/api/api-fetch";
 
 /**
- * v1.4.31 — operator-side panel for the six assistant feature
- * flags. The master toggle gates the whole assistant; five
+ * v1.4.31 — operator-side panel for the five assistant feature
+ * flags. The master toggle gates the whole assistant; four
  * sub-toggles carve specific surfaces (Coach, Daily Briefing,
- * per-metric status cards, correlation narration, Health-Score
- * delta explainer).
+ * per-metric status cards, correlation narration).
  *
  * UX:
  *   - Master toggle at the top. When off, the sub-toggles are
@@ -35,7 +34,6 @@ interface AssistantFlagsResponse {
     assistantBriefingEnabled: boolean;
     assistantInsightStatusEnabled: boolean;
     assistantCorrelationsEnabled: boolean;
-    assistantHealthScoreExplainerEnabled: boolean;
   };
   resolved: {
     enabled: boolean;
@@ -43,7 +41,6 @@ interface AssistantFlagsResponse {
     briefing: boolean;
     insightStatus: boolean;
     correlations: boolean;
-    healthScoreExplainer: boolean;
   };
 }
 
@@ -151,17 +148,6 @@ export function AssistantSection() {
             checked={raw?.assistantCorrelationsEnabled ?? true}
             onCheckedChange={(checked) =>
               mutation.mutate({ assistantCorrelationsEnabled: checked })
-            }
-            disabled={disabledSubs}
-          />
-          <SettingsToggle
-            label={t("admin.assistant.healthScoreExplainer.title")}
-            description={t("admin.assistant.healthScoreExplainer.description")}
-            checked={raw?.assistantHealthScoreExplainerEnabled ?? true}
-            onCheckedChange={(checked) =>
-              mutation.mutate({
-                assistantHealthScoreExplainerEnabled: checked,
-              })
             }
             disabled={disabledSubs}
           />

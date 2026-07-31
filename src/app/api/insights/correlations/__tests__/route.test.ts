@@ -167,7 +167,6 @@ describe("GET /api/insights/correlations", () => {
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
       assistantCorrelationsEnabled: false,
-      assistantHealthScoreExplainerEnabled: true,
     });
     const res = await callGet(makeReq());
     expect(res.status).toBe(403);
@@ -185,7 +184,6 @@ describe("GET /api/insights/correlations", () => {
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
       assistantCorrelationsEnabled: true,
-      assistantHealthScoreExplainerEnabled: true,
     });
     const res = await callGet(makeReq());
     expect(res.status).toBe(403);
