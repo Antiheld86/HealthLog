@@ -58,7 +58,17 @@ interface PillarEnvelope {
   result: {
     status: "ok" | "insufficient";
     reason?: string;
-    value?: { score: number; observed: { value: number } };
+    value?: {
+      score: number;
+      observed: { value: number };
+      scoreBasis?: {
+        axis: string;
+        relation: string;
+        offsetMmHg: number;
+        boundaryMmHg: number;
+      };
+      personalReference?: { label: string };
+    };
   };
 }
 
@@ -258,6 +268,84 @@ describe("GET /api/analytics — Health Score (v1.34 reference composite)", () =
     expect(hs).not.toBeNull();
     expect(hs.composite.status).toBe("insufficient");
     expect(hs.composite.value).toBeUndefined();
+  });
+
+  it("delivers the BP score basis to the client from the same run that produced the score", async () => {
+    // v1.34.5 — the popover explains "why 56" from a server-resolved basis.
+    // The basis and the score must come from ONE grading run: the route
+    // deliberately re-runs the BP helper against the CLINICAL band when the
+    // user keeps a personal target, and a basis taken from the other run
+    // would explain a number nobody is looking at.
+    //
+    // This asserts through the REAL route and the REAL JSON response, not a
+    // hand-built payload, because the assembly between the grader and the
+    // client is exactly where a correct field goes missing.
+    const user = await seedSession("hs-bp-basis");
+    const prisma = getPrismaClient();
+    const now = Date.now();
+    const DAY = 24 * 60 * 60 * 1000;
+
+    // A personal band that is WIDER than the clinical one on both axes, so
+    // the two runs disagree about everything the basis carries:
+    //   clinical 129/79 → diastolic binds, 9 mmHg over its 79 ceiling → 55
+    //   personal 135/90 → both axes in band                          → 88
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        thresholdsJson: {
+          BLOOD_PRESSURE_SYS: { min: 120, max: 135 },
+          BLOOD_PRESSURE_DIA: { min: 70, max: 90 },
+        },
+      },
+    });
+    for (let i = 0; i < 20; i++) {
+      const at = new Date(now - i * DAY);
+      await prisma.measurement.create({
+        data: {
+          userId: user.id,
+          type: "BLOOD_PRESSURE_SYS",
+          value: 132,
+          unit: "mmHg",
+          measuredAt: at,
+        },
+      });
+      await prisma.measurement.create({
+        data: {
+          userId: user.id,
+          type: "BLOOD_PRESSURE_DIA",
+          value: 88,
+          unit: "mmHg",
+          measuredAt: at,
+        },
+      });
+    }
+
+    const { GET } = await import("@/app/api/analytics/route");
+    const res = await (GET as (req: Request) => Promise<Response>)(
+      new Request("http://localhost/api/analytics"),
+    );
+    expect(res.status).toBe(200);
+    const env = (await res.json()) as AnalyticsEnvelope;
+    const bp = env.data!.healthScore!.pillars.find(
+      (p) => p.id === "BLOOD_PRESSURE",
+    )!;
+    expect(bp.result.status).toBe("ok");
+
+    // The personal band reached the payload, so the route really did take
+    // the branch that re-grades against the clinical one.
+    expect(bp.result.value!.personalReference!.label).toContain("135");
+
+    // Score AND basis, both from the clinical run: the diastolic axis, nine
+    // over ITS clinical ceiling of 79. Under the personal band the same
+    // readings sit inside it and score 88 — so a basis sourced from that
+    // second run cannot pass here.
+    expect(bp.result.value!.score).toBe(55);
+    expect(bp.result.value!.scoreBasis).toEqual({
+      axis: "diastolic",
+      relation: "above_ceiling",
+      offsetMmHg: 9,
+      boundaryMmHg: 79,
+    });
   });
 
   it("stays insufficient with only two eligible domains — the three-domain floor", async () => {
