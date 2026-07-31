@@ -35,6 +35,7 @@ import {
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
+import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import {
   takeBaseToken,
@@ -136,6 +137,12 @@ export const PATCH = apiHandler(async (req: Request) => {
     },
   });
   if ("conflict" in guarded) return guarded.conflict;
+
+  // A module toggle can add or remove a Health Score pillar, so the
+  // cached composite was computed from a composition that no longer
+  // holds. Without this the score stays stale for up to an hour after a
+  // change the person made on purpose.
+  invalidateUserHealthScore(user.id);
 
   const modules = await resolveModuleMap(user.id);
 

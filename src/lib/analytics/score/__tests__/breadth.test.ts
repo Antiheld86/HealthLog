@@ -138,7 +138,7 @@ describe("evaluateScoreBreadth", () => {
 });
 
 describe("the scorer refuses exactly what the write refuses", () => {
-  for (const { what, ids, reason } of CASES) {
+  for (const { what, ids } of CASES) {
     it(`agrees on ${what}`, () => {
       const composite = computeComposite({
         pillars: ids.map((id) => pillar(id)),
