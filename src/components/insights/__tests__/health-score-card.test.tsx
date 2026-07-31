@@ -165,6 +165,20 @@ const FASTING_GLUCOSE: ScorePillarResult = {
   },
 };
 
+/** A scored pillar at an arbitrary score, for the partition + tint tests. */
+function scoredAt(
+  id: ScorePillarResult["id"],
+  score: number,
+): ScorePillarResult {
+  const base = BLOOD_PRESSURE.result;
+  if (base.status !== "ok") throw new Error("fixture is not scored");
+  return {
+    ...BLOOD_PRESSURE,
+    id,
+    result: { ...base, value: { ...base.value, score } },
+  };
+}
+
 function gatedPillar(
   id: ScorePillarResult["id"],
   reason: string,
@@ -253,6 +267,35 @@ function anatomyRegion(html: string): string {
   return html.slice(start);
 }
 
+/** Everything visible without opening the disclosure. */
+function atRest(html: string): string {
+  const end = html.indexOf('data-slot="health-score-anatomy-region"');
+  expect(end).toBeGreaterThan(-1);
+  return html.slice(0, end);
+}
+
+/** The named not-scored list itself, not merely the region containing it. */
+function notScoredList(html: string): string {
+  const start = html.indexOf('data-slot="health-score-not-scored"');
+  expect(start).toBeGreaterThan(-1);
+  const end = html.indexOf("</ul>", start);
+  expect(end).toBeGreaterThan(start);
+  return html.slice(start, end);
+}
+
+/** Every `data-pillar="X"` in document order — the plural attribute never matches. */
+function pillarAttrs(html: string): string[] {
+  return [...html.matchAll(/data-pillar="([^"]+)"/g)].map((m) => m[1]);
+}
+
+/** The ids a coalesced line declares it speaks for. */
+function pillarsAttr(html: string, slot: string): string[] {
+  const m = html.match(
+    new RegExp(`data-slot="${slot}"\\s+data-pillars="([^"]*)"`),
+  );
+  return m && m[1] ? m[1].split(",") : [];
+}
+
 beforeEach(() => {
   mockAuthUser = { unitPreference: "metric", glucoseUnit: "mg/dL" };
 });
@@ -268,42 +311,107 @@ describe("<HealthScoreCard> disclosure", () => {
     const controls = html.match(/aria-controls="([^"]+)"/);
     expect(controls).not.toBeNull();
     expect(html).toContain(`id="${controls![1]}" hidden=""`);
-    expect(anatomyRegion(html)).toContain('data-slot="health-score-pillars"');
+    expect(anatomyRegion(html)).toContain('data-slot="health-score-method"');
   });
 
-  it("keeps the score face outside the disclosure", () => {
+  it("keeps the number and the contributor rows out of the disclosure", () => {
     const html = render(<HealthScoreCard report={scoredReport()} />);
-    const face = html.slice(
-      0,
-      html.indexOf('data-slot="health-score-anatomy-toggle"'),
-    );
-    expect(face).toContain('data-slot="health-score-band"');
-    expect(face).toContain('data-slot="health-score-delta"');
-    expect(face).toContain(">86<");
-    // The pillar grid and the method footer belong to the opened region only.
-    expect(face).not.toContain('data-slot="health-score-pillars"');
-    expect(face).not.toContain('data-slot="health-score-method"');
+    const rest = atRest(html);
+    // The number, the bar, the band sentence and the delta are the panel's
+    // face; the rows sit directly under them, not behind a toggle.
+    expect(rest).toContain('data-slot="health-score-card-number"');
+    expect(rest).toContain('data-slot="health-score-card-progress"');
+    expect(rest).toContain('data-slot="health-score-band"');
+    expect(rest).toContain('data-slot="health-score-delta"');
+    expect(rest).toContain(">86<");
+    expect(rest).toContain('data-slot="health-score-pillars"');
+    // The named reasons, the weight goal and the method footer are what the
+    // disclosure is for.
+    expect(rest).not.toContain('data-slot="health-score-method"');
+    expect(rest).not.toContain('data-slot="health-score-weight-goal"');
+    expect(rest).not.toContain('data-slot="health-score-not-scored"');
+  });
+
+  it("wears the hero column's width and stretches to the band", () => {
+    const html = render(<HealthScoreCard report={scoredReport()} />);
+    // The panel owns its own column geometry, so the band's `items-stretch`
+    // can equalise it against the greeting.
+    expect(html).toContain("md:basis-[22rem]");
+    expect(html).toContain("xl:basis-[26rem]");
+    expect(html).toContain("md:shrink-0");
+    expect(html).toContain("flex h-full flex-col");
   });
 });
 
 describe("<HealthScoreCard> pillars", () => {
-  it("grids the scored pillars only and never draws a gated one as a cell", () => {
+  it("gives a row to the scored pillars only, never to a gated one", () => {
     const html = render(<HealthScoreCard report={scoredReport()} />);
-    const region = anatomyRegion(html);
-    expect(region).toContain("sm:grid-cols-2");
-    expect(region).toContain("lg:grid-cols-3");
-    expect(region).toContain('data-pillar="BLOOD_PRESSURE" data-status="ok"');
-    expect(region).not.toContain('data-pillar="ACTIVITY" data-status="ok"');
-    // Blood pressure scores 82, so its impact bar is band-green at 82%.
-    expect(region).toContain("width:82%");
-    expect(region).toContain("bg-success");
+    const rest = atRest(html);
+    expect(rest).toContain('data-pillar="BLOOD_PRESSURE" data-status="ok"');
+    expect(rest).not.toContain('data-pillar="ACTIVITY" data-status="ok"');
+    // One line per row: a truncating label column, a thin bar, the score.
+    expect(rest).toContain("grid-cols-[minmax(0,8rem)_1fr_2rem_auto]");
+    expect(rest).toContain("width:82%");
   });
 
-  it("names every gated pillar with its reason instead of scoring it zero", () => {
+  it("tints each row with its OWN band, not the composite's", () => {
+    // The composite is red and the two pillars sit either side of the green
+    // threshold. The old rows took the composite's colour and painted the
+    // strong pillar red.
+    const html = render(
+      <HealthScoreCard
+        report={scoredReport({
+          composite: {
+            status: "ok",
+            value: {
+              score: 31,
+              band: "red",
+              bandSetter: null,
+              composition: ["BLOOD_PRESSURE", "GLYCAEMIA"],
+              noiseFloor: 3,
+              scoreVersion: 2,
+            },
+            coverage: {
+              requiredInputs: 3,
+              presentInputs: 3,
+              historyDays: 28,
+              missing: [],
+            },
+            confidence: { score: 100, band: "high" },
+            provenance,
+          },
+          pillars: [
+            scoredAt("BLOOD_PRESSURE", 92),
+            scoredAt("GLYCAEMIA", 22),
+            scoredAt("SLEEP", 55),
+          ],
+        })}
+      />,
+    );
+    const rows = atRest(html).split('data-pillar="');
+    const barClass = (id: string) => {
+      const row = rows.find((r) => r.startsWith(id));
+      expect(row, `${id} has no row`).toBeDefined();
+      const m = row!.match(
+        /data-slot="health-score-pillar-bar" class="([^"]*)"/,
+      );
+      expect(m, `${id} has no bar`).not.toBeNull();
+      return m![1];
+    };
+    expect(barClass("BLOOD_PRESSURE")).toContain("bg-success");
+    expect(barClass("GLYCAEMIA")).toContain("bg-destructive");
+    expect(barClass("SLEEP")).toContain("bg-warning");
+    // The composite is red, so a composite-tinted set would be all-red.
+    expect(barClass("BLOOD_PRESSURE")).not.toContain("bg-destructive");
+  });
+
+  it("counts absence at rest and names it behind the disclosure", () => {
     const html = render(<HealthScoreCard report={scoredReport()} />);
+    // At rest: a count, never a name drawn as a zero.
+    expect(atRest(html)).toContain("Not scored yet (1)");
+    expect(atRest(html)).toContain('data-count="1"');
     const region = anatomyRegion(html);
     expect(region).toContain('data-slot="health-score-not-scored"');
-    expect(region).toContain("Not scored yet (1)");
     expect(region).toContain('data-reason="below_day_floor_or_stale"');
     expect(region).toContain("Not enough recent eligible data");
     expect(region).not.toContain("below_day_floor_or_stale<");
@@ -323,17 +431,52 @@ describe("<HealthScoreCard> pillars", () => {
         onRetry={retry}
       />,
     );
-    const region = anatomyRegion(html);
-    expect(region).toContain('data-slot="health-score-pillar-error"');
-    expect(region).toContain('role="alert"');
-    expect(region).toContain('data-slot="health-score-pillar-retry"');
-    expect(region).toContain("Data could not be loaded");
+    // A failure may be quiet, but it may not hide: the line and its retry are
+    // visible without opening anything.
+    const rest = atRest(html);
+    expect(rest).toContain('data-slot="health-score-pillar-error"');
+    expect(rest).toContain('role="alert"');
+    expect(rest).toContain('data-slot="health-score-pillar-retry"');
+    expect(rest).toContain("Data could not be loaded");
+    expect(rest).toContain("Not scored yet (1)");
+
     // A failed read is NOT absence, so it stays out of the "not scored" list.
-    expect(region).toContain("Not scored yet (1)");
+    const region = anatomyRegion(html);
     expect(region).not.toContain('data-reason="read_failed"');
+    expect(notScoredList(html)).not.toContain('data-reason="read_failed"');
+    expect(notScoredList(html)).not.toContain('data-pillar="SLEEP"');
   });
 
-  it("leads the gated list with safety signposting", () => {
+  it("coalesces every failed read into one line with one retry", () => {
+    // Lipids and HbA1c come off one labs read, so a single failure gates two
+    // pillars. One cause, one line, one retry — and the retry refetches the
+    // whole payload anyway.
+    const html = render(
+      <HealthScoreCard
+        report={scoredReport({
+          pillars: [
+            BLOOD_PRESSURE,
+            gatedPillar("LIPIDS", "read_failed"),
+            gatedPillar("GLYCAEMIA", "read_failed"),
+          ],
+        })}
+        onRetry={vi.fn()}
+      />,
+    );
+    expect(
+      html.match(/data-slot="health-score-pillar-error"/g) ?? [],
+    ).toHaveLength(1);
+    expect(
+      html.match(/data-slot="health-score-pillar-retry"/g) ?? [],
+    ).toHaveLength(1);
+    expect(pillarsAttr(html, "health-score-pillar-error")).toEqual([
+      "LIPIDS",
+      "GLYCAEMIA",
+    ]);
+    expect(atRest(html)).toContain("Lipids, Glycaemia: Data could not be");
+  });
+
+  it("names safety signposting at rest instead of counting it", () => {
     const html = render(
       <HealthScoreCard
         report={scoredReport({
@@ -345,18 +488,108 @@ describe("<HealthScoreCard> pillars", () => {
         })}
       />,
     );
-    const region = anatomyRegion(html);
-    expect(region).toContain("Not scored yet (2)");
-    const crisis = region.indexOf('data-reason="crisis_signposting"');
-    const activity = region.indexOf('data-reason="below_day_floor_or_stale"');
-    expect(crisis).toBeGreaterThan(-1);
-    expect(crisis).toBeLessThan(activity);
-    expect(region).toContain("Safety guidance is shown instead of a score");
+    // Safety copy is content: it is named in full on the surface, not folded
+    // into a count and not hidden behind the toggle.
+    const rest = atRest(html);
+    expect(rest).toContain('data-slot="health-score-crisis"');
+    expect(rest).toContain("Wellbeing: Safety guidance is shown instead of");
+    // …and therefore it is not also one of the anonymous counted absences.
+    expect(rest).toContain("Not scored yet (1)");
+    expect(rest).toContain('data-count="1"');
+    expect(anatomyRegion(html)).not.toContain(
+      'data-reason="crisis_signposting"',
+    );
+  });
+});
+
+describe("<HealthScoreCard> one pillar, one home", () => {
+  /** Four scored, one failed read, one crisis, two plain absences. */
+  function mixedReport() {
+    return scoredReport({
+      pillars: [
+        scoredAt("BLOOD_PRESSURE", 82),
+        scoredAt("GLYCAEMIA", 74),
+        scoredAt("ACTIVITY", 61),
+        scoredAt("SLEEP", 45),
+        gatedPillar("FITNESS", "read_failed"),
+        gatedPillar("WELLBEING", "crisis_signposting"),
+        gatedPillar("ADIPOSITY", "missing_height"),
+        gatedPillar("LIPIDS", "not_tracked"),
+      ],
+    });
+  }
+
+  it("puts every pillar in exactly one of the four homes", () => {
+    const html = render(<HealthScoreCard report={mixedReport()} />);
+    const rest = atRest(html);
+
+    const rowIds = [
+      ...rest.matchAll(/data-pillar="([^"]+)" data-status="ok"/g),
+    ].map((m) => m[1]);
+    const failedIds = pillarsAttr(html, "health-score-pillar-error");
+    const crisisIds = pillarsAttr(html, "health-score-crisis");
+    const counted = Number(rest.match(/data-count="(\d+)"/)?.[1] ?? 0);
+
+    expect(rowIds).toEqual([
+      "BLOOD_PRESSURE",
+      "GLYCAEMIA",
+      "ACTIVITY",
+      "SLEEP",
+    ]);
+    expect(failedIds).toEqual(["FITNESS"]);
+    expect(crisisIds).toEqual(["WELLBEING"]);
+    expect(counted).toBe(2);
+
+    // The four homes partition the eight pillars: disjoint, and complete.
+    const named = [...rowIds, ...failedIds, ...crisisIds];
+    expect(new Set(named).size).toBe(named.length);
+    expect(named.length + counted).toBe(8);
+  });
+
+  it("never renders one pillar id twice anywhere in the panel", () => {
+    const html = render(<HealthScoreCard report={mixedReport()} />);
+    // The scored rows and the named not-scored list both carry `data-pillar`;
+    // the coalesced lines carry the plural `data-pillars` and are not matched
+    // here. Seeing an id twice is exactly the complaint this panel answers.
+    const ids = pillarAttrs(html);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.sort()).toEqual(
+      [
+        "ACTIVITY",
+        "ADIPOSITY",
+        "BLOOD_PRESSURE",
+        "GLYCAEMIA",
+        "LIPIDS",
+        "SLEEP",
+      ].sort(),
+    );
+  });
+
+  it("never renders one pillar's name twice anywhere in the panel", () => {
+    const html = render(<HealthScoreCard report={mixedReport()} />);
+    // The method footer's "Overall band set by …" sentence names a pillar as
+    // prose rather than listing it, so it is not part of this count.
+    const methodAt = html.indexOf('data-slot="health-score-method"');
+    expect(methodAt).toBeGreaterThan(-1);
+    const listed = html.slice(0, methodAt);
+    for (const label of [
+      "Blood pressure",
+      "Glycaemia",
+      "Activity",
+      "Sleep",
+      "Adiposity",
+      "Wellbeing",
+      "Measured fitness",
+      "Lipids",
+    ]) {
+      const hits = listed.split(label).length - 1;
+      expect(hits, `${label} appears ${hits} times`).toBeLessThanOrEqual(1);
+    }
   });
 });
 
 describe("<HealthScoreCard> composite states", () => {
-  it("shows a provisional ring and the learning gate when the composite is gated", () => {
+  it("shows a dash and the learning line when the composite is gated", () => {
     const html = render(<HealthScoreCard report={report()} />);
     expect(html).toMatch(
       /data-slot="health-score-card"[^>]*data-status="insufficient"/,
@@ -365,8 +598,11 @@ describe("<HealthScoreCard> composite states", () => {
     expect(html).toContain(
       "The score needs at least three, including a measured physiological pillar.",
     );
-    // No band sentence and no fabricated number in the face.
+    // No band sentence and no fabricated number: a dash, and no bar either.
     expect(html).not.toContain('data-slot="health-score-band"');
+    expect(html).not.toContain('data-slot="health-score-card-progress"');
+    expect(html).toContain("—");
+    expect(html).not.toContain("/ 100");
     expect(html).toContain("Method version 2");
   });
 
@@ -389,17 +625,30 @@ describe("<HealthScoreCard> composite states", () => {
         returnToBand={{ metricType: "RESTING_HEART_RATE", daysInside: 6 }}
       />,
     );
-    const face = html.slice(
-      0,
-      html.indexOf('data-slot="health-score-anatomy-toggle"'),
-    );
-    expect(face).toContain("Rest Mode active since 2026-07-20");
-    expect(face).toContain('data-slot="health-score-tension"');
-    expect(face).toContain('data-slot="health-score-return-to-band"');
+    const rest = atRest(html);
+    expect(rest).toContain("Rest Mode active since 2026-07-20");
+    expect(rest).toContain('data-slot="health-score-tension"');
+    expect(rest).toContain('data-slot="health-score-return-to-band"');
     // The contributor key and the metric type are localised, never raw.
-    expect(face).toContain("Resting heart rate");
-    expect(face).not.toContain("RESTING_HEART_RATE");
-    expect(face).not.toContain(">rhr<");
+    expect(rest).toContain("Resting heart rate");
+    expect(rest).not.toContain("RESTING_HEART_RATE");
+    expect(rest).not.toContain(">rhr<");
+  });
+
+  it("shows the weekly gain as a chip beside the label", () => {
+    const html = render(<HealthScoreCard report={scoredReport()} />);
+    expect(html).toContain('data-slot="health-score-card-label"');
+    expect(html).toContain('data-slot="health-score-card-delta-chip"');
+    expect(html).toMatch(/data-slot="health-score-card-delta-chip"[^>]*>\+2</);
+  });
+
+  it("keeps the chip away from a flat or falling week", () => {
+    const html = render(
+      <HealthScoreCard report={scoredReport({ delta: -3 })} />,
+    );
+    expect(html).not.toContain('data-slot="health-score-card-delta-chip"');
+    // The line still states it — only the green chip is reserved for a gain.
+    expect(html).toContain('data-slot="health-score-delta"');
   });
 
   it("keeps a one-sided tension quiet", () => {
@@ -497,9 +746,17 @@ describe("pillar detail formatting", () => {
     const html = render(
       <HealthScoreCard report={scoredReport({ pillars: [FASTING_GLUCOSE] })} />,
     );
-    // The card mounts with mmol/L accounts too; the visible observed line is
-    // the one always on screen.
-    expect(html).toContain("Observed: Fasting glucose: 100 mg/dL");
+    // The observed value moved into the row's popover, which Radix mounts
+    // only once opened — so the panel shows the row, and the value itself is
+    // asserted through the same pure formatter the popover is fed.
+    expect(html).toContain('data-pillar="GLYCAEMIA" data-status="ok"');
+    expect(html).toContain('data-slot="info-popover-trigger"');
+    expect(
+      pillarObservedText(FASTING_GLUCOSE, {
+        t: translator(),
+        glucoseUnit: "mg/dL",
+      }),
+    ).toBe("Fasting glucose: 100 mg/dL");
 
     const mmol = pillarObservedText(FASTING_GLUCOSE, {
       t: translator(),
@@ -575,12 +832,35 @@ describe("pillar detail formatting", () => {
 });
 
 describe("<HealthScoreCardSkeleton>", () => {
-  it("reserves the collapsed footprint and announces nothing", () => {
+  it("reserves the column's footprint and announces nothing", () => {
     const html = render(<HealthScoreCardSkeleton />);
     expect(html).toContain('data-slot="health-score-card-skeleton"');
     expect(html).toContain('aria-hidden="true"');
-    // The `md` ring is a fixed 168 px box; the reserve matches it exactly.
-    expect(html).toContain("size-[168px]");
+    // A reserve that is not the panel's width is not a reserve.
+    expect(html).toContain("md:basis-[22rem]");
+    expect(html).toContain("xl:basis-[26rem]");
+    // 480 px: measured against the built panel, which resolves to 440 px at
+    // three rows and 524 px at six, so the reserve sits in the middle.
+    expect(html).toContain("min-h-[30rem]");
+  });
+
+  it("holds the same column geometry the resolved panel does", () => {
+    const skeleton = render(<HealthScoreCardSkeleton />);
+    const panel = render(<HealthScoreCard report={scoredReport()} />);
+    // Any drift between the two is a jump when the payload lands.
+    for (const cls of [
+      "w-full",
+      "md:shrink-0",
+      "md:grow-0",
+      "md:basis-[22rem]",
+      "xl:basis-[26rem]",
+      "flex h-full flex-col",
+      "rounded-xl border p-4",
+      "md:p-6",
+    ]) {
+      expect(skeleton, cls).toContain(cls);
+      expect(panel, cls).toContain(cls);
+    }
   });
 });
 

@@ -97,6 +97,115 @@ const COINCIDENT_FIRED = {
   reason: null,
 };
 
+/**
+ * A populated Health Score report for the hero band's score column.
+ *
+ * The panel is the widest-content block in the band: a fixed-width label
+ * column, a fill bar, a value column and a popover trigger all on one 20 px
+ * line, plus a coalesced failed-read line that carries an inline button. An
+ * empty score leaves the column unmounted entirely, so without this the
+ * phone-width guard measured a band that had no panel in it.
+ *
+ * Every state the panel can paint is present at once: scored rows, a failed
+ * read with its retry, safety signposting, and counted absence.
+ */
+function scorePillar(id: string, domain: string, score: number) {
+  return {
+    id,
+    domain,
+    result: {
+      status: "ok" as const,
+      value: {
+        score,
+        observed: {
+          value: 126,
+          unit: "mmHg",
+          label: "126/78 mmHg",
+          asOf: NOW,
+          sources: ["MANUAL"],
+        },
+        reference: {
+          kind: "clinical-threshold" as const,
+          low: 120,
+          high: 129,
+          label: "120 to 129/70 to 79 mmHg",
+          source: "ESH 2023",
+        },
+        noiseFloor: 1,
+        deltaEligible: true,
+        deltaIdentity: id,
+      },
+      coverage: coverage(),
+      confidence: confidence(),
+      provenance: provenance([id]),
+    },
+  };
+}
+
+function gatedPillar(id: string, domain: string, reason: string) {
+  return {
+    id,
+    domain,
+    result: {
+      status: "insufficient" as const,
+      coverage: {
+        requiredInputs: 4,
+        presentInputs: 0,
+        historyDays: 0,
+        missing: [] as string[],
+      },
+      provenance: provenance([id]),
+      reason,
+    },
+  };
+}
+
+const HEALTH_SCORE = {
+  composite: {
+    status: "ok" as const,
+    value: {
+      score: 74,
+      band: "green" as const,
+      bandSetter: "SLEEP",
+      composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP", "ADIPOSITY"],
+      noiseFloor: 3,
+      scoreVersion: 2,
+    },
+    coverage: coverage(),
+    confidence: confidence(),
+    provenance: provenance(["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"]),
+  },
+  pillars: [
+    scorePillar("BLOOD_PRESSURE", "cardiometabolic", 56),
+    scorePillar("ACTIVITY", "activity", 88),
+    scorePillar("SLEEP", "sleep", 41),
+    scorePillar("ADIPOSITY", "adiposity", 72),
+    gatedPillar("FITNESS", "fitness", "read_failed"),
+    gatedPillar("LIPIDS", "cardiometabolic", "read_failed"),
+    gatedPillar("WELLBEING", "wellbeing", "crisis_signposting"),
+    gatedPillar("GLYCAEMIA", "cardiometabolic", "not_tracked"),
+  ],
+  delta: 2,
+  deltaReason: null,
+  scoreVersion: 2,
+  weightGoal: {
+    status: "ok" as const,
+    value: {
+      currentKg: 81,
+      target: { min: 74, max: 78 },
+      distanceKg: 3,
+      deltaKg: 1,
+      asOf: NOW,
+      source: "MANUAL",
+    },
+    coverage: coverage(),
+    confidence: confidence(),
+    provenance: provenance(["WEIGHT"]),
+  },
+  algorithmNotice: null,
+  restMode: null,
+};
+
 /** A deterministic sparkline series around `center`. */
 function series(center: number, spread: number): number[] {
   return Array.from({ length: 30 }, (_, i) =>
@@ -252,6 +361,28 @@ export async function mockPopulatedInsights(page: Page): Promise<void> {
       }),
     }),
   );
+
+  // The hero band's score column. The real response is fetched and the score
+  // injected into it, so every OTHER field the page reads off `/api/analytics`
+  // stays authentic and this fixture cannot silently blank a section it was
+  // never meant to touch.
+  await page.route(/\/api\/analytics(\?|$)/, async (route) => {
+    const response = await route.fetch();
+    let payload: { data?: Record<string, unknown> | null; error?: unknown };
+    try {
+      payload = await response.json();
+    } catch {
+      payload = { data: {}, error: null };
+    }
+    await route.fulfill({
+      response,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...payload,
+        data: { ...(payload.data ?? {}), healthScore: HEALTH_SCORE },
+      }),
+    });
+  });
 
   // The single-metric derived route. Only COINCIDENT_DEVIATION is stubbed —
   // it is the card whose heading carries the provenance sentence. Any other

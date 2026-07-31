@@ -105,15 +105,17 @@ const PANEL_CHROME_CLASS =
   "bg-card/65 rounded-xl border p-4 shadow-sm backdrop-blur-sm md:p-6";
 
 /**
- * Height the loading reserve holds so the greeting does not reflow when the
- * analytics payload lands. Measured against the built panel at 352 px (the
- * `md` column) with a five-row, one-failed-read report: 431 px including the
- * card padding, of which the widest realistic case is what matters. Held a
- * little under the measurement so a shorter report does not paint a gap:
- * a three-row report measures 341 px, and 21rem/336px is the floor both sit
- * near. See `health-score-card-geometry.test.ts` for the numbers.
+ * Height the reserve holds while the payload is in flight, so the band does
+ * not jump when the score lands. Not a guess: the panel was rendered with the
+ * app's own stylesheet and typeface and measured in a browser at the `md`
+ * column width of 352 px. A three-row account resolves to 440 px, four rows
+ * 468, five rows 496, six rows 524 — so 480 px sits in the middle of the 3-to-6
+ * row range the report actually produces, and the reserve above and below it
+ * is symmetric rather than always one-sided. The blocks in the reserve below
+ * mirror the panel's own, which brings its natural height to 484 px, within
+ * four pixels of the floor.
  */
-const PANEL_RESERVE_CLASS = "min-h-[21rem]";
+const PANEL_RESERVE_CLASS = "min-h-[30rem]";
 
 /**
  * v1.21.2 (A5) — readiness contributor keys the Tension Verdict surfaces.
@@ -636,8 +638,14 @@ function PillarRow({
     <li
       data-pillar={pillar.id}
       data-status="ok"
-      className="grid grid-cols-[minmax(0,7rem)_1fr_2rem_auto] items-center gap-2 text-xs"
+      className="grid grid-cols-[minmax(0,8rem)_1fr_2rem_auto] items-center gap-2 text-xs"
     >
+      {/* 8rem, not 7: rendered in all six locales, 7rem clipped the longest
+          label in five of them — "Körperfettverteilung" and "Forma física
+          medida" by two pixels each, which reads as a bug rather than as a
+          truncation. 8rem clears every label except the French "Condition
+          physique mesurée", which needs 161 px and would not fit any column
+          width this panel can afford. */}
       <span className="text-muted-foreground min-w-0 truncate">
         {t(PILLAR_LABEL_KEY[pillar.id])}
       </span>
@@ -765,22 +773,29 @@ export function HealthScoreCardSkeleton({ className }: { className?: string }) {
         className,
       )}
     >
+      {/* Block for block, the panel above: label, number, bar, two qualifier
+          lines, five contributor rows, one not-contributing line, and the
+          foot with its meter and toggle. */}
       <Skeleton className="h-4 w-24" />
-      <Skeleton className="h-12 w-28" />
+      <Skeleton className="h-15 w-28" />
       <Skeleton className="h-2 w-full rounded-full" />
-      <div className="space-y-1.5">
-        <Skeleton className="h-3 w-40" />
-        <Skeleton className="h-3 w-32" />
+      <div className="space-y-1">
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-4 w-32" />
       </div>
-      <div className="space-y-2 pt-3">
+      <div className="border-border/60 space-y-2 border-t pt-3">
+        <Skeleton className="h-3 w-full" />
         <Skeleton className="h-3 w-full" />
         <Skeleton className="h-3 w-full" />
         <Skeleton className="h-3 w-full" />
         <Skeleton className="h-3 w-full" />
       </div>
+      <Skeleton className="h-4 w-36" />
       <div className="mt-auto space-y-3 pt-1">
-        <Skeleton className="h-3 w-28" />
-        <Skeleton className="h-11 w-full rounded-sm" />
+        <Skeleton className="h-11 w-28 rounded-sm" />
+        <div className="border-border/60 border-t pt-1">
+          <Skeleton className="h-11 w-full rounded-sm" />
+        </div>
       </div>
     </div>
   );

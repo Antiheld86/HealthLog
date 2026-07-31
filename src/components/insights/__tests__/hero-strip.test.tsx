@@ -3,6 +3,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { I18nProvider } from "@/lib/i18n/context";
 import { HeroStrip } from "../hero-strip";
 import type { DailyBriefing as DailyBriefingPayload } from "@/lib/ai/schema";
+import type {
+  HealthScoreReport,
+  ScorePillarId,
+  ScorePillarResult,
+} from "@/lib/analytics/score/types";
 
 // The "generated" freshness line reads the profile timezone via `useAuth`; stub
 // it so the SSR render does not reach for a QueryClient the test omits.
@@ -37,6 +42,120 @@ const sampleBriefing: DailyBriefingPayload = {
 // (the mocked `Europe/Berlin`), not the host's — so pin explicit UTC
 // instants and translate them to the intended Berlin wall-clock hour.
 // May 10 2026 is CEST (UTC+2), so Berlin = UTC + 2h.
+const provenance = {
+  inputs: ["BLOOD_PRESSURE"],
+  source: "live" as const,
+  windowDays: 90,
+  computedAt: "2026-07-28T12:00:00.000Z",
+};
+
+function scored(id: ScorePillarId, score: number): ScorePillarResult {
+  return {
+    id,
+    domain: "cardiometabolic",
+    result: {
+      status: "ok",
+      value: {
+        score,
+        observed: {
+          value: 126,
+          unit: "mmHg",
+          label: "126/78 mmHg",
+          asOf: "2026-07-27T08:00:00.000Z",
+          sources: ["MANUAL"],
+        },
+        reference: {
+          kind: "clinical-threshold",
+          low: 120,
+          high: 129,
+          label: "120 to 129 mmHg",
+          source: "ESH 2023",
+        },
+        noiseFloor: 1,
+        deltaEligible: true,
+        deltaIdentity: id,
+      },
+      coverage: {
+        requiredInputs: 12,
+        presentInputs: 12,
+        historyDays: 28,
+        missing: [],
+      },
+      confidence: { score: 100, band: "high" },
+      provenance,
+    },
+  };
+}
+
+function gated(id: ScorePillarId, reason: string): ScorePillarResult {
+  return {
+    id,
+    domain: "wellbeing",
+    result: {
+      status: "insufficient",
+      coverage: {
+        requiredInputs: 1,
+        presentInputs: 0,
+        historyDays: 0,
+        missing: [],
+      },
+      provenance: { ...provenance, inputs: [id] },
+      reason,
+    },
+  };
+}
+
+function scoreReport(pillars: ScorePillarResult[]): HealthScoreReport {
+  return {
+    composite: {
+      status: "ok",
+      value: {
+        score: 74,
+        band: "green",
+        bandSetter: null,
+        composition: ["BLOOD_PRESSURE"],
+        noiseFloor: 3,
+        scoreVersion: 2,
+      },
+      coverage: {
+        requiredInputs: 3,
+        presentInputs: 3,
+        historyDays: 28,
+        missing: [],
+      },
+      confidence: { score: 100, band: "high" },
+      provenance,
+    },
+    pillars,
+    delta: 2,
+    deltaReason: null,
+    scoreVersion: 2,
+    weightGoal: {
+      status: "insufficient",
+      coverage: {
+        requiredInputs: 2,
+        presentInputs: 0,
+        historyDays: 0,
+        missing: [],
+      },
+      provenance: { ...provenance, inputs: ["WEIGHT"] },
+      reason: "no_personal_goal",
+    },
+    algorithmNotice: null,
+  };
+}
+
+const SCORE = scoreReport([
+  scored("BLOOD_PRESSURE", 82),
+  scored("ACTIVITY", 61),
+  gated("LIPIDS", "not_tracked"),
+]);
+
+const SCORE_WITH_FAILED_READ = scoreReport([
+  scored("BLOOD_PRESSURE", 82),
+  gated("LIPIDS", "read_failed"),
+]);
+
 const morningLocal = new Date("2026-05-10T07:00:00Z"); // 09:00 Berlin
 const afternoonLocal = new Date("2026-05-10T12:00:00Z"); // 14:00 Berlin
 const eveningLocal = new Date("2026-05-10T18:00:00Z"); // 20:00 Berlin
@@ -238,27 +357,95 @@ describe("<HeroStrip>", () => {
     expect(html).not.toContain('data-slot="insights-hero-strip-weekly-banner"');
   });
 
-  // ── B5 — the Health Score left the hero band ──────────────────────
-  // The score used to mount twice: a compact face in this band and the full
-  // breakdown below it. The breakdown is now one pinned card under the band
-  // (`page-client.tsx`), so the hero carries no score surface at all — no
-  // panel, no reserved column, no skeleton.
-  it("never renders a Health Score surface in the band", () => {
+  // ── The Health Score column ────────────────────────────────────────
+  // The score is back in the band's right column, and this band is its only
+  // mount on the overview.
+  it("keeps the greeting full width when there is no score", () => {
+    // An account without a score keeps the single-column band it always had;
+    // the split must not appear around an empty slot.
     const html = render(<HeroStrip briefing={null} now={morningLocal} />);
+    expect(html).not.toContain("md:flex-row");
+    expect(html).not.toContain("md:items-stretch");
     expect(html).not.toContain('data-slot="health-score-card"');
-    expect(html).not.toContain('data-slot="health-score-card-compact"');
     expect(html).not.toContain('data-slot="health-score-card-skeleton"');
   });
 
-  it("keeps the greeting on the full width with no reserved second column", () => {
-    // With the panel gone the band is single-column on every breakpoint; the
-    // `md:`/`lg:` split + stretch contract it carried for the score column
-    // must not come back, or the greeting reflows around an empty slot.
-    const html = render(<HeroStrip briefing={null} now={morningLocal} />);
-    expect(html).not.toContain("md:flex-row");
-    expect(html).not.toContain("lg:flex-row");
-    expect(html).not.toContain("md:items-stretch");
-    expect(html).not.toContain("md:basis-[22rem]");
+  it("splits into two columns and paints the panel when a score is present", () => {
+    const html = render(
+      <HeroStrip briefing={null} now={morningLocal} healthScore={SCORE} />,
+    );
+    expect(html).toContain("md:flex-row");
+    expect(html).toContain("md:items-stretch");
+    expect(html).toContain('data-slot="health-score-card"');
+    // The greeting keeps its own column and can shrink inside it.
+    expect(html).toContain("min-w-0 flex-1");
+    expect(html).toContain('data-slot="insights-hero-strip-greeting"');
+  });
+
+  it("reserves the column while the payload is in flight", () => {
+    const html = render(
+      <HeroStrip briefing={null} now={morningLocal} scorePending />,
+    );
+    // The split is already there, so the greeting does not re-wrap when the
+    // score lands — that reflow is why the reserve exists at all.
+    expect(html).toContain("md:flex-row");
+    expect(html).toContain('data-slot="health-score-card-skeleton"');
+    expect(html).toContain("md:basis-[22rem]");
+    expect(html).not.toContain('data-slot="health-score-card"');
+  });
+
+  it("prefers the resolved panel over the reserve", () => {
+    const html = render(
+      <HeroStrip
+        briefing={null}
+        now={morningLocal}
+        healthScore={SCORE}
+        scorePending
+      />,
+    );
+    expect(html).toContain('data-slot="health-score-card"');
+    expect(html).not.toContain('data-slot="health-score-card-skeleton"');
+  });
+
+  it("renders the full panel with no briefing at all", () => {
+    // The score used to live inside the daily-briefing branch, so an instance
+    // with the briefing switched off lost the entire breakdown. The band
+    // renders unconditionally and carries the panel whole.
+    const html = render(
+      <HeroStrip briefing={null} now={morningLocal} healthScore={SCORE} />,
+    );
+    expect(html).toContain("A daily read of your trends"); // the no-briefing subtitle
+    for (const slot of [
+      "health-score-card",
+      "health-score-card-label",
+      "health-score-card-number",
+      "health-score-card-progress",
+      "health-score-band",
+      "health-score-pillars",
+      "health-score-not-scored-count",
+      "health-score-anatomy-toggle",
+      "health-score-anatomy-region",
+      "health-score-not-scored",
+      "health-score-weight-goal",
+      "health-score-method",
+    ]) {
+      expect(html, slot).toContain(`data-slot="${slot}"`);
+    }
+    expect(html).toContain(">74<");
+    expect(html).toContain('data-pillar="BLOOD_PRESSURE" data-status="ok"');
+  });
+
+  it("forwards the retry so a failed read can be retried from the band", () => {
+    const html = render(
+      <HeroStrip
+        briefing={null}
+        now={morningLocal}
+        healthScore={SCORE_WITH_FAILED_READ}
+        onScoreRetry={() => {}}
+      />,
+    );
+    expect(html).toContain('data-slot="health-score-pillar-error"');
+    expect(html).toContain('data-slot="health-score-pillar-retry"');
   });
 
   it("does not render any Ask-the-Coach affordance in the hero band", () => {
