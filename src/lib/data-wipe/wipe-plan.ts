@@ -54,6 +54,12 @@ export const WIPE_MODELS = [
   // record and nothing else holds it, so a wipe that leaves it behind leaves
   // behind an account's activity pattern.
   "IntradayCumulativeProfile",
+  // The health score as it was shown, one row per local day. Not a cache of
+  // the live computation — nothing can rebuild a past day once the readings
+  // behind it have moved — so leaving it behind leaves behind a record of how
+  // the account was doing, day by day, after a confirmation that said
+  // otherwise.
+  "HealthScoreRecord",
   "MeasurementReminder",
 
   // ── Medication ──────────────────────────────────────────────────────────

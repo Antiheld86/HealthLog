@@ -6,7 +6,7 @@ import { resolveModuleMap } from "@/lib/modules/gate";
 import { loadUserSourcePriority } from "@/lib/rollups/measurement-read";
 import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 
-import { computeUserHealthScore } from "./reader";
+import { computeAndRecordUserHealthScore } from "./record";
 import type { CompositeValue } from "./types";
 
 const DAY_MS = 86_400_000;
@@ -51,7 +51,7 @@ export async function computeHealthScoreDerived(
     bpAt(new Date(now.getTime() - 7 * DAY_MS)),
     bpAt(new Date(now.getTime() - 14 * DAY_MS)),
   ]);
-  const report = await computeUserHealthScore({
+  const report = await computeAndRecordUserHealthScore({
     userId,
     now,
     profile: {

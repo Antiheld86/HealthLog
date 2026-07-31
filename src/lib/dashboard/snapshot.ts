@@ -77,7 +77,7 @@ import {
   buildMedsTodayBlock,
   type MedsTodayBlock,
 } from "@/lib/dashboard/meds-today";
-import { computeUserHealthScore } from "@/lib/analytics/score/reader";
+import { computeAndRecordUserHealthScore } from "@/lib/analytics/score/record";
 import {
   buildDashboardBands as buildTargetBands,
   type DashboardTargetBands,
@@ -742,7 +742,7 @@ async function buildExtras(
   // prior-week delta values). Closes the dashboard-vs-insights divergence.
   const scoreSourcePriority = user.sourcePriorityJson ?? null;
   const scoreResult = await time("healthScore", () =>
-    computeUserHealthScore({
+    computeAndRecordUserHealthScore({
       prisma,
       userId: user.id,
       now,

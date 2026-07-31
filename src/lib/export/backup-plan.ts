@@ -103,6 +103,12 @@ export const BACKED_UP_MODELS = [
   "CustomMetric",
   "CustomMetricEntry",
   "CorrelationPattern",
+  // Reads like a derived tier and is not one. The live computation always
+  // answers for today from today's rows, so once the readings behind a past
+  // day have been corrected, re-synced or simply grown, nothing can reproduce
+  // what that day said. The row is the only copy of the number the account
+  // actually saw, which is exactly the test for BACKED_UP rather than DERIVED.
+  "HealthScoreRecord",
 
   // ── Activity and nutrition ────────────────────────────────────────────────
   "Workout",
@@ -157,6 +163,7 @@ export const BACKUP_WRITER_FILES: readonly string[] = [
   "src/lib/export/records-backup.ts",
   "src/lib/export/profile-backup.ts",
   "src/lib/export/intraday-profile-backup.ts",
+  "src/lib/export/health-score-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -164,6 +171,7 @@ export const BACKUP_RESTORE_FILES: readonly string[] = [
   "src/app/api/admin/backups/[id]/restore/route.ts",
   "src/lib/export/profile-backup.ts",
   "src/lib/export/intraday-profile-backup.ts",
+  "src/lib/export/health-score-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -206,6 +214,7 @@ export const TWO_ENDED_MODELS: readonly string[] = [
   "CustomMetric",
   "CustomMetricEntry",
   "CorrelationPattern",
+  "HealthScoreRecord",
   "Workout",
   "NutrientIntakeDay",
   "InboundDocument",

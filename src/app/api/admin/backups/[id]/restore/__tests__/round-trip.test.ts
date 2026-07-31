@@ -257,6 +257,29 @@ function sourceClient() {
         },
       ]),
     },
+    // The score as it was SHOWN on a local day. Not recomputable: today's
+    // number always comes from today's rows, so once the readings behind this
+    // day moved, nothing can reproduce what it said.
+    healthScoreRecord: {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "score-day-1",
+          userId: OWNER,
+          dayKey: "2026-07-18",
+          timezone: "Europe/Berlin",
+          composite: 76,
+          band: "yellow",
+          scoreVersion: 2,
+          composition: ["BLOOD_PRESSURE", "SLEEP", "ADIPOSITY"],
+          pillarScores: { BLOOD_PRESSURE: 86, SLEEP: 100, ADIPOSITY: 42 },
+          inputFingerprint: "a".repeat(64),
+          configVersion: null,
+          configChangedAt: null,
+          computedAt: new Date("2026-07-18T20:00:00.000Z"),
+          createdAt: new Date("2026-07-18T20:00:00.000Z"),
+        },
+      ]),
+    },
     customMetric: {
       findMany: vi.fn().mockResolvedValue([
         {
@@ -584,6 +607,44 @@ describe("backup round trip — export, wire schema, restore", () => {
     // The curve is the part that cannot be rebuilt from anything else, so it
     // is asserted hour by hour rather than by its total.
     expect(rows[0].hourlyCumulative).toEqual(DAY_CURVE);
+  });
+
+  it("writes the recorded score day back with the number it showed", async () => {
+    const { written } = await roundTrip();
+
+    const write = written.find(
+      (w) => w.model === "healthScoreRecord" && w.op === "createMany",
+    );
+    expect(
+      write,
+      "the recorded score day reached the file and nothing wrote it back",
+    ).toBeDefined();
+
+    const rows = write!.data as unknown as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: "score-day-1",
+      userId: OWNER,
+      dayKey: "2026-07-18",
+      timezone: "Europe/Berlin",
+      composite: 76,
+      band: "yellow",
+      scoreVersion: 2,
+      inputFingerprint: "a".repeat(64),
+    });
+    // The composition and the per-pillar scores are what keep the stored day
+    // readable across a later change to what counts. A row that came back
+    // with only its headline would look restored and answer nothing.
+    expect(rows[0].composition).toEqual([
+      "BLOOD_PRESSURE",
+      "SLEEP",
+      "ADIPOSITY",
+    ]);
+    expect(rows[0].pillarScores).toEqual({
+      BLOOD_PRESSURE: 86,
+      SLEEP: 100,
+      ADIPOSITY: 42,
+    });
   });
 
   it("writes the account's own cycle symptom back before resolving its links", async () => {
