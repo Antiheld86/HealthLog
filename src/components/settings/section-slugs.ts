@@ -78,6 +78,12 @@ export const SETTINGS_SECTION_SLUGS = [
   // home for allergies + family history. Always shown (not module-gated, like
   // `vorsorge`); the records are foundational health-profile data.
   "anamnesis",
+  // v1.35.0 — "Health Score": which pillars count toward the composite.
+  // Its own surface rather than a corner of the modules hub, because the
+  // module switches answer a different question (what is recorded and
+  // shown) and folding the two together is what kept the score's
+  // composition invisible.
+  "score",
   "vorsorge",
   "thresholds",
   "ai",

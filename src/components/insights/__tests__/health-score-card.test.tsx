@@ -597,9 +597,13 @@ describe("<HealthScoreCard> composite states", () => {
       /data-slot="health-score-card"[^>]*data-status="insufficient"/,
     );
     expect(html).toContain('data-slot="health-score-insufficient"');
+    // `presentInputs` counts distinct DOMAINS. The sentence used to call
+    // them pillars, which told an account with blood pressure, glycaemia
+    // and lipids that it had one eligible pillar while it had three.
     expect(html).toContain(
-      "The score needs at least three, including a measured physiological pillar.",
+      "1 of 3 areas of health have enough recent data. The score needs 3, at least one of them a physical measurement.",
     );
+    expect(html).not.toMatch(/eligible pillars/i);
     // No band sentence and no fabricated number: a dash, and no bar either.
     expect(html).not.toContain('data-slot="health-score-band"');
     expect(html).not.toContain('data-slot="health-score-card-progress"');

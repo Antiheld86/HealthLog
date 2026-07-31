@@ -2268,7 +2268,7 @@
         "yellow": "Some pillars need attention",
         "red": "One or more pillars are outside the reference range"
       },
-      "insufficient": "{count} eligible pillars. The score needs at least three, including a measured physiological pillar.",
+      "insufficient": "{count} of {required} areas of health have enough recent data. The score needs {required}, at least one of them a physical measurement.",
       "anatomyToggle": "How this score comes about",
       "notScored": "Not scored yet ({count})",
       "method": "The score is the equal-weighted average of the pillars that count toward it, on a 0 to 100 scale. Each pillar is graded against a published reference band, and the weakest pillar can set the overall band. A pillar without enough recent data is left out rather than counted as a zero. The reference bands come from published sources; which pillars count is yours to choose, so the combined number is not itself a clinical standard.",
@@ -2348,6 +2348,11 @@
         "weight_not_tracked": "Log a weight reading to see progress toward your goal.",
         "read_failed": "Weight data could not be loaded. Try again.",
         "notScored": "Weight-goal progress is personal context and does not affect the Health Score."
+      },
+      "configureLink": "Choose what counts toward your score",
+      "coverage": {
+        "minimumMet": "Covers the three areas the score needs",
+        "areas": "{present} of {required} areas of health"
       }
     },
     "suggestedPrompts": {
@@ -3609,7 +3614,8 @@
         "summary": "{present} of {required} inputs · {percent}%",
         "ratioLabel": "{present}/{required}",
         "historyDays": "Based on {count} days of history",
-        "missing": "Track these to sharpen this: {list}"
+        "missing": "Track these to sharpen this: {list}",
+        "summaryLabelled": "{label} · {percent}%"
       },
       "scoreRing": {
         "aria": "Score {score} out of 100, {band}",
@@ -4898,6 +4904,68 @@
         "fetchFailedOne": "The last background weather update failed ({when}).",
         "fetchFailedFew": "The last {count} background weather updates failed, most recently {when}.",
         "fetchFailedOther": "The last {count} background weather updates failed, most recently {when}."
+      },
+      "score": {
+        "title": "Health Score",
+        "subtitle": "Choose which pillars count toward your score.",
+        "card": {
+          "title": "What counts toward your score",
+          "description": "Every pillar you record counts unless you say otherwise here."
+        },
+        "threeAxes": "Recording, showing and counting are three separate things. This page changes only the last one. A pillar you switch off here keeps being recorded and keeps appearing everywhere else in HealthLog, it just stops moving the number.",
+        "axis": {
+          "recorded": "Being recorded",
+          "shown": "Shown in the app",
+          "countsFor": "Count {pillar} toward the score"
+        },
+        "domain": {
+          "cardiometabolic": "Heart and metabolism",
+          "activity": "Activity",
+          "sleep": "Sleep",
+          "adiposity": "Body shape",
+          "wellbeing": "Wellbeing",
+          "fitness": "Measured fitness"
+        },
+        "domainNote": {
+          "cardiometabolic": "Three pillars, one area of health. Each pillar carries the same weight in the score, so this area weighs three times as much as an area with a single pillar."
+        },
+        "state": {
+          "counting": "Counting toward your score",
+          "waiting": "Selected, waiting for data",
+          "crisis": "Safety guidance is shown instead of a score. Your selection is fine.",
+          "readFailed": "This pillar could not be read on the last run.",
+          "unavailable": "Not available yet",
+          "unavailableDetail": "HealthLog cannot yet tell a measured fitness test apart from a device estimate, so this pillar has never produced a score. It stays listed so you can see it is not counted."
+        },
+        "presets": {
+          "label": "Start from",
+          "all": "All pillars",
+          "current": "Your saved selection"
+        },
+        "save": "Save",
+        "saved": "Saved.",
+        "error": "Couldn't save. Please try again.",
+        "loadFailed": "Couldn't load your selection.",
+        "eligibilityFailed": "Couldn't check which pillars currently have data. The switches below still work.",
+        "omitted": "{count} pillars are not listed because their tracking is switched off. Turn a module back on and its pillar comes back.",
+        "omittedLink": "Open modules",
+        "refusal": {
+          "physiological": "A health score needs at least one physical measurement. Keep one of blood pressure, glucose, sleep, body shape or cholesterol in your selection, alongside whatever else you choose.",
+          "domains": "A health score needs at least three different areas of health. Blood pressure, glucose and cholesterol all describe the same area, so a selection made only of those counts as one."
+        },
+        "notice": {
+          "upgrade": {
+            "title": "What counts is now yours to choose",
+            "body": "Which pillars counted toward your Health Score used to follow the modules you had switched on. It is a separate choice now, and this page is where you make it. Your number did not move when this arrived: it still counts exactly what it counted before."
+          },
+          "changed": {
+            "title": "You changed what counts",
+            "body": "Since {date} your score is worked out from a different set of pillars. Days before that were worked out from the old set, so the two are not compared and the weekly change stays paused until the comparison window is clear of the change. Each pillar's own history runs straight through it.",
+            "bodyUndated": "Your score is worked out from a different set of pillars than it used to be. Days before the change were worked out from the old set, so the two are not compared and the weekly change stays paused until the comparison window is clear of the change. Each pillar's own history runs straight through it."
+          },
+          "dismiss": "Got it",
+          "dismissError": "Couldn't save that. Please try again."
+        }
       }
     },
     "profile": "Profile",
