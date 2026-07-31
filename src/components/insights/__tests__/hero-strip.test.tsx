@@ -114,6 +114,7 @@ function scoreReport(pillars: ScorePillarResult[]): HealthScoreReport {
         band: "green",
         bandSetter: null,
         composition: ["BLOOD_PRESSURE"],
+        configured: false,
         noiseFloor: 3,
         scoreVersion: 2,
       },

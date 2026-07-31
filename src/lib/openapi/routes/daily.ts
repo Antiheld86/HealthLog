@@ -69,9 +69,38 @@ const dailyDigestResponse = z
         value: z.number(),
         band: z.string(),
         delta: z.number().nullable(),
+        configured: z
+          .boolean()
+          .optional()
+          .describe(
+            "True when the account's own recipe narrows the score's composition below what its defaults would resolve to today. Resolved on the server and carried straight from the dashboard snapshot; the configuration itself never rides this wire. Optional so older cached digests without the field stay valid.",
+          ),
+        // The score's identity fields have ridden this wire since the
+        // digest first carried a score, but the object is
+        // `additionalProperties: false` and never declared them — a
+        // generated strict decoder would have rejected the real payload.
+        // Declared here rather than left standing beside a new field
+        // that documents itself correctly.
+        deltaReason: z
+          .string()
+          .nullable()
+          .optional()
+          .describe("Why a delta was suppressed; null when it was not."),
+        scoreVersion: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Algorithm version that produced the value."),
+        composition: z
+          .array(z.string())
+          .optional()
+          .describe("Registry-ordered pillar ids the value was composed of."),
       })
       .nullable()
-      .describe("Health score + band + week-over-week delta; null when none."),
+      .describe(
+        "Health score + band + week-over-week delta, plus whether the account authored the composition; null when none.",
+      ),
     topSignal: z
       .object({
         sourceMetric: z.string(),

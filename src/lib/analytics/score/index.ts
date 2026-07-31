@@ -9,6 +9,7 @@ import { computeGlycaemiaPillar } from "./glycaemia";
 import { computeLipidsPillar } from "./lipids";
 import { computeSleepPillar } from "./sleep";
 import {
+  SCORE_PILLAR_DOMAINS,
   SCORE_PILLAR_IDS,
   SCORE_VERSION,
   type CompositeValue,
@@ -23,6 +24,12 @@ import { computeWellbeingPillar } from "./wellbeing";
 export interface ComputeHealthScoreInput {
   asOf: Date;
   availablePillars: ScorePillarId[];
+  /**
+   * Whether `availablePillars` is an authored recipe rather than the
+   * account's defaults, resolved by `resolveScoreConfigured`. Rides to
+   * the composite unchanged; nothing here re-derives it.
+   */
+  configured: boolean;
   pillars: PillarInputs;
   weightGoal: Derived<WeightGoalValue>;
   delta?: number | null;
@@ -35,42 +42,42 @@ export function computeHealthScore(
   const byId: Record<ScorePillarId, ScorePillarResult> = {
     BLOOD_PRESSURE: {
       id: "BLOOD_PRESSURE",
-      domain: "cardiometabolic",
+      domain: SCORE_PILLAR_DOMAINS.BLOOD_PRESSURE,
       result: computeBloodPressurePillar(input.pillars.BLOOD_PRESSURE),
     },
     GLYCAEMIA: {
       id: "GLYCAEMIA",
-      domain: "cardiometabolic",
+      domain: SCORE_PILLAR_DOMAINS.GLYCAEMIA,
       result: computeGlycaemiaPillar(input.pillars.GLYCAEMIA),
     },
     ACTIVITY: {
       id: "ACTIVITY",
-      domain: "activity",
+      domain: SCORE_PILLAR_DOMAINS.ACTIVITY,
       result: computeActivityPillar(input.pillars.ACTIVITY),
     },
     SLEEP: {
       id: "SLEEP",
-      domain: "sleep",
+      domain: SCORE_PILLAR_DOMAINS.SLEEP,
       result: computeSleepPillar(input.pillars.SLEEP),
     },
     ADIPOSITY: {
       id: "ADIPOSITY",
-      domain: "adiposity",
+      domain: SCORE_PILLAR_DOMAINS.ADIPOSITY,
       result: computeAdiposityPillar(input.pillars.ADIPOSITY),
     },
     WELLBEING: {
       id: "WELLBEING",
-      domain: "wellbeing",
+      domain: SCORE_PILLAR_DOMAINS.WELLBEING,
       result: computeWellbeingPillar(input.pillars.WELLBEING),
     },
     FITNESS: {
       id: "FITNESS",
-      domain: "fitness",
+      domain: SCORE_PILLAR_DOMAINS.FITNESS,
       result: computeFitnessPillar(input.pillars.FITNESS),
     },
     LIPIDS: {
       id: "LIPIDS",
-      domain: "cardiometabolic",
+      domain: SCORE_PILLAR_DOMAINS.LIPIDS,
       result: computeLipidsPillar(input.pillars.LIPIDS),
     },
   };
@@ -83,6 +90,7 @@ export function computeHealthScore(
       pillars,
       availablePillars: input.availablePillars,
       asOf: input.asOf,
+      configured: input.configured,
     }),
     pillars,
     delta: input.delta ?? null,

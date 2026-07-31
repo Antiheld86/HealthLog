@@ -195,6 +195,7 @@ function baseUser(
     insightsCachedAt: null,
     dashboardWidgetsJson: null,
     thresholdsJson: null,
+    healthScoreConfigJson: null,
     ...overrides,
   };
 }

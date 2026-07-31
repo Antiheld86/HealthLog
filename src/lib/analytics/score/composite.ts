@@ -6,7 +6,7 @@ import {
 import type { Derived } from "@/lib/insights/derived/types";
 
 import {
-  SCORE_PILLAR_IDS,
+  orderedUniquePillars,
   SCORE_VERSION,
   type CompositeValue,
   type HealthScoreReport,
@@ -15,18 +15,15 @@ import {
   type ScorePillarResult,
 } from "./types";
 import { mean, provenance, scoreBand } from "./shared";
+import { evaluateScoreBreadth, SCORE_MIN_ELIGIBLE_DOMAINS } from "./breadth";
+import type { ScoreConfigBoundary } from "./config";
 
 export const SCORE_ALGORITHM_CHANGED_AT = "2026-07-28T00:00:00.000Z";
-export const SCORE_MIN_ELIGIBLE_DOMAINS = 3;
 
-const PHYSIOLOGICAL_PILLARS: ReadonlySet<ScorePillarId> = new Set([
-  "BLOOD_PRESSURE",
-  "GLYCAEMIA",
-  "SLEEP",
-  "ADIPOSITY",
-  "FITNESS",
-  "LIPIDS",
-]);
+// The rule itself lives in `./breadth`, where the settings write reads it
+// too. Re-exported here because this is where every existing caller looks
+// for it.
+export { SCORE_MIN_ELIGIBLE_DOMAINS };
 
 const BAND_RANK: Record<ScoreBand, number> = {
   green: 2,
@@ -38,17 +35,20 @@ export interface CompositeInput {
   pillars: ScorePillarResult[];
   availablePillars: ScorePillarId[];
   asOf: Date;
-}
-
-function orderedUnique(ids: readonly ScorePillarId[]): ScorePillarId[] {
-  const present = new Set(ids);
-  return SCORE_PILLAR_IDS.filter((id) => present.has(id));
+  /**
+   * Whether `availablePillars` is an authored recipe rather than the
+   * account's defaults. Resolved by `resolveScoreConfigured` before the
+   * pillar list gets here, because the comparison needs the config and
+   * the modules and the composite has neither. Required, so a caller
+   * cannot stay silent and publish `false` for a configured account.
+   */
+  configured: boolean;
 }
 
 export function computeComposite(
   input: CompositeInput,
 ): Derived<CompositeValue> {
-  const available = orderedUnique(input.availablePillars);
+  const available = orderedUniquePillars(input.availablePillars);
   const byId = new Map(input.pillars.map((pillar) => [pillar.id, pillar]));
   const eligible = available
     .map((id) => byId.get(id))
@@ -57,9 +57,7 @@ export function computeComposite(
     );
   const composition = eligible.map((pillar) => pillar.id);
   const eligibleDomains = new Set(eligible.map((pillar) => pillar.domain));
-  const hasPhysiological = composition.some((id) =>
-    PHYSIOLOGICAL_PILLARS.has(id),
-  );
+  const breadth = evaluateScoreBreadth(composition);
   const availableDomains = new Set(
     input.pillars
       .filter((pillar) => available.includes(pillar.id))
@@ -102,13 +100,11 @@ export function computeComposite(
     asOf: input.asOf,
   });
 
-  if (eligibleDomains.size < SCORE_MIN_ELIGIBLE_DOMAINS || !hasPhysiological) {
+  if (!breadth.ok) {
     return buildInsufficient({
       coverage,
       provenance: compositeProvenance,
-      reason: !hasPhysiological
-        ? "measured_physiological_domain_required"
-        : "three_domains_required",
+      reason: breadth.reason,
     });
   }
 
@@ -151,6 +147,7 @@ export function computeComposite(
           ? composition[bandSetterIndex]
           : null,
       composition,
+      configured: input.configured,
       noiseFloor,
       scoreVersion: SCORE_VERSION,
     },
@@ -221,11 +218,61 @@ function comparableDynamicPillars(
   };
 }
 
+/**
+ * Whether the person's own recipe changed BETWEEN the two windows being
+ * compared.
+ *
+ * The exact shape of the global algorithm boundary one function below,
+ * for the same reason and with the same arithmetic: a dated change, and
+ * a comparison that straddles the date. What makes the per-user version
+ * necessary at all is that the two windows are computed in ONE request
+ * under whatever recipe is in force right now. Both sides therefore
+ * carry the new composition, `sameComposition` agrees, and the
+ * subtraction looks legitimate. Nothing inside the two composites can
+ * see the change; only the recipe's own `changedAt` can.
+ *
+ * The date is the whole signal, and the boundary's `version` is
+ * deliberately NOT consulted here. An earlier draft also required
+ * `version >= 1`, which reads like defence in depth and is not: the
+ * resolver hands back a version below 1 only on the path that also
+ * hands back a null date, so no input could ever reach that arm and no
+ * test could make it fail. A condition nothing can trip is decoration
+ * on a guard. The version earns its keep elsewhere — it identifies the
+ * recipe on the stored row and in the notice key — but the question
+ * "did the recipe move inside this window" has one honest answer and it
+ * is a date.
+ *
+ * No date means nothing to compare, and that does not suppress:
+ * refusing every delta forever over an unreadable timestamp would trade
+ * one silent lie for a permanent silence. Both cases — an account that
+ * never chose, and a stored date this build cannot read — parse to NaN,
+ * and every comparison against NaN is false, so the refusal falls out
+ * of the arithmetic. Two early returns stood here and neither could
+ * change an answer, which makes them a comment wearing an `if`.
+ */
+export function crossesConfigBoundary(
+  boundary: ScoreConfigBoundary,
+  previousAt: Date,
+  asOf: Date,
+): boolean {
+  const changedAt = Date.parse(boundary.changedAt ?? "");
+  return asOf.getTime() >= changedAt && previousAt.getTime() < changedAt;
+}
+
+/**
+ * `config` is required and has no default on purpose. Every caller has
+ * to state which recipe the two windows were computed under, and the
+ * account that authored none says so with
+ * {@link UNCONFIGURED_SCORE_BOUNDARY}. A defaulted boundary would let a
+ * future caller thread nothing and get the pre-v1.35.0 behaviour back —
+ * a false drop narrated at a person who had just used the settings page.
+ */
 export function attachScoreDelta(
   current: Derived<CompositeValue>,
   previous: Derived<CompositeValue>,
   previousPrevious: Derived<CompositeValue>,
   asOf: Date,
+  config: ScoreConfigBoundary,
   currentPillars: ScorePillarResult[] = [],
   previousPillars: ScorePillarResult[] = [],
 ): Pick<HealthScoreReport, "delta" | "deltaReason"> {
@@ -243,6 +290,13 @@ export function attachScoreDelta(
     (asOf >= boundary && previousAt < boundary)
   ) {
     return { delta: null, deltaReason: "algorithm_changed" };
+  }
+  // Ahead of the composition check deliberately. When both fire, the
+  // person changed what counts and that is the truer sentence; "the
+  // included pillars changed" would describe the consequence and leave
+  // out the act.
+  if (crossesConfigBoundary(config, previousAt, asOf)) {
+    return { delta: null, deltaReason: "config_changed" };
   }
   if (!sameComposition(current, previous)) {
     return { delta: null, deltaReason: "composition_changed" };

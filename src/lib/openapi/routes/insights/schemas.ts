@@ -1109,9 +1109,16 @@ export const dashboardSnapshotResponse = z
             ]),
           )
           .optional(),
+        configured: z
+          .boolean()
+          .optional()
+          .describe(
+            "True when the account's own recipe narrows the score's composition below what its defaults would resolve to today. Server-resolved, so a client never interprets a configuration blob: an account that kept every pillar reads false, and so does one whose disabled modules alone narrow the set. The configuration itself is never on this wire. Optional so older cached snapshots without the field stay valid.",
+          ),
         deltaReason: z
           .enum([
             "algorithm_changed",
+            "config_changed",
             "composition_changed",
             "first_eligibility_window",
             "below_noise_floor",

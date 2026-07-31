@@ -2275,10 +2275,12 @@
       "bandSetter": "Ogólny zakres wyznacza {pillar}",
       "versionAndNoise": "Wersja metody {version}. Próg porównania tygodniowego: {noise} pkt.",
       "methodVersion": "Wersja metody {version}.",
+      "configured": "Wybrane przez Ciebie filary decydują o tym wyniku.",
       "none": "brak",
       "delta": "{delta} względem poprzedniego porównywalnego okresu",
       "deltaReason": {
         "algorithm_changed": "Brak porównania, ponieważ zmieniła się metoda obliczeń.",
+        "config_changed": "Brak porównania, ponieważ zmieniono, co wlicza się do wyniku.",
         "composition_changed": "Brak porównania, ponieważ zmieniły się uwzględnione filary.",
         "first_eligibility_window": "Brak porównania, ponieważ to pierwszy kwalifikujący się okres.",
         "below_noise_floor": "Zmiana mieści się w łącznej zmienności pomiarów.",

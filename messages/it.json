@@ -2275,10 +2275,12 @@
       "bandSetter": "Fascia complessiva determinata da {pillar}",
       "versionAndNoise": "Versione del metodo {version}. Soglia del confronto settimanale: {noise} punti.",
       "methodVersion": "Versione del metodo {version}.",
+      "configured": "Hai scelto quali pilastri contano per questo punteggio.",
       "none": "nessuno",
       "delta": "{delta} rispetto al periodo precedente confrontabile",
       "deltaReason": {
         "algorithm_changed": "Nessun confronto perché è cambiato il metodo di calcolo.",
+        "config_changed": "Nessun confronto perché hai cambiato ciò che conta per il tuo punteggio.",
         "composition_changed": "Nessun confronto perché sono cambiati i pilastri inclusi.",
         "first_eligibility_window": "Nessun confronto perché questo è il primo periodo idoneo.",
         "below_noise_floor": "La variazione rientra nella fluttuazione combinata delle misurazioni.",
