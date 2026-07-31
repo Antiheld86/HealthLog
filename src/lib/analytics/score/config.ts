@@ -31,6 +31,40 @@
  * positive selection, because that is what a person sees and what the
  * score's published composition means. The inversion happens once, at
  * the boundary, in `healthScoreConfigFromSelection`.
+ *
+ * ## What happens to an account that already exists
+ *
+ * Nothing, on the day it upgrades, and that is the whole promise. The
+ * column starts null, the resolver reads null as version 0 with no
+ * change date, and version 0 resolves to every pillar — which,
+ * intersected with what the account's modules record, is exactly the
+ * composition the module switches were producing before this release.
+ * The number does not move, no series break is drawn, no notice is
+ * raised, and no delta is suppressed. There is no backfill because
+ * there is nothing to back-fill: the inheritance is the resolver's
+ * behaviour, not a migration's.
+ *
+ * The first time someone opens the surface and saves, the version goes
+ * 0 → 1 and a dated change appears beside it. From that instant three
+ * things follow, all of them once:
+ *
+ *   * the week-over-week delta is suppressed for as long as the
+ *     comparison window still straddles the change, with the reason
+ *     `config_changed` — the person changed what counts, and a
+ *     subtraction across that is not a health event;
+ *   * the next stored day is marked as a series break, so the composite
+ *     line is drawn in two segments rather than one line through the
+ *     change (`./series.ts`), while the per-pillar rows run straight
+ *     through it;
+ *   * the notice key gains the recipe version, so the "you changed what
+ *     counts" note is raised once and dismissed once per version, and a
+ *     dismissal of one version never silences the next.
+ *
+ * What makes the previously invisible choice visible for the first time
+ * is the surface itself, which is where the one-time note belongs and
+ * where it is written. This file owns the behaviour that note describes;
+ * saying it twice, in two places that can drift, is how a note ends up
+ * describing something the code stopped doing.
  */
 import { z } from "zod";
 
