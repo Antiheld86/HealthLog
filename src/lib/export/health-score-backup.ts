@@ -111,7 +111,7 @@ export async function buildHealthScoreBackupSection(
       dayKey: row.dayKey,
       timezone: row.timezone,
       composite: row.composite,
-      band: row.band as ScoreBand,
+      band: row.band,
       scoreVersion: row.scoreVersion,
       composition: row.composition,
       pillarScores: readPillarScores(row.pillarScores),

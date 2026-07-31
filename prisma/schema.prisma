@@ -5056,6 +5056,17 @@ model UserAchievement {
 
 // ─── Health Score record ──────
 
+/// The three bands a composite can land in, lowercase because that is the
+/// value every surface already speaks. Closed on purpose: the column refuses
+/// a band no renderer knows.
+enum HealthScoreBand {
+  green
+  yellow
+  red
+
+  @@map("health_score_band")
+}
+
 /// The health score as it was SHOWN to the account on one local day.
 ///
 /// Not a cache and not a derived tier: nothing can rebuild it. The live
@@ -5084,11 +5095,10 @@ model HealthScoreRecord {
   /// The composite 0-100 as shown. Integer, matching the composite's own
   /// rounding.
   composite Int
-  /// The band as shown (`green` / `yellow` / `red`). Stored rather than
-  /// re-derived from `composite`, because the worst pillar can pull the band
-  /// below the one the mean alone would give, so the number does not
-  /// determine the band.
-  band String @db.VarChar(8)
+  /// The band as shown. Stored rather than re-derived from `composite`,
+  /// because the worst pillar can pull the band below the one the mean alone
+  /// would give, so the number does not determine the band.
+  band HealthScoreBand
   /// Algorithm identity the row was computed under.
   scoreVersion Int @map("score_version")
   /// Registry-ordered pillar ids that produced the composite. Part of the

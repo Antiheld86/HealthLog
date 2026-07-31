@@ -10,12 +10,25 @@
 --   * one row per account per local day, so a second computation on the same
 --     day cannot mint a rival record of the same day, and the writer's
 --     ON CONFLICT DO NOTHING has something to conflict against;
---   * a closed set of bands, so a row can never carry a band no surface knows
---     how to render.
+--   * a closed set of bands, as a type rather than as a CHECK. The value the
+--     application speaks is lowercase, so the enum carries the same labels and
+--     needs no translation layer. A type also keeps the schema-driven wipe
+--     seeder working: it reads `pg_enum` for a value it cannot otherwise
+--     guess, where a CHECK would have forced a hand-written entry into a
+--     fixture whose whole point is not having one.
+--
+-- The composite is range-checked because it is free to check and a number
+-- outside 0-100 would render as a score nobody can read. The day key's format
+-- and the composition's non-emptiness are NOT checked here: the writer builds
+-- the key through the timezone helper and refuses an empty composition before
+-- it inserts, and the restore validates both against the wire schema before
+-- the transaction opens. A third copy of those two rules would buy nothing.
 --
 -- There is deliberately no updated_at column. The row is written once and
 -- never rewritten: a later computation under different readings, or under a
 -- different configuration, leaves the earlier day exactly as it stood.
+
+CREATE TYPE "health_score_band" AS ENUM ('green', 'yellow', 'red');
 
 CREATE TABLE "health_score_records" (
     "id"                 TEXT NOT NULL,
@@ -23,7 +36,7 @@ CREATE TABLE "health_score_records" (
     "day_key"            VARCHAR(10) NOT NULL,
     "timezone"           TEXT NOT NULL,
     "composite"          INTEGER NOT NULL,
-    "band"               VARCHAR(8) NOT NULL,
+    "band"               "health_score_band" NOT NULL,
     "score_version"      INTEGER NOT NULL,
     "composition"        TEXT[] NOT NULL,
     "pillar_scores"      JSONB NOT NULL,
@@ -34,14 +47,8 @@ CREATE TABLE "health_score_records" (
     "created_at"         TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "health_score_records_pkey" PRIMARY KEY ("id"),
-    CONSTRAINT "health_score_records_band_check"
-        CHECK ("band" IN ('green', 'yellow', 'red')),
     CONSTRAINT "health_score_records_composite_range_check"
-        CHECK ("composite" >= 0 AND "composite" <= 100),
-    CONSTRAINT "health_score_records_day_key_check"
-        CHECK ("day_key" ~ '^\d{4}-\d{2}-\d{2}$'),
-    CONSTRAINT "health_score_records_composition_not_empty_check"
-        CHECK (array_length("composition", 1) >= 1)
+        CHECK ("composite" >= 0 AND "composite" <= 100)
 );
 
 CREATE UNIQUE INDEX "health_score_records_user_id_day_key_key"

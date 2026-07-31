@@ -9,6 +9,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
+import { HealthScoreBand } from "@/generated/prisma/client";
 import { buildOk, deriveCoverage } from "@/lib/insights/derived/coverage";
 import type { Derived } from "@/lib/insights/derived/types";
 
@@ -114,11 +115,18 @@ const HEALTHY = [
 ];
 
 describe("stored bands", () => {
+  it("matches the band type the column actually accepts", () => {
+    // The column is a Postgres enum, so a band the composite can produce and
+    // the type does not carry is a constraint violation on a write path that
+    // swallows its own failures — the score would keep rendering and the day
+    // would silently go unrecorded. Both ends are literals: the generated
+    // enum on one side, the list the writer uses on the other.
+    expect(Object.values(HealthScoreBand).sort()).toEqual(
+      [...SCORE_BANDS].sort(),
+    );
+  });
+
   it("lists every band the composite can produce, and nothing else", () => {
-    // The migration's CHECK constraint spells out the same three. A band the
-    // composite can reach and the column refuses is a runtime constraint
-    // violation on a write path that swallows its own failures, so the two
-    // lists have to be the same list.
     const produced = new Set<string>();
     for (const score of [95, 85, 65, 55, 40, 20, 0]) {
       const built = report([
