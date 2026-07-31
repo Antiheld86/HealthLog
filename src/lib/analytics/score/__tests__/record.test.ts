@@ -324,7 +324,9 @@ describe("writing the row", () => {
    * not a comment.
    */
   function delegate(count: number) {
-    const createMany = vi.fn(async () => ({ count }));
+    const createMany = vi.fn(async (_args: { skipDuplicates?: boolean }) => ({
+      count,
+    }));
     return {
       db: { healthScoreRecord: { createMany } } as never,
       createMany,
