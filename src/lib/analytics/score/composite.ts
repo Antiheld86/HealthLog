@@ -6,7 +6,7 @@ import {
 import type { Derived } from "@/lib/insights/derived/types";
 
 import {
-  SCORE_PILLAR_IDS,
+  orderedUniquePillars,
   SCORE_VERSION,
   type CompositeValue,
   type HealthScoreReport,
@@ -36,15 +36,10 @@ export interface CompositeInput {
   asOf: Date;
 }
 
-function orderedUnique(ids: readonly ScorePillarId[]): ScorePillarId[] {
-  const present = new Set(ids);
-  return SCORE_PILLAR_IDS.filter((id) => present.has(id));
-}
-
 export function computeComposite(
   input: CompositeInput,
 ): Derived<CompositeValue> {
-  const available = orderedUnique(input.availablePillars);
+  const available = orderedUniquePillars(input.availablePillars);
   const byId = new Map(input.pillars.map((pillar) => [pillar.id, pillar]));
   const eligible = available
     .map((id) => byId.get(id))

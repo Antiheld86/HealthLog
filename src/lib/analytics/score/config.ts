@@ -34,13 +34,11 @@
  */
 import { z } from "zod";
 
-import { SCORE_PILLAR_IDS, type ScorePillarId } from "./types";
-
-/** Ordered, de-duplicated, unknown ids dropped. Registry order is the score's own. */
-export function orderedUniquePillars(ids: readonly unknown[]): ScorePillarId[] {
-  const present = new Set(ids);
-  return SCORE_PILLAR_IDS.filter((id) => present.has(id));
-}
+import {
+  orderedUniquePillars,
+  SCORE_PILLAR_IDS,
+  type ScorePillarId,
+} from "./types";
 
 export const scorePillarIdSchema = z.enum(SCORE_PILLAR_IDS);
 

@@ -20,6 +20,18 @@ export const SCORE_PILLAR_IDS = [
 ] as const;
 
 export type ScorePillarId = (typeof SCORE_PILLAR_IDS)[number];
+
+/**
+ * Sanitise a list of pillar ids: registry order, no duplicates, and
+ * anything outside the catalogue dropped. Everything that narrows the
+ * score's composition goes through here, so a stored blob, a caller's
+ * argument and the scorer itself cannot disagree about what a valid
+ * pillar set looks like.
+ */
+export function orderedUniquePillars(ids: readonly unknown[]): ScorePillarId[] {
+  const present = new Set(ids);
+  return SCORE_PILLAR_IDS.filter((id) => present.has(id));
+}
 export type ScoreBand = "green" | "yellow" | "red";
 export type ScoreDomain =
   | "cardiometabolic"
