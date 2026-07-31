@@ -235,17 +235,19 @@ function comparableDynamicPillars(
  *
  * No date means nothing to compare, and that does not suppress:
  * refusing every delta forever over an unreadable timestamp would trade
- * one silent lie for a permanent silence.
+ * one silent lie for a permanent silence. Both cases — an account that
+ * never chose, and a stored date this build cannot read — parse to NaN,
+ * and every comparison against NaN is false, so the refusal falls out
+ * of the arithmetic. Two early returns stood here and neither could
+ * change an answer, which makes them a comment wearing an `if`.
  */
 export function crossesConfigBoundary(
   boundary: ScoreConfigBoundary,
   previousAt: Date,
   asOf: Date,
 ): boolean {
-  if (boundary.changedAt === null) return false;
-  const changedAt = new Date(boundary.changedAt);
-  if (Number.isNaN(changedAt.getTime())) return false;
-  return asOf >= changedAt && previousAt < changedAt;
+  const changedAt = Date.parse(boundary.changedAt ?? "");
+  return asOf.getTime() >= changedAt && previousAt.getTime() < changedAt;
 }
 
 /**

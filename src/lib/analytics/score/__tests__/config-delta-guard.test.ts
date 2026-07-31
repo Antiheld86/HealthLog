@@ -403,11 +403,23 @@ describe("the seam", () => {
   });
 
   it("treats a day that names no recipe as a break rather than a link", () => {
-    const points = scoreSeriesSeams([
-      day("2026-08-19", null),
-      day("2026-08-20", 1),
-    ]);
-    expect(points[1].seamBreak).toBe(true);
+    // Both directions, including two unknowns in a row. Without the
+    // second case the arm would be doing nothing that plain inequality
+    // does not already do: `null !== 1` breaks on its own, while
+    // `null !== null` would quietly claim two rows share a basis that
+    // neither of them names.
+    expect(
+      scoreSeriesSeams([day("2026-08-19", null), day("2026-08-20", 1)])[1]
+        .seamBreak,
+    ).toBe(true);
+    expect(
+      scoreSeriesSeams([day("2026-08-19", 1), day("2026-08-20", null)])[1]
+        .seamBreak,
+    ).toBe(true);
+    expect(
+      scoreSeriesSeams([day("2026-08-19", null), day("2026-08-20", null)])[1]
+        .seamBreak,
+    ).toBe(true);
   });
 
   it("breaks the composite line and never rejoins it", () => {
