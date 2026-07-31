@@ -2,6 +2,51 @@
 
 ## [Unreleased]
 
+## [1.34.5] — 2026-07-31
+
+A release about the score explaining itself, and about sentences arriving in the
+language you read.
+
+### Added
+
+- The health score sits beside the greeting again, at the top of the insights page,
+  instead of on a separate card pinned underneath it. It has one place on the page.
+- Every pillar inside the score takes its own colour. A pillar doing well was painted
+  in the overall score's colour, so a good result inside a weak week looked like a bad
+  one.
+- A blood pressure score says how it came about. The pillar's detail now opens with
+  which of the two values set the number and how far it sat from its boundary, what
+  the scale means at that boundary, and that the pair it works from is a weighted
+  average over the window rather than a reading anyone took.
+
+### Fixed
+
+- The Coach read strip writes both of its lines in the language you use. The summary
+  was translated and the line directly beneath it stayed English. The translations
+  existed the whole time. The request simply never named a language, and the code
+  behind it chose English whenever nobody did.
+- The cycle insights read carried the same silence and the same English line.
+- Switching language reloads those lines instead of showing the previous language out
+  of the browser cache.
+- Anything in the score that is not contributing is one quiet line instead of a block
+  of its own. A read that failed is named once for every pillar it took down and keeps
+  its retry. Safety guidance is shown in full. Anything not recorded yet is counted,
+  with the names one tap away.
+
+### Internal
+
+- A function that writes a sentence for a person has to be told the language, and none
+  of them may fall back to English on their own. A guard reads the types rather than
+  the parameter names, so renaming the parameter or moving the default onto the
+  destructuring pattern does not get past it.
+- The space the score holds open while it loads is measured against the built panel
+  instead of estimated. The declared minimum was smaller than the blocks inside it, so
+  it never bound anything, and a short score was pushed further down the page than it
+  needed to be.
+- A widening of the pillar label column was taken back out. The measurement behind it
+  did not hold: the longest label in five of the six languages overruns any column
+  this panel can afford, so the extra width would have come off the bar.
+
 ## [1.34.4] — 2026-07-31
 
 A release about two places in the code answering one question differently.
