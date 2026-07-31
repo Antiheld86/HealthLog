@@ -22,7 +22,14 @@ export const cycleKeys = {
    * on-ramp reads this so a non-FEMALE account can opt in before the gated
    * cycle page is reachable. */
   cyclePrefs: () => ["cycle", "prefs"] as const,
-  cycleInsights: () => ["cycle", "insights"] as const,
+  /**
+   * The FDR-guarded phase-correlation read (`/api/cycle/insights`). Keyed by
+   * locale: each surviving lagged row now carries an `interpretation` the
+   * server writes in the reader's language, so a cached payload belongs to one
+   * language only. `["cycle"]` stays the prefix, so every cycle write still
+   * evicts it through `cycleDependentKeys`.
+   */
+  cycleInsights: (locale: string) => ["cycle", "insights", locale] as const,
   cycleDayLog: (date: string) => ["cycle", "day-log", date] as const,
   /** The caller's own custom symptoms (decrypted labels) the log-day sheet
    * merges into the seeded chip grid. */

@@ -103,6 +103,50 @@ function isLocaleType(node: ts.TypeNode | undefined, alias: string): boolean {
   return false;
 }
 
+/**
+ * Does the type still let a caller say nothing? `Locale | undefined` and
+ * `Locale | null` carry no `?` and no default, so a check that only looked at
+ * the question mark read them as required — and they are the original bug
+ * wearing a different hat: the caller passes `undefined`, the body picks a
+ * language, and the sentence comes back in English again. `any` and `unknown`
+ * are the same hole with the door taken off.
+ */
+function toleratesAbsence(node: ts.TypeNode | undefined): boolean {
+  if (!node) return false;
+  if (
+    node.kind === ts.SyntaxKind.UndefinedKeyword ||
+    node.kind === ts.SyntaxKind.NullKeyword ||
+    node.kind === ts.SyntaxKind.AnyKeyword ||
+    node.kind === ts.SyntaxKind.UnknownKeyword ||
+    node.kind === ts.SyntaxKind.VoidKeyword
+  ) {
+    return true;
+  }
+  if (ts.isLiteralTypeNode(node)) {
+    return node.literal.kind === ts.SyntaxKind.NullKeyword;
+  }
+  if (ts.isUnionTypeNode(node)) return node.types.some(toleratesAbsence);
+  return false;
+}
+
+/**
+ * Property names given a default inside an object binding pattern —
+ * `function narrate({ locale = "en" }: { locale: Locale })`. The default sits
+ * on the binding, not on the parameter, so `parameter.initializer` is empty
+ * and the signature reads clean.
+ */
+function defaultedBindingNames(
+  parameter: ts.ParameterDeclaration,
+): Set<string> {
+  const names = new Set<string>();
+  if (!ts.isObjectBindingPattern(parameter.name)) return names;
+  for (const element of parameter.name.elements) {
+    if (element.initializer === undefined) continue;
+    names.add((element.propertyName ?? element.name).getText());
+  }
+  return names;
+}
+
 /** Find a top-level function/interface declaration by name. */
 function findDeclaration(
   source: ts.SourceFile,
@@ -147,16 +191,23 @@ export function localeSites(
     owner: string,
     ownerOptional: boolean,
     ownerHasInitializer: boolean,
+    defaultedNames: Set<string> = new Set(),
   ) => {
     for (const member of members) {
       if (!ts.isPropertySignature(member)) continue;
       if (!isLocaleType(member.type, alias)) continue;
+      const name = member.name.getText();
       sites.push({
-        where: `${owner}.${member.name.getText()}`,
+        where: `${owner}.${name}`,
         // The property itself may be required while the object it lives on is
-        // optional or defaulted — which puts the silence right back.
-        optional: member.questionToken !== undefined || ownerOptional,
-        hasInitializer: ownerHasInitializer,
+        // optional or defaulted — which puts the silence right back. So does a
+        // type that merely admits `undefined` / `null`: no question mark, and a
+        // caller can still hand over nothing.
+        optional:
+          member.questionToken !== undefined ||
+          ownerOptional ||
+          toleratesAbsence(member.type),
+        hasInitializer: ownerHasInitializer || defaultedNames.has(name),
       });
     }
   };
@@ -168,13 +219,24 @@ export function localeSites(
       const owner = parameter.name.getText();
       const optional = parameter.questionToken !== undefined;
       const hasInitializer = parameter.initializer !== undefined;
+      const defaultedNames = defaultedBindingNames(parameter);
       if (isLocaleType(parameter.type, alias)) {
-        sites.push({ where: owner, optional, hasInitializer });
+        sites.push({
+          where: owner,
+          optional: optional || toleratesAbsence(parameter.type),
+          hasInitializer,
+        });
         continue;
       }
       const type = parameter.type;
       if (type && ts.isTypeLiteralNode(type)) {
-        collectFromMembers(type.members, owner, optional, hasInitializer);
+        collectFromMembers(
+          type.members,
+          owner,
+          optional,
+          hasInitializer,
+          defaultedNames,
+        );
       } else if (type && ts.isTypeReferenceNode(type)) {
         const referenced = findDeclaration(source, type.typeName.getText());
         if (referenced && ts.isInterfaceDeclaration(referenced)) {
@@ -183,6 +245,7 @@ export function localeSites(
             type.typeName.getText(),
             optional,
             hasInitializer,
+            defaultedNames,
           );
         }
       }

@@ -107,6 +107,80 @@ describe("the locale guard cannot be talked around", () => {
     expect(site.optional).toBe(true);
   });
 
+  it("catches `Locale | undefined` written WITHOUT the question mark", () => {
+    // The nastiest disguise, because it reads as required at a glance: no `?`,
+    // no default, and the field is spelled out in the signature. But the caller
+    // can still pass `undefined`, the body picks a language, and the sentence
+    // comes back in English — the original bug, one hat later.
+    const [site] = localeSites(
+      parse(
+        FILE,
+        `import type { Locale } from "@/lib/i18n/config";
+         export function narrate(opts: { locale: Locale | undefined }) {
+           return opts.locale === undefined ? "en" : opts.locale;
+         }`,
+      ),
+      "narrate",
+    );
+    expect(site.optional).toBe(true);
+  });
+
+  it("catches `Locale | null` the same way", () => {
+    const [site] = localeSites(
+      parse(
+        FILE,
+        `import type { Locale } from "@/lib/i18n/config";
+         export function narrate(opts: { locale: Locale | null }) {
+           return opts.locale === null ? "en" : opts.locale;
+         }`,
+      ),
+      "narrate",
+    );
+    expect(site.optional).toBe(true);
+  });
+
+  it("catches a locale widened to `any`", () => {
+    const [site] = localeSites(
+      parse(
+        FILE,
+        `import type { Locale } from "@/lib/i18n/config";
+         export function narrate(opts: { locale: Locale | any }) { return opts; }`,
+      ),
+      "narrate",
+    );
+    expect(site.optional).toBe(true);
+  });
+
+  it("catches a default hidden in the parameter's own binding pattern", () => {
+    // The field is required in the type and the parameter has no initializer,
+    // so both of the earlier checks read clean — the default sits on the
+    // destructuring instead.
+    const [site] = localeSites(
+      parse(
+        FILE,
+        `import type { Locale } from "@/lib/i18n/config";
+         export function narrate({ locale = "en" }: { locale: Locale }) { return locale; }`,
+      ),
+      "narrate",
+    );
+    expect(site.hasInitializer).toBe(true);
+  });
+
+  it("leaves a plainly required locale alone", () => {
+    // The shape the whole chain is supposed to have. If this ever reads as a
+    // violation the guard stops being a guard and starts being noise.
+    const [site] = localeSites(
+      parse(
+        FILE,
+        `import type { Locale } from "@/lib/i18n/config";
+         export function narrate(opts: { locale: Locale }) { return opts.locale; }`,
+      ),
+      "narrate",
+    );
+    expect(site.optional).toBe(false);
+    expect(site.hasInitializer).toBe(false);
+  });
+
   it("refuses to pass a declaration that dropped the locale entirely", () => {
     expect(() =>
       localeSites(

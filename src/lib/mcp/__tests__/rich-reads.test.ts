@@ -218,6 +218,10 @@ describe("get_correlation", () => {
     expect(res.pair?.r).toBe(-0.42);
     expect(res.association).toBe("descriptive");
     expect(res.windowDays).toBe(180);
+    // The `note` on the pair is a finished sentence an MCP client shows as it
+    // stands, so the account's language has to reach the reader. Nothing else
+    // in this file would notice if the read went back to asking in English.
+    expect(readCoachCorrelations).toHaveBeenCalledWith(USER, "de");
   });
 
   it("honest-null when the pair has no surviving association", async () => {
