@@ -712,13 +712,19 @@ type ServerCacheRegistry = ReturnType<typeof createServerCaches>;
  * A module imported from BOTH a Server Component and a route handler is
  * instantiated once per bundler layer, so plain module state gives the
  * dashboard RSC its own private `Map` and the API routes another. Measured
- * on a production build (`next build && next start`, one process): the RSC
- * copy held two analytics entries while an interactive measurement write —
- * which runs in a route handler and calls `deleteByPrefix` — emptied only
- * the route-handler copy. The dashboard's server-rendered first paint kept
- * serving the pre-write snapshot until the TTL lapsed minutes later, and
- * because that payload is dehydrated into TanStack it overwrote the fresh
- * value the client had already fetched.
+ * on a production build, single process: the RSC copy held two analytics
+ * entries while an interactive measurement write — which runs in a route
+ * handler and calls `deleteByPrefix` — emptied only the route-handler copy.
+ * The dashboard's server-rendered first paint kept serving the pre-write
+ * snapshot until the TTL lapsed minutes later, and because that payload is
+ * dehydrated into TanStack it overwrote the fresh value the client had
+ * already fetched.
+ *
+ * Measured under `node .next/standalone/server.js`, which is what the image
+ * runs, and not only under `next start`. Both behave the same here: three
+ * module instantiations either way, one shared registry once pinned. Worth
+ * keeping in mind for the next cache-shaped bug — a reading taken under
+ * `next start` alone would not have settled this.
  *
  * `Symbol.for` is the same cross-layer slot `event-builder.ts` uses for the
  * event-loop-lag sample; `globalForCaches` mirrors `db.ts`'s `globalForPrisma`
