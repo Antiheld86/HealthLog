@@ -2,6 +2,74 @@
 
 ## [Unreleased]
 
+## [1.34.3] — 2026-07-31
+
+A release about surfaces that knew something and did not say it.
+
+### Added
+
+- The workout page now shows the day around a session instead of linking away
+  from it: the day's pulse curve, the night before, and that day's mood, on the
+  page. It also offers the previous session of the same sport in one tap, says
+  how many workouts the list holds, and lets a sport narrow it.
+- When a nutrient sync arrives and nothing can be stored, the nutrients page now
+  says so and why, in plain sentences, instead of showing the same empty page
+  someone would see who never synced at all.
+
+### Changed
+
+- The health score appears once. It is a single card below the greeting with the
+  breakdown behind one expander, rather than a compact copy in the greeting plus
+  nine full-width blocks underneath. Scores with too little input leave the grid
+  but keep their name and the reason they are not scored.
+- The Coach input is one row tall until you type. It used to reserve a second row
+  for its buttons before anything had been written.
+- Card headings sit closer to their content. A card with a title and no
+  description reserved space for a description that was never there, which
+  affected 45 of the 48 cards in the app.
+
+### Fixed
+
+- A profile save no longer discards everything because one field is invalid.
+  Valid fields are saved, rejected ones are named, and if nothing can be saved
+  the message says which field blocked it. Validator wording no longer reaches
+  the screen.
+- A failed read on the nutrients page is no longer shown as "no data yet".
+
+### Contract
+
+- Share-link selection now publishes which leaves belong to which group and which
+  group is the sensitive one. The server always knew; a client that could not see
+  it had to withhold "select all" rather than risk sending psychometric scores in
+  a single tap.
+- The dashboard snapshot schema declares three fields the route has been sending
+  all along. Because that schema is closed, a strictly generated client rejected
+  the real response.
+- Rhythm events carry their own six-value classification, separate from the
+  three-value one on ECG rows.
+- Six routes that clients consume were added to the published specification,
+  including sixteen skip reasons enumerated from the source rather than
+  transcribed. Three schemas were named in the specification's own prose while
+  never being emitted; all three are now published.
+
+### Operations
+
+- The optional worker in the bundled compose file inherited 14 of the app's 62
+  environment variables, missing every mail, push and notification value. It is
+  the process that sends notifications, so a split deployment ran a worker that
+  silently sent nothing. Both services now share one definition.
+- Bounded log rotation on both containers, dropped capabilities and a memory
+  limit on the app, with the reasoning recorded, including why the database gets
+  neither.
+- Every nutrient ingest call is now recorded, not only the ones that stored a
+  row. The single durable trace used to be conditional on success, so a batch
+  that was entirely rejected looked exactly like a batch that never arrived.
+- The build carries its own memory ceiling, so a local run, CI and the published
+  image all invoke it the same way.
+- The self-hosting notes warn that a pinned image reference stays pinned, and name
+  the two checks that catch a deploy which reports success while serving the
+  previous release.
+
 ## [1.34.2] — 2026-07-30
 
 Point release. One workout that arrived more than once, and several surfaces

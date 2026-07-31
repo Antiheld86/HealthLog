@@ -120,6 +120,13 @@
         "outOfOrder": "Votre progression a changé. Actualisez la page et continuez.",
         "concurrent": "Votre progression a changé. Actualisez la page et continuez."
       }
+    },
+    "profile": {
+      "update": {
+        "nothingSaved": "Rien n'a été enregistré. Corrigez le champ signalé et réessayez.",
+        "invalidBody": "La mise à jour du profil n'a pas pu être lue.",
+        "emailInUse": "Cette adresse e-mail est déjà utilisée."
+      }
     }
   },
   "doctorReport": {
@@ -2262,6 +2269,9 @@
         "red": "Un ou plusieurs piliers sont hors de la plage de référence"
       },
       "insufficient": "{count} piliers admissibles. Le score en requiert au moins trois, dont un pilier physiologique mesuré.",
+      "anatomyToggle": "Comment ce score est établi",
+      "notScored": "Pas encore évalué ({count})",
+      "method": "Le score est la moyenne à poids égal de tous les piliers disposant d'assez de données récentes, sur une échelle de 0 à 100. Chaque pilier est comparé à une plage de référence publiée, et le pilier le plus faible peut déterminer la plage globale. Un pilier sans données suffisantes est écarté plutôt que compté comme un zéro.",
       "bandSetter": "Catégorie globale fixée par {pillar}",
       "versionAndNoise": "Version de la méthode {version}. Seuil de comparaison hebdomadaire : {noise} points.",
       "methodVersion": "Version de la méthode {version}.",
@@ -2320,7 +2330,6 @@
         "insufficientHistory": "Pas assez de données récentes admissibles",
         "unavailable": "Ce pilier n'est pas admissible actuellement"
       },
-      "pillarInsufficient": "Aucun score pour ce pilier : {reason}",
       "tension": "Les signaux de préparation diffèrent. Favorables : {positive}. Sous tension : {negative}.",
       "returnToBand": "{metric} est revenu dans ta plage habituelle depuis {days} jours.",
       "weightGoal": {
@@ -3100,9 +3109,15 @@
         "splitsTime": "Temps",
         "splitsPace": "Allure",
         "thatDayTitle": "Ce jour-là",
-        "dayPulse": "Pouls",
-        "daySleep": "Sommeil",
-        "dayMood": "Humeur",
+        "daySleepTitle": "La nuit précédente",
+        "daySleepNone": "Aucun sommeil enregistré cette nuit-là",
+        "daySleepAwakeningsOne": "{count} réveil",
+        "daySleepAwakeningsMany": "{count} réveils",
+        "dayMoodTitle": "Humeur ce jour-là",
+        "dayMoodNone": "Aucune humeur enregistrée ce jour-là",
+        "sleepTrendsLink": "Tendances du sommeil",
+        "moodHistoryLink": "Historique d'humeur",
+        "previousSessionLink": "Séance précédente",
         "insightTitle": "Analyse de l'activité"
       },
       "sport": {
@@ -3131,7 +3146,13 @@
       "loadError": "Tes séances n'ont pas pu être chargées",
       "loadMore": "Charger plus de séances",
       "loadingMore": "Chargement de séances supplémentaires",
-      "loadMoreError": "Les séances supplémentaires n'ont pas pu être chargées"
+      "loadMoreError": "Les séances supplémentaires n'ont pas pu être chargées",
+      "countOne": "{count} séance",
+      "countOther": "{count} séances",
+      "countFew": "{count} séances",
+      "filterLabel": "Filtrer par sport",
+      "filterAll": "Tous les sports",
+      "filterEmpty": "Aucune séance de ce sport dans votre historique."
     },
     "bloodGlucose": {
       "title": "Glycémie",
@@ -4906,6 +4927,8 @@
     "timezoneHint": "Utilisé pour les libellés des axes des graphiques, les heures de rappel, les horodatages d’export et le contexte du Coach. Les données stockées restent inchangées.",
     "timezoneInvalid": "Fuseau horaire IANA non valide.",
     "profileSaved": "Profil enregistré",
+    "profilePartiallySaved": "Profil enregistré, mais {field} n'a pas pu être mis à jour.",
+    "profileNothingSaved": "Rien n'a été enregistré. Corrigez {field} et réessayez.",
     "avatar": {
       "title": "Photo de profil",
       "description": "Téléverse une photo stockée sur ton propre serveur. Elle apparaît dans toute l'application à la place d'un service d'avatar externe.",
@@ -5643,7 +5666,6 @@
     "cycleTracking": {
       "title": "Suivi du cycle",
       "description": "Suivez votre cycle menstruel, les prédictions, les symptômes et les analyses de phases. Activé par défaut pour les comptes définis comme féminins ; disponible pour tous.",
-      "disclaimer": "Les prévisions et les phases sont des estimations descriptives issues de tes données enregistrées : ce ne sont ni un avis médical ni une méthode de contraception. Elles n'indiquent jamais qu'un rapport non protégé est sans risque. La précision s'améliore à mesure que tu enregistres plus de cycles. Pour la contraception ou toute décision médicale, consulte un professionnel de santé.",
       "enable": "Activer le suivi du cycle",
       "manage": "Ouvrir le suivi du cycle",
       "error": "Impossible de mettre à jour le suivi du cycle."
@@ -9088,7 +9110,17 @@
       "moduleOffDescription": "Activez le module nutriments pour voir ici l'hydratation et les apports en vitamines/minéraux. Les données synchronisées feront partie du dossier que le Coach peut lire.",
       "moduleOffCta": "Activer les nutriments",
       "emptyTitle": "Pas encore de données nutritionnelles",
-      "emptyDescription": "Les données proviennent de la synchronisation de l'appli santé de votre téléphone ou d'une saisie manuelle d'eau."
+      "emptyDescription": "Les données proviennent de la synchronisation de l'appli santé de votre téléphone ou d'une saisie manuelle d'eau.",
+      "loadError": "Tes données de nutriments n'ont pas pu être chargées",
+      "lastAttemptTitle": "Une synchronisation est arrivée, mais rien n'a pu être enregistré",
+      "lastAttemptAt": "Dernière tentative : {date}",
+      "lastAttemptReason": {
+        "unitMismatch": "Les valeurs reçues ne correspondaient pas aux unités attendues par l'appli pour ces nutriments, elles n'ont donc pas pu être enregistrées.",
+        "valueOutOfRange": "Les quantités reçues étaient supérieures à ce que l'appli peut raisonnablement enregistrer, elles n'ont donc pas pu être sauvegardées.",
+        "dayInvalid": "Les entrées portaient une date que le serveur n'a pas pu accepter. Cela peut arriver quand l'horloge ou le fuseau horaire du côté qui envoie les données est incorrect — cela vaut la peine de vérifier.",
+        "upsertFailed": "Ces entrées sont arrivées jusqu'au serveur, mais un problème de notre côté a empêché leur enregistrement. Tu n'as rien à faire.",
+        "unknown": "Ces entrées sont arrivées mais n'ont pas pu être enregistrées."
+      }
     },
     "hydration": {
       "referenceMeta": "Apport de référence {value} {unit}/jour · EFSA",

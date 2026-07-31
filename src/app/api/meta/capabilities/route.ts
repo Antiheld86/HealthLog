@@ -46,10 +46,7 @@ import {
   FHIR_SEARCH_PARAMS,
 } from "@/lib/fhir/rest";
 import { SHARE_LINK_MAX_DAYS } from "@/lib/validations/clinician-share-link";
-import {
-  ALL_LEAF_IDS,
-  REPORT_GROUP_ORDER,
-} from "@/lib/report-selection/catalogue";
+import { ALL_LEAF_IDS, SHARE_GROUPS } from "@/lib/report-selection/catalogue";
 
 export const dynamic = "force-dynamic";
 
@@ -135,7 +132,12 @@ export const GET = apiHandler(async () => {
       maxDays: SHARE_LINK_MAX_DAYS,
       reportDownload: ["fhir", "pdf"],
       selectionVersion: 2,
-      groups: REPORT_GROUP_ORDER,
+      // Each group carries its own member leaves, and the fenced tier carries
+      // `sensitive: true` — the membership the panel, the PDF and the guard
+      // tests already enforce, published so the native client can mirror the
+      // fence instead of guessing which leaves it may bundle behind one
+      // control. `leaves` stays the flat total set for back-compat.
+      groups: SHARE_GROUPS,
       leaves: ALL_LEAF_IDS,
     },
   });

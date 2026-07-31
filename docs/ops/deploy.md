@@ -131,6 +131,23 @@ without touching the file:
 - `HEALTHLOG_IMAGE_REF=:v1.16.5` — pin to a release tag (still mutable).
 - `HEALTHLOG_IMAGE_REF=@sha256:<digest>` — pin to the immutable digest.
 
+> **A pin is sticky, and a stale pin is silent.** Once set, every later deploy
+> ships that reference until someone changes it. The deploy still reports
+> success, the tag still builds, the image still publishes, and the running
+> instance stays on the old release. If you pin, bumping the pin is part of
+> shipping, not an afterthought. If you would rather not carry that step, leave
+> the variable unset: `docker-publish.yml` rotates `:latest` on every release tag
+> without a pre-release suffix, so the git tag stays the single place a version is
+> declared.
+>
+> Two checks after any deploy, because the first alone can be served from a
+> cache: `/api/version` must report the version and commit you shipped, and the
+> running container's image must be the one you expect
+> (`docker inspect <container> --format '{{.Config.Image}}'`). A deploy that
+> finishes suspiciously fast is a signal rather than good news. Also watch for a
+> DUPLICATE `HEALTHLOG_IMAGE_REF` entry: Coolify accepts two rows with the same
+> key without warning, and which one wins is not defined.
+
 ### Promote a release to a pinned digest
 
 `scripts/promote-digest.ts` automates the whole promotion after

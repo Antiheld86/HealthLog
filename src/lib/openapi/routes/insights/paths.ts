@@ -39,6 +39,7 @@ import {
   ecgListResponse,
   ecgDetailQuery,
   ecgDetailResponse,
+  rhythmEventsResponse,
 } from "./schemas";
 
 export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
@@ -486,6 +487,29 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           description:
             "No ECG recording with that id for the authenticated user (existence sealed — a foreign id is indistinguishable from a missing one).",
           content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...moduleDisabledResponse,
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/insights/rhythm-events": {
+    get: {
+      tags: ["Insights"],
+      summary: "Device-flagged rhythm/HR/steadiness event timeline",
+      description:
+        "v1.10.0 (WX-B) — the authenticated user's timeline of device-flagged EVENT rows: irregular-rhythm / high-HR / low-HR / walking-steadiness / breathing-disturbance notifications the user's wearable (Apple Watch / Withings ScanWatch) already produced and synced. AWARENESS / SCREENING of the DEVICE's own decision — HealthLog stores and reflects ONLY the classification result the device's certified on-device algorithm emitted, verbatim; it never re-classifies and never produces a HealthLog diagnosis. `classification` carries the full six-value verdict set (the three ECG verdicts plus the two walking-steadiness severities plus the neutral FIRED verdict) — a distinct, wider enum than the three-value one on GET /api/insights/ecg. Data-availability-gated: an account with no event rows returns `hasEvents: false`. Module-gated on `insights` and the operator `insightStatus` assistant surface; no LLM call. Auth via cookie or Bearer.",
+      responses: {
+        "200": {
+          description: "The device-flagged event timeline (possibly empty).",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                rhythmEventsResponse,
+                "RhythmEventsResponseEnvelope",
+              ),
+            },
+          },
         },
         ...moduleDisabledResponse,
         ...stdResponses,

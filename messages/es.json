@@ -120,6 +120,13 @@
         "outOfOrder": "Tu progreso ha cambiado. Actualiza la página y continúa.",
         "concurrent": "Tu progreso ha cambiado. Actualiza la página y continúa."
       }
+    },
+    "profile": {
+      "update": {
+        "nothingSaved": "No se guardó nada. Revisa el campo marcado e inténtalo de nuevo.",
+        "invalidBody": "No se pudo leer la actualización del perfil.",
+        "emailInUse": "Esta dirección de correo ya está en uso."
+      }
     }
   },
   "doctorReport": {
@@ -2262,6 +2269,9 @@
         "red": "Uno o más pilares están fuera del intervalo de referencia"
       },
       "insufficient": "{count} pilares aptos. La puntuación necesita al menos tres, incluido un pilar fisiológico medido.",
+      "anatomyToggle": "Cómo se forma esta puntuación",
+      "notScored": "Aún sin puntuar ({count})",
+      "method": "La puntuación es la media con igual peso de todos los pilares que tienen suficientes datos recientes, en una escala de 0 a 100. Cada pilar se compara con un rango de referencia publicado, y el pilar más débil puede fijar el rango general. Un pilar sin datos suficientes queda fuera en lugar de contar como cero.",
       "bandSetter": "Categoría general determinada por {pillar}",
       "versionAndNoise": "Versión del método {version}. Umbral de comparación semanal: {noise} puntos.",
       "methodVersion": "Versión del método {version}.",
@@ -2320,7 +2330,6 @@
         "insufficientHistory": "No hay suficientes datos recientes aptos",
         "unavailable": "Este pilar no reúne los requisitos actualmente"
       },
-      "pillarInsufficient": "Sin puntuación del pilar: {reason}",
       "tension": "Las señales de preparación difieren. Favorables: {positive}. Con tensión: {negative}.",
       "returnToBand": "{metric} lleva {days} días de nuevo dentro de tu intervalo habitual.",
       "weightGoal": {
@@ -3100,9 +3109,15 @@
         "splitsTime": "Tiempo",
         "splitsPace": "Ritmo",
         "thatDayTitle": "Ese día",
-        "dayPulse": "Pulso",
-        "daySleep": "Sueño",
-        "dayMood": "Ánimo",
+        "daySleepTitle": "La noche anterior",
+        "daySleepNone": "No hay sueño registrado esa noche",
+        "daySleepAwakeningsOne": "{count} despertar",
+        "daySleepAwakeningsMany": "{count} despertares",
+        "dayMoodTitle": "Ánimo ese día",
+        "dayMoodNone": "No hay ánimo registrado ese día",
+        "sleepTrendsLink": "Tendencias de sueño",
+        "moodHistoryLink": "Historial de ánimo",
+        "previousSessionLink": "Sesión anterior",
         "insightTitle": "Análisis de la actividad"
       },
       "sport": {
@@ -3131,7 +3146,13 @@
       "loadError": "No se pudieron cargar tus entrenamientos",
       "loadMore": "Cargar más entrenamientos",
       "loadingMore": "Cargando más entrenamientos",
-      "loadMoreError": "No se pudieron cargar más entrenamientos"
+      "loadMoreError": "No se pudieron cargar más entrenamientos",
+      "countOne": "{count} entrenamiento",
+      "countOther": "{count} entrenamientos",
+      "countFew": "{count} entrenamientos",
+      "filterLabel": "Filtrar por deporte",
+      "filterAll": "Todos los deportes",
+      "filterEmpty": "No hay sesiones de este deporte en tu historial."
     },
     "bloodGlucose": {
       "title": "Glucosa en sangre",
@@ -4906,6 +4927,8 @@
     "timezoneHint": "Se usa para las etiquetas de los ejes de los gráficos, las horas de recordatorio, las marcas de tiempo de exportación y el contexto del Coach. Los datos almacenados no cambian.",
     "timezoneInvalid": "No es una zona horaria IANA válida.",
     "profileSaved": "Perfil guardado",
+    "profilePartiallySaved": "Perfil guardado, pero no se pudo actualizar {field}.",
+    "profileNothingSaved": "No se guardó nada. Corrige {field} e inténtalo de nuevo.",
     "avatar": {
       "title": "Foto de perfil",
       "description": "Sube una foto que se almacena en tu propio servidor. Aparece en toda la aplicación en lugar de un servicio de avatares externo.",
@@ -5643,7 +5666,6 @@
     "cycleTracking": {
       "title": "Seguimiento del ciclo",
       "description": "Registra tu ciclo menstrual, predicciones, síntomas e información de fases. Activado por defecto en cuentas configuradas como femeninas; disponible para todos.",
-      "disclaimer": "Las predicciones y las fases son estimaciones descriptivas a partir de tus datos registrados, no son consejo médico ni un método anticonceptivo. Nunca indican que sea seguro tener relaciones sin protección. La precisión mejora a medida que registras más ciclos. Para la anticoncepción o cualquier decisión médica, consulta a un profesional sanitario.",
       "enable": "Activar el seguimiento del ciclo",
       "manage": "Abrir seguimiento del ciclo",
       "error": "No se pudo actualizar el seguimiento del ciclo."
@@ -9088,7 +9110,17 @@
       "moduleOffDescription": "Activa el módulo de nutrientes para ver aquí la hidratación y la ingesta de vitaminas/minerales. Los datos sincronizados pasarán a formar parte del registro que el Coach puede leer.",
       "moduleOffCta": "Activar nutrientes",
       "emptyTitle": "Aún no hay datos de nutrientes",
-      "emptyDescription": "Los datos llegan desde la sincronización de la app de salud de tu teléfono o desde una entrada manual de agua."
+      "emptyDescription": "Los datos llegan desde la sincronización de la app de salud de tu teléfono o desde una entrada manual de agua.",
+      "loadError": "No se pudieron cargar tus datos de nutrientes",
+      "lastAttemptTitle": "Se recibió una sincronización, pero no se pudo guardar nada",
+      "lastAttemptAt": "Último intento: {date}",
+      "lastAttemptReason": {
+        "unitMismatch": "Los valores recibidos no coincidían con las unidades que esta app espera para estos nutrientes, así que no se pudieron guardar.",
+        "valueOutOfRange": "Las cantidades recibidas eran superiores a lo que esta app puede almacenar de forma plausible, así que no se pudieron guardar.",
+        "dayInvalid": "Las entradas llevaban una fecha que el servidor no pudo aceptar. Esto puede ocurrir cuando el reloj o la zona horaria del lado que envía los datos están mal configurados; merece la pena revisarlo.",
+        "upsertFailed": "Estas entradas llegaron al servidor, pero un problema de nuestro lado impidió guardarlas. No tienes que hacer nada.",
+        "unknown": "Estas entradas llegaron, pero no se pudieron guardar."
+      }
     },
     "hydration": {
       "referenceMeta": "Ingesta de referencia {value} {unit}/día · EFSA",

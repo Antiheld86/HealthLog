@@ -335,7 +335,10 @@ export function AuthShell({
               the desktop bottom-6 anchor), so the last line of content
               can always scroll out from under the floating button.
             */}
-            <div className="mx-auto max-w-screen-xl px-4 pt-6 pb-20 md:px-6">
+            <div
+              data-slot="main-content-wrapper"
+              className="mx-auto max-w-screen-xl px-4 pt-6 pb-20 md:px-6"
+            >
               {children}
             </div>
           </main>

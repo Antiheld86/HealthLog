@@ -11,6 +11,7 @@ import { apiHandler, requireAuth } from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
+  apiValidationError,
   getClientIp,
   safeJson,
 } from "@/lib/api-response";
@@ -101,7 +102,10 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
 
   const result = await applyProfileUpdate(user.id, body, getClientIp(request));
   if (!result.ok) {
-    return apiError(result.message, result.status);
+    const meta = result.errorCode ? { errorCode: result.errorCode } : undefined;
+    return result.issues
+      ? apiValidationError(result.message, result.issues, result.status, meta)
+      : apiError(result.message, result.status, meta);
   }
 
   annotate({ action: { name: "user.profile.update" } });
@@ -122,5 +126,6 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     insurerName: result.user.insurerName,
     insurerIkNumber: result.user.insurerIkNumber,
     hasInsuranceNumber: result.user.hasInsuranceNumber,
+    ...(result.rejectedFields ? { rejectedFields: result.rejectedFields } : {}),
   });
 });

@@ -100,6 +100,16 @@ export const nutrientOverviewSchema = z
         daysWithData: z.number().int().min(1),
       }),
     ),
+    lastAttempt: z
+      .object({
+        at: z.iso.datetime({ offset: true }),
+        topReason: z.string(),
+      })
+      .nullable()
+      .meta({
+        description:
+          "Non-null only when `nutrients` is empty AND the most recent nutrient-batch call landed nothing — the most common skip reason from that call, so the client can say a sync arrived and why instead of a bare empty state.",
+      }),
   })
   .meta({
     id: "NutrientIntakeOverview",

@@ -1,7 +1,9 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { Activity, Loader2 } from "lucide-react";
 
+import { cn } from "@/lib/utils";
 import { useTranslations } from "@/lib/i18n/context";
 import { useInfiniteWorkouts } from "@/hooks/use-workouts";
 import { useModulePageGuard } from "@/hooks/use-module-page-guard";
@@ -31,12 +33,20 @@ import { QueryErrorCard } from "@/components/ui/query-error-card";
  *     workout-entry form today),
  *   - the deduped list otherwise. Each row links to
  *     `/insights/workouts/[id]` for the detail surface.
+ *
+ * A sport filter narrows the list server-side through the `sportType`
+ * parameter the route and the hook already accept. The chips offer only
+ * sports the account actually has, captured from the unfiltered read, so
+ * choosing one never empties the row it was chosen from. The RSC prefetch
+ * seeds the unfiltered key only, so a filtered view costs one client fetch.
  */
 export default function InsightsWorkoutsPageClient() {
-  const { t } = useTranslations();
+  const { t, tCount } = useTranslations();
   const { ready } = useModulePageGuard("workouts");
+  const [sportType, setSportType] = useState<string | undefined>(undefined);
   const {
     workouts,
+    total,
     isLoading,
     isEmpty,
     isError,
@@ -45,7 +55,26 @@ export default function InsightsWorkoutsPageClient() {
     hasNextPage,
     fetchNextPage,
     refetch,
-  } = useInfiniteWorkouts({ limit: 100 });
+  } = useInfiniteWorkouts({ limit: 100, sportType });
+
+  // The chip row's vocabulary comes from the UNFILTERED read: deriving it
+  // from the filtered list would collapse the row to the one sport already
+  // chosen, leaving no way back. With no filter active this resolves to the
+  // very same query key as the list above, so the two share one query and
+  // the row costs nothing; under a filter it keeps serving that cache.
+  const { workouts: allSports } = useInfiniteWorkouts({ limit: 100 });
+  const sportOptions = useMemo(
+    () => Array.from(new Set(allSports.map((w) => w.sportType))).sort(),
+    [allSports],
+  );
+
+  const sportLabel = (sport: string) => {
+    // A sport enum the bundle has no copy for renders as its canonical
+    // string rather than a raw key — same fallback the list rows use.
+    const key = `insights.workouts.sport.${sport}`;
+    const label = t(key);
+    return label === key ? sport : label;
+  };
 
   // v1.18.0 B1 — bounce a direct URL hit on a disabled-workouts account.
   if (!ready) {
@@ -77,7 +106,7 @@ export default function InsightsWorkoutsPageClient() {
           <Skeleton className="h-14 w-full rounded-lg" />
           <Skeleton className="h-14 w-full rounded-lg" />
         </div>
-      ) : isEmpty ? (
+      ) : isEmpty && sportType === undefined ? (
         <MetricEmptyState
           icon={<Activity className="size-6" />}
           title={t("insights.workouts.emptyState.title")}
@@ -85,15 +114,67 @@ export default function InsightsWorkoutsPageClient() {
           cta={null}
           coachPrefill="I haven't logged any workouts yet — why does tracking them matter, and what should I focus on first?"
         />
-      ) : workouts.length > 0 ? (
-        <WorkoutList
-          workouts={workouts}
-          hasNextPage={hasNextPage}
-          isFetchingNextPage={isFetchingNextPage}
-          isFetchNextPageError={isFetchNextPageError}
-          onLoadMore={fetchNextPage}
-        />
-      ) : null}
+      ) : (
+        <>
+          {sportOptions.length > 1 ? (
+            <div
+              data-slot="workout-sport-filter"
+              role="group"
+              aria-label={t("insights.workouts.filterLabel")}
+              // Borderless page-level blocks track the shell heading's own
+              // card inset, so the row, the count line and the h1 above them
+              // share one left edge.
+              className="flex flex-wrap gap-2 px-4 md:px-6"
+            >
+              {[undefined, ...sportOptions].map((sport) => {
+                const active = sport === sportType;
+                return (
+                  <button
+                    key={sport ?? "all"}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setSportType(sport)}
+                    className={cn(
+                      "focus-visible:ring-ring inline-flex min-h-11 items-center rounded-full px-3 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none sm:min-h-8",
+                      active
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {sport === undefined
+                      ? t("insights.workouts.filterAll")
+                      : sportLabel(sport)}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+          {workouts.length > 0 ? (
+            <>
+              <p
+                data-slot="workout-list-count"
+                className="text-muted-foreground px-4 text-xs md:px-6"
+              >
+                {tCount("insights.workouts.count", total)}
+              </p>
+              <WorkoutList
+                workouts={workouts}
+                hasNextPage={hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                isFetchNextPageError={isFetchNextPageError}
+                onLoadMore={fetchNextPage}
+              />
+            </>
+          ) : (
+            <p
+              data-slot="workout-list-filter-empty"
+              className="text-muted-foreground px-4 text-sm md:px-6"
+            >
+              {t("insights.workouts.filterEmpty")}
+            </p>
+          )}
+        </>
+      )}
     </SubPageShell>
   );
 }

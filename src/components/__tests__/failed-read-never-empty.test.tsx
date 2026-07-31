@@ -32,8 +32,11 @@ vi.mock("@/lib/api/api-fetch", () => ({
 }));
 
 vi.mock("@/hooks/use-auth", () => ({
+  // `modules.nutrients: true` so the `/insights/nutrients` page tests below
+  // reach their query instead of short-circuiting on the module-off branch;
+  // no other surface in this file reads `user.modules`.
   useAuth: () => ({
-    user: { gender: "FEMALE", modules: {} },
+    user: { gender: "FEMALE", modules: { nutrients: true } },
     isAuthenticated: true,
     isLoading: false,
   }),
@@ -41,6 +44,7 @@ vi.mock("@/hooks/use-auth", () => ({
 
 import { MentalWellbeing } from "@/components/mental-health/mental-wellbeing";
 import { MicronutrientsCard } from "@/components/insights/nutrients/micronutrients-card";
+import InsightsNutrientsPage from "@/app/insights/nutrients/page";
 
 function makeClient() {
   return new QueryClient({
@@ -79,6 +83,11 @@ function render(node: React.ReactNode, client: QueryClient): string {
       <I18nProvider initialLocale="en">{node}</I18nProvider>
     </QueryClientProvider>,
   );
+}
+
+/** React's SSR serialiser escapes `'` as `&#x27;` in text nodes. */
+function htmlEscaped(text: string): string {
+  return text.replace(/'/g, "&#x27;");
 }
 
 describe("mental wellbeing — screening history", () => {
@@ -140,6 +149,85 @@ describe("micronutrients card", () => {
   });
 });
 
+describe("/insights/nutrients page — overview read shares the micronutrients queryKey", () => {
+  const np = en.nutrients.page;
+
+  // The page's overview query and `<MicronutrientsCard>` read the exact same
+  // `queryKeys.nutrientIntake(30)` cache entry. Before this branch existed, a
+  // failed read left `overview.data` undefined — indistinguishable from the
+  // pre-response state — so the page's empty-state check fired first and
+  // returned "no nutrient data yet" without ever mounting the three cards
+  // below (including `<MicronutrientsCard>`'s own, already-correct error
+  // card).
+  it("renders the page-level error card, not the empty state, when the overview read fails", async () => {
+    const client = makeClient();
+    await seedFailure(client, queryKeys.nutrientIntake(30));
+    const html = render(<InsightsNutrientsPage />, client);
+
+    expect(html).toContain('data-slot="query-error-card"');
+    expect(html).toContain(np.loadError);
+    expect(html).toContain(en.common.retry);
+    expect(html).not.toContain(np.emptyTitle);
+    // The three-card spine must not mount alongside the error notice.
+    expect(html).not.toContain('data-slot="nutrients-hydration-card"');
+    expect(html).not.toContain('data-slot="nutrients-micronutrients-card"');
+  });
+
+  it("still renders the honest empty state when the window genuinely has no rows", () => {
+    const client = makeClient();
+    client.setQueryData(queryKeys.nutrientIntake(30), {
+      nutrients: [],
+      lastAttempt: null,
+    });
+    const html = render(<InsightsNutrientsPage />, client);
+
+    expect(html).not.toContain('data-slot="query-error-card"');
+    expect(html).toContain(np.emptyTitle);
+    expect(html).not.toContain(np.lastAttemptTitle);
+  });
+
+  // `GET /api/nutrients` returns `lastAttempt` non-null only when the window
+  // is empty AND the most recent `nutrient.batch.ingest` audit row shows a
+  // call that landed nothing — a batch CAN arrive and have every entry
+  // rejected, which used to read on this page exactly like nothing ever
+  // synced. The reason must render as the mapped human sentence, never the
+  // raw wire code.
+  it("names the sync attempt and its reason instead of the generic empty state", () => {
+    const client = makeClient();
+    client.setQueryData(queryKeys.nutrientIntake(30), {
+      nutrients: [],
+      lastAttempt: {
+        at: "2026-07-15T09:30:00.000Z",
+        topReason: "unit_mismatch",
+      },
+    });
+    const html = render(<InsightsNutrientsPage />, client);
+
+    expect(html).toContain(np.lastAttemptTitle);
+    expect(html).toContain(htmlEscaped(np.lastAttemptReason.unitMismatch));
+    // The date line renders around a formatted timestamp; assert the fixed
+    // prefix rather than the locale-formatted date itself.
+    expect(html).toContain(np.lastAttemptAt.split("{date}")[0]);
+    expect(html).not.toContain(np.emptyTitle);
+    expect(html).not.toContain("unit_mismatch");
+  });
+
+  it("falls back to the generic reason sentence for an unmapped code", () => {
+    const client = makeClient();
+    client.setQueryData(queryKeys.nutrientIntake(30), {
+      nutrients: [],
+      lastAttempt: {
+        at: "2026-07-15T09:30:00.000Z",
+        topReason: "some_future_reason",
+      },
+    });
+    const html = render(<InsightsNutrientsPage />, client);
+
+    expect(html).toContain(np.lastAttemptTitle);
+    expect(html).toContain(htmlEscaped(np.lastAttemptReason.unknown));
+  });
+});
+
 /**
  * The remaining surfaces in the sweep are pages whose render depends on the
  * router / module gate, which the SSR-only convention cannot drive. Pin their
@@ -155,6 +243,11 @@ describe("read-failure branch is wired on every swept surface", () => {
     "src/components/custom-metrics/custom-metric-values-list.tsx",
     "src/app/achievements/page.tsx",
     "src/components/insights/nutrients/micronutrients-card.tsx",
+    // The page shares `MicronutrientsCard`'s exact queryKey and used to
+    // short-circuit to the "no nutrient data yet" EmptyState on a failed
+    // read, before that card's own (already-correct) error branch ever
+    // got a chance to mount.
+    "src/app/insights/nutrients/page.tsx",
     // A failed comprehensive read used to fall through to "you haven't added
     // any medications yet" — with a CTA inviting someone on a full daily
     // regimen to re-enter what the app already holds.

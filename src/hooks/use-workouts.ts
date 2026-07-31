@@ -290,6 +290,14 @@ export type WorkoutActivityInsight = {
 } | null;
 
 export interface WorkoutDetailPayload extends WorkoutListEntry {
+  /**
+   * The session's local calendar day, `YYYY-MM-DD`. Computed server-side
+   * from `startedAt` in the user's timezone — never re-derived here, so a
+   * browser in a different zone can't move the workout to another day. It
+   * addresses the day-scoped reads the detail page renders around the
+   * session.
+   */
+  dayKey: string;
   minHr: number | null;
   stepCount: number | null;
   elevationM: number | null;
@@ -311,6 +319,12 @@ export interface WorkoutDetailPayload extends WorkoutListEntry {
   sportContext: WorkoutSportContextDto | null;
   aiInsight: WorkoutActivityInsight;
   canonicalId: string;
+  /**
+   * The canonical session before this one in the same sport, `null` when
+   * this is the first on record. Server-resolved through the same picker
+   * the list uses, so the link never lands on a duplicate row.
+   */
+  previousWorkoutId: string | null;
 }
 
 async function fetchWorkoutDetail(id: string): Promise<WorkoutDetailPayload> {

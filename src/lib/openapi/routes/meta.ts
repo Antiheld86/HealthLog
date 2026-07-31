@@ -113,8 +113,25 @@ const capabilitiesResponse = z
           .int()
           .describe("Version of the leaf-selection grammar this build speaks."),
         groups: z
-          .array(z.string())
-          .describe("Selection group ids, in presentation order."),
+          .array(
+            z.object({
+              id: z.string().describe("Group id."),
+              leaves: z
+                .array(z.string())
+                .describe(
+                  "Member leaf ids, in the order the panel renders them.",
+                ),
+              sensitive: z
+                .boolean()
+                .optional()
+                .describe(
+                  "Present and true only on the fenced tier: no single control may switch on more than one of its leaves.",
+                ),
+            }),
+          )
+          .describe(
+            "Selection groups, in presentation order, each carrying its member leaf ids.",
+          ),
         leaves: z
           .array(z.string())
           .describe(

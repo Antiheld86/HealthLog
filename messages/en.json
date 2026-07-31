@@ -120,6 +120,13 @@
         "outOfOrder": "Your onboarding progress changed. Refresh and continue.",
         "concurrent": "Your onboarding progress changed. Refresh and continue."
       }
+    },
+    "profile": {
+      "update": {
+        "nothingSaved": "Nothing was saved. Check the highlighted field and try again.",
+        "invalidBody": "The profile update could not be read.",
+        "emailInUse": "This email address is already in use."
+      }
     }
   },
   "doctorReport": {
@@ -2262,6 +2269,9 @@
         "red": "One or more pillars are outside the reference range"
       },
       "insufficient": "{count} eligible pillars. The score needs at least three, including a measured physiological pillar.",
+      "anatomyToggle": "How this score comes about",
+      "notScored": "Not scored yet ({count})",
+      "method": "The score is the equal-weighted average of every pillar that has enough recent data, on a 0 to 100 scale. Each pillar is graded against a published reference band, and the weakest pillar can set the overall band. A pillar without enough data is left out rather than counted as a zero.",
       "bandSetter": "Overall band set by {pillar}",
       "versionAndNoise": "Method version {version}. Weekly comparison floor: {noise} points.",
       "methodVersion": "Method version {version}.",
@@ -2320,7 +2330,6 @@
         "insufficientHistory": "Not enough recent eligible data",
         "unavailable": "This pillar is not currently eligible"
       },
-      "pillarInsufficient": "No pillar score: {reason}",
       "tension": "Readiness signals differ. Supportive: {positive}. Under strain: {negative}.",
       "returnToBand": "{metric} has been back inside your usual range for {days} days.",
       "weightGoal": {
@@ -3100,9 +3109,15 @@
         "splitsTime": "Time",
         "splitsPace": "Pace",
         "thatDayTitle": "That day",
-        "dayPulse": "Pulse",
-        "daySleep": "Sleep",
-        "dayMood": "Mood",
+        "daySleepTitle": "The night before",
+        "daySleepNone": "No sleep recorded for that night",
+        "daySleepAwakeningsOne": "{count} awakening",
+        "daySleepAwakeningsMany": "{count} awakenings",
+        "dayMoodTitle": "Mood that day",
+        "dayMoodNone": "No mood logged that day",
+        "sleepTrendsLink": "Sleep trends",
+        "moodHistoryLink": "Mood history",
+        "previousSessionLink": "Previous session",
         "insightTitle": "Activity insight"
       },
       "sport": {
@@ -3131,7 +3146,13 @@
       "loadError": "Your workouts could not be loaded",
       "loadMore": "Load more workouts",
       "loadingMore": "Loading more workouts",
-      "loadMoreError": "More workouts could not be loaded"
+      "loadMoreError": "More workouts could not be loaded",
+      "countOne": "{count} workout",
+      "countOther": "{count} workouts",
+      "countFew": "{count} workouts",
+      "filterLabel": "Filter by sport",
+      "filterAll": "All sports",
+      "filterEmpty": "No sessions of this sport in your history."
     },
     "bloodGlucose": {
       "title": "Blood Glucose",
@@ -4906,6 +4927,8 @@
     "timezoneHint": "Used for chart axis labels, reminder times, export timestamps, and Coach context. Stored data is unchanged.",
     "timezoneInvalid": "Not a valid IANA timezone.",
     "profileSaved": "Profile saved",
+    "profilePartiallySaved": "Profile saved, but {field} could not be updated.",
+    "profileNothingSaved": "Nothing was saved. Fix {field} and try again.",
     "avatar": {
       "title": "Profile photo",
       "description": "Upload a photo stored on your own server. It appears across the app in place of an external avatar service.",
@@ -5643,7 +5666,6 @@
     "cycleTracking": {
       "title": "Cycle tracking",
       "description": "Track your menstrual cycle, predictions, symptoms, and phase insights. On by default for accounts set to female; available to everyone.",
-      "disclaimer": "Predictions and phases are descriptive estimates from your logged data — not medical advice and not a contraceptive method. They never indicate that it is safe to have unprotected sex. Accuracy improves as you log more cycles. For contraception or any medical decision, consult a healthcare professional.",
       "enable": "Enable cycle tracking",
       "manage": "Open cycle tracking",
       "error": "Couldn't update cycle tracking."
@@ -9088,7 +9110,17 @@
       "moduleOffDescription": "Turn on the nutrients module to see hydration and vitamin/mineral intake here. Synced intake becomes part of the record the Coach can read.",
       "moduleOffCta": "Turn on nutrients",
       "emptyTitle": "No nutrient data yet",
-      "emptyDescription": "Data arrives from your phone's health app sync or a manual water entry."
+      "emptyDescription": "Data arrives from your phone's health app sync or a manual water entry.",
+      "loadError": "Your nutrient data could not be loaded",
+      "lastAttemptTitle": "A sync arrived, but nothing could be stored",
+      "lastAttemptAt": "Last attempt: {date}",
+      "lastAttemptReason": {
+        "unitMismatch": "The values that arrived didn't match the units this app expects for these nutrients, so they couldn't be stored.",
+        "valueOutOfRange": "The amounts that arrived were higher than this app can plausibly store, so they couldn't be saved.",
+        "dayInvalid": "The entries carried a date the server couldn't accept. This can happen when the clock or time zone on the sending side is wrong — it's worth checking.",
+        "upsertFailed": "These entries reached the server, but a problem on this end kept them from being saved. There's nothing you need to do.",
+        "unknown": "These entries arrived but couldn't be stored."
+      }
     },
     "hydration": {
       "referenceMeta": "Reference intake {value} {unit}/day · EFSA",

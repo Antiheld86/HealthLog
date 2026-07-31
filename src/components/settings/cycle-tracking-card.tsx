@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { CalendarHeart, Info } from "lucide-react";
+import { CalendarHeart } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -78,21 +78,6 @@ export function CycleTrackingCard({
             onCheckedChange={(v) => toggle.mutate(v)}
             className="mt-0.5 shrink-0"
           />
-        </div>
-        {/* The single, prominent non-medical disclaimer for the whole cycle
-            vertical. It lives here at the on-ramp — where expectations are
-            set — instead of repeating beneath every prediction surface. */}
-        <div
-          data-slot="cycle-tracking-disclaimer"
-          className="border-border bg-muted/40 flex items-start gap-2.5 rounded-lg border-l-2 p-3"
-        >
-          <Info
-            className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0"
-            aria-hidden="true"
-          />
-          <p className="text-foreground/80 text-xs leading-relaxed">
-            {t("settings.cycleTracking.disclaimer")}
-          </p>
         </div>
         {enabled ? (
           <Button

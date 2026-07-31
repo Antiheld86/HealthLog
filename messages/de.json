@@ -120,6 +120,13 @@
         "outOfOrder": "Dein Onboarding-Fortschritt hat sich geändert. Lade die Seite neu und fahre fort.",
         "concurrent": "Dein Onboarding-Fortschritt hat sich geändert. Lade die Seite neu und fahre fort."
       }
+    },
+    "profile": {
+      "update": {
+        "nothingSaved": "Es wurde nichts gespeichert. Bitte das markierte Feld korrigieren und erneut versuchen.",
+        "invalidBody": "Die Profilaktualisierung konnte nicht gelesen werden.",
+        "emailInUse": "Diese E-Mail-Adresse wird bereits verwendet."
+      }
     }
   },
   "doctorReport": {
@@ -2262,6 +2269,9 @@
         "red": "Mindestens ein Bereich liegt außerhalb des Referenzbereichs"
       },
       "insufficient": "{count} geeignete Bereiche. Der Score benötigt mindestens drei, darunter einen gemessenen physiologischen Bereich.",
+      "anatomyToggle": "Wie dieser Score zustande kommt",
+      "notScored": "Noch nicht bewertet ({count})",
+      "method": "Der Score ist der gleich gewichtete Mittelwert aller Säulen mit ausreichend aktuellen Daten, auf einer Skala von 0 bis 100. Jede Säule wird an einem veröffentlichten Referenzbereich gemessen, und die schwächste Säule kann den Gesamtbereich bestimmen. Eine Säule ohne ausreichende Daten bleibt außen vor und zählt nicht als null.",
       "bandSetter": "Gesamtstufe bestimmt durch {pillar}",
       "versionAndNoise": "Methodenversion {version}. Schwelle für den Wochenvergleich: {noise} Punkte.",
       "methodVersion": "Methodenversion {version}.",
@@ -2320,7 +2330,6 @@
         "insufficientHistory": "Nicht genügend aktuelle geeignete Daten",
         "unavailable": "Dieser Bereich kann derzeit nicht bewertet werden"
       },
-      "pillarInsufficient": "Kein Bereichsscore: {reason}",
       "tension": "Die Bereitschaftssignale unterscheiden sich. Unterstützend: {positive}. Belastet: {negative}.",
       "returnToBand": "{metric} liegt seit {days} Tagen wieder im üblichen Bereich.",
       "weightGoal": {
@@ -3100,9 +3109,15 @@
         "splitsTime": "Zeit",
         "splitsPace": "Tempo",
         "thatDayTitle": "An diesem Tag",
-        "dayPulse": "Puls",
-        "daySleep": "Schlaf",
-        "dayMood": "Stimmung",
+        "daySleepTitle": "Die Nacht davor",
+        "daySleepNone": "Für diese Nacht ist kein Schlaf erfasst",
+        "daySleepAwakeningsOne": "{count}× aufgewacht",
+        "daySleepAwakeningsMany": "{count}× aufgewacht",
+        "dayMoodTitle": "Stimmung an diesem Tag",
+        "dayMoodNone": "An diesem Tag ist keine Stimmung erfasst",
+        "sleepTrendsLink": "Schlaf-Trends",
+        "moodHistoryLink": "Stimmungsverlauf",
+        "previousSessionLink": "Vorherige Einheit",
         "insightTitle": "Aktivitäts-Einblick"
       },
       "sport": {
@@ -3131,7 +3146,13 @@
       "loadError": "Deine Workouts konnten nicht geladen werden",
       "loadMore": "Weitere Workouts laden",
       "loadingMore": "Weitere Workouts werden geladen",
-      "loadMoreError": "Weitere Workouts konnten nicht geladen werden"
+      "loadMoreError": "Weitere Workouts konnten nicht geladen werden",
+      "countOne": "{count} Workout",
+      "countOther": "{count} Workouts",
+      "countFew": "{count} Workouts",
+      "filterLabel": "Nach Sportart filtern",
+      "filterAll": "Alle Sportarten",
+      "filterEmpty": "Keine Einheiten dieser Sportart in deinem Verlauf."
     },
     "bloodGlucose": {
       "title": "Blutzucker",
@@ -4906,6 +4927,8 @@
     "timezoneHint": "Wird für Diagrammachsen, Erinnerungszeiten, Export-Zeitstempel und den Coach-Kontext verwendet. Gespeicherte Daten bleiben unverändert.",
     "timezoneInvalid": "Keine gültige IANA-Zeitzone.",
     "profileSaved": "Profil gespeichert",
+    "profilePartiallySaved": "Profil gespeichert, aber {field} konnte nicht aktualisiert werden.",
+    "profileNothingSaved": "Es wurde nichts gespeichert. Bitte {field} korrigieren und erneut versuchen.",
     "avatar": {
       "title": "Profilfoto",
       "description": "Lade ein Foto hoch, das auf deinem eigenen Server gespeichert wird. Es erscheint überall in der App anstelle eines externen Avatar-Dienstes.",
@@ -5643,7 +5666,6 @@
     "cycleTracking": {
       "title": "Zyklus-Tracking",
       "description": "Verfolge deinen Menstruationszyklus, Vorhersagen, Symptome und Phasen-Insights. Standardmäßig an für als weiblich eingestellte Konten; für alle verfügbar.",
-      "disclaimer": "Vorhersagen und Phasen sind beschreibende Schätzungen aus deinen erfassten Daten – keine medizinische Beratung und keine Verhütungsmethode. Sie zeigen nie an, dass ungeschützter Geschlechtsverkehr sicher ist. Die Genauigkeit steigt, je mehr Zyklen du erfasst. Wende dich für Verhütung oder medizinische Entscheidungen an eine medizinische Fachperson.",
       "enable": "Zyklus-Tracking aktivieren",
       "manage": "Zyklus-Tracking öffnen",
       "error": "Zyklus-Tracking konnte nicht aktualisiert werden."
@@ -9088,7 +9110,17 @@
       "moduleOffDescription": "Aktiviere das Nährstoffe-Modul, um Flüssigkeits- und Vitamin-/Mineralstoffaufnahme hier zu sehen. Synchronisierte Werte werden Teil der Aufzeichnung, die der Coach lesen kann.",
       "moduleOffCta": "Nährstoffe aktivieren",
       "emptyTitle": "Noch keine Nährstoffdaten",
-      "emptyDescription": "Daten kommen aus der Synchronisierung der Gesundheits-App deines Telefons oder einem manuellen Wassereintrag."
+      "emptyDescription": "Daten kommen aus der Synchronisierung der Gesundheits-App deines Telefons oder einem manuellen Wassereintrag.",
+      "loadError": "Deine Nährstoffdaten konnten nicht geladen werden",
+      "lastAttemptTitle": "Eine Synchronisierung ist angekommen, aber nichts konnte gespeichert werden",
+      "lastAttemptAt": "Letzter Versuch: {date}",
+      "lastAttemptReason": {
+        "unitMismatch": "Die übermittelten Werte entsprachen nicht den Einheiten, die diese App für diese Nährstoffe erwartet, daher konnten sie nicht gespeichert werden.",
+        "valueOutOfRange": "Die übermittelten Mengen lagen höher, als diese App plausibel speichern kann, daher konnten sie nicht gesichert werden.",
+        "dayInvalid": "Die Einträge trugen ein Datum, das der Server nicht akzeptieren konnte. Das kann passieren, wenn Uhrzeit oder Zeitzone auf der sendenden Seite falsch eingestellt sind — das lohnt sich zu prüfen.",
+        "upsertFailed": "Diese Einträge haben den Server erreicht, aber ein Problem auf unserer Seite hat verhindert, dass sie gespeichert wurden. Du musst nichts weiter tun.",
+        "unknown": "Diese Einträge sind angekommen, konnten aber nicht gespeichert werden."
+      }
     },
     "hydration": {
       "referenceMeta": "Richtwert {value} {unit}/Tag · EFSA",

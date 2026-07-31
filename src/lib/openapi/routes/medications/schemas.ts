@@ -18,6 +18,7 @@ import {
   MEDICATION_ORDER_ID_MAX_LENGTH,
   MEDICATION_ORDER_MAX_ENTRIES,
 } from "@/lib/medication-list-layout";
+import { MEDICATION_IMPORT_SKIP_REASONS } from "@/lib/jobs/medication-intake-import";
 
 // ── Medications (v1.5 scheduling) ────────────────────────────────────
 //
@@ -928,4 +929,269 @@ export const medicationListLayoutResult = medicationListLayoutSchema
     id: "MedicationListLayoutResult",
     description:
       "Resolved medications list presentation plus the optimistic-concurrency `updatedAt` token.",
+  });
+
+// ── Intake-import jobs (v1.33.0) — the per-medication `/api/medications/{id}/
+// intake/import` route and the account-wide `/api/medications/intake/
+// dose-history-import` route both queue onto `MedicationIntakeImportJob` and
+// are polled through the SAME status projection, so the shapes below are
+// shared rather than duplicated per route.
+
+// The 16-reason closed set a row can be refused for, exactly as declared in
+// `MEDICATION_IMPORT_SKIP_REASONS`. `duplicate_in_file` / `already_recorded`
+// are dedup outcomes; `medication_not_found` / `medication_ambiguous` /
+// `medication_is_mirrored` / `missing_medication` are medication-matching
+// outcomes; `status_*` are source rows whose own status column said the dose
+// was never taken (a reminder, an unsent notification, an unrecognised
+// status); `missing_timestamp` / `missing_timezone_offset` /
+// `unreadable_timestamp` / `implausible_timestamp` are timestamp problems;
+// `unreadable_dosage` / `unreadable_row` are malformed cells.
+export const medicationImportSkipReasonEnum = z
+  .enum(MEDICATION_IMPORT_SKIP_REASONS)
+  .meta({
+    id: "MedicationImportSkipReason",
+    description:
+      "Why one source row did not become an intake row. Closed 16-value set: duplicate_in_file, already_recorded, medication_not_found, medication_ambiguous, medication_is_mirrored, status_no_dose_information, status_reminder_event, status_notification_not_sent, status_unknown, missing_timestamp, missing_timezone_offset, unreadable_timestamp, implausible_timestamp, missing_medication, unreadable_dosage, unreadable_row.",
+  });
+
+const medicationImportSkipGroup = z
+  .object({
+    reason: medicationImportSkipReasonEnum,
+    count: z.number().int().min(1),
+  })
+  .meta({ id: "MedicationImportSkipGroup" });
+
+const medicationImportSkipDetail = z
+  .object({
+    line: z.number().int().describe("1-based source-file row ordinal."),
+    reason: medicationImportSkipReasonEnum,
+  })
+  .meta({
+    id: "MedicationImportSkipDetail",
+    description:
+      "One refused source row, reduced to the ordinal + reason — never the row's own content (no medication name, timestamp, or dosage text).",
+  });
+
+// The terminal, persisted result. Reconstructed through a strict allowlist
+// (`projectMedicationImportResult`) before it ever reaches a polling
+// response, so a compromised or legacy JSON blob cannot smuggle anything
+// past this shape.
+export const medicationImportResult = z
+  .object({
+    imported: z.number().int().min(0),
+    skipped: z
+      .number()
+      .int()
+      .min(0)
+      .describe("Total entries that did not become a row."),
+    skipReasons: z
+      .array(medicationImportSkipGroup)
+      .describe(
+        "One entry per reason that actually occurred, count descending then reason — never the same sentence repeated per row. Empty when nothing was skipped.",
+      ),
+    skipDetails: z
+      .array(medicationImportSkipDetail)
+      .optional()
+      .describe(
+        "First bounded source-row details (capped at 200). Absent on a legacy job run before this field existed.",
+      ),
+    skippedDetailsOmitted: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe(
+        "Count of additional skipped rows beyond the `skipDetails` cap, counted without retaining their contents. Absent when nothing was omitted.",
+      ),
+  })
+  .meta({
+    id: "MedicationImportResult",
+    description:
+      "The finished job's outcome. Null while the job is still queued or running — `status` + `progress` are the fields to read meanwhile.",
+  });
+
+// The in-flight progress blob a running/queued job carries. Written whole at
+// admission time and advanced by the worker in place; unlike `result` it is
+// NOT re-validated on read (stored as a bare JSON column), so this documents
+// the shape the job worker actually writes rather than a server-enforced
+// contract.
+export const medicationImportProgress = z
+  .object({
+    processed: z
+      .number()
+      .int()
+      .min(0)
+      .describe("Entries the worker has walked so far, in file order."),
+    total: z.number().int().min(0).describe("Entries queued for this job."),
+    imported: z
+      .number()
+      .int()
+      .min(0)
+      .describe("Entries that have reached the database so far."),
+    skippedByReason: z
+      .partialRecord(medicationImportSkipReasonEnum, z.number().int().min(1))
+      .describe(
+        "Running skip tally by reason. A reason with no skips yet is absent from the object, never present as 0.",
+      ),
+    skipDetails: z
+      .array(medicationImportSkipDetail)
+      .optional()
+      .describe("Same bounded detail list as the finished `result`."),
+    skippedDetailsOmitted: z.number().int().min(0).optional(),
+    touchedDays: z
+      .array(z.string())
+      .describe(
+        "Local calendar days (YYYY-MM-DD) touched so far, driving the chunked rollup recompute behind the write.",
+      ),
+    rollupProcessed: z
+      .number()
+      .int()
+      .min(0)
+      .describe("Of `touchedDays`, how many have had their rollup recomputed."),
+  })
+  .meta({
+    id: "MedicationImportProgress",
+    description:
+      "In-flight job progress, written whole at admission and advanced in place by the worker. Present from the moment the job is created (queued), so `processed: 0, total: N` is the shape a client sees immediately after kickoff, not an empty object.",
+  });
+
+export const medicationIntakeImportJobStatusResponse = z
+  .object({
+    jobId: z.string(),
+    status: z
+      .enum(["queued", "running", "done", "failed"])
+      .describe(
+        "queued — admitted, not yet picked up. running — the worker is walking entries. done — finished (see `result` for the outcome, even a fully-refused run). failed — the worker could not complete the run (see `failureReason`).",
+      ),
+    progress: medicationImportProgress,
+    result: medicationImportResult
+      .nullable()
+      .describe("Set only once `status` is `done`; null before that."),
+    failureReason: z
+      .string()
+      .nullable()
+      .describe("Set only when `status` is `failed`; null otherwise."),
+    createdAt: z.iso.datetime({ offset: true }),
+    startedAt: z.iso
+      .datetime({ offset: true })
+      .nullable()
+      .describe("When the worker picked the job up; null while still queued."),
+    completedAt: z.iso
+      .datetime({ offset: true })
+      .nullable()
+      .describe("When the job reached `done` or `failed`; null while active."),
+  })
+  .meta({
+    id: "MedicationIntakeImportJobStatusResponse",
+    description:
+      "Poll target for a queued intake-import job — shared by the per-medication import and the account-wide dose-history import, so a client polls both through one shape.",
+  });
+
+// ── Account-wide dose-history import (v1.33.0) ───────────────────────
+
+// The file-level verdict, identical for a dry run and a real submission.
+const medicationDoseHistoryImportFile = z
+  .object({
+    rowsRead: z
+      .number()
+      .int()
+      .min(0)
+      .describe("Data rows read from the file, refusals included."),
+    queued: z
+      .number()
+      .int()
+      .min(0)
+      .describe("Rows that parsed and matched a medication."),
+    refused: z
+      .number()
+      .int()
+      .min(0)
+      .describe("Total rows that did not queue, across every reason."),
+    refusedByReason: z
+      .array(medicationImportSkipGroup)
+      .describe(
+        "One entry per reason that actually occurred, count descending then reason.",
+      ),
+    unmatchedMedications: z
+      .array(z.string())
+      .max(50)
+      .describe(
+        "Medication names the file used that match nothing on the record, deduplicated, first-seen order, capped at 50.",
+      ),
+    ambiguousMedications: z
+      .array(z.string())
+      .max(50)
+      .describe(
+        "Names that match more than one medication, so no single one can be meant. Capped at 50.",
+      ),
+    mirroredMedications: z
+      .array(z.string())
+      .max(50)
+      .describe(
+        "Names that match only a medication mirrored from an external list. Capped at 50.",
+      ),
+    unknownColumns: z
+      .array(z.string())
+      .max(50)
+      .describe("Header cells the importer has no verdict for. Capped at 50."),
+    codingsNotRead: z
+      .number()
+      .int()
+      .min(0)
+      .describe("Rows whose `Codings` cell held something left unread."),
+    fromArchivedMedications: z
+      .number()
+      .int()
+      .min(0)
+      .describe(
+        "Rows the file marked as belonging to a medication archived in the source.",
+      ),
+  })
+  .meta({ id: "MedicationDoseHistoryImportFile" });
+
+export const medicationDoseHistoryImportResponse = z
+  .object({
+    dryRun: z.boolean(),
+    jobId: z
+      .string()
+      .nullable()
+      .describe("Null on a dry run (nothing was queued)."),
+    status: z
+      .literal("queued")
+      .optional()
+      .describe("Present only on a real (non-dry-run) submission."),
+    statusUrl: z
+      .string()
+      .nullable()
+      .describe(
+        "Relative poll path (`/api/medications/intake/dose-history-import/{jobId}/status`). Null on a dry run.",
+      ),
+    file: medicationDoseHistoryImportFile,
+  })
+  .meta({
+    id: "MedicationDoseHistoryImportResponse",
+    description:
+      "The file-level verdict, plus the queued job pointer on a real submission. A dry run (`?dryRun=1`) returns the same `file` verdict with `jobId`/`statusUrl` null and no `status` field — parses, matches, and reports without writing anything.",
+  });
+
+// The 5 file-level (whole-submission) refusal reasons — distinct from the
+// 16 per-row `medicationImportSkipReasonEnum` above. `application/json` is
+// accepted at the content-type check, but the documented JSON export shape
+// always ends in `json_carries_no_intake_time`: it carries `scheduledDate` +
+// `status` + `dosage` but no field for when a dose was actually taken, and
+// writing the scheduled time as `takenAt` would manufacture an on-time
+// history the file never claimed. `text/csv` is the only shape that
+// actually imports.
+export const medicationDoseHistoryImportFatalReasonEnum = z
+  .enum([
+    "empty_file",
+    "missing_required_columns",
+    "unreadable_json",
+    "json_not_an_array",
+    "json_carries_no_intake_time",
+  ])
+  .meta({
+    id: "MedicationDoseHistoryImportFatalReason",
+    description:
+      "Whole-file refusal reason on the 422 `errorCode`. empty_file — no data rows. missing_required_columns — the CSV header is missing a column the parser needs. unreadable_json — the body did not parse as JSON. json_not_an_array — parsed JSON is not an array (and no nested array was found under any key). json_carries_no_intake_time — well-formed JSON export input, refused by design (see above).",
   });

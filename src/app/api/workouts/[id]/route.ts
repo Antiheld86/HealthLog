@@ -41,6 +41,8 @@ import {
 import { computeSplits } from "@/lib/workouts/splits";
 import { buildSportContext } from "@/lib/workouts/sport-context";
 import type { RouteCoordinate } from "@/lib/workouts/route-svg";
+import { resolveUserTimezone } from "@/lib/tz/resolver";
+import { userDayKey } from "@/lib/tz/format";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -129,6 +131,14 @@ export const GET = apiHandler(
       where: { id: user.id },
       select: { sourcePriorityJson: true, dateOfBirth: true },
     });
+    // The local calendar day this session belongs to. Resolved here, in the
+    // user's timezone, so the day linkage stays server-authoritative — a
+    // client that derived it from `startedAt` would fall back to the browser
+    // zone and put a late-evening session on the wrong day whenever the two
+    // disagree.
+    const timezone = await resolveUserTimezone(user.id);
+    const dayKey = userDayKey(row.startedAt, timezone);
+
     const canonicalCluster = pickCanonicalWorkoutRows(
       clusterRows,
       userRow?.sourcePriorityJson ?? null,
@@ -201,6 +211,47 @@ export const GET = apiHandler(
       row.id,
     );
 
+    // The session before this one in the same sport. "How does this compare
+    // to last time?" is the most likely next question after reading a
+    // workout, and today it costs a trip back to the list plus a scan.
+    // Scoped to rows that start before this cluster's slot, so a twin of THIS
+    // session can never be offered as the previous one, and run through the
+    // same canonical picker so the link lands on the row the list shows.
+    const previousRows = await prisma.workout.findMany({
+      where: {
+        userId: user.id,
+        sportType: row.sportType,
+        startedAt: { lt: slotStart },
+      },
+      orderBy: [{ startedAt: "desc" }, { id: "desc" }],
+      // Enough to survive a run of same-session twins and re-sends without
+      // reading the whole history; the picker collapses them to a handful.
+      take: 20,
+      select: {
+        id: true,
+        source: true,
+        startedAt: true,
+        sportType: true,
+        durationSec: true,
+        avgHeartRate: true,
+        maxHeartRate: true,
+        metadata: true,
+      },
+    });
+    // The picker takes rows in ascending order and does not promise to hand
+    // them back sorted, so pick the newest survivor explicitly.
+    const previousWorkoutId =
+      pickCanonicalWorkoutRows(
+        [...previousRows].reverse(),
+        userRow?.sourcePriorityJson ?? null,
+      ).reduce<{ id: string; startedAt: Date } | null>(
+        (newest, candidate) =>
+          newest === null || candidate.startedAt > newest.startedAt
+            ? candidate
+            : newest,
+        null,
+      )?.id ?? null;
+
     const route = row.route
       ? {
           geometry: row.route.geometry,
@@ -250,6 +301,10 @@ export const GET = apiHandler(
       sportType: row.sportType,
       startedAt: row.startedAt,
       endedAt: row.endedAt,
+      // `YYYY-MM-DD` in the user's timezone. Additive; it addresses the
+      // day-scoped reads (intraday pulse, that night's sleep, the day's
+      // mood) the detail surface renders around the session.
+      dayKey,
       durationSec: row.durationSec,
       distanceM: row.totalDistanceM,
       activeEnergyKcal: row.totalEnergyKcal,
@@ -281,6 +336,10 @@ export const GET = apiHandler(
       // winner. `canonicalId === id` when the requested row already
       // is the winner.
       canonicalId: canonical?.id ?? row.id,
+      // The canonical previous session in this sport, or null when this is
+      // the first one on record. Additive; a client that does not read it is
+      // unaffected.
+      previousWorkoutId,
     });
   },
 );

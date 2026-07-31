@@ -176,6 +176,32 @@ export function returnAllZodIssues(
 }
 
 /**
+ * Like {@link returnAllZodIssues}, but for callers that have already
+ * reduced a `ZodError` to a caller-composed, person-safe top-level
+ * `error` sentence and a pre-sanitised issue list (e.g. a shared
+ * write-path helper that validates outside the route handler, such as
+ * `applyProfileUpdate`). The multi-issue envelope (`details.issues`) is
+ * unchanged from `returnAllZodIssues` — this exists so the top-level
+ * string never has to repeat a raw Zod default message (an enum's
+ * `Invalid option: expected one of "A"|"B"|"C"` reaching a person's
+ * screen) while the machine-readable detail is still relocated, not
+ * dropped. `meta.errorCode` lets the web client resolve a localized
+ * sentence via `apiErrors.<errorCode>` (see `localizedApiError`).
+ */
+export function apiValidationError(
+  message: string,
+  issues: SanitisedZodIssue[],
+  status: number = 422,
+  meta?: ErrorMeta,
+): NextResponse {
+  return buildJsonErrorResponse(
+    { data: null, error: message, details: { issues } },
+    status,
+    meta,
+  );
+}
+
+/**
  * `meta` is additive — clients that ignore it see the unchanged
  * `{ data: null, error: <string> }` envelope. New callers can pass
  * `{ errorCode: "credentials_rejected" }` so the UI translates the message

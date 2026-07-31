@@ -229,6 +229,32 @@ async function auditReasons(action: string): Promise<string[]> {
   );
 }
 
+/**
+ * Poll until an audit reason lands, instead of sleeping a fixed span and hoping.
+ *
+ * The audit write is fire-and-forget, so the old `setTimeout(r, 100)` before
+ * reading the ledger was a race the assertion loses whenever the runner is
+ * busy — which is exactly when CI is slowest and least willing to explain
+ * itself. The failure looked like a broken refusal ("expected [] to include
+ * 'consumed'") when the refusal had in fact worked and only its breadcrumb was
+ * still in flight. On timeout this asserts against the real list, so a genuine
+ * regression still reports what WAS written rather than a bare timeout.
+ */
+async function expectAuditReason(
+  action: string,
+  reason: string,
+  timeoutMs = 5_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let seen: string[] = [];
+  while (Date.now() < deadline) {
+    seen = await auditReasons(action);
+    if (seen.includes(reason)) return;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  expect(seen).toContain(reason);
+}
+
 // ── E1 — a stolen token, on its own, gains nothing ───────────────────
 
 describe("E1 — the token alone is not a step-up proof", () => {
@@ -261,10 +287,7 @@ describe("E1 — the token alone is not a step-up proof", () => {
     useElevation(`hle_${"f".repeat(64)}`);
 
     expect((await callMfaSetup()).status).toBe(401);
-    await new Promise((r) => setTimeout(r, 100));
-    expect(await auditReasons("auth.stepup.elevation.rejected")).toContain(
-      "unknown",
-    );
+    await expectAuditReason("auth.stepup.elevation.rejected", "unknown");
   });
 });
 
@@ -287,10 +310,7 @@ describe("E2 — an elevation is not portable between tokens", () => {
     const res = await callMfaSetup();
 
     expect(res.status).toBe(401);
-    await new Promise((r) => setTimeout(r, 100));
-    expect(await auditReasons("auth.stepup.elevation.rejected")).toContain(
-      "wrong_token",
-    );
+    await expectAuditReason("auth.stepup.elevation.rejected", "wrong_token");
 
     // And the legitimate holder's elevation survived the attempt.
     const row = await getPrismaClient().stepUpElevation.findFirst();
@@ -331,10 +351,7 @@ describe("E3 — an elevation is consumed exactly once", () => {
     expect((await callMfaSetup()).status).toBe(200);
     expect((await callMfaSetup()).status).toBe(401);
 
-    await new Promise((r) => setTimeout(r, 100));
-    expect(await auditReasons("auth.stepup.elevation.rejected")).toContain(
-      "consumed",
-    );
+    await expectAuditReason("auth.stepup.elevation.rejected", "consumed");
   });
 
   it("lets exactly one of two CONCURRENT redemptions win", async () => {
@@ -389,10 +406,7 @@ describe("E4 — an expired elevation is refused", () => {
     useElevation(elevation);
     expect((await callMfaSetup()).status).toBe(401);
 
-    await new Promise((r) => setTimeout(r, 100));
-    expect(await auditReasons("auth.stepup.elevation.rejected")).toContain(
-      "expired",
-    );
+    await expectAuditReason("auth.stepup.elevation.rejected", "expired");
   });
 
   it("mints a five-minute window, matching the cookie step-up", async () => {
@@ -778,8 +792,8 @@ describe("E10 — a password proof cannot reach the destructive routes", () => {
     expect(res.status).toBe(401);
     // No codes were minted, so step 2 of the chain yields nothing.
     expect(await getPrismaClient().mfaRecoveryCode.count()).toBe(0);
-    await new Promise((r) => setTimeout(r, 100));
-    expect(await auditReasons("auth.stepup.elevation.rejected")).toContain(
+    await expectAuditReason(
+      "auth.stepup.elevation.rejected",
       "insufficient_factor",
     );
   });

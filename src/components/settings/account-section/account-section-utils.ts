@@ -43,8 +43,13 @@ export function resolveInitialTimezone(
 /**
  * v1.16.4 — settings status hints store the i18n KEY (+ params), not
  * the translated string: a locale switch re-renders the hint in the
- * new language instead of freezing the old-language snapshot. Server-
- * provided error text (which has no key) rides `text` verbatim.
+ * new language instead of freezing the old-language snapshot. The
+ * `text` variant rides a server string verbatim — reserved for
+ * endpoints whose message is already a specific, hand-curated,
+ * person-safe sentence (e.g. the timezone endpoint's own IANA
+ * validation text). It must never carry a generic validator message;
+ * the profile save path resolves `meta.errorCode` into a `key` instead
+ * so nothing server-generated reaches this screen untranslated.
  */
 export type StatusMessage =
   { key: string; params?: Record<string, string | number> } | { text: string };
@@ -54,4 +59,46 @@ export function statusText(
   t: (key: string, params?: Record<string, string | number>) => string,
 ): string {
   return "key" in msg ? t(msg.key, msg.params) : msg.text;
+}
+
+/** A single rejected-field entry from `applyProfileUpdate`'s wire shape
+ * (`details.issues` on failure, `data.rejectedFields` on a partial
+ * success) — `path` is the schema field name, never shown verbatim. */
+export interface RejectedProfileField {
+  path: string;
+  code: string;
+  message?: string;
+}
+
+/**
+ * Maps a rejected field's schema `path` to the same i18n label already
+ * shown next to that input on this screen. The server only ever knows
+ * the field by its schema key (`heightCm`, `gender`, ...) — naming it
+ * in a person-facing sentence is the client's job, using labels that
+ * already exist and are already localized for this form.
+ */
+const PROFILE_FIELD_LABEL_KEYS: Record<string, string> = {
+  email: "auth.email",
+  heightCm: "settings.height",
+  dateOfBirth: "settings.dateOfBirth",
+  gender: "settings.gender",
+  fullName: "settings.identity.fullName",
+  insurerName: "settings.identity.insurer",
+  insuranceNumber: "settings.identity.insuranceNumber",
+};
+
+/**
+ * Renders the first rejected field's label, falling back to its raw
+ * schema key for a field this screen has no input for (defensive —
+ * every field `applyProfileUpdate` accepts from this form is mapped
+ * above).
+ */
+export function describeRejectedProfileField(
+  fields: RejectedProfileField[] | undefined,
+  t: (key: string) => string,
+): string | null {
+  const first = fields?.[0];
+  if (!first) return null;
+  const labelKey = PROFILE_FIELD_LABEL_KEYS[first.path];
+  return labelKey ? t(labelKey) : first.path;
 }

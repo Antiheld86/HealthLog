@@ -26,6 +26,12 @@ const shareLinkSummary = z.object({
   // v1.28 — how many documents this share carries. Never the ids, never the
   // bytes; the share serve route is the only decrypt path.
   documentCount: z.number(),
+  // v1.28.13 — the frozen documents-only flag, written once at creation and
+  // never updated. True means the link carries NO report scope at all (the
+  // create route forces `selection` empty server-side even if the body sent
+  // one) and the share view renders only the frozen document set, never a
+  // health-record section.
+  documentOnly: z.boolean(),
   // Whether this link's frozen scope predates the selection model. Every such
   // link was revoked on upgrade; the sharing list surfaces this so the owner
   // knows to re-mint rather than wondering why a working link stopped.

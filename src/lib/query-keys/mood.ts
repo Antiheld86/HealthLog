@@ -32,6 +32,16 @@ export const moodKeys = {
       params.sortDir,
     ] as const,
 
+  /**
+   * v1.34.3 — every mood entry logged on ONE local day, read by the
+   * workout detail page's day context. Rides under the `["mood-entries"]`
+   * prefix so `moodDependentKeys` reaches it on a mood write, and carries
+   * its own `"day"` scope segment so it can never share a slot with
+   * `moodEntriesList` — same key with a different response shape silently
+   * poisons the cache.
+   */
+  moodEntriesDay: (date: string) => ["mood-entries", "day", date] as const,
+
   moodAnalytics: () => ["mood-analytics"] as const,
   /**
    * v1.8.5 — pre-computed mood-insights aggregates (heatmap, distribution,

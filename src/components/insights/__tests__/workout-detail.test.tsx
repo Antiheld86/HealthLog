@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { I18nProvider } from "@/lib/i18n/context";
 import {
@@ -9,7 +10,7 @@ import {
   WorkoutDetailHrSection,
   WorkoutDetailZones,
   WorkoutDetailSplits,
-  WorkoutDetailDayLinks,
+  WorkoutDetailDayContext,
 } from "../workout-detail";
 import { WorkoutInsightCard } from "../workout-detail/insight-slot";
 import type { WorkoutDetailPayload } from "@/hooks/use-workouts";
@@ -28,6 +29,23 @@ function render(node: React.ReactNode) {
   );
 }
 
+/**
+ * For the one section that reads: the day context queries sleep and mood,
+ * so it needs a client in the tree. Retries off and no network in this
+ * environment, so every query stays pending and the section renders its
+ * loading state — which is exactly what the structural assertions want.
+ */
+function renderWithQueryClient(node: React.ReactNode) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return renderToStaticMarkup(
+    <QueryClientProvider client={client}>
+      <I18nProvider initialLocale="en">{node}</I18nProvider>
+    </QueryClientProvider>,
+  );
+}
+
 function expectSingleSectionHeading(html: string, title: string) {
   const headings = Array.from(
     html.matchAll(/<h2(?:\s[^>]*)?>(.*?)<\/h2>/g),
@@ -41,6 +59,7 @@ const FIXTURE: WorkoutDetailPayload = {
   sportType: "running",
   startedAt: "2026-05-15T07:00:00Z",
   endedAt: "2026-05-15T07:30:00Z",
+  dayKey: "2026-05-15",
   durationSec: 1800,
   distanceM: 5200,
   activeEnergyKcal: 320,
@@ -61,6 +80,7 @@ const FIXTURE: WorkoutDetailPayload = {
   sportContext: null,
   aiInsight: null,
   canonicalId: "w-1",
+  previousWorkoutId: null,
 };
 
 describe("<WorkoutDetailHeader>", () => {
@@ -83,6 +103,18 @@ describe("<WorkoutDetailStats>", () => {
     expect(html).toContain("145 bpm");
     expect(html).toContain("Steps");
     expect(html).toContain("Pace");
+  });
+
+  it("links to the previous session only when the server resolved one", () => {
+    expect(render(<WorkoutDetailStats workout={FIXTURE} />)).not.toContain(
+      'data-slot="workout-detail-previous-link"',
+    );
+
+    const html = render(
+      <WorkoutDetailStats workout={{ ...FIXTURE, previousWorkoutId: "w-0" }} />,
+    );
+    expect(html).toContain('href="/insights/workouts/w-0"');
+    expect(html).toContain("Previous session");
   });
 
   it("omits tiles for null fields", () => {
@@ -267,14 +299,42 @@ describe("<WorkoutDetailSplits>", () => {
   });
 });
 
-describe("<WorkoutDetailDayLinks>", () => {
-  it("renders the that-day navigation links", () => {
-    const html = render(<WorkoutDetailDayLinks workout={FIXTURE} />);
+describe("<WorkoutDetailDayContext>", () => {
+  it("renders the day's own signals under the that-day heading", () => {
+    const html = renderWithQueryClient(
+      <WorkoutDetailDayContext workout={FIXTURE} />,
+    );
     expectSingleSectionHeading(html, "That day");
-    expect(html).toContain('data-slot="workout-detail-day-links"');
-    expect(html).toContain('href="/insights/pulse"');
+    expect(html).toContain('data-slot="workout-detail-day-context"');
+    expect(html).toContain('data-slot="workout-detail-day-sleep"');
+    expect(html).toContain('data-slot="workout-detail-day-mood"');
+    // The section is dated by the heading's meta, not by the links.
+    expect(html).toContain("Fri, 05/15");
+  });
+
+  it("never reads a pending query as an absent night", () => {
+    // The queries are disabled here (no session), so nothing has answered.
+    // "No sleep recorded" would be a claim the section cannot make.
+    const html = renderWithQueryClient(
+      <WorkoutDetailDayContext workout={FIXTURE} />,
+    );
+    expect(html).not.toContain("No sleep recorded for that night");
+    expect(html).not.toContain("No mood logged that day");
+    expect(html).toContain('data-slot="skeleton"');
+  });
+
+  it("labels its outbound links as the undated surfaces they lead to", () => {
+    const html = renderWithQueryClient(
+      <WorkoutDetailDayContext workout={FIXTURE} />,
+    );
     expect(html).toContain('href="/insights/sleep"');
-    expect(html).toContain('href="/insights/mood"');
+    expect(html).toContain("Sleep trends");
+    expect(html).toContain('href="/mood"');
+    expect(html).toContain("Mood history");
+    // The dead "that day" chips are gone: the pulse page cannot take a
+    // date, so nothing here pretends it can.
+    expect(html).not.toContain('href="/insights/pulse"');
+    expect(html).not.toContain('href="/insights/mood"');
   });
 });
 

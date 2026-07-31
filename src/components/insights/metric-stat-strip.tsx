@@ -258,7 +258,7 @@ export function MetricStatStrip({
         data-multi-series="true"
         role="group"
         aria-label={groupLabel ?? t("insights.subPage.stats.label")}
-        className="gap-1.5 py-3 md:py-4"
+        className="gap-2 py-3 md:py-4"
       >
         <CardContent>
           <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
@@ -291,7 +291,7 @@ export function MetricStatStrip({
           ? `${t("insights.subPage.stats.label")} — ${seriesLabel}`
           : t("insights.subPage.stats.label")
       }
-      className="gap-1.5 py-3 md:py-4"
+      className="gap-2 py-3 md:py-4"
     >
       <CardContent>
         <SeriesBlock

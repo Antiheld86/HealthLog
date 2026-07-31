@@ -264,7 +264,7 @@ export function InsightStatusCard({
       // v1.12.2 — stable hook for the spine guard test, which asserts the
       // assessment is the LAST content block on every bespoke metric page.
       data-slot="insight-assessment"
-      // Compact card density (`gap-1.5 py-3 md:py-4`) — the sanctioned tight
+      // Compact card density (`gap-2 py-3 md:py-4`) — the sanctioned tight
       // tier, so the assessment shares one header→body rhythm with the
       // target summary, the read strip, and the stat strip on the same
       // spine. Earlier bespoke values (`gap-1.5` + `md:py-5`) predate the
@@ -272,7 +272,7 @@ export function InsightStatusCard({
       // lands on every status variant so the gap is consistent across
       // states. (The one-time purple left accent stays dropped — the plain
       // card border carries enough separation.)
-      className="animate-insight-in gap-1.5 py-3 md:py-4"
+      className="animate-insight-in gap-2 py-3 md:py-4"
     >
       <CardHeader>
         {/* v1.11.5 — the top-right "cached" label was removed: it surfaced

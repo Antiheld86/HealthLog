@@ -61,6 +61,7 @@ import { SHARE_LINK_MAX_DAYS } from "@/lib/validations/clinician-share-link";
 import {
   ALL_LEAF_IDS,
   REPORT_GROUP_ORDER,
+  SENSITIVE_GROUP_ID,
 } from "@/lib/report-selection/catalogue";
 
 const SESSION_OK = {
@@ -96,7 +97,7 @@ type CapabilitiesBody = {
       maxDays: number;
       reportDownload: string[];
       selectionVersion: number;
-      groups: string[];
+      groups: { id: string; leaves: string[]; sensitive?: boolean }[];
       leaves: string[];
     };
   };
@@ -187,10 +188,35 @@ describe("GET /api/meta/capabilities — drift guards", () => {
     // that was never built.
     expect(body.data.share.reportDownload).toEqual(["fhir", "pdf"]);
     expect(body.data.share.selectionVersion).toBe(2);
-    expect(body.data.share.groups).toEqual([...REPORT_GROUP_ORDER]);
+    expect(body.data.share.groups.map((g) => g.id)).toEqual([
+      ...REPORT_GROUP_ORDER,
+    ]);
     expect([...body.data.share.leaves].sort()).toEqual(
       [...ALL_LEAF_IDS].sort(),
     );
+  });
+
+  it("share.groups carries membership: every leaf in exactly one group, fence flagged once", async () => {
+    const res = await call();
+    const body = (await res.json()) as CapabilitiesBody;
+
+    const seen = new Set<string>();
+    for (const group of body.data.share.groups) {
+      for (const leaf of group.leaves) {
+        expect(seen.has(leaf), `${leaf} appears in more than one group`).toBe(
+          false,
+        );
+        seen.add(leaf);
+      }
+    }
+    // Every leaf in the flat set is in exactly one group, and no group holds
+    // a leaf absent from the flat set — the invariant that makes a native
+    // client's fence trustworthy.
+    expect([...seen].sort()).toEqual([...body.data.share.leaves].sort());
+
+    const sensitiveGroups = body.data.share.groups.filter((g) => g.sensitive);
+    expect(sensitiveGroups).toHaveLength(1);
+    expect(sensitiveGroups[0]?.id).toBe(SENSITIVE_GROUP_ID);
   });
 
   it("quantityTypes are sourced from the HealthKit ingest mapping", async () => {

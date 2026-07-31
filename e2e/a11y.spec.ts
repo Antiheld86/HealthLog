@@ -111,6 +111,8 @@ const workoutDetail = {
   },
   aiInsight: null,
   canonicalId: A11Y_WORKOUT_ID,
+  dayKey: "2026-07-20",
+  previousWorkoutId: null,
 };
 
 const medication = {
@@ -360,6 +362,44 @@ async function installA11yMocks(page: Page) {
     fulfilJson(route, {
       totalMeasurements: fixedMeasurementRows.length,
       moodSummary: { count: 1 },
+    }),
+  );
+
+  // The workout detail page's day context reads the day's pulse shape and
+  // the night the person woke from into it.
+  await page.route("**/api/insights/pulse/intraday*", (route) =>
+    fulfilJson(route, {
+      dateKey: "2026-07-20",
+      bucketMinutes: 10,
+      series: [
+        { startMinute: 420, mean: 62, count: 6, min: 58, max: 70 },
+        { startMinute: 430, mean: 118, count: 6, min: 96, max: 141 },
+      ],
+      baseline: 58,
+      baselineSource: "resting",
+      tension: null,
+      resolution: "dense",
+    }),
+  );
+
+  await page.route("**/api/sleep/night*", (route) =>
+    fulfilJson(route, {
+      night: "2026-07-20",
+      main: {
+        night: "2026-07-20",
+        source: "APPLE_HEALTH",
+        start: "2026-07-19T22:10:00.000Z",
+        end: "2026-07-20T05:45:00.000Z",
+        asleepMinutes: 415,
+        inBedMinutes: 455,
+        awakeMinutes: 40,
+        awakenings: 2,
+        reconstructed: false,
+        stages: {},
+        segments: [],
+        sourceDiscrepancy: null,
+      },
+      naps: [],
     }),
   );
 

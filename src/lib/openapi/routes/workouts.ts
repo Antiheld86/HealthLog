@@ -166,6 +166,13 @@ const workoutDetailResponse = z
     sportType: z.string(),
     startedAt: z.iso.datetime({ offset: true }),
     endedAt: z.iso.datetime({ offset: true }),
+    /**
+     * The local calendar day the session belongs to, `YYYY-MM-DD`, resolved
+     * server-side from `startedAt` in the user's timezone. Clients address
+     * the day-scoped reads with it instead of deriving a day from the
+     * timestamp in their own zone.
+     */
+    dayKey: z.string(),
     durationSec: z.number().int().nonnegative(),
     distanceM: z.number().nullable(),
     activeEnergyKcal: z.number().nullable(),
@@ -192,6 +199,12 @@ const workoutDetailResponse = z
     // a provider reachable. Reading this endpoint never generates one.
     aiInsight: workoutActivityInsight.nullable(),
     canonicalId: z.string(),
+    /**
+     * The canonical session before this one in the same sport, or null when
+     * this is the first on record. Resolved through the same source-priority
+     * picker as the list, so the id always addresses a row the list shows.
+     */
+    previousWorkoutId: z.string().nullable(),
   })
   .meta({ id: "WorkoutDetailResponse" });
 

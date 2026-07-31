@@ -187,6 +187,49 @@ describe("POST /api/nutrients/batch (real Postgres)", () => {
     expect(count).toBe(0);
   });
 
+  // Before this, `nutrient.batch.ingest` audited only when
+  // `inserted + updated > 0` — the ONLY durable record of the call — so a
+  // batch where every entry was rejected left the exact same empty
+  // AuditLog trail as a phone that never posted at all. An operator could
+  // not tell the two apart from the durable record.
+  it("records an audit-log row even when every entry is rejected", async () => {
+    const { POST } = await import("@/app/api/nutrients/batch/route");
+    const res = await POST(
+      postReq({
+        entries: [
+          { day: recentDay(1), nutrient: "vitamin_d", unit: "mg", amount: 20 },
+          { day: recentDay(2), nutrient: "iron", unit: "mg", amount: 999 },
+        ],
+      }),
+    );
+    const json = (await res.json()) as BatchEnvelope;
+    expect(json.data.inserted).toBe(0);
+    expect(json.data.updated).toBe(0);
+    expect(json.data.skipped).toHaveLength(2);
+
+    const rows = await getPrismaClient().auditLog.findMany({
+      where: { userId: OPTED_IN_USER, action: "nutrient.batch.ingest" },
+    });
+    expect(rows).toHaveLength(1);
+    const details = JSON.parse(rows[0].details ?? "{}") as {
+      processed: number;
+      inserted: number;
+      updated: number;
+      skipped: number;
+      skippedByReason: Record<string, number>;
+    };
+    expect(details).toMatchObject({
+      processed: 2,
+      inserted: 0,
+      updated: 0,
+      skipped: 2,
+    });
+    expect(details.skippedByReason).toMatchObject({
+      unit_mismatch: 1,
+      value_out_of_range: 1,
+    });
+  });
+
   it("refuses ingest 403 module.disabled for an account that never opted in", async () => {
     const { POST } = await import("@/app/api/nutrients/batch/route");
     cookieJar.clear();
@@ -257,5 +300,84 @@ describe("GET /api/nutrients (real Postgres)", () => {
     await signIn(OPTED_OUT_USER);
     const res = await GET(new NextRequest("http://localhost/api/nutrients"));
     expect(res.status).toBe(403);
+  });
+
+  // The account holder's only signal that a sync ever arrived: when the
+  // window is genuinely empty AND the most recent nutrient-batch call
+  // landed nothing, the read surfaces why instead of a bare empty state.
+  it("surfaces the last failed attempt when the window is genuinely empty", async () => {
+    const { POST } = await import("@/app/api/nutrients/batch/route");
+    const { GET } = await import("@/app/api/nutrients/route");
+
+    await POST(
+      postReq({
+        entries: [
+          { day: recentDay(1), nutrient: "vitamin_d", unit: "mg", amount: 20 },
+        ],
+      }),
+    );
+
+    const res = await GET(
+      new NextRequest("http://localhost/api/nutrients?days=14"),
+    );
+    const json = (await res.json()) as {
+      data: { nutrients: unknown[]; lastAttempt: { topReason: string } | null };
+    };
+    expect(json.data.nutrients).toHaveLength(0);
+    expect(json.data.lastAttempt).toMatchObject({
+      topReason: "unit_mismatch",
+    });
+  });
+
+  it("omits lastAttempt entirely once the window has data", async () => {
+    const { POST } = await import("@/app/api/nutrients/batch/route");
+    const { GET } = await import("@/app/api/nutrients/route");
+
+    await POST(
+      postReq({
+        entries: [
+          { day: recentDay(1), nutrient: "caffeine", unit: "mg", amount: 250 },
+        ],
+      }),
+    );
+
+    const res = await GET(
+      new NextRequest("http://localhost/api/nutrients?days=14"),
+    );
+    const json = (await res.json()) as {
+      data: { nutrients: unknown[]; lastAttempt: unknown };
+    };
+    expect(json.data.nutrients).toHaveLength(1);
+    expect(json.data.lastAttempt).toBeNull();
+  });
+
+  // A last attempt that actually SUCCEEDED must never be reframed as a
+  // failure just because the window is empty for an unrelated reason
+  // (here: the stored row was removed after the fact). Showing a failure
+  // notice over a real success is the exact false claim this feature
+  // exists to prevent.
+  it("stays silent when the last recorded attempt succeeded, even if the window is now empty", async () => {
+    const { POST } = await import("@/app/api/nutrients/batch/route");
+    const { GET } = await import("@/app/api/nutrients/route");
+
+    await POST(
+      postReq({
+        entries: [
+          { day: recentDay(1), nutrient: "caffeine", unit: "mg", amount: 250 },
+        ],
+      }),
+    );
+    await getPrismaClient().nutrientIntakeDay.deleteMany({
+      where: { userId: OPTED_IN_USER },
+    });
+
+    const res = await GET(
+      new NextRequest("http://localhost/api/nutrients?days=14"),
+    );
+    const json = (await res.json()) as {
+      data: { nutrients: unknown[]; lastAttempt: unknown };
+    };
+    expect(json.data.nutrients).toHaveLength(0);
+    expect(json.data.lastAttempt).toBeNull();
   });
 });

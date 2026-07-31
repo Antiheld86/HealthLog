@@ -6,7 +6,10 @@
  * runtime request parsing, so the wire contract stays single-source.
  */
 import { z } from "zod/v4";
-import { measurementTypeEnum } from "@/lib/validations/measurement";
+import {
+  measurementTypeEnum,
+  measurementSourceEnum,
+} from "@/lib/validations/measurement";
 import { METRIC_STATUS_IDS } from "@/lib/insights/metric-status-registry";
 import {
   DERIVED_METRIC_IDS,
@@ -299,6 +302,16 @@ export const discoveredCorrelation = z
       .number()
       .describe(
         "Benjamini-Hochberg FDR-adjusted q-value (≤ the surface threshold).",
+      ),
+    shrunkR: z
+      .number()
+      .describe(
+        "Sample-size-shrunk effect (r shrunk toward null by depth), used for ranking and the effect-size floor. Display still uses raw `r`.",
+      ),
+    tier: z
+      .enum(["high", "moderate", "faint"])
+      .describe(
+        "Phrasing-confidence tier the narration honours: `faint` is hedged, `high` is stated plainly, `moderate` sits between. A below-floor pair never reaches this list.",
       ),
     interpretation: z
       .string()
@@ -893,6 +906,112 @@ export const dashboardSnapshotResponse = z
       .describe(
         "Latest reading per chartable metric, keyed by the iOS `MetricKind` raw value (the non-obvious raws: `oxygenSaturation`, `totalBodyWater`, `heartRateVariability`, `bodyMassIndex`, `walkingAsymmetryPercentage`, `walkingDoubleSupportPercentage`, `environmentalAudioExposure`, `headphoneAudioExposure`, `activeEnergyBurned`). Each entry carries `value`, `measuredAt` (ISO8601), and the canonical `unit`. Types the user has never logged are omitted.",
       ),
+    // v1.18.6 — server-computed band / target math (audit finding #3),
+    // resolved from the user's own profile facts (DOB / gender / height /
+    // weight-target override). The dashboard reads these instead of
+    // recomputing client-side; always present (every sub-field falls back
+    // to a neutral default rather than being omitted).
+    targetBands: z
+      .object({
+        bpTargets: z
+          .object({
+            sysLow: z.number(),
+            sysHigh: z.number(),
+            diaLow: z.number(),
+            diaHigh: z.number(),
+          })
+          .nullable()
+          .describe(
+            "Personalised blood-pressure target numbers. Null when the profile has no date of birth.",
+          ),
+        bpSysRange: z
+          .object({
+            greenMin: z.number(),
+            greenMax: z.number(),
+            orangeMin: z.number(),
+            orangeMax: z.number(),
+          })
+          .nullable()
+          .describe(
+            "Systolic traffic-light range. Null when the profile has no date of birth.",
+          ),
+        bpDiaRange: z
+          .object({
+            greenMin: z.number(),
+            greenMax: z.number(),
+            orangeMin: z.number(),
+            orangeMax: z.number(),
+          })
+          .nullable()
+          .describe(
+            "Diastolic traffic-light range. Null when the profile has no date of birth.",
+          ),
+        pulseDisplayRange: z
+          .object({
+            greenMin: z.number(),
+            greenMax: z.number(),
+            orangeMin: z.number(),
+            orangeMax: z.number(),
+          })
+          .describe(
+            "Resting-pulse display range. Always present — falls back to the AHA reference range with no date of birth.",
+          ),
+        pulseBands: z
+          .array(
+            z.object({
+              min: z.number(),
+              max: z.number(),
+              color: z.string(),
+              opacity: z.number().optional(),
+              strokeOpacity: z.number().optional(),
+            }),
+          )
+          .describe(
+            "Resting-pulse chart bands. Always present — AHA fallback with no date of birth.",
+          ),
+        bodyFatRange: z
+          .object({ min: z.number(), max: z.number() })
+          .describe("Gender-aware body-fat target range. Always present."),
+        bodyFatBands: z
+          .array(
+            z.object({
+              min: z.number(),
+              max: z.number(),
+              color: z.string(),
+              opacity: z.number().optional(),
+              strokeOpacity: z.number().optional(),
+            }),
+          )
+          .describe("Body-fat chart bands. Always present."),
+        weightRange: z
+          .object({
+            greenMin: z.number(),
+            greenMax: z.number(),
+            orangeMin: z.number(),
+            orangeMax: z.number(),
+          })
+          .nullable()
+          .describe(
+            "Weight traffic-light range: the user's own target band when set, else the height-derived WHO band, else null (no height and no target).",
+          ),
+        weightBands: z
+          .array(
+            z.object({
+              min: z.number(),
+              max: z.number(),
+              color: z.string(),
+              opacity: z.number().optional(),
+              strokeOpacity: z.number().optional(),
+            }),
+          )
+          .nullable()
+          .describe(
+            "Weight chart bands, from the same range. Null when `weightRange` is null.",
+          ),
+      })
+      .describe(
+        "Server-computed band / target math resolved from the user's profile facts, so the client reads these numbers instead of recomputing them. Every sub-field is null only when the driving profile fact is missing (no date of birth for blood pressure, no height and no weight target for weight).",
+      ),
     tiles: z.object({
       summaries: dataSummaryRecord,
       lastSeenByType: z.record(z.string(), z.unknown()),
@@ -1023,6 +1142,38 @@ export const dashboardSnapshotResponse = z
           })
           .nullable()
           .optional(),
+        // v1.21.2 (A5) — the Tension Verdict, locale-agnostic. Fires only
+        // when the readiness composite's contributors disagree (>=1
+        // strongly favourable AND >=1 strongly unfavourable); suppressed
+        // (null) under a clinical red-flag so that path dominates.
+        tension: z
+          .object({
+            band: z.enum(["green", "yellow", "red"]),
+            positive: z.array(
+              z.enum(["rhr", "hrv", "sleep", "respiratory", "mood"]),
+            ),
+            negative: z.array(
+              z.enum(["rhr", "hrv", "sleep", "respiratory", "mood"]),
+            ),
+          })
+          .nullable()
+          .optional()
+          .describe(
+            "Locale-agnostic tension verdict: present only when the readiness composite's contributors disagree. `positive`/`negative` carry readiness contributor keys the client maps to localised labels. Null on a coherent day or when a clinical red-flag suppresses it. Optional so older cached snapshots without the field stay valid.",
+          ),
+        // v1.21.2 (A6) — return-to-baseline, locale-agnostic. Present only
+        // when a salient metric has come back inside the user's own
+        // personal range after a prior out-of-band run; at most one.
+        returnToBand: z
+          .object({
+            metricType: measurementTypeEnum,
+            daysInside: z.number().int(),
+          })
+          .nullable()
+          .optional()
+          .describe(
+            "Locale-agnostic return-to-baseline event: present only when a salient metric (resting heart rate, HRV, respiratory rate, or weight) has come back inside the user's own personal range after a genuine prior out-of-band run. At most one, the most salient. `metricType` is the measurement type the client maps to a localised metric name; `daysInside` is how long it has now sat back inside range. Null otherwise. Optional so older cached snapshots without the field stay valid.",
+          ),
       })
       .nullable()
       .describe(
@@ -1058,6 +1209,19 @@ export const dashboardSnapshotResponse = z
         "User-selected hero score rings (max 3, `selectedScoreRings` on the dashboard layout), resolved server-side: READINESS / RECOVERY_SCORE / SLEEP_SCORE via the derived engines (module-gated like `/api/insights/derived`); MED_COMPLIANCE is TODAY's dose progress off the snapshot's medsToday tally — `score` is the rounded 0..100 progress, `doses` carries the taken/scheduled pair, the band is progress semantics (green once every scheduled dose is taken, yellow while doses remain, never red), and the ring is absent when no dose is scheduled today. Only rings with data appear, in selection order — a missing entry means no data or a disabled module, never zero. Clients render what arrives and never recompute.",
       ),
     briefing: z.record(z.string(), z.unknown()).nullable(),
+    // v1.21.2 (A4) — server-resolved recall + forward-look for the
+    // briefing card, rides the snapshot DTO so iOS reads the same
+    // already-localised block the web card renders verbatim.
+    briefingMemory: z
+      .object({
+        recall: z.string(),
+        forward: z.string(),
+      })
+      .nullable()
+      .optional()
+      .describe(
+        "The briefing recall + forward-look: `recall` is the prior period's narrative headline, `forward` points ahead to the most salient trend drift (or a calm 'holding steady' line). Both are already-localised prose the client renders verbatim. Null when no prior narrative is on file or no briefing is shown. Optional so older cached snapshots without the field stay valid.",
+      ),
     briefingState: z.enum(["ready", "preparing", "disabled", "no-provider"]),
     briefingUpdatedAt: z.string().nullable(),
     briefingStale: z
@@ -1249,4 +1413,74 @@ export const ecgDetailResponse = z
     id: "EcgDetailResponse",
     description:
       "One ECG recording's decrypted waveform plus metadata and the DEVICE's verbatim classification. Ownership is narrowed in the query where — a foreign / unknown id 404s. The waveform is AES-256-GCM at rest, decrypted through the fail-closed codec. HealthLog does not interpret the trace, measure intervals, annotate beats, or emit a verdict of its own. no-store.",
+  });
+
+// v1.10.0 — device-flagged event timeline (rhythm-events, WX-B). Deliberately
+// a SEPARATE enum from `ecgClassification` above: an EVENT row's
+// `rhythmClassification` carries the FULL RhythmClassification set (the
+// three ECG verdicts + the two walking-steadiness severities + the neutral
+// "event occurred" verdict), not just the three ECG-only values. Reusing
+// `ecgClassification` here would silently drop LOW / VERY_LOW / FIRED for
+// any client that generates its type from this schema.
+const rhythmEventType = z
+  .enum([
+    "IRREGULAR_RHYTHM_NOTIFICATION",
+    "HIGH_HEART_RATE_EVENT",
+    "LOW_HEART_RATE_EVENT",
+    "WALKING_STEADINESS_EVENT",
+    "BREATHING_DISTURBANCE_EVENT",
+  ])
+  .describe(
+    "The HealthKit category the device flagged. IRREGULAR_RHYTHM_NOTIFICATION (`HKCategoryTypeIdentifierIrregularHeartRhythmEvent` + ScanWatch AFib screening), HIGH_HEART_RATE_EVENT / LOW_HEART_RATE_EVENT (a sustained heart rate above / below the user's configured threshold while apparently inactive), WALKING_STEADINESS_EVENT (`HKCategoryTypeIdentifierAppleWalkingSteadinessEvent`; the severity rides in `classification`), BREATHING_DISTURBANCE_EVENT (`HKCategoryTypeIdentifierSleepApneaEvent` + `AppleSleepingBreathingDisturbances`, an elevated breathing-disturbance / possible sleep-apnea screening signal).",
+  );
+
+const rhythmEventClassification = z
+  .enum([
+    "IRREGULAR",
+    "NOT_DETECTED",
+    "INCONCLUSIVE",
+    "LOW",
+    "VERY_LOW",
+    "FIRED",
+  ])
+  .nullable()
+  .describe(
+    "The RECORDING DEVICE's own verdict, surfaced verbatim. IRREGULAR / NOT_DETECTED / INCONCLUSIVE are the ECG-style rhythm verdicts (device flagged a possible irregular rhythm / algorithm ran and found nothing / signal too poor to classify) and occur on an `IRREGULAR_RHYTHM_NOTIFICATION` row. LOW / VERY_LOW are walking-steadiness severities and occur on a `WALKING_STEADINESS_EVENT` row. FIRED is the neutral \"event occurred\" verdict with no severity gradient, and occurs on a `HIGH_HEART_RATE_EVENT` / `LOW_HEART_RATE_EVENT` / `BREATHING_DISTURBANCE_EVENT` row. Null when the source reported none. HealthLog never re-classifies — this is the device's certified on-device result. Distinct from `EcgRecordingListItem.classification` / `EcgDetailResponse.classification` above, which are scoped to the three ECG-only values.",
+  );
+
+const rhythmEventListItem = z
+  .object({
+    id: z.string().describe("Measurement row id (cuid)."),
+    type: rhythmEventType,
+    classification: rhythmEventClassification,
+    occurredAt: z.iso
+      .datetime({ offset: true })
+      .describe("Device-reported event time (`measuredAt`)."),
+    source: measurementSourceEnum,
+    deviceType: z
+      .string()
+      .nullable()
+      .describe(
+        "Device class that reported the event (`watch | band | ring | phone | scale | other | unknown`); null when the source omitted it (treated as `unknown`).",
+      ),
+  })
+  .meta({ id: "RhythmEventListItem" });
+
+export const rhythmEventsResponse = z
+  .object({
+    events: z
+      .array(rhythmEventListItem)
+      .describe(
+        "The user's device-flagged events, newest first (capped at 200).",
+      ),
+    hasEvents: z
+      .boolean()
+      .describe(
+        "False for an account with no event rows — the client un-mounts the whole surface (data-availability floor).",
+      ),
+  })
+  .meta({
+    id: "RhythmEventsResponse",
+    description:
+      "Timeline of device-flagged EVENT rows (irregular-rhythm / high-HR / low-HR / walking-steadiness / breathing-disturbance) the user's wearable (Apple Watch / Withings ScanWatch) already produced and synced. AWARENESS / SCREENING of the DEVICE's own decision — HealthLog stores and reflects the classification result verbatim, never a raw waveform, and never re-classifies. Read-only; no LLM call.",
   });

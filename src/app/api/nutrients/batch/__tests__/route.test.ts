@@ -387,7 +387,12 @@ describe("POST /api/nutrients/batch — write semantics", () => {
     });
   });
 
-  it("writes the audit-ledger breadcrumb only when at least one row landed", async () => {
+  it("writes the audit-ledger breadcrumb on every call, landed rows or not", async () => {
+    // This used to fire only when `inserted + updated > 0`, which made the one
+    // durable trace of an ingest conditional on its success. A batch where every
+    // entry was rejected then looked exactly like a batch that never arrived,
+    // and on an empty table the two were indistinguishable from the record —
+    // which is what made "does the client even post?" unanswerable.
     await POST(
       postReq({
         entries: [
@@ -395,7 +400,10 @@ describe("POST /api/nutrients/batch — write semantics", () => {
         ],
       }),
     );
-    expect(auditLog).not.toHaveBeenCalled();
+    expect(auditLog).toHaveBeenCalledWith(
+      "nutrient.batch.ingest",
+      expect.objectContaining({ userId: "user-1" }),
+    );
 
     await POST(
       postReq({
@@ -404,10 +412,7 @@ describe("POST /api/nutrients/batch — write semantics", () => {
         ],
       }),
     );
-    expect(auditLog).toHaveBeenCalledWith(
-      "nutrient.batch.ingest",
-      expect.objectContaining({ userId: "user-1" }),
-    );
+    expect(auditLog).toHaveBeenCalledTimes(2);
   });
 
   it("a failed bulk insert marks only the insert group skipped, without touching the update group", async () => {

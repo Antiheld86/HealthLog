@@ -29,7 +29,20 @@ export interface NutrientOverviewRow {
   daysWithData: number;
 }
 
+/**
+ * Non-null only when `nutrients` is empty AND the most recent
+ * `nutrient.batch.ingest` audit row shows a call that landed nothing —
+ * `topReason` is the most common of the closed skip-reason codes
+ * (`unit_mismatch` | `value_out_of_range` | `day_invalid` |
+ * `upsert_failed`) from that call.
+ */
+export interface NutrientLastIngestAttempt {
+  at: string;
+  topReason: string;
+}
+
 export interface NutrientIntakeOverview {
   windowDays: number;
   nutrients: NutrientOverviewRow[];
+  lastAttempt: NutrientLastIngestAttempt | null;
 }
