@@ -2968,6 +2968,8 @@
         "asleep": "Asleep",
         "awake": "Awake",
         "inBed": "In bed",
+        "nap": "Nap",
+        "napCount": "{count} naps",
         "unavailable": "No stage data yet — sleep stages appear here as soon as a connected source delivers them."
       },
       "empty": {
@@ -6176,10 +6178,6 @@
       "correlations": {
         "title": "Correlations",
         "description": "Correlation tile narration on the Insights overview."
-      },
-      "healthScoreExplainer": {
-        "title": "Health-Score explainer",
-        "description": "The ? glyph next to the Health-Score delta line. The delta digit stays visible regardless."
       }
     },
     "modules": {

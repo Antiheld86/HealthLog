@@ -2968,6 +2968,8 @@
         "asleep": "Śpi",
         "awake": "Czuwa",
         "inBed": "W łóżku",
+        "nap": "Drzemka",
+        "napCount": "{count} drzemki/ek",
         "unavailable": "Brak danych o fazach — fazy snu pojawią się tutaj, gdy tylko dostarczy je połączone źródło."
       },
       "empty": {
@@ -6176,10 +6178,6 @@
       "correlations": {
         "title": "Korelacje",
         "description": "Narracja kafelka korelacji w przeglądzie Insights."
-      },
-      "healthScoreExplainer": {
-        "title": "Objaśnienie Health-Score",
-        "description": "Ikona ? obok linii delty Health-Score. Cyfra delty pozostaje widoczna niezależnie."
       }
     },
     "modules": {

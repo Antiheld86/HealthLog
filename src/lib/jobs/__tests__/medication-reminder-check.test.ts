@@ -9,6 +9,37 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+/**
+ * The intake rows the tick is allowed to see, before its own range filter.
+ *
+ * The tick reads intakes with a real `scheduledFor` range and suppresses a
+ * slot from what comes back. A fake that hands every row over regardless of
+ * `where` cannot tell a correct range from a broken one — the suppression
+ * assertion stays green either way, which is exactly how a dose logged at
+ * 23:50 could keep being reminded after midnight while this file passed. So
+ * the fake honours the range the tick actually asks for.
+ */
+let intakeEvents: Record<string, unknown>[] = [];
+
+function setIntakeEvents(events: Record<string, unknown>[]): void {
+  intakeEvents = events;
+}
+
+function readIntakeEvents(args?: {
+  where?: { scheduledFor?: { gte?: Date; lte?: Date } };
+}): Record<string, unknown>[] {
+  const range = args?.where?.scheduledFor;
+  return intakeEvents.filter((event) => {
+    const scheduledFor = event.scheduledFor;
+    if (!(scheduledFor instanceof Date)) return true;
+    if (range?.gte && scheduledFor.getTime() < range.gte.getTime())
+      return false;
+    if (range?.lte && scheduledFor.getTime() > range.lte.getTime())
+      return false;
+    return true;
+  });
+}
+
 const prismaMock = {
   telegramScheduledDeletion: {
     findMany: vi.fn().mockResolvedValue([]),
@@ -22,7 +53,9 @@ const prismaMock = {
     findMany: vi.fn().mockResolvedValue([]),
   },
   medicationIntakeEvent: {
-    findMany: vi.fn().mockResolvedValue([]),
+    findMany: vi.fn(async (args?: Parameters<typeof readIntakeEvents>[0]) =>
+      readIntakeEvents(args),
+    ),
     findFirst: vi.fn().mockResolvedValue(null),
     create: vi.fn(),
     count: vi.fn().mockResolvedValue(0),
@@ -125,7 +158,7 @@ beforeEach(() => {
   prismaMock.telegramPromptContext.deleteMany.mockResolvedValue({ count: 0 });
   prismaMock.medication.updateMany.mockResolvedValue({ count: 0 });
   prismaMock.medication.findMany.mockResolvedValue([]);
-  prismaMock.medicationIntakeEvent.findMany.mockResolvedValue([]);
+  setIntakeEvents([]);
   prismaMock.medicationIntakeEvent.findFirst.mockResolvedValue(null);
   prismaMock.medicationIntakeEvent.create.mockResolvedValue(undefined);
 });
@@ -172,7 +205,7 @@ describe("handleReminderCheck per-slot reminder windows", () => {
         timesOfDay: ["08:00", "18:00"],
       }),
     ] as never);
-    prismaMock.medicationIntakeEvent.findMany.mockResolvedValue([]);
+    setIntakeEvents([]);
 
     await handleReminderCheck([]);
 
@@ -197,7 +230,7 @@ describe("handleReminderCheck per-slot reminder windows", () => {
         doseWindows: [{ timeOfDay: "08:00", start: "07:30", end: "09:30" }],
       }),
     ] as never);
-    prismaMock.medicationIntakeEvent.findMany.mockResolvedValue([]);
+    setIntakeEvents([]);
 
     await handleReminderCheck([]);
 
@@ -218,7 +251,7 @@ describe("handleReminderCheck per-slot reminder windows", () => {
     prismaMock.medication.findMany.mockResolvedValue([
       medicationWithSchedule({}),
     ] as never);
-    prismaMock.medicationIntakeEvent.findMany.mockResolvedValue([
+    setIntakeEvents([
       {
         scheduledFor: new Date("2026-07-28T08:00:00.000Z"),
         takenAt: new Date("2026-07-28T08:45:00.000Z"),
@@ -250,7 +283,7 @@ describe("handleReminderCheck medication-wide slot attribution", () => {
       },
     ];
     prismaMock.medication.findMany.mockResolvedValue([medication] as never);
-    prismaMock.medicationIntakeEvent.findMany.mockResolvedValue([
+    setIntakeEvents([
       {
         scheduledFor: new Date("2026-07-28T09:00:00.000Z"),
         takenAt: new Date("2026-07-28T08:50:00.000Z"),
@@ -285,7 +318,7 @@ describe("handleReminderCheck medication-wide slot attribution", () => {
       },
     ];
     prismaMock.medication.findMany.mockResolvedValue([medication] as never);
-    prismaMock.medicationIntakeEvent.findMany.mockResolvedValue([
+    setIntakeEvents([
       {
         scheduledFor: new Date("2026-07-28T08:00:00.000Z"),
         takenAt: new Date("2026-07-28T08:45:00.000Z"),
@@ -316,7 +349,7 @@ describe("handleReminderCheck medication-wide slot attribution", () => {
     prismaMock.medicationIntakeEvent.findFirst.mockResolvedValue({
       takenAt: new Date("2026-07-21T08:00:00.000Z"),
     });
-    prismaMock.medicationIntakeEvent.findMany.mockResolvedValue([
+    setIntakeEvents([
       {
         scheduledFor: new Date("2026-07-28T08:00:00.000Z"),
         takenAt: null,
@@ -339,7 +372,7 @@ describe("handleReminderCheck medication-wide slot attribution", () => {
         timesOfDay: [],
       }),
     ] as never);
-    prismaMock.medicationIntakeEvent.findMany.mockResolvedValue([
+    setIntakeEvents([
       {
         scheduledFor: new Date("2026-07-28T08:00:00.000Z"),
         takenAt: new Date("2026-07-28T08:10:00.000Z"),
@@ -372,7 +405,7 @@ describe("handleReminderCheck medication-wide slot attribution", () => {
       },
     ];
     prismaMock.medication.findMany.mockResolvedValue([medication] as never);
-    prismaMock.medicationIntakeEvent.findMany.mockResolvedValue([
+    setIntakeEvents([
       {
         scheduledFor: new Date("2026-07-28T08:00:00.000Z"),
         takenAt: null,
@@ -396,7 +429,7 @@ describe("handleReminderCheck medication-wide slot attribution", () => {
     prismaMock.medication.findMany.mockResolvedValue([
       medicationWithSchedule({}),
     ] as never);
-    prismaMock.medicationIntakeEvent.findMany.mockResolvedValue([
+    setIntakeEvents([
       {
         scheduledFor: new Date("2026-07-28T08:00:00.000Z"),
         takenAt: new Date("2026-07-28T13:00:00.000Z"),
@@ -424,7 +457,7 @@ describe("handleReminderCheck medication-wide slot attribution", () => {
       },
     ];
     prismaMock.medication.findMany.mockResolvedValue([medication] as never);
-    prismaMock.medicationIntakeEvent.findMany.mockResolvedValue([
+    setIntakeEvents([
       {
         scheduledFor: new Date("2026-07-28T08:00:30.000Z"),
         takenAt: null,
@@ -451,7 +484,7 @@ describe("handleReminderCheck medication-wide slot attribution", () => {
       { validUntil: new Date("2026-07-28T08:30:00.000Z") },
     ];
     prismaMock.medication.findMany.mockResolvedValue([medication] as never);
-    prismaMock.medicationIntakeEvent.findMany.mockResolvedValue([
+    setIntakeEvents([
       {
         scheduledFor: new Date("2026-07-28T08:00:00.000Z"),
         takenAt: new Date("2026-07-28T08:00:00.000Z"),
@@ -479,7 +512,7 @@ describe("handleReminderCheck medication-wide slot attribution", () => {
       { validUntil: new Date("2026-07-28T08:30:00.000Z") },
     ];
     prismaMock.medication.findMany.mockResolvedValue([medication] as never);
-    prismaMock.medicationIntakeEvent.findMany.mockResolvedValue([
+    setIntakeEvents([
       {
         scheduledFor: new Date("2026-07-28T08:00:00.000Z"),
         takenAt: new Date("2026-07-28T09:00:00.000Z"),
@@ -525,7 +558,7 @@ describe("handleReminderCheck medication-wide slot attribution", () => {
       { validUntil: new Date("2026-07-28T08:30:00.000Z") },
     ];
     prismaMock.medication.findMany.mockResolvedValue([medication] as never);
-    prismaMock.medicationIntakeEvent.findMany.mockResolvedValue([
+    setIntakeEvents([
       {
         scheduledFor: new Date("2026-07-28T10:00:00.000Z"),
         takenAt: null,
@@ -553,7 +586,7 @@ describe("handleReminderCheck medication-wide slot attribution", () => {
       { validUntil: new Date("2026-07-28T08:30:00.000Z") },
     ];
     prismaMock.medication.findMany.mockResolvedValue([medication] as never);
-    prismaMock.medicationIntakeEvent.findMany.mockResolvedValue([
+    setIntakeEvents([
       {
         scheduledFor: new Date("2026-07-28T10:00:00.000Z"),
         takenAt: new Date("2026-07-28T08:00:00.000Z"),
@@ -691,7 +724,7 @@ describe("issue #664 — exact occurrence identity survives local midnight", () 
       prismaMock.medication.findMany.mockResolvedValue([
         crossMidnightMedication(timezone),
       ] as never);
-      prismaMock.medicationIntakeEvent.findMany.mockResolvedValue([]);
+      setIntakeEvents([]);
 
       await handleReminderCheck([]);
 
@@ -720,7 +753,7 @@ describe("issue #664 — exact occurrence identity survives local midnight", () 
     prismaMock.medication.findMany.mockResolvedValue([
       crossMidnightMedication("Europe/Berlin"),
     ] as never);
-    prismaMock.medicationIntakeEvent.findMany.mockResolvedValue([action]);
+    setIntakeEvents([action]);
 
     vi.setSystemTime(new Date("2026-07-28T22:15:00.000Z")); // 00:15 Jul 29
     await handleReminderCheck([]);
@@ -747,5 +780,69 @@ describe("issue #664 — exact occurrence identity survives local midnight", () 
         }),
       }),
     );
+  });
+
+  it("still escalates a genuinely missed 23:45 dose hours after midnight", async () => {
+    // The other direction of the same boundary, and the one that costs a
+    // person a dose rather than a night's sleep: quietening the repeat must
+    // not quieten the escalation. 04:30 Berlin on Jul 29 is 240 minutes past
+    // the Jul 28 window's end, so the untaken dose reaches RED — and both the
+    // missed-intake row and the notification must name the Jul 28 slot, not
+    // the day the tick happens to run on.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-29T02:30:00.000Z")); // 04:30 Jul 29
+    prismaMock.medication.findMany.mockResolvedValue([
+      crossMidnightMedication("Europe/Berlin"),
+    ] as never);
+    setIntakeEvents([]);
+
+    await handleReminderCheck([]);
+
+    expect(prismaMock.medicationIntakeEvent.create).toHaveBeenCalledTimes(1);
+    expect(prismaMock.medicationIntakeEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          scheduledFor: new Date("2026-07-28T21:45:00.000Z"),
+          takenAt: null,
+          skipped: false,
+          source: "REMINDER",
+        }),
+      }),
+    );
+    expect(dispatchNotification).toHaveBeenCalledTimes(1);
+    expect(dispatchNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          phase: "RED",
+          scheduledAt: "2026-07-28T21:45:00.000Z",
+          date: "2026-07-28",
+        }),
+      }),
+    );
+  });
+
+  it("does not mint a second missed row for a dose taken just before midnight", async () => {
+    // The RED placeholder is the escalation's permanent trace: mint it for a
+    // dose the user already logged and the medication reads as missed forever
+    // after, in compliance and in every history surface.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-29T02:30:00.000Z")); // 04:30 Jul 29
+    prismaMock.medication.findMany.mockResolvedValue([
+      crossMidnightMedication("Europe/Berlin"),
+    ] as never);
+    setIntakeEvents([
+      {
+        scheduledFor: new Date("2026-07-28T21:45:00.000Z"),
+        takenAt: new Date("2026-07-28T21:50:00.000Z"),
+        skipped: false,
+        attributionSource: "AUTO",
+        updatedAt: new Date("2026-07-28T21:50:00.000Z"),
+      },
+    ]);
+
+    await handleReminderCheck([]);
+
+    expect(prismaMock.medicationIntakeEvent.create).not.toHaveBeenCalled();
+    expect(dispatchNotification).not.toHaveBeenCalled();
   });
 });

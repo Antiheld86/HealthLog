@@ -46,7 +46,6 @@ const ALL_ON = {
   assistantBriefingEnabled: true,
   assistantInsightStatusEnabled: true,
   assistantCorrelationsEnabled: true,
-  assistantHealthScoreExplainerEnabled: true,
 };
 
 beforeEach(() => {
@@ -140,7 +139,6 @@ describe("PUT /api/admin/settings/assistant-flags", () => {
     expect(body.data.resolved.briefing).toBe(false);
     expect(body.data.resolved.insightStatus).toBe(false);
     expect(body.data.resolved.correlations).toBe(false);
-    expect(body.data.resolved.healthScoreExplainer).toBe(false);
   });
 
   it("rejects an empty body", async () => {

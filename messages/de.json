@@ -2968,6 +2968,8 @@
         "asleep": "Schlafend",
         "awake": "Wach",
         "inBed": "Im Bett",
+        "nap": "Nickerchen",
+        "napCount": "{count} Nickerchen",
         "unavailable": "Noch keine Phasen-Daten – Schlafphasen erscheinen hier, sobald eine verbundene Quelle sie liefert."
       },
       "empty": {
@@ -6176,10 +6178,6 @@
       "correlations": {
         "title": "Korrelationen",
         "description": "Erzähl-Kachel zur Korrelation auf der Insights-Übersicht."
-      },
-      "healthScoreExplainer": {
-        "title": "Health-Score-Erklärer",
-        "description": "Das ?-Symbol neben der Health-Score-Differenz. Die Zahl bleibt unabhängig davon sichtbar."
       }
     },
     "modules": {

@@ -5,7 +5,10 @@ import { I18nProvider } from "@/lib/i18n/context";
 import {
   SleepStageStackedBar,
   STAGE_ORDER,
+  buildCompositionRows,
+  windowHasNap,
   type SleepStageBreakdown,
+  type SleepStageNight,
 } from "../sleep-stage-stacked-bar";
 
 /**
@@ -228,5 +231,63 @@ describe("<SleepStageStackedBar>", () => {
       expect(html).toContain('data-slot="sleep-stage-stacked-bar"');
       expect(html).toContain('data-slot="sleep-stage-window-toggle"');
     });
+  });
+});
+
+describe("nap band", () => {
+  /**
+   * Recharts draws nothing under `renderToStaticMarkup`, so the band itself
+   * is pinned through the pure row builder the chart feeds.
+   */
+  const label = (dayKey: string) => dayKey;
+
+  it("carries the nap minutes on the day that has one", () => {
+    const perNight: SleepStageNight[] = [
+      { dayKey: "2026-06-03", stages: { CORE: 250, DEEP: 50 } },
+      {
+        dayKey: "2026-06-04",
+        stages: { CORE: 250, DEEP: 50 },
+        napMinutes: 110,
+        napCount: 1,
+      },
+    ];
+    const { rows } = buildCompositionRows(perNight, 7, label);
+    expect(rows[1].NAP).toBe(110);
+    expect(rows[1].napCount).toBe(1);
+    // The night's own stages are untouched by the nap sitting beside them.
+    expect(rows[1].CORE).toBe(250);
+    // And the day before, which had no nap, carries nothing.
+    expect(rows[0].NAP).toBe(0);
+    expect(windowHasNap(rows)).toBe(true);
+  });
+
+  it("mounts no band at all on a week without a nap", () => {
+    const perNight: SleepStageNight[] = [
+      { dayKey: "2026-06-03", stages: { CORE: 250, DEEP: 50 } },
+      { dayKey: "2026-06-04", stages: { CORE: 260, DEEP: 40 } },
+    ];
+    const { rows } = buildCompositionRows(perNight, 7, label);
+    expect(windowHasNap(rows)).toBe(false);
+  });
+
+  it("drops the band when the nap falls outside the visible window", () => {
+    // The nap is on the oldest day; a 2-day window scrolls past it, so the
+    // legend must not keep a nap entry the user cannot see.
+    const perNight: SleepStageNight[] = [
+      {
+        dayKey: "2026-06-02",
+        stages: { CORE: 250 },
+        napMinutes: 110,
+        napCount: 1,
+      },
+      { dayKey: "2026-06-03", stages: { CORE: 250 } },
+      { dayKey: "2026-06-04", stages: { CORE: 260 } },
+    ];
+    expect(windowHasNap(buildCompositionRows(perNight, 3, label).rows)).toBe(
+      true,
+    );
+    expect(windowHasNap(buildCompositionRows(perNight, 2, label).rows)).toBe(
+      false,
+    );
   });
 });

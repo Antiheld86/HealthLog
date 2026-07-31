@@ -2968,6 +2968,8 @@
         "asleep": "Dormido",
         "awake": "Despierto",
         "inBed": "En la cama",
+        "nap": "Siesta",
+        "napCount": "{count} siestas",
         "unavailable": "Aún no hay datos de fases — las fases de sueño aparecerán aquí en cuanto una fuente conectada las proporcione."
       },
       "empty": {
@@ -6176,10 +6178,6 @@
       "correlations": {
         "title": "Correlaciones",
         "description": "Narración de la tarjeta de correlación en la vista general de Insights."
-      },
-      "healthScoreExplainer": {
-        "title": "Explicador de Health-Score",
-        "description": "El icono ? junto a la línea de delta del Health-Score. El dígito del delta permanece visible siempre."
       }
     },
     "modules": {

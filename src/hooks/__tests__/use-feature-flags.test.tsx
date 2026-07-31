@@ -54,7 +54,6 @@ describe("useFeatureFlags", () => {
                   briefing: true,
                   insightStatus: false,
                   correlations: true,
-                  healthScoreExplainer: false,
                 },
               },
             }),
@@ -75,7 +74,6 @@ describe("useFeatureFlags", () => {
         briefing: true,
         insightStatus: false,
         correlations: true,
-        healthScoreExplainer: false,
       },
     });
 
@@ -86,6 +84,5 @@ describe("useFeatureFlags", () => {
     );
     expect(html).toContain("&quot;coach&quot;:false");
     expect(html).toContain("&quot;insightStatus&quot;:false");
-    expect(html).toContain("&quot;healthScoreExplainer&quot;:false");
   });
 });

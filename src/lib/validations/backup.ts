@@ -267,8 +267,26 @@ const cycleSpanSchema = z
  * ciphertext envelope verbatim — the backup never decrypts it, so the
  * owner's free-text note round-trips encrypted (and a wrong-surface leak is
  * impossible). `symptomKeys` carries the seeded catalogue keys so the
- * restore can re-link without exporting internal join ids.
+ * restore can re-link without exporting internal join ids, and
+ * `symptomSeverities` carries how hard each of them hit.
  */
+/**
+ * The intensity recorded against one of a day's symptoms.
+ *
+ * A sparse annotation over `symptomKeys`, not a replacement for it: the keys
+ * still say which symptoms the day had, this says how hard the ones that were
+ * rated hit. Only rated links appear, so a missing entry means the person never
+ * put a number on it. `severity` is left as a plain integer here on purpose —
+ * the 1-4 range is checked when the row is written, so a file carrying a value
+ * outside it loses that one intensity instead of failing to restore at all.
+ */
+const cycleSymptomSeveritySchema = z
+  .object({
+    key: z.string().min(1),
+    severity: z.number().int().nullable().optional(),
+  })
+  .passthrough();
+
 const cycleDayLogSchema = z
   .object({
     id: z.string().min(1).optional(),
@@ -298,6 +316,7 @@ const cycleDayLogSchema = z
     createdAt: isoDateTime.optional(),
     updatedAt: isoDateTime.optional(),
     symptomKeys: z.array(z.string()).default([]),
+    symptomSeverities: z.array(cycleSymptomSeveritySchema).default([]),
   })
   .passthrough();
 
@@ -595,7 +614,6 @@ const appSettingsBackupSchema = z
     assistantBriefingEnabled: z.boolean(),
     assistantInsightStatusEnabled: z.boolean(),
     assistantCorrelationsEnabled: z.boolean(),
-    assistantHealthScoreExplainerEnabled: z.boolean(),
     moduleAvailabilityJson: z.unknown().nullable(),
     documentMaxFileBytes: z.number().int(),
     documentQuotaBytes: z.string().regex(/^\d+$/),

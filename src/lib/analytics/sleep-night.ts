@@ -1117,6 +1117,46 @@ export function pickMainNightAndNaps(sessions: readonly SleepSession[]): {
   return { main, naps };
 }
 
+/** One wake day resolved into its main night and that day's naps. */
+export interface SleepDaySplit {
+  /** Wake-day key (YYYY-MM-DD) in the user's timezone. */
+  night: string;
+  /** The overnight block — the session with the most asleep minutes. */
+  main: SleepSession;
+  /** Every other scorable session on the same wake day, sorted by start. */
+  naps: SleepSession[];
+}
+
+/**
+ * Run the NAP convention across a whole span of sessions: group them by wake
+ * day and apply `pickMainNightAndNaps` to each day.
+ *
+ * This exists so every surface that needs "which session was the night?" over
+ * more than one day asks the SAME question the single-day surfaces ask, rather
+ * than growing its own idea of a night. There is exactly one nap classifier in
+ * this codebase and it is `pickMainNightAndNaps`; this is its multi-day form.
+ *
+ * Days whose sessions carry no asleep minutes are dropped (no main night to
+ * report). The result is sorted ascending by wake day.
+ */
+export function separateNightsAndNaps(
+  sessions: readonly SleepSession[],
+): SleepDaySplit[] {
+  const byDay = new Map<string, SleepSession[]>();
+  for (const session of sessions) {
+    const list = byDay.get(session.night);
+    if (list) list.push(session);
+    else byDay.set(session.night, [session]);
+  }
+  const days: SleepDaySplit[] = [];
+  for (const [night, daySessions] of byDay) {
+    const { main, naps } = pickMainNightAndNaps(daySessions);
+    if (!main) continue;
+    days.push({ night, main, naps });
+  }
+  return days.sort((a, b) => a.night.localeCompare(b.night));
+}
+
 export interface SleepNightSummary {
   /**
    * A `DataSummary` whose every value is a per-night TIME-ASLEEP total

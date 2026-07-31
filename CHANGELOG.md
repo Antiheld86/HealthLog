@@ -2,6 +2,55 @@
 
 ## [Unreleased]
 
+## [1.34.4] — 2026-07-31
+
+A release about two places in the code answering one question differently.
+
+### Added
+
+- An inferred nap is now shown as its own band in the sleep stage view instead of
+  being blended into that night. A nap used to be counted into the night's stages,
+  so a day with a long afternoon sleep read as a longer and shallower night than
+  it was. Nights without a nap look exactly as they did, with no empty band and no
+  legend entry for something that is not there.
+
+### Fixed
+
+- A checkup that is due tomorrow says tomorrow. The dashboard card worked its due
+  line out in rolling 24-hour steps while the checkups page used calendar days, so
+  the same appointment could read as due tomorrow on one screen and in two days on
+  the other. Both now read one shared rule.
+- The due line and the date printed beside it are worked out on the same clock.
+  One used the device's timezone and the other the profile's, which disagree by a
+  day for anyone travelling or on a machine set to another zone.
+- Recording something no longer takes minutes to appear on the home page. The page
+  render and the API were each holding their own copy of the server cache, so a
+  write emptied one and left the other serving the state from before it. They now
+  share one.
+- Returning to the dashboard no longer answers a refresh with a reading fetched
+  before your last entry.
+- The onboarding profile step says when the server could not accept a field.
+  Valid answers are kept, rejected ones are named, and if nothing could be saved
+  the message says which field blocked it.
+- A cycle symptom's intensity survives a backup and restore. It was recorded and
+  shown, and every export quietly dropped it. Older backup files still restore,
+  with the intensity honestly absent rather than filled in with a zero.
+
+### Removed
+
+- The Health-Score explainer switch in the operator settings. It promised a control
+  that was deliberately removed two releases ago, so it had been switching nothing
+  for months.
+
+### Internal
+
+- The sleep composition and the single-night view now agree about which session is
+  the night, because they ask the same function rather than each deciding.
+- A test that was meant to prove a dose taken before midnight stops reminding could
+  not fail: the stand-in for the database ignored the time window it was asked for.
+  It now honours it, and both directions are pinned, so a genuinely missed dose
+  still escalates.
+
 ## [1.34.3] — 2026-07-31
 
 A release about surfaces that knew something and did not say it.

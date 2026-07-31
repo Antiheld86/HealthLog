@@ -72,7 +72,6 @@ describe("GET /api/feature-flags", () => {
           briefing: boolean;
           insightStatus: boolean;
           correlations: boolean;
-          healthScoreExplainer: boolean;
         };
       };
       error: null;
@@ -85,7 +84,6 @@ describe("GET /api/feature-flags", () => {
       briefing: true,
       insightStatus: true,
       correlations: true,
-      healthScoreExplainer: true,
     });
   });
 
@@ -97,7 +95,6 @@ describe("GET /api/feature-flags", () => {
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
       assistantCorrelationsEnabled: true,
-      assistantHealthScoreExplainerEnabled: true,
     });
 
     const res = await GET(req());
@@ -113,7 +110,6 @@ describe("GET /api/feature-flags", () => {
       briefing: false,
       insightStatus: false,
       correlations: false,
-      healthScoreExplainer: false,
     });
   });
 
@@ -125,7 +121,6 @@ describe("GET /api/feature-flags", () => {
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: false,
       assistantCorrelationsEnabled: true,
-      assistantHealthScoreExplainerEnabled: false,
     });
 
     const res = await GET(req());
@@ -141,7 +136,6 @@ describe("GET /api/feature-flags", () => {
       briefing: true,
       insightStatus: false,
       correlations: true,
-      healthScoreExplainer: false,
     });
   });
 

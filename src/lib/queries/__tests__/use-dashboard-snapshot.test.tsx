@@ -194,6 +194,53 @@ describe("prefetchDashboardSnapshot — hydration-safe promise handoff", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("a cell that already carries data never parks a response, so a write's refetch reads the server as it is AFTER the write", async () => {
+    // The read-after-write rule for the handoff. A parked response is a copy of
+    // the server from the moment it was requested; handing it to a later
+    // `queryFn` run serves pre-write data to a refetch whose entire purpose is
+    // to see the write. The dashboard reaches `queryFn` again only via the
+    // 120 s poll, a focus refetch, or the invalidation a mutation fires — never
+    // via a remount (`refetchOnMount: false`) — so every consumer of a parked
+    // response is one of those three.
+    let serverBody: Record<string, unknown> = {
+      layout: { widgets: [] },
+      tiles: {},
+      medsToday: { takenToday: 0 },
+    };
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(envelopeResponse(serverBody)));
+    vi.stubGlobal("fetch", fetchMock);
+    getQueryDataMock.mockReturnValue({ widgets: [{ id: "existing" }] });
+
+    // The user comes back to the dashboard after a few minutes away. The cell
+    // still holds the pre-write body, so the page paints from it at once.
+    prefetchDashboardSnapshot(
+      fakeQueryClient({
+        data: { tiles: {} },
+        dataUpdatedAt: Date.now() - 5 * 60_000,
+      }),
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // They record a dose. The server now reports it taken.
+    serverBody = {
+      layout: { widgets: [] },
+      tiles: {},
+      medsToday: { takenToday: 1 },
+    };
+
+    // The write's invalidation refetches the mounted cell.
+    useDashboardSnapshot();
+    const opts = lastOptsOf(useQueryMock);
+    const snap = await (
+      opts.queryFn as () => Promise<{ medsToday: { takenToday: number } }>
+    )();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(snap.medsToday.takenToday).toBe(1);
+  });
+
   it("falls back to a fresh fetch when the preload failed — the mounted cell owns error surfacing", async () => {
     const layout = { widgets: [] };
     const fetchMock = vi

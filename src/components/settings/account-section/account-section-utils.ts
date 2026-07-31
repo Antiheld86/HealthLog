@@ -61,44 +61,9 @@ export function statusText(
   return "key" in msg ? t(msg.key, msg.params) : msg.text;
 }
 
-/** A single rejected-field entry from `applyProfileUpdate`'s wire shape
- * (`details.issues` on failure, `data.rejectedFields` on a partial
- * success) — `path` is the schema field name, never shown verbatim. */
-export interface RejectedProfileField {
-  path: string;
-  code: string;
-  message?: string;
-}
-
 /**
- * Maps a rejected field's schema `path` to the same i18n label already
- * shown next to that input on this screen. The server only ever knows
- * the field by its schema key (`heightCm`, `gender`, ...) — naming it
- * in a person-facing sentence is the client's job, using labels that
- * already exist and are already localized for this form.
+ * Naming a rejected profile field is shared with the onboarding
+ * baseline step — see `src/lib/profile/rejected-fields.ts`. This screen
+ * uses the default label map, which points at the labels these inputs
+ * already carry.
  */
-const PROFILE_FIELD_LABEL_KEYS: Record<string, string> = {
-  email: "auth.email",
-  heightCm: "settings.height",
-  dateOfBirth: "settings.dateOfBirth",
-  gender: "settings.gender",
-  fullName: "settings.identity.fullName",
-  insurerName: "settings.identity.insurer",
-  insuranceNumber: "settings.identity.insuranceNumber",
-};
-
-/**
- * Renders the first rejected field's label, falling back to its raw
- * schema key for a field this screen has no input for (defensive —
- * every field `applyProfileUpdate` accepts from this form is mapped
- * above).
- */
-export function describeRejectedProfileField(
-  fields: RejectedProfileField[] | undefined,
-  t: (key: string) => string,
-): string | null {
-  const first = fields?.[0];
-  if (!first) return null;
-  const labelKey = PROFILE_FIELD_LABEL_KEYS[first.path];
-  return labelKey ? t(labelKey) : first.path;
-}

@@ -463,242 +463,284 @@ export class ServerCache<T> {
 }
 
 /**
- * Per-route cache instances. Module-scope so every request lands in the
- * same `Map`. Sizes match the blueprint §5 table.
+ * Per-route cache instances. Sizes match the blueprint §5 table.
  *
  * The blueprint's full eight-cache roster is provisioned so future
  * rounds can wire the remaining routes (`/api/medications`,
  * `/api/dashboard/widgets`, `/api/workouts`,
  * `/api/mood/analytics`) without churning the helper module.
+ *
+ * Built once and parked on `globalThis` (see `caches` below) — module
+ * scope alone is NOT enough to make every request land in the same `Map`.
  */
-export const caches = {
-  /**
-   * Slim / thick analytics cells, the iOS summary cell, the dashboard
-   * summary, AND the unified dashboard first-paint snapshot (per-key TTL
-   * override). 60 s fresh TTL keeps multiple sub-page mounts inside a
-   * minute on a warm entry.
-   *
-   * v1.12.7 — stale-while-revalidate window. The snapshot read uses
-   * `cachedSwr` and a measurement write marks the bucket stale (not a
-   * hard evict) via `invalidateUserMeasurements`, so a high-frequency
-   * iOS Apple-Health sync no longer busts the snapshot into a cold
-   * rebuild on every batch (the v1.8.7 "sync evicting the cache all day"
-   * class, on the dashboard snapshot). Slim / thick / summary cells read
-   * via plain `cached` are unaffected: a marked-stale entry has
-   * `expiresAt === now`, so their next `cached` read is a clean miss and
-   * rebuilds fresh — only the `cachedSwr` snapshot serves stale + warms a
-   * background recompute. The stale window bounds how old a served
-   * snapshot can be when no reader triggers a revalidation.
-   *
-   * v1.16.12 — stale window widened 10 min → 1 h. A single self-hoster
-   * visits the dashboard / insights every ~20-30 min; the old 10-minute
-   * window meant nearly every return landed PAST it (a `miss`, ~1.5 s of
-   * synchronous rebuild) instead of inside it (a `stale`, instant + one
-   * background refresh). Each stale-serve re-inserts, so an active session
-   * stays warm regardless of the exact window; the value only governs how
-   * long an ABSENCE still gets an instant response. 1 h covers a normal
-   * break while keeping the dashboard's time-derived `nextDueOverdue` /
-   * tally drift bounded — and that field already self-corrects within the
-   * snapshot client's 120 s poll and the immediate background refresh.
-   */
-  analytics: new ServerCache<unknown>({
-    name: "analytics",
-    maxEntries: 1000,
-    ttlMs: 60_000,
-    staleTtlMs: 3_600_000,
-  }),
-  /**
-   * v1.16.8 — stale-while-revalidate on the list bucket. The 60 s fresh
-   * TTL meant every visit minutes apart paid the full cold list build
-   * (five parallel reads + the next-due engine per medication). The list
-   * GET reads via `cachedSwr` now: inside the 10-minute stale window the
-   * prior list serves immediately while one background recompute warms a
-   * fresh one. Interactive writes hard-evict the bucket through
-   * `invalidateUserMedications({ evict: true })`, so the window only
-   * bounds wall-clock drift (`todayEventCount`, `nextDueAt`), never
-   * user-action staleness.
-   */
-  medications: new ServerCache<unknown>({
-    name: "medications",
-    maxEntries: 1000,
-    ttlMs: 60_000,
-    staleTtlMs: 600_000,
-  }),
-  /**
-   * v1.18.11 (W5 perf) — stale-while-revalidate window. The
-   * `AchievementUnlockNotifier` is mounted on every authenticated page and
-   * polls this endpoint every 2 minutes. Against a 60 s hard-TTL bucket
-   * that poll always landed on an expired entry, firing a cold ~400 ms
-   * rebuild on every session every 2 minutes. With a stale window the poll
-   * (and the inline `/achievements` page mount) serves the prior payload
-   * instantly while one coalesced background recompute refreshes it.
-   *
-   * SWR is safe here: the route persists `pendingUnlocks` OUTSIDE the
-   * cached factory (idempotent `createMany({ skipDuplicates: true })`), so
-   * serving a stale body never skips an unlock write. The 10-minute window
-   * mirrors the `medications` bucket; measurement / mood / medication /
-   * intake writes invalidate the `${userId}|` prefix so a user's own
-   * action still surfaces on the next read.
-   */
-  achievements: new ServerCache<unknown>({
-    name: "achievements",
-    maxEntries: 1000,
-    ttlMs: 60_000,
-    staleTtlMs: 600_000,
-  }),
-  dashboardWidgets: new ServerCache<unknown>({
-    name: "dashboardWidgets",
-    maxEntries: 500,
-    ttlMs: 300_000,
-  }),
-  // Retain at most 50k canonical workout rows across all filter projections.
-  // The selected row shape is fixed and narrow, so row count is a stable
-  // byte proxy without serializing or walking every field on each cache set.
-  // A projection larger than the entire budget is returned to its caller but
-  // immediately evicted rather than monopolizing process memory.
-  workouts: new ServerCache<WorkoutsProjection>({
-    name: "workouts",
-    maxEntries: 1000,
-    // A row-weight budget prevents a handful of full-history projections
-    // from looking as cheap as tiny lists under the entry-count cap.
-    maxWeight: 50_000,
-    ttlMs: 60_000,
-    weightOf: (projection) => Math.max(1, projection.canonical.length),
-  }),
-  medicationsIntake: new ServerCache<unknown>({
-    name: "medicationsIntake",
-    maxEntries: 1000,
-    ttlMs: 900_000,
-  }),
-  /**
-   * v1.15.20 — per-medication compliance payload
-   * (`GET /api/medications/[id]/compliance`). The medications list fans
-   * the endpoint out once per card, and each cold build runs the full
-   * band-expansion pass — so the warm path has to live server-side.
-   * Keyed `${userId}|${medicationId}|compliance|${userTz}` (the payload's
-   * day buckets derive from the user timezone, so a timezone change must
-   * miss rather than serve the previous zone's buckets); every intake /
-   * medication write flushes the `${userId}|` prefix via
-   * `invalidateUserMedications`, so the 15-minute TTL only bounds
-   * wall-clock drift (a dose flipping overdue), never user-action
-   * staleness. Sized for a few hundred users × a handful of meds.
-   *
-   * v1.16.8 — stale-while-revalidate. Both compliance routes (the per-id
-   * detail read and the batched card read) consume via `cachedSwr`:
-   * inside the 10-minute stale window an expired cell serves the prior
-   * payload immediately while one coalesced rebuild warms it. Interactive
-   * intake / medication writes — including the iOS bulk-intake endpoint,
-   * which carries the phone user's own taken/skipped doses — hard-evict
-   * (the user must see their own dose on the next read); the genuinely
-   * background writers (the auto-miss cron, slot dedup) mark stale so a
-   * high-frequency pass never busts every card into an inline cold
-   * rebuild.
-   */
-  medicationCompliance: new ServerCache<unknown>({
-    name: "medicationCompliance",
-    maxEntries: 2000,
-    ttlMs: 900_000,
-    staleTtlMs: 600_000,
-  }),
-  moodAnalytics: new ServerCache<unknown>({
-    name: "moodAnalytics",
-    maxEntries: 1000,
-    ttlMs: 60_000,
-  }),
-  /**
-   * v1.8.5 — pre-computed mood-insights aggregates (heatmap, distribution,
-   * weekday, tags, cross-metric correlations) for the Mood Insights page.
-   * Read on every `/insights/mood` mount; bounded 365-day live read behind
-   * the cache. 60 s fresh TTL matches `moodAnalytics`.
-   *
-   * v1.12.1 — stale-while-revalidate. The read route uses `cachedSwr` and
-   * a mood write marks the bucket stale (not a hard evict) via
-   * `invalidateUserMood`. An active logger now serves the prior aggregate
-   * immediately while a single background recompute warms a fresh one,
-   * instead of re-paying the multi-second cold compute on every entry
-   * (the v1.8.7 "sync evicting the cache all day" class, on mood). The
-   * 10-minute stale window bounds how old a served aggregate can be when
-   * no reader has triggered a revalidation.
-   */
-  moodInsights: new ServerCache<unknown>({
-    name: "moodInsights",
-    maxEntries: 1000,
-    ttlMs: 60_000,
-    staleTtlMs: 600_000,
-  }),
-  /**
-   * v1.4.36 W1 — `/api/insights/targets` is read on every Insights
-   * mount and runs >1 s cold (it pulls 30-day measurements for every
-   * type + medications + intakes + mood + glucose). 60 s TTL matches
-   * the analytics cache so multiple sub-page mounts inside a minute
-   * all hit a warm cache. Invalidated alongside the analytics bucket
-   * on measurement / mood / medication writes.
-   *
-   * v1.16.8 — stale-while-revalidate. The 60 s fresh TTL meant every
-   * Insights mount more than a minute after the last one re-paid the
-   * full multi-query build inline (>1 s cold). The route reads via
-   * `cachedSwr` now: inside the 10-minute stale window the prior body
-   * serves immediately while one coalesced background rebuild warms a
-   * fresh one. Writes keep their hard evict (`deleteByPrefix`) so a
-   * user's own measurement / mood / medication action is always
-   * reflected on the very next read — the window only bounds
-   * wall-clock drift, never user-action staleness.
-   */
-  insightsTargets: new ServerCache<unknown>({
-    name: "insightsTargets",
-    maxEntries: 1000,
-    ttlMs: 60_000,
-    staleTtlMs: 600_000,
-  }),
-  /**
-   * v1.16.8 — batched derived-wellness payload
-   * (`GET /api/insights/derived/batch`). The Insights overview reads
-   * ~16 metric computes in one request; each cold build walks the
-   * rollup tier per metric and lands at 1–2 s wall-clock even under the
-   * bounded `p-limit(4)` fan-out. Keyed
-   * `${userId}|batch|${sortedTokens}|${locale}` so the overview's one
-   * canonical token set always lands on one cell. Measurement writes
-   * cover it through `invalidateUserMeasurements` (evict on interactive
-   * writes, mark-stale on background syncs); mood writes mark it stale
-   * (READINESS folds the mood series in). Stale-while-revalidate keeps
-   * any repeat read inside the 10-minute window instant while one
-   * background recompute refreshes the cell.
-   */
-  insightsDerived: new ServerCache<unknown>({
-    name: "insightsDerived",
-    maxEntries: 2000,
-    ttlMs: 60_000,
-    // v1.16.12 — 10 min → 1 h, same rationale as the analytics bucket: the
-    // derived-insight aggregates are trend data (no time-critical due
-    // state), so a returning visitor serves an instant stale payload +
-    // background refresh instead of a ~1.1 s cold rebuild.
-    staleTtlMs: 3_600_000,
-  }),
-  /**
-   * v1.5.5 — per-user insights tile layout cache. Mirrors
-   * `dashboardWidgets` (same 5-minute TTL, same per-user bucket size).
-   * Read on every `/insights` mount; the layout only changes on a
-   * Settings save, which invalidates this cache via
-   * `invalidateUserInsightsLayout()`.
-   */
-  insightsLayout: new ServerCache<unknown>({
-    name: "insightsLayout",
-    maxEntries: 500,
-    ttlMs: 300_000,
-  }),
-  /**
-   * v1.16.10 — per-user medications list presentation (view choice +
-   * manual order). Mirrors `insightsLayout` (same 5-minute TTL, same
-   * per-user bucket size). Read on every /medications mount; changes
-   * only on a view toggle / order save, which invalidates via
-   * `invalidateUserMedicationListLayout()`.
-   */
-  medicationListLayout: new ServerCache<unknown>({
-    name: "medicationListLayout",
-    maxEntries: 500,
-    ttlMs: 300_000,
-  }),
-} as const;
+function createServerCaches() {
+  return {
+    /**
+     * Slim / thick analytics cells, the iOS summary cell, the dashboard
+     * summary, AND the unified dashboard first-paint snapshot (per-key TTL
+     * override). 60 s fresh TTL keeps multiple sub-page mounts inside a
+     * minute on a warm entry.
+     *
+     * v1.12.7 — stale-while-revalidate window. The snapshot read uses
+     * `cachedSwr` and a measurement write marks the bucket stale (not a
+     * hard evict) via `invalidateUserMeasurements`, so a high-frequency
+     * iOS Apple-Health sync no longer busts the snapshot into a cold
+     * rebuild on every batch (the v1.8.7 "sync evicting the cache all day"
+     * class, on the dashboard snapshot). Slim / thick / summary cells read
+     * via plain `cached` are unaffected: a marked-stale entry has
+     * `expiresAt === now`, so their next `cached` read is a clean miss and
+     * rebuilds fresh — only the `cachedSwr` snapshot serves stale + warms a
+     * background recompute. The stale window bounds how old a served
+     * snapshot can be when no reader triggers a revalidation.
+     *
+     * v1.16.12 — stale window widened 10 min → 1 h. A single self-hoster
+     * visits the dashboard / insights every ~20-30 min; the old 10-minute
+     * window meant nearly every return landed PAST it (a `miss`, ~1.5 s of
+     * synchronous rebuild) instead of inside it (a `stale`, instant + one
+     * background refresh). Each stale-serve re-inserts, so an active session
+     * stays warm regardless of the exact window; the value only governs how
+     * long an ABSENCE still gets an instant response. 1 h covers a normal
+     * break while keeping the dashboard's time-derived `nextDueOverdue` /
+     * tally drift bounded — and that field already self-corrects within the
+     * snapshot client's 120 s poll and the immediate background refresh.
+     */
+    analytics: new ServerCache<unknown>({
+      name: "analytics",
+      maxEntries: 1000,
+      ttlMs: 60_000,
+      staleTtlMs: 3_600_000,
+    }),
+    /**
+     * v1.16.8 — stale-while-revalidate on the list bucket. The 60 s fresh
+     * TTL meant every visit minutes apart paid the full cold list build
+     * (five parallel reads + the next-due engine per medication). The list
+     * GET reads via `cachedSwr` now: inside the 10-minute stale window the
+     * prior list serves immediately while one background recompute warms a
+     * fresh one. Interactive writes hard-evict the bucket through
+     * `invalidateUserMedications({ evict: true })`, so the window only
+     * bounds wall-clock drift (`todayEventCount`, `nextDueAt`), never
+     * user-action staleness.
+     */
+    medications: new ServerCache<unknown>({
+      name: "medications",
+      maxEntries: 1000,
+      ttlMs: 60_000,
+      staleTtlMs: 600_000,
+    }),
+    /**
+     * v1.18.11 (W5 perf) — stale-while-revalidate window. The
+     * `AchievementUnlockNotifier` is mounted on every authenticated page and
+     * polls this endpoint every 2 minutes. Against a 60 s hard-TTL bucket
+     * that poll always landed on an expired entry, firing a cold ~400 ms
+     * rebuild on every session every 2 minutes. With a stale window the poll
+     * (and the inline `/achievements` page mount) serves the prior payload
+     * instantly while one coalesced background recompute refreshes it.
+     *
+     * SWR is safe here: the route persists `pendingUnlocks` OUTSIDE the
+     * cached factory (idempotent `createMany({ skipDuplicates: true })`), so
+     * serving a stale body never skips an unlock write. The 10-minute window
+     * mirrors the `medications` bucket; measurement / mood / medication /
+     * intake writes invalidate the `${userId}|` prefix so a user's own
+     * action still surfaces on the next read.
+     */
+    achievements: new ServerCache<unknown>({
+      name: "achievements",
+      maxEntries: 1000,
+      ttlMs: 60_000,
+      staleTtlMs: 600_000,
+    }),
+    dashboardWidgets: new ServerCache<unknown>({
+      name: "dashboardWidgets",
+      maxEntries: 500,
+      ttlMs: 300_000,
+    }),
+    // Retain at most 50k canonical workout rows across all filter projections.
+    // The selected row shape is fixed and narrow, so row count is a stable
+    // byte proxy without serializing or walking every field on each cache set.
+    // A projection larger than the entire budget is returned to its caller but
+    // immediately evicted rather than monopolizing process memory.
+    workouts: new ServerCache<WorkoutsProjection>({
+      name: "workouts",
+      maxEntries: 1000,
+      // A row-weight budget prevents a handful of full-history projections
+      // from looking as cheap as tiny lists under the entry-count cap.
+      maxWeight: 50_000,
+      ttlMs: 60_000,
+      weightOf: (projection) => Math.max(1, projection.canonical.length),
+    }),
+    medicationsIntake: new ServerCache<unknown>({
+      name: "medicationsIntake",
+      maxEntries: 1000,
+      ttlMs: 900_000,
+    }),
+    /**
+     * v1.15.20 — per-medication compliance payload
+     * (`GET /api/medications/[id]/compliance`). The medications list fans
+     * the endpoint out once per card, and each cold build runs the full
+     * band-expansion pass — so the warm path has to live server-side.
+     * Keyed `${userId}|${medicationId}|compliance|${userTz}` (the payload's
+     * day buckets derive from the user timezone, so a timezone change must
+     * miss rather than serve the previous zone's buckets); every intake /
+     * medication write flushes the `${userId}|` prefix via
+     * `invalidateUserMedications`, so the 15-minute TTL only bounds
+     * wall-clock drift (a dose flipping overdue), never user-action
+     * staleness. Sized for a few hundred users × a handful of meds.
+     *
+     * v1.16.8 — stale-while-revalidate. Both compliance routes (the per-id
+     * detail read and the batched card read) consume via `cachedSwr`:
+     * inside the 10-minute stale window an expired cell serves the prior
+     * payload immediately while one coalesced rebuild warms it. Interactive
+     * intake / medication writes — including the iOS bulk-intake endpoint,
+     * which carries the phone user's own taken/skipped doses — hard-evict
+     * (the user must see their own dose on the next read); the genuinely
+     * background writers (the auto-miss cron, slot dedup) mark stale so a
+     * high-frequency pass never busts every card into an inline cold
+     * rebuild.
+     */
+    medicationCompliance: new ServerCache<unknown>({
+      name: "medicationCompliance",
+      maxEntries: 2000,
+      ttlMs: 900_000,
+      staleTtlMs: 600_000,
+    }),
+    moodAnalytics: new ServerCache<unknown>({
+      name: "moodAnalytics",
+      maxEntries: 1000,
+      ttlMs: 60_000,
+    }),
+    /**
+     * v1.8.5 — pre-computed mood-insights aggregates (heatmap, distribution,
+     * weekday, tags, cross-metric correlations) for the Mood Insights page.
+     * Read on every `/insights/mood` mount; bounded 365-day live read behind
+     * the cache. 60 s fresh TTL matches `moodAnalytics`.
+     *
+     * v1.12.1 — stale-while-revalidate. The read route uses `cachedSwr` and
+     * a mood write marks the bucket stale (not a hard evict) via
+     * `invalidateUserMood`. An active logger now serves the prior aggregate
+     * immediately while a single background recompute warms a fresh one,
+     * instead of re-paying the multi-second cold compute on every entry
+     * (the v1.8.7 "sync evicting the cache all day" class, on mood). The
+     * 10-minute stale window bounds how old a served aggregate can be when
+     * no reader has triggered a revalidation.
+     */
+    moodInsights: new ServerCache<unknown>({
+      name: "moodInsights",
+      maxEntries: 1000,
+      ttlMs: 60_000,
+      staleTtlMs: 600_000,
+    }),
+    /**
+     * v1.4.36 W1 — `/api/insights/targets` is read on every Insights
+     * mount and runs >1 s cold (it pulls 30-day measurements for every
+     * type + medications + intakes + mood + glucose). 60 s TTL matches
+     * the analytics cache so multiple sub-page mounts inside a minute
+     * all hit a warm cache. Invalidated alongside the analytics bucket
+     * on measurement / mood / medication writes.
+     *
+     * v1.16.8 — stale-while-revalidate. The 60 s fresh TTL meant every
+     * Insights mount more than a minute after the last one re-paid the
+     * full multi-query build inline (>1 s cold). The route reads via
+     * `cachedSwr` now: inside the 10-minute stale window the prior body
+     * serves immediately while one coalesced background rebuild warms a
+     * fresh one. Writes keep their hard evict (`deleteByPrefix`) so a
+     * user's own measurement / mood / medication action is always
+     * reflected on the very next read — the window only bounds
+     * wall-clock drift, never user-action staleness.
+     */
+    insightsTargets: new ServerCache<unknown>({
+      name: "insightsTargets",
+      maxEntries: 1000,
+      ttlMs: 60_000,
+      staleTtlMs: 600_000,
+    }),
+    /**
+     * v1.16.8 — batched derived-wellness payload
+     * (`GET /api/insights/derived/batch`). The Insights overview reads
+     * ~16 metric computes in one request; each cold build walks the
+     * rollup tier per metric and lands at 1–2 s wall-clock even under the
+     * bounded `p-limit(4)` fan-out. Keyed
+     * `${userId}|batch|${sortedTokens}|${locale}` so the overview's one
+     * canonical token set always lands on one cell. Measurement writes
+     * cover it through `invalidateUserMeasurements` (evict on interactive
+     * writes, mark-stale on background syncs); mood writes mark it stale
+     * (READINESS folds the mood series in). Stale-while-revalidate keeps
+     * any repeat read inside the 10-minute window instant while one
+     * background recompute refreshes the cell.
+     */
+    insightsDerived: new ServerCache<unknown>({
+      name: "insightsDerived",
+      maxEntries: 2000,
+      ttlMs: 60_000,
+      // v1.16.12 — 10 min → 1 h, same rationale as the analytics bucket: the
+      // derived-insight aggregates are trend data (no time-critical due
+      // state), so a returning visitor serves an instant stale payload +
+      // background refresh instead of a ~1.1 s cold rebuild.
+      staleTtlMs: 3_600_000,
+    }),
+    /**
+     * v1.5.5 — per-user insights tile layout cache. Mirrors
+     * `dashboardWidgets` (same 5-minute TTL, same per-user bucket size).
+     * Read on every `/insights` mount; the layout only changes on a
+     * Settings save, which invalidates this cache via
+     * `invalidateUserInsightsLayout()`.
+     */
+    insightsLayout: new ServerCache<unknown>({
+      name: "insightsLayout",
+      maxEntries: 500,
+      ttlMs: 300_000,
+    }),
+    /**
+     * v1.16.10 — per-user medications list presentation (view choice +
+     * manual order). Mirrors `insightsLayout` (same 5-minute TTL, same
+     * per-user bucket size). Read on every /medications mount; changes
+     * only on a view toggle / order save, which invalidates via
+     * `invalidateUserMedicationListLayout()`.
+     */
+    medicationListLayout: new ServerCache<unknown>({
+      name: "medicationListLayout",
+      maxEntries: 500,
+      ttlMs: 300_000,
+    }),
+  } as const;
+}
+
+type ServerCacheRegistry = ReturnType<typeof createServerCaches>;
+
+/**
+ * The registry lives on `globalThis`, not on module scope.
+ *
+ * A module imported from BOTH a Server Component and a route handler is
+ * instantiated once per bundler layer, so plain module state gives the
+ * dashboard RSC its own private `Map` and the API routes another. Measured
+ * on a production build, single process: the RSC copy held two analytics
+ * entries while an interactive measurement write — which runs in a route
+ * handler and calls `deleteByPrefix` — emptied only the route-handler copy.
+ * The dashboard's server-rendered first paint kept serving the pre-write
+ * snapshot until the TTL lapsed minutes later, and because that payload is
+ * dehydrated into TanStack it overwrote the fresh value the client had
+ * already fetched.
+ *
+ * Measured under `node .next/standalone/server.js`, which is what the image
+ * runs, and not only under `next start`. Both behave the same here: three
+ * module instantiations either way, one shared registry once pinned. Worth
+ * keeping in mind for the next cache-shaped bug — a reading taken under
+ * `next start` alone would not have settled this.
+ *
+ * `Symbol.for` is the same cross-layer slot `event-builder.ts` uses for the
+ * event-loop-lag sample; `globalForCaches` mirrors `db.ts`'s `globalForPrisma`
+ * alias. The pin is unconditional: `db.ts` guards its assignment with
+ * `NODE_ENV !== "production"` because it only defends against dev HMR, while
+ * the layer split this defends against is a PRODUCTION build behaviour.
+ */
+const CACHES_GLOBAL_SLOT = Symbol.for("healthlog.serverCaches");
+
+const globalForCaches = globalThis as unknown as {
+  [key: symbol]: ServerCacheRegistry | undefined;
+};
+
+export const caches: ServerCacheRegistry =
+  globalForCaches[CACHES_GLOBAL_SLOT] ??
+  (globalForCaches[CACHES_GLOBAL_SLOT] = createServerCaches());
 
 /**
  * Non-reversible 32-bit hash of the cache key. Used in wide-event meta

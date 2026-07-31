@@ -46,7 +46,7 @@ import {
   useDisplayTimezone,
 } from "@/lib/i18n/context";
 import { relativeCalendarDate } from "@/lib/i18n/relative-time";
-import { startOfLocalDayInTz } from "@/lib/tz/local-day";
+import { relativeDueKey } from "@/lib/measurement-reminders/due-day";
 import { cn } from "@/lib/utils";
 import { applyOrder, useModuleListPrefs } from "@/lib/module-list-prefs";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
@@ -142,42 +142,6 @@ const INTERVAL_PRESETS = [7, 14, 28, 30, 90, 180, 365] as const;
 const CADENCE_CUSTOM = "custom";
 const CADENCE_RRULE = "rrule";
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-/**
- * v1.32.36 — returns a FULLY-QUALIFIED i18n key, not a bare tail. A call site
- * that interpolates the tail onto the namespace root anchors the
- * reverse-coverage guard at that bare namespace, which marks every key under
- * it reachable and turns the guard into a no-op for the whole namespace. The
- * guard now refuses that shape outright, so the key is built whole here.
- */
-function relativeDueKey(
-  nextDueAt: string | null,
-  now: number,
-): { key: string; days: number } {
-  if (!nextDueAt) return { key: "measurementReminders.nextDue.none", days: 0 };
-  const due = new Date(nextDueAt);
-  if (Number.isNaN(due.getTime()))
-    return { key: "measurementReminders.nextDue.none", days: 0 };
-  // v1.18.9 (recon) — compare CALENDAR-day deltas in the user's local zone,
-  // not a rolling-24h delta. A reminder due at 09:00 viewed the same evening
-  // at 20:00 must still read "heute", and one whose due calendar-day is before
-  // today must read "überfällig" — a raw `(due - now) / DAY_MS` round would
-  // mis-bucket both. Floor each instant to its local day start (host-local zone
-  // = the browser user's zone for this client component) before differencing.
-  const dueDay = startOfLocalDayInTz(due, undefined).getTime();
-  const nowDay = startOfLocalDayInTz(new Date(now), undefined).getTime();
-  const deltaDays = Math.round((dueDay - nowDay) / DAY_MS);
-  if (deltaDays < 0)
-    return {
-      key: "measurementReminders.overdueByDays",
-      days: Math.abs(deltaDays),
-    };
-  if (deltaDays === 0)
-    return { key: "measurementReminders.nextDue.today", days: 0 };
-  if (deltaDays === 1)
-    return { key: "measurementReminders.nextDue.tomorrow", days: 1 };
-  return { key: "measurementReminders.nextDue.inDays", days: deltaDays };
-}
 
 /**
  * v1.18.1 — a COACH-minted reminder stores an i18n KEY in `label` (the
@@ -825,9 +789,12 @@ function VorsorgeCard({
   const fmt = useFormatters();
   // Issue #490 — day-boundary zone for the relative "today / yesterday"
   // bucket must match the zone `fmt.date` renders in (mirror → Berlin).
+  // The next-due phrase reads off the SAME zone as the last-done date below
+  // it; they used to disagree by a day for anyone whose device sat in another
+  // zone from their profile.
   const displayTz = useDisplayTimezone();
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const due = relativeDueKey(reminder.nextDueAt, now);
+  const due = relativeDueKey(reminder.nextDueAt, now, displayTz);
   const cadence =
     reminder.intervalDays != null
       ? t("measurementReminders.cadence.everyNDays", {

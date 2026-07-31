@@ -101,6 +101,5 @@ export const adminSettingsSchema = z
     assistantBriefingEnabled: z.boolean().optional(),
     assistantInsightStatusEnabled: z.boolean().optional(),
     assistantCorrelationsEnabled: z.boolean().optional(),
-    assistantHealthScoreExplainerEnabled: z.boolean().optional(),
   })
   .strict();
