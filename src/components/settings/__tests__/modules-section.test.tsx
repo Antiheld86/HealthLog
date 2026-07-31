@@ -74,7 +74,6 @@ const ALL_ON_FLAGS: AssistantFlagSet = {
   briefing: true,
   insightStatus: true,
   correlations: true,
-  healthScoreExplainer: true,
 };
 const flagsSpy = vi.fn<() => AssistantFlagSet>(() => ALL_ON_FLAGS);
 vi.mock("@/hooks/use-feature-flags", () => ({

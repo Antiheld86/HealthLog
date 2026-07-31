@@ -6176,10 +6176,6 @@
       "correlations": {
         "title": "Correlaciones",
         "description": "Narración de la tarjeta de correlación en la vista general de Insights."
-      },
-      "healthScoreExplainer": {
-        "title": "Explicador de Health-Score",
-        "description": "El icono ? junto a la línea de delta del Health-Score. El dígito del delta permanece visible siempre."
       }
     },
     "modules": {

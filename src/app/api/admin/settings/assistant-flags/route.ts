@@ -1,6 +1,6 @@
 /**
  * `PUT /api/admin/settings/assistant-flags` — operator-side flip
- * surface for the six assistant feature flags.
+ * surface for the five assistant feature flags.
  *
  * Dedicated endpoint (separate from the generic
  * `/api/admin/settings` PUT) so the admin panel can wire its
@@ -47,7 +47,6 @@ const assistantFlagsSchema = z
     assistantBriefingEnabled: z.boolean().optional(),
     assistantInsightStatusEnabled: z.boolean().optional(),
     assistantCorrelationsEnabled: z.boolean().optional(),
-    assistantHealthScoreExplainerEnabled: z.boolean().optional(),
   })
   .strict();
 
@@ -57,7 +56,6 @@ type AssistantFlagsRow = {
   assistantBriefingEnabled: boolean;
   assistantInsightStatusEnabled: boolean;
   assistantCorrelationsEnabled: boolean;
-  assistantHealthScoreExplainerEnabled: boolean;
 };
 
 function buildResponseShape(row: AssistantFlagsRow) {
@@ -67,7 +65,6 @@ function buildResponseShape(row: AssistantFlagsRow) {
     briefing: row.assistantBriefingEnabled,
     insightStatus: row.assistantInsightStatusEnabled,
     correlations: row.assistantCorrelationsEnabled,
-    healthScoreExplainer: row.assistantHealthScoreExplainerEnabled,
   });
   return {
     raw: {
@@ -76,8 +73,6 @@ function buildResponseShape(row: AssistantFlagsRow) {
       assistantBriefingEnabled: row.assistantBriefingEnabled,
       assistantInsightStatusEnabled: row.assistantInsightStatusEnabled,
       assistantCorrelationsEnabled: row.assistantCorrelationsEnabled,
-      assistantHealthScoreExplainerEnabled:
-        row.assistantHealthScoreExplainerEnabled,
     },
     resolved,
   };
@@ -97,7 +92,6 @@ export const GET = apiHandler(async () => {
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
       assistantCorrelationsEnabled: true,
-      assistantHealthScoreExplainerEnabled: true,
     },
   });
 
@@ -109,8 +103,6 @@ export const GET = apiHandler(async () => {
       settings?.assistantInsightStatusEnabled ?? true,
     assistantCorrelationsEnabled:
       settings?.assistantCorrelationsEnabled ?? true,
-    assistantHealthScoreExplainerEnabled:
-      settings?.assistantHealthScoreExplainerEnabled ?? true,
   };
 
   return apiSuccess(buildResponseShape(row));
@@ -162,8 +154,6 @@ export const PUT = apiHandler(async (request: NextRequest) => {
     assistantBriefingEnabled: settings.assistantBriefingEnabled,
     assistantInsightStatusEnabled: settings.assistantInsightStatusEnabled,
     assistantCorrelationsEnabled: settings.assistantCorrelationsEnabled,
-    assistantHealthScoreExplainerEnabled:
-      settings.assistantHealthScoreExplainerEnabled,
   };
 
   return apiSuccess(buildResponseShape(row));

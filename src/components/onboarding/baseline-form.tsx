@@ -29,12 +29,17 @@ import { useTranslations } from "@/lib/i18n/context";
 import { apiGet, apiPost, apiPut } from "@/lib/api/api-fetch";
 import { localizedApiError } from "@/lib/api/localized-error";
 import { queryKeys } from "@/lib/query-keys";
-import { toProfileSex } from "@/lib/profile/sex";
 import {
   AnamnesisCard,
   buildAnamnesisAboutMeBody,
   type AnamnesisValue,
 } from "@/components/onboarding/anamnesis-card";
+import {
+  baselineFieldLabelKeys,
+  buildBaselineProfileBody,
+  describeBaselineSaveOutcome,
+  putBaselineProfile,
+} from "@/components/onboarding/baseline-form-utils";
 
 /**
  * v1.4.25 W14b-Content — onboarding step 3 (baseline).
@@ -49,7 +54,12 @@ import {
  * path (see `applyProfileUpdate` in `src/lib/auth/profile-update.ts`).
  *
  * Submit flow on "Save and continue":
- *   1. PUT profile (best-effort — empty fields are skipped).
+ *   1. PUT profile (empty fields are skipped). The write is
+ *      field-independent, so the answer is read rather than assumed:
+ *      a field the server declined is named on screen and the rest
+ *      still counts as saved; a submission where nothing landed keeps
+ *      the person on this step with the blocking field named. See
+ *      `baseline-form-utils.ts`.
  *   2. PUT /api/coach/about-me — only when the optional anamnesis card
  *      (v1.17.1) was filled; preserves any existing `aboutMe` and
  *      writes conditions / allergies encrypted at rest.
@@ -134,19 +144,28 @@ export function BaselineForm() {
     setSaving(true);
     try {
       if (opts.saveProfile) {
-        const profileBody: Record<string, unknown> = {};
-        if (form.displayName.trim())
-          profileBody.displayName = form.displayName.trim();
-        const heightCm = heightAdapter.toCanonicalCm(form.height);
-        if (heightCm !== null) profileBody.heightCm = heightCm;
-        if (form.dateOfBirth) profileBody.dateOfBirth = form.dateOfBirth;
-        // Every value the profile stores travels; the guard drops only the
-        // "prefer not to say" placeholder. It used to list two of the three
-        // by hand, so a third-value answer vanished on submit without a word.
-        const gender = toProfileSex(form.gender);
-        if (gender) profileBody.gender = gender;
+        const profileBody = buildBaselineProfileBody(
+          form,
+          heightAdapter.toCanonicalCm(form.height),
+        );
         if (Object.keys(profileBody).length > 0) {
-          await apiPut("/api/auth/profile", profileBody);
+          const outcome = describeBaselineSaveOutcome(
+            await putBaselineProfile(profileBody),
+            t,
+            baselineFieldLabelKeys(heightAdapter.usesFeetInches),
+          );
+          if (outcome.notice) {
+            const show =
+              outcome.notice.tone === "warning" ? toast.warning : toast.error;
+            show(outcome.notice.message);
+          }
+          if (!outcome.advance) {
+            // Nothing was written. Staying on the step is the point —
+            // the person has a named field to fix and the values they
+            // typed are still in front of them.
+            setSaving(false);
+            return;
+          }
         }
 
         // Anamnesis — only write when the user actually filled a field

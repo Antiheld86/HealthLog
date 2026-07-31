@@ -39,9 +39,11 @@ import { detectBrowserTimezone } from "@/lib/tz/format";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
 import {
   describeRejectedProfileField,
+  type RejectedProfileField,
+} from "@/lib/profile/rejected-fields";
+import {
   resolveInitialTimezone,
   statusText,
-  type RejectedProfileField,
   type StatusMessage,
 } from "./account-section-utils";
 import { AvatarSection } from "./avatar-section";

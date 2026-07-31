@@ -13,7 +13,7 @@ import { useQueryClientMounted } from "@/hooks/_internal/use-query-client-safe";
  *
  * The matrix gates every assistant-driven surface on the web —
  * Coach + chat, Daily Briefing, per-metric status cards, correlation
- * narration, Health-Score delta explainer. iOS reads the same
+ * narration. iOS reads the same
  * endpoint and uses the same matrix; the contract is locked per
  * `.planning/RESPONSE-TO-IOS-TEAM-2026-05-16.md` §3 R5.
  */
@@ -29,8 +29,6 @@ export interface AssistantFlagSet {
   insightStatus: boolean;
   /** Correlation narration tile on the mother page. */
   correlations: boolean;
-  /** `?` glyph that opens the Health-Score delta explainer popover. */
-  healthScoreExplainer: boolean;
 }
 
 interface FeatureFlagsPayload {
@@ -44,7 +42,6 @@ export const DEFAULT_ASSISTANT_FLAGS: AssistantFlagSet = Object.freeze({
   briefing: true,
   insightStatus: true,
   correlations: true,
-  healthScoreExplainer: true,
 });
 
 async function fetchFeatureFlags(): Promise<FeatureFlagsPayload> {

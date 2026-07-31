@@ -43,7 +43,6 @@ describe("resolveAssistantFlags", () => {
       briefing: false,
       insightStatus: true,
       correlations: false,
-      healthScoreExplainer: true,
     };
     expect(resolveAssistantFlags(input)).toEqual(input);
   });
@@ -55,7 +54,6 @@ describe("resolveAssistantFlags", () => {
       briefing: true,
       insightStatus: true,
       correlations: true,
-      healthScoreExplainer: true,
     };
     expect(resolveAssistantFlags(input)).toEqual({
       enabled: false,
@@ -63,7 +61,6 @@ describe("resolveAssistantFlags", () => {
       briefing: false,
       insightStatus: false,
       correlations: false,
-      healthScoreExplainer: false,
     });
   });
 });
@@ -82,7 +79,6 @@ describe("getAssistantFlags", () => {
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: false,
       assistantCorrelationsEnabled: true,
-      assistantHealthScoreExplainerEnabled: false,
     });
     const flags = await getAssistantFlags();
     expect(flags).toEqual({
@@ -91,7 +87,6 @@ describe("getAssistantFlags", () => {
       briefing: true,
       insightStatus: false,
       correlations: true,
-      healthScoreExplainer: false,
     });
   });
 
@@ -102,7 +97,6 @@ describe("getAssistantFlags", () => {
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
       assistantCorrelationsEnabled: true,
-      assistantHealthScoreExplainerEnabled: true,
     });
     const flags = await getAssistantFlags();
     expect(flags).toEqual({
@@ -111,7 +105,6 @@ describe("getAssistantFlags", () => {
       briefing: false,
       insightStatus: false,
       correlations: false,
-      healthScoreExplainer: false,
     });
   });
 
@@ -130,7 +123,6 @@ describe("requireAssistantSurface", () => {
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
       assistantCorrelationsEnabled: true,
-      assistantHealthScoreExplainerEnabled: true,
     });
     const flags = await requireAssistantSurface("coach");
     expect(flags.coach).toBe(true);
@@ -143,7 +135,6 @@ describe("requireAssistantSurface", () => {
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
       assistantCorrelationsEnabled: true,
-      assistantHealthScoreExplainerEnabled: true,
     });
     await expect(requireAssistantSurface("coach")).rejects.toThrow(
       AssistantDisabledError,
@@ -157,7 +148,6 @@ describe("requireAssistantSurface", () => {
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
       assistantCorrelationsEnabled: true,
-      assistantHealthScoreExplainerEnabled: true,
     });
     await expect(requireAssistantSurface("briefing")).rejects.toThrow(
       AssistantDisabledError,
@@ -184,7 +174,6 @@ describe("per-request memoisation", () => {
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
       assistantCorrelationsEnabled: true,
-      assistantHealthScoreExplainerEnabled: true,
     });
     // Pin a stable stub object so every `getEvent()` inside this test
     // returns the same reference — the memo keys on identity, so a
@@ -207,7 +196,6 @@ describe("per-request memoisation", () => {
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
       assistantCorrelationsEnabled: true,
-      assistantHealthScoreExplainerEnabled: true,
     });
 
     mockEvent = { addWarning: vi.fn(), id: "req-1" };

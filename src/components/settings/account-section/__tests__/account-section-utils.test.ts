@@ -1,8 +1,6 @@
 import { describe, it, expect } from "vitest";
-import {
-  describeRejectedProfileField,
-  resolveInitialTimezone,
-} from "../account-section-utils";
+import { describeRejectedProfileField } from "@/lib/profile/rejected-fields";
+import { resolveInitialTimezone } from "../account-section-utils";
 
 describe("describeRejectedProfileField", () => {
   const t = (key: string) => `translated:${key}`;

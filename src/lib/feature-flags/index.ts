@@ -5,9 +5,9 @@ import { memoizePerRequest } from "@/lib/request-cache";
 /**
  * v1.4.31 — Assistant-surface operator feature flags.
  *
- * Six boolean toggles on `AppSettings` carve the visibility cut for
- * the seven LLM-driven surfaces. The master flag is a single kill-
- * switch; the five sub-flags carve specific surfaces.
+ * Five boolean toggles on `AppSettings` carve the visibility cut for
+ * the LLM-driven surfaces. The master flag is a single kill-switch;
+ * the four sub-flags carve specific surfaces.
  *
  * `assistant.enabled = false` forces every sub-flag false in the
  * resolved shape — the master always wins. This means a server-side
@@ -20,13 +20,9 @@ import { memoizePerRequest } from "@/lib/request-cache";
  * shape so iOS reads the same authoritative set the web reads.
  */
 
-/** The five assistant sub-flags the operator can carve. */
+/** The four assistant sub-flags the operator can carve. */
 export type AssistantSurface =
-  | "coach"
-  | "briefing"
-  | "insightStatus"
-  | "correlations"
-  | "healthScoreExplainer";
+  "coach" | "briefing" | "insightStatus" | "correlations";
 
 export interface AssistantFlagSet {
   /** Master kill-switch — when false, every sub-flag is forced false. */
@@ -39,8 +35,6 @@ export interface AssistantFlagSet {
   insightStatus: boolean;
   /** Correlation narration tile on the mother page. */
   correlations: boolean;
-  /** `?` glyph that opens the Health-Score delta explainer popover. */
-  healthScoreExplainer: boolean;
 }
 
 /** All-on default; mirrors v1.4.30 behaviour for fresh installs. */
@@ -50,7 +44,6 @@ export const ASSISTANT_FLAGS_DEFAULT: AssistantFlagSet = Object.freeze({
   briefing: true,
   insightStatus: true,
   correlations: true,
-  healthScoreExplainer: true,
 });
 
 /**
@@ -80,7 +73,6 @@ export async function getAssistantFlags(): Promise<AssistantFlagSet> {
           assistantBriefingEnabled: true,
           assistantInsightStatusEnabled: true,
           assistantCorrelationsEnabled: true,
-          assistantHealthScoreExplainerEnabled: true,
         },
       });
 
@@ -91,8 +83,6 @@ export async function getAssistantFlags(): Promise<AssistantFlagSet> {
         briefing: settings?.assistantBriefingEnabled ?? true,
         insightStatus: settings?.assistantInsightStatusEnabled ?? true,
         correlations: settings?.assistantCorrelationsEnabled ?? true,
-        healthScoreExplainer:
-          settings?.assistantHealthScoreExplainerEnabled ?? true,
       });
     } catch {
       getEvent()?.addWarning(
@@ -116,7 +106,6 @@ export function resolveAssistantFlags(raw: AssistantFlagSet): AssistantFlagSet {
       briefing: false,
       insightStatus: false,
       correlations: false,
-      healthScoreExplainer: false,
     };
   }
   return { ...raw };

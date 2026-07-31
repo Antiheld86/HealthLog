@@ -129,7 +129,6 @@ describe("GET /api/insights/biomarker-assessment", () => {
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: false,
       assistantCorrelationsEnabled: true,
-      assistantHealthScoreExplainerEnabled: true,
     } as never);
     const res = await callGet(makeReq("bm-1"));
     expect(res.status).toBe(403);

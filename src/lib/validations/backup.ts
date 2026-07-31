@@ -614,7 +614,6 @@ const appSettingsBackupSchema = z
     assistantBriefingEnabled: z.boolean(),
     assistantInsightStatusEnabled: z.boolean(),
     assistantCorrelationsEnabled: z.boolean(),
-    assistantHealthScoreExplainerEnabled: z.boolean(),
     moduleAvailabilityJson: z.unknown().nullable(),
     documentMaxFileBytes: z.number().int(),
     documentQuotaBytes: z.string().regex(/^\d+$/),

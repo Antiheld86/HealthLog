@@ -91,7 +91,6 @@ describe("GET /api/insights/blood-pressure-status — assistant-flag gate", () =
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: false,
       assistantCorrelationsEnabled: true,
-      assistantHealthScoreExplainerEnabled: true,
     } as never);
     const res = await callGet(makeReq());
     expect(res.status).toBe(403);
