@@ -168,6 +168,7 @@ const HEALTH_SCORE = {
       band: "green" as const,
       bandSetter: "SLEEP",
       composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP", "ADIPOSITY"],
+      configured: false,
       noiseFloor: 3,
       scoreVersion: 2,
     },
