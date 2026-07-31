@@ -2,6 +2,54 @@
 
 ## [Unreleased]
 
+## [1.35.0] — 2026-07-31
+
+The Health Score becomes something you decide rather than something that happens
+to you.
+
+### Added
+
+- You choose what counts toward your Health Score. A settings page of its own
+  lists the pillars, each one on or off. It starts with everything that can be
+  scored, so a narrower score is a decision you make rather than a default you
+  inherit.
+- Each day's score is now recorded with the recipe that produced it: the value,
+  the method, which pillars took part, what each of them scored, and a
+  fingerprint of the inputs it depended on. Until now nothing was kept, and every
+  comparison was recomputed under today's rules.
+- The score says when its composition was authored, so a number built from a
+  chosen set never looks like one built from everything available.
+
+### Changed
+
+- The module switches no longer decide what the score is made of. Turning off
+  Sleep or Labs used to remove that pillar from the score with nothing on screen
+  saying so. Those switches now govern what you see, and the score's own page
+  governs what it counts. An existing account keeps exactly the composition it
+  has today, so no number moves on upgrade.
+- Changing what counts no longer reads as a change in your health. The comparison
+  stops at the point the recipe changed and says so, rather than drawing a line
+  across two different definitions. The per-pillar figures continue, because those
+  stay comparable.
+
+### Fixed
+
+- A settings change can no longer produce a message telling you your score
+  dropped.
+- The score's own coverage figure now describes the pillars it actually counts
+  rather than every pillar that exists.
+
+### Removed
+
+- Two refusals that could not refuse anything, and a boundary condition no input
+  could ever reach.
+
+### Operations
+
+- Two migrations: one for the per-account composition, one for the recorded
+  scores. The recorded days travel through backup, restore and delete-all-data
+  like every other table.
+
 ## [1.34.5] — 2026-07-31
 
 A release about the score explaining itself, and about sentences arriving in the
