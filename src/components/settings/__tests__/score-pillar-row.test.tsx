@@ -139,12 +139,31 @@ describe("a pillar this build cannot score", () => {
 });
 
 describe("localisation", () => {
-  it("renders every state in each shipped locale", () => {
-    for (const locale of ["de", "fr", "es", "it", "pl"] as Locale[]) {
-      const html = render({ ...base, eligibility: "waiting" }, locale);
-      // A missing key falls through to the key path; seeing one here means
-      // a locale bundle is short.
-      expect(html).not.toContain("settings.sections.score");
+  // Asserting the absence of a key path would prove nothing: `t()` falls
+  // back to the English bundle, so a missing locale key renders English
+  // rather than the key. Locale PARITY is already a repo-wide guard
+  // (`i18n-locale-integrity`); what belongs here is that the row actually
+  // reaches each locale's own words, which fails on a missing key, on an
+  // English value copied into a bundle, and on a locale wired to the
+  // wrong strings.
+  const WAITING: Record<string, string> = {
+    de: "Ausgewählt, wartet auf Daten",
+    fr: "Sélectionné, en attente de données",
+    es: "Seleccionado, esperando datos",
+    it: "Selezionato, in attesa di dati",
+    pl: "Wybrany, czeka na dane",
+  };
+
+  it("renders each locale's own words, not the English fallback", () => {
+    for (const [locale, expected] of Object.entries(WAITING)) {
+      const html = render(
+        { ...base, eligibility: "waiting" },
+        locale as Locale,
+      );
+      expect(html, `${locale} row`).toContain(expected);
+      expect(html, `${locale} row fell back to English`).not.toContain(
+        "Selected, waiting for data",
+      );
     }
   });
 });

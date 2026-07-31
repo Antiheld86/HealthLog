@@ -97,15 +97,51 @@ describe("dismissal", () => {
 });
 
 describe("localisation", () => {
-  it("renders both shapes in each shipped locale", () => {
-    for (const locale of ["de", "fr", "es", "it", "pl"] as Locale[]) {
-      for (const version of [0, 2]) {
-        const html = render(
-          { configVersion: version, changedAt: "2026-07-31T09:00:00.000Z" },
-          locale,
-        );
-        expect(html).not.toContain("settings.sections.score");
-      }
+  // Not an absence check: `t()` falls back to English, so a missing key
+  // renders English rather than a key path. These are each locale's own
+  // titles, so an English fallback, a copied value or a mis-wired bundle
+  // all fail here. Key parity across bundles is a repo-wide guard already.
+  const TITLES: Record<string, { upgrade: string; changed: string }> = {
+    de: {
+      upgrade: "Was zählt, entscheidest jetzt du",
+      changed: "Du hast geändert, was zählt",
+    },
+    fr: {
+      upgrade: "Ce qui compte, c'est vous qui le décidez",
+      changed: "Vous avez changé ce qui compte",
+    },
+    es: {
+      upgrade: "Ahora decides tú qué cuenta",
+      changed: "Has cambiado qué cuenta",
+    },
+    it: {
+      upgrade: "Ora sei tu a decidere cosa conta",
+      changed: "Hai cambiato cosa conta",
+    },
+    pl: {
+      upgrade: "Teraz to Ty decydujesz, co się liczy",
+      changed: "Zmieniłeś to, co się liczy",
+    },
+  };
+
+  it("renders both shapes in each locale's own words", () => {
+    for (const [locale, titles] of Object.entries(TITLES)) {
+      const upgrade = render(
+        { configVersion: 0, changedAt: null },
+        locale as Locale,
+      );
+      expect(upgrade, `${locale} upgrade note`).toContain(
+        // The apostrophe in the French title is escaped in the markup.
+        titles.upgrade.replace(/'/g, "&#x27;"),
+      );
+      expect(upgrade).not.toContain("What counts is now yours to choose");
+
+      const changed = render(
+        { configVersion: 2, changedAt: "2026-07-31T09:00:00.000Z" },
+        locale as Locale,
+      );
+      expect(changed, `${locale} changed note`).toContain(titles.changed);
+      expect(changed).not.toContain("You changed what counts");
     }
   });
 });

@@ -29,8 +29,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import ts from "typescript";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { I18nProvider } from "@/lib/i18n/context";
+import { CoverageMeter } from "../derived/coverage-meter";
 import en from "../../../../messages/en.json";
 
 const CARD_FILE = join(
@@ -229,5 +232,42 @@ describe("the composite's coverage meter names its own axis", () => {
     expect(message("insights.healthScore.coverage.areas")).toContain(
       "{present}",
     );
+  });
+});
+
+/**
+ * The attribute guard above proves the override is written down. This
+ * proves it does something: a prop that is declared and then ignored is
+ * exactly the shape of a check that cannot fail.
+ */
+describe("the axis override reaches the markup", () => {
+  const coverage = {
+    requiredInputs: 3,
+    presentInputs: 3,
+    historyDays: 20,
+    missing: [],
+  };
+
+  function render(axisLabel?: string): string {
+    return renderToStaticMarkup(
+      <I18nProvider initialLocale="en">
+        <CoverageMeter coverage={coverage} axisLabel={axisLabel} />
+      </I18nProvider>,
+    );
+  }
+
+  it("replaces the fraction in the label and the accessible name", () => {
+    const html = render("Covers the three areas the score needs");
+
+    expect(html).toContain("Covers the three areas the score needs");
+    expect(html).not.toContain(">3/3<");
+    expect(html).toMatch(/aria-label="Covers the three areas the score needs/);
+  });
+
+  it("keeps the fraction for every caller that does not override it", () => {
+    const html = render();
+
+    expect(html).toContain("3/3");
+    expect(html).toContain("3 of 3 inputs");
   });
 });

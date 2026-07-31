@@ -79,6 +79,7 @@ import {
 } from "@/lib/analytics/score/types";
 import type { HealthScoreReport } from "@/lib/analytics/score/types";
 import type { ScoreModuleKey } from "@/lib/analytics/score/modules";
+import type { ScoreBreadthFailure } from "@/lib/analytics/score/breadth";
 
 /** The resolved configuration `GET /api/auth/me/health-score-config` returns. */
 interface HealthScoreConfigPayload {
@@ -99,8 +100,14 @@ interface HealthScoreConfigPayload {
  * exists for callers without a locale, and rendering it would leave five
  * of the six locales reading English at exactly the moment the person
  * needs to understand something.
+ *
+ * Typed as a total map over `ScoreBreadthFailure` rather than over
+ * `string`, so a third refusal reason added to the rule cannot ship with
+ * this surface quietly falling through to a generic "couldn't save". The
+ * TYPE is imported, never the rule: the breadth question is answered
+ * server-side and answered once.
  */
-const REFUSAL_KEYS: Record<string, string> = {
+export const REFUSAL_KEYS: Record<ScoreBreadthFailure, string> = {
   measured_physiological_domain_required:
     "settings.sections.score.refusal.physiological",
   three_domains_required: "settings.sections.score.refusal.domains",
@@ -213,8 +220,13 @@ export function ScoreSection() {
       // only translates the reason it gave.
       if (err instanceof ApiError && err.status === 422) {
         const reason = err.meta?.reason;
+        // The wire carries an unknown string until it is checked against
+        // the map; an unrecognised one falls through to the generic
+        // failure rather than rendering an empty alert.
         const key =
-          typeof reason === "string" ? REFUSAL_KEYS[reason] : undefined;
+          typeof reason === "string" && reason in REFUSAL_KEYS
+            ? REFUSAL_KEYS[reason as ScoreBreadthFailure]
+            : undefined;
         if (key) {
           setRefusal(key);
           return;
