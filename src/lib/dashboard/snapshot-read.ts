@@ -6,17 +6,27 @@
  *     prefetches the same payload into a dehydrated TanStack cache so the
  *     first HTML paints real tiles instead of skeletons-until-JS.
  *
- * Both ride the SAME `caches.analytics` SWR cell (key
- * `${userId}|dashboard-snapshot|${locale}`), so an RSC prefetch warms the
- * API path and vice versa — the builder never runs twice for one user
- * within the TTL, and the write-invalidation semantics (stale-sweep on
- * measurement writes, hard evict on widget reorder) cover both readers.
+ * Both ride the SAME `caches.analytics` SWR cell, keyed by
+ * `dashboardSnapshotCacheKey(userId)` plus the resolved locale, so an RSC
+ * prefetch warms the API path and vice versa — the builder never runs twice
+ * for one user within the TTL, and the write-invalidation semantics
+ * (stale-sweep on measurement writes, hard evict on widget reorder) cover
+ * both readers.
+ *
+ * "The SAME cell" rests on `caches` being pinned to `globalThis` in
+ * `src/lib/cache/server-cache.ts`. These two entry points are bundled into
+ * different layers, and while the registry sat in plain module state they
+ * held one Map each: a write evicted the route handlers' copy and the home
+ * page kept rendering the pre-write snapshot until it aged out. Anything
+ * that moves the registry back off the global breaks this paragraph, not
+ * just a performance assumption.
  */
 import type { User } from "@/generated/prisma/client";
 
 import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
 import { cachedSwr, caches, type ServerCache } from "@/lib/cache/server-cache";
+import { dashboardSnapshotCacheKey } from "@/lib/cache/invalidate";
 import { DASHBOARD_REFETCH_INTERVAL_MS } from "@/lib/queries/refetch-interval";
 import {
   buildDashboardSnapshot,
@@ -87,7 +97,10 @@ export async function readDashboardSnapshotCached(
   // miss + synchronous rebuild here.
   const body = await cachedSwr(
     caches.analytics as ServerCache<DashboardSnapshot>,
-    `${user.id}|dashboard-snapshot|${locale}`,
+    // The invalidators sweep by `dashboardSnapshotCacheKey(userId)` prefix, so
+    // the read has to build its key from that same function. Spelling the
+    // string out here worked only for as long as nobody edited one side.
+    `${dashboardSnapshotCacheKey(user.id)}|${locale}`,
     () => buildDashboardSnapshot(prisma, snapshotUser, { time, locale }),
     annotate,
     SNAPSHOT_CACHE_TTL_MS,
