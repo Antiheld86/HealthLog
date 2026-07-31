@@ -329,6 +329,17 @@ export interface DashboardSnapshotHealthScore {
   delta: number | null;
   confidence?: DerivedConfidence;
   composition?: ScorePillarId[];
+  /**
+   * v1.35.0 — the resolved "this score is configured" flag: true when the
+   * person's own recipe narrows the composition below what the account's
+   * defaults would resolve to today. Server-resolved so the hero, the
+   * widget and the complication acknowledge an authored recipe without
+   * interpreting a config blob; the blob itself never rides this wire,
+   * and neither does any per-pillar config detail. Optional on the type
+   * (additive contract) so older cached snapshots stay valid; the live
+   * builder always sets it.
+   */
+  configured?: boolean;
   deltaReason?: ScoreDeltaReason | null;
   scoreVersion?: number;
   bandSetter?: ScorePillarId | null;
@@ -792,6 +803,7 @@ async function buildExtras(
           delta: scoreResult.delta,
           confidence: scoreResult.composite.confidence,
           composition: scoreResult.composite.value.composition,
+          configured: scoreResult.composite.value.configured,
           deltaReason: scoreResult.deltaReason,
           scoreVersion: scoreResult.scoreVersion,
           bandSetter: scoreResult.composite.value.bandSetter,

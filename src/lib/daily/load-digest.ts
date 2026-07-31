@@ -431,6 +431,7 @@ export async function loadDailyDigest(
         deltaReason: snapshot.healthScore.deltaReason,
         scoreVersion: snapshot.healthScore.scoreVersion,
         composition: snapshot.healthScore.composition,
+        configured: snapshot.healthScore.configured,
       }
     : null;
 

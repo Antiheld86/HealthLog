@@ -28112,6 +28112,13 @@ components:
                       - WELLBEING
                       - FITNESS
                       - LIPIDS
+                configured:
+                  description: "True when the account's own recipe narrows the score's composition below what its defaults would resolve
+                    to today. Server-resolved, so a client never interprets a configuration blob: an account that kept
+                    every pillar reads false, and so does one whose disabled modules alone narrow the set. The
+                    configuration itself is never on this wire. Optional so older cached snapshots without the field
+                    stay valid."
+                  type: boolean
                 deltaReason:
                   anyOf:
                     - type: string
@@ -35262,13 +35269,34 @@ components:
                   anyOf:
                     - type: number
                     - type: "null"
+                configured:
+                  description: True when the account's own recipe narrows the score's composition below what its defaults would resolve to
+                    today. Resolved on the server and carried straight from the dashboard snapshot; the configuration
+                    itself never rides this wire. Optional so older cached digests without the field stay valid.
+                  type: boolean
+                deltaReason:
+                  description: Why a delta was suppressed; null when it was not.
+                  anyOf:
+                    - type: string
+                    - type: "null"
+                scoreVersion:
+                  description: Algorithm version that produced the value.
+                  type: integer
+                  exclusiveMinimum: 0
+                  maximum: 9007199254740991
+                composition:
+                  description: Registry-ordered pillar ids the value was composed of.
+                  type: array
+                  items:
+                    type: string
               required:
                 - value
                 - band
                 - delta
               additionalProperties: false
             - type: "null"
-          description: Health score + band + week-over-week delta; null when none.
+          description: Health score + band + week-over-week delta, plus whether the account authored the composition; null when
+            none.
         topSignal:
           anyOf:
             - type: object

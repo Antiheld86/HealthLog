@@ -105,6 +105,12 @@ export interface DailyDigestScore {
   deltaReason?: ScoreDeltaReason | null;
   scoreVersion?: number;
   composition?: ScorePillarId[];
+  /**
+   * v1.35.0 — the resolved "this score is configured" flag, carried
+   * straight from the snapshot's health-score block. Omitted by older
+   * cached digests, like its siblings above.
+   */
+  configured?: boolean;
 }
 
 /** A broken integration, deterministically derived from `IntegrationStatus`. */
