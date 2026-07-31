@@ -90,7 +90,30 @@ export interface CycleBackupSection {
     deletedAt?: string | null;
     createdAt?: string;
     updatedAt?: string;
+    /**
+     * Which symptoms the day carries. The single presence list — one entry per
+     * link, nothing else decides whether a symptom was on the day.
+     */
     symptomKeys: string[];
+    /**
+     * How hard each of those symptoms hit, where the person said so.
+     *
+     * `CycleSymptomLink.severity` is a 1-4 Likert the log-day sheet writes and
+     * the day-log DTO reads back, and the backup carried only the keys — so a
+     * day recorded as "cramps, and they were a 4" came back as "cramps" and the
+     * 4 was gone. Nothing failed; the number was simply not in the file.
+     *
+     * Kept as a SPARSE annotation over `symptomKeys` rather than folded into
+     * it, for two reasons. A release that only knows `symptomKeys` still reads
+     * every symptom out of a file written here, instead of finding the key it
+     * looks for replaced by one it does not know and restoring a day with no
+     * symptoms at all. And presence stays decided in exactly one place, so the
+     * two lists cannot disagree about which symptoms a day had.
+     *
+     * A link with no severity is simply not listed. No entry means the person
+     * never rated it — which is not the same as rating it zero.
+     */
+    symptomSeverities: Array<{ key: string; severity: number }>;
   }>;
   /**
    * The account's OWN symptom definitions.
@@ -231,6 +254,9 @@ export async function buildCycleBackupSection(
       externalId: d.externalId,
       tz: d.tz,
       symptomKeys: d.symptomLinks.map((l) => l.symptom.key),
+      symptomSeverities: d.symptomLinks
+        .filter((l): l is typeof l & { severity: number } => l.severity != null)
+        .map((l) => ({ key: l.symptom.key, severity: l.severity })),
     })),
     customSymptoms: customSymptoms.map((sym) => ({
       ...(disasterRecovery ? { id: sym.id } : {}),
@@ -313,6 +339,25 @@ const CYCLE_GOALS = new Set<CycleTrackingGoal>([
   "OFF",
 ]);
 
+/**
+ * A symptom severity is the 1-4 Likert the log-day sheet writes, or nothing.
+ *
+ * Anything else — a value from a hand-edited file, a wider scale some later
+ * release might use, a null — reads as "not rated". It is dropped rather than
+ * clamped or rounded into range, because a severity nobody recorded is absent,
+ * and inventing a 1 or a 4 for it would be a guess printed next to the person's
+ * own numbers. It never fails the restore: refusing the whole file over one
+ * unfamiliar intensity would cost far more than the intensity does.
+ */
+function severityOrNull(value: number | null | undefined): number | null {
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= 4
+    ? value
+    : null;
+}
+
 function enumOrNull<T extends string>(
   value: string | null | undefined,
   allow: ReadonlySet<T>,
@@ -326,7 +371,8 @@ function enumOrNull<T extends string>(
  * Restore the cycle tables for `ownerId` from a parsed backup payload,
  * inside an existing transaction. Delete-then-recreate, matching the
  * measurement/mood restore contract. Symptom links are re-resolved against
- * the seeded catalogue by key (unknown keys dropped). `notesEncrypted` is
+ * the seeded catalogue by key, and each one gets back the 1-4 intensity the
+ * file recorded for it, or none if the file recorded none. `notesEncrypted` is
  * written back as the ciphertext envelope verbatim — never re-encrypted.
  *
  * Returns the wiped counts for the audit trail. A pre-v1.15 payload (empty
@@ -468,13 +514,23 @@ export async function restoreCycleData(
   };
 
   for (const d of payload.cycleDayLogs) {
+    // The day's rated intensities, keyed by symptom. A file written before
+    // severities were carried has no list at all and every link comes back
+    // unrated, which is what it was. An entry naming a symptom the day does not
+    // have is simply never read.
+    const severityByKey = new Map<string, number>();
+    for (const s of d.symptomSeverities ?? []) {
+      const severity = severityOrNull(s.severity);
+      if (severity !== null) severityByKey.set(s.key, severity);
+    }
+
     // Every key was proven resolvable above, so this maps rather than filters:
     // a `.filter(Boolean)` here would silently re-open the hole that check
     // just closed.
-    const symptomIds = (d.symptomKeys ?? []).map((k) => {
+    const symptomLinks = (d.symptomKeys ?? []).map((k) => {
       const id = symptomIdByKey.get(k);
       if (!id) throw new Error(`Unresolved cycle symptom key: ${k}`);
-      return id;
+      return { symptomId: id, severity: severityByKey.get(k) ?? null };
     });
     const cycleId =
       d.cycleId !== undefined
@@ -516,12 +572,8 @@ export async function restoreCycleData(
         deletedAt: d.deletedAt ? new Date(d.deletedAt) : null,
         ...(d.createdAt ? { createdAt: new Date(d.createdAt) } : {}),
         ...(d.updatedAt ? { updatedAt: new Date(d.updatedAt) } : {}),
-        ...(symptomIds.length > 0
-          ? {
-              symptomLinks: {
-                create: symptomIds.map((symptomId) => ({ symptomId })),
-              },
-            }
+        ...(symptomLinks.length > 0
+          ? { symptomLinks: { create: symptomLinks } }
           : {}),
       },
     });
