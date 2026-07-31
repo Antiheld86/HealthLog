@@ -28,39 +28,14 @@ import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MeasurementForm } from "@/components/measurements/measurement-form";
 import { isScreeningReminderType } from "@/lib/validations/measurement-reminders";
+import { relativeDueKey } from "@/lib/measurement-reminders/due-day";
 import {
   useMeasurementReminders,
   useMeasurementReminderMutations,
   type MeasurementReminder,
 } from "@/hooks/use-measurement-reminders";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const SUMMARY_LIMIT = 3;
-
-/**
- * v1.32.36 — returns a FULLY-QUALIFIED i18n key, not a bare tail. A call site
- * that interpolates the tail onto the namespace root anchors the
- * reverse-coverage guard at that bare namespace, which marks every key under
- * it reachable and turns the guard into a no-op for the whole namespace. The
- * guard now refuses that shape outright, so the key is built whole here.
- */
-function relativeDueKey(
-  nextDueAt: string | null,
-  now: number,
-): { key: string; days: number } {
-  if (!nextDueAt) return { key: "measurementReminders.nextDue.none", days: 0 };
-  const deltaDays = Math.round((new Date(nextDueAt).getTime() - now) / DAY_MS);
-  if (deltaDays < 0)
-    return {
-      key: "measurementReminders.overdueByDays",
-      days: Math.abs(deltaDays),
-    };
-  if (deltaDays === 0)
-    return { key: "measurementReminders.nextDue.today", days: 0 };
-  if (deltaDays === 1)
-    return { key: "measurementReminders.nextDue.tomorrow", days: 1 };
-  return { key: "measurementReminders.nextDue.inDays", days: deltaDays };
-}
 
 function resolveLabel(
   reminder: MeasurementReminder,
