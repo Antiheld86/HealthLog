@@ -152,13 +152,40 @@ describe("input fingerprint", () => {
     );
   });
 
-  it("moves when the composition moves", () => {
+  it("moves when the composition narrows", () => {
     const narrowed = {
       ...base,
       composition: ["BLOOD_PRESSURE", "SLEEP"] as ScorePillarId[],
     };
     expect(healthScoreInputFingerprint(narrowed)).not.toBe(
       healthScoreInputFingerprint(base),
+    );
+  });
+
+  it("moves when a different pillar set produces the same numbers", () => {
+    // Same count, same scores, same order, same scoring modes — only WHICH
+    // pillars counted differs. Without the pillar id in the hash this is the
+    // case that reads as an unchanged standing, and it is exactly the change
+    // a configuration edit makes.
+    const swapped = {
+      ...base,
+      composition: ["GLYCAEMIA", "SLEEP", "ADIPOSITY"] as ScorePillarId[],
+      pillars: [
+        pillar("GLYCAEMIA", 88, { deltaIdentity: "shared" }),
+        pillar("SLEEP", 74, { deltaIdentity: "shared" }),
+        pillar("ADIPOSITY", 66, { deltaIdentity: "shared" }),
+      ],
+    };
+    const original = {
+      ...base,
+      pillars: [
+        pillar("BLOOD_PRESSURE", 88, { deltaIdentity: "shared" }),
+        pillar("SLEEP", 74, { deltaIdentity: "shared" }),
+        pillar("ADIPOSITY", 66, { deltaIdentity: "shared" }),
+      ],
+    };
+    expect(healthScoreInputFingerprint(swapped)).not.toBe(
+      healthScoreInputFingerprint(original),
     );
   });
 

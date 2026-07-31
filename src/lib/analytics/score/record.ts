@@ -132,11 +132,17 @@ function countedPillars(
  * SHA-256 over exactly what the stored composite and band depend on.
  *
  * The covered set is the whole point, so it is spelled out rather than
- * "hash the report": the algorithm version, the composition, and each counted
- * pillar's score together with its scoring-mode identity. Drop any one of
- * them and two genuinely different standings collapse onto one fingerprint —
- * a key missing a dimension its value depends on, which is a defect class
- * this codebase has shipped before.
+ * "hash the report": the algorithm version, and then one ordered triple per
+ * counted pillar — its id, its score, and the scoring mode that produced that
+ * score. Drop any one of those and two genuinely different standings collapse
+ * onto one fingerprint, which is a key missing a dimension its value depends
+ * on, a defect class this codebase has shipped before.
+ *
+ * The composition is not hashed separately. It IS the ordered list of ids in
+ * those triples, and an earlier draft carried it twice: a key that no input
+ * could ever make disagree with its neighbour, and therefore a key no test
+ * could make fail. A hash term nothing can move is not defence in depth, it
+ * is decoration on a guard.
  *
  * What is deliberately NOT covered: the account's configuration version. A
  * configuration decides the composition, and the composition is already here.
@@ -153,7 +159,6 @@ export function healthScoreInputFingerprint(input: {
   const canonical = JSON.stringify({
     v: FINGERPRINT_VERSION,
     scoreVersion: input.scoreVersion,
-    composition: [...input.composition],
     pillars: counted.map((pillar) => [
       pillar.id,
       pillar.score,
