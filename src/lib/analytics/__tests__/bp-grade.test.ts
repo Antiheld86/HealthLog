@@ -7,6 +7,8 @@
  * (low-to-mid 50s), not in the catastrophic band.
  */
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   gradeBpScore,
   gradeBpScoreFromSeries,
@@ -473,4 +475,54 @@ describe("gradeBpScoreFromSeries — the basis travels with the score", () => {
     expect(personal.basis.relation).toBe("in_band");
     expect(personal.score).toBeGreaterThan(clinical.score);
   });
+});
+
+/**
+ * The popover's scale line quotes two numbers out of this curve ("at the
+ * ceiling the score is 85; 100 means roughly 12 mmHg below it") because
+ * the sentence has to read naturally in six languages. That makes the
+ * copy and the anchors two places that must agree, so this pins them to
+ * each other: re-anchoring the curve turns this red and the six strings
+ * have to follow.
+ */
+describe("the scale the popover quotes", () => {
+  const AT_CEILING_SCORE = 85;
+  const OPTIMAL_OFFSET_MMHG = 12;
+
+  it("still scores 85 at the ceiling and 100 at twelve below it", () => {
+    expect(
+      bpScore({ sys: UNDER65.sysHigh, dia: UNDER65.diaHigh, target: UNDER65 }),
+    ).toBe(AT_CEILING_SCORE);
+    expect(
+      bpScore({
+        sys: UNDER65.sysHigh - OPTIMAL_OFFSET_MMHG,
+        dia: UNDER65.diaHigh - OPTIMAL_OFFSET_MMHG,
+        target: UNDER65,
+      }),
+    ).toBe(100);
+    // Twelve is the SMALLEST distance that reaches 100 — one less does not.
+    expect(
+      bpScore({
+        sys: UNDER65.sysHigh - (OPTIMAL_OFFSET_MMHG - 1),
+        dia: UNDER65.diaHigh - (OPTIMAL_OFFSET_MMHG - 1),
+        target: UNDER65,
+      }),
+    ).toBeLessThan(100);
+  });
+
+  it.each(["en", "de", "fr", "es", "it", "pl"])(
+    "quotes those same two numbers in %s",
+    (locale) => {
+      const bundle = JSON.parse(
+        readFileSync(
+          join(__dirname, "../../../../messages", `${locale}.json`),
+          "utf8",
+        ),
+      ) as { insights: { healthScore: Record<string, string> } };
+      const line = bundle.insights.healthScore.bpScale;
+      expect(line).toContain(String(AT_CEILING_SCORE));
+      expect(line).toContain(String(OPTIMAL_OFFSET_MMHG));
+      expect(line).toContain("100");
+    },
+  );
 });
