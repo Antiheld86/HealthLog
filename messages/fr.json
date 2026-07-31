@@ -2968,6 +2968,8 @@
         "asleep": "Endormi",
         "awake": "Éveillé",
         "inBed": "Au lit",
+        "nap": "Sieste",
+        "napCount": "{count} siestes",
         "unavailable": "Pas encore de données de phases — les phases de sommeil apparaîtront ici dès qu’une source connectée les fournira."
       },
       "empty": {

@@ -44,7 +44,16 @@ import type { Locale } from "@/lib/i18n/config";
 export interface SleepStageNight {
   /** Berlin-tz day key (YYYY-MM-DD). */
   dayKey: string;
+  /** Per-stage minutes of the MAIN night. Naps are not in here. */
   stages: Record<string, number>;
+  /**
+   * Time asleep across this day's naps, in minutes. Absent on a day with no
+   * nap, which is most days — the chart draws nothing for it and the legend
+   * does not carry a nap entry.
+   */
+  napMinutes?: number;
+  /** How many naps that is. Absent alongside `napMinutes`. */
+  napCount?: number;
 }
 
 export interface SleepStageBreakdown {
@@ -88,6 +97,16 @@ type WindowSize = (typeof WINDOW_DAYS)[number];
 export const STAGE_ORDER = ["DEEP", "REM", "CORE", "ASLEEP", "AWAKE"] as const;
 
 /**
+ * The nap band. Not a sleep stage — it is the day's daytime sleep, kept out
+ * of the night's stage buckets and drawn as its own block on top of the
+ * column so the night below it reads as the night.
+ *
+ * The band is only rendered when the visible window actually holds a nap. On
+ * a week without one there is no bar, no legend entry, and no tooltip row.
+ */
+const NAP_KEY = "NAP";
+
+/**
  * Dracula stage palette. Exported so the last-night hypnogram
  * (`sleep-hypnogram.tsx`) reuses the exact same tokens — per the
  * charts-visual-identity rule, no token reshuffle.
@@ -99,6 +118,7 @@ export const STAGE_COLORS: Record<string, string> = {
   ASLEEP: "var(--success)", // dracula-green — legacy iOS 15- unspecified
   AWAKE: "var(--dracula-yellow)", // dracula-yellow — wake bouts
   IN_BED: "var(--chart-inbed)", // muted blue-grey — pre-asleep
+  [NAP_KEY]: "var(--dracula-orange)", // daytime sleep, not a night stage
 };
 
 /**
@@ -155,6 +175,7 @@ export function SleepStageStackedBar({ breakdown }: SleepStageStackedBarProps) {
     ASLEEP: t("insights.sleep.stages.asleep"),
     AWAKE: t("insights.sleep.stages.awake"),
     IN_BED: t("insights.sleep.stages.inBed"),
+    [NAP_KEY]: t("insights.sleep.stages.nap"),
   };
 
   // v1.4.25 W3f — per-night dataset. Slice the trailing N nights and
@@ -185,9 +206,24 @@ export function SleepStageStackedBar({ breakdown }: SleepStageStackedBarProps) {
       for (const stage of STAGE_ORDER) {
         row[stage] = night.stages[stage] ?? 0;
       }
+      // A day without a nap carries a plain 0 here, which Recharts draws as
+      // nothing; the band itself is only mounted when some day in the window
+      // has one, so the legend stays clean on a nap-less week.
+      row[NAP_KEY] = night.napMinutes ?? 0;
+      row.napCount = night.napCount ?? 0;
       return row;
     });
   }, [breakdown, windowDays, locale, t]);
+
+  // Mount the nap band only when the VISIBLE window holds one.
+  const hasNap = useMemo(
+    () =>
+      data.some(
+        (row) =>
+          typeof row[NAP_KEY] === "number" && (row[NAP_KEY] as number) > 0,
+      ),
+    [data],
+  );
 
   // Empty-state guard — no perNight rows AND no aggregate.
   const hasData =
@@ -287,10 +323,19 @@ export function SleepStageStackedBar({ breakdown }: SleepStageStackedBarProps) {
                   content={({ active, payload, label }) => {
                     if (!active || !payload || payload.length === 0)
                       return null;
+                    const row = payload[0]?.payload as
+                      Record<string, number | string> | undefined;
+                    const napCount =
+                      typeof row?.napCount === "number" ? row.napCount : 0;
+                    // The footer total is the NIGHT. The nap is listed above
+                    // it as its own line and stays out of the sum, so the
+                    // per-stage percentages keep meaning "of this night".
                     const totalNight = payload.reduce(
                       (sum, entry) =>
-                        sum +
-                        (typeof entry.value === "number" ? entry.value : 0),
+                        entry.dataKey === NAP_KEY
+                          ? sum
+                          : sum +
+                            (typeof entry.value === "number" ? entry.value : 0),
                       0,
                     );
                     return (
@@ -303,6 +348,14 @@ export function SleepStageStackedBar({ breakdown }: SleepStageStackedBarProps) {
                           const minutes =
                             typeof entry.value === "number" ? entry.value : 0;
                           if (minutes === 0) return null;
+                          const isNap = stage === NAP_KEY;
+                          const label = isNap
+                            ? napCount > 1
+                              ? t("insights.sleep.stages.napCount", {
+                                  count: String(napCount),
+                                })
+                              : stageLabels[NAP_KEY]
+                            : (stageLabels[stage] ?? stage);
                           const pct =
                             totalNight > 0
                               ? Math.round((minutes / totalNight) * 100)
@@ -318,10 +371,14 @@ export function SleepStageStackedBar({ breakdown }: SleepStageStackedBarProps) {
                                   className="inline-block h-2 w-2 rounded-sm"
                                   style={{ background: STAGE_COLORS[stage] }}
                                 />
-                                {stageLabels[stage] ?? stage}
+                                {label}
                               </span>
                               <span className="text-muted-foreground">
-                                {formatDurationMinutes(minutes, t)} · {pct}%
+                                {/* The nap is not part of the night, so it
+                                    gets no share-of-night percentage. */}
+                                {isNap
+                                  ? formatDurationMinutes(minutes, t)
+                                  : `${formatDurationMinutes(minutes, t)} · ${pct}%`}
                               </span>
                             </div>
                           );
@@ -351,6 +408,17 @@ export function SleepStageStackedBar({ breakdown }: SleepStageStackedBarProps) {
                     <Cell fill={STAGE_COLORS[stage]} />
                   </Bar>
                 ))}
+                {hasNap && (
+                  <Bar
+                    key={NAP_KEY}
+                    dataKey={NAP_KEY}
+                    stackId="stages"
+                    fill={STAGE_COLORS[NAP_KEY]}
+                    isAnimationActive={false}
+                  >
+                    <Cell fill={STAGE_COLORS[NAP_KEY]} />
+                  </Bar>
+                )}
               </BarChart>
             </ResponsiveContainer>
           </div>
