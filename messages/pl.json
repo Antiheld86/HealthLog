@@ -2275,6 +2275,7 @@
       "bandSetter": "Ogólny zakres wyznacza {pillar}",
       "versionAndNoise": "Wersja metody {version}. Próg porównania tygodniowego: {noise} pkt.",
       "methodVersion": "Wersja metody {version}.",
+      "configured": "Wybrane przez Ciebie filary decydują o tym wyniku.",
       "none": "brak",
       "delta": "{delta} względem poprzedniego porównywalnego okresu",
       "deltaReason": {

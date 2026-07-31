@@ -675,6 +675,44 @@ describe("<HealthScoreCard> footer", () => {
     expect(region).toContain("equal-weighted average");
   });
 
+  it("states an authored composition in the method footer, and only when the server says so", () => {
+    // The footer reads the resolved flag off the composite and says one
+    // sentence. It never names the pillars the person took out — that is
+    // the settings surface's job — and it never appears for an account
+    // whose composition is the default one.
+    const configured = render(
+      <HealthScoreCard
+        report={scoredReport({
+          composite: {
+            ...(scoredReport().composite as Extract<
+              HealthScoreReport["composite"],
+              { status: "ok" }
+            >),
+            value: {
+              ...(
+                scoredReport().composite as Extract<
+                  HealthScoreReport["composite"],
+                  { status: "ok" }
+                >
+              ).value,
+              configured: true,
+            },
+          },
+        })}
+      />,
+    );
+    expect(anatomyRegion(configured)).toContain(
+      'data-slot="health-score-configured"',
+    );
+    expect(anatomyRegion(configured)).toContain(
+      "You chose which pillars count toward this score.",
+    );
+
+    const inherited = render(<HealthScoreCard report={scoredReport()} />);
+    expect(inherited).not.toContain('data-slot="health-score-configured"');
+    expect(inherited).not.toContain("You chose which pillars count");
+  });
+
   it("shows the personal weight goal as explicitly unscored context", () => {
     const html = render(
       <HealthScoreCard

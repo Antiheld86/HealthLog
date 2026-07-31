@@ -2275,6 +2275,7 @@
       "bandSetter": "Overall band set by {pillar}",
       "versionAndNoise": "Method version {version}. Weekly comparison floor: {noise} points.",
       "methodVersion": "Method version {version}.",
+      "configured": "You chose which pillars count toward this score.",
       "none": "none",
       "delta": "{delta} vs the previous comparable window",
       "deltaReason": {

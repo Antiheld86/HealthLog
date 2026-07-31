@@ -2275,6 +2275,7 @@
       "bandSetter": "Fascia complessiva determinata da {pillar}",
       "versionAndNoise": "Versione del metodo {version}. Soglia del confronto settimanale: {noise} punti.",
       "methodVersion": "Versione del metodo {version}.",
+      "configured": "Hai scelto quali pilastri contano per questo punteggio.",
       "none": "nessuno",
       "delta": "{delta} rispetto al periodo precedente confrontabile",
       "deltaReason": {

@@ -2275,6 +2275,7 @@
       "bandSetter": "Gesamtstufe bestimmt durch {pillar}",
       "versionAndNoise": "Methodenversion {version}. Schwelle für den Wochenvergleich: {noise} Punkte.",
       "methodVersion": "Methodenversion {version}.",
+      "configured": "Du hast festgelegt, welche Bereiche in diesen Score einfließen.",
       "none": "keiner",
       "delta": "{delta} gegenüber dem vorherigen vergleichbaren Zeitraum",
       "deltaReason": {

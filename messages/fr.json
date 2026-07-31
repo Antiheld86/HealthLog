@@ -2275,6 +2275,7 @@
       "bandSetter": "Catégorie globale fixée par {pillar}",
       "versionAndNoise": "Version de la méthode {version}. Seuil de comparaison hebdomadaire : {noise} points.",
       "methodVersion": "Version de la méthode {version}.",
+      "configured": "Vous avez choisi les piliers qui comptent pour ce score.",
       "none": "aucun",
       "delta": "{delta} par rapport à la période comparable précédente",
       "deltaReason": {

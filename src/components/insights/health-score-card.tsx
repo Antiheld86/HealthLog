@@ -594,6 +594,22 @@ export function HealthScoreCard({
                       noise: composite.value.noiseFloor,
                     })}
                   </p>
+                  {/*
+                   * The server resolved whether this composition is the
+                   * person's own; the footer states it and nothing more.
+                   * Which pillars they took out is the settings surface's
+                   * to show, not this one's, and re-deriving the answer
+                   * from a configuration blob here would put a second
+                   * decider behind one sentence.
+                   */}
+                  {composite.value.configured ? (
+                    <p
+                      data-slot="health-score-configured"
+                      className="text-muted-foreground text-xs"
+                    >
+                      {t("insights.healthScore.configured")}
+                    </p>
+                  ) : null}
                 </>
               ) : (
                 <p className="text-muted-foreground text-xs">

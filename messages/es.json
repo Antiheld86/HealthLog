@@ -2275,6 +2275,7 @@
       "bandSetter": "Categoría general determinada por {pillar}",
       "versionAndNoise": "Versión del método {version}. Umbral de comparación semanal: {noise} puntos.",
       "methodVersion": "Versión del método {version}.",
+      "configured": "Tú has elegido qué pilares cuentan para esta puntuación.",
       "none": "ninguno",
       "delta": "{delta} frente al periodo comparable anterior",
       "deltaReason": {
