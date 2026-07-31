@@ -24,6 +24,12 @@ import { computeWellbeingPillar } from "./wellbeing";
 export interface ComputeHealthScoreInput {
   asOf: Date;
   availablePillars: ScorePillarId[];
+  /**
+   * Whether `availablePillars` is an authored recipe rather than the
+   * account's defaults, resolved by `resolveScoreConfigured`. Rides to
+   * the composite unchanged; nothing here re-derives it.
+   */
+  configured: boolean;
   pillars: PillarInputs;
   weightGoal: Derived<WeightGoalValue>;
   delta?: number | null;
@@ -84,6 +90,7 @@ export function computeHealthScore(
       pillars,
       availablePillars: input.availablePillars,
       asOf: input.asOf,
+      configured: input.configured,
     }),
     pillars,
     delta: input.delta ?? null,

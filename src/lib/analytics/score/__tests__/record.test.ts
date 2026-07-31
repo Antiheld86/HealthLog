@@ -97,6 +97,7 @@ function report(
     pillars,
     availablePillars: available,
     asOf: NOW,
+    configured: false,
   });
   return {
     composite,

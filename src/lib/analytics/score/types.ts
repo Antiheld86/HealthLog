@@ -119,6 +119,14 @@ export interface CompositeValue {
   bandSetter: ScorePillarId | null;
   /** Registry-ordered eligible pillar ids. Part of the number's identity. */
   composition: ScorePillarId[];
+  /**
+   * v1.35.0 — the resolved "this score is configured" flag: true when the
+   * account's composition differs from the one its defaults would resolve
+   * to today. Server-resolved so no client interprets a config blob, and
+   * never a per-pillar detail. `resolveScoreConfigured` in `./config`
+   * owns the definition and the reasons behind it.
+   */
+  configured: boolean;
   /** Equal-weighted floor across delta-eligible pillars. */
   noiseFloor: number;
   scoreVersion: typeof SCORE_VERSION;

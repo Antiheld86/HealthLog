@@ -83,6 +83,7 @@ function evaluation(
     pillars: entries,
     availablePillars: available,
     asOf,
+    configured: false,
   });
 }
 

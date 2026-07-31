@@ -35,6 +35,14 @@ export interface CompositeInput {
   pillars: ScorePillarResult[];
   availablePillars: ScorePillarId[];
   asOf: Date;
+  /**
+   * Whether `availablePillars` is an authored recipe rather than the
+   * account's defaults. Resolved by `resolveScoreConfigured` before the
+   * pillar list gets here, because the comparison needs the config and
+   * the modules and the composite has neither. Required, so a caller
+   * cannot stay silent and publish `false` for a configured account.
+   */
+  configured: boolean;
 }
 
 export function computeComposite(
@@ -139,6 +147,7 @@ export function computeComposite(
           ? composition[bandSetterIndex]
           : null,
       composition,
+      configured: input.configured,
       noiseFloor,
       scoreVersion: SCORE_VERSION,
     },

@@ -171,6 +171,63 @@ export function resolveHealthScoreConfig(
 }
 
 /**
+ * Does this account's score run on an authored recipe?
+ *
+ * One boolean, resolved here so that no client ever reads a config blob
+ * to answer it. The web hero, the iOS widget, the watch complication and
+ * the public API all read the same value off the wire.
+ *
+ * **The definition, in one sentence:** the score is configured when the
+ * composition it resolves to differs from the composition the account's
+ * defaults would resolve to today. Both sides are narrowed by the same
+ * modules, so the comparison is about the person's choice and nothing
+ * else.
+ *
+ * Three consequences, each deliberate:
+ *
+ *   * An account that opened the surface and kept every pillar is NOT
+ *     configured. It has a selection, and that selection is the default;
+ *     nothing about its number is attributable to an authored recipe.
+ *     This is why `hasSelection` is not this flag — that one answers
+ *     "did the person write something", which is a different question
+ *     and the wrong one to put in front of a widget.
+ *   * An account whose modules alone narrow the set is NOT configured.
+ *     The modules say what is being recorded, not what should count, and
+ *     the defaults resolve through them identically.
+ *   * An account that took out a pillar no module is feeding IS
+ *     configured, because its resolved composition is genuinely
+ *     narrower than the default one. Data availability narrows further
+ *     still, and that narrowing is not a choice — so the comparison runs
+ *     before it, and the flag does not flicker as readings arrive.
+ *
+ * The mirror of the third: taking out a pillar whose module is already
+ * off changes nothing, and the flag says so. The recipe is stored and
+ * comes back the moment the module returns; today it makes no difference
+ * to the number, and claiming otherwise would be a surface claiming more
+ * than it does.
+ *
+ * `recordedPillars` is what `pillarsWithModuleData(modules)` returns.
+ * Required, and deliberately not defaulted: a caller that left it out
+ * would compare against every pillar in the catalogue and report a
+ * module-narrowed account as configured, which is precisely the answer
+ * this flag exists to avoid.
+ */
+export function resolveScoreConfigured(args: {
+  config: Pick<ResolvedHealthScoreConfig, "pillars">;
+  recordedPillars: readonly ScorePillarId[];
+}): boolean {
+  const recorded = new Set(args.recordedPillars);
+  const resolved = args.config.pillars.filter((id) => recorded.has(id));
+  const byDefault = DEFAULT_HEALTH_SCORE_CONFIG.pillars.filter((id) =>
+    recorded.has(id),
+  );
+  return (
+    resolved.length !== byDefault.length ||
+    resolved.some((id, index) => id !== byDefault[index])
+  );
+}
+
+/**
  * The recipe's identity, reduced to the two things a comparison needs:
  * which version of the person's own recipe produced a number, and when
  * that recipe last moved.

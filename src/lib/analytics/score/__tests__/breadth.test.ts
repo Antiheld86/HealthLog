@@ -144,6 +144,7 @@ describe("the scorer refuses exactly what the write refuses", () => {
         pillars: ids.map((id) => pillar(id)),
         availablePillars: ids,
         asOf: NOW,
+        configured: false,
       });
       const verdict = evaluateScoreBreadth(ids);
       expect(composite.status).toBe(verdict.ok ? "ok" : "insufficient");

@@ -27,7 +27,11 @@ import { annotate, getEvent } from "@/lib/logging/context";
 import { ACTIVITY_WINDOW_DAYS } from "./activity";
 import { SLEEP_WINDOW_DAYS } from "./sleep";
 import { attachScoreDelta } from "./composite";
-import { resolveHealthScoreConfig, scoreConfigBoundary } from "./config";
+import {
+  resolveHealthScoreConfig,
+  resolveScoreConfigured,
+  scoreConfigBoundary,
+} from "./config";
 import { pillarsWithModuleData, type ScoreReaderModules } from "./modules";
 import { computeHealthScore } from "./index";
 import type { HealthScoreReport, PillarInputs, ScorePillarId } from "./types";
@@ -785,10 +789,17 @@ export async function computeUserHealthScore(
   // recording would be nagging in the voice of their own settings. The
   // place that pillar comes back is the modules screen.
   const config = resolveHealthScoreConfig(input.healthScoreConfigJson);
-  const recorded = new Set(pillarsWithModuleData(input.modules));
+  const recordedPillars = pillarsWithModuleData(input.modules);
+  const recorded = new Set(recordedPillars);
   const availablePillars: ScorePillarId[] = config.pillars.filter((id) =>
     recorded.has(id),
   );
+  // v1.35.0 — the one place the "this score is configured" boolean is
+  // decided, from the same config and the same module map the
+  // composition came from. Resolved here rather than anywhere a client
+  // can reach, because a client that re-derived it would be a second
+  // place deciding one thing.
+  const configured = resolveScoreConfigured({ config, recordedPillars });
   const previousAt = new Date(input.now.getTime() - 7 * DAY_MS);
   const previousPreviousAt = new Date(input.now.getTime() - 14 * DAY_MS);
   const currentBp = scoreBpEnvelope({
@@ -841,6 +852,7 @@ export async function computeUserHealthScore(
   const current = computeHealthScore({
     asOf: input.now,
     availablePillars,
+    configured,
     pillars: scoreInputsFor({
       ...common,
       asOf: input.now,
@@ -851,6 +863,7 @@ export async function computeUserHealthScore(
   const previous = computeHealthScore({
     asOf: previousAt,
     availablePillars,
+    configured,
     pillars: scoreInputsFor({
       ...common,
       asOf: previousAt,
@@ -861,6 +874,7 @@ export async function computeUserHealthScore(
   const previousPrevious = computeHealthScore({
     asOf: previousPreviousAt,
     availablePillars,
+    configured,
     pillars: scoreInputsFor({
       ...common,
       asOf: previousPreviousAt,
