@@ -207,10 +207,46 @@ describe("the score a surface shows is the score that gets written down", () => 
     expect(row.inputFingerprint).toMatch(/^[0-9a-f]{64}$/);
     expect(row.timezone).toBe("UTC");
     expect(row.dayKey).toBe(new Date(now).toISOString().slice(0, 10));
-    // Nothing supplies these yet, and an invented default would be worse than
-    // an honest null the day the delta guard starts reading them.
-    expect(row.configVersion).toBeNull();
+    // The recipe the day was scored under, resolved on the write path from
+    // the account's own stored configuration. This account never opened the
+    // settings surface, so the honest answer is version 0 with no change
+    // date — the thing the first authored recipe will later be a move FROM.
+    expect(row.configVersion).toBe(0);
     expect(row.configChangedAt).toBeNull();
+  });
+
+  it("stamps the account's own recipe on the row, straight from the stored configuration", async () => {
+    // The supply half of the delta guard, over real Postgres. Nothing in
+    // the request carries the recipe: the write path resolves it from the
+    // same column the composition came from, so a version that never
+    // reached the writer shows up as a row that cannot say which recipe
+    // produced it — and the seam becomes underivable a release later.
+    const user = await seedSession("hsr-recipe");
+    const now = Date.now();
+    await seedBp(user.id, now, 20, 122);
+    await seedSleep(user.id, now, 14);
+    await seedWaist(user.id, now);
+    const changedAt = new Date(now - 3 * DAY);
+    await getPrismaClient().user.update({
+      where: { id: user.id },
+      data: {
+        healthScoreConfigJson: {
+          excludedPillars: ["FITNESS"],
+          version: 6,
+          changedAt: changedAt.toISOString(),
+        },
+      },
+    });
+
+    expect((await readAnalytics()).data!.healthScore!.composite.status).toBe(
+      "ok",
+    );
+
+    const row = await getPrismaClient().healthScoreRecord.findFirstOrThrow({
+      where: { userId: user.id },
+    });
+    expect(row.configVersion).toBe(6);
+    expect(row.configChangedAt?.toISOString()).toBe(changedAt.toISOString());
   });
 
   it("leaves the recorded day untouched when the same day is computed again under a changed standing", async () => {
