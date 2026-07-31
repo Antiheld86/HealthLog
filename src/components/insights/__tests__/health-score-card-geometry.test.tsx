@@ -439,11 +439,20 @@ describe("hero band geometry", () => {
             culprit = child.getAttribute("data-slot") ?? child.className;
           }
         }
+        const strip = el.closest('[data-slot="insights-hero-strip"]')!;
+        const stripBox = getComputedStyle(strip);
         return {
           scroll: el.scrollWidth,
           client: el.clientWidth,
+          width: Math.round(el.getBoundingClientRect().width),
           widest: Math.round(widest),
           culprit: String(culprit).slice(0, 60),
+          // The width the band actually offers, padding taken off.
+          available: Math.round(
+            strip.getBoundingClientRect().width -
+              parseFloat(stripBox.paddingLeft) -
+              parseFloat(stripBox.paddingRight),
+          ),
           docScroll: document.documentElement.scrollWidth,
           docClient: document.documentElement.clientWidth,
         };
@@ -457,7 +466,16 @@ describe("hero band geometry", () => {
         m.widest,
         `a child is wider than the panel: ${JSON.stringify(m)}`,
       ).toBeLessThanOrEqual(m.client + 1);
-      // The page itself, which is what a person actually feels.
+      // The panel against the room the band gives it. This is the assertion
+      // that has to carry the phone case: the band wears `overflow-hidden`
+      // for its glow, so a panel wider than the band is silently CLIPPED
+      // rather than scrolled, and the document check below stays green while
+      // a person loses the right-hand end of every row.
+      expect(
+        m.width,
+        `the panel is wider than the band gives it: ${JSON.stringify(m)}`,
+      ).toBeLessThanOrEqual(m.available + 1);
+      // Kept anyway, for anything that escapes the band's clip.
       expect(
         m.docScroll,
         `the page scrolls sideways: ${JSON.stringify(m)}`,
