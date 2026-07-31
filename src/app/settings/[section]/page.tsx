@@ -24,6 +24,7 @@ import { ModulesSection } from "@/components/settings/modules-section";
 import { MoodSection } from "@/components/settings/mood-section";
 import { NotificationsSection } from "@/components/settings/notifications-section";
 import { PrivacySection } from "@/components/settings/privacy-section";
+import { ScoreSection } from "@/components/settings/score-section";
 import { SectionPlaceholder } from "@/components/settings/section-placeholder";
 import { VorsorgeSection } from "@/components/settings/vorsorge-section";
 // v1.18.1 (D4) — `sources` is a standalone left-side entry (split out of the
@@ -76,6 +77,7 @@ const SECTION_COMPONENTS: Record<
   illness: IllnessSection,
   environment: EnvironmentSection,
   anamnesis: AnamnesisSection,
+  score: ScoreSection,
   vorsorge: VorsorgeSection,
   thresholds: ThresholdsSection,
   api: ApiSection,

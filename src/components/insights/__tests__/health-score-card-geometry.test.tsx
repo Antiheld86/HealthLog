@@ -147,6 +147,7 @@ function reportWith(pillars: ScorePillarResult[]): HealthScoreReport {
         band: "green",
         bandSetter: null,
         composition: pillars.map((p) => p.id),
+        configured: false,
         noiseFloor: 3,
         scoreVersion: 2,
       },

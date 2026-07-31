@@ -239,6 +239,7 @@ function scoredReport(
         band: "green",
         bandSetter: null,
         composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
+        configured: false,
         noiseFloor: 3,
         scoreVersion: 2,
       },
@@ -368,6 +369,7 @@ describe("<HealthScoreCard> pillars", () => {
               band: "red",
               bandSetter: null,
               composition: ["BLOOD_PRESSURE", "GLYCAEMIA"],
+              configured: false,
               noiseFloor: 3,
               scoreVersion: 2,
             },
@@ -595,9 +597,13 @@ describe("<HealthScoreCard> composite states", () => {
       /data-slot="health-score-card"[^>]*data-status="insufficient"/,
     );
     expect(html).toContain('data-slot="health-score-insufficient"');
+    // `presentInputs` counts distinct DOMAINS. The sentence used to call
+    // them pillars, which told an account with blood pressure, glycaemia
+    // and lipids that it had one eligible pillar while it had three.
     expect(html).toContain(
-      "The score needs at least three, including a measured physiological pillar.",
+      "1 of 3 areas of health have enough recent data. The score needs 3, at least one of them a physical measurement.",
     );
+    expect(html).not.toMatch(/eligible pillars/i);
     // No band sentence and no fabricated number: a dash, and no bar either.
     expect(html).not.toContain('data-slot="health-score-band"');
     expect(html).not.toContain('data-slot="health-score-card-progress"');
@@ -671,6 +677,44 @@ describe("<HealthScoreCard> footer", () => {
     expect(region).toContain("Method version 2. Weekly comparison floor");
     expect(region).toContain('data-slot="provenance-explainer-method"');
     expect(region).toContain("equal-weighted average");
+  });
+
+  it("states an authored composition in the method footer, and only when the server says so", () => {
+    // The footer reads the resolved flag off the composite and says one
+    // sentence. It never names the pillars the person took out — that is
+    // the settings surface's job — and it never appears for an account
+    // whose composition is the default one.
+    const configured = render(
+      <HealthScoreCard
+        report={scoredReport({
+          composite: {
+            ...(scoredReport().composite as Extract<
+              HealthScoreReport["composite"],
+              { status: "ok" }
+            >),
+            value: {
+              ...(
+                scoredReport().composite as Extract<
+                  HealthScoreReport["composite"],
+                  { status: "ok" }
+                >
+              ).value,
+              configured: true,
+            },
+          },
+        })}
+      />,
+    );
+    expect(anatomyRegion(configured)).toContain(
+      'data-slot="health-score-configured"',
+    );
+    expect(anatomyRegion(configured)).toContain(
+      "You chose which pillars count toward this score.",
+    );
+
+    const inherited = render(<HealthScoreCard report={scoredReport()} />);
+    expect(inherited).not.toContain('data-slot="health-score-configured"');
+    expect(inherited).not.toContain("You chose which pillars count");
   });
 
   it("shows the personal weight goal as explicitly unscored context", () => {

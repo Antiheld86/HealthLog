@@ -121,6 +121,8 @@ describe("SETTINGS_SECTION_SLUGS", () => {
       "environment",
       // v1.25 (W-RECORDS) — Anamnese (allergies + family history), always shown.
       "anamnesis",
+      // v1.35.0 — the Health Score composition surface.
+      "score",
       "vorsorge",
       "thresholds",
       "ai",

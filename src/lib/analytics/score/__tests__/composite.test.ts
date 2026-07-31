@@ -7,6 +7,7 @@ import {
   computeComposite,
   SCORE_ALGORITHM_CHANGED_AT,
 } from "../composite";
+import { UNCONFIGURED_SCORE_BOUNDARY } from "../config";
 import type { PillarValue, ScorePillarId, ScorePillarResult } from "../types";
 
 const NOW = new Date("2026-08-20T12:00:00.000Z");
@@ -82,6 +83,7 @@ function evaluation(
     pillars: entries,
     availablePillars: available,
     asOf,
+    configured: false,
   });
 }
 
@@ -175,7 +177,13 @@ describe("reference-score composite", () => {
       ],
       new Date(NOW.getTime() - 7 * 86_400_000),
     );
-    const report = attachScoreDelta(current, previous, previous, NOW);
+    const report = attachScoreDelta(
+      current,
+      previous,
+      previous,
+      NOW,
+      UNCONFIGURED_SCORE_BOUNDARY,
+    );
     expect(report.delta).toBeNull();
     expect(report.deltaReason).toBe("composition_changed");
   });
@@ -201,7 +209,13 @@ describe("reference-score composite", () => {
       [pillar("BLOOD_PRESSURE", 70), pillar("ACTIVITY", 70)],
       new Date(NOW.getTime() - 14 * 86_400_000),
     );
-    const report = attachScoreDelta(current, previous, previousPrevious, NOW);
+    const report = attachScoreDelta(
+      current,
+      previous,
+      previousPrevious,
+      NOW,
+      UNCONFIGURED_SCORE_BOUNDARY,
+    );
     expect(report.delta).toBeNull();
     expect(report.deltaReason).toBe("first_eligibility_window");
   });
@@ -229,6 +243,7 @@ describe("reference-score composite", () => {
       beforeBoundary,
       beforeBoundary,
       changedAt,
+      UNCONFIGURED_SCORE_BOUNDARY,
     );
     expect(algorithm.deltaReason).toBe("algorithm_changed");
 
@@ -256,7 +271,13 @@ describe("reference-score composite", () => {
       ],
       new Date(NOW.getTime() - 14 * 86_400_000),
     );
-    const belowNoise = attachScoreDelta(current, previous, stablePrior, NOW);
+    const belowNoise = attachScoreDelta(
+      current,
+      previous,
+      stablePrior,
+      NOW,
+      UNCONFIGURED_SCORE_BOUNDARY,
+    );
     expect(belowNoise.delta).toBeNull();
     expect(belowNoise.deltaReason).toBe("below_noise_floor");
   });
@@ -294,6 +315,7 @@ describe("reference-score composite", () => {
       previous,
       stablePrior,
       NOW,
+      UNCONFIGURED_SCORE_BOUNDARY,
       [
         pillar("BLOOD_PRESSURE", 90),
         pillar("ACTIVITY", 90),
@@ -339,6 +361,7 @@ describe("reference-score composite", () => {
       previous,
       stablePrior,
       NOW,
+      UNCONFIGURED_SCORE_BOUNDARY,
       currentPillars,
       previousPillars,
     );

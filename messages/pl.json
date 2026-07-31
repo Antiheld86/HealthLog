@@ -2268,17 +2268,19 @@
         "yellow": "Niektóre filary wymagają uwagi",
         "red": "Co najmniej jeden filar jest poza zakresem referencyjnym"
       },
-      "insufficient": "{count} kwalifikujące się filary. Wynik wymaga co najmniej trzech, w tym zmierzonego filaru fizjologicznego.",
+      "insufficient": "{count} z {required} obszarów zdrowia ma wystarczająco świeżych danych. Wynik potrzebuje {required}, w tym co najmniej jednego pomiaru fizycznego.",
       "anatomyToggle": "Jak powstaje ten wynik",
       "notScored": "Jeszcze bez oceny ({count})",
-      "method": "Wynik to średnia o równych wagach ze wszystkich filarów, które mają wystarczająco dużo aktualnych danych, w skali od 0 do 100. Każdy filar jest porównywany z opublikowanym zakresem referencyjnym, a najsłabszy filar może wyznaczyć ogólny zakres. Filar bez wystarczających danych jest pomijany, a nie liczony jako zero.",
+      "method": "Wynik to średnia o równych wagach z filarów, które się do niego liczą, w skali od 0 do 100. Każdy filar jest porównywany z opublikowanym zakresem referencyjnym, a najsłabszy filar może wyznaczyć ogólny zakres. Filar bez wystarczających aktualnych danych jest pomijany, a nie liczony jako zero. Zakresy referencyjne pochodzą z opublikowanych źródeł; to ty decydujesz, które filary się liczą, więc łączna liczba sama w sobie nie jest standardem klinicznym.",
       "bandSetter": "Ogólny zakres wyznacza {pillar}",
       "versionAndNoise": "Wersja metody {version}. Próg porównania tygodniowego: {noise} pkt.",
       "methodVersion": "Wersja metody {version}.",
+      "configured": "Wybrane przez Ciebie filary decydują o tym wyniku.",
       "none": "brak",
       "delta": "{delta} względem poprzedniego porównywalnego okresu",
       "deltaReason": {
         "algorithm_changed": "Brak porównania, ponieważ zmieniła się metoda obliczeń.",
+        "config_changed": "Brak porównania, ponieważ zmieniono, co wlicza się do wyniku.",
         "composition_changed": "Brak porównania, ponieważ zmieniły się uwzględnione filary.",
         "first_eligibility_window": "Brak porównania, ponieważ to pierwszy kwalifikujący się okres.",
         "below_noise_floor": "Zmiana mieści się w łącznej zmienności pomiarów.",
@@ -2346,6 +2348,11 @@
         "weight_not_tracked": "Zapisz pomiar masy ciała, aby zobaczyć postęp w kierunku celu.",
         "read_failed": "Nie udało się wczytać danych masy ciała. Spróbuj ponownie.",
         "notScored": "Postęp celu wagowego jest osobistym kontekstem i nie wpływa na wynik zdrowia."
+      },
+      "configureLink": "Wybierz, co liczy się do Twojego wyniku",
+      "coverage": {
+        "minimumMet": "Pokrywa trzy obszary wymagane przez wynik",
+        "areas": "{present} z {required} obszarów zdrowia"
       }
     },
     "suggestedPrompts": {
@@ -3607,7 +3614,8 @@
         "summary": "{present} z {required} danych · {percent}%",
         "ratioLabel": "{present}/{required}",
         "historyDays": "Na podstawie {count} dni historii",
-        "missing": "Zapisuj te dane, aby uściślić wartość: {list}"
+        "missing": "Zapisuj te dane, aby uściślić wartość: {list}",
+        "summaryLabelled": "{label} · {percent}%"
       },
       "scoreRing": {
         "aria": "Wynik {score} na 100, {band}",
@@ -4896,6 +4904,68 @@
         "fetchFailedOne": "Ostatnia aktualizacja pogody w tle nie powiodła się ({when}).",
         "fetchFailedFew": "Ostatnie {count} aktualizacje pogody w tle nie powiodły się, najnowsza {when}.",
         "fetchFailedOther": "Ostatnich {count} aktualizacji pogody w tle nie powiodło się, najnowsza {when}."
+      },
+      "score": {
+        "title": "Wynik zdrowia",
+        "subtitle": "Wybierz, które filary liczą się do Twojego wyniku.",
+        "card": {
+          "title": "Co liczy się do Twojego wyniku",
+          "description": "Każdy filar, który zapisujesz, liczy się, dopóki nie powiesz tutaj inaczej."
+        },
+        "threeAxes": "Zapisywanie, pokazywanie i liczenie to trzy różne rzeczy. Ta strona zmienia tylko ostatnią. Filar wyłączony tutaj nadal jest zapisywany i nadal widoczny w całym HealthLogu, przestaje jedynie ruszać liczbą.",
+        "axis": {
+          "recorded": "Jest zapisywany",
+          "shown": "Pokazywany w aplikacji",
+          "countsFor": "Licz {pillar} do wyniku"
+        },
+        "domain": {
+          "cardiometabolic": "Serce i metabolizm",
+          "activity": "Aktywność",
+          "sleep": "Sen",
+          "adiposity": "Sylwetka",
+          "wellbeing": "Samopoczucie",
+          "fitness": "Zmierzona wydolność"
+        },
+        "domainNote": {
+          "cardiometabolic": "Trzy filary, jeden obszar zdrowia. Każdy filar waży w wyniku tyle samo, więc ten obszar waży trzy razy tyle co obszar z jednym filarem."
+        },
+        "state": {
+          "counting": "Liczy się do Twojego wyniku",
+          "waiting": "Wybrany, czeka na dane",
+          "crisis": "Zamiast wyniku pokazywana jest wskazówka bezpieczeństwa. Z Twoim wyborem wszystko w porządku.",
+          "readFailed": "Tego filaru nie udało się odczytać przy ostatnim liczeniu.",
+          "unavailable": "Jeszcze niedostępny",
+          "unavailableDetail": "HealthLog nie potrafi jeszcze odróżnić zmierzonego testu wydolności od szacunku z urządzenia, więc ten filar nigdy nie dał wyniku. Zostaje na liście, żebyś widział, że się nie liczy."
+        },
+        "presets": {
+          "label": "Punkt wyjścia",
+          "all": "Wszystkie filary",
+          "current": "Twój zapisany wybór"
+        },
+        "save": "Zapisz",
+        "saved": "Zapisano.",
+        "error": "Nie udało się zapisać. Spróbuj ponownie.",
+        "loadFailed": "Nie udało się wczytać Twojego wyboru.",
+        "eligibilityFailed": "Nie udało się sprawdzić, które filary mają teraz dane. Przełączniki poniżej i tak działają.",
+        "omitted": "{count} filarów nie ma na liście, bo ich śledzenie jest wyłączone. Włącz moduł z powrotem, a jego filar wróci.",
+        "omittedLink": "Otwórz moduły",
+        "refusal": {
+          "physiological": "Wynik zdrowia potrzebuje co najmniej jednego pomiaru fizycznego. Zostaw w wyborze ciśnienie, glukozę, sen, sylwetkę albo cholesterol, obok wszystkiego innego, co wybierzesz.",
+          "domains": "Wynik zdrowia potrzebuje co najmniej trzech różnych obszarów zdrowia. Ciśnienie, glukoza i cholesterol opisują ten sam obszar, więc wybór złożony tylko z nich liczy się jako jeden."
+        },
+        "notice": {
+          "upgrade": {
+            "title": "Teraz to Ty decydujesz, co się liczy",
+            "body": "To, które filary liczyły się do Twojego Health Score, szło wcześniej za modułami, które miałeś włączone. Teraz jest to osobna decyzja i podejmujesz ją tutaj. Twoja liczba się przy tym nie ruszyła: nadal liczy dokładnie to, co liczyła wcześniej."
+          },
+          "changed": {
+            "title": "Zmieniłeś to, co się liczy",
+            "body": "Od {date} Twój wynik liczony jest z innego zestawu filarów. Dni wcześniejsze pochodzą ze starego zestawu, więc obu nie porównujemy, a zmiana tygodniowa pozostaje wstrzymana, dopóki okno porównania nie minie tej zmiany. Historia każdego filaru z osobna biegnie przez nią bez przerwy.",
+            "bodyUndated": "Twój wynik liczony jest z innego zestawu filarów niż wcześniej. Dni sprzed zmiany pochodzą ze starego zestawu, więc obu nie porównujemy, a zmiana tygodniowa pozostaje wstrzymana, dopóki okno porównania nie minie tej zmiany. Historia każdego filaru z osobna biegnie przez nią bez przerwy."
+          },
+          "dismiss": "Rozumiem",
+          "dismissError": "Nie udało się zapisać. Spróbuj ponownie."
+        }
       }
     },
     "profile": "Profil",

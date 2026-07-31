@@ -20,7 +20,7 @@ import {
   computeBpInTargetFastPath,
   type BpInTargetEnvelope,
 } from "@/lib/analytics/bp-in-target-fast-path";
-import { computeUserHealthScore } from "@/lib/analytics/score/reader";
+import { computeAndRecordUserHealthScore } from "@/lib/analytics/score/record";
 import { isModuleEnabled } from "@/lib/modules/gate";
 import { resolveRestMode } from "@/lib/illness/rest-mode";
 import { deriveBpWindow90 } from "@/lib/analytics/window-confidence";
@@ -554,7 +554,7 @@ async function buildAnalyticsResponse(user: AuthedUser, locale: Locale) {
   const glucoseByContextOut = glucoseEnabled ? glucoseByContext : null;
   const glucoseClinicalOut = glucoseEnabled ? glucoseClinical : null;
   const scoredAt = new Date();
-  const healthScore = await computeUserHealthScore({
+  const healthScore = await computeAndRecordUserHealthScore({
     userId: user.id,
     now: scoredAt,
     profile: {
@@ -571,6 +571,7 @@ async function buildAnalyticsResponse(user: AuthedUser, locale: Locale) {
       sleep: sleepEnabled,
       mentalHealth: mentalHealthEnabled,
     },
+    healthScoreConfigJson: user.healthScoreConfigJson,
     bpTargets: clinicalBpTargets,
     bpEnvelope,
     bpEnvelopePriorWeek,

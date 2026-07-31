@@ -51,6 +51,12 @@ vi.mock("@/lib/feature-flags", async (importOriginal) => {
   };
 });
 
+vi.mock("@/lib/cache/invalidate", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/cache/invalidate")>();
+  return { ...actual, invalidateUserHealthScore: vi.fn() };
+});
+
 vi.mock("next/headers", () => ({
   headers: vi.fn(async () => ({ get: () => null })),
   cookies: vi.fn(async () => ({
@@ -66,6 +72,7 @@ import { getSession } from "@/lib/auth/session";
 import { auditLog } from "@/lib/auth/audit";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getAssistantFlags } from "@/lib/feature-flags";
+import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -317,6 +324,39 @@ describe("PATCH /api/auth/me/modules", () => {
       select: { updatedAt: true },
       data: { modulePreferencesJson: { sleep: false, labs: false } },
     });
+  });
+});
+
+/**
+ * v1.35.0 — four of the score's pillars come and go with a module
+ * toggle, so a toggle changes what the composite is made of. The score
+ * caches hold the old composition and are served for up to an hour, so
+ * the person who just turned a module off keeps seeing a number
+ * computed from it. Nothing about that is visible in a test that does
+ * not assert the eviction, which is why it went unnoticed for so long.
+ */
+describe("PATCH /api/auth/me/modules — the score caches", () => {
+  it("evicts the score caches after a module toggle lands", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    primeUser({ modulePreferencesJson: null });
+
+    const res = await (PATCH as (r: Request) => Promise<Response>)(
+      mkPatch({ sleep: false }),
+    );
+    expect(res.status).toBe(200);
+    expect(invalidateUserHealthScore).toHaveBeenCalledWith("user-1");
+  });
+
+  it("does not evict them when the write never landed", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    primeUser({ modulePreferencesJson: null });
+    vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 0 } as never);
+
+    const res = await (PATCH as (r: Request) => Promise<Response>)(
+      mkPatch({ sleep: false, baseUpdatedAt: "2026-07-24T08:00:00.000Z" }),
+    );
+    expect(res.status).toBe(409);
+    expect(invalidateUserHealthScore).not.toHaveBeenCalled();
   });
 });
 

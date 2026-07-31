@@ -21,12 +21,18 @@ import { pickCumulativeDaySum } from "@/lib/measurements/cumulative-day-sum";
 import { userDayKey } from "@/lib/tz/format";
 import { getAgeFromDateOfBirth } from "@/lib/analytics/pulse-targets";
 import { toProfileSex } from "@/lib/profile/sex";
-import { healthScoreAlgorithmItemKey } from "@/lib/daily/priority-item-key";
+import { healthScoreNoticeItemKey } from "@/lib/daily/priority-item-key";
 import { annotate, getEvent } from "@/lib/logging/context";
 
 import { ACTIVITY_WINDOW_DAYS } from "./activity";
 import { SLEEP_WINDOW_DAYS } from "./sleep";
 import { attachScoreDelta } from "./composite";
+import {
+  resolveHealthScoreConfig,
+  resolveScoreConfigured,
+  scoreConfigBoundary,
+} from "./config";
+import { pillarsWithModuleData, type ScoreReaderModules } from "./modules";
 import { computeHealthScore } from "./index";
 import type { HealthScoreReport, PillarInputs, ScorePillarId } from "./types";
 import { computeWeightGoal } from "./weight-goal";
@@ -45,19 +51,20 @@ export interface ScoreReaderProfile {
   thresholdsJson: unknown;
 }
 
-export interface ScoreReaderModules {
-  glucose: boolean;
-  labs: boolean;
-  sleep: boolean;
-  mentalHealth: boolean;
-}
-
 export interface UserHealthScoreInput {
   prisma?: PrismaClient;
   userId: string;
   now: Date;
   profile: ScoreReaderProfile;
   modules: ScoreReaderModules;
+  /**
+   * The raw `User.healthScoreConfigJson` blob. Required, and deliberately
+   * not defaulted: a caller that forgets it would silently score the
+   * account on someone else's recipe, and a plausible default is exactly
+   * how that stays invisible. `null` is a real, meaningful value here —
+   * it means the person never chose, and every pillar counts.
+   */
+  healthScoreConfigJson: unknown;
   bpTargets: BpTargets | null;
   bpEnvelope: BpInTargetEnvelope | null;
   bpEnvelopePriorWeek: BpInTargetEnvelope | null;
@@ -763,18 +770,36 @@ export async function computeUserHealthScore(
     ),
   ]);
 
-  const availablePillars: ScorePillarId[] = [
-    "BLOOD_PRESSURE",
-    ...(input.modules.glucose || input.modules.labs
-      ? ["GLYCAEMIA" as const]
-      : []),
-    "ACTIVITY",
-    ...(input.modules.sleep ? ["SLEEP" as const] : []),
-    "ADIPOSITY",
-    ...(input.modules.mentalHealth ? ["WELLBEING" as const] : []),
-    "FITNESS",
-    ...(input.modules.labs ? ["LIPIDS" as const] : []),
-  ];
+  // v1.35.0 — what counts is the person's choice, narrowed to what there
+  // can be data for. Before this release the module switches decided the
+  // composition on their own; now they only say whether a pillar's data
+  // is being recorded, and the stored recipe says what counts. Two
+  // things deciding one number is the defect this replaces, so the old
+  // expression is gone rather than kept beside the new one.
+  //
+  // The promise on upgrade is that nobody's number moves, and it holds
+  // by construction rather than by a backfill: an account that never
+  // chose resolves to every pillar, and every pillar intersected with
+  // module availability is precisely the set the ternaries built.
+  //
+  // A pillar the config selects but whose module is off drops out here
+  // and therefore produces no row at all — not a score, not a "waiting
+  // for data" line. Turning a module off is a deliberate act with its
+  // own meaning, and asking someone for data they chose to stop
+  // recording would be nagging in the voice of their own settings. The
+  // place that pillar comes back is the modules screen.
+  const config = resolveHealthScoreConfig(input.healthScoreConfigJson);
+  const recordedPillars = pillarsWithModuleData(input.modules);
+  const recorded = new Set(recordedPillars);
+  const availablePillars: ScorePillarId[] = config.pillars.filter((id) =>
+    recorded.has(id),
+  );
+  // v1.35.0 — the one place the "this score is configured" boolean is
+  // decided, from the same config and the same module map the
+  // composition came from. Resolved here rather than anywhere a client
+  // can reach, because a client that re-derived it would be a second
+  // place deciding one thing.
+  const configured = resolveScoreConfigured({ config, recordedPillars });
   const previousAt = new Date(input.now.getTime() - 7 * DAY_MS);
   const previousPreviousAt = new Date(input.now.getTime() - 14 * DAY_MS);
   const currentBp = scoreBpEnvelope({
@@ -827,6 +852,7 @@ export async function computeUserHealthScore(
   const current = computeHealthScore({
     asOf: input.now,
     availablePillars,
+    configured,
     pillars: scoreInputsFor({
       ...common,
       asOf: input.now,
@@ -837,6 +863,7 @@ export async function computeUserHealthScore(
   const previous = computeHealthScore({
     asOf: previousAt,
     availablePillars,
+    configured,
     pillars: scoreInputsFor({
       ...common,
       asOf: previousAt,
@@ -847,6 +874,7 @@ export async function computeUserHealthScore(
   const previousPrevious = computeHealthScore({
     asOf: previousPreviousAt,
     availablePillars,
+    configured,
     pillars: scoreInputsFor({
       ...common,
       asOf: previousPreviousAt,
@@ -854,15 +882,25 @@ export async function computeUserHealthScore(
     }),
     weightGoal,
   });
+  // All three windows above were computed under the recipe in force
+  // right now, which is exactly why the guard needs the recipe's own
+  // dated identity: nothing in the three composites can show that last
+  // Tuesday was scored on a different set. Resolved once, from the same
+  // blob the composition came from, so the number and the boundary that
+  // judges its movement can never describe two different recipes.
   const delta = attachScoreDelta(
     current.composite,
     previous.composite,
     previousPrevious.composite,
     input.now,
+    scoreConfigBoundary(config),
     current.pillars,
     previous.pillars,
   );
-  const itemKey = healthScoreAlgorithmItemKey(current.scoreVersion);
+  const itemKey = healthScoreNoticeItemKey(
+    current.scoreVersion,
+    config.version,
+  );
   const dismissal = await capture(
     db.dismissedPriorityItem.findUnique({
       where: { userId_itemKey: { userId: input.userId, itemKey } },

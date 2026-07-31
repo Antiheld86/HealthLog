@@ -20,6 +20,18 @@ export const SCORE_PILLAR_IDS = [
 ] as const;
 
 export type ScorePillarId = (typeof SCORE_PILLAR_IDS)[number];
+
+/**
+ * Sanitise a list of pillar ids: registry order, no duplicates, and
+ * anything outside the catalogue dropped. Everything that narrows the
+ * score's composition goes through here, so a stored blob, a caller's
+ * argument and the scorer itself cannot disagree about what a valid
+ * pillar set looks like.
+ */
+export function orderedUniquePillars(ids: readonly unknown[]): ScorePillarId[] {
+  const present = new Set(ids);
+  return SCORE_PILLAR_IDS.filter((id) => present.has(id));
+}
 export type ScoreBand = "green" | "yellow" | "red";
 export type ScoreDomain =
   | "cardiometabolic"
@@ -28,6 +40,27 @@ export type ScoreDomain =
   | "adiposity"
   | "wellbeing"
   | "fitness";
+
+/**
+ * Which domain each pillar speaks to. The composite needs three
+ * distinct domains, so this map is part of the breadth rule and not
+ * decoration: three of the eight pillars share the cardiometabolic
+ * domain, which is why a selection of five pillars can still fail.
+ *
+ * One map, read by the scorer when it builds a pillar result and by the
+ * breadth rule when it judges a selection, so the two can never drift
+ * into disagreeing about what counts as a distinct area.
+ */
+export const SCORE_PILLAR_DOMAINS: Record<ScorePillarId, ScoreDomain> = {
+  BLOOD_PRESSURE: "cardiometabolic",
+  GLYCAEMIA: "cardiometabolic",
+  ACTIVITY: "activity",
+  SLEEP: "sleep",
+  ADIPOSITY: "adiposity",
+  WELLBEING: "wellbeing",
+  FITNESS: "fitness",
+  LIPIDS: "cardiometabolic",
+};
 
 export type PillarReferenceKind =
   "clinical-threshold" | "population-percentile" | "guideline-band";
@@ -86,6 +119,14 @@ export interface CompositeValue {
   bandSetter: ScorePillarId | null;
   /** Registry-ordered eligible pillar ids. Part of the number's identity. */
   composition: ScorePillarId[];
+  /**
+   * v1.35.0 — the resolved "this score is configured" flag: true when the
+   * account's composition differs from the one its defaults would resolve
+   * to today. Server-resolved so no client interprets a config blob, and
+   * never a per-pillar detail. `resolveScoreConfigured` in `./config`
+   * owns the definition and the reasons behind it.
+   */
+  configured: boolean;
   /** Equal-weighted floor across delta-eligible pillars. */
   noiseFloor: number;
   scoreVersion: typeof SCORE_VERSION;
@@ -93,6 +134,16 @@ export interface CompositeValue {
 
 export type ScoreDeltaReason =
   | "algorithm_changed"
+  /**
+   * The person changed their own recipe inside the comparison window.
+   * Distinct from `algorithm_changed` (we changed the method for
+   * everybody) and from `composition_changed` (the two windows ended up
+   * with different pillar sets): here both windows are computed under
+   * the NEW recipe in one request, so the sets agree and the arithmetic
+   * looks comparable when it is not. Without this reason the settings
+   * action reads as a health event.
+   */
+  | "config_changed"
   | "composition_changed"
   | "first_eligibility_window"
   | "below_noise_floor"

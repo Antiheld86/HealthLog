@@ -204,6 +204,7 @@ function makePrisma() {
         },
       ]),
     },
+    healthScoreRecord: { findMany: vi.fn().mockResolvedValue([]) },
     // Left unmocked on purpose: `buildProfileBackupSection` runs for real
     // against these, so the assertions below exercise the builder rather than
     // a stand-in that would agree with whatever the payload happened to do.

@@ -40,6 +40,7 @@ import { recomputeUserRollups } from "@/lib/rollups/measurement-rollups";
 import { restoreCycleData } from "@/lib/cycle/backup";
 import { restoreProfileData } from "@/lib/export/profile-backup";
 import { restoreIntradayProfileData } from "@/lib/export/intraday-profile-backup";
+import { restoreHealthScoreData } from "@/lib/export/health-score-backup";
 import { invalidateUserData } from "@/lib/cache/invalidate";
 
 export const dynamic = "force-dynamic";
@@ -71,6 +72,7 @@ interface RestoreResponse {
     customMetrics: number;
     correlationPatterns: number;
     intradayProfiles: number;
+    healthScoreRecords: number;
   };
 }
 
@@ -764,6 +766,14 @@ const handler = apiHandler(
             payload,
           );
 
+          // The score as it was shown on each local day. Both ends live in
+          // `src/lib/export/health-score-backup.ts`, same as the two above.
+          const healthScoreCleared = await restoreHealthScoreData(
+            tx,
+            ownerId,
+            payload,
+          );
+
           const biomarkerByName = new Map<string, string>();
           const restoredBiomarkerIds = new Set<string>();
           for (const biomarker of payload.biomarkers) {
@@ -1128,6 +1138,7 @@ const handler = apiHandler(
             customMetrics: profileCleared.customMetrics,
             correlationPatterns: profileCleared.correlationPatterns,
             intradayProfiles: intradayCleared.intradayProfiles,
+            healthScoreRecords: healthScoreCleared.healthScoreRecords,
           };
         },
         {

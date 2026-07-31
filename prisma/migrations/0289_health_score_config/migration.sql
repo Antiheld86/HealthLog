@@ -1,0 +1,35 @@
+-- v1.35.0 — per-user Health Score composition.
+--
+-- A single nullable JSONB column on `users` carrying which pillars the
+-- person chose to count toward the composite Health Score. Follows the
+-- established per-user JSON-column convention (`module_preferences_json`,
+-- `dashboard_widgets_json`, `coach_prefs_json`).
+--
+-- Shape (validated by `src/lib/analytics/score/config.ts`):
+--   { "excludedPillars": ["SLEEP", "LIPIDS"],
+--     "version": 3,
+--     "changedAt": "2026-07-31T09:12:44.000Z" }
+--
+-- The stored list is a DESELECTION list, the same posture as
+-- `module_preferences_json`, and it is stored that way on purpose. A
+-- pillar shipped after the person made their choice is simply absent
+-- from the list, so it counts by default and the score keeps its
+-- "everything eligible" starting point without a backfill. Storing the
+-- positive selection instead would make a newly shipped pillar
+-- indistinguishable from one the person deliberately removed.
+--
+-- NULL = the person never chose, which is NOT the same as choosing to
+-- count nothing (an `excludedPillars` list naming every pillar). The
+-- resolver keeps those two apart because only the first one may inherit
+-- a later change of defaults.
+--
+-- `version` is the per-user recipe version: it increments on every
+-- accepted write and, with `changedAt`, is what a score record and the
+-- weekly delta key off to tell "you changed what counts" apart from a
+-- real movement in the person's health.
+--
+-- Additive + nullable: every existing account keeps NULL and the
+-- resolver treats NULL as "counts every pillar", which is exactly what
+-- those accounts get today.
+
+ALTER TABLE "users" ADD COLUMN "health_score_config_json" JSONB;

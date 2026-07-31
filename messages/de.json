@@ -2268,17 +2268,19 @@
         "yellow": "Einige Bereiche brauchen Aufmerksamkeit",
         "red": "Mindestens ein Bereich liegt außerhalb des Referenzbereichs"
       },
-      "insufficient": "{count} geeignete Bereiche. Der Score benötigt mindestens drei, darunter einen gemessenen physiologischen Bereich.",
+      "insufficient": "{count} von {required} Feldern der Gesundheit haben genug aktuelle Daten. Der Score braucht {required}, mindestens eines davon körperlich gemessen.",
       "anatomyToggle": "Wie dieser Score zustande kommt",
       "notScored": "Noch nicht bewertet ({count})",
-      "method": "Der Score ist der gleich gewichtete Mittelwert aller Säulen mit ausreichend aktuellen Daten, auf einer Skala von 0 bis 100. Jede Säule wird an einem veröffentlichten Referenzbereich gemessen, und die schwächste Säule kann den Gesamtbereich bestimmen. Eine Säule ohne ausreichende Daten bleibt außen vor und zählt nicht als null.",
+      "method": "Der Score ist der gleich gewichtete Mittelwert der Säulen, die für ihn zählen, auf einer Skala von 0 bis 100. Jede Säule wird an einem veröffentlichten Referenzbereich gemessen, und die schwächste Säule kann den Gesamtbereich bestimmen. Eine Säule ohne ausreichend aktuelle Daten bleibt außen vor und zählt nicht als null. Die Referenzbereiche stammen aus veröffentlichten Quellen; welche Säulen zählen, entscheidest du selbst, deshalb ist die zusammengefasste Zahl selbst kein klinischer Standard.",
       "bandSetter": "Gesamtstufe bestimmt durch {pillar}",
       "versionAndNoise": "Methodenversion {version}. Schwelle für den Wochenvergleich: {noise} Punkte.",
       "methodVersion": "Methodenversion {version}.",
+      "configured": "Du hast festgelegt, welche Bereiche in diesen Score einfließen.",
       "none": "keiner",
       "delta": "{delta} gegenüber dem vorherigen vergleichbaren Zeitraum",
       "deltaReason": {
         "algorithm_changed": "Kein Vergleich, weil sich die Score-Methode geändert hat.",
+        "config_changed": "Kein Vergleich, weil du geändert hast, was in deinen Score einfließt.",
         "composition_changed": "Kein Vergleich, weil sich die einbezogenen Bereiche geändert haben.",
         "first_eligibility_window": "Kein Vergleich, weil dies der erste geeignete Zeitraum ist.",
         "below_noise_floor": "Die Veränderung liegt innerhalb der gemeinsamen Messschwankung.",
@@ -2346,6 +2348,11 @@
         "weight_not_tracked": "Erfasse dein Gewicht, um den Fortschritt zum Ziel zu sehen.",
         "read_failed": "Gewichtsdaten konnten nicht geladen werden. Versuche es erneut.",
         "notScored": "Der Fortschritt zum Gewichtsziel ist persönlicher Kontext und beeinflusst den Gesundheitsscore nicht."
+      },
+      "configureLink": "Festlegen, was in deinen Score einfließt",
+      "coverage": {
+        "minimumMet": "Deckt die drei Felder ab, die der Score braucht",
+        "areas": "{present} von {required} Feldern der Gesundheit"
       }
     },
     "suggestedPrompts": {
@@ -3607,7 +3614,8 @@
         "summary": "{present} von {required} Eingaben · {percent}%",
         "ratioLabel": "{present}/{required}",
         "historyDays": "Basiert auf {count} Tagen Verlauf",
-        "missing": "Erfasse diese, um den Wert zu schärfen: {list}"
+        "missing": "Erfasse diese, um den Wert zu schärfen: {list}",
+        "summaryLabelled": "{label} · {percent}%"
       },
       "scoreRing": {
         "aria": "Wert {score} von 100, {band}",
@@ -4896,6 +4904,68 @@
         "fetchFailedOne": "Die letzte Wetteraktualisierung im Hintergrund ist fehlgeschlagen ({when}).",
         "fetchFailedFew": "Die letzten {count} Wetteraktualisierungen im Hintergrund sind fehlgeschlagen, zuletzt {when}.",
         "fetchFailedOther": "Die letzten {count} Wetteraktualisierungen im Hintergrund sind fehlgeschlagen, zuletzt {when}."
+      },
+      "score": {
+        "title": "Gesundheitsscore",
+        "subtitle": "Lege fest, welche Bereiche in deinen Score einfließen.",
+        "card": {
+          "title": "Was in deinen Score einfließt",
+          "description": "Jeder Bereich, den du aufzeichnest, zählt mit, solange du hier nichts anderes sagst."
+        },
+        "threeAxes": "Aufzeichnen, Anzeigen und Mitzählen sind drei verschiedene Dinge. Diese Seite ändert nur das Letzte. Ein Bereich, den du hier abschaltest, wird weiter aufgezeichnet und weiter überall in HealthLog angezeigt, er bewegt nur die Zahl nicht mehr.",
+        "axis": {
+          "recorded": "Wird aufgezeichnet",
+          "shown": "Wird in der App angezeigt",
+          "countsFor": "{pillar} in den Score einrechnen"
+        },
+        "domain": {
+          "cardiometabolic": "Herz und Stoffwechsel",
+          "activity": "Aktivität",
+          "sleep": "Schlaf",
+          "adiposity": "Körperform",
+          "wellbeing": "Wohlbefinden",
+          "fitness": "Gemessene Fitness"
+        },
+        "domainNote": {
+          "cardiometabolic": "Drei Bereiche, ein Feld der Gesundheit. Jeder Bereich zählt im Score gleich viel, dieses Feld wiegt also dreimal so schwer wie eines mit nur einem Bereich."
+        },
+        "state": {
+          "counting": "Zählt in deinen Score",
+          "waiting": "Ausgewählt, wartet auf Daten",
+          "crisis": "Statt eines Werts wird ein Sicherheitshinweis gezeigt. An deiner Auswahl liegt es nicht.",
+          "readFailed": "Dieser Bereich konnte beim letzten Durchlauf nicht gelesen werden.",
+          "unavailable": "Noch nicht verfügbar",
+          "unavailableDetail": "HealthLog kann einen gemessenen Fitnesstest bisher nicht von einer Geräteschätzung unterscheiden, deshalb hat dieser Bereich noch nie einen Wert ergeben. Er bleibt in der Liste, damit du siehst, dass er nicht mitzählt."
+        },
+        "presets": {
+          "label": "Ausgangspunkt",
+          "all": "Alle Bereiche",
+          "current": "Deine gespeicherte Auswahl"
+        },
+        "save": "Speichern",
+        "saved": "Gespeichert.",
+        "error": "Konnte nicht gespeichert werden. Bitte versuche es erneut.",
+        "loadFailed": "Deine Auswahl konnte nicht geladen werden.",
+        "eligibilityFailed": "Es ließ sich nicht prüfen, für welche Bereiche gerade Daten vorliegen. Die Schalter unten funktionieren trotzdem.",
+        "omitted": "{count} Bereiche stehen nicht in der Liste, weil ihre Erfassung abgeschaltet ist. Schalte ein Modul wieder ein, dann kommt sein Bereich zurück.",
+        "omittedLink": "Module öffnen",
+        "refusal": {
+          "physiological": "Ein Health Score braucht mindestens einen körperlich gemessenen Wert. Behalte Blutdruck, Glukose, Schlaf, Körperform oder Cholesterin in deiner Auswahl, zusätzlich zu allem anderen, was du wählst.",
+          "domains": "Ein Health Score braucht mindestens drei verschiedene Felder der Gesundheit. Blutdruck, Glukose und Cholesterin beschreiben dasselbe Feld, eine Auswahl nur daraus zählt also als eines."
+        },
+        "notice": {
+          "upgrade": {
+            "title": "Was zählt, entscheidest jetzt du",
+            "body": "Welche Bereiche in deinen Health Score einflossen, richtete sich früher danach, welche Module du eingeschaltet hattest. Das ist jetzt eine eigene Entscheidung, und hier triffst du sie. Deine Zahl hat sich dadurch nicht bewegt: Sie zählt weiterhin genau das, was sie vorher gezählt hat."
+          },
+          "changed": {
+            "title": "Du hast geändert, was zählt",
+            "body": "Seit {date} wird dein Score aus einer anderen Zusammenstellung berechnet. Die Tage davor stammen aus der alten Zusammenstellung, beide werden deshalb nicht verglichen und die Wochenveränderung bleibt ausgesetzt, bis der Vergleichszeitraum die Änderung hinter sich hat. Der Verlauf jedes einzelnen Bereichs läuft ungebrochen durch.",
+            "bodyUndated": "Dein Score wird aus einer anderen Zusammenstellung berechnet als früher. Die Tage davor stammen aus der alten Zusammenstellung, beide werden deshalb nicht verglichen und die Wochenveränderung bleibt ausgesetzt, bis der Vergleichszeitraum die Änderung hinter sich hat. Der Verlauf jedes einzelnen Bereichs läuft ungebrochen durch."
+          },
+          "dismiss": "Verstanden",
+          "dismissError": "Konnte nicht gespeichert werden. Bitte versuche es erneut."
+        }
       }
     },
     "profile": "Profil",

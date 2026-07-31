@@ -2268,17 +2268,19 @@
         "yellow": "Algunos pilares requieren atención",
         "red": "Uno o más pilares están fuera del intervalo de referencia"
       },
-      "insufficient": "{count} pilares aptos. La puntuación necesita al menos tres, incluido un pilar fisiológico medido.",
+      "insufficient": "{count} de {required} ámbitos de salud tienen suficientes datos recientes. La puntuación necesita {required}, y al menos uno debe ser una medición física.",
       "anatomyToggle": "Cómo se forma esta puntuación",
       "notScored": "Aún sin puntuar ({count})",
-      "method": "La puntuación es la media con igual peso de todos los pilares que tienen suficientes datos recientes, en una escala de 0 a 100. Cada pilar se compara con un rango de referencia publicado, y el pilar más débil puede fijar el rango general. Un pilar sin datos suficientes queda fuera en lugar de contar como cero.",
+      "method": "La puntuación es la media con igual peso de los pilares que cuentan para ella, en una escala de 0 a 100. Cada pilar se compara con un rango de referencia publicado, y el pilar más débil puede fijar el rango general. Un pilar sin datos recientes suficientes queda fuera en lugar de contar como cero. Los rangos de referencia proceden de fuentes publicadas; qué pilares cuentan lo eliges tú, así que el número combinado no es en sí mismo un estándar clínico.",
       "bandSetter": "Categoría general determinada por {pillar}",
       "versionAndNoise": "Versión del método {version}. Umbral de comparación semanal: {noise} puntos.",
       "methodVersion": "Versión del método {version}.",
+      "configured": "Tú has elegido qué pilares cuentan para esta puntuación.",
       "none": "ninguno",
       "delta": "{delta} frente al periodo comparable anterior",
       "deltaReason": {
         "algorithm_changed": "No hay comparación porque cambió el método de puntuación.",
+        "config_changed": "No hay comparación porque cambiaste lo que cuenta para tu puntuación.",
         "composition_changed": "No hay comparación porque cambiaron los pilares incluidos.",
         "first_eligibility_window": "No hay comparación porque este es el primer periodo apto.",
         "below_noise_floor": "El cambio está dentro de la variación conjunta de las mediciones.",
@@ -2346,6 +2348,11 @@
         "weight_not_tracked": "Registra una lectura de peso para ver el progreso hacia tu objetivo.",
         "read_failed": "No se pudieron cargar los datos de peso. Inténtalo de nuevo.",
         "notScored": "El progreso del objetivo de peso es contexto personal y no afecta a la puntuación de salud."
+      },
+      "configureLink": "Elegir qué cuenta para tu puntuación",
+      "coverage": {
+        "minimumMet": "Cubre los tres ámbitos que la puntuación necesita",
+        "areas": "{present} de {required} ámbitos de salud"
       }
     },
     "suggestedPrompts": {
@@ -3607,7 +3614,8 @@
         "summary": "{present} de {required} entradas · {percent}%",
         "ratioLabel": "{present}/{required}",
         "historyDays": "Basado en {count} días de historial",
-        "missing": "Registra estos para afinar el valor: {list}"
+        "missing": "Registra estos para afinar el valor: {list}",
+        "summaryLabelled": "{label} · {percent}%"
       },
       "scoreRing": {
         "aria": "Puntuación {score} de 100, {band}",
@@ -4896,6 +4904,68 @@
         "fetchFailedOne": "La última actualización meteorológica en segundo plano falló ({when}).",
         "fetchFailedFew": "Las últimas {count} actualizaciones meteorológicas en segundo plano fallaron, la más reciente {when}.",
         "fetchFailedOther": "Las últimas {count} actualizaciones meteorológicas en segundo plano fallaron, la más reciente {when}."
+      },
+      "score": {
+        "title": "Puntuación de salud",
+        "subtitle": "Elige qué pilares cuentan para tu puntuación.",
+        "card": {
+          "title": "Qué cuenta para tu puntuación",
+          "description": "Cada pilar que registras cuenta, salvo que digas lo contrario aquí."
+        },
+        "threeAxes": "Registrar, mostrar y contar son tres cosas distintas. Esta página cambia solo la última. Un pilar que desactives aquí se sigue registrando y se sigue viendo en el resto de HealthLog, simplemente deja de mover el número.",
+        "axis": {
+          "recorded": "Se registra",
+          "shown": "Se muestra en la app",
+          "countsFor": "Contar {pillar} para la puntuación"
+        },
+        "domain": {
+          "cardiometabolic": "Corazón y metabolismo",
+          "activity": "Actividad",
+          "sleep": "Sueño",
+          "adiposity": "Forma corporal",
+          "wellbeing": "Bienestar",
+          "fitness": "Condición física medida"
+        },
+        "domainNote": {
+          "cardiometabolic": "Tres pilares, un mismo ámbito de salud. Cada pilar pesa lo mismo en la puntuación, así que este ámbito pesa el triple que uno con un solo pilar."
+        },
+        "state": {
+          "counting": "Cuenta para tu puntuación",
+          "waiting": "Seleccionado, esperando datos",
+          "crisis": "En lugar de una puntuación se muestra orientación de seguridad. Tu selección está bien.",
+          "readFailed": "Este pilar no se pudo leer en el último cálculo.",
+          "unavailable": "Todavía no disponible",
+          "unavailableDetail": "HealthLog aún no distingue una prueba de condición física medida de una estimación del dispositivo, así que este pilar nunca ha dado una puntuación. Sigue en la lista para que veas que no cuenta."
+        },
+        "presets": {
+          "label": "Punto de partida",
+          "all": "Todos los pilares",
+          "current": "Tu selección guardada"
+        },
+        "save": "Guardar",
+        "saved": "Guardado.",
+        "error": "No se pudo guardar. Inténtalo de nuevo.",
+        "loadFailed": "No se pudo cargar tu selección.",
+        "eligibilityFailed": "No se pudo comprobar qué pilares tienen datos ahora mismo. Los interruptores de abajo siguen funcionando.",
+        "omitted": "{count} pilares no aparecen porque su seguimiento está desactivado. Vuelve a activar un módulo y su pilar regresa.",
+        "omittedLink": "Abrir módulos",
+        "refusal": {
+          "physiological": "Una puntuación de salud necesita al menos una medición física. Mantén en tu selección la presión arterial, la glucosa, el sueño, la forma corporal o el colesterol, además de lo demás que elijas.",
+          "domains": "Una puntuación de salud necesita al menos tres ámbitos de salud distintos. La presión arterial, la glucosa y el colesterol describen el mismo ámbito, así que una selección hecha solo con ellos cuenta como uno."
+        },
+        "notice": {
+          "upgrade": {
+            "title": "Ahora decides tú qué cuenta",
+            "body": "Qué pilares contaban para tu Health Score dependía antes de los módulos que tuvieras activados. Ahora es una decisión aparte, y aquí es donde la tomas. Tu número no se movió al llegar este cambio: sigue contando exactamente lo que contaba antes."
+          },
+          "changed": {
+            "title": "Has cambiado qué cuenta",
+            "body": "Desde el {date} tu puntuación se calcula con otro conjunto de pilares. Los días anteriores salen del conjunto antiguo, así que no se comparan entre sí y la variación semanal queda en pausa hasta que la ventana de comparación deje atrás el cambio. El historial de cada pilar sigue sin interrupción.",
+            "bodyUndated": "Tu puntuación se calcula con un conjunto de pilares distinto al anterior. Los días previos salen del conjunto antiguo, así que no se comparan entre sí y la variación semanal queda en pausa hasta que la ventana de comparación deje atrás el cambio. El historial de cada pilar sigue sin interrupción."
+          },
+          "dismiss": "Entendido",
+          "dismissError": "No se pudo guardar. Inténtalo de nuevo."
+        }
       }
     },
     "profile": "Perfil",
