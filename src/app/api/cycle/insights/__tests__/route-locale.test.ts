@@ -17,7 +17,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
  * notice.
  */
 
-const discoverPhaseCorrelations = vi.fn(() => ({
+/** Stands in for the discovery engine so the ARGUMENTS are what is inspected. */
+const discoverPhaseCorrelations = vi.fn<
+  (args: { locale?: unknown }) => {
+    discovered: never[];
+    pairsTested: number;
+    fdrQ: number;
+    minPairs: number;
+  }
+>(() => ({
   discovered: [],
   pairsTested: 0,
   fdrQ: 0.1,
@@ -25,7 +33,8 @@ const discoverPhaseCorrelations = vi.fn(() => ({
 }));
 vi.mock("@/lib/cycle/phase-crosstab", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/cycle/phase-crosstab")>()),
-  discoverPhaseCorrelations: (args: unknown) => discoverPhaseCorrelations(args),
+  discoverPhaseCorrelations: (args: { locale?: unknown }) =>
+    discoverPhaseCorrelations(args),
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -101,16 +110,14 @@ beforeEach(() => {
 
 /** The locale the route handed the discovery engine on the last call. */
 function passedLocale(): unknown {
-  const args = discoverPhaseCorrelations.mock.calls.at(-1)?.[0] as
-    { locale?: unknown } | undefined;
-  return args?.locale;
+  return discoverPhaseCorrelations.mock.calls.at(-1)?.[0]?.locale;
 }
 
 describe("GET /api/cycle/insights — the reader's language", () => {
   it("passes the language the switcher's cookie names", async () => {
     localeCookie.mockReturnValue("de");
 
-    const res = await GET(new Request("http://localhost/api/cycle/insights"));
+    const res = await GET();
 
     expect(res.status).toBe(200);
     expect(passedLocale()).toBe("de");
@@ -123,7 +130,7 @@ describe("GET /api/cycle/insights — the reader's language", () => {
       >,
     );
 
-    await GET(new Request("http://localhost/api/cycle/insights"));
+    await GET();
 
     expect(passedLocale()).toBe("pl");
   });
@@ -132,10 +139,10 @@ describe("GET /api/cycle/insights — the reader's language", () => {
     // Two readers, two languages, from the same handler. A route that named
     // one outright would pass this only by accident.
     localeCookie.mockReturnValue("it");
-    await GET(new Request("http://localhost/api/cycle/insights"));
+    await GET();
     const first = passedLocale();
     localeCookie.mockReturnValue("fr");
-    await GET(new Request("http://localhost/api/cycle/insights"));
+    await GET();
 
     expect([first, passedLocale()]).toEqual(["it", "fr"]);
   });
