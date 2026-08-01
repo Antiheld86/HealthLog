@@ -32,6 +32,34 @@ vi.mock("@/hooks/use-measurement-reminders", () => ({
 }));
 
 import { VorsorgeSection } from "../vorsorge-section";
+import { DISPLAY_TIMEZONE } from "@/lib/format-locale";
+
+/**
+ * Noon on the day `offsetDays` from today, counted on the DISPLAY zone's
+ * calendar rather than the process clock's.
+ *
+ * The component reads `useDisplayTimezone()` and floors the due date there,
+ * while `vitest.config.mts` pins the suite to `TZ=UTC`. For the two hours
+ * before UTC midnight, Europe/Berlin is already on the next date, so a fixture
+ * built with `new Date().setHours(...)` lands a day behind what the component
+ * sees. Deriving the date parts from the same zone the component uses removes
+ * the disagreement instead of hoping the suite never runs at night.
+ *
+ * Noon is deliberate: any UTC offset in use puts 12:00 UTC on the same
+ * calendar date in the display zone, so the instant cannot slide either way.
+ */
+function noonOnDisplayDay(offsetDays: number): Date {
+  // `en-CA` formats as YYYY-MM-DD, which is the shape we want to add days to.
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: DISPLAY_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const shifted = new Date(`${today}T12:00:00.000Z`);
+  shifted.setUTCDate(shifted.getUTCDate() + offsetDays);
+  return shifted;
+}
 
 function render(node: React.ReactNode) {
   // v1.18.7 (Wave E) — a measurement-linked card now mounts the 7-day
@@ -172,10 +200,14 @@ describe("<VorsorgeSection> loading + empty", () => {
     // v1.18.9 recon — a reminder whose nextDue falls on the SAME local
     // calendar day must read "Due today" with the green status hue, even when
     // the wall-clock gap to now exceeds the 24h a rolling delta would key on.
-    // Anchor the due instant to local noon today so the floored calendar-day
-    // delta is 0 regardless of the hour the suite runs.
-    const todayNoon = new Date();
-    todayNoon.setHours(12, 0, 0, 0);
+    // Anchor the due instant to noon on the DISPLAY zone's today, not the
+    // process clock's. `vitest.config.mts` pins the suite to TZ=UTC while the
+    // component floors in the profile zone (`DISPLAY_TIMEZONE`, Europe/Berlin),
+    // and those two disagree about the date for the two hours before UTC
+    // midnight. Anchoring on `setHours` made this case fail every night in
+    // that window, which is the same confusion of clocks the assertion exists
+    // to catch.
+    const todayNoon = noonOnDisplayDay(0);
     const reminder: MeasurementReminder = {
       id: "due-today",
       label: "Blood pressure check",
@@ -204,9 +236,9 @@ describe("<VorsorgeSection> loading + empty", () => {
     // A reminder whose due CALENDAR day is before today reads "Overdue", with
     // the warning hue — a rolling-24h delta would mis-bucket a yesterday-evening
     // due viewed this morning as "today".
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    yesterday.setHours(20, 0, 0, 0);
+    // Same clock discipline as the case above: one day back on the DISPLAY
+    // zone's calendar, not on the process clock's.
+    const yesterday = noonOnDisplayDay(-1);
     const reminder: MeasurementReminder = {
       id: "overdue",
       label: "Annual physical",
