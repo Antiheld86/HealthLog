@@ -6,6 +6,7 @@ import { I18nProvider } from "@/lib/i18n/context";
 import { TodayHero } from "../today-hero";
 import type { DailyDigest } from "@/lib/daily/digest";
 import type { PriorityItem } from "@/lib/daily/priority-item";
+import { SCORE_VERSION } from "@/lib/analytics/score/types";
 
 // The hero now wires the coach check-in card's keep / let-go taps through
 // `useCoachCheckinAction`, so it needs a QueryClient in the tree.
@@ -57,7 +58,7 @@ function digest(over: Partial<DailyDigest> = {}): DailyDigest {
       band: "green",
       delta: 3,
       deltaReason: null,
-      scoreVersion: 2,
+      scoreVersion: SCORE_VERSION,
       composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
     },
     topSignal: {
@@ -114,7 +115,7 @@ describe("<TodayHero>", () => {
             band: "green",
             delta: 20,
             deltaReason: "algorithm_changed",
-            scoreVersion: 2,
+            scoreVersion: SCORE_VERSION,
             composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
           },
         })}

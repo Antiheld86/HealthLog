@@ -2,6 +2,8 @@ import { expect, test } from "./setup/test";
 
 import { STORAGE_STATE_PATH } from "./setup/global-setup";
 import { settleBeforeMeasure } from "./utils/settle";
+import { SCORE_VERSION } from "@/lib/analytics/score/types";
+import { healthScoreAlgorithmItemKey } from "@/lib/daily/priority-item-key";
 
 /**
  * Settings → Health Score: the surface that decides which pillars count.
@@ -65,11 +67,14 @@ function scoreReport() {
     ],
     delta: null,
     deltaReason: "no_current_score",
-    scoreVersion: 2,
+    scoreVersion: SCORE_VERSION,
     weightGoal: insufficient("no_goal"),
     // Raised and never dismissed, which is the state every account is in:
     // nothing has ever rendered this notice.
-    algorithmNotice: { itemKey: "health_score_algorithm:2", dismissed: false },
+    algorithmNotice: {
+      itemKey: healthScoreAlgorithmItemKey(SCORE_VERSION),
+      dismissed: false,
+    },
   };
 }
 
@@ -223,7 +228,7 @@ test.describe("Settings → Health Score", () => {
     await notice.locator('[data-slot="score-change-notice-dismiss"]').click();
 
     await expect(notice).toHaveCount(0);
-    expect(dismissed).toBe("health_score_algorithm:2");
+    expect(dismissed).toBe(healthScoreAlgorithmItemKey(SCORE_VERSION));
   });
 
   test("refuses a selection too narrow to produce a score, in plain language", async ({

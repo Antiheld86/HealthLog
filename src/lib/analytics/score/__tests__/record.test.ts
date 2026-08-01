@@ -144,8 +144,12 @@ describe("stored bands", () => {
 });
 
 describe("input fingerprint", () => {
+  // The fixture only needs two DIFFERENT version markers to prove the
+  // fingerprint is sensitive to a version move — pinned relative to
+  // SCORE_VERSION so the pair stays "previous vs current" rather than
+  // going stale (or colliding) the next time the constant bumps.
   const base = {
-    scoreVersion: 1,
+    scoreVersion: SCORE_VERSION - 1,
     composition: ["BLOOD_PRESSURE", "SLEEP", "ADIPOSITY"] as ScorePillarId[],
     pillars: HEALTHY,
   };
@@ -157,9 +161,9 @@ describe("input fingerprint", () => {
   });
 
   it("moves when the algorithm version moves", () => {
-    expect(healthScoreInputFingerprint({ ...base, scoreVersion: 2 })).not.toBe(
-      healthScoreInputFingerprint(base),
-    );
+    expect(
+      healthScoreInputFingerprint({ ...base, scoreVersion: SCORE_VERSION }),
+    ).not.toBe(healthScoreInputFingerprint(base));
   });
 
   it("moves when the composition narrows", () => {
