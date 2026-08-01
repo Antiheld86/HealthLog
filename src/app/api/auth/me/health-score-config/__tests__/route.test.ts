@@ -69,14 +69,13 @@ const SESSION_OK = {
   user: { id: "user-1", username: "testuser", role: "USER" as const },
 };
 
-const ALL_EIGHT: ScorePillarId[] = [
+const ALL_PILLARS: ScorePillarId[] = [
   "BLOOD_PRESSURE",
   "GLYCAEMIA",
   "ACTIVITY",
   "SLEEP",
   "ADIPOSITY",
   "WELLBEING",
-  "FITNESS",
   "LIPIDS",
 ];
 
@@ -154,7 +153,7 @@ describe("GET /api/auth/me/health-score-config", () => {
     );
     expect(res.status).toBe(200);
     const env = (await res.json()) as { data: ResolvedBody };
-    expect(env.data.pillars).toEqual(ALL_EIGHT);
+    expect(env.data.pillars).toEqual(ALL_PILLARS);
     expect(env.data.hasSelection).toBe(false);
     expect(env.data.version).toBe(0);
     expect(env.data.updatedAt).toBeUndefined();
@@ -172,7 +171,7 @@ describe("GET /api/auth/me/health-score-config", () => {
     );
     const env = (await res.json()) as { data: ResolvedBody };
     expect(env.data.pillars).toEqual(
-      ALL_EIGHT.filter((id) => id !== "SLEEP" && id !== "LIPIDS"),
+      ALL_PILLARS.filter((id) => id !== "SLEEP" && id !== "LIPIDS"),
     );
     expect(env.data.excludedPillars).toEqual(["SLEEP", "LIPIDS"]);
     expect(env.data.hasSelection).toBe(true);
@@ -185,7 +184,7 @@ describe("PATCH /api/auth/me/health-score-config", () => {
   it("rejects an unauthenticated request with 401", async () => {
     vi.mocked(getSession).mockResolvedValue(null);
     const res = await (PATCH as (r: Request) => Promise<Response>)(
-      mkPatch({ pillars: ALL_EIGHT }),
+      mkPatch({ pillars: ALL_PILLARS }),
     );
     expect(res.status).toBe(401);
     expect(prisma.user.update).not.toHaveBeenCalled();
@@ -211,7 +210,7 @@ describe("PATCH /api/auth/me/health-score-config", () => {
 
     const stored = writtenConfig();
     expect(stored.excludedPillars).toEqual(
-      ALL_EIGHT.filter((id) => !selection.includes(id)),
+      ALL_PILLARS.filter((id) => !selection.includes(id)),
     );
     expect(stored.version).toBe(1);
     expect(stored.changedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
@@ -230,7 +229,7 @@ describe("PATCH /api/auth/me/health-score-config", () => {
     });
 
     await (PATCH as (r: Request) => Promise<Response>)(
-      mkPatch({ pillars: ALL_EIGHT }),
+      mkPatch({ pillars: ALL_PILLARS }),
     );
     expect(writtenConfig().version).toBe(8);
   });
@@ -240,7 +239,7 @@ describe("PATCH /api/auth/me/health-score-config", () => {
     primeUser(null);
 
     const res = await (PATCH as (r: Request) => Promise<Response>)(
-      mkPatch({ pillars: ALL_EIGHT }),
+      mkPatch({ pillars: ALL_PILLARS }),
     );
     const env = (await res.json()) as { data: ResolvedBody };
     expect(writtenConfig().excludedPillars).toEqual([]);
@@ -252,7 +251,7 @@ describe("PATCH /api/auth/me/health-score-config", () => {
     primeUser(null);
 
     await (PATCH as (r: Request) => Promise<Response>)(
-      mkPatch({ pillars: ALL_EIGHT }),
+      mkPatch({ pillars: ALL_PILLARS }),
     );
     expect(invalidateUserHealthScore).toHaveBeenCalledWith("user-1");
   });
@@ -334,7 +333,7 @@ describe("PATCH — envelope and transport", () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     primeUser(null);
     const res = await (PATCH as (r: Request) => Promise<Response>)(
-      mkPatch({ pillars: ALL_EIGHT, weights: { SLEEP: 2 } }),
+      mkPatch({ pillars: ALL_PILLARS, weights: { SLEEP: 2 } }),
     );
     expect(res.status).toBe(422);
     expect(prisma.user.update).not.toHaveBeenCalled();
@@ -344,7 +343,7 @@ describe("PATCH — envelope and transport", () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     primeUser(null);
     const res = await (PATCH as (r: Request) => Promise<Response>)(
-      mkPatch({ pillars: ALL_EIGHT, userId: "user-2" }),
+      mkPatch({ pillars: ALL_PILLARS, userId: "user-2" }),
     );
     expect(res.status).toBe(422);
     expect(prisma.user.update).not.toHaveBeenCalled();
@@ -373,7 +372,7 @@ describe("PATCH — envelope and transport", () => {
       resetAt: Date.now() + 30_000,
     });
     const res = await (PATCH as (r: Request) => Promise<Response>)(
-      mkPatch({ pillars: ALL_EIGHT }),
+      mkPatch({ pillars: ALL_PILLARS }),
     );
     expect(res.status).toBe(429);
     expect(prisma.user.update).not.toHaveBeenCalled();
@@ -386,7 +385,7 @@ describe("PATCH — envelope and transport", () => {
 
     const res = await (PATCH as (r: Request) => Promise<Response>)(
       mkPatch({
-        pillars: ALL_EIGHT,
+        pillars: ALL_PILLARS,
         baseUpdatedAt: "2026-07-24T08:00:00.000Z",
       }),
     );

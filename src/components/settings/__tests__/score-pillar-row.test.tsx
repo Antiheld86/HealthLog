@@ -25,26 +25,27 @@ const base: ScoreConfigRow = {
   id: "SLEEP",
   domain: "sleep",
   counts: true,
-  selectable: true,
   eligibility: "counting",
 };
 
-describe("the three axes", () => {
-  it("names recording and showing beside the score switch", () => {
-    const html = render(base);
-
-    expect(html).toContain('data-slot="score-pillar-axis-recorded"');
-    expect(html).toContain('data-slot="score-pillar-axis-shown"');
-    expect(html).toContain('data-slot="score-pillar-switch"');
-    expect(html).toContain("Being recorded");
-    expect(html).toContain("Shown in the app");
-  });
-
+describe("the row", () => {
   it("offers exactly one switch, and it is the score one", () => {
     const html = render(base);
 
+    expect(html).toContain('data-slot="score-pillar-switch"');
     expect(html.match(/role="switch"/g) ?? []).toHaveLength(1);
     expect(html).toContain("Count Sleep toward the score");
+  });
+
+  it("says nothing about recording or showing", () => {
+    // Those two belong to the modules screen. Restating them under every
+    // pillar put the same two words on every row of a page about a third
+    // question, and the sentence above the rows already says so once.
+    const html = render(base);
+
+    expect(html).not.toContain('data-slot="score-pillar-axes"');
+    expect(html).not.toContain("Being recorded");
+    expect(html).not.toContain("Shown in the app");
   });
 });
 
@@ -103,38 +104,6 @@ describe("a failed read", () => {
     expect(html).toContain('data-state="read_failed"');
     expect(html).toContain("could not be read");
     expect(html).not.toContain("Selected, waiting for data");
-  });
-});
-
-describe("a pillar this build cannot score", () => {
-  it("is disabled, honest, and offers no switch at all", () => {
-    const html = render({
-      ...base,
-      id: "FITNESS",
-      domain: "fitness",
-      selectable: false,
-      eligibility: "unavailable",
-    });
-
-    expect(html).toContain('data-selectable="false"');
-    expect(html).toContain('data-slot="score-pillar-unavailable"');
-    expect(html).toContain('aria-disabled="true"');
-    expect(html).toContain("Not available yet");
-    // Not a switch that no-ops behind a disabled attribute: no switch.
-    expect(html).not.toContain('data-slot="score-pillar-switch"');
-    expect(html).not.toContain('role="switch"');
-  });
-
-  it("says why, rather than leaving the row a dead end", () => {
-    const html = render({
-      ...base,
-      id: "FITNESS",
-      domain: "fitness",
-      selectable: false,
-      eligibility: "unavailable",
-    });
-
-    expect(html).toContain("has never produced a score");
   });
 });
 

@@ -2295,7 +2295,6 @@
         "sleep": "Sleep",
         "adiposity": "Adiposity",
         "wellbeing": "Wellbeing",
-        "fitness": "Measured fitness",
         "lipids": "Lipids"
       },
       "observed": "Observed: {value}",
@@ -2312,11 +2311,9 @@
       "observedActivity": "{value} steps per day",
       "observedSleep": "{value} minutes per night",
       "observedAdiposity": "Waist-to-height ratio {value}",
-      "observedFitness": "{value} {unit}, measured",
       "referenceActivity": "Benefit plateaus by {high} steps per day",
       "referenceSleep": "At least {low} minutes per night; longer sleep is not penalised",
       "referenceAdiposity": "Waist-to-height ratio below {high}",
-      "referenceFitness": "{low} to {high} {unit}, age and sex reference band",
       "referenceHba1c": "HbA1c {low} to {high}%",
       "referenceDetail": "{label} · {source} · {kind} · {low} to {high}",
       "openBound": "open",
@@ -4914,8 +4911,6 @@
         },
         "threeAxes": "Recording, showing and counting are three separate things. This page changes only the last one. A pillar you switch off here keeps being recorded and keeps appearing everywhere else in HealthLog, it just stops moving the number.",
         "axis": {
-          "recorded": "Being recorded",
-          "shown": "Shown in the app",
           "countsFor": "Count {pillar} toward the score"
         },
         "domain": {
@@ -4923,19 +4918,13 @@
           "activity": "Activity",
           "sleep": "Sleep",
           "adiposity": "Body shape",
-          "wellbeing": "Wellbeing",
-          "fitness": "Measured fitness"
-        },
-        "domainNote": {
-          "cardiometabolic": "Three pillars, one area of health. Each pillar carries the same weight in the score, so this area weighs three times as much as an area with a single pillar."
+          "wellbeing": "Wellbeing"
         },
         "state": {
           "counting": "Counting toward your score",
           "waiting": "Selected, waiting for data",
           "crisis": "Safety guidance is shown instead of a score. Your selection is fine.",
-          "readFailed": "This pillar could not be read on the last run.",
-          "unavailable": "Not available yet",
-          "unavailableDetail": "HealthLog cannot yet tell a measured fitness test apart from a device estimate, so this pillar has never produced a score. It stays listed so you can see it is not counted."
+          "readFailed": "This pillar could not be read on the last run."
         },
         "presets": {
           "label": "Start from",

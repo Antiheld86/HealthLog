@@ -181,7 +181,6 @@ const HEALTH_SCORE = {
     scorePillar("ACTIVITY", "activity", 88),
     scorePillar("SLEEP", "sleep", 41),
     scorePillar("ADIPOSITY", "adiposity", 72),
-    gatedPillar("FITNESS", "fitness", "read_failed"),
     gatedPillar("LIPIDS", "cardiometabolic", "read_failed"),
     gatedPillar("WELLBEING", "wellbeing", "crisis_signposting"),
     gatedPillar("GLYCAEMIA", "cardiometabolic", "not_tracked"),

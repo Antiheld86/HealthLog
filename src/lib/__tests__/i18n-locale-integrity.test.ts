@@ -352,7 +352,6 @@ describe("i18n locale file integrity", () => {
       ["insights.healthScore.pillar.activity", "Aktivität"],
       ["insights.healthScore.pillar.sleep", "Schlaf"],
       ["insights.healthScore.pillar.wellbeing", "Wohlbefinden"],
-      ["insights.healthScore.pillar.fitness", "Gemessene Fitness"],
       ["insights.healthScore.pillar.lipids", "Blutfette"],
     ];
     for (const [key, expectedDe] of expected) {

@@ -38,7 +38,6 @@ const DOMAIN_BY_PILLAR: Record<ScorePillarId, ScorePillarResult["domain"]> = {
   SLEEP: "sleep",
   ADIPOSITY: "adiposity",
   WELLBEING: "wellbeing",
-  FITNESS: "fitness",
   LIPIDS: "cardiometabolic",
 };
 

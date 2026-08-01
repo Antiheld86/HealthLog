@@ -37,10 +37,10 @@ describe("resolveScoreConfigured", () => {
   });
 
   it("reads true once the person's own recipe narrows the composition", () => {
-    const withoutFitness = ALL.filter((id) => id !== "FITNESS");
+    const narrowed = ALL.filter((id) => id !== "LIPIDS");
     expect(
       resolveScoreConfigured({
-        config: { pillars: withoutFitness },
+        config: { pillars: narrowed },
         recordedPillars: RECORDS_EVERYTHING,
       }),
     ).toBe(true);
@@ -87,10 +87,10 @@ describe("resolveScoreConfigured", () => {
   });
 
   it("reads false again when the recipe is undone", () => {
-    const withoutFitness = ALL.filter((id) => id !== "FITNESS");
+    const narrowed = ALL.filter((id) => id !== "LIPIDS");
     expect(
       resolveScoreConfigured({
-        config: { pillars: withoutFitness },
+        config: { pillars: narrowed },
         recordedPillars: RECORDS_EVERYTHING,
       }),
     ).toBe(true);

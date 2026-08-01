@@ -251,7 +251,7 @@ function recipe(changedAt: Date): unknown {
     // rest. The composition this resolves to is the same either way in
     // this fixture, which is exactly the case a composition comparison
     // cannot see.
-    selection: SCORE_PILLAR_IDS.filter((id) => id !== "FITNESS"),
+    selection: SCORE_PILLAR_IDS.filter((id) => id !== "LIPIDS"),
     version: 3,
     changedAt,
   });
@@ -532,7 +532,7 @@ describe("a settings change is never narrated as a health event", () => {
     const next = await computeUserHealthScore(
       scoreInput(
         healthScoreConfigFromSelection({
-          selection: SCORE_PILLAR_IDS.filter((id) => id !== "FITNESS"),
+          selection: SCORE_PILLAR_IDS.filter((id) => id !== "LIPIDS"),
           version: 4,
           changedAt: new Date(NOW.getTime() - DAY_MS),
         }),

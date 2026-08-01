@@ -20,12 +20,12 @@
  * was the `glucose || labs` ternary, and it is the entry that would be
  * lost by assuming one module per pillar.
  *
- * `BLOOD_PRESSURE`, `ACTIVITY`, `ADIPOSITY` and `FITNESS` are absent
- * from the map, which is the same thing the reader has always done:
- * they read core measurement domains that carry no module switch, so no
- * module can withdraw their data. Absent means ungated, not forgotten —
- * the test beside this file pins the four so a silent addition to the
- * map cannot quietly start gating one of them.
+ * `BLOOD_PRESSURE`, `ACTIVITY` and `ADIPOSITY` are absent from the map,
+ * which is the same thing the reader has always done: they read core
+ * measurement domains that carry no module switch, so no module can
+ * withdraw their data. Absent means ungated, not forgotten — the test
+ * beside this file pins the three so a silent addition to the map cannot
+ * quietly start gating one of them.
  */
 import { SCORE_PILLAR_IDS, type ScorePillarId } from "./types";
 

@@ -82,12 +82,6 @@ export function pillarObservedText(
       value: observed.value,
     });
   }
-  if (pillar.id === "FITNESS") {
-    return t("insights.healthScore.observedFitness", {
-      value: observed.value,
-      unit: observed.unit,
-    });
-  }
   return observed.label;
 }
 
@@ -129,18 +123,12 @@ function pillarReferenceText(
           ? t("insights.healthScore.referenceAdiposity", {
               high: reference.high ?? "",
             })
-          : pillar.id === "FITNESS"
-            ? t("insights.healthScore.referenceFitness", {
+          : pillar.id === "GLYCAEMIA"
+            ? t("insights.healthScore.referenceHba1c", {
                 low: reference.low ?? "",
                 high: reference.high ?? "",
-                unit: value.observed.unit,
               })
-            : pillar.id === "GLYCAEMIA"
-              ? t("insights.healthScore.referenceHba1c", {
-                  low: reference.low ?? "",
-                  high: reference.high ?? "",
-                })
-              : reference.label;
+            : reference.label;
   return formatReference(
     reference,
     label,

@@ -505,7 +505,7 @@ describe("<HealthScoreCard> pillars", () => {
 });
 
 describe("<HealthScoreCard> one pillar, one home", () => {
-  /** Four scored, one failed read, one crisis, two plain absences. */
+  /** Four scored, one failed read, one crisis, one plain absence. */
   function mixedReport() {
     return scoredReport({
       pillars: [
@@ -513,10 +513,9 @@ describe("<HealthScoreCard> one pillar, one home", () => {
         scoredAt("GLYCAEMIA", 74),
         scoredAt("ACTIVITY", 61),
         scoredAt("SLEEP", 45),
-        gatedPillar("FITNESS", "read_failed"),
+        gatedPillar("LIPIDS", "read_failed"),
         gatedPillar("WELLBEING", "crisis_signposting"),
         gatedPillar("ADIPOSITY", "missing_height"),
-        gatedPillar("LIPIDS", "not_tracked"),
       ],
     });
   }
@@ -538,14 +537,14 @@ describe("<HealthScoreCard> one pillar, one home", () => {
       "ACTIVITY",
       "SLEEP",
     ]);
-    expect(failedIds).toEqual(["FITNESS"]);
+    expect(failedIds).toEqual(["LIPIDS"]);
     expect(crisisIds).toEqual(["WELLBEING"]);
-    expect(counted).toBe(2);
+    expect(counted).toBe(1);
 
-    // The four homes partition the eight pillars: disjoint, and complete.
+    // The four homes partition the seven pillars: disjoint, and complete.
     const named = [...rowIds, ...failedIds, ...crisisIds];
     expect(new Set(named).size).toBe(named.length);
-    expect(named.length + counted).toBe(8);
+    expect(named.length + counted).toBe(7);
   });
 
   it("never renders one pillar id twice anywhere in the panel", () => {
@@ -556,14 +555,7 @@ describe("<HealthScoreCard> one pillar, one home", () => {
     const ids = pillarAttrs(html);
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids.sort()).toEqual(
-      [
-        "ACTIVITY",
-        "ADIPOSITY",
-        "BLOOD_PRESSURE",
-        "GLYCAEMIA",
-        "LIPIDS",
-        "SLEEP",
-      ].sort(),
+      ["ACTIVITY", "ADIPOSITY", "BLOOD_PRESSURE", "GLYCAEMIA", "SLEEP"].sort(),
     );
   });
 
@@ -581,7 +573,6 @@ describe("<HealthScoreCard> one pillar, one home", () => {
       "Sleep",
       "Adiposity",
       "Wellbeing",
-      "Measured fitness",
       "Lipids",
     ]) {
       const hits = listed.split(label).length - 1;

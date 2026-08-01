@@ -759,7 +759,6 @@ async function buildExtras(
       now,
       profile: {
         dateOfBirth: user.dateOfBirth,
-        gender: user.gender,
         heightCm: user.heightCm,
         timezone: userTz,
         sourcePriorityJson: scoreSourcePriority,

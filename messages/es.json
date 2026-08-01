@@ -2295,7 +2295,6 @@
         "sleep": "Sueño",
         "adiposity": "Adiposidad",
         "wellbeing": "Bienestar",
-        "fitness": "Forma física medida",
         "lipids": "Lípidos"
       },
       "observed": "Observado: {value}",
@@ -2312,11 +2311,9 @@
       "observedActivity": "{value} pasos al día",
       "observedSleep": "{value} minutos por noche",
       "observedAdiposity": "Relación cintura-altura {value}",
-      "observedFitness": "{value} {unit}, medido",
       "referenceActivity": "El beneficio se estabiliza en {high} pasos al día",
       "referenceSleep": "Al menos {low} minutos por noche; el sueño más largo no se penaliza",
       "referenceAdiposity": "Relación cintura-altura inferior a {high}",
-      "referenceFitness": "{low} a {high} {unit}, intervalo de referencia por edad y sexo",
       "referenceHba1c": "HbA1c de {low} a {high} %",
       "referenceDetail": "{label} · {source} · {kind} · {low} a {high}",
       "openBound": "abierto",
@@ -4914,8 +4911,6 @@
         },
         "threeAxes": "Registrar, mostrar y contar son tres cosas distintas. Esta página cambia solo la última. Un pilar que desactives aquí se sigue registrando y se sigue viendo en el resto de HealthLog, simplemente deja de mover el número.",
         "axis": {
-          "recorded": "Se registra",
-          "shown": "Se muestra en la app",
           "countsFor": "Contar {pillar} para la puntuación"
         },
         "domain": {
@@ -4923,19 +4918,13 @@
           "activity": "Actividad",
           "sleep": "Sueño",
           "adiposity": "Forma corporal",
-          "wellbeing": "Bienestar",
-          "fitness": "Condición física medida"
-        },
-        "domainNote": {
-          "cardiometabolic": "Tres pilares, un mismo ámbito de salud. Cada pilar pesa lo mismo en la puntuación, así que este ámbito pesa el triple que uno con un solo pilar."
+          "wellbeing": "Bienestar"
         },
         "state": {
           "counting": "Cuenta para tu puntuación",
           "waiting": "Seleccionado, esperando datos",
           "crisis": "En lugar de una puntuación se muestra orientación de seguridad. Tu selección está bien.",
-          "readFailed": "Este pilar no se pudo leer en el último cálculo.",
-          "unavailable": "Todavía no disponible",
-          "unavailableDetail": "HealthLog aún no distingue una prueba de condición física medida de una estimación del dispositivo, así que este pilar nunca ha dado una puntuación. Sigue en la lista para que veas que no cuenta."
+          "readFailed": "Este pilar no se pudo leer en el último cálculo."
         },
         "presets": {
           "label": "Punto de partida",

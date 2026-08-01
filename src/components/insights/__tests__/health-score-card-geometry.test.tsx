@@ -134,7 +134,6 @@ const ALL_PILLARS = [
   "SLEEP",
   "ADIPOSITY",
   "WELLBEING",
-  "FITNESS",
   "LIPIDS",
 ] as const;
 

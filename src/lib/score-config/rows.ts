@@ -37,21 +37,6 @@ import {
 } from "@/lib/analytics/score/modules";
 
 /**
- * Pillars this build can never score, whatever anyone selects.
- *
- * FITNESS is the only entry and it is not a placeholder for a future
- * list. The schema records VO₂max but cannot distinguish a measured test
- * from a device estimate, so every FITNESS row reaches the scorer with
- * `measured: false` and is refused (`src/lib/analytics/score/reader.ts`,
- * the FITNESS input block). Offering it as a switch would be chrome over
- * a thing that recomputes nothing — the exact defect this release exists
- * to remove — so the row is present, honest, and inert.
- */
-export const UNSCORABLE_PILLARS: ReadonlySet<ScorePillarId> = new Set([
-  "FITNESS",
-]);
-
-/**
  * What the server's last scoring run said about one pillar. Every value
  * comes from a `ScorePillarResult`; nothing here is computed from data.
  */
@@ -64,8 +49,6 @@ export type ScoreRowEligibility =
   | "crisis"
   /** The read broke. Absence and failure are different states. */
   | "read_failed"
-  /** This build cannot score it at all. */
-  | "unavailable"
   /** The server said nothing about it. No claim is made either way. */
   | "unknown";
 
@@ -74,8 +57,6 @@ export interface ScoreConfigRow {
   domain: ScoreDomain;
   /** True when the draft counts this pillar toward the score. */
   counts: boolean;
-  /** False when the switch is inert — today only the unscorable pillars. */
-  selectable: boolean;
   eligibility: ScoreRowEligibility;
 }
 
@@ -118,10 +99,8 @@ function resolveModules(
 }
 
 function eligibilityOf(
-  id: ScorePillarId,
   verdict: ScorePillarVerdict | undefined,
 ): ScoreRowEligibility {
-  if (UNSCORABLE_PILLARS.has(id)) return "unavailable";
   if (!verdict) return "unknown";
   if (verdict.status === "ok") return "counting";
   if (verdict.reason === "crisis_signposting") return "crisis";
@@ -169,8 +148,7 @@ export function buildScoreConfigRows(
       id,
       domain,
       counts: selected.has(id),
-      selectable: !UNSCORABLE_PILLARS.has(id),
-      eligibility: eligibilityOf(id, input.verdicts?.[id]),
+      eligibility: eligibilityOf(input.verdicts?.[id]),
     };
     const existing = byDomain.get(domain);
     if (existing) {
@@ -198,24 +176,4 @@ export function buildScoreConfigRows(
  */
 export function showsWaitingForData(row: ScoreConfigRow): boolean {
   return row.counts && row.eligibility === "waiting";
-}
-
-/**
- * The selection a save should send.
- *
- * Every pillar the person can actually choose, and nothing else. A pillar
- * this build cannot score is left out rather than echoed back: echoing it
- * would let it satisfy the write-time breadth rule (it is a domain of its
- * own AND a physiological pillar) on behalf of a score it can never
- * reach, so the write would be accepted and the score would still
- * disappear at read time. The refusal is only worth having if it judges
- * the recipe that will actually be scored.
- */
-export function selectionToSave(
-  selection: readonly ScorePillarId[],
-): ScorePillarId[] {
-  const selected = new Set(selection);
-  return SCORE_PILLAR_IDS.filter(
-    (id) => selected.has(id) && !UNSCORABLE_PILLARS.has(id),
-  );
 }

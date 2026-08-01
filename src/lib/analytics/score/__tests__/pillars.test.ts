@@ -4,7 +4,6 @@ import { gradeBpScore } from "@/lib/analytics/bp-grade";
 import { computeActivityPillar } from "../activity";
 import { computeAdiposityPillar } from "../adiposity";
 import { computeBloodPressurePillar } from "../blood-pressure";
-import { computeFitnessPillar } from "../fitness";
 import { computeGlycaemiaPillar } from "../glycaemia";
 import { computeLipidsPillar } from "../lipids";
 import { computeSleepPillar } from "../sleep";
@@ -390,43 +389,6 @@ describe("reference-score pillars", () => {
     if (who.status === "ok") expect(who.value.score).toBe(52);
   });
 
-  it("admits fitness only when the source proves a measured test", () => {
-    const unverified = computeFitnessPillar({
-      ...live,
-      asOf: NOW,
-      ageYears: 40,
-      sex: "MALE",
-      rows: [
-        {
-          value: 42,
-          at: new Date("2026-07-20T08:00:00Z"),
-          source: "APPLE_HEALTH",
-          measured: false,
-        },
-      ],
-    });
-    expect(unverified.status).toBe("insufficient");
-
-    const measured = computeFitnessPillar({
-      ...live,
-      asOf: NOW,
-      ageYears: 40,
-      sex: "MALE",
-      rows: [
-        {
-          value: 42,
-          at: new Date("2026-07-20T08:00:00Z"),
-          source: "MANUAL",
-          measured: true,
-        },
-      ],
-    });
-    expect(measured.status).toBe("ok");
-    if (measured.status === "ok") {
-      expect(measured.value.reference.source).toBe("FRIEND (Kaminsky 2015)");
-    }
-  });
-
   it("requires a fresh lipid panel with lab-reported reference bounds", () => {
     const result = computeLipidsPillar({
       ...live,
@@ -493,15 +455,6 @@ describe("reference-score pillars", () => {
         asOf: NOW,
         hba1c: [{ value: 5.3, unit: "%", at: staleAt, source: "MANUAL" }],
         fastingGlucose: [],
-      }).status,
-    ).toBe("insufficient");
-    expect(
-      computeFitnessPillar({
-        ...live,
-        asOf: NOW,
-        ageYears: 40,
-        sex: "MALE",
-        rows: [{ value: 42, at: staleAt, source: "MANUAL", measured: true }],
       }).status,
     ).toBe("insufficient");
     expect(
