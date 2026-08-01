@@ -4796,6 +4796,71 @@ paths:
         "401": *a1
         "422": *a3
         "429": *a4
+  /api/auth/me/health-score-config:
+    get:
+      tags:
+        - Auth
+      summary: Read which pillars count toward the Health Score
+      description: "v1.35.0 — the resolved composition: which pillars count, which the person took out, whether they have
+        chosen at all, and the recipe version. An account that never chose reads every pillar with `hasSelection: false`
+        and `version: 0`, which is exactly what its number was already built from — there is no backfill because there
+        is nothing to back-fill."
+      responses:
+        "200":
+          description: The resolved composition. `updatedAt` is absent until a selection has been stored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthScoreConfigEnvelope"
+        "401": *a1
+        "422": *a3
+        "429": *a4
+    patch:
+      tags:
+        - Auth
+      summary: Choose which pillars count toward the Health Score
+      description: "Replaces the recipe with the given positive selection and bumps the per-user recipe version by one. The
+        write is refused when the selection cannot produce a score: at least one physical measurement, and at least
+        three distinct areas of health. Blood pressure, glucose and cholesterol are three pillars but one area, which is
+        the refusal that surprises people. Accepting the write also evicts the account's score caches, so the next read
+        reflects the new composition rather than the previous hour's number. Optimistic concurrency: send
+        `baseUpdatedAt` from a prior read and the write 409s if the recipe moved since; omit it for the unconditional
+        write. Rate-limited to 60 writes per minute per user."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchHealthScoreConfigRequest"
+      responses:
+        "200":
+          description: The stored composition, echoed back with the incremented `version` and the advanced `updatedAt` token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatchHealthScoreConfigEnvelope"
+        "401": *a1
+        "409":
+          description: Score selection changed since it was loaded (optimistic-concurrency conflict). No write happened. Re-read
+            the resource, re-apply the user's change against the fresh state, and resend with the new token.
+            `meta.errorCode` = `health_score_config_conflict`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422":
+          description: "The write was refused and nothing was stored. `meta.errorCode` distinguishes the cases:
+            `health_score_config.too_narrow` — the selection cannot produce a score (`meta.reason` is
+            `measured_physiological_domain_required` or `three_domains_required`, and the `error` string is the sentence
+            to show the person); `health_score_config.invalid` — the body failed validation, with the per-issue list
+            under `details.issues`; `invalid_base_updated_at` — `baseUpdatedAt` was present but unparseable, `null`
+            included, which is rejected rather than falling back to the unconditional write. A body that is not JSON at
+            all returns the bare message `health-score-config.body.invalid_json` with no errorCode."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429": *a4
   /api/auth/me/modules:
     get:
       tags:
@@ -13842,6 +13907,44 @@ components:
       description: Per-account diabetes opt-in (v1.18.6). `true` selects the ADA glycemic GOAL bands (fasting 80–130,
         postprandial < 180) for glucose targets instead of the general non-diabetic bands. A user-declared preference
         only — never inferred from a value, never a diagnosis.
+    PatchHealthScoreConfigRequest:
+      type: object
+      properties:
+        pillars:
+          maxItems: 8
+          type: array
+          items:
+            $ref: "#/components/schemas/ScorePillarId"
+          description: The pillars that should count — the positive selection, not the exclusions. Replaces the stored recipe
+            whole; it never merges. An id outside the catalogue is a 422 rather than being dropped, because a client has
+            no business sending one.
+        baseUpdatedAt:
+          description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
+            legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
+            row still carrying this exact value — a stale token fails with 409 and changes nothing. A
+            present-but-unparseable value fails with 422 and `meta.errorCode` = `invalid_base_updated_at` — note that
+            this is NOT the unconditional write: sending `null` or a malformed string is rejected rather than treated as
+            an omitted token. Treat as opaque: only ever echo a server-returned value, never parse or synthesise it."
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+      required:
+        - pillars
+      additionalProperties: false
+      description: "The pillars that should count toward the score. Strict: any key other than `pillars` and `baseUpdatedAt`
+        is rejected."
+    ScorePillarId:
+      type: string
+      enum:
+        - BLOOD_PRESSURE
+        - GLYCAEMIA
+        - ACTIVITY
+        - SLEEP
+        - ADIPOSITY
+        - WELLBEING
+        - FITNESS
+        - LIPIDS
+      description: A Health Score pillar id.
     ModulePrefsPatchRequest:
       type: object
       properties:
@@ -23365,6 +23468,89 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/DiabetesFlagOutput"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    HealthScoreConfigEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/HealthScoreConfigResponse"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    HealthScoreConfigResponse:
+      type: object
+      properties:
+        pillars:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScorePillarId"
+          description: Registry-ordered pillars that count toward the score. Data availability narrows this further at score time,
+            and that narrowing is not a choice — so this is the composition, not a promise that every pillar has a
+            number today.
+        excludedPillars:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScorePillarId"
+          description: Registry-ordered pillars the person took out.
+        hasSelection:
+          type: boolean
+          description: "True once a selection has been written. It says the person chose, not that their choice differs from the
+            default: an account that opened the surface and kept every pillar has a selection. False means nobody ever
+            chose, and such an account still inherits a later change of defaults."
+        version:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: Per-user recipe version, monotonic and incremented on every accepted write. 0 while no selection has been
+            written. A score record names the version that produced it, so a comparison can see the recipe move.
+        changedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+          description: When the recipe last changed; null while it never has.
+        updatedAt:
+          description: "Optimistic-concurrency token: the stored row's `updatedAt` at read/write time. Echo it back as
+            `baseUpdatedAt` on the next write. Opaque — only ever echo a server-returned value, never parse or
+            synthesise it."
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+      required:
+        - pillars
+        - excludedPillars
+        - hasSelection
+        - version
+        - changedAt
+      additionalProperties: false
+      description: The resolved Health Score composition. `updatedAt` is ABSENT while the account has never written a
+        selection — there is nothing to guard a write against, so the first save is the unconditional write.
+    PatchHealthScoreConfigEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/HealthScoreConfigResponse"
         error:
           type: "null"
         meta:
