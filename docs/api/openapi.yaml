@@ -2196,6 +2196,24 @@ paths:
         "401": *a1
         "422": *a3
         "429": *a4
+  /api/auth/passkeys:
+    get:
+      tags:
+        - Auth
+      summary: List the caller's registered passkeys
+      description: The passkeys registered for primary sign-in, newest first. Distinct from the second-factor security keys in
+        `GET /api/auth/2fa/status` (`webauthn`) — a passkey replaces the password, a security key is asserted after one.
+        `lastUsedAt` is stamped on every verified assertion and is null only for a passkey that has never signed in.
+      responses:
+        "200":
+          description: The caller's passkeys, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasskeyListEnvelope"
+        "401": *a1
+        "422": *a3
+        "429": *a4
   /api/auth/me/sessions:
     get:
       tags:
@@ -3685,7 +3703,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "422": *a3
+        "422": &a6
+          description: Request validation failed. When the body carried a `baseUpdatedAt` that could not be parsed as an ISO-8601
+            timestamp — including an explicit `null` — `meta.errorCode` = `invalid_base_updated_at` and nothing was
+            written. Omit the key entirely for the unconditional write; do not send `null` for it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "429": *a4
     delete:
       tags:
@@ -4688,7 +4713,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "422": *a3
+        "422": *a6
         "429": *a4
   /api/auth/me/disable-coach:
     get:
@@ -4821,7 +4846,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "422": *a3
+        "422": *a6
         "429": *a4
   /api/auth/me/source-priority:
     get:
@@ -5847,7 +5872,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "422": *a3
+        "422": *a6
         "429": *a4
   /api/auth/me/report-selection:
     get:
@@ -6291,7 +6316,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "422": *a3
+        "422": *a6
         "429": *a4
     delete:
       tags:
@@ -6469,8 +6494,11 @@ paths:
                 baseUpdatedAt:
                   description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
                     legacy unconditional write (older clients are unaffected). When present, the write is guarded on the
-                    stored row still carrying this exact value — a stale token fails with 409 and changes nothing. Treat
-                    as opaque: only ever echo a server-returned value, never parse or synthesise it."
+                    stored row still carrying this exact value — a stale token fails with 409 and changes nothing. A
+                    present-but-unparseable value fails with 422 and `meta.errorCode` = `invalid_base_updated_at` — note
+                    that this is NOT the unconditional write: sending `null` or a malformed string is rejected rather
+                    than treated as an omitted token. Treat as opaque: only ever echo a server-returned value, never
+                    parse or synthesise it."
                   type: string
                   format: date-time
                   pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
@@ -6491,7 +6519,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "422": *a3
+        "422": *a6
         "429": *a4
   /api/anamnesis/facts:
     get:
@@ -6616,7 +6644,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CorrectAnamnesisFactResponse"
         "401": *a1
-        "404": &a6
+        "404": &a7
           description: No current revision with this id exists for the authenticated account.
           content:
             application/json:
@@ -6652,7 +6680,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RemoveAnamnesisFactResponse"
         "401": *a1
-        "404": *a6
+        "404": *a7
         "409":
           description: Anamnesis fact changed since it was loaded (optimistic-concurrency conflict). No write happened. Re-read
             the resource, re-apply the user's change against the fresh state, and resend with the new token.
@@ -7783,9 +7811,11 @@ paths:
         - in: query
           name: type
           schema:
-            description: For VITALS_BASELINE only — the single vital to band (defaults to RESTING_HEART_RATE). Ignored by
-              composites. An unsupported value yields an `insufficient` value rather than a 422 so iOS metric
-              combinations stay forgiving.
+            description: The single measurement type a baseline metric works over. `VITALS_BASELINE` takes one of the eleven vitals
+              (`RESTING_HEART_RATE` through `WEIGHT`; defaults to `RESTING_HEART_RATE`). `SAME_TIME_BASELINE` takes one
+              of the four cumulative day metrics — `ACTIVITY_STEPS`, `ACTIVE_ENERGY_BURNED`, `WALKING_RUNNING_DISTANCE`,
+              `FLIGHTS_CLIMBED`. Ignored by the composite metrics. A type the named metric does not support yields an
+              `insufficient` value rather than a 422, so client metric combinations stay forgiving.
             type: string
             enum:
               - RESTING_HEART_RATE
@@ -7799,9 +7829,15 @@ paths:
               - BLOOD_GLUCOSE
               - PULSE
               - WEIGHT
-          description: For VITALS_BASELINE only — the single vital to band (defaults to RESTING_HEART_RATE). Ignored by
-            composites. An unsupported value yields an `insufficient` value rather than a 422 so iOS metric combinations
-            stay forgiving.
+              - ACTIVITY_STEPS
+              - ACTIVE_ENERGY_BURNED
+              - WALKING_RUNNING_DISTANCE
+              - FLIGHTS_CLIMBED
+          description: The single measurement type a baseline metric works over. `VITALS_BASELINE` takes one of the eleven vitals
+            (`RESTING_HEART_RATE` through `WEIGHT`; defaults to `RESTING_HEART_RATE`). `SAME_TIME_BASELINE` takes one of
+            the four cumulative day metrics — `ACTIVITY_STEPS`, `ACTIVE_ENERGY_BURNED`, `WALKING_RUNNING_DISTANCE`,
+            `FLIGHTS_CLIMBED`. Ignored by the composite metrics. A type the named metric does not support yields an
+            `insufficient` value rather than a 422, so client metric combinations stay forgiving.
       responses:
         "200":
           description: The flat derived-metric value (ok or insufficient).
@@ -7830,12 +7866,16 @@ paths:
             minLength: 1
             maxLength: 1024
             description: Comma-separated derived-metric tokens. Each is a `<DERIVED_METRIC_ID>` or
-              `<DERIVED_METRIC_ID>:<MeasurementType>` (the colon sub-targets a VITALS_BASELINE vital). An unknown id
-              422s; a `type` outside the MeasurementType enum 422s; at most 24 tokens; duplicates collapse.
+              `<DERIVED_METRIC_ID>:<MeasurementType>` (the colon sub-targets the single measurement type a baseline
+              metric works over — a vital for `VITALS_BASELINE`, a cumulative day metric for `SAME_TIME_BASELINE`; see
+              the `type` parameter on `GET /api/insights/derived`). An unknown id 422s; a `type` outside the
+              MeasurementType enum 422s; at most 24 tokens; duplicates collapse.
           required: true
           description: Comma-separated derived-metric tokens. Each is a `<DERIVED_METRIC_ID>` or
-            `<DERIVED_METRIC_ID>:<MeasurementType>` (the colon sub-targets a VITALS_BASELINE vital). An unknown id 422s;
-            a `type` outside the MeasurementType enum 422s; at most 24 tokens; duplicates collapse.
+            `<DERIVED_METRIC_ID>:<MeasurementType>` (the colon sub-targets the single measurement type a baseline metric
+            works over — a vital for `VITALS_BASELINE`, a cumulative day metric for `SAME_TIME_BASELINE`; see the `type`
+            parameter on `GET /api/insights/derived`). An unknown id 422s; a `type` outside the MeasurementType enum
+            422s; at most 24 tokens; duplicates collapse.
       responses:
         "200":
           description: The map of derived-metric values, keyed by token.
@@ -8222,7 +8262,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MoodCustomTagPatchEnvelope"
         "401": *a1
-        "404": &a7
+        "404": &a8
           description: Not found / not owned by the caller.
           content:
             application/json:
@@ -8257,7 +8297,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MoodCustomTagDeleteEnvelope"
         "401": *a1
-        "404": *a7
+        "404": *a8
         "422": *a3
         "429": *a4
   /api/mood/tags/{key}/hidden:
@@ -8298,7 +8338,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "401": *a1
-        "404": *a7
+        "404": *a8
         "422": *a3
         "429": *a4
   /api/mood/tags/groups:
@@ -8373,7 +8413,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MoodTagGroupPatchEnvelope"
         "401": *a1
-        "404": *a7
+        "404": *a8
         "422": *a3
         "429": *a4
     delete:
@@ -8404,7 +8444,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MoodTagGroupDeleteEnvelope"
         "401": *a1
-        "404": *a7
+        "404": *a8
         "422": *a3
         "429": *a4
   /api/mood/tags/layout:
@@ -8452,7 +8492,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "422": *a3
+        "422": *a6
         "429": *a4
   /api/settings/reminder-thresholds:
     get:
@@ -8648,7 +8688,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MeasurementReminderEnvelope"
         "401": *a1
-        "404": &a8
+        "404": &a9
           description: Measurement reminder not found / not owned.
           content:
             application/json:
@@ -8682,7 +8722,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MeasurementReminderPatchEnvelope"
         "401": *a1
-        "404": *a8
+        "404": *a9
         "422": *a3
         "429": *a4
     delete:
@@ -8704,7 +8744,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MeasurementReminderDeleteEnvelope"
         "401": *a1
-        "404": *a8
+        "404": *a9
         "422": *a3
         "429": *a4
   /api/measurement-reminders/{id}/satisfy:
@@ -8728,7 +8768,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MeasurementReminderSatisfyEnvelope"
         "401": *a1
-        "404": *a8
+        "404": *a9
         "422": *a3
         "429": *a4
   /api/measurement-reminders/{id}/complete:
@@ -8755,7 +8795,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MeasurementReminderCompleteEnvelope"
         "401": *a1
-        "404": *a8
+        "404": *a9
         "422": *a3
         "429": *a4
   /api/labs:
@@ -8920,7 +8960,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GetLabResultResponse"
         "401": *a1
-        "404": &a9
+        "404": &a10
           description: Lab result not found (or owned by another user).
           content:
             application/json:
@@ -8998,7 +9038,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateLabResultResponse"
         "401": *a1
-        "404": *a9
+        "404": *a10
         "422": *a3
         "429": *a4
     delete:
@@ -9020,7 +9060,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteLabResultResponse"
         "401": *a1
-        "404": *a9
+        "404": *a10
         "422": *a3
         "429": *a4
   /api/labs/restore:
@@ -9237,7 +9277,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateBiomarkerResponse"
         "401": *a1
-        "409": &a11
+        "409": &a12
           description: A biomarker with this name already exists for the caller.
           content:
             application/json:
@@ -9265,7 +9305,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GetBiomarkerResponse"
         "401": *a1
-        "404": &a10
+        "404": &a11
           description: Biomarker not found (or owned by another user).
           content:
             application/json:
@@ -9332,8 +9372,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateBiomarkerResponse"
         "401": *a1
-        "404": *a10
-        "409": *a11
+        "404": *a11
+        "409": *a12
         "422": *a3
         "429": *a4
     delete:
@@ -9356,7 +9396,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteBiomarkerResponse"
         "401": *a1
-        "404": *a10
+        "404": *a11
         "422": *a3
         "429": *a4
   /api/illness/episodes:
@@ -9481,7 +9521,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GetIllnessEpisodeEnvelope"
         "401": *a1
-        "404": &a12
+        "404": &a13
           description: Illness episode not found (or owned by another user).
           content:
             application/json:
@@ -9559,7 +9599,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateIllnessEpisodeEnvelope"
         "401": *a1
-        "404": *a12
+        "404": *a13
         "422": *a3
         "429": *a4
     delete:
@@ -9582,7 +9622,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteIllnessEpisodeEnvelope"
         "401": *a1
-        "404": *a12
+        "404": *a13
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/restore:
@@ -9608,7 +9648,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RestoreIllnessEpisodeEnvelope"
         "401": *a1
-        "404": *a12
+        "404": *a13
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/resolve:
@@ -9644,7 +9684,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ResolveIllnessEpisodeEnvelope"
         "401": *a1
-        "404": *a12
+        "404": *a13
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/day-logs:
@@ -9694,7 +9734,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GetIllnessDayLogEnvelope"
         "401": *a1
-        "404": *a12
+        "404": *a13
         "422": *a3
         "429": *a4
     post:
@@ -9773,7 +9813,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpsertIllnessDayLogCreatedEnvelope"
         "401": *a1
-        "404": *a12
+        "404": *a13
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/correlation:
@@ -9800,7 +9840,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/IllnessCorrelationEnvelope"
         "401": *a1
-        "404": *a12
+        "404": *a13
         "422": *a3
         "429": *a4
   /api/illness/insights:
@@ -10068,7 +10108,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GetAllergyEnvelope"
         "401": *a1
-        "404": &a13
+        "404": &a14
           description: Allergy not found (or owned by another user).
           content:
             application/json:
@@ -10150,7 +10190,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateAllergyEnvelope"
         "401": *a1
-        "404": *a13
+        "404": *a14
         "422": *a3
         "429": *a4
     delete:
@@ -10173,7 +10213,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteAllergyEnvelope"
         "401": *a1
-        "404": *a13
+        "404": *a14
         "422": *a3
         "429": *a4
   /api/family-history:
@@ -10278,7 +10318,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GetFamilyHistoryEnvelope"
         "401": *a1
-        "404": &a14
+        "404": &a15
           description: Family history entry not found (or owned by another user).
           content:
             application/json:
@@ -10346,7 +10386,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateFamilyHistoryEnvelope"
         "401": *a1
-        "404": *a14
+        "404": *a15
         "422": *a3
         "429": *a4
     delete:
@@ -10369,7 +10409,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteFamilyHistoryEnvelope"
         "401": *a1
-        "404": *a14
+        "404": *a15
         "422": *a3
         "429": *a4
   /api/documents/inbound:
@@ -11478,7 +11518,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateCustomMetricResponse"
         "401": *a1
-        "409": &a16
+        "409": &a17
           description: A custom metric with this name already exists for the caller.
           content:
             application/json:
@@ -11506,7 +11546,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GetCustomMetricResponse"
         "401": *a1
-        "404": &a15
+        "404": &a16
           description: Custom metric not found (or owned by another user).
           content:
             application/json:
@@ -11570,8 +11610,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateCustomMetricResponse"
         "401": *a1
-        "404": *a15
-        "409": *a16
+        "404": *a16
+        "409": *a17
         "422": *a3
         "429": *a4
     delete:
@@ -11594,7 +11634,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteCustomMetricResponse"
         "401": *a1
-        "404": *a15
+        "404": *a16
         "422": *a3
         "429": *a4
   /api/custom-metrics/{id}/entries:
@@ -11637,7 +11677,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ListCustomMetricEntriesEnvelope"
         "401": *a1
-        "404": *a15
+        "404": *a16
         "422": *a3
         "429": *a4
     post:
@@ -11681,7 +11721,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateCustomMetricEntryResponse"
         "401": *a1
-        "404": *a15
+        "404": *a16
         "422": *a3
         "429": *a4
   /api/custom-metrics/{id}/entries/{entryId}:
@@ -11731,7 +11771,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateCustomMetricEntryResponse"
         "401": *a1
-        "404": &a17
+        "404": &a18
           description: Custom metric entry not found (or owned by another user).
           content:
             application/json:
@@ -11763,7 +11803,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteCustomMetricEntryResponse"
         "401": *a1
-        "404": *a17
+        "404": *a18
         "422": *a3
         "429": *a4
   /api/onboarding/disclaimer:
@@ -11899,7 +11939,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientBatchEnvelope"
         "401": *a1
-        "403": &a18
+        "403": &a19
           description: The opt-in `nutrients` module is off for this account (errorCode `module.disabled`). Stop syncing and do
             not retry; offer the enable-in-settings hint. Only run the HealthKit read-authorization flow while the
             module is on.
@@ -11933,7 +11973,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientOverviewEnvelope"
         "401": *a1
-        "403": *a18
+        "403": *a19
         "422": *a3
         "429": *a4
   /api/nutrients/daily:
@@ -11969,7 +12009,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientDailySeriesEnvelope"
         "401": *a1
-        "403": *a18
+        "403": *a19
         "422": *a3
         "429": *a4
   /api/nutrients/water:
@@ -11996,7 +12036,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientWaterWriteEnvelope"
         "401": *a1
-        "403": *a18
+        "403": *a19
         "422": *a3
         "429": *a4
   /api/integrations/healthkit:
@@ -12271,7 +12311,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "422": *a3
+        "422": *a6
         "429": *a4
     delete:
       tags:
@@ -13297,8 +13337,10 @@ components:
         baseUpdatedAt:
           description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
             legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
-            row still carrying this exact value — a stale token fails with 409 and changes nothing. Treat as opaque:
-            only ever echo a server-returned value, never parse or synthesise it."
+            row still carrying this exact value — a stale token fails with 409 and changes nothing. A
+            present-but-unparseable value fails with 422 and `meta.errorCode` = `invalid_base_updated_at` — note that
+            this is NOT the unconditional write: sending `null` or a malformed string is rejected rather than treated as
+            an omitted token. Treat as opaque: only ever echo a server-returned value, never parse or synthesise it."
           type: string
           format: date-time
           pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
@@ -13772,8 +13814,10 @@ components:
         baseUpdatedAt:
           description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
             legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
-            row still carrying this exact value — a stale token fails with 409 and changes nothing. Treat as opaque:
-            only ever echo a server-returned value, never parse or synthesise it."
+            row still carrying this exact value — a stale token fails with 409 and changes nothing. A
+            present-but-unparseable value fails with 422 and `meta.errorCode` = `invalid_base_updated_at` — note that
+            this is NOT the unconditional write: sending `null` or a malformed string is rejected rather than treated as
+            an omitted token. Treat as opaque: only ever echo a server-returned value, never parse or synthesise it."
           type: string
           format: date-time
           pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
@@ -13836,8 +13880,10 @@ components:
         baseUpdatedAt:
           description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
             legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
-            row still carrying this exact value — a stale token fails with 409 and changes nothing. Treat as opaque:
-            only ever echo a server-returned value, never parse or synthesise it."
+            row still carrying this exact value — a stale token fails with 409 and changes nothing. A
+            present-but-unparseable value fails with 422 and `meta.errorCode` = `invalid_base_updated_at` — note that
+            this is NOT the unconditional write: sending `null` or a malformed string is rejected rather than treated as
+            an omitted token. Treat as opaque: only ever echo a server-returned value, never parse or synthesise it."
           type: string
           format: date-time
           pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
@@ -14000,8 +14046,10 @@ components:
         baseUpdatedAt:
           description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
             legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
-            row still carrying this exact value — a stale token fails with 409 and changes nothing. Treat as opaque:
-            only ever echo a server-returned value, never parse or synthesise it."
+            row still carrying this exact value — a stale token fails with 409 and changes nothing. A
+            present-but-unparseable value fails with 422 and `meta.errorCode` = `invalid_base_updated_at` — note that
+            this is NOT the unconditional write: sending `null` or a malformed string is rejected rather than treated as
+            an omitted token. Treat as opaque: only ever echo a server-returned value, never parse or synthesise it."
           type: string
           format: date-time
           pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
@@ -14207,8 +14255,10 @@ components:
         baseUpdatedAt:
           description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
             legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
-            row still carrying this exact value — a stale token fails with 409 and changes nothing. Treat as opaque:
-            only ever echo a server-returned value, never parse or synthesise it."
+            row still carrying this exact value — a stale token fails with 409 and changes nothing. A
+            present-but-unparseable value fails with 422 and `meta.errorCode` = `invalid_base_updated_at` — note that
+            this is NOT the unconditional write: sending `null` or a malformed string is rejected rather than treated as
+            an omitted token. Treat as opaque: only ever echo a server-returned value, never parse or synthesise it."
           type: string
           format: date-time
           pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
@@ -14445,8 +14495,10 @@ components:
         baseUpdatedAt:
           description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
             legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
-            row still carrying this exact value — a stale token fails with 409 and changes nothing. Treat as opaque:
-            only ever echo a server-returned value, never parse or synthesise it."
+            row still carrying this exact value — a stale token fails with 409 and changes nothing. A
+            present-but-unparseable value fails with 422 and `meta.errorCode` = `invalid_base_updated_at` — note that
+            this is NOT the unconditional write: sending `null` or a malformed string is rejected rather than treated as
+            an omitted token. Treat as opaque: only ever echo a server-returned value, never parse or synthesise it."
           type: string
           format: date-time
           pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
@@ -15027,8 +15079,10 @@ components:
         baseUpdatedAt:
           description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
             legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
-            row still carrying this exact value — a stale token fails with 409 and changes nothing. Treat as opaque:
-            only ever echo a server-returned value, never parse or synthesise it."
+            row still carrying this exact value — a stale token fails with 409 and changes nothing. A
+            present-but-unparseable value fails with 422 and `meta.errorCode` = `invalid_base_updated_at` — note that
+            this is NOT the unconditional write: sending `null` or a malformed string is rejected rather than treated as
+            an omitted token. Treat as opaque: only ever echo a server-returned value, never parse or synthesise it."
           type: string
           format: date-time
           pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
@@ -17343,6 +17397,65 @@ components:
       required:
         - data
         - error
+      additionalProperties: false
+    PasskeyListEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/PasskeyListResponse"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    PasskeyListResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/PasskeyInfo"
+    PasskeyInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Row id; the handle for DELETE.
+        name:
+          type: string
+          description: User-supplied label, defaulting to “Passkey”.
+        credentialDeviceType:
+          type: string
+          description: "Authenticator device type as reported at registration: `singleDevice` for a credential bound to one
+            authenticator, `multiDevice` for a syncable one."
+        credentialBackedUp:
+          type: boolean
+          description: Whether the authenticator reported the credential as backed up (synced to the platform keychain) at
+            registration time. Not re-read afterwards.
+        createdAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: Registered at.
+        lastUsedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+          description: When this passkey last completed a verified assertion; null when it has never been used to sign in. Stamped
+            on every successful login, so a client can render a real 'last used' rather than assuming never.
+      required:
+        - id
+        - name
+        - credentialDeviceType
+        - credentialBackedUp
+        - createdAt
+        - lastUsedAt
       additionalProperties: false
     SessionListEnvelope:
       type: object

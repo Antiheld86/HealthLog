@@ -47,6 +47,7 @@ import {
   stdResponses,
   baseUpdatedAtField,
   conflictResponse409,
+  invalidBaseTokenResponse,
 } from "./shared";
 
 // ── Coach cadence suggestions (v1.18.1) ──────────────────────────────
@@ -1011,8 +1012,10 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         ...conflictResponse409("Insights layout", "insights_layout_conflict"),
-        // 422 (multi-issue validation envelope) comes from stdResponses.
+        // 422 (multi-issue validation envelope) comes from stdResponses;
+        // the base-token variant of it narrows that description afterwards.
         ...stdResponses,
+        ...invalidBaseTokenResponse,
       },
     },
     delete: {
@@ -1233,6 +1236,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         ...conflictResponse409("Self-context", "about_me_conflict"),
         ...stdResponses,
+        ...invalidBaseTokenResponse,
       },
     },
   },

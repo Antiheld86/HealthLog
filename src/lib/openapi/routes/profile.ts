@@ -20,6 +20,7 @@ import {
   baseUpdatedAtField,
   updatedAtTokenField,
   conflictResponse409,
+  invalidBaseTokenResponse,
 } from "./shared";
 
 // v1.18.0 — module enable/disable. The PATCH request is the REAL runtime
@@ -499,6 +500,7 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         ...conflictResponse409("Coach preferences", "coach_prefs_conflict"),
         ...stdResponses,
+        ...invalidBaseTokenResponse,
       },
     },
   },
@@ -634,6 +636,7 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         ...conflictResponse409("Module preferences", "modules_conflict"),
         ...stdResponses,
+        ...invalidBaseTokenResponse,
       },
     },
   },
@@ -875,6 +878,7 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
           "notification_prefs_conflict",
         ),
         ...stdResponses,
+        ...invalidBaseTokenResponse,
       },
     },
   },
