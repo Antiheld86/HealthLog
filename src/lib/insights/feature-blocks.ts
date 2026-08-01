@@ -11,6 +11,7 @@
  */
 import { prisma } from "@/lib/db";
 import { classifyReferenceRange } from "@/lib/labs/reference-range";
+import { calendarDaysUntil } from "@/lib/measurement-reminders/due-day";
 import { resolveLabFields } from "@/lib/labs/serialise";
 import { readRollupBuckets } from "@/lib/rollups/measurement-rollups";
 import { deriveBucketedTypes } from "@/lib/signals/adapters/correlation";
@@ -251,10 +252,23 @@ export async function readLabsBriefingBlock(
  * v1.22 — preventive-care (Vorsorge) due + overdue read-side. Reads the
  * user's enabled, live reminders and buckets by the server-authoritative
  * `nextDueAt`. Returns `undefined` when nothing is due or overdue.
+ *
+ * `daysUntil` / `daysOverdue` are CALENDAR days in `timeZone`, counted by the
+ * same `calendarDaysUntil` the checkup screens phrase their due line with.
+ * They used to be an hour gap divided by 24, which is a different question:
+ * a checkup at 09:00 read that evening came out "overdue by 0 days", and one
+ * due tomorrow morning read late tonight came out due "in 0 days" — today's.
+ * The model narrates these numbers, so it repeated whichever the arithmetic
+ * had drifted to while the screen next to it said something else.
+ *
+ * `timeZone` is the user's profile zone; the horizon that bounds the read
+ * stays an hours-based cutoff on purpose — it is a query bound, not a
+ * statement to anyone about which day something falls on.
  */
 export async function readPreventiveCareBlock(
   userId: string,
   now: number,
+  timeZone: string,
 ): Promise<AggregatedFeatures["preventiveCare"] | undefined> {
   const horizon = new Date(now + PREVENTIVE_DUE_HORIZON_DAYS * MS_PER_DAY);
   const rows = await prisma.measurementReminder.findMany({
@@ -273,15 +287,18 @@ export async function readPreventiveCareBlock(
   const overdue: NonNullable<AggregatedFeatures["preventiveCare"]>["overdue"] =
     [];
   const due: NonNullable<AggregatedFeatures["preventiveCare"]>["due"] = [];
+  const nowDate = new Date(now);
   for (const r of rows) {
     if (!r.nextDueAt) continue;
     const label = sanitizeLabel(r.label);
     if (!label) continue;
-    const diffMs = r.nextDueAt.getTime() - now;
-    if (diffMs < 0) {
-      overdue.push({ label, daysOverdue: Math.round(-diffMs / MS_PER_DAY) });
+    const days = calendarDaysUntil(r.nextDueAt, nowDate, timeZone);
+    // Today's checkup is due, not overdue — the hour it was booked for may
+    // have passed, but the day it belongs to has not.
+    if (days < 0) {
+      overdue.push({ label, daysOverdue: -days });
     } else {
-      due.push({ label, daysUntil: Math.round(diffMs / MS_PER_DAY) });
+      due.push({ label, daysUntil: days });
     }
   }
   if (overdue.length === 0 && due.length === 0) return undefined;
