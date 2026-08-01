@@ -361,6 +361,9 @@ describe("the resolved configured flag, on every wire that carries it", () => {
 
     expectEveryWire(await readWires(), false);
 
+    // Narrowed: one pillar taken out. If both halves of this case send the
+    // same list, the round trip proves nothing — it would read false at both
+    // ends and the flip would never be exercised.
     await saveSelection([
       "BLOOD_PRESSURE",
       "GLYCAEMIA",
@@ -368,7 +371,6 @@ describe("the resolved configured flag, on every wire that carries it", () => {
       "SLEEP",
       "ADIPOSITY",
       "WELLBEING",
-      "LIPIDS",
     ]);
     expectEveryWire(await readWires(), true);
 
