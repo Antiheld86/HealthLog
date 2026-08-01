@@ -133,44 +133,35 @@ test.describe("Settings → Health Score", () => {
     await expect(cardio.locator('[data-slot="score-pillar-row"]')).toHaveCount(
       3,
     );
-    await expect(
-      cardio.locator('[data-slot="score-config-group-note"]'),
-    ).toBeVisible();
 
-    // Every visible row names recording and showing beside its switch, and
-    // the card says in words that this page leaves those two alone.
+    // The rows say nothing about recording or showing — the card says it
+    // once, above them, and the modules screen owns those two questions.
     const rows = page.locator('[data-slot="score-pillar-row"]');
-    const rowCount = await rows.count();
-    expect(rowCount).toBeGreaterThan(0);
-    await expect(
-      page.locator('[data-slot="score-pillar-axis-recorded"]'),
-    ).toHaveCount(rowCount);
-    await expect(
-      page.locator('[data-slot="score-pillar-axis-shown"]'),
-    ).toHaveCount(rowCount);
+    expect(await rows.count()).toBeGreaterThan(0);
+    await expect(page.locator('[data-slot="score-pillar-axes"]')).toHaveCount(
+      0,
+    );
     await expect(
       page.locator('[data-slot="score-config-three-axes"]'),
     ).toContainText("keeps being recorded");
   });
 
-  test("shows the pillar it cannot score as present, disabled and honest", async ({
-    page,
-  }) => {
+  test("offers a switch on every pillar it lists", async ({ page }) => {
     await page.goto("/settings/score", { waitUntil: "domcontentloaded" });
-    const fitness = page.locator(
-      '[data-slot="score-pillar-row"][data-pillar="FITNESS"]',
-    );
-    await settleBeforeMeasure(page, fitness);
+    const rows = page.locator('[data-slot="score-pillar-row"]');
+    await settleBeforeMeasure(page, rows.first());
 
-    await expect(fitness).toHaveAttribute("data-selectable", "false");
-    await expect(fitness).toHaveAttribute("data-eligibility", "unavailable");
-    // No switch at all, rather than one that no-ops behind `disabled`.
+    // Nothing on this page is a choice the person cannot make. The pillar
+    // that could never score was removed from the catalogue rather than
+    // listed as an inert row.
+    const rowCount = await rows.count();
+    expect(rowCount).toBeGreaterThan(0);
+    await expect(page.locator('[data-slot="score-pillar-switch"]')).toHaveCount(
+      rowCount,
+    );
     await expect(
-      fitness.locator('[data-slot="score-pillar-switch"]'),
+      page.locator('[data-slot="score-pillar-row"][data-pillar="FITNESS"]'),
     ).toHaveCount(0);
-    await expect(
-      fitness.locator('[data-slot="score-pillar-unavailable"]'),
-    ).toHaveAttribute("aria-disabled", "true");
   });
 
   test("tells waiting for data apart from safety guidance and a failed read", async ({
@@ -247,9 +238,7 @@ test.describe("Settings → Health Score", () => {
     // server refuses.
     await page.locator('[data-slot="score-config-preset-all"]').click();
     const keep = new Set(["ACTIVITY", "WELLBEING"]);
-    const rows = page.locator(
-      '[data-slot="score-pillar-row"][data-selectable="true"]',
-    );
+    const rows = page.locator('[data-slot="score-pillar-row"]');
     for (let index = 0; index < (await rows.count()); index += 1) {
       const row = rows.nth(index);
       const pillar = await row.getAttribute("data-pillar");

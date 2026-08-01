@@ -19,7 +19,6 @@ export async function computeHealthScoreDerived(
     where: { id: userId },
     select: {
       dateOfBirth: true,
-      gender: true,
       heightCm: true,
       timezone: true,
       thresholdsJson: true,
@@ -56,7 +55,6 @@ export async function computeHealthScoreDerived(
     now,
     profile: {
       dateOfBirth: user.dateOfBirth,
-      gender: user.gender,
       heightCm: user.heightCm,
       timezone,
       sourcePriorityJson,

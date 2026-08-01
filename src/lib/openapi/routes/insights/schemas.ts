@@ -1104,7 +1104,6 @@ export const dashboardSnapshotResponse = z
               "SLEEP",
               "ADIPOSITY",
               "WELLBEING",
-              "FITNESS",
               "LIPIDS",
             ]),
           )
@@ -1136,7 +1135,6 @@ export const dashboardSnapshotResponse = z
             "SLEEP",
             "ADIPOSITY",
             "WELLBEING",
-            "FITNESS",
             "LIPIDS",
           ])
           .nullable()

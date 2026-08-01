@@ -14,13 +14,18 @@
  *   - **One concept, one card.** The rows, the starting points and the
  *     save all sit in the same card. A top half and a bottom half of the
  *     same decision is the split the settings IA rules forbid.
- *   - **Grouped by domain, and the grouping is visible.** Blood pressure,
- *     glycaemia and lipids sit under one heading with a sentence saying
- *     they are one area of health carrying three pillars. Equal weight per
- *     pillar is not equal weight per area, and until this page nothing in
- *     the app said so.
- *   - **Only the score toggle is writable.** Recording and showing are
- *     read-outs with a line saying this page leaves them alone.
+ *   - **The settings card anatomy, unmodified.** Header through
+ *     `SettingsCardHeader`, body at `mt-4 pl-7` so every line starts on
+ *     the title's reading edge, save bottom-right in its own row. The
+ *     v1.35.0 cut hung the save in the header's status slot and let the
+ *     body start at the card edge, which read as a different kind of card
+ *     from the ones above and below it.
+ *   - **Grouped by domain, and the grouping is spacing.** Blood pressure,
+ *     glycaemia and lipids sit under one heading; the gap between groups
+ *     does the separating. Rules between every row made a short list look
+ *     like a table of unrelated things.
+ *   - **Only the score toggle is writable.** Recording and showing belong
+ *     to the modules screen and are not restated per row.
  *   - **A pillar whose module is off is not shown.** Turning a module off
  *     closes the data path deliberately; a pillar behind a closed path is
  *     not waiting for anything, and saying it waits nags a person in the
@@ -66,16 +71,13 @@ import {
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { useAnalyticsQuery } from "@/lib/queries/use-analytics-query";
-import {
-  SCORE_DOMAIN_LABEL_KEYS,
-  SCORE_DOMAIN_NOTE_KEYS,
-} from "@/lib/score-config/labels";
+import { SCORE_DOMAIN_LABEL_KEYS } from "@/lib/score-config/labels";
 import {
   buildScoreConfigRows,
-  selectionToSave,
   type ScorePillarVerdict,
 } from "@/lib/score-config/rows";
 import {
+  orderedUniquePillars,
   SCORE_PILLAR_IDS,
   type ScorePillarId,
 } from "@/lib/analytics/score/types";
@@ -191,7 +193,13 @@ export function ScoreSection() {
       apiPatch<HealthScoreConfigPayload>(
         "/api/auth/me/health-score-config",
         withBaseToken(
-          { pillars: selectionToSave(selection) },
+          // Registry order, no duplicates. What the person sees is what
+          // the server stores: every listed pillar is a real choice, so
+          // nothing is filtered out of the selection on the way to the
+          // write. A selection that came back different from the one that
+          // was sent is what left the page permanently claiming unsaved
+          // changes in v1.35.0.
+          { pillars: orderedUniquePillars(selection) },
           readUpdatedAtToken(queryClient, queryKeys.healthScoreConfig()),
         ),
       ),
@@ -295,157 +303,167 @@ export function ScoreSection() {
           as="section"
           data-slot="score-config-card"
           aria-labelledby="score-config-title"
-          className="space-y-4"
         >
           <SettingsCardHeader
             icon={Gauge}
             titleId="score-config-title"
             title={t("settings.sections.score.card.title")}
             description={t("settings.sections.score.card.description")}
-            status={
-              <Button
-                size="sm"
-                type="button"
-                onClick={() => saveMutation.mutate(draft)}
-                disabled={busy || !dirty || configQuery.isLoading}
-                data-slot="score-config-save"
-                className="min-h-11 sm:min-h-9"
-              >
-                {busy ? (
-                  <Loader2
-                    aria-hidden="true"
-                    className="size-3.5 animate-spin motion-reduce:animate-none"
-                  />
-                ) : null}
-                {t("settings.sections.score.save")}
-              </Button>
-            }
           />
 
-          {/* The sentence the whole feature exists for. Foreground, in the
-              body, because it is content and not a meta description. */}
-          <p data-slot="score-config-three-axes" className="text-sm">
-            {t("settings.sections.score.threeAxes")}
-          </p>
+          {/* The body starts on the title's reading edge — icon box plus
+              gap is 28 px, which is the `pl-7` every other settings card
+              uses. */}
+          <div className="mt-4 space-y-6 pl-7">
+            {/* The sentence the whole feature exists for. Foreground, in
+                the body, because it is content and not a meta
+                description. */}
+            <p data-slot="score-config-three-axes" className="text-sm">
+              {t("settings.sections.score.threeAxes")}
+            </p>
 
-          {/* The starting points. Both name data; neither names a person.
-              A template that supplies a rationale for dropping a pillar is
-              the one shape the evidence rules out, so there is none. */}
-          <div
-            data-slot="score-config-presets"
-            className="flex flex-wrap items-center gap-2"
-          >
-            <span className="text-muted-foreground text-xs">
-              {t("settings.sections.score.presets.label")}
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              data-slot="score-config-preset-all"
-              className="min-h-11 sm:min-h-9"
-              onClick={() => {
-                setRefusal(null);
-                setDraft([...SCORE_PILLAR_IDS]);
-              }}
+            {/* The starting points. Both name data; neither names a
+                person. A template that supplies a rationale for dropping a
+                pillar is the one shape the evidence rules out, so there is
+                none. */}
+            <div
+              data-slot="score-config-presets"
+              className="flex flex-wrap items-center gap-2"
             >
-              {t("settings.sections.score.presets.all")}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={busy || !dirty}
-              data-slot="score-config-preset-current"
-              className="min-h-11 sm:min-h-9"
-              onClick={() => {
-                setRefusal(null);
-                setDraft([...serverSelection]);
-              }}
-            >
-              {t("settings.sections.score.presets.current")}
-            </Button>
+              <span className="text-muted-foreground text-xs">
+                {t("settings.sections.score.presets.label")}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                data-slot="score-config-preset-all"
+                className="min-h-11 sm:min-h-9"
+                onClick={() => {
+                  setRefusal(null);
+                  setDraft([...SCORE_PILLAR_IDS]);
+                }}
+              >
+                {t("settings.sections.score.presets.all")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy || !dirty}
+                data-slot="score-config-preset-current"
+                className="min-h-11 sm:min-h-9"
+                onClick={() => {
+                  setRefusal(null);
+                  setDraft([...serverSelection]);
+                }}
+              >
+                {t("settings.sections.score.presets.current")}
+              </Button>
+            </div>
+
+            {refusal ? (
+              <p
+                data-slot="score-config-refusal"
+                role="alert"
+                className="text-destructive text-sm"
+              >
+                {t(refusal)}
+              </p>
+            ) : null}
+
+            {analyticsQuery.isError ? (
+              <QueryErrorRow
+                slot="score-config-eligibility-error"
+                message={t("settings.sections.score.eligibilityFailed")}
+                onRetry={() => void analyticsQuery.refetch()}
+              />
+            ) : null}
+
+            {configQuery.isLoading ? (
+              <div data-slot="score-config-loading" className="space-y-3">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-11 w-full" />
+                <Skeleton className="h-11 w-full" />
+                <Skeleton className="h-11 w-full" />
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {groups.map((group) => (
+                  <div
+                    key={group.domain}
+                    data-slot="score-config-group"
+                    data-domain={group.domain}
+                    className="space-y-2"
+                  >
+                    {/* Names an area of health, so it sits in the content
+                        tier. The muted section-label treatment it shipped
+                        with read as switched-off beside the rows it
+                        heads. */}
+                    <h3
+                      data-slot="score-config-group-heading"
+                      className="text-foreground text-xs font-medium tracking-wide uppercase"
+                    >
+                      {t(SCORE_DOMAIN_LABEL_KEYS[group.domain])}
+                    </h3>
+                    {/* No rules between the rows: the gap between groups
+                        is the grouping. */}
+                    <div className="space-y-3">
+                      {group.rows.map((row) => (
+                        <ScorePillarRow
+                          key={row.id}
+                          row={row}
+                          pending={busy}
+                          onToggle={(next) => toggle(row.id, next)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {omitted.length > 0 ? (
+              <p
+                data-slot="score-config-omitted"
+                data-count={omitted.length}
+                className="text-muted-foreground text-xs"
+              >
+                {t("settings.sections.score.omitted", {
+                  count: omitted.length,
+                })}{" "}
+                <Link
+                  href="/settings/modules"
+                  data-slot="score-config-omitted-link"
+                  className="text-foreground underline underline-offset-2"
+                >
+                  {t("settings.sections.score.omittedLink")}
+                </Link>
+              </p>
+            ) : null}
           </div>
 
-          {refusal ? (
-            <p
-              data-slot="score-config-refusal"
-              role="alert"
-              className="text-destructive text-sm"
+          {/* Bottom-right, in its own row, like every other settings card
+              that saves a form. */}
+          <div className="mt-4 flex justify-end pl-7">
+            <Button
+              size="sm"
+              type="button"
+              onClick={() => saveMutation.mutate(draft)}
+              disabled={busy || !dirty || configQuery.isLoading}
+              data-slot="score-config-save"
+              className="min-h-11 sm:min-h-9"
             >
-              {t(refusal)}
-            </p>
-          ) : null}
-
-          {analyticsQuery.isError ? (
-            <QueryErrorRow
-              slot="score-config-eligibility-error"
-              message={t("settings.sections.score.eligibilityFailed")}
-              onRetry={() => void analyticsQuery.refetch()}
-            />
-          ) : null}
-
-          {configQuery.isLoading ? (
-            <div data-slot="score-config-loading" className="space-y-3">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-11 w-full" />
-              <Skeleton className="h-11 w-full" />
-              <Skeleton className="h-11 w-full" />
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {groups.map((group) => (
-                <div
-                  key={group.domain}
-                  data-slot="score-config-group"
-                  data-domain={group.domain}
-                >
-                  <h3
-                    data-slot="score-config-group-heading"
-                    className="text-muted-foreground text-xs font-medium tracking-wide uppercase"
-                  >
-                    {t(SCORE_DOMAIN_LABEL_KEYS[group.domain])}
-                  </h3>
-                  {SCORE_DOMAIN_NOTE_KEYS[group.domain] ? (
-                    <p
-                      data-slot="score-config-group-note"
-                      className="text-muted-foreground mt-1 text-xs"
-                    >
-                      {t(SCORE_DOMAIN_NOTE_KEYS[group.domain] as string)}
-                    </p>
-                  ) : null}
-                  <div className="divide-border/60 mt-1 divide-y">
-                    {group.rows.map((row) => (
-                      <ScorePillarRow
-                        key={row.id}
-                        row={row}
-                        pending={busy}
-                        onToggle={(next) => toggle(row.id, next)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {omitted.length > 0 ? (
-            <p
-              data-slot="score-config-omitted"
-              data-count={omitted.length}
-              className="text-muted-foreground text-xs"
-            >
-              {t("settings.sections.score.omitted", { count: omitted.length })}{" "}
-              <Link
-                href="/settings/modules"
-                data-slot="score-config-omitted-link"
-                className="text-foreground underline underline-offset-2"
-              >
-                {t("settings.sections.score.omittedLink")}
-              </Link>
-            </p>
-          ) : null}
+              {busy ? (
+                <Loader2
+                  aria-hidden="true"
+                  className="size-3.5 animate-spin motion-reduce:animate-none"
+                />
+              ) : null}
+              {t("settings.sections.score.save")}
+            </Button>
+          </div>
         </SettingsCard>
       )}
     </div>

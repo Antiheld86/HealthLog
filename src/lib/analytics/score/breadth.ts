@@ -28,7 +28,6 @@ export const PHYSIOLOGICAL_PILLARS: ReadonlySet<ScorePillarId> = new Set([
   "GLYCAEMIA",
   "SLEEP",
   "ADIPOSITY",
-  "FITNESS",
   "LIPIDS",
 ]);
 

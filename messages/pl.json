@@ -2295,7 +2295,6 @@
         "sleep": "Sen",
         "adiposity": "Otłuszczenie",
         "wellbeing": "Samopoczucie",
-        "fitness": "Zmierzona wydolność",
         "lipids": "Lipidy"
       },
       "observed": "Zaobserwowano: {value}",
@@ -2312,11 +2311,9 @@
       "observedActivity": "{value} kroków dziennie",
       "observedSleep": "{value} minut na noc",
       "observedAdiposity": "Stosunek obwodu talii do wzrostu {value}",
-      "observedFitness": "{value} {unit}, zmierzone",
       "referenceActivity": "Korzyść stabilizuje się przy {high} krokach dziennie",
       "referenceSleep": "Co najmniej {low} minut na noc; dłuższy sen nie obniża wyniku",
       "referenceAdiposity": "Stosunek obwodu talii do wzrostu poniżej {high}",
-      "referenceFitness": "Od {low} do {high} {unit}, zakres odniesienia według wieku i płci",
       "referenceHba1c": "HbA1c od {low} do {high}%",
       "referenceDetail": "{label} · {source} · {kind} · od {low} do {high}",
       "openBound": "otwarty",
@@ -4914,8 +4911,6 @@
         },
         "threeAxes": "Zapisywanie, pokazywanie i liczenie to trzy różne rzeczy. Ta strona zmienia tylko ostatnią. Filar wyłączony tutaj nadal jest zapisywany i nadal widoczny w całym HealthLogu, przestaje jedynie ruszać liczbą.",
         "axis": {
-          "recorded": "Jest zapisywany",
-          "shown": "Pokazywany w aplikacji",
           "countsFor": "Licz {pillar} do wyniku"
         },
         "domain": {
@@ -4923,19 +4918,13 @@
           "activity": "Aktywność",
           "sleep": "Sen",
           "adiposity": "Sylwetka",
-          "wellbeing": "Samopoczucie",
-          "fitness": "Zmierzona wydolność"
-        },
-        "domainNote": {
-          "cardiometabolic": "Trzy filary, jeden obszar zdrowia. Każdy filar waży w wyniku tyle samo, więc ten obszar waży trzy razy tyle co obszar z jednym filarem."
+          "wellbeing": "Samopoczucie"
         },
         "state": {
           "counting": "Liczy się do Twojego wyniku",
           "waiting": "Wybrany, czeka na dane",
           "crisis": "Zamiast wyniku pokazywana jest wskazówka bezpieczeństwa. Z Twoim wyborem wszystko w porządku.",
-          "readFailed": "Tego filaru nie udało się odczytać przy ostatnim liczeniu.",
-          "unavailable": "Jeszcze niedostępny",
-          "unavailableDetail": "HealthLog nie potrafi jeszcze odróżnić zmierzonego testu wydolności od szacunku z urządzenia, więc ten filar nigdy nie dał wyniku. Zostaje na liście, żebyś widział, że się nie liczy."
+          "readFailed": "Tego filaru nie udało się odczytać przy ostatnim liczeniu."
         },
         "presets": {
           "label": "Punkt wyjścia",
@@ -9299,8 +9288,6 @@
       "deltaVsBaseline": "{delta} wzgl. Twojej wartości bazowej",
       "deltaFlat": "Zgodnie z Twoją wartością bazową",
       "sleepPending": "Sen z ostatniej nocy jeszcze nie dotarł — dzisiejszy odczyt jest wstępny.",
-      "justIn": "Właśnie dotarło",
-      "justInAt": "Właśnie dotarło · {time}",
       "worthALook": "Warto sprawdzić",
       "allClear": "Dziś nic nie wymaga Twojej uwagi.",
       "ringLink": "Otwórz szczegóły: {metric}"

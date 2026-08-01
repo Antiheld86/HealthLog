@@ -28110,7 +28110,6 @@ components:
                       - SLEEP
                       - ADIPOSITY
                       - WELLBEING
-                      - FITNESS
                       - LIPIDS
                 configured:
                   description: "True when the account's own recipe narrows the score's composition below what its defaults would resolve
@@ -28145,7 +28144,6 @@ components:
                         - SLEEP
                         - ADIPOSITY
                         - WELLBEING
-                        - FITNESS
                         - LIPIDS
                     - type: "null"
                 restMode:

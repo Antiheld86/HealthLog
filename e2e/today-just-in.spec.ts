@@ -12,15 +12,21 @@ import { E2E_USER, STORAGE_STATE_PATH } from "./setup/global-setup";
  *
  * The spec drives that end-to-end against the real read path:
  *
- *   1. load the dashboard with nothing fresh — no chip, day is provisional;
- *   2. land last night's sleep through the REAL batch endpoint, and the
- *      arrival marker the spine's worker would have written;
+ *   1. load the dashboard with last night's sleep still missing;
+ *   2. land it through the REAL batch endpoint, and the arrival marker the
+ *      spine's worker would have written;
  *   3. surface the tab's real visibility-change signal — the browser event
  *      TanStack Query's focus manager consumes for
  *      `refetchOnWindowFocus: "always"` (alongside the 120 s foreground poll);
  *      using that existing trigger keeps the test inside the real cadence
  *      while staying well under the poll interval;
- *   4. assert the chip appeared and the phase flipped — in place, no reload.
+ *   4. assert the phase flipped and the pending note cleared — in place, no
+ *      reload.
+ *
+ * The hero used to carry a "just in" chip here; it is gone, because under a
+ * number "just in" never said what had arrived. What the milestone was
+ * always about survives it: the open page reads differently on its own
+ * cadence.
  *
  * The marker is seeded directly rather than waited for from pg-boss: whether
  * the queue drains inside the e2e web server is the SPINE's contract and has
@@ -43,9 +49,7 @@ function localDayKey(at: Date, timeZone: string): string {
   }).format(at);
 }
 
-test("a fresh arrival surfaces the just-in chip and flips the day in place", async ({
-  page,
-}) => {
+test("a fresh arrival flips the day in place", async ({ page }) => {
   const dbUrl = process.env.DATABASE_URL;
   test.skip(!dbUrl, "DATABASE_URL is required to seed the arrival marker");
 
@@ -85,10 +89,10 @@ test("a fresh arrival surfaces the just-in chip and flips the day in place", asy
     );
 
     // ── BEFORE ────────────────────────────────────────────────────────────
-    // Wait until the digest settles, then prove there is no stale arrival
-    // reaction. Other browser specs deliberately reuse this account and may
-    // have recorded older health data already, so an ordinary briefing Hero
-    // is a valid baseline; the invariant here is that it has no just-in chip.
+    // Wait until the digest settles. Other browser specs deliberately reuse
+    // this account and may have recorded older health data already, so an
+    // ordinary briefing hero is a valid baseline. Nothing on it may name an
+    // arrival: that chip was removed.
     await page.goto("/");
     await expect(page.locator('[data-slot="today-hero-skeleton"]')).toHaveCount(
       0,
@@ -149,9 +153,6 @@ test("a fresh arrival surfaces the just-in chip and flips the day in place", asy
       window.dispatchEvent(new Event("visibilitychange")),
     );
 
-    await expect(hero.locator('[data-slot="today-hero-just-in"]')).toBeVisible({
-      timeout: 20_000,
-    });
     await expect(hero).toHaveAttribute("data-phase", "final", {
       timeout: 20_000,
     });
@@ -159,10 +160,10 @@ test("a fresh arrival surfaces the just-in chip and flips the day in place", asy
     await expect(
       hero.locator('[data-slot="today-hero-sleep-pending"]'),
     ).toHaveCount(0);
-    // The chip names the arrival kind — the stable attribute, not the copy.
-    await expect(
-      hero.locator('[data-slot="today-hero-just-in"]'),
-    ).toHaveAttribute("data-just-in-kind", "sleep_night");
+    // And the arrival still raises no chip of its own, on either pass.
+    await expect(page.locator('[data-slot="today-hero-just-in"]')).toHaveCount(
+      0,
+    );
   } finally {
     client.release();
     await pool.end();

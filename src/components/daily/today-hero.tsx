@@ -37,8 +37,6 @@
 import Link from "next/link";
 import { Moon } from "lucide-react";
 
-import { useMounted } from "@/hooks/use-mounted";
-import { formatTime } from "@/lib/format";
 import { ScoreRing } from "@/components/insights/derived/score-ring";
 import type { ScoreBand } from "@/components/insights/derived/band-tokens";
 import { ProseBlocks } from "@/components/insights/prose-blocks";
@@ -86,32 +84,6 @@ function withoutRepeatedScore(
   return result.length > 0 ? result : null;
 }
 
-/**
- * The "just in" chip's clock face.
- *
- * Formatted CLIENT-side, and only after mount. `justIn.at` crosses the wire as
- * an ISO instant precisely so this stays a client concern: the server has no
- * business rendering a local wall-clock time it would format under its OWN
- * locale and timezone, and any such string would differ from the browser's on
- * the hydration render — React #418, a class of bug this project has already
- * paid for once.
- *
- * Goes through the shared `formatTime`, which reads the profile's timezone and
- * clock preference. The bare `toLocaleTimeString(undefined, …)` this replaces
- * asked the BROWSER instead, which is a different question: someone whose
- * profile says Europe/Berlin while their laptop sits in Manila saw a Manila
- * time here and a Berlin time on every other surface, for the same instant.
- */
-function formatJustInTime(iso: string): string | null {
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return null;
-  try {
-    return formatTime(at);
-  } catch {
-    return null;
-  }
-}
-
 export function TodayHero({
   digest,
   renderFilteredAllClear = false,
@@ -125,7 +97,6 @@ export function TodayHero({
   // paints from the server-dehydrated digest on both the SSR and the hydration
   // render). So the slot renders on both passes and the formatted time fills in
   // on the first client re-render, keeping those two passes byte-identical.
-  const mounted = useMounted();
   const { keep, letGo } = useCoachCheckinAction();
   const dismissItem = usePriorityItemDismiss();
 
@@ -166,7 +137,6 @@ export function TodayHero({
   const signalFallbackLead =
     hasScore && !lead ? topSignal?.headline?.trim() || null : null;
   const displayLead = lead ?? signalFallbackLead;
-  const justInTime = digest.justIn ? formatJustInTime(digest.justIn.at) : null;
   // A score-only all-clear digest has no narrative content for the leading
   // column. Keeping the full md ring in that two-column shell left a blank
   // column beside a 168 px dial and pushed the actual all-clear read below it.
@@ -191,8 +161,7 @@ export function TodayHero({
     !hasScore &&
     !hasItems &&
     !digest.briefingLead &&
-    !digest.reactionLine &&
-    !digest.justIn
+    !digest.reactionLine
   ) {
     return null;
   }
@@ -267,28 +236,15 @@ export function TodayHero({
             {/* In the compact fallback the quiet freshness tier belongs next
                 to the smaller ring. That uses the otherwise-empty leading
                 space and avoids adding a second row below the dial. */}
-            {compactAllClear && (digest.sleepPending || digest.justIn) ? (
+            {compactAllClear && digest.sleepPending ? (
               <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                {digest.sleepPending ? (
-                  <p
-                    data-slot="today-hero-sleep-pending"
-                    className="flex items-center gap-1.5"
-                  >
-                    <Moon className="size-3.5 shrink-0" aria-hidden="true" />
-                    {t("daily.today.sleepPending")}
-                  </p>
-                ) : null}
-                {digest.justIn ? (
-                  <p
-                    data-slot="today-hero-just-in"
-                    data-just-in-kind={digest.justIn.kind}
-                    className="flex items-center gap-1.5"
-                  >
-                    {mounted && justInTime
-                      ? t("daily.today.justInAt", { time: justInTime })
-                      : t("daily.today.justIn")}
-                  </p>
-                ) : null}
+                <p
+                  data-slot="today-hero-sleep-pending"
+                  className="flex items-center gap-1.5"
+                >
+                  <Moon className="size-3.5 shrink-0" aria-hidden="true" />
+                  {t("daily.today.sleepPending")}
+                </p>
               </div>
             ) : null}
           </div>
@@ -334,43 +290,18 @@ export function TodayHero({
 
         {/* Meta row — the hero's quiet tier (UI-STANDARDS §text: `text-xs
             text-muted-foreground` is the meta floor; never an accent, never an
-            opacity modifier). Holds the freshness note and the "just in" chip;
-            they can legitimately co-occur (a weight landed while last night's
-            sleep is still pending), so they share one wrapping row rather than
-            competing for the same slot. */}
-        {!compactAllClear && (digest.sleepPending || digest.justIn) ? (
+            opacity modifier). Freshness note (plan §2.4) — provisional day,
+            last night's sleep not yet folded in. Muted, non-blocking,
+            refreshes in place when the morning job lands. */}
+        {!compactAllClear && digest.sleepPending ? (
           <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-            {/* Freshness note (plan §2.4) — provisional day, last night's
-                sleep not yet folded in. Muted, non-blocking, refreshes in
-                place when the morning job lands. */}
-            {digest.sleepPending ? (
-              <p
-                data-slot="today-hero-sleep-pending"
-                className="flex items-center gap-1.5"
-              >
-                <Moon className="size-3.5 shrink-0" aria-hidden="true" />
-                {t("daily.today.sleepPending")}
-              </p>
-            ) : null}
-
-            {/* The "just in" chip — a state change, not a notification. No
-                badge count, no accent, no animation: the record simply reads
-                differently on the next refresh, and this names why. It is
-                present for as long as the arrival is news (the server applies
-                the window, so the chip expires on a poll rather than on a
-                client timer) and carries the arrival's local time once the
-                client has mounted and can format it honestly. */}
-            {digest.justIn ? (
-              <p
-                data-slot="today-hero-just-in"
-                data-just-in-kind={digest.justIn.kind}
-                className="flex items-center gap-1.5"
-              >
-                {mounted && justInTime
-                  ? t("daily.today.justInAt", { time: justInTime })
-                  : t("daily.today.justIn")}
-              </p>
-            ) : null}
+            <p
+              data-slot="today-hero-sleep-pending"
+              className="flex items-center gap-1.5"
+            >
+              <Moon className="size-3.5 shrink-0" aria-hidden="true" />
+              {t("daily.today.sleepPending")}
+            </p>
           </div>
         ) : null}
 

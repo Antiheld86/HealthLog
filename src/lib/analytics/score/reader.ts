@@ -20,7 +20,6 @@ import { reconstructNights } from "@/lib/insights/derived/sleep-score";
 import { pickCumulativeDaySum } from "@/lib/measurements/cumulative-day-sum";
 import { userDayKey } from "@/lib/tz/format";
 import { getAgeFromDateOfBirth } from "@/lib/analytics/pulse-targets";
-import { toProfileSex } from "@/lib/profile/sex";
 import { healthScoreNoticeItemKey } from "@/lib/daily/priority-item-key";
 import { annotate, getEvent } from "@/lib/logging/context";
 
@@ -44,7 +43,6 @@ const SCORE_READ_DAYS = 365 + HISTORY_OFFSET_DAYS;
 
 export interface ScoreReaderProfile {
   dateOfBirth: Date | null;
-  gender: string | null;
   heightCm: number | null;
   timezone: string;
   sourcePriorityJson: unknown;
@@ -424,7 +422,6 @@ function scoreInputsFor(args: {
   activity: Settled<ActivityRead>;
   sleep: Settled<MeasurementRow[]>;
   adiposity: Settled<MeasurementRow[]>;
-  fitness: Settled<MeasurementRow[]>;
   assessments: Settled<
     Array<{
       instrument: "PHQ9" | "GAD7" | "WHO5" | "SCI";
@@ -463,7 +460,6 @@ function scoreInputsFor(args: {
     new Date(asOf.getTime() - (SLEEP_WINDOW_DAYS - 1) * DAY_MS),
     input.profile.timezone,
   );
-  const sex = toProfileSex(input.profile.gender);
   const fastingCanonical = pickStableSourceRows(
     args.glucose.value.filter((row) => row.glucoseContext === "FASTING"),
     (row) => userDayKey(row.measuredAt, input.profile.timezone),
@@ -492,12 +488,6 @@ function scoreInputsFor(args: {
     (row) =>
       `${row.type}|${userDayKey(row.measuredAt, input.profile.timezone)}`,
   );
-  const fitnessCanonical = pickCanonicalSourceRows(
-    args.fitness.value,
-    "vo2Max",
-    input.profile.sourcePriorityJson,
-    (date) => userDayKey(date, input.profile.timezone),
-  ).canonicalRows;
 
   return {
     BLOOD_PRESSURE: {
@@ -599,21 +589,6 @@ function scoreInputsFor(args: {
           at: row.takenAt,
         })),
     },
-    FITNESS: {
-      source: "live",
-      readFailed: !args.fitness.ok,
-      asOf,
-      ageYears,
-      sex,
-      // The schema records VO₂max but does not distinguish CPET measurements
-      // from device estimates. No current row can therefore prove `measured`.
-      rows: fitnessCanonical.map((row) => ({
-        value: row.value,
-        at: row.measuredAt,
-        source: row.source,
-        measured: false,
-      })),
-    },
     LIPIDS: {
       source: "live",
       readFailed: !args.labs.ok,
@@ -653,7 +628,6 @@ export async function computeUserHealthScore(
     activity,
     sleep,
     adiposity,
-    fitness,
     assessments,
     labs,
     weights,
@@ -694,11 +668,6 @@ export async function computeUserHealthScore(
       ),
       [],
       "ADIPOSITY",
-    ),
-    capture(
-      readMeasurements(db, input.userId, ["VO2_MAX"], since),
-      [],
-      "FITNESS",
     ),
     input.modules.mentalHealth
       ? capture(
@@ -827,7 +796,6 @@ export async function computeUserHealthScore(
     activity,
     sleep,
     adiposity,
-    fitness,
     assessments,
     labs,
   };

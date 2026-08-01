@@ -129,7 +129,7 @@ function compositionFor(selection: readonly ScorePillarId[]): ScorePillarId[] {
 }
 
 describe("Health Score coverage contract", () => {
-  it("does not measure a four-pillar account against the eight-pillar catalogue", () => {
+  it("does not measure a four-pillar account against the whole catalogue", () => {
     const selection: ScorePillarId[] = [
       "BLOOD_PRESSURE",
       "ACTIVITY",
@@ -148,8 +148,9 @@ describe("Health Score coverage contract", () => {
     });
 
     expect(composite.status).toBe("ok");
-    // The catalogue is eight wide and must not be the yardstick.
-    expect(SCORE_PILLAR_IDS.length).toBe(8);
+    // The catalogue is wider than the selection and must not be the
+    // yardstick.
+    expect(SCORE_PILLAR_IDS.length).toBeGreaterThan(selection.length);
     expect(composite.coverage.requiredInputs).not.toBe(SCORE_PILLAR_IDS.length);
     // The denominator is the breadth rule applied to the person's own set,
     // so it can never exceed what they chose to count.
@@ -162,7 +163,7 @@ describe("Health Score coverage contract", () => {
     );
     if (composite.status !== "ok") throw new Error("unreachable");
     // Fully covered means fully covered: four of four counted pillars have
-    // data, so nothing about the four they left out may pull this down.
+    // data, so nothing about the ones they left out may pull this down.
     expect(composite.confidence.score).toBe(100);
     expect(composite.value.composition).toEqual(selection);
   });
@@ -187,7 +188,8 @@ describe("Health Score coverage contract", () => {
 
   it("still asks for data from a pillar the person kept", () => {
     // The same four pillars have data; the difference is that this account
-    // counts all eight, so the four blanks are genuinely missing coverage.
+    // counts the whole catalogue, so the blanks are genuinely missing
+    // coverage.
     const withData: ScorePillarId[] = [
       "BLOOD_PRESSURE",
       "ACTIVITY",
@@ -202,8 +204,12 @@ describe("Health Score coverage contract", () => {
       asOf: NOW,
     });
 
-    expect(composite.coverage.missing).toContain("wellbeing");
-    expect(composite.coverage.missing).toContain("fitness");
+    // Named by DOMAIN, not by pillar: glycaemia and lipids are blank too,
+    // but blood pressure already covers the area they sit in, so wellbeing
+    // is the one area with nothing behind it. The previous case's `missing`
+    // was empty, which is the contrast that makes this assertion mean
+    // something.
+    expect(composite.coverage.missing).toEqual(["wellbeing"]);
   });
 
   it("keeps the registry's HEALTH_SCORE inputs equal to the score catalogue", () => {
