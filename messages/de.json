@@ -9288,8 +9288,6 @@
       "deltaVsBaseline": "{delta} ggü. deinem Ausgangswert",
       "deltaFlat": "Im Bereich deines Ausgangswerts",
       "sleepPending": "Der Schlaf von letzter Nacht fehlt noch – der heutige Wert ist vorläufig.",
-      "justIn": "Gerade eingetroffen",
-      "justInAt": "Gerade eingetroffen · {time}",
       "worthALook": "Einen Blick wert",
       "allClear": "Heute braucht nichts deine Aufmerksamkeit.",
       "ringLink": "{metric}-Details öffnen"

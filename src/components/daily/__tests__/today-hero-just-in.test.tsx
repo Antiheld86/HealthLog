@@ -1,22 +1,17 @@
 /**
- * The Today hero's "just in" chip and the reaction line's lead replacement.
+ * The Today hero's arrival handling and the reaction line's lead
+ * replacement.
  *
- * Two invariants, both of which have a specific failure this project has
- * already paid for:
+ * The hero used to carry a "just in" chip under the score, with the
+ * arrival's local time on it. It is gone: under a number, "just in" did
+ * not say what had arrived — the score? a reading? — and the clock face
+ * changed nothing a person would then do. What is left is the invariant
+ * that an arrival alone is not a reason to paint anything, and the one
+ * the reaction line has always had.
  *
- * 1. HYDRATION. The hero is deliberately NOT mount-gated — it paints from the
- *    server-dehydrated digest on the SSR pass because it is the LCP element
- *    (v1.30.9). So anything inside it that differs between the server and the
- *    browser is a React #418 mismatch. A wall-clock time is exactly that: the
- *    server's locale and timezone are not the reader's. The chip therefore
- *    renders its SLOT on both passes and fills the time in only after mount.
- *    These tests render through `renderToStaticMarkup`, which takes the SERVER
- *    snapshot of `useSyncExternalStore` — i.e. precisely the pass that must
- *    carry no formatted time.
- *
- * 2. NO LAYOUT SHIFT. The reaction line REPLACES the lead; it is never a second
- *    paragraph. The hero stays one lead line tall, so nothing below it moves
- *    when the line arrives on a poll.
+ * NO LAYOUT SHIFT. The reaction line REPLACES the lead; it is never a
+ * second paragraph. The hero stays one lead line tall, so nothing below
+ * it moves when the line arrives on a poll.
  */
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -53,30 +48,56 @@ function digest(over: Partial<DailyDigest> = {}): DailyDigest {
   };
 }
 
-/** Any hh:mm clock face — the thing the server must never emit. */
+/** Any hh:mm clock face — the thing the hero must never print here. */
 const CLOCK_FACE = /\d{1,2}:\d{2}/;
 
-describe("TodayHero — the just-in chip", () => {
-  it("renders no chip when nothing landed", () => {
-    const html = render(<TodayHero digest={digest()} />);
-    expect(html).not.toContain('data-slot="today-hero-just-in"');
-  });
-
-  it("renders the chip slot on the server pass, carrying the kind", () => {
+describe("TodayHero — an arrival is not a chip", () => {
+  it("paints no arrival marker when something has landed", () => {
     const html = render(
       <TodayHero
         digest={digest({ justIn: { kind: "sleep_night", at: ARRIVED_AT } })}
       />,
     );
 
-    // The slot is present on the SSR pass, so the hydration render — which
-    // takes the same server snapshot — produces identical HTML.
-    expect(html).toContain('data-slot="today-hero-just-in"');
-    expect(html).toContain('data-just-in-kind="sleep_night"');
-    expect(html).toContain("Just in");
+    expect(html).not.toContain('data-slot="today-hero-just-in"');
+    expect(html).not.toContain("Just in");
+    expect(html).not.toContain(ARRIVED_AT);
   });
 
-  it("renders for a bare account when the arrival has no generated line", () => {
+  it("prints no clock face beside the score", () => {
+    // The removed chip was the only wall clock on this surface, and a
+    // wall clock rendered on the server pass is a hydration mismatch as
+    // well as noise. Neither is possible once nothing prints one.
+    const html = render(
+      <TodayHero
+        digest={digest({ justIn: { kind: "weight", at: ARRIVED_AT } })}
+      />,
+    );
+
+    expect(html).not.toMatch(CLOCK_FACE);
+  });
+
+  it("still shows a pending night, which is a different sentence", () => {
+    // The freshness note says the day is not complete yet, which changes
+    // how the number should be read. That one stays.
+    const html = render(
+      <TodayHero
+        digest={digest({
+          phase: "provisional",
+          sleepPending: true,
+          justIn: { kind: "weight", at: ARRIVED_AT },
+        })}
+      />,
+    );
+
+    expect(html).toContain('data-slot="today-hero-sleep-pending"');
+    expect(html).not.toContain('data-slot="today-hero-just-in"');
+  });
+
+  it("renders nothing at all for an account whose only news was the arrival", () => {
+    // With no chip there is nothing left for such a digest to say, and a
+    // bordered empty hero above the tile strip would be worse than
+    // absence.
     const html = render(
       <TodayHero
         digest={digest({
@@ -89,68 +110,7 @@ describe("TodayHero — the just-in chip", () => {
       />,
     );
 
-    expect(html).toContain('data-slot="today-hero"');
-    expect(html).toContain('data-slot="today-hero-just-in"');
-  });
-
-  it("emits NO formatted time and no raw ISO instant on the server pass", () => {
-    const html = render(
-      <TodayHero
-        digest={digest({ justIn: { kind: "weight", at: ARRIVED_AT } })}
-      />,
-    );
-
-    const chip = html.slice(html.indexOf('data-slot="today-hero-just-in"'));
-    // The mismatch itself: a wall clock the browser would render differently.
-    expect(chip).not.toMatch(CLOCK_FACE);
-    // And the raw instant must not leak either — it is machine data, not copy.
-    expect(html).not.toContain(ARRIVED_AT);
-  });
-
-  it("keeps the chip muted meta — never an accent, never an opacity modifier", () => {
-    const html = render(
-      <TodayHero
-        digest={digest({ justIn: { kind: "workout", at: ARRIVED_AT } })}
-      />,
-    );
-
-    const row = html.slice(
-      0,
-      html.indexOf('data-slot="today-hero-just-in"') + 400,
-    );
-    expect(row).toContain("text-muted-foreground");
-    expect(row).toContain("text-xs");
-    // UI-STANDARDS §text: alpha on muted text drops below AA contrast.
-    expect(html).not.toContain("text-muted-foreground/");
-    expect(html).not.toContain("text-primary");
-  });
-
-  it("shows the chip alongside a still-pending night", () => {
-    // Legitimately co-occurring: a weight landed this morning while last
-    // night's sleep has not arrived yet.
-    const html = render(
-      <TodayHero
-        digest={digest({
-          phase: "provisional",
-          sleepPending: true,
-          justIn: { kind: "weight", at: ARRIVED_AT },
-        })}
-      />,
-    );
-
-    expect(html).toContain('data-slot="today-hero-sleep-pending"');
-    expect(html).toContain('data-slot="today-hero-just-in"');
-  });
-
-  it("localises the chip", () => {
-    const html = render(
-      <TodayHero
-        digest={digest({ justIn: { kind: "sleep_night", at: ARRIVED_AT } })}
-      />,
-      "de",
-    );
-    expect(html).toContain("Gerade eingetroffen");
-    expect(html).not.toContain("Just in");
+    expect(html).not.toContain('data-slot="today-hero"');
   });
 });
 

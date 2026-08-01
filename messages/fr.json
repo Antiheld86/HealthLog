@@ -9288,8 +9288,6 @@
       "deltaVsBaseline": "{delta} par rapport à ta référence",
       "deltaFlat": "Conforme à ta référence",
       "sleepPending": "Le sommeil de la nuit dernière n'est pas encore arrivé — la lecture du jour est provisoire.",
-      "justIn": "Vient d'arriver",
-      "justInAt": "Vient d'arriver · {time}",
       "worthALook": "À regarder",
       "allClear": "Rien ne requiert ton attention aujourd'hui.",
       "ringLink": "Ouvrir les détails de {metric}"

@@ -9288,8 +9288,6 @@
       "deltaVsBaseline": "{delta} wzgl. Twojej wartości bazowej",
       "deltaFlat": "Zgodnie z Twoją wartością bazową",
       "sleepPending": "Sen z ostatniej nocy jeszcze nie dotarł — dzisiejszy odczyt jest wstępny.",
-      "justIn": "Właśnie dotarło",
-      "justInAt": "Właśnie dotarło · {time}",
       "worthALook": "Warto sprawdzić",
       "allClear": "Dziś nic nie wymaga Twojej uwagi.",
       "ringLink": "Otwórz szczegóły: {metric}"
