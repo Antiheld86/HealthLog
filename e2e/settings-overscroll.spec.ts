@@ -135,15 +135,40 @@ test.describe("settings + admin vertical over-scroll guard", () => {
         expect(dims, "main-content / wrapper present").not.toBeNull();
         if (!dims) return;
 
-        // One-scroll-floor (UI-STANDARDS §9): `<main>` is the ONLY vertical
-        // scroll surface — the document itself must never become scrollable
-        // next to it (a second painted scrollbar + a dead dark band under
-        // the shell). The historic offender class: an absolutely-positioned
-        // sr-only element (the dnd drag-hint paragraph) whose containing
-        // block resolves to the initial containing block because no ancestor
-        // between it and the root is positioned — its static position below
-        // a long list then extends the DOCUMENT's scrollable overflow while
-        // `<main>` clips everything in normal flow.
+        // One-scroll-floor (UI-STANDARDS §9), structural half. `<main>` may
+        // only be the ONLY vertical scroll surface if it also OWNS the
+        // containing block of its absolutely-positioned descendants: an
+        // abspos box with no positioned ancestor resolves against the
+        // initial containing block, which sits outside the scroll container,
+        // so `overflow-y-auto` never clips it and its static position
+        // extends the DOCUMENT's scrollable overflow instead.
+        //
+        // This is asserted separately from the height read below because the
+        // two catch the same defect at different reliabilities. The height
+        // read only sees an escapee that is mounted at measure time, and the
+        // escapees are mostly transient: a Radix `<Switch>` outside a
+        // `<form>` renders a hidden `position:absolute` bubble input on the
+        // first pass and drops it once its button ref resolves, and the root
+        // `loading.tsx` chart skeleton carries an `sr-only` announcement
+        // that lives only until the real content streams in. Both made the
+        // document scrollable for the whole pre-hydration window, and both
+        // are gone by the time a fast machine gets around to measuring, so
+        // the height read caught them on a loaded CI runner and nowhere
+        // else. The computed style of `<main>` is timing-free.
+        const mainPosition = await page.evaluate(
+          () =>
+            getComputedStyle(document.getElementById("main-content")!).position,
+        );
+        expect(
+          mainPosition,
+          "<main id=main-content> must establish a containing block, or an " +
+            "absolutely-positioned descendant escapes its overflow clip and " +
+            "becomes a second vertical scroll surface",
+        ).not.toBe("static");
+
+        // Same rule, measured: the document itself must never become
+        // scrollable next to `<main>` (a second painted scrollbar + a dead
+        // dark band under the shell).
         const doc = await page.evaluate(() => ({
           scrollHeight: document.documentElement.scrollHeight,
           clientHeight: document.documentElement.clientHeight,
