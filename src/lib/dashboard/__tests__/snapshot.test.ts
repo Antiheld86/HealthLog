@@ -77,7 +77,7 @@ vi.mock("@/lib/analytics/score/reader", () => ({
             bandSetter: "BLOOD_PRESSURE" as const,
             composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"] as const,
             noiseFloor: 2,
-            scoreVersion: 2 as const,
+            scoreVersion: SCORE_VERSION,
           },
           coverage,
           confidence: { score: 100, band: "high" as const },
@@ -94,7 +94,7 @@ vi.mock("@/lib/analytics/score/reader", () => ({
       pillars: [],
       delta: legacy?.delta ?? null,
       deltaReason: null,
-      scoreVersion: 2 as const,
+      scoreVersion: SCORE_VERSION,
       weightGoal: {
         status: "insufficient" as const,
         coverage,
@@ -154,6 +154,7 @@ import {
 } from "../snapshot";
 import type { ModuleKey } from "@/lib/modules/gate";
 import { MODULE_KEYS } from "@/lib/modules/registry";
+import { SCORE_VERSION } from "@/lib/analytics/score/types";
 
 const emptySummary = {
   count: 0,
@@ -370,7 +371,7 @@ describe("buildDashboardSnapshot — per-type thick-phase gate", () => {
       confidence: { score: 100, band: "high" },
       composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
       deltaReason: null,
-      scoreVersion: 2,
+      scoreVersion: SCORE_VERSION,
       bandSetter: "BLOOD_PRESSURE",
       // v1.21.2 (A5 / A6) — additive narrative fields, null absent a
       // disagreeing readiness set / a returned metric (the fake derived
@@ -516,7 +517,7 @@ describe("buildDashboardSnapshot — healthScore (warm phase only)", () => {
       confidence: { score: 100, band: "high" },
       composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
       deltaReason: null,
-      scoreVersion: 2,
+      scoreVersion: SCORE_VERSION,
       bandSetter: "BLOOD_PRESSURE",
       // v1.21.2 (A5 / A6) — additive narrative fields, null here.
       tension: null,

@@ -4,6 +4,7 @@ import {
   SECTION_MOBILITY,
   SECTION_VITALS,
 } from "@/components/insights/derived/use-dashboard-derived";
+import { SCORE_VERSION } from "@/lib/analytics/score/types";
 
 /**
  * A POPULATED Insights overview fixture.
@@ -170,7 +171,7 @@ const HEALTH_SCORE = {
       composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP", "ADIPOSITY"],
       configured: false,
       noiseFloor: 3,
-      scoreVersion: 2,
+      scoreVersion: SCORE_VERSION,
     },
     coverage: coverage(),
     confidence: confidence(),
@@ -187,7 +188,7 @@ const HEALTH_SCORE = {
   ],
   delta: 2,
   deltaReason: null,
-  scoreVersion: 2,
+  scoreVersion: SCORE_VERSION,
   weightGoal: {
     status: "ok" as const,
     value: {

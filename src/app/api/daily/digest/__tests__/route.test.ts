@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 
 import { apiError } from "@/lib/api-response";
 import type { DailyDigest } from "@/lib/daily/digest";
+import { SCORE_VERSION } from "@/lib/analytics/score/types";
 
 /**
  * `GET /api/daily/digest` — the P3 read seam.
@@ -63,7 +64,7 @@ const DIGEST: DailyDigest = {
     band: "good",
     delta: 3,
     deltaReason: null,
-    scoreVersion: 2,
+    scoreVersion: SCORE_VERSION,
     composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
   },
   topSignal: null,

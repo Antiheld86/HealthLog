@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page, TestInfo } from "@playwright/test";
 import type { DailyDigest } from "@/lib/daily/digest";
+import { SCORE_VERSION } from "@/lib/analytics/score/types";
 
 import { expect, test } from "./setup/test";
 import { STORAGE_STATE_PATH } from "./setup/global-setup";
@@ -23,7 +24,7 @@ const NARRATIVE_DIGEST: DailyDigest = {
     band: "green",
     delta: -2,
     deltaReason: null,
-    scoreVersion: 2,
+    scoreVersion: SCORE_VERSION,
     composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
   },
   topSignal: LONG_HEADLINE_BRIEFING.signalsOfDay?.[0] ?? null,
