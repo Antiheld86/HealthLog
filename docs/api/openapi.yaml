@@ -16518,12 +16518,6 @@ components:
               type: boolean
             needsReselection:
               type: boolean
-            allowFhirApi:
-              type: boolean
-            resourceTypes:
-              type: array
-              items:
-                type: string
             expiresAt:
               type: string
             createdAt:
@@ -16562,8 +16556,6 @@ components:
             - documentCount
             - documentOnly
             - needsReselection
-            - allowFhirApi
-            - resourceTypes
             - expiresAt
             - createdAt
             - revokedAt
@@ -16616,12 +16608,6 @@ components:
                     type: boolean
                   needsReselection:
                     type: boolean
-                  allowFhirApi:
-                    type: boolean
-                  resourceTypes:
-                    type: array
-                    items:
-                      type: string
                   expiresAt:
                     type: string
                   createdAt:
@@ -16647,8 +16633,6 @@ components:
                   - documentCount
                   - documentOnly
                   - needsReselection
-                  - allowFhirApi
-                  - resourceTypes
                   - expiresAt
                   - createdAt
                   - revokedAt

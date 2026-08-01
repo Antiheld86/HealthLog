@@ -83,14 +83,6 @@ export interface ShareLinkSummary {
  * hashes). `qrUrl` carries the passphrase in the URL fragment (`#k=`).
  */
 export interface ShareLinkCreated extends ShareLinkSummary {
-  /**
-   * RETIRED, response-only. They configured a FHIR face that was never built;
-   * the request refuses them and the columns are gone. They stay here because
-   * the native client was given this shape and a missing non-optional key
-   * fails a whole Swift decode — see #70 in the native repository.
-   */
-  allowFhirApi: boolean;
-  resourceTypes: string[];
   token: string;
   passphrase: string;
   shareUrl: string;
