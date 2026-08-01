@@ -10,6 +10,14 @@
  *
  * The write half (the stamp on a verified assertion) is pinned in
  * `src/lib/auth/__tests__/passkey.test.ts`.
+ *
+ * v1.35.1 adds the published half. The route was absent from
+ * `docs/api/openapi.yaml` entirely — no path entry, no schema — while iOS
+ * had been told to generate against one (iOS #60). The last case below
+ * compares the projection the route actually asks Prisma for against the
+ * property set the contract publishes, so the two cannot drift: a column
+ * added to the select without a schema entry fails, and so does a schema
+ * property the route never serves.
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -29,6 +37,7 @@ vi.mock("@/lib/logging/context", () => ({ annotate: vi.fn() }));
 import { GET } from "../route";
 import { requireAuth } from "@/lib/api-handler";
 import { prisma } from "@/lib/db";
+import { buildOpenApiDocument } from "@/lib/openapi/registry";
 
 const USER = { id: "user-1", username: "u", email: "u@example.com" };
 
@@ -80,6 +89,29 @@ describe("GET /api/auth/passkeys", () => {
 
     expect(Object.keys(body.data[0])).toContain("lastUsedAt");
     expect(body.data[0].lastUsedAt).toBeNull();
+  });
+
+  it("publishes exactly the columns it selects", async () => {
+    await (GET as unknown as () => Promise<Response>)();
+    const args = vi.mocked(prisma.passkey.findMany).mock.calls[0][0];
+    const selected = Object.keys(args?.select ?? {}).sort();
+
+    const doc = buildOpenApiDocument() as {
+      paths?: Record<string, { get?: { responses?: Record<string, unknown> } }>;
+      components?: {
+        schemas?: Record<string, { properties?: Record<string, unknown> }>;
+      };
+    };
+
+    expect(
+      doc.paths?.["/api/auth/passkeys"]?.get,
+      "GET /api/auth/passkeys is not registered in the OpenAPI document",
+    ).toBeDefined();
+
+    const published = doc.components?.schemas?.["PasskeyInfo"]?.properties;
+    expect(published, "PasskeyInfo schema is not emitted").toBeDefined();
+
+    expect(Object.keys(published ?? {}).sort()).toEqual(selected);
   });
 });
 

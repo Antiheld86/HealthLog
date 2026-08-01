@@ -109,7 +109,7 @@ export const baseUpdatedAtField = z.iso
   .datetime({ offset: true })
   .optional()
   .describe(
-    "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored row still carrying this exact value — a stale token fails with 409 and changes nothing. Treat as opaque: only ever echo a server-returned value, never parse or synthesise it.",
+    "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored row still carrying this exact value — a stale token fails with 409 and changes nothing. A present-but-unparseable value fails with 422 and `meta.errorCode` = `invalid_base_updated_at` — note that this is NOT the unconditional write: sending `null` or a malformed string is rejected rather than treated as an omitted token. Treat as opaque: only ever echo a server-returned value, never parse or synthesise it.",
   );
 
 /**
@@ -137,6 +137,28 @@ export function conflictResponse409(resource: string, errorCode: string) {
     },
   };
 }
+
+/**
+ * The 422 a malformed `baseUpdatedAt` earns, for the write endpoints that
+ * accept the token in their body.
+ *
+ * Spread AFTER `...stdResponses` — the generic 422 there would otherwise
+ * overwrite this one and the errorCode would vanish from the contract.
+ *
+ * Worth stating outright because the shape surprises implementers: an
+ * unparseable token is NOT silently downgraded to the unconditional write.
+ * `null`, an empty string and a non-ISO string all 422. The unconditional
+ * write is reached by OMITTING the key, nothing else. `invalid_base_updated_at`
+ * had lived only in route tests since v1.32.21, so a client had no way to
+ * learn this from the published spec.
+ */
+export const invalidBaseTokenResponse = {
+  "422": {
+    description:
+      "Request validation failed. When the body carried a `baseUpdatedAt` that could not be parsed as an ISO-8601 timestamp — including an explicit `null` — `meta.errorCode` = `invalid_base_updated_at` and nothing was written. Omit the key entirely for the unconditional write; do not send `null` for it.",
+    content: { "application/json": { schema: errorEnvelope } },
+  },
+};
 
 // ── Standard 401 / 422 / 429 responses ───────────────────────────────
 
