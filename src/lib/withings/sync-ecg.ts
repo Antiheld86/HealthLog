@@ -53,7 +53,7 @@ import type {
 import { prisma } from "@/lib/db";
 import { annotate, getEvent } from "@/lib/logging/context";
 import { safeFetch } from "@/lib/safe-fetch";
-import { encryptWaveformToBytes } from "./ecg-waveform-codec";
+import { persistEcgRecording } from "@/lib/ecg/persist-recording";
 import {
   collapseToTypeDayKeys,
   recomputeBucketsForMeasurement,
@@ -262,7 +262,9 @@ export async function fetchWithingsHeartSignal(
 }
 
 /**
- * Fetch + encrypt + persist one ECG waveform. Idempotent: upserts on
+ * Fetch one ECG waveform and hand it to the shared writer
+ * (`@/lib/ecg/persist-recording`, also used by the Apple Health archive
+ * importer and the live ingest). Idempotent: upserts on
  * `(userId, source, externalRecordingId)` so a re-sync overwrites the same
  * recording in place rather than inserting a duplicate. Returns `true` when a
  * waveform row was written, `false` when the recording carried no usable
@@ -293,52 +295,28 @@ async function captureEcgWaveform(params: {
     signal.sampling_frequency > 0
       ? Math.round(signal.sampling_frequency)
       : 0;
-  const sampleCount = samples.length;
-  const durationSeconds =
-    samplingFrequency > 0 ? sampleCount / samplingFrequency : null;
   const averageHeartRate =
     typeof signal.heart_rate === "number" && Number.isFinite(signal.heart_rate)
       ? Math.round(signal.heart_rate)
       : null;
 
-  // Encrypt the raw sample array BEFORE it ever reaches the row. Fail-closed:
-  // a crypto error throws here and the waveform is never written as plaintext.
-  const waveformEncrypted = encryptWaveformToBytes(samples);
-
-  // Build the `data` object field-by-field (no mass assignment); `userId` is
-  // the integration owner narrowed by the caller, never a client field.
-  await prisma.ecgRecording.upsert({
-    where: {
-      userId_source_externalRecordingId: {
-        userId: params.userId,
-        source: "WITHINGS",
-        externalRecordingId: params.externalRecordingId,
-      },
-    },
-    create: {
+  // Encryption, the derived counts, the upsert and the duplicate rule are the
+  // shared writer's job; `userId` is the integration owner narrowed by the
+  // caller, never a client field.
+  await persistEcgRecording(
+    {
       userId: params.userId,
       source: "WITHINGS",
       externalRecordingId: params.externalRecordingId,
       recordedAt: params.recordedAt,
-      waveformEncrypted,
+      samples,
       samplingFrequency,
-      sampleCount,
-      durationSeconds,
       averageHeartRate,
       rhythmClassification: params.classification,
       measurementId: params.measurementId,
     },
-    update: {
-      recordedAt: params.recordedAt,
-      waveformEncrypted,
-      samplingFrequency,
-      sampleCount,
-      durationSeconds,
-      averageHeartRate,
-      rhythmClassification: params.classification,
-      measurementId: params.measurementId,
-    },
-  });
+    prisma,
+  );
 
   return true;
 }

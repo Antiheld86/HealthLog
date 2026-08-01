@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+## [1.35.3] — 2026-08-01
+
+### Added
+
+- Apple Watch ECG recordings can now be sent directly by the iOS app, through a
+  new endpoint at `POST /api/insights/ecg`, instead of only arriving inside an
+  export archive. One recording travels per request, and the endpoint is gated
+  by the same module and status switches that already govern reading ECGs, so an
+  account with the surface switched off is unaffected.
+
+### Changed
+
+- A recording carries its own identity, so sending the same one again resolves
+  to the same record. A strip that arrives once inside an export archive and
+  again from the app ends up as a single entry rather than a duplicate or an
+  error.
+
+### Migration
+
+- This release removes duplicate ECG recordings. An existing database can hold
+  more than one row for the same recording, because the export archive and a
+  live client name the same strip differently. A uniqueness rule now prevents
+  that, and the migration resolves what is already stored before applying it.
+  Where two rows describe the same recording, it keeps the one holding the actual
+  waveform over one holding only a verdict, and it carries a removed row's link
+  to its rhythm event onto the row that is kept, so resolving a duplicate never
+  costs the recording its place in the timeline. Rows that lose are deleted, and
+  they cannot be recovered. Back up the database before deploying if that matters
+  for your instance.
+
 ## [1.35.2] — 2026-08-01
 
 ### Added

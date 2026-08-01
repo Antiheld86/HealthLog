@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HealthLog API
-  version: 1.35.2
+  version: 1.35.3
   description: >-
     Self-hosted personal-health-tracking PWA — public API surface for the iOS native client and external ingest.
 
@@ -7993,6 +7993,44 @@ paths:
         "403": *a5
         "422": *a3
         "429": *a4
+    post:
+      tags:
+        - Insights
+      summary: Ingest one ECG recording
+      description: "The live ECG ingest: one Apple Watch recording per request, for a client draining its HealthKit ECG
+        observer. Before this existed, a watch ECG could only reach HealthLog inside a full `export.zip`. One recording
+        per request because a 30 s / 512 Hz strip is ~15 360 samples. Samples are INTEGER MICRO-VOLTS (convert from
+        HealthKit's Volts), stored AES-256-GCM encrypted; `sampleCount` and `durationSeconds` are derived server-side.
+        The `classification` is the device's own verdict stored verbatim — HealthLog never reads the waveform to produce
+        or revise one. `source` accepts `APPLE_HEALTH` only; `userId` comes from the session and is never a body field.
+        Unknown body keys are rejected with a 422 naming them. No `Idempotency-Key` is needed: the recording carries its
+        own identity, so a retry resolves to the same row by construction — see `status` for what a re-post reports.
+        Limits: 32 768 samples, 2 MB body, 60 recordings per minute per user. Module-gated on `insights` and the
+        operator `insightStatus` assistant surface; no LLM call. Auth via cookie or Bearer."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EcgIngestRequest"
+      responses:
+        "200":
+          description: "The recording was already stored: `updated` (same id, overwritten in place) or `duplicate` (already
+            present under a different id, nothing written)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EcgIngestResponseEnvelope"
+        "201":
+          description: "A new recording was stored (`status: inserted`)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EcgIngestCreatedEnvelope"
+        "401": *a1
+        "403": *a5
+        "422": *a3
+        "429": *a4
   /api/insights/ecg/{id}:
     get:
       tags:
@@ -14481,6 +14519,81 @@ components:
       properties: {}
       description: No body fields. The user is taken from the session / Bearer and the locale from the session; the warm
         covers every assessment for that user.
+    EcgIngestRequest:
+      type: object
+      properties:
+        externalRecordingId:
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: "The recording's stable id AS THE CLIENT KNOWS IT — for an Apple Health client, the `HKSample.uuid`. It is
+            the source's own identity, not a content hash: re-posting the same id overwrites that recording in place. It
+            does not have to agree with the id the `export.zip` importer derives for the same strip; the server
+            reconciles the two doors itself (see `status: duplicate`)."
+        recordedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: "When the strip was recorded on-device, with offset. Part of the recording's identity — see `status:
+            duplicate`."
+        samplingFrequency:
+          type: integer
+          minimum: 1
+          maximum: 10000
+          description: Signal sampling rate in Hz (an Apple Watch ECG is 512). Part of the recording's identity, and the divisor
+            for the server-derived `durationSeconds`.
+        samples:
+          minItems: 1
+          maxItems: 32768
+          type: array
+          items:
+            type: integer
+            minimum: -1000000
+            maximum: 1000000
+          description: The waveform as INTEGER MICRO-VOLTS, in recording order — the same unit the `export.zip` CSV parser
+            produces, so convert from HealthKit's Volts before sending. Capped at 32 768 samples (a clean factor of two
+            above a 30 s / 512 Hz strip). Stored AES-256-GCM encrypted; never persisted as plaintext.
+        lead:
+          description: Recording lead label when the device reports one (e.g. `I`).
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 40
+            - type: "null"
+        averageHeartRate:
+          description: The device's average heart rate (BPM) for the strip.
+          anyOf:
+            - type: integer
+              minimum: 1
+              maximum: 300
+            - type: "null"
+        classification:
+          description: The RECORDING DEVICE's own verdict, stored verbatim. Only the three ECG values are accepted here.
+            `RhythmClassification` in the database has six members because walking-steadiness and neutral event verdicts
+            share it, and those appear on GET /api/insights/rhythm-events — a decoder generated from this schema must
+            NOT be reused there. HealthLog never reads the waveform to produce or revise a verdict.
+          anyOf:
+            - type: string
+              enum:
+                - IRREGULAR
+                - NOT_DETECTED
+                - INCONCLUSIVE
+            - type: "null"
+        source:
+          type: string
+          enum:
+            - APPLE_HEALTH
+          description: "The client's own source. `APPLE_HEALTH` only: `WITHINGS` rows are minted by the OAuth sync and `COMPUTED`
+            ones by the server, so neither is client-assertable — the same posture POST /api/measurements/batch takes."
+      required:
+        - externalRecordingId
+        - recordedAt
+        - samplingFrequency
+        - samples
+        - source
+      description: One Apple Watch ECG recording. Unknown keys are REJECTED with a 422 naming them rather than silently
+        dropped, because every field here is load-bearing metadata for a stored recording. `sampleCount` and
+        `durationSeconds` are derived server-side and must not be sent.
     UpdateCorrelationPatternRequest:
       type: object
       properties:
@@ -29970,6 +30083,83 @@ components:
         - classification
         - source
         - hasWaveform
+      additionalProperties: false
+    EcgIngestResponseEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/EcgIngestResponse"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    EcgIngestResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The recording row's id (cuid).
+        status:
+          type: string
+          enum:
+            - inserted
+            - updated
+            - duplicate
+          description: What the write did. `inserted` — a new recording landed (HTTP 201). `updated` — this `externalRecordingId`
+            was already stored and the row was overwritten in place (HTTP 200); a retry is safe and creates nothing.
+            `duplicate` — this exact recording is already stored under a DIFFERENT id, i.e. it arrived earlier through
+            the `export.zip` importer (HTTP 200); nothing was written and `id` names the row that already holds it. A
+            recording is the same recording when `(source, recordedAt, samplingFrequency)` match, which is enforced by a
+            unique index rather than by convention. All three statuses mean the recording is stored and the client may
+            advance its cursor.
+        recordedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: The `recordedAt` that was submitted, echoed back.
+        sampleCount:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: "Server-derived: the number of samples received."
+        durationSeconds:
+          anyOf:
+            - type: number
+            - type: "null"
+          description: "Server-derived: `sampleCount / samplingFrequency`."
+      required:
+        - id
+        - status
+        - recordedAt
+        - sampleCount
+        - durationSeconds
+      additionalProperties: false
+      description: The outcome of one ECG ingest. Reported honestly rather than optimistically — a re-post never claims to
+        have inserted.
+    EcgIngestCreatedEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/EcgIngestResponse"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
       additionalProperties: false
     EcgDetailResponseEnvelope:
       type: object

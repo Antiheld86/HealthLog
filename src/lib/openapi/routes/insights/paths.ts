@@ -37,6 +37,8 @@ import {
   insightsPregenerateResponse,
   dashboardSnapshotResponse,
   ecgListResponse,
+  ecgIngestRequest,
+  ecgIngestResponse,
   ecgDetailQuery,
   ecgDetailResponse,
   rhythmEventsResponse,
@@ -450,6 +452,45 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: {
             "application/json": {
               schema: dataEnvelope(ecgListResponse, "EcgListResponseEnvelope"),
+            },
+          },
+        },
+        ...moduleDisabledResponse,
+        ...stdResponses,
+      },
+    },
+    post: {
+      tags: ["Insights"],
+      summary: "Ingest one ECG recording",
+      description:
+        "The live ECG ingest: one Apple Watch recording per request, for a client draining its HealthKit ECG observer. Before this existed, a watch ECG could only reach HealthLog inside a full `export.zip`. One recording per request because a 30 s / 512 Hz strip is ~15 360 samples. Samples are INTEGER MICRO-VOLTS (convert from HealthKit's Volts), stored AES-256-GCM encrypted; `sampleCount` and `durationSeconds` are derived server-side. The `classification` is the device's own verdict stored verbatim — HealthLog never reads the waveform to produce or revise one. `source` accepts `APPLE_HEALTH` only; `userId` comes from the session and is never a body field. Unknown body keys are rejected with a 422 naming them. No `Idempotency-Key` is needed: the recording carries its own identity, so a retry resolves to the same row by construction — see `status` for what a re-post reports. Limits: 32 768 samples, 2 MB body, 60 recordings per minute per user. Module-gated on `insights` and the operator `insightStatus` assistant surface; no LLM call. Auth via cookie or Bearer.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: ecgIngestRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description:
+            "The recording was already stored: `updated` (same id, overwritten in place) or `duplicate` (already present under a different id, nothing written).",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                ecgIngestResponse,
+                "EcgIngestResponseEnvelope",
+              ),
+            },
+          },
+        },
+        "201": {
+          description: "A new recording was stored (`status: inserted`).",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                ecgIngestResponse,
+                "EcgIngestCreatedEnvelope",
+              ),
             },
           },
         },

@@ -8,19 +8,31 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/db", () => ({
-  prisma: {
-    measurement: {
-      upsert: vi.fn(),
+// The waveform write goes through the shared writer
+// (`@/lib/ecg/persist-recording`), which opens a transaction and looks the
+// recording up under both identities before upserting. The mock hands the
+// transaction the same `ecgRecording` delegate, so these tests still watch the
+// real assembly rather than a stub standing in for it.
+vi.mock("@/lib/db", () => {
+  const ecgRecording = {
+    upsert: vi.fn(),
+    findUnique: vi.fn(),
+  };
+  return {
+    prisma: {
+      measurement: {
+        upsert: vi.fn(),
+      },
+      ecgRecording,
+      withingsConnection: {
+        findUnique: vi.fn(),
+      },
+      $transaction: vi.fn(
+        async (fn: (tx: unknown) => unknown) => await fn({ ecgRecording }),
+      ),
     },
-    ecgRecording: {
-      upsert: vi.fn(),
-    },
-    withingsConnection: {
-      findUnique: vi.fn(),
-    },
-  },
-}));
+  };
+});
 
 vi.mock("../ecg-waveform-codec", () => ({
   encryptWaveformToBytes: vi.fn((samples: number[]) =>
@@ -126,7 +138,14 @@ beforeEach(() => {
   vi.mocked(prisma.measurement.upsert).mockResolvedValue({
     id: "m-1",
   } as never);
-  vi.mocked(prisma.ecgRecording.upsert).mockResolvedValue({} as never);
+  vi.mocked(prisma.ecgRecording.findUnique).mockResolvedValue(null as never);
+  vi.mocked(prisma.ecgRecording.upsert).mockResolvedValue({
+    id: "ecg-1",
+  } as never);
+  vi.mocked(prisma.$transaction).mockImplementation(
+    (async (fn: (tx: unknown) => unknown) =>
+      await fn({ ecgRecording: prisma.ecgRecording })) as never,
+  );
 });
 
 afterEach(() => {
