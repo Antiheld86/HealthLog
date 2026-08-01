@@ -455,10 +455,10 @@ describe("the published contract matches what the route serves", () => {
     // Body that fails validation.
     await record({ pillars: ["NOT_A_PILLAR"] });
     // Present-but-unparseable base token.
-    await record({ pillars: ALL_EIGHT, baseUpdatedAt: null });
+    await record({ pillars: ALL_PILLARS, baseUpdatedAt: null });
     // Stale base token.
     await record(
-      { pillars: ALL_EIGHT, baseUpdatedAt: "2026-07-24T08:00:00.000Z" },
+      { pillars: ALL_PILLARS, baseUpdatedAt: "2026-07-24T08:00:00.000Z" },
       true,
     );
     return byStatus;
@@ -506,7 +506,7 @@ describe("the published contract matches what the route serves", () => {
     vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 1 } as never);
 
     const res = await (PATCH as (r: Request) => Promise<Response>)(
-      mkPatch({ pillars: ALL_EIGHT }),
+      mkPatch({ pillars: ALL_PILLARS }),
     );
     const env = (await res.json()) as { data: ResolvedBody };
     expect(res.status).toBe(200);

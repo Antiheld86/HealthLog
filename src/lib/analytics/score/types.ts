@@ -22,7 +22,7 @@ export const SCORE_VERSION = 3 as const;
 /**
  * The pillars a score can be built from.
  *
- * v1.35.1 — FITNESS is gone. The schema records VO₂max but cannot tell a
+ * v1.35.2 — FITNESS is gone. The schema records VO₂max but cannot tell a
  * measured test apart from a device estimate, so every FITNESS row
  * reached the scorer unproven and was refused: the pillar had never once
  * produced a value on any account. A pillar that cannot score is not a
