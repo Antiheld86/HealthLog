@@ -36,12 +36,6 @@ const shareLinkSummary = z.object({
   // link was revoked on upgrade; the sharing list surfaces this so the owner
   // knows to re-mint rather than wondering why a working link stopped.
   needsReselection: z.boolean(),
-  // RETIRED, response-only, serving the constants `false` and `[]`. They
-  // configured a FHIR face that was never built; the request refuses them and
-  // their columns are gone. They stay on the response until the native client
-  // confirms it does not decode them.
-  allowFhirApi: z.boolean(),
-  resourceTypes: z.array(z.string()),
   expiresAt: z.string(),
   createdAt: z.string(),
   revokedAt: z.string().nullable(),

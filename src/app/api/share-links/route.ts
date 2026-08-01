@@ -87,22 +87,6 @@ const shareLinkSummarySelect = {
   _count: { select: { documents: true } },
 } as const;
 
-/**
- * RETIRED, kept on the response only.
- *
- * These two fields described a scoped FHIR face for a share link that was
- * never built. The request schema refuses them — sending either is a 422 —
- * their columns are dropped, and nothing reads or honours them. They stay in
- * the create and list responses, serving the constant `false` and `[]`,
- * because the native client was given this response shape and a missing
- * non-optional key fails a whole Swift decode. They come out once #70 in the
- * native repository confirms the client does not decode them.
- */
-const RETIRED_FHIR_SCOPE_FIELDS = {
-  allowFhirApi: false,
-  resourceTypes: [] as string[],
-} as const;
-
 /** Project a stored row to the safe owner-facing shape (never the token). */
 function toSummary(row: {
   id: string;
@@ -279,7 +263,6 @@ export const POST = apiHandler(async (request: NextRequest) => {
   return apiSuccess(
     {
       ...toSummary(created),
-      ...RETIRED_FHIR_SCOPE_FIELDS,
       token: rawToken,
       passphrase: rawPassphrase,
       shareUrl,
@@ -300,9 +283,6 @@ export const GET = apiHandler(async () => {
   });
 
   return apiSuccess({
-    shareLinks: rows.map((row) => ({
-      ...toSummary(row),
-      ...RETIRED_FHIR_SCOPE_FIELDS,
-    })),
+    shareLinks: rows.map((row) => toSummary(row)),
   });
 });
