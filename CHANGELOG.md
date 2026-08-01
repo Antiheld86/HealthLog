@@ -19,6 +19,17 @@
   again from the app ends up as a single entry rather than a duplicate or an
   error.
 
+### Fixed
+
+- A page no longer grows a second scrollbar for the moment between appearing and
+  becoming interactive. Every screen with a toggle briefly rendered a hidden form
+  control that sat outside the scrolling area, so the whole document became
+  scrollable to roughly twice the height of the screen until the page finished
+  loading. On a slow connection or a busy device the window was long enough to
+  flick past the end of a settings page and land on nothing. The scrolling area
+  now contains its own children, which closes the whole class rather than the one
+  page it was noticed on.
+
 ### Migration
 
 - This release removes duplicate ECG recordings. An existing database can hold

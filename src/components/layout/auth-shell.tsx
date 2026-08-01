@@ -319,7 +319,25 @@ export function AuthShell({
             // wrapper then recentres and the whole column, including the
             // admin/settings sidebar, shifts a few px sideways on every
             // toggle. Reserving the gutter holds the layout still.
-            className="flex-1 [scrollbar-gutter:stable] overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-0"
+            //
+            // `relative` makes this element the containing block for every
+            // absolutely-positioned descendant that has no nearer positioned
+            // ancestor. Without it those boxes resolve against the INITIAL
+            // containing block, which lives outside the scroll container, so
+            // `overflow-y-auto` never clips them: their static position sits
+            // wherever the flow put them and extends the DOCUMENT's
+            // scrollable overflow instead, painting a second vertical scroll
+            // surface beside `<main>` (UI-STANDARDS §9 one-scroll-floor).
+            // The class is not hypothetical and not confined to app code. A
+            // Radix `<Switch>` outside a `<form>` renders a hidden
+            // `position:absolute` bubble input on the first pass and drops it
+            // only once the button ref resolves, so every route carrying a
+            // switch below the fold (/settings/modules is the long one) grew
+            // a full-height document scrollbar for the entire pre-hydration
+            // window. Anchoring the scroll container closes the escape route
+            // for all of them at once instead of asking each new
+            // absolutely-positioned child to remember its own wrapper.
+            className="relative flex-1 [scrollbar-gutter:stable] overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-0"
           >
             {/*
               v1.4.33 IW9 — container normalised on `max-w-screen-xl`
