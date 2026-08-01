@@ -185,12 +185,7 @@ describe("GET /api/gamification/achievements — per-module badge skipping", () 
     },
   ];
 
-  type Badge = {
-    id: string;
-    category: string;
-    metric: string;
-    unlocked: boolean;
-  };
+  type Badge = { id: string; category: string; metric: string };
 
   async function badgesFor(
     moduleMap: Record<string, boolean>,
@@ -222,14 +217,8 @@ describe("GET /api/gamification/achievements — per-module badge skipping", () 
     expect(badges.length).toBeGreaterThan(0);
   });
 
-  it("persists no unlock at all — a GET does not write", async () => {
-    // A mood badge unlocks at >=1 entry, so this read HAS an unlock to
-    // notice. It still writes nothing: the row that pins the date is the
-    // `achievement-unlock-sweep` job's, and a read carrying an INSERT is
-    // the side-effecting GET `api-handler.ts` warns against. The badge grid
-    // is unaffected — `unlocked` comes from the live metrics.
-    const badges = await badgesFor({ mood: true });
-    expect(badges.some((b) => b.category === "mood" && b.unlocked)).toBe(true);
-    expect(prisma.userAchievement.createMany).not.toHaveBeenCalled();
-  });
+  // The "a disabled module never gets its badge pinned" invariant moved with
+  // the write itself — see `src/lib/jobs/__tests__/achievement-unlock-sweep.test.ts`.
+  // That this route persists nothing at all is proved in
+  // `writes-nothing.test.ts`, against a result that HAS a pending unlock.
 });
