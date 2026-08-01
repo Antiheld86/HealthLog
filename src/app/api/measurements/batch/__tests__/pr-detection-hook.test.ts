@@ -156,6 +156,7 @@ describe("POST /api/measurements/batch — PR detection enqueue (v1.4.25 W16c)",
       // This batch declares no trigger, so the trigger field is nulled and the
       // background timestamp is not written — see the sync-trigger suite.
       data: {
+        lastSyncedAt: expect.any(Date),
         healthKitLastSyncedAt: expect.any(Date),
         healthKitLastSyncTrigger: null,
       },
@@ -170,7 +171,12 @@ describe("POST /api/measurements/batch — PR detection enqueue (v1.4.25 W16c)",
     );
 
     expect(res.status).toBe(200);
-    expect(prisma.user.update).not.toHaveBeenCalled();
+    // The SyncMode checkpoint still advances — a MANUAL push is a client
+    // sync — but none of the HealthKit-specific fields are touched.
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: { lastSyncedAt: expect.any(Date) },
+    });
   });
 
   it("surfaces a hard reconciliation failure without checkpointing it", async () => {
