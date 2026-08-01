@@ -191,6 +191,45 @@ const cycleCalendarDayDto = z.object({
   cervixOpening: cervixOpeningEnum.nullable(),
 });
 
+const cycleVerdictDto = z
+  .object({
+    state: z.enum(["IN_CYCLE", "OVERDUE", "INSUFFICIENT_DATA"]),
+    dayOfCycle: z.number().int().nullable().meta({
+      description:
+        "1-based day of the current cycle. Null in OVERDUE and INSUFFICIENT_DATA — beyond the typical length plus the server's grace window the count is no longer an observed fact.",
+    }),
+    cycleLength: z.number().int().nullable().meta({
+      description:
+        "Days the ring represents: the observed labelled run, or the profile-derived idealized cycle for a low-data tracker.",
+    }),
+    phase: cyclePhaseEnumOpenapi.nullable(),
+    spans: z.array(
+      z.object({ phase: cyclePhaseEnumOpenapi, fraction: z.number() }),
+    ),
+    cycleStartDate: z.string().nullable().meta({
+      description:
+        "First day of the current cycle (YYYY-MM-DD). Still set while OVERDUE — the last logged period start remains a fact once the count stops.",
+    }),
+    overdueDays: z.number().int().nullable().meta({
+      description:
+        "How many days past the profile's typical cycle length the open cycle has run. Set only in OVERDUE.",
+    }),
+    daysUntilNext: z.number().int().nullable().meta({
+      description:
+        "Days from today to the predicted next period start. Null when no prediction ran and null once that start is in the past.",
+    }),
+    fertileWindow: z.object({
+      start: z.string().nullable(),
+      end: z.string().nullable(),
+      active: z.boolean(),
+    }),
+  })
+  .meta({
+    id: "CycleVerdictDTO",
+    description:
+      "The resolved cycle verdict for the user's own timezone day. Render these values; do not recompute them. The grace window that decides OVERDUE is deliberately not published — read `state` and `overdueDays`.",
+  });
+
 const cycleProfileDto = z
   .object({
     goal: cycleTrackingGoalEnum,
@@ -218,6 +257,10 @@ const cycleCalendarResponse = z.object({
     cyclesObserved: z.number().int(),
   }),
   prediction: cyclePredictionDto.nullable(),
+  // The resolved verdict — required, never optional. An optional verdict is a
+  // plausible default that invites a client to fall back to deriving its own,
+  // which is the defect this field exists to remove.
+  verdict: cycleVerdictDto,
   // Cold-start gate (mirrors `prediction.stillLearning`): true while < 3 cycles
   // are observed. When set, the `days` grid carries no fertile window, no
   // predicted-ovulation dot, and no phase band (those would rest on a

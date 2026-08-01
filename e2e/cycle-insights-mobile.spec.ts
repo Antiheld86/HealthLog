@@ -37,20 +37,29 @@ function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** The labelled run the fixture paints: 5 menstrual, 6 follicular, 1 ovulatory,
+ *  then luteal through today and one day past it. */
+const RUN_START_OFFSET = -12;
+const PHASE_PLAN: string[] = [
+  ...Array<string>(5).fill("MENSTRUAL"),
+  ...Array<string>(6).fill("FOLLICULAR"),
+  "OVULATORY",
+  "LUTEAL",
+  "LUTEAL",
+];
+
+function runStart(): Date {
+  const start = new Date();
+  start.setDate(start.getDate() + RUN_START_OFFSET);
+  return start;
+}
+
 /** A 90-day-back → 180-day-forward calendar with a recent labelled cycle run
- *  so the wheel resolves a current phase + day and the calendar paints cells. */
+ *  so the wheel has a phase + day to show and the calendar paints cells. */
 function buildCalendarDays(): Array<Record<string, unknown>> {
   const days: Array<Record<string, unknown>> = [];
-  const start = new Date();
-  start.setDate(start.getDate() - 12);
-  // 5 menstrual, 6 follicular, 1 ovulatory, then luteal through today.
-  const plan: string[] = [
-    ...Array<string>(5).fill("MENSTRUAL"),
-    ...Array<string>(6).fill("FOLLICULAR"),
-    "OVULATORY",
-    "LUTEAL",
-    "LUTEAL",
-  ];
+  const start = runStart();
+  const plan = PHASE_PLAN;
   for (let i = 0; i < plan.length; i++) {
     const d = new Date(start);
     d.setDate(start.getDate() + i);
@@ -72,6 +81,34 @@ function buildCalendarDays(): Array<Record<string, unknown>> {
   return days;
 }
 
+/**
+ * The verdict the server resolves for that grid. The real route publishes this
+ * and the wheel renders it, so a fixture that omitted it would paint an empty
+ * ring — deriving it here from the SAME plan keeps the two from drifting.
+ */
+function buildVerdict(): Record<string, unknown> {
+  const plan = PHASE_PLAN;
+  const counts = plan.reduce<Record<string, number>>((acc, phase) => {
+    acc[phase] = (acc[phase] ?? 0) + 1;
+    return acc;
+  }, {});
+  const order = ["MENSTRUAL", "FOLLICULAR", "OVULATORY", "LUTEAL"];
+  return {
+    state: "IN_CYCLE",
+    // The run starts 12 days back, so today is its 13th day.
+    dayOfCycle: 1 - RUN_START_OFFSET,
+    cycleLength: plan.length,
+    phase: plan[-RUN_START_OFFSET],
+    spans: order
+      .filter((phase) => (counts[phase] ?? 0) > 0)
+      .map((phase) => ({ phase, fraction: counts[phase] / plan.length })),
+    cycleStartDate: ymd(runStart()),
+    overdueDays: null,
+    daysUntilNext: null,
+    fertileWindow: { start: null, end: null, active: false },
+  };
+}
+
 const CALENDAR_BODY = {
   data: {
     profile: {
@@ -81,6 +118,8 @@ const CALENDAR_BODY = {
       cyclesObserved: 1,
     },
     prediction: null,
+    verdict: buildVerdict(),
+    stillLearning: false,
     days: buildCalendarDays(),
     meta: { generatedAt: new Date().toISOString() },
   },

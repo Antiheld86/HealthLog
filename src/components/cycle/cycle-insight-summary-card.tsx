@@ -8,22 +8,16 @@ import { useTranslations } from "@/lib/i18n/context";
 import { SectionHeading } from "@/components/insights/section-heading";
 import { CyclePhaseHeadline } from "./cycle-phase-crosstab";
 import { PHASE_HUE } from "./phase-tokens";
-import { deriveWheelState } from "./wheel-state";
-import {
-  localYmd,
-  useCycleCalendar,
-  useCycleInsights,
-  useCycleProfile,
-} from "./use-cycle";
+import { localYmd, useCycleCalendar, useCycleInsights } from "./use-cycle";
 
 /**
  * v1.15.2 — the gated cycle-insights summary card for the main Insights page.
  *
  * A compact TEASER + entry point, never a duplicate of the full cycle insights
  * tab. It surfaces three things and links into the source of truth:
- *   1. the current phase (name + hue dot) and cycle day, derived from the
- *      SAME calendar read + `deriveWheelState` the cycle wheel uses, so the
- *      two surfaces can never disagree on the day-of-cycle or phase;
+ *   1. the current phase (name + hue dot) and cycle day, read from the SAME
+ *      server-resolved `verdict` on the calendar read the cycle wheel uses, so
+ *      the two surfaces can never disagree on the day-of-cycle or phase;
  *   2. the one headline phase finding, rendered through the SHARED
  *      `<CyclePhaseHeadline>` (which already owns the FDR-gated copy + the
  *      honest "not enough cycles yet" empty line) — no re-implementation;
@@ -54,25 +48,13 @@ export function CycleInsightSummaryCard() {
 
   // Mirror the cycle-view window so the cache key is shared (no extra request
   // when the user later opens the cycle page in the same session).
-  const today = useMemo(() => shiftToday(0), []);
   const from = useMemo(() => shiftToday(-90), []);
   const to = useMemo(() => shiftToday(180), []);
 
   const calendar = useCycleCalendar(from, to);
   const insights = useCycleInsights();
-  // Shared 5-min-cached profile read so a low-data tracker still gets the
-  // canonical four-phase ring (no extra request — shared cache key).
-  const profile = useCycleProfile();
-
-  const wheel = useMemo(
-    () =>
-      deriveWheelState(calendar.data?.days ?? [], today, {
-        typicalCycleLength: profile.data?.typicalCycleLength,
-        typicalPeriodLength: profile.data?.typicalPeriodLength,
-        lutealPhaseLength: profile.data?.lutealPhaseLength,
-      }),
-    [calendar.data, today, profile.data],
-  );
+  // The server's resolved verdict — the teaser reports it, never recomputes it.
+  const verdict = calendar.data?.verdict;
 
   // Stay silent until the calendar read resolves, and on a hard error: the
   // overview must never show a half-painted or error-framed cycle teaser. The
@@ -80,10 +62,10 @@ export function CycleInsightSummaryCard() {
   if (calendar.isLoading && !calendar.data) return null;
   if (calendar.isError && !calendar.data) return null;
 
-  const phase = wheel.phase;
+  const phase = verdict?.phase ?? null;
   const hue = phase ? PHASE_HUE[phase] : PHASE_HUE.LUTEAL;
   const phaseName = phase ? t(`cycle.phase.${phase}`) : t("cycle.phase.none");
-  const dayOfCycle = wheel.dayOfCycle;
+  const dayOfCycle = verdict?.dayOfCycle ?? null;
 
   const ariaLabel =
     phase && dayOfCycle != null

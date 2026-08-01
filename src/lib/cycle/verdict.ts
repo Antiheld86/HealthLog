@@ -1,0 +1,354 @@
+/**
+ * The resolved cycle verdict — day-of-cycle, the ring's phase segments, the
+ * overdue judgement and its day count, and the days until the next predicted
+ * period. Computed here, on the server, once.
+ *
+ * This used to live in web client code (`src/components/cycle/wheel-state.ts`)
+ * and every client that wanted the same answer had to reproduce it, including
+ * the fourteen-day grace window that decides when the day count stops being
+ * an observed fact. Two copies of that rule means two answers about one
+ * person's body, and the second copy is how a cycle ring ends up frozen. The
+ * rule now exists once and the answer travels on the wire.
+ *
+ * Pure and deterministic: it reads the calendar grid the same request already
+ * built, plus the profile's typical lengths and the (already goal-gated)
+ * prediction fields. No database, no clock — `today` is resolved by the caller
+ * from the user's own timezone, which is also why a client cannot compute this
+ * correctly on its own.
+ */
+import { dayDiff } from "./day-math";
+import type { CyclePhase } from "./types";
+
+const PHASE_ORDER: CyclePhase[] = [
+  "MENSTRUAL",
+  "FOLLICULAR",
+  "OVULATORY",
+  "LUTEAL",
+];
+
+/** One arc of the ring: a phase and its share of the represented cycle. */
+export interface CyclePhaseSpan {
+  phase: CyclePhase;
+  fraction: number;
+}
+
+/**
+ * What the record supports saying about today.
+ *
+ * - `IN_CYCLE` — today sits inside a cycle whose day count is still an
+ *   observed fact. `dayOfCycle`, `phase` and `cycleStartDate` are all set.
+ * - `OVERDUE` — the open cycle has run past the profile's typical length by
+ *   more than the grace window. `dayOfCycle` and `phase` are null on purpose
+ *   (see the ceiling below); `overdueDays` carries how late it is.
+ * - `INSUFFICIENT_DATA` — today carries no phase at all: no cycle has been
+ *   logged, or today falls outside every known cycle window.
+ */
+export type CycleVerdictState = "IN_CYCLE" | "OVERDUE" | "INSUFFICIENT_DATA";
+
+export interface CycleVerdict {
+  state: CycleVerdictState;
+  /** 1-based day of the current cycle. Null in OVERDUE and INSUFFICIENT_DATA. */
+  dayOfCycle: number | null;
+  /** Days the ring represents (observed run, or the idealized cycle). */
+  cycleLength: number | null;
+  /** Today's phase. Null in OVERDUE and INSUFFICIENT_DATA. */
+  phase: CyclePhase | null;
+  /** The ring's arcs, as fractions summing to ~1. Empty when there is nothing to draw. */
+  spans: CyclePhaseSpan[];
+  /**
+   * First day of the current cycle (`YYYY-MM-DD`), or null when no cycle is
+   * active. Still set while OVERDUE — the last logged period start remains a
+   * fact even once the count stops. Scopes the BBT chart to the same cycle the
+   * ring shows.
+   */
+  cycleStartDate: string | null;
+  /**
+   * How many days past the profile's typical cycle length the open cycle has
+   * run. Set only in OVERDUE. Measured against the typical length, not against
+   * typical + grace: a person asking how late they are means "later than my
+   * usual cycle", and the grace window is our tolerance, not their calendar.
+   */
+  overdueDays: number | null;
+  /**
+   * Days from today to the predicted next period start. Null when there is no
+   * prediction (raw-chart mode / prediction disabled) and null once that
+   * predicted start is in the past — at that point there is no "until", and
+   * `state` + `overdueDays` carry what is true instead.
+   */
+  daysUntilNext: number | null;
+  /** The fertile window as already goal-gated upstream, plus whether today falls in it. */
+  fertileWindow: {
+    start: string | null;
+    end: string | null;
+    active: boolean;
+  };
+}
+
+/**
+ * The profile-derived canonical phase lengths used to draw an idealized ring
+ * for a low-data tracker (see `idealizedSpans`). All optional — every field
+ * falls back to the textbook default when the profile has not set it.
+ */
+export interface CycleProfileLengths {
+  /** Typical full cycle length in days (default 28). */
+  typicalCycleLength?: number | null;
+  /** Typical period (menstrual) length in days (default 5). */
+  typicalPeriodLength?: number | null;
+  /** Typical luteal-phase length in days (default 14). */
+  lutealPhaseLength?: number | null;
+}
+
+/** The calendar-grid fields the verdict reads. `CalendarDayDTO` satisfies it. */
+export interface VerdictCalendarDay {
+  date: string;
+  phase: CyclePhase | null;
+  isFertileWindow: boolean;
+}
+
+export interface ResolveCycleVerdictInput {
+  /** The calendar grid for the rendered span, in any order. */
+  days: readonly VerdictCalendarDay[];
+  /** Today's `YYYY-MM-DD` in the USER's timezone, not the process's. */
+  today: string;
+  profile?: CycleProfileLengths;
+  /** `prediction.nextPeriodStart`, or null when no prediction ran. */
+  nextPeriodStart?: string | null;
+  /** Already goal- and cold-start-gated fertile window bounds. */
+  fertileWindowStart?: string | null;
+  fertileWindowEnd?: string | null;
+}
+
+/** Below this many labelled days in the current cycle run, the ring would
+ * normalise a 1-3 day partial run so a single phase filled the whole circle.
+ * For such low-data trackers we draw the canonical four-phase proportions from
+ * the profile instead, so the dial always reads as a real cycle wheel. A run
+ * of 7+ labelled days already spans more than the menstrual phase, so the
+ * observed-share path takes over from there. */
+const SPARSE_RUN_THRESHOLD = 7;
+
+/**
+ * Days PAST the profile's typical cycle length before the count stops.
+ * The engine keeps the open cycle's phase window alive until the predicted
+ * next start, and a confirmed/anchored ovulation signal (BBT trend,
+ * symptothermal double-check, LH surge) or a long estimated length can push
+ * that prediction into the future while the last logged period is months old —
+ * every day of the gap then carries a (population-framed) LUTEAL label and the
+ * day-of-cycle walks up without bound ("day 90"). Beyond typical + grace the
+ * count is no longer an observed fact, so the verdict degrades to the honest
+ * overdue state instead. Two weeks of grace covers ordinary cycle-to-cycle
+ * variation without hiding a real delay.
+ *
+ * This constant is deliberately NOT published on the wire. A client that knows
+ * the threshold will eventually apply it itself, and then there are two
+ * deciders again. Clients read `state` and `overdueDays`.
+ */
+const OVERDUE_GRACE_DAYS = 14;
+
+/** The profile's typical cycle length, floored at a week. */
+function typicalCycleLength(profile?: CycleProfileLengths): number {
+  return Math.max(Math.round(profile?.typicalCycleLength ?? 28) || 28, 7);
+}
+
+/**
+ * The canonical four-phase span set for a low-data tracker, derived from the
+ * profile's typical lengths (textbook defaults when unset): a 28-day cycle
+ * with a 5-day period, a 2-day ovulatory window, a 14-day luteal phase, and
+ * the follicular phase filling the remainder. Proportions, not day counts, so
+ * the ring renders the familiar MENSTRUAL/FOLLICULAR/OVULATORY/LUTEAL arcs
+ * instead of one dominant sliver.
+ */
+function idealizedSpans(profile?: CycleProfileLengths): {
+  spans: CyclePhaseSpan[];
+  cycleLength: number;
+} {
+  const cycle = typicalCycleLength(profile);
+  const period = Math.min(
+    Math.max(Math.round(profile?.typicalPeriodLength ?? 5) || 5, 1),
+    cycle - 3,
+  );
+  const luteal = Math.min(
+    Math.max(Math.round(profile?.lutealPhaseLength ?? 14) || 14, 1),
+    cycle - period - 1,
+  );
+  // A short ovulatory window sits at the fertile peak; the follicular phase
+  // fills whatever remains between the period and the ovulatory window.
+  const ovulatory = Math.min(2, Math.max(cycle - period - luteal - 1, 1));
+  const follicular = Math.max(cycle - period - ovulatory - luteal, 1);
+
+  const days: Record<CyclePhase, number> = {
+    MENSTRUAL: period,
+    FOLLICULAR: follicular,
+    OVULATORY: ovulatory,
+    LUTEAL: luteal,
+  };
+  const total = days.MENSTRUAL + days.FOLLICULAR + days.OVULATORY + days.LUTEAL;
+  const spans = PHASE_ORDER.map((phase) => ({
+    phase,
+    fraction: days[phase] / total,
+  }));
+  return { spans, cycleLength: total };
+}
+
+/**
+ * Walk back from `todayIdx` to the start of the current MENSTRUAL-anchored run:
+ * the first day of the most recent MENSTRUAL block at/before today with no phase
+ * gap. Assumes `sorted[todayIdx].phase != null` (the caller checks first).
+ */
+function findCycleStartIndex(
+  sorted: readonly VerdictCalendarDay[],
+  todayIdx: number,
+): number {
+  let startIdx = todayIdx;
+  for (let i = todayIdx; i >= 0; i--) {
+    const d = sorted[i];
+    if (d.phase == null) break;
+    startIdx = i;
+    if (
+      d.phase === "MENSTRUAL" &&
+      (i === 0 || sorted[i - 1].phase !== "MENSTRUAL")
+    ) {
+      break;
+    }
+  }
+  return startIdx;
+}
+
+/** Days from today to the next predicted start, or null once it is past. */
+function resolveDaysUntilNext(
+  today: string,
+  nextPeriodStart: string | null | undefined,
+): number | null {
+  if (!nextPeriodStart) return null;
+  const delta = dayDiff(nextPeriodStart, today);
+  return delta >= 0 ? delta : null;
+}
+
+function resolveFertileWindow(
+  input: ResolveCycleVerdictInput,
+  todayDay: VerdictCalendarDay | undefined,
+): CycleVerdict["fertileWindow"] {
+  return {
+    start: input.fertileWindowStart ?? null,
+    end: input.fertileWindowEnd ?? null,
+    active: todayDay?.isFertileWindow ?? false,
+  };
+}
+
+/**
+ * Resolve everything a client needs to render the cycle ring and its caption.
+ * The only place in the product that decides any of it.
+ */
+export function resolveCycleVerdict(
+  input: ResolveCycleVerdictInput,
+): CycleVerdict {
+  const { days, today, profile } = input;
+  const byDate = new Map(days.map((d) => [d.date, d]));
+  const todayDay = byDate.get(today);
+  const fertileWindow = resolveFertileWindow(input, todayDay);
+  const daysUntilNext = resolveDaysUntilNext(today, input.nextPeriodStart);
+
+  const nothingToSay: CycleVerdict = {
+    state: "INSUFFICIENT_DATA",
+    dayOfCycle: null,
+    cycleLength: null,
+    phase: null,
+    spans: [],
+    cycleStartDate: null,
+    overdueDays: null,
+    daysUntilNext,
+    fertileWindow,
+  };
+
+  if (!todayDay || todayDay.phase == null) return nothingToSay;
+
+  // Sort dates ascending and find today's index.
+  const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
+  const todayIdx = sorted.findIndex((d) => d.date === today);
+  if (todayIdx < 0) return nothingToSay;
+
+  const startIdx = findCycleStartIndex(sorted, todayIdx);
+  const cycleStartDate = sorted[startIdx].date;
+  const run = sorted.slice(startIdx, todayIdx + 1);
+  const dayOfCycle = run.length;
+
+  // Honest ceiling: once the run overshoots the typical length + grace, the
+  // count reflects the engine's open-ended cycle window, not an observed
+  // cycle day. Degrade to the idealized ring with no day / phase claim; the
+  // caption says the period is late and by how much.
+  const typicalLength = typicalCycleLength(profile);
+  if (dayOfCycle > typicalLength + OVERDUE_GRACE_DAYS) {
+    const ideal = idealizedSpans(profile);
+    return {
+      state: "OVERDUE",
+      dayOfCycle: null,
+      cycleLength: ideal.cycleLength,
+      phase: null,
+      spans: ideal.spans,
+      cycleStartDate,
+      overdueDays: dayOfCycle - typicalLength,
+      daysUntilNext,
+      fertileWindow,
+    };
+  }
+
+  // Tally each phase's day-count across the run + the forward predicted run
+  // (so the ring shows the whole cycle, not just elapsed days).
+  const counts: Record<CyclePhase, number> = {
+    MENSTRUAL: 0,
+    FOLLICULAR: 0,
+    OVULATORY: 0,
+    LUTEAL: 0,
+  };
+  // Include forward days until the next MENSTRUAL block to bound a full cycle.
+  let end = todayIdx;
+  for (let i = todayIdx + 1; i < sorted.length; i++) {
+    const d = sorted[i];
+    if (d.phase == null) break;
+    if (d.phase === "MENSTRUAL") break;
+    end = i;
+  }
+  const fullRun = sorted.slice(startIdx, end + 1);
+  for (const d of fullRun) {
+    if (d.phase) counts[d.phase] += 1;
+  }
+
+  // Low-data tracker: too few labelled days to span a real cycle. The
+  // observed-share math would normalise a 1-3 day partial run so a single
+  // phase filled the whole ring (the "one dominant arc" bug). Fall back to the
+  // canonical four-phase proportions derived from the profile's typical
+  // lengths so the dial reads as a real cycle wheel. The current phase + the
+  // day-of-cycle marker stay driven by the observed labels; only the arc
+  // proportions and the ring's represented length come from the ideal.
+  if (fullRun.length < SPARSE_RUN_THRESHOLD) {
+    const ideal = idealizedSpans(profile);
+    return {
+      state: "IN_CYCLE",
+      dayOfCycle,
+      cycleLength: ideal.cycleLength,
+      phase: todayDay.phase,
+      spans: ideal.spans,
+      cycleStartDate,
+      overdueDays: null,
+      daysUntilNext,
+      fertileWindow,
+    };
+  }
+
+  const total = fullRun.length || 1;
+  const spans = PHASE_ORDER.filter((p) => counts[p] > 0).map((phase) => ({
+    phase,
+    fraction: counts[phase] / total,
+  }));
+
+  return {
+    state: "IN_CYCLE",
+    dayOfCycle,
+    cycleLength: fullRun.length,
+    phase: todayDay.phase,
+    spans,
+    cycleStartDate,
+    overdueDays: null,
+    daysUntilNext,
+    fertileWindow,
+  };
+}

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { I18nProvider } from "@/lib/i18n/context";
-import type { CalendarResponse } from "../types";
+import type { CalendarResponse, CycleVerdict } from "../types";
 
 /**
  * v1.15.3 — the compact cycle ring as a wellness-strip tile.
@@ -10,7 +10,7 @@ import type { CalendarResponse } from "../types";
  * The tile is mounted ONLY when `user.cycleTrackingEnabled` is true (a
  * page-level gate the Insights page owns, mirroring the summary card); these
  * tests cover the tile's own behaviour given that gate: it sources the phase +
- * cycle day from the SAME calendar read + `deriveWheelState` the wheel uses,
+ * cycle day from the SAME server-resolved `verdict` the wheel reads,
  * renders the cycle ring labelled, deep-links to the cycle page, and stays
  * silent while resolving / on a hard error / when there is no active cycle so
  * the wellness strip never shows a half-painted dial (no gap, no placeholder).
@@ -49,9 +49,6 @@ vi.mock("../use-cycle", async () => {
   return {
     ...actual,
     useCycleCalendar: () => calendarState.current,
-    // The tile now reads the profile lengths for the low-data idealized ring.
-    // Mock it at the hook boundary too so the SSR snapshot needs no QueryClient.
-    useCycleProfile: () => ({ data: undefined }),
   };
 });
 
@@ -63,7 +60,38 @@ function render(node: React.ReactNode) {
   );
 }
 
-/** A calendar read where `today` sits on a LUTEAL day at day-of-cycle 3. */
+/** The verdict the server would resolve for that grid: LUTEAL, cycle day 3. */
+const LUTEAL_VERDICT: CycleVerdict = {
+  state: "IN_CYCLE",
+  dayOfCycle: 3,
+  cycleLength: 28,
+  phase: "LUTEAL",
+  spans: [
+    { phase: "MENSTRUAL", fraction: 5 / 28 },
+    { phase: "FOLLICULAR", fraction: 7 / 28 },
+    { phase: "OVULATORY", fraction: 2 / 28 },
+    { phase: "LUTEAL", fraction: 14 / 28 },
+  ],
+  cycleStartDate: null,
+  overdueDays: null,
+  daysUntilNext: null,
+  fertileWindow: { start: null, end: null, active: false },
+};
+
+/** The verdict for an account with nothing to say about today. */
+const NO_CYCLE_VERDICT: CycleVerdict = {
+  state: "INSUFFICIENT_DATA",
+  dayOfCycle: null,
+  cycleLength: null,
+  phase: null,
+  spans: [],
+  cycleStartDate: null,
+  overdueDays: null,
+  daysUntilNext: null,
+  fertileWindow: { start: null, end: null, active: false },
+};
+
+/** A calendar read whose SERVER-RESOLVED verdict puts today on LUTEAL, day 3. */
 function lutealCalendar(today: string): CalendarResponse {
   const days = [
     { date: shift(today, -2), phase: "MENSTRUAL" as const },
@@ -74,6 +102,7 @@ function lutealCalendar(today: string): CalendarResponse {
     days: days as unknown as CalendarResponse["days"],
     profile: {} as CalendarResponse["profile"],
     prediction: null,
+    verdict: LUTEAL_VERDICT,
   } as CalendarResponse;
 }
 
@@ -138,6 +167,7 @@ describe("<CycleRingTile>", () => {
       days: [] as unknown as CalendarResponse["days"],
       profile: {} as CalendarResponse["profile"],
       prediction: null,
+      verdict: NO_CYCLE_VERDICT,
     } as CalendarResponse;
     calendarState.current = { data: empty, isLoading: false, isError: false };
     expect(render(<CycleRingTile />)).toBe("");

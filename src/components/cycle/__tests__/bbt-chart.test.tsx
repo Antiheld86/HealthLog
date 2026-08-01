@@ -41,6 +41,7 @@ describe("<BbtChart>", () => {
       <BbtChart
         days={days}
         today={today}
+        cycleStartDate="2026-06-01"
         predictedOvulation={null}
         rawChartMode={false}
       />,
@@ -60,6 +61,7 @@ describe("<BbtChart>", () => {
       <BbtChart
         days={days}
         today={today}
+        cycleStartDate="2026-06-01"
         predictedOvulation="2026-06-08"
         rawChartMode={false}
       />,

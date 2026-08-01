@@ -7513,6 +7513,7 @@
       "caption": "twojego cyklu",
       "firstPeriodCta": "Zapisz pierwszą miesiączkę",
       "periodOverdue": "Okres jest późniejszy niż zwykle — licznik dni jest wstrzymany, dopóki nie zapiszesz następnego okresu.",
+      "periodOverdueDays": "Okres jest {days} dni późniejszy niż zwykle — licznik dni jest wstrzymany, dopóki nie zapiszesz następnego okresu.",
       "logPeriodCta": "Zapisz okres"
     },
     "calendar": {

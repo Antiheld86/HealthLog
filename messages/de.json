@@ -7513,6 +7513,7 @@
       "caption": "deines Zyklus",
       "firstPeriodCta": "Erste Periode erfassen",
       "periodOverdue": "Deine Periode ist später als üblich – die Tageszählung pausiert, bis die nächste Periode erfasst ist.",
+      "periodOverdueDays": "Deine Periode ist {days} Tage später als üblich – die Tageszählung pausiert, bis die nächste Periode erfasst ist.",
       "logPeriodCta": "Periode erfassen"
     },
     "calendar": {
