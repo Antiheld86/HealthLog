@@ -1422,6 +1422,96 @@ export const ecgDetailResponse = z
       "One ECG recording's decrypted waveform plus metadata and the DEVICE's verbatim classification. Ownership is narrowed in the query where — a foreign / unknown id 404s. The waveform is AES-256-GCM at rest, decrypted through the fail-closed codec. HealthLog does not interpret the trace, measure intervals, annotate beats, or emit a verdict of its own. no-store.",
   });
 
+// The live ECG ingest. One recording per request: a 30 s Apple Watch strip at
+// 512 Hz is ~15 360 samples, so a batch of them is not a shape anyone wants on
+// the wire. `userId` is never a body field — it comes from the session.
+export const ecgIngestRequest = z
+  .object({
+    externalRecordingId: z
+      .string()
+      .min(1)
+      .max(120)
+      .describe(
+        "The recording's stable id AS THE CLIENT KNOWS IT — for an Apple Health client, the `HKSample.uuid`. It is the source's own identity, not a content hash: re-posting the same id overwrites that recording in place. It does not have to agree with the id the `export.zip` importer derives for the same strip; the server reconciles the two doors itself (see `status: duplicate`).",
+      ),
+    recordedAt: z.iso
+      .datetime({ offset: true })
+      .describe(
+        "When the strip was recorded on-device, with offset. Part of the recording's identity — see `status: duplicate`.",
+      ),
+    samplingFrequency: z
+      .number()
+      .int()
+      .min(1)
+      .max(10_000)
+      .describe(
+        "Signal sampling rate in Hz (an Apple Watch ECG is 512). Part of the recording's identity, and the divisor for the server-derived `durationSeconds`.",
+      ),
+    samples: z
+      .array(z.number().int().min(-1_000_000).max(1_000_000))
+      .min(1)
+      .max(32_768)
+      .describe(
+        "The waveform as INTEGER MICRO-VOLTS, in recording order — the same unit the `export.zip` CSV parser produces, so convert from HealthKit's Volts before sending. Capped at 32 768 samples (a clean factor of two above a 30 s / 512 Hz strip). Stored AES-256-GCM encrypted; never persisted as plaintext.",
+      ),
+    lead: z
+      .string()
+      .min(1)
+      .max(40)
+      .nullable()
+      .optional()
+      .describe("Recording lead label when the device reports one (e.g. `I`)."),
+    averageHeartRate: z
+      .number()
+      .int()
+      .min(1)
+      .max(300)
+      .nullable()
+      .optional()
+      .describe("The device's average heart rate (BPM) for the strip."),
+    classification: ecgClassification
+      .optional()
+      .describe(
+        "The RECORDING DEVICE's own verdict, stored verbatim. Only the three ECG values are accepted here. `RhythmClassification` in the database has six members because walking-steadiness and neutral event verdicts share it, and those appear on GET /api/insights/rhythm-events — a decoder generated from this schema must NOT be reused there. HealthLog never reads the waveform to produce or revise a verdict.",
+      ),
+    source: z
+      .enum(["APPLE_HEALTH"])
+      .describe(
+        "The client's own source. `APPLE_HEALTH` only: `WITHINGS` rows are minted by the OAuth sync and `COMPUTED` ones by the server, so neither is client-assertable — the same posture POST /api/measurements/batch takes.",
+      ),
+  })
+  .meta({
+    id: "EcgIngestRequest",
+    description:
+      "One Apple Watch ECG recording. Unknown keys are REJECTED with a 422 naming them rather than silently dropped, because every field here is load-bearing metadata for a stored recording. `sampleCount` and `durationSeconds` are derived server-side and must not be sent.",
+  });
+
+export const ecgIngestResponse = z
+  .object({
+    id: z.string().describe("The recording row's id (cuid)."),
+    status: z
+      .enum(["inserted", "updated", "duplicate"])
+      .describe(
+        "What the write did. `inserted` — a new recording landed (HTTP 201). `updated` — this `externalRecordingId` was already stored and the row was overwritten in place (HTTP 200); a retry is safe and creates nothing. `duplicate` — this exact recording is already stored under a DIFFERENT id, i.e. it arrived earlier through the `export.zip` importer (HTTP 200); nothing was written and `id` names the row that already holds it. A recording is the same recording when `(source, recordedAt, samplingFrequency)` match, which is enforced by a unique index rather than by convention. All three statuses mean the recording is stored and the client may advance its cursor.",
+      ),
+    recordedAt: z.iso
+      .datetime({ offset: true })
+      .describe("The `recordedAt` that was submitted, echoed back."),
+    sampleCount: z
+      .number()
+      .int()
+      .describe("Server-derived: the number of samples received."),
+    durationSeconds: z
+      .number()
+      .nullable()
+      .describe("Server-derived: `sampleCount / samplingFrequency`."),
+  })
+  .meta({
+    id: "EcgIngestResponse",
+    description:
+      "The outcome of one ECG ingest. Reported honestly rather than optimistically — a re-post never claims to have inserted.",
+  });
+
 // v1.10.0 — device-flagged event timeline (rhythm-events, WX-B). Deliberately
 // a SEPARATE enum from `ecgClassification` above: an EVENT row's
 // `rhythmClassification` carries the FULL RhythmClassification set (the
