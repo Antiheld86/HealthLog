@@ -1354,9 +1354,15 @@ export async function extractFeatures(
     (typeof sinceDays === "number" &&
       sinceDays >= INTEGRATION_BLOCK_MIN_WINDOW_DAYS);
   if (includeIntegrations) {
+    // The preventive-care block states a distance in whole days, so it needs
+    // to know whose calendar it is counting on. Resolved here rather than
+    // inside the block because the resolver reads the database and this is
+    // the layer that already talks to it; the resolver's own 60 s cache makes
+    // the second call in this function free.
+    const preventiveTz = await resolveUserTimezone(userId);
     const [labs, preventiveCare, workouts, ecg] = await Promise.all([
       readLabsBriefingBlock(userId, now),
-      readPreventiveCareBlock(userId, now),
+      readPreventiveCareBlock(userId, now, preventiveTz),
       readWorkoutsBlock(userId, now),
       // S10 — ECG device-verdict descriptor (never the waveform). Weaves the
       // ECG silo into the narrative; the model may reference it, attributed to

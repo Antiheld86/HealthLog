@@ -67,6 +67,7 @@ import {
   resolveSyncVerdict,
 } from "@/lib/integrations/sync-verdict";
 import { toMeasurementReminderDto } from "@/lib/measurement-reminders/dto";
+import { calendarDaysUntil } from "@/lib/measurement-reminders/due-day";
 import { fenceUserText, scrubFenceMarkers } from "@/lib/ai/coach/data-fence";
 import type { McpAuthContext } from "./auth";
 
@@ -1566,7 +1567,16 @@ export const MCP_TOOLS: McpToolDefinition[] = [
         return { present: false };
       }
 
-      const nowMs = Date.now();
+      // Overdue is a CALENDAR-day verdict, the same one the checkups screen
+      // renders. Comparing the instants said a checkup booked for nine this
+      // morning was overdue by ten past, so the tool called something overdue
+      // on the very day it is due while the screen next to it read "today".
+      const user = await prisma.user.findUnique({
+        where: { id: ctx.userId },
+        select: { timezone: true },
+      });
+      const timezone = user?.timezone || DEFAULT_TIMEZONE;
+      const now = new Date();
       const checkups = reminders.map((r) => {
         const dto = toMeasurementReminderDto(r);
         return {
@@ -1575,7 +1585,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
           nextDueAt: dto.nextDueAt,
           overdue:
             dto.nextDueAt !== null
-              ? new Date(dto.nextDueAt).getTime() < nowMs
+              ? calendarDaysUntil(new Date(dto.nextDueAt), now, timezone) < 0
               : false,
           location: dto.location,
           lastSatisfiedAt: dto.lastSatisfiedAt,
