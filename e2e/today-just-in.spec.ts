@@ -12,7 +12,11 @@ import { E2E_USER, STORAGE_STATE_PATH } from "./setup/global-setup";
  *
  * The spec drives that end-to-end against the real read path:
  *
- *   1. load the dashboard with last night's sleep still missing;
+ *   0. give the account a reason to paint a hero at all — one integration
+ *      needing a reconnect, which is an ordinary Today for someone whose
+ *      readings sync from devices;
+ *   1. load the dashboard with last night's sleep still missing, and prove
+ *      it reads provisional with the pending note up;
  *   2. land it through the REAL batch endpoint, and the arrival marker the
  *      spine's worker would have written;
  *   3. surface the tab's real visibility-change signal — the browser event
@@ -27,6 +31,15 @@ import { E2E_USER, STORAGE_STATE_PATH } from "./setup/global-setup";
  * number "just in" never said what had arrived. What the milestone was
  * always about survives it: the open page reads differently on its own
  * cadence.
+ *
+ * Step 0 is what the chip's removal exposed rather than caused. The arrival
+ * was the only thing keeping the hero on screen for this bare fixture
+ * account, so the spec was watching the day flip on a hero its own subject
+ * was propping up — and on whatever data a sibling spec happened to leave
+ * behind. It now establishes its own precondition, so the hero is there for
+ * a reason a reader would recognise and the run order cannot decide the
+ * outcome. `today-hero-just-in.test.tsx` pins the same composition at the
+ * component, since this file cannot be run without a built app.
  *
  * The marker is seeded directly rather than waited for from pg-boss: whether
  * the queue drains inside the e2e web server is the SPINE's contract and has
@@ -87,17 +100,52 @@ test("a fresh arrival flips the day in place", async ({ page }) => {
       "UPDATE users SET morning_digest_refreshed_on = NULL WHERE id = $1",
       [userId],
     );
+    // And no sleep sample from an earlier run of THIS spec, which would
+    // land the day on `final` before the scenario starts and make the
+    // provisional assertion below unreachable. Scoped to the external ids
+    // this file writes: it is the only e2e spec that records sleep for the
+    // fixture account (the two v1427 specs mock the route in the browser
+    // and write nothing), so nothing else can be depending on these rows.
+    await client.query(
+      "DELETE FROM measurements WHERE user_id = $1 AND external_id LIKE 'e2e-just-in-%'",
+      [userId],
+    );
+
+    // The account needs a reason to paint a hero that is not the arrival
+    // itself. A connection needing a reconnect is that reason: the digest
+    // reads `integration_statuses` fresh on every request rather than
+    // through the dashboard snapshot's SWR cell, so unlike a seeded score
+    // or a seeded briefing (both of which ride that cell) it
+    // cannot lose a race with a cached snapshot, and `buildSyncIssueItems`
+    // admits it unconditionally — no module gate, no window, and
+    // `sync_issue` carries no dismiss path that a previous run could have
+    // silenced. Removed again in the `finally` below.
+    await client.query(
+      `INSERT INTO integration_statuses (id, user_id, integration, state, updated_at)
+       VALUES ($1, $2, 'withings', 'error_reauth', NOW())
+       ON CONFLICT (user_id, integration) DO UPDATE SET state = 'error_reauth'`,
+      [`c${Date.now()}syncissue000`, userId],
+    );
 
     // ── BEFORE ────────────────────────────────────────────────────────────
-    // Wait until the digest settles. Other browser specs deliberately reuse
-    // this account and may have recorded older health data already, so an
-    // ordinary briefing hero is a valid baseline. Nothing on it may name an
-    // arrival: that chip was removed.
+    // Wait until the digest settles, then pin the starting state. The two
+    // assertions that matter here are the ones that make the AFTER block
+    // mean something: a note that was never rendered is also absent at the
+    // end, and a day that was already final also reads final at the end.
     await page.goto("/");
     await expect(page.locator('[data-slot="today-hero-skeleton"]')).toHaveCount(
       0,
     );
     const hero = page.locator('[data-slot="today-hero"]');
+    // Counts rather than visibility, matching the AFTER block: the two are
+    // then the same assertion with the expected number flipped, and neither
+    // can pass because a responsive class happened to hide the element.
+    await expect(hero).toHaveCount(1, { timeout: 20_000 });
+    await expect(hero).toHaveAttribute("data-phase", "provisional");
+    await expect(
+      hero.locator('[data-slot="today-hero-sleep-pending"]'),
+    ).toHaveCount(1);
+    // Nothing on it may name an arrival: that chip was removed.
     await expect(page.locator('[data-slot="today-hero-just-in"]')).toHaveCount(
       0,
     );
@@ -165,6 +213,15 @@ test("a fresh arrival flips the day in place", async ({ page }) => {
       0,
     );
   } finally {
+    await client
+      .query(
+        "DELETE FROM integration_statuses WHERE user_id = (SELECT id FROM users WHERE username = $1) AND integration = 'withings'",
+        [E2E_USER.username],
+      )
+      // The account is shared, so the seeded row must go even when an
+      // assertion above threw — but a cleanup that throws would replace a
+      // real failure with a confusing one.
+      .catch(() => {});
     client.release();
     await pool.end();
   }

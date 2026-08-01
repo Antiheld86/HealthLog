@@ -92,11 +92,11 @@ export function TodayHero({
   renderFilteredAllClear?: boolean;
 }) {
   const { t } = useTranslations();
-  // Gates ONLY the chip's time string — never the chip's presence. The hero
-  // itself is deliberately NOT mount-gated (v1.30.9: it is the LCP element and
-  // paints from the server-dehydrated digest on both the SSR and the hydration
-  // render). So the slot renders on both passes and the formatted time fills in
-  // on the first client re-render, keeping those two passes byte-identical.
+  // The hero is deliberately NOT mount-gated (v1.30.9: it is the LCP element
+  // and paints from the server-dehydrated digest on both the SSR and the
+  // hydration render), so nothing in it may differ between those two passes.
+  // The one thing that did — the removed arrival chip's wall-clock time — was
+  // the reason a mount gate lived here at all.
   const { keep, letGo } = useCoachCheckinAction();
   const dismissItem = usePriorityItemDismiss();
 
@@ -147,13 +147,20 @@ export function TodayHero({
   const compactAllClear = !lead && !topSignal && !hasItems;
 
   // Calm degrade (plan §3): a genuinely empty account — no score, no rail
-  // items, no cached briefing lead, and no fresh arrival — surfaces nothing
+  // items, no cached briefing lead and no reaction line — surfaces nothing
   // here. The tile strip below carries its own "add your first reading" empty
   // state, so a second alarming empty card on the hero would be noise. The
   // all-clear state (score present, nothing needs attention) is handled inline
-  // below. A fresh marker counts as content even when line generation was
-  // unavailable: the deterministic digest line still gives the hero an honest
-  // lead, and hiding the marker would lose the arrival moment entirely.
+  // below.
+  //
+  // A fresh arrival used to count as content on its own, back when the
+  // "just in" chip was the thing it kept on screen. With the chip gone it
+  // no longer earns a hero: an arrival-only digest reaches the compact
+  // all-clear composition, which would tell someone with no readings at
+  // all that everything is clear — a claim about their health made from
+  // nothing, and made only on the days something happened to sync. The
+  // arrival still rides the DTO and still feeds the morning line.
+  //
   // A filtered layout is the one explicit exception: its empty digest means
   // "the hidden canonical candidates are quiet here", so retain all-clear.
   if (

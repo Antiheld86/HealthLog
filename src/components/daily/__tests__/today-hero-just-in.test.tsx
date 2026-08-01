@@ -114,6 +114,84 @@ describe("TodayHero — an arrival is not a chip", () => {
   });
 });
 
+/**
+ * What the `today-just-in` e2e spec stands on.
+ *
+ * That spec watches an open dashboard flip from provisional to final when
+ * last night's sleep lands. It can only watch it on a hero that exists,
+ * and until the chip was removed the ARRIVAL was what kept the hero alive
+ * on the bare fixture account — so the spec was quietly testing the day
+ * flip on a hero that only its own subject was propping up. It now seeds
+ * a rail item instead, which is the same shape as a real account with a
+ * connection needing attention.
+ *
+ * These cases are the local half of that: the browser proves the flip on
+ * a real page, and this proves the composition the fixture relies on is
+ * the one the component actually renders. Without them the e2e change
+ * would be a guess about a file it never touches.
+ */
+describe("TodayHero — what earns the hero without a score", () => {
+  const SYNC_ISSUE: DailyDigest["worthALook"][number] = {
+    kind: "sync_issue",
+    title: "A connection needs your attention",
+    body: "One of your integrations stopped syncing.",
+    status: "warning",
+    actions: [
+      {
+        labelKey: "daily.action.reconnect",
+        intent: "sync.reconnect",
+        href: "/settings/integrations",
+      },
+    ],
+  };
+
+  /** No score, no briefing, no reaction line: one rail item and a night. */
+  function itemOnly(over: Partial<DailyDigest> = {}): DailyDigest {
+    return digest({
+      score: null,
+      briefingLead: null,
+      reactionLine: null,
+      phase: "provisional",
+      sleepPending: true,
+      worthALook: [SYNC_ISSUE],
+      justIn: { kind: "sleep_night", at: ARRIVED_AT },
+      ...over,
+    });
+  }
+
+  it("renders on a rail item alone, and names the day it is reading", () => {
+    const html = render(<TodayHero digest={itemOnly()} />);
+
+    expect(html).toContain('data-slot="today-hero"');
+    expect(html).toContain('data-phase="provisional"');
+    expect(html).toContain('data-slot="today-hero-rail"');
+    // The note the flip is going to clear. Asserting it is HERE first is
+    // what stops the "it is gone afterwards" assertion from passing on a
+    // note that was never rendered at all.
+    expect(html).toContain('data-slot="today-hero-sleep-pending"');
+    expect(html).not.toContain('data-slot="today-hero-just-in"');
+  });
+
+  it("clears the pending note and reads final once the night is in", () => {
+    const html = render(
+      <TodayHero digest={itemOnly({ phase: "final", sleepPending: false })} />,
+    );
+
+    expect(html).toContain('data-phase="final"');
+    expect(html).not.toContain('data-slot="today-hero-sleep-pending"');
+    expect(html).not.toContain('data-slot="today-hero-just-in"');
+  });
+
+  it("has nothing to render once the item goes too", () => {
+    // The mirror, and the reason the e2e fixture has to seed something:
+    // strip the item and the same digest paints nothing, arrival and
+    // pending night included.
+    const html = render(<TodayHero digest={itemOnly({ worthALook: [] })} />);
+
+    expect(html).not.toContain('data-slot="today-hero"');
+  });
+});
+
 describe("TodayHero — the reaction line replaces the lead", () => {
   const REACTION = "A solid night, deeper than your recent stretch.";
 
