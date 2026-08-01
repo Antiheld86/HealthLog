@@ -109,19 +109,6 @@ const LUTEAL_VERDICT: CycleVerdict = {
   fertileWindow: { start: null, end: null, active: false },
 };
 
-/** The verdict for an account with nothing to say about today. */
-const NO_CYCLE_VERDICT: CycleVerdict = {
-  state: "INSUFFICIENT_DATA",
-  dayOfCycle: null,
-  cycleLength: null,
-  phase: null,
-  spans: [],
-  cycleStartDate: null,
-  overdueDays: null,
-  daysUntilNext: null,
-  fertileWindow: { start: null, end: null, active: false },
-};
-
 /** A calendar read whose SERVER-RESOLVED verdict puts today on LUTEAL, day 3.
  *  The card renders the verdict; it no longer derives anything from `days`. */
 function lutealCalendar(today: string): CalendarResponse {
