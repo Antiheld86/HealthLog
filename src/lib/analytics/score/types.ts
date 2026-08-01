@@ -4,10 +4,33 @@ import type {
   Derived,
   DerivedProvenanceSource,
 } from "@/lib/insights/derived/types";
-import type { ProfileSex } from "@/lib/profile/sex";
 
-export const SCORE_VERSION = 2 as const;
+/**
+ * The scoring method's identity.
+ *
+ * Moves whenever the method changes, which is what lets a stored day say
+ * which rules produced it and lets each account be told once that the
+ * rules moved (`healthScoreNoticeItemKey`). It is NOT the schema version
+ * of the report.
+ *
+ * 3 — v1.35.1: green starts at 70 rather than 75, matching the two other
+ *     scores in the app, and the fitness pillar left the catalogue.
+ * 2 — the composite the previous line shipped.
+ */
+export const SCORE_VERSION = 3 as const;
 
+/**
+ * The pillars a score can be built from.
+ *
+ * v1.35.2 — FITNESS is gone. The schema records VO₂max but cannot tell a
+ * measured test apart from a device estimate, so every FITNESS row
+ * reached the scorer unproven and was refused: the pillar had never once
+ * produced a value on any account. A pillar that cannot score is not a
+ * choice, and listing it as one put chrome in front of a thing that
+ * recomputes nothing. Reading it back is still safe — a stored recipe
+ * naming it passes through `orderedUniquePillars`, which keeps only ids
+ * this catalogue knows.
+ */
 export const SCORE_PILLAR_IDS = [
   "BLOOD_PRESSURE",
   "GLYCAEMIA",
@@ -15,7 +38,6 @@ export const SCORE_PILLAR_IDS = [
   "SLEEP",
   "ADIPOSITY",
   "WELLBEING",
-  "FITNESS",
   "LIPIDS",
 ] as const;
 
@@ -34,18 +56,13 @@ export function orderedUniquePillars(ids: readonly unknown[]): ScorePillarId[] {
 }
 export type ScoreBand = "green" | "yellow" | "red";
 export type ScoreDomain =
-  | "cardiometabolic"
-  | "activity"
-  | "sleep"
-  | "adiposity"
-  | "wellbeing"
-  | "fitness";
+  "cardiometabolic" | "activity" | "sleep" | "adiposity" | "wellbeing";
 
 /**
  * Which domain each pillar speaks to. The composite needs three
  * distinct domains, so this map is part of the breadth rule and not
- * decoration: three of the eight pillars share the cardiometabolic
- * domain, which is why a selection of five pillars can still fail.
+ * decoration: three of the seven pillars share the cardiometabolic
+ * domain, which is why a selection of four pillars can still fail.
  *
  * One map, read by the scorer when it builds a pillar result and by the
  * breadth rule when it judges a selection, so the two can never drift
@@ -58,7 +75,6 @@ export const SCORE_PILLAR_DOMAINS: Record<ScorePillarId, ScoreDomain> = {
   SLEEP: "sleep",
   ADIPOSITY: "adiposity",
   WELLBEING: "wellbeing",
-  FITNESS: "fitness",
   LIPIDS: "cardiometabolic",
 };
 
@@ -272,21 +288,6 @@ export interface WellbeingPillarInput extends DomainReadState {
   assessments: WellbeingAssessment[];
 }
 
-export interface FitnessReading {
-  value: number;
-  at: Date;
-  source: string;
-  /** True only when persisted provenance proves a measured CPET/test. */
-  measured: boolean;
-}
-
-export interface FitnessPillarInput extends DomainReadState {
-  asOf: Date;
-  ageYears: number | null;
-  sex: ProfileSex;
-  rows: FitnessReading[];
-}
-
 export interface LipidReading {
   marker: string;
   value: number;
@@ -310,6 +311,5 @@ export interface PillarInputs {
   SLEEP: SleepPillarInput;
   ADIPOSITY: AdiposityPillarInput;
   WELLBEING: WellbeingPillarInput;
-  FITNESS: FitnessPillarInput;
   LIPIDS: LipidsPillarInput;
 }

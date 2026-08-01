@@ -2295,7 +2295,6 @@
         "sleep": "Schlaf",
         "adiposity": "Körperfettverteilung",
         "wellbeing": "Wohlbefinden",
-        "fitness": "Gemessene Fitness",
         "lipids": "Blutfette"
       },
       "observed": "Beobachtet: {value}",
@@ -2312,11 +2311,9 @@
       "observedActivity": "{value} Schritte pro Tag",
       "observedSleep": "{value} Minuten pro Nacht",
       "observedAdiposity": "Taille-zu-Körpergröße-Verhältnis {value}",
-      "observedFitness": "{value} {unit}, gemessen",
       "referenceActivity": "Der Nutzen flacht bei {high} Schritten pro Tag ab",
       "referenceSleep": "Mindestens {low} Minuten pro Nacht; längerer Schlaf wird nicht abgewertet",
       "referenceAdiposity": "Taille-zu-Körpergröße-Verhältnis unter {high}",
-      "referenceFitness": "{low} bis {high} {unit}, Referenzbereich nach Alter und Geschlecht",
       "referenceHba1c": "HbA1c {low} bis {high} %",
       "referenceDetail": "{label} · {source} · {kind} · {low} bis {high}",
       "openBound": "offen",
@@ -4914,8 +4911,6 @@
         },
         "threeAxes": "Aufzeichnen, Anzeigen und Mitzählen sind drei verschiedene Dinge. Diese Seite ändert nur das Letzte. Ein Bereich, den du hier abschaltest, wird weiter aufgezeichnet und weiter überall in HealthLog angezeigt, er bewegt nur die Zahl nicht mehr.",
         "axis": {
-          "recorded": "Wird aufgezeichnet",
-          "shown": "Wird in der App angezeigt",
           "countsFor": "{pillar} in den Score einrechnen"
         },
         "domain": {
@@ -4923,19 +4918,13 @@
           "activity": "Aktivität",
           "sleep": "Schlaf",
           "adiposity": "Körperform",
-          "wellbeing": "Wohlbefinden",
-          "fitness": "Gemessene Fitness"
-        },
-        "domainNote": {
-          "cardiometabolic": "Drei Bereiche, ein Feld der Gesundheit. Jeder Bereich zählt im Score gleich viel, dieses Feld wiegt also dreimal so schwer wie eines mit nur einem Bereich."
+          "wellbeing": "Wohlbefinden"
         },
         "state": {
           "counting": "Zählt in deinen Score",
           "waiting": "Ausgewählt, wartet auf Daten",
           "crisis": "Statt eines Werts wird ein Sicherheitshinweis gezeigt. An deiner Auswahl liegt es nicht.",
-          "readFailed": "Dieser Bereich konnte beim letzten Durchlauf nicht gelesen werden.",
-          "unavailable": "Noch nicht verfügbar",
-          "unavailableDetail": "HealthLog kann einen gemessenen Fitnesstest bisher nicht von einer Geräteschätzung unterscheiden, deshalb hat dieser Bereich noch nie einen Wert ergeben. Er bleibt in der Liste, damit du siehst, dass er nicht mitzählt."
+          "readFailed": "Dieser Bereich konnte beim letzten Durchlauf nicht gelesen werden."
         },
         "presets": {
           "label": "Ausgangspunkt",
@@ -7524,6 +7513,7 @@
       "caption": "deines Zyklus",
       "firstPeriodCta": "Erste Periode erfassen",
       "periodOverdue": "Deine Periode ist später als üblich – die Tageszählung pausiert, bis die nächste Periode erfasst ist.",
+      "periodOverdueDays": "Deine Periode ist {days} Tage später als üblich – die Tageszählung pausiert, bis die nächste Periode erfasst ist.",
       "logPeriodCta": "Periode erfassen"
     },
     "calendar": {
@@ -9299,8 +9289,6 @@
       "deltaVsBaseline": "{delta} ggü. deinem Ausgangswert",
       "deltaFlat": "Im Bereich deines Ausgangswerts",
       "sleepPending": "Der Schlaf von letzter Nacht fehlt noch – der heutige Wert ist vorläufig.",
-      "justIn": "Gerade eingetroffen",
-      "justInAt": "Gerade eingetroffen · {time}",
       "worthALook": "Einen Blick wert",
       "allClear": "Heute braucht nichts deine Aufmerksamkeit.",
       "ringLink": "{metric}-Details öffnen"

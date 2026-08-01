@@ -29,6 +29,7 @@ import {
   stdResponses,
   baseUpdatedAtField,
   conflictResponse409,
+  invalidBaseTokenResponse,
 } from "./shared";
 
 const dashboardWidgetConfig = z.object({
@@ -143,6 +144,7 @@ export const dashboardWidgetPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         ...conflictResponse409("Dashboard layout", "dashboard_layout_conflict"),
         ...stdResponses,
+        ...invalidBaseTokenResponse,
       },
     },
     delete: {

@@ -2295,7 +2295,6 @@
         "sleep": "Sommeil",
         "adiposity": "Adiposité",
         "wellbeing": "Bien-être",
-        "fitness": "Condition physique mesurée",
         "lipids": "Lipides"
       },
       "observed": "Observé : {value}",
@@ -2312,11 +2311,9 @@
       "observedActivity": "{value} pas par jour",
       "observedSleep": "{value} minutes par nuit",
       "observedAdiposity": "Rapport taille-hauteur {value}",
-      "observedFitness": "{value} {unit}, mesuré",
       "referenceActivity": "Le bénéfice se stabilise à {high} pas par jour",
       "referenceSleep": "Au moins {low} minutes par nuit ; un sommeil plus long n'est pas pénalisé",
       "referenceAdiposity": "Rapport taille-hauteur inférieur à {high}",
-      "referenceFitness": "{low} à {high} {unit}, plage de référence selon l'âge et le sexe",
       "referenceHba1c": "HbA1c de {low} à {high} %",
       "referenceDetail": "{label} · {source} · {kind} · {low} à {high}",
       "openBound": "ouvert",
@@ -4914,8 +4911,6 @@
         },
         "threeAxes": "Enregistrer, afficher et compter sont trois choses distinctes. Cette page ne change que la dernière. Un pilier désactivé ici continue d'être enregistré et reste visible partout ailleurs dans HealthLog, il cesse simplement de faire bouger le chiffre.",
         "axis": {
-          "recorded": "Enregistré",
-          "shown": "Affiché dans l'application",
           "countsFor": "Compter {pillar} dans le score"
         },
         "domain": {
@@ -4923,19 +4918,13 @@
           "activity": "Activité",
           "sleep": "Sommeil",
           "adiposity": "Silhouette",
-          "wellbeing": "Bien-être",
-          "fitness": "Condition physique mesurée"
-        },
-        "domainNote": {
-          "cardiometabolic": "Trois piliers, un seul domaine de santé. Chaque pilier pèse autant dans le score, ce domaine pèse donc trois fois plus qu'un domaine composé d'un seul pilier."
+          "wellbeing": "Bien-être"
         },
         "state": {
           "counting": "Compte dans votre score",
           "waiting": "Sélectionné, en attente de données",
           "crisis": "Un message de sécurité s'affiche à la place d'un score. Votre sélection n'est pas en cause.",
-          "readFailed": "Ce pilier n'a pas pu être lu lors du dernier calcul.",
-          "unavailable": "Pas encore disponible",
-          "unavailableDetail": "HealthLog ne sait pas encore distinguer un test de condition physique mesuré d'une estimation d'appareil, ce pilier n'a donc jamais produit de score. Il reste listé pour que vous voyiez qu'il ne compte pas."
+          "readFailed": "Ce pilier n'a pas pu être lu lors du dernier calcul."
         },
         "presets": {
           "label": "Point de départ",
@@ -7524,6 +7513,7 @@
       "caption": "de ton cycle",
       "firstPeriodCta": "Enregistrer mes premières règles",
       "periodOverdue": "Tes règles arrivent plus tard que d’habitude — le compteur de jours est en pause jusqu’à ce que les prochaines règles soient enregistrées.",
+      "periodOverdueDays": "Tes règles arrivent {days} jours plus tard que d’habitude — le compteur de jours est en pause jusqu’à ce que les prochaines règles soient enregistrées.",
       "logPeriodCta": "Enregistrer les règles"
     },
     "calendar": {
@@ -9299,8 +9289,6 @@
       "deltaVsBaseline": "{delta} par rapport à ta référence",
       "deltaFlat": "Conforme à ta référence",
       "sleepPending": "Le sommeil de la nuit dernière n'est pas encore arrivé — la lecture du jour est provisoire.",
-      "justIn": "Vient d'arriver",
-      "justInAt": "Vient d'arriver · {time}",
       "worthALook": "À regarder",
       "allClear": "Rien ne requiert ton attention aujourd'hui.",
       "ringLink": "Ouvrir les détails de {metric}"

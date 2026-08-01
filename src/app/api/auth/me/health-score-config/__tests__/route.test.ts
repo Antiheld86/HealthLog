@@ -63,20 +63,20 @@ import { auditLog } from "@/lib/auth/audit";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
 import type { ScorePillarId } from "@/lib/analytics/score/types";
+import { buildOpenApiDocument } from "@/lib/openapi/registry";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
   user: { id: "user-1", username: "testuser", role: "USER" as const },
 };
 
-const ALL_EIGHT: ScorePillarId[] = [
+const ALL_PILLARS: ScorePillarId[] = [
   "BLOOD_PRESSURE",
   "GLYCAEMIA",
   "ACTIVITY",
   "SLEEP",
   "ADIPOSITY",
   "WELLBEING",
-  "FITNESS",
   "LIPIDS",
 ];
 
@@ -154,7 +154,7 @@ describe("GET /api/auth/me/health-score-config", () => {
     );
     expect(res.status).toBe(200);
     const env = (await res.json()) as { data: ResolvedBody };
-    expect(env.data.pillars).toEqual(ALL_EIGHT);
+    expect(env.data.pillars).toEqual(ALL_PILLARS);
     expect(env.data.hasSelection).toBe(false);
     expect(env.data.version).toBe(0);
     expect(env.data.updatedAt).toBeUndefined();
@@ -172,7 +172,7 @@ describe("GET /api/auth/me/health-score-config", () => {
     );
     const env = (await res.json()) as { data: ResolvedBody };
     expect(env.data.pillars).toEqual(
-      ALL_EIGHT.filter((id) => id !== "SLEEP" && id !== "LIPIDS"),
+      ALL_PILLARS.filter((id) => id !== "SLEEP" && id !== "LIPIDS"),
     );
     expect(env.data.excludedPillars).toEqual(["SLEEP", "LIPIDS"]);
     expect(env.data.hasSelection).toBe(true);
@@ -185,7 +185,7 @@ describe("PATCH /api/auth/me/health-score-config", () => {
   it("rejects an unauthenticated request with 401", async () => {
     vi.mocked(getSession).mockResolvedValue(null);
     const res = await (PATCH as (r: Request) => Promise<Response>)(
-      mkPatch({ pillars: ALL_EIGHT }),
+      mkPatch({ pillars: ALL_PILLARS }),
     );
     expect(res.status).toBe(401);
     expect(prisma.user.update).not.toHaveBeenCalled();
@@ -211,7 +211,7 @@ describe("PATCH /api/auth/me/health-score-config", () => {
 
     const stored = writtenConfig();
     expect(stored.excludedPillars).toEqual(
-      ALL_EIGHT.filter((id) => !selection.includes(id)),
+      ALL_PILLARS.filter((id) => !selection.includes(id)),
     );
     expect(stored.version).toBe(1);
     expect(stored.changedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
@@ -230,7 +230,7 @@ describe("PATCH /api/auth/me/health-score-config", () => {
     });
 
     await (PATCH as (r: Request) => Promise<Response>)(
-      mkPatch({ pillars: ALL_EIGHT }),
+      mkPatch({ pillars: ALL_PILLARS }),
     );
     expect(writtenConfig().version).toBe(8);
   });
@@ -240,7 +240,7 @@ describe("PATCH /api/auth/me/health-score-config", () => {
     primeUser(null);
 
     const res = await (PATCH as (r: Request) => Promise<Response>)(
-      mkPatch({ pillars: ALL_EIGHT }),
+      mkPatch({ pillars: ALL_PILLARS }),
     );
     const env = (await res.json()) as { data: ResolvedBody };
     expect(writtenConfig().excludedPillars).toEqual([]);
@@ -252,7 +252,7 @@ describe("PATCH /api/auth/me/health-score-config", () => {
     primeUser(null);
 
     await (PATCH as (r: Request) => Promise<Response>)(
-      mkPatch({ pillars: ALL_EIGHT }),
+      mkPatch({ pillars: ALL_PILLARS }),
     );
     expect(invalidateUserHealthScore).toHaveBeenCalledWith("user-1");
   });
@@ -334,7 +334,7 @@ describe("PATCH — envelope and transport", () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     primeUser(null);
     const res = await (PATCH as (r: Request) => Promise<Response>)(
-      mkPatch({ pillars: ALL_EIGHT, weights: { SLEEP: 2 } }),
+      mkPatch({ pillars: ALL_PILLARS, weights: { SLEEP: 2 } }),
     );
     expect(res.status).toBe(422);
     expect(prisma.user.update).not.toHaveBeenCalled();
@@ -344,7 +344,7 @@ describe("PATCH — envelope and transport", () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     primeUser(null);
     const res = await (PATCH as (r: Request) => Promise<Response>)(
-      mkPatch({ pillars: ALL_EIGHT, userId: "user-2" }),
+      mkPatch({ pillars: ALL_PILLARS, userId: "user-2" }),
     );
     expect(res.status).toBe(422);
     expect(prisma.user.update).not.toHaveBeenCalled();
@@ -373,7 +373,7 @@ describe("PATCH — envelope and transport", () => {
       resetAt: Date.now() + 30_000,
     });
     const res = await (PATCH as (r: Request) => Promise<Response>)(
-      mkPatch({ pillars: ALL_EIGHT }),
+      mkPatch({ pillars: ALL_PILLARS }),
     );
     expect(res.status).toBe(429);
     expect(prisma.user.update).not.toHaveBeenCalled();
@@ -386,7 +386,7 @@ describe("PATCH — envelope and transport", () => {
 
     const res = await (PATCH as (r: Request) => Promise<Response>)(
       mkPatch({
-        pillars: ALL_EIGHT,
+        pillars: ALL_PILLARS,
         baseUpdatedAt: "2026-07-24T08:00:00.000Z",
       }),
     );
@@ -396,5 +396,147 @@ describe("PATCH — envelope and transport", () => {
     expect(prisma.user.update).not.toHaveBeenCalled();
     // A write that never landed must not evict the caches either.
     expect(invalidateUserHealthScore).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * v1.35.1 — the route shipped in v1.35.0 with a settings surface in front
+ * of it and no published contract at all: `grep -c health-score-config
+ * docs/api/openapi.yaml` returned 0. This block is the second end.
+ *
+ * It does not compare the spec against a restatement of the spec. It drives
+ * the REAL route to produce each response, reads the codes and keys off the
+ * bytes it actually returns, and asserts the published contract names them.
+ * A response the route can emit but the contract does not describe fails
+ * here, which is the failure the release itself did not catch.
+ */
+describe("the published contract matches what the route serves", () => {
+  const PATH = "/api/auth/me/health-score-config";
+
+  function doc() {
+    return buildOpenApiDocument() as {
+      paths?: Record<
+        string,
+        Record<string, { responses?: Record<string, { description?: string }> }>
+      >;
+      components?: {
+        schemas?: Record<
+          string,
+          { properties?: Record<string, unknown>; required?: string[] }
+        >;
+      };
+    };
+  }
+
+  /** Every `meta.errorCode` the PATCH route can actually produce. */
+  async function emittedErrorCodes(): Promise<Map<number, Set<string>>> {
+    const byStatus = new Map<number, Set<string>>();
+    const record = async (body: unknown, conflict = false) => {
+      vi.clearAllMocks();
+      vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+      primeUser(null);
+      vi.mocked(prisma.user.updateMany).mockResolvedValue({
+        count: conflict ? 0 : 1,
+      } as never);
+      const res = await (PATCH as (r: Request) => Promise<Response>)(
+        mkPatch(body),
+      );
+      const env = (await res.json()) as { meta?: { errorCode?: string } };
+      if (env.meta?.errorCode) {
+        const set = byStatus.get(res.status) ?? new Set<string>();
+        set.add(env.meta.errorCode);
+        byStatus.set(res.status, set);
+      }
+    };
+
+    // Too narrow, both reasons.
+    await record({ pillars: ["ACTIVITY"] });
+    await record({ pillars: ["BLOOD_PRESSURE", "GLYCAEMIA", "LIPIDS"] });
+    // Body that fails validation.
+    await record({ pillars: ["NOT_A_PILLAR"] });
+    // Present-but-unparseable base token.
+    await record({ pillars: ALL_PILLARS, baseUpdatedAt: null });
+    // Stale base token.
+    await record(
+      { pillars: ALL_PILLARS, baseUpdatedAt: "2026-07-24T08:00:00.000Z" },
+      true,
+    );
+    return byStatus;
+  }
+
+  it("registers both verbs", () => {
+    const path = doc().paths?.[PATH];
+    expect(
+      path,
+      `${PATH} is not registered in the OpenAPI document`,
+    ).toBeDefined();
+    expect(Object.keys(path ?? {}).sort()).toEqual(["get", "patch"]);
+  });
+
+  it("names every errorCode the route can emit, on the right status", async () => {
+    const emitted = await emittedErrorCodes();
+    const responses = doc().paths?.[PATH]?.patch?.responses ?? {};
+
+    // Sanity: the driver really did produce the codes, so a contract that
+    // named none of them could not pass by the loop never running.
+    expect([...(emitted.get(422) ?? [])].sort()).toEqual([
+      "health_score_config.invalid",
+      "health_score_config.too_narrow",
+      "invalid_base_updated_at",
+    ]);
+    expect([...(emitted.get(409) ?? [])]).toEqual([
+      "health_score_config_conflict",
+    ]);
+
+    for (const [status, codes] of emitted) {
+      const described = responses[String(status)]?.description ?? "";
+      for (const code of codes) {
+        expect(
+          described,
+          `${status} description does not mention \`${code}\``,
+        ).toContain(code);
+      }
+    }
+  });
+
+  it("publishes exactly the fields a real response carries", async () => {
+    vi.clearAllMocks();
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    primeUser(null);
+    vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 1 } as never);
+
+    const res = await (PATCH as (r: Request) => Promise<Response>)(
+      mkPatch({ pillars: ALL_PILLARS }),
+    );
+    const env = (await res.json()) as { data: ResolvedBody };
+    expect(res.status).toBe(200);
+
+    const schema = doc().components?.schemas?.["HealthScoreConfigResponse"];
+    expect(schema, "HealthScoreConfigResponse is not emitted").toBeDefined();
+
+    expect(Object.keys(schema?.properties ?? {}).sort()).toEqual(
+      Object.keys(env.data).sort(),
+    );
+    // `updatedAt` is absent on a never-configured GET, so it must not be
+    // required — a generated decoder would reject that read.
+    expect(schema?.required ?? []).not.toContain("updatedAt");
+  });
+
+  it("leaves updatedAt off the read that genuinely has none", async () => {
+    vi.clearAllMocks();
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    primeUser(null);
+
+    const res = await (GET as (r: Request) => Promise<Response>)(
+      new Request(`http://localhost${PATH}`),
+    );
+    const env = (await res.json()) as { data: ResolvedBody };
+    const published = Object.keys(
+      doc().components?.schemas?.["HealthScoreConfigResponse"]?.properties ??
+        {},
+    );
+
+    expect(Object.keys(env.data)).not.toContain("updatedAt");
+    for (const key of Object.keys(env.data)) expect(published).toContain(key);
   });
 });

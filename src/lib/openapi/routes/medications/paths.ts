@@ -27,6 +27,7 @@ import {
   errorEnvelope,
   stdResponses,
   conflictResponse409,
+  invalidBaseTokenResponse,
 } from "../shared";
 
 efficacyTargetOverrideSchema.meta({
@@ -289,6 +290,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           "medication_layout_conflict",
         ),
         ...stdResponses,
+        ...invalidBaseTokenResponse,
       },
     },
     delete: {

@@ -7,6 +7,7 @@ import type {
   HealthScoreReport,
   ScorePillarResult,
 } from "@/lib/analytics/score/types";
+import { SCORE_VERSION } from "@/lib/analytics/score/types";
 import {
   HealthScoreCard,
   HealthScoreCardSkeleton,
@@ -211,7 +212,7 @@ function report(overrides: Partial<HealthScoreReport> = {}): HealthScoreReport {
     pillars: [BLOOD_PRESSURE, ACTIVITY_BELOW_FLOOR],
     delta: null,
     deltaReason: "no_current_score",
-    scoreVersion: 2,
+    scoreVersion: SCORE_VERSION,
     weightGoal: {
       status: "insufficient",
       coverage: {
@@ -241,7 +242,7 @@ function scoredReport(
         composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
         configured: false,
         noiseFloor: 3,
-        scoreVersion: 2,
+        scoreVersion: SCORE_VERSION,
       },
       coverage: {
         requiredInputs: 3,
@@ -371,7 +372,7 @@ describe("<HealthScoreCard> pillars", () => {
               composition: ["BLOOD_PRESSURE", "GLYCAEMIA"],
               configured: false,
               noiseFloor: 3,
-              scoreVersion: 2,
+              scoreVersion: SCORE_VERSION,
             },
             coverage: {
               requiredInputs: 3,
@@ -505,7 +506,7 @@ describe("<HealthScoreCard> pillars", () => {
 });
 
 describe("<HealthScoreCard> one pillar, one home", () => {
-  /** Four scored, one failed read, one crisis, two plain absences. */
+  /** Four scored, one failed read, one crisis, one plain absence. */
   function mixedReport() {
     return scoredReport({
       pillars: [
@@ -513,10 +514,9 @@ describe("<HealthScoreCard> one pillar, one home", () => {
         scoredAt("GLYCAEMIA", 74),
         scoredAt("ACTIVITY", 61),
         scoredAt("SLEEP", 45),
-        gatedPillar("FITNESS", "read_failed"),
+        gatedPillar("LIPIDS", "read_failed"),
         gatedPillar("WELLBEING", "crisis_signposting"),
         gatedPillar("ADIPOSITY", "missing_height"),
-        gatedPillar("LIPIDS", "not_tracked"),
       ],
     });
   }
@@ -538,14 +538,14 @@ describe("<HealthScoreCard> one pillar, one home", () => {
       "ACTIVITY",
       "SLEEP",
     ]);
-    expect(failedIds).toEqual(["FITNESS"]);
+    expect(failedIds).toEqual(["LIPIDS"]);
     expect(crisisIds).toEqual(["WELLBEING"]);
-    expect(counted).toBe(2);
+    expect(counted).toBe(1);
 
-    // The four homes partition the eight pillars: disjoint, and complete.
+    // The four homes partition the seven pillars: disjoint, and complete.
     const named = [...rowIds, ...failedIds, ...crisisIds];
     expect(new Set(named).size).toBe(named.length);
-    expect(named.length + counted).toBe(8);
+    expect(named.length + counted).toBe(7);
   });
 
   it("never renders one pillar id twice anywhere in the panel", () => {
@@ -556,14 +556,7 @@ describe("<HealthScoreCard> one pillar, one home", () => {
     const ids = pillarAttrs(html);
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids.sort()).toEqual(
-      [
-        "ACTIVITY",
-        "ADIPOSITY",
-        "BLOOD_PRESSURE",
-        "GLYCAEMIA",
-        "LIPIDS",
-        "SLEEP",
-      ].sort(),
+      ["ACTIVITY", "ADIPOSITY", "BLOOD_PRESSURE", "GLYCAEMIA", "SLEEP"].sort(),
     );
   });
 
@@ -581,7 +574,6 @@ describe("<HealthScoreCard> one pillar, one home", () => {
       "Sleep",
       "Adiposity",
       "Wellbeing",
-      "Measured fitness",
       "Lipids",
     ]) {
       const hits = listed.split(label).length - 1;
@@ -609,7 +601,7 @@ describe("<HealthScoreCard> composite states", () => {
     expect(html).not.toContain('data-slot="health-score-card-progress"');
     expect(html).toContain("—");
     expect(html).not.toContain("/ 100");
-    expect(html).toContain("Method version 2");
+    expect(html).toContain(`Method version ${SCORE_VERSION}`);
   });
 
   it("explains a missing comparison where the trend would be", () => {
@@ -674,7 +666,9 @@ describe("<HealthScoreCard> footer", () => {
     const region = anatomyRegion(html);
     expect(region).toContain('data-slot="health-score-method"');
     expect(region).toContain("Overall band set by none");
-    expect(region).toContain("Method version 2. Weekly comparison floor");
+    expect(region).toContain(
+      `Method version ${SCORE_VERSION}. Weekly comparison floor`,
+    );
     expect(region).toContain('data-slot="provenance-explainer-method"');
     expect(region).toContain("equal-weighted average");
   });

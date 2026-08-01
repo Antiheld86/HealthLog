@@ -12,6 +12,7 @@ import { notificationPrefsSchema } from "@/lib/validations/notification-prefs";
 import { sourcePrioritySchema } from "@/lib/validations/source-priority";
 import { modulePrefsPatchSchema } from "@/lib/validations/modules";
 import { MODULE_KEYS } from "@/lib/modules/registry";
+import { SCORE_PILLAR_IDS } from "@/lib/analytics/score/types";
 import { savedReportProfileSchema } from "@/lib/report-selection/profile-shape";
 import {
   dataEnvelope,
@@ -20,6 +21,7 @@ import {
   baseUpdatedAtField,
   updatedAtTokenField,
   conflictResponse409,
+  invalidBaseTokenResponse,
 } from "./shared";
 
 // v1.18.0 — module enable/disable. The PATCH request is the REAL runtime
@@ -198,6 +200,72 @@ const coachPrefsPutRequest = coachPrefsSchema
     id: "PutCoachPrefsRequest",
     description:
       "Coach prompt-tuning preferences to persist, plus the optional optimistic-concurrency `baseUpdatedAt` token. The guarded write covers both `coachPrefsJson` and the mirrored `insightsExcludeMetrics` column atomically. Omit the token for the legacy unconditional write.",
+  });
+
+// v1.35.0 — which pillars count toward the Health Score. Shipped with a
+// settings surface in front of it and no published contract at all; the
+// entry below is that contract, read off the route rather than inferred
+// from a neighbour.
+//
+// The asymmetry is the thing to get right: the REQUEST speaks the positive
+// selection (the pillars that should count, which is what a person picks),
+// while the RESPONSE carries both sides resolved. The column itself stores
+// the complement, but that is storage and no client ever sees it.
+
+const scorePillarId = z
+  .enum(SCORE_PILLAR_IDS)
+  .meta({ id: "ScorePillarId", description: "A Health Score pillar id." });
+
+const healthScoreConfigResponse = z
+  .object({
+    pillars: z
+      .array(scorePillarId)
+      .describe(
+        "Registry-ordered pillars that count toward the score. Data availability narrows this further at score time, and that narrowing is not a choice — so this is the composition, not a promise that every pillar has a number today.",
+      ),
+    excludedPillars: z
+      .array(scorePillarId)
+      .describe("Registry-ordered pillars the person took out."),
+    hasSelection: z
+      .boolean()
+      .describe(
+        "True once a selection has been written. It says the person chose, not that their choice differs from the default: an account that opened the surface and kept every pillar has a selection. False means nobody ever chose, and such an account still inherits a later change of defaults.",
+      ),
+    version: z
+      .number()
+      .int()
+      .describe(
+        "Per-user recipe version, monotonic and incremented on every accepted write. 0 while no selection has been written. A score record names the version that produced it, so a comparison can see the recipe move.",
+      ),
+    changedAt: z.iso
+      .datetime({ offset: true })
+      .nullable()
+      .describe("When the recipe last changed; null while it never has."),
+    updatedAt: updatedAtTokenField,
+  })
+  .meta({
+    id: "HealthScoreConfigResponse",
+    description:
+      "The resolved Health Score composition. `updatedAt` is ABSENT while the account has never written a selection — there is nothing to guard a write against, so the first save is the unconditional write.",
+  });
+
+const healthScoreConfigPatchRequest = z
+  .object({
+    pillars: z
+      .array(scorePillarId)
+      .max(SCORE_PILLAR_IDS.length)
+      .describe(
+        "The pillars that should count — the positive selection, not the exclusions. Replaces the stored recipe whole; it never merges. An id outside the catalogue is a 422 rather than being dropped, because a client has no business sending one.",
+      ),
+    baseUpdatedAt: baseUpdatedAtField,
+  })
+  // Mirrors the runtime `.strict()`, so a generated client is told about
+  // the rejection rather than only being told in prose.
+  .strict()
+  .meta({
+    id: "PatchHealthScoreConfigRequest",
+    description:
+      "The pillars that should count toward the score. Strict: any key other than `pillars` and `baseUpdatedAt` is rejected.",
   });
 
 // v1.28-era — the owner's saved doctor-report selection (leaf list plus the
@@ -499,6 +567,7 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         ...conflictResponse409("Coach preferences", "coach_prefs_conflict"),
         ...stdResponses,
+        ...invalidBaseTokenResponse,
       },
     },
   },
@@ -587,6 +656,70 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       },
     },
   },
+  "/api/auth/me/health-score-config": {
+    get: {
+      tags: ["Auth"],
+      summary: "Read which pillars count toward the Health Score",
+      description:
+        "v1.35.0 — the resolved composition: which pillars count, which the person took out, whether they have chosen at all, and the recipe version. An account that never chose reads every pillar with `hasSelection: false` and `version: 0`, which is exactly what its number was already built from — there is no backfill because there is nothing to back-fill.",
+      responses: {
+        "200": {
+          description:
+            "The resolved composition. `updatedAt` is absent until a selection has been stored.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                healthScoreConfigResponse,
+                "HealthScoreConfigEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    patch: {
+      tags: ["Auth"],
+      summary: "Choose which pillars count toward the Health Score",
+      description:
+        "Replaces the recipe with the given positive selection and bumps the per-user recipe version by one. The write is refused when the selection cannot produce a score: at least one physical measurement, and at least three distinct areas of health. Blood pressure, glucose and cholesterol are three pillars but one area, which is the refusal that surprises people. Accepting the write also evicts the account's score caches, so the next read reflects the new composition rather than the previous hour's number. Optimistic concurrency: send `baseUpdatedAt` from a prior read and the write 409s if the recipe moved since; omit it for the unconditional write. Rate-limited to 60 writes per minute per user.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: healthScoreConfigPatchRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description:
+            "The stored composition, echoed back with the incremented `version` and the advanced `updatedAt` token.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                healthScoreConfigResponse,
+                "PatchHealthScoreConfigEnvelope",
+              ),
+            },
+          },
+        },
+        ...conflictResponse409(
+          "Score selection",
+          "health_score_config_conflict",
+        ),
+        ...stdResponses,
+        // Four distinct 422s on one route, so this one is written out
+        // rather than reusing the shared base-token response: a client
+        // branching on `meta.errorCode` needs to see all of them, and a
+        // description that named only the token would be a contract that
+        // quietly omits the refusal a person actually hits.
+        "422": {
+          description:
+            "The write was refused and nothing was stored. `meta.errorCode` distinguishes the cases: `health_score_config.too_narrow` — the selection cannot produce a score (`meta.reason` is `measured_physiological_domain_required` or `three_domains_required`, and the `error` string is the sentence to show the person); `health_score_config.invalid` — the body failed validation, with the per-issue list under `details.issues`; `invalid_base_updated_at` — `baseUpdatedAt` was present but unparseable, `null` included, which is rejected rather than falling back to the unconditional write. A body that is not JSON at all returns the bare message `health-score-config.body.invalid_json` with no errorCode.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
   "/api/auth/me/modules": {
     get: {
       tags: ["Auth"],
@@ -634,6 +767,7 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         ...conflictResponse409("Module preferences", "modules_conflict"),
         ...stdResponses,
+        ...invalidBaseTokenResponse,
       },
     },
   },
@@ -875,6 +1009,7 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
           "notification_prefs_conflict",
         ),
         ...stdResponses,
+        ...invalidBaseTokenResponse,
       },
     },
   },

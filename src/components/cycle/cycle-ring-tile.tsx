@@ -8,8 +8,7 @@ import { cn } from "@/lib/utils";
 import { useTranslations } from "@/lib/i18n/context";
 import { CycleRing } from "./cycle-ring";
 import { PHASE_HUE } from "./phase-tokens";
-import { deriveWheelState } from "./wheel-state";
-import { localYmd, useCycleCalendar, useCycleProfile } from "./use-cycle";
+import { localYmd, useCycleCalendar } from "./use-cycle";
 
 /**
  * v1.15.3 — the compact cycle ring as a WELLNESS-STRIP element.
@@ -24,8 +23,9 @@ import { localYmd, useCycleCalendar, useCycleProfile } from "./use-cycle";
  *
  * It is NOT a second `<CycleInsightSummaryCard>` — that teaser (phase finding +
  * deep-link) already lives further down the overview. This is the RING only,
- * as a wellness dial. Both surfaces derive day-of-cycle + phase from the SAME
- * `useCycleCalendar` read + `deriveWheelState`, so they can never disagree.
+ * as a wellness dial. Both surfaces read day-of-cycle + phase from the SAME
+ * server-resolved `verdict` on the calendar read, so they can never disagree —
+ * and neither of them computes it.
  *
  * GATING IS THE CALLER'S JOB. The page mounts this only when
  * `user.cycleTrackingEnabled` is true (the same `/api/auth/me` signal the
@@ -48,25 +48,14 @@ export function CycleRingTile({ className }: { className?: string }) {
 
   // Mirror the cycle-view + summary-card window so the cache key is shared —
   // no extra request when the user opens the cycle page in the same session.
-  const today = useMemo(() => shiftToday(0), []);
   const from = useMemo(() => shiftToday(-90), []);
   const to = useMemo(() => shiftToday(180), []);
 
   const calendar = useCycleCalendar(from, to);
-  // Shared 5-min-cached profile read (no extra request when the cycle page or
-  // summary card already loaded it): its typical lengths let a low-data tracker
-  // draw the canonical four-phase ring instead of one dominant arc.
-  const profile = useCycleProfile();
-
-  const wheel = useMemo(
-    () =>
-      deriveWheelState(calendar.data?.days ?? [], today, {
-        typicalCycleLength: profile.data?.typicalCycleLength,
-        typicalPeriodLength: profile.data?.typicalPeriodLength,
-        lutealPhaseLength: profile.data?.lutealPhaseLength,
-      }),
-    [calendar.data, today, profile.data],
-  );
+  // The server already resolved the ring: cycle day, phase, and the arc
+  // proportions (including the profile-derived idealized ring a low-data
+  // tracker gets). The tile renders it.
+  const verdict = calendar.data?.verdict;
 
   // The signature reveal plays ONCE per browser session, gated on its own key
   // so a background calendar refetch never re-triggers the moment. The
@@ -87,9 +76,9 @@ export function CycleRingTile({ className }: { className?: string }) {
   // empty-framed cycle dial. The full cycle page owns the empty-state CTA.
   if (calendar.isLoading && !calendar.data) return null;
   if (calendar.isError && !calendar.data) return null;
-  if (wheel.phase == null || wheel.dayOfCycle == null) return null;
+  if (verdict?.phase == null || verdict.dayOfCycle == null) return null;
 
-  const hue = PHASE_HUE[wheel.phase];
+  const hue = PHASE_HUE[verdict.phase];
 
   return (
     // `data-revealed` must sit on an ANCESTOR of `.wellness-tile-rise` — the
@@ -102,7 +91,7 @@ export function CycleRingTile({ className }: { className?: string }) {
         href="/cycle"
         data-slot="wellness-cycle-tile"
         data-metric="CYCLE"
-        data-phase={wheel.phase}
+        data-phase={verdict.phase}
         // Match the score `RingTile` chrome: the phase's `--tile-hue`
         // low-opacity mix over `--card` + the faint film grain (the
         // `.wellness-tile` family), with a calm once-per-session rise. The
@@ -122,10 +111,10 @@ export function CycleRingTile({ className }: { className?: string }) {
         </div>
         <div className="flex flex-col items-center gap-1.5">
           <CycleRing
-            dayOfCycle={wheel.dayOfCycle}
-            cycleLength={wheel.cycleLength}
-            phase={wheel.phase}
-            spans={wheel.spans}
+            dayOfCycle={verdict.dayOfCycle}
+            cycleLength={verdict.cycleLength}
+            phase={verdict.phase}
+            spans={verdict.spans}
             animate={play}
             size={120}
           />
@@ -133,7 +122,7 @@ export function CycleRingTile({ className }: { className?: string }) {
             data-slot="wellness-cycle-band-word"
             className="text-muted-foreground text-center text-xs"
           >
-            {t(`cycle.phase.${wheel.phase}`)}
+            {t(`cycle.phase.${verdict.phase}`)}
           </span>
         </div>
       </Link>

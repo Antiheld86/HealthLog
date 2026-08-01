@@ -31,6 +31,7 @@ import {
   baseUpdatedAtField,
   updatedAtTokenField,
   conflictResponse409,
+  invalidBaseTokenResponse,
 } from "./shared";
 
 // ── Request schemas — annotated for spec emission ────────────────────
@@ -566,6 +567,7 @@ export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         ...conflictResponse409("Mood-tag layout", "mood_tag_layout_conflict"),
         ...stdResponses,
+        ...invalidBaseTokenResponse,
       },
     },
   },

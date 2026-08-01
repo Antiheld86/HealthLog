@@ -2295,7 +2295,6 @@
         "sleep": "Sonno",
         "adiposity": "Adiposità",
         "wellbeing": "Benessere",
-        "fitness": "Forma fisica misurata",
         "lipids": "Lipidi"
       },
       "observed": "Osservato: {value}",
@@ -2312,11 +2311,9 @@
       "observedActivity": "{value} passi al giorno",
       "observedSleep": "{value} minuti per notte",
       "observedAdiposity": "Rapporto vita-altezza {value}",
-      "observedFitness": "{value} {unit}, misurato",
       "referenceActivity": "Il beneficio si stabilizza a {high} passi al giorno",
       "referenceSleep": "Almeno {low} minuti per notte; il sonno più lungo non viene penalizzato",
       "referenceAdiposity": "Rapporto vita-altezza inferiore a {high}",
-      "referenceFitness": "Da {low} a {high} {unit}, intervallo di riferimento per età e sesso",
       "referenceHba1c": "HbA1c da {low} a {high}%",
       "referenceDetail": "{label} · {source} · {kind} · da {low} a {high}",
       "openBound": "aperto",
@@ -4914,8 +4911,6 @@
         },
         "threeAxes": "Registrare, mostrare e contare sono tre cose diverse. Questa pagina cambia solo l'ultima. Un pilastro che disattivi qui continua a essere registrato e resta visibile ovunque in HealthLog, smette solo di muovere il numero.",
         "axis": {
-          "recorded": "Viene registrato",
-          "shown": "Mostrato nell'app",
           "countsFor": "Conta {pillar} nel punteggio"
         },
         "domain": {
@@ -4923,19 +4918,13 @@
           "activity": "Attività",
           "sleep": "Sonno",
           "adiposity": "Forma corporea",
-          "wellbeing": "Benessere",
-          "fitness": "Forma fisica misurata"
-        },
-        "domainNote": {
-          "cardiometabolic": "Tre pilastri, un solo ambito di salute. Ogni pilastro pesa allo stesso modo nel punteggio, quindi questo ambito pesa il triplo di uno con un solo pilastro."
+          "wellbeing": "Benessere"
         },
         "state": {
           "counting": "Conta nel tuo punteggio",
           "waiting": "Selezionato, in attesa di dati",
           "crisis": "Al posto di un punteggio viene mostrata un'indicazione di sicurezza. La tua selezione va bene.",
-          "readFailed": "Questo pilastro non è stato letto nell'ultimo calcolo.",
-          "unavailable": "Non ancora disponibile",
-          "unavailableDetail": "HealthLog non sa ancora distinguere un test di forma fisica misurato da una stima del dispositivo, perciò questo pilastro non ha mai prodotto un punteggio. Resta in elenco perché tu veda che non conta."
+          "readFailed": "Questo pilastro non è stato letto nell'ultimo calcolo."
         },
         "presets": {
           "label": "Punto di partenza",
@@ -7524,6 +7513,7 @@
       "caption": "del tuo ciclo",
       "firstPeriodCta": "Registra il mio primo ciclo",
       "periodOverdue": "Il ciclo è in ritardo rispetto al solito — il conteggio dei giorni resta in pausa finché non registri la prossima mestruazione.",
+      "periodOverdueDays": "Il ciclo è in ritardo di {days} giorni rispetto al solito — il conteggio dei giorni resta in pausa finché non registri la prossima mestruazione.",
       "logPeriodCta": "Registra mestruazione"
     },
     "calendar": {
@@ -9299,8 +9289,6 @@
       "deltaVsBaseline": "{delta} rispetto al tuo valore di riferimento",
       "deltaFlat": "In linea con il tuo valore di riferimento",
       "sleepPending": "Il sonno di stanotte non è ancora arrivato: la lettura di oggi è provvisoria.",
-      "justIn": "Appena arrivato",
-      "justInAt": "Appena arrivato · {time}",
       "worthALook": "Da tenere d'occhio",
       "allClear": "Oggi nulla richiede la tua attenzione.",
       "ringLink": "Apri i dettagli di {metric}"

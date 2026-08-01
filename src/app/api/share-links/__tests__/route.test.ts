@@ -374,8 +374,6 @@ describe("DELETE /api/share-links/[id] — revoke", () => {
  * Mutation checks:
  *   - drop the `SHARE_LINK_FORBIDDEN_LEAVES` check in the route → "refuses the
  *     insurance leaf by name" goes red.
- *   - drop `RETIRED_FHIR_SCOPE_FIELDS` from the create response → "keeps the
- *     retired scope fields on the response" goes red.
  *   - make `needsReselection` always false → "flags a link whose frozen scope
  *     predates the selection model" goes red.
  */
@@ -433,21 +431,17 @@ describe("POST /api/share-links — the frozen scope", () => {
     expect(createArg.data.sectionsJson).toEqual({ v: 2, leaves: [] });
   });
 
-  it("keeps the retired scope fields on the response", async () => {
-    // Response-only, serving constants. The request refuses them and the
-    // columns are gone; they stay here until the native client confirms it
-    // does not decode them.
+  it("the retired FHIR scope fields are gone from the create response", async () => {
+    // #70 — the native client confirmed removal breaks no shipped decoder.
     vi.mocked(prisma.clinicianShareLink.create).mockResolvedValue(
       storedRow() as never,
     );
     const res = await POST(
       postReq(validBody({ selection: { v: 2, leaves: ["WEIGHT"] } })),
     );
-    const body = (await res.json()) as {
-      data: { allowFhirApi: boolean; resourceTypes: string[] };
-    };
-    expect(body.data.allowFhirApi).toBe(false);
-    expect(body.data.resourceTypes).toEqual([]);
+    const body = (await res.json()) as { data: Record<string, unknown> };
+    expect(body.data).not.toHaveProperty("allowFhirApi");
+    expect(body.data).not.toHaveProperty("resourceTypes");
   });
 });
 
@@ -465,12 +459,9 @@ describe("GET /api/share-links — the pick-again state", () => {
     const res = await GET();
     const body = (await res.json()) as {
       data: {
-        shareLinks: Array<{
-          id: string;
-          needsReselection: boolean;
-          allowFhirApi: boolean;
-          resourceTypes: string[];
-        }>;
+        shareLinks: Array<
+          { id: string; needsReselection: boolean } & Record<string, unknown>
+        >;
       };
     };
     const byId = new Map(body.data.shareLinks.map((l) => [l.id, l]));
@@ -479,8 +470,8 @@ describe("GET /api/share-links — the pick-again state", () => {
     // A documents-only link carried no report scope to begin with, so it was
     // never revoked and is not asked to pick again.
     expect(byId.get("docs")!.needsReselection).toBe(false);
-    // The retired fields ride the list response too.
-    expect(byId.get("current")!.allowFhirApi).toBe(false);
-    expect(byId.get("current")!.resourceTypes).toEqual([]);
+    // The retired FHIR scope fields are gone from the list response too.
+    expect(byId.get("current")).not.toHaveProperty("allowFhirApi");
+    expect(byId.get("current")).not.toHaveProperty("resourceTypes");
   });
 });

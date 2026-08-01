@@ -2,7 +2,7 @@
  * What the "what counts toward your score" surface shows, and what it
  * refuses to show.
  *
- * Four decisions are pinned here because each of them is a sentence a
+ * Three decisions are pinned here because each of them is a sentence a
  * person reads about their own health, and each has a plausible wrong
  * version that would look fine in a screenshot:
  *
@@ -16,17 +16,12 @@
  *      one the server never mentioned.
  *   3. Wellbeing under crisis signposting is its own state and never a
  *      configuration problem.
- *   4. A pillar this build can never score is never sent as part of a
- *      selection, because the write-time breadth rule would otherwise
- *      accept a recipe on its behalf that the scorer then refuses.
  */
 import { describe, expect, it } from "vitest";
 
 import {
   buildScoreConfigRows,
-  selectionToSave,
   showsWaitingForData,
-  UNSCORABLE_PILLARS,
   type ScoreConfigRow,
 } from "@/lib/score-config/rows";
 import {
@@ -81,9 +76,9 @@ describe("grouping", () => {
       if (group.domain === "cardiometabolic") continue;
       expect(group.rows).toHaveLength(1);
     }
-    // Six domains across eight pillars is the whole reason the surface
+    // Five domains across seven pillars is the whole reason the surface
     // groups: equal weight per pillar is not equal weight per domain.
-    expect(built.groups).toHaveLength(6);
+    expect(built.groups).toHaveLength(5);
     expect(rowsOf(built)).toHaveLength(SCORE_PILLAR_IDS.length);
   });
 
@@ -158,7 +153,6 @@ describe("a module that is off", () => {
       "BLOOD_PRESSURE",
       "ACTIVITY",
       "ADIPOSITY",
-      "FITNESS",
     ] as ScorePillarId[]) {
       expect(row(built, id)).toBeDefined();
     }
@@ -244,56 +238,5 @@ describe("states that are not absence", () => {
     const bp = row(built, "BLOOD_PRESSURE");
     expect(bp?.eligibility).toBe("read_failed");
     expect(showsWaitingForData(bp!)).toBe(false);
-  });
-});
-
-describe("a pillar this build cannot score", () => {
-  it("is present, honest and never selectable", () => {
-    const built = buildScoreConfigRows({
-      selection: ALL,
-      modules: ALL_MODULES_ON,
-      // Even a verdict claiming it scored cannot make it selectable.
-      verdicts: { FITNESS: { status: "ok" } },
-    });
-
-    const fitness = row(built, "FITNESS");
-    expect(fitness).toBeDefined();
-    expect(fitness?.selectable).toBe(false);
-    expect(fitness?.eligibility).toBe("unavailable");
-  });
-
-  it("leaves every other pillar selectable", () => {
-    const built = buildScoreConfigRows({
-      selection: ALL,
-      modules: ALL_MODULES_ON,
-    });
-
-    for (const candidate of rowsOf(built)) {
-      expect(candidate.selectable).toBe(!UNSCORABLE_PILLARS.has(candidate.id));
-    }
-  });
-
-  it("is never sent as part of a saved selection", () => {
-    expect(selectionToSave(ALL)).not.toContain("FITNESS");
-    expect(selectionToSave(["FITNESS"])).toEqual([]);
-  });
-
-  it("cannot carry a selection over the breadth floor on its own", () => {
-    // The failure this guards: FITNESS is a domain of its own AND counts
-    // as physiological, so echoing it back would let the write-time rule
-    // accept `{ACTIVITY, WELLBEING, FITNESS}` — three domains, one of
-    // them physiological — for a score the reader then refuses, because
-    // FITNESS never reaches the composition.
-    expect(selectionToSave(["ACTIVITY", "WELLBEING", "FITNESS"])).toEqual([
-      "ACTIVITY",
-      "WELLBEING",
-    ]);
-  });
-
-  it("keeps registry order and drops duplicates", () => {
-    expect(selectionToSave(["LIPIDS", "ACTIVITY", "ACTIVITY"])).toEqual([
-      "ACTIVITY",
-      "LIPIDS",
-    ]);
   });
 });

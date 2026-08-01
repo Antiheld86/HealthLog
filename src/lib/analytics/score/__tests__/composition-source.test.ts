@@ -58,14 +58,26 @@ const NOW = new Date("2026-08-20T12:00:00.000Z");
 const DAY_MS = 86_400_000;
 
 /**
+ * Pillars the catalogue has retired since the swap.
+ *
+ * FITNESS went in v1.35.1. It had never produced a value on any account —
+ * the schema cannot prove a VO₂max reading came from a measured test, so
+ * every FITNESS row reached the scorer unproven and was refused — which
+ * is why retiring it moves no number. It is named here rather than edited
+ * out of the frozen expression below, so the "before" side stays a
+ * verbatim copy and the retirement stays a visible, deliberate subtraction
+ * instead of a silent one.
+ */
+const RETIRED_SINCE_THE_SWAP: readonly string[] = ["FITNESS"];
+
+/**
  * The `availablePillars` expression exactly as it stood before the swap,
  * kept here as the "before" side of the inheritance proof. It must never
  * be edited to follow the implementation: the day it disagrees with the
- * reader is the day somebody's number moved.
+ * reader is the day somebody's number moved. The one sanctioned
+ * subtraction is `RETIRED_SINCE_THE_SWAP`, applied below.
  */
-function compositionBeforeTheSwap(
-  modules: ScoreReaderModules,
-): ScorePillarId[] {
+function compositionBeforeTheSwap(modules: ScoreReaderModules): string[] {
   return [
     "BLOOD_PRESSURE",
     ...(modules.glucose || modules.labs ? (["GLYCAEMIA"] as const) : []),
@@ -76,6 +88,13 @@ function compositionBeforeTheSwap(
     "FITNESS",
     ...(modules.labs ? (["LIPIDS"] as const) : []),
   ];
+}
+
+/** The pre-swap composition minus the pillars the catalogue has retired. */
+function compositionInheritedToday(modules: ScoreReaderModules): string[] {
+  return compositionBeforeTheSwap(modules).filter(
+    (id) => !RETIRED_SINCE_THE_SWAP.includes(id),
+  );
 }
 
 /** All sixteen on/off states of the four modules the reader is handed. */
@@ -145,8 +164,8 @@ function measurement(
 
 /**
  * An account with enough data for four pillars to score: steps, sleep,
- * a waist-to-height ratio and a WHO-5. Blood pressure, glycaemia, lipids
- * and fitness stay honestly absent, which is what lets the same fixture
+ * a waist-to-height ratio and a WHO-5. Blood pressure, glycaemia and
+ * lipids stay honestly absent, which is what lets the same fixture
  * show a selected-but-dataless pillar beside a module-withdrawn one.
  */
 const MEASUREMENTS: MeasurementRow[] = [
@@ -213,7 +232,6 @@ function score(args: {
     now: NOW,
     profile: {
       dateOfBirth: null,
-      gender: null,
       heightCm: null,
       timezone: "UTC",
       sourcePriorityJson: null,
@@ -243,7 +261,7 @@ describe("the module-to-pillar map", () => {
       expect(
         pillarsWithModuleData(modules),
         `availability for ${describeModules(modules)}`,
-      ).toEqual(compositionBeforeTheSwap(modules));
+      ).toEqual(compositionInheritedToday(modules));
     }
   });
 
@@ -267,20 +285,15 @@ describe("the module-to-pillar map", () => {
     ).toContain("LIPIDS");
   });
 
-  it("leaves the four core-domain pillars ungated", () => {
-    // These read weight, blood pressure, steps and waist — domains with
-    // no module switch at all, so no module can withdraw their data.
-    // Pinned rather than derived so an addition to the map that started
-    // gating one of them has to be a deliberate edit here too.
+  it("leaves the three core-domain pillars ungated", () => {
+    // These read blood pressure, steps and waist — domains with no module
+    // switch at all, so no module can withdraw their data. Pinned rather
+    // than derived so an addition to the map that started gating one of
+    // them has to be a deliberate edit here too.
     const ungated = SCORE_PILLAR_IDS.filter(
       (id) => !MODULE_GATED_PILLARS.has(id),
     );
-    expect(ungated).toEqual([
-      "BLOOD_PRESSURE",
-      "ACTIVITY",
-      "ADIPOSITY",
-      "FITNESS",
-    ]);
+    expect(ungated).toEqual(["BLOOD_PRESSURE", "ACTIVITY", "ADIPOSITY"]);
     const allOff: ScoreReaderModules = {
       glucose: false,
       labs: false,
@@ -288,6 +301,19 @@ describe("the module-to-pillar map", () => {
       mentalHealth: false,
     };
     expect(pillarsWithModuleData(allOff)).toEqual(ungated);
+  });
+
+  it("holds no retired pillar the catalogue still knows", () => {
+    // A retirement list that named a live pillar would quietly subtract
+    // it from the "before" side and hide a real composition change.
+    for (const id of RETIRED_SINCE_THE_SWAP) {
+      expect(SCORE_PILLAR_IDS as readonly string[]).not.toContain(id);
+    }
+    // And the list is not empty-by-accident: the subtraction it performs
+    // has to be visible in at least one module combination.
+    expect(compositionBeforeTheSwap(ALL_MODULES_ON)).not.toEqual(
+      compositionInheritedToday(ALL_MODULES_ON),
+    );
   });
 
   it("names only real modules and real pillars", () => {
@@ -307,7 +333,7 @@ describe("inheritance: a never-written recipe keeps the number it had", () => {
       expect(
         report.pillars.map((pillar) => pillar.id),
         `composition for ${describeModules(modules)}`,
-      ).toEqual(compositionBeforeTheSwap(modules));
+      ).toEqual(compositionInheritedToday(modules));
     }
   });
 
@@ -321,7 +347,6 @@ describe("inheritance: a never-written recipe keeps the number it had", () => {
       "ACTIVITY",
       "ADIPOSITY",
       "WELLBEING",
-      "FITNESS",
       "LIPIDS",
     ]);
     expect(report.composite.status).toBe("ok");

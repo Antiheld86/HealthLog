@@ -342,7 +342,7 @@ const REGISTRY: Record<DerivedMetricId, DerivedMetricMeta> = {
     id: "HEALTH_SCORE",
     displayName: "Cardiometabolic reference score",
     archetype: "composite",
-    // The eight ids below are the CATALOGUE of scorable pillars, and since
+    // The seven ids below are the CATALOGUE of scorable pillars, and since
     // v1.35.0 they are not the recipe. What counts toward an account's
     // composite is the resolved per-user composition
     // (`resolveHealthScoreConfig`) intersected with the modules that record
@@ -356,7 +356,6 @@ const REGISTRY: Record<DerivedMetricId, DerivedMetricMeta> = {
       "SLEEP",
       "ADIPOSITY",
       "WELLBEING",
-      "FITNESS",
       "LIPIDS",
     ],
     minHistoryDays: 1,
@@ -364,10 +363,10 @@ const REGISTRY: Record<DerivedMetricId, DerivedMetricMeta> = {
     // confidence this metric publishes are built in `computeComposite`
     // (`src/lib/analytics/score/composite.ts`) over the resolved
     // composition, never from this entry, which is why a person who counts
-    // four pillars is not measured against a denominator of eight. The real
+    // four pillars is not measured against a denominator of seven. The real
     // floor is the breadth rule in `src/lib/analytics/score/breadth.ts`: at
     // least three distinct DOMAINS including one physiological pillar. Three
-    // of the eight ids above share the cardiometabolic domain, so "three
+    // of the seven ids above share the cardiometabolic domain, so "three
     // inputs" and "enough breadth for a score" are different questions and
     // this number answers neither. The field stays because every registry
     // entry carries it; reading it as a threshold would be wrong.

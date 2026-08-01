@@ -27,7 +27,6 @@ import { PredictionsPanel } from "./predictions-panel";
 import { CyclePhaseHeadline, CyclePhaseCrosstab } from "./cycle-phase-crosstab";
 import { CycleSymptomPatterns } from "./cycle-symptom-patterns";
 import { CycleSettings } from "./cycle-settings";
-import { deriveWheelState } from "./wheel-state";
 import { PHASE_HUE } from "./phase-tokens";
 import {
   localYmd,
@@ -139,17 +138,9 @@ export function CycleView() {
     }
   });
 
-  // Pass the profile's typical lengths so a low-data tracker (few logged
-  // cycles) draws the canonical four-phase ring instead of one dominant arc.
-  const wheel = useMemo(
-    () =>
-      deriveWheelState(calendar.data?.days ?? [], today, {
-        typicalCycleLength: profileQuery.data?.typicalCycleLength,
-        typicalPeriodLength: profileQuery.data?.typicalPeriodLength,
-        lutealPhaseLength: profileQuery.data?.lutealPhaseLength,
-      }),
-    [calendar.data, today, profileQuery.data],
-  );
+  // The server's resolved verdict — cycle day, the ring's arcs, the overdue
+  // judgement and its day count. Nothing on this page recomputes any of it.
+  const verdict = calendar.data?.verdict;
 
   function openSheet(date: string) {
     setSelectedDate(date);
@@ -158,7 +149,7 @@ export function CycleView() {
 
   const loading = calendar.isLoading && !calendar.data;
   const calendarError = calendar.isError && !calendar.data;
-  const tileHue = wheel.phase ? PHASE_HUE[wheel.phase] : undefined;
+  const tileHue = verdict?.phase ? PHASE_HUE[verdict.phase] : undefined;
   const goal = calendar.data?.profile.goal;
   // Honesty-gate inputs for the phase-education card (Clue precedent): the
   // predictive phase framing only shows when prediction is on, not in
@@ -244,32 +235,38 @@ export function CycleView() {
                 </div>
               ) : (
                 <CycleRing
-                  dayOfCycle={wheel.dayOfCycle}
-                  cycleLength={wheel.cycleLength}
-                  phase={wheel.phase}
-                  spans={wheel.spans}
+                  dayOfCycle={verdict?.dayOfCycle ?? null}
+                  cycleLength={verdict?.cycleLength ?? null}
+                  phase={verdict?.phase ?? null}
+                  spans={verdict?.spans ?? []}
                   animate={play}
                 />
               )}
               {!calendarError ? (
                 <p className="text-muted-foreground max-w-56 text-center text-xs">
-                  {/* v1.27.5 — beyond typical length + grace the wheel stops
-                      asserting a day count; this caption says why instead of
-                      the "of your cycle" tagline under an empty ring. */}
-                  {wheel.periodOverdue
-                    ? t("cycle.ring.periodOverdue")
+                  {/* Beyond the typical length plus the server's grace window
+                      the count stops being an observed fact, so the server
+                      resolves OVERDUE and says how late; this caption reports
+                      that instead of the "of your cycle" tagline under an
+                      empty ring. */}
+                  {verdict?.state === "OVERDUE"
+                    ? verdict.overdueDays != null
+                      ? t("cycle.ring.periodOverdueDays", {
+                          days: verdict.overdueDays,
+                        })
+                      : t("cycle.ring.periodOverdue")
                     : t("cycle.ring.caption")}
                 </p>
               ) : null}
               {/* Log CTA — first period when no cycle exists yet, next period
                   when the count paused on an overdue cycle. */}
-              {!loading && !calendarError && wheel.dayOfCycle == null ? (
+              {!loading && !calendarError && verdict?.dayOfCycle == null ? (
                 <Button
                   variant="outline"
                   className="mt-1 w-full"
                   onClick={() => openSheet(today)}
                 >
-                  {wheel.periodOverdue
+                  {verdict?.state === "OVERDUE"
                     ? t("cycle.ring.logPeriodCta")
                     : t("cycle.ring.firstPeriodCta")}
                 </Button>
@@ -283,7 +280,7 @@ export function CycleView() {
           {!loading && !calendarError ? (
             <PhaseEducationCard
               animate={play}
-              phase={wheel.phase}
+              phase={verdict?.phase ?? null}
               symptomPatterns={insights.data?.symptomPatterns ?? []}
               predictionEnabled={calProfile?.predictionEnabled ?? false}
               rawChartMode={calProfile?.rawChartMode ?? false}
@@ -388,6 +385,7 @@ export function CycleView() {
                 <BbtChart
                   days={calendar.data?.days ?? []}
                   today={today}
+                  cycleStartDate={verdict?.cycleStartDate ?? null}
                   predictedOvulation={
                     calendar.data?.prediction?.predictedOvulation ?? null
                   }
@@ -446,9 +444,9 @@ export function CycleView() {
         onOpenChange={setSheetOpen}
         date={selectedDate}
         today={today}
-        activePeriod={wheel.phase === "MENSTRUAL"}
-        phase={wheel.phase}
-        dayOfCycle={wheel.dayOfCycle}
+        activePeriod={verdict?.phase === "MENSTRUAL"}
+        phase={verdict?.phase ?? null}
+        dayOfCycle={verdict?.dayOfCycle ?? null}
         goal={goal}
         predictionEnabled={calProfile?.predictionEnabled ?? false}
         rawChartMode={calProfile?.rawChartMode ?? false}

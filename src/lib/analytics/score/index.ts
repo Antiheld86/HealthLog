@@ -4,7 +4,6 @@ import { computeActivityPillar } from "./activity";
 import { computeAdiposityPillar } from "./adiposity";
 import { computeBloodPressurePillar } from "./blood-pressure";
 import { computeComposite } from "./composite";
-import { computeFitnessPillar } from "./fitness";
 import { computeGlycaemiaPillar } from "./glycaemia";
 import { computeLipidsPillar } from "./lipids";
 import { computeSleepPillar } from "./sleep";
@@ -69,11 +68,6 @@ export function computeHealthScore(
       id: "WELLBEING",
       domain: SCORE_PILLAR_DOMAINS.WELLBEING,
       result: computeWellbeingPillar(input.pillars.WELLBEING),
-    },
-    FITNESS: {
-      id: "FITNESS",
-      domain: SCORE_PILLAR_DOMAINS.FITNESS,
-      result: computeFitnessPillar(input.pillars.FITNESS),
     },
     LIPIDS: {
       id: "LIPIDS",

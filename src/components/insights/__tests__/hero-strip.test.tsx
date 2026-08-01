@@ -8,6 +8,7 @@ import type {
   ScorePillarId,
   ScorePillarResult,
 } from "@/lib/analytics/score/types";
+import { SCORE_VERSION } from "@/lib/analytics/score/types";
 
 // The "generated" freshness line reads the profile timezone via `useAuth`; stub
 // it so the SSR render does not reach for a QueryClient the test omits.
@@ -116,7 +117,7 @@ function scoreReport(pillars: ScorePillarResult[]): HealthScoreReport {
         composition: ["BLOOD_PRESSURE"],
         configured: false,
         noiseFloor: 3,
-        scoreVersion: 2,
+        scoreVersion: SCORE_VERSION,
       },
       coverage: {
         requiredInputs: 3,
@@ -130,7 +131,7 @@ function scoreReport(pillars: ScorePillarResult[]): HealthScoreReport {
     pillars,
     delta: 2,
     deltaReason: null,
-    scoreVersion: 2,
+    scoreVersion: SCORE_VERSION,
     weightGoal: {
       status: "insufficient",
       coverage: {

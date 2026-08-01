@@ -2,6 +2,44 @@
 
 ## [Unreleased]
 
+## [1.35.2] — 2026-08-01
+
+### Added
+
+- The cycle ring now reads its verdict from the server: which day of the cycle
+  you are on, how many days until the next one is expected, and whether a period
+  is late, with the number of days. Both clients read the same answer instead of
+  each working one out.
+
+### Changed
+
+- The Health Score turns green at 70, the same threshold the readiness and sleep
+  scores already used. A weak pillar still holds the band down no matter how good
+  the average is, so a single poor area cannot be averaged out of sight.
+- The score settings page was rebuilt to match the other settings cards: one
+  reading edge, no separator lines, the save button where the other cards keep it.
+- The Fitness pillar is gone. It could never produce a value, because the record
+  cannot tell a measured fitness test from a device estimate, so it was offering a
+  choice that did nothing.
+- The arrival line under the greeting is gone. It never said what had arrived.
+
+### Fixed
+
+- A saved score selection now comes back exactly as it was sent. One pillar was
+  quietly stripped on the way to the server, so the page could never agree with
+  what it had saved and the save button stayed lit for good.
+- The cycle wheel follows the timezone on your profile rather than the one your
+  browser happens to be in.
+
+### Contract
+
+- Two share-link fields that were agreed for retirement are no longer served.
+- A conflict on a repeated request now returns its error the way every other
+  route does. One place in the whole codebase answered with a different shape.
+- Five gaps in the published specification are closed, including a route that
+  shipped with the score settings and was never described at all, and one that
+  had been promised for months.
+
 ## [1.35.1] — 2026-08-01
 
 ### Fixed
@@ -3380,12 +3418,11 @@ one coherent whole.
 
 ### Correctness, resilience and polish
 
-The same line carried a full audit sweep: DST-safe medication windows and
+The same line carried a broad correctness sweep: DST-safe medication windows and
 user-timezone compliance; graceful degradation (worker timeouts, per-metric sync
 freshness, offline-write safety, per-source isolation, honest "unreadable"
 markers); no more dashboard dead-ends and honest error/empty states; accessibility
-contrast and semantics; and cold-start + performance fixes — down to the low-priority
-findings.
+contrast and semantics; and cold-start + performance fixes.
 
 ## [1.27.33] — 2026-07-09 — Chat about a document
 
@@ -5950,7 +5987,7 @@ A broad polishing release across the medication, dashboard, export, and HealthKi
 
 ### Tests
 
-- 5628 → 5878 unit; 1 skipped. New coverage spans the recurrence-engine PRN/cyclic cases, cadence-canonical compliance parity per cadence type, the FHIR bundle shape and LOINC/UCUM mapping, the KVNR validator, the export route, the dashboard snapshot envelope and pre-generation cron, the measurement delta feed and soft-delete tombstones, the daily-mean consolidation drain, and the display-unit transforms. A six-reviewer audit (correctness, security, architecture, design/a11y, simplification, i18n) ran before release; every High and Medium finding was resolved.
+- 5628 → 5878 unit; 1 skipped. New coverage spans the recurrence-engine PRN/cyclic cases, cadence-canonical compliance parity per cadence type, the FHIR bundle shape and LOINC/UCUM mapping, the KVNR validator, the export route, the dashboard snapshot envelope and pre-generation cron, the measurement delta feed and soft-delete tombstones, the daily-mean consolidation drain, and the display-unit transforms.
 
 ## [1.6.0] — 2026-05-30 — Medication editor overhaul, route of administration, today-tile read-flip
 
@@ -6012,12 +6049,12 @@ v1.5.5 gave every retired medication feature a home on the detail page, but the 
 
 ## [1.5.5] — 2026-05-29 — Medication detail page, iOS coordination, outbound-fetch hardening
 
-The v1.5.4 modal wizard landed the create + edit plan flow, but it took 16 features down with the retired flat form — Einnahmen bearbeiten / löschen, Medikament pausieren / beenden / löschen, per-Med API tokens, Phasen-Konfiguration, CSV-Import — and the trends-row on Insights had a 34 px overflow that pushed annotation copy on top of the charts. This release lands the medication detail page that gives every retired feature a coherent home, polishes the wizard against the live walk-through feedback, closes the iOS audit follow-ups in one go, and hardens every outbound fetch the server makes.
+The v1.5.4 modal wizard landed the create + edit plan flow, but it took 16 features down with the retired flat form — Einnahmen bearbeiten / löschen, Medikament pausieren / beenden / löschen, per-Med API tokens, Phasen-Konfiguration, CSV-Import — and the trends-row on Insights had a 34 px overflow that pushed annotation copy on top of the charts. This release lands the medication detail page that gives every retired feature a coherent home, polishes the wizard, closes the iOS audit follow-ups in one go, and hardens every outbound fetch the server makes.
 
 ### Added
 
 - **`/medications/[id]/page.tsx`** — a single Server-Component detail page composed of eight sections (Header band → Today's-dose → Cadence summary → Phasen (GLP-1) → Intake history preview → Notifications → Settings → Verwaltung & Gefahrenzone). One-shot medications walk a five-section variant; paused medications keep the structure but the status pill flips to `Pausiert` and the dose-card surface mutes. Restores every one of the 16 features the v1.5.4 flat-form retirement displaced.
-- **Per-row + bulk intake history actions** — the preview now ships a per-row kebab (`Bearbeiten` / `Löschen`) and a multi-select toolbar that fires the new `POST /api/medications/{id}/intake/bulk-delete` endpoint. The maintainer's „Einnahmen löschen" + „Einnahmen bearbeiten" complaints from the v1.5.4 walk-through close cleanly.
+- **Per-row + bulk intake history actions** — the preview now ships a per-row kebab (`Bearbeiten` / `Löschen`) and a multi-select toolbar that fires the new `POST /api/medications/{id}/intake/bulk-delete` endpoint.
 - **`safeFetch` wrapper** at `src/lib/safe-fetch.ts` — every outbound fetch the server makes for user-supplied hosts now inherits `redirect: "manual"` + `AbortSignal.timeout(15_000)` defaults. Closes #218.
 - **DNS-rebinding pinned `undici.Agent`** at `src/lib/safe-fetch-dispatcher.ts` — when `requirePublicHost: true`, the dispatcher resolves the hostname literally inside the connect hook, refuses any address `isPublicIp` would reject, and pins the connection to the first valid public address. The five user-host paths (MoodLog sync + push + test, local-AI client, ntfy) route through it. Closes #217.
 - **Self-hosted avatar storage** at `POST/GET/DELETE /api/user/avatar` — multipart-uploaded JPEG/PNG/WebP, 2 MiB / 2048×2048 max, hand-rolled magic-byte sniff + dimension probe so no native dependency lands. Stored on the User row as BYTEA; rides `pg_dump` alongside the rest of the row. The profile response carries an `avatarUrl` with a cache-busting timestamp. `src/lib/gravatar.ts` retires — Automattic no longer sees the email-hash on every authenticated page load.
@@ -6056,7 +6093,7 @@ The v1.5.4 modal wizard landed the create + edit plan flow, but it took 16 featu
 - `safeFetch` + DNS-rebinding pinned dispatcher close issues #217 + #218 architecturally — the input-time `isPublicUrl` guard now pairs with a connect-time IP pin so DNS rebinding cannot flip the resolved host between accept and dispatch.
 - Avatar route enforces size before parse (Content-Length pre-flight + post-parse `file.size` check), magic-byte sniff over the declared content-type, dimension probe, owner-scoped on every method. No new XSS vector — the served content-type is whitelisted to the three image MIMEs.
 - `assertMedicationOwnership` sweep closes every detail-page route's ownership narrowing — the route layer is now the single ownership predicate across `src/app/api/medications/[id]/**`.
-- Pre-tag senior-dev + security architect audit produced two docs (internal working notes). The four senior-dev Criticals + five Highs landed in code; F-1 H-5 (`safeFetch` migration to constant-host call sites like Withings + Codex + the GitHub bug-reporter) + F-2 M-1..M-3 (operator-host `requirePublicHost`, avatar chunked-body pre-flight, raw-fetch lint rule) deferred to v1.5.5.1.
+- Deferred to v1.5.5.1: the `safeFetch` migration for the constant-host call sites (Withings, Codex, the GitHub bug-reporter), `requirePublicHost` on operator-supplied hosts, the avatar chunked-body pre-flight, and the raw-fetch lint rule.
 
 ### iOS coord
 
@@ -6090,7 +6127,7 @@ The v1.5.3 creation wizard shipped as a single-page card with seven inline steps
 ### Fixed
 
 - **Multi-schedule data-loss risk** — the v1.5.3 wizard collapsed a multi-schedule medication to its first schedule on save and silently dropped the rest. Compose-mode is the proper fix; the encoder now emits every schedule, the hydrator reads every schedule, the per-schedule `id` round-trips so the PUT preserves identity.
-- **The edit form being wider than its container** — a specific user complaint from the v1.5.3 hand-walk. The container is now a constrained Dialog at `sm:max-w-md` on desktop and a sticky-footer Sheet at `max-h-[90dvh]` on mobile; the form-as-page surface is gone.
+- **The edit form being wider than its container** — the container is now a constrained Dialog at `sm:max-w-md` on desktop and a sticky-footer Sheet at `max-h-[90dvh]` on mobile; the form-as-page surface is gone.
 
 ### Tests
 
@@ -6100,7 +6137,7 @@ The v1.5.3 creation wizard shipped as a single-page card with seven inline steps
 
 ### Notes
 
-- **No API or wire-format change.** The wizard writes the same `createMedicationSchema` payload the v1.5.3 wizard wrote; iOS clients reading and writing the existing schedule shape are unaffected. The native `treatmentClass` enum already shipped `GLP1`; the wizard's Step 2 maps the maintainer-confirmed labels onto the existing enum + the two new `MedicationCategory` values.
+- **No API or wire-format change.** The wizard writes the same `createMedicationSchema` payload the v1.5.3 wizard wrote; iOS clients reading and writing the existing schedule shape are unaffected. The native `treatmentClass` enum already shipped `GLP1`; the wizard's Step 2 maps its treatment-class labels onto the existing enum + the two new `MedicationCategory` values.
 - **Cadence-engine read-flip is still v1.5.x deferred** — the today-projector, the cadence chart, and the medication card continue to read the legacy `daysOfWeek` / `intervalWeeks` columns. A wizard-minted rolling or one-shot medication will render a daily-looking next-due chip on the dashboard until the read-flip ships. The reminder worker and the engine work with the new fields correctly.
 - **Test totals.** 5500 unit + 1 skipped, 261 integration + 3 skipped, 14 Playwright wizard instances. Typecheck, lint, `openapi:check`, i18n call-site coverage, locale-integrity all green at HEAD.
 
@@ -6338,7 +6375,7 @@ Post-deploy production logs from `/api/analytics` (default + slim, cold cache) c
 
 ## [1.4.49] — 2026-05-23 — Server-side reminder suppression + diagnostic endpoint backed + backlog closure
 
-v1.4.47 closed the high-priority punch list. v1.4.49 bundles the remaining v1.4.47 follow-ups together with the items deferred out of v1.4.48: server-side suppression of `MEDICATION_REMINDER` APNs for iOS clients that manage their own local reminders, a `push_attempts` table backing the diagnostic endpoint, the `/api/admin/notifications/diagnostic` OpenAPI entry, and a sweep of v1.4.48 forward-findings (Withings reason-tagging, observability PII hardening, MoodReminderCard auto-clear parity, simplifier dead-code, sub-locale copy gaps). The workout-batch integration suite that had been red on `main` for three releases turns green; the cold-mount analytics fallback path picks up the same 90-day outer cap v1.4.47.1 shipped for the rollup-fresh path; iOS validation-failure audit rows carry the rejected payload shape so iOS serialiser drift can be chased from a single log line.
+v1.4.47 closed the high-priority punch list. v1.4.49 bundles the remaining v1.4.47 follow-ups together with the items deferred out of v1.4.48: server-side suppression of `MEDICATION_REMINDER` APNs for iOS clients that manage their own local reminders, a `push_attempts` table backing the diagnostic endpoint, the `/api/admin/notifications/diagnostic` OpenAPI entry, and a sweep of the v1.4.48 carry-overs (Withings reason-tagging, observability PII hardening, MoodReminderCard auto-clear parity, simplifier dead-code, sub-locale copy gaps). The workout-batch integration suite that had been red on `main` for three releases turns green; the cold-mount analytics fallback path picks up the same 90-day outer cap v1.4.47.1 shipped for the rollup-fresh path; iOS validation-failure audit rows carry the rejected payload shape so iOS serialiser drift can be chased from a single log line.
 
 ### Added
 
@@ -6656,14 +6693,14 @@ Fourteen independent sub-tasks landed on `develop` before this release commit.
 - **`phase-config-dialog.tsx` Input + Button bump to 44 px on mobile** — drops `text-sm` from the Input so the iOS-zoom-on-focus is closed.
 - **`correlation-card.tsx` skeleton mirrors the loaded scatter chart's aspect ratio** — `aspect-square sm:aspect-[3/2] min-h-[180px] sm:h-auto`. Closes the ~60 px CLS on the insights cold mount.
 - **`insights-tab-strip.tsx` group-popover items bumped to 44 px** — outer tab pills already met the floor; inner popover items lagged.
-- **`chart-overlay-controls.tsx` trigger adopts the responsive `min-h-11 sm:min-h-9` pattern** — consistent with the v1.4.33 maintainer-item-7 settlement.
+- **`chart-overlay-controls.tsx` trigger adopts the responsive `min-h-11 sm:min-h-9` pattern** — consistent with the responsive tap-target floor v1.4.33 converged on.
 - **`RecentWorkoutsTile` + `DrugLevelChart` reserve loaded-card height during loading** — no card-pop on first paint.
 - **`dedupeWorkoutBatch` honours `User.sourcePriorityJson`** — write-time picker threads the same priority ladder the read-time picker uses. The v1.4.42 docstring warning ("does NOT consult sourcePriorityJson") is now obsolete; the batch route does a single `prisma.user.findUnique` lookup before the dedup pass.
 - **`/api/dashboard/widgets` 422 audit-ledger row dedupes per `(userId, action)` over 60 s** — a misconfigured iOS client retrying every 100 ms no longer writes 10 audit rows per second. The 422 response is still per-call; only the audit-ledger row dedupes.
 
 ### Fixed
 
-- **`auth.login.failed` audit row no longer persists the raw typed identifier** — replaced with `identifier_hash: hashToken(identifier)`. Closes the PII gap surfaced by the v1.4.20 retroactive directive: an admin scrolling `/api/admin/audit-log` no longer sees every wrong-email a user typo'd at the login screen, and a future audit-table compromise no longer hands an attacker a list of probed identifiers.
+- **`auth.login.failed` audit row no longer persists the raw typed identifier** — replaced with `identifier_hash: hashToken(identifier)`. Closes a PII gap: an admin scrolling `/api/admin/audit-log` no longer sees every wrong-email a user typo'd at the login screen, and a future audit-table compromise no longer hands an attacker a list of probed identifiers.
 - **`WithingsApiError.message` capped at 1024 chars in the constructor** — the v1.4.42 classifier persisted the upstream `json.error` string verbatim into `AuditLog.details`. Withings is the trusted upstream but the operator-readable audit row should match the encrypted-error column's 1024-char cap.
 - **Chart empty-state copy split on raw measurement count** — `<HealthChart>`, `<MoodChart>`, `<MedicationComplianceChart>` now distinguish "fewer than 3 entries" (empty-state title) from "many entries but only on 1-2 distinct days" (new `needMoreDistinctDays` title). The user-reported "Erfasse 3 Einträge" on a populated account is closed.
 - **Chart `aria-busy` empty branch no longer silently returns null** — replaced with a `<ChartEmptyState>` rendering the `noDataInRange` copy.
@@ -6759,7 +6796,7 @@ v1.4.41 closed the iOS BP/Weight 14 s perf paper-cut and the soft-delete reader-
 
 ## [1.4.41] — 2026-05-21 — iOS perf hotfix, soft-delete completeness, tree hygiene
 
-v1.4.40 closed the architecture-level critical and high-priority findings and shipped the iOS PB30 backend prerequisites. v1.4.41 is the follow-up: one user-visible perf hotfix on the iOS-facing insights endpoints (consolidated into a shared timeout-stub helper that now backs all seven status routes), three remaining soft-delete reader-tier gaps closed (invariant pinned by integration tests), type-consolidation across analytics + backups, a four-branch iOS-onboarding discovery endpoint with per-IP rate-limiting, and a code-hygiene pass that retires the v1.4.39 legacy-NULL UNION discovery arm, extracts the today-intake projection helper, and trims a batch of dead exports.
+v1.4.40 closed the architecture-level critical and high-priority issues and shipped the iOS PB30 backend prerequisites. v1.4.41 is the follow-up: one user-visible perf hotfix on the iOS-facing insights endpoints (consolidated into a shared timeout-stub helper that now backs all seven status routes), three remaining soft-delete reader-tier gaps closed (invariant pinned by integration tests), type-consolidation across analytics + backups, a four-branch iOS-onboarding discovery endpoint with per-IP rate-limiting, and a code-hygiene pass that retires the v1.4.39 legacy-NULL UNION discovery arm, extracts the today-intake projection helper, and trims a batch of dead exports.
 
 ### Added
 
@@ -6932,11 +6969,11 @@ Withings sync, `/api/import`, and admin-restore paths. New writes from
 those surfaces now fold the persistent rollup tier on touch, and the
 boot-time backfill discovery surfaces every per-(user, type, day) gap
 so a worker restart converges any stranded accounts. v1.4.39.2 closes
-two follow-ups the maintainer surfaced from the post-deploy trace: the dashboard
-chart still painted its `< 3 daily points` empty-state on the 30-point
-range for accounts whose historic rollup partition had not yet been
-folded, and the cold-mount UX waterfall left every per-type tile
-waiting on the heavy `/api/analytics` envelope.
+two gaps the post-deploy trace surfaced: the dashboard chart still
+painted its `< 3 daily points` empty-state on the 30-point range for
+accounts whose historic rollup partition had not yet been folded, and
+the cold-mount UX waterfall left every per-type tile waiting on the
+heavy `/api/analytics` envelope.
 
 ### Fixed
 
@@ -8285,7 +8322,7 @@ viewport-zoom fix surfaced during the mobile-deep pass.
 
 ## [1.4.34.4] — 2026-05-17 — Hotfix bundle: security, UX, code-quality, docs
 
-A consolidated hotfix landing findings across mobile security, UX + accessibility, code quality + docs,
+A consolidated hotfix landing fixes across mobile security, UX + accessibility, code quality + docs,
 README + discoverability, web performance, and mobile-deep responsive
 behaviour. None of the changes break the public API or the existing
 data shape; every fix is additive and SAFE under the v1.4.34.x web
@@ -8434,14 +8471,13 @@ focus-visible:outline-none focus-visible:ring-offset-2`. Keyboard
 
 ## [1.4.34.3] — 2026-05-17 — Remove the dashboard Coach CTA
 
-Per maintainer directive: the dashboard hero CTA that v1.4.34 added
-("Frag den Coach" sparkles button next to "Hinzufügen") is removed
-from the dashboard. The Coach surface remains reachable from the
-`/insights` tree where it originally lived; the auth-shell-level
-`<CoachLaunchProvider>` + drawer mount stay intact so other pages
-that want to surface a Coach CTA can opt in cleanly. The button was
-visually loud on the dashboard hero and not the right placement for
-the surface.
+The dashboard hero CTA that v1.4.34 added ("Frag den Coach" sparkles
+button next to "Hinzufügen") is removed from the dashboard. The Coach
+surface remains reachable from the `/insights` tree where it
+originally lived; the auth-shell-level `<CoachLaunchProvider>` +
+drawer mount stay intact so other pages that want to surface a Coach
+CTA can opt in cleanly. The button was visually loud on the dashboard
+hero and not the right placement for the surface.
 
 ### Changed
 
@@ -9422,15 +9458,15 @@ mount, GLP-1 detail-page intake history + inventory, the
 weekly-report route), four broken edges close (workout-edit duplicate-
 timestamp 409, BD-Zielbereich tile rebuilt on the shared
 `<TrendCard>` primitive, `/insights/puls` chart timeout fallback,
-sticky tab-strip scroll lock), and one consistency contract lands per
-maintainer directive: every medication-list row, every medication-
-detail section header, every trend tile, every Coach launch glyph,
-every chart-height contract reads on one shape. The HealthScore card
-grows to fill its column, gains an accessible `?` tooltip explaining
-the delta, and drops the placeholder "Wochenbericht erstellen"
-button. iOS contracts are intact; the only `/api/*` evolution is
-additive (the `aggregate=monthly` grain on `/api/measurements` and an
-internal-only `/api/internal/web-vitals` beacon route).
+sticky tab-strip scroll lock), and one consistency contract lands:
+every medication-list row, every medication-detail section header,
+every trend tile, every Coach launch glyph, every chart-height
+contract reads on one shape. The HealthScore card grows to fill its
+column, gains an accessible `?` tooltip explaining the delta, and
+drops the placeholder "Wochenbericht erstellen" button. iOS contracts
+are intact; the only `/api/*` evolution is additive (the
+`aggregate=monthly` grain on `/api/measurements` and an internal-only
+`/api/internal/web-vitals` beacon route).
 
 ### Removed
 
@@ -9457,10 +9493,8 @@ internal-only `/api/internal/web-vitals` beacon route).
 - **GLP-1 detail-page intake history + inventory.** The "Dosis-
   Historie" disclosure and "Bestand" section retire from the GLP-1
   medication detail page. The page now collapses to header,
-  schedule, dose-titration ladder, and side-effects — every section
-  the maintainer flagged as wanted; every section flagged as
-  unwanted is gone. Inventory tracking remains opt-in for a future
-  release.
+  schedule, dose-titration ladder, and side-effects. Inventory
+  tracking remains opt-in for a future release.
 - **Hero "Wochenbericht erstellen" button.** The placeholder
   affordance retires from the `/insights` action row. The row now
   carries a single "Coach fragen" button so the HealthScore card on
@@ -9731,13 +9765,10 @@ tracking-tight`). DrugLevelChart's standalone header migrates to
   `from` is a four-line edit deferred to v1.4.29 — the bucketed
   rows carry a divergent shape and the chart adapter needs a small
   helper to merge bucketed vs raw inputs.
-- **Medium-tier findings across surfaces.** The simplifier, design, UI-conformity,
-  i18n, and senior-dev passes each surfaced a medium-tier
-  backlog. Closed only the high-impact items in this release;
-  medium-tier items (8 design, 4 UI-conformity, 5 i18n, 7 senior-
-  dev, plus the `<ResponsiveSheet>` footer-slot wiring and the 5
-  `<Dialog>` consumers still to migrate) defer to v1.4.29 per the
-  scope-discipline directive ("less scope, more depth").
+- **Medium-priority polish across surfaces.** Design, UI-conformity,
+  i18n, and code-quality items of medium priority defer to v1.4.29,
+  along with the `<ResponsiveSheet>` footer-slot wiring and the 5
+  `<Dialog>` consumers still to migrate.
 - **Five admin / monitoring orphan endpoints.** Unchanged from
   v1.4.27. The wire-or-remove decision still pends — each is
   documented in README but has no runtime consumer. Carry forward
@@ -9745,7 +9776,7 @@ tracking-tight`). DrugLevelChart's standalone header migrates to
 
 ## [1.4.27] — 2026-05-15
 
-Mobile capability + maintainer-finding cleanup. The headline is a new
+Mobile capability + accessibility cleanup. The headline is a new
 `<ResponsiveSheet>` primitive that switches between a bottom-sheet on
 narrow viewports and a centred dialog on desktop; every primary form
 entry mounts through it with sticky-pinned Save / Cancel above the soft
@@ -9761,9 +9792,8 @@ availability with empty-state CTAs that route into a self-opening
 measurement form. Login overview surfaces an offline-resolved carrier
 chip via bundled MaxMind GeoLite2-City + GeoLite2-ASN MMDBs. A new
 `<NativeSelect>` primitive replaces five raw selects across settings
-and admin. 26 of the 27 maintainer findings landed; the weekly-report
-dead-click ask defers to v1.4.28 pending a screenshot. Migration 0061
-is additive, `IF NOT EXISTS`-guarded, and forward-only.
+and admin. The weekly-report dead-click defers to v1.4.28. Migration
+0061 is additive, `IF NOT EXISTS`-guarded, and forward-only.
 
 ### Added
 
@@ -9887,8 +9917,7 @@ is additive, `IF NOT EXISTS`-guarded, and forward-only.
 - **iOS handoff addendum.** A new coordination note
   documents the standalone-then-pair pattern for the iOS native
   client. Sibling of the existing `22-offline-first-architecture.md`;
-  same research input, neutral framing per the v1.4.27 convention
-  directive.
+  same research input, neutral framing.
 
 ### Changed
 
@@ -10291,7 +10320,7 @@ refuses drug-level estimates with MDR + MDCG 2021-24 cites).
   enum with eight site values. A new body-map picker proposes the
   next rotation site based on the last fourteen days of injections.
   Medication-card grows a `glp1` variant (text-rich, no inline
-  chart per directive — chart lives on the dashboard tile and
+  chart; the chart lives on the dashboard tile and
   `/insights/medikamente` therapy timeline). Dashboard tile shows
   next-injection schedule + week-over-week weight delta. Weight
   chart gains vertical injection markers. Therapy timeline on the
@@ -10943,8 +10972,8 @@ estimates and source citations, is tracked internally. Headline items:
   client-side only; the dashboard-widgets seed feature reads it in
   v1.4.26).
 - `advance()` hook extraction for the three onboarding step
-  components — pattern surfaced in the simplifier review, deferred
-  to avoid collision with v1.4.25 touch-target work.
+  components — deferred to avoid collision with v1.4.25 touch-target
+  work.
 - `glp1-pk.ts` unused-export decision (internalise vs wire
   dashboard chip).
 - Seven orphan endpoint go / no-go decisions
@@ -11498,16 +11527,15 @@ NOT NULL`) is the defence-in-depth backstop.
   live in the internal ops notes. Future
   releases should drop the host-side retag fallback the moment
   the toggle is on.
-- **191 maintainer-name references in `src/` source comments
-  swept** (FX carry-over from v1.4.20). Test fixtures kept as
+- **191 personal-name references in `src/` source comments
+  swept** (carried over from v1.4.20). Test fixtures kept as
   opaque test data.
 - **DE+EN bilingual CHANGELOG entries (v1.4.14 + v1.4.15)
   normalised to English-only.** Per the English-only voice
   rule.
-- **`CLAUDE.md` filename retired (FX carry-over)** so the
-  filename is no longer AI-vendor-specific; `CONTRIBUTING.md`
-  reference updated. `AGENTS.md` stays for multi-agent
-  compatibility.
+- **`CLAUDE.md` filename retired** so the filename is no longer
+  AI-vendor-specific; `CONTRIBUTING.md` reference updated.
+  `AGENTS.md` stays for multi-agent compatibility.
 
 ### Deferred to v1.4.23
 
@@ -11702,12 +11730,10 @@ Coach extension for the new measurement types
 
 ### Deferred to v1.4.21
 
-- 22 medium + 16 low + 4 simplify-apply-maybe items from the multi-
-  pass review. Highlights include: senior-dev call to consolidate the duplicated
-  Pearson / linear-regression maths layer; refactor the
-  `<CoachDrawer key={prefill}>` state-reset shortcut into a
-  controlled prefill prop; transactional `recordSpend()`; refusal
-  accounting + lexicon expansion.
+- Consolidate the duplicated Pearson / linear-regression maths
+  layer; refactor the `<CoachDrawer key={prefill}>` state-reset
+  shortcut into a controlled prefill prop; transactional
+  `recordSpend()`; refusal accounting + lexicon expansion.
 
 ### Deferred to v1.5
 
@@ -11753,11 +11779,11 @@ Coach extension for the new measurement types
   No more dead "Einklappen" affordance when the route only exposes
   one section.
 - **Mobile Sys/Dia badge enum mismatch on blood-pressure rows.**
-  CRITICAL from QA — the badge enum on mobile measurement rows
-  decoded the wrong key. Fixed before tag with a TDD guard.
-- **6 CRITICAL + 21 HIGH copy / consistency / a11y findings from the
-  quality-of-life audit.** Time-window range strings now respect the
-  active locale, login overview filters out non-auth events, the
+  The badge enum on mobile measurement rows decoded the wrong key;
+  a regression guard pins the mapping.
+- **Copy, consistency and accessibility fixes across the app.**
+  Time-window range strings now respect the active locale, login
+  overview filters out non-auth events, the
   date / datetime input pair forwards `lang` so the native picker
   uses the user's locale, raw enum badges are humanised, audit-action
   labels are localised and link back to the row, achievement titles
@@ -11810,12 +11836,11 @@ Coach extension for the new measurement types
 
 ### Deferred to v1.4.20
 
-- 3 HIGH from QA — `/insights` `data?.` narrowing refactor,
-  `/admin/api-tokens` touch-tooltip (needs Popover swap), and
-  `/insights` hero density (folded into the v1.4.20 redesign).
-- 31 MED + 16 LOW from the quality-of-life audit. Short-list tracked internally.
-- `/insights` redesign with AI Coach — separate roadmap, design
-  handoff at `~/Downloads/design_handoff_insights_redesign`.
+- `/insights` `data?.` narrowing refactor, `/admin/api-tokens`
+  touch-tooltip (needs Popover swap), and `/insights` hero density
+  (folded into the v1.4.20 redesign).
+- A longer copy and consistency backlog, tracked internally.
+- `/insights` redesign with AI Coach — separate roadmap.
 
 ## [1.4.18] — 2026-05-10
 

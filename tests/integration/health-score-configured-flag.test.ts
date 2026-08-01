@@ -277,7 +277,6 @@ describe("the resolved configured flag, on every wire that carries it", () => {
       "SLEEP",
       "ADIPOSITY",
       "WELLBEING",
-      "FITNESS",
       "LIPIDS",
     ]);
 
@@ -324,7 +323,6 @@ describe("the resolved configured flag, on every wire that carries it", () => {
       "ACTIVITY",
       "SLEEP",
       "ADIPOSITY",
-      "FITNESS",
       "LIPIDS",
     ]);
 
@@ -341,7 +339,6 @@ describe("the resolved configured flag, on every wire that carries it", () => {
       "SLEEP",
       "ADIPOSITY",
       "WELLBEING",
-      "LIPIDS",
     ]);
 
     const stored = await getPrismaClient().user.findUniqueOrThrow({
@@ -349,7 +346,7 @@ describe("the resolved configured flag, on every wire that carries it", () => {
       select: { healthScoreConfigJson: true },
     });
     expect(stored.healthScoreConfigJson).toMatchObject({
-      excludedPillars: ["FITNESS"],
+      excludedPillars: ["LIPIDS"],
     });
 
     expectEveryWire(await readWires(), true);
@@ -364,6 +361,9 @@ describe("the resolved configured flag, on every wire that carries it", () => {
 
     expectEveryWire(await readWires(), false);
 
+    // Narrowed: one pillar taken out. If both halves of this case send the
+    // same list, the round trip proves nothing — it would read false at both
+    // ends and the flip would never be exercised.
     await saveSelection([
       "BLOOD_PRESSURE",
       "GLYCAEMIA",
@@ -371,7 +371,6 @@ describe("the resolved configured flag, on every wire that carries it", () => {
       "SLEEP",
       "ADIPOSITY",
       "WELLBEING",
-      "LIPIDS",
     ]);
     expectEveryWire(await readWires(), true);
 
@@ -382,7 +381,6 @@ describe("the resolved configured flag, on every wire that carries it", () => {
       "SLEEP",
       "ADIPOSITY",
       "WELLBEING",
-      "FITNESS",
       "LIPIDS",
     ]);
     expectEveryWire(await readWires(), false);

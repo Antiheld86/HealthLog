@@ -559,7 +559,6 @@ async function buildAnalyticsResponse(user: AuthedUser, locale: Locale) {
     now: scoredAt,
     profile: {
       dateOfBirth: user.dateOfBirth,
-      gender: user.gender,
       heightCm: user.heightCm ?? null,
       timezone: userTz,
       sourcePriorityJson: scoreSourcePriority,

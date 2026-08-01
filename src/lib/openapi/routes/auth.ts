@@ -230,6 +230,40 @@ const webauthnCredentialInfo = z
   })
   .meta({ id: "WebauthnMfaCredentialInfo" });
 
+// ── Passkey list (primary sign-in credentials) ───────────────────────
+// A DIFFERENT surface from `WebauthnMfaCredentialInfo` above: these are
+// the credentials a passkey LOGIN asserts against, not the security keys
+// registered as a second factor. The two lists are served by different
+// routes and are never merged.
+
+const passkeyInfo = z
+  .object({
+    id: z.string().describe("Row id; the handle for DELETE."),
+    name: z.string().describe("User-supplied label, defaulting to “Passkey”."),
+    credentialDeviceType: z
+      .string()
+      .describe(
+        "Authenticator device type as reported at registration: `singleDevice` for a credential bound to one authenticator, `multiDevice` for a syncable one.",
+      ),
+    credentialBackedUp: z
+      .boolean()
+      .describe(
+        "Whether the authenticator reported the credential as backed up (synced to the platform keychain) at registration time. Not re-read afterwards.",
+      ),
+    createdAt: z.iso.datetime({ offset: true }).describe("Registered at."),
+    lastUsedAt: z.iso
+      .datetime({ offset: true })
+      .nullable()
+      .describe(
+        "When this passkey last completed a verified assertion; null when it has never been used to sign in. Stamped on every successful login, so a client can render a real 'last used' rather than assuming never.",
+      ),
+  })
+  .meta({ id: "PasskeyInfo" });
+
+const passkeyListResponse = z
+  .array(passkeyInfo)
+  .meta({ id: "PasskeyListResponse" });
+
 const mfaStatusResponse = z
   .object({
     totp: z.object({ enabled: z.boolean() }),
@@ -915,6 +949,25 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
                   "RefreshRevokeResponse",
                 ),
               ]),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/passkeys": {
+    get: {
+      tags: ["Auth"],
+      summary: "List the caller's registered passkeys",
+      description:
+        "The passkeys registered for primary sign-in, newest first. Distinct from the second-factor security keys in `GET /api/auth/2fa/status` (`webauthn`) — a passkey replaces the password, a security key is asserted after one. `lastUsedAt` is stamped on every verified assertion and is null only for a passkey that has never signed in.",
+      responses: {
+        "200": {
+          description: "The caller's passkeys, newest first.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(passkeyListResponse, "PasskeyListEnvelope"),
             },
           },
         },
