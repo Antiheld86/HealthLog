@@ -9,6 +9,7 @@ import type {
   HealthScoreReport,
   ScorePillarResult,
 } from "@/lib/analytics/score/types";
+import { SCORE_VERSION } from "@/lib/analytics/score/types";
 import { HeroStrip } from "../hero-strip";
 
 /**
@@ -148,7 +149,7 @@ function reportWith(pillars: ScorePillarResult[]): HealthScoreReport {
         composition: pillars.map((p) => p.id),
         configured: false,
         noiseFloor: 3,
-        scoreVersion: 2,
+        scoreVersion: SCORE_VERSION,
       },
       coverage,
       confidence: { score: 100, band: "high" },
@@ -157,7 +158,7 @@ function reportWith(pillars: ScorePillarResult[]): HealthScoreReport {
     pillars,
     delta: 2,
     deltaReason: null,
-    scoreVersion: 2,
+    scoreVersion: SCORE_VERSION,
     weightGoal: {
       status: "insufficient",
       coverage: {

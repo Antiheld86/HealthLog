@@ -8,7 +8,13 @@ import {
   SCORE_ALGORITHM_CHANGED_AT,
 } from "../composite";
 import { UNCONFIGURED_SCORE_BOUNDARY } from "../config";
-import type { PillarValue, ScorePillarId, ScorePillarResult } from "../types";
+import { SCORE_GREEN_FLOOR, scoreBand } from "../shared";
+import {
+  SCORE_VERSION,
+  type PillarValue,
+  type ScorePillarId,
+  type ScorePillarResult,
+} from "../types";
 
 const NOW = new Date("2026-08-20T12:00:00.000Z");
 
@@ -85,6 +91,111 @@ function evaluation(
     configured: false,
   });
 }
+
+/**
+ * Where the band changes, and what the band is NOT.
+ *
+ * v1.35.1 moved green from 75 to 70, so the Health Score says the same
+ * thing by a green dot that Readiness and the sleep score already did.
+ * Boundaries are pinned on both sides because an off-by-one here is
+ * invisible: a `>` where a `>=` belongs looks perfectly healthy at 80.
+ *
+ * The last case is the one that must survive every future threshold
+ * edit. The band is not a function of the number: `computeComposite`
+ * takes the worse of the mean's band and the worst counted pillar's, and
+ * `HealthScoreRecord.band` is stored rather than re-derived precisely
+ * because of it. A mean above the green floor with a red pillar under it
+ * is still red.
+ */
+describe("the band the mean alone gives", () => {
+  const CASES: Array<[number, string]> = [
+    [69, "yellow"],
+    [70, "green"],
+    [74, "green"],
+    [75, "green"],
+    [49, "red"],
+    [50, "yellow"],
+  ];
+
+  for (const [score, expected] of CASES) {
+    it(`calls ${score} ${expected}`, () => {
+      expect(scoreBand(score)).toBe(expected);
+    });
+  }
+
+  it("says the same thing the app's other two scores say", () => {
+    // Readiness and the sleep score both call 70 green. Three scores in
+    // one app cannot mean three things by one colour, and the Health
+    // Score was the outlier.
+    expect(scoreBand(SCORE_GREEN_FLOOR)).toBe("green");
+    expect(scoreBand(SCORE_GREEN_FLOOR - 1)).toBe("yellow");
+    expect(SCORE_GREEN_FLOOR).toBe(70);
+  });
+
+  it("moved the method version with it", () => {
+    // A stored day keeps the band it was shown under, and the notice key
+    // carries this number, so each account hears once that the rules
+    // moved. A threshold edit without a version bump is a silent one.
+    expect(SCORE_VERSION).toBeGreaterThan(2);
+  });
+});
+
+describe("the worst pillar still holds the band down", () => {
+  it("keeps a composite red when a counted pillar is red, above the green floor", () => {
+    // Mean 73: green on the number alone, and green under the OLD floor
+    // it would have been yellow — so this case can only pass because the
+    // worst-pillar rule survived the threshold change.
+    const result = evaluation(
+      [
+        pillar("BLOOD_PRESSURE", 20),
+        pillar("ACTIVITY", 100),
+        pillar("SLEEP", 100),
+      ],
+      NOW,
+    );
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.value.score).toBe(73);
+    expect(scoreBand(result.value.score)).toBe("green");
+    expect(result.value.band).toBe("red");
+    expect(result.value.bandSetter).toBe("BLOOD_PRESSURE");
+  });
+
+  it("keeps a composite yellow when its worst pillar is yellow", () => {
+    // Mean 84, every pillar above the red floor, one of them yellow.
+    const result = evaluation(
+      [
+        pillar("BLOOD_PRESSURE", 52),
+        pillar("ACTIVITY", 100),
+        pillar("SLEEP", 100),
+      ],
+      NOW,
+    );
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(scoreBand(result.value.score)).toBe("green");
+    expect(result.value.band).toBe("yellow");
+    expect(result.value.bandSetter).toBe("BLOOD_PRESSURE");
+  });
+
+  it("names no setter when every pillar clears the mean's band", () => {
+    const result = evaluation(
+      [
+        pillar("BLOOD_PRESSURE", 71),
+        pillar("ACTIVITY", 90),
+        pillar("SLEEP", 90),
+      ],
+      NOW,
+    );
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.value.band).toBe("green");
+    expect(result.value.bandSetter).toBeNull();
+  });
+});
 
 describe("reference-score composite", () => {
   it("requires three domains and one measured physiological domain", () => {

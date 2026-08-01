@@ -19,9 +19,37 @@ export function clampScore(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
+/** Green from here up. Yellow from {@link SCORE_YELLOW_FLOOR} up. */
+export const SCORE_GREEN_FLOOR = 70;
+
+/** Below this is red. */
+export const SCORE_YELLOW_FLOOR = 50;
+
+/**
+ * The band a 0-100 score falls in, from the number alone.
+ *
+ * v1.35.1 — green starts at 70, not 75. The app carries three scores and
+ * had two conventions: Readiness and the sleep score both call 70 green
+ * (`bandForScore` in `src/lib/insights/derived/readiness.ts` and
+ * `src/lib/insights/derived/sleep-score.ts`), and the Health Score alone
+ * sat at 75. One app cannot mean two things by a green dot, so the
+ * outlier moved. The yellow floor stays at 50 deliberately: raising the
+ * bar for a reward and lowering the bar for a warning are different
+ * decisions, and only the first one was asked for.
+ *
+ * This is a METHOD change, so `SCORE_VERSION` moved with it. Stored days
+ * keep the band they were actually shown under, and the notice key
+ * carries the version, so each account is told once that the method
+ * moved.
+ *
+ * NOT the whole band rule. `computeComposite` takes the worse of this
+ * band and the worst counted pillar's band, so a composite carrying a red
+ * pillar stays red however high the mean sits. That rule is untouched;
+ * only the mean-side thresholds moved.
+ */
 export function scoreBand(score: number): ScoreBand {
-  if (score >= 75) return "green";
-  if (score >= 50) return "yellow";
+  if (score >= SCORE_GREEN_FLOOR) return "green";
+  if (score >= SCORE_YELLOW_FLOOR) return "yellow";
   return "red";
 }
 

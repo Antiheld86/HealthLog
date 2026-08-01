@@ -5,7 +5,19 @@ import type {
   DerivedProvenanceSource,
 } from "@/lib/insights/derived/types";
 
-export const SCORE_VERSION = 2 as const;
+/**
+ * The scoring method's identity.
+ *
+ * Moves whenever the method changes, which is what lets a stored day say
+ * which rules produced it and lets each account be told once that the
+ * rules moved (`healthScoreNoticeItemKey`). It is NOT the schema version
+ * of the report.
+ *
+ * 3 — v1.35.1: green starts at 70 rather than 75, matching the two other
+ *     scores in the app, and the fitness pillar left the catalogue.
+ * 2 — the composite the previous line shipped.
+ */
+export const SCORE_VERSION = 3 as const;
 
 /**
  * The pillars a score can be built from.

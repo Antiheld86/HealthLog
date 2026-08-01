@@ -28,6 +28,7 @@ import type {
   ScorePillarId,
   ScorePillarResult,
 } from "../types";
+import { SCORE_VERSION } from "../types";
 
 const NOW = new Date("2026-08-20T12:00:00.000Z");
 
@@ -103,7 +104,7 @@ function report(
     pillars,
     delta: null,
     deltaReason: "no_previous_window",
-    scoreVersion: 2,
+    scoreVersion: SCORE_VERSION,
     weightGoal: { status: "insufficient" } as HealthScoreReport["weightGoal"],
     algorithmNotice: null,
   };
@@ -144,7 +145,7 @@ describe("stored bands", () => {
 
 describe("input fingerprint", () => {
   const base = {
-    scoreVersion: 2,
+    scoreVersion: 1,
     composition: ["BLOOD_PRESSURE", "SLEEP", "ADIPOSITY"] as ScorePillarId[],
     pillars: HEALTHY,
   };
@@ -156,7 +157,7 @@ describe("input fingerprint", () => {
   });
 
   it("moves when the algorithm version moves", () => {
-    expect(healthScoreInputFingerprint({ ...base, scoreVersion: 3 })).not.toBe(
+    expect(healthScoreInputFingerprint({ ...base, scoreVersion: 2 })).not.toBe(
       healthScoreInputFingerprint(base),
     );
   });

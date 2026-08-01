@@ -39,6 +39,7 @@ import type {
   ScorePillarId,
   ScorePillarResult,
 } from "../types";
+import { SCORE_VERSION } from "../types";
 
 const DAY_MS = 86_400_000;
 const NOW = new Date("2026-08-20T12:00:00.000Z");
@@ -115,7 +116,7 @@ function composite(score: number, asOf: Date): Derived<CompositeValue> {
       composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
       configured: false,
       noiseFloor: 1,
-      scoreVersion: 2,
+      scoreVersion: SCORE_VERSION,
     },
     coverage,
     confidence,
@@ -190,7 +191,7 @@ describe("the recipe boundary", () => {
         composition: ["BLOOD_PRESSURE", "ACTIVITY"],
         configured: false,
         noiseFloor: 1,
-        scoreVersion: 2,
+        scoreVersion: SCORE_VERSION,
       },
       coverage: {
         requiredInputs: 3,

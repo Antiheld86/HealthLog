@@ -7,6 +7,7 @@ import type {
   HealthScoreReport,
   ScorePillarResult,
 } from "@/lib/analytics/score/types";
+import { SCORE_VERSION } from "@/lib/analytics/score/types";
 import {
   HealthScoreCard,
   HealthScoreCardSkeleton,
@@ -211,7 +212,7 @@ function report(overrides: Partial<HealthScoreReport> = {}): HealthScoreReport {
     pillars: [BLOOD_PRESSURE, ACTIVITY_BELOW_FLOOR],
     delta: null,
     deltaReason: "no_current_score",
-    scoreVersion: 2,
+    scoreVersion: SCORE_VERSION,
     weightGoal: {
       status: "insufficient",
       coverage: {
@@ -241,7 +242,7 @@ function scoredReport(
         composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP"],
         configured: false,
         noiseFloor: 3,
-        scoreVersion: 2,
+        scoreVersion: SCORE_VERSION,
       },
       coverage: {
         requiredInputs: 3,
@@ -371,7 +372,7 @@ describe("<HealthScoreCard> pillars", () => {
               composition: ["BLOOD_PRESSURE", "GLYCAEMIA"],
               configured: false,
               noiseFloor: 3,
-              scoreVersion: 2,
+              scoreVersion: SCORE_VERSION,
             },
             coverage: {
               requiredInputs: 3,
@@ -600,7 +601,7 @@ describe("<HealthScoreCard> composite states", () => {
     expect(html).not.toContain('data-slot="health-score-card-progress"');
     expect(html).toContain("—");
     expect(html).not.toContain("/ 100");
-    expect(html).toContain("Method version 2");
+    expect(html).toContain(`Method version ${SCORE_VERSION}`);
   });
 
   it("explains a missing comparison where the trend would be", () => {
@@ -665,7 +666,9 @@ describe("<HealthScoreCard> footer", () => {
     const region = anatomyRegion(html);
     expect(region).toContain('data-slot="health-score-method"');
     expect(region).toContain("Overall band set by none");
-    expect(region).toContain("Method version 2. Weekly comparison floor");
+    expect(region).toContain(
+      `Method version ${SCORE_VERSION}. Weekly comparison floor`,
+    );
     expect(region).toContain('data-slot="provenance-explainer-method"');
     expect(region).toContain("equal-weighted average");
   });
