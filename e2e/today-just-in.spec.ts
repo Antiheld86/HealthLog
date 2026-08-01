@@ -100,16 +100,58 @@ test("a fresh arrival flips the day in place", async ({ page }) => {
       "UPDATE users SET morning_digest_refreshed_on = NULL WHERE id = $1",
       [userId],
     );
-    // And no sleep sample from an earlier run of THIS spec, which would
-    // land the day on `final` before the scenario starts and make the
-    // provisional assertion below unreachable. Scoped to the external ids
-    // this file writes: it is the only e2e spec that records sleep for the
-    // fixture account (the two v1427 specs mock the route in the browser
-    // and write nothing), so nothing else can be depending on these rows.
-    await client.query(
-      "DELETE FROM measurements WHERE user_id = $1 AND external_id LIKE 'e2e-just-in-%'",
+    // And no sleep sample from an earlier run of THIS spec — the desktop
+    // project runs first and leaves one behind, and the day reads `final`
+    // for as long as last night's sleep is in the record, which would make
+    // the provisional assertion below unreachable on every run after the
+    // first. Scoped to the external ids this file writes: it is the only
+    // e2e spec that records sleep for the fixture account (the two v1427
+    // specs mock the route in the browser and write nothing), so nothing
+    // else can be depending on these rows.
+    //
+    // Deleted through the APP rather than with a `DELETE FROM measurements`,
+    // and that difference is the whole reason this scenario used to fail on
+    // the second project: a fixture that mutates rows behind the app's back
+    // inherits the app's caching. `sleepLastSeenDaysAgo` is read off the
+    // dashboard snapshot, which is an SWR cell in the analytics bucket
+    // (60 s fresh, one HOUR of stale-serve), so the desktop run's
+    // "sleep is in" snapshot outlived the rows it was built from and the
+    // mobile run read `final` from cache against an empty table.
+    //
+    // `bulk-delete` specifically: it hard-evicts that bucket
+    // (`invalidateUserMeasurements(userId, { evict: true })`, pinned by its
+    // own route test), tombstones the rows the way the management list
+    // does, and recomputes the rollup buckets the snapshot reads through.
+    // The delete-by-external-id route would have been the closer fit for
+    // how this spec names its rows, but it invalidates WITHOUT `evict` —
+    // a marked-stale cell is served immediately while it revalidates, so
+    // the next read would still have been the stale `final` one.
+    //
+    // Ids come from SQL rather than from `GET /api/measurements`: that
+    // list collapses overlapping sources to one canonical row per day, so
+    // it can hide a row that is still in the table and still counts.
+    //
+    // Deliberately NOT moved into the `finally` block. The eviction only
+    // happens when the delete actually removes something, so cleaning up
+    // at the end of each run would leave the next one with nothing to
+    // delete, no eviction, and the same stale snapshot.
+    const stale = await client.query<{ id: string }>(
+      `SELECT id FROM measurements
+        WHERE user_id = $1
+          AND external_id LIKE 'e2e-just-in-%'
+          AND deleted_at IS NULL
+        LIMIT 200`,
       [userId],
     );
+    if (stale.rows.length > 0) {
+      const purge = await page.request.post("/api/measurements/bulk-delete", {
+        data: { ids: stale.rows.map((row) => row.id) },
+      });
+      expect(
+        purge.ok(),
+        `purging ${stale.rows.length} stale sleep rows must be accepted (got ${purge.status()})`,
+      ).toBe(true);
+    }
 
     // The account needs a reason to paint a hero that is not the arrival
     // itself. A connection needing a reconnect is that reason: the digest
