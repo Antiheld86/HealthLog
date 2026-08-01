@@ -643,9 +643,18 @@ async function postBatch(request: NextRequest): Promise<Response> {
       );
     });
 
-  // This batch route is the native HealthKit ingestion boundary. Stamp only
-  // after every attempted write has reached a durable, non-failed verdict;
-  // MANUAL-only and skipped-only batches are not HealthKit syncs.
+  // This batch route is the native ingestion boundary, so it is also where the
+  // SyncMode checkpoint (`User.lastSyncedAt`, the same column
+  // `markSyncCheckpoint` writes) is established — `GET /api/sync/state` only
+  // reports it. The checkpoint covers MANUAL pushes too: the client synced
+  // whatever it was holding. A batch carrying a hard failure leaves the
+  // checkpoint where it was, so the undelivered window stays inside whatever
+  // the client asks for next.
+  //
+  // The HealthKit fields ride the same update and keep their narrower
+  // condition. Stamp only after every attempted write has reached a durable,
+  // non-failed verdict; MANUAL-only and skipped-only batches are not
+  // HealthKit syncs.
   //
   // The trigger the client declared is stamped alongside, and a background- or
   // push-triggered batch additionally dates `healthKitLastBackgroundSyncAt`.
@@ -655,17 +664,22 @@ async function postBatch(request: NextRequest): Promise<Response> {
   // trigger writes null over the previous value rather than leaving a stale one
   // standing: the field describes THIS sync, and an older build's silence is
   // not evidence about it.
-  if (healthKitSyncSucceeded) {
+  if (failedCount === 0) {
     const syncedAt = new Date();
     const deliveredWithoutTheApp =
       syncTrigger === "background" || syncTrigger === "push";
     await prisma.user.update({
       where: { id: user.id },
       data: {
-        healthKitLastSyncedAt: syncedAt,
-        healthKitLastSyncTrigger: syncTrigger ?? null,
-        ...(deliveredWithoutTheApp
-          ? { healthKitLastBackgroundSyncAt: syncedAt }
+        lastSyncedAt: syncedAt,
+        ...(healthKitSyncSucceeded
+          ? {
+              healthKitLastSyncedAt: syncedAt,
+              healthKitLastSyncTrigger: syncTrigger ?? null,
+              ...(deliveredWithoutTheApp
+                ? { healthKitLastBackgroundSyncAt: syncedAt }
+                : {}),
+            }
           : {}),
       },
     });

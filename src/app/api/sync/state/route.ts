@@ -12,7 +12,9 @@
  *   {
  *     userId,
  *     timezone,
- *     lastSyncedAt,             — User.lastSyncedAt (ISO string or null)
+ *     lastSyncedAt,             — User.lastSyncedAt (ISO string or null).
+ *                                 Set by the ingest boundaries, not here:
+ *                                 this route is a read and writes nothing.
  *     serverNow,                — `new Date().toISOString()` for clock skew
  *     measurements: { lastUpdatedAt, liveCount, tombstonedCount },
  *     mood:         { lastUpdatedAt, liveCount, tombstonedCount },
@@ -45,10 +47,10 @@ import {
 export const GET = apiHandler(async (_request: NextRequest) => {
   const { user } = await requireAuth();
 
-  // Per-domain aggregate reads + one user-side bump. Each runs against
-  // indexed columns (userId, deleted_at / updated_at) so it stays
-  // O(rows-for-user) and not O(rows-across-tenants). v1.7.0 adds the
-  // mood + intake blocks now that both carry the sync columns.
+  // Per-domain aggregate reads. Each runs against indexed columns (userId,
+  // deleted_at / updated_at) so it stays O(rows-for-user) and not
+  // O(rows-across-tenants). v1.7.0 adds the mood + intake blocks now that
+  // both carry the sync columns.
   const [
     measurementLatest,
     measurementLive,
@@ -96,16 +98,14 @@ export const GET = apiHandler(async (_request: NextRequest) => {
     }),
   ]);
 
-  // The handshake also bumps the user's lastSyncedAt — the call IS
-  // the handshake. iOS reads the OLD lastSyncedAt from the response
-  // and then trusts that subsequent server writes after the new
-  // checkpoint will round-trip via the standard read paths.
-  const previous = currentUser?.lastSyncedAt ?? null;
-  const nextCheckpoint = new Date();
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { lastSyncedAt: nextCheckpoint },
-  });
+  // The handshake reports the checkpoint; it does not set it. The column is
+  // stamped by the ingest boundaries that actually move data (see
+  // `markSyncCheckpoint`), so `lastSyncedAt` answers "when did this account
+  // last push a batch" rather than "when did a client last ask". NULL still
+  // means never synced, and the value can now only trail the truth — the
+  // handshake used to advance it past a window the client had not drained.
+  const lastSyncedAt = currentUser?.lastSyncedAt ?? null;
+  const serverNow = new Date();
 
   annotate({
     action: { name: "sync.state" },
@@ -114,15 +114,15 @@ export const GET = apiHandler(async (_request: NextRequest) => {
       tombstonedCount: measurementTomb,
       moodLiveCount: moodLive,
       intakeLiveCount: intakeLive,
-      lastSyncedAtBefore: previous?.toISOString() ?? null,
+      lastSyncedAt: lastSyncedAt?.toISOString() ?? null,
     },
   });
 
   return apiSuccess({
     userId: user.id,
     timezone: currentUser?.timezone ?? "Europe/Berlin",
-    lastSyncedAt: previous?.toISOString() ?? null,
-    serverNow: nextCheckpoint.toISOString(),
+    lastSyncedAt: lastSyncedAt?.toISOString() ?? null,
+    serverNow: serverNow.toISOString(),
     measurements: {
       lastUpdatedAt: measurementLatest?.updatedAt?.toISOString() ?? null,
       liveCount: measurementLive,

@@ -22,6 +22,12 @@ vi.mock("@/lib/db", () => ({
     menstrualCycle: { findMany: vi.fn() },
     cycleDayLog: { findMany: vi.fn() },
     measurement: { findMany: vi.fn() },
+    // Present so a re-introduced forecast persist is VISIBLE here rather
+    // than blowing up on an undefined model. `persistPredictionCache` calls
+    // `findUnique` synchronously before its first await, so even the old
+    // fire-and-forget `void persistPredictionCache(...)` lands on this mock
+    // before the assertion runs.
+    cyclePrediction: { findUnique: vi.fn(), upsert: vi.fn() },
     auditLog: { create: vi.fn() },
   },
 }));
@@ -34,10 +40,6 @@ vi.mock("@/lib/rate-limit", () => ({
   rateLimitHeaders: () => ({}),
 }));
 vi.mock("@/lib/cycle/gate", () => ({ requireCycleEnabled: vi.fn() }));
-// The cache persist is fire-and-forget and would reach the database.
-vi.mock("@/lib/cycle/prediction-cache", () => ({
-  persistPredictionCache: vi.fn().mockResolvedValue(undefined),
-}));
 vi.mock("@/lib/logging/transports", () => ({ emitIfSampled: vi.fn() }));
 vi.mock("@/lib/db-compat", () => ({
   ensureDbCompatibility: vi.fn().mockResolvedValue(undefined),
@@ -140,6 +142,22 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe("GET /api/cycle/calendar is a read", () => {
+  it("persists no forecast — the reminder cron's row is the job's, not this route's", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-10T12:00:00Z"));
+
+    const { status, body } = await callCalendar();
+    expect(status).toBe(200);
+    // There IS a forecast to persist, so the absence of a write is a
+    // decision rather than an empty case.
+    expect((body.data as Record<string, unknown>).prediction).not.toBeNull();
+
+    expect(prisma.cyclePrediction.findUnique).not.toHaveBeenCalled();
+    expect(prisma.cyclePrediction.upsert).not.toHaveBeenCalled();
+  });
 });
 
 describe("GET /api/cycle/calendar carries the resolved verdict", () => {

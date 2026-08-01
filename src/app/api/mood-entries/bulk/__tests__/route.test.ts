@@ -29,6 +29,9 @@ const { moodEntryMock, txClient } = vi.hoisted(() => {
 vi.mock("@/lib/db", () => ({
   prisma: {
     moodEntry: moodEntryMock,
+    // The bulk drain stamps the SyncMode checkpoint (`User.lastSyncedAt`) —
+    // it is a client push, and the push is what the checkpoint describes.
+    user: { update: vi.fn().mockResolvedValue({}) },
     auditLog: { create: vi.fn() },
     $transaction: vi.fn(async (fn: unknown) => {
       if (typeof fn === "function") {
@@ -686,5 +689,34 @@ describe("POST /api/mood-entries/bulk — upsert + tag links are atomic", () => 
     // The throw must have propagated out of the transaction callback, so the
     // rollback is the database's job rather than a compensating write.
     expect(prisma.$transaction).toHaveBeenCalled();
+  });
+});
+
+/**
+ * The SyncMode checkpoint (`User.lastSyncedAt`) belongs to the push that moved
+ * the data. `GET /api/sync/state` reports it and writes nothing, so if this
+ * boundary stops stamping, the checkpoint stays null forever and every paired
+ * client re-pairs with a full backfill.
+ */
+describe("POST /api/mood-entries/bulk — sync checkpoint", () => {
+  beforeEach(() => {
+    vi.mocked(prisma.moodEntry.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.moodEntry.upsert).mockResolvedValue({
+      id: "entry-1",
+    } as never);
+  });
+
+  it("stamps lastSyncedAt when the drain lands", async () => {
+    const res = await POST(
+      postReq({
+        entries: [{ mood: "OKAY", moodLoggedAt: "2026-05-16T08:00:00.000Z" }],
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledTimes(1);
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: { lastSyncedAt: expect.any(Date) },
+    });
   });
 });

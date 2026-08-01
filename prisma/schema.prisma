@@ -502,6 +502,12 @@ model User {
   // SwiftData backlog before opening a fresh anchored-query window.
   // NULL = never synced; the SyncMode store treats that as "force
   // a full refresh on the next pair".
+  //
+  // Written by the client-push ingest boundaries only — the batch /
+  // bulk endpoints for measurements, mood and intakes (see
+  // `markSyncCheckpoint`). The handshake that reports it is a GET and
+  // writes nothing, so the checkpoint can only trail a real sync
+  // instead of running ahead of one.
   lastSyncedAt DateTime? @map("last_synced_at")
 
   // v0.5.4 ios-coord — daily mood-reminder opt-in.

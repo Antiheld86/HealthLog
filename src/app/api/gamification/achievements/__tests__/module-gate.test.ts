@@ -185,7 +185,12 @@ describe("GET /api/gamification/achievements — per-module badge skipping", () 
     },
   ];
 
-  type Badge = { id: string; category: string; metric: string };
+  type Badge = {
+    id: string;
+    category: string;
+    metric: string;
+    unlocked: boolean;
+  };
 
   async function badgesFor(
     moduleMap: Record<string, boolean>,
@@ -217,14 +222,14 @@ describe("GET /api/gamification/achievements — per-module badge skipping", () 
     expect(badges.length).toBeGreaterThan(0);
   });
 
-  it("never persists an unlock for a disabled-module badge", async () => {
-    // A mood badge would unlock at >=1 entry; with mood OFF the createMany
-    // must carry no mood achievement row.
-    await badgesFor({ mood: false });
-    const createCalls = vi.mocked(prisma.userAchievement.createMany).mock.calls;
-    for (const [arg] of createCalls) {
-      const rows = (arg as { data: Array<{ achievementId: string }> }).data;
-      expect(rows.some((r) => r.achievementId.includes("mood"))).toBe(false);
-    }
+  it("persists no unlock at all — a GET does not write", async () => {
+    // A mood badge unlocks at >=1 entry, so this read HAS an unlock to
+    // notice. It still writes nothing: the row that pins the date is the
+    // `achievement-unlock-sweep` job's, and a read carrying an INSERT is
+    // the side-effecting GET `api-handler.ts` warns against. The badge grid
+    // is unaffected — `unlocked` comes from the live metrics.
+    const badges = await badgesFor({ mood: true });
+    expect(badges.some((b) => b.category === "mood" && b.unlocked)).toBe(true);
+    expect(prisma.userAchievement.createMany).not.toHaveBeenCalled();
   });
 });
