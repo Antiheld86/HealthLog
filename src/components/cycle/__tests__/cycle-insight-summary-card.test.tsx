@@ -25,7 +25,7 @@ vi.mock("@/hooks/use-unit-display", async () => {
 });
 
 import { I18nProvider } from "@/lib/i18n/context";
-import type { CalendarResponse } from "../types";
+import type { CalendarResponse, CycleVerdict } from "../types";
 import type { CycleInsightsResponse } from "../use-cycle";
 import type { CyclePhaseCrosstabRow } from "../cycle-phase-crosstab";
 
@@ -80,8 +80,6 @@ vi.mock("../use-cycle", async () => {
     ...actual,
     useCycleCalendar: () => calendarState.current,
     useCycleInsights: () => insightsState.current,
-    // The card now reads the profile lengths for the low-data idealized ring.
-    useCycleProfile: () => ({ data: undefined }),
   };
 });
 
@@ -93,9 +91,39 @@ function render(node: React.ReactNode) {
   );
 }
 
-/** Build a calendar read where `today` sits on a LUTEAL day at day-of-cycle 3
- *  (a short MENSTRUAL run → LUTEAL today, so `deriveWheelState` resolves a
- *  phase + day). */
+/** The verdict the server would resolve for that grid: LUTEAL, cycle day 3. */
+const LUTEAL_VERDICT: CycleVerdict = {
+  state: "IN_CYCLE",
+  dayOfCycle: 3,
+  cycleLength: 28,
+  phase: "LUTEAL",
+  spans: [
+    { phase: "MENSTRUAL", fraction: 5 / 28 },
+    { phase: "FOLLICULAR", fraction: 7 / 28 },
+    { phase: "OVULATORY", fraction: 2 / 28 },
+    { phase: "LUTEAL", fraction: 14 / 28 },
+  ],
+  cycleStartDate: null,
+  overdueDays: null,
+  daysUntilNext: null,
+  fertileWindow: { start: null, end: null, active: false },
+};
+
+/** The verdict for an account with nothing to say about today. */
+const NO_CYCLE_VERDICT: CycleVerdict = {
+  state: "INSUFFICIENT_DATA",
+  dayOfCycle: null,
+  cycleLength: null,
+  phase: null,
+  spans: [],
+  cycleStartDate: null,
+  overdueDays: null,
+  daysUntilNext: null,
+  fertileWindow: { start: null, end: null, active: false },
+};
+
+/** A calendar read whose SERVER-RESOLVED verdict puts today on LUTEAL, day 3.
+ *  The card renders the verdict; it no longer derives anything from `days`. */
 function lutealCalendar(today: string): CalendarResponse {
   // Three consecutive days ending today: MENSTRUAL, FOLLICULAR, LUTEAL.
   const days = [
@@ -107,6 +135,7 @@ function lutealCalendar(today: string): CalendarResponse {
     days: days as unknown as CalendarResponse["days"],
     profile: {} as CalendarResponse["profile"],
     prediction: null,
+    verdict: LUTEAL_VERDICT,
   } as CalendarResponse;
 }
 

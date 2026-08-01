@@ -7524,6 +7524,7 @@
       "caption": "of your cycle",
       "firstPeriodCta": "Log my first period",
       "periodOverdue": "Your period is later than usual — the day count pauses until the next period is logged.",
+      "periodOverdueDays": "Your period is {days} days later than usual — the day count pauses until the next period is logged.",
       "logPeriodCta": "Log period"
     },
     "calendar": {

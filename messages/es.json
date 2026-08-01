@@ -7524,6 +7524,7 @@
       "caption": "de tu ciclo",
       "firstPeriodCta": "Registrar mi primer periodo",
       "periodOverdue": "Tu período llega más tarde de lo habitual — el conteo de días se pausa hasta que registres el próximo período.",
+      "periodOverdueDays": "Tu período llega {days} días más tarde de lo habitual — el conteo de días se pausa hasta que registres el próximo período.",
       "logPeriodCta": "Registrar período"
     },
     "calendar": {

@@ -7524,6 +7524,7 @@
       "caption": "de ton cycle",
       "firstPeriodCta": "Enregistrer mes premières règles",
       "periodOverdue": "Tes règles arrivent plus tard que d’habitude — le compteur de jours est en pause jusqu’à ce que les prochaines règles soient enregistrées.",
+      "periodOverdueDays": "Tes règles arrivent {days} jours plus tard que d’habitude — le compteur de jours est en pause jusqu’à ce que les prochaines règles soient enregistrées.",
       "logPeriodCta": "Enregistrer les règles"
     },
     "calendar": {

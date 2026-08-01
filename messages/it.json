@@ -7524,6 +7524,7 @@
       "caption": "del tuo ciclo",
       "firstPeriodCta": "Registra il mio primo ciclo",
       "periodOverdue": "Il ciclo è in ritardo rispetto al solito — il conteggio dei giorni resta in pausa finché non registri la prossima mestruazione.",
+      "periodOverdueDays": "Il ciclo è in ritardo di {days} giorni rispetto al solito — il conteggio dei giorni resta in pausa finché non registri la prossima mestruazione.",
       "logPeriodCta": "Registra mestruazione"
     },
     "calendar": {

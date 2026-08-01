@@ -53,6 +53,29 @@ export interface CyclePrediction {
   disclaimer: string;
 }
 
+/**
+ * The server's resolved answer about today (`src/lib/cycle/verdict.ts`).
+ *
+ * Render it. Do not recompute any part of it here: the grace window that
+ * decides `OVERDUE`, the day count, the ring's arcs and the fertile-window
+ * state are all resolved server-side against the user's own timezone day, and
+ * a second copy of that logic in client code is how a cycle ring ends up
+ * showing a person a day their record does not hold.
+ */
+export type CycleVerdictState = "IN_CYCLE" | "OVERDUE" | "INSUFFICIENT_DATA";
+
+export interface CycleVerdict {
+  state: CycleVerdictState;
+  dayOfCycle: number | null;
+  cycleLength: number | null;
+  phase: CyclePhase | null;
+  spans: { phase: CyclePhase; fraction: number }[];
+  cycleStartDate: string | null;
+  overdueDays: number | null;
+  daysUntilNext: number | null;
+  fertileWindow: { start: string | null; end: string | null; active: boolean };
+}
+
 export interface CalendarResponse {
   profile: {
     goal: CycleGoal;
@@ -61,6 +84,8 @@ export interface CalendarResponse {
     cyclesObserved: number;
   };
   prediction: CyclePrediction | null;
+  /** The resolved verdict — always present, so nothing here needs to derive one. */
+  verdict: CycleVerdict;
   /**
    * Cold-start gate (mirrors `prediction.stillLearning`): true while < 3 cycles
    * are observed. When set, `days` carries no fertile window, ovulation dot, or

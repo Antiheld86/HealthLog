@@ -3,8 +3,10 @@
 /**
  * v1.15.0 — the basal-body-temperature (BBT) chart.
  *
- * Plots the user's logged BBT across the CURRENT cycle (the same window the
- * wheel shows, via `currentCycleStartDate`) as a line with phase-tinted dots,
+ * Plots the user's logged BBT across the CURRENT cycle — the same window the
+ * wheel shows, because both take the cycle start from the server's resolved
+ * verdict rather than each walking the calendar themselves — as a line with
+ * phase-tinted dots,
  * the symptothermal signal a fertility-aware reader expects. Fertility signs
  * already logged for a day — egg-white/watery mucus, a positive LH test —
  * surface in the tooltip so the temperature shift reads in context. When the
@@ -42,7 +44,6 @@ import { prefersReducedMotion } from "@/lib/charts/reduced-motion";
 import { cn } from "@/lib/utils";
 import type { CalendarDay, CervicalMucus, OvulationTest } from "./types";
 import { PHASE_HUE, OVULATION_HUE } from "./phase-tokens";
-import { currentCycleStartDate } from "./wheel-state";
 
 /** Trailing fallback window (days) when no MENSTRUAL-anchored cycle is active. */
 const FALLBACK_WINDOW_DAYS = 35;
@@ -60,6 +61,12 @@ interface BbtPoint {
 export interface BbtChartProps {
   days: CalendarDay[];
   today: string;
+  /**
+   * First day of the current cycle, from the calendar read's resolved
+   * `verdict.cycleStartDate`. Null when no cycle is active, and the chart
+   * falls back to a trailing window so recent temperatures still show.
+   */
+  cycleStartDate: string | null;
   /** Estimated ovulation day (`YYYY-MM-DD`), or null when goal-gated off. */
   predictedOvulation: string | null;
   /** Whether the ovulation day was confirmed by a signal layer (solid marker). */
@@ -76,6 +83,7 @@ function ymdToMs(d: string): number {
 export function BbtChart({
   days,
   today,
+  cycleStartDate,
   predictedOvulation,
   ovulationConfirmed = false,
   rawChartMode,
@@ -84,15 +92,15 @@ export function BbtChart({
   const fmt = useFormatters();
   const animationsEnabled = !prefersReducedMotion();
 
-  // Scope to the current cycle (wheel window); fall back to a trailing window
-  // when no cycle is active so a user still sees their recent temperatures.
+  // Scope to the current cycle using the server's resolved start; fall back to
+  // a trailing window when no cycle is active so a user still sees their
+  // recent temperatures.
   const fromDate = useMemo(() => {
-    const start = currentCycleStartDate(days, today);
-    if (start) return start;
+    if (cycleStartDate) return cycleStartDate;
     const fallback = new Date(ymdToMs(today));
     fallback.setUTCDate(fallback.getUTCDate() - FALLBACK_WINDOW_DAYS);
     return fallback.toISOString().slice(0, 10);
-  }, [days, today]);
+  }, [cycleStartDate, today]);
 
   const points = useMemo<BbtPoint[]>(() => {
     const fromMs = ymdToMs(fromDate);

@@ -24,3 +24,11 @@ export {
   clampLuteal,
 } from "./prediction";
 export { phaseForDay, phaseSeries, type PhaseCycle } from "./phase";
+export {
+  resolveCycleVerdict,
+  type CycleVerdict,
+  type CycleVerdictState,
+  type CyclePhaseSpan,
+  type CycleProfileLengths,
+  type VerdictCalendarDay,
+} from "./verdict";

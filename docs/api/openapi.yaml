@@ -15585,6 +15585,8 @@ components:
               anyOf:
                 - $ref: "#/components/schemas/CyclePredictionDTO"
                 - type: "null"
+            verdict:
+              $ref: "#/components/schemas/CycleVerdictDTO"
             stillLearning:
               type: boolean
             days:
@@ -15697,6 +15699,7 @@ components:
           required:
             - profile
             - prediction
+            - verdict
             - stillLearning
             - days
             - meta
@@ -15771,6 +15774,100 @@ components:
         - SYMPTOTHERMAL
         - TEMPERATURE_TREND
         - BLENDED
+    CycleVerdictDTO:
+      type: object
+      properties:
+        state:
+          type: string
+          enum:
+            - IN_CYCLE
+            - OVERDUE
+            - INSUFFICIENT_DATA
+        dayOfCycle:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: 1-based day of the current cycle. Null in OVERDUE and INSUFFICIENT_DATA — beyond the typical length plus
+            the server's grace window the count is no longer an observed fact.
+        cycleLength:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: "Days the ring represents: the observed labelled run, or the profile-derived idealized cycle for a low-data
+            tracker."
+        phase:
+          anyOf:
+            - $ref: "#/components/schemas/CyclePhase"
+            - type: "null"
+        spans:
+          type: array
+          items:
+            type: object
+            properties:
+              phase:
+                $ref: "#/components/schemas/CyclePhase"
+              fraction:
+                type: number
+            required:
+              - phase
+              - fraction
+            additionalProperties: false
+        cycleStartDate:
+          anyOf:
+            - type: string
+            - type: "null"
+          description: First day of the current cycle (YYYY-MM-DD). Still set while OVERDUE — the last logged period start remains
+            a fact once the count stops.
+        overdueDays:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: How many days past the profile's typical cycle length the open cycle has run. Set only in OVERDUE.
+        daysUntilNext:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: Days from today to the predicted next period start. Null when no prediction ran and null once that start is
+            in the past.
+        fertileWindow:
+          type: object
+          properties:
+            start:
+              anyOf:
+                - type: string
+                - type: "null"
+            end:
+              anyOf:
+                - type: string
+                - type: "null"
+            active:
+              type: boolean
+          required:
+            - start
+            - end
+            - active
+          additionalProperties: false
+      required:
+        - state
+        - dayOfCycle
+        - cycleLength
+        - phase
+        - spans
+        - cycleStartDate
+        - overdueDays
+        - daysUntilNext
+        - fertileWindow
+      additionalProperties: false
+      description: The resolved cycle verdict for the user's own timezone day. Render these values; do not recompute them. The
+        grace window that decides OVERDUE is deliberately not published — read `state` and `overdueDays`.
     CyclePhase:
       type: string
       enum:

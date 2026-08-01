@@ -30,6 +30,7 @@ import {
   goalAllowsFertileWindow,
   cycleDisclaimerKey,
 } from "@/lib/cycle/dto";
+import { resolveCycleVerdict } from "@/lib/cycle/verdict";
 import { persistPredictionCache } from "@/lib/cycle/prediction-cache";
 import { addDays, dayDiff } from "@/lib/cycle/day-math";
 import { BBT_WINDOW } from "@/lib/cycle/types";
@@ -173,12 +174,36 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // "not a contraceptive method" caveat (QA H-1).
   const disclaimer = t.t(cycleDisclaimerKey(profile.goal));
 
+  const predictionDto = prediction
+    ? toCyclePredictionDTO(prediction, goalAllowsFertile, disclaimer)
+    : null;
+
+  // The resolved verdict. Built from the SAME grid the response carries and
+  // from the ALREADY-GATED prediction DTO, never the raw engine result — a
+  // fertile window suppressed for the profile's goal or by the cold-start gate
+  // cannot reappear here. `today` is the user's timezone day, which is the
+  // other half of why this cannot be a client-side derivation: a browser in a
+  // different zone resolves a different "today" and reads a different cycle day.
+  const verdict = resolveCycleVerdict({
+    days,
+    today,
+    profile: {
+      typicalCycleLength: profile.typicalCycleLength,
+      typicalPeriodLength: profile.typicalPeriodLength,
+      lutealPhaseLength: profile.lutealPhaseLength,
+    },
+    nextPeriodStart: predictionDto?.nextPeriodStart ?? null,
+    fertileWindowStart: predictionDto?.fertileWindowStart ?? null,
+    fertileWindowEnd: predictionDto?.fertileWindowEnd ?? null,
+  });
+
   annotate({
     action: { name: "cycle.calendar.read" },
     meta: {
       days: days.length,
       cycles_observed: prediction?.cyclesObserved ?? 0,
       has_prediction: prediction !== null,
+      verdict_state: verdict.state,
     },
   });
 
@@ -194,9 +219,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
       // so a consumer never sees two divergent "cycles observed" values.
       cyclesObserved: prediction?.cyclesObserved ?? cycles.length,
     },
-    prediction: prediction
-      ? toCyclePredictionDTO(prediction, goalAllowsFertile, disclaimer)
-      : null,
+    prediction: predictionDto,
+    // The one resolved answer about today: cycle day, the ring's arcs, how
+    // many days until the next period, and whether the period is late and by
+    // how much. Every client renders this; none of them recomputes it.
+    verdict,
     // Top-level cold-start flag (mirrors `prediction.stillLearning`): the
     // calendar grid has suppressed fertile/ovulation/phase output, so the
     // client renders a calm "learning your cycle" banner over the grid. Additive
