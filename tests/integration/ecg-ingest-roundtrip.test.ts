@@ -194,10 +194,13 @@ describe("POST /api/insights/ecg — round trip through the real routes", () => 
       where: { id: posted.data.id },
     });
     const stored = Buffer.from(row.waveformEncrypted).toString("utf8");
-    for (const sample of SAMPLES) {
-      expect(stored).not.toContain(String(sample));
-    }
-    expect(stored).not.toContain("[12,-7,3");
+    // The column holds the `<keyId>.<base64>` envelope and nothing else. A
+    // serialised sample array cannot satisfy that shape — it carries
+    // brackets, commas and minus signs — so this rules plaintext out without
+    // asking whether some digit happens to appear in a base64 blob, which it
+    // routinely does.
+    expect(stored).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9+/=]+$/);
+    expect(stored).not.toContain(JSON.stringify(SAMPLES));
   });
 
   it("reports a re-post as updated and does not grow the table", async () => {
