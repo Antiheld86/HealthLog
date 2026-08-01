@@ -271,6 +271,7 @@ function findOpenOverdueSlot(
   if (floor.getTime() >= now.getTime()) return null;
 
   const ctx = buildRecurrenceContext({ medication, userTz, lastIntakeAt });
+  const intakeInstants = lastIntakeAt ? [lastIntakeAt] : [];
   let latest: {
     at: Date;
     availableFrom: Date;
@@ -288,9 +289,24 @@ function findOpenOverdueSlot(
       userTz,
       range: { from: floor, to: now },
       now,
-      intakeInstants: lastIntakeAt ? [lastIntakeAt] : [],
+      intakeInstants,
       includeOpenRollingOccurrence: true,
     });
+    // A rolling cadence's retrospective grid anchors an expected slot AT each
+    // logged intake instant (`expandRollingRetrospective`), so every instant
+    // fed in above comes back as a band. Such a band is served BY DEFINITION —
+    // the take that minted it IS the action on it — but `isResolved` keys on
+    // the row's `scheduledFor`, which for a late take is the SLOT anchor days
+    // away from `takenAt`. The two coordinate systems never meet, so the band
+    // read as an open overdue slot at exactly the instant the dose was taken
+    // and the card told the user to take a weekly injection again. Drop the
+    // self-minted anchors before the openness test; the genuine open
+    // occurrence (`lastIntakeAt + N`, unioned in above) and any back-filled
+    // missed cycle are untouched.
+    const selfMinted =
+      schedule.rollingIntervalDays !== null
+        ? new Set(intakeInstants.map((instant) => instant.getTime()))
+        : null;
     for (const band of bands) {
       const anchor = band.at.getTime();
       // Open overdue: the anchor has passed, now is still inside the
@@ -300,6 +316,7 @@ function findOpenOverdueSlot(
       if (anchor < floor.getTime()) continue;
       if (anchor >= now.getTime()) continue;
       if (now.getTime() > band.overdueEnd.getTime()) continue;
+      if (selfMinted?.has(anchor)) continue;
       if (isResolved(band.at)) continue;
       if (
         latest === null ||
