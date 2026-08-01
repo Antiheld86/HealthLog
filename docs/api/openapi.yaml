@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HealthLog API
-  version: 1.35.1
+  version: 1.35.2
   description: >-
     Self-hosted personal-health-tracking PWA — public API surface for the iOS native client and external ingest.
 
@@ -13911,7 +13911,7 @@ components:
       type: object
       properties:
         pillars:
-          maxItems: 8
+          maxItems: 7
           type: array
           items:
             $ref: "#/components/schemas/ScorePillarId"
@@ -13942,7 +13942,6 @@ components:
         - SLEEP
         - ADIPOSITY
         - WELLBEING
-        - FITNESS
         - LIPIDS
       description: A Health Score pillar id.
     ModulePrefsPatchRequest:

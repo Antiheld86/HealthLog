@@ -2,6 +2,44 @@
 
 ## [Unreleased]
 
+## [1.35.2] — 2026-08-01
+
+### Added
+
+- The cycle ring now reads its verdict from the server: which day of the cycle
+  you are on, how many days until the next one is expected, and whether a period
+  is late, with the number of days. Both clients read the same answer instead of
+  each working one out.
+
+### Changed
+
+- The Health Score turns green at 70, the same threshold the readiness and sleep
+  scores already used. A weak pillar still holds the band down no matter how good
+  the average is, so a single poor area cannot be averaged out of sight.
+- The score settings page was rebuilt to match the other settings cards: one
+  reading edge, no separator lines, the save button where the other cards keep it.
+- The Fitness pillar is gone. It could never produce a value, because the record
+  cannot tell a measured fitness test from a device estimate, so it was offering a
+  choice that did nothing.
+- The arrival line under the greeting is gone. It never said what had arrived.
+
+### Fixed
+
+- A saved score selection now comes back exactly as it was sent. One pillar was
+  quietly stripped on the way to the server, so the page could never agree with
+  what it had saved and the save button stayed lit for good.
+- The cycle wheel follows the timezone on your profile rather than the one your
+  browser happens to be in.
+
+### Contract
+
+- Two share-link fields that were agreed for retirement are no longer served.
+- A conflict on a repeated request now returns its error the way every other
+  route does. One place in the whole codebase answered with a different shape.
+- Five gaps in the published specification are closed, including a route that
+  shipped with the score settings and was never described at all, and one that
+  had been promised for months.
+
 ## [1.35.1] — 2026-08-01
 
 ### Fixed
