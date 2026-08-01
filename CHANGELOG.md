@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [1.35.1] — 2026-08-01
+
+### Fixed
+
+- A weekly injection you have already taken is no longer announced again. A
+  medication dosed on a rolling interval had its expected dose anchored on the
+  moment you actually injected, and was then checked off against the moment it
+  was planned for, with six hours of tolerance. Those two are allowed to sit days
+  apart, because a late dose still counts, so the dose your own injection created
+  could never be marked done. It stayed open, went overdue, and the app asked for
+  it again. Anyone on a weekly medication could hit this without ever editing
+  anything: taking a dose a few days late was enough. Push reminders were never
+  affected, because they read the plan rather than your entries.
+
 ## [1.35.0] — 2026-07-31
 
 The Health Score becomes something you decide rather than something that happens
