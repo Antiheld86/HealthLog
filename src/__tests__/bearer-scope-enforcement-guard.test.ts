@@ -64,16 +64,34 @@ describe("T1 — the Bearer resolution set is frozen", () => {
     // surface, which gates on BOTH `medication:ingest` and the per-medication
     // `medication:<id>:ingest` grant and never touches `requireAuth`.
     "app/api/ingest/medication/route.ts",
+    // `defaultUserIdResolver` — resolves the Bearer token to a user id so an
+    // idempotency key files under its owner. It authorises nothing: the
+    // handler still runs its own `requireAuth()`, and this resolver only
+    // decides which user's cache cell a replay lands in. Narrow in reach and
+    // deliberate, but it is a raw Bearer value becoming a user id, so it
+    // belongs on this list rather than beside it.
+    "lib/idempotency.ts",
   ].sort();
 
   it("no file outside the allowlist resolves a Bearer token to a user", () => {
     // `resolveBearerToken` is the shared primitive; a `tokenHash` lookup is the
     // hand-rolled equivalent. Either one turns a bearer credential into an
     // identity, so both have to stay inside the allowlist.
+    //
+    // The whitespace classes around `.findUnique` are load-bearing. The
+    // original matcher demanded the literal `apiToken.findUnique(`, and
+    // `lib/idempotency.ts` writes the call fluent-style — `prisma.apiToken`,
+    // newline, `.findUnique({`. It resolved a Bearer token to a user id for
+    // three releases without this guard ever seeing it. A matcher that misses
+    // a real resolver is green because it matched nothing, not because
+    // nothing was there.
     const resolvers = filesMatching(
-      /resolveBearerToken|apiToken\.findUnique\([\s\S]*?where:\s*\{\s*tokenHash/,
+      /resolveBearerToken|apiToken\s*\.\s*findUnique\(\s*\{[\s\S]*?where:\s*\{\s*tokenHash/,
     );
 
+    // Non-zero proof: an empty match set must fail rather than agree with an
+    // emptied allowlist.
+    expect(resolvers.length).toBeGreaterThan(0);
     expect(resolvers).toEqual(RESOLUTION_ALLOWLIST);
   });
 
