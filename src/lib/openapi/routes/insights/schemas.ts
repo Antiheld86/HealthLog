@@ -14,6 +14,7 @@ import { METRIC_STATUS_IDS } from "@/lib/insights/metric-status-registry";
 import {
   DERIVED_METRIC_IDS,
   VITALS_BASELINE_TYPES,
+  SAME_TIME_BASELINE_TYPES,
 } from "@/lib/insights/derived/registry";
 import { ANALYTICS_RANGES } from "@/lib/analytics/range-delta";
 
@@ -108,8 +109,26 @@ export const metricStatusResponse = z
 
 // v1.10.0 — generic derived-wellness-metric route. The query enum is
 // derived from the same registry the route validates against, so spec +
-// route + cache scope cannot drift. `type` sub-targets the single vital
-// a baseline metric (VITALS_BASELINE) bands over.
+// route + cache scope cannot drift. `type` sub-targets the single
+// measurement type a baseline metric works over.
+
+/**
+ * Every value the `type` query parameter accepts, assembled from the two
+ * registry sets that define one: `VITALS_BASELINE` bands a single vital,
+ * `SAME_TIME_BASELINE` compares one cumulative day metric against the same
+ * hour of a typical day. Published as one enum because `type` is a single
+ * parameter shared by both metrics — a client picks the subset that belongs
+ * to the `metric` it names.
+ *
+ * Built from the registry rather than restated here, so a type added to
+ * either engine reaches the published contract in the same commit.
+ * `derived-type-enum-sync.test.ts` pins the equality.
+ */
+export const DERIVED_TYPE_PARAM_VALUES: string[] = [
+  ...VITALS_BASELINE_TYPES,
+  ...SAME_TIME_BASELINE_TYPES,
+];
+
 export const derivedMetricQuery = z
   .object({
     metric: z
@@ -118,10 +137,10 @@ export const derivedMetricQuery = z
         "Derived-metric id to compute (e.g. VITALS_BASELINE, FITNESS_AGE, VASCULAR_AGE_DELTA, HRV_BALANCE, BMI, READINESS). Closed enum: an unknown id 422s. Metrics whose compute has not yet landed return an `insufficient` value with reason `not_implemented`.",
       ),
     type: z
-      .enum(VITALS_BASELINE_TYPES as [string, ...string[]])
+      .enum(DERIVED_TYPE_PARAM_VALUES as [string, ...string[]])
       .optional()
       .describe(
-        "For VITALS_BASELINE only — the single vital to band (defaults to RESTING_HEART_RATE). Ignored by composites. An unsupported value yields an `insufficient` value rather than a 422 so iOS metric combinations stay forgiving.",
+        "The single measurement type a baseline metric works over. `VITALS_BASELINE` takes one of the eleven vitals (`RESTING_HEART_RATE` through `WEIGHT`; defaults to `RESTING_HEART_RATE`). `SAME_TIME_BASELINE` takes one of the four cumulative day metrics — `ACTIVITY_STEPS`, `ACTIVE_ENERGY_BURNED`, `WALKING_RUNNING_DISTANCE`, `FLIGHTS_CLIMBED`. Ignored by the composite metrics. A type the named metric does not support yields an `insufficient` value rather than a 422, so client metric combinations stay forgiving.",
       ),
   })
   .meta({ id: "DerivedMetricQuery" });
@@ -253,7 +272,7 @@ export const derivedBatchQuery = z
       .min(1)
       .max(1024)
       .describe(
-        "Comma-separated derived-metric tokens. Each is a `<DERIVED_METRIC_ID>` or `<DERIVED_METRIC_ID>:<MeasurementType>` (the colon sub-targets a VITALS_BASELINE vital). An unknown id 422s; a `type` outside the MeasurementType enum 422s; at most 24 tokens; duplicates collapse.",
+        "Comma-separated derived-metric tokens. Each is a `<DERIVED_METRIC_ID>` or `<DERIVED_METRIC_ID>:<MeasurementType>` (the colon sub-targets the single measurement type a baseline metric works over — a vital for `VITALS_BASELINE`, a cumulative day metric for `SAME_TIME_BASELINE`; see the `type` parameter on `GET /api/insights/derived`). An unknown id 422s; a `type` outside the MeasurementType enum 422s; at most 24 tokens; duplicates collapse.",
       ),
   })
   .meta({ id: "DerivedBatchQuery" });

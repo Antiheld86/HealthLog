@@ -329,6 +329,31 @@ export async function defaultUserIdResolver(): Promise<string | null> {
  *
  * No-op when the header is missing or the value is malformed.
  */
+/**
+ * The 409 both in-flight arms return.
+ *
+ * `error` is a STRING, matching the envelope `@/lib/api-response` defines
+ * for every other route (`{ data: null, error: <prose>, meta? }`). Until
+ * v1.35.1 these two literals sent `error` as `{ message }` — the only
+ * object-shaped error the app ever emitted, inherited by every route under
+ * `withIdempotency`, and never what the published contract promised. A
+ * client decoding the documented envelope now gets what it was generated
+ * against.
+ *
+ * Built once rather than twice so the two arms cannot drift apart again.
+ * The response is hand-built rather than routed through `apiError` because
+ * the 409 carries the `X-Idempotent-Replay` header.
+ */
+function inflightConflictResponse(): Response {
+  return NextResponse.json(
+    {
+      data: null,
+      error: "A request with this Idempotency-Key is already in progress",
+    },
+    { status: 409, headers: { "X-Idempotent-Replay": "false" } },
+  );
+}
+
 export function withIdempotency<
   Args extends [Request | NextRequest, ...unknown[]],
 >(
@@ -368,16 +393,7 @@ export function withIdempotency<
         action: { name: "idempotency.inflight_conflict" },
         meta: { method: ctx.method, path: ctx.path },
       });
-      return NextResponse.json(
-        {
-          data: null,
-          error: {
-            message:
-              "A request with this Idempotency-Key is already in progress",
-          },
-        },
-        { status: 409, headers: { "X-Idempotent-Replay": "false" } },
-      );
+      return inflightConflictResponse();
     }
 
     // Claim the key before running the handler. If a racing request beats
@@ -389,16 +405,7 @@ export function withIdempotency<
         action: { name: "idempotency.inflight_conflict" },
         meta: { method: ctx.method, path: ctx.path },
       });
-      return NextResponse.json(
-        {
-          data: null,
-          error: {
-            message:
-              "A request with this Idempotency-Key is already in progress",
-          },
-        },
-        { status: 409, headers: { "X-Idempotent-Replay": "false" } },
-      );
+      return inflightConflictResponse();
     }
 
     let response: Response;

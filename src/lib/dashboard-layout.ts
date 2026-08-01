@@ -406,9 +406,12 @@ function coerceChartOverlayPrefsMap(value: unknown): ChartOverlayPrefsMap {
  *
  *   - `READINESS` / `RECOVERY_SCORE` / `SLEEP_SCORE` resolve through the
  *     derived registry's engines (module-gated like the derived routes);
- *   - `MED_COMPLIANCE` is the pooled 7-day medication adherence from the
- *     canonical compliance engine — the ring that absorbs the retired
- *     hero dose row's information role.
+ *   - `MED_COMPLIANCE` is TODAY's dose progress (taken of scheduled) from
+ *     the snapshot's own `medsToday` block — the ring that absorbs the
+ *     retired hero dose row's information role. The v1.27.7 first cut put
+ *     the pooled 7-day adherence percentage here; it has been today's
+ *     progress since v1.27.8. Resolution lives in
+ *     `@/lib/dashboard/score-rings`.
  *
  * The preference piggy-backs on the layout blob like `chartOverlayPrefs`
  * (a UI affordance, no Prisma migration). The resolver drops unknown ids,
