@@ -1907,6 +1907,14 @@ model EcgRecording {
 
   // Re-sync overwrites in place rather than inserting a duplicate.
   @@unique([userId, source, externalRecordingId])
+  // The same physical recording can reach us through two doors with two
+  // different source ids: the `export.zip` importer identifies an Apple
+  // Watch strip by a hash of its content, the live `POST /api/insights/ecg`
+  // ingest by the device's own sample uuid. One device does not record two
+  // different strips at the same instant at the same sampling rate, so this
+  // is what the recording IS rather than what a source calls it, and it
+  // makes the convergence a guarantee instead of a convention.
+  @@unique([userId, source, recordedAt, samplingFrequency], map: "ecg_recordings_user_source_recorded_at_freq_key")
   @@index([userId, recordedAt(sort: Desc)])
   @@map("ecg_recordings")
 }
