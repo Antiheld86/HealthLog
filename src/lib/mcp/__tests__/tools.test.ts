@@ -687,6 +687,95 @@ describe("get_preventive_care", () => {
     };
     expect(result.present).toBe(false);
   });
+
+  /**
+   * Overdue is a question about dates, and the answer has to hold for the
+   * whole of the date. Comparing the two instants flipped the flag at the
+   * hour the checkup was booked for, so from ten past nine the tool told the
+   * model a checkup was overdue while the screen beside it still read
+   * "today" — one reminder, two verdicts.
+   *
+   * Read in the profile zone the mocked account carries (UTC), so the
+   * instants below say the same thing whatever the host machine is set to.
+   */
+  async function overdueFlagFor(
+    nextDueAt: string,
+    now: string,
+    timezone = "UTC",
+  ) {
+    vi.setSystemTime(Date.parse(now));
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ timezone } as never);
+    vi.mocked(prisma.measurementReminder.findMany).mockResolvedValue([
+      { id: "r-1" },
+    ] as never);
+    vi.mocked(toMeasurementReminderDto).mockReturnValue({
+      id: "r-1",
+      label: "Blood pressure check",
+      measurementType: "BLOOD_PRESSURE_SYS",
+      intervalDays: 30,
+      rrule: null,
+      anchorDate: null,
+      endsOn: null,
+      origin: "VORSORGE",
+      notifyHour: 9,
+      location: null,
+      nextDueAt,
+      lastSatisfiedAt: null,
+      enabled: true,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const result = (await tool("get_preventive_care").run(CTX, {})) as {
+      checkups: Array<{ overdue: boolean }>;
+    };
+    return result.checkups[0]?.overdue;
+  }
+
+  it("holds the overdue flag for the whole of the day a checkup is due", async () => {
+    vi.useFakeTimers();
+    try {
+      // The booked hour has passed by eleven hours, and it is still the day
+      // the checkup belongs to.
+      expect(
+        await overdueFlagFor(
+          "2026-07-17T09:00:00.000Z",
+          "2026-07-17T20:00:00.000Z",
+        ),
+      ).toBe(false);
+      // Forty-five minutes later on the clock, and a date later on the
+      // calendar. Now it is missed.
+      expect(
+        await overdueFlagFor(
+          "2026-07-17T23:30:00.000Z",
+          "2026-07-18T00:15:00.000Z",
+        ),
+      ).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reads the dates off the profile's calendar, not the server's", async () => {
+    vi.useFakeTimers();
+    try {
+      // The same pair of instants as the first case above, which UTC reads as
+      // one date and answers "not overdue". Twelve hours east it is already
+      // the next morning, so that same checkup was yesterday's and is missed.
+      // Only the profile zone can produce the second answer.
+      expect(
+        await overdueFlagFor(
+          "2026-07-17T09:00:00.000Z",
+          "2026-07-17T20:00:00.000Z",
+          "Pacific/Auckland",
+        ),
+      ).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
+        timezone: "UTC",
+      } as never);
+    }
+  });
 });
 
 describe("search — cursor pagination", () => {

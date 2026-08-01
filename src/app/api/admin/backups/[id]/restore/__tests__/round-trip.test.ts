@@ -22,6 +22,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 import { Buffer } from "node:buffer";
 
+import { SCORE_VERSION } from "@/lib/analytics/score/types";
+
 process.env.ENCRYPTION_KEY =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
@@ -269,7 +271,7 @@ function sourceClient() {
           timezone: "Europe/Berlin",
           composite: 76,
           band: "yellow",
-          scoreVersion: 2,
+          scoreVersion: SCORE_VERSION,
           composition: ["BLOOD_PRESSURE", "SLEEP", "ADIPOSITY"],
           pillarScores: { BLOOD_PRESSURE: 86, SLEEP: 100, ADIPOSITY: 42 },
           inputFingerprint: "a".repeat(64),
@@ -629,7 +631,7 @@ describe("backup round trip — export, wire schema, restore", () => {
       timezone: "Europe/Berlin",
       composite: 76,
       band: "yellow",
-      scoreVersion: 2,
+      scoreVersion: SCORE_VERSION,
       inputFingerprint: "a".repeat(64),
     });
     // The composition and the per-pillar scores are what keep the stored day

@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+## [1.35.4] — 2026-08-02
+
+### Fixed
+
+- A checkup due later today is no longer described as overdue. Two places
+  counted the distance to a checkup in hours and rounded, which is a different
+  question from how many calendar days away it is. On a Friday evening,
+  something due Saturday morning is fourteen hours away and something due Sunday
+  morning is thirty-eight, and rounding turned both into tomorrow. Both now
+  count calendar days in the timezone on your profile.
+- The assistant and the screen beside it now agree about when a checkup is due.
+  The list the assistant reads flipped to overdue the moment the clock time
+  passed, while the page still said today until midnight. One appointment could
+  produce two different answers depending on which one you asked.
+
+### Internal
+
+- The set of places that can work out who is calling is now frozen by a check.
+  It covers surfaces that read a session and surfaces that authenticate by a
+  credential in the address rather than a session, which no earlier check
+  watched at all. Adding one now fails the check until it is listed with a
+  reason.
+- One place that turns an access token into an account was outside the previous
+  check's reach, because the check looked for a phrase the file happens to write
+  across two lines. It matched nothing and reported success. It now tolerates
+  the formatting and fails when it finds nothing to match, so an empty result
+  can no longer read as a pass.
+- Test fixtures that stated the score version by hand now read it from the same
+  place the application does, so a future change to it cannot leave them behind.
+
 ## [1.35.3] — 2026-08-01
 
 ### Added

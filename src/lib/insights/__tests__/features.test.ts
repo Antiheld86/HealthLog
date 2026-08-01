@@ -37,6 +37,7 @@ vi.mock("@/lib/medication-category", () => ({
 }));
 
 import { prisma } from "@/lib/db";
+import { invalidateUserTimezone } from "@/lib/tz/resolver";
 import {
   extractFeatures,
   FeaturesPayloadTooLargeError,
@@ -68,6 +69,13 @@ const prismaMock = prisma as unknown as {
 };
 
 const dayMs = 24 * 60 * 60 * 1000;
+
+/**
+ * Its own account id, because `resolveUserTimezone` memoises per user for a
+ * minute — reusing "user-1" would either read a zone a neighbouring test set
+ * or leave one behind for the next.
+ */
+const TZ_USER = "user-tz";
 
 function rollupRow(daysAgo: number, mean: number, count: number) {
   return {
@@ -403,6 +411,44 @@ describe("extractFeatures — v1.22 preventive-care block", () => {
   it("omits the block when nothing is due or overdue", async () => {
     const f = await extractFeatures("user-1", false);
     expect(f.preventiveCare).toBeUndefined();
+  });
+
+  /**
+   * The day counting itself is pinned in `preventive-care-days.test.ts`; what
+   * this pins is the wire between it and the account — that the zone the block
+   * counts on is the one on the person's PROFILE, and that it survives the trip
+   * through `extractFeatures`. Both ends were right once before while the
+   * assembly between them handed down something else.
+   *
+   * One instant, three answers. At 05:00 UTC on the 18th it is still the 17th
+   * in Los Angeles, so a checkup at 20:00 UTC on the 18th is tomorrow's there —
+   * while UTC and the Berlin server default both call it today's. Only the
+   * profile zone gives 1, so nothing but the profile zone can produce it.
+   */
+  it("counts the days on the profile's calendar, not UTC's or the server's", async () => {
+    const NOW = Date.parse("2026-07-18T05:00:00Z");
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(NOW);
+    invalidateUserTimezone(TZ_USER);
+    prismaMock.user.findUnique.mockResolvedValue({
+      heightCm: 180,
+      dateOfBirth: new Date("1980-01-01"),
+      gender: "MALE",
+      timezone: "America/Los_Angeles",
+    });
+    prismaMock.measurementReminder.findMany.mockResolvedValue([
+      { label: "Augenarzt", nextDueAt: new Date("2026-07-18T20:00:00Z") },
+    ]);
+
+    try {
+      const f = await extractFeatures(TZ_USER, false);
+      expect(f.preventiveCare?.due).toEqual([
+        { label: "Augenarzt", daysUntil: 1 },
+      ]);
+    } finally {
+      vi.useRealTimers();
+      invalidateUserTimezone(TZ_USER);
+    }
   });
 });
 
