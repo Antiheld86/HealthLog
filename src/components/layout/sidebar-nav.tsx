@@ -22,6 +22,7 @@ import {
   visibleNavDestinations,
   visibleUtilityDestinations,
 } from "@/components/layout/nav-model";
+import { SHELL_HEADER_BAND } from "@/components/layout/shell-metrics";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/logo";
 import { useAuth, useLogout } from "@/hooks/use-auth";
@@ -435,17 +436,22 @@ export function SidebarNav() {
           collapsed ? "w-16" : "w-64",
         )}
       >
-        {/* Logo */}
+        {/* Logo band. Height + bottom border come from `SHELL_HEADER_BAND`,
+            which the top bar reads too, so the two borders draw one
+            continuous line. The band owns the 4rem; the link inside
+            stretches with `h-full` and never restates a height. */}
         <div
+          data-slot="sidebar-header"
           className={cn(
-            "border-sidebar-border border-b",
+            "border-sidebar-border",
+            SHELL_HEADER_BAND,
             collapsed ? "px-3" : "px-6",
           )}
         >
           <Link
             href="/"
             className={cn(
-              "flex h-16 items-center",
+              "flex h-full items-center",
               collapsed ? "justify-center px-0" : "gap-2",
             )}
           >

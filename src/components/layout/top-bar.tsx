@@ -11,6 +11,8 @@ import {
   Shield,
   Sun,
 } from "lucide-react";
+import { SHELL_HEADER_BAND } from "@/components/layout/shell-metrics";
+import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/logo";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -56,12 +58,21 @@ export function TopBar() {
 
   return (
     <header
-      className="bg-card/80 border-border sticky top-0 z-40 flex h-16 items-center justify-between border-b px-4 backdrop-blur-md md:px-6"
+      data-slot="top-bar"
+      // Height + bottom border come from `SHELL_HEADER_BAND`, which the
+      // sidebar logo band reads too, so the two borders draw one
+      // continuous line. Never restate a height here.
+      className={cn(
+        "bg-card/80 border-border sticky top-0 z-40 flex items-center justify-between px-4 backdrop-blur-md md:px-6",
+        SHELL_HEADER_BAND,
+      )}
       // iOS PWA on notched iPhones overlays the status bar onto the
       // sticky header unless we reserve the safe-area inset. The
       // inline style adds `safe-area-inset-top` as padding-top on
       // devices that report one and is a no-op on every other
-      // platform; the inner h-16 content area stays nominally 64 px.
+      // platform. The band stays 4rem tall either way (border-box), so
+      // on a device that reports an inset the content area inside it
+      // gives up those pixels.
       style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
     >
       {/* Mobile logo */}
