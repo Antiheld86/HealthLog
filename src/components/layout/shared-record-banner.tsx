@@ -30,7 +30,18 @@ import { accountLabel } from "@/lib/sharing/account-access-view";
  *
  * The name is `text-foreground` and the qualifier `text-muted-foreground`, per
  * the two-tier text rule — the person's name is content, the read-only note is
- * meta. Mounted for every authenticated route inside `<AuthShell>` (the
+ * meta.
+ *
+ * The row is the inline-action shape from UI-STANDARDS §11 rather than a
+ * centred wrapping stack: sentence `min-w-0 flex-1`, action `shrink-0`, so the
+ * way out stays beside the sentence instead of dropping onto its own line once
+ * the name is long. `<MaintainershipBanner>` is the sibling that already had an
+ * action and already had this shape; the two now read the same. The tap target
+ * carries the standard's floor (`min-h-11 sm:min-h-9`) — a person leaving
+ * somebody else's record on a phone is the one interaction in the stack, and it
+ * was a 32px target.
+ *
+ * Mounted for every authenticated route inside `<AuthShell>` (the
  * `<DemoBanner>` pattern) so no page can forget it, and rendered from
  * `accountAccess.active`, which the server resolves: the banner appears exactly
  * when the server says the session is inside a record, never on a client guess.
@@ -54,25 +65,30 @@ export function SharedRecordBanner() {
       role="status"
       data-slot="shared-record-banner"
       data-account-id={active.accountId}
-      className="bg-warning/15 border-warning/40 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b px-3 py-2 text-xs"
+      className="bg-warning/15 border-warning/40 flex items-start gap-3 border-b px-3 py-2 text-xs sm:items-center"
     >
-      <Eye className="text-foreground size-3.5 shrink-0" aria-hidden="true" />
-      <span className="text-foreground text-center font-medium">
-        {t("recordSharing.banner.viewing", { name })}
-      </span>
-      {/* Resolved server-side. `canWrite` is false for every grant in v1, and
-          the day it is not, this line stops claiming otherwise on its own. */}
-      {!active.canWrite && (
-        <span className="text-muted-foreground text-center">
-          {t("recordSharing.banner.readOnly")}
-        </span>
-      )}
+      <Eye
+        className="text-foreground mt-0.5 size-3.5 shrink-0 sm:mt-0"
+        aria-hidden="true"
+      />
+      <p className="min-w-0 flex-1 leading-snug">
+        <span className="text-foreground font-medium">
+          {t("recordSharing.banner.viewing", { name })}
+        </span>{" "}
+        {/* Resolved server-side. `canWrite` is false for every grant in v1, and
+            the day it is not, this line stops claiming otherwise on its own. */}
+        {!active.canWrite && (
+          <span className="text-muted-foreground">
+            {t("recordSharing.banner.readOnly")}
+          </span>
+        )}
+      </p>
       <button
         type="button"
         data-slot="shared-record-banner-exit"
         onClick={() => switchAccount.mutate(null)}
         disabled={switchAccount.isPending}
-        className="text-foreground hover:bg-warning/25 focus-visible:ring-ring inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-md px-2 py-1 font-medium underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
+        className="text-foreground hover:bg-warning/25 focus-visible:ring-ring inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-md px-2 py-1 font-medium underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50 sm:min-h-9"
       >
         {switchAccount.isPending ? (
           <Loader2
