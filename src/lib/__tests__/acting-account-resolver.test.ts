@@ -1,0 +1,616 @@
+/**
+ * v1.36.0 — the acting-account resolver, arm by arm.
+ *
+ * Three things are worth more here than anywhere else in the feature, because
+ * everything downstream trusts them:
+ *
+ *   1. **It fails closed.** A bare `requireAuth()` reached under an active
+ *      switch refuses. It must never fall back to the caller's own account —
+ *      a delegate who believes they are reading the owner's record being handed
+ *      their own is the same data-mixing failure, pointed the other way.
+ *   2. **Refusals do not enumerate.** A selector naming an account that does
+ *      not exist and one naming an account that granted nothing produce the
+ *      same bytes. Asserted as bytes, not as "both were 403".
+ *   3. **Nothing is cached.** The grant is loaded on the request that uses it.
+ *      Proven against a real database in
+ *      `tests/integration/acting-account-resolver.test.ts`, where revoking
+ *      between two requests is a thing that can actually happen.
+ *
+ * The grant module is deliberately NOT mocked. The resolver consuming S1's
+ * `isGrantActive` rather than its own idea of "active" is the property that
+ * keeps the panel and the resolver from disagreeing, and a mocked predicate
+ * would report that property working while it was broken. The Prisma fake below
+ * honours its `where` clause for the same reason: a fake that ignores `where`
+ * turns every scoping assertion into a check that cannot fail.
+ */
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+// --- Mocks must be hoisted before importing the module under test. ---
+
+interface GrantRow {
+  id: string;
+  grantorId: string;
+  granteeId: string;
+  access: "READ" | "WRITE";
+  acceptedAt: Date | null;
+  revokedAt: Date | null;
+  expiresAt: Date | null;
+}
+
+const grantRows: GrantRow[] = [];
+const userRows = new Map<string, { id: string; role: string }>();
+const touched: string[] = [];
+
+vi.mock("@/lib/db", () => ({
+  prisma: {
+    accountGrant: {
+      // Honours the narrowing the real query performs. `findActiveGrant`
+      // narrows on `revokedAt: null` in SQL and leaves accepted/expired to the
+      // state machine; a fake that returned any row for any `where` would make
+      // the cross-user arms below pass no matter what the resolver did.
+      findFirst: vi.fn(
+        async ({
+          where,
+        }: {
+          where: {
+            grantorId: string;
+            granteeId: string;
+            revokedAt: null;
+          };
+        }) =>
+          grantRows.find(
+            (g) =>
+              g.grantorId === where.grantorId &&
+              g.granteeId === where.granteeId &&
+              (where.revokedAt === null ? g.revokedAt === null : true),
+          ) ?? null,
+      ),
+      update: vi.fn(async ({ where }: { where: { id: string } }) => {
+        touched.push(where.id);
+        return {};
+      }),
+    },
+    user: {
+      findUnique: vi.fn(
+        async ({ where }: { where: { id: string } }) =>
+          userRows.get(where.id) ?? null,
+      ),
+    },
+    apiToken: { findUnique: vi.fn(), update: vi.fn() },
+    webauthnMfaCredential: { count: vi.fn(async () => 0) },
+    session: { findUnique: vi.fn() },
+  },
+}));
+
+vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
+vi.mock("@/lib/auth/hmac", () => ({ hashToken: vi.fn(() => "hash") }));
+vi.mock("@/lib/auth/audit", () => ({
+  auditLog: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/logging/transports", () => ({ emitIfSampled: vi.fn() }));
+
+const headerJar = new Map<string, string>();
+vi.mock("next/headers", () => ({
+  headers: vi.fn(async () => ({
+    get: (name: string) => headerJar.get(name.toLowerCase()) ?? null,
+  })),
+  cookies: vi.fn(async () => ({
+    get: () => undefined,
+    set: () => {},
+    delete: () => {},
+  })),
+}));
+
+// --- Imports use the mocked modules above. ---
+
+import { NextRequest, NextResponse } from "next/server";
+import {
+  ACCOUNT_SELECTOR_HEADER,
+  apiHandler,
+  requireActorAuth,
+  requireAdmin,
+  requireAuth,
+  requireCookieAuth,
+  requireFreshMfa,
+  requireRecordAuth,
+  type RecordAuthContext,
+} from "../api-handler";
+import { getSession } from "@/lib/auth/session";
+import { auditLog } from "@/lib/auth/audit";
+import { emitIfSampled } from "@/lib/logging/transports";
+import { prisma } from "@/lib/db";
+import type { WideEvent } from "@/lib/logging/types";
+
+const OWNER = "owner-1";
+const DELEGATE = "delegate-1";
+
+function user(id: string, role: "USER" | "ADMIN" = "USER") {
+  return { id, role, username: id, email: `${id}@example.test` };
+}
+
+/** Sign the delegate in over the cookie transport. */
+function signedInCookie(
+  actingAsUserId: string | null = null,
+  role: "USER" | "ADMIN" = "USER",
+): void {
+  vi.mocked(getSession).mockResolvedValue({
+    session: {
+      id: "session-1",
+      expiresAt: new Date(Date.now() + 3_600_000),
+      actingAsUserId,
+    },
+    user: user(DELEGATE, role) as never,
+  });
+}
+
+/** Sign the delegate in over the Bearer transport. */
+function signedInBearer(): void {
+  vi.mocked(getSession).mockResolvedValue(null);
+  headerJar.set("authorization", "Bearer hlk_" + "a".repeat(64));
+  vi.mocked(prisma.apiToken.findUnique).mockResolvedValue({
+    id: "token-1",
+    userId: DELEGATE,
+    permissions: ["*"],
+    revoked: false,
+    expiresAt: new Date(Date.now() + 3_600_000),
+  } as never);
+  vi.mocked(prisma.apiToken.update).mockResolvedValue({} as never);
+  userRows.set(DELEGATE, user(DELEGATE));
+}
+
+function selector(value: string): void {
+  headerJar.set(ACCOUNT_SELECTOR_HEADER, value);
+}
+
+function liveGrant(overrides: Partial<GrantRow> = {}): GrantRow {
+  const row: GrantRow = {
+    id: "grant-1",
+    grantorId: OWNER,
+    granteeId: DELEGATE,
+    access: "READ",
+    acceptedAt: new Date(Date.now() - 60_000),
+    revokedAt: null,
+    expiresAt: null,
+    ...overrides,
+  };
+  grantRows.push(row);
+  return row;
+}
+
+/**
+ * Run a resolver call the way a route runs it: inside `apiHandler`, against a
+ * real `NextRequest`, so the HTTP method the resolver reads is the one the
+ * request actually carried and the refusal is a real HTTP response.
+ */
+function route(
+  resolve: () => Promise<unknown>,
+): (method?: string) => Promise<Response> {
+  // A zero-argument handler is assignable to the one-argument shape Next.js
+  // calls; naming the type here keeps the call site honest without an unused
+  // parameter.
+  const handler: (request: NextRequest) => Promise<Response> = apiHandler(
+    async () => {
+      await resolve();
+      return NextResponse.json({ data: null, error: null });
+    },
+  );
+  return (method = "GET") =>
+    handler(new NextRequest("http://localhost/api/test", { method }));
+}
+
+/**
+ * Resolve inside a route and hand back what the handler body would have seen.
+ * Every substitution assertion runs through here rather than calling the
+ * resolver bare, because the HTTP method is part of the decision and a bare
+ * call has none.
+ */
+async function resolveInRoute<T>(
+  resolve: () => Promise<T>,
+  method = "GET",
+): Promise<T> {
+  let value: T | undefined;
+  const response = await route(async () => {
+    value = await resolve();
+  })(method);
+  expect(response.status).toBe(200);
+  return value as T;
+}
+
+/** The wide event the last run emitted. */
+function lastEvent(): WideEvent {
+  const calls = vi.mocked(emitIfSampled).mock.calls;
+  return calls[calls.length - 1][0] as WideEvent;
+}
+
+function sharingAuditCalls() {
+  return vi
+    .mocked(auditLog)
+    .mock.calls.filter(([action]) => action === "sharing.access.denied");
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  grantRows.length = 0;
+  userRows.clear();
+  touched.length = 0;
+  headerJar.clear();
+  userRows.set(OWNER, user(OWNER));
+  userRows.set(DELEGATE, user(DELEGATE));
+});
+
+describe("do no harm — nothing is acting as anyone", () => {
+  it("resolves every mode to the caller, and never asks about a grant", async () => {
+    signedInCookie(null);
+
+    const bare = await resolveInRoute(() => requireAuth());
+    expect(bare.user.id).toBe(DELEGATE);
+
+    const actor = await resolveInRoute(() => requireActorAuth());
+    expect(actor.user.id).toBe(DELEGATE);
+
+    const record = await resolveInRoute(() => requireRecordAuth("read"));
+    expect(record.user.id).toBe(DELEGATE);
+    expect(record.actor.id).toBe(DELEGATE);
+    expect(record.grantId).toBeNull();
+
+    // No carrier means no authorization question was ever asked. If this
+    // fires, the resolver is doing work on the un-switched path — which is
+    // where 100% of today's traffic lives.
+    expect(prisma.accountGrant.findFirst).not.toHaveBeenCalled();
+    expect(sharingAuditCalls()).toHaveLength(0);
+  });
+
+  it("leaves the wide event's actor identity alone", async () => {
+    signedInCookie(null);
+    const call = route(() => requireRecordAuth("read"));
+    await call();
+
+    expect(lastEvent().auth?.user_id).toBe(DELEGATE);
+    expect(lastEvent().auth?.acting_as).toBeUndefined();
+  });
+});
+
+describe("bare requireAuth refuses to run under a switch", () => {
+  it("refuses the session carrier without falling back to the caller", async () => {
+    signedInCookie(OWNER);
+    liveGrant();
+
+    const response = await route(() => requireAuth())();
+    expect(response.status).toBe(403);
+    const body = await response.json();
+    expect(body.meta.errorCode).toBe("sharing.not_permitted");
+    expect(body.data).toBeNull();
+  });
+
+  it("refuses even when the grant behind the switch is perfectly valid", async () => {
+    // The point of the fail-closed arm: the grant is not the question. The
+    // route never declared that it can be used on someone else's record.
+    signedInCookie(OWNER);
+    liveGrant();
+
+    await expect(requireAuth()).rejects.toMatchObject({
+      errorCode: "sharing.not_permitted",
+      statusCode: 403,
+    });
+  });
+
+  it("refuses a Bearer selector, and records it", async () => {
+    signedInBearer();
+    selector(OWNER);
+    liveGrant();
+
+    await expect(requireAuth()).rejects.toMatchObject({
+      errorCode: "sharing.not_permitted",
+    });
+    expect(sharingAuditCalls()).toHaveLength(1);
+    expect(sharingAuditCalls()[0][1]).toMatchObject({
+      userId: DELEGATE,
+      details: expect.objectContaining({
+        reason: "undeclared_mode",
+        carrier: "header",
+        target: OWNER,
+      }),
+    });
+  });
+
+  it("refuses a selector sent over the cookie transport", async () => {
+    // The header is a Bearer-only carrier. Ignoring it here would serve the
+    // caller's own record to a client that believes it asked for another's.
+    signedInCookie(null);
+    selector(OWNER);
+
+    await expect(requireAuth()).rejects.toMatchObject({
+      errorCode: "sharing.not_permitted",
+    });
+    expect(sharingAuditCalls()[0][1]).toMatchObject({
+      details: expect.objectContaining({ carrier: "misplaced-header" }),
+    });
+  });
+
+  it("keeps the ambient web refusal out of the audit table", async () => {
+    // Every navigation and poll that touches a non-delegable route lands here
+    // while a switch is on. A row per request would bury the header refusals,
+    // which are the ones that mean something.
+    signedInCookie(OWNER);
+    await expect(requireAuth()).rejects.toThrow();
+    expect(sharingAuditCalls()).toHaveLength(0);
+  });
+});
+
+describe("requireActorAuth — always the caller's own rows", () => {
+  it("works under a session switch and answers as the caller", async () => {
+    signedInCookie(OWNER);
+    liveGrant();
+
+    const ctx = await requireActorAuth();
+    expect(ctx.user.id).toBe(DELEGATE);
+    // The switcher, the banner and the "whose records may I open" list all run
+    // while switched, and every one of them is about the delegate.
+    expect(prisma.accountGrant.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("refuses a Bearer selector loudly", async () => {
+    signedInBearer();
+    selector(OWNER);
+    liveGrant();
+
+    await expect(requireActorAuth()).rejects.toMatchObject({
+      errorCode: "sharing.not_permitted",
+      statusCode: 403,
+    });
+    expect(sharingAuditCalls()[0][1]).toMatchObject({
+      details: expect.objectContaining({ reason: "actor_surface" }),
+    });
+  });
+
+  it("refuses a selector on the cookie transport too", async () => {
+    signedInCookie(null);
+    selector(OWNER);
+    await expect(requireActorAuth()).rejects.toMatchObject({
+      errorCode: "sharing.not_permitted",
+    });
+  });
+});
+
+describe("requireRecordAuth — substitution", () => {
+  it("substitutes the owner as the data scope and keeps the delegate as actor", async () => {
+    signedInCookie(OWNER);
+    const grant = liveGrant();
+
+    const resolved: RecordAuthContext = await resolveInRoute(() =>
+      requireRecordAuth("read"),
+    );
+    expect(resolved.user.id).toBe(OWNER);
+    expect(resolved.actor.id).toBe(DELEGATE);
+    expect(resolved.grantId).toBe(grant.id);
+  });
+
+  it("substitutes over the Bearer selector as well", async () => {
+    signedInBearer();
+    selector(OWNER);
+    liveGrant();
+
+    const resolved = await resolveInRoute(() => requireRecordAuth("read"));
+    expect(resolved.user.id).toBe(OWNER);
+    expect(resolved.actor.id).toBe(DELEGATE);
+  });
+
+  it("names the acting account on the wide event without moving the actor", async () => {
+    signedInCookie(OWNER);
+    liveGrant();
+
+    await route(() => requireRecordAuth("read"))();
+    expect(lastEvent().auth?.user_id).toBe(DELEGATE);
+    expect(lastEvent().auth?.acting_as).toBe(OWNER);
+  });
+
+  it("stamps the grant as used without making the read wait on it", async () => {
+    signedInCookie(OWNER);
+    const grant = liveGrant();
+
+    await resolveInRoute(() => requireRecordAuth("read"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(touched).toEqual([grant.id]);
+  });
+});
+
+describe("requireRecordAuth — every way a grant can fail", () => {
+  const refused = async (): Promise<Response> => {
+    const response = await route(() => requireRecordAuth("read"))();
+    expect(response.status).toBe(403);
+    expect((await response.clone().json()).meta.errorCode).toBe(
+      "sharing.access.denied",
+    );
+    return response;
+  };
+
+  it("refuses a pending invitation", async () => {
+    signedInCookie(OWNER);
+    liveGrant({ acceptedAt: null });
+    await refused();
+  });
+
+  it("refuses a revoked grant", async () => {
+    signedInCookie(OWNER);
+    liveGrant({ revokedAt: new Date(Date.now() - 1000) });
+    await refused();
+  });
+
+  it("refuses an expired grant", async () => {
+    signedInCookie(OWNER);
+    liveGrant({ expiresAt: new Date(Date.now() - 1000) });
+    await refused();
+  });
+
+  it("refuses a grant made to somebody else", async () => {
+    signedInCookie(OWNER);
+    liveGrant({ granteeId: "other-delegate" });
+    await refused();
+  });
+
+  it("refuses a write method under a read grant", async () => {
+    signedInCookie(OWNER);
+    liveGrant();
+
+    const response = await route(() => requireRecordAuth("read"))("POST");
+    expect(response.status).toBe(403);
+    expect((await response.json()).meta.errorCode).toBe(
+      "sharing.access.denied",
+    );
+  });
+
+  it("refuses a declared write under a read grant", async () => {
+    signedInCookie(OWNER);
+    liveGrant();
+
+    const response = await route(() => requireRecordAuth("write"))();
+    expect(response.status).toBe(403);
+  });
+
+  it("admits a write method once the grant says WRITE", async () => {
+    // v1 never writes a WRITE row, so this arm is reached by the data rather
+    // than by a special case — which is what makes v2 enforcement work instead
+    // of a rewrite.
+    signedInCookie(OWNER);
+    liveGrant({ access: "WRITE" });
+
+    const response = await route(() => requireRecordAuth("write"))("POST");
+    expect(response.status).toBe(200);
+  });
+
+  it("refuses when the method cannot be known", async () => {
+    // Outside an event context there is no method to check, so we cannot prove
+    // the request is a read. Same fail-closed posture as the MCP audience
+    // guard.
+    signedInCookie(OWNER);
+    liveGrant();
+    await expect(requireRecordAuth("read")).rejects.toMatchObject({
+      errorCode: "sharing.access.denied",
+    });
+  });
+
+  it("refuses a selector too long to name an account, without querying", async () => {
+    signedInBearer();
+    selector("x".repeat(65));
+    await expect(requireRecordAuth("read")).rejects.toMatchObject({
+      errorCode: "sharing.access.denied",
+    });
+    expect(prisma.accountGrant.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("refuses a selector sent over the cookie transport", async () => {
+    signedInCookie(null);
+    selector(OWNER);
+    liveGrant();
+    await expect(requireRecordAuth("read")).rejects.toMatchObject({
+      errorCode: "sharing.not_permitted",
+    });
+  });
+
+  it("refuses when the owner row is gone under a surviving grant", async () => {
+    signedInCookie(OWNER);
+    liveGrant();
+    userRows.delete(OWNER);
+    await refused();
+    expect(sharingAuditCalls()[0][1]).toMatchObject({
+      details: expect.objectContaining({ reason: "owner_missing" }),
+    });
+  });
+});
+
+describe("refusals do not enumerate", () => {
+  it("answers identically for an account that does not exist and one that granted nothing", async () => {
+    signedInBearer();
+    selector("no-such-account-at-all");
+    const missing = await route(() => requireRecordAuth("read"))();
+    const missingBody = await missing.text();
+
+    vi.clearAllMocks();
+    headerJar.clear();
+    signedInBearer();
+    // An account that exists, has a session, has data, and simply never
+    // granted this caller anything.
+    userRows.set("real-stranger", user("real-stranger"));
+    selector("real-stranger");
+    const present = await route(() => requireRecordAuth("read"))();
+    const presentBody = await present.text();
+
+    expect(missing.status).toBe(present.status);
+    // Bytes, not statuses. A difference of one word here is an account
+    // enumeration oracle for anyone holding a login.
+    expect(missingBody).toBe(presentBody);
+  });
+
+  it("answers identically for a revoked grant and a grant that never existed", async () => {
+    signedInBearer();
+    selector(OWNER);
+    liveGrant({ revokedAt: new Date(Date.now() - 1000) });
+    const revoked = await route(() => requireRecordAuth("read"))();
+    const revokedBody = await revoked.text();
+
+    vi.clearAllMocks();
+    headerJar.clear();
+    grantRows.length = 0;
+    signedInBearer();
+    selector(OWNER);
+    const never = await route(() => requireRecordAuth("read"))();
+
+    expect(revokedBody).toBe(await never.text());
+  });
+
+  it("keeps the reason off the wire and on the audit row", async () => {
+    signedInBearer();
+    selector(OWNER);
+    liveGrant({ expiresAt: new Date(Date.now() - 1000) });
+
+    const body = await (await route(() => requireRecordAuth("read"))()).text();
+    expect(body).not.toContain("expire");
+    expect(body).not.toContain("grant");
+    expect(sharingAuditCalls()[0][1]).toMatchObject({
+      details: expect.objectContaining({ reason: "no_active_grant" }),
+    });
+  });
+});
+
+describe("the cookie-only helpers stay out of reach of a switch", () => {
+  it("resolves requireAdmin against the actor, never the account being acted on", async () => {
+    signedInCookie(OWNER, "ADMIN");
+    liveGrant();
+    userRows.set(OWNER, user(OWNER, "USER"));
+
+    const ctx = await requireAdmin();
+    // The role came off the caller's row. Switching into somebody's record
+    // must confer nothing, and switching out of an admin's must take nothing
+    // away.
+    expect(ctx.user.id).toBe(DELEGATE);
+  });
+
+  it("resolves requireCookieAuth against the actor", async () => {
+    signedInCookie(OWNER);
+    liveGrant();
+    const ctx = await requireCookieAuth();
+    expect(ctx.user.id).toBe(DELEGATE);
+  });
+
+  it("resolves requireFreshMfa against the actor", async () => {
+    signedInCookie(OWNER);
+    liveGrant();
+    vi.mocked(getSession).mockResolvedValue({
+      session: {
+        id: "session-1",
+        expiresAt: new Date(Date.now() + 3_600_000),
+        actingAsUserId: OWNER,
+      },
+      user: {
+        ...user(DELEGATE),
+        totpConfirmedAt: new Date(Date.now() - 86_400_000),
+      } as never,
+    });
+    vi.mocked(prisma.session.findUnique).mockResolvedValue({
+      mfaVerifiedAt: new Date(),
+    } as never);
+
+    const ctx = await requireFreshMfa(300);
+    expect(ctx.user.id).toBe(DELEGATE);
+  });
+});
