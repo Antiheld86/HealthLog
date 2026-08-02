@@ -34,6 +34,7 @@ export function GrantInviteCard() {
   const { t } = useTranslations();
   const invite = useInviteGrant();
   const [identifier, setIdentifier] = useState("");
+  const [expiresOn, setExpiresOn] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [invited, setInvited] = useState<string | null>(null);
 
@@ -44,10 +45,11 @@ export function GrantInviteCard() {
     setError(null);
     setInvited(null);
     invite.mutate(
-      { identifier: value, expiresAt: null },
+      { identifier: value, expiresAt: endOfDayIso(expiresOn) },
       {
         onSuccess: (grant) => {
           setIdentifier("");
+          setExpiresOn("");
           setInvited(grant.account.username);
         },
         onError: (err) => setError(t(inviteErrorKey(err))),
@@ -80,6 +82,22 @@ export function GrantInviteCard() {
             {t("recordSharing.invite.identifierHint")}
           </p>
         </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="grant-invite-expires">
+            {t("recordSharing.invite.expiresLabel")}
+          </Label>
+          <Input
+            id="grant-invite-expires"
+            data-slot="grant-invite-expires"
+            type="date"
+            value={expiresOn}
+            min={tomorrowIso()}
+            onChange={(e) => setExpiresOn(e.target.value)}
+          />
+          <p className="text-muted-foreground text-xs">
+            {t("recordSharing.invite.expiresHint")}
+          </p>
+        </div>
         <Button
           type="submit"
           data-slot="grant-invite-submit"
@@ -102,6 +120,29 @@ export function GrantInviteCard() {
       </form>
     </SettingsCard>
   );
+}
+
+/**
+ * The chosen day, as the instant access stops.
+ *
+ * A date input yields a bare `YYYY-MM-DD`, and the grant's `expiresAt` is
+ * checked live against `now` on every request. Anchoring at the END of the
+ * chosen day in the browser's own zone is what makes "until the 30th" mean the
+ * 30th rather than the midnight that starts it, which is the reading anybody
+ * picking a date has in mind. Empty means no lapse date, which is the default
+ * and stays the common case.
+ */
+export function endOfDayIso(day: string): string | null {
+  if (day.length === 0) return null;
+  const end = new Date(`${day}T23:59:59.999`);
+  return Number.isNaN(end.getTime()) ? null : end.toISOString();
+}
+
+/** The earliest day worth offering: a grant that lapses today confers nothing. */
+function tomorrowIso(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 /**

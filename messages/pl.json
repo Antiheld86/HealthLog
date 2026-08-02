@@ -9424,6 +9424,8 @@
       "identifierLabel": "Nazwa użytkownika lub e-mail",
       "identifierPlaceholder": "Nazwa, którą się loguje",
       "identifierHint": "Ta osoba potrzebuje konta na tej instancji. Nie można wysłać zaproszenia na niezarejestrowany adres.",
+      "expiresLabel": "Dostęp kończy się (opcjonalnie)",
+      "expiresHint": "Zostaw puste, aby dostęp trwał, dopóki ktoś go nie zakończy. Data jest sprawdzana przy każdym żądaniu, więc dostęp kończy się sam z końcem tego dnia.",
       "submit": "Wyślij zaproszenie",
       "submitting": "Wysyłanie…",
       "sent": "Zaproszenie wysłane do {name}.",

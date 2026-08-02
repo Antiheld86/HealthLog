@@ -9424,6 +9424,8 @@
       "identifierLabel": "Username or e-mail",
       "identifierPlaceholder": "The name they sign in with",
       "identifierHint": "They need an account on this instance. Invitations cannot be sent to an e-mail address that has not registered.",
+      "expiresLabel": "Access ends on (optional)",
+      "expiresHint": "Leave this empty for access that lasts until somebody ends it. A date here is checked on every request, so access stops on its own at the end of that day.",
       "submit": "Send invitation",
       "submitting": "Sending…",
       "sent": "Invitation sent to {name}.",
