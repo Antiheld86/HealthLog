@@ -90,6 +90,18 @@ export class WideEventBuilder {
     return this;
   }
 
+  /**
+   * v1.36.0 — record that this request acted on another account's record.
+   *
+   * Merges rather than replaces, because the actor identity is already on the
+   * event by the time the acting account is resolved and overwriting it is the
+   * exact confusion the two fields exist to prevent.
+   */
+  setActingAs(userId: string): this {
+    this.event.auth = { ...(this.event.auth ?? {}), acting_as: userId };
+    return this;
+  }
+
   setAction(action: WideEvent["action"]): this {
     this.event.action = action;
     return this;

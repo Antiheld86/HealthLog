@@ -58,6 +58,14 @@ export interface WideEvent {
       | "cron_secret"
       | "telegram_webhook"
       | "webhook_secret";
+    /**
+     * v1.36.0 — the account whose record this request read or wrote, when it
+     * is not the caller's own. `user_id` above always stays the ACTOR: the
+     * person who authenticated. Two fields rather than one swapped field,
+     * because "who did it" and "whose record" are different questions and a
+     * dashboard that conflates them cannot answer either.
+     */
+    acting_as?: string;
   };
 
   // Business-Daten (was wurde getan)

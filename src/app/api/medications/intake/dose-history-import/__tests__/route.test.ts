@@ -59,6 +59,11 @@ import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 const SESSION_OK = {
+  session: {
+    id: "session-1",
+    expiresAt: new Date(Date.now() + 3_600_000),
+    actingAsUserId: null,
+  },
   user: { id: "user-1", username: "owner", role: "USER", email: null },
 };
 

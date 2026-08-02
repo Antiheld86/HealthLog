@@ -77,7 +77,11 @@ function postReq(fields: Record<string, string>): Request {
 
 function signedIn() {
   vi.mocked(getSession).mockResolvedValue({
-    session: { id: "s1", expiresAt: new Date(Date.now() + 1e6) },
+    session: {
+      id: "s1",
+      expiresAt: new Date(Date.now() + 1e6),
+      actingAsUserId: null,
+    },
     user: { id: "user-1" } as never,
   });
 }

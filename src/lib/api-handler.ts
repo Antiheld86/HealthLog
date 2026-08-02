@@ -22,6 +22,12 @@ import { hashToken } from "./auth/hmac";
 import { AssistantDisabledError } from "./feature-flags";
 import { ConsentRequiredError } from "./ai/consent-guard";
 import { SCOPE_HEALTH_READ, SCOPE_HEALTH_WRITE } from "./mcp/oauth/config";
+import {
+  findActiveGrant,
+  grantAllows,
+  touchGrantUsage,
+  type GrantNeed,
+} from "./sharing/grants";
 
 /**
  * HTTP methods a read-only credential may use on the REST surface. A request
@@ -64,6 +70,63 @@ export class HttpError extends Error {
   ) {
     super(message);
     this.name = "HttpError";
+  }
+}
+
+/**
+ * v1.36.0 — the two refusals the acting-account resolver can raise.
+ *
+ * Both are 403 with a stable `meta.errorCode`, the same envelope shape the
+ * step-up and consent gates already use, so a client branches on the code
+ * rather than on prose.
+ */
+export abstract class SharingAuthError extends HttpError {
+  abstract readonly errorCode: string;
+}
+
+/**
+ * "You may not act as that account."
+ *
+ * Deliberately parameterless. The message is a fixed literal and the
+ * constructor takes no arguments, so there is no way for a caller to vary the
+ * response — which is what makes a selector naming an account that does not
+ * exist and one naming an account that granted nothing produce the SAME BYTES.
+ * That is not a formatting nicety: a distinguishable refusal turns this
+ * endpoint into an account-enumeration oracle for anyone with a login.
+ *
+ * The indistinguishability is structural rather than careful, too. Neither
+ * branch ever looks an account up: the resolver asks the grant table for the
+ * (owner, delegate) pair and a missing account and a missing grant are the
+ * same empty result, on the same code path, after the same one query.
+ *
+ * Why the reason is not in the response at all: the caller already knows what
+ * they sent, and the only party who benefits from knowing WHICH condition
+ * failed is someone probing. The reason goes to the audit row and the wide
+ * event, where the owner and the operator can see it.
+ */
+export class SharingAccessDeniedError extends SharingAuthError {
+  readonly errorCode = "sharing.access.denied";
+  constructor() {
+    super(403, "Account access denied");
+    this.name = "SharingAccessDeniedError";
+  }
+}
+
+/**
+ * "This endpoint does not act on another account's record."
+ *
+ * A different fact from the one above and so a different code: nothing here is
+ * about whether a grant exists. The route simply never declared that it can be
+ * used under a switch, so it refuses rather than quietly serving the caller's
+ * OWN record — which is the reverse data-mixing failure, and the reason this
+ * class exists at all. A delegate who believes they are reading the owner's
+ * record must never be handed their own instead.
+ */
+export class SharingNotPermittedError extends SharingAuthError {
+  readonly errorCode = "sharing.not_permitted";
+  constructor() {
+    super(403, "This endpoint cannot be used while acting on another account");
+    this.name = "SharingNotPermittedError";
   }
 }
 
@@ -247,6 +310,21 @@ export function apiHandler<T extends (...args: any[]) => Promise<Response>>(
             },
             { status: error.statusCode },
           );
+        } else if (error instanceof SharingAuthError) {
+          // v1.36.0 — the acting-account resolver refused. Same
+          // 403 + meta.errorCode envelope as the gates above, so a client
+          // distinguishes "you may not act as that account" from "this
+          // endpoint does not support acting on one" without parsing prose.
+          // Checked before the generic HttpError branch because it extends it.
+          evt.setError(error);
+          response = NextResponse.json(
+            {
+              data: null,
+              error: error.message,
+              meta: { errorCode: error.errorCode },
+            },
+            { status: error.statusCode },
+          );
         } else if (error instanceof HttpError) {
           evt.setError(error);
           response = NextResponse.json(
@@ -292,7 +370,21 @@ export function apiHandler<T extends (...args: any[]) => Promise<Response>>(
  * to a Session row.
  */
 export type AuthContext = {
-  session: { id: string; expiresAt: Date };
+  session: {
+    id: string;
+    expiresAt: Date;
+    /**
+     * v1.36.0 — the cookie transport's acting-account carrier, straight off
+     * the session row. Absent on the Bearer path, which has no session row and
+     * carries its selector in a per-request header instead.
+     *
+     * Optional so that the ~180 test files which hand `requireAuth` a
+     * hand-built session context keep compiling; an absent field means the
+     * same thing as a null one — no switch. Only the acting-account resolver
+     * below reads it.
+     */
+    readonly actingAsUserId?: string | null;
+  };
   user: User;
   /**
    * Transport the caller authenticated with, derived from the SAME branch that
@@ -313,6 +405,22 @@ export type AuthContext = {
  *   2. No cookie + `Authorization: Bearer hlk_<...>` → API token path.
  *   3. Neither → 401.
  *
+ * v1.36.0 — and it REFUSES to run while the request is acting on another
+ * account. A bare `requireAuth()` is an undeclared route: nobody has decided
+ * whether it is safe under a switch, and the routes that call it include the
+ * password change, the MFA management surface, the token mint, and the
+ * integration connect. So a request carrying an acting-account carrier gets a
+ * 403 `sharing.not_permitted` here, and never a silent fall-back to the
+ * caller's own record.
+ *
+ * The fall-back is the tempting wrong answer and is worth naming: it looks
+ * harmless, it keeps every un-migrated route working, and it is the reverse
+ * data-mixing failure. A delegate reading what they believe is the owner's
+ * record would be shown their own; a delegate writing what they believe is the
+ * owner's measurement would write it into theirs. An inaccessible route is an
+ * inconvenience. A route that answers with the wrong person's health record is
+ * the product being wrong about the only thing it does.
+ *
  * @param requiredPermission Optional permission scope. Only enforced for Bearer
  *   auth — cookie sessions always pass (full user access). Omitting it is a
  *   positive declaration: the route accepts cookie sessions and cookie-
@@ -322,6 +430,25 @@ export type AuthContext = {
  *   HttpError(403).
  */
 export async function requireAuth(
+  requiredPermission?: string,
+): Promise<AuthContext> {
+  const auth = await authenticateCaller(requiredPermission);
+  const carrier = await readActingCarrier(auth);
+  if (carrier.kind !== "none") {
+    throw refuseUndeclaredMode(auth, carrier);
+  }
+  return auth;
+}
+
+/**
+ * Resolve the caller as themselves. The pre-v1.36.0 `requireAuth` body,
+ * unchanged, split out so the three declared modes above it can share it.
+ *
+ * This function knows nothing about acting accounts and must not learn: it is
+ * the thing every mode agrees on before they disagree about what the request
+ * is allowed to reach.
+ */
+async function authenticateCaller(
   requiredPermission?: string,
 ): Promise<AuthContext> {
   // 1. Session cookie path — unchanged.
@@ -466,10 +593,312 @@ async function authenticateBearer(
   };
 }
 
+// ── The acting-account resolver ─────────────────────────────────────────────
+//
+// One function decides, for every transport, whether this request acts on
+// somebody else's record — the same argument that put `resolveBearerToken` in
+// one file for two wires. Two carriers converge here because they are two
+// answers to one question, and two answers that live apart drift.
+//
+// Neither carrier authorises anything. Both merely NAME an account; the grant
+// table decides, on this request, with no cached verdict anywhere. The
+// difference between them is who can set them:
+//
+//   * The cookie transport carries it on the session ROW (`actingAsUserId`).
+//     A browser cannot address that row — the cookie holds a secret whose hash
+//     is the lookup key — so the value is server state, written only by the
+//     switch endpoint after it has validated the grant.
+//   * The Bearer transport carries it in a per-request HEADER. A long-lived
+//     token must not accumulate switch state: stamping it on the ApiToken row
+//     would make the credential itself ambient authority, and the token has to
+//     keep meaning "this person" for as long as it exists.
+//
+// The header is a Bearer-only carrier. On a cookie request it is refused, not
+// ignored — a client that sends a selector over a transport that does not read
+// one believes it is selecting an account and is not, and the failure of that
+// belief is a support case about data that looks wrong.
+
+/**
+ * The per-request account selector, on the Bearer transport only.
+ *
+ * Cross-origin JavaScript cannot set it: a custom request header forces a CORS
+ * preflight and this app sends no CORS headers at all, so the preflight is
+ * never answered. It is a selector regardless — the grant table is what
+ * authorises, and the header is treated as hostile input everywhere below.
+ */
+export const ACCOUNT_SELECTOR_HEADER = "x-healthlog-account";
+
+/**
+ * Longest selector value worth a database round trip. Account ids are 25-char
+ * cuids; anything past this names no account that could exist and is refused
+ * as such, on the same path and with the same bytes as an unknown account.
+ */
+const MAX_SELECTOR_LENGTH = 64;
+
+/**
+ * What, if anything, this request says it is acting as.
+ *
+ * `misplaced-header` is its own case rather than an error thrown at read time
+ * so that every mode below decides for itself — the modes disagree about the
+ * session carrier and must not disagree about this one by accident.
+ */
+type ActingCarrier =
+  | { kind: "none" }
+  | { kind: "session"; accountId: string }
+  | { kind: "header"; accountId: string }
+  | { kind: "misplaced-header" };
+
+/** The selector header, or null when the request did not send one. */
+async function readSelectorHeader(): Promise<string | null> {
+  try {
+    const headerList = await headers();
+    return headerList.get(ACCOUNT_SELECTOR_HEADER);
+  } catch {
+    // Outside a Next.js request scope (direct unit invocation of a legacy
+    // route) there is no header to read. Same posture as the Bearer branch of
+    // `authenticateCaller`.
+    return null;
+  }
+}
+
+/**
+ * The acting-account carrier for this request.
+ *
+ * The session value rides out of `getSession()` on the row that call already
+ * loaded — a second query for a column we have just read would be waste on
+ * every cookie request in the app. What does NOT ride out of `getSession()` is
+ * a substituted user: it keeps answering "who is calling" and nothing else,
+ * which is exactly why `requireAdmin`, `requireCookieAuth` and
+ * `requireFreshMfa` are unreachable by a switch. The carrier is an id to be
+ * checked, not a decision that has been made.
+ *
+ * Fresh on every request, by construction: `getSession()` reads the row from
+ * Postgres each time, so a switch cleared by a revocation is gone from the very
+ * next request rather than from the next login.
+ */
+async function readActingCarrier(auth: AuthContext): Promise<ActingCarrier> {
+  const header = await readSelectorHeader();
+
+  if (auth.authMethod === "bearer") {
+    // No session row exists on this transport, so the header is the only
+    // carrier there could be.
+    return header === null
+      ? { kind: "none" }
+      : { kind: "header", accountId: header };
+  }
+
+  if (header !== null) return { kind: "misplaced-header" };
+
+  const stamped = auth.session.actingAsUserId ?? null;
+  return stamped === null
+    ? { kind: "none" }
+    : { kind: "session", accountId: stamped };
+}
+
+/** Could this value name an account at all? */
+function selectorNamesAnAccount(value: string): boolean {
+  return value.length > 0 && value.length <= MAX_SELECTOR_LENGTH;
+}
+
+/** The account a carrier names, or null when it names nothing. */
+function carrierTarget(carrier: ActingCarrier): string | null {
+  return "accountId" in carrier ? carrier.accountId : null;
+}
+
+/**
+ * Record a refused delegation.
+ *
+ * Written for the OWNER's benefit as much as the operator's: "someone tried to
+ * open my record and was turned away" is the question the sharing panel exists
+ * to answer. The row names the actor (the caller), the account they aimed at,
+ * and why it failed — none of which reaches the response.
+ *
+ * Fire-and-forget: an audit write that fails must not convert a 403 into a 500,
+ * because the 403 is the part that protects the record.
+ */
+function auditRefusal(
+  auth: AuthContext,
+  carrier: ActingCarrier,
+  reason: string,
+): void {
+  auditLog("sharing.access.denied", {
+    userId: auth.user.id,
+    details: {
+      reason,
+      carrier: carrier.kind,
+      target: carrierTarget(carrier),
+      method: getEvent()?.getHttpMethod() ?? null,
+    },
+  }).catch(() => {});
+}
+
+/**
+ * This request says it is acting on another account and this route will not.
+ *
+ * Two ways to arrive: a route that never declared a mode (`undeclared_mode`),
+ * and a selector sent over the transport that does not carry one
+ * (`misplaced_selector`). One response either way — the caller learns that the
+ * request will not be served, and nothing about grants.
+ *
+ * The audit rule, stated once because it is a judgement call: a HEADER refusal
+ * always writes a row, a SESSION refusal never does. The header is a per-request
+ * assertion by a client — a bug or a probe, and both are worth a durable record.
+ * The session field is ambient browser state: while a switch is on, every
+ * navigation, prefetch and poll that touches a non-delegable route lands here,
+ * and a row per such request would bury the header rows that matter under noise
+ * from the feature working as designed. Both are on the wide event either way.
+ */
+function refuseUndeclaredMode(
+  auth: AuthContext,
+  carrier: ActingCarrier,
+  reason: "undeclared_mode" | "misplaced_selector" = "undeclared_mode",
+): SharingNotPermittedError {
+  annotate({ meta: { sharing_refusal: reason } });
+  if (carrier.kind !== "session") {
+    auditRefusal(auth, carrier, reason);
+  }
+  return new SharingNotPermittedError();
+}
+
+/**
+ * v1.36.0 — an actor surface: this route always serves the CALLER's own rows.
+ *
+ * It works under a switch. That is the whole reason the mode exists: the
+ * switcher itself, the banner, and the "which records may I open" list all have
+ * to keep answering while the browser is acting as someone else, and every one
+ * of them is about the delegate. So the session carrier is read and
+ * deliberately ignored — no query, because there is nothing the answer could
+ * change.
+ *
+ * A selector HEADER is refused, loudly. An actor surface is DEFINED as serving
+ * the caller's own rows, so a client that attaches a selector to one has a bug,
+ * and the bug is invisible until somebody files a support ticket about data
+ * that looks wrong. Ignoring the header would serve exactly the right response
+ * to exactly the wrong expectation.
+ */
+export async function requireActorAuth(): Promise<AuthContext> {
+  const auth = await authenticateCaller();
+  const header = await readSelectorHeader();
+  if (header !== null) {
+    annotate({ meta: { sharing_refusal: "actor_surface" } });
+    auditRefusal(auth, { kind: "header", accountId: header }, "actor_surface");
+    throw new SharingNotPermittedError();
+  }
+  return auth;
+}
+
+/**
+ * A request resolved against a record that may not be the caller's own.
+ *
+ * `user` is the account whose rows the handler must read and write — so an
+ * existing `where: { userId: user.id }` is correct without being touched, which
+ * is what keeps a route migration a one-line change instead of an audit.
+ * `actor` is who is actually here. They are the same object when no switch is
+ * active.
+ */
+export interface RecordAuthContext extends AuthContext {
+  /** The authenticated caller. Equals `user` when the caller acts as themselves. */
+  readonly actor: User;
+  /** The grant being exercised, or null when the caller acts as themselves. */
+  readonly grantId: string | null;
+}
+
+/**
+ * v1.36.0 — a delegable surface: this route may act on a shared record.
+ *
+ * Calling it is a DECLARATION, reviewed and frozen by a structural guard, that
+ * the route reads or writes health data and nothing else — no credential, no
+ * integration, no notification channel, no grant management, nothing that would
+ * let a delegate extend their own reach. The declaration is the security
+ * property; this function only enforces what was declared.
+ *
+ * @param need what the route does to the record. `"read"` still refuses a
+ *   non-safe HTTP method under a read-only grant: the declaration and the
+ *   method must BOTH be satisfiable, so a delegable GET handler that grows a
+ *   POST export cannot quietly inherit the read grant's permission. An unknown
+ *   method (no event context) counts as a write and is refused, the same
+ *   fail-closed posture as the MCP audience guard above.
+ */
+export async function requireRecordAuth(
+  need: GrantNeed,
+): Promise<RecordAuthContext> {
+  const auth = await authenticateCaller();
+  const carrier = await readActingCarrier(auth);
+
+  if (carrier.kind === "none") {
+    // Do no harm: without a carrier this is byte-for-byte the pre-v1.36.0
+    // request, resolved by the same `authenticateCaller` every other mode uses.
+    return { ...auth, actor: auth.user, grantId: null };
+  }
+  if (carrier.kind === "misplaced-header") {
+    // The route DID declare a mode; the client sent the selector over the
+    // cookie transport, where the carrier is the session row.
+    throw refuseUndeclaredMode(auth, carrier, "misplaced_selector");
+  }
+
+  /** Every refusal below is this one error, with the reason kept off the wire. */
+  const denied = (reason: string): SharingAccessDeniedError => {
+    annotate({ meta: { sharing_refusal: reason } });
+    auditRefusal(auth, carrier, reason);
+    return new SharingAccessDeniedError();
+  };
+
+  if (!selectorNamesAnAccount(carrier.accountId)) {
+    throw denied("malformed_selector");
+  }
+
+  const method = (getEvent()?.getHttpMethod() ?? "").toUpperCase();
+  const effectiveNeed: GrantNeed =
+    need === "write" || !READ_HTTP_METHODS.has(method) ? "write" : "read";
+
+  // Loaded here, on this request, every request. Not memoised on the session,
+  // not cached in the process, not carried on the token: a revocation has to
+  // land on the delegate's NEXT request, not on their next login. That is the
+  // one property the owner is actually promised when they press revoke.
+  //
+  // Note what is NOT looked up: the account named by the carrier. An account
+  // that does not exist and an account that granted nothing produce the same
+  // empty row from the same query, which is what makes the two refusals
+  // identical in bytes and in timing rather than identical by careful wording.
+  const grant = await findActiveGrant({
+    grantorId: carrier.accountId,
+    granteeId: auth.user.id,
+  });
+  if (!grant) throw denied("no_active_grant");
+  if (!grantAllows(grant, effectiveNeed)) throw denied("insufficient_access");
+
+  const owner = await prisma.user.findUnique({
+    where: { id: grant.grantorId },
+  });
+  // Unreachable while the FK cascade holds — a grant naming a deleted account
+  // is deleted with it. Fail closed anyway: an authorization we cannot resolve
+  // to a person is not one to act on.
+  if (!owner) throw denied("owner_missing");
+
+  getEvent()?.setActingAs(owner.id);
+  // Fire-and-forget, the `ApiToken.lastUsedAt` posture: the read must not wait
+  // on the bookkeeping, and the bookkeeping failing must not fail the read.
+  void touchGrantUsage(grant.id);
+
+  return {
+    session: auth.session,
+    user: owner,
+    authMethod: auth.authMethod,
+    actor: auth.user,
+    grantId: grant.id,
+  };
+}
+
 /**
  * Require an authenticated admin user. Throws HttpError(401) or HttpError(403).
  * Cookie-only — Bearer tokens never elevate to admin (security boundary).
  * Automatically annotates the Wide Event with auth context.
+ *
+ * v1.36.0 — unreachable by a switch, structurally: it resolves through
+ * `getSession()`, which knows only who is calling, and the role is read off
+ * that row. Switching into an ADMIN's record therefore confers nothing, and
+ * making it confer something would take a deliberate edit here rather than an
+ * oversight elsewhere.
  */
 export async function requireAdmin(): Promise<AuthContext> {
   const sessionData = await getSession();
