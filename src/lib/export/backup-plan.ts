@@ -380,12 +380,16 @@ export const NOT_IN_BACKUP_MODELS: Readonly<Record<string, string>> = {
     "The backup catalogue itself. A backup that contains the list of backups is a recursion with no reader.",
   ImportJob:
     "A job record pointing at an uploaded file that the backup does not carry, so restoring it would resurrect a task with nothing to work on.",
+  InviteToken:
+    "The instance's registration ledger, minted by the operator rather than by the person, and already declared instance-scoped by the wipe plan. Restoring one account's backup must not re-open a registration code the operator retired, and the creator relation is the only thing that makes this look account-scoped at all. It surfaced here when the classification check learned to read a relation by type instead of by field name.",
   MedicationIntakeImportJob:
     "A job record pointing at an uploaded dose-history file that is not carried in the backup, so restoring the job would resurrect a task with nothing to work on.",
   TelegramPromptContext:
     "Records which reminder a Telegram reply refers to, keyed by a message id in one chat on one bot. Meaningless against any other chat, and the conversation it belongs to is not carried either.",
 
   // Sharing and outbound links.
+  AccountGrant:
+    "Live authorization over another person's health record. A backup is a snapshot of DATA, and rolling data back is a decision the owner's admin makes; rolling an authorization back is a decision nobody makes — the grant an owner revoked on Tuesday would come back alive out of Monday's file, silently, with no notification and nobody aware that access resumed. Every credential-shaped row in this file is excluded for that reason (ApiToken, TrustedDevice, StepUpElevation, UserKnownDevice) and a share link for the closest one (ClinicianShareLink). The cost is stated rather than hidden: after a disaster restore, sharing is OFF and the owner has to invite again and the delegate has to accept again. That is the fail-safe direction — access lost, never access resumed — and re-consenting after a restore is the correct amount of ceremony for handing someone your health record a second time.",
   ClinicianShareLink:
     "A live URL handed to a practice. Restoring it would resurrect a link the account may have revoked deliberately — and it points at a host that may not be this one.",
   ClinicianShareLinkDocument:

@@ -40,9 +40,16 @@ function schemaModels(): string[] {
 }
 
 /**
- * Models with no `userId` and no user relation are instance-scoped (queue
+ * Models with no `userId` and no relation to `User` are instance-scoped (queue
  * tables, rate-limit buckets, invite codes the operator issues). They are not
  * an account's data and the wipe plan already declares them as such.
+ *
+ * The relation check is on the TYPE, not on the field name. It used to require
+ * a field literally called `user`, which meant a model naming its account
+ * relations anything else — `grantor`/`grantee` on an account grant, say —
+ * read as instance-scoped and was excused from having a verdict at all. A
+ * guard that lets the newest table through is the shape of guard this file
+ * exists to prevent, so it reads the type.
  */
 function isUserScoped(model: string): boolean {
   const source = readFileSync(SCHEMA_PATH, "utf8");
@@ -52,7 +59,7 @@ function isUserScoped(model: string): boolean {
   ).exec(source);
   if (!block) return false;
   const body = block[1];
-  return /\buserId\b/.test(body) || /\buser\s+User\b/.test(body);
+  return /\buserId\b/.test(body) || /^\s*\w+\s+User(\[\]|\?)?\s/m.test(body);
 }
 
 describe("every schema model has a backup verdict", () => {
