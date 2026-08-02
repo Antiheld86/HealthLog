@@ -24,12 +24,15 @@
  *   1. **Every leg asserts its own matcher found something.** A matcher that
  *      matches nothing reports success, and this repository has shipped several
  *      of those — a resolver hidden behind a newline, a regex a variable slipped
- *      past, an absence asserted in a fixture that never held the thing. The
- *      frozen lists below start EMPTY, so "found nothing" and "the list is
- *      correct" look identical from the outside. Each leg therefore pins a
- *      separate, non-empty count: the number of route modules SCANNED, or the
- *      number of files naming a symbol the leg depends on. Those counts are the
- *      evidence; the empty result is only the verdict.
+ *      past, an absence asserted in a fixture that never held the thing. Legs
+ *      (c) and (d) still expect an EMPTY offender set, so for them "found
+ *      nothing" and "the list is correct" look identical from the outside.
+ *      Each leg therefore pins a separate, non-empty count: the number of
+ *      route modules SCANNED, or the number of files naming a symbol the leg
+ *      depends on. Those counts are the evidence; the empty result is only the
+ *      verdict. The delegable list itself was empty when this file was written
+ *      and is not any more, which removes the trap from legs (a) and (b) but
+ *      not from the two below them.
  *
  *   2. **AST decides, text only skips.** Membership is decided by parsing the
  *      module and reading its identifiers, so a comment explaining why a route
@@ -311,11 +314,31 @@ const DELEGABLE_ROUTES: Record<string, string> = {
   "app/api/cycle/cycles/route.ts":
     "The record's cycle history. The gate reads `user.gender` off the resolved record, which is the point: whether cycle tracking applies is a property of the record, not of whoever is looking at it.",
   "app/api/cycle/day-logs/route.ts":
-    "One day of the record's cycle log. The `auditLog(\"cycle.day-log.upsert\")` in this file belongs to the PUT, which keeps `requireAuth()`.",
+    'One day of the record\'s cycle log. The `auditLog("cycle.day-log.upsert")` in this file belongs to the PUT, which keeps `requireAuth()`.',
   "app/api/cycle/profile/route.ts":
     "The record's cycle profile, supplied by the gate itself. No query of its own.",
   "app/api/cycle/symptoms/custom/route.ts":
     "The record's own custom symptom vocabulary. The create arm carries the rate limit and keeps `requireAuth()`.",
+  "app/api/medications/route.ts":
+    "The record's medication cabinet. The cached list projection keys on the same resolved id it scopes to, so the owner's cell holds the owner's data. Returns no ingest endpoint and no token count — the route that does is refused.",
+  "app/api/medications/[id]/route.ts":
+    "One medication of the record, fetch-then-guard against the resolved user before anything is serialised.",
+  "app/api/medications/[id]/cadence/route.ts":
+    "One medication's cadence, behind `assertMedicationOwnership(id, user.id)` — the shared guard, resolved against the record.",
+  "app/api/medications/[id]/schedule-revisions/route.ts":
+    "One medication's archived schedule eras, behind the same ownership guard. The create arm keeps `requireAuth()` and its compliance backfill with it.",
+  "app/api/medications/[id]/side-effects/route.ts":
+    "One medication's recorded side effects, behind the same ownership guard. The rate limit in this file belongs to the create arm.",
+  "app/api/medications/[id]/inventory/route.ts":
+    "One medication's inventory, behind the same ownership guard. The rate limit in this file belongs to the create arm.",
+  "app/api/medications/[id]/phase-config/route.ts":
+    "One medication's reminder phase config, behind the same ownership guard. The upsert arm keeps `requireAuth()`.",
+  "app/api/medications/[id]/intake/route.ts":
+    "One medication's intake history, behind the same ownership guard. The taking of a dose is a write and stays on `requireAuth()`.",
+  "app/api/medications/intake/route.ts":
+    "The account-wide intake list, scoped through the resolved user. Its cache cell keys on the same id it scopes to.",
+  "app/api/medications/compliance/route.ts":
+    "Batched compliance across the record's cabinet. The one delegable read that spends a quota, so its rate-limit bucket keys on the ACTOR: a delegate must burn their own allowance rather than lock the owner out, and must not collect a fresh one by switching records.",
 };
 
 /**
@@ -339,7 +362,7 @@ const ACTOR_ROUTES: Record<string, string> = {
  * a formality by accident: every addition has to be counted here as well as
  * listed above, which is one more place a careless admission has to pass.
  */
-const FROZEN_ENTRY_COUNT = 35;
+const FROZEN_ENTRY_COUNT = 45;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —
@@ -453,8 +476,8 @@ describe("the matchers see what they look for", () => {
   });
 
   it("the co-occurrence rule fires on a module that does both", () => {
-    // Leg (c) finds nothing on today's tree because nothing calls the record
-    // resolver yet. This is the shape it exists to catch, proved against the
+    // Leg (c) finds nothing on today's tree because no delegable module runs a
+    // role check. This is the shape it exists to catch, proved against the
     // same predicate the tree scan uses.
     const OFFENDER = `
       import { requireRecordAuth, requireAdmin } from "@/lib/api-handler";
@@ -530,11 +553,13 @@ describe("(a) the delegable route set is frozen", () => {
       "app/.well-known/oauth-protected-resource/route.ts",
     );
 
-    // Positive control for this leg's own matcher, and the reason it exists:
-    // while the frozen list is empty, "no route names the resolver" and "the
-    // matcher names nothing" are the same sentence. Neuter `identifiersIn` and
-    // the assertion below still passes; this one does not. `lib/api-handler.ts`
-    // is the guaranteed positive — it declares the symbol.
+    // Positive control for this leg's own matcher. It was written when the
+    // frozen list was empty and "no route names the resolver" and "the matcher
+    // names nothing" were the same sentence; the list is populated now, so the
+    // assertion below would catch a neutered matcher on its own. Kept anyway,
+    // because a future removal could empty the list again and the day that
+    // happens is not the day to rediscover this. `lib/api-handler.ts` is the
+    // guaranteed positive — it declares the symbol.
     expect(modulesNaming(["lib/api-handler.ts"], RECORD_RESOLVER)).toEqual([
       "lib/api-handler.ts",
     ]);
@@ -594,7 +619,7 @@ describe("(c) a record resolver never shares a module with a role or step-up che
 
     // This leg's own non-zero proof, and the one that matters most here: the
     // offender set is empty today whether or not the helper names are right,
-    // because nothing calls the record resolver yet. So each helper has to be
+    // because no delegable module runs a role check. So each helper has to be
     // findable in the very tree being scanned. Rename `requireAdmin` and this
     // fails, rather than the guard quietly checking for a symbol that no
     // longer exists.

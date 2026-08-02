@@ -72,9 +72,7 @@ vi.mock("@/lib/rollups/medication-compliance-rollups", () => ({
 
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 
-vi.mock("@/lib/auth/audit", () => ({
-  auditLog: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock("@/lib/auth/audit", () => ({ auditLog: vi.fn() }));
 
 vi.mock("@/lib/logging/transports", () => ({ emitIfSampled: vi.fn() }));
 
@@ -100,6 +98,7 @@ vi.mock("@/lib/notifications/medication-intake-sync", () => ({
 
 import { GET, POST } from "../route";
 import { queueMedicationIntakeSync } from "@/lib/notifications/medication-intake-sync";
+import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 
@@ -127,6 +126,10 @@ const ROUTE_PARAMS = { params: Promise.resolve({ id: "med-1" }) };
 
 beforeEach(() => {
   vi.resetAllMocks();
+  // v1.36.0 — the GET's validation breadcrumb goes through the `auditLog`
+  // helper, whose promise the route attaches a `.catch` to. `resetAllMocks`
+  // clears the factory's implementation, so it is restored here.
+  vi.mocked(auditLog).mockResolvedValue(undefined);
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
   vi.mocked(prisma.medication.findUnique).mockResolvedValue(MED_OK as never);
   vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue(
@@ -292,13 +295,19 @@ describe("v1.4.43 W6 — multi-issue 422 envelope", () => {
     await GET(makeRequest("status=junk"), ROUTE_PARAMS);
     await POST(postReq({ takenAt: "junk" }), ROUTE_PARAMS);
     await new Promise((r) => setTimeout(r, 5));
+    // v1.36.0 — the GET's breadcrumb goes through the `auditLog` helper (the
+    // only writer that stamps `actorUserId`); the POST's still writes the row
+    // directly, because that arm cannot be reached under a switch.
+    expect(auditLog).toHaveBeenCalledWith(
+      "medications.intake.list.validation-failed",
+      expect.objectContaining({ userId: "user-1" }),
+    );
     expect(prisma.auditLog.create).toHaveBeenCalled();
     const actions = vi
       .mocked(prisma.auditLog.create)
       .mock.calls.map(
         (c) => (c[0] as { data: { action: string } }).data.action,
       );
-    expect(actions).toContain("medications.intake.list.validation-failed");
     expect(actions).toContain("medications.intake.create.validation-failed");
   });
 

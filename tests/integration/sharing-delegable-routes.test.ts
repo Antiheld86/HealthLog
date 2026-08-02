@@ -1366,7 +1366,9 @@ describe("GET /api/cycle/profile", () => {
     const response = await call(GET as Handler, "/api/cycle/profile");
 
     expect(response.status).toBe(200);
-    expect((await body(response)).data).toMatchObject({ cycleTrackingEnabled: true });
+    expect((await body(response)).data).toMatchObject({
+      cycleTrackingEnabled: true,
+    });
   });
 
   it("refuses when the RECORD does not track a cycle, whatever the caller does", async () => {
@@ -1402,7 +1404,9 @@ describe("GET /api/cycle/profile", () => {
     const { GET } = await import("@/app/api/cycle/profile/route");
     const response = await call(GET as Handler, "/api/cycle/profile");
     expect(response.status).toBe(200);
-    expect((await body(response)).data).toMatchObject({ cycleTrackingEnabled: true });
+    expect((await body(response)).data).toMatchObject({
+      cycleTrackingEnabled: true,
+    });
   });
 });
 
@@ -1461,5 +1465,294 @@ describe("GET /api/cycle/day-logs and /api/cycle/symptoms/custom", () => {
     expect((await body(response)).data).toMatchObject({
       basalBodyTempC: 36.4,
     });
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Medications                                                                */
+/* -------------------------------------------------------------------------- */
+
+async function seedMedication(userId: string, name: string) {
+  const medication = await getPrismaClient().medication.create({
+    data: { userId, name, dose: "10mg" },
+  });
+  await getPrismaClient().medicationSchedule.create({
+    data: {
+      medicationId: medication.id,
+      windowStart: "08:00",
+      windowEnd: "10:00",
+    },
+  });
+  await getPrismaClient().medicationIntakeEvent.create({
+    data: {
+      userId,
+      medicationId: medication.id,
+      scheduledFor: new Date("2026-07-14T08:00:00Z"),
+      takenAt: new Date("2026-07-14T08:12:00Z"),
+    },
+  });
+}
+
+contract<string>("GET /api/medications", {
+  call: async () => {
+    const { GET } = await import("@/app/api/medications/route");
+    return call(GET as Handler, "/api/medications");
+  },
+  seed: seedMedication,
+  read: (payload: { name: string }[]) => payload.map((m) => m.name),
+  ownerMarker: "owner-statin",
+  delegateMarker: "delegate-statin",
+});
+
+/** Today's dose, so the `scope=today` window actually contains it. */
+async function seedTodaysDose(userId: string, name: string) {
+  const medication = await getPrismaClient().medication.create({
+    data: { userId, name, dose: "10mg" },
+  });
+  await getPrismaClient().medicationIntakeEvent.create({
+    data: {
+      userId,
+      medicationId: medication.id,
+      scheduledFor: new Date(),
+    },
+  });
+  return medication;
+}
+
+describe("GET /api/medications/intake", () => {
+  async function today(): Promise<Response> {
+    const { GET } = await import("@/app/api/medications/intake/route");
+    return call(GET as Handler, "/api/medications/intake?scope=today");
+  }
+
+  it("lists the owner's doses and none of the delegate's", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    const ownerMed = await seedTodaysDose(owner.id, "owner-statin");
+    const delegateMed = await seedTodaysDose(delegate.id, "delegate-statin");
+
+    const { grant } = await switchInto(owner.id, delegate.id);
+    const response = await today();
+    expect(response.status).toBe(200);
+    const ids = ((await body(response)).data as { medicationId: string }[]).map(
+      (e) => e.medicationId,
+    );
+    expect(ids).toContain(ownerMed.id);
+    expect(ids).not.toContain(delegateMed.id);
+
+    await revokeGrant(grant.id);
+    await expectDenied(await today());
+  });
+
+  it("refuses a caller who names a record they were never granted", async () => {
+    const owner = await makeUser("owner");
+    const stranger = await makeUser("stranger");
+    await seedTodaysDose(owner.id, "owner-statin");
+
+    const session = await signIn(stranger.id);
+    await getPrismaClient().session.update({
+      where: { id: session.id },
+      data: { actingAsUserId: owner.id },
+    });
+
+    await expectDenied(await today());
+  });
+
+  it("is unchanged for a caller who has not switched", async () => {
+    const plain = await makeUser("plain");
+    const med = await seedTodaysDose(plain.id, "plain-statin");
+    await signIn(plain.id);
+
+    const response = await today();
+    expect(response.status).toBe(200);
+    const ids = ((await body(response)).data as { medicationId: string }[]).map(
+      (e) => e.medicationId,
+    );
+    expect(ids).toContain(med.id);
+  });
+});
+
+describe("the per-medication reads", () => {
+  it("resolve the ownership guard against the record", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await seedMedication(owner.id, "owner-statin");
+    await seedMedication(delegate.id, "delegate-statin");
+    const ownerMed = await getPrismaClient().medication.findFirstOrThrow({
+      where: { userId: owner.id },
+    });
+    const delegateMed = await getPrismaClient().medication.findFirstOrThrow({
+      where: { userId: delegate.id },
+    });
+
+    const detail = await import("@/app/api/medications/[id]/route");
+    const cadence = await import("@/app/api/medications/[id]/cadence/route");
+    const revisions =
+      await import("@/app/api/medications/[id]/schedule-revisions/route");
+    const sideEffects =
+      await import("@/app/api/medications/[id]/side-effects/route");
+    const inventory =
+      await import("@/app/api/medications/[id]/inventory/route");
+    const phaseConfig =
+      await import("@/app/api/medications/[id]/phase-config/route");
+    const intake = await import("@/app/api/medications/[id]/intake/route");
+
+    const { grant } = await switchInto(owner.id, delegate.id);
+
+    const mine = await call(
+      detail.GET as Handler,
+      `/api/medications/${ownerMed.id}`,
+      { id: ownerMed.id },
+    );
+    expect(mine.status).toBe(200);
+    expect((await body(mine)).data).toMatchObject({ name: "owner-statin" });
+
+    // Every sibling reaches the owner's medication...
+    for (const route of [
+      cadence.GET,
+      revisions.GET,
+      sideEffects.GET,
+      inventory.GET,
+      phaseConfig.GET,
+      intake.GET,
+    ]) {
+      const response = await call(
+        route as Handler,
+        `/api/medications/${ownerMed.id}/sub`,
+        { id: ownerMed.id },
+      );
+      expect(response.status).toBe(200);
+    }
+
+    // ...and none of them reaches the delegate's own, because
+    // `assertMedicationOwnership` now asks about the record.
+    for (const route of [
+      detail.GET,
+      cadence.GET,
+      revisions.GET,
+      sideEffects.GET,
+      inventory.GET,
+      phaseConfig.GET,
+      intake.GET,
+    ]) {
+      const response = await call(
+        route as Handler,
+        `/api/medications/${delegateMed.id}/sub`,
+        { id: delegateMed.id },
+      );
+      expect(response.status).toBe(404);
+    }
+
+    await revokeGrant(grant.id);
+    for (const route of [detail.GET, cadence.GET, intake.GET]) {
+      await expectDenied(
+        await call(route as Handler, `/api/medications/${ownerMed.id}/sub`, {
+          id: ownerMed.id,
+        }),
+      );
+    }
+  });
+
+  it("are unchanged for a caller who has not switched", async () => {
+    const plain = await makeUser("plain");
+    await seedMedication(plain.id, "plain-statin");
+    const med = await getPrismaClient().medication.findFirstOrThrow({
+      where: { userId: plain.id },
+    });
+    await signIn(plain.id);
+
+    const detail = await import("@/app/api/medications/[id]/route");
+    const response = await call(
+      detail.GET as Handler,
+      `/api/medications/${med.id}`,
+      { id: med.id },
+    );
+    expect(response.status).toBe(200);
+    expect((await body(response)).data).toMatchObject({
+      name: "plain-statin",
+    });
+  });
+
+  it("refuses a caller who names a record they were never granted", async () => {
+    const owner = await makeUser("owner");
+    const stranger = await makeUser("stranger");
+    await seedMedication(owner.id, "owner-statin");
+    const med = await getPrismaClient().medication.findFirstOrThrow({
+      where: { userId: owner.id },
+    });
+
+    const session = await signIn(stranger.id);
+    await getPrismaClient().session.update({
+      where: { id: session.id },
+      data: { actingAsUserId: owner.id },
+    });
+
+    const detail = await import("@/app/api/medications/[id]/route");
+    await expectDenied(
+      await call(detail.GET as Handler, `/api/medications/${med.id}`, {
+        id: med.id,
+      }),
+    );
+  });
+});
+
+describe("GET /api/medications/compliance — the bucket follows the actor", () => {
+  it("spends the delegate's quota, not the owner's", async () => {
+    // The one delegable read that costs a quota. If the bucket keyed on the
+    // resolved user, a delegate could lock the owner out of their own
+    // cabinet, and could collect a fresh allowance by switching records. The
+    // rate_limits row is read from the table rather than inferred from a 429,
+    // because a key that is merely wrong still produces a 200.
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await seedMedication(owner.id, "owner-statin");
+
+    await switchInto(owner.id, delegate.id);
+    const { GET } = await import("@/app/api/medications/compliance/route");
+    const response = await call(GET as Handler, "/api/medications/compliance");
+    expect(response.status).toBe(200);
+
+    const keys = (
+      await getPrismaClient().rateLimit.findMany({
+        where: { key: { startsWith: "medication-compliance-summary:" } },
+      })
+    ).map((row) => row.key);
+    expect(keys).toEqual([`medication-compliance-summary:${delegate.id}`]);
+    expect(keys).not.toContain(`medication-compliance-summary:${owner.id}`);
+  });
+
+  it("still keys on the caller when nobody has switched", async () => {
+    const plain = await makeUser("plain");
+    await seedMedication(plain.id, "plain-statin");
+    await signIn(plain.id);
+
+    const { GET } = await import("@/app/api/medications/compliance/route");
+    expect(
+      (await call(GET as Handler, "/api/medications/compliance")).status,
+    ).toBe(200);
+
+    const keys = (
+      await getPrismaClient().rateLimit.findMany({
+        where: { key: { startsWith: "medication-compliance-summary:" } },
+      })
+    ).map((row) => row.key);
+    expect(keys).toEqual([`medication-compliance-summary:${plain.id}`]);
+  });
+
+  it("refuses the next request after the grant is revoked", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await seedMedication(owner.id, "owner-statin");
+
+    const { GET } = await import("@/app/api/medications/compliance/route");
+    const { grant } = await switchInto(owner.id, delegate.id);
+    expect(
+      (await call(GET as Handler, "/api/medications/compliance")).status,
+    ).toBe(200);
+
+    await revokeGrant(grant.id);
+    await expectDenied(
+      await call(GET as Handler, "/api/medications/compliance"),
+    );
   });
 });

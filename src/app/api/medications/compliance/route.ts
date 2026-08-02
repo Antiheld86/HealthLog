@@ -1,7 +1,7 @@
 import pLimit from "p-limit";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { apiSuccess, apiError } from "@/lib/api-response";
 import {
@@ -26,10 +26,15 @@ import { checkRateLimit } from "@/lib/rate-limit";
  * detail page keeps the per-id route for the grid.
  */
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  const { user, actor } = await requireRecordAuth("read");
 
+  // v1.36.0 — the bucket keys on the ACTOR while everything below it scopes to
+  // the record. Two reasons, and both are the same reason from opposite ends:
+  // a delegate hammering this route must burn their own allowance rather than
+  // locking the owner out of their own cabinet, and switching records must not
+  // hand the same caller a fresh allowance. `user.id` would get both wrong.
   const rl = await checkRateLimit(
-    `medication-compliance-summary:${user.id}`,
+    `medication-compliance-summary:${actor.id}`,
     30,
     60_000,
   );
