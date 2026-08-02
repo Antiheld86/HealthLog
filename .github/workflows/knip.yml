@@ -30,7 +30,11 @@ jobs:
       - run: pnpm db:generate
 
       # v1.4.42 — exports + types tiers promoted to enforcing. The
-      # `knip.json` ignore-block carries the shadcn UI surface and the
+      # `knip.jsonc` ignore-block carries the shadcn UI surface and the
       # `src/lib/validations/**` contract types; everything else has
       # to clear or get justified there.
+      #
+      # This pass cannot see a module whose only importer is its own test —
+      # vitest is a knip plugin, so test files are entries. The header of
+      # `knip.jsonc` demonstrates that and names the pass that does see it.
       - run: pnpm knip --reporter compact

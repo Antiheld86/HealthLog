@@ -1,0 +1,131 @@
+// Dead-code configuration. JSONC rather than JSON so this can say what the
+// gate proves — the previous JSON file could not, and the difference matters
+// more here than anywhere else in the repo.
+//
+// ## What `pnpm knip` (the CI gate in .github/workflows/knip.yml) proves
+//
+// A module, export or dependency that nothing in the repository reaches is a
+// build failure. That is a real property and it catches the ordinary case: a
+// helper left behind after its last caller was rewritten.
+//
+// ## What it does NOT prove, demonstrated
+//
+// It does not prove a module is still reachable from production. Vitest is a
+// knip plugin here, so `src/**/__tests__/**` are entry files, and a module
+// whose ONLY importer is its own test counts as used — forever. Planting
+// `src/lib/dead-probe.ts` with a single test importing it left `pnpm knip` at
+// exit 0. Nothing in the default pass can see that class of dead code, so do
+// not read a green Dead-code gate as "every module is still wired to
+// something that ships".
+//
+// ## The pass that does see it
+//
+//     pnpm knip --production --include files
+//
+// Production mode drops the plugin-supplied test entries and keeps only the
+// entry and project patterns suffixed with `!` below — the app router tree,
+// the proxy, instrumentation, the pg-boss workers, and `scripts/` (maintainer
+// tooling is not production, but it is a legitimate non-test consumer, so a
+// module reached only from a script is not the thing we are hunting). The `!`
+// suffix is inert in the default pass, so both modes read one config.
+//
+// This is a review tool, not a second gate, for two reasons written down so
+// the next reader does not have to rediscover them:
+//
+//   1. It reports 29 files today. Some are test-only by construction (the
+//      guard helpers under `src/__tests__/helpers/`, the settings section
+//      harness) and some are deliberately unreachable from production
+//      (`src/lib/ai/mock-client.ts` is excluded structurally by the
+//      `PROVIDER_CHAIN_TYPES` allowlist). Baselining the rest without
+//      triaging each one would encode noise as an invariant.
+//   2. It has false positives. `src/lib/mood/note-backfill.ts` is imported by
+//      `scripts/backfill-mood-note-column.ts` through the `@/` alias and is
+//      still reported, because `scripts/` sits outside the tsconfig that
+//      defines the alias. The default pass hides that resolution failure
+//      behind the module's test importer.
+//
+// Run it in the deep-audit step, the same way
+// `scripts/audit-column-readers.ts` is run: read the list, judge each entry,
+// do not treat the exit code as a verdict.
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // `!` marks an entry as production. Read the block above before adding or
+  // removing one — the suffix is what separates the two passes.
+  "entry": [
+    "src/app/**/page.tsx!",
+    "src/app/**/layout.tsx!",
+    "src/app/**/route.ts!",
+    "src/app/**/loading.tsx!",
+    "src/app/**/not-found.tsx!",
+    "src/app/**/error.tsx!",
+    "src/app/**/global-error.tsx!",
+    "src/app/**/template.tsx!",
+    "src/app/**/opengraph-image.tsx!",
+    "src/app/**/twitter-image.tsx!",
+    "src/app/**/icon.tsx!",
+    "src/app/**/apple-icon.tsx!",
+    "src/app/**/manifest.ts!",
+    "src/app/**/robots.ts!",
+    "src/app/**/sitemap.ts!",
+    "src/app/**/default.tsx!",
+    "src/proxy.ts!",
+    "src/instrumentation.ts!",
+    "src/lib/jobs/**/*.ts!",
+    "src/lib/ai/coach/eval/judge.ts!",
+    "scripts/**/*.ts!",
+    "scripts/**/*.mjs!",
+    "e2e/**/*.spec.ts",
+    "e2e/**/*.test.ts",
+    "tests/**/*.test.ts",
+    "tests/**/setup.ts",
+    "vitest.config.ts",
+    "vitest.config.integration.ts",
+    "playwright.config.ts",
+    "next.config.ts!",
+    "eslint.config.*",
+    "knip.jsonc",
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}!",
+    "scripts/**/*.{ts,mjs}!",
+    "tests/**/*.ts",
+    "e2e/**/*.ts",
+  ],
+  "ignore": [
+    "src/generated/**",
+    "prisma/**",
+    "public/**",
+    ".next/**",
+    "**/__mocks__/**",
+    "e2e/setup/test-helpers.ts",
+    "src/lib/logging/index.ts",
+  ],
+  "ignoreDependencies": [
+    "@types/node",
+    "@types/react",
+    "@types/react-dom",
+    "@hookform/resolvers",
+    "react-hook-form",
+    "@prisma/client",
+    "next-themes",
+    "@vitejs/plugin-react",
+    "shadcn",
+    "tailwindcss",
+    "testcontainers",
+    "tw-animate-css",
+    "@napi-rs/canvas",
+    "@openai/codex-security",
+    "postcss",
+  ],
+  "ignoreBinaries": ["docker", "docker-compose", "pg_isready", "tsx", "cosign"],
+  // Scoped to a single file: an export used only inside its own module is not
+  // a finding. It is also why the default pass cannot answer the question the
+  // production pass answers — this setting is about exports, not reachability.
+  "ignoreExportsUsedInFile": true,
+  "ignoreIssues": {
+    "src/components/ui/**": ["exports", "types"],
+    "src/lib/validations/**": ["types"],
+    "src/hooks/_internal/use-query-client-safe.ts": ["exports"],
+    "src/lib/google-health/sync.ts": ["exports"],
+  },
+}
