@@ -33,6 +33,13 @@
  *                 defect this file was written to prevent, so it is recorded
  *                 rather than quietly corrected — and it is why the guard now
  *                 reads the source rather than trusting a list.
+ *
+ *                 Reading the source is still not the same as watching the data
+ *                 move: a restore branch wrapped in `if (false)` reads exactly
+ *                 like one that works. So the claim is settled end to end in
+ *                 `tests/integration/backup-round-trip.test.ts`, which seeds a
+ *                 row of every model named here, exports it, deletes the
+ *                 account and counts the row back out of the real restore.
  * `DERIVED`     — recomputable from `BACKED_UP` rows. Leaving it out keeps the
  *                 file smaller and cannot lose anything; the reason names what
  *                 recomputes it.
@@ -161,6 +168,11 @@ export const BACKUP_WRITER_FILES: readonly string[] = [
   // delegates" mistake the list exists to prevent, made while writing the list.
   "src/lib/export/paged-measurements.ts",
   "src/lib/export/records-backup.ts",
+  // The illness day-log's symptom include is a shared constant living here,
+  // not a literal in the records writer. Same "the caller delegates" shape as
+  // the measurement pager above, found the same way: by a check that stopped
+  // accepting one model's relation write as proof about another's.
+  "src/lib/illness/dto.ts",
   "src/lib/export/profile-backup.ts",
   "src/lib/export/intraday-profile-backup.ts",
   "src/lib/export/health-score-backup.ts",
@@ -187,8 +199,12 @@ export const BACKUP_RESTORE_FILES: readonly string[] = [
  * the whole point of the split — a verdict of `BACKED_UP` is an intention, and
  * an intention is what the nutrient day totals had while a restore was throwing
  * them away and reporting success.
+ *
+ * Frozen as a literal tuple so {@link TwoEndedModel} can key the round-trip
+ * test's seed registry. Adding a name here without seeding a row for it is then
+ * a compile error rather than a silently unproven claim.
  */
-export const TWO_ENDED_MODELS: readonly string[] = [
+export const TWO_ENDED_MODELS = [
   "Measurement",
   "IntradayCumulativeProfile",
   "Medication",
@@ -218,7 +234,30 @@ export const TWO_ENDED_MODELS: readonly string[] = [
   "Workout",
   "NutrientIntakeDay",
   "InboundDocument",
-];
+] as const;
+
+/** One model claimed to travel both ways. */
+export type TwoEndedModel = (typeof TWO_ENDED_MODELS)[number];
+
+/**
+ * Two-ended models whose coverage the structural check cannot ATTRIBUTE, with
+ * the reason each defeats it.
+ *
+ * Not an exemption from being carried — every model here is carried, and the
+ * round-trip test proves it by seeding a row, exporting, emptying the account
+ * and reading the row back out of the restore. It is an exemption from being
+ * proven by reading source text, and it exists so the limit is written down in
+ * one place instead of showing up as a green check that means nothing.
+ *
+ * A model earns a line here only when a same-file grep genuinely cannot tell
+ * two tables apart. The guard beside this file checks that each one is covered
+ * by the round trip, so naming a model here moves the burden of proof rather
+ * than dropping it.
+ */
+export const STRUCTURALLY_UNATTRIBUTABLE: Readonly<Record<string, string>> = {
+  IllnessSymptomLink:
+    "Read out through `dayLogSymptomInclude`, a shared include constant in `src/lib/illness/dto.ts` that names `symptomLinks` with no query beside it. `symptomLinks` is also `CycleDayLog`'s field for `CycleSymptomLink`, so the name alone cannot say which table a line is about, and the parent that would disambiguate it — `IllnessDayLog` — is reached transitively through the episode's `dayLogs` include in another file. Deleting the illness branch from the restore route left the old check green on the strength of the cycle write; the round trip is what notices now.",
+};
 
 /**
  * Backed-up models that do NOT travel yet, each with what an account loses
