@@ -695,7 +695,10 @@ model User {
 
   // Relations
   passkeys                       Passkey[]
-  sessions                       Session[]
+  sessions                       Session[]                       @relation("SessionOwner")
+  // v1.36.0 — browser sessions belonging to OTHER accounts that are currently
+  // acting on this one. Named so the delete cascade has somewhere to point.
+  sessionsActingOnMe             Session[]                       @relation("SessionActingAs")
   challenges                     AuthChallenge[]
   // v1.23 — second-factor stores (kept separate from `passkeys`, which is the
   // passwordless-primary credential set; an MFA credential is meaningless
@@ -1132,9 +1135,30 @@ model Session {
   // v1.23 — sliding "last seen" for the user-facing active-session list.
   lastActiveAt  DateTime? @map("last_active_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// v1.36.0 — the cookie transport's acting-account carrier. NULL (the only
+  /// value any session has had until now) means the browser is acting as the
+  /// account it signed in as. A non-NULL value names the account whose record
+  /// this session is currently reading, and it is a SELECTOR, never an
+  /// authorization: the resolver joins it against a live grant on every single
+  /// request, so a value left here by a grant that has since ended confers
+  /// exactly nothing.
+  ///
+  /// Server-side by construction — the column lives on a row the client cannot
+  /// address (the cookie carries a secret, not this id), and the only writer is
+  /// the switch endpoint, which validates the grant before it stamps.
+  ///
+  /// The FK is ON DELETE SET NULL rather than CASCADE: deleting the OWNER must
+  /// not delete the delegate's browser session, it must put that browser back
+  /// into its own account.
+  actingAsUserId String? @map("acting_as_user_id")
+
+  user     User  @relation("SessionOwner", fields: [userId], references: [id], onDelete: Cascade)
+  actingAs User? @relation("SessionActingAs", fields: [actingAsUserId], references: [id], onDelete: SetNull)
 
   @@index([userId])
+  // Revocation clears every session pointing at the owner, and deleting an
+  // account nulls the same set. Both sweep on this column.
+  @@index([actingAsUserId])
   // v1.18.7 — the sliding-30-day session reaper sweeps on `expiresAt`; without
   // this index the cleanup degrades to a sequential scan on a busy instance.
   @@index([expiresAt])
