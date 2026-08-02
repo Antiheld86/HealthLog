@@ -44,9 +44,7 @@ vi.mock("@/lib/jobs/boss-instance", () => ({
 
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 
-vi.mock("@/lib/auth/audit", () => ({
-  auditLog: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock("@/lib/auth/audit", () => ({ auditLog: vi.fn() }));
 
 vi.mock("@/lib/medications/inventory/consumption", () => ({
   consumeForIntake: vi.fn().mockResolvedValue(undefined),
@@ -76,6 +74,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import { GET, POST } from "../route";
+import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import {
@@ -92,6 +91,10 @@ const SESSION_OK = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  // v1.36.0 — the GET's validation breadcrumb goes through the `auditLog`
+  // helper, whose promise the route attaches a `.catch` to. `resetAllMocks`
+  // clears the factory's implementation, so it is restored here.
+  vi.mocked(auditLog).mockResolvedValue(undefined);
   // v1.4.34 IW-G — reset compliance LRU between tests so each case
   // observes a cold cache.
   __resetAllCachesForTests();

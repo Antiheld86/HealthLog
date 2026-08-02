@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { apiSuccess, returnAllZodIssues, safeJson } from "@/lib/api-response";
 import { phaseConfigSchema } from "@/lib/validations/phase-config";
@@ -10,7 +10,7 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 export const GET = apiHandler(
   async (_request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    const { user } = await requireRecordAuth("read");
 
     const { id } = await params;
     // v1.4.25 W21 Fix-N — privacy gate hoisted to the shared helper.

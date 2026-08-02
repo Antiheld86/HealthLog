@@ -19,7 +19,7 @@ import {
 } from "@/lib/validations/external-id";
 import { NextRequest } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { withIdempotency } from "@/lib/idempotency";
 import { encryptNote, shapeMoodNote } from "@/lib/crypto/note-cipher";
@@ -41,7 +41,7 @@ function parseTags(tags: string | null): string[] {
 }
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  const { user } = await requireRecordAuth("read");
 
   const params = Object.fromEntries(request.nextUrl.searchParams);
   const parsed = listMoodEntriesSchema.safeParse(params);
@@ -61,17 +61,16 @@ export const GET = apiHandler(async (request: NextRequest) => {
     const auditIssues = sanitiseZodIssues(parsed.error.issues, {
       stripValuesFromMessage: true,
     });
-    prisma.auditLog
-      .create({
-        data: {
-          userId: user.id,
-          action: "mood-entries.list.validation-failed",
-          details: JSON.stringify({ issues: auditIssues }),
-        },
-      })
-      .catch(() => {
-        /* swallow — 422 response is the contract */
-      });
+    // v1.36.0 — through `auditLog()` rather than a bare `prisma.auditLog
+    // .create`, because that helper is the only thing that stamps
+    // `actorUserId`. Filed under the resolved record either way; without the
+    // stamp a delegate's malformed query would read as the owner's own.
+    void auditLog("mood-entries.list.validation-failed", {
+      userId: user.id,
+      details: { issues: auditIssues },
+    }).catch(() => {
+      /* swallow — 422 response is the contract */
+    });
     return returnAllZodIssues(parsed.error, 422, {
       errorCode: "mood.list.invalid",
     });

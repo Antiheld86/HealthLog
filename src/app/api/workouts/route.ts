@@ -57,7 +57,7 @@
  */
 import { NextRequest } from "next/server";
 
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { apiSuccess, returnAllZodIssues } from "@/lib/api-response";
 import {
@@ -70,7 +70,7 @@ const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  const { user } = await requireRecordAuth("read");
   annotate({ action: { name: "workouts.list" } });
 
   // v1.18.0 B1 — the workouts surface is a toggleable module. A disabled

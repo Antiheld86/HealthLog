@@ -30,9 +30,7 @@ vi.mock("@/lib/db", () => ({
 }));
 
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
-vi.mock("@/lib/auth/audit", () => ({
-  auditLog: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock("@/lib/auth/audit", () => ({ auditLog: vi.fn() }));
 vi.mock("@/lib/logging/transports", () => ({ emitIfSampled: vi.fn() }));
 vi.mock("@/lib/db-compat", () => ({
   ensureDbCompatibility: vi.fn().mockResolvedValue(undefined),
@@ -53,6 +51,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import { GET, POST } from "../route";
+import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { Prisma } from "@/generated/prisma/client";
@@ -71,6 +70,11 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
   vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never);
+  // v1.36.0 — the GET's validation breadcrumb goes through the `auditLog`
+  // helper now, because that helper is the only writer that stamps
+  // `actorUserId`. `resetAllMocks` above clears the factory's implementation,
+  // so the resolved promise the route awaits has to be restored here.
+  vi.mocked(auditLog).mockResolvedValue(undefined);
 });
 
 function getReq(qs: string): NextRequest {
@@ -121,18 +125,18 @@ describe("GET /api/measurements — 422 multi-issue (v1.4.43 W6)", () => {
     const res = await GET(getReq("limit=999999&offset=-1"));
     expect(res.status).toBe(422);
     await new Promise((r) => setTimeout(r, 5));
-    expect(prisma.auditLog.create).toHaveBeenCalledTimes(1);
-    const call = vi.mocked(prisma.auditLog.create).mock.calls[0]?.[0] as {
-      data: { userId: string; action: string; details: string };
-    };
-    expect(call.data.userId).toBe("user-1");
-    expect(call.data.action).toBe("measurements.list.validation-failed");
+    expect(auditLog).toHaveBeenCalledTimes(1);
+    // v1.36.0 — through the helper, which files the row under the resolved
+    // record and stamps the delegate as actor when there is one. The bare
+    // `prisma.auditLog.create` this replaced could not do the second half.
+    expect(auditLog).toHaveBeenCalledWith(
+      "measurements.list.validation-failed",
+      expect.objectContaining({ userId: "user-1" }),
+    );
   });
 
   it("does not block the 422 when the audit-row write rejects", async () => {
-    vi.mocked(prisma.auditLog.create).mockRejectedValueOnce(
-      new Error("db down"),
-    );
+    vi.mocked(auditLog).mockRejectedValueOnce(new Error("db down"));
     const res = await GET(getReq("limit=999999&offset=-1"));
     expect(res.status).toBe(422);
   });

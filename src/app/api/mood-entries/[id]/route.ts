@@ -11,7 +11,7 @@ import {
 import { updateMoodEntrySchema, getScoreForMood } from "@/lib/validations/mood";
 import { NextRequest } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
 import { encryptNote, shapeMoodNote } from "@/lib/crypto/note-cipher";
@@ -36,7 +36,7 @@ function parseTags(tags: string | null): string[] {
 
 export const GET = apiHandler(
   async (_request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    const { user } = await requireRecordAuth("read");
 
     const { id } = await params;
 

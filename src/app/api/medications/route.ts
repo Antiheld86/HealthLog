@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import { annotate, getEvent } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -33,7 +33,7 @@ import { NextRequest } from "next/server";
 const APPLE_HEALTH_MIRROR_CAP = 30;
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  const { user } = await requireRecordAuth("read");
 
   // Cache the list shape on userId. The 60 s fresh TTL bounds the
   // cross-midnight staleness window for `todayEventCount` and the

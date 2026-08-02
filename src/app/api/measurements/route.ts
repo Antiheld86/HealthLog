@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { fireAndForget } from "@/lib/logging/fire-and-forget";
 import { auditLog } from "@/lib/auth/audit";
@@ -58,7 +58,7 @@ import type {
 import { Prisma } from "@/generated/prisma/client";
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  const { user } = await requireRecordAuth("read");
 
   const params = Object.fromEntries(request.nextUrl.searchParams);
   const parsed = listMeasurementsSchema.safeParse(params);
@@ -78,17 +78,16 @@ export const GET = apiHandler(async (request: NextRequest) => {
     const auditIssues = sanitiseZodIssues(parsed.error.issues, {
       stripValuesFromMessage: true,
     });
-    prisma.auditLog
-      .create({
-        data: {
-          userId: user.id,
-          action: "measurements.list.validation-failed",
-          details: JSON.stringify({ issues: auditIssues }),
-        },
-      })
-      .catch(() => {
-        /* swallow — 422 response is the contract */
-      });
+    // v1.36.0 — through `auditLog()` rather than a bare `prisma.auditLog
+    // .create`, because that helper is the only thing that stamps
+    // `actorUserId`. Filed under the resolved record either way; without the
+    // stamp a delegate's malformed query would read as the owner's own.
+    void auditLog("measurements.list.validation-failed", {
+      userId: user.id,
+      details: { issues: auditIssues },
+    }).catch(() => {
+      /* swallow — 422 response is the contract */
+    });
     return returnAllZodIssues(parsed.error, 422);
   }
 

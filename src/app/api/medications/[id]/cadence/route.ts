@@ -18,7 +18,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { apiError, apiSuccess, returnAllZodIssues } from "@/lib/api-response";
 import {
@@ -42,7 +42,7 @@ const querySchema = z.object({
 
 export const GET = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    const { user } = await requireRecordAuth("read");
     const { id } = await params;
 
     // v1.4.25 W21 Fix-N — privacy gate hoisted to the shared helper.

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { fireAndForget } from "@/lib/logging/fire-and-forget";
 
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
@@ -70,7 +70,7 @@ function toResolved(
 }
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  const { user } = await requireRecordAuth("read");
 
   const params = Object.fromEntries(request.nextUrl.searchParams);
   const parsed = listLabResultsSchema.safeParse(params);

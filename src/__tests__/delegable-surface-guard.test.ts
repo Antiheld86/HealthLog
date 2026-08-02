@@ -24,12 +24,15 @@
  *   1. **Every leg asserts its own matcher found something.** A matcher that
  *      matches nothing reports success, and this repository has shipped several
  *      of those — a resolver hidden behind a newline, a regex a variable slipped
- *      past, an absence asserted in a fixture that never held the thing. The
- *      frozen lists below start EMPTY, so "found nothing" and "the list is
- *      correct" look identical from the outside. Each leg therefore pins a
- *      separate, non-empty count: the number of route modules SCANNED, or the
- *      number of files naming a symbol the leg depends on. Those counts are the
- *      evidence; the empty result is only the verdict.
+ *      past, an absence asserted in a fixture that never held the thing. Legs
+ *      (c) and (d) still expect an EMPTY offender set, so for them "found
+ *      nothing" and "the list is correct" look identical from the outside.
+ *      Each leg therefore pins a separate, non-empty count: the number of
+ *      route modules SCANNED, or the number of files naming a symbol the leg
+ *      depends on. Those counts are the evidence; the empty result is only the
+ *      verdict. The delegable list itself was empty when this file was written
+ *      and is not any more, which removes the trap from legs (a) and (b) but
+ *      not from the two below them.
  *
  *   2. **AST decides, text only skips.** Membership is decided by parsing the
  *      module and reading its identifiers, so a comment explaining why a route
@@ -234,16 +237,109 @@ function exportedFunctionNames(rel: string): string[] {
 /**
  * Route modules permitted to act on a record that may not be the caller's.
  *
- * EMPTY, and correct empty. The resolver landed with the auth layer and
- * deliberately touched no route file; the first members arrive when routes
- * migrate, each one carrying a line in the classification record that says why
- * it may. A route absent from that record cannot enter this list.
+ * Every member carries a line in the classification record that says why it
+ * may. A route absent from that record cannot enter this list.
  *
  * The value is the reason, in one line, in the maintainer's words. Not the
  * route's description — the argument for why a delegate reading or writing
  * through it cannot extend their own reach.
+ *
+ * Note what a member means: the MODULE reaches the resolver, and in every case
+ * below that is the GET arm alone. The write arms in these same files still
+ * resolve through `requireAuth()`, which refuses outright while a switch is
+ * active, so admitting a file here admits a read and nothing more. A delegable
+ * write is a separate decision that would have to be made at each of them.
  */
-const DELEGABLE_ROUTES: Record<string, string> = {};
+const DELEGABLE_ROUTES: Record<string, string> = {
+  "app/api/measurements/route.ts":
+    "The record's readings. The GET returns values, units, timestamps and notes scoped `userId: user.id` and offers no control affordance; the POST arms in the same file keep `requireAuth()` and so refuse under a switch.",
+  "app/api/measurements/[id]/route.ts":
+    "One reading of the record, fetched by id and guarded against the resolved user before it is serialised. The PUT and DELETE beside it keep `requireAuth()`.",
+  "app/api/measurements/series/route.ts":
+    "A chart series over the record's own readings. Every `where` and every raw-SQL predicate binds the resolved user id; the route holds no write arm at all.",
+  "app/api/measurements/series-batch/route.ts":
+    "The multi-type form of the same series read, delegating to `readSeriesBatch(user.id, …)`. Nothing but the resolved id reaches the query.",
+  "app/api/measurement-reminders/route.ts":
+    "The record's own reminder schedule — what the owner asked to be reminded of, not a notification channel or a device. The GET reads `userId: user.id`; creating a reminder stays on `requireAuth()`.",
+  "app/api/measurement-reminders/[id]/route.ts":
+    "One reminder of the record, fetched by id then guarded against the resolved user. The PUT and DELETE keep `requireAuth()`.",
+  "app/api/labs/route.ts":
+    "The record's lab results. The only nested include is the biomarker's own reference range — no third party, no credential. Creating a result stays on `requireAuth()`.",
+  "app/api/labs/[id]/route.ts":
+    "One lab result of the record, fetched by id then guarded against the resolved user before anything is serialised.",
+  "app/api/biomarkers/route.ts":
+    "The record's biomarker catalogue: the analytes this account tracks and the ranges it tracks them against. No writes on the read arm.",
+  "app/api/biomarkers/[id]/route.ts":
+    "One biomarker of the record, fetch-then-guard against the resolved user.",
+  "app/api/allergies/route.ts":
+    "The record's allergy list — the single most useful thing a caregiver can read, and a plain list of the owner's own rows.",
+  "app/api/allergies/[id]/route.ts":
+    "One allergy of the record, fetch-then-guard against the resolved user.",
+  "app/api/family-history/route.ts":
+    "The record's family history. The payload describes the owner's relatives, so it is the one admitted read where third-party health information is present by design rather than by accident; a caregiver reading it is the use the feature exists for, and the row is stored as the owner's.",
+  "app/api/family-history/[id]/route.ts":
+    "One family-history entry of the record, fetch-then-guard against the resolved user.",
+  "app/api/mental-health/assessments/route.ts":
+    "The record's screener history. The module gate resolves against the record, so a delegate sees the surface only where the owner switched it on; the rate limit on the POST arm is untouched and that arm still refuses under a switch.",
+  "app/api/anamnesis/facts/route.ts":
+    "The record's health-profile facts, read through `readHealthProfileFacts(user.id)`. The module holds write helpers, and the GET calls none of them.",
+  "app/api/mood-entries/route.ts":
+    "The record's mood entries. The nested include is the tag vocabulary — a key and a kind, no identifiers. Note that `GET /api/mood/tags` is refused and stays refused: it pulls the owner's tag LAYOUT, which is a presentation preference and belongs to the person, not the record.",
+  "app/api/mood-entries/[id]/route.ts":
+    "One mood entry of the record, fetch-then-guard against the resolved user.",
+  "app/api/custom-metrics/route.ts":
+    "The record's own metric definitions and their latest values. Every `where` carries the resolved user id.",
+  "app/api/custom-metrics/[id]/route.ts":
+    "One custom metric of the record, scoped by the resolved user id in the query itself.",
+  "app/api/custom-metrics/[id]/entries/route.ts":
+    "The entries of one custom metric, reached only after the metric itself resolves under the record's user id — the ownership hop runs before the entry query.",
+  "app/api/personal-records/route.ts":
+    "The record's personal bests, `where: { userId: user.id }`. Nothing else in the file.",
+  "app/api/sleep/night/route.ts":
+    "The record's hypnogram. Read-only, module-gated on the record, no write of any kind on the path.",
+  "app/api/sleep/rhythm/route.ts":
+    "The record's sleep rhythm, built from `buildSleepRhythm(user.id)` and gated on the record's sleep module.",
+  "app/api/nutrients/route.ts":
+    "The record's nutrient overview. It reads the last ingest audit row to date the data — integration-adjacent metadata, and no credential, endpoint or token crosses the wire.",
+  "app/api/nutrients/daily/route.ts":
+    "One nutrient's daily series over the record, scoped by the resolved user id.",
+  "app/api/illness/episodes/route.ts":
+    "The record's illness episodes. Module-gated on the record; the create arm keeps `requireAuth()`.",
+  "app/api/illness/episodes/[id]/route.ts":
+    "One episode of the record, fetch-then-guard against the resolved user.",
+  "app/api/illness/episodes/[id]/day-logs/route.ts":
+    "The day logs of one episode. The episode-scoped queries are safe because `loadOwnedEpisode(id, user.id)` runs first and now resolves against the record; the upsert arm keeps `requireAuth()`.",
+  "app/api/workouts/route.ts":
+    "The record's workout list. Verified to carry no AI-written paragraph: the single-workout route beside it does, and stays refused for exactly that reason.",
+  "app/api/cycle/cycles/route.ts":
+    "The record's cycle history. Whether cycle tracking applies is a property of the record, and the gate gets there by re-loading the profile and gender for the resolved user id — note that the `gender` argument at the call site is dead (`requireCycleEnabled` names it `_gender`), so it is the id that carries the substitution, not that argument.",
+  "app/api/cycle/day-logs/route.ts":
+    'One day of the record\'s cycle log. The `auditLog("cycle.day-log.upsert")` in this file belongs to the PUT, which keeps `requireAuth()`.',
+  "app/api/cycle/profile/route.ts":
+    "The record's cycle profile, supplied by the gate itself. This is the one cycle route that does read the auth-context gender directly — `isCycleEnabled(user.gender, gate.profile)` computes the `resolved` flag it returns — and post-substitution that is the owner's.",
+  "app/api/cycle/symptoms/custom/route.ts":
+    "The record's own custom symptom vocabulary. The create arm carries the rate limit and keeps `requireAuth()`.",
+  "app/api/medications/route.ts":
+    "The record's medication cabinet. The cached list projection keys on the same resolved id it scopes to, so the owner's cell holds the owner's data. Returns no ingest endpoint and no token count — the route that does is refused.",
+  "app/api/medications/[id]/route.ts":
+    "One medication of the record, fetch-then-guard against the resolved user before anything is serialised.",
+  "app/api/medications/[id]/cadence/route.ts":
+    "One medication's cadence, behind `assertMedicationOwnership(id, user.id)` — the shared guard, resolved against the record.",
+  "app/api/medications/[id]/schedule-revisions/route.ts":
+    "One medication's archived schedule eras, behind the same ownership guard. The create arm keeps `requireAuth()` and its compliance backfill with it.",
+  "app/api/medications/[id]/side-effects/route.ts":
+    "One medication's recorded side effects, behind the same ownership guard. The rate limit in this file belongs to the create arm.",
+  "app/api/medications/[id]/inventory/route.ts":
+    "One medication's inventory, behind the same ownership guard. The rate limit in this file belongs to the create arm.",
+  "app/api/medications/[id]/phase-config/route.ts":
+    "One medication's reminder phase config, behind the same ownership guard. The upsert arm keeps `requireAuth()`.",
+  "app/api/medications/[id]/intake/route.ts":
+    "One medication's intake history, behind the same ownership guard. The taking of a dose is a write and stays on `requireAuth()`.",
+  "app/api/medications/intake/route.ts":
+    "The account-wide intake list, scoped through the resolved user. Its cache cell keys on the same id it scopes to.",
+  "app/api/medications/compliance/route.ts":
+    "Batched compliance across the record's cabinet. The one delegable read that spends a quota, so its rate-limit bucket keys on the ACTOR: a delegate must burn their own allowance rather than lock the owner out, and must not collect a fresh one by switching records.",
+};
 
 /**
  * Route modules that deliberately resolve the ACTOR and keep working under a
@@ -268,7 +364,7 @@ const ACTOR_ROUTES: Record<string, string> = {
  * a formality by accident: every addition has to be counted here as well as
  * listed above, which is one more place a careless admission has to pass.
  */
-const FROZEN_ENTRY_COUNT = 2;
+const FROZEN_ENTRY_COUNT = 46;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —
@@ -382,8 +478,8 @@ describe("the matchers see what they look for", () => {
   });
 
   it("the co-occurrence rule fires on a module that does both", () => {
-    // Leg (c) finds nothing on today's tree because nothing calls the record
-    // resolver yet. This is the shape it exists to catch, proved against the
+    // Leg (c) finds nothing on today's tree because no delegable module runs a
+    // role check. This is the shape it exists to catch, proved against the
     // same predicate the tree scan uses.
     const OFFENDER = `
       import { requireRecordAuth, requireAdmin } from "@/lib/api-handler";
@@ -459,11 +555,13 @@ describe("(a) the delegable route set is frozen", () => {
       "app/.well-known/oauth-protected-resource/route.ts",
     );
 
-    // Positive control for this leg's own matcher, and the reason it exists:
-    // while the frozen list is empty, "no route names the resolver" and "the
-    // matcher names nothing" are the same sentence. Neuter `identifiersIn` and
-    // the assertion below still passes; this one does not. `lib/api-handler.ts`
-    // is the guaranteed positive — it declares the symbol.
+    // Positive control for this leg's own matcher. It was written when the
+    // frozen list was empty and "no route names the resolver" and "the matcher
+    // names nothing" were the same sentence; the list is populated now, so the
+    // assertion below would catch a neutered matcher on its own. Kept anyway,
+    // because a future removal could empty the list again and the day that
+    // happens is not the day to rediscover this. `lib/api-handler.ts` is the
+    // guaranteed positive — it declares the symbol.
     expect(modulesNaming(["lib/api-handler.ts"], RECORD_RESOLVER)).toEqual([
       "lib/api-handler.ts",
     ]);
@@ -523,7 +621,7 @@ describe("(c) a record resolver never shares a module with a role or step-up che
 
     // This leg's own non-zero proof, and the one that matters most here: the
     // offender set is empty today whether or not the helper names are right,
-    // because nothing calls the record resolver yet. So each helper has to be
+    // because no delegable module runs a role check. So each helper has to be
     // findable in the very tree being scanned. Rename `requireAdmin` and this
     // fails, rather than the guard quietly checking for a symbol that no
     // longer exists.

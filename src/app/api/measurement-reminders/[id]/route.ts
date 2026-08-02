@@ -10,7 +10,7 @@ import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
 import { auditLog } from "@/lib/auth/audit";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiSuccess,
   apiError,
@@ -41,7 +41,7 @@ async function resolveTimezone(userId: string): Promise<string> {
 
 export const GET = apiHandler(
   async (_request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    const { user } = await requireRecordAuth("read");
     const { id } = await params;
 
     const reminder = await prisma.measurementReminder.findFirst({

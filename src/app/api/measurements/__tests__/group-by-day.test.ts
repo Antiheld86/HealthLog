@@ -54,6 +54,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import { GET } from "../route";
+import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 
@@ -80,6 +81,9 @@ beforeEach(() => {
   // write; the route swallows rejections so the test only needs a
   // resolved mock to keep the catch-block silent.
   vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never);
+  // v1.36.0 — the 422 breadcrumb writes through the `auditLog` helper, whose
+  // returned promise the route attaches a `.catch` to.
+  vi.mocked(auditLog).mockResolvedValue(undefined);
   // v1.29.6 — null source-priority blob → default rank ladders for the
   // groupBy=day canonical-source collapse.
   vi.mocked(prisma.user.findUnique).mockResolvedValue(null as never);
