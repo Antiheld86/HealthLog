@@ -99,7 +99,10 @@ export function RecentAuditPreview() {
             title={t("admin.overview.auditEmpty")}
           />
         ) : (
-          <ul className="divide-border divide-y">
+          // `admin-audit-rows` names the read entries. The branches above
+          // are a spinner, a load error and an empty state, so the marker
+          // stands for a card that has actually answered.
+          <ul data-slot="admin-audit-rows" className="divide-border divide-y">
             {entries.map((entry) => {
               const isFailed = entry.action === "auth.login.failed";
               // F-31 (v1.4.19): each row links into the full

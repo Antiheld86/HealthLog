@@ -297,67 +297,90 @@ export function AuthShell({
           {t("nav.skipToContent")}
         </a>
       </nav>
-      <div className="flex h-dvh flex-col md:flex-row">
-        <SidebarNav />
-        {/* `min-w-0` lets the content column shrink below its children's
-            intrinsic min width (e.g. the measurements table); without it
-            the column widens past the viewport next to the sidebar and
-            the whole page gains a horizontal scrollbar. Wide children
-            scroll inside their own `overflow-x-auto` containers. */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {/*
-            v1.4.43 QoL (M5) — `<OfflineBanner>` paints only when
-            `navigator.onLine === false`. Sits above the maintainership
-            banner + top bar so the connection-status hint is always
-            the first chrome line a user sees in the offline branch.
-          */}
-          <OfflineBanner />
-          {/* v1.36.0 — whose record is open. Sits directly under the
-              connection strip and above everything else: a person who has
-              forgotten they are switched is about to write a reading into
-              somebody else's record, and no other line of chrome is worth
-              seeing first. Renders nothing when the session is in its own
-              account, which is every session that has never used sharing. */}
-          <SharedRecordBanner />
-          {/* Demo instances surface a persistent "changes are not
-              saved" strip — the proxy blocks every mutation, and
-              without the banner that block only surfaced as a raw API
-              error after the user already filled in a form. */}
-          {demoMode ? <DemoBanner /> : null}
-          <MaintainershipBanner />
-          <TopBar />
-          <main
-            id="main-content"
-            // `scrollbar-gutter: stable` keeps the scroll viewport's content
-            // box a fixed width whether or not the vertical scrollbar is
-            // painted. Without it a route / sub-tab whose body overflows
-            // (e.g. the admin "Insights Quality" section) shows the bar and
-            // narrows the content box, while a shorter one (e.g.
-            // "Integrations") hides it and widens the box — the `mx-auto`
-            // wrapper then recentres and the whole column, including the
-            // admin/settings sidebar, shifts a few px sideways on every
-            // toggle. Reserving the gutter holds the layout still.
-            //
-            // `relative` makes this element the containing block for every
-            // absolutely-positioned descendant that has no nearer positioned
-            // ancestor. Without it those boxes resolve against the INITIAL
-            // containing block, which lives outside the scroll container, so
-            // `overflow-y-auto` never clips them: their static position sits
-            // wherever the flow put them and extends the DOCUMENT's
-            // scrollable overflow instead, painting a second vertical scroll
-            // surface beside `<main>` (UI-STANDARDS §9 one-scroll-floor).
-            // The class is not hypothetical and not confined to app code. A
-            // Radix `<Switch>` outside a `<form>` renders a hidden
-            // `position:absolute` bubble input on the first pass and drops it
-            // only once the button ref resolves, so every route carrying a
-            // switch below the fold (/settings/modules is the long one) grew
-            // a full-height document scrollbar for the entire pre-hydration
-            // window. Anchoring the scroll container closes the escape route
-            // for all of them at once instead of asking each new
-            // absolutely-positioned child to remember its own wrapper.
-            className="relative flex-1 [scrollbar-gutter:stable] overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-0"
-          >
-            {/*
+      {/*
+        The banner stack is PAGE-level, above the sidebar/content row, and that
+        placement is the whole point rather than a detail of the markup. A
+        banner is a strip about the whole window — the connection is down, this
+        is somebody else's record, this instance saves nothing — and none of
+        those statements is about the content column.
+
+        Inside the column, which is where they lived until v1.36.x, each one
+        pushed the top bar down while the sidebar's logo band stayed at the
+        top. Both bands read `SHELL_HEADER_BAND` so they are the same height
+        with the same border, and the line they draw together still broke: with
+        the French maintainership strip up, the two borders sat 66.5px apart at
+        768px and 61px apart at 1280px, and the full three-banner stack put them
+        184.5px apart. Above the row, every banner displaces both bands by the
+        same amount and the seam cannot come apart however many paint.
+
+        The stack comes OUT of the viewport budget rather than being added on
+        top of it: the outer wrapper owns the `h-dvh`, the row below takes what
+        the banners leave (`min-h-0 flex-1`), and `<main>` stays the one
+        vertical scroller. Measured in `e2e/chrome-header-seam-banners.spec.ts`
+        at both breakpoints.
+      */}
+      <div className="flex h-dvh flex-col">
+        {/*
+          v1.4.43 QoL (M5) — `<OfflineBanner>` paints only when
+          `navigator.onLine === false`. Sits above the maintainership
+          banner + top bar so the connection-status hint is always
+          the first chrome line a user sees in the offline branch.
+        */}
+        <OfflineBanner />
+        {/* v1.36.0 — whose record is open. Sits directly under the
+            connection strip and above everything else: a person who has
+            forgotten they are switched is about to write a reading into
+            somebody else's record, and no other line of chrome is worth
+            seeing first. Renders nothing when the session is in its own
+            account, which is every session that has never used sharing. */}
+        <SharedRecordBanner />
+        {/* Demo instances surface a persistent "changes are not
+            saved" strip — the proxy blocks every mutation, and
+            without the banner that block only surfaced as a raw API
+            error after the user already filled in a form. */}
+        {demoMode ? <DemoBanner /> : null}
+        <MaintainershipBanner />
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          <SidebarNav />
+          {/* `min-w-0` lets the content column shrink below its children's
+              intrinsic min width (e.g. the measurements table); without it
+              the column widens past the viewport next to the sidebar and
+              the whole page gains a horizontal scrollbar. Wide children
+              scroll inside their own `overflow-x-auto` containers. */}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <TopBar />
+            <main
+              id="main-content"
+              // `scrollbar-gutter: stable` keeps the scroll viewport's content
+              // box a fixed width whether or not the vertical scrollbar is
+              // painted. Without it a route / sub-tab whose body overflows
+              // (e.g. the admin "Insights Quality" section) shows the bar and
+              // narrows the content box, while a shorter one (e.g.
+              // "Integrations") hides it and widens the box — the `mx-auto`
+              // wrapper then recentres and the whole column, including the
+              // admin/settings sidebar, shifts a few px sideways on every
+              // toggle. Reserving the gutter holds the layout still.
+              //
+              // `relative` makes this element the containing block for every
+              // absolutely-positioned descendant that has no nearer positioned
+              // ancestor. Without it those boxes resolve against the INITIAL
+              // containing block, which lives outside the scroll container, so
+              // `overflow-y-auto` never clips them: their static position sits
+              // wherever the flow put them and extends the DOCUMENT's
+              // scrollable overflow instead, painting a second vertical scroll
+              // surface beside `<main>` (UI-STANDARDS §9 one-scroll-floor).
+              // The class is not hypothetical and not confined to app code. A
+              // Radix `<Switch>` outside a `<form>` renders a hidden
+              // `position:absolute` bubble input on the first pass and drops it
+              // only once the button ref resolves, so every route carrying a
+              // switch below the fold (/settings/modules is the long one) grew
+              // a full-height document scrollbar for the entire pre-hydration
+              // window. Anchoring the scroll container closes the escape route
+              // for all of them at once instead of asking each new
+              // absolutely-positioned child to remember its own wrapper.
+              className="relative flex-1 [scrollbar-gutter:stable] overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-0"
+            >
+              {/*
               v1.4.33 IW9 — container normalised on `max-w-screen-xl`
               (1280 px) so dashboard / settings / admin all hit the
               same content frame. Pre-v1.4.33 the dashboard
@@ -371,15 +394,16 @@ export function AuthShell({
               the desktop bottom-6 anchor), so the last line of content
               can always scroll out from under the floating button.
             */}
-            <div
-              data-slot="main-content-wrapper"
-              className="mx-auto max-w-screen-xl px-4 pt-6 pb-20 md:px-6"
-            >
-              {outsideSharedRecord ? <SharedRecordUnavailable /> : children}
-            </div>
-          </main>
+              <div
+                data-slot="main-content-wrapper"
+                className="mx-auto max-w-screen-xl px-4 pt-6 pb-20 md:px-6"
+              >
+                {outsideSharedRecord ? <SharedRecordUnavailable /> : children}
+              </div>
+            </main>
+          </div>
+          <BottomNav />
         </div>
-        <BottomNav />
       </div>
       <LayoutCoachMount />
       {/* v1.18.6 — the module-tour launcher lives at the shell level so its

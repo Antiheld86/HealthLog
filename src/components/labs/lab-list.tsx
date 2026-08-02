@@ -184,7 +184,10 @@ export function LabList({ onAddFirst }: { onAddFirst?: () => void } = {}) {
   // (#40); the card/tile view is the alternative the settings toggle selects.
   if (prefs.view === "list") {
     return (
-      <div className="space-y-3">
+      // `lab-list` marks the read results in both view shapes. The loading
+      // branch above carries `lab-list-loading` instead, so the marker
+      // cannot stand for a silhouette.
+      <div data-slot="lab-list" className="space-y-3">
         {truncated ? (
           <p className="text-muted-foreground text-xs">
             {t("labs.showingLatestOf", { shown, total })}
@@ -259,6 +262,7 @@ export function LabList({ onAddFirst }: { onAddFirst?: () => void } = {}) {
   // control on the tile; the trash icon lives only on the value detail view.
   return (
     <ul
+      data-slot="lab-list"
       className={cn(
         "grid list-none gap-4 p-0",
         // A lone lab spans the full row rather than orphaning half of it;

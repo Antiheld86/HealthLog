@@ -658,7 +658,12 @@ export function BackupsSection() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-border divide-y">
+              {/* `backup-rows` names the read rows. The three branches above
+                  are a spinner, a load error and an empty state, so the
+                  marker cannot stand for a page that has not answered yet.
+                  The narrow-layout list below carries it too, so a wait on
+                  it holds at any viewport. */}
+              <tbody data-slot="backup-rows" className="divide-border divide-y">
                 {rows.map((row, i) => (
                   <tr key={row.id} className={i % 2 === 0 ? "bg-muted/30" : ""}>
                     <td className="px-3 py-2 font-medium">{row.username}</td>
@@ -713,6 +718,7 @@ export function BackupsSection() {
               stay reachable on a phone instead of scrolling off-screen. */}
           <ul
             className="space-y-2 md:hidden"
+            data-slot="backup-rows"
             data-testid="admin-backups-mobile-list"
           >
             {rows.map((row) => (

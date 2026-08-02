@@ -93,10 +93,11 @@ export function MaintainershipBanner() {
   return (
     <div
       role="status"
+      data-slot="maintainership-banner"
       data-testid="maintainership-banner"
       className="border-border bg-muted/40 text-muted-foreground flex items-start gap-2 border-b px-4 py-2 text-xs sm:items-center"
     >
-      <Languages className="mt-0.5 h-3.5 w-3.5 shrink-0 sm:mt-0" aria-hidden />
+      <Languages className="mt-0.5 size-3.5 shrink-0 sm:mt-0" aria-hidden />
       <p className="flex-1 leading-snug">
         {t("i18n.maintainershipBanner.notice")}{" "}
         <a
@@ -117,7 +118,7 @@ export function MaintainershipBanner() {
         // the surrounding hit area is what the user actually taps.
         className="hover:text-foreground focus-visible:ring-ring/50 -mr-2 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
       >
-        <X className="h-3.5 w-3.5" aria-hidden />
+        <X className="size-3.5" aria-hidden />
       </button>
     </div>
   );

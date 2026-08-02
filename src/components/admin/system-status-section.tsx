@@ -141,7 +141,13 @@ export function SystemStatusSection() {
           description={t("admin.systemStatusDescription")}
         />
         {status ? (
-          <div className="mt-4 grid gap-4 pl-7 sm:grid-cols-2 lg:grid-cols-4">
+          <div
+            // `system-status-grid` names the answered snapshot. The two
+            // branches below it are a load error and a spinner, so the
+            // marker cannot stand for a section still waiting on the read.
+            data-slot="system-status-grid"
+            className="mt-4 grid gap-4 pl-7 sm:grid-cols-2 lg:grid-cols-4"
+          >
             <StatusItem
               icon={Database}
               label={t("admin.database")}

@@ -31,7 +31,7 @@ export function DemoBanner() {
       data-slot="demo-banner"
       className="bg-primary/10 border-primary/30 text-foreground flex items-center justify-center gap-2 border-b px-3 py-2 text-xs"
     >
-      <FlaskConical className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      <FlaskConical className="size-3.5 shrink-0" aria-hidden="true" />
       <span className="text-center">{t("demoBanner.message")}</span>
     </div>
   );

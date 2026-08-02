@@ -354,7 +354,15 @@ export function UserManagementSection() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-border divide-y">
+                {/* `admin-user-rows` names the read accounts. The section
+                    renders an empty state instead when the list is empty and
+                    nothing at all while the query is in flight, so the marker
+                    stands for answered data. The mobile card list below
+                    carries it too, so a wait on it holds at any viewport. */}
+                <tbody
+                  data-slot="admin-user-rows"
+                  className="divide-border divide-y"
+                >
                   {filteredUsers.map((u, i) => (
                     <tr key={u.id} className={i % 2 === 0 ? "bg-muted/30" : ""}>
                       <td className="px-3 py-2 font-medium">{u.username}</td>
@@ -392,6 +400,7 @@ export function UserManagementSection() {
               is hidden behind a horizontal scroll. */}
             <ul
               className="mt-4 space-y-2 md:hidden"
+              data-slot="admin-user-rows"
               data-testid="admin-users-mobile-list"
             >
               {filteredUsers.map((u) => (
