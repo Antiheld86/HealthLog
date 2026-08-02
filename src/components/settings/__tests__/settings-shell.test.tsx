@@ -105,6 +105,10 @@ describe("SETTINGS_SECTION_SLUGS", () => {
     expect([...SETTINGS_SECTION_SLUGS]).toEqual([
       "account",
       "security",
+      // v1.36.0 — account sharing: who may open this record, and whose this
+      // account may open. Beside `security`, and distinct from the `sharing`
+      // slug further down (the clinician share LINK).
+      "access",
       "modules",
       "integrations",
       "sources",

@@ -1,0 +1,43 @@
+"use client";
+
+import { GrantInviteCard } from "@/components/settings/access/grant-invite-card";
+import { GrantsGivenCard } from "@/components/settings/access/grants-given-card";
+import { GrantsReceivedCard } from "@/components/settings/access/grants-received-card";
+import { RecordActivityCard } from "@/components/settings/access/record-activity-card";
+
+/**
+ * v1.36.0 — Settings → "Shared access".
+ *
+ * One section for one concept: who else can open this health record, and whose
+ * this account may open. Split across two pages it would be two half-answers —
+ * the settings IA rule this repository keeps rediscovering — so both directions
+ * and the activity that follows from them live in one column, in the order
+ * somebody reads them:
+ *
+ *   1. Invite — the act.
+ *   2. Who has access — the standing state, and the way to end it.
+ *   3. What I can open — the same, from the other side.
+ *   4. When it was opened — what actually happened.
+ *
+ * Distinct from Settings → "Health record" → sharing links, which mints a
+ * time-boxed read-only link to a REPORT for a clinician. This section is about
+ * another ACCOUNT on this instance being able to open the live record, which is
+ * a standing relationship rather than a document handed over once.
+ *
+ * Every card here reads and writes routes that refuse while the browser is
+ * acting on somebody else's record, and the section is unreachable in that
+ * state because the whole Settings entry drops out of the nav. Grant management
+ * is the one surface a delegate must have no reach into at all: a delegate who
+ * could invite, widen or transfer would be re-delegating access nobody granted
+ * them.
+ */
+export function AccessSection() {
+  return (
+    <div className="space-y-4">
+      <GrantInviteCard />
+      <GrantsGivenCard />
+      <GrantsReceivedCard />
+      <RecordActivityCard />
+    </div>
+  );
+}

@@ -4955,6 +4955,10 @@
           "dismiss": "Got it",
           "dismissError": "Couldn't save that. Please try again."
         }
+      },
+      "access": {
+        "title": "Shared access",
+        "subtitle": "Who can open your health record, and whose you can open."
       }
     },
     "profile": "Profile",
@@ -9373,5 +9377,99 @@
     "scopeNone": "Nothing selected yet. Choose what to include, or apply the standard report.",
     "scopeCount": "{count} entries from {groups} areas",
     "scopeSensitive": "incl. {names}"
+  },
+  "recordSharing": {
+    "banner": {
+      "viewing": "You are in {name}'s record",
+      "readOnly": "You can read it, not change it.",
+      "leave": "Back to my record"
+    },
+    "switcher": {
+      "label": "Open a record",
+      "ownRecord": "My own record",
+      "readOnly": "Read only",
+      "canWrite": "Can add entries"
+    },
+    "switch": {
+      "failed": "Could not open that record. Please try again.",
+      "noLongerAvailable": "That record is no longer shared with you."
+    },
+    "unavailable": {
+      "title": "Not part of shared access",
+      "description": "Sharing covers the health record itself. Settings, connected services, notifications and the AI features stay with the person who owns the account.",
+      "leave": "Back to my record"
+    },
+    "state": {
+      "active": "Active",
+      "pending": "Waiting for acceptance",
+      "expired": "Lapsed",
+      "revoked": "Ended"
+    },
+    "row": {
+      "readOnly": "Can read the record",
+      "canWrite": "Can read and add entries",
+      "invited": "Invited",
+      "accepted": "Accepted",
+      "expires": "Lapses",
+      "lastUsed": "Last opened",
+      "neverUsed": "never",
+      "endedByYou": "You ended it",
+      "endedByOwner": "Withdrawn",
+      "handedBack": "Handed back",
+      "ended": "Ended"
+    },
+    "invite": {
+      "title": "Invite someone",
+      "description": "Nothing is shared until they accept. Until then the invitation sits in their settings and gives them nothing.",
+      "identifierLabel": "Username or e-mail",
+      "identifierPlaceholder": "The name they sign in with",
+      "identifierHint": "They need an account on this instance. Invitations cannot be sent to an e-mail address that has not registered.",
+      "submit": "Send invitation",
+      "submitting": "Sending…",
+      "sent": "Invitation sent to {name}.",
+      "errorNoAccount": "No account on this instance carries that name.",
+      "errorDuplicate": "That account already has access to your record.",
+      "errorSelf": "That is your own account.",
+      "errorInvalid": "Please enter a username or e-mail address.",
+      "errorRateLimited": "Too many invitations. Please try again later.",
+      "errorFailed": "The invitation could not be sent. Please try again."
+    },
+    "given": {
+      "title": "Who can open my record",
+      "description": "Ended access stays listed, so you can always see who had it and when.",
+      "emptyTitle": "Nobody else can open your record",
+      "emptyDescription": "Invite someone above if you want them to be able to read it.",
+      "loadError": "The list could not be loaded.",
+      "revoke": "End access",
+      "withdrawInvite": "Withdraw",
+      "revokeTitle": "End {name}'s access?",
+      "revokeBody": "They lose access immediately, including any browser they have your record open in. What they have already seen cannot be taken back. You can invite them again at any time.",
+      "revokeConfirm": "End access"
+    },
+    "received": {
+      "title": "Records I can open",
+      "description": "An invitation gives you nothing until you accept it. You can hand access back whenever you want.",
+      "emptyTitle": "Nobody has shared a record with you",
+      "emptyDescription": "When someone invites you, the invitation appears here.",
+      "loadError": "The list could not be loaded.",
+      "accept": "Accept",
+      "accepting": "Accepting…",
+      "open": "Open",
+      "renounce": "Hand back",
+      "renounceTitle": "Hand {name}'s record back?",
+      "renounceBody": "You lose access immediately. They can invite you again at any time.",
+      "renounceConfirm": "Hand back"
+    },
+    "activity": {
+      "title": "When my record was opened",
+      "description": "Every time someone else opened your record.",
+      "retention": "This covers the last {days} days. Older entries are deleted.",
+      "emptyTitle": "Nobody has opened your record",
+      "emptyDescription": "Openings by anyone other than you appear here, one line per person per day.",
+      "loadError": "The activity could not be loaded.",
+      "opened": "{name} opened your record {count}×",
+      "acted": "{name} made a change in your record",
+      "deletedAccount": "A deleted account"
+    }
   }
 }

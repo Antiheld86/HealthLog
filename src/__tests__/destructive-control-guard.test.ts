@@ -498,6 +498,40 @@ const REGISTRY: DestructiveEntry[] = [
     ],
   },
 
+  // ── Account sharing ─────────────────────────────────────────────────────
+  {
+    file: "components/settings/access/grants-given-card.tsx",
+    destroys:
+      "another account's standing access to this health record, and every browser session of theirs that was inside it",
+    recovery: "permanent",
+    confirm: ["ConfirmButton"],
+    undetected:
+      "No detector sees it. The DELETE goes out from `useRevokeGrant` in `lib/queries/use-account-grants.ts`, and `lib/` is an excluded root; the card itself only calls `.mutate(grant.id)` with a bare string, which no payload pattern matches, and the route path lives in the hook rather than here. Registered by hand.",
+  },
+  {
+    file: "components/settings/access/grants-received-card.tsx",
+    destroys:
+      "this account's own access to somebody else's record, handed back rather than withdrawn",
+    recovery: "permanent",
+    confirm: ["ConfirmButton"],
+    undetected:
+      "Same shape as the card above, and one step further out of reach: renouncing is a POST, so not even a DELETE goes out. The path (`/api/account/grants/{id}/renounce`) names an act the D2 vocabulary does not carry, and it lives in the hook regardless. Registered by hand.",
+  },
+  {
+    file: "components/settings/access/grant-invite-card.tsx",
+    destroys:
+      "nothing — it offers access, and the offer confers nothing until the other person accepts it",
+    recovery: "permanent",
+    confirm: [],
+    unconfirmed: [
+      {
+        control: "the invitation form",
+        reason:
+          "D3 flags this file for `expiresAt: null` in the invite payload, reading it as a field being blanked. It is not: null means the grant runs until somebody ends it, which is the common household case and the absence of an expiry rather than the removal of one. The form creates a pending row and destroys nothing, and gating a creation behind a confirmation dialog would teach people to click through the dialogs that do guard a loss.",
+      },
+    ],
+  },
+
   // ── Admin ───────────────────────────────────────────────────────────────
   {
     file: "components/admin/danger-zone-section.tsx",

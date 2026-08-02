@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { JSX } from "react";
 
+import { AccessSection } from "@/components/settings/access-section";
 import { AccountSection } from "@/components/settings/account-section";
 import { AnamnesisSection } from "@/components/settings/anamnesis-section";
 import { SecuritySection } from "@/components/settings/security-section";
@@ -60,6 +61,7 @@ const SECTION_COMPONENTS: Record<
   () => JSX.Element | null
 > = {
   account: AccountSection,
+  access: AccessSection,
   security: SecuritySection,
   modules: ModulesSection,
   about: AboutSection,
