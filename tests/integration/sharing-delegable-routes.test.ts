@@ -1051,3 +1051,267 @@ contract<number>("GET /api/personal-records", {
   ownerMarker: 79.5,
   delegateMarker: 61.5,
 });
+
+/* -------------------------------------------------------------------------- */
+/* Sleep, nutrients, illness, workouts                                        */
+/* -------------------------------------------------------------------------- */
+
+async function seedSleepStage(userId: string, minutes: number) {
+  await getPrismaClient().measurement.create({
+    data: {
+      userId,
+      type: "SLEEP_DURATION",
+      value: minutes,
+      unit: "min",
+      measuredAt: new Date(Date.now() - 8 * 3_600_000),
+      source: "MANUAL",
+      sleepStage: "DEEP",
+    },
+  });
+}
+
+describe("GET /api/sleep/night", () => {
+  it("reads the owner's night and refuses once the grant ends", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await seedSleepStage(owner.id, 90);
+    await seedSleepStage(delegate.id, 30);
+
+    const { GET } = await import("@/app/api/sleep/night/route");
+    const { grant } = await switchInto(owner.id, delegate.id);
+
+    const response = await call(GET as Handler, "/api/sleep/night");
+    expect(response.status).toBe(200);
+    const payload = (await body(response)).data as {
+      main: { stages?: unknown; totalMinutes?: number } | null;
+    };
+    // The owner's 90 minutes, not the delegate's 30.
+    expect(JSON.stringify(payload)).toContain("90");
+    expect(JSON.stringify(payload)).not.toContain('"30"');
+
+    await revokeGrant(grant.id);
+    await expectDenied(await call(GET as Handler, "/api/sleep/night"));
+  });
+
+  it("is unchanged for a caller who has not switched", async () => {
+    const plain = await makeUser("plain");
+    await seedSleepStage(plain.id, 90);
+    await signIn(plain.id);
+
+    const { GET } = await import("@/app/api/sleep/night/route");
+    const response = await call(GET as Handler, "/api/sleep/night");
+    expect(response.status).toBe(200);
+    expect(JSON.stringify((await body(response)).data)).toContain("90");
+  });
+
+  it("refuses a caller who names a record they were never granted", async () => {
+    const owner = await makeUser("owner");
+    const stranger = await makeUser("stranger");
+    const session = await signIn(stranger.id);
+    await getPrismaClient().session.update({
+      where: { id: session.id },
+      data: { actingAsUserId: owner.id },
+    });
+
+    const { GET } = await import("@/app/api/sleep/night/route");
+    await expectDenied(await call(GET as Handler, "/api/sleep/night"));
+  });
+});
+
+describe("GET /api/sleep/rhythm", () => {
+  it("follows the record's sleep module, not the delegate's", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await getPrismaClient().user.update({
+      where: { id: owner.id },
+      data: { modulePreferencesJson: { sleep: false } },
+    });
+    await getPrismaClient().user.update({
+      where: { id: delegate.id },
+      data: { modulePreferencesJson: { sleep: true } },
+    });
+
+    await switchInto(owner.id, delegate.id);
+    const { GET } = await import("@/app/api/sleep/rhythm/route");
+    const response = await call(GET as Handler, "/api/sleep/rhythm");
+
+    expect(response.status).toBe(403);
+    expect((await body(response)).meta?.errorCode).toBe("module.disabled");
+  });
+
+  it("is unchanged for a caller who has not switched", async () => {
+    const plain = await makeUser("plain");
+    await signIn(plain.id);
+    const { GET } = await import("@/app/api/sleep/rhythm/route");
+    expect((await call(GET as Handler, "/api/sleep/rhythm")).status).toBe(200);
+  });
+});
+
+async function seedNutrient(userId: string, amount: number) {
+  // Opt-in module, default off. Enabled on whoever is seeded, so the delegate
+  // case below exercises the substitution rather than the gate.
+  await getPrismaClient().user.update({
+    where: { id: userId },
+    data: { modulePreferencesJson: { nutrients: true } },
+  });
+  const day = new Date().toISOString().slice(0, 10);
+  await getPrismaClient().nutrientIntakeDay.create({
+    data: { userId, day, nutrient: "magnesium", amount, unit: "mg" },
+  });
+}
+
+contract<number>("GET /api/nutrients", {
+  call: async () => {
+    const { GET } = await import("@/app/api/nutrients/route");
+    return call(GET as Handler, "/api/nutrients?days=30");
+  },
+  seed: seedNutrient,
+  read: (payload: { nutrients: { latestAmount: number }[] }) =>
+    payload.nutrients.map((n) => n.latestAmount),
+  ownerMarker: 320,
+  delegateMarker: 145,
+});
+
+contract<number>("GET /api/nutrients/daily", {
+  call: async () => {
+    const { GET } = await import("@/app/api/nutrients/daily/route");
+    return call(GET as Handler, "/api/nutrients/daily?nutrient=magnesium");
+  },
+  seed: seedNutrient,
+  read: (payload: { days: { amount: number }[] }) =>
+    payload.days.map((d) => d.amount).filter((a) => a > 0),
+  ownerMarker: 320,
+  delegateMarker: 145,
+});
+
+async function seedEpisode(userId: string, label: string) {
+  const episode = await getPrismaClient().illnessEpisode.create({
+    data: {
+      userId,
+      label,
+      type: "INFECTION",
+      onsetAt: new Date("2026-07-01T00:00:00Z"),
+    },
+  });
+  await getPrismaClient().illnessDayLog.create({
+    data: {
+      userId,
+      episodeId: episode.id,
+      date: "2026-07-02",
+      functionalImpact: 3,
+    },
+  });
+}
+
+contract<string>("GET /api/illness/episodes", {
+  call: async () => {
+    const { GET } = await import("@/app/api/illness/episodes/route");
+    return call(GET as Handler, "/api/illness/episodes");
+  },
+  seed: seedEpisode,
+  read: (payload: { label: string }[]) => payload.map((e) => e.label),
+  ownerMarker: "owner-flu",
+  delegateMarker: "delegate-flu",
+});
+
+describe("GET /api/illness/episodes/[id] and its day logs", () => {
+  it("resolve the ownership hop against the record", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await seedEpisode(owner.id, "owner-flu");
+    await seedEpisode(delegate.id, "delegate-flu");
+    const ownerEpisode =
+      await getPrismaClient().illnessEpisode.findFirstOrThrow({
+        where: { userId: owner.id },
+      });
+    const delegateEpisode =
+      await getPrismaClient().illnessEpisode.findFirstOrThrow({
+        where: { userId: delegate.id },
+      });
+
+    const detail = await import("@/app/api/illness/episodes/[id]/route");
+    const logs = await import("@/app/api/illness/episodes/[id]/day-logs/route");
+    const { grant } = await switchInto(owner.id, delegate.id);
+
+    const mine = await call(
+      detail.GET as Handler,
+      `/api/illness/episodes/${ownerEpisode.id}`,
+      { id: ownerEpisode.id },
+    );
+    expect(mine.status).toBe(200);
+    expect((await body(mine)).data).toMatchObject({ label: "owner-flu" });
+
+    // `loadOwnedEpisode` is what makes the episode-scoped day-log query safe.
+    // It now resolves against the owner, so the delegate's own episode 404s
+    // from in here rather than leaking its logs.
+    const theirs = await call(
+      logs.GET as Handler,
+      `/api/illness/episodes/${delegateEpisode.id}/day-logs?date=2026-07-02`,
+      { id: delegateEpisode.id },
+    );
+    expect(theirs.status).toBe(404);
+
+    const ownerLog = await call(
+      logs.GET as Handler,
+      `/api/illness/episodes/${ownerEpisode.id}/day-logs?date=2026-07-02`,
+      { id: ownerEpisode.id },
+    );
+    expect(ownerLog.status).toBe(200);
+    expect((await body(ownerLog)).data).toMatchObject({
+      functionalImpact: 3,
+    });
+
+    await revokeGrant(grant.id);
+    await expectDenied(
+      await call(
+        detail.GET as Handler,
+        `/api/illness/episodes/${ownerEpisode.id}`,
+        { id: ownerEpisode.id },
+      ),
+    );
+  });
+
+  it("are unchanged for a caller who has not switched", async () => {
+    const plain = await makeUser("plain");
+    await seedEpisode(plain.id, "plain-flu");
+    const episode = await getPrismaClient().illnessEpisode.findFirstOrThrow({
+      where: { userId: plain.id },
+    });
+    await signIn(plain.id);
+
+    const { GET } = await import("@/app/api/illness/episodes/[id]/route");
+    const response = await call(
+      GET as Handler,
+      `/api/illness/episodes/${episode.id}`,
+      { id: episode.id },
+    );
+    expect(response.status).toBe(200);
+    expect((await body(response)).data).toMatchObject({ label: "plain-flu" });
+  });
+});
+
+async function seedWorkout(userId: string, durationSec: number) {
+  await getPrismaClient().workout.create({
+    data: {
+      userId,
+      sportType: "RUNNING",
+      startedAt: new Date("2026-07-11T06:00:00Z"),
+      endedAt: new Date("2026-07-11T07:00:00Z"),
+      durationSec,
+    },
+  });
+}
+
+contract<number>("GET /api/workouts", {
+  call: async () => {
+    const { GET } = await import("@/app/api/workouts/route");
+    return call(GET as Handler, "/api/workouts");
+  },
+  seed: seedWorkout,
+  read: (payload: { workouts: { durationSec: number | null }[] }) =>
+    payload.workouts
+      .map((w) => w.durationSec)
+      .filter((d): d is number => d !== null),
+  ownerMarker: 3600,
+  delegateMarker: 1800,
+});

@@ -24,7 +24,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod/v4";
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiSuccess,
   returnAllZodIssues,
@@ -105,7 +105,7 @@ function serializeSession(s: SleepSession) {
 }
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  const { user } = await requireRecordAuth("read");
 
   // Per-domain gate: the hypnogram read serves only the sleep module's
   // view surfaces, so it gates on the sleep module. Disabled ⇒ 403.

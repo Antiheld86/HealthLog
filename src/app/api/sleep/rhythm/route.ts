@@ -19,14 +19,14 @@
  *
  * Auth: cookie session OR Bearer token (`requireAuth`). Soft-delete-filtered.
  */
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { buildSleepRhythm } from "@/lib/insights/derived/sleep-rhythm";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  const { user } = await requireRecordAuth("read");
 
   // Per-domain gate: the sleep-rhythm read serves only the sleep module's
   // view surfaces (Sleep page + iOS), so it gates on the sleep module.

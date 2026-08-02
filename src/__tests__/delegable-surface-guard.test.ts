@@ -292,6 +292,22 @@ const DELEGABLE_ROUTES: Record<string, string> = {
     "The entries of one custom metric, reached only after the metric itself resolves under the record's user id — the ownership hop runs before the entry query.",
   "app/api/personal-records/route.ts":
     "The record's personal bests, `where: { userId: user.id }`. Nothing else in the file.",
+  "app/api/sleep/night/route.ts":
+    "The record's hypnogram. Read-only, module-gated on the record, no write of any kind on the path.",
+  "app/api/sleep/rhythm/route.ts":
+    "The record's sleep rhythm, built from `buildSleepRhythm(user.id)` and gated on the record's sleep module.",
+  "app/api/nutrients/route.ts":
+    "The record's nutrient overview. It reads the last ingest audit row to date the data — integration-adjacent metadata, and no credential, endpoint or token crosses the wire.",
+  "app/api/nutrients/daily/route.ts":
+    "One nutrient's daily series over the record, scoped by the resolved user id.",
+  "app/api/illness/episodes/route.ts":
+    "The record's illness episodes. Module-gated on the record; the create arm keeps `requireAuth()`.",
+  "app/api/illness/episodes/[id]/route.ts":
+    "One episode of the record, fetch-then-guard against the resolved user.",
+  "app/api/illness/episodes/[id]/day-logs/route.ts":
+    "The day logs of one episode. The episode-scoped queries are safe because `loadOwnedEpisode(id, user.id)` runs first and now resolves against the record; the upsert arm keeps `requireAuth()`.",
+  "app/api/workouts/route.ts":
+    "The record's workout list. Verified to carry no AI-written paragraph: the single-workout route beside it does, and stays refused for exactly that reason.",
 };
 
 /**
@@ -315,7 +331,7 @@ const ACTOR_ROUTES: Record<string, string> = {
  * a formality by accident: every addition has to be counted here as well as
  * listed above, which is one more place a careless admission has to pass.
  */
-const FROZEN_ENTRY_COUNT = 23;
+const FROZEN_ENTRY_COUNT = 31;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —
