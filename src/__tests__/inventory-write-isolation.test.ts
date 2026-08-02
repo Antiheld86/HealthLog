@@ -22,6 +22,12 @@ import { join, relative, sep } from "node:path";
 const ROOT = join(__dirname, "../..");
 const SRC = join(ROOT, "src");
 
+/**
+ * Pruned on purpose: the generated Prisma client, build output, vendored
+ * dependencies, and the suites themselves are not the tree under audit. Note
+ * what is NOT pruned — this walk descends into dot-prefixed directories, so
+ * `src/app/.well-known` is inside the sweep. `fs.globSync` would drop it.
+ */
 const SKIP_DIRS = new Set(["__tests__", "node_modules", ".next", "generated"]);
 
 /**
@@ -61,6 +67,13 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 describe("medicationInventoryItem write isolation", () => {
+  // A sweep that finds nothing agrees with every allowlist, so the size of
+  // the tree being read is asserted before anything is concluded from it.
+  // Pinned below the real source-file count with headroom, not at one.
+  it("reads the tree it claims to sweep", () => {
+    expect(walk(SRC).length).toBeGreaterThan(1500);
+  });
+
   it("no file outside the consumption module + inventory surfaces writes inventory items", () => {
     const offenders: string[] = [];
     for (const file of walk(SRC)) {

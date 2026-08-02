@@ -11,6 +11,7 @@ import {
   Shield,
   Sun,
 } from "lucide-react";
+import { AccountSwitcherMenuItems } from "@/components/layout/account-switcher-menu";
 import { SHELL_HEADER_BAND } from "@/components/layout/shell-metrics";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/logo";
@@ -41,6 +42,8 @@ function getInitials(name: string): string {
 
 export function TopBar() {
   const { user, isLoading } = useAuth();
+  // v1.36.0 — acting on somebody else's record; see the menu below.
+  const sharedRecord = user?.accountAccess?.active != null;
   const logout = useLogout();
   const { theme, setTheme } = useTheme();
   const { t } = useTranslations();
@@ -112,25 +115,34 @@ export function TopBar() {
               <ChevronDown className="h-3 w-3 opacity-60" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-60">
-              <DropdownMenuItem asChild>
-                <Link href="/settings/account" className="cursor-pointer">
-                  <Settings className="mr-2 h-4 w-4" />
-                  {t("nav.settings")}
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/notifications" className="cursor-pointer">
-                  <Bell className="mr-2 h-4 w-4" />
-                  {t("nav.notifications")}
-                </Link>
-              </DropdownMenuItem>
-              {isAdmin && (
-                <DropdownMenuItem asChild>
-                  <Link href="/admin" className="cursor-pointer">
-                    <Shield className="mr-2 h-4 w-4" />
-                    {t("nav.admin")}
-                  </Link>
-                </DropdownMenuItem>
+              {/* v1.36.0 — the account utilities drop out while this browser is
+                  acting on somebody else's record. Every route behind them
+                  refuses under a switch, and a control that leads only to an
+                  explanation of why it does not work is worse than no control.
+                  The switcher below is how the person gets back. */}
+              {!sharedRecord && (
+                <>
+                  <DropdownMenuItem asChild>
+                    <Link href="/settings/account" className="cursor-pointer">
+                      <Settings className="mr-2 h-4 w-4" />
+                      {t("nav.settings")}
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/notifications" className="cursor-pointer">
+                      <Bell className="mr-2 h-4 w-4" />
+                      {t("nav.notifications")}
+                    </Link>
+                  </DropdownMenuItem>
+                  {isAdmin && (
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin" className="cursor-pointer">
+                        <Shield className="mr-2 h-4 w-4" />
+                        {t("nav.admin")}
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                </>
               )}
               {/* v1.4.36 W4e — About moved into the Admin Console
                   (`/admin/about`). The dropdown entry was redundant
@@ -177,6 +189,11 @@ export function TopBar() {
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
+              {/* v1.36.0 — the same switcher slice the desktop sidebar menu
+                  mounts. One component in both menus: a switcher a person can
+                  reach on their laptop and not on their phone is a record they
+                  can enter and cannot leave. */}
+              <AccountSwitcherMenuItems />
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => logout.mutate()}

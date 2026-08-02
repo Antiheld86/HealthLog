@@ -97,7 +97,6 @@ export interface GoalsChipPickerProps {
   userId: string;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function GoalsChipPicker({ userId: _userId }: GoalsChipPickerProps) {
   const { t } = useTranslations();
   const router = useRouter();

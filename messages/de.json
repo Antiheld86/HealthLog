@@ -4955,6 +4955,10 @@
           "dismiss": "Verstanden",
           "dismissError": "Konnte nicht gespeichert werden. Bitte versuche es erneut."
         }
+      },
+      "access": {
+        "title": "Geteilter Zugriff",
+        "subtitle": "Wer deine Gesundheitsakte öffnen kann und wessen Akte du öffnen kannst."
       }
     },
     "profile": "Profil",
@@ -9373,5 +9377,99 @@
     "scopeNone": "Noch nichts ausgewählt. Wählen Sie aus, was enthalten sein soll, oder übernehmen Sie den Standardbericht.",
     "scopeCount": "{count} Einträge aus {groups} Bereichen",
     "scopeSensitive": "inkl. {names}"
+  },
+  "recordSharing": {
+    "banner": {
+      "viewing": "Du bist in der Akte von {name}",
+      "readOnly": "Du kannst sie lesen, nicht ändern.",
+      "leave": "Zurück zu meiner Akte"
+    },
+    "switcher": {
+      "label": "Akte öffnen",
+      "ownRecord": "Meine eigene Akte",
+      "readOnly": "Nur lesen",
+      "canWrite": "Darf Einträge anlegen"
+    },
+    "switch": {
+      "failed": "Die Akte konnte nicht geöffnet werden. Bitte noch einmal versuchen.",
+      "noLongerAvailable": "Diese Akte ist nicht mehr für dich freigegeben."
+    },
+    "unavailable": {
+      "title": "Gehört nicht zum geteilten Zugriff",
+      "description": "Geteilt wird die Gesundheitsakte selbst. Einstellungen, verbundene Dienste, Benachrichtigungen und die KI-Funktionen bleiben bei der Person, der das Konto gehört.",
+      "leave": "Zurück zu meiner Akte"
+    },
+    "state": {
+      "active": "Aktiv",
+      "pending": "Wartet auf Zustimmung",
+      "expired": "Abgelaufen",
+      "revoked": "Beendet"
+    },
+    "row": {
+      "readOnly": "Darf die Akte lesen",
+      "canWrite": "Darf lesen und Einträge anlegen",
+      "invited": "Eingeladen",
+      "accepted": "Angenommen",
+      "expires": "Läuft ab",
+      "lastUsed": "Zuletzt geöffnet",
+      "neverUsed": "nie",
+      "endedByYou": "Von dir beendet",
+      "endedByOwner": "Zurückgezogen",
+      "handedBack": "Zurückgegeben",
+      "ended": "Beendet"
+    },
+    "invite": {
+      "title": "Jemanden einladen",
+      "description": "Vor der Zustimmung wird nichts geteilt. Bis dahin liegt die Einladung in den Einstellungen der anderen Person und gibt ihr nichts.",
+      "identifierLabel": "Benutzername oder E-Mail",
+      "identifierPlaceholder": "Der Name, mit dem sie sich anmeldet",
+      "identifierHint": "Die Person braucht ein Konto auf dieser Instanz. An eine E-Mail-Adresse ohne Registrierung lässt sich keine Einladung schicken.",
+      "submit": "Einladung senden",
+      "submitting": "Wird gesendet…",
+      "sent": "Einladung an {name} gesendet.",
+      "errorNoAccount": "Auf dieser Instanz gibt es kein Konto mit diesem Namen.",
+      "errorDuplicate": "Dieses Konto hat bereits Zugriff auf deine Akte.",
+      "errorSelf": "Das ist dein eigenes Konto.",
+      "errorInvalid": "Bitte einen Benutzernamen oder eine E-Mail-Adresse eingeben.",
+      "errorRateLimited": "Zu viele Einladungen. Bitte später noch einmal versuchen.",
+      "errorFailed": "Die Einladung konnte nicht gesendet werden. Bitte noch einmal versuchen."
+    },
+    "given": {
+      "title": "Wer meine Akte öffnen kann",
+      "description": "Beendeter Zugriff bleibt in der Liste, damit du immer siehst, wer ihn hatte und wann.",
+      "emptyTitle": "Niemand sonst kann deine Akte öffnen",
+      "emptyDescription": "Lade oben jemanden ein, wenn diese Person sie lesen können soll.",
+      "loadError": "Die Liste konnte nicht geladen werden.",
+      "revoke": "Zugriff beenden",
+      "withdrawInvite": "Zurückziehen",
+      "revokeTitle": "Zugriff von {name} beenden?",
+      "revokeBody": "Der Zugriff endet sofort, auch in jedem Browser, in dem deine Akte gerade offen ist. Was bereits gesehen wurde, lässt sich nicht zurückholen. Du kannst jederzeit erneut einladen.",
+      "revokeConfirm": "Zugriff beenden"
+    },
+    "received": {
+      "title": "Akten, die ich öffnen kann",
+      "description": "Eine Einladung gibt dir nichts, bevor du sie annimmst. Du kannst den Zugriff jederzeit zurückgeben.",
+      "emptyTitle": "Niemand hat eine Akte mit dir geteilt",
+      "emptyDescription": "Wenn dich jemand einlädt, erscheint die Einladung hier.",
+      "loadError": "Die Liste konnte nicht geladen werden.",
+      "accept": "Annehmen",
+      "accepting": "Wird angenommen…",
+      "open": "Öffnen",
+      "renounce": "Zurückgeben",
+      "renounceTitle": "Akte von {name} zurückgeben?",
+      "renounceBody": "Dein Zugriff endet sofort. Die Person kann dich jederzeit erneut einladen.",
+      "renounceConfirm": "Zurückgeben"
+    },
+    "activity": {
+      "title": "Wann meine Akte geöffnet wurde",
+      "description": "Jedes Mal, wenn jemand anderes deine Akte geöffnet hat.",
+      "retention": "Das umfasst die letzten {days} Tage. Ältere Einträge werden gelöscht.",
+      "emptyTitle": "Niemand hat deine Akte geöffnet",
+      "emptyDescription": "Zugriffe von anderen erscheinen hier, eine Zeile pro Person und Tag.",
+      "loadError": "Die Aktivität konnte nicht geladen werden.",
+      "opened": "{name} hat deine Akte {count}× geöffnet",
+      "acted": "{name} hat etwas in deiner Akte geändert",
+      "deletedAccount": "Ein gelöschtes Konto"
+    }
   }
 }

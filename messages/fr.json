@@ -4955,6 +4955,10 @@
           "dismiss": "Compris",
           "dismissError": "Enregistrement impossible. Veuillez réessayer."
         }
+      },
+      "access": {
+        "title": "Accès partagé",
+        "subtitle": "Qui peut ouvrir votre dossier de santé, et lequel vous pouvez ouvrir."
       }
     },
     "profile": "Profil",
@@ -9373,5 +9377,99 @@
     "scopeNone": "Rien de sélectionné pour l'instant. Choisissez ce qui doit figurer, ou appliquez le compte rendu standard.",
     "scopeCount": "{count} éléments issus de {groups} domaines",
     "scopeSensitive": "dont {names}"
+  },
+  "recordSharing": {
+    "banner": {
+      "viewing": "Vous êtes dans le dossier de {name}",
+      "readOnly": "Vous pouvez le lire, pas le modifier.",
+      "leave": "Revenir à mon dossier"
+    },
+    "switcher": {
+      "label": "Ouvrir un dossier",
+      "ownRecord": "Mon propre dossier",
+      "readOnly": "Lecture seule",
+      "canWrite": "Peut ajouter des entrées"
+    },
+    "switch": {
+      "failed": "Impossible d'ouvrir ce dossier. Veuillez réessayer.",
+      "noLongerAvailable": "Ce dossier n'est plus partagé avec vous."
+    },
+    "unavailable": {
+      "title": "Ne fait pas partie de l'accès partagé",
+      "description": "Le partage porte sur le dossier de santé lui-même. Les réglages, les services connectés, les notifications et les fonctions d'IA restent à la personne propriétaire du compte.",
+      "leave": "Revenir à mon dossier"
+    },
+    "state": {
+      "active": "Actif",
+      "pending": "En attente d'acceptation",
+      "expired": "Expiré",
+      "revoked": "Terminé"
+    },
+    "row": {
+      "readOnly": "Peut lire le dossier",
+      "canWrite": "Peut lire et ajouter des entrées",
+      "invited": "Invité le",
+      "accepted": "Accepté le",
+      "expires": "Expire le",
+      "lastUsed": "Dernière ouverture",
+      "neverUsed": "jamais",
+      "endedByYou": "Vous y avez mis fin",
+      "endedByOwner": "Retiré",
+      "handedBack": "Rendu",
+      "ended": "Terminé"
+    },
+    "invite": {
+      "title": "Inviter quelqu'un",
+      "description": "Rien n'est partagé avant son acceptation. D'ici là, l'invitation reste dans ses réglages et ne lui donne rien.",
+      "identifierLabel": "Nom d'utilisateur ou e-mail",
+      "identifierPlaceholder": "Le nom avec lequel elle se connecte",
+      "identifierHint": "Cette personne a besoin d'un compte sur cette instance. Une invitation ne peut pas être envoyée à une adresse non inscrite.",
+      "submit": "Envoyer l'invitation",
+      "submitting": "Envoi…",
+      "sent": "Invitation envoyée à {name}.",
+      "errorNoAccount": "Aucun compte de cette instance ne porte ce nom.",
+      "errorDuplicate": "Ce compte a déjà accès à votre dossier.",
+      "errorSelf": "C'est votre propre compte.",
+      "errorInvalid": "Saisissez un nom d'utilisateur ou une adresse e-mail.",
+      "errorRateLimited": "Trop d'invitations. Veuillez réessayer plus tard.",
+      "errorFailed": "L'invitation n'a pas pu être envoyée. Veuillez réessayer."
+    },
+    "given": {
+      "title": "Qui peut ouvrir mon dossier",
+      "description": "Les accès terminés restent dans la liste, pour que vous voyiez toujours qui l'a eu et quand.",
+      "emptyTitle": "Personne d'autre ne peut ouvrir votre dossier",
+      "emptyDescription": "Invitez quelqu'un ci-dessus si vous voulez qu'il puisse le lire.",
+      "loadError": "La liste n'a pas pu être chargée.",
+      "revoke": "Mettre fin à l'accès",
+      "withdrawInvite": "Retirer",
+      "revokeTitle": "Mettre fin à l'accès de {name} ?",
+      "revokeBody": "L'accès cesse immédiatement, y compris dans tout navigateur où votre dossier est ouvert. Ce qui a déjà été vu ne peut pas être repris. Vous pouvez inviter de nouveau à tout moment.",
+      "revokeConfirm": "Mettre fin à l'accès"
+    },
+    "received": {
+      "title": "Dossiers que je peux ouvrir",
+      "description": "Une invitation ne vous donne rien avant que vous l'acceptiez. Vous pouvez rendre l'accès quand vous voulez.",
+      "emptyTitle": "Personne n'a partagé de dossier avec vous",
+      "emptyDescription": "Quand quelqu'un vous invite, l'invitation apparaît ici.",
+      "loadError": "La liste n'a pas pu être chargée.",
+      "accept": "Accepter",
+      "accepting": "Acceptation…",
+      "open": "Ouvrir",
+      "renounce": "Rendre",
+      "renounceTitle": "Rendre le dossier de {name} ?",
+      "renounceBody": "Vous perdez l'accès immédiatement. Cette personne peut vous inviter de nouveau à tout moment.",
+      "renounceConfirm": "Rendre"
+    },
+    "activity": {
+      "title": "Quand mon dossier a été ouvert",
+      "description": "Chaque fois que quelqu'un d'autre a ouvert votre dossier.",
+      "retention": "Cela couvre les {days} derniers jours. Les entrées plus anciennes sont supprimées.",
+      "emptyTitle": "Personne n'a ouvert votre dossier",
+      "emptyDescription": "Les ouvertures par d'autres apparaissent ici, une ligne par personne et par jour.",
+      "loadError": "L'activité n'a pas pu être chargée.",
+      "opened": "{name} a ouvert votre dossier {count}×",
+      "acted": "{name} a fait une modification dans votre dossier",
+      "deletedAccount": "Un compte supprimé"
+    }
   }
 }

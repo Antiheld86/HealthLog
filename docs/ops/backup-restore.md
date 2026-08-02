@@ -92,6 +92,33 @@ The script downloads the object, decrypts it, and writes the JSON dump
 to disk. Importing the JSON back into a HealthLog instance is left to
 the operator (use `prisma db seed` or a custom script).
 
+### What a backup deliberately does not carry
+
+Every credential-shaped row is left out, and this is not an oversight to fix:
+API tokens, trusted devices, step-up elevations, known devices, clinician share
+links, and the account grants behind shared record access. Restoring data is
+rolling a record back to a known state. Restoring an authorization is different
+in kind, because a grant the owner revoked on Tuesday would come back alive out
+of Monday's file with nobody deciding it and neither person told.
+
+What this means in practice depends on where you restore to.
+
+**Onto the same instance.** Nothing changes. The restore replaces the account's
+data tables and does not touch grants, tokens or devices, so shared access
+carries on exactly as it was. Somebody who had read access before the restore
+still has it afterwards, now looking at the restored data.
+
+**Onto a fresh instance.** None of it comes with the file. Nobody has access to
+anybody's record, every API token has to be reissued, every device re-trusted,
+and both people have to invite and accept again before sharing works. That is
+the fail-safe direction — access lost, never access resumed — and re-consenting
+is the right amount of ceremony for handing someone your health record a second
+time. Plan for it rather than discovering it.
+
+The full per-model reasoning lives in `src/lib/export/backup-plan.ts`, where
+every excluded model carries a written verdict and a structural test refuses to
+let a new model land without one.
+
 ## Monthly restore drill (automatic)
 
 Since v1.16.4 a pg-boss job (`data-restore-drill`, cron `11 4 1 * *` —

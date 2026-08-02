@@ -12,9 +12,12 @@ import { TourLauncher } from "@/components/onboarding/tour-launcher";
 import { clearCachesForSessionEnd, useAuth } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
 import { CoachLaunchProvider } from "@/lib/insights/coach-launch-context";
+import { isDestinationInSharedRecord } from "./nav-model";
 import { BottomNav } from "./bottom-nav";
 import { DemoBanner } from "./demo-banner";
 import { OfflineBanner } from "./offline-banner";
+import { SharedRecordBanner } from "./shared-record-banner";
+import { SharedRecordUnavailable } from "./shared-record-unavailable";
 import { SidebarNav } from "./sidebar-nav";
 import { TopBar } from "./top-bar";
 
@@ -69,6 +72,14 @@ export function AuthShell({
     pathname.startsWith("/about") ||
     pathname.startsWith("/c/");
   const isAdminPage = pathname.startsWith("/admin");
+  // v1.36.0 — a page reached while acting on somebody else's record that
+  // sharing does not cover. The nav already drops these entries, so arriving
+  // here means a bookmark or a browser back button; the panel below explains
+  // it instead of letting the page paint a row of 403 error cards. Paint only
+  // — every route behind these pages refuses on its own.
+  const outsideSharedRecord =
+    user?.accountAccess?.active != null &&
+    !isDestinationInSharedRecord(pathname);
   const isOnboardingPage = pathname === "/onboarding";
   const showUnlockNotifier = isAuthenticated && !isPublicPage && !!user?.id;
 
@@ -301,6 +312,13 @@ export function AuthShell({
             the first chrome line a user sees in the offline branch.
           */}
           <OfflineBanner />
+          {/* v1.36.0 — whose record is open. Sits directly under the
+              connection strip and above everything else: a person who has
+              forgotten they are switched is about to write a reading into
+              somebody else's record, and no other line of chrome is worth
+              seeing first. Renders nothing when the session is in its own
+              account, which is every session that has never used sharing. */}
+          <SharedRecordBanner />
           {/* Demo instances surface a persistent "changes are not
               saved" strip — the proxy blocks every mutation, and
               without the banner that block only surfaced as a raw API
@@ -357,7 +375,7 @@ export function AuthShell({
               data-slot="main-content-wrapper"
               className="mx-auto max-w-screen-xl px-4 pt-6 pb-20 md:px-6"
             >
-              {children}
+              {outsideSharedRecord ? <SharedRecordUnavailable /> : children}
             </div>
           </main>
         </div>

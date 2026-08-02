@@ -348,13 +348,15 @@ const DELEGABLE_ROUTES: Record<string, string> = {
  *
  * The intended members are the surfaces a switched session needs in order to
  * stay usable and to get back out: the account bootstrap payload, the switch
- * endpoint, logout, the native refresh route, the locale read. One of them
- * exists so far. The rest arrive as their own diffs here; naming them before
+ * endpoint, logout, the native refresh route, the locale read. Two of them
+ * exist so far. The rest arrive as their own diffs here; naming them before
  * they exist would freeze a guess.
  */
 const ACTOR_ROUTES: Record<string, string> = {
   "app/api/account/switch/route.ts":
     "The way back out. Every other route refuses under a switch, so if this one did too a browser could enter a record and never leave it. It reads and writes exactly one row — the caller's own session — renders nothing of the owner's, and grants nothing: the account it stamps is validated against a live grant first, and the stamp is re-checked on every request after.",
+  "app/api/auth/me/route.ts":
+    "The app shell reads it on every boot, including while a switch is on: the switcher, the banner naming whose record is open, and the route back out all bind this payload. Every field it returns is the caller's own — their preferences, their modules, their identity — and the one field about the switch says only which records they may open and which they are inside. It reads no row of the owner's, and its `accountAccess` block grants nothing: the resolver re-checks the grant on every delegated request regardless of what this payload said a moment ago.",
 };
 
 /**
@@ -362,7 +364,7 @@ const ACTOR_ROUTES: Record<string, string> = {
  * a formality by accident: every addition has to be counted here as well as
  * listed above, which is one more place a careless admission has to pass.
  */
-const FROZEN_ENTRY_COUNT = 45;
+const FROZEN_ENTRY_COUNT = 46;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —

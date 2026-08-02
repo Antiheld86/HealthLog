@@ -102,7 +102,6 @@ async function acceptedGrant() {
   const grant = await acceptGrant({
     grantId: invited.id,
     granteeId: delegate.id,
-    ip: "203.0.113.7",
   });
   return { owner, delegate, grant };
 }
@@ -134,10 +133,12 @@ describe("account grant lifecycle", () => {
     const accepted = await acceptGrant({
       grantId: invited.id,
       granteeId: delegate.id,
-      ip: "203.0.113.7",
     });
     expect(accepted.acceptedAt).not.toBeNull();
-    expect(accepted.acceptedIp).toBe("203.0.113.7");
+    // The consent record says who and when, and deliberately not from where.
+    // A column re-added and written again would fail here rather than pass
+    // unnoticed, which is the point of asserting an absence.
+    expect(accepted).not.toHaveProperty("acceptedIp");
 
     const active = await findActiveGrant({
       grantorId: owner.id,
@@ -178,23 +179,20 @@ describe("account grant lifecycle", () => {
     const first = await acceptGrant({
       grantId: invited.id,
       granteeId: delegate.id,
-      ip: "203.0.113.7",
     });
     await expect(
       acceptGrant({
         grantId: invited.id,
         granteeId: delegate.id,
-        ip: "198.51.100.4",
       }),
     ).rejects.toMatchObject({ code: "not_pending" });
 
     // The second attempt did not re-stamp the acceptance: the consent record
-    // still says when and from where the delegate actually agreed.
+    // still says when the delegate actually agreed.
     const row = await getPrismaClient().accountGrant.findUniqueOrThrow({
       where: { id: invited.id },
     });
     expect(row.acceptedAt).toEqual(first.acceptedAt);
-    expect(row.acceptedIp).toBe("203.0.113.7");
   });
 
   it("cannot accept an invitation that already lapsed", async () => {
@@ -251,7 +249,6 @@ describe("account grant lifecycle", () => {
     });
     expect(row).not.toBeNull();
     expect(row!.acceptedAt).toEqual(grant.acceptedAt);
-    expect(row!.acceptedIp).toBe("203.0.113.7");
 
     expect(
       await findActiveGrant({
@@ -370,7 +367,6 @@ describe("account grant lifecycle", () => {
     expect(all[0].id).toBe(first.id);
     expect(all[0].revokedAt).toEqual(first.revokedAt);
     expect(all[0].revokedBy).toBe("GRANTOR");
-    expect(all[0].acceptedIp).toBe("203.0.113.7");
 
     // And the resolver still answers with the live row only.
     expect(
@@ -492,7 +488,6 @@ describe("account grant lifecycle paths", () => {
     const liveGrant = await acceptGrant({
       grantId: liveInvite.id,
       granteeId: live.id,
-      ip: "203.0.113.7",
     });
     const droppedInvite = await inviteGrant({
       grantorId: admin.id,

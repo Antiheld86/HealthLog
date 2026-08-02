@@ -100,9 +100,16 @@ not immediately. A weekly `geoipupdate` followed by
 
 The databases are downloaded under your own MaxMind account, so their
 terms are between you and MaxMind — read what your account agrees to at
-<https://www.maxmind.com/en/geolite2/eula>. HealthLog's own attribution
-("this product includes GeoLite2 data created by MaxMind") is already on
-the `/about` page and covers an instance that uses them.
+<https://www.maxmind.com/en/geolite/eula>. That agreement, the GeoLite
+End User License Agreement, incorporates CC BY-SA 4.0 by reference and
+controls wherever the two disagree; both require you to attribute the
+data to MaxMind if you make it available to anyone else.
+
+HealthLog's own attribution ("This product includes GeoLite2 data
+created by MaxMind, available from https://www.maxmind.com") is already
+on the `/about` page and covers an instance that uses them. Keep that
+page reachable — it is what carries the attribution for your deployment,
+and it is served without a session for exactly that reason.
 
 ## Troubleshooting
 

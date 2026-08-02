@@ -53,6 +53,14 @@ export const SETTINGS_SECTION_SLUGS = [
   // setup (TOTP + security keys), recovery codes, and passkey management. Sits
   // right after `account` so the two identity surfaces read as neighbours.
   "security",
+  // v1.36.0 — `access` ("Shared access"): which other accounts on this
+  // instance may open this health record, which records this one may open, and
+  // when they were opened. Sits beside `security` because it answers the same
+  // question those surfaces do — who can get at my account, and what have they
+  // been doing. Distinct from the `sharing` slug below, which is the clinician
+  // share LINK (a time-boxed read-only report handed to somebody outside the
+  // instance); this one is a standing relationship between two accounts on it.
+  "access",
   // v1.18.0 — `modules` ("Was du trackst") sits right after account: the
   // single front door for enabling/disabling secondary tracking domains.
   "modules",

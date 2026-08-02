@@ -41,6 +41,12 @@ test.describe("v1.4.27 — public pages", () => {
     // GeoLite2 attribution is the load-bearing reason this page exists.
     await expect(page.getByText(/GeoLite2/).first()).toBeVisible();
     await expect(page.getByText(/MaxMind/).first()).toBeVisible();
+    // Both licences, because naming only the Creative Commons one understates
+    // the terms: the GeoLite EULA is what governs and CC BY-SA 4.0 rides
+    // inside it.
+    await expect(
+      page.getByText(/GeoLite End User License Agreement/i),
+    ).toBeVisible();
     await expect(page.getByText(/Attribution-ShareAlike 4\.0/i)).toBeVisible();
   });
 

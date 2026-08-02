@@ -15,19 +15,17 @@
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { globSync } from "node:fs";
-import { join, sep } from "node:path";
+import { join } from "node:path";
+
+import { walkSourceFiles } from "./helpers/source-files";
 
 const SRC = join(process.cwd(), "src");
 
 function sourceFiles(): string[] {
-  return globSync("**/*.{ts,tsx}", { cwd: SRC })
-    .filter(
-      (p) => !p.startsWith(`generated${sep}`) && !p.startsWith("generated/"),
-    )
+  return walkSourceFiles(SRC, { floor: 3000 })
+    .filter((p) => !p.startsWith("generated/"))
     .filter((p) => !p.includes("__tests__"))
     .filter((p) => !p.endsWith(".test.ts") && !p.endsWith(".test.tsx"))
-    .map((p) => p.split(sep).join("/"))
     .sort();
 }
 
@@ -83,6 +81,16 @@ describe("the acting-account carrier is read in one place", () => {
     // themselves call these two functions and never name the column, which is
     // what keeps this list from growing one entry per surface.
     "lib/sharing/acting-session.ts",
+    // v1.36.0 — the only thing that PUBLISHES it, and it publishes the stamp
+    // only after re-deciding it. The account payload has to say which record
+    // the browser is inside so the banner can name a person, but the value it
+    // prints is not the column: an entry reaches `active` solely by surviving
+    // the same live-grant pass that builds the switcher list, so a stamp left
+    // behind by a lapsed grant reads as "not switched" — the same answer the
+    // resolver will independently give the next delegated request. Takes the
+    // whole auth context for exactly this reason: had it taken the id, the
+    // route would name the column too, and the list would grow per surface.
+    "lib/sharing/account-access.ts",
   ].sort();
 
   it("no other file reads or writes the carrier column", () => {

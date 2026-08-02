@@ -16,6 +16,10 @@ const eslintConfig = defineConfig([
     // v1.31.4 — ignore local tool worktrees so a worktree on another
     // commit cannot poison `pnpm lint` locally.
     // CI never sees these paths; the rules protect the dev environment.
+    // `.wt-*` is the convention actually in use; the two names below predate
+    // it. Without the first pattern `pnpm lint` walks every worktree in the
+    // root, which is both slow and exactly the poisoning this list prevents.
+    ".wt-*/**",
     ".claude/**",
     ".worktrees/**",
     // The project-local ESLint rule plugin is CommonJS (require/module
@@ -32,6 +36,21 @@ const eslintConfig = defineConfig([
   {
     plugins: { healthlog: healthlogPlugin },
     rules: {
+      // The codebase already marks a deliberately unused binding by prefixing
+      // it with an underscore — a required-but-ignored route handler argument,
+      // a mock signature that has to match the real one. The rule did not know
+      // that convention, so seven such bindings warned and `pnpm lint` could
+      // not be read as pass/fail. Teaching it the convention is what makes a
+      // real warning visible again.
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          destructuredArrayIgnorePattern: "^_",
+        },
+      ],
       "healthlog/queryKey-factory": "error",
       // v1.5.6 — every outbound fetch under src/lib + src/app must route
       // through the safeFetch wrapper (manual-redirect + timeout, and the

@@ -7,10 +7,13 @@
  * row with `acceptedAt IS NULL` and why this route is the only thing that can
  * set it.
  *
- * The acceptance is also the consent record. `acceptedAt` and `acceptedIp` are
- * stamped here and never anywhere else, on the same row that carries who
- * offered the access and when it ended — one row, one history, no second
- * receipt table to disagree with it.
+ * The acceptance is also the consent record. `acceptedAt` is stamped here and
+ * never anywhere else, on the same row that carries who offered the access and
+ * when it ended — one row, one history, no second receipt table to disagree
+ * with it. The address the delegate accepted from is deliberately not part of
+ * it: who and when is what a consent record has to answer, and an address kept
+ * for the life of both accounts answers nothing further. The audit row below
+ * still carries it, under `audit_logs`' own retention.
  *
  * Not delegable: bare `requireAuth()` refuses under a switch, so nobody can
  * accept an invitation while acting as somebody else. The delegate is the
@@ -60,7 +63,6 @@ export const POST = apiHandler(
       const grant = await acceptGrant({
         grantId: id,
         granteeId: user.id,
-        ip,
       });
 
       const grantor = await prisma.user.findUniqueOrThrow({

@@ -34,8 +34,9 @@
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { join, sep } from "node:path";
-import { globSync } from "node:fs";
+import { join } from "node:path";
+
+import { walkSourceFiles } from "./helpers/source-files";
 
 const SRC = join(process.cwd(), "src");
 
@@ -46,8 +47,8 @@ const SRC = join(process.cwd(), "src");
  * `app/`) and never read — see CLAUDE.md.
  */
 function appFiles(): string[] {
-  return globSync("app/**/*.{ts,tsx}", { cwd: SRC })
-    .map((p) => p.split(sep).join("/"))
+  return walkSourceFiles(SRC, { floor: 3000 })
+    .filter((p) => p.startsWith("app/"))
     .filter((p) => !p.includes("__tests__"))
     .filter((p) => !p.endsWith(".test.ts") && !p.endsWith(".test.tsx"))
     .sort();

@@ -43,7 +43,6 @@ import {
   TOMBSTONE_RETENTION_DAYS,
 } from "@/lib/auth/native-client";
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const GET = apiHandler(async (_request: NextRequest) => {
   const { user } = await requireAuth();
 

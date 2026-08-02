@@ -50,6 +50,61 @@ export const E2E_USER = {
   role: "ADMIN",
 } as const;
 
+/**
+ * v1.36.0 — the SECOND account, so account sharing has two sides to test.
+ *
+ * Sharing is the one feature in the product that cannot be exercised by one
+ * person: somebody has to own a record and somebody else has to be given it.
+ * This account owns the record; `E2E_USER` is the delegate throughout the
+ * sharing spec.
+ */
+export const E2E_OWNER = {
+  email: "e2e-owner@healthlog.test",
+  username: "e2e-owner",
+  password: "Qv7bR2n!Ks9wLd4T",
+  role: "USER",
+} as const;
+
+/**
+ * Weights seeded one per account, chosen so neither can be mistaken for the
+ * other in rendered markup and neither collides with a value any other spec
+ * writes.
+ *
+ * The delegate's number is the whole point of the stale-paint check: after
+ * switching into the owner's record it must appear NOWHERE, at no moment. A
+ * spec that only waited for the owner's data to arrive would prove nothing
+ * about what was on screen in between.
+ */
+export const E2E_DELEGATE_MARKER_KG = 77.7;
+export const E2E_OWNER_MARKER_KG = 63.3;
+
+export const OWNER_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateOwner.json",
+);
+
+/**
+ * A SECOND cookie jar for the same delegate account, and the reason it exists
+ * is the one property that makes account switching work at all: the switch is
+ * stamped on the session row, not held in the tab. Every session opened from
+ * `STORAGE_STATE_PATH` is therefore the same session — so a spec that switches
+ * that jar into somebody else's record switches it for every spec that
+ * authenticates with it, whichever of them happens to be mid-navigation on the
+ * other worker.
+ *
+ * The symptom is a wandering one: `/settings/ai` painting "Not part of shared
+ * access", an axe scan reading a banner nobody asked for, a `waitForResponse`
+ * on a request the refused surface never sends. Nothing in the failing spec is
+ * wrong and nothing in its file explains it.
+ *
+ * So the journey that switches gets its own login, and the shared jar is never
+ * pointed anywhere. Same account, different session row, no overlap.
+ */
+export const DELEGATE_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateDelegate.json",
+);
+
 async function hashPassword(password: string): Promise<string> {
   return hash(password, {
     memoryCost: 19456,
@@ -179,6 +234,85 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
       [cuid(), now, E2E_USER.username],
     );
 
+    // ── v1.36.0 — the sharing fixture ────────────────────────────────────
+    //
+    // A second account, one distinctive weight in each record, and a clean
+    // grant table. The reset matters as much as the seed: grants and switch
+    // stamps outlive a run, and a second run starting with the delegate
+    // already inside the owner's record would skip the invitation half of
+    // the journey while still going green.
+    await pool.query(
+      `INSERT INTO users
+        (id, username, email, password_hash, role,
+         created_at, updated_at,
+         onboarding_completed_at, onboarding_tour_completed)
+       VALUES ($1, $2, $3, $4, 'USER', $5, $5, $5, true)
+       ON CONFLICT (username) DO UPDATE SET
+         email = EXCLUDED.email,
+         password_hash = EXCLUDED.password_hash,
+         updated_at = EXCLUDED.updated_at,
+         onboarding_completed_at = EXCLUDED.onboarding_completed_at,
+         onboarding_tour_completed = EXCLUDED.onboarding_tour_completed`,
+      [
+        cuid(),
+        E2E_OWNER.username,
+        E2E_OWNER.email,
+        await hashPassword(E2E_OWNER.password),
+        now,
+      ],
+    );
+
+    // Every grant between the pair, and any switch stamp either of them is
+    // carrying. Deleted rather than revoked: this is fixture hygiene, not a
+    // lifecycle transition, and a revoked row would still show in the panel.
+    await pool.query(
+      `DELETE FROM account_grants
+       WHERE grantor_id IN (SELECT id FROM users WHERE username = ANY($1))
+          OR grantee_id IN (SELECT id FROM users WHERE username = ANY($1))`,
+      [[E2E_USER.username, E2E_OWNER.username]],
+    );
+    await pool.query(
+      `UPDATE sessions SET acting_as_user_id = NULL
+       WHERE user_id IN (SELECT id FROM users WHERE username = ANY($1))`,
+      [[E2E_USER.username, E2E_OWNER.username]],
+    );
+    await pool.query(
+      `DELETE FROM rate_limits
+       WHERE key LIKE 'sharing:%'`,
+    );
+
+    // The login bucket, for the same reason. This setup signs in THREE times
+    // now (the shared jar, the owner, and the sharing journey's own delegate
+    // jar), and the ceiling is five attempts per IP per quarter-hour — so two
+    // local runs in a row would otherwise end with a 429 from the fixture
+    // rather than a failure from the product. Only the auth surfaces' own
+    // buckets are cleared; nothing else in the table is touched.
+    await pool.query(`DELETE FROM rate_limits WHERE key LIKE 'auth:%'`);
+
+    // One marker weight per record. Re-seeded by delete-then-insert so a
+    // re-run cannot accumulate duplicates and so an edited constant takes
+    // effect rather than sitting beside the old value.
+    for (const [username, kg] of [
+      [E2E_USER.username, E2E_DELEGATE_MARKER_KG],
+      [E2E_OWNER.username, E2E_OWNER_MARKER_KG],
+    ] as const) {
+      await pool.query(
+        `DELETE FROM measurements
+         WHERE user_id = (SELECT id FROM users WHERE username = $1)
+           AND external_id = 'e2e-sharing-marker'`,
+        [username],
+      );
+      await pool.query(
+        `INSERT INTO measurements
+          (id, user_id, type, value, unit, source, measured_at,
+           external_id, created_at, updated_at)
+         SELECT $1, u.id, 'WEIGHT', $2, 'kg', 'MANUAL', $3,
+                'e2e-sharing-marker', $3, $3
+         FROM users u WHERE u.username = $4`,
+        [cuid(), kg, now, username],
+      );
+    }
+
     // Console (instead of structured logging) is intentional here —
     // global-setup runs outside the app's logging context, and the
     // line is useful when debugging a CI failure where the seed didn't
@@ -190,60 +324,82 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     await pool.end();
   }
 
-  // Login once and persist the resulting cookie jar so every spec can
-  // reuse it via `playwright.config.ts → use.storageState`. This is the
-  // documented Playwright pattern (`docs/auth.md`) and the only way to
-  // avoid the per-spec login + rate-limit dance.
+  // Log the fixture accounts in here and persist their cookie jars so specs
+  // can reuse them via `test.use({ storageState })`. This is the documented
+  // Playwright pattern (`docs/auth.md`) and the only way to avoid the per-spec
+  // login + rate-limit dance.
   const baseURL =
     config.projects[0]?.use.baseURL ??
     process.env.E2E_BASE_URL ??
     "http://localhost:3000";
 
+  // The shared jar every authenticated spec reads.
+  await captureAuthState(baseURL, E2E_USER, STORAGE_STATE_PATH);
+
+  // v1.36.0 — the owner's jar. The sharing journey needs both sides of a grant
+  // signed in at once, and the login endpoint is IP-rate-limited, so the owner
+  // is logged in here rather than inside the spec.
+  await captureAuthState(baseURL, E2E_OWNER, OWNER_STORAGE_STATE_PATH);
+
+  // The delegate's own jar for that journey. Same account as the shared one,
+  // deliberately a different session row — see DELEGATE_STORAGE_STATE_PATH for
+  // what happens when the journey switches the shared row instead.
+  await captureAuthState(baseURL, E2E_USER, DELEGATE_STORAGE_STATE_PATH);
+}
+
+/**
+ * Log one account in and write its cookie jar to `path`.
+ *
+ * Each call mints a fresh session row, so two jars for the same account are
+ * two independent browser sessions — which is the whole point of the delegate
+ * jar above.
+ *
+ * Only the cookies the auth shell needs survive the filter. v1.4.22 C4 added
+ * `hl_onboarding`: the login route sets it to "pending" for a new account and
+ * DELETES it for an already-onboarded one, so for these pre-seeded accounts it
+ * is absent and the proxy passes the dashboard through.
+ *
+ * v1.27.11 — the locale cookie is pinned to English rather than inherited. The
+ * server honours `User.locale` when the cookie is absent (the ITP fix), and
+ * the locale-switch spec mirrors its German pick into the SHARED account's
+ * profile — without this cookie every spec running after it would render
+ * German and the English-string assertions would fail. The cookie sits at the
+ * top of the resolution ladder, so each spec context stays deterministically
+ * English; locale-switch overrides it inside its own context only.
+ */
+async function captureAuthState(
+  baseURL: string,
+  account: { username: string; password: string },
+  path: string,
+): Promise<void> {
   const ctx = await playwrightRequest.newContext({ baseURL });
-  const res = await ctx.post("/api/auth/login", {
-    data: {
-      email: E2E_USER.username,
-      password: E2E_USER.password,
-    },
-  });
-  if (res.status() !== 200) {
-    const body = await res.text();
-    throw new Error(
-      `[e2e/global-setup] login failed: HTTP ${res.status()} — ${body.slice(0, 200)}`,
+  try {
+    const res = await ctx.post("/api/auth/login", {
+      data: { email: account.username, password: account.password },
+    });
+    if (res.status() !== 200) {
+      const body = await res.text();
+      throw new Error(
+        `[e2e/global-setup] login failed for ${account.username}: HTTP ${res.status()} — ${body.slice(0, 200)}`,
+      );
+    }
+    const state = await ctx.storageState();
+    state.cookies = state.cookies.filter((c) =>
+      ["healthlog_session", "hl_onboarding"].includes(c.name),
     );
+    state.cookies.push({
+      name: "healthlog-locale",
+      value: "en",
+      domain: new URL(baseURL).hostname,
+      path: "/",
+      expires: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365,
+      httpOnly: false,
+      secure: false,
+      sameSite: "Lax",
+    });
+    await writeFile(path, JSON.stringify(state, null, 2));
+    console.log(`[e2e/global-setup] auth state captured to ${path}`);
+  } finally {
+    await ctx.dispose();
   }
-  const state = await ctx.storageState();
-  // Strip any cookies we don't recognise so storageState only carries
-  // what the auth shell needs. v1.4.22 C4 added `hl_onboarding` — the
-  // login route sets it to "pending" for new users and DELETES it for
-  // already-onboarded ones, so for our pre-seeded completed e2e user
-  // the cookie is absent and the proxy passes the dashboard through.
-  state.cookies = state.cookies.filter((c) =>
-    ["healthlog_session", "healthlog-locale", "hl_onboarding"].includes(c.name),
-  );
-  // v1.27.11 — pin the shared auth state to English via an explicit locale
-  // cookie. The server now honours `User.locale` when the cookie is absent
-  // (the ITP fix), and the locale-switch spec mirrors its German pick into
-  // the SHARED e2e user's profile — without this cookie every spec running
-  // after it would render German and the English-string assertions fail.
-  // The cookie sits at the top of the resolution ladder, so each spec
-  // context stays deterministically English; locale-switch overrides it
-  // inside its own context only.
-  const base = new URL(baseURL);
-  state.cookies = state.cookies.filter((c) => c.name !== "healthlog-locale");
-  state.cookies.push({
-    name: "healthlog-locale",
-    value: "en",
-    domain: base.hostname,
-    path: "/",
-    expires: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365,
-    httpOnly: false,
-    secure: false,
-    sameSite: "Lax",
-  });
-  await writeFile(STORAGE_STATE_PATH, JSON.stringify(state, null, 2));
-  await ctx.dispose();
-  console.log(
-    `[e2e/global-setup] auth state captured to ${STORAGE_STATE_PATH}`,
-  );
 }

@@ -493,6 +493,13 @@ function markerCounts(
 }
 
 describe("success affordance — owned by the outcome module, pinned everywhere else", () => {
+  // A sweep that finds nothing agrees with every allowlist, so the size of
+  // the tree being read is asserted before anything is concluded from it.
+  // Pinned below the real component-file count with headroom, not at one.
+  it("reads the tree it claims to sweep", () => {
+    expect(componentSourceFiles().length).toBeGreaterThan(400);
+  });
+
   it("lets no unlisted component reach for the success affordance", () => {
     const unlisted = componentSourceFiles()
       .filter((path) => !path.startsWith(PRESENTATION_DIR))

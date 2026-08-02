@@ -39,6 +39,7 @@ import {
   Thermometer,
   TrendingUp,
   User,
+  UsersRound,
   type LucideIcon,
 } from "lucide-react";
 
@@ -49,6 +50,7 @@ import type { SettingsSectionSlug } from "./section-slugs";
 const SLUG_ICON: Record<SettingsSectionSlug, LucideIcon> = {
   account: User,
   security: ShieldCheck,
+  access: UsersRound,
   modules: Blocks,
   integrations: Link2,
   sources: Layers,

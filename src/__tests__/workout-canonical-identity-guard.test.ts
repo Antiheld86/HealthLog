@@ -21,8 +21,9 @@
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { globSync } from "node:fs";
-import { join, sep } from "node:path";
+import { join } from "node:path";
+
+import { walkSourceFiles } from "./helpers/source-files";
 
 const SRC = join(process.cwd(), "src");
 
@@ -52,8 +53,7 @@ const IDENTITY_OWNER: Record<string, string> = {
 const EXPECTED_CALL_SITES = Object.keys(IDENTITY_OWNER).sort();
 
 function sourceFiles(): string[] {
-  return globSync("**/*.{ts,tsx}", { cwd: SRC })
-    .map((p) => p.split(sep).join("/"))
+  return walkSourceFiles(SRC, { floor: 3000 })
     .filter((p) => !p.startsWith("generated/"))
     .filter((p) => !p.includes("__tests__"))
     .filter((p) => !p.endsWith(".test.ts") && !p.endsWith(".test.tsx"))
@@ -81,6 +81,13 @@ function invokesPicker(source: string): boolean {
 }
 
 describe("the picker's call-site set is frozen", () => {
+  // A sweep that finds nothing agrees with every allowlist, so the size of
+  // the tree being read is asserted before anything is concluded from it.
+  // Pinned below the real source-file count with headroom, not at one.
+  it("reads the tree it claims to sweep", () => {
+    expect(sourceFiles().length).toBeGreaterThan(1500);
+  });
+
   it("has exactly the call sites this file acknowledges", () => {
     const found = sourceFiles()
       .filter((rel) => rel !== PICKER)

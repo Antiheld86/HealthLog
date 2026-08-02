@@ -33,6 +33,7 @@ import {
 } from "@tanstack/react-query";
 
 import { queryKeys } from "@/lib/query-keys";
+import { isReadingSharedRecord } from "@/lib/query-keys/record-scope";
 
 const DB_NAME = "healthlog-query-cache";
 const STORE = "kv";
@@ -173,6 +174,12 @@ export async function restorePersistedQueryCache(
   buildVersion: string,
 ): Promise<void> {
   if (typeof indexedDB === "undefined") return;
+  // v1.36.0 — a browser inside somebody else's record restores nothing. The
+  // store holds the caller's OWN dashboard (it is the only thing that was ever
+  // written to it, see the flush below), and painting that under a banner
+  // saying "viewing her record" is the mis-context failure this feature is
+  // built to prevent, in the one place a full reload cannot clear.
+  if (isReadingSharedRecord()) return;
   try {
     const payload = await idbGet<PersistedPayload>();
     if (!payload) return;
@@ -245,6 +252,13 @@ export function startPersistingQueryCache(
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   const flush = () => {
+    // v1.36.0 — never write another person's record to this device. The
+    // allowlist below decides WHICH families are low-sensitivity enough to
+    // persist; that judgement was made about the account's own data and does
+    // not carry over to a record they were merely given to read. Refusing at
+    // the flush (rather than filtering keys) also means the last good snapshot
+    // of the caller's own dashboard survives a switch untouched.
+    if (isReadingSharedRecord()) return;
     const state = dehydrate(queryClient, {
       shouldDehydrateQuery: (query) =>
         query.state.status === "success" && isPersistableKey(query.queryKey),
@@ -337,4 +351,27 @@ export async function clearOfflineCachesForSessionEnd(): Promise<void> {
       /* best effort */
     }
   }
+}
+
+/**
+ * v1.36.0 — the same wipe, before a record switch in either direction.
+ *
+ * Deliberately the same bytes as the session-end wipe rather than a narrower
+ * one, and deliberately named for the act that calls it.
+ *
+ * The full page reload the switch performs clears the in-memory cache; these
+ * two layers are the ones that survive it. The IndexedDB snapshot holds the
+ * dashboard the browser was last looking at, and the service worker's
+ * `healthlog-data-*` cache answers `/api/…` reads from disk on a
+ * stale-while-revalidate branch — so without this call, the first paint after
+ * switching into a record can be the previous record's numbers, served by the
+ * worker, under a banner naming the new one. Nothing about the page's own code
+ * would be wrong; the answer would just come from somewhere the page does not
+ * control.
+ *
+ * Run it BEFORE the reload and await it. A wipe racing the navigation is a
+ * wipe that sometimes does not happen, and "sometimes" is the whole failure.
+ */
+export async function clearOfflineCachesForRecordSwitch(): Promise<void> {
+  await clearOfflineCachesForSessionEnd();
 }

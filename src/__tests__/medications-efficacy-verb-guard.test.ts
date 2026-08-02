@@ -80,6 +80,12 @@ function flatten(obj: unknown, prefix: string, out: [string, string][]): void {
 }
 
 describe("medications.efficacy — banned verdict/advice verbs", () => {
+  // Six shipped locales. An empty read of `messages/` would register zero
+  // per-locale cases and the suite would report green over nothing.
+  it("reads every shipped locale bundle", () => {
+    expect(LOCALES.length).toBeGreaterThanOrEqual(6);
+  });
+
   it.each(LOCALES)("%s carries no forbidden verb", (file) => {
     const bundle = JSON.parse(readFileSync(join(MESSAGES, file), "utf8")) as {
       medications?: { efficacy?: unknown };

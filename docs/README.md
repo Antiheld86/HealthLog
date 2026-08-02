@@ -26,7 +26,12 @@ notes, and machine-readable specs that ship alongside the source:
   `OIDC_ONLY` consequences, and the break-glass runbook. Also
   [`self-hosting/geolite2.md`](./self-hosting/geolite2.md) — bringing your
   own offline GeoLite2 databases via `GEOLITE2_DIR` instead of sending
-  login IPs to a third-party lookup.
+  login IPs to a third-party lookup. And
+  [`self-hosting/account-sharing.md`](./self-hosting/account-sharing.md) —
+  letting one account on the instance open another's health record: what
+  the person given access can and cannot reach, what revocation does and
+  does not undo, and which trust properties of the instance are unchanged
+  by it.
 - [`migration/`](./migration/) — release-by-release migration notes.
   Read the entry for the version you're upgrading from.
 - [`audit/`](./audit/) — per-release audit summaries archived for

@@ -23,8 +23,10 @@
  *      are pinned to a named allowlist, so a new converted-value surface
  *      cannot quietly join them.
  */
-import { readFileSync, globSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
+
+import { walkSourceFiles } from "./helpers/source-files";
 
 import { describe, it, expect } from "vitest";
 
@@ -69,7 +71,7 @@ const RAW_SCALE_READ =
   /\b\w*[Tt]ransform(?:For\([^)]*\))?\??\.(factor|offset)\b/;
 
 function sourceFiles(): string[] {
-  return globSync("**/*.{ts,tsx}", { cwd: SRC }).filter(
+  return walkSourceFiles(SRC, { floor: 3000 }).filter(
     (rel) =>
       // Never walk the Prisma client, and skip the suites that legitimately
       // exercise the raw arithmetic they are asserting about.

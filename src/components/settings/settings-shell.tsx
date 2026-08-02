@@ -38,6 +38,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   User,
+  UsersRound,
   type LucideIcon,
 } from "lucide-react";
 
@@ -148,6 +149,16 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     slug: "security",
     titleKey: "settings.sections.security.title",
     icon: ShieldCheck,
+    group: "account",
+  },
+  // v1.36.0 — who else may open this record, and whose this account may open.
+  // In the Account group beside Security: both answer "who can get at my
+  // account and what have they done", and a person looking for one will look
+  // where the other is.
+  {
+    slug: "access",
+    titleKey: "settings.sections.access.title",
+    icon: UsersRound,
     group: "account",
   },
   // v1.23 — "Data & Privacy" assembles the export / deletion / retention /

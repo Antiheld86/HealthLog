@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
+import { AccountSwitcherMenuItems } from "@/components/layout/account-switcher-menu";
 import { medicationsPrefetchIntentProps } from "@/lib/queries/prefetch-medications";
 import {
   isNavDestinationActive,
@@ -58,12 +59,51 @@ function getInitials(name: string): string {
     .join("");
 }
 
+/**
+ * The sidebar footer's name-and-avatar block.
+ *
+ * A link into the account settings normally, and a plain block while this
+ * browser is acting on somebody else's record — the settings routes refuse
+ * under a switch, so the link would lead only to an explanation of why it did
+ * not work. It keeps naming the person at the keyboard either way, which is
+ * what a switched session needs it to do.
+ */
+function FooterIdentity({
+  sharedRecord,
+  label,
+  children,
+}: {
+  sharedRecord: boolean;
+  label: string;
+  children: React.ReactNode;
+}) {
+  const className =
+    "flex min-w-0 flex-1 items-center gap-3 rounded-md transition-colors";
+  if (sharedRecord) {
+    return <div className={className}>{children}</div>;
+  }
+  return (
+    <Link
+      href="/settings/account"
+      aria-label={label}
+      className={`hover:bg-accent ${className}`}
+    >
+      {children}
+    </Link>
+  );
+}
+
 function SidebarUserSection({ collapsed }: { collapsed: boolean }) {
   const { user } = useAuth();
   const logout = useLogout();
   const { theme, setTheme } = useTheme();
   const { t } = useTranslations();
   const avatarUrl = user?.avatarUrl ?? null;
+  // v1.36.0 — while this browser is acting on somebody else's record the
+  // account surfaces are unreachable, so the avatar stops being a door into
+  // them. It still names the person at the keyboard, which is exactly what a
+  // switched session needs it to do.
+  const sharedRecord = user?.accountAccess?.active != null;
 
   if (!user) return null;
 
@@ -76,6 +116,23 @@ function SidebarUserSection({ collapsed }: { collapsed: boolean }) {
       <Sun className="h-4 w-4" />
     );
 
+  const identityBlock = (
+    <>
+      <Avatar className="h-9 w-9 shrink-0">
+        {avatarUrl && <AvatarImage src={avatarUrl} alt={user.username} />}
+        <AvatarFallback className="bg-primary/15 text-primary text-xs font-medium">
+          {getInitials(user.username)}
+        </AvatarFallback>
+      </Avatar>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold">{user.username}</p>
+        {user.email && (
+          <p className="text-muted-foreground truncate text-xs">{user.email}</p>
+        )}
+      </div>
+    </>
+  );
+
   const dropdownContent = (
     <DropdownMenuContent
       side="right"
@@ -87,34 +144,27 @@ function SidebarUserSection({ collapsed }: { collapsed: boolean }) {
           settings. Clicking the avatar / name jumps straight to
           `/settings/account` rather than making the user hunt for a
           separate "Settings" entry. */}
-      <DropdownMenuItem asChild>
-        <Link
-          href="/settings/account"
-          className="flex cursor-pointer items-center gap-3 px-2 py-2"
-        >
-          <Avatar className="h-9 w-9 shrink-0">
-            {avatarUrl && <AvatarImage src={avatarUrl} alt={user.username} />}
-            <AvatarFallback className="bg-primary/15 text-primary text-xs font-medium">
-              {getInitials(user.username)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">{user.username}</p>
-            {user.email && (
-              <p className="text-muted-foreground truncate text-xs">
-                {user.email}
-              </p>
-            )}
-          </div>
-        </Link>
-      </DropdownMenuItem>
+      {sharedRecord ? (
+        <div className="flex items-center gap-3 px-2 py-2">{identityBlock}</div>
+      ) : (
+        <DropdownMenuItem asChild>
+          <Link
+            href="/settings/account"
+            className="flex cursor-pointer items-center gap-3 px-2 py-2"
+          >
+            {identityBlock}
+          </Link>
+        </DropdownMenuItem>
+      )}
       <DropdownMenuSeparator />
-      <DropdownMenuItem asChild>
-        <Link href="/notifications" className="cursor-pointer">
-          <Bell className="mr-2 h-4 w-4" />
-          {t("nav.notifications")}
-        </Link>
-      </DropdownMenuItem>
+      {!sharedRecord && (
+        <DropdownMenuItem asChild>
+          <Link href="/notifications" className="cursor-pointer">
+            <Bell className="mr-2 h-4 w-4" />
+            {t("nav.notifications")}
+          </Link>
+        </DropdownMenuItem>
+      )}
       {/* The about section lives at the end of the settings shell nav;
           the avatar menu stays focused on account-level actions. */}
       <DropdownMenuSub>
@@ -146,6 +196,10 @@ function SidebarUserSection({ collapsed }: { collapsed: boolean }) {
           </DropdownMenuItem>
         </DropdownMenuSubContent>
       </DropdownMenuSub>
+      {/* v1.36.0 — the records this account may open. Renders nothing when
+          nobody has shared one, so the menu is unchanged for every account
+          that does not use sharing. */}
+      <AccountSwitcherMenuItems />
       <DropdownMenuSeparator />
       <DropdownMenuItem
         onClick={() => logout.mutate()}
@@ -188,10 +242,9 @@ function SidebarUserSection({ collapsed }: { collapsed: boolean }) {
         {/* R20 — the avatar + name in the expanded footer routes straight
             into the account settings; the kebab to the right still opens
             the rest of the user menu. */}
-        <Link
-          href="/settings/account"
-          aria-label={t("nav.accountSettings")}
-          className="hover:bg-accent flex min-w-0 flex-1 items-center gap-3 rounded-md transition-colors"
+        <FooterIdentity
+          sharedRecord={sharedRecord}
+          label={t("nav.accountSettings")}
         >
           <Avatar className="h-8 w-8 shrink-0">
             {avatarUrl && <AvatarImage src={avatarUrl} alt={user.username} />}
@@ -207,7 +260,7 @@ function SidebarUserSection({ collapsed }: { collapsed: boolean }) {
               </p>
             )}
           </div>
-        </Link>
+        </FooterIdentity>
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label={t("nav.userMenu")}
@@ -250,9 +303,13 @@ export function SidebarNav() {
   // only) and stops a disabled module's entry from flickering in for one
   // frame before the query resolves; once mounted the real map applies.
   const mounted = useMounted();
+  // v1.36.0 — while this browser is acting on somebody else's record, the nav
+  // shows only what sharing covers. The server refuses the rest regardless;
+  // dropping the entries spares a delegate a click that ends in a 403.
+  const sharedRecord = user?.accountAccess?.active != null;
   const visibleNavItems = useMemo(
-    () => visibleNavDestinations(user?.modules, mounted),
-    [user?.modules, mounted],
+    () => visibleNavDestinations(user?.modules, mounted, sharedRecord),
+    [user?.modules, mounted, sharedRecord],
   );
   // Collapsed = the user's stored choice, or — with no stored choice — a
   // viewport default: tablet widths (md–lg, e.g. an iPad held upright)
@@ -295,8 +352,10 @@ export function SidebarNav() {
   // role-gated, sidebar-only surface and is inserted separately below.
   const footerUtilityItems = useMemo(
     () =>
-      visibleUtilityDestinations().filter((d) => d.href !== "/notifications"),
-    [],
+      visibleUtilityDestinations({ sharedRecord }).filter(
+        (d) => d.href !== "/notifications",
+      ),
+    [sharedRecord],
   );
 
   function isUtilityActive(href: string) {
