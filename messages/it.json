@@ -4955,6 +4955,10 @@
           "dismiss": "Ho capito",
           "dismissError": "Non è stato possibile salvare. Riprova."
         }
+      },
+      "access": {
+        "title": "Accesso condiviso",
+        "subtitle": "Chi può aprire la tua cartella sanitaria e quale puoi aprire tu."
       }
     },
     "profile": "Profilo",
@@ -9373,5 +9377,99 @@
     "scopeNone": "Ancora niente selezionato. Scegli cosa includere oppure applica il referto standard.",
     "scopeCount": "{count} voci da {groups} aree",
     "scopeSensitive": "incl. {names}"
+  },
+  "recordSharing": {
+    "banner": {
+      "viewing": "Sei nella cartella di {name}",
+      "readOnly": "Puoi leggerla, non modificarla.",
+      "leave": "Torna alla mia cartella"
+    },
+    "switcher": {
+      "label": "Apri una cartella",
+      "ownRecord": "La mia cartella",
+      "readOnly": "Sola lettura",
+      "canWrite": "Può aggiungere voci"
+    },
+    "switch": {
+      "failed": "Non è stato possibile aprire quella cartella. Riprova.",
+      "noLongerAvailable": "Quella cartella non è più condivisa con te."
+    },
+    "unavailable": {
+      "title": "Non fa parte dell'accesso condiviso",
+      "description": "La condivisione riguarda la cartella sanitaria in sé. Impostazioni, servizi collegati, notifiche e funzioni di IA restano alla persona proprietaria dell'account.",
+      "leave": "Torna alla mia cartella"
+    },
+    "state": {
+      "active": "Attivo",
+      "pending": "In attesa di accettazione",
+      "expired": "Scaduto",
+      "revoked": "Terminato"
+    },
+    "row": {
+      "readOnly": "Può leggere la cartella",
+      "canWrite": "Può leggere e aggiungere voci",
+      "invited": "Invitato il",
+      "accepted": "Accettato il",
+      "expires": "Scade il",
+      "lastUsed": "Ultima apertura",
+      "neverUsed": "mai",
+      "endedByYou": "L'hai terminato tu",
+      "endedByOwner": "Revocato",
+      "handedBack": "Restituito",
+      "ended": "Terminato"
+    },
+    "invite": {
+      "title": "Invita qualcuno",
+      "description": "Nulla viene condiviso finché non accetta. Fino ad allora l'invito resta nelle sue impostazioni e non le dà nulla.",
+      "identifierLabel": "Nome utente o e-mail",
+      "identifierPlaceholder": "Il nome con cui accede",
+      "identifierHint": "Serve un account su questa istanza. Non è possibile inviare inviti a un indirizzo non registrato.",
+      "submit": "Invia invito",
+      "submitting": "Invio…",
+      "sent": "Invito inviato a {name}.",
+      "errorNoAccount": "Nessun account su questa istanza ha quel nome.",
+      "errorDuplicate": "Quell'account ha già accesso alla tua cartella.",
+      "errorSelf": "Questo è il tuo account.",
+      "errorInvalid": "Inserisci un nome utente o un indirizzo e-mail.",
+      "errorRateLimited": "Troppi inviti. Riprova più tardi.",
+      "errorFailed": "Non è stato possibile inviare l'invito. Riprova."
+    },
+    "given": {
+      "title": "Chi può aprire la mia cartella",
+      "description": "Gli accessi terminati restano in elenco, così vedi sempre chi li ha avuti e quando.",
+      "emptyTitle": "Nessun altro può aprire la tua cartella",
+      "emptyDescription": "Invita qualcuno qui sopra se vuoi che possa leggerla.",
+      "loadError": "Non è stato possibile caricare l'elenco.",
+      "revoke": "Termina accesso",
+      "withdrawInvite": "Ritira",
+      "revokeTitle": "Terminare l'accesso di {name}?",
+      "revokeBody": "L'accesso finisce subito, anche in qualsiasi browser in cui la tua cartella è aperta. Ciò che è già stato visto non può essere ritirato. Puoi invitare di nuovo quando vuoi.",
+      "revokeConfirm": "Termina accesso"
+    },
+    "received": {
+      "title": "Cartelle che posso aprire",
+      "description": "Un invito non ti dà nulla finché non lo accetti. Puoi restituire l'accesso quando vuoi.",
+      "emptyTitle": "Nessuno ha condiviso una cartella con te",
+      "emptyDescription": "Quando qualcuno ti invita, l'invito compare qui.",
+      "loadError": "Non è stato possibile caricare l'elenco.",
+      "accept": "Accetta",
+      "accepting": "Accettazione…",
+      "open": "Apri",
+      "renounce": "Restituisci",
+      "renounceTitle": "Restituire la cartella di {name}?",
+      "renounceBody": "Perdi l'accesso subito. Quella persona può invitarti di nuovo quando vuole.",
+      "renounceConfirm": "Restituisci"
+    },
+    "activity": {
+      "title": "Quando è stata aperta la mia cartella",
+      "description": "Ogni volta che qualcun altro ha aperto la tua cartella.",
+      "retention": "Copre gli ultimi {days} giorni. Le voci più vecchie vengono eliminate.",
+      "emptyTitle": "Nessuno ha aperto la tua cartella",
+      "emptyDescription": "Le aperture da parte di altri compaiono qui, una riga per persona e giorno.",
+      "loadError": "Non è stato possibile caricare l'attività.",
+      "opened": "{name} ha aperto la tua cartella {count}×",
+      "acted": "{name} ha fatto una modifica nella tua cartella",
+      "deletedAccount": "Un account eliminato"
+    }
   }
 }

@@ -1,5 +1,7 @@
 import type { DefaultOptions, QueryClient } from "@tanstack/react-query";
 
+import { recordScopedQueryKeyHashFn } from "@/lib/query-keys/record-scope";
+
 export const MEANINGFUL_HIDDEN_INTERVAL_MS = 60_000;
 
 interface VisibilityTarget {
@@ -57,6 +59,13 @@ export function subscribeToMeaningfulVisibilityRefresh(
  * regardless, the offline `fetch` rejects immediately, and `onError` fires — an
  * honest failure the form surfaces (and the global `OfflineMutationToaster`
  * backstops), instead of a spinner-of-death plus silent write loss.
+ *
+ * v1.36.0 — `queryKeyHashFn` folds the record being read into the cache
+ * identity of every entry in the app. Without it `["dashboard","snapshot"]`
+ * names two different people's data and the cache cannot tell them apart. See
+ * `src/lib/query-keys/record-scope.ts` for why this sits on the hash rather
+ * than on the key arrays (the arrays feed prefix invalidation and the
+ * import-time dependent-key bundles, both of which would break).
  */
 export const QUERY_CLIENT_DEFAULT_OPTIONS: DefaultOptions = {
   queries: {
@@ -64,6 +73,7 @@ export const QUERY_CLIENT_DEFAULT_OPTIONS: DefaultOptions = {
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
     retry: 1,
+    queryKeyHashFn: recordScopedQueryKeyHashFn,
   },
   mutations: {
     networkMode: "always",

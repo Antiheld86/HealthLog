@@ -57,6 +57,24 @@ export interface NavDestination {
    * not a re-derivation.
    */
   requiresModule?: ModuleKey;
+  /**
+   * v1.36.0 — is this destination part of what account sharing covers.
+   *
+   * `false` (the default, so the omission is the safe answer) means the entry
+   * disappears while the browser is acting on somebody else's record. It is
+   * PAINT and nothing else: the server refuses every non-delegable route under
+   * a switch on its own, from a frozen allowlist that this file cannot reach
+   * and does not mirror. Hiding the entry only spares a delegate a click that
+   * ends in a refusal — both ends, always, and this is the cosmetic end.
+   *
+   * The line the flag draws is the design's (§4, §6): a delegate reads the
+   * health RECORD, and never the account around it. So the tracking surfaces
+   * are marked, and everything that configures, connects, exports, or asks an
+   * AI about the account is not. AI is the one that looks arbitrary and is
+   * not: server-managed LLM egress of the owner's data rides a consent the
+   * owner gave for their own use, so those surfaces stay owner-only in v1.
+   */
+  sharedRecord?: boolean;
 }
 
 /**
@@ -69,15 +87,23 @@ export interface NavDestination {
 // previous: Medications → Vorsorge → Labs → Illness → Insights → Coach →
 // Achievements. A disabled module simply drops out; the rest keep this order.
 export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
-  { href: "/", tKey: "nav.dashboard", icon: Home, tourId: "nav-dashboard" },
+  {
+    href: "/",
+    sharedRecord: true,
+    tKey: "nav.dashboard",
+    icon: Home,
+    tourId: "nav-dashboard",
+  },
   {
     href: "/measurements",
+    sharedRecord: true,
     tKey: "nav.measurements",
     icon: Activity,
     tourId: "nav-measurements",
   },
   {
     href: "/mood",
+    sharedRecord: true,
     tKey: "nav.mood",
     icon: Waves,
     tourId: "nav-mood",
@@ -91,6 +117,7 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
   // no longer borrows the Insights tab strip / layout shell).
   {
     href: "/mental-wellbeing",
+    sharedRecord: true,
     tKey: "nav.mentalWellbeing",
     icon: Brain,
     tourId: "nav-mental-wellbeing",
@@ -98,6 +125,7 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
   },
   {
     href: "/cycle",
+    sharedRecord: true,
     tKey: "nav.cycle",
     icon: Droplets,
     tourId: "nav-cycle",
@@ -105,6 +133,7 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
   },
   {
     href: "/medications",
+    sharedRecord: true,
     tKey: "nav.medications",
     icon: Pill,
     tourId: "nav-medications",
@@ -119,6 +148,7 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
   // Reminders hub still links to it; this is the direct front door.
   {
     href: "/checkups",
+    sharedRecord: true,
     tKey: "nav.vorsorge",
     icon: Stethoscope,
     tourId: "nav-vorsorge",
@@ -132,6 +162,7 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
   },
   {
     href: "/labs",
+    sharedRecord: true,
     tKey: "nav.labs",
     icon: FlaskConical,
     tourId: "nav-labs",
@@ -143,6 +174,7 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
   // absent until the account turns the module on from the Modules hub.
   {
     href: "/illness",
+    sharedRecord: true,
     tKey: "nav.illness",
     icon: Thermometer,
     tourId: "nav-illness",
@@ -158,11 +190,17 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
   // until the account turns the module on from the Modules hub.
   {
     href: "/documents",
+    sharedRecord: true,
     tKey: "nav.documents",
     icon: FileScan,
     tourId: "nav-documents",
     requiresModule: "inboundDocuments",
   },
+  // v1.36.0 — Insights and the Coach carry no `sharedRecord` flag, so they
+  // drop out under a switch. Both are AI surfaces, and AI egress of a
+  // person's health data rides the consent THAT person gave for their own
+  // use; a delegate triggering it would create a consent-shaped act the owner
+  // never made. Non-delegable in v1, server-side and here (design §4).
   {
     href: "/insights",
     tKey: "nav.insights",
@@ -183,6 +221,7 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
   },
   {
     href: "/achievements",
+    sharedRecord: true,
     tKey: "nav.achievements",
     icon: Trophy,
     tourId: "nav-achievements",
@@ -224,7 +263,15 @@ export const NAV_UTILITY_DESTINATIONS: ReadonlyArray<NavUtilityDestination> = [
  * tail (the sidebar footer + avatar menu, the bottom-nav More hub) so the two
  * surfaces share one definition of the utility links.
  */
-export function visibleUtilityDestinations(): NavUtilityDestination[] {
+export function visibleUtilityDestinations(
+  opts: { sharedRecord?: boolean } = {},
+): NavUtilityDestination[] {
+  // v1.36.0 — the utility tail is account configuration by definition:
+  // Settings holds credentials, integrations, notification channels and grant
+  // management, and Notifications is the delegate's own device business. Every
+  // route behind both refuses under a switch; the tail simply stops being
+  // offered so nobody walks into the refusal.
+  if (opts.sharedRecord) return [];
   return [...NAV_UTILITY_DESTINATIONS];
 }
 
@@ -257,10 +304,33 @@ function isNavDestinationVisible(
   d: NavDestination,
   modules: ModuleVisibilityMap | undefined,
   mounted = true,
+  sharedRecord = false,
 ): boolean {
+  if (sharedRecord && d.sharedRecord !== true) return false;
   if (!d.requiresModule) return true;
   if (!mounted) return false;
   return modules?.[d.requiresModule] !== false;
+}
+
+/**
+ * v1.36.0 — is this path part of what account sharing covers?
+ *
+ * Answers from the one destination list rather than from a second literal, so
+ * the mobile bar's fixed slots, the sidebar and the shell's deep-link guard
+ * cannot end up disagreeing about which surfaces a delegate is offered.
+ *
+ * Matches a destination and everything beneath it (`/measurements/123` rides
+ * `/measurements`), with the dashboard matching exactly — otherwise `"/"`
+ * would swallow every path in the app. A path no destination claims answers
+ * `false`: a surface nobody has classified is not one to open inside somebody
+ * else's record.
+ */
+export function isDestinationInSharedRecord(pathname: string): boolean {
+  return NAV_DESTINATIONS.some((d) => {
+    if (!d.sharedRecord) return false;
+    if (d.href === "/") return pathname === "/";
+    return pathname === d.href || pathname.startsWith(`${d.href}/`);
+  });
 }
 
 /**
@@ -269,13 +339,18 @@ function isNavDestinationVisible(
  * disabled in the account's resolved module map. Both bars start from this.
  * v1.18.0 — cycle is no longer a bespoke boolean: it is `requiresModule:
  * "cycle"` and reads the delegated `cycle` key from the same map.
+ *
+ * v1.36.0 — `sharedRecord` drops every entry that is not part of what sharing
+ * covers, so a delegate is not offered a door the server will shut. Paint
+ * only; see the `sharedRecord` field's docblock.
  */
 export function visibleNavDestinations(
   modules: ModuleVisibilityMap | undefined,
   mounted = true,
+  sharedRecord = false,
 ): NavDestination[] {
   return NAV_DESTINATIONS.filter((d) =>
-    isNavDestinationVisible(d, modules, mounted),
+    isNavDestinationVisible(d, modules, mounted, sharedRecord),
   );
 }
 
@@ -312,8 +387,14 @@ export function mobileMoreHubDestinations(opts: {
   modules: ModuleVisibilityMap | undefined;
   /** Hydration gate — see `isNavDestinationVisible`. Defaults to mounted. */
   mounted?: boolean;
+  /** v1.36.0 — acting on somebody else's record. Defaults to own. */
+  sharedRecord?: boolean;
 }): MobileMoreHubEntry[] {
-  return visibleNavDestinations(opts.modules, opts.mounted ?? true)
+  return visibleNavDestinations(
+    opts.modules,
+    opts.mounted ?? true,
+    opts.sharedRecord ?? false,
+  )
     .filter((d) => !BOTTOM_NAV_PRIMARY_SLOT_HREFS.includes(d.href))
     .map((d) => ({ href: d.href, tKey: d.tKey, icon: d.icon }));
 }

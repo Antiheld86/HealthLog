@@ -1,0 +1,37 @@
+/**
+ * Query keys — account sharing (v1.36.0).
+ * Part of the centralized factory; aggregated in `./index.ts`.
+ *
+ * Note what these keys deliberately do NOT carry: the acting account. That
+ * dimension lives on the QueryClient's `queryKeyHashFn`
+ * (`./record-scope.ts`), which folds it into every entry in the app at once
+ * — including these. Adding it here as well would partition the same cache
+ * twice under two rules, which is the two-deciders shape in miniature.
+ *
+ * The reads below are all non-delegable by construction: `/api/account/grants`
+ * and the record-activity feed both resolve through a bare `requireAuth()` and
+ * refuse while a switch is on. They are still record-scoped like everything
+ * else, so a session that switches out and back never reads a grant list
+ * cached under the wrong scope.
+ */
+export const sharingKeys = {
+  /**
+   * Grants in both directions (`GET /api/account/grants`). One key for one
+   * endpoint: the route answers "who can see my record, and whose can I see"
+   * in a single payload precisely so no client renders half of it.
+   */
+  accountGrants: () => ["account", "grants"] as const,
+
+  /**
+   * The owner's record-activity feed (`GET /api/account/activity`) — who
+   * opened their record, and when.
+   */
+  accountActivity: () => ["account", "activity"] as const,
+
+  /** Mutation keys — kept in the factory so no bare array reaches a call site. */
+  accountGrantInvite: () => ["account", "grants", "invite"] as const,
+  accountGrantAccept: () => ["account", "grants", "accept"] as const,
+  accountGrantRevoke: () => ["account", "grants", "revoke"] as const,
+  accountGrantRenounce: () => ["account", "grants", "renounce"] as const,
+  accountSwitchMutation: () => ["account", "switch"] as const,
+};

@@ -14,6 +14,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { medicationsPrefetchIntentProps } from "@/lib/queries/prefetch-medications";
 import {
   isNavDestinationActive,
+  isDestinationInSharedRecord,
   mobileMoreHubDestinations,
 } from "@/components/layout/nav-model";
 import type { ModuleKey } from "@/lib/modules/registry";
@@ -92,6 +93,10 @@ export function BottomNav() {
   // module from flickering into the hub / primary slot before the query
   // resolves (the #418-class divergence); once mounted the real map applies.
   const mounted = useMounted();
+  // v1.36.0 — acting on somebody else's record. Same gate as the sidebar, from
+  // the same resolved payload, so the two bars cannot disagree about what a
+  // delegate is offered.
+  const sharedRecord = user?.accountAccess?.active != null;
 
   // v1.17.1 (F-1) — the More hub is the model-computed hub: every visible
   // feature destination that isn't a primary slot, plus the shared utility
@@ -102,8 +107,9 @@ export function BottomNav() {
       mobileMoreHubDestinations({
         modules: user?.modules,
         mounted,
+        sharedRecord,
       }),
-    [user?.modules, mounted],
+    [user?.modules, mounted, sharedRecord],
   );
 
   // v1.18.0 — drop a module-gated primary slot (Insights) when the account
@@ -115,10 +121,14 @@ export function BottomNav() {
     () =>
       PRIMARY_RIGHT.filter(
         (item) =>
-          !item.requiresModule ||
-          (mounted && user?.modules?.[item.requiresModule] !== false),
+          // v1.36.0 — the fixed slot asks the shared destination model
+          // whether sharing covers it, rather than carrying its own answer:
+          // Insights is an AI surface and drops out under a switch.
+          (!sharedRecord || isDestinationInSharedRecord(item.href)) &&
+          (!item.requiresModule ||
+            (mounted && user?.modules?.[item.requiresModule] !== false)),
       ),
-    [user?.modules, mounted],
+    [user?.modules, mounted, sharedRecord],
   );
 
   function isActiveLink(href: string) {

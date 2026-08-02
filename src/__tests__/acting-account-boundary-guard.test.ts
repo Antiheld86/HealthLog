@@ -81,6 +81,16 @@ describe("the acting-account carrier is read in one place", () => {
     // themselves call these two functions and never name the column, which is
     // what keeps this list from growing one entry per surface.
     "lib/sharing/acting-session.ts",
+    // v1.36.0 — the only thing that PUBLISHES it, and it publishes the stamp
+    // only after re-deciding it. The account payload has to say which record
+    // the browser is inside so the banner can name a person, but the value it
+    // prints is not the column: an entry reaches `active` solely by surviving
+    // the same live-grant pass that builds the switcher list, so a stamp left
+    // behind by a lapsed grant reads as "not switched" — the same answer the
+    // resolver will independently give the next delegated request. Takes the
+    // whole auth context for exactly this reason: had it taken the id, the
+    // route would name the column too, and the list would grow per surface.
+    "lib/sharing/account-access.ts",
   ].sort();
 
   it("no other file reads or writes the carrier column", () => {

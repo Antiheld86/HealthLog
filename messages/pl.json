@@ -4955,6 +4955,10 @@
           "dismiss": "Rozumiem",
           "dismissError": "Nie udało się zapisać. Spróbuj ponownie."
         }
+      },
+      "access": {
+        "title": "Udostępniony dostęp",
+        "subtitle": "Kto może otworzyć twoją kartę zdrowia i czyją kartę możesz otworzyć ty."
       }
     },
     "profile": "Profil",
@@ -9373,5 +9377,99 @@
     "scopeNone": "Nic jeszcze nie wybrano. Wybierz, co ma się znaleźć w dokumencie, albo zastosuj raport standardowy.",
     "scopeCount": "{count} pozycji z {groups} obszarów",
     "scopeSensitive": "w tym {names}"
+  },
+  "recordSharing": {
+    "banner": {
+      "viewing": "Jesteś w karcie użytkownika {name}",
+      "readOnly": "Możesz ją czytać, nie zmieniać.",
+      "leave": "Wróć do mojej karty"
+    },
+    "switcher": {
+      "label": "Otwórz kartę",
+      "ownRecord": "Moja własna karta",
+      "readOnly": "Tylko odczyt",
+      "canWrite": "Może dodawać wpisy"
+    },
+    "switch": {
+      "failed": "Nie udało się otworzyć tej karty. Spróbuj ponownie.",
+      "noLongerAvailable": "Ta karta nie jest już dla ciebie udostępniona."
+    },
+    "unavailable": {
+      "title": "Nie należy do udostępnionego dostępu",
+      "description": "Udostępniana jest sama karta zdrowia. Ustawienia, połączone usługi, powiadomienia i funkcje SI pozostają przy osobie, do której należy konto.",
+      "leave": "Wróć do mojej karty"
+    },
+    "state": {
+      "active": "Aktywny",
+      "pending": "Czeka na akceptację",
+      "expired": "Wygasł",
+      "revoked": "Zakończony"
+    },
+    "row": {
+      "readOnly": "Może czytać kartę",
+      "canWrite": "Może czytać i dodawać wpisy",
+      "invited": "Zaproszono",
+      "accepted": "Zaakceptowano",
+      "expires": "Wygasa",
+      "lastUsed": "Ostatnio otwarto",
+      "neverUsed": "nigdy",
+      "endedByYou": "Zakończone przez ciebie",
+      "endedByOwner": "Wycofane",
+      "handedBack": "Zwrócone",
+      "ended": "Zakończone"
+    },
+    "invite": {
+      "title": "Zaproś kogoś",
+      "description": "Nic nie jest udostępniane, dopóki ta osoba nie zaakceptuje. Do tego czasu zaproszenie leży w jej ustawieniach i nic jej nie daje.",
+      "identifierLabel": "Nazwa użytkownika lub e-mail",
+      "identifierPlaceholder": "Nazwa, którą się loguje",
+      "identifierHint": "Ta osoba potrzebuje konta na tej instancji. Nie można wysłać zaproszenia na niezarejestrowany adres.",
+      "submit": "Wyślij zaproszenie",
+      "submitting": "Wysyłanie…",
+      "sent": "Zaproszenie wysłane do {name}.",
+      "errorNoAccount": "Na tej instancji nie ma konta o takiej nazwie.",
+      "errorDuplicate": "To konto ma już dostęp do twojej karty.",
+      "errorSelf": "To twoje własne konto.",
+      "errorInvalid": "Podaj nazwę użytkownika lub adres e-mail.",
+      "errorRateLimited": "Zbyt wiele zaproszeń. Spróbuj później.",
+      "errorFailed": "Nie udało się wysłać zaproszenia. Spróbuj ponownie."
+    },
+    "given": {
+      "title": "Kto może otworzyć moją kartę",
+      "description": "Zakończony dostęp zostaje na liście, żebyś zawsze widział, kto go miał i kiedy.",
+      "emptyTitle": "Nikt inny nie może otworzyć twojej karty",
+      "emptyDescription": "Zaproś kogoś powyżej, jeśli chcesz, żeby mógł ją czytać.",
+      "loadError": "Nie udało się wczytać listy.",
+      "revoke": "Zakończ dostęp",
+      "withdrawInvite": "Wycofaj",
+      "revokeTitle": "Zakończyć dostęp dla {name}?",
+      "revokeBody": "Dostęp kończy się natychmiast, także w każdej przeglądarce, w której twoja karta jest otwarta. Tego, co już zostało zobaczone, nie da się cofnąć. Możesz zaprosić ponownie w dowolnej chwili.",
+      "revokeConfirm": "Zakończ dostęp"
+    },
+    "received": {
+      "title": "Karty, które mogę otworzyć",
+      "description": "Zaproszenie nic ci nie daje, dopóki go nie zaakceptujesz. Dostęp możesz zwrócić w dowolnej chwili.",
+      "emptyTitle": "Nikt nie udostępnił ci karty",
+      "emptyDescription": "Kiedy ktoś cię zaprosi, zaproszenie pojawi się tutaj.",
+      "loadError": "Nie udało się wczytać listy.",
+      "accept": "Akceptuj",
+      "accepting": "Akceptowanie…",
+      "open": "Otwórz",
+      "renounce": "Zwróć",
+      "renounceTitle": "Zwrócić kartę użytkownika {name}?",
+      "renounceBody": "Tracisz dostęp natychmiast. Ta osoba może zaprosić cię ponownie w dowolnej chwili.",
+      "renounceConfirm": "Zwróć"
+    },
+    "activity": {
+      "title": "Kiedy otwierano moją kartę",
+      "description": "Za każdym razem, gdy ktoś inny otworzył twoją kartę.",
+      "retention": "Obejmuje ostatnie {days} dni. Starsze wpisy są usuwane.",
+      "emptyTitle": "Nikt nie otworzył twojej karty",
+      "emptyDescription": "Otwarcia przez inne osoby pojawiają się tutaj, jedna linia na osobę i dzień.",
+      "loadError": "Nie udało się wczytać aktywności.",
+      "opened": "{name} otworzył twoją kartę {count}×",
+      "acted": "{name} wprowadził zmianę w twojej karcie",
+      "deletedAccount": "Usunięte konto"
+    }
   }
 }

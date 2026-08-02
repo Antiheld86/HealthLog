@@ -1,5 +1,23 @@
+/**
+ * `GET /api/auth/me` — the account payload, and the one surface that keeps
+ * answering while the browser is acting on somebody else's record.
+ *
+ * v1.36.0 made it an ACTOR surface (`requireActorAuth`). It has to be: the
+ * switcher, the banner naming whose record is open, and the way back out all
+ * read this payload, and all three are about the person at the keyboard, not
+ * the record they are looking at. Under a bare `requireAuth()` the whole app
+ * shell would 403 the moment a switch was on.
+ *
+ * So every field below is still the CALLER's own — their preferences, their
+ * modules, their identity — and the one field about the switch,
+ * `accountAccess`, says so explicitly. Nothing here ever renders the owner's
+ * data; a delegate reading their own display preferences while inside
+ * somebody else's record is the correct behaviour and the reason the mode
+ * exists (design §4: locale, theme and layout belong to the person, not the
+ * record).
+ */
 import { apiSuccess } from "@/lib/api-response";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireActorAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { setOnboardingPendingCookie } from "@/lib/auth/session";
 import { syncMfaEnrollCookie } from "@/lib/auth/mfa-enrollment";
@@ -12,11 +30,13 @@ import {
   getOperatorModuleAvailability,
 } from "@/lib/modules/gate";
 import { parseTourProgress } from "@/lib/onboarding/tour-progress";
+import { resolveAccountAccess } from "@/lib/sharing/account-access";
 
 export const dynamic = "force-dynamic";
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  const auth = await requireActorAuth();
+  const { user } = auth;
 
   annotate({ action: { name: "auth.me" } });
 
@@ -27,33 +47,38 @@ export const GET = apiHandler(async () => {
   // cycle-tracking gate; no row is forced, a NULL toggle derives from
   // gender) is a Postgres round-trip. Running them sequentially added
   // the cookie hop to every /me — and /me sits on every app boot path.
-  const [, , cycleProfile, modules, moduleAvailability] = await Promise.all([
-    setOnboardingPendingCookie(user.onboardingCompletedAt == null),
-    // v1.23 — keep the admin-enforced-MFA hint cookie honest on every app
-    // boot, mirroring the onboarding-cookie resync. A locally edited cookie is
-    // corrected here; an account that enrols (or has the policy lifted) loses
-    // the redirect on the next /me read.
-    syncMfaEnrollCookie(user.id, {
-      totpConfirmedAt: user.totpConfirmedAt,
-      mfaEnforced: user.mfaEnforced,
-    }),
-    prisma.cycleProfile.findUnique({
-      where: { userId: user.id },
-      select: { cycleTrackingEnabled: true },
-    }),
-    // v1.18.0 — resolved module enable/disable map for every toggleable
-    // module. cycle/coach reflect their real delegated state (the cycle
-    // gate / disableCoach + operator assistant flag); the rest read the
-    // disabled-allowlist `modulePreferencesJson`. Default-on. Clients
-    // hide a whole module surface end-to-end when its key is `false`.
-    resolveModuleMap(user.id),
-    // v1.18.0 — operator-layer availability map (server-wide kill-switch).
-    // The resolved `modules` map above already AND-s this in, so it cannot
-    // distinguish operator-off from user-off. The Modules hub needs that
-    // distinction to render an operator-disabled module as a read-only
-    // "disabled server-wide" row instead of a live toggle that no-ops.
-    getOperatorModuleAvailability(),
-  ]);
+  const [, , cycleProfile, modules, moduleAvailability, accountAccess] =
+    await Promise.all([
+      setOnboardingPendingCookie(user.onboardingCompletedAt == null),
+      // v1.23 — keep the admin-enforced-MFA hint cookie honest on every app
+      // boot, mirroring the onboarding-cookie resync. A locally edited cookie is
+      // corrected here; an account that enrols (or has the policy lifted) loses
+      // the redirect on the next /me read.
+      syncMfaEnrollCookie(user.id, {
+        totpConfirmedAt: user.totpConfirmedAt,
+        mfaEnforced: user.mfaEnforced,
+      }),
+      prisma.cycleProfile.findUnique({
+        where: { userId: user.id },
+        select: { cycleTrackingEnabled: true },
+      }),
+      // v1.18.0 — resolved module enable/disable map for every toggleable
+      // module. cycle/coach reflect their real delegated state (the cycle
+      // gate / disableCoach + operator assistant flag); the rest read the
+      // disabled-allowlist `modulePreferencesJson`. Default-on. Clients
+      // hide a whole module surface end-to-end when its key is `false`.
+      resolveModuleMap(user.id),
+      // v1.18.0 — operator-layer availability map (server-wide kill-switch).
+      // The resolved `modules` map above already AND-s this in, so it cannot
+      // distinguish operator-off from user-off. The Modules hub needs that
+      // distinction to render an operator-disabled module as a read-only
+      // "disabled server-wide" row instead of a live toggle that no-ops.
+      getOperatorModuleAvailability(),
+      // v1.36.0 — which records this caller may open, which one they are
+      // inside, and what they may do there. Every value resolved server-side;
+      // see the module docblock for why none of it is left to the client.
+      resolveAccountAccess(auth),
+    ]);
   const cycleTrackingEnabled = isCycleEnabled(user.gender, cycleProfile);
 
   // v1.7.0 — patient-identity fields for the health-record export. The
@@ -142,5 +167,11 @@ export const GET = apiHandler(async () => {
     // this to show a "disabled server-wide" read-only row; everywhere else
     // the already-AND-ed `modules` map is the single gate to read.
     moduleAvailability,
+    // v1.36.0 — account sharing, resolved. `accounts` is the switcher's menu,
+    // `active` is the record this session is inside (null when it is in its
+    // own), `canSwitch` and per-entry `canWrite` are the booleans the UI binds
+    // directly. Always present — an account with no grants gets an empty list,
+    // not a missing field.
+    accountAccess,
   });
 });

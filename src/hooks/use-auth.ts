@@ -22,6 +22,19 @@ import { storeTimezone } from "@/lib/timezone-mirror";
 import type { ModuleKey } from "@/lib/modules/registry";
 import type { TourProgress } from "@/lib/onboarding/tour-progress";
 import { clearOfflineCachesForSessionEnd } from "@/lib/pwa/query-persister";
+import { setRecordScope } from "@/lib/query-keys/record-scope";
+import type { AccountAccess } from "@/lib/sharing/account-access-view";
+
+/**
+ * v1.36.0 — an account with no sharing at all. The shape `fetchMe` falls back
+ * to when the payload carries no block, so every consumer reads a real object
+ * and none of them has to spell out what a missing block would mean.
+ */
+export const NO_ACCOUNT_ACCESS: AccountAccess = {
+  accounts: [],
+  active: null,
+  canSwitch: false,
+};
 
 /**
  * v1.18.6 — resume point for the module tour as the client sees it on
@@ -162,6 +175,21 @@ export interface AuthUser {
    * payload so a missing map reads as all-available.
    */
   moduleAvailability?: Partial<Record<ModuleKey, boolean>>;
+  /**
+   * v1.36.0 — account sharing, resolved server-side. `accounts` is the
+   * switcher's menu, `active` is the record this browser is inside (null when
+   * it is in its own), `canSwitch` and per-entry `canWrite` are booleans to
+   * bind, never to compute.
+   *
+   * Nothing in the UI may derive a permission from this block: the server
+   * publishes what the caller may do and the client renders it, because two
+   * programs deciding one person's access is how they end up disagreeing.
+   *
+   * Optional so existing `AuthUser` test fixtures stay valid; `fetchMe`
+   * always populates it, coercing an absent block (an older server image) to
+   * the empty one — no accounts, no active record, no switcher.
+   */
+  accountAccess?: AccountAccess;
 }
 
 /**
@@ -264,6 +292,13 @@ async function fetchMe(): Promise<AuthUser> {
   storeTimezone(typeof data.timezone === "string" ? data.timezone : "");
   // A confirmed session: refresh the non-sensitive offline-relaunch marker.
   storeWasAuthenticated();
+  // v1.36.0 — the record this browser is reading, straight from the server's
+  // resolved answer. This is the correcting write for the cache-scope mirror:
+  // whatever the switch flow stamped before its reload, the block is what the
+  // resolver will actually honour on the next request, so the mirror tracks it
+  // rather than the client's memory of what it asked for.
+  const accountAccess = coerceAccountAccess(data.accountAccess);
+  setRecordScope(accountAccess.active?.accountId ?? null);
   return {
     ...(data as AuthUser),
     disableCoach: data.disableCoach ?? false,
@@ -290,6 +325,28 @@ async function fetchMe(): Promise<AuthUser> {
       data.moduleAvailability && typeof data.moduleAvailability === "object"
         ? data.moduleAvailability
         : {},
+    accountAccess,
+  };
+}
+
+/**
+ * Read the sharing block off a payload that may not carry one.
+ *
+ * Fails CLOSED, unlike the module maps above: an older server image (or a
+ * malformed block) resolves to no accounts, no active record, and no switcher.
+ * The module gates fail open because a missing map must never blank the nav;
+ * this one fails closed because the affordance it drives asks the server to
+ * open somebody else's health record, and an affordance offered on a server
+ * that cannot honour it is worse than one that is missing.
+ */
+function coerceAccountAccess(value: unknown): AccountAccess {
+  if (value === null || typeof value !== "object") return NO_ACCOUNT_ACCESS;
+  const block = value as Partial<AccountAccess>;
+  if (!Array.isArray(block.accounts)) return NO_ACCOUNT_ACCESS;
+  return {
+    accounts: block.accounts,
+    active: block.active ?? null,
+    canSwitch: block.canSwitch === true,
   };
 }
 
@@ -358,6 +415,12 @@ export function useAuth() {
  */
 export function clearCachesForSessionEnd(queryClient: QueryClient): void {
   queryClient.clear();
+  // v1.36.0 — the cache-scope mirror is session state too. Left behind, the
+  // next account on this browser would boot with the previous session's record
+  // scope, which partitions its cache under a stranger's id until the first
+  // `/api/auth/me` corrects it. Harmless for correctness (the store it points
+  // at is wiped below) and free to get right.
+  setRecordScope(null);
   // The offline-relaunch marker is session state too: after a real session
   // end the next cold offline launch must land on the login gate, not the
   // cached shell.

@@ -12432,6 +12432,61 @@ paths:
         "401": *a1
         "422": *a3
         "429": *a4
+  /api/auth/me:
+    get:
+      tags:
+        - Auth
+      summary: The signed-in account, and what sharing lets it do
+      description: "Keeps answering while the browser is acting on another record — the switcher, the banner naming whose
+        record is open, and the way back out all read it, so a refusal here would strand a switched session. It is
+        therefore an ACTOR surface: it always serves the caller's own rows, and a request that attaches
+        `X-HealthLog-Account` is refused with 403 `sharing.not_permitted` rather than quietly answered. A client that
+        wants a record's data sends the selector on the read that needs it, never on this call."
+      responses:
+        "200":
+          description: The account payload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountPayloadEnvelope"
+        "401": *a1
+        "403":
+          description: "A selector header was attached to an actor surface (`meta.errorCode: sharing.not_permitted`)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422": *a3
+        "429": *a4
+  /api/account/activity:
+    get:
+      tags:
+        - Account sharing
+      summary: Who opened this record, and when
+      description: "Every audit row filed under this account that somebody else performed, newest first — one row per delegate
+        per day with a count, rather than one per request. `retentionDays` rides the response because audit history is
+        purged on a schedule the operator configures: a view that showed the rows without the window would imply a
+        completeness it does not have, and clients must state the number the server sends rather than assume the 365-day
+        default. Not delegable: a grant is not an introduction to the other people in the household."
+      responses:
+        "200":
+          description: The activity, and how far back it can see.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordActivityEnvelope"
+        "401": *a1
+        "403": &a20
+          description: Refused. `meta.errorCode` is `sharing.not_permitted` when the request was made while acting on another
+            account (grant management is never delegable), or `sharing.access.denied` when the caller may not act as the
+            account they named. The latter is byte-identical for an account that does not exist and one that granted
+            nothing — the refusal is not an enumeration oracle.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422": *a3
+        "429": *a4
   /api/account/grants:
     get:
       tags:
@@ -12446,15 +12501,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AccountGrantListEnvelope"
         "401": *a1
-        "403": &a20
-          description: Refused. `meta.errorCode` is `sharing.not_permitted` when the request was made while acting on another
-            account (grant management is never delegable), or `sharing.access.denied` when the caller may not act as the
-            account they named. The latter is byte-identical for an account that does not exist and one that granted
-            nothing — the refusal is not an enumeration oracle.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
+        "403": *a20
         "422": *a3
         "429": *a4
     post:
@@ -36558,6 +36605,186 @@ components:
         - data
         - error
       additionalProperties: false
+    AccountPayloadEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/AccountPayload"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    AccountPayload:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        accountAccess:
+          $ref: "#/components/schemas/AccountAccess"
+      required:
+        - id
+        - username
+        - accountAccess
+      additionalProperties: {}
+      description: "The signed-in account: its identity, its preferences, and (since v1.36.0) what account sharing lets it do.
+        Additional properties are the preference fields this spec does not yet enumerate. Under an active switch this
+        payload still describes the CALLER — their preferences, their modules, their identity — because display
+        preferences belong to the person at the keyboard rather than to the record they are reading."
+    AccountAccess:
+      type: object
+      properties:
+        accounts:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccountAccessEntry"
+          description: Every record this caller may open, newest grant first.
+        active:
+          anyOf:
+            - $ref: "#/components/schemas/AccountAccessEntry"
+            - type: "null"
+          description: "The record this session is inside right now, resolved to a full entry rather than an id to look up — so a
+            banner can name the person without joining two fields. Null when the caller is in their own record, and
+            ALWAYS null on the Bearer transport: a token carries its selector per request and this endpoint refuses
+            one."
+        canSwitch:
+          type: boolean
+          description: Whether there is anywhere to switch to. Bind it directly.
+      required:
+        - accounts
+        - active
+        - canSwitch
+      additionalProperties: false
+      description: "Account sharing, resolved. This block is the ONLY source of switchability and writability: the server
+        publishes what the caller may do and the client renders it. A client that computed either from grant data would
+        be a second program deciding one person's access to a health record, and the two answer differently the first
+        time an expiry or a revocation appears. Always present — an account nobody has shared with gets an empty list,
+        not a missing field."
+    AccountAccessEntry:
+      type: object
+      properties:
+        accountId:
+          type: string
+          description: The account whose record it is — the value POST /api/account/switch takes, and the value the
+            X-HealthLog-Account header carries.
+        username:
+          type: string
+        displayName:
+          anyOf:
+            - type: string
+            - type: "null"
+        access:
+          type: string
+          enum:
+            - read
+            - write
+        canWrite:
+          type: boolean
+          description: Whether this caller may CHANGE that record. Resolved server-side; `false` for every grant in v1. Render it;
+            never derive it.
+      required:
+        - accountId
+        - username
+        - displayName
+        - access
+        - canWrite
+      additionalProperties: false
+      description: "One account this caller may act on. No avatar is published: the avatar bytes are owner-scoped, so a URL
+        here would resolve to a refusal. Clients paint their initials fallback."
+    RecordActivityEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/RecordActivity"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    RecordActivity:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecordActivityEntry"
+        retentionDays:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: How far back this feed can see, in days. Resolved from the instance's audit retention setting (365 by
+            default, operator-configurable), NOT a constant — an instance running a 90-day window sends 90. Show it
+            beside the rows.
+      required:
+        - entries
+        - retentionDays
+      additionalProperties: false
+      description: The owner's record of what somebody else did in their record, bounded by the instance's audit retention.
+    RecordActivityEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        actor:
+          anyOf:
+            - $ref: "#/components/schemas/AccountGrantParty"
+            - type: "null"
+          description: Who did it. Null when that account has since been deleted — the audit column is deliberately not a foreign
+            key, so history is not rewritten when somebody leaves. Render it as a deleted account; a blank would read as
+            though the owner had done it themselves.
+        action:
+          type: string
+        accesses:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: How many times that delegate opened the record on that day, for a coalesced read row. Null for anything
+            else — a single act has no count, and a 1 there would invite adding up numbers that mean different things.
+        createdAt:
+          type: string
+      required:
+        - id
+        - actor
+        - action
+        - accesses
+        - createdAt
+      additionalProperties: false
+    AccountGrantParty:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        displayName:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - id
+        - username
+        - displayName
+      additionalProperties: false
+      description: "The account on the other end of a grant. E-mail addresses are deliberately not published: a grant is not a
+        way to collect the other party's contact details."
     AccountGrantListEnvelope:
       type: object
       properties:
@@ -36647,24 +36874,6 @@ components:
         accepted, when and by whom it ended — so ended grants stay in the list with `state: REVOKED` rather than
         disappearing. `revokedBy` distinguishes the owner withdrawing access from the delegate handing it back.
         `lastUsedAt` mirrors API-token semantics: the last time the grant was actually exercised."
-    AccountGrantParty:
-      type: object
-      properties:
-        id:
-          type: string
-        username:
-          type: string
-        displayName:
-          anyOf:
-            - type: string
-            - type: "null"
-      required:
-        - id
-        - username
-        - displayName
-      additionalProperties: false
-      description: "The account on the other end of a grant. E-mail addresses are deliberately not published: a grant is not a
-        way to collect the other party's contact details."
     AccountGrantState:
       type: string
       enum:
@@ -37272,6 +37481,23 @@ components:
         - showEvidenceByDefault
         - defaultWindow
       additionalProperties: false
+  parameters:
+    AccountSelector:
+      name: X-HealthLog-Account
+      in: header
+      required: false
+      schema:
+        type: string
+        maxLength: 64
+      description: "Act on another account's record for THIS request. Bearer transport only — the browser session carries its
+        switch on the session row, and sending this header alongside a cookie is refused rather than ignored. The value
+        is an `accountId` from `accountAccess.accounts` on GET /api/auth/me. It is a SELECTOR and not a permission: the
+        grant is re-checked on every request, so a revocation lands on the next one rather than at the next login, and a
+        selector naming an account that granted nothing is refused with 403 `sharing.access.denied` — byte-identical to
+        one naming an account that does not exist, so the refusal is not an enumeration oracle. NEVER attach it to the
+        sync engine, device or notification registration, or any auth/refresh call: those are about the person holding
+        the token, not the record being read, and the account payload refuses the header outright for exactly that
+        reason."
   securitySchemes:
     bearerAuth:
       type: http
