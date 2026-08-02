@@ -5924,9 +5924,16 @@ enum AccountGrantRevoker {
 /// The row is BOTH. There is no separate receipt table: two records of one act
 /// drift, and then nobody can say which is true. So every fact about the
 /// delegation is a column here — who offered it (`grantorId`, `invitedAt`), who
-/// accepted and from where (`granteeId`, `acceptedAt`, `acceptedIp`), when it
-/// lapses (`expiresAt`), when it was last exercised (`lastUsedAt`), and who
-/// ended it (`revokedAt`, `revokedBy`).
+/// accepted it (`granteeId`, `acceptedAt`), when it lapses (`expiresAt`), when
+/// it was last exercised (`lastUsedAt`), and who ended it (`revokedAt`,
+/// `revokedBy`).
+///
+/// What is deliberately NOT a column: the address the delegate accepted from.
+/// A consent record has to say who consented and when, and this one does. It
+/// does not need to say from where, and an address kept for as long as both
+/// accounts exist is personal data held past the point it answers anything.
+/// `AuditLog` still records the acceptance with its IP under that table's own
+/// retention.
 ///
 /// Consequences worth stating where they can be read next to the columns:
 ///
@@ -5971,10 +5978,6 @@ model AccountGrant {
   /// When the delegate accepted. NULL = pending, which confers nothing.
   /// One-shot: an accepted grant can never be accepted again.
   acceptedAt DateTime? @map("accepted_at")
-  /// The delegate's IP at acceptance, recorded plaintext exactly as
-  /// `AuditLog.ipAddress` is. Being handed someone's health record is an act
-  /// the consent record should be able to place.
-  acceptedIp String?   @map("accepted_ip")
 
   /// When access ended, and who ended it. Written together, never cleared —
   /// a re-invitation is a NEW row. The database enforces that the two are

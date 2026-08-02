@@ -157,7 +157,6 @@ async function household() {
   const grant = await acceptGrant({
     grantId: invited.id,
     granteeId: delegate.id,
-    ip: "203.0.113.7",
   });
   return { owner, delegate, grant };
 }

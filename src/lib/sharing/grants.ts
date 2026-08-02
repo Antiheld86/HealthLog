@@ -216,8 +216,6 @@ export interface AcceptGrantInput {
   grantId: string;
   /** Taken from the authenticated session — never from a request body. */
   granteeId: string;
-  /** The delegate's IP at acceptance, as the audit trail records one. */
-  ip?: string | null;
 }
 
 /**
@@ -241,7 +239,7 @@ export async function acceptGrant(
       revokedAt: null,
       OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
     },
-    data: { acceptedAt: now, acceptedIp: input.ip ?? null },
+    data: { acceptedAt: now },
   });
 
   if (count === 0) {
