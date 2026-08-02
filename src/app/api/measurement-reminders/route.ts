@@ -8,7 +8,7 @@ import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
 import { auditLog } from "@/lib/auth/audit";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiSuccess,
   getClientIp,
@@ -36,7 +36,7 @@ async function resolveTimezone(userId: string): Promise<string> {
 }
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  const { user } = await requireRecordAuth("read");
 
   const reminders = await prisma.measurementReminder.findMany({
     where: { userId: user.id, deletedAt: null },

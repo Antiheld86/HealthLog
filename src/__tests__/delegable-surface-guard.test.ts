@@ -234,16 +234,33 @@ function exportedFunctionNames(rel: string): string[] {
 /**
  * Route modules permitted to act on a record that may not be the caller's.
  *
- * EMPTY, and correct empty. The resolver landed with the auth layer and
- * deliberately touched no route file; the first members arrive when routes
- * migrate, each one carrying a line in the classification record that says why
- * it may. A route absent from that record cannot enter this list.
+ * Every member carries a line in the classification record that says why it
+ * may. A route absent from that record cannot enter this list.
  *
  * The value is the reason, in one line, in the maintainer's words. Not the
  * route's description — the argument for why a delegate reading or writing
  * through it cannot extend their own reach.
+ *
+ * Note what a member means: the MODULE reaches the resolver, and in every case
+ * below that is the GET arm alone. The write arms in these same files still
+ * resolve through `requireAuth()`, which refuses outright while a switch is
+ * active, so admitting a file here admits a read and nothing more. A delegable
+ * write is a separate decision that would have to be made at each of them.
  */
-const DELEGABLE_ROUTES: Record<string, string> = {};
+const DELEGABLE_ROUTES: Record<string, string> = {
+  "app/api/measurements/route.ts":
+    "The record's readings. The GET returns values, units, timestamps and notes scoped `userId: user.id` and offers no control affordance; the POST arms in the same file keep `requireAuth()` and so refuse under a switch.",
+  "app/api/measurements/[id]/route.ts":
+    "One reading of the record, fetched by id and guarded against the resolved user before it is serialised. The PUT and DELETE beside it keep `requireAuth()`.",
+  "app/api/measurements/series/route.ts":
+    "A chart series over the record's own readings. Every `where` and every raw-SQL predicate binds the resolved user id; the route holds no write arm at all.",
+  "app/api/measurements/series-batch/route.ts":
+    "The multi-type form of the same series read, delegating to `readSeriesBatch(user.id, …)`. Nothing but the resolved id reaches the query.",
+  "app/api/measurement-reminders/route.ts":
+    "The record's own reminder schedule — what the owner asked to be reminded of, not a notification channel or a device. The GET reads `userId: user.id`; creating a reminder stays on `requireAuth()`.",
+  "app/api/measurement-reminders/[id]/route.ts":
+    "One reminder of the record, fetched by id then guarded against the resolved user. The PUT and DELETE keep `requireAuth()`.",
+};
 
 /**
  * Route modules that deliberately resolve the ACTOR and keep working under a
@@ -266,7 +283,7 @@ const ACTOR_ROUTES: Record<string, string> = {
  * a formality by accident: every addition has to be counted here as well as
  * listed above, which is one more place a careless admission has to pass.
  */
-const FROZEN_ENTRY_COUNT = 1;
+const FROZEN_ENTRY_COUNT = 7;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —

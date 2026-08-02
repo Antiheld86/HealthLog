@@ -22,7 +22,7 @@
  * client keeps sleep on the dedicated route.
  */
 import { NextRequest } from "next/server";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { returnAllZodIssues } from "@/lib/api-response";
 import { apiSuccess } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
@@ -33,7 +33,7 @@ import {
 } from "@/lib/validations/series-batch";
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  const { user } = await requireRecordAuth("read");
 
   const params = Object.fromEntries(request.nextUrl.searchParams);
   const parsed = seriesBatchQuerySchema.safeParse(params);
