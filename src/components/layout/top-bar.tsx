@@ -11,6 +11,7 @@ import {
   Shield,
   Sun,
 } from "lucide-react";
+import { AccountSwitcherMenuItems } from "@/components/layout/account-switcher-menu";
 import { SHELL_HEADER_BAND } from "@/components/layout/shell-metrics";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/logo";
@@ -177,6 +178,11 @@ export function TopBar() {
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
+              {/* v1.36.0 — the same switcher slice the desktop sidebar menu
+                  mounts. One component in both menus: a switcher a person can
+                  reach on their laptop and not on their phone is a record they
+                  can enter and cannot leave. */}
+              <AccountSwitcherMenuItems />
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => logout.mutate()}

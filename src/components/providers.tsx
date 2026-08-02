@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { VersionPoller } from "@/components/version-poller";
 import { ServiceWorkerRegistrar } from "@/components/service-worker-registrar";
+import { SharedRecordGrantLossBridge } from "@/components/layout/shared-record-grant-loss-bridge";
 import { isDashboardSnapshotEnabled } from "@/lib/dashboard/snapshot-flag";
 import { prefetchDashboardSnapshot } from "@/lib/queries/use-dashboard-snapshot";
 import { prefetchMedicationsList } from "@/lib/queries/prefetch-medications";
@@ -281,6 +282,11 @@ export function Providers({
           <QueryVisibilityRefreshBridge />
           <DashboardSnapshotPreloader />
           <OfflineMutationToaster />
+          {/* v1.36.0 — a grant that ends while a browser is inside the record
+              leaves the session stamped and every read refused. One cache
+              subscriber notices the stable errorCode and puts the browser back
+              in its own account, rather than asking every call site to. */}
+          <SharedRecordGrantLossBridge />
           {children}
           <Toaster position="bottom-right" richColors />
           <VersionPoller />

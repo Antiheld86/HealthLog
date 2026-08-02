@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
+import { AccountSwitcherMenuItems } from "@/components/layout/account-switcher-menu";
 import { medicationsPrefetchIntentProps } from "@/lib/queries/prefetch-medications";
 import {
   isNavDestinationActive,
@@ -146,6 +147,10 @@ function SidebarUserSection({ collapsed }: { collapsed: boolean }) {
           </DropdownMenuItem>
         </DropdownMenuSubContent>
       </DropdownMenuSub>
+      {/* v1.36.0 — the records this account may open. Renders nothing when
+          nobody has shared one, so the menu is unchanged for every account
+          that does not use sharing. */}
+      <AccountSwitcherMenuItems />
       <DropdownMenuSeparator />
       <DropdownMenuItem
         onClick={() => logout.mutate()}
@@ -250,9 +255,13 @@ export function SidebarNav() {
   // only) and stops a disabled module's entry from flickering in for one
   // frame before the query resolves; once mounted the real map applies.
   const mounted = useMounted();
+  // v1.36.0 — while this browser is acting on somebody else's record, the nav
+  // shows only what sharing covers. The server refuses the rest regardless;
+  // dropping the entries spares a delegate a click that ends in a 403.
+  const sharedRecord = user?.accountAccess?.active != null;
   const visibleNavItems = useMemo(
-    () => visibleNavDestinations(user?.modules, mounted),
-    [user?.modules, mounted],
+    () => visibleNavDestinations(user?.modules, mounted, sharedRecord),
+    [user?.modules, mounted, sharedRecord],
   );
   // Collapsed = the user's stored choice, or — with no stored choice — a
   // viewport default: tablet widths (md–lg, e.g. an iPad held upright)
@@ -295,8 +304,10 @@ export function SidebarNav() {
   // role-gated, sidebar-only surface and is inserted separately below.
   const footerUtilityItems = useMemo(
     () =>
-      visibleUtilityDestinations().filter((d) => d.href !== "/notifications"),
-    [],
+      visibleUtilityDestinations({ sharedRecord }).filter(
+        (d) => d.href !== "/notifications",
+      ),
+    [sharedRecord],
   );
 
   function isUtilityActive(href: string) {
