@@ -15,15 +15,24 @@
  *     into the second, and the owner's revoke button would mean "at some point
  *     later" instead of "now".
  *
- * The do-no-harm arm runs against a REAL shipped route (`GET /api/measurements`,
- * a bare-`requireAuth` handler nobody has migrated). A mock cannot fake that,
- * and the arm is worth nothing unless the route it exercises is one somebody
- * actually ships.
+ * Both arms run against REAL shipped routes, and since the route migration they
+ * exercise both sides of the boundary rather than one:
  *
- * The delegable handler is assembled here rather than imported because no route
- * declares `requireRecordAuth` yet — S3 lands the frozen list empty on purpose,
- * and S6 migrates the first route into it. Everything under it is real: the
- * real `apiHandler`, the real resolver, the real grant module, the real
+ *   * `GET /api/measurements` is delegable now. Un-switched it must answer
+ *     exactly what it answered before the resolver existed, which is the
+ *     do-no-harm claim and the one worth the most.
+ *   * `GET /api/share-links` is refused, permanently and by design — a delegate
+ *     must never mint a door that outlives their own revocation. It is what a
+ *     route that never declared a mode does under a switch. Naming a
+ *     permanently-refused route rather than a merely-unmigrated one is
+ *     deliberate: this arm broke once already when the route it pointed at
+ *     became delegable, and a route that can never join the list cannot break
+ *     it the same way twice.
+ *
+ * The delegable handler below is still assembled here rather than imported. A
+ * shipped route would work, but it would bind this file to one domain's query
+ * shape, and what is under test is the resolver. Everything beneath it is real:
+ * the real `apiHandler`, the real resolver, the real grant module, the real
  * database.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -276,7 +285,7 @@ describe("acting-account resolver — the decision is never cached", () => {
 });
 
 describe("acting-account resolver — do no harm", () => {
-  it("leaves an un-switched request on a real shipped route exactly as it was", async () => {
+  it("leaves an un-switched request on a real delegable route exactly as it was", async () => {
     const user = await makeUser("solo");
     await seedWeight(user.id, 72);
     await signIn(user.id);
@@ -292,7 +301,7 @@ describe("acting-account resolver — do no harm", () => {
     ).toEqual([72]);
   });
 
-  it("refuses that same route while a switch is active, and serves nobody's rows", async () => {
+  it("serves the owner's rows on that route once the caller has switched", async () => {
     const { owner, delegate } = await household();
     const session = await signIn(delegate.id);
     await switchTo(session.id, owner.id);
@@ -301,13 +310,32 @@ describe("acting-account resolver — do no harm", () => {
     const response = await GET(
       new NextRequest("http://localhost/api/measurements?type=WEIGHT"),
     );
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    // The owner's 81 kg, and — the failure that matters — not the delegate's
+    // own 64 kg, which is seeded alongside it.
+    expect(
+      body.data.measurements.map((m: { value: number }) => m.value),
+    ).toEqual([81]);
+  });
+
+  it("refuses a route that never declared a mode, and serves nobody's rows", async () => {
+    // `GET /api/share-links` is permanently non-delegable: a delegate who
+    // could mint a clinician link would hold a door that survives the owner
+    // revoking their access. It resolves through the bare `requireAuth`
+    // default arm, which is what makes the refusal structural rather than a
+    // check somebody remembered to write.
+    const { owner, delegate } = await household();
+    const session = await signIn(delegate.id);
+    await switchTo(session.id, owner.id);
+
+    const { GET } = await import("@/app/api/share-links/route");
+    const response = await GET();
     expect(response.status).toBe(403);
     const body = await response.json();
     expect(body.meta.errorCode).toBe("sharing.not_permitted");
     expect(body.data).toBeNull();
-    // Not the owner's rows, and — the failure that matters — not the
-    // delegate's own either.
-    expect(JSON.stringify(body)).not.toContain("64");
+    expect(owner.id).not.toBe(delegate.id);
   });
 });
 
