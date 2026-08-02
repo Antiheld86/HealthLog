@@ -21,6 +21,7 @@
  */
 import type { ZodOpenApiObject } from "zod-openapi";
 
+import { accountSharingPaths } from "./account-sharing";
 import { adminDiagnosticPaths, adminInvitePaths } from "./admin";
 import { allergyPaths } from "./allergies";
 import { authPaths } from "./auth";
@@ -115,6 +116,9 @@ export const openApiPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   // registry entirely, now documented as the reference optimistic-concurrency
   // contract (appended, spread order is load-bearing).
   ...dashboardWidgetPaths,
+  // v1.36.0 — account sharing: the grant lifecycle and the switch endpoint
+  // (appended, spread order is load-bearing).
+  ...accountSharingPaths,
 };
 
 export const openApiComponents: NonNullable<ZodOpenApiObject["components"]> = {

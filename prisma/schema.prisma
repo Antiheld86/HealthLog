@@ -4483,8 +4483,31 @@ model AppSettings {
 // ─── Audit Log ─────────────────────────────────────────────
 
 model AuditLog {
-  id        String   @id @default(cuid())
-  userId    String?  @map("user_id")
+  id     String  @id @default(cuid())
+  userId String? @map("user_id")
+
+  /// v1.36.0 — who acted, when that is not the person the row is filed under.
+  ///
+  /// NULL means the account acted for itself, which is what every row written
+  /// before this column existed means and what almost every row written after
+  /// it will mean. The threading in `src/lib/auth/audit.ts` fills it only when
+  /// the request resolved an acting account, so a self-action can never grow
+  /// an actor id by accident — if it could, the reading of every historical
+  /// row would change under us.
+  ///
+  /// A delegated action files under the OWNER (`userId`) with the delegate
+  /// here: it is the owner's record that was touched, and the owner's view of
+  /// "what happened to my data" has to contain it.
+  ///
+  /// Deliberately NOT a foreign key. `userId` above is ON DELETE SET NULL, and
+  /// the same rule here would rewrite history rather than erase it — nulling
+  /// the actor turns "your daughter opened your record" into "you opened your
+  /// record" the moment her account is deleted. An id that no longer resolves
+  /// to a person renders as a deleted account; an id that silently became NULL
+  /// renders as a lie. The 365-day retention purge bounds how long either
+  /// lives.
+  actorUserId String? @map("actor_user_id")
+
   action    String // e.g. "auth.login", "measurement.create", "export.csv"
   details   String? // JSON string, no sensitive data
   ipAddress String?  @map("ip_address")
@@ -4512,6 +4535,12 @@ model AuditLog {
   // scan and could not finish inside statement_timeout on an instance with
   // enough history. See migration 0276.
   @@index([createdAt])
+  // v1.36.0 — the owner's "who touched my record" view reads
+  // `{ userId, actorUserId: { not: null } }` newest first. Every index above
+  // leads with `userId` and then `action` or `createdAt`, so that read would
+  // have to filter the whole of an account's history to find the handful of
+  // delegated rows in it. See migration 0294.
+  @@index([userId, actorUserId, createdAt(sort: Desc)])
   @@map("audit_logs")
 }
 

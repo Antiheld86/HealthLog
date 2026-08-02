@@ -7,7 +7,7 @@ import { annotate, eventStorage, getEvent } from "./logging/context";
 import { emitIfSampled } from "./logging/transports";
 import { redactOptional, redactSecrets } from "./logging/redact";
 import { getSession } from "./auth/session";
-import { auditLog } from "./auth/audit";
+import { auditLog, recordDelegatedAccess } from "./auth/audit";
 import {
   resolveBearerToken,
   BearerAuthError,
@@ -879,6 +879,12 @@ export async function requireRecordAuth(
   // Fire-and-forget, the `ApiToken.lastUsedAt` posture: the read must not wait
   // on the bookkeeping, and the bookkeeping failing must not fail the read.
   void touchGrantUsage(grant.id);
+  // The owner's copy of the same fact, and the one they can read: a day-
+  // coalesced row on their own record saying who opened it. It lands here
+  // rather than in the handlers because a route cannot forget what it never
+  // had to remember — every delegated request in the product passes through
+  // this line, and only requests that got past the grant check reach it.
+  void recordDelegatedAccess(owner.id, auth.user.id);
 
   return {
     session: auth.session,

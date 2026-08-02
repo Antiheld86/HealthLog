@@ -250,21 +250,23 @@ const DELEGABLE_ROUTES: Record<string, string> = {};
  * switch, because they serve the caller's own account and nothing of the
  * owner's.
  *
- * Also empty today, and for the same reason: the resolver exists, its members
- * do not yet. The intended first five — the account bootstrap payload, the
- * switch endpoint itself, logout, the native refresh route, and the locale
- * read — are the surfaces a switched session needs in order to stay usable and
- * to switch back. None of them exists in this shape yet, and naming them here
- * before they do would freeze a guess.
+ * The intended members are the surfaces a switched session needs in order to
+ * stay usable and to get back out: the account bootstrap payload, the switch
+ * endpoint, logout, the native refresh route, the locale read. One of them
+ * exists so far. The rest arrive as their own diffs here; naming them before
+ * they exist would freeze a guess.
  */
-const ACTOR_ROUTES: Record<string, string> = {};
+const ACTOR_ROUTES: Record<string, string> = {
+  "app/api/account/switch/route.ts":
+    "The way back out. Every other route refuses under a switch, so if this one did too a browser could enter a record and never leave it. It reads and writes exactly one row — the caller's own session — renders nothing of the owner's, and grants nothing: the account it stamps is validated against a live grant first, and the stamp is re-checked on every request after.",
+};
 
 /**
  * Entries across both lists. Pinned so that the reason-loop below cannot stay
- * a formality by accident: it runs zero times today, and the day it stops
- * running zero times somebody has to say so here.
+ * a formality by accident: every addition has to be counted here as well as
+ * listed above, which is one more place a careless admission has to pass.
  */
-const FROZEN_ENTRY_COUNT = 0;
+const FROZEN_ENTRY_COUNT = 1;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —
@@ -502,10 +504,8 @@ describe("every frozen entry carries a reason", () => {
       expect(reason.trim().length, `${rel} has no reason`).toBeGreaterThan(0);
     }
 
-    // Both lists are empty, so the loop above runs zero times and proves
-    // nothing today. Said out loud rather than left to be discovered: this
-    // count is what forces the next person adding an entry to notice that the
-    // reason check has been dormant.
+    // The loop above now runs, once. The count stays because it is what makes
+    // an addition visible twice — in the list and here — rather than once.
     expect(entries.length).toBe(FROZEN_ENTRY_COUNT);
   });
 });
