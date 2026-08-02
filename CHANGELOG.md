@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [1.35.6] — 2026-08-02
+
+### Fixed
+
+- The line under the top bar and the line under the sidebar header now meet.
+  They were one pixel apart, because the two carried the same height but painted
+  their border on different elements. Both now take height and border from one
+  place, so they cannot come apart again without a check failing.
+
+### Internal
+
+- A resolver that worked out a headline verdict for the dashboard is gone. Its
+  consumer was removed a while ago and it was never wired to anything else, so
+  it had been computing an answer nobody read. Every signal it covered already
+  has a live owner elsewhere.
+- Two waits in the browser-test helper could never time out, which turned a
+  stalled asset into a confusing error at the following step instead of a clear
+  one at the stall. They are bounded now.
+- A browser check waited for a marker that the loading placeholders also carry,
+  so it could inspect a page that had not finished arriving and report a problem
+  that was not there. It waits for real content now.
+
 ## [1.35.5] — 2026-08-02
 
 ### Fixed
