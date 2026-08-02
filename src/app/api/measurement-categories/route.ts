@@ -62,7 +62,6 @@ const CATEGORY_ORDER: readonly MeasurementCategory[] = [
   "metabolic",
 ] as const;
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const GET = apiHandler(async (_request: NextRequest) => {
   await requireAuth();
 

@@ -87,5 +87,10 @@ next-env.d.ts
 .audit-*.mjs
 
 
-# Isolated development worktrees
+# Isolated development worktrees. `/.wt-*/` is the convention actually in use;
+# each one is a full copy of the tree with its own node_modules, so leaving it
+# untracked-but-visible means one `git add -A` commits the repository eleven
+# times over. The same two names are excluded from eslint and vitest, for the
+# same reason in a different tool.
+/.wt-*/
 /.worktrees/

@@ -31,8 +31,13 @@ export default defineConfig({
       "tests/integration/**",
       // Playwright E2E suite — driven separately via `pnpm e2e`.
       "e2e/**",
-      // Local agent worktrees create copies of `src/` under `.claude/`
-      // or `.worktrees/`; vitest must not collect stale duplicate suites.
+      // Local tool worktrees create full copies of `src/` in the repo root;
+      // vitest must not collect stale duplicate suites from them. The copies
+      // also carry their own `node_modules`, so a collected duplicate drags in
+      // a SECOND React instance and fails in ways that have nothing to do with
+      // the working tree. `.wt-*` is the convention actually in use — the two
+      // names below predate it and are kept because both still occur.
+      ".wt-*/**",
       ".claude/worktrees/**",
       ".worktrees/**",
     ],

@@ -88,7 +88,6 @@ export type CycleGateResult =
  */
 export async function requireCycleEnabled(
   userId: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _gender: string | null | undefined,
 ): Promise<CycleGateResult> {
   const [profile, available] = await Promise.all([

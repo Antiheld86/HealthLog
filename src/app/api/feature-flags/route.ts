@@ -40,7 +40,6 @@ import { apiSuccess } from "@/lib/api-response";
 import { getAssistantFlags } from "@/lib/feature-flags";
 import { annotate } from "@/lib/logging/context";
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const GET = apiHandler(async (_request: NextRequest) => {
   await requireAuth();
   annotate({ action: { name: "feature-flags.read" } });
