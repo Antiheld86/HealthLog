@@ -1,6 +1,24 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
 /**
+ * How long either settle wait in `settleBeforeMeasure` may take before the
+ * spec moves on.
+ *
+ * Both of those waits are written to end on their own terms; neither was
+ * bounded, and neither inherits a bound from anywhere, because the config
+ * leaves `actionTimeout` and `navigationTimeout` unset and Playwright reads
+ * that as "no limit". One request that never completes therefore ends the
+ * whole test instead of just the wait, and it ends it in the least useful way
+ * available: the run reports whichever call was still pending when the fixture
+ * tore the page down, so the message names a `page.evaluate` against a closed
+ * target rather than the surface that stalled. Six seconds is an order of
+ * magnitude above the slowest settle measured anywhere in this suite. Past
+ * that it is a stall, and a stall belongs in front of the spec's own
+ * assertions, which can say what is actually wrong.
+ */
+const SETTLE_BUDGET_MS = 6_000;
+
+/**
  * Gate a one-shot DOM read on the element it is about to measure.
  *
  * The failure this exists to prevent: a spec navigates with
@@ -45,6 +63,30 @@ export async function settleBeforeMeasure(
     .catch(() => {});
   // Fonts and late CSS change geometry after the element is visible, and
   // every measurement in this suite is geometric.
-  await page.waitForLoadState("networkidle").catch(() => {});
-  await page.evaluate(() => document.fonts?.ready);
+  await page
+    .waitForLoadState("networkidle", { timeout: SETTLE_BUDGET_MS })
+    .catch(() => {});
+  await waitForFonts(page);
+}
+
+/**
+ * Wait for webfonts to settle, bounded inside the page.
+ *
+ * `document.fonts.ready` belongs to the document, so awaiting it from a
+ * `page.evaluate` hands the test an unbounded wait on a promise no timeout
+ * reaches. Race it against a timer in the page instead, so a font that never
+ * arrives costs this wait and nothing else.
+ */
+export async function waitForFonts(
+  page: Page,
+  timeout = SETTLE_BUDGET_MS,
+): Promise<void> {
+  await page.evaluate(async (budget: number) => {
+    const ready = document.fonts?.ready;
+    if (!ready) return;
+    await Promise.race([
+      ready,
+      new Promise((resolve) => window.setTimeout(resolve, budget)),
+    ]);
+  }, timeout);
 }

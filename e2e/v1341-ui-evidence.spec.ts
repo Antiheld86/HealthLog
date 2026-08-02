@@ -11,7 +11,7 @@ import {
   mockDashboardSnapshot,
 } from "./utils/mock-dashboard-snapshot";
 import { mockPopulatedInsights } from "./utils/mock-populated-insights";
-import { settleBeforeMeasure } from "./utils/settle";
+import { settleBeforeMeasure, waitForFonts } from "./utils/settle";
 
 const EVIDENCE_DIR = join(process.cwd(), "test-results", "v1341");
 
@@ -46,7 +46,9 @@ async function settleAndCapture(
     content:
       "*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}",
   });
-  await page.evaluate(() => document.fonts?.ready);
+  // The injected stylesheet can pull a font the page had not needed yet, so
+  // the wait repeats after it. Bounded, for the reason `waitForFonts` gives.
+  await waitForFonts(page);
   const path = join(EVIDENCE_DIR, filename);
   await page.screenshot({ path, animations: "disabled" });
   await testInfo.attach(filename, { path, contentType: "image/png" });
