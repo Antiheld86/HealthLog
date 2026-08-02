@@ -840,3 +840,214 @@ describe("GET /api/mental-health/assessments", () => {
     expect(payload.assessments.map((a) => a.totalScore)).toEqual([7]);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Mood, custom metrics, personal records                                     */
+/* -------------------------------------------------------------------------- */
+
+async function seedMood(userId: string, score: number) {
+  await getPrismaClient().moodEntry.create({
+    data: {
+      userId,
+      date: "2026-07-14",
+      mood: "GUT",
+      score,
+      moodLoggedAt: new Date("2026-07-14T19:00:00Z"),
+    },
+  });
+}
+
+contract<number>("GET /api/mood-entries", {
+  call: async () => {
+    const { GET } = await import("@/app/api/mood-entries/route");
+    return call(GET as Handler, "/api/mood-entries");
+  },
+  seed: seedMood,
+  read: (payload: { entries: { score: number }[] }) =>
+    payload.entries.map((e) => e.score),
+  ownerMarker: 4,
+  delegateMarker: 2,
+});
+
+describe("GET /api/mood-entries/[id]", () => {
+  it("resolves against the owner and refuses once the grant ends", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await seedMood(owner.id, 4);
+    await seedMood(delegate.id, 2);
+    const ownerRow = await getPrismaClient().moodEntry.findFirstOrThrow({
+      where: { userId: owner.id },
+    });
+    const delegateRow = await getPrismaClient().moodEntry.findFirstOrThrow({
+      where: { userId: delegate.id },
+    });
+
+    const { GET } = await import("@/app/api/mood-entries/[id]/route");
+    const { grant } = await switchInto(owner.id, delegate.id);
+
+    const mine = await call(
+      GET as Handler,
+      `/api/mood-entries/${ownerRow.id}`,
+      { id: ownerRow.id },
+    );
+    expect(mine.status).toBe(200);
+    expect((await body(mine)).data).toMatchObject({ score: 4 });
+
+    const theirs = await call(
+      GET as Handler,
+      `/api/mood-entries/${delegateRow.id}`,
+      { id: delegateRow.id },
+    );
+    expect(theirs.status).toBe(404);
+
+    await revokeGrant(grant.id);
+    await expectDenied(
+      await call(GET as Handler, `/api/mood-entries/${ownerRow.id}`, {
+        id: ownerRow.id,
+      }),
+    );
+  });
+
+  it("is unchanged for a caller who has not switched", async () => {
+    const plain = await makeUser("plain");
+    await seedMood(plain.id, 5);
+    const row = await getPrismaClient().moodEntry.findFirstOrThrow({
+      where: { userId: plain.id },
+    });
+    await signIn(plain.id);
+
+    const { GET } = await import("@/app/api/mood-entries/[id]/route");
+    const response = await call(GET as Handler, `/api/mood-entries/${row.id}`, {
+      id: row.id,
+    });
+    expect(response.status).toBe(200);
+    expect((await body(response)).data).toMatchObject({ score: 5 });
+  });
+});
+
+async function seedCustomMetric(userId: string, name: string) {
+  const metric = await getPrismaClient().customMetric.create({
+    data: { userId, name, unit: "ml" },
+  });
+  await getPrismaClient().customMetricEntry.create({
+    data: {
+      userId,
+      customMetricId: metric.id,
+      value: 250,
+      unit: "ml",
+      measuredAt: new Date("2026-07-14T12:00:00Z"),
+    },
+  });
+}
+
+contract<string>("GET /api/custom-metrics", {
+  call: async () => {
+    const { GET } = await import("@/app/api/custom-metrics/route");
+    return call(GET as Handler, "/api/custom-metrics");
+  },
+  seed: seedCustomMetric,
+  read: (payload: { customMetrics: { name: string }[] }) =>
+    payload.customMetrics.map((m) => m.name),
+  ownerMarker: "owner-water",
+  delegateMarker: "delegate-water",
+});
+
+describe("GET /api/custom-metrics/[id] and its entries", () => {
+  it("reach the owner's metric and refuse once the grant ends", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await seedCustomMetric(owner.id, "owner-water");
+    await seedCustomMetric(delegate.id, "delegate-water");
+    const ownerMetric = await getPrismaClient().customMetric.findFirstOrThrow({
+      where: { userId: owner.id },
+    });
+    const delegateMetric =
+      await getPrismaClient().customMetric.findFirstOrThrow({
+        where: { userId: delegate.id },
+      });
+
+    const detail = await import("@/app/api/custom-metrics/[id]/route");
+    const entries = await import("@/app/api/custom-metrics/[id]/entries/route");
+    const { grant } = await switchInto(owner.id, delegate.id);
+
+    const mine = await call(
+      detail.GET as Handler,
+      `/api/custom-metrics/${ownerMetric.id}`,
+      { id: ownerMetric.id },
+    );
+    expect(mine.status).toBe(200);
+    expect((await body(mine)).data).toMatchObject({ name: "owner-water" });
+
+    // The entries route establishes ownership on the METRIC first and only
+    // then queries by `customMetricId`. That hop now resolves against the
+    // owner, so the delegate's own metric is unreachable from in here.
+    const theirEntries = await call(
+      entries.GET as Handler,
+      `/api/custom-metrics/${delegateMetric.id}/entries`,
+      { id: delegateMetric.id },
+    );
+    expect(theirEntries.status).toBe(404);
+
+    const ownerEntries = await call(
+      entries.GET as Handler,
+      `/api/custom-metrics/${ownerMetric.id}/entries`,
+      { id: ownerMetric.id },
+    );
+    expect(ownerEntries.status).toBe(200);
+    const payload = (await body(ownerEntries)).data as {
+      entries: { value: number }[];
+    };
+    expect(payload.entries.map((e) => e.value)).toEqual([250]);
+
+    await revokeGrant(grant.id);
+    await expectDenied(
+      await call(
+        entries.GET as Handler,
+        `/api/custom-metrics/${ownerMetric.id}/entries`,
+        { id: ownerMetric.id },
+      ),
+    );
+  });
+
+  it("are unchanged for a caller who has not switched", async () => {
+    const plain = await makeUser("plain");
+    await seedCustomMetric(plain.id, "plain-water");
+    const metric = await getPrismaClient().customMetric.findFirstOrThrow({
+      where: { userId: plain.id },
+    });
+    await signIn(plain.id);
+
+    const { GET } = await import("@/app/api/custom-metrics/[id]/route");
+    const response = await call(
+      GET as Handler,
+      `/api/custom-metrics/${metric.id}`,
+      { id: metric.id },
+    );
+    expect(response.status).toBe(200);
+    expect((await body(response)).data).toMatchObject({ name: "plain-water" });
+  });
+});
+
+async function seedPersonalRecord(userId: string, value: number) {
+  await getPrismaClient().personalRecord.create({
+    data: {
+      userId,
+      metricType: "WEIGHT",
+      direction: "MIN",
+      value,
+      unit: "kg",
+      achievedAt: new Date("2026-06-01T08:00:00Z"),
+    },
+  });
+}
+
+contract<number>("GET /api/personal-records", {
+  call: async () => {
+    const { GET } = await import("@/app/api/personal-records/route");
+    return call(GET as Handler, "/api/personal-records");
+  },
+  seed: seedPersonalRecord,
+  read: (payload: { value: number }[]) => payload.map((r) => r.value),
+  ownerMarker: 79.5,
+  delegateMarker: 61.5,
+});

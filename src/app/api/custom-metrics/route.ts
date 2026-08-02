@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
@@ -29,7 +29,7 @@ import { createCustomMetricSchema } from "@/lib/validations/custom-metrics";
  */
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  const { user } = await requireRecordAuth("read");
 
   const rows = await prisma.customMetric.findMany({
     where: { userId: user.id, deletedAt: null },

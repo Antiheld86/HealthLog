@@ -280,6 +280,18 @@ const DELEGABLE_ROUTES: Record<string, string> = {
     "The record's screener history. The module gate resolves against the record, so a delegate sees the surface only where the owner switched it on; the rate limit on the POST arm is untouched and that arm still refuses under a switch.",
   "app/api/anamnesis/facts/route.ts":
     "The record's health-profile facts, read through `readHealthProfileFacts(user.id)`. The module holds write helpers, and the GET calls none of them.",
+  "app/api/mood-entries/route.ts":
+    "The record's mood entries. The nested include is the tag vocabulary — a key and a kind, no identifiers. Note that `GET /api/mood/tags` is refused and stays refused: it pulls the owner's tag LAYOUT, which is a presentation preference and belongs to the person, not the record.",
+  "app/api/mood-entries/[id]/route.ts":
+    "One mood entry of the record, fetch-then-guard against the resolved user.",
+  "app/api/custom-metrics/route.ts":
+    "The record's own metric definitions and their latest values. Every `where` carries the resolved user id.",
+  "app/api/custom-metrics/[id]/route.ts":
+    "One custom metric of the record, scoped by the resolved user id in the query itself.",
+  "app/api/custom-metrics/[id]/entries/route.ts":
+    "The entries of one custom metric, reached only after the metric itself resolves under the record's user id — the ownership hop runs before the entry query.",
+  "app/api/personal-records/route.ts":
+    "The record's personal bests, `where: { userId: user.id }`. Nothing else in the file.",
 };
 
 /**
@@ -303,7 +315,7 @@ const ACTOR_ROUTES: Record<string, string> = {
  * a formality by accident: every addition has to be counted here as well as
  * listed above, which is one more place a careless admission has to pass.
  */
-const FROZEN_ENTRY_COUNT = 17;
+const FROZEN_ENTRY_COUNT = 23;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —

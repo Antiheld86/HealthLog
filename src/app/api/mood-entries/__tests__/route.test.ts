@@ -51,9 +51,7 @@ vi.mock("@/lib/mood/tag-links", async () => {
 });
 
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
-vi.mock("@/lib/auth/audit", () => ({
-  auditLog: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock("@/lib/auth/audit", () => ({ auditLog: vi.fn() }));
 vi.mock("@/lib/idempotency", () => ({
   withIdempotency:
     <Args extends unknown[]>(fn: (...args: Args) => Promise<Response>) =>
@@ -80,6 +78,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import { GET, POST } from "../route";
+import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { createTagLinks } from "@/lib/mood/tag-links";
@@ -107,6 +106,11 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
   vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never);
+  // v1.36.0 — the GET's validation breadcrumb goes through the `auditLog`
+  // helper now, because that helper is the only writer that stamps
+  // `actorUserId`. `resetAllMocks` clears the factory's implementation, so the
+  // resolved promise the route attaches a `.catch` to is restored here.
+  vi.mocked(auditLog).mockResolvedValue(undefined);
   // Re-establish the interactive-transaction passthrough after the reset.
   vi.mocked(prisma.$transaction).mockImplementation(async (fn: unknown) =>
     (fn as (tx: typeof txClient) => unknown)(txClient),
@@ -152,17 +156,14 @@ describe("GET /api/mood-entries — 422 multi-issue (v1.4.43 W6)", () => {
     const res = await GET(getReq("mood=junk&sortBy=garbage"));
     expect(res.status).toBe(422);
     await new Promise((r) => setTimeout(r, 5));
-    expect(prisma.auditLog.create).toHaveBeenCalledTimes(1);
-    const call = vi.mocked(prisma.auditLog.create).mock.calls[0]?.[0] as {
-      data: { userId: string; action: string };
-    };
-    expect(call.data.action).toBe("mood-entries.list.validation-failed");
+    expect(auditLog).toHaveBeenCalledWith(
+      "mood-entries.list.validation-failed",
+      expect.objectContaining({ userId: "user-1" }),
+    );
   });
 
   it("does not block the 422 when the audit-row write rejects", async () => {
-    vi.mocked(prisma.auditLog.create).mockRejectedValueOnce(
-      new Error("db down"),
-    );
+    vi.mocked(auditLog).mockRejectedValueOnce(new Error("db down"));
     const res = await GET(getReq("mood=junk&sortBy=garbage"));
     expect(res.status).toBe(422);
   });

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
@@ -35,7 +35,7 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 export const GET = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    const { user } = await requireRecordAuth("read");
     const { id } = await params;
 
     const metric = await prisma.customMetric.findFirst({

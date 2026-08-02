@@ -16,7 +16,7 @@
  */
 import { prisma } from "@/lib/db";
 import type { NextRequest } from "next/server";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { apiSuccess } from "@/lib/api-response";
 import { measurementTypeEnum } from "@/lib/validations/measurement";
@@ -36,7 +36,7 @@ const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  const { user } = await requireRecordAuth("read");
   annotate({ action: { name: "personalRecords.list" } });
 
   const { searchParams } = new URL(request.url);
