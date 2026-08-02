@@ -246,7 +246,7 @@ interface HealthChartProps {
    * v1.12.8 — optional leading glyph for the chart card's `<TileHeader>`.
    * When supplied, the chart header renders the canonical icon + title row
    * (same size + spacing as every other Insights tile) instead of the bare
-   * `<h3>`. Omitted on the dashboard / mini mounts, which keep the compact
+   * `<h2>`. Omitted on the dashboard / mini mounts, which keep the compact
    * heading. Accepts any component that takes a `className` (the contract
    * `<TileHeader>` and the stat strip's `icon` already use), so a page can
    * thread the same glyph it hands the stat strip.
@@ -1691,11 +1691,23 @@ export function HealthChart({
                 `<TileHeader>` (icon + title at `text-base`, foreground
                 colour, h-5 w-5) so it matches the assessment / target /
                 stat tiles. The dashboard / ad-hoc mounts omit the icon and
-                keep the compact `<h3>`. */}
+                keep the compact heading.
+
+                That compact heading is an `<h2>`, not an `<h3>`. The card is
+                a sibling of the other cards in the same grid, and those name
+                themselves at the second level already — the dashboard's
+                "Recent unlocks" and "Recent workouts" tiles both render
+                `<TileHeader titleAs="h2">`, and the metric subpages' target /
+                usual-range cards are `<h2>` too. Sitting one level lower made
+                the chart card the odd one out AND skipped a level under the
+                page `<h1>`: the dashboard's rendered ladder read h1 → h3 →
+                h3 → h3 → h2 → h2, and /insights/bmi read h1 → h3 → h2. A
+                heading level is a claim about nesting, and the chart card is
+                not nested inside anything. */}
             {titleIcon ? (
               <TileHeader icon={titleIcon} title={title} />
             ) : (
-              <h3 className="text-sm font-semibold">{title}</h3>
+              <h2 className="text-sm font-semibold">{title}</h2>
             )}
             {activeBucket !== "day" && (
               <span className="bg-muted/40 text-muted-foreground hidden rounded-md px-1.5 py-0.5 text-[10px] font-medium tracking-wide uppercase sm:inline-flex">
