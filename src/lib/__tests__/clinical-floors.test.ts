@@ -2,11 +2,11 @@
  * D3-H1 coverage — the clinical safety floors are ONE source of truth.
  *
  * Before v1.21.0 the "is this BP a crisis?" floors lived in three modules with
- * a divergent diastolic value (notification engine + Coach 180/120, dashboard
- * hero 180/110), so a 170/112 reading lit the hero banner yet never tripped the
- * alarm. This suite pins that every consumer now resolves the SAME canonical
- * constants from `@/lib/clinical-floors`, so the three surfaces can never drift
- * apart again without a test failure.
+ * a divergent diastolic value (notification engine + Coach 180/120, a third
+ * surface 180/110), so a 170/112 reading read as a crisis in one place and
+ * never tripped the alarm. This suite pins that every consumer now resolves the
+ * SAME canonical constants from `@/lib/clinical-floors`, so the surfaces can
+ * never drift apart again without a test failure.
  */
 import { describe, it, expect } from "vitest";
 
@@ -33,8 +33,8 @@ import { getMetricStatusMeta } from "@/lib/insights/metric-status-registry";
 
 describe("clinical-floors — single source of truth", () => {
   it("uses the guideline-correct hypertensive-crisis floors (180/120)", () => {
-    // ACC/AHA hypertensive-urgency floor: the diastolic floor is 120, NOT the
-    // former hero-only 110 that fired the banner on calmer readings.
+    // ACC/AHA hypertensive-urgency floor: the diastolic floor is 120, not the
+    // 110 one surface once used to raise a banner on calmer readings.
     expect(BP_SYS_CRITICAL).toBe(180);
     expect(BP_DIA_CRITICAL).toBe(120);
   });

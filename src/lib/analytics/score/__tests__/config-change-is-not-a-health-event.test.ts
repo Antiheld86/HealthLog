@@ -19,8 +19,12 @@
  *     → `computeUserHealthScore` (the real reader, real pillars)
  *     → `computeAndRecordUserHealthScore` (the real write path)
  *     → `buildDashboardSnapshot` (the real snapshot mapping)
- *     → `resolveDashboardVerdict` (the real `scoreDrop` rung)
  *     → `loadDailyDigest` → `buildDailyDigest` (the real morning line)
+ *
+ * The digest is the last stop before a person: the Today hero renders the
+ * delta chip on `delta !== null && deltaReason === null` and the morning
+ * push sends `line` verbatim, so those two fields are asserted rather than
+ * any intermediate the renderer does not read.
  *
  * Only the IO around that chain is faked. A version of this test that
  * built a `DashboardSnapshot` literal by hand would have been green
@@ -233,7 +237,6 @@ vi.mock("@/lib/insights/derived/baseline", () => ({
 
 import { buildDashboardSnapshot } from "@/lib/dashboard/snapshot";
 import type { SnapshotUserInput } from "@/lib/dashboard/snapshot";
-import { resolveDashboardVerdict } from "@/lib/dashboard/verdict";
 import { loadDailyDigest } from "@/lib/daily/load-digest";
 import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
 import { __resetAllCachesForTests } from "@/lib/cache/server-cache";
@@ -322,7 +325,6 @@ async function runChain(healthScoreConfigJson: unknown) {
     fakeDb as never,
     user(healthScoreConfigJson),
   );
-  const verdict = resolveDashboardVerdict(snapshot, NOW);
   readDashboardSnapshotCached.mockResolvedValue({
     body: {
       ...snapshot,
@@ -341,7 +343,7 @@ async function runChain(healthScoreConfigJson: unknown) {
     } as unknown as User,
     NOW,
   );
-  return { snapshot, verdict, digest, record: writtenRecords[0] ?? null };
+  return { snapshot, digest, record: writtenRecords[0] ?? null };
 }
 
 beforeEach(() => {
@@ -424,7 +426,7 @@ const JUST_CHANGED = recipe(new Date(NOW.getTime() - 3 * DAY_MS));
 
 describe("a settings change is never narrated as a health event", () => {
   it("shows a real ten-point-plus drop when no recipe changed in the window", async () => {
-    const { snapshot, verdict, digest } = await runChain(SETTLED);
+    const { snapshot, digest } = await runChain(SETTLED);
 
     // If this ever stops holding, every assertion in the next test is
     // vacuous: an account with no drop to suppress would pass it while
@@ -433,19 +435,27 @@ describe("a settings change is never narrated as a health event", () => {
     expect(snapshot.healthScore!.deltaReason).toBeNull();
     expect(snapshot.healthScore!.delta).not.toBeNull();
     expect(snapshot.healthScore!.delta!).toBeLessThanOrEqual(-10);
-    expect(verdict.variant).toBe("scoreDrop");
-    expect(digest.score?.delta).toBe(snapshot.healthScore!.delta);
+    // And it survives the assembly to the field the hero reads, at the
+    // full size — a drop that arrived rounded to nothing would leave the
+    // suppression below with nothing to prove.
     expect(digest.score?.deltaReason).toBeNull();
+    expect(digest.score?.delta).toBe(snapshot.healthScore!.delta);
+    expect(digest.score!.delta!).toBeLessThanOrEqual(-10);
   });
 
-  it("fires no scoreDrop verdict when the recipe changed inside the window", async () => {
-    // The verdict first and on its own line: this is the sentence the
-    // person would read, and it is what has to go red when the guard
-    // goes missing. Asserting the reason before it would fail one step
-    // earlier and never exercise the rung at all.
-    const { verdict } = await runChain(JUST_CHANGED);
+  it("renders no delta chip when the recipe changed inside the window", async () => {
+    // The chip first and on its own line: the hero paints it on
+    // `delta !== null && deltaReason === null`, so that pair is what a
+    // person actually sees and what has to go red when the guard goes
+    // missing. Asserting the reason before it would fail one step
+    // earlier and never exercise the render condition at all.
+    const { digest } = await runChain(JUST_CHANGED);
 
-    expect(verdict.variant).not.toBe("scoreDrop");
+    expect(
+      digest.score !== null &&
+        digest.score.delta !== null &&
+        digest.score.deltaReason === null,
+    ).toBe(false);
   });
 
   it("suppresses the delta with the reason that names the act", async () => {
