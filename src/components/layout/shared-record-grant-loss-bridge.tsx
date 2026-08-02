@@ -1,10 +1,10 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
 import {
-  isSharingAccessDenied,
+  subscribeToGrantLoss,
   useLeaveSharedRecordOnGrantLoss,
 } from "@/hooks/use-account-switch";
 
@@ -25,26 +25,18 @@ import {
  * code is the point: a per-call-site handler is a rule the next feature
  * forgets, and forgetting it here means somebody is stuck.
  *
- * Fires once. `landOnRecord` never resolves (the document is being replaced),
- * so a second trigger would queue a second reload behind a navigation already
- * in flight; the ref makes the first one the only one.
+ * Fires once — `subscribeToGrantLoss` owns that, because `landOnRecord` never
+ * resolves (the document is being replaced) and a second trigger would queue a
+ * second reload behind a navigation already in flight.
  */
 export function SharedRecordGrantLossBridge() {
   const queryClient = useQueryClient();
   const leave = useLeaveSharedRecordOnGrantLoss();
-  const leaving = useRef(false);
 
-  useEffect(() => {
-    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
-      if (leaving.current) return;
-      if (event.type !== "updated") return;
-      if (event.query.state.status !== "error") return;
-      if (!isSharingAccessDenied(event.query.state.error)) return;
-      leaving.current = true;
-      void leave();
-    });
-    return unsubscribe;
-  }, [queryClient, leave]);
+  useEffect(
+    () => subscribeToGrantLoss(queryClient, () => void leave()),
+    [queryClient, leave],
+  );
 
   return null;
 }

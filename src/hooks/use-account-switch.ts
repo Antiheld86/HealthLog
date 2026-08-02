@@ -26,7 +26,11 @@
  * Callers therefore do not need a success state, only a pending one.
  */
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { useCallback } from "react";
 import { toast } from "sonner";
 
@@ -154,6 +158,32 @@ export function useAccountSwitch() {
  * down) the reload still happens: the stamp survives, but so does the honest
  * refusal, and the alternative is a page that neither recovers nor says why.
  */
+/**
+ * Watch the cache for the moment the server stops honouring the switch.
+ *
+ * A plain function over a QueryClient rather than an effect body, so a test
+ * can drive a real cache into the error state and check what happens — which
+ * is the only way to tell a subscriber that fires from one that was written
+ * and never wired.
+ *
+ * Fires `onLoss` at most once. The caller reloads the document, and a second
+ * trigger would queue a second navigation behind one already in flight.
+ */
+export function subscribeToGrantLoss(
+  queryClient: QueryClient,
+  onLoss: () => void,
+): () => void {
+  let fired = false;
+  return queryClient.getQueryCache().subscribe((event) => {
+    if (fired) return;
+    if (event.type !== "updated") return;
+    if (event.query.state.status !== "error") return;
+    if (!isSharingAccessDenied(event.query.state.error)) return;
+    fired = true;
+    onLoss();
+  });
+}
+
 export function useLeaveSharedRecordOnGrantLoss() {
   return useCallback(async () => {
     try {

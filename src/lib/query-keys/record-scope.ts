@@ -75,13 +75,15 @@ function readMirror(): string | null {
  * The record this browser is currently reading, or null when it is reading its
  * own.
  *
- * Server-side this is always null. `Providers` renders on the server during
- * SSR, where there is no storage to read and no cache to partition.
+ * Server-side this stays null for the life of the process: the mirror is only
+ * ever seeded from browser storage, and `setRecordScope` is called from client
+ * code alone. That matters more than it looks — the value is a module-level
+ * variable, so a server that could write it would be sharing one scope across
+ * every request it serves.
  */
 export function getRecordScope(): string | null {
-  if (typeof window === "undefined") return null;
   if (!seeded) {
-    scope = readMirror();
+    scope = typeof window === "undefined" ? null : readMirror();
     seeded = true;
   }
   return scope;

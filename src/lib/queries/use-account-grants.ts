@@ -17,7 +17,12 @@
  * cannot render "active" on a row the server has stopped honouring.
  */
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 
 import { apiDelete, apiGet, apiPost } from "@/lib/api/api-fetch";
 import { grantDependentKeys, queryKeys } from "@/lib/query-keys";
@@ -88,17 +93,27 @@ export function useRecordActivity(enabled = true) {
 /**
  * Refresh everything a grant transition can have changed.
  *
+ * A plain function over a QueryClient rather than a hook body, so a test can
+ * hand it a real client, seed the three reads and check they came back
+ * invalidated — which is the only way to tell an invalidation that runs from
+ * one that was written and never wired.
+ */
+export function invalidateGrantReads(queryClient: QueryClient): void {
+  for (const key of grantDependentKeys) {
+    void queryClient.invalidateQueries({ queryKey: key });
+  }
+}
+
+/**
+ * The same refresh, bound to the mounted client.
+ *
  * Shared by all four mutations rather than written out per hook: the day one
  * of them forgets the account payload is the day a revoked record keeps its
  * switcher entry.
  */
 function useInvalidateGrants() {
   const queryClient = useQueryClient();
-  return () => {
-    for (const key of grantDependentKeys) {
-      void queryClient.invalidateQueries({ queryKey: key });
-    }
-  };
+  return () => invalidateGrantReads(queryClient);
 }
 
 export interface InviteInput {
