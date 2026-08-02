@@ -50,6 +50,39 @@ export const E2E_USER = {
   role: "ADMIN",
 } as const;
 
+/**
+ * v1.36.0 — the SECOND account, so account sharing has two sides to test.
+ *
+ * Sharing is the one feature in the product that cannot be exercised by one
+ * person: somebody has to own a record and somebody else has to be given it.
+ * This account owns the record; `E2E_USER` is the delegate throughout the
+ * sharing spec.
+ */
+export const E2E_OWNER = {
+  email: "e2e-owner@healthlog.test",
+  username: "e2e-owner",
+  password: "Qv7bR2n!Ks9wLd4T",
+  role: "USER",
+} as const;
+
+/**
+ * Weights seeded one per account, chosen so neither can be mistaken for the
+ * other in rendered markup and neither collides with a value any other spec
+ * writes.
+ *
+ * The delegate's number is the whole point of the stale-paint check: after
+ * switching into the owner's record it must appear NOWHERE, at no moment. A
+ * spec that only waited for the owner's data to arrive would prove nothing
+ * about what was on screen in between.
+ */
+export const E2E_DELEGATE_MARKER_KG = 77.7;
+export const E2E_OWNER_MARKER_KG = 63.3;
+
+export const OWNER_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateOwner.json",
+);
+
 async function hashPassword(password: string): Promise<string> {
   return hash(password, {
     memoryCost: 19456,
@@ -179,6 +212,77 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
       [cuid(), now, E2E_USER.username],
     );
 
+    // ── v1.36.0 — the sharing fixture ────────────────────────────────────
+    //
+    // A second account, one distinctive weight in each record, and a clean
+    // grant table. The reset matters as much as the seed: grants and switch
+    // stamps outlive a run, and a second run starting with the delegate
+    // already inside the owner's record would skip the invitation half of
+    // the journey while still going green.
+    await pool.query(
+      `INSERT INTO users
+        (id, username, email, password_hash, role,
+         created_at, updated_at,
+         onboarding_completed_at, onboarding_tour_completed)
+       VALUES ($1, $2, $3, $4, 'USER', $5, $5, $5, true)
+       ON CONFLICT (username) DO UPDATE SET
+         email = EXCLUDED.email,
+         password_hash = EXCLUDED.password_hash,
+         updated_at = EXCLUDED.updated_at,
+         onboarding_completed_at = EXCLUDED.onboarding_completed_at,
+         onboarding_tour_completed = EXCLUDED.onboarding_tour_completed`,
+      [
+        cuid(),
+        E2E_OWNER.username,
+        E2E_OWNER.email,
+        await hashPassword(E2E_OWNER.password),
+        now,
+      ],
+    );
+
+    // Every grant between the pair, and any switch stamp either of them is
+    // carrying. Deleted rather than revoked: this is fixture hygiene, not a
+    // lifecycle transition, and a revoked row would still show in the panel.
+    await pool.query(
+      `DELETE FROM account_grants
+       WHERE grantor_id IN (SELECT id FROM users WHERE username = ANY($1))
+          OR grantee_id IN (SELECT id FROM users WHERE username = ANY($1))`,
+      [[E2E_USER.username, E2E_OWNER.username]],
+    );
+    await pool.query(
+      `UPDATE sessions SET acting_as_user_id = NULL
+       WHERE user_id IN (SELECT id FROM users WHERE username = ANY($1))`,
+      [[E2E_USER.username, E2E_OWNER.username]],
+    );
+    await pool.query(
+      `DELETE FROM rate_limits
+       WHERE key LIKE 'sharing:%'`,
+    );
+
+    // One marker weight per record. Re-seeded by delete-then-insert so a
+    // re-run cannot accumulate duplicates and so an edited constant takes
+    // effect rather than sitting beside the old value.
+    for (const [username, kg] of [
+      [E2E_USER.username, E2E_DELEGATE_MARKER_KG],
+      [E2E_OWNER.username, E2E_OWNER_MARKER_KG],
+    ] as const) {
+      await pool.query(
+        `DELETE FROM measurements
+         WHERE user_id = (SELECT id FROM users WHERE username = $1)
+           AND external_id = 'e2e-sharing-marker'`,
+        [username],
+      );
+      await pool.query(
+        `INSERT INTO measurements
+          (id, user_id, type, value, unit, source, measured_at,
+           external_id, created_at, updated_at)
+         SELECT $1, u.id, 'WEIGHT', $2, 'kg', 'MANUAL', $3,
+                'e2e-sharing-marker', $3, $3
+         FROM users u WHERE u.username = $4`,
+        [cuid(), kg, now, username],
+      );
+    }
+
     // Console (instead of structured logging) is intentional here —
     // global-setup runs outside the app's logging context, and the
     // line is useful when debugging a CI failure where the seed didn't
@@ -245,5 +349,41 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
   await ctx.dispose();
   console.log(
     `[e2e/global-setup] auth state captured to ${STORAGE_STATE_PATH}`,
+  );
+
+  // v1.36.0 — the owner's cookie jar, captured the same way and for the same
+  // reason: the login endpoint is IP-rate-limited and the sharing spec needs
+  // both sides of a grant signed in at once.
+  const ownerCtx = await playwrightRequest.newContext({ baseURL });
+  const ownerRes = await ownerCtx.post("/api/auth/login", {
+    data: { email: E2E_OWNER.username, password: E2E_OWNER.password },
+  });
+  if (ownerRes.status() !== 200) {
+    const body = await ownerRes.text();
+    throw new Error(
+      `[e2e/global-setup] owner login failed: HTTP ${ownerRes.status()} — ${body.slice(0, 200)}`,
+    );
+  }
+  const ownerState = await ownerCtx.storageState();
+  ownerState.cookies = ownerState.cookies.filter(
+    (c) => c.name === "healthlog_session" || c.name === "hl_onboarding",
+  );
+  ownerState.cookies.push({
+    name: "healthlog-locale",
+    value: "en",
+    domain: base.hostname,
+    path: "/",
+    expires: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365,
+    httpOnly: false,
+    secure: false,
+    sameSite: "Lax",
+  });
+  await writeFile(
+    OWNER_STORAGE_STATE_PATH,
+    JSON.stringify(ownerState, null, 2),
+  );
+  await ownerCtx.dispose();
+  console.log(
+    `[e2e/global-setup] owner auth state captured to ${OWNER_STORAGE_STATE_PATH}`,
   );
 }

@@ -6,4 +6,11 @@
  * specific to the spec-side (e.g. multi-user scenarios that need
  * fresh logins) have a natural home.
  */
-export { E2E_USER, STORAGE_STATE_PATH } from "./global-setup";
+export {
+  E2E_USER,
+  E2E_OWNER,
+  E2E_DELEGATE_MARKER_KG,
+  E2E_OWNER_MARKER_KG,
+  STORAGE_STATE_PATH,
+  OWNER_STORAGE_STATE_PATH,
+} from "./global-setup";

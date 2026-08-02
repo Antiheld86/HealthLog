@@ -121,13 +121,188 @@ const switchResponse = z
       "The account this session is now acting on, or null when it is back in its own. The stamp is a selector and not a permission — the grant is re-checked on every subsequent request, so a revocation lands on the next one rather than at the next login.",
   });
 
+const recordActivityEntry = z
+  .object({
+    id: z.string(),
+    actor: grantParty
+      .nullable()
+      .describe(
+        "Who did it. Null when that account has since been deleted — the audit column is deliberately not a foreign key, so history is not rewritten when somebody leaves. Render it as a deleted account; a blank would read as though the owner had done it themselves.",
+      ),
+    action: z.string(),
+    accesses: z
+      .number()
+      .int()
+      .nullable()
+      .describe(
+        "How many times that delegate opened the record on that day, for a coalesced read row. Null for anything else — a single act has no count, and a 1 there would invite adding up numbers that mean different things.",
+      ),
+    createdAt: z.string(),
+  })
+  .meta({ id: "RecordActivityEntry" });
+
+const recordActivityResponse = z
+  .object({
+    entries: z.array(recordActivityEntry),
+    retentionDays: z
+      .number()
+      .int()
+      .describe(
+        "How far back this feed can see, in days. Resolved from the instance's audit retention setting (365 by default, operator-configurable), NOT a constant — an instance running a 90-day window sends 90. Show it beside the rows.",
+      ),
+  })
+  .meta({
+    id: "RecordActivity",
+    description:
+      "The owner's record of what somebody else did in their record, bounded by the instance's audit retention.",
+  });
+
 const sharingRefusal = {
   description:
     "Refused. `meta.errorCode` is `sharing.not_permitted` when the request was made while acting on another account (grant management is never delegable), or `sharing.access.denied` when the caller may not act as the account they named. The latter is byte-identical for an account that does not exist and one that granted nothing — the refusal is not an enumeration oracle.",
   content: { "application/json": { schema: errorEnvelope } },
 };
 
+/**
+ * The per-request account selector, published once.
+ *
+ * No route entry references it yet, and that is the honest state of the
+ * contract: the routes that read a record other than the caller's own arrive
+ * with the delegable-surface migration, and each one will `$ref` this
+ * parameter as it lands. Publishing the selector now is what lets a native
+ * client be built against a tagged spec rather than against a description of
+ * one — the header is live in the resolver today, and a request that sends it
+ * to a route which has not declared the mode is refused rather than quietly
+ * served the caller's own data.
+ *
+ * Defined here rather than in the components block so the header's name stays
+ * in two files, which `src/__tests__/acting-account-boundary-guard.test.ts`
+ * holds it to: the resolver that reads it, and this one that publishes it.
+ */
+export const accountSelectorParameter: NonNullable<
+  NonNullable<ZodOpenApiObject["components"]>["parameters"]
+>[string] = {
+  name: "X-HealthLog-Account",
+  in: "header",
+  required: false,
+  schema: { type: "string", maxLength: 64 },
+  description:
+    "Act on another account's record for THIS request. Bearer transport only — the browser session carries its switch on the session row, and sending this header alongside a cookie is refused rather than ignored. The value is an `accountId` from `accountAccess.accounts` on GET /api/auth/me. It is a SELECTOR and not a permission: the grant is re-checked on every request, so a revocation lands on the next one rather than at the next login, and a selector naming an account that granted nothing is refused with 403 `sharing.access.denied` — byte-identical to one naming an account that does not exist, so the refusal is not an enumeration oracle. NEVER attach it to the sync engine, device or notification registration, or any auth/refresh call: those are about the person holding the token, not the record being read, and the account payload refuses the header outright for exactly that reason.",
+};
+
+// ── What the client is told it may do ────────────────────────────────────────
+
+const accountAccessEntry = z
+  .object({
+    accountId: z
+      .string()
+      .describe(
+        "The account whose record it is — the value POST /api/account/switch takes, and the value the X-HealthLog-Account header carries.",
+      ),
+    username: z.string(),
+    displayName: z.string().nullable(),
+    access: z.enum(["read", "write"]),
+    canWrite: z
+      .boolean()
+      .describe(
+        "Whether this caller may CHANGE that record. Resolved server-side; `false` for every grant in v1. Render it; never derive it.",
+      ),
+  })
+  .meta({
+    id: "AccountAccessEntry",
+    description:
+      "One account this caller may act on. No avatar is published: the avatar bytes are owner-scoped, so a URL here would resolve to a refusal. Clients paint their initials fallback.",
+  });
+
+export const accountAccessBlock = z
+  .object({
+    accounts: z
+      .array(accountAccessEntry)
+      .describe("Every record this caller may open, newest grant first."),
+    active: accountAccessEntry
+      .nullable()
+      .describe(
+        "The record this session is inside right now, resolved to a full entry rather than an id to look up — so a banner can name the person without joining two fields. Null when the caller is in their own record, and ALWAYS null on the Bearer transport: a token carries its selector per request and this endpoint refuses one.",
+      ),
+    canSwitch: z
+      .boolean()
+      .describe("Whether there is anywhere to switch to. Bind it directly."),
+  })
+  .meta({
+    id: "AccountAccess",
+    description:
+      "Account sharing, resolved. This block is the ONLY source of switchability and writability: the server publishes what the caller may do and the client renders it. A client that computed either from grant data would be a second program deciding one person's access to a health record, and the two answer differently the first time an expiry or a revocation appears. Always present — an account nobody has shared with gets an empty list, not a missing field.",
+  });
+
+/**
+ * The account payload, documented for the one field this release adds.
+ *
+ * Loose on purpose. `GET /api/auth/me` has never been in this spec, and its
+ * remaining fields are the account's own preference envelope — thirty-odd keys
+ * that no contract has ever enumerated. Specifying `accountAccess` and
+ * declaring the rest open is honest; enumerating a subset and closing the
+ * object would publish a contract the server does not keep.
+ */
+const accountPayload = z
+  .looseObject({
+    id: z.string(),
+    username: z.string(),
+    accountAccess: accountAccessBlock,
+  })
+  .meta({
+    id: "AccountPayload",
+    description:
+      "The signed-in account: its identity, its preferences, and (since v1.36.0) what account sharing lets it do. Additional properties are the preference fields this spec does not yet enumerate. Under an active switch this payload still describes the CALLER — their preferences, their modules, their identity — because display preferences belong to the person at the keyboard rather than to the record they are reading.",
+  });
+
 export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
+  "/api/auth/me": {
+    get: {
+      tags: ["Auth"],
+      summary: "The signed-in account, and what sharing lets it do",
+      description:
+        "Keeps answering while the browser is acting on another record — the switcher, the banner naming whose record is open, and the way back out all read it, so a refusal here would strand a switched session. It is therefore an ACTOR surface: it always serves the caller's own rows, and a request that attaches `X-HealthLog-Account` is refused with 403 `sharing.not_permitted` rather than quietly answered. A client that wants a record's data sends the selector on the read that needs it, never on this call.",
+      responses: {
+        ...stdResponses,
+        "200": {
+          description: "The account payload.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(accountPayload, "AccountPayloadEnvelope"),
+            },
+          },
+        },
+        "403": {
+          description:
+            "A selector header was attached to an actor surface (`meta.errorCode: sharing.not_permitted`).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
+  "/api/account/activity": {
+    get: {
+      tags: ["Account sharing"],
+      summary: "Who opened this record, and when",
+      description:
+        "Every audit row filed under this account that somebody else performed, newest first — one row per delegate per day with a count, rather than one per request. `retentionDays` rides the response because audit history is purged on a schedule the operator configures: a view that showed the rows without the window would imply a completeness it does not have, and clients must state the number the server sends rather than assume the 365-day default. Not delegable: a grant is not an introduction to the other people in the household.",
+      responses: {
+        ...stdResponses,
+        "200": {
+          description: "The activity, and how far back it can see.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                recordActivityResponse,
+                "RecordActivityEnvelope",
+              ),
+            },
+          },
+        },
+        "403": sharingRefusal,
+      },
+    },
+  },
   "/api/account/grants": {
     get: {
       tags: ["Account sharing"],

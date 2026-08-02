@@ -21,7 +21,10 @@
  */
 import type { ZodOpenApiObject } from "zod-openapi";
 
-import { accountSharingPaths } from "./account-sharing";
+import {
+  accountSelectorParameter,
+  accountSharingPaths,
+} from "./account-sharing";
 import { adminDiagnosticPaths, adminInvitePaths } from "./admin";
 import { allergyPaths } from "./allergies";
 import { authPaths } from "./auth";
@@ -149,6 +152,11 @@ export const openApiComponents: NonNullable<ZodOpenApiObject["components"]> = {
       medicationDoseHistoryImportFatalReasonEnum,
     CoachPrefs: coachPrefsSchema,
   },
+  // v1.36.0 — the per-request account selector, defined in the sharing route
+  // module so that `src/__tests__/acting-account-boundary-guard.test.ts` keeps
+  // holding the header's name to two files: the resolver that reads it, and
+  // the one place that publishes it.
+  parameters: { AccountSelector: accountSelectorParameter },
   securitySchemes: {
     bearerAuth: {
       type: "http",

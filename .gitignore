@@ -19,6 +19,7 @@
 /playwright-report
 /playwright/.cache
 /e2e/setup/storageState.json
+/e2e/setup/storageStateOwner.json
 
 # next.js
 /.next/
