@@ -308,6 +308,14 @@ const DELEGABLE_ROUTES: Record<string, string> = {
     "The day logs of one episode. The episode-scoped queries are safe because `loadOwnedEpisode(id, user.id)` runs first and now resolves against the record; the upsert arm keeps `requireAuth()`.",
   "app/api/workouts/route.ts":
     "The record's workout list. Verified to carry no AI-written paragraph: the single-workout route beside it does, and stays refused for exactly that reason.",
+  "app/api/cycle/cycles/route.ts":
+    "The record's cycle history. The gate reads `user.gender` off the resolved record, which is the point: whether cycle tracking applies is a property of the record, not of whoever is looking at it.",
+  "app/api/cycle/day-logs/route.ts":
+    "One day of the record's cycle log. The `auditLog(\"cycle.day-log.upsert\")` in this file belongs to the PUT, which keeps `requireAuth()`.",
+  "app/api/cycle/profile/route.ts":
+    "The record's cycle profile, supplied by the gate itself. No query of its own.",
+  "app/api/cycle/symptoms/custom/route.ts":
+    "The record's own custom symptom vocabulary. The create arm carries the rate limit and keeps `requireAuth()`.",
 };
 
 /**
@@ -331,7 +339,7 @@ const ACTOR_ROUTES: Record<string, string> = {
  * a formality by accident: every addition has to be counted here as well as
  * listed above, which is one more place a careless admission has to pass.
  */
-const FROZEN_ENTRY_COUNT = 31;
+const FROZEN_ENTRY_COUNT = 35;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —

@@ -1315,3 +1315,151 @@ contract<number>("GET /api/workouts", {
   ownerMarker: 3600,
   delegateMarker: 1800,
 });
+
+/* -------------------------------------------------------------------------- */
+/* Cycle — the gate reads the record's own gender                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A cycle-tracking account. `cycleTrackingEnabled` is an explicit opt-in that
+ * overrides the gender derivation, so the fixture does not depend on the enum
+ * normalisation the gate's own comment flags as still pending.
+ */
+async function seedCycle(userId: string, startDate: string) {
+  await getPrismaClient().user.update({
+    where: { id: userId },
+    data: { gender: "FEMALE" },
+  });
+  await getPrismaClient().cycleProfile.upsert({
+    where: { userId },
+    create: { userId, cycleTrackingEnabled: true },
+    update: { cycleTrackingEnabled: true },
+  });
+  await getPrismaClient().menstrualCycle.create({
+    data: { userId, startDate },
+  });
+}
+
+contract<string>("GET /api/cycle/cycles", {
+  call: async () => {
+    const { GET } = await import("@/app/api/cycle/cycles/route");
+    return call(GET as Handler, "/api/cycle/cycles");
+  },
+  seed: seedCycle,
+  read: (payload: { cycles: { startDate: string }[] }) =>
+    payload.cycles.map((c) => c.startDate),
+  ownerMarker: "2026-07-01",
+  delegateMarker: "2026-06-02",
+});
+
+describe("GET /api/cycle/profile", () => {
+  it("resolves the gate against the record, not the caller", async () => {
+    // The delegate does not track a cycle. The owner does. A gate reading the
+    // caller's own gender and profile would refuse this request — the module
+    // decision belongs to the record.
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await seedCycle(owner.id, "2026-07-01");
+
+    await switchInto(owner.id, delegate.id);
+    const { GET } = await import("@/app/api/cycle/profile/route");
+    const response = await call(GET as Handler, "/api/cycle/profile");
+
+    expect(response.status).toBe(200);
+    expect((await body(response)).data).toMatchObject({ cycleTrackingEnabled: true });
+  });
+
+  it("refuses when the RECORD does not track a cycle, whatever the caller does", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await seedCycle(delegate.id, "2026-06-02");
+
+    await switchInto(owner.id, delegate.id);
+    const { GET } = await import("@/app/api/cycle/profile/route");
+    const response = await call(GET as Handler, "/api/cycle/profile");
+
+    expect(response.status).toBe(403);
+  });
+
+  it("refuses the next request after the grant is revoked", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await seedCycle(owner.id, "2026-07-01");
+
+    const { GET } = await import("@/app/api/cycle/profile/route");
+    const { grant } = await switchInto(owner.id, delegate.id);
+    expect((await call(GET as Handler, "/api/cycle/profile")).status).toBe(200);
+
+    await revokeGrant(grant.id);
+    await expectDenied(await call(GET as Handler, "/api/cycle/profile"));
+  });
+
+  it("is unchanged for a caller who has not switched", async () => {
+    const plain = await makeUser("plain");
+    await seedCycle(plain.id, "2026-07-01");
+    await signIn(plain.id);
+
+    const { GET } = await import("@/app/api/cycle/profile/route");
+    const response = await call(GET as Handler, "/api/cycle/profile");
+    expect(response.status).toBe(200);
+    expect((await body(response)).data).toMatchObject({ cycleTrackingEnabled: true });
+  });
+});
+
+describe("GET /api/cycle/day-logs and /api/cycle/symptoms/custom", () => {
+  it("read the owner's rows and refuse once the grant ends", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await seedCycle(owner.id, "2026-07-01");
+    await seedCycle(delegate.id, "2026-06-02");
+    await getPrismaClient().cycleDayLog.create({
+      data: { userId: owner.id, date: "2026-07-03", basalBodyTempC: 36.7 },
+    });
+    await getPrismaClient().cycleDayLog.create({
+      data: { userId: delegate.id, date: "2026-07-03", basalBodyTempC: 36.1 },
+    });
+
+    const logs = await import("@/app/api/cycle/day-logs/route");
+    const symptoms = await import("@/app/api/cycle/symptoms/custom/route");
+    const { grant } = await switchInto(owner.id, delegate.id);
+
+    const log = await call(
+      logs.GET as Handler,
+      "/api/cycle/day-logs?date=2026-07-03",
+    );
+    expect(log.status).toBe(200);
+    expect((await body(log)).data).toMatchObject({ basalBodyTempC: 36.7 });
+
+    expect(
+      (await call(symptoms.GET as Handler, "/api/cycle/symptoms/custom"))
+        .status,
+    ).toBe(200);
+
+    await revokeGrant(grant.id);
+    await expectDenied(
+      await call(logs.GET as Handler, "/api/cycle/day-logs?date=2026-07-03"),
+    );
+    await expectDenied(
+      await call(symptoms.GET as Handler, "/api/cycle/symptoms/custom"),
+    );
+  });
+
+  it("are unchanged for a caller who has not switched", async () => {
+    const plain = await makeUser("plain");
+    await seedCycle(plain.id, "2026-07-01");
+    await getPrismaClient().cycleDayLog.create({
+      data: { userId: plain.id, date: "2026-07-03", basalBodyTempC: 36.4 },
+    });
+    await signIn(plain.id);
+
+    const { GET } = await import("@/app/api/cycle/day-logs/route");
+    const response = await call(
+      GET as Handler,
+      "/api/cycle/day-logs?date=2026-07-03",
+    );
+    expect(response.status).toBe(200);
+    expect((await body(response)).data).toMatchObject({
+      basalBodyTempC: 36.4,
+    });
+  });
+});
