@@ -363,7 +363,14 @@ export default function LoginPage() {
             />
           </div>
         ) : (
-          <div className="mt-8 space-y-4">
+          <div
+            // The login card's own action block. `<main>` around it belongs
+            // to the shell and is on screen before this page renders at all,
+            // so it is this marker, not the landmark, that says the form has
+            // arrived.
+            data-slot="login-actions"
+            className="mt-8 space-y-4"
+          >
             {oidcStatus?.enabled && (
               <Button
                 onClick={handleOidcLogin}

@@ -11,6 +11,30 @@ type AxeViolation = Awaited<
 
 type Theme = "light" | "dark";
 
+/**
+ * One scan target: where to go, and what has to be on screen before axe is
+ * allowed to look.
+ *
+ * The `painted` locator is the whole contract of this file. A scan that runs
+ * against a page whose content has not arrived reports violations the app does
+ * not have — "page must have a level-one heading" against a page that has one,
+ * a moment later — and that reads as a product defect until somebody re-runs
+ * it. Two rules keep the sentinel honest, and both were learned from a case
+ * that broke them:
+ *
+ *  1. It must name something the PAGE renders once its data is there, never
+ *     something the shell or a skeleton also carries. `#main-content` is the
+ *     app frame and exists before the route paints anything; `[role="status"]`
+ *     is on every busy placeholder; a filter rail renders next to the loading
+ *     silhouettes it filters. Each of those is a coin flip, not a wait.
+ *  2. It must not be the thing the scan asserts. Waiting for `<h1>` and then
+ *     letting axe check that an `<h1>` exists is a check that cannot fail —
+ *     strictly worse than the flake, because a page that really lost its
+ *     heading would wait out the timeout under a misleading name instead of
+ *     failing the rule. Every case here gates on content that lives in a
+ *     different component from the heading, so dropping the heading still
+ *     fails the scan.
+ */
 type RouteCase = {
   name: string;
   path: string;
@@ -670,9 +694,7 @@ const INSIGHTS_ROUTES: readonly RouteCase[] = [
     // one), so that selector matched the loading tree the server sends before
     // the page client has mounted anything. On a loaded runner the scan then
     // landed on a document whose only heading had not rendered yet and blamed
-    // the app for a missing `<h1>` it does have. Same rule as the overview
-    // case above: a sentinel must prove the content, not the placeholder
-    // standing in for it.
+    // the app for a missing `<h1>` it does have.
     name: "/insights/workouts list",
     path: "/insights/workouts",
     painted: (page) =>
@@ -700,29 +722,41 @@ const INSIGHTS_ROUTES: readonly RouteCase[] = [
 
 const RECORD_ROUTES: readonly RouteCase[] = [
   {
+    // `filter-bar` is a sibling of the loading silhouettes, not their
+    // successor — the rail renders above the list in every branch, so it was
+    // on screen while the rows were still `measurement-list-loading`
+    // rectangles. The rows wrapper exists only in the resolved, non-empty
+    // branch, and both the desktop table and the mobile card list carry it.
     name: "/measurements",
     path: "/measurements",
-    painted: (page) => page.locator('[data-slot="filter-bar"]'),
+    painted: (page) => page.locator('[data-slot="measurement-rows"]:visible'),
   },
   {
+    // Same shape as /measurements, and the one this was measured on: under
+    // an 8× CPU throttle `filter-bar` and `mood-list-loading` resolved in the
+    // same 40 ms poll, the rows a poll later.
     name: "/mood",
     path: "/mood",
-    painted: (page) => page.locator('[data-slot="filter-bar"]'),
+    painted: (page) => page.locator('[data-slot="mood-rows"]:visible'),
   },
   {
+    // Was `getByRole("heading", { level: 1 })` — the axe rule's own query
+    // used as its own precondition. The card carries the mocked medication's
+    // id; `MedicationCardSkeleton` carries no id at all.
     name: "/medications",
     path: "/medications",
-    painted: (page) => page.getByRole("heading", { level: 1 }).first(),
+    painted: (page) => page.locator("[data-medication-id]").first(),
   },
   {
     name: "/labs",
     path: "/labs",
-    painted: (page) => page.getByText("A11y LDL").first(),
+    painted: (page) => page.locator('[data-slot="lab-list"]'),
   },
   {
     name: "/documents compact panel",
     path: "/documents?view=compact",
-    painted: (page) => page.getByText("A11y blood panel").first(),
+    painted: (page) =>
+      page.locator(`[data-document-id="${A11Y_DOCUMENT_ID}"]`).first(),
   },
 ];
 
@@ -730,40 +764,55 @@ const ADMIN_AND_BASELINE_ROUTES: readonly RouteCase[] = [
   {
     name: "/admin/app-logs",
     path: "/admin/app-logs",
-    painted: (page) => page.getByText("a11y.paint").first(),
+    painted: (page) => page.locator('[data-slot="app-log-rows"] tr').first(),
   },
   {
     name: "/admin/backups",
     path: "/admin/backups",
-    painted: (page) =>
-      page.getByText("a11y-backup-user", { exact: true }).filter({
-        visible: true,
-      }),
+    painted: (page) => page.locator('[data-slot="backup-rows"]:visible'),
   },
   {
+    // This one is why the whole file was swept. `#main-content` is the
+    // authenticated shell's `<main>`: it is in the first HTML on every route,
+    // it wraps whatever the segment happens to be streaming, and on `/` that
+    // is `app/loading.tsx` — a silhouette with no heading in it. The scan was
+    // therefore free to run against a document that legitimately had no `<h1>`
+    // yet and report the app as missing one. Measured under an 8× CPU
+    // throttle: `#main-content` at 759 ms, the tile strip at 4896 ms. The
+    // strip is the dashboard's own content and has a separate
+    // `dashboard-tile-strip-skeleton` marker for its loading phase, so the two
+    // states cannot be confused for one another.
     name: "/ dashboard",
     path: "/",
-    painted: (page) => page.locator("#main-content"),
+    painted: (page) => page.locator('[data-slot="dashboard-tile-strip"]'),
   },
   {
+    // The settings heading belongs to `<SettingsShell>`, i.e. the chrome —
+    // waiting on it says nothing about the section body below. The
+    // connections panel is that body. This route has no data-gated content of
+    // its own: every provider card renders immediately and fills in its
+    // status pill later, so the panel's presence is the honest ceiling here.
     name: "/settings/integrations",
     path: "/settings/integrations",
-    painted: (page) => page.getByRole("heading", { level: 1 }).first(),
+    painted: (page) => page.locator('[data-slot="connections-panel"]'),
   },
   {
+    // The heading comes from `<AdminShell>` and is on screen while every card
+    // under it is still a spinner. The audit list is the last card on the
+    // overview and only exists once its query has answered.
     name: "/admin overview",
     path: "/admin",
-    painted: (page) => page.getByRole("heading", { level: 1 }).first(),
+    painted: (page) => page.locator('[data-slot="admin-audit-rows"]'),
   },
   {
     name: "/admin/system-status",
     path: "/admin/system-status",
-    painted: (page) => page.getByRole("heading", { level: 1 }).first(),
+    painted: (page) => page.locator('[data-slot="system-status-grid"]'),
   },
   {
     name: "/admin/users",
     path: "/admin/users",
-    painted: (page) => page.getByRole("heading", { level: 1 }).first(),
+    painted: (page) => page.locator('[data-slot="admin-user-rows"]:visible'),
   },
 ];
 
@@ -776,7 +825,11 @@ test.describe("axe-core public surfaces", () => {
         page,
         theme,
         "/auth/login",
-        page.getByRole("main"),
+        // Not `getByRole("main")`: the public shell renders that landmark
+        // around whatever the segment is streaming, so it is satisfied
+        // before the login card itself exists. The action block is the
+        // page's own.
+        page.locator('[data-slot="login-actions"]'),
       );
       expectNoViolations(theme, "/auth/login", blocking);
     });
@@ -836,7 +889,7 @@ test.describe("axe-core authenticated route and state matrix", () => {
 
       await test.step(`${theme} /labs open OCR picker dialog`, async () => {
         await page.goto("/labs", { waitUntil: "domcontentloaded" });
-        await expect(page.getByText("A11y LDL").first()).toBeVisible({
+        await expect(page.locator('[data-slot="lab-list"]')).toBeVisible({
           timeout: 15_000,
         });
         await page
@@ -879,6 +932,11 @@ test.describe("axe-core authenticated route and state matrix", () => {
 
       await test.step(`${theme} /medications open representative wizard dialog`, async () => {
         await page.goto("/medications", { waitUntil: "domcontentloaded" });
+        // axe scans the whole document, dialog and page behind it alike, so
+        // the list has to have arrived before the dialog opens on top of it.
+        await expect(page.locator("[data-medication-id]").first()).toBeVisible({
+          timeout: 15_000,
+        });
         await page
           .locator('#main-content [data-slot="dropdown-menu-trigger"]')
           .first()
@@ -899,6 +957,11 @@ test.describe("axe-core authenticated route and state matrix", () => {
         await page.goto(`/documents?view=compact&doc=${A11Y_DOCUMENT_ID}`, {
           waitUntil: "domcontentloaded",
         });
+        // Same reason as the medication dialog: the vault behind the sheet is
+        // in the scan, so it has to be past `documents-loading` first.
+        await expect(
+          page.locator(`[data-document-id="${A11Y_DOCUMENT_ID}"]`).first(),
+        ).toBeVisible({ timeout: 15_000 });
         const sheet = page.locator('[data-slot="responsive-sheet-content"]');
         await expect(sheet).toBeVisible({ timeout: 15_000 });
         await sheet.getByRole("button", { name: /summari/i }).click();

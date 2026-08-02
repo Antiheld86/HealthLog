@@ -964,7 +964,16 @@ export function MeasurementList({
           <>
             {/* Desktop table — rendered only when not mobile (v1.28.42 H3). */}
             {!isMobile && (
-              <div className="bg-card border-border hidden overflow-hidden rounded-lg border md:block">
+              <div
+                // `measurement-rows` marks the READ rows, not the list frame:
+                // the filter rail above renders next to the loading
+                // silhouettes as well, so it proves nothing about the data
+                // having arrived. This wrapper exists only in the resolved,
+                // non-empty branch, and the mobile list below carries the
+                // same marker so a wait on it holds at any viewport.
+                data-slot="measurement-rows"
+                className="bg-card border-border hidden overflow-hidden rounded-lg border md:block"
+              >
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1216,7 +1225,7 @@ export function MeasurementList({
 
             {/* Mobile list — rendered only when mobile (v1.28.42 H3). */}
             {isMobile && (
-              <div className="space-y-2 md:hidden">
+              <div data-slot="measurement-rows" className="space-y-2 md:hidden">
                 {data.measurements.map((m) => {
                   const Icon = TYPE_ICONS[m.type];
                   const isGrouped =
