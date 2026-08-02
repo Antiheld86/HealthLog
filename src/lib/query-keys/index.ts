@@ -36,6 +36,7 @@ import { mentalHealthKeys } from "./mental-health";
 import { moodKeys } from "./mood";
 import { nutrientKeys } from "./nutrients";
 import { settingsKeys } from "./settings";
+import { sharingKeys } from "./sharing";
 import { workoutKeys } from "./workouts";
 
 export const queryKeys = {
@@ -62,7 +63,24 @@ export const queryKeys = {
   ...documentKeys,
   ...customMetrics,
   ...nutrientKeys,
+  ...sharingKeys,
 };
+
+/**
+ * v1.36.0 — every read a grant transition can make stale.
+ *
+ * Inviting, accepting, revoking and renouncing all change the same three
+ * answers: the grant list, the owner's record-activity feed, and
+ * `accountAccess` on the account payload — which is what drives the switcher
+ * and the banner. A revoke that refreshed the panel but not the payload would
+ * leave a switcher entry pointing at a record the server had just closed: the
+ * affordance still on screen, the click already refused.
+ */
+export const grantDependentKeys = [
+  queryKeys.accountGrants(),
+  queryKeys.accountActivity(),
+  queryKeys.authMe(),
+];
 
 /**
  * Keys that should be invalidated when a measurement is created, updated or
