@@ -40,11 +40,7 @@ import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
 import { checkRateLimit } from "@/lib/rate-limit";
-import {
-  GRANT_PARTY_SELECT,
-  toGrantView,
-  type GrantParty,
-} from "@/lib/sharing/grant-view";
+import { GRANT_PARTY_SELECT, toGrantView } from "@/lib/sharing/grant-view";
 import { GrantError, inviteGrant } from "@/lib/sharing/grants";
 import { inviteGrantSchema } from "@/lib/validations/account-sharing";
 
@@ -156,7 +152,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       },
     });
 
-    return apiSuccess(toGrantView(grant, invitee as GrantParty), 201);
+    return apiSuccess(toGrantView(grant, invitee), 201);
   } catch (err) {
     if (err instanceof GrantError) return grantErrorResponse(err);
     throw err;
