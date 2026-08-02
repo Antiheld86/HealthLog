@@ -52,6 +52,7 @@ import {
 } from "@/lib/api-response";
 import { withIdempotency } from "@/lib/idempotency";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { markSyncCheckpoint } from "@/lib/sync/checkpoint";
 import { invalidateUserMedications } from "@/lib/cache/invalidate";
 import {
   recomputeMedicationComplianceForDay,
@@ -931,6 +932,12 @@ async function postBulk(request: NextRequest): Promise<Response> {
       });
     })();
   }
+
+  // The SyncMode checkpoint belongs to the push that moved the data, not to
+  // the `/api/sync/state` handshake that reports it. This endpoint is one of
+  // the three domains that handshake summarises, so an intake drain advances
+  // it.
+  await markSyncCheckpoint(user.id);
 
   return apiSuccess({
     processed: entries.length,

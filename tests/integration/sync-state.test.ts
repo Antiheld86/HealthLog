@@ -103,17 +103,37 @@ describe("GET /api/sync/state (real Postgres)", () => {
     expect(json.data.intakes.liveCount).toBe(0);
     expect(json.data.intakes.tombstonedCount).toBe(0);
 
-    // Server-side, lastSyncedAt now carries a value.
+    // The handshake asks where to resume. It does not deliver anything, so it
+    // must not move the resume point: advancing past a window the client has
+    // not drained is how rows go missing.
     const after = await getPrismaClient().user.findUnique({
       where: { id: TEST_USER_ID },
       select: { lastSyncedAt: true },
     });
-    expect(after?.lastSyncedAt).not.toBeNull();
+    expect(after?.lastSyncedAt).toBeNull();
   });
 
-  it("returns the previous checkpoint on the second call", async () => {
+  it("still reports null on the second call, because asking twice is not syncing", async () => {
+    // The old contract stamped the checkpoint on the first call, so the second
+    // read found one. Nothing has arrived between these two calls, so the
+    // honest answer is still null.
     const { GET } = await import("@/app/api/sync/state/route");
     await GET(makeRequest());
+    const res = await GET(makeRequest());
+    const json = (await res.json()) as {
+      data: { lastSyncedAt: string | null };
+    };
+    expect(json.data.lastSyncedAt).toBeNull();
+  });
+
+  it("reports a checkpoint once data has actually arrived", async () => {
+    // The other half of the move: the mark now comes from an ingest boundary.
+    // Without this case the two above would pass just as well against a column
+    // nothing writes at all, which is the failure they exist to rule out.
+    const { markSyncCheckpoint } = await import("@/lib/sync/checkpoint");
+    await markSyncCheckpoint(TEST_USER_ID);
+
+    const { GET } = await import("@/app/api/sync/state/route");
     const res = await GET(makeRequest());
     const json = (await res.json()) as {
       data: { lastSyncedAt: string | null };

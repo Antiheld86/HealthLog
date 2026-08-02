@@ -1,4 +1,3 @@
-import { prisma } from "@/lib/db";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { requireModuleEnabled, resolveModuleMap } from "@/lib/modules/gate";
 import { annotate } from "@/lib/logging/context";
@@ -62,9 +61,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // iOS-format branch runs the locale-aware transform after the cache
   // read so the cache stays format-agnostic and the achievement-progress
   // dashboard duplicate (seen twice per dashboard mount in the v1.4.33
-  // HAR) coalesces into one builder call. v1.18.0 B5 — unlock persistence
-  // now happens in the handler after the cache read (idempotent), not as
-  // a side effect inside the cached factory.
+  // HAR) coalesces into one builder call.
   // v1.18.0 B5 — resolve the per-user module map once and pass it into the
   // builder so badge categories whose owning module is disabled (sleep
   // badges when sleep is off, mood badges when mood is off) are skipped
@@ -76,8 +73,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // 10-minute stale window; the app-wide `AchievementUnlockNotifier` polls
   // every 2 minutes, so a hard-TTL read always missed and re-paid the cold
   // build. SWR serves the prior payload instantly and warms one background
-  // recompute. Persistence of `pendingUnlocks` stays OUTSIDE this read (see
-  // below), so a stale-served body never skips an unlock write.
+  // recompute.
   const result = await cachedSwr(
     caches.achievements as ServerCache<AchievementsResult>,
     user.id,
@@ -85,25 +81,19 @@ export const GET = apiHandler(async (request: NextRequest) => {
     annotate,
   );
 
-  // v1.18.0 B5 — persist newly unlocked achievements OUTSIDE the cached
-  // factory. `createMany({ skipDuplicates: true })` is idempotent on the
-  // `(userId, achievementId)` unique, so re-running it on a cache hit is
-  // a no-op rather than a duplicate, and the write is never skipped just
-  // because the read was served from cache.
-  if (result.pendingUnlocks.length > 0) {
-    await prisma.userAchievement.createMany({
-      data: result.pendingUnlocks.map((u) => ({
-        userId: user.id,
-        achievementId: u.achievementId,
-        unlockedAt: new Date(u.unlockedAt),
-      })),
-      skipDuplicates: true,
-    });
-    annotate({
-      action: { name: "gamification.achievements" },
-      meta: { newUnlocks: result.pendingUnlocks.length },
-    });
-  }
+  // v1.35.3 — the unlock rows are NOT written here. A GET must not have side
+  // effects (`api-handler.ts`, the MCP-audience note above
+  // `READ_HTTP_METHODS`), and this INSERT was one. The badge grid does not
+  // need the rows: `unlocked` comes from the live metrics and the completion
+  // date is derived from the account's own history, so the payload below is
+  // identical whether or not a row exists. The rows pin that date against a
+  // later data edit and carry it into the backup, which is durable work and
+  // belongs on the `achievement-unlock-sweep` job — where it also covers the
+  // accounts that never open this page.
+  annotate({
+    action: { name: "gamification.achievements" },
+    meta: { pendingUnlocks: result.pendingUnlocks.length },
+  });
 
   // Strip the internal `pendingUnlocks` carrier; it never goes on the wire.
   const payload = {
