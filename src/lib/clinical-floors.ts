@@ -3,25 +3,25 @@
  *
  * Before this module the "is this a crisis?" thresholds were defined in three
  * places with a divergent diastolic floor: the safety-floor notification engine
- * and the Coach acute clause used 180/120, but the dashboard hero's `bpCritical`
- * rung used 180/110 — so a reading like 170/112 lit the red "critical BP" hero
- * banner yet never tripped the notification alarm or the Coach's stated acute
- * number. One surface said crisis, the other two stayed calm on the same row.
+ * and the Coach acute clause used 180/120, while a third surface used 180/110 —
+ * so a reading like 170/112 read as a crisis in one place and stayed calm in
+ * the other two on the same row.
  *
  * This leaf holds the absolute, guideline-backed floors as plain constants and
  * every consumer imports from here:
  *   - `src/lib/illness/safety-floors.ts` (the confirm-before-alarm engine),
- *   - `src/lib/dashboard/verdict.ts` (the hero `bpCritical` rung),
  *   - `src/lib/insights/metric-status-registry.ts` (the fever band line),
- *   - and (left to the prompt agent) the `safetyAcute` / `safetyGlp1` Coach
- *     contracts, which must bind their prose numbers to these exports rather
- *     than hardcoding literals — see the comment at each constant.
+ *   - `src/lib/signals/registry.ts` (the signal severity bands),
+ *   - and the `safetyAcute` / `safetyGlp1` Coach contracts in
+ *     `src/lib/ai/prompts/shared-contracts.ts`, which bind their prose numbers
+ *     to these exports rather than hardcoding literals — see the comment at
+ *     each constant.
  *
- * CLIENT-SAFE: dependency-free literals only. `verdict.ts` runs inside the
- * `"use client"` dashboard hero, and its import-graph client-safety test
- * (`verdict-client-safety.test.ts`) walks every VALUE import reachable from
- * `verdict.ts`. Do NOT add any import to this file — no prisma, no `node:`
- * builtins, no server graph. Constants only.
+ * CLIENT-SAFE: dependency-free literals only. The fever band reaches the
+ * browser through `metric-status-registry.ts`, which the `"use client"` metric
+ * status card renders, so a server import added here would land in the client
+ * bundle. Do NOT add any import to this file — no prisma, no `node:` builtins,
+ * no server graph. Constants only.
  *
  * Units: mmHg (BP), mg/dL (glucose), °C (temperature) — HealthLog canonical
  * store units throughout.
@@ -30,9 +30,9 @@
  *   - BP ≥ 180/120: ACC/AHA 2017; AHA "Management of Elevated BP in the Acute
  *     Care Setting" 2024. The number is identical for emergency vs non-
  *     emergency — symptoms are the differentiator, not the value. The crisis
- *     DIASTOLIC floor is 120, NOT the old hero 110: 120 is the hypertensive-
- *     urgency standard, so the wider 110 net is dropped to keep the three
- *     surfaces telling one story (D3-H1).
+ *     DIASTOLIC floor is 120, not the 110 one surface once used: 120 is the
+ *     hypertensive-urgency standard, so the wider 110 net is dropped to keep
+ *     every surface telling one story (D3-H1).
  *   - Low BP (SBP < 90): NHLBI low-blood-pressure guidance; Hypotension —
  *     StatPearls/NIH 2024.
  *   - Hypoglycemia: ADA Standards of Care §6 — Level 1 alert < 70 mg/dL,
@@ -55,8 +55,8 @@
 export const BP_SYS_CRITICAL = 180;
 /**
  * Hypertensive-crisis floor: diastolic ≥ this (mmHg). 120 (ACC/AHA), the
- * single crisis diastolic floor across the hero, the notification engine, and
- * the Coach acute clause (D3-H1 — was 110 on the hero only).
+ * single crisis diastolic floor across the notification engine, the signal
+ * bands, and the Coach acute clause (D3-H1 — one surface once used 110).
  */
 export const BP_DIA_CRITICAL = 120;
 /** Symmetric low-BP cautionary floor: systolic < this (mmHg). */

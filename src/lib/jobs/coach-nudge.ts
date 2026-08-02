@@ -105,18 +105,6 @@ import {
   DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
   type HealthProfileAiSection,
 } from "@/lib/validations/health-profile-facts";
-// Trend thresholds shared with the dashboard hero's verdict resolver
-// live in a client-safe leaf module; re-exported below so server-side
-// imports keep their path.
-import {
-  COACH_NUDGE_WEIGHT_DRIFT_KG,
-  COACH_NUDGE_SLEEP_DEFICIT_MARGIN_H,
-} from "@/lib/jobs/coach-nudge-thresholds";
-
-export {
-  COACH_NUDGE_WEIGHT_DRIFT_KG,
-  COACH_NUDGE_SLEEP_DEFICIT_MARGIN_H,
-} from "@/lib/jobs/coach-nudge-thresholds";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const SELF_CONTEXT_AI_SECTIONS = [
@@ -155,8 +143,12 @@ export const COACH_NUDGE_SELF_CONTEXT_STALE_DAYS = 60;
 export const COACH_NUDGE_COACH_ACTIVE_DAYS = 14;
 /** Weight trigger: minimum readings per weekly window. */
 export const COACH_NUDGE_WEIGHT_MIN_READINGS = 3;
+/** Weight trigger: minimum kg the weekly mean must drift AWAY from the range. */
+export const COACH_NUDGE_WEIGHT_DRIFT_KG = 0.5;
 /** Sleep trigger: minimum recorded nights in the 7-day window. */
 export const COACH_NUDGE_SLEEP_MIN_NIGHTS = 5;
+/** Sleep trigger: a night must undershoot the floor by this margin (h). */
+export const COACH_NUDGE_SLEEP_DEFICIT_MARGIN_H = 0.5;
 /** Sleep trigger: nights under the floor required to fire. */
 export const COACH_NUDGE_SLEEP_DEFICIT_NIGHTS = 4;
 /** Gap trigger: distinct active days required in the prior 3 weeks. */
