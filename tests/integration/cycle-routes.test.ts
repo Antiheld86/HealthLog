@@ -480,16 +480,67 @@ describe("cycle calendar", () => {
     // GENERAL_HEALTH default → fertile window suppressed.
     expect(json.data.prediction.fertileWindowStart).toBeNull();
 
-    // The cache row is persisted fire-and-forget (the route never blocks
-    // the read on it), so poll briefly for it to land.
-    let cache = null;
-    for (let i = 0; i < 20 && cache === null; i++) {
-      cache = await prisma.cyclePrediction.findUnique({
+    // The read persists nothing. The prediction row exists for the reminder
+    // job, and writing it here made the job's behaviour depend on whether
+    // anyone had opened this page. Poll anyway rather than reading once, so
+    // that a write which merely arrives late still fails the case.
+    for (let i = 0; i < 20; i++) {
+      const cache = await prisma.cyclePrediction.findUnique({
         where: { userId: FEMALE_USER_ID },
       });
-      if (cache === null) await new Promise((r) => setTimeout(r, 25));
+      expect(cache).toBeNull();
+      await new Promise((r) => setTimeout(r, 25));
     }
-    expect(cache).not.toBeNull();
+  });
+
+  it("the nightly refresh writes the prediction the read no longer writes", async () => {
+    // The other end of the move. Without this the case above would pass
+    // against a prediction nothing writes at all.
+    //
+    // `beforeEach` truncates, so this case seeds its own history rather than
+    // inheriting the one above. It also never touches the calendar route: the
+    // point is that the prediction lands without anyone opening that page.
+    //
+    // The profile row is seeded directly for the same reason. Every
+    // `/api/cycle/*` route creates one on the way past, so in production the
+    // cohort is "has ever used cycle tracking" rather than "opened the
+    // calendar recently". Calling a route to get one here would defeat the
+    // case.
+    const prisma = getPrismaClient();
+    await prisma.cycleProfile.create({ data: { userId: FEMALE_USER_ID } });
+    for (const [start, end, len] of [
+      ["2026-01-01", "2026-01-28", 28],
+      ["2026-01-29", "2026-02-25", 28],
+    ] as const) {
+      await prisma.menstrualCycle.create({
+        data: {
+          userId: FEMALE_USER_ID,
+          startDate: start,
+          endDate: end,
+          lengthDays: len,
+          periodEndDate: null,
+        },
+      });
+    }
+    await prisma.menstrualCycle.create({
+      data: { userId: FEMALE_USER_ID, startDate: "2026-02-26" },
+    });
+
+    expect(
+      await prisma.cyclePrediction.findUnique({
+        where: { userId: FEMALE_USER_ID },
+      }),
+    ).toBeNull();
+
+    const { refreshPredictionCacheForUser } =
+      await import("@/lib/cycle/prediction-refresh");
+    await refreshPredictionCacheForUser(FEMALE_USER_ID);
+
+    expect(
+      await prisma.cyclePrediction.findUnique({
+        where: { userId: FEMALE_USER_ID },
+      }),
+    ).not.toBeNull();
   });
 });
 
