@@ -38,6 +38,7 @@ import {
   USER_RESET,
   WIPE_EXEMPT,
   WIPE_MODELS,
+  WIPE_OWNER_FIELDS,
 } from "@/lib/data-wipe/wipe-plan";
 import type { PrismaClient } from "@/generated/prisma/client";
 
@@ -271,14 +272,35 @@ async function seedEveryTable(
   return ordered;
 }
 
+/**
+ * The columns that bind a row of `model` to an account, as SQL identifiers.
+ *
+ * `user_id` is the convention. A model that relates two accounts cannot use
+ * it, and the wipe plan already declares its columns — read them from there
+ * rather than keeping a second list here, or the two would answer differently
+ * and this file would be asserting against its own idea of ownership instead
+ * of the one the route uses.
+ */
+function ownerColumns(model: string | undefined): string[] {
+  const declared = model ? WIPE_OWNER_FIELDS[model] : undefined;
+  if (!declared) return ["user_id"];
+  return declared.map((field) =>
+    field.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`),
+  );
+}
+
 async function countRows(
   prisma: PrismaClient,
   table: string,
   userId?: string,
+  model?: string,
 ): Promise<number> {
+  const predicate = ownerColumns(model)
+    .map((column) => `"${column}" = $1`)
+    .join(" OR ");
   const rows = userId
     ? await prisma.$queryRawUnsafe<Array<{ n: bigint }>>(
-        `SELECT count(*)::bigint AS n FROM "${table}" WHERE user_id = $1`,
+        `SELECT count(*)::bigint AS n FROM "${table}" WHERE ${predicate}`,
         userId,
       )
     : await prisma.$queryRawUnsafe<Array<{ n: bigint }>>(
@@ -354,7 +376,7 @@ describe("DELETE /api/settings/data leaves nothing it promised to delete", () =>
       // one new row after it commits: the receipt for the wipe itself. The
       // history is gone; the record that the person asked for it is not.
       const expected = model === "AuditLog" ? 1 : 0;
-      if ((await countRows(prisma, table, user.id)) > expected) {
+      if ((await countRows(prisma, table, user.id, model)) > expected) {
         survivors.push(`${model} (${table})`);
       }
     }
