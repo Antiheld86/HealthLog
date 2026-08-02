@@ -83,7 +83,7 @@ export function OfflineBanner() {
       data-slot="offline-banner"
       className="bg-warning/15 border-warning/40 text-foreground flex items-center justify-center gap-2 border-b px-3 py-2 text-xs"
     >
-      <WifiOff className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      <WifiOff className="size-3.5 shrink-0" aria-hidden="true" />
       <span className="text-center">
         {t("offlineBanner.message")}
         {hasCachedData ? ` ${t("offlineBanner.showingCached")}` : ""}
