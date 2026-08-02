@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+## [1.35.5] — 2026-08-02
+
+### Fixed
+
+- Cycle reminders no longer depend on whether you happened to open the calendar.
+  The prediction a reminder is sent from was written only while that page was
+  being viewed, so an account that never opened it had nothing for the reminder
+  job to read. The prediction is now refreshed nightly for every account that
+  tracks a cycle, whether or not anyone looks at the page.
+- A failed prediction write is no longer silent. It used to be discarded, so
+  nothing anywhere recorded that it had not happened.
+- The sync handshake no longer marks an account as synced. Asking the server
+  where to resume is not the same as sending anything, and treating it as a sync
+  moved the resume point past data the app had not fetched yet. The mark is now
+  set by the three paths that actually receive data, so it can only trail a real
+  sync rather than run ahead of one.
+- Badges are awarded whether or not you open the app. The date a badge was
+  earned was recorded only when the achievements screen was loaded, so an
+  account that earned one and did not look never had it written down, and the
+  date is the part that cannot be reconstructed later. A nightly pass now
+  records it, using the date it was actually earned rather than the date it was
+  noticed.
+
+### Internal
+
+- Three read endpoints no longer write. A read that writes widens what a
+  read-only credential can reach, which the code says plainly at the place the
+  rule is enforced, and it had drifted at three routes. A check now watches
+  those three.
+
 ## [1.35.4] — 2026-08-02
 
 ### Fixed

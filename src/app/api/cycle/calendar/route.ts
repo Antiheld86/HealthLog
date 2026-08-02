@@ -3,9 +3,9 @@
  * (ios-contract §2.D).
  *
  * Calls the pure engine (`predictCycle` + per-day phase) to build
- * `{ profile, prediction, days }`. The synchronous engine call is cheap
- * (pure stats); the heavy part is the cache persist, which is debounced
- * stale-while-revalidate and fire-and-forget so it never blocks the GET.
+ * `{ profile, prediction, days }`. The engine call is cheap (pure stats) and
+ * the route writes nothing — the `CyclePrediction` row the reminder cron
+ * reads is owned by the `cycle-prediction-refresh` job.
  * Fertile-window fields are goal-gated (surfaced for TRYING_TO_CONCEIVE and
  * AVOID_PREGNANCY — the latter with the stronger "not a contraceptive method"
  * disclaimer; suppressed for GENERAL_HEALTH / PERIMENOPAUSE / OFF),
@@ -31,7 +31,6 @@ import {
   cycleDisclaimerKey,
 } from "@/lib/cycle/dto";
 import { resolveCycleVerdict } from "@/lib/cycle/verdict";
-import { persistPredictionCache } from "@/lib/cycle/prediction-cache";
 import { addDays, dayDiff } from "@/lib/cycle/day-math";
 import { BBT_WINDOW } from "@/lib/cycle/types";
 import { DEFAULT_TIMEZONE, moodDateKey } from "@/lib/mood/date-key";
@@ -157,13 +156,14 @@ export const GET = apiHandler(async (request: NextRequest) => {
     goalAllowsFertile,
   );
 
-  // Persist the cache fire-and-forget (debounced) — never block the read.
-  let generatedAt = new Date().toISOString();
-  if (prediction) {
-    const now = new Date();
-    generatedAt = now.toISOString();
-    void persistPredictionCache(user.id, prediction, now);
-  }
+  // v1.35.3 — this read persists nothing. It used to fire
+  // `void persistPredictionCache(...)`: a write on a GET, and a discarded
+  // promise on top, so a failed write left no trace at all. The forecast the
+  // response carries is computed right here from the account's rows; the
+  // `CyclePrediction` row the reminder cron scans is written by the
+  // `cycle-prediction-refresh` job, which reaches every tracking account
+  // rather than the ones that opened this page.
+  const generatedAt = new Date().toISOString();
 
   const locale = await resolveServerLocale({
     request,

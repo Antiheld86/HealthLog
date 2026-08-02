@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HealthLog API
-  version: 1.35.4
+  version: 1.35.5
   description: >-
     Self-hosted personal-health-tracking PWA — public API surface for the iOS native client and external ingest.
 
@@ -2369,9 +2369,9 @@ paths:
       tags:
         - Sync
       summary: Sync handshake + window metadata
-      description: Cheap 'should I sync?' summary. Returns the previous `lastSyncedAt` checkpoint and advances it server-side
-        on each call. The `sync` block carries the incremental-delta window + tombstone retention so the client reads
-        them rather than hardcoding.
+      description: Cheap 'should I sync?' summary. Returns the `lastSyncedAt` checkpoint, which the batch ingest endpoints
+        advance when a client push lands; this route is a read and writes nothing. The `sync` block carries the
+        incremental-delta window + tombstone retention so the client reads them rather than hardcoding.
       responses:
         "200":
           description: Sync state summary.
@@ -18160,8 +18160,9 @@ components:
         - intakes
         - sync
       additionalProperties: false
-      description: iOS SyncMode handshake. Each GET also advances the server-side `lastSyncedAt` checkpoint and returns the
-        previous value. The cheap 'should I sync?' summary; the durable delta cursor lives on `/api/sync/changes`.
+      description: iOS SyncMode handshake. Reports the server-side `lastSyncedAt` checkpoint, which the batch ingest endpoints
+        set when a client push lands; the handshake itself writes nothing. The cheap 'should I sync?' summary; the
+        durable delta cursor lives on `/api/sync/changes`.
     SyncChangesEnvelope:
       type: object
       properties:

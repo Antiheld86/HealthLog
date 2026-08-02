@@ -217,14 +217,8 @@ describe("GET /api/gamification/achievements — per-module badge skipping", () 
     expect(badges.length).toBeGreaterThan(0);
   });
 
-  it("never persists an unlock for a disabled-module badge", async () => {
-    // A mood badge would unlock at >=1 entry; with mood OFF the createMany
-    // must carry no mood achievement row.
-    await badgesFor({ mood: false });
-    const createCalls = vi.mocked(prisma.userAchievement.createMany).mock.calls;
-    for (const [arg] of createCalls) {
-      const rows = (arg as { data: Array<{ achievementId: string }> }).data;
-      expect(rows.some((r) => r.achievementId.includes("mood"))).toBe(false);
-    }
-  });
+  // The "a disabled module never gets its badge pinned" invariant moved with
+  // the write itself — see `src/lib/jobs/__tests__/achievement-unlock-sweep.test.ts`.
+  // That this route persists nothing at all is proved in
+  // `writes-nothing.test.ts`, against a result that HAS a pending unlock.
 });

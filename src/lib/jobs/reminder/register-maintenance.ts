@@ -189,6 +189,18 @@ import {
   handleDocumentPurge,
   type DocumentPurgePayload,
 } from "@/lib/jobs/document-purge";
+import {
+  CYCLE_PREDICTION_REFRESH_QUEUE,
+  CYCLE_PREDICTION_REFRESH_CRON,
+  handleCyclePredictionRefresh,
+  type CyclePredictionRefreshPayload,
+} from "@/lib/jobs/cycle-prediction-refresh";
+import {
+  ACHIEVEMENT_UNLOCK_SWEEP_QUEUE,
+  ACHIEVEMENT_UNLOCK_SWEEP_CRON,
+  handleAchievementUnlockSweep,
+  type AchievementUnlockSweepPayload,
+} from "@/lib/jobs/achievement-unlock-sweep";
 
 const DATA_BACKUP_QUEUE = "data-backup";
 
@@ -349,6 +361,13 @@ const allQueues = [
   // v1.31.0 — data-arrival reaction-marker prune. Without this entry the
   // daily schedule silently no-ops and the markers accumulate forever.
   ARRIVAL_REACTION_CLEANUP_QUEUE,
+  // v1.35.3 — nightly refresh of the cycle forecast rows the reminder cron
+  // scans. Without this entry the schedule silently no-ops and the forecast
+  // is only as fresh as the last time somebody opened the calendar.
+  CYCLE_PREDICTION_REFRESH_QUEUE,
+  // v1.35.3 — nightly pin for newly unlocked achievements. Without this entry
+  // the schedule silently no-ops and no unlock date is ever made durable.
+  ACHIEVEMENT_UNLOCK_SWEEP_QUEUE,
   // v1.7.0 — soft-deleted measurement tombstone prune. Without this entry
   // the daily schedule silently no-ops and pruned-past-retention tombstones
   // pile up forever.
@@ -494,6 +513,22 @@ const schedules: ScheduleEntry[] = [
   [NOTE_ENCRYPTION_BACKFILL_QUEUE, NOTE_ENCRYPTION_BACKFILL_CRON],
   // v1.24 — daily 04:00 Europe/Berlin prune for dead MCP connector tokens.
   [MCP_TOKEN_CLEANUP_QUEUE, MCP_TOKEN_CLEANUP_CRON, cronIsTheRetry],
+  // v1.35.3 — daily 04:20 Europe/Berlin refresh of the cycle forecast rows
+  // the reminder cron scans. Tomorrow's tick is the retry: the forecast moves
+  // on a day scale and the reminder windows are days wide.
+  [
+    CYCLE_PREDICTION_REFRESH_QUEUE,
+    CYCLE_PREDICTION_REFRESH_CRON,
+    cronIsTheRetry,
+  ],
+  // v1.35.3 — daily 04:25 Europe/Berlin pin for newly unlocked achievements.
+  // Tomorrow's tick is the retry: the date written is the computed completion
+  // date, so a night late writes the identical row.
+  [
+    ACHIEVEMENT_UNLOCK_SWEEP_QUEUE,
+    ACHIEVEMENT_UNLOCK_SWEEP_CRON,
+    cronIsTheRetry,
+  ],
   // v1.25 — daily 04:05 Europe/Berlin medication-note encryption backfill
   // discovery. The empty cron payload (no `userId`) is the handler's signal to
   // fan out one per-user job per account still holding a plaintext medication
@@ -698,6 +733,24 @@ export async function registerMaintenanceQueues(
     ARRIVAL_REACTION_CLEANUP_QUEUE,
     { localConcurrency: 1 },
     handleArrivalReactionCleanup,
+  );
+  // v1.35.3 — nightly cycle-forecast refresh. Single-flight: two ticks
+  // recomputing the same cohort is wasted work and the second upsert is a
+  // no-op against the debounce.
+  await createAndWork<CyclePredictionRefreshPayload>(
+    boss,
+    CYCLE_PREDICTION_REFRESH_QUEUE,
+    { localConcurrency: 1 },
+    handleCyclePredictionRefresh,
+  );
+  // v1.35.3 — nightly achievement-unlock pin. Single-flight: the underlying
+  // createMany is idempotent on the (userId, achievementId) unique, so a
+  // second concurrent tick would only re-walk the same accounts.
+  await createAndWork<AchievementUnlockSweepPayload>(
+    boss,
+    ACHIEVEMENT_UNLOCK_SWEEP_QUEUE,
+    { localConcurrency: 1 },
+    handleAchievementUnlockSweep,
   );
   // v1.7.0 — daily prune of expired measurement tombstones. Single-flight
   // like every other cleanup queue.

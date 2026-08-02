@@ -21,6 +21,9 @@ vi.mock("@/lib/db", () => ({
       // v1.15.19 — resolver-null convergence probe before standalone insert.
       findFirst: vi.fn(),
     },
+    // The bulk drain stamps the SyncMode checkpoint (`User.lastSyncedAt`) —
+    // it is a client push, and the push is what the checkpoint describes.
+    user: { update: vi.fn().mockResolvedValue({}) },
     auditLog: { create: vi.fn() },
   },
 }));
@@ -1484,5 +1487,51 @@ describe("POST /api/medications/intake/bulk — identity stability floor", () =>
     };
     expect(body.data.entries[0].status).not.toBe("skipped");
     expect(prisma.medicationIntakeEvent.create).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────
+// SyncMode checkpoint — the push owns `User.lastSyncedAt`
+// ────────────────────────────────────────────────────────────────────
+/**
+ * `GET /api/sync/state` reports the checkpoint and writes nothing, so the
+ * ingest boundaries are the only writers. If this one stops stamping, the
+ * checkpoint stays null forever and every paired client re-pairs full.
+ */
+describe("POST /api/medications/intake/bulk — sync checkpoint", () => {
+  beforeEach(() => {
+    vi.mocked(prisma.medication.findMany).mockResolvedValue([
+      { id: "med-1" },
+    ] as never);
+    vi.mocked(prisma.medication.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue(
+      [] as never,
+    );
+    vi.mocked(prisma.medicationIntakeEvent.findFirst).mockResolvedValue(
+      null as never,
+    );
+    vi.mocked(prisma.medicationIntakeEvent.create).mockResolvedValue({
+      id: "row-1",
+    } as never);
+  });
+
+  it("stamps lastSyncedAt when the drain lands", async () => {
+    const res = await POST(
+      postReq({
+        entries: [
+          {
+            medicationId: "med-1",
+            scheduledFor: "2026-06-15T05:00:00.000Z",
+            takenAt: "2026-06-15T05:02:00.000Z",
+          },
+        ],
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledTimes(1);
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: { lastSyncedAt: expect.any(Date) },
+    });
   });
 });

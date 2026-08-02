@@ -116,6 +116,8 @@ const subsystemSurface = {
   "mood-reminder-cleanup": { audience: "system" },
   "push-attempt-cleanup": { audience: "system" },
   "arrival-reaction-cleanup": { audience: "system" },
+  "cycle-prediction-refresh": { audience: "system" },
+  "achievement-unlock-sweep": { audience: "system" },
   "measurement-tombstone-cleanup": { audience: "system" },
   "coach-message-cleanup": { audience: "system" },
   "note-encryption-backfill": { audience: "system" },
