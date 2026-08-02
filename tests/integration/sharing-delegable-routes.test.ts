@@ -472,3 +472,371 @@ describe("GET /api/measurement-reminders/[id]", () => {
     });
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Labs and biomarkers                                                        */
+/* -------------------------------------------------------------------------- */
+
+async function seedLab(userId: string, analyte: string) {
+  await getPrismaClient().labResult.create({
+    data: {
+      userId,
+      analyte,
+      value: 5.2,
+      unit: "mmol/L",
+      takenAt: new Date("2026-07-10T09:00:00Z"),
+    },
+  });
+}
+
+contract<string>("GET /api/labs", {
+  call: async () => {
+    const { GET } = await import("@/app/api/labs/route");
+    return call(GET as Handler, "/api/labs");
+  },
+  seed: seedLab,
+  read: (payload: { results: { analyte: string }[] }) =>
+    payload.results.map((r) => r.analyte),
+  ownerMarker: "owner-hba1c",
+  delegateMarker: "delegate-hba1c",
+});
+
+async function seedBiomarker(userId: string, name: string) {
+  await getPrismaClient().biomarker.create({
+    data: { userId, name, unit: "mmol/L" },
+  });
+}
+
+contract<string>("GET /api/biomarkers", {
+  call: async () => {
+    const { GET } = await import("@/app/api/biomarkers/route");
+    return call(GET as Handler, "/api/biomarkers");
+  },
+  seed: seedBiomarker,
+  read: (payload: { biomarkers: { name: string }[] }) =>
+    payload.biomarkers.map((b) => b.name),
+  ownerMarker: "owner-ferritin",
+  delegateMarker: "delegate-ferritin",
+});
+
+describe("GET /api/labs/[id] and /api/biomarkers/[id]", () => {
+  it("resolve by id against the owner, not the caller", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await seedLab(owner.id, "owner-hba1c");
+    await seedLab(delegate.id, "delegate-hba1c");
+    await seedBiomarker(owner.id, "owner-ferritin");
+
+    const ownerLab = await getPrismaClient().labResult.findFirstOrThrow({
+      where: { userId: owner.id },
+    });
+    const delegateLab = await getPrismaClient().labResult.findFirstOrThrow({
+      where: { userId: delegate.id },
+    });
+    const ownerMarker = await getPrismaClient().biomarker.findFirstOrThrow({
+      where: { userId: owner.id },
+    });
+
+    const labs = await import("@/app/api/labs/[id]/route");
+    const markers = await import("@/app/api/biomarkers/[id]/route");
+    const { grant } = await switchInto(owner.id, delegate.id);
+
+    const lab = await call(labs.GET as Handler, `/api/labs/${ownerLab.id}`, {
+      id: ownerLab.id,
+    });
+    expect(lab.status).toBe(200);
+    expect((await body(lab)).data).toMatchObject({ analyte: "owner-hba1c" });
+
+    // The delegate's own result is not reachable from inside the owner's
+    // record. The fetch-then-guard arm now guards against the owner.
+    const theirs = await call(
+      labs.GET as Handler,
+      `/api/labs/${delegateLab.id}`,
+      { id: delegateLab.id },
+    );
+    expect(theirs.status).toBe(404);
+
+    const marker = await call(
+      markers.GET as Handler,
+      `/api/biomarkers/${ownerMarker.id}`,
+      { id: ownerMarker.id },
+    );
+    expect(marker.status).toBe(200);
+    expect((await body(marker)).data).toMatchObject({ name: "owner-ferritin" });
+
+    await revokeGrant(grant.id);
+    await expectDenied(
+      await call(labs.GET as Handler, `/api/labs/${ownerLab.id}`, {
+        id: ownerLab.id,
+      }),
+    );
+    await expectDenied(
+      await call(markers.GET as Handler, `/api/biomarkers/${ownerMarker.id}`, {
+        id: ownerMarker.id,
+      }),
+    );
+  });
+
+  it("are unchanged for a caller who has not switched", async () => {
+    const plain = await makeUser("plain");
+    await seedLab(plain.id, "plain-hba1c");
+    const row = await getPrismaClient().labResult.findFirstOrThrow({
+      where: { userId: plain.id },
+    });
+    await signIn(plain.id);
+
+    const { GET } = await import("@/app/api/labs/[id]/route");
+    const response = await call(GET as Handler, `/api/labs/${row.id}`, {
+      id: row.id,
+    });
+    expect(response.status).toBe(200);
+    expect((await body(response)).data).toMatchObject({
+      analyte: "plain-hba1c",
+    });
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Clinical record                                                            */
+/* -------------------------------------------------------------------------- */
+
+async function seedAllergy(userId: string, substance: string) {
+  await getPrismaClient().allergy.create({ data: { userId, substance } });
+}
+
+contract<string>("GET /api/allergies", {
+  call: async () => {
+    const { GET } = await import("@/app/api/allergies/route");
+    return call(GET as Handler, "/api/allergies");
+  },
+  seed: seedAllergy,
+  read: (payload: { substance: string }[]) => payload.map((a) => a.substance),
+  ownerMarker: "owner-penicillin",
+  delegateMarker: "delegate-penicillin",
+});
+
+async function seedFamilyHistory(userId: string, condition: string) {
+  await getPrismaClient().familyHistoryEntry.create({
+    data: { userId, relationship: "MOTHER", condition },
+  });
+}
+
+contract<string>("GET /api/family-history", {
+  call: async () => {
+    const { GET } = await import("@/app/api/family-history/route");
+    return call(GET as Handler, "/api/family-history");
+  },
+  seed: seedFamilyHistory,
+  read: (payload: { condition: string }[]) => payload.map((e) => e.condition),
+  ownerMarker: "owner-condition",
+  delegateMarker: "delegate-condition",
+});
+
+describe("GET /api/allergies/[id] and /api/family-history/[id]", () => {
+  it("resolve by id against the owner and refuse once the grant ends", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await seedAllergy(owner.id, "owner-penicillin");
+    await seedAllergy(delegate.id, "delegate-penicillin");
+    await seedFamilyHistory(owner.id, "owner-condition");
+
+    const ownerAllergy = await getPrismaClient().allergy.findFirstOrThrow({
+      where: { userId: owner.id },
+    });
+    const delegateAllergy = await getPrismaClient().allergy.findFirstOrThrow({
+      where: { userId: delegate.id },
+    });
+    const ownerEntry =
+      await getPrismaClient().familyHistoryEntry.findFirstOrThrow({
+        where: { userId: owner.id },
+      });
+
+    const allergies = await import("@/app/api/allergies/[id]/route");
+    const history = await import("@/app/api/family-history/[id]/route");
+    const { grant } = await switchInto(owner.id, delegate.id);
+
+    const mine = await call(
+      allergies.GET as Handler,
+      `/api/allergies/${ownerAllergy.id}`,
+      { id: ownerAllergy.id },
+    );
+    expect(mine.status).toBe(200);
+    expect((await body(mine)).data).toMatchObject({
+      substance: "owner-penicillin",
+    });
+
+    const theirs = await call(
+      allergies.GET as Handler,
+      `/api/allergies/${delegateAllergy.id}`,
+      { id: delegateAllergy.id },
+    );
+    expect(theirs.status).toBe(404);
+
+    const entry = await call(
+      history.GET as Handler,
+      `/api/family-history/${ownerEntry.id}`,
+      { id: ownerEntry.id },
+    );
+    expect(entry.status).toBe(200);
+    expect((await body(entry)).data).toMatchObject({
+      condition: "owner-condition",
+    });
+
+    await revokeGrant(grant.id);
+    await expectDenied(
+      await call(
+        allergies.GET as Handler,
+        `/api/allergies/${ownerAllergy.id}`,
+        { id: ownerAllergy.id },
+      ),
+    );
+  });
+
+  it("are unchanged for a caller who has not switched", async () => {
+    const plain = await makeUser("plain");
+    await seedAllergy(plain.id, "plain-penicillin");
+    const row = await getPrismaClient().allergy.findFirstOrThrow({
+      where: { userId: plain.id },
+    });
+    await signIn(plain.id);
+
+    const { GET } = await import("@/app/api/allergies/[id]/route");
+    const response = await call(GET as Handler, `/api/allergies/${row.id}`, {
+      id: row.id,
+    });
+    expect(response.status).toBe(200);
+    expect((await body(response)).data).toMatchObject({
+      substance: "plain-penicillin",
+    });
+  });
+});
+
+async function seedFact(userId: string, value: string) {
+  // Through the real writer, because the revision's value is an encrypted
+  // column and a hand-built row would read back as `unreadable`.
+  const { createHealthProfileFact } =
+    await import("@/lib/profile/health-facts");
+  await createHealthProfileFact(userId, "SMOKING_STATUS", value as never);
+}
+
+contract<string>("GET /api/anamnesis/facts", {
+  call: async () => {
+    const { GET } = await import("@/app/api/anamnesis/facts/route");
+    return call(GET as Handler, "/api/anamnesis/facts");
+  },
+  seed: seedFact,
+  read: (payload: {
+    current: Record<string, { value: string | null } | null>;
+  }) =>
+    Object.values(payload.current)
+      .map((row) => row?.value ?? null)
+      .filter((v): v is string => v !== null),
+  ownerMarker: "CURRENT",
+  delegateMarker: "NEVER",
+});
+
+/* -------------------------------------------------------------------------- */
+/* Mental health — the module gate follows the record                          */
+/* -------------------------------------------------------------------------- */
+
+async function seedAssessment(userId: string, totalScore: number) {
+  await getPrismaClient().mentalHealthAssessment.create({
+    data: {
+      userId,
+      instrument: "PHQ9",
+      locale: "en",
+      responsesEncrypted: Buffer.from("sealed"),
+      totalScore,
+      severityBand: "mild",
+      takenAt: new Date("2026-07-12T10:00:00Z"),
+    },
+  });
+}
+
+async function setModulePreference(userId: string, enabled: boolean) {
+  await getPrismaClient().user.update({
+    where: { id: userId },
+    data: { modulePreferencesJson: { mentalHealth: enabled } },
+  });
+}
+
+describe("GET /api/mental-health/assessments", () => {
+  it("reads the owner's screener history when the OWNER enabled the module", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await setModulePreference(owner.id, true);
+    await seedAssessment(owner.id, 11);
+    await seedAssessment(delegate.id, 3);
+
+    await switchInto(owner.id, delegate.id);
+    const { GET } = await import("@/app/api/mental-health/assessments/route");
+    const response = await call(
+      GET as Handler,
+      "/api/mental-health/assessments",
+    );
+
+    expect(response.status).toBe(200);
+    const payload = (await body(response)).data as {
+      assessments: { totalScore: number }[];
+    };
+    expect(payload.assessments.map((a) => a.totalScore)).toEqual([11]);
+  });
+
+  it("refuses when the OWNER switched the module off, whatever the delegate set", async () => {
+    // The decision recorded in the classification: the module map governs
+    // which parts of a RECORD exist, so it is read off the record. A delegate
+    // who enabled the screener on their own account does not thereby gain a
+    // screener view inside somebody else's.
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await setModulePreference(owner.id, false);
+    await setModulePreference(delegate.id, true);
+    await seedAssessment(owner.id, 11);
+
+    await switchInto(owner.id, delegate.id);
+    const { GET } = await import("@/app/api/mental-health/assessments/route");
+    const response = await call(
+      GET as Handler,
+      "/api/mental-health/assessments",
+    );
+
+    expect(response.status).toBe(403);
+    expect((await body(response)).meta?.errorCode).toBe("module.disabled");
+  });
+
+  it("refuses a caller with no grant, and refuses the request after revocation", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await setModulePreference(owner.id, true);
+    await seedAssessment(owner.id, 11);
+
+    const { GET } = await import("@/app/api/mental-health/assessments/route");
+    const { grant } = await switchInto(owner.id, delegate.id);
+    expect(
+      (await call(GET as Handler, "/api/mental-health/assessments")).status,
+    ).toBe(200);
+
+    await revokeGrant(grant.id);
+    await expectDenied(
+      await call(GET as Handler, "/api/mental-health/assessments"),
+    );
+  });
+
+  it("is unchanged for a caller who has not switched", async () => {
+    const plain = await makeUser("plain");
+    await setModulePreference(plain.id, true);
+    await seedAssessment(plain.id, 7);
+    await signIn(plain.id);
+
+    const { GET } = await import("@/app/api/mental-health/assessments/route");
+    const response = await call(
+      GET as Handler,
+      "/api/mental-health/assessments",
+    );
+    expect(response.status).toBe(200);
+    const payload = (await body(response)).data as {
+      assessments: { totalScore: number }[];
+    };
+    expect(payload.assessments.map((a) => a.totalScore)).toEqual([7]);
+  });
+});

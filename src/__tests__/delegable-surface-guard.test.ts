@@ -260,6 +260,26 @@ const DELEGABLE_ROUTES: Record<string, string> = {
     "The record's own reminder schedule — what the owner asked to be reminded of, not a notification channel or a device. The GET reads `userId: user.id`; creating a reminder stays on `requireAuth()`.",
   "app/api/measurement-reminders/[id]/route.ts":
     "One reminder of the record, fetched by id then guarded against the resolved user. The PUT and DELETE keep `requireAuth()`.",
+  "app/api/labs/route.ts":
+    "The record's lab results. The only nested include is the biomarker's own reference range — no third party, no credential. Creating a result stays on `requireAuth()`.",
+  "app/api/labs/[id]/route.ts":
+    "One lab result of the record, fetched by id then guarded against the resolved user before anything is serialised.",
+  "app/api/biomarkers/route.ts":
+    "The record's biomarker catalogue: the analytes this account tracks and the ranges it tracks them against. No writes on the read arm.",
+  "app/api/biomarkers/[id]/route.ts":
+    "One biomarker of the record, fetch-then-guard against the resolved user.",
+  "app/api/allergies/route.ts":
+    "The record's allergy list — the single most useful thing a caregiver can read, and a plain list of the owner's own rows.",
+  "app/api/allergies/[id]/route.ts":
+    "One allergy of the record, fetch-then-guard against the resolved user.",
+  "app/api/family-history/route.ts":
+    "The record's family history. The payload describes the owner's relatives, so it is the one admitted read where third-party health information is present by design rather than by accident; a caregiver reading it is the use the feature exists for, and the row is stored as the owner's.",
+  "app/api/family-history/[id]/route.ts":
+    "One family-history entry of the record, fetch-then-guard against the resolved user.",
+  "app/api/mental-health/assessments/route.ts":
+    "The record's screener history. The module gate resolves against the record, so a delegate sees the surface only where the owner switched it on; the rate limit on the POST arm is untouched and that arm still refuses under a switch.",
+  "app/api/anamnesis/facts/route.ts":
+    "The record's health-profile facts, read through `readHealthProfileFacts(user.id)`. The module holds write helpers, and the GET calls none of them.",
 };
 
 /**
@@ -283,7 +303,7 @@ const ACTOR_ROUTES: Record<string, string> = {
  * a formality by accident: every addition has to be counted here as well as
  * listed above, which is one more place a careless admission has to pass.
  */
-const FROZEN_ENTRY_COUNT = 7;
+const FROZEN_ENTRY_COUNT = 17;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —

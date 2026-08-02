@@ -12,6 +12,13 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/api-handler", () => ({
   apiHandler: (handler: unknown) => handler,
   requireAuth: vi.fn(async () => ({ user: { id: "user-1" } })),
+  // v1.36.0 — the GET resolves a record rather than a caller. Same shape when
+  // nobody has switched, which is the case this file exercises.
+  requireRecordAuth: vi.fn(async () => ({
+    user: { id: "user-1" },
+    actor: { id: "user-1" },
+    grantId: null,
+  })),
 }));
 vi.mock("@/lib/idempotency", () => ({
   withIdempotency: (handler: unknown) => handler,

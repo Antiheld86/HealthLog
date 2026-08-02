@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
@@ -71,7 +71,7 @@ function serialiseBiomarker(row: {
 }
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  const { user } = await requireRecordAuth("read");
 
   // Visible markers first, then hidden — the manager renders them in two
   // sections and the lab-entry pickers drop the hidden tail client-side.
