@@ -109,7 +109,8 @@ async function grantAccess(
       granteeId,
       access: "READ",
       invitedAt: new Date(),
-      acceptedAt: extra.acceptedAt === undefined ? new Date() : extra.acceptedAt,
+      acceptedAt:
+        extra.acceptedAt === undefined ? new Date() : extra.acceptedAt,
       expiresAt: extra.expiresAt ?? null,
     },
   });
