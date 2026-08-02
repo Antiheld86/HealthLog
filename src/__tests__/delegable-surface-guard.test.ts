@@ -312,11 +312,11 @@ const DELEGABLE_ROUTES: Record<string, string> = {
   "app/api/workouts/route.ts":
     "The record's workout list. Verified to carry no AI-written paragraph: the single-workout route beside it does, and stays refused for exactly that reason.",
   "app/api/cycle/cycles/route.ts":
-    "The record's cycle history. The gate reads `user.gender` off the resolved record, which is the point: whether cycle tracking applies is a property of the record, not of whoever is looking at it.",
+    "The record's cycle history. Whether cycle tracking applies is a property of the record, and the gate gets there by re-loading the profile and gender for the resolved user id — note that the `gender` argument at the call site is dead (`requireCycleEnabled` names it `_gender`), so it is the id that carries the substitution, not that argument.",
   "app/api/cycle/day-logs/route.ts":
     'One day of the record\'s cycle log. The `auditLog("cycle.day-log.upsert")` in this file belongs to the PUT, which keeps `requireAuth()`.',
   "app/api/cycle/profile/route.ts":
-    "The record's cycle profile, supplied by the gate itself. No query of its own.",
+    "The record's cycle profile, supplied by the gate itself. This is the one cycle route that does read the auth-context gender directly — `isCycleEnabled(user.gender, gate.profile)` computes the `resolved` flag it returns — and post-substitution that is the owner's.",
   "app/api/cycle/symptoms/custom/route.ts":
     "The record's own custom symptom vocabulary. The create arm carries the rate limit and keeps `requireAuth()`.",
   "app/api/medications/route.ts":
