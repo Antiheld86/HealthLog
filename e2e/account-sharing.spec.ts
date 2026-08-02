@@ -66,11 +66,11 @@ import type { BrowserContext, Page } from "@playwright/test";
 
 import { expect, test } from "./setup/test";
 import {
+  DELEGATE_STORAGE_STATE_PATH,
   E2E_DELEGATE_MARKER_KG,
   E2E_OWNER,
   E2E_USER,
   OWNER_STORAGE_STATE_PATH,
-  STORAGE_STATE_PATH,
 } from "./setup/test-helpers";
 
 const DELEGATE_MARKER = String(E2E_DELEGATE_MARKER_KG);
@@ -131,7 +131,17 @@ test.describe("account sharing", () => {
   // The `page` fixture throughout is the DELEGATE. The owner gets an explicit
   // context below, because a grant needs two signed-in sides at once and the
   // login endpoint is IP-rate-limited.
-  test.use({ storageState: STORAGE_STATE_PATH });
+  //
+  // The delegate's jar is this journey's OWN, not the shared one every other
+  // authenticated spec reads, and that is load-bearing rather than tidy. The
+  // switch is stamped on the session row (see "the nav offers only what
+  // sharing covers" below, which relies on exactly that), so switching the
+  // shared jar would switch it for every spec holding the same cookie — and
+  // the suite runs fully parallel. The damage lands somewhere else entirely:
+  // a settings surface painting "Not part of shared access", an axe scan
+  // reading a banner its spec never asked for. Same account, different
+  // session, no reach outside this file.
+  test.use({ storageState: DELEGATE_STORAGE_STATE_PATH });
 
   // Desktop only, and for a reason that is about the fixture rather than the
   // layout: this journey mutates shared rows — one grant between two seeded
