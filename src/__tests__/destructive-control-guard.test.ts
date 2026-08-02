@@ -519,20 +519,6 @@ const REGISTRY: DestructiveEntry[] = [
     undetected:
       "Same shape as the card above, and one step further out of reach: renouncing is a POST, so not even a DELETE goes out. The path (`/api/account/grants/{id}/renounce`) names an act the D2 vocabulary does not carry, and it lives in the hook regardless. Registered by hand.",
   },
-  {
-    file: "components/settings/access/grant-invite-card.tsx",
-    destroys:
-      "nothing — it offers access, and the offer confers nothing until the other person accepts it",
-    recovery: "permanent",
-    confirm: [],
-    unconfirmed: [
-      {
-        control: "the invitation form",
-        reason:
-          "D3 flags this file for `expiresAt: null` in the invite payload, reading it as a field being blanked. It is not: null means the grant runs until somebody ends it, which is the common household case and the absence of an expiry rather than the removal of one. The form creates a pending row and destroys nothing, and gating a creation behind a confirmation dialog would teach people to click through the dialogs that do guard a loss.",
-      },
-    ],
-  },
 
   // ── Admin ───────────────────────────────────────────────────────────────
   {

@@ -172,6 +172,13 @@ test.describe("account sharing", () => {
     await ownerContext.close();
   });
 
+  /** A `YYYY-MM-DD` day the date input accepts, N days from now. */
+  function isoDayFromNow(days: number): string {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
   test("the owner invites, and the invitation confers nothing yet", async () => {
     await ownerPage.goto("/settings/access");
 
@@ -187,7 +194,34 @@ test.describe("account sharing", () => {
       await identifier.fill(E2E_USER.username);
       await expect(submit).toBeEnabled({ timeout: 1000 });
     }).toPass({ timeout: 15_000 });
+
+    // The lapse date, through the real form and onto the real wire.
+    //
+    // `expiresAt` was accepted, stored and annotated on by the route from the
+    // day the grant model shipped, while the card sent a hardcoded `null`. The
+    // component test cannot see that: it renders the control and checks the
+    // date mapping, and BOTH still pass with the card wired back to `null`.
+    // Only reading the posted body proves the value a person typed is the
+    // value the server receives, which is the half that was missing.
+    const lapse = ownerPage.locator('[data-slot="grant-invite-expires"]');
+    await expect(lapse).toBeVisible();
+    const chosenDay = isoDayFromNow(30);
+    await lapse.fill(chosenDay);
+
+    const invitePost = ownerPage.waitForRequest(
+      (req) =>
+        req.method() === "POST" && req.url().endsWith("/api/account/grants"),
+    );
     await submit.click();
+    const posted = JSON.parse((await invitePost).postData() ?? "{}") as {
+      expiresAt?: string | null;
+    };
+    expect(
+      posted.expiresAt,
+      "the invitation must carry the day the owner chose",
+    ).toBeTruthy();
+    // End of the chosen day, not the midnight that starts it.
+    expect(posted.expiresAt).toContain(chosenDay.slice(0, 8));
 
     const row = ownerPage
       .locator('[data-slot="grants-given-list"] [data-slot="grant-row"]')
