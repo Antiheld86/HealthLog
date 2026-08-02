@@ -46,7 +46,9 @@ import {
   USER_RESET,
   WIPE_EXEMPT,
   WIPE_MODELS,
+  WIPE_OWNER_FIELDS,
   wipeDelegateKey,
+  wipeWhere,
 } from "@/lib/data-wipe/wipe-plan";
 
 const SCHEMA = join(process.cwd(), "prisma", "schema.prisma");
@@ -286,5 +288,57 @@ describe("data-wipe completeness", () => {
       expect(key[0]).toBe(model[0].toLowerCase());
       expect(key.slice(1)).toBe(model.slice(1));
     }
+  });
+
+  /**
+   * The wipe loop asks every model the same question — "your rows for this
+   * account" — and the convention that answers it is a `userId` column. A
+   * model that relates two accounts has no such column, and before
+   * `WIPE_OWNER_FIELDS` existed the only way to notice was a Prisma error at
+   * request time, inside the wipe transaction, after the confirmation was
+   * typed.
+   */
+  it("knows how every wiped model belongs to an account", () => {
+    const unaddressable = WIPE_MODELS.filter((model) => {
+      const shape = models.get(model);
+      if (!shape) return false;
+      return !shape.scalars.includes("userId") && !(model in WIPE_OWNER_FIELDS);
+    });
+    expect(
+      unaddressable,
+      `these wiped models carry no userId, so the wipe cannot select their rows:\n${unaddressable.join("\n")}\n\n` +
+        "Add each to WIPE_OWNER_FIELDS naming the columns that bind a row to " +
+        "an account.",
+    ).toEqual([]);
+  });
+
+  it("names real columns in WIPE_OWNER_FIELDS, on wiped models only", () => {
+    for (const [model, fields] of Object.entries(WIPE_OWNER_FIELDS)) {
+      expect(
+        (WIPE_MODELS as readonly string[]).includes(model),
+        `WIPE_OWNER_FIELDS names "${model}", which the wipe does not delete`,
+      ).toBe(true);
+      const scalars = new Set(models.get(model)?.scalars ?? []);
+      expect(
+        fields.length,
+        `${model} needs at least one owner column`,
+      ).toBeGreaterThan(0);
+      for (const field of fields) {
+        expect(
+          scalars.has(field),
+          `WIPE_OWNER_FIELDS.${model} names "${field}", which is not a column on that model`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("selects both sides of an account grant", () => {
+    // Spelled out rather than left to the generic check above: wiping only the
+    // grantor side would delete the grants this account made and leave it
+    // still holding read access to other people's records.
+    expect(wipeWhere("AccountGrant", "u1")).toEqual({
+      OR: [{ grantorId: "u1" }, { granteeId: "u1" }],
+    });
+    expect(wipeWhere("Measurement", "u1")).toEqual({ userId: "u1" });
   });
 });

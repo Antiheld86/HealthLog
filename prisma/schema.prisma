@@ -845,6 +845,13 @@ model User {
   // scoped, time-limited, revocable read view of the health record to a
   // clinician holding the raw `hls_` token (stored only as an HMAC hash).
   clinicianShareLinks            ClinicianShareLink[]
+  // v1.36.0 — account sharing. Two relations because a person is on both sides
+  // of the arrangement: `accountGrantsGiven` are the grants this account made
+  // over its OWN record, `accountGrantsReceived` are the records this account
+  // may open. Both cascade on delete of this row — a grant naming a user who
+  // no longer exists is a dangling authorization.
+  accountGrantsGiven             AccountGrant[]                  @relation("AccountGrantsGiven")
+  accountGrantsReceived          AccountGrant[]                  @relation("AccountGrantsReceived")
   // v1.11.0 W1 — durable per-provider AI-health ledger (one row per
   // provider chain entry) so a known-bad credential is negatively cached
   // across workers instead of re-burning a 401 every generation.
@@ -5835,6 +5842,109 @@ model ClinicianShareLinkDocument {
   @@index([shareLinkId])
   @@index([documentId])
   @@map("clinician_share_link_documents")
+}
+
+/// v1.36.0 — the access level a grant confers. Only `READ` is ever written in
+/// v1; the type exists from day one so that adding delegated writes is
+/// enforcement work rather than migration work, and so a row states its level
+/// instead of leaving a reader to infer it.
+enum AccountGrantAccess {
+  READ
+  WRITE
+
+  @@map("account_grant_access")
+}
+
+/// Who ended a grant. "The owner withdrew it" and "the delegate handed it back"
+/// are different facts about the same person's record, and the consent record
+/// has to be able to tell them apart.
+enum AccountGrantRevoker {
+  GRANTOR
+  GRANTEE
+
+  @@map("account_grant_revoker")
+}
+
+/// v1.36.0 — one account's standing permission to read another account's
+/// record, and the durable record of the consent that created it.
+///
+/// The row is BOTH. There is no separate receipt table: two records of one act
+/// drift, and then nobody can say which is true. So every fact about the
+/// delegation is a column here — who offered it (`grantorId`, `invitedAt`), who
+/// accepted and from where (`granteeId`, `acceptedAt`, `acceptedIp`), when it
+/// lapses (`expiresAt`), when it was last exercised (`lastUsedAt`), and who
+/// ended it (`revokedAt`, `revokedBy`).
+///
+/// Consequences worth stating where they can be read next to the columns:
+///
+///   * **Revocation never deletes.** It stamps `revokedAt` + `revokedBy`. A
+///     deleted row cannot answer "who had access, from when to when, and who
+///     ended it" — the question the owner is owed.
+///   * **The uniqueness constraint is partial and lives only in migration
+///     0292** — `UNIQUE (grantor_id, grantee_id) WHERE revoked_at IS NULL`.
+///     Prisma cannot express the predicate, and declaring the plain pair here
+///     would be worse than declaring nothing: it would hand the client a
+///     `findUnique` over a key the database does not hold unique, so a pair
+///     with several revoked rows would resolve to an arbitrary one.
+///     `Device.apnsToken` carries its partial unique index the same way. At
+///     most one LIVE grant per pair; history accumulates freely underneath.
+///   * **Pending confers nothing and expiry is live.** `acceptedAt IS NULL` is
+///     an invitation, not access, and a grant past `expiresAt` fails the active
+///     predicate on the request that reads it rather than at write time. Both
+///     are decided in `src/lib/sharing/grants.ts` and nowhere else.
+///   * **Both foreign keys cascade.** A grant naming a user who no longer
+///     exists is a dangling authorization — resolvable by nobody, revocable by
+///     nobody — so deleting EITHER account removes it, not just the owner.
+///
+/// Self-grants are refused by the domain module rather than by a database
+/// CHECK; migration 0292 carries the reason (the schema-driven wipe seeder
+/// binds every `users` foreign key to one account, so a row it plants here has
+/// grantor = grantee by construction).
+model AccountGrant {
+  id String @id @default(cuid())
+
+  /// The account whose record is being shared. "Owner" everywhere in the code.
+  grantorId String @map("grantor_id")
+  /// The account being given access. "Delegate" everywhere in the code.
+  granteeId String @map("grantee_id")
+
+  access AccountGrantAccess @default(READ)
+
+  /// When the invitation was offered. A domain event, so re-offering an
+  /// invitation on the same pending row moves it; `createdAt` below is row
+  /// bookkeeping and never moves. They agree the day the row is written and
+  /// are allowed to disagree afterwards.
+  invitedAt  DateTime  @default(now()) @map("invited_at")
+  /// When the delegate accepted. NULL = pending, which confers nothing.
+  /// One-shot: an accepted grant can never be accepted again.
+  acceptedAt DateTime? @map("accepted_at")
+  /// The delegate's IP at acceptance, recorded plaintext exactly as
+  /// `AuditLog.ipAddress` is. Being handed someone's health record is an act
+  /// the consent record should be able to place.
+  acceptedIp String?   @map("accepted_ip")
+
+  /// When access ended, and who ended it. Written together, never cleared —
+  /// a re-invitation is a NEW row. The database enforces that the two are
+  /// either both set or both null.
+  revokedAt DateTime?            @map("revoked_at")
+  revokedBy AccountGrantRevoker? @map("revoked_by")
+
+  /// Optional lapse date. Checked live on every resolution, so an expired
+  /// grant stops conferring access without anything having to sweep it.
+  expiresAt  DateTime? @map("expires_at")
+  /// Refreshed fire-and-forget when the grant is exercised, the same posture
+  /// as `ApiToken.lastUsedAt`. The owner's panel reads it to answer "is this
+  /// access still being used, or is it a grant nobody remembers".
+  lastUsedAt DateTime? @map("last_used_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  grantor User @relation("AccountGrantsGiven", fields: [grantorId], references: [id], onDelete: Cascade)
+  grantee User @relation("AccountGrantsReceived", fields: [granteeId], references: [id], onDelete: Cascade)
+
+  @@index([granteeId, createdAt(sort: Desc)])
+  @@index([grantorId, createdAt(sort: Desc)])
+  @@map("account_grants")
 }
 
 // v1.11.0 W3 — period-narrative cache (Pillar P1).

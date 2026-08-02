@@ -130,6 +130,19 @@ export const WIPE_MODELS = [
   // `resolveShareGateState` both resolve an unknown `tokenHash` to `null`, and
   // null is the same blunt 404 a revoked link gets.
   "ClinicianShareLink",
+  // v1.36.0 — account grants, on BOTH sides (see WIPE_OWNER_FIELDS): the ones
+  // this account made over its own record, and the ones it holds over someone
+  // else's.
+  //
+  // Deleting rather than revoking, and the difference is worth stating because
+  // the domain module refuses to delete these rows anywhere else. Revocation
+  // preserves the row precisely because the row is the consent record — but a
+  // person who types the confirmation on "Delete All Data" is asking for the
+  // record itself to be gone, and the same request already takes their entire
+  // audit history and their consent receipts with it. Leaving a grant behind
+  // would also leave a delegate holding live access to an account that just
+  // erased everything it had.
+  "AccountGrant",
 
   // ── Integrations ────────────────────────────────────────────────────────
   "WithingsConnection",
@@ -387,9 +400,42 @@ export const USER_KEPT_FIELDS: Readonly<Record<string, string>> = {
     "a per-account storage quota set by the operator, not by the person",
 };
 
+/**
+ * Wiped models that do NOT carry a `userId`, and the columns that say the row
+ * belongs to an account.
+ *
+ * The convention is one `userId` column and almost every table keeps it. A
+ * table that relates two accounts cannot: an account grant names an owner and
+ * a delegate, and a wipe by either of them has to take the row.
+ *
+ * Declared here rather than at the wipe route, so the route keeps asking for
+ * exactly one thing — "delete this model's rows for this account" — and the
+ * question of what "for this account" means for a given model stays in the
+ * file that already answers every other question about the wipe.
+ * {@link resolveWipeDelegate} translates; the route is unaware.
+ */
+export const WIPE_OWNER_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  // Both sides. Wiping only the grantor side would leave the account still
+  // holding read access to other people's records after it asked for
+  // everything of its own to be deleted.
+  AccountGrant: ["grantorId", "granteeId"],
+};
+
 /** Prisma client delegate key for a model name (`MoodEntry` → `moodEntry`). */
 export function wipeDelegateKey(model: string): string {
   return model.charAt(0).toLowerCase() + model.slice(1);
+}
+
+/**
+ * The `where` that selects one account's rows of `model`.
+ *
+ * `{ userId }` for the convention, an `OR` over the declared owner columns for
+ * the models that relate two accounts.
+ */
+export function wipeWhere(model: string, userId: string): object {
+  const fields = WIPE_OWNER_FIELDS[model];
+  if (!fields) return { userId };
+  return { OR: fields.map((field) => ({ [field]: userId })) };
 }
 
 /** The narrow slice of a Prisma delegate the wipe loop uses. */
@@ -402,19 +448,33 @@ export interface UserScopedDeleteDelegate {
  *
  * One documented cast: `WIPE_MODELS` is a literal list of model names checked
  * against `schema.prisma` by the completeness test, and every entry indexes a
- * delegate that exposes `deleteMany` over a `userId`. The test also asserts
- * every entry resolves, so an unresolvable name fails the build rather than
- * the request.
+ * delegate that exposes `deleteMany`. The test also asserts every entry
+ * resolves, so an unresolvable name fails the build rather than the request.
+ *
+ * A model listed in {@link WIPE_OWNER_FIELDS} gets a wrapper that rewrites the
+ * caller's `{ userId }` into that model's own ownership predicate. The caller
+ * still says "this account's rows" and still gets a count back; only the
+ * translation moved, and it moved to the file that declares the columns rather
+ * than to the loop that does not know about them.
  */
 export function resolveWipeDelegate(
   client: object,
   model: string,
 ): UserScopedDeleteDelegate {
-  const delegate = (client as Record<string, UserScopedDeleteDelegate>)[
-    wipeDelegateKey(model)
-  ];
+  const delegate = (
+    client as Record<
+      string,
+      { deleteMany(args: { where: object }): Promise<{ count: number }> }
+    >
+  )[wipeDelegateKey(model)];
   if (!delegate || typeof delegate.deleteMany !== "function") {
     throw new Error(`No Prisma delegate for wipe model "${model}"`);
   }
-  return delegate;
+  if (!WIPE_OWNER_FIELDS[model]) {
+    return delegate as UserScopedDeleteDelegate;
+  }
+  return {
+    deleteMany: ({ where }) =>
+      delegate.deleteMany({ where: wipeWhere(model, where.userId) }),
+  };
 }
