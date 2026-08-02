@@ -93,6 +93,7 @@ export function MaintainershipBanner() {
   return (
     <div
       role="status"
+      data-slot="maintainership-banner"
       data-testid="maintainership-banner"
       className="border-border bg-muted/40 text-muted-foreground flex items-start gap-2 border-b px-4 py-2 text-xs sm:items-center"
     >
