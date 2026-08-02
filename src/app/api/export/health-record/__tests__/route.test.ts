@@ -98,6 +98,11 @@ import {
 } from "@/lib/modules/gate";
 
 const SESSION_OK = {
+  session: {
+    id: "session-1",
+    expiresAt: new Date(Date.now() + 3_600_000),
+    actingAsUserId: null,
+  },
   user: { id: "user-1", email: "test@example.com", role: "USER" },
 } as const;
 

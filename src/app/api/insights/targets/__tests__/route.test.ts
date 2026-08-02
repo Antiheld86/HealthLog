@@ -96,7 +96,11 @@ const SESSION_USER = {
 };
 
 const SESSION_OK = {
-  session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
+  session: {
+    id: "sess-1",
+    expiresAt: new Date(Date.now() + 3_600_000),
+    actingAsUserId: null,
+  },
   user: SESSION_USER as never,
 };
 

@@ -246,7 +246,7 @@ export async function createSession(
 }
 
 export async function getSession(): Promise<{
-  session: { id: string; expiresAt: Date };
+  session: { id: string; expiresAt: Date; actingAsUserId: string | null };
   user: User;
 } | null> {
   try {
@@ -343,7 +343,27 @@ export async function getSession(): Promise<{
   }
 
   return {
-    session: { id: session.id, expiresAt: session.expiresAt },
+    session: {
+      id: session.id,
+      expiresAt: session.expiresAt,
+      // v1.36.0 — the acting-account CARRIER, projected because the row is
+      // already in hand and re-reading it per request would be waste.
+      //
+      // Read this in exactly one place: the acting-account resolver in
+      // `src/lib/api-handler.ts`. It is a selector and not a decision — the
+      // resolver still has to find a live grant for the pair before anything
+      // is substituted, and a value stranded here by a grant that has since
+      // ended confers nothing.
+      //
+      // What this function returns for `user` does NOT change and must not:
+      // `getSession()` answers "who is calling", and `requireAdmin`,
+      // `requireCookieAuth` and `requireFreshMfa` are unreachable by a switch
+      // precisely because that is the only thing it answers. Substituting the
+      // owner here would put a delegate inside the admin check.
+      // `src/__tests__/acting-account-boundary-guard.test.ts` freezes the set
+      // of files allowed to touch this field.
+      actingAsUserId: session.actingAsUserId,
+    },
     user: session.user,
   };
 }
