@@ -197,6 +197,77 @@ function catalogueLabel(
   return t("admin.section.backups.restoreSkippedMoodFactor");
 }
 
+/**
+ * What the last restore could not put back.
+ *
+ * Its own component, and exported, so it can be rendered against a report in a
+ * test instead of only through a state transition the SSR smoke tests here
+ * cannot drive. A report that reaches the response and never reaches the screen
+ * is the same silence the reporting exists to end, so the render is worth
+ * proving on its own.
+ *
+ * It names every key rather than totalling them away: an operator who cannot
+ * see WHICH symptom went missing cannot decide whether it mattered.
+ */
+export function RestoreSkipReport({
+  report,
+  onDismiss,
+}: {
+  report: RestoreSkipSummary;
+  onDismiss: () => void;
+}) {
+  const { t } = useTranslations();
+  if (report.links === 0) return null;
+  return (
+    <div
+      role="status"
+      data-slot="restore-skip-report"
+      className="border-warning/40 bg-warning/10 mt-4 rounded-md border px-3 py-2 text-sm"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start gap-2">
+          <AlertTriangle
+            className="mt-0.5 h-4 w-4 shrink-0"
+            aria-hidden="true"
+          />
+          <div>
+            <p className="font-medium">
+              {t("admin.section.backups.restoreSkippedTitle", {
+                links: String(report.links),
+              })}
+            </p>
+            <p className="text-muted-foreground text-xs">
+              {t("admin.section.backups.restoreSkippedDescription")}
+            </p>
+            <ul className="mt-2 space-y-1">
+              {report.catalogueKeys.map((entry) => (
+                <li key={`${entry.catalogue}:${entry.key}`} className="text-xs">
+                  <span className="font-mono">{entry.key}</span>{" "}
+                  <span className="text-muted-foreground">
+                    {catalogueLabel(entry.catalogue, t)}
+                    {" · "}
+                    {t("admin.section.backups.restoreSkippedLinks", {
+                      count: String(entry.links),
+                    })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onDismiss}
+          className="min-h-11"
+        >
+          {t("common.dismiss")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function BackupsSection() {
   const { t } = useTranslations();
   const fmt = useFormatters();
@@ -513,60 +584,11 @@ export function BackupsSection() {
         </div>
       </div>
 
-      {/* The restore's honesty panel. Rendered only after a restore that
-          actually dropped something, and it names every key rather than
-          totalling them away — an operator who cannot see WHICH symptom went
-          missing cannot decide whether it mattered. */}
-      {skipped && skipped.links > 0 ? (
-        <div
-          role="status"
-          data-slot="restore-skip-report"
-          className="border-warning/40 bg-warning/10 mt-4 rounded-md border px-3 py-2 text-sm"
-        >
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex items-start gap-2">
-              <AlertTriangle
-                className="mt-0.5 h-4 w-4 shrink-0"
-                aria-hidden="true"
-              />
-              <div>
-                <p className="font-medium">
-                  {t("admin.section.backups.restoreSkippedTitle", {
-                    links: String(skipped.links),
-                  })}
-                </p>
-                <p className="text-muted-foreground text-xs">
-                  {t("admin.section.backups.restoreSkippedDescription")}
-                </p>
-                <ul className="mt-2 space-y-1">
-                  {skipped.catalogueKeys.map((entry) => (
-                    <li
-                      key={`${entry.catalogue}:${entry.key}`}
-                      className="text-xs"
-                    >
-                      <span className="font-mono">{entry.key}</span>{" "}
-                      <span className="text-muted-foreground">
-                        {catalogueLabel(entry.catalogue, t)}
-                        {" · "}
-                        {t("admin.section.backups.restoreSkippedLinks", {
-                          count: String(entry.links),
-                        })}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setSkipped(null)}
-              className="min-h-11"
-            >
-              {t("common.dismiss")}
-            </Button>
-          </div>
-        </div>
+      {skipped ? (
+        <RestoreSkipReport
+          report={skipped}
+          onDismiss={() => setSkipped(null)}
+        />
       ) : null}
 
       {isLoading ? (
