@@ -17,6 +17,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { getPrismaClient, truncateAllTables } from "./setup";
 import { streamParseExportXml } from "@/lib/measurements/import-apple-health-export";
 import { buildCycleBackupSection, restoreCycleData } from "@/lib/cycle/backup";
+import type { RestoreSkipLog } from "@/lib/export/restore-skips";
 import { parseBackupPayload } from "@/lib/validations/backup";
 
 process.env.ENCRYPTION_KEY ??=
@@ -219,9 +220,14 @@ describe("cycle backup — round-trips through build + restore", () => {
     });
 
     // Restore into a clean transaction (wipes then recreates).
+    const skips: RestoreSkipLog = [];
     await prisma.$transaction(async (tx) => {
-      await restoreCycleData(tx, USER_ID, payload);
+      await restoreCycleData(tx, USER_ID, payload, skips);
     });
+    // A file whose every symptom resolves reports nothing skipped. Absence
+    // reading as absence cuts both ways: the report has to stay empty when
+    // nothing was lost, or an operator learns to ignore it.
+    expect(skips).toEqual([]);
 
     const restored = await prisma.cycleDayLog.findMany({
       where: { userId: USER_ID },

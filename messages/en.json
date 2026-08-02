@@ -6569,6 +6569,13 @@
         "restoreInProgress": "Restoring…",
         "restoreSuccess": "Restore complete",
         "restoreFailed": "Restore failed",
+        "restoreSkippedToast": "Restore complete, {links} symptom links could not be put back",
+        "restoreSkippedTitle": "{links} links were not restored",
+        "restoreSkippedDescription": "The file references entries this installation does not know. Everything else was restored. The same list is in the audit log.",
+        "restoreSkippedLinks": "{count} links",
+        "restoreSkippedCycleSymptom": "Cycle symptom",
+        "restoreSkippedIllnessSymptom": "Illness symptom",
+        "restoreSkippedMoodFactor": "Mood factor",
         "docsLink": "Documentation"
       },
       "danger-zone": {

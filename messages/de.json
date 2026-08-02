@@ -6569,6 +6569,13 @@
         "restoreInProgress": "Wiederherstellung läuft…",
         "restoreSuccess": "Wiederherstellung abgeschlossen",
         "restoreFailed": "Wiederherstellung fehlgeschlagen",
+        "restoreSkippedToast": "Wiederherstellung abgeschlossen, {links} Symptomverknüpfungen konnten nicht zurückgeschrieben werden",
+        "restoreSkippedTitle": "{links} Verknüpfungen wurden nicht wiederhergestellt",
+        "restoreSkippedDescription": "Die Datei verweist auf Einträge, die diese Installation nicht kennt. Alles andere wurde wiederhergestellt. Dieselbe Liste steht im Audit-Log.",
+        "restoreSkippedLinks": "{count} Verknüpfungen",
+        "restoreSkippedCycleSymptom": "Zyklussymptom",
+        "restoreSkippedIllnessSymptom": "Krankheitssymptom",
+        "restoreSkippedMoodFactor": "Stimmungsfaktor",
         "docsLink": "Dokumentation"
       },
       "danger-zone": {

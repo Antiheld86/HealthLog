@@ -6569,6 +6569,13 @@
         "restoreInProgress": "Restauration en cours...",
         "restoreSuccess": "Restauration terminée",
         "restoreFailed": "Échec de la restauration",
+        "restoreSkippedToast": "Restauration terminée, {links} liens de symptômes n'ont pas pu être rétablis",
+        "restoreSkippedTitle": "{links} liens n'ont pas été restaurés",
+        "restoreSkippedDescription": "Le fichier référence des entrées que cette installation ne connaît pas. Tout le reste a été restauré. La même liste figure dans le journal d'audit.",
+        "restoreSkippedLinks": "{count} liens",
+        "restoreSkippedCycleSymptom": "Symptôme de cycle",
+        "restoreSkippedIllnessSymptom": "Symptôme de maladie",
+        "restoreSkippedMoodFactor": "Facteur d'humeur",
         "docsLink": "Documentation"
       },
       "danger-zone": {
