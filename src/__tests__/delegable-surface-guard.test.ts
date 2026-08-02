@@ -1,0 +1,605 @@
+/**
+ * Structural guards on the delegable and actor-surface allowlists.
+ *
+ * `requireRecordAuth` is a declaration: this route may act on somebody else's
+ * health record. `requireActorAuth` is the opposite declaration: this route
+ * serves the caller's own account and keeps working while the caller is acting
+ * as someone else. Which routes may say either thing is the single most
+ * security-sensitive list in the product, and it is a judgement — argued in
+ * `.planning/2026-08-01-delegable-classification.md`, not derived from anything
+ * a machine can check.
+ *
+ * That record is an argument on paper. This file is what makes it hold: the set
+ * of route modules that actually reach each resolver has to equal a literal
+ * written here, so every admission arrives as a diff a human reviewed rather
+ * than as an import somebody added on a Friday.
+ *
+ * These are tripwires, not proofs. They cannot show a list is correct — only
+ * that it has not changed without someone editing this file. A reviewer who
+ * waves through a bad addition defeats every leg below, and no test substitutes
+ * for that review.
+ *
+ * Two properties this file is built around, both learned the hard way:
+ *
+ *   1. **Every leg asserts its own matcher found something.** A matcher that
+ *      matches nothing reports success, and this repository has shipped several
+ *      of those — a resolver hidden behind a newline, a regex a variable slipped
+ *      past, an absence asserted in a fixture that never held the thing. The
+ *      frozen lists below start EMPTY, so "found nothing" and "the list is
+ *      correct" look identical from the outside. Each leg therefore pins a
+ *      separate, non-empty count: the number of route modules SCANNED, or the
+ *      number of files naming a symbol the leg depends on. Those counts are the
+ *      evidence; the empty result is only the verdict.
+ *
+ *   2. **AST decides, text only skips.** Membership is decided by parsing the
+ *      module and reading its identifiers, so a comment explaining why a route
+ *      is NOT delegable cannot enrol it, and an aliased import cannot hide one.
+ *      A raw-substring test runs first, but only to skip files that cannot
+ *      possibly match — the source text is a strict superset of the identifier
+ *      set. `describe("the matchers see what they look for")` proves both
+ *      halves of that sentence against synthetic modules, so the day a matcher
+ *      stops matching is the day this file goes red rather than quiet.
+ *
+ * `acting-account-boundary-guard.test.ts` is the other half of this boundary
+ * and stays as it is. It freezes who may touch the CARRIER — the session column
+ * and the selector header — with a text matcher that deliberately does not
+ * exempt comments, so a file merely naming the column in prose trips it. That
+ * is argued at its own call site and it is the right direction to be wrong in
+ * for an authorisation carrier. This file asks a different question of a
+ * different set of symbols and answers it from the AST, because a route
+ * explaining in a comment why it is NOT delegable is a thing worth writing.
+ */
+import { readFileSync, readdirSync } from "node:fs";
+import { join, sep } from "node:path";
+
+import ts from "typescript";
+import { describe, expect, it } from "vitest";
+
+const SRC = join(process.cwd(), "src");
+
+/** The delegable declaration. Frozen by `DELEGABLE_ROUTES`. */
+const RECORD_RESOLVER = "requireRecordAuth";
+/** The actor-surface declaration. Frozen by `ACTOR_ROUTES`. */
+const ACTOR_RESOLVER = "requireActorAuth";
+
+/**
+ * The helpers that answer a question a delegate must never be able to reach:
+ * "is this caller an admin", "has this caller just re-proven a second factor",
+ * "is this caller here over a cookie". All three resolve through `getSession()`
+ * and see the actor, never the owner — that is what
+ * `acting-account-boundary-guard.test.ts` pins inside `api-handler.ts`.
+ *
+ * This file pins the other end. A handler that resolves a RECORD and then runs
+ * one of these has put a role check and a substituted data scope in the same
+ * module, and the next person to edit it has no way to tell which `user` they
+ * are holding. `requireFreshMfaIfEnrolled` and `requireMfaManagementAuth` are
+ * not listed separately: both are thin wrappers that call `requireFreshMfa` or
+ * `requireCookieAuth`, so a module using either names one of these three too.
+ */
+const COOKIE_ONLY_HELPERS = [
+  "requireAdmin",
+  "requireFreshMfa",
+  "requireCookieAuth",
+] as const;
+
+/**
+ * Floors, not counts. The tree today holds 447 route modules (440 of them under
+ * `app/api/`) and 2,338 source files, of which 346 route modules resolve auth
+ * the ordinary way. These numbers exist so that a scan which collapses to a
+ * handful of files — a changed enumeration, a moved `src`, a `cwd` that is not
+ * the repo root — fails instead of agreeing with an empty allowlist. They sit
+ * far below today's figures so ordinary churn never touches them.
+ */
+const ROUTE_MODULE_FLOOR = 300;
+const SOURCE_FILE_FLOOR = 1500;
+const BARE_REQUIRE_AUTH_FLOOR = 250;
+
+/* -------------------------------------------------------------------------- */
+/* The file set                                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Every path under `src/`, as a `/`-joined relative string.
+ *
+ * A recursive `readdirSync` rather than a glob, and the difference is not
+ * stylistic. `fs.globSync` skips dot-prefixed directories, so `app/**` silently
+ * omits the three routes under `src/app/.well-known/` — three request handlers
+ * that a glob-based sweep reports as if they did not exist. Leg (a) pins one of
+ * them by name so this cannot quietly regress. Names only; nothing under
+ * `generated/` is ever read (CLAUDE.md).
+ */
+function allPaths(): string[] {
+  return readdirSync(SRC, { recursive: true })
+    .map((p) => String(p).split(sep).join("/"))
+    .sort();
+}
+
+function nonTest(paths: string[]): string[] {
+  return paths
+    .filter((p) => !p.startsWith("generated/"))
+    .filter((p) => !p.includes("__tests__"))
+    .filter((p) => !p.endsWith(".test.ts") && !p.endsWith(".test.tsx"));
+}
+
+/**
+ * Every request-handling module in the tree. `app/**` rather than `app/api/**`
+ * on purpose: `app/mcp/route.ts` and the clinician share routes handle requests
+ * too, and a resolver reached from one of those is exactly as interesting as
+ * one reached from under `api/`.
+ */
+function routeModules(): string[] {
+  return nonTest(
+    allPaths().filter((p) => p.startsWith("app/") && p.endsWith("/route.ts")),
+  );
+}
+
+/** Every non-test source file under `src/`, generated client excluded. */
+function sourceFiles(): string[] {
+  return nonTest(
+    allPaths().filter((p) => p.endsWith(".ts") || p.endsWith(".tsx")),
+  );
+}
+
+const textCache = new Map<string, string>();
+
+function read(rel: string): string {
+  const cached = textCache.get(rel);
+  if (cached !== undefined) return cached;
+  const text = readFileSync(join(SRC, rel), "utf8");
+  textCache.set(rel, text);
+  return text;
+}
+
+/* -------------------------------------------------------------------------- */
+/* The matcher                                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Every identifier in a module's parsed source.
+ *
+ * Identifiers only, which means: imports (including the original name of an
+ * aliased one), calls, declarations, type references. Not comments, not string
+ * literals. A route file may say in prose why it is not delegable without being
+ * enrolled by saying so — the failure mode of a text matcher, and the reason
+ * the plan asked for AST here.
+ */
+function identifiersIn(source: string, fileName: string): Set<string> {
+  const parsed = ts.createSourceFile(
+    fileName,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    fileName.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const found = new Set<string>();
+  const walk = (node: ts.Node): void => {
+    if (ts.isIdentifier(node)) found.add(node.text);
+    node.forEachChild(walk);
+  };
+  parsed.forEachChild(walk);
+  return found;
+}
+
+const identifierCache = new Map<string, Set<string>>();
+
+function identifiers(rel: string): Set<string> {
+  const cached = identifierCache.get(rel);
+  if (cached !== undefined) return cached;
+  const found = identifiersIn(read(rel), rel);
+  identifierCache.set(rel, found);
+  return found;
+}
+
+/**
+ * Does this module name `symbol` in code?
+ *
+ * The substring test runs first and decides nothing: it only skips files whose
+ * raw text cannot contain the identifier, because the text is a strict superset
+ * of the identifier set. Every candidate that survives it is decided by the
+ * AST. Both halves are proved below against synthetic modules.
+ */
+function namesSymbol(rel: string, symbol: string): boolean {
+  if (!read(rel).includes(symbol)) return false;
+  return identifiers(rel).has(symbol);
+}
+
+function modulesNaming(files: readonly string[], symbol: string): string[] {
+  return files.filter((rel) => namesSymbol(rel, symbol));
+}
+
+/** Names of the top-level functions a module exports. */
+function exportedFunctionNames(rel: string): string[] {
+  const parsed = ts.createSourceFile(
+    rel,
+    read(rel),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const names: string[] = [];
+  parsed.forEachChild((node) => {
+    if (!ts.isFunctionDeclaration(node) || !node.name) return;
+    const exported = node.modifiers?.some(
+      (m) => m.kind === ts.SyntaxKind.ExportKeyword,
+    );
+    if (exported) names.push(node.name.text);
+  });
+  return names;
+}
+
+/* -------------------------------------------------------------------------- */
+/* The frozen lists                                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Route modules permitted to act on a record that may not be the caller's.
+ *
+ * EMPTY, and correct empty. The resolver landed with the auth layer and
+ * deliberately touched no route file; the first members arrive when routes
+ * migrate, each one carrying a line in the classification record that says why
+ * it may. A route absent from that record cannot enter this list.
+ *
+ * The value is the reason, in one line, in the maintainer's words. Not the
+ * route's description — the argument for why a delegate reading or writing
+ * through it cannot extend their own reach.
+ */
+const DELEGABLE_ROUTES: Record<string, string> = {};
+
+/**
+ * Route modules that deliberately resolve the ACTOR and keep working under a
+ * switch, because they serve the caller's own account and nothing of the
+ * owner's.
+ *
+ * Also empty today, and for the same reason: the resolver exists, its members
+ * do not yet. The intended first five — the account bootstrap payload, the
+ * switch endpoint itself, logout, the native refresh route, and the locale
+ * read — are the surfaces a switched session needs in order to stay usable and
+ * to switch back. None of them exists in this shape yet, and naming them here
+ * before they do would freeze a guess.
+ */
+const ACTOR_ROUTES: Record<string, string> = {};
+
+/**
+ * Entries across both lists. Pinned so that the reason-loop below cannot stay
+ * a formality by accident: it runs zero times today, and the day it stops
+ * running zero times somebody has to say so here.
+ */
+const FROZEN_ENTRY_COUNT = 0;
+
+/**
+ * The two surfaces that authenticate a Bearer token outside `requireAuth` —
+ * frozen as a set by `bearer-scope-enforcement-guard.test.ts`, repeated here
+ * for the one property that guard does not cover: neither may reach either new
+ * resolver. Both hand-roll their own token resolution, so neither would inherit
+ * the refusal arms that make the switch fail closed.
+ *
+ * The value is the identifier that proves the file is still that surface. If a
+ * file stops resolving a Bearer token, the "it never reaches the resolvers"
+ * assertion below becomes true for the wrong reason, so the anchor is checked
+ * first.
+ */
+const OUT_OF_BAND_BEARER: Record<string, string> = {
+  // Hand-rolled `tokenHash` lookup; gates on the per-medication grant.
+  "app/api/ingest/medication/route.ts": "tokenHash",
+  // Resolves through `resolveMcpAuthContext`, the MCP edge of the resolver.
+  "app/mcp/route.ts": "resolveMcpAuthContext",
+};
+
+/* -------------------------------------------------------------------------- */
+/* The matcher's own proof                                                    */
+/* -------------------------------------------------------------------------- */
+
+describe("the matchers see what they look for", () => {
+  /**
+   * These run against strings, not the tree, and they are the reason the empty
+   * allowlists above mean anything. Every leg below reports "no route calls
+   * these resolvers". That sentence is worth exactly as much as the evidence
+   * that the matcher could have said otherwise.
+   */
+  const DELEGABLE_MODULE = `
+    import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
+    import { apiSuccess } from "@/lib/api-response";
+
+    export const GET = apiHandler(async () => {
+      const { user, actor } = await requireRecordAuth("read");
+      return apiSuccess({ owner: user.id, actor: actor.id });
+    });
+  `;
+
+  const ALIASED_MODULE = `
+    import { requireRecordAuth as resolveRecord } from "@/lib/api-handler";
+
+    export const GET = apiHandler(async () => {
+      const { user } = await resolveRecord("read");
+      return apiSuccess({ id: user.id });
+    });
+  `;
+
+  const NAMESPACE_MODULE = `
+    import * as auth from "@/lib/api-handler";
+
+    export const GET = auth.apiHandler(async () => {
+      const { user } = await auth.requireActorAuth();
+      return apiSuccess({ id: user.id });
+    });
+  `;
+
+  const PROSE_ONLY_MODULE = `
+    /**
+     * Not delegable: requireRecordAuth would substitute the data scope, and
+     * this route reads the caller's own notification channels. requireAdmin is
+     * not used either.
+     */
+    import { apiHandler, requireAuth } from "@/lib/api-handler";
+
+    const NOTE = "requireActorAuth";
+
+    export const GET = apiHandler(async () => {
+      const { user } = await requireAuth();
+      return apiSuccess({ id: user.id, note: NOTE });
+    });
+  `;
+
+  it("finds a direct call", () => {
+    expect(identifiersIn(DELEGABLE_MODULE, "d.ts").has(RECORD_RESOLVER)).toBe(
+      true,
+    );
+  });
+
+  it("finds an aliased import, which a call-site matcher would miss", () => {
+    const ids = identifiersIn(ALIASED_MODULE, "a.ts");
+    expect(ids.has(RECORD_RESOLVER)).toBe(true);
+    // The call itself reads `resolveRecord(`. Matching calls rather than
+    // identifiers would have found nothing here and reported the route clean.
+    expect(ids.has("resolveRecord")).toBe(true);
+  });
+
+  it("finds a namespace-qualified call", () => {
+    expect(identifiersIn(NAMESPACE_MODULE, "n.ts").has(ACTOR_RESOLVER)).toBe(
+      true,
+    );
+  });
+
+  it("does not enrol a module that only mentions the resolvers", () => {
+    const ids = identifiersIn(PROSE_ONLY_MODULE, "p.ts");
+    expect(ids.has(RECORD_RESOLVER)).toBe(false);
+    expect(ids.has(ACTOR_RESOLVER)).toBe(false);
+    expect(ids.has("requireAdmin")).toBe(false);
+    // And it is a real module, not an empty parse.
+    expect(ids.has("requireAuth")).toBe(true);
+  });
+
+  it("the substring pre-filter decides nothing", () => {
+    // The prose module contains all three names as raw text. If the pre-filter
+    // were doing the deciding, the assertions above would be inverted.
+    expect(PROSE_ONLY_MODULE.includes(RECORD_RESOLVER)).toBe(true);
+    expect(PROSE_ONLY_MODULE.includes(ACTOR_RESOLVER)).toBe(true);
+    expect(PROSE_ONLY_MODULE.includes("requireAdmin")).toBe(true);
+  });
+
+  it("the co-occurrence rule fires on a module that does both", () => {
+    // Leg (c) finds nothing on today's tree because nothing calls the record
+    // resolver yet. This is the shape it exists to catch, proved against the
+    // same predicate the tree scan uses.
+    const OFFENDER = `
+      import { requireRecordAuth, requireAdmin } from "@/lib/api-handler";
+
+      export const POST = apiHandler(async () => {
+        await requireAdmin();
+        const { user } = await requireRecordAuth("write");
+        return apiSuccess({ id: user.id });
+      });
+    `;
+    const ids = identifiersIn(OFFENDER, "o.ts");
+    expect(ids.has(RECORD_RESOLVER)).toBe(true);
+    expect(COOKIE_ONLY_HELPERS.some((h) => ids.has(h))).toBe(true);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The anchor: the symbols this file names are the symbols in production       */
+/* -------------------------------------------------------------------------- */
+
+describe("the resolvers exist and live in one place", () => {
+  it("both are exported from the auth layer", () => {
+    // If either symbol were renamed, every leg below would find nothing and
+    // agree with its empty allowlist. This is the assertion that stops that.
+    const exported = exportedFunctionNames("lib/api-handler.ts");
+    expect(exported.length).toBeGreaterThan(0);
+    expect(exported).toContain(RECORD_RESOLVER);
+    expect(exported).toContain(ACTOR_RESOLVER);
+  });
+
+  it("nothing outside the frozen route lists reaches either resolver", () => {
+    // A shared helper calling `requireRecordAuth` would make every route that
+    // imports it delegable without any route file saying so. The route-level
+    // legs below cannot see that; this one can.
+    const files = sourceFiles();
+    expect(files.length).toBeGreaterThan(SOURCE_FILE_FLOOR);
+
+    const naming = files.filter(
+      (rel) =>
+        namesSymbol(rel, RECORD_RESOLVER) || namesSymbol(rel, ACTOR_RESOLVER),
+    );
+
+    expect(naming.length).toBeGreaterThan(0);
+    expect(naming).toEqual(
+      [
+        // Declares both. Not a caller.
+        "lib/api-handler.ts",
+        ...Object.keys(DELEGABLE_ROUTES),
+        ...Object.keys(ACTOR_ROUTES),
+      ].sort(),
+    );
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* (a) the delegable list                                                     */
+/* -------------------------------------------------------------------------- */
+
+describe("(a) the delegable route set is frozen", () => {
+  it("equals the frozen list", () => {
+    const scanned = routeModules();
+
+    // The scan must find routes. This is the count that starts non-zero; the
+    // result set is the count that starts at zero, and they are not the same
+    // claim. Without this line an empty glob and an empty allowlist agree.
+    expect(scanned.length).toBeGreaterThan(ROUTE_MODULE_FLOOR);
+    expect(scanned.every((rel) => rel.endsWith("/route.ts"))).toBe(true);
+    expect(scanned).toContain("app/api/measurements/route.ts");
+    // The dot-directory pin. A glob-based enumeration drops this file and the
+    // two beside it without saying anything; the scan would still look healthy
+    // at 444 modules. Naming one of them makes that failure loud.
+    expect(scanned).toContain(
+      "app/.well-known/oauth-protected-resource/route.ts",
+    );
+
+    // Positive control for this leg's own matcher, and the reason it exists:
+    // while the frozen list is empty, "no route names the resolver" and "the
+    // matcher names nothing" are the same sentence. Neuter `identifiersIn` and
+    // the assertion below still passes; this one does not. `lib/api-handler.ts`
+    // is the guaranteed positive — it declares the symbol.
+    expect(modulesNaming(["lib/api-handler.ts"], RECORD_RESOLVER)).toEqual([
+      "lib/api-handler.ts",
+    ]);
+
+    expect(modulesNaming(scanned, RECORD_RESOLVER)).toEqual(
+      Object.keys(DELEGABLE_ROUTES).sort(),
+    );
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* (b) the actor-surface list                                                 */
+/* -------------------------------------------------------------------------- */
+
+describe("(b) the actor-surface route set is frozen", () => {
+  it("equals the frozen list", () => {
+    const scanned = routeModules();
+
+    expect(scanned.length).toBeGreaterThan(ROUTE_MODULE_FLOOR);
+
+    // Positive control, same reason as leg (a).
+    expect(modulesNaming(["lib/api-handler.ts"], ACTOR_RESOLVER)).toEqual([
+      "lib/api-handler.ts",
+    ]);
+
+    expect(modulesNaming(scanned, ACTOR_RESOLVER)).toEqual(
+      Object.keys(ACTOR_ROUTES).sort(),
+    );
+  });
+});
+
+describe("every frozen entry carries a reason", () => {
+  it("names why the route may say what it says", () => {
+    const entries = [
+      ...Object.entries(DELEGABLE_ROUTES),
+      ...Object.entries(ACTOR_ROUTES),
+    ];
+
+    for (const [rel, reason] of entries) {
+      expect(reason.trim().length, `${rel} has no reason`).toBeGreaterThan(0);
+    }
+
+    // Both lists are empty, so the loop above runs zero times and proves
+    // nothing today. Said out loud rather than left to be discovered: this
+    // count is what forces the next person adding an entry to notice that the
+    // reason check has been dormant.
+    expect(entries.length).toBe(FROZEN_ENTRY_COUNT);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* (c) the record resolver never sits beside a role or step-up check          */
+/* -------------------------------------------------------------------------- */
+
+describe("(c) a record resolver never shares a module with a role or step-up check", () => {
+  it("no handler module names both", () => {
+    const scanned = routeModules();
+    expect(scanned.length).toBeGreaterThan(ROUTE_MODULE_FLOOR);
+
+    // This leg's own non-zero proof, and the one that matters most here: the
+    // offender set is empty today whether or not the helper names are right,
+    // because nothing calls the record resolver yet. So each helper has to be
+    // findable in the very tree being scanned. Rename `requireAdmin` and this
+    // fails, rather than the guard quietly checking for a symbol that no
+    // longer exists.
+    for (const helper of COOKIE_ONLY_HELPERS) {
+      expect(modulesNaming(scanned, helper).length, helper).toBeGreaterThan(0);
+    }
+
+    const offenders = scanned.filter((rel) => {
+      if (!namesSymbol(rel, RECORD_RESOLVER)) return false;
+      const ids = identifiers(rel);
+      return COOKIE_ONLY_HELPERS.some((helper) => ids.has(helper));
+    });
+
+    expect(offenders).toEqual([]);
+  });
+
+  it("the declaration site is out of scope by construction", () => {
+    // `lib/api-handler.ts` declares the record resolver AND all three cookie-
+    // only helpers, so a scan of every source file would need it exempted, and
+    // an exemption is a hole. Scoping the leg to handler modules removes the
+    // need for one. This asserts the scoping still holds.
+    const src = exportedFunctionNames("lib/api-handler.ts");
+    expect(src).toContain(RECORD_RESOLVER);
+    for (const helper of COOKIE_ONLY_HELPERS) expect(src).toContain(helper);
+    expect(routeModules()).not.toContain("lib/api-handler.ts");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* (d) the out-of-band Bearer surfaces                                        */
+/* -------------------------------------------------------------------------- */
+
+describe("(d) the out-of-band Bearer surfaces stay out of the switch", () => {
+  it("both are still route modules in the tree", () => {
+    const scanned = routeModules();
+    for (const rel of Object.keys(OUT_OF_BAND_BEARER)) {
+      expect(scanned, rel).toContain(rel);
+    }
+  });
+
+  it.each(Object.entries(OUT_OF_BAND_BEARER))(
+    "%s resolves its own Bearer token and reaches neither resolver",
+    (rel, anchor) => {
+      const ids = identifiers(rel);
+
+      // Non-zero proof, twice: the parse produced identifiers at all, and the
+      // file is still the Bearer surface this list claims it is. A file that
+      // stopped resolving a token would satisfy the two assertions below for a
+      // reason that has nothing to do with the switch.
+      expect(ids.size).toBeGreaterThan(0);
+      expect(ids.has(anchor), `${rel} no longer names ${anchor}`).toBe(true);
+
+      expect(ids.has(RECORD_RESOLVER)).toBe(false);
+      expect(ids.has(ACTOR_RESOLVER)).toBe(false);
+    },
+  );
+});
+
+/* -------------------------------------------------------------------------- */
+/* The counter-test: quiet on the innocent tree                               */
+/* -------------------------------------------------------------------------- */
+
+describe("the guard is quiet on the tree it was written against", () => {
+  it("the bare-requireAuth population is scanned and produces no findings", () => {
+    const scanned = routeModules();
+
+    // The routes that resolve auth the ordinary way. They are the bulk of the
+    // tree and the thing this guard must not shout at. Iterating them is what
+    // makes "no findings" a measurement rather than a hope: 344 modules read,
+    // parsed where the substring appears, and none of them names a resolver.
+    const bare = modulesNaming(scanned, "requireAuth").filter(
+      (rel) => !(rel in DELEGABLE_ROUTES) && !(rel in ACTOR_ROUTES),
+    );
+    expect(bare.length).toBeGreaterThan(BARE_REQUIRE_AUTH_FLOOR);
+
+    for (const rel of bare) {
+      expect(namesSymbol(rel, RECORD_RESOLVER), rel).toBe(false);
+      expect(namesSymbol(rel, ACTOR_RESOLVER), rel).toBe(false);
+    }
+  });
+});
