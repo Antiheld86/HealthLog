@@ -66,6 +66,9 @@ describe("auditLog", () => {
       userId: "user-7",
       details: JSON.stringify({ reason: "passkey", browser: "firefox" }),
       ipAddress: "203.0.113.5",
+      // v1.36.0 — no acting account on this request, so the row says the
+      // account acted for itself. NULL is the statement, not a gap.
+      actorUserId: null,
     });
     // Location is intentionally not set on insert — it's filled later by the
     // geo lookup. The schema column itself is not in the create payload.
@@ -81,6 +84,7 @@ describe("auditLog", () => {
       userId: null,
       details: null,
       ipAddress: null,
+      actorUserId: null,
     });
     // No IP → no geo lookup enqueued.
     expect(lookupIpGeo).not.toHaveBeenCalled();

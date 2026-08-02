@@ -223,6 +223,21 @@ export class WideEventBuilder {
     return this.event.http?.method;
   }
 
+  /**
+   * Who authenticated, and whose record they are acting on.
+   *
+   * v1.36.0 — read by `auditLog()`, which needs both halves and must not be
+   * handed either one by a call site. The event is already the one place that
+   * knows them: `setAuth` stamps the actor at authentication, `setActingAs`
+   * stamps the owner when the resolver substitutes one, and both run before any
+   * handler body can write an audit row. A copy of this fact threaded through
+   * function arguments would be a second answer to "who is doing this", and the
+   * routes that forgot to pass it would be the ones nobody reviewed.
+   */
+  getAuth(): WideEvent["auth"] {
+    return this.event.auth;
+  }
+
   getRequestId(): string {
     return this.event.request_id!;
   }

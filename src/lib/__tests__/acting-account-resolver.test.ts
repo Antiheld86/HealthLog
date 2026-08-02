@@ -86,6 +86,10 @@ vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/auth/hmac", () => ({ hashToken: vi.fn(() => "hash") }));
 vi.mock("@/lib/auth/audit", () => ({
   auditLog: vi.fn().mockResolvedValue(undefined),
+  // v1.36.0 — the resolver also writes the owner's day-coalesced access row.
+  // Stubbed here because what it writes is a question about rows, answered in
+  // `tests/integration/sharing-audit-actor.test.ts` against a real database.
+  recordDelegatedAccess: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/lib/logging/transports", () => ({ emitIfSampled: vi.fn() }));
 
