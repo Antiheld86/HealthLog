@@ -14,15 +14,26 @@ import {
 /**
  * Every model in the schema has a written verdict about the backup.
  *
- * This is the first half of the backup guard: classification. The second half
- * — that every `BACKED_UP` model actually has a payload reader AND a restore
- * branch — DOES NOT EXIST YET. It is the harder half and the one that matters,
- * because a model classified as carried and then never restored is the defect
- * rather than the fix, and this test would pass either way.
+ * This is the first of three checks on that claim, and the weakest one on
+ * purpose — it asks only whether a decision was written down.
  *
- * Until it lands, `BACKED_UP` means "must be carried", not "is carried".
+ *   1. here — every user-scoped model has a verdict, and every verdict names a
+ *      model the schema still has.
+ *   2. below — every model claimed two-ended has a payload reader and a restore
+ *      branch in the declared files. Source text, so it sees code that was
+ *      never written and not code that never runs.
+ *   3. `tests/integration/backup-round-trip.test.ts` — a seeded row of every
+ *      two-ended model exported, the account emptied, the restore run, the row
+ *      counted back. The only one of the three that can tell a restore branch
+ *      that runs from one that merely exists.
  *
- * The failure this prevents: a model is added to `schema.prisma`, it is
+ * An earlier version of this comment said the second half did not exist and
+ * that `BACKED_UP` therefore meant "must be carried" rather than "is carried".
+ * Both halves exist now; the sentence is rewritten rather than deleted because
+ * the sequence is the point — the classification was written first and was
+ * mistaken for proof for several releases.
+ *
+ * The failure all three prevent: a model is added to `schema.prisma`, it is
  * user-scoped from birth, and it is outside the backup by default. Nothing
  * notices, and the gap is only discovered by someone restoring a backup and
  * finding a part of their record missing — which is the worst possible moment
@@ -153,14 +164,37 @@ describe("every schema model has a backup verdict", () => {
  * retracted; `restoreCycleData` and `restoreProfileData` both live elsewhere.
  * Following the helpers is the entire difficulty of this question, so the file
  * list is declared next to the verdicts and checked to exist.
+ *
+ * ── What reading source text cannot answer ──────────────────────────────────
+ *
+ * A branch that exists and never runs. Wrapping the nutrient restore in
+ * `if (false && …)` leaves every check in this file green, because the call is
+ * still written where the matcher looks. Same for a restore that writes into
+ * the wrong account, or a transaction that rolls back. The round-trip test
+ * named above is what answers those, and the reason it is worth its runtime.
+ *
+ * A model the matcher cannot tell apart from another is named in
+ * {@link STRUCTURALLY_UNATTRIBUTABLE} with what defeats it, and is checked here
+ * only for being covered by the round trip.
  */
 
 import {
   BACKUP_RESTORE_FILES,
   BACKUP_WRITER_FILES,
   COVERAGE_PENDING,
+  STRUCTURALLY_UNATTRIBUTABLE,
   TWO_ENDED_MODELS,
 } from "@/lib/export/backup-plan";
+
+/**
+ * The behavioural half, checked from here only for its coverage.
+ *
+ * It seeds a row per two-ended model, exports through the real builder, empties
+ * the account and restores through the real route, so it is the only check that
+ * can tell a restore branch that RUNS from one that merely exists — this file
+ * stayed green with the nutrient restore wrapped in `if (false)`.
+ */
+const ROUND_TRIP_TEST = "tests/integration/backup-round-trip.test.ts";
 
 const REPO_ROOT = resolve(__dirname, "../..");
 
@@ -174,22 +208,39 @@ function delegateName(model: string): string {
 }
 
 /**
- * Relation fields on OTHER models whose type is `model`.
+ * Relation fields on OTHER models whose type is `model`, each with the model
+ * that declares it.
  *
  * A child rides its parent — `include: { schedules: true }` on the way out,
  * `schedules: { create: [...] }` on the way back — so a delegate-only search
  * would report every nested child as uncarried and the guard would be noise.
+ *
+ * The declaring parent comes back with the field name because a field name on
+ * its own is not evidence about a model. `symptomLinks` is declared twice —
+ * once on `IllnessDayLog` for `IllnessSymptomLink`, once on `CycleDayLog` for
+ * `CycleSymptomLink` — and a search for the bare name found the cycle write in
+ * `src/lib/cycle/backup.ts` and reported the ILLNESS link covered. Verified by
+ * deleting the illness `symptomLinks: { create: … }` branch from the restore
+ * route outright: the guard stayed green on all twelve checks, because the
+ * cycle file was answering a question about a different table.
  */
-function relationFieldNames(model: string): string[] {
+function relationParents(model: string): Array<{
+  field: string;
+  parent: string;
+}> {
   const source = readFileSync(SCHEMA_PATH, "utf8");
-  const names = new Set<string>();
-  for (const [, body] of source.matchAll(/^model\s+\w+\s*\{([\s\S]*?)^\}/gm)) {
+  const found: Array<{ field: string; parent: string }> = [];
+  for (const [, parent, body] of source.matchAll(
+    /^model\s+(\w+)\s*\{([\s\S]*?)^\}/gm,
+  )) {
     for (const line of body.split("\n")) {
       const match = /^\s*(\w+)\s+(\w+)(\[\])?\??\s*(@|$)/.exec(line);
-      if (match && match[2] === model) names.add(match[1]);
+      if (match && match[2] === model) {
+        found.push({ field: match[1], parent });
+      }
     }
   }
-  return [...names];
+  return found;
 }
 
 const READ_OPS = /(findMany|findUnique|findFirst|findUniqueOrThrow|groupBy)/;
@@ -197,28 +248,63 @@ const WRITE_OPS = /(create|createMany|upsert|update|updateMany)/;
 const READ_RELATION_OPS = /[{[t]/;
 const WRITE_RELATION_OPS = /\{\s*create\b/;
 
-/** Does any of `files` touch `model` through matching delegate and relation operations? */
+/** Does `source` call a matching operation on `model`'s own Prisma delegate? */
+function callsDelegate(source: string, model: string, ops: RegExp): boolean {
+  const delegate = delegateName(model);
+  for (const match of source.matchAll(
+    new RegExp(`\\.${delegate}\\s*\\.\\s*(\\w+)`, "g"),
+  )) {
+    if (ops.test(match[1])) return true;
+  }
+  return false;
+}
+
+/** Every model a relation field of this name points at, across the schema. */
+function targetsOfRelationField(field: string): Set<string> {
+  const source = readFileSync(SCHEMA_PATH, "utf8");
+  const targets = new Set<string>();
+  for (const [, body] of source.matchAll(/^model\s+\w+\s*\{([\s\S]*?)^\}/gm)) {
+    for (const line of body.split("\n")) {
+      const match = /^\s*(\w+)\s+(\w+)(\[\])?\??\s*(@|$)/.exec(line);
+      if (match && match[1] === field) targets.add(match[2]);
+    }
+  }
+  return targets;
+}
+
+/**
+ * Does any of `files` touch `model` through matching delegate and relation
+ * operations?
+ *
+ * A relation field name that points at exactly ONE model anywhere in the schema
+ * is evidence wherever it appears in the declared files — `schedules` can only
+ * mean `MedicationSchedule`.
+ *
+ * A name that points at SEVERAL models is evidence only in a file that also
+ * operates on the declaring parent's delegate, because otherwise the two
+ * writes are indistinguishable and either model answers for the other.
+ */
 function touches(
   files: readonly string[],
   model: string,
   delegateOps: RegExp,
   relationOps: RegExp,
 ): boolean {
-  const delegate = delegateName(model);
-  const relations = relationFieldNames(model);
   return files.some((file) => {
     // Whitespace-flattened so a call broken across lines still matches.
     const source = read(file).replace(/\s+/g, " ");
-    for (const match of source.matchAll(
-      new RegExp(`\\.${delegate}\\s*\\.\\s*(\\w+)`, "g"),
-    )) {
-      if (delegateOps.test(match[1])) return true;
-    }
-    return relations.some((relation) =>
-      new RegExp(`\\b${relation}\\s*:\\s*(?:${relationOps.source})`).test(
-        source,
-      ),
-    );
+    if (callsDelegate(source, model, delegateOps)) return true;
+    return relationParents(model).some(({ field, parent }) => {
+      if (
+        !new RegExp(`\\b${field}\\s*:\\s*(?:${relationOps.source})`).test(
+          source,
+        )
+      ) {
+        return false;
+      }
+      if (targetsOfRelationField(field).size === 1) return true;
+      return callsDelegate(source, parent, delegateOps);
+    });
   });
 }
 
@@ -234,6 +320,31 @@ describe("every backed-up model travels both ways, or is named as debt", () => {
     ).toBe(false);
   });
 
+  it("does not accept a relation name borrowed from another parent", () => {
+    // `src/lib/cycle/backup.ts` writes `symptomLinks: { create: … }` for
+    // `CycleDayLog`. The same field name belongs to `IllnessDayLog`, so the
+    // bare-name search read that line as proof the illness links are restored.
+    // The cycle file must answer for the cycle link and for nothing else.
+    expect(
+      touches(
+        ["src/lib/cycle/backup.ts"],
+        "CycleSymptomLink",
+        WRITE_OPS,
+        WRITE_RELATION_OPS,
+      ),
+      "the cycle file does write the cycle link — this half must stay true",
+    ).toBe(true);
+    expect(
+      touches(
+        ["src/lib/cycle/backup.ts"],
+        "IllnessSymptomLink",
+        WRITE_OPS,
+        WRITE_RELATION_OPS,
+      ),
+      "the cycle file says nothing about illness links and must not be read as if it did",
+    ).toBe(false);
+  });
+
   it("declares writer and restore files that exist", () => {
     for (const file of [...BACKUP_WRITER_FILES, ...BACKUP_RESTORE_FILES]) {
       expect(() => read(file), `${file} is declared but missing`).not.toThrow();
@@ -245,7 +356,7 @@ describe("every backed-up model travels both ways, or is named as debt", () => {
 
   it("splits BACKED_UP into exactly two-ended and pending, with no overlap", () => {
     const backedUp = new Set<string>(BACKED_UP_MODELS);
-    const twoEnded = new Set(TWO_ENDED_MODELS);
+    const twoEnded = new Set<string>(TWO_ENDED_MODELS);
     const pending = new Set(Object.keys(COVERAGE_PENDING));
 
     const both = [...twoEnded].filter((m) => pending.has(m));
@@ -273,6 +384,7 @@ describe("every backed-up model travels both ways, or is named as debt", () => {
   it("finds a payload reader for every model claimed two-ended", () => {
     const missing = TWO_ENDED_MODELS.filter(
       (model) =>
+        !(model in STRUCTURALLY_UNATTRIBUTABLE) &&
         !touches(BACKUP_WRITER_FILES, model, READ_OPS, READ_RELATION_OPS),
     );
     expect(
@@ -285,6 +397,7 @@ describe("every backed-up model travels both ways, or is named as debt", () => {
   it("finds a restore branch for every model claimed two-ended", () => {
     const missing = TWO_ENDED_MODELS.filter(
       (model) =>
+        !(model in STRUCTURALLY_UNATTRIBUTABLE) &&
         !touches(BACKUP_RESTORE_FILES, model, WRITE_OPS, WRITE_RELATION_OPS),
     );
     expect(
@@ -292,6 +405,40 @@ describe("every backed-up model travels both ways, or is named as debt", () => {
       "claimed carried, but nothing writes it back — the export is a file the " +
         "restore reads past, which is the worst of both: the data is in the " +
         "backup and not in the account",
+    ).toEqual([]);
+  });
+
+  it("hands every unattributable model to the round trip instead", () => {
+    const names = Object.keys(STRUCTURALLY_UNATTRIBUTABLE);
+    const foreign = names.filter(
+      (m) => !(TWO_ENDED_MODELS as readonly string[]).includes(m),
+    );
+    expect(
+      foreign,
+      "only a model claimed two-ended has a claim for this check to be unable to attribute",
+    ).toEqual([]);
+
+    const thin = Object.entries(STRUCTURALLY_UNATTRIBUTABLE)
+      .filter(([, reason]) => reason.trim().length < 60)
+      .map(([model]) => model);
+    expect(
+      thin,
+      "say what defeats the matcher, or the next reader cannot tell an " +
+        "unprovable model from an unproven one",
+    ).toEqual([]);
+
+    // Naming a model here silences the two checks above, so it has to buy that
+    // silence with a seeded row in the round trip. Without this the record is
+    // a way to make any model's coverage question disappear.
+    const roundTrip = read(ROUND_TRIP_TEST);
+    const uncovered = names.filter(
+      (model) => !new RegExp(`\\b${model}\\s*:`).test(roundTrip),
+    );
+    expect(
+      uncovered,
+      `exempt from the structural check and absent from ${ROUND_TRIP_TEST} — ` +
+        "that is not a limitation being recorded, it is a model with nothing " +
+        "checking it at all",
     ).toEqual([]);
   });
 
