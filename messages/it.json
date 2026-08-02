@@ -9424,6 +9424,8 @@
       "identifierLabel": "Nome utente o e-mail",
       "identifierPlaceholder": "Il nome con cui accede",
       "identifierHint": "Serve un account su questa istanza. Non è possibile inviare inviti a un indirizzo non registrato.",
+      "expiresLabel": "L'accesso termina il (facoltativo)",
+      "expiresHint": "Lascia vuoto per un accesso che dura finché qualcuno non lo termina. Una data qui viene controllata a ogni richiesta, quindi l'accesso si interrompe da solo alla fine di quel giorno.",
       "submit": "Invia invito",
       "submitting": "Invio…",
       "sent": "Invito inviato a {name}.",

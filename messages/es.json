@@ -9424,6 +9424,8 @@
       "identifierLabel": "Usuario o correo electrónico",
       "identifierPlaceholder": "El nombre con el que inicia sesión",
       "identifierHint": "Necesita una cuenta en esta instancia. No se pueden enviar invitaciones a una dirección que no se haya registrado.",
+      "expiresLabel": "El acceso termina el (opcional)",
+      "expiresHint": "Déjalo vacío para un acceso que dure hasta que alguien lo termine. Una fecha aquí se comprueba en cada petición, así que el acceso se detiene solo al final de ese día.",
       "submit": "Enviar invitación",
       "submitting": "Enviando…",
       "sent": "Invitación enviada a {name}.",
