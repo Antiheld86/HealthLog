@@ -132,6 +132,12 @@ const REGISTRY: readonly KeySpace[] = [
 ];
 
 describe("dynamic-key exhaustiveness (enum-derived)", () => {
+  // Six shipped locales. An empty read of `messages/` would register zero
+  // per-locale cases and the suite would report green over nothing.
+  it("reads every shipped locale bundle", () => {
+    expect(LOCALES.length).toBeGreaterThanOrEqual(6);
+  });
+
   it("discovers all six shipped locales", () => {
     expect(LOCALES.map((l) => l.locale).sort()).toEqual([
       "de",

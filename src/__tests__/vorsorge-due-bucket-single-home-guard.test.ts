@@ -18,8 +18,10 @@
  * settles is that there is only one of it.
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync, globSync } from "node:fs";
-import { join, sep } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { walkSourceFiles } from "./helpers/source-files";
 
 const SRC = join(process.cwd(), "src");
 
@@ -71,8 +73,7 @@ const FIX_THE_ZONE = [
 ].join(" ");
 
 function sourceFiles(): string[] {
-  return globSync("**/*.{ts,tsx}", { cwd: SRC })
-    .map((p) => p.split(sep).join("/"))
+  return walkSourceFiles(SRC, { floor: 3000 })
     .filter((p) => !p.startsWith("generated/"))
     .filter((p) => !p.includes("__tests__/"))
     .sort();
@@ -94,6 +95,13 @@ function declaresTheBucket(source: string): boolean {
 }
 
 describe("the checkup due-day bucket has one home", () => {
+  // A sweep that finds nothing agrees with every allowlist, so the size of
+  // the tree being read is asserted before anything is concluded from it.
+  // Pinned below the real source-file count with headroom, not at one.
+  it("reads the tree it claims to sweep", () => {
+    expect(sourceFiles().length).toBeGreaterThan(1500);
+  });
+
   it("is declared in exactly one file", () => {
     const declaring = sourceFiles().filter((rel) =>
       declaresTheBucket(read(rel)),

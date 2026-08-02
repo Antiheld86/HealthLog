@@ -8,9 +8,11 @@ import Link from "next/link";
  *
  *   1. The runtime image bundles MaxMind GeoLite2-City and
  *      GeoLite2-ASN databases for offline IP-to-location and
- *      IP-to-ASN lookups. The CC BY-SA 4.0 licence requires the
- *      attribution to be reachable from the running application,
- *      not just the source repository.
+ *      IP-to-ASN lookups. They ship under the GeoLite End User
+ *      License Agreement, which incorporates CC BY-SA 4.0 by
+ *      reference and controls over it; both want the attribution
+ *      reachable from the running application, not just from the
+ *      source repository.
  *   2. A general home for open-source credits as the project
  *      accumulates more third-party data sources (already true for
  *      the upcoming ICD-10 reference table in the iOS Health import
@@ -35,7 +37,7 @@ import Link from "next/link";
 // weakening the CSP with `unsafe-inline`.
 export const dynamic = "force-dynamic";
 
-const LAST_UPDATED = "2026-05-15";
+const LAST_UPDATED = "2026-08-02";
 
 export const metadata: Metadata = {
   title: "About — HealthLog",
@@ -119,7 +121,9 @@ export default function AboutPage() {
             >
               github.com/MBombeck/HealthLog
             </a>{" "}
-            and is licensed under the GNU Affero General Public License v3.0.
+            and is licensed under the PolyForm Noncommercial License 1.0.0.
+            Releases up to and including v1.15.18 were published under AGPL-3.0
+            and stay available under it.
           </p>
         </Section>
 
@@ -157,14 +161,24 @@ export default function AboutPage() {
             decorate the admin login-overview audit table. They are distributed
             under the{" "}
             <a
+              href="https://www.maxmind.com/en/geolite/eula"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              GeoLite End User License Agreement
+            </a>
+            , which incorporates the{" "}
+            <a
               href="https://creativecommons.org/licenses/by-sa/4.0/"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline"
             >
               Creative Commons Attribution-ShareAlike 4.0 International License
-            </a>
-            .
+            </a>{" "}
+            by reference and controls wherever the two disagree. The attribution
+            above is what that licence asks for.
           </p>
         </Section>
 

@@ -11,8 +11,9 @@
  * Mutation check: add `unit="kg"` back to any swept page and this goes red.
  */
 import { readFileSync } from "node:fs";
-import { globSync } from "node:fs";
 import { join } from "node:path";
+
+import { walkSourceFiles } from "./helpers/source-files";
 
 import { describe, it, expect } from "vitest";
 
@@ -74,9 +75,11 @@ const HEIGHT_CONTROL = join(
 function sweptFiles(): string[] {
   return [
     join(SRC, "app", "page-client.tsx"),
-    ...globSync("app/insights/**/page.tsx", { cwd: SRC }).map((rel) =>
-      join(SRC, rel),
-    ),
+    ...walkSourceFiles(SRC, { floor: 700, extensions: [".tsx"] })
+      .filter(
+        (rel) => rel.startsWith("app/insights/") && rel.endsWith("/page.tsx"),
+      )
+      .map((rel) => join(SRC, rel)),
     ...TARGET_SURFACES,
   ];
 }
