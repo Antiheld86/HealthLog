@@ -303,6 +303,34 @@ describe("account grant lifecycle", () => {
     ).toBeNull();
   });
 
+  it("refuses a revocation the record cannot attribute", async () => {
+    // The database holds the halves together, because a revoked row with no
+    // revoker and a revoker with no revocation are both records that cannot
+    // answer the question the table exists to answer. The domain module always
+    // writes the pair; this is the floor under it.
+    const { grant } = await acceptedGrant();
+    const prisma = getPrismaClient();
+
+    await expect(
+      prisma.accountGrant.update({
+        where: { id: grant.id },
+        data: { revokedAt: new Date() },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.accountGrant.update({
+        where: { id: grant.id },
+        data: { revokedBy: "GRANTOR" },
+      }),
+    ).rejects.toThrow();
+
+    const row = await prisma.accountGrant.findUniqueOrThrow({
+      where: { id: grant.id },
+    });
+    expect(row.revokedAt).toBeNull();
+    expect(row.revokedBy).toBeNull();
+  });
+
   it("refuses a second live grant for the same pair", async () => {
     const owner = await makeUser("owner");
     const delegate = await makeUser("delegate");
