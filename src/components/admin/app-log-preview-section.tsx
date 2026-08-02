@@ -229,7 +229,13 @@ export function AppLogPreviewSection() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-border divide-y">
+              {/* `app-log-rows` names the read events. The branch above it
+                  is a spinner and the one below an empty state, so the
+                  marker exists only once the buffer has actually answered. */}
+              <tbody
+                data-slot="app-log-rows"
+                className="divide-border divide-y"
+              >
                 {events.map((event, i) => {
                   const actionLabel =
                     event.action?.name ??

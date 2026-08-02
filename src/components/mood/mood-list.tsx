@@ -629,7 +629,16 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
         ) : (
           <>
             {/* Desktop table */}
-            <div className="bg-card border-border hidden overflow-hidden rounded-lg border md:block">
+            <div
+              // `mood-rows` marks the READ entries, not the list frame: the
+              // filter rail above renders next to the loading silhouettes
+              // too, so it proves nothing about the data having arrived.
+              // This wrapper exists only in the resolved, non-empty branch,
+              // and the mobile list below carries the same marker so a wait
+              // on it holds at any viewport.
+              data-slot="mood-rows"
+              className="bg-card border-border hidden overflow-hidden rounded-lg border md:block"
+            >
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -760,7 +769,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
                 `data-testid="mood-row"` hook is what the Playwright Pixel-5
                 guard at `e2e/mood-card-mobile.spec.ts` queries to assert
                 "exactly one occurrence of the score per row". */}
-            <div className="space-y-2 md:hidden">
+            <div data-slot="mood-rows" className="space-y-2 md:hidden">
               {data.entries.map((entry) => {
                 const isSelected = selectedIds.has(entry.id);
                 return (
