@@ -6569,6 +6569,13 @@
         "restoreInProgress": "Restaurando...",
         "restoreSuccess": "Restauración completada",
         "restoreFailed": "La restauración falló",
+        "restoreSkippedToast": "Restauración completada, {links} vínculos de síntomas no se pudieron recuperar",
+        "restoreSkippedTitle": "{links} vínculos no se restauraron",
+        "restoreSkippedDescription": "El archivo hace referencia a entradas que esta instalación no conoce. Todo lo demás se restauró. La misma lista está en el registro de auditoría.",
+        "restoreSkippedLinks": "{count} vínculos",
+        "restoreSkippedCycleSymptom": "Síntoma del ciclo",
+        "restoreSkippedIllnessSymptom": "Síntoma de enfermedad",
+        "restoreSkippedMoodFactor": "Factor de ánimo",
         "docsLink": "Documentación"
       },
       "danger-zone": {

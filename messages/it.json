@@ -6569,6 +6569,13 @@
         "restoreInProgress": "Ripristino in corso...",
         "restoreSuccess": "Ripristino completato",
         "restoreFailed": "Ripristino non riuscito",
+        "restoreSkippedToast": "Ripristino completato, {links} collegamenti ai sintomi non sono stati recuperati",
+        "restoreSkippedTitle": "{links} collegamenti non sono stati ripristinati",
+        "restoreSkippedDescription": "Il file fa riferimento a voci che questa installazione non conosce. Tutto il resto è stato ripristinato. Lo stesso elenco è nel registro di audit.",
+        "restoreSkippedLinks": "{count} collegamenti",
+        "restoreSkippedCycleSymptom": "Sintomo del ciclo",
+        "restoreSkippedIllnessSymptom": "Sintomo di malattia",
+        "restoreSkippedMoodFactor": "Fattore dell'umore",
         "docsLink": "Documentazione"
       },
       "danger-zone": {

@@ -1074,6 +1074,20 @@ describe("canonical disaster-recovery backup round-trip", () => {
     expect(invalidateUserData).not.toHaveBeenCalled();
   });
 
+  /**
+   * The contract here is the rollback, not the trigger. The trigger used to be
+   * a mood factor key the instance did not know, and that is no longer a
+   * failure at all: a seeded catalogue legitimately drifts between the day a
+   * backup is written and the day it is read, so an unresolvable catalogue key
+   * now drops one link and names it in the response rather than costing the
+   * whole file.
+   *
+   * An intake event naming a medication the file does not carry is a different
+   * animal and still throws. That reference points at a row THIS FILE was
+   * supposed to contain, so a dangling one means the file contradicts itself,
+   * and writing a dose history against a medication that does not exist is not
+   * a recoverable restore. It is the honest trigger for the rollback contract.
+   */
   it("rolls back a failed full restore before invalidating caches", async () => {
     const prisma = getPrismaClient();
     const admin = await seedAdminSession();
@@ -1092,6 +1106,15 @@ describe("canonical disaster-recovery backup round-trip", () => {
       exportedAt: "2026-07-04T08:00:00.000Z",
       userId: admin.id,
       measurements: [],
+      medications: [],
+      intakeEvents: [
+        {
+          id: "failed-restore-intake",
+          medication: "a medication this file never carried",
+          scheduledFor: "2026-07-04T08:00:00.000Z",
+          takenAt: "2026-07-04T08:05:00.000Z",
+        },
+      ],
       moodEntries: [
         {
           id: "failed-restore-mood",
@@ -1100,7 +1123,7 @@ describe("canonical disaster-recovery backup round-trip", () => {
           score: 3,
           tags: null,
           loggedAt: "2026-07-04T08:00:00.000Z",
-          factors: [{ key: "missing-backup-factor", rating: 4 }],
+          factors: [],
         },
       ],
     });

@@ -13,6 +13,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   BookOpen,
   Database,
   Download,
@@ -45,6 +46,10 @@ import { ListRow } from "@/components/ui/list-row";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import type { BackupRow, BackupsList } from "@/types/backups";
+import type {
+  RestoreSkipSummary,
+  SkippedCatalogue,
+} from "@/lib/export/restore-skips";
 import { getApiErrorMessage } from "./_shared";
 import { apiFetch, apiFetchRaw, apiGet, apiPost } from "@/lib/api/api-fetch";
 
@@ -169,6 +174,98 @@ function formatBackupType(
   if (type === "WEEKLY_AUTO") return t("admin.section.backups.typeWeeklyAuto");
   if (type === "MANUAL") return t("admin.section.backups.typeManual");
   return type;
+}
+
+/**
+ * Which catalogue a skipped key belonged to, as a label.
+ *
+ * Spelled out with literal `t()` calls rather than an interpolated key, so
+ * `i18n-call-site-coverage.test.ts` can see each one and prove the bundle has
+ * it. An interpolated key is invisible to that guard and shows up as raw dot
+ * notation in production the day someone renames a catalogue.
+ */
+function catalogueLabel(
+  catalogue: SkippedCatalogue,
+  t: ReturnType<typeof useTranslations>["t"],
+) {
+  if (catalogue === "cycleSymptom") {
+    return t("admin.section.backups.restoreSkippedCycleSymptom");
+  }
+  if (catalogue === "illnessSymptom") {
+    return t("admin.section.backups.restoreSkippedIllnessSymptom");
+  }
+  return t("admin.section.backups.restoreSkippedMoodFactor");
+}
+
+/**
+ * What the last restore could not put back.
+ *
+ * Its own component, and exported, so it can be rendered against a report in a
+ * test instead of only through a state transition the SSR smoke tests here
+ * cannot drive. A report that reaches the response and never reaches the screen
+ * is the same silence the reporting exists to end, so the render is worth
+ * proving on its own.
+ *
+ * It names every key rather than totalling them away: an operator who cannot
+ * see WHICH symptom went missing cannot decide whether it mattered.
+ */
+export function RestoreSkipReport({
+  report,
+  onDismiss,
+}: {
+  report: RestoreSkipSummary;
+  onDismiss: () => void;
+}) {
+  const { t } = useTranslations();
+  if (report.links === 0) return null;
+  return (
+    <div
+      role="status"
+      data-slot="restore-skip-report"
+      className="border-warning/40 bg-warning/10 mt-4 rounded-md border px-3 py-2 text-sm"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start gap-2">
+          <AlertTriangle
+            className="mt-0.5 h-4 w-4 shrink-0"
+            aria-hidden="true"
+          />
+          <div>
+            <p className="font-medium">
+              {t("admin.section.backups.restoreSkippedTitle", {
+                links: String(report.links),
+              })}
+            </p>
+            <p className="text-muted-foreground text-xs">
+              {t("admin.section.backups.restoreSkippedDescription")}
+            </p>
+            <ul className="mt-2 space-y-1">
+              {report.catalogueKeys.map((entry) => (
+                <li key={`${entry.catalogue}:${entry.key}`} className="text-xs">
+                  <span className="font-mono">{entry.key}</span>{" "}
+                  <span className="text-muted-foreground">
+                    {catalogueLabel(entry.catalogue, t)}
+                    {" · "}
+                    {t("admin.section.backups.restoreSkippedLinks", {
+                      count: String(entry.links),
+                    })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onDismiss}
+          className="min-h-11"
+        >
+          {t("common.dismiss")}
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export function BackupsSection() {
@@ -301,6 +398,12 @@ export function BackupsSection() {
     if (file) upload.mutate(file);
   }
 
+  // What the last restore could not put back. Held in state rather than left
+  // to the toast: a toast for "twelve symptom links are gone" disappears in
+  // four seconds and the operator has no way to get it back. This panel stays
+  // until they dismiss it.
+  const [skipped, setSkipped] = useState<RestoreSkipSummary | null>(null);
+
   // Restore: typed-confirmation dialog. The mutation is keyed by row id
   // and used inline by `<RestoreRowDialog>` below — keeping the
   // mutation here lets the parent invalidate the list query on success.
@@ -310,14 +413,28 @@ export function BackupsSection() {
       // destructive transaction. Include the row id so two different
       // backups can both be restored independently in the same minute.
       const idempotencyKey = `restore-${row.id}-${crypto.randomUUID()}`;
-      return apiPost<{ restored: true }>(
+      return apiPost<{ restored: true; skipped?: RestoreSkipSummary }>(
         `/api/admin/backups/${row.id}/restore`,
         { confirm: "RESTORE" },
         { headers: { "Idempotency-Key": idempotencyKey } },
       );
     },
-    onSuccess: () => {
-      toast.success(t("admin.section.backups.restoreSuccess"));
+    onSuccess: (data) => {
+      // A restore that dropped links is not a plain success and must not read
+      // as one. The count and the exact keys go on screen; the same report is
+      // in the audit row for anyone asking later.
+      const report = data.skipped;
+      if (report && report.links > 0) {
+        setSkipped(report);
+        toast.warning(
+          t("admin.section.backups.restoreSkippedToast", {
+            links: String(report.links),
+          }),
+        );
+      } else {
+        setSkipped(null);
+        toast.success(t("admin.section.backups.restoreSuccess"));
+      }
       queryClient.invalidateQueries({ queryKey: queryKeys.adminBackups() });
       // Restore touches every personal-data table; nuke the broader
       // cache so dashboards / lists rebuild against the new state.
@@ -466,6 +583,13 @@ export function BackupsSection() {
           </Button>
         </div>
       </div>
+
+      {skipped ? (
+        <RestoreSkipReport
+          report={skipped}
+          onDismiss={() => setSkipped(null)}
+        />
+      ) : null}
 
       {isLoading ? (
         <div className="mt-4 flex items-center gap-2">

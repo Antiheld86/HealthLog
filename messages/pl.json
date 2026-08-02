@@ -6569,6 +6569,13 @@
         "restoreInProgress": "Przywracanie...",
         "restoreSuccess": "Przywracanie zakończone",
         "restoreFailed": "Przywracanie nie powiodło się",
+        "restoreSkippedToast": "Przywracanie zakończone, {links} powiązań objawów nie udało się odtworzyć",
+        "restoreSkippedTitle": "{links} powiązań nie zostało przywróconych",
+        "restoreSkippedDescription": "Plik odwołuje się do wpisów, których ta instalacja nie zna. Wszystko pozostałe zostało przywrócone. Ta sama lista znajduje się w dzienniku audytu.",
+        "restoreSkippedLinks": "{count} powiązań",
+        "restoreSkippedCycleSymptom": "Objaw cyklu",
+        "restoreSkippedIllnessSymptom": "Objaw choroby",
+        "restoreSkippedMoodFactor": "Czynnik nastroju",
         "docsLink": "Dokumentacja"
       },
       "danger-zone": {

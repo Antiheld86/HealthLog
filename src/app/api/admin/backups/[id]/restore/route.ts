@@ -38,6 +38,12 @@ import {
 } from "@/lib/rollups/medication-compliance-rollups";
 import { recomputeUserRollups } from "@/lib/rollups/measurement-rollups";
 import { restoreCycleData } from "@/lib/cycle/backup";
+import {
+  recordUnknownKeys,
+  summarizeRestoreSkips,
+  type RestoreSkipLog,
+  type RestoreSkipSummary,
+} from "@/lib/export/restore-skips";
 import { restoreProfileData } from "@/lib/export/profile-backup";
 import { restoreIntradayProfileData } from "@/lib/export/intraday-profile-backup";
 import { restoreHealthScoreData } from "@/lib/export/health-score-backup";
@@ -48,6 +54,14 @@ export const dynamic = "force-dynamic";
 interface RestoreResponse {
   restored: true;
   summary: BackupSummary;
+  /**
+   * What the file carried that this instance could not resolve, named.
+   *
+   * `links: 0` with an empty list is the normal answer and says so: nothing
+   * was dropped. Anything else has to reach the operator's screen, because a
+   * restore that quietly loses links looks exactly like one that did not.
+   */
+  skipped: RestoreSkipSummary;
   cleared: {
     measurements: number;
     medications: number;
@@ -276,10 +290,18 @@ const handler = apiHandler(
       );
     }
 
-    let cleared: RestoreResponse["cleared"];
+    let outcome: {
+      cleared: RestoreResponse["cleared"];
+      skipped: RestoreSkipSummary;
+    };
     try {
-      cleared = await prisma.$transaction(
+      outcome = await prisma.$transaction(
         async (tx) => {
+          // Declared INSIDE the transaction so a rollback takes the report with
+          // it. An accumulator that outlived a failed attempt would carry drops
+          // that never happened into the next one.
+          const skips: RestoreSkipLog = [];
+
           // Delete every serialized owner-scoped partition before rebuilding it
           // in the same transaction. Child rows either go first for counts or
           // cascade from their serialized parent.
@@ -631,13 +653,10 @@ const handler = apiHandler(
           }
 
           if (payload.moodEntries.length > 0) {
-            const factorKeys = [
-              ...new Set(
-                payload.moodEntries.flatMap((entry) =>
-                  entry.factors.map((factor) => factor.key),
-                ),
-              ),
-            ];
+            const referencedFactorKeys = payload.moodEntries.flatMap((entry) =>
+              entry.factors.map((factor) => factor.key),
+            );
+            const factorKeys = [...new Set(referencedFactorKeys)];
             // Re-create the account's own tag definitions first. The lookup
             // below used to ask only for the seeded catalogue (`userId: null`),
             // so a single custom rated tag made the whole restore throw
@@ -681,12 +700,18 @@ const handler = apiHandler(
             const factorByKey = new Map(
               factorRows.map((factor) => [factor.key, factor.id]),
             );
-            if (factorByKey.size !== factorKeys.length) {
-              const missing = factorKeys.filter((key) => !factorByKey.has(key));
-              throw new Error(
-                `Unknown mood factor keys: ${missing.join(", ")}`,
-              );
-            }
+            // A rated tag this instance does not know costs the entry's link to
+            // it, not the entry. The mood, the score, the date, the free tags —
+            // everything the person logged — comes back; the one rating that
+            // has nowhere to attach is dropped and named. Refusing the file
+            // instead meant a renamed seeded tag made the whole account
+            // unrecoverable.
+            recordUnknownKeys(
+              skips,
+              "moodFactor",
+              factorKeys.filter((key) => !factorByKey.has(key)),
+              referencedFactorKeys,
+            );
 
             for (const entry of payload.moodEntries) {
               const moodLoggedAt = new Date(entry.loggedAt);
@@ -734,14 +759,20 @@ const handler = apiHandler(
               await tx.moodEntryTagLink.deleteMany({
                 where: { moodEntryId: restored.id },
               });
-              if (entry.factors.length > 0) {
-                await tx.moodEntryTagLink.createMany({
-                  data: entry.factors.map((factor) => ({
-                    moodEntryId: restored.id,
-                    moodTagId: factorByKey.get(factor.key)!,
-                    rating: factor.rating,
-                  })),
-                });
+              const factorLinks = entry.factors.flatMap((factor) => {
+                const moodTagId = factorByKey.get(factor.key);
+                return moodTagId
+                  ? [
+                      {
+                        moodEntryId: restored.id,
+                        moodTagId,
+                        rating: factor.rating,
+                      },
+                    ]
+                  : [];
+              });
+              if (factorLinks.length > 0) {
+                await tx.moodEntryTagLink.createMany({ data: factorLinks });
               }
             }
           }
@@ -749,7 +780,12 @@ const handler = apiHandler(
           // v1.15.0 — cycle tables (profile + observed spans + day-logs +
           // symptom links). Delete-then-recreate, mirroring the contract
           // above. `notesEncrypted` is restored as ciphertext verbatim.
-          const cycleCleared = await restoreCycleData(tx, ownerId, payload);
+          const cycleCleared = await restoreCycleData(
+            tx,
+            ownerId,
+            payload,
+            skips,
+          );
 
           // Durable self-context + user-defined metrics. Both ends of this pair
           // live in `src/lib/export/profile-backup.ts` beside its builder — a
@@ -905,15 +941,13 @@ const handler = apiHandler(
             }
           }
 
-          const symptomKeys = [
-            ...new Set(
-              payload.illnessEpisodes.flatMap((episode) =>
-                episode.dayLogs.flatMap((dayLog) =>
-                  dayLog.symptoms.map((symptom) => symptom.key),
-                ),
+          const referencedSymptomKeys = payload.illnessEpisodes.flatMap(
+            (episode) =>
+              episode.dayLogs.flatMap((dayLog) =>
+                dayLog.symptoms.map((symptom) => symptom.key),
               ),
-            ),
-          ];
+          );
+          const symptomKeys = [...new Set(referencedSymptomKeys)];
           const symptomRows =
             symptomKeys.length === 0
               ? []
@@ -924,14 +958,25 @@ const handler = apiHandler(
           const symptomByKey = new Map(
             symptomRows.map((symptom) => [symptom.key, symptom.id]),
           );
-          if (symptomByKey.size !== symptomKeys.length) {
-            const missing = symptomKeys.filter((key) => !symptomByKey.has(key));
-            throw new Error(
-              `Unknown illness symptom keys: ${missing.join(", ")}`,
-            );
-          }
+          // `IllnessSymptom` has no `userId` column at all — it is a purely
+          // seeded catalogue, so a key that will not resolve here can ONLY be
+          // catalogue drift and never a definition the file failed to carry.
+          // Which makes refusing the file over it the least defensible of the
+          // three: the file was never able to supply the missing row.
+          recordUnknownKeys(
+            skips,
+            "illnessSymptom",
+            symptomKeys.filter((key) => !symptomByKey.has(key)),
+            referencedSymptomKeys,
+          );
           for (const episode of payload.illnessEpisodes) {
             for (const dayLog of episode.dayLogs) {
+              const symptomLinks = dayLog.symptoms.flatMap((symptom) => {
+                const symptomId = symptomByKey.get(symptom.key);
+                return symptomId
+                  ? [{ symptomId, severity: symptom.severity ?? null }]
+                  : [];
+              });
               await tx.illnessDayLog.create({
                 data: {
                   ...(dayLog.id ? { id: dayLog.id } : {}),
@@ -958,12 +1003,9 @@ const handler = apiHandler(
                   ...(dayLog.updatedAt
                     ? { updatedAt: new Date(dayLog.updatedAt) }
                     : {}),
-                  symptomLinks: {
-                    create: dayLog.symptoms.map((symptom) => ({
-                      symptomId: symptomByKey.get(symptom.key)!,
-                      severity: symptom.severity ?? null,
-                    })),
-                  },
+                  ...(symptomLinks.length > 0
+                    ? { symptomLinks: { create: symptomLinks } }
+                    : {}),
                 },
               });
             }
@@ -1113,7 +1155,7 @@ const handler = apiHandler(
             });
           }
 
-          return {
+          const cleared = {
             measurements: measurements.count,
             medications: meds.count,
             intakeEvents: intake.count,
@@ -1140,6 +1182,7 @@ const handler = apiHandler(
             intradayProfiles: intradayCleared.intradayProfiles,
             healthScoreRecords: healthScoreCleared.healthScoreRecords,
           };
+          return { cleared, skipped: summarizeRestoreSkips(skips) };
         },
         {
           maxWait: 10_000,
@@ -1167,6 +1210,19 @@ const handler = apiHandler(
       annotate({ meta: { restoreFailReason: verbose } });
       return apiError("Restore failed", 500);
     }
+
+    const { cleared, skipped } = outcome;
+
+    // Pinned shape, not free text: a dashboard can alert on
+    // `restoreSkippedLinks > 0` and the key list says which catalogue drifted.
+    annotate({
+      meta: {
+        restoreSkippedLinks: skipped.links,
+        restoreSkippedKeys: skipped.catalogueKeys
+          .map((entry) => `${entry.catalogue}:${entry.key}`)
+          .join(","),
+      },
+    });
 
     // v1.4.39.1 — re-fold the persistent measurement rollup tier from
     // the just-restored measurements. Pre-fix the restore left the
@@ -1247,6 +1303,10 @@ const handler = apiHandler(
         ownerId,
         ownerUsername: owner.username,
         cleared,
+        // The durable half of the report. The response reaches whoever was
+        // looking at the screen; the audit row is still here next week when
+        // someone asks why a day-log lost a symptom.
+        skipped,
         restored: {
           measurements: summary.measurements,
           medications: summary.medications,
@@ -1278,6 +1338,7 @@ const handler = apiHandler(
     const response: RestoreResponse = {
       restored: true,
       summary,
+      skipped,
       cleared,
     };
     return apiSuccess(response);

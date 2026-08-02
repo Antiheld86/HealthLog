@@ -26,6 +26,10 @@ import type {
   SecondarySymptom,
 } from "@/generated/prisma/client";
 import type { BackupPayload } from "@/lib/validations/backup";
+import {
+  recordUnknownKeys,
+  type RestoreSkipLog,
+} from "@/lib/export/restore-skips";
 
 /** The cycle slice of a backup payload. */
 export interface CycleBackupOptions {
@@ -375,6 +379,11 @@ function enumOrNull<T extends string>(
  * file recorded for it, or none if the file recorded none. `notesEncrypted` is
  * written back as the ciphertext envelope verbatim — never re-encrypted.
  *
+ * A key that resolves against nothing is dropped from the day's links and
+ * recorded on `skips`. It is a required argument rather than an optional one:
+ * a caller that forgets to pass it would restore exactly as before and report
+ * nothing, which is the failure this reporting exists to end.
+ *
  * Returns the wiped counts for the audit trail. A pre-v1.15 payload (empty
  * cycle arrays + null profile) wipes nothing and recreates nothing.
  */
@@ -382,6 +391,7 @@ export async function restoreCycleData(
   tx: Prisma.TransactionClient,
   ownerId: string,
   payload: BackupPayload,
+  skips: RestoreSkipLog,
 ): Promise<CycleRestoreCleared> {
   // Wipe (child links cascade off the day-log delete).
   const dayLogs = await tx.cycleDayLog.deleteMany({
@@ -470,9 +480,10 @@ export async function restoreCycleData(
   }
 
   // Resolve the symptom catalogue once for the link re-creation.
-  const allKeys = Array.from(
-    new Set(payload.cycleDayLogs.flatMap((d) => d.symptomKeys ?? [])),
+  const referencedKeys = payload.cycleDayLogs.flatMap(
+    (d) => d.symptomKeys ?? [],
   );
+  const allKeys = Array.from(new Set(referencedKeys));
   const symptomIdByKey = new Map<string, string>();
   if (allKeys.length > 0) {
     const rows = await tx.cycleSymptom.findMany({
@@ -484,19 +495,18 @@ export async function restoreCycleData(
     });
     for (const r of rows) symptomIdByKey.set(r.key, r.id);
 
-    // Three lines below, an unknown CYCLE reference throws. An unknown symptom
-    // used to be filtered out instead: the day-log came back with one of its
-    // symptoms quietly missing, and the restore reported success. Same
-    // function, same class of missing reference, two different answers — so
-    // this one is loud now too.
+    // A cycle reference below still throws, and that difference is the point.
+    // A `cycleId` names a row THIS FILE was supposed to carry, so a dangling
+    // one means the file contradicts itself and nothing good comes of writing
+    // it. A symptom key names a row the INSTANCE owns: the seeded catalogue is
+    // reference data that drifts across releases, so a key the file wrote a
+    // year ago and this instance no longer seeds is an ordinary, expected
+    // mismatch. Refusing the file over it threw away every measurement, every
+    // dose, and every note to protect a symptom chip. The link is dropped and
+    // named instead — see `restore-skips.ts` for why neither throwing nor
+    // filtering in silence was an acceptable answer.
     const unresolved = allKeys.filter((k) => !symptomIdByKey.has(k));
-    if (unresolved.length > 0) {
-      throw new Error(
-        `Unknown cycle symptom keys: ${unresolved.join(", ")}. ` +
-          "The backup references symptoms that are neither in this instance's " +
-          "seeded catalogue nor carried in the file.",
-      );
-    }
+    recordUnknownKeys(skips, "cycleSymptom", unresolved, referencedKeys);
   }
 
   // Recreate day-logs (with symptom links). The owning cycle is the latest
@@ -524,13 +534,15 @@ export async function restoreCycleData(
       if (severity !== null) severityByKey.set(s.key, severity);
     }
 
-    // Every key was proven resolvable above, so this maps rather than filters:
-    // a `.filter(Boolean)` here would silently re-open the hole that check
-    // just closed.
-    const symptomLinks = (d.symptomKeys ?? []).map((k) => {
+    // Every unresolvable key was counted into `skips` above, so dropping it
+    // here is a reported drop rather than a silent one. The rest of the day —
+    // flow, temperature, the encrypted note, every observation the person
+    // actually wrote — is unaffected by a symptom chip that will not resolve.
+    const symptomLinks = (d.symptomKeys ?? []).flatMap((k) => {
       const id = symptomIdByKey.get(k);
-      if (!id) throw new Error(`Unresolved cycle symptom key: ${k}`);
-      return { symptomId: id, severity: severityByKey.get(k) ?? null };
+      return id
+        ? [{ symptomId: id, severity: severityByKey.get(k) ?? null }]
+        : [];
     });
     const cycleId =
       d.cycleId !== undefined
