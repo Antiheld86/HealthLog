@@ -78,6 +78,11 @@ describe("the acting-account carrier is read in one place", () => {
     "lib/auth/session.ts",
     // The resolver. The only thing that acts on the value.
     "lib/api-handler.ts",
+    // v1.36.0 — the only thing that WRITES it: the switch endpoint sets it
+    // through here, ending a grant clears it through here. The routes
+    // themselves call these two functions and never name the column, which is
+    // what keeps this list from growing one entry per surface.
+    "lib/sharing/acting-session.ts",
   ].sort();
 
   it("no other file reads or writes the carrier column", () => {
@@ -91,9 +96,18 @@ describe("the acting-account carrier is read in one place", () => {
   it("the selector header is named in one place", () => {
     // A route that read the header itself would be deciding an authorisation
     // question the resolver exists to answer once.
+    //
+    // The OpenAPI table is the one other file allowed to say the name, and it
+    // is not a reader: it publishes the header to the clients that have to
+    // send it. Listed explicitly rather than exempted by pattern, so a route
+    // that starts parsing the header cannot hide behind a rule about which
+    // directories are documentation.
     const namers = filesMatching(/x-healthlog-account/i);
     expect(namers.length).toBeGreaterThan(0);
-    expect(namers).toEqual(["lib/api-handler.ts"]);
+    expect(namers).toEqual([
+      "lib/api-handler.ts",
+      "lib/openapi/routes/account-sharing.ts",
+    ]);
   });
 });
 
@@ -131,5 +145,108 @@ describe("the cookie-only helpers cannot see the acting account", () => {
     // path, which acts on it. A third would be a mode nobody declared.
     const callers = (src.match(/await readActingCarrier\(/g) ?? []).length;
     expect(callers).toBe(2);
+  });
+});
+
+describe("grant management is not delegable by construction", () => {
+  /**
+   * A delegate must never grant, widen, or transfer access. The way that is
+   * true here is not a re-delegation check inside the handlers — a check is a
+   * line somebody can move — but the mode the handlers resolve in: bare
+   * `requireAuth()` refuses outright while a switch is active, so there is no
+   * code path through these routes that runs as somebody else at all.
+   *
+   * The switch endpoint is the deliberate exception and lives elsewhere: it is
+   * an actor surface because it is the way back out of a switch, and it grants
+   * nothing.
+   */
+  const GRANT_ROUTES = [
+    "app/api/account/grants/route.ts",
+    "app/api/account/grants/[id]/route.ts",
+    "app/api/account/grants/[id]/accept/route.ts",
+    "app/api/account/grants/[id]/renounce/route.ts",
+  ];
+
+  it("every grant route exists and resolves through bare requireAuth", () => {
+    // Non-zero proof: a renamed or moved route must fail here rather than
+    // leave the loop below with nothing to check.
+    const found = sourceFiles().filter((p) => GRANT_ROUTES.includes(p));
+    expect(found.sort()).toEqual([...GRANT_ROUTES].sort());
+
+    for (const rel of GRANT_ROUTES) {
+      const src = read(rel);
+      expect(src, `${rel} must resolve auth`).toMatch(/await requireAuth\(\)/);
+      expect(src, `${rel} must not honour a switch`).not.toContain(
+        "requireRecordAuth",
+      );
+      expect(src, `${rel} must not declare an actor surface`).not.toContain(
+        "requireActorAuth",
+      );
+    }
+  });
+
+  it("no grant route takes a party to the grant from the request body", () => {
+    // Both ends of a grant come from the session and from the row. A body
+    // field naming either would be the caller deciding an authorisation
+    // question, which is the one thing no route here is allowed to do.
+    for (const rel of GRANT_ROUTES) {
+      const src = read(rel);
+      expect(src).not.toMatch(/parsed\.data\.(grantorId|granteeId|userId)/);
+    }
+  });
+});
+
+describe("ending a grant and clearing the switch are one act", () => {
+  /**
+   * Two statements of the same fact. Split apart, a revocation that stamped
+   * the row but not the sessions leaves a delegate's browser inside a record
+   * it can no longer read — every request refused, the banner still naming the
+   * owner, nothing on screen able to explain it.
+   *
+   * The behavioural half of this is
+   * `tests/integration/sharing-lifecycle.test.ts`, which asserts the session
+   * row after a revoke. This half holds the atomicity, which no test can
+   * observe from outside.
+   */
+  function privateFunctionBody(src: string, name: string): string {
+    const start = src.indexOf(`async function ${name}(`);
+    if (start === -1) return "";
+    const open = src.indexOf("{", src.indexOf(")", start));
+    let depth = 0;
+    for (let i = open; i < src.length; i++) {
+      if (src[i] === "{") depth++;
+      else if (src[i] === "}") {
+        depth -= 1;
+        if (depth === 0) return src.slice(open, i + 1);
+      }
+    }
+    return "";
+  }
+
+  it("runs the transition and the cleanup in one transaction", () => {
+    const body = privateFunctionBody(
+      read("lib/sharing/grants.ts"),
+      "endAndClear",
+    );
+    // Non-zero proof: a renamed helper fails here rather than asserting
+    // against an empty string, which would pass every `not.toContain` below
+    // and most of what a reader assumes this test covers.
+    expect(body.length).toBeGreaterThan(0);
+    expect(body).toContain("$transaction");
+    expect(body).toContain("clearActingSessions");
+  });
+
+  it("routes an ending through the cleanup, never through the bare transition", () => {
+    for (const rel of [
+      "app/api/account/grants/[id]/route.ts",
+      "app/api/account/grants/[id]/renounce/route.ts",
+    ]) {
+      const src = read(rel);
+      expect(src).toMatch(/(revoke|renounce)GrantAndClearSwitch/);
+      // The bare transitions leave sessions behind on purpose — they exist so
+      // they can run inside somebody else's transaction. A route reaching for
+      // one has skipped the cleanup.
+      expect(src).not.toMatch(/\b(revokeGrant|renounceGrant)\(/);
+    }
   });
 });

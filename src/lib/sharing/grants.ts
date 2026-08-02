@@ -45,6 +45,7 @@
  */
 import { prisma } from "@/lib/db";
 import { isP2002 } from "@/lib/prisma-errors";
+import { clearActingSessions } from "@/lib/sharing/acting-session";
 import type {
   AccountGrant,
   AccountGrantAccess,
@@ -292,6 +293,57 @@ export async function renounceGrant(
   return endGrant(input.grantId, { granteeId: input.granteeId }, "GRANTEE", db);
 }
 
+/**
+ * What ending a grant did: the row as it now stands, and how many of the
+ * delegate's browser sessions were sitting inside the record when it happened.
+ */
+export interface EndedGrant {
+  grant: AccountGrant;
+  sessionsCleared: number;
+}
+
+/**
+ * The owner withdraws access, and any browser already inside the record leaves
+ * with it.
+ *
+ * This is the verb the sharing panel calls; {@link revokeGrant} is the state
+ * transition underneath it. They are separate because the transition has to be
+ * usable inside somebody else's transaction, and because a caller who takes the
+ * transition alone should have to notice they are leaving sessions behind.
+ *
+ * One transaction, and the reason is a specific failure: the grant row and the
+ * sessions pointing at it are two statements of the same fact, and a revocation
+ * that stamped the row but not the sessions would leave the delegate's browser
+ * inside a record it can no longer read — every request 403, the banner still
+ * saying "viewing her record", nothing on screen able to account for it. The
+ * resolver would refuse correctly and the person would still be looking at a
+ * lie.
+ *
+ * Still no step-up, no confirmation ceremony, nothing that makes this slower
+ * than granting was. Reducing access must never be harder than giving it: the
+ * person ending access to their own health record is the one party here whose
+ * intent needs no verification.
+ */
+export async function revokeGrantAndClearSwitch(
+  input: RevokeGrantInput,
+): Promise<EndedGrant> {
+  return endAndClear((tx) => revokeGrant(input, tx));
+}
+
+/**
+ * The delegate hands the access back, and their own browser leaves the record.
+ *
+ * Same cleanup, and for a sharper reason than on the revoke side: the session
+ * being cleared is almost certainly the one making this very request, because
+ * renouncing is a thing people do while looking at the record they are
+ * renouncing.
+ */
+export async function renounceGrantAndClearSwitch(
+  input: RenounceGrantInput,
+): Promise<EndedGrant> {
+  return endAndClear((tx) => renounceGrant(input, tx));
+}
+
 // ── Resolution ──────────────────────────────────────────────────────────────
 
 /**
@@ -341,6 +393,26 @@ export function touchGrantUsage(
 }
 
 // ── Internals ───────────────────────────────────────────────────────────────
+
+/**
+ * Run an ending transition and its session cleanup as one unit.
+ *
+ * The transition runs first and throws on a refusal, which rolls the whole
+ * thing back — so a revoke somebody was not entitled to make cannot clear a
+ * session as a side effect of being refused.
+ */
+async function endAndClear(
+  transition: (tx: Prisma.TransactionClient) => Promise<AccountGrant>,
+): Promise<EndedGrant> {
+  return prisma.$transaction(async (tx) => {
+    const grant = await transition(tx);
+    const sessionsCleared = await clearActingSessions(
+      { grantorId: grant.grantorId, granteeId: grant.granteeId },
+      tx,
+    );
+    return { grant, sessionsCleared };
+  });
+}
 
 /** The shared body of revoke and renounce. */
 async function endGrant(
