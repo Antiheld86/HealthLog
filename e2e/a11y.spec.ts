@@ -778,13 +778,23 @@ const ADMIN_AND_BASELINE_ROUTES: readonly RouteCase[] = [
     // is `app/loading.tsx` — a silhouette with no heading in it. The scan was
     // therefore free to run against a document that legitimately had no `<h1>`
     // yet and report the app as missing one. Measured under an 8× CPU
-    // throttle: `#main-content` at 759 ms, the tile strip at 4896 ms. The
-    // strip is the dashboard's own content and has a separate
-    // `dashboard-tile-strip-skeleton` marker for its loading phase, so the two
-    // states cannot be confused for one another.
+    // throttle: `#main-content` at 759 ms, the tile strip at 4896 ms.
+    //
+    // The gate is the revealed chart cell rather than the tile strip because
+    // an unrevealed cell is `invisible` AND `aria-hidden` — the chart cards
+    // are simply not in the accessibility tree, so axe walks past the whole
+    // chart row without reading it. Gating on the strip alone left it a
+    // coin flip whether the row was scanned at all: locally the cells were
+    // still hidden at strip time and revealed six seconds later, while the
+    // runner that reported the heading-order break had already revealed
+    // them. The row is the dashboard's largest surface; the scan has to see
+    // it every time or not claim to have checked the page.
     name: "/ dashboard",
     path: "/",
-    painted: (page) => page.locator('[data-slot="dashboard-tile-strip"]'),
+    painted: (page) =>
+      page
+        .locator('[data-slot="dashboard-chart-cell"][data-revealed="true"]')
+        .first(),
   },
   {
     // The settings heading belongs to `<SettingsShell>`, i.e. the chrome —
