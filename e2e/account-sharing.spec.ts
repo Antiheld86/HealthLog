@@ -24,6 +24,30 @@
  * the delegate's own measurements page must trip the latch. Without that, "the
  * marker never appeared" and "the observer never worked" are the same sentence.
  *
+ * ### How much this assertion can be made to fail, measured rather than assumed
+ *
+ * Three controls stand behind it, and they were removed one at a time and
+ * together against a real build to see which of them this spec can actually
+ * detect. The honest answer is: none of them individually, and that is worth
+ * writing down rather than leaving as an implication.
+ *
+ *   - Delete the switch-time cache wipe, the persister's restore guard and the
+ *     record-scoped query hash — all three at once — and this spec stays
+ *     GREEN. The reason is a rule that predates this feature: the restore
+ *     refuses to clobber a query the live cache already holds, and the
+ *     dashboard's own query is created during render, before any effect runs.
+ *     So the IndexedDB snapshot never reaches the screen on this route at all.
+ *   - Delete the full reload and the spec goes RED, but on the banner line
+ *     rather than the marker line: without a reload the account payload never
+ *     re-resolves and the banner never paints, so the run stops before the
+ *     latch is read.
+ *
+ * What that means, plainly: this spec is a regression net over the whole
+ * journey, not a proof of any single control. The controls are proven where
+ * they can be broken and observed — `query-persister-shared-record.test.ts`
+ * for the two disk guards, `record-scope.test.ts` for the cache dimension —
+ * and each of those was verified red before being kept.
+ *
  * ## What this spec cannot cover, stated rather than implied
  *
  * - **The service worker.** The Playwright context runs with
@@ -104,6 +128,26 @@ test.describe("account sharing", () => {
   // three times against a rate-limited endpoint.
   test.describe.configure({ mode: "serial" });
 
+  // The `page` fixture throughout is the DELEGATE. The owner gets an explicit
+  // context below, because a grant needs two signed-in sides at once and the
+  // login endpoint is IP-rate-limited.
+  test.use({ storageState: STORAGE_STATE_PATH });
+
+  // Desktop only, and for a reason that is about the fixture rather than the
+  // layout: this journey mutates shared rows — one grant between two seeded
+  // accounts — so two projects running it at once race each other, and the
+  // second one's invitation is refused as a duplicate of the first's. Running
+  // it once keeps every step's precondition true. The mobile bar reads the
+  // same destination model as the sidebar, and that agreement is a unit
+  // contract (`nav-model-shared-record.test.ts`) rather than something two
+  // browser runs of the same script would establish.
+  test.beforeEach(({}, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "chromium-desktop",
+      "shared-fixture journey — runs once",
+    );
+  });
+
   let ownerContext: BrowserContext;
   let ownerPage: Page;
 
@@ -121,10 +165,19 @@ test.describe("account sharing", () => {
   test("the owner invites, and the invitation confers nothing yet", async () => {
     await ownerPage.goto("/settings/access");
 
-    await ownerPage
-      .locator('[data-slot="grant-invite-identifier"]')
-      .fill(E2E_USER.username);
-    await ownerPage.locator('[data-slot="grant-invite-submit"]').click();
+    // The submit button is disabled until the controlled input holds a value,
+    // so a `fill()` that lands before React has attached its listeners leaves
+    // the form looking filled and behaving empty. Retry the pair until the
+    // button agrees, rather than waiting a fixed time and hoping.
+    const identifier = ownerPage.locator(
+      '[data-slot="grant-invite-identifier"]',
+    );
+    const submit = ownerPage.locator('[data-slot="grant-invite-submit"]');
+    await expect(async () => {
+      await identifier.fill(E2E_USER.username);
+      await expect(submit).toBeEnabled({ timeout: 1000 });
+    }).toPass({ timeout: 15_000 });
+    await submit.click();
 
     const row = ownerPage
       .locator('[data-slot="grants-given-list"] [data-slot="grant-row"]')
@@ -198,8 +251,10 @@ test.describe("account sharing", () => {
     await expect(banner).toBeVisible();
     await expect(banner).toContainText(E2E_OWNER.username);
 
-    // The latch was reset by the reload's init script, so this covers the
-    // whole life of the switched document.
+    // The document showing the banner has never shown the delegate's own
+    // number. The latch was armed by that document's own init script, so this
+    // covers its whole life rather than the instant it is read. See the
+    // header for what this line can and cannot be made to fail on.
     expect(await sawText(page)).toBe(false);
 
     // And it stays false across a navigation inside the record.
@@ -211,6 +266,10 @@ test.describe("account sharing", () => {
   });
 
   test("the nav offers only what sharing covers", async ({ page }) => {
+    // A fresh page fixture, and still inside the record: the switch lives on
+    // the session row rather than in the tab, so every tab of that browser is
+    // switched at once. That is the property this navigation quietly proves.
+    await page.goto("/");
     await expect(
       page.locator('[data-slot="shared-record-banner"]'),
     ).toBeVisible();

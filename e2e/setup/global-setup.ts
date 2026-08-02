@@ -259,6 +259,13 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
        WHERE key LIKE 'sharing:%'`,
     );
 
+    // The login bucket, for the same reason. This setup signs in TWICE now
+    // (delegate and owner), and the ceiling is five attempts per IP per
+    // quarter-hour — so three local runs in a row used to end with a 429 from
+    // the fixture rather than a failure from the product. Only the auth
+    // surfaces' own buckets are cleared; nothing else in the table is touched.
+    await pool.query(`DELETE FROM rate_limits WHERE key LIKE 'auth:%'`);
+
     // One marker weight per record. Re-seeded by delete-then-insert so a
     // re-run cannot accumulate duplicates and so an edited constant takes
     // effect rather than sitting beside the old value.
