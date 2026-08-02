@@ -115,6 +115,12 @@ const REQUIRED_KEY_SETS: Array<{
 ];
 
 describe("v1.4.27 B6 i18n drift-guard — required keys present in every locale", () => {
+  // Six shipped locales. An empty read of `messages/` would register zero
+  // per-locale cases and the suite would report green over nothing.
+  it("reads every shipped locale bundle", () => {
+    expect(LOCALES.length).toBeGreaterThanOrEqual(6);
+  });
+
   for (const { label, required } of REQUIRED_KEY_SETS) {
     describe(label, () => {
       it.each(LOCALES)(

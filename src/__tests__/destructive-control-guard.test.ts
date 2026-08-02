@@ -49,8 +49,10 @@
  * red at the call site.
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync, globSync } from "node:fs";
-import { join, sep } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { walkSourceFiles } from "./helpers/source-files";
 
 const SRC = join(process.cwd(), "src");
 
@@ -558,8 +560,7 @@ const CONTROL_ROOTS = ["app/", "components/", "hooks/"];
 const EXCLUDED_PREFIXES = ["app/api/", "generated/", "lib/"];
 
 function sourceFiles(): string[] {
-  return globSync("**/*.{ts,tsx}", { cwd: SRC })
-    .map((p) => p.split(sep).join("/"))
+  return walkSourceFiles(SRC, { floor: 3000 })
     .filter((p) => !p.includes("__tests__"))
     .filter((p) => !p.endsWith(".test.ts") && !p.endsWith(".test.tsx"))
     .sort();

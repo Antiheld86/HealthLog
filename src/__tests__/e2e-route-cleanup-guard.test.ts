@@ -14,8 +14,10 @@
  * a runtime property, proven by the suite itself.
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync, globSync } from "node:fs";
-import { join, sep } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { walkSourceFiles } from "./helpers/source-files";
 
 const E2E = join(process.cwd(), "e2e");
 
@@ -33,9 +35,7 @@ const DIRECT_IMPORT_ALLOWLIST: Record<string, string> = {
 };
 
 function e2eFiles(): string[] {
-  return globSync("**/*.ts", { cwd: E2E })
-    .map((p) => p.split(sep).join("/"))
-    .sort();
+  return walkSourceFiles(E2E, { floor: 40, extensions: [".ts"] }).sort();
 }
 
 function read(rel: string): string {

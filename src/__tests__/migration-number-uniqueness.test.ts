@@ -64,6 +64,9 @@ describe("prisma migrations — numeric prefixes are unique", () => {
     const numbered = readdirSync(MIGRATIONS_DIR, {
       withFileTypes: true,
     }).filter((e) => e.isDirectory() && NUMBERED_MIGRATION.test(e.name));
-    expect(numbered.length).toBeGreaterThan(0);
+    // Not `> 0`: a walk that returns a single directory is as broken as one
+    // that returns none, and both would pass a zero floor. Pinned below the
+    // real migration count with headroom.
+    expect(numbered.length).toBeGreaterThan(200);
   });
 });
