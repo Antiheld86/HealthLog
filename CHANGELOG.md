@@ -2,6 +2,117 @@
 
 ## [Unreleased]
 
+## [1.36.0] — 2026-08-02
+
+### Added
+
+- You can give another account read access to your record. @balajiv113 asked for
+  a way to look after a family member's record in #360, and this is the shape it
+  took: everyone keeps their own account, their own password, their own second
+  factor. Sharing is a grant from one account to another, and it is only ever a
+  grant. Nobody logs in as anybody.
+
+  The owner sends an invitation and it confers nothing until the other person
+  accepts. Either side can end it at any time, and it ends on the delegate's very
+  next request rather than at their next login. An invitation can also carry a
+  date it lapses on, checked live, so access that was meant to be temporary does
+  not quietly become permanent because nobody remembered.
+
+  While you are inside somebody else's record the whole application says so.
+  There is a strip across the top naming whose record you are reading, the
+  navigation drops what does not belong to them, and everything that would let a
+  delegate widen their own reach is simply not there: no credentials, no
+  integrations, no notification channels, no ability to hand the access on. Read
+  access is read access, and the server refuses a write under one regardless of
+  what the screen offers.
+
+  The owner can see what the access is being used for. A panel lists who has
+  access, when they accepted, when they last opened the record, and a day by day
+  view of which days somebody else was in it.
+
+- The grant row is also the consent record. One row carries who offered the
+  access, who accepted and when, when it lapses, when it was last used, and who
+  ended it. Revoking stamps the row rather than deleting it, so the history of
+  who had access and between which dates survives the access itself.
+
+### Fixed
+
+- A backup with a symptom key this instance no longer recognises now restores.
+  It used to fail the whole file over one retired key, so a single renamed entry
+  cost the entire account. The unresolvable link is dropped, and the restore says
+  exactly which keys it dropped and how many entries each one cost, rather than
+  quietly losing them or refusing everything.
+
+- The About page said the project is licensed under the GNU Affero General Public
+  License. It has been PolyForm Noncommercial 1.0.0 since v1.15.19, which the same
+  page's own footer said correctly. It also described the GeoLite2 terms as
+  CC BY-SA 4.0 alone; those databases ship under MaxMind's own end user licence,
+  which incorporates CC BY-SA 4.0 and takes precedence where the two disagree.
+  Both are now named.
+
+### Internal
+
+- The line under the top bar and the line under the sidebar header come apart
+  whenever a banner is showing. They are meant to form one continuous seam across
+  the window; a stack of banners pushed one of them down by as much as 184 pixels,
+  because the banners sat inside the content column while the sidebar is beside it.
+  The banners now span the window, so both bands start below them.
+
+- Chart cards on the dashboard and in Insights titled themselves one heading level
+  below where they sit. Their neighbours in the same grid already titled themselves
+  correctly, and nothing contained the difference, so a screen reader walking the
+  page heard the level jump. For an account with no daily summary the page went
+  straight from its title to a chart card with nothing in between.
+
+- Several accessibility checks looked at pages that had not finished arriving and
+  reported problems the app does not have. One of them waited for a heading and
+  then checked that the heading exists, which is a check that could never fail.
+  They wait for real content now, and separately, the dashboard's chart cards were
+  outside the accessibility tree until they finished revealing, so nothing had been
+  checking them at all.
+
+- Fourteen checks that compare the source tree against a frozen list were walking
+  it with a pattern that never matches a directory beginning with a dot. Three
+  live routes under `.well-known`, including both discovery documents the machine
+  interface publishes, sat outside all fourteen while every one reported success.
+  They now share one walker, and that walker refuses to run if it finds
+  implausibly few files, because a sweep that finds nothing agrees with a list
+  that contains nothing.
+
+- The address a delegate accepted an invitation from is no longer stored. A
+  consent record has to say who and when, and this one does. Where adds nothing
+  and would have been kept for as long as both accounts exist.
+
+- Local development worktrees were excluded from git, the linter and the test
+  runner under a directory name that is no longer the one in use, so all three
+  were walking eleven copies of the source tree. Linting took ten minutes and
+  reported findings from unrelated commits.
+
+- The backup and restore runbook now states what a backup deliberately does not
+  carry, and what that means depending on whether you restore onto the same
+  instance or a fresh one.
+
+### What a delegate can and cannot reach
+
+Forty-four read routes serve a shared record. Every one of them was reviewed
+against five questions before it was admitted, and a route that could not answer
+all five stayed out. Of a hundred and twenty candidates, seventy-six did. Four
+that look harmless are among the refusals: one returns two numbers and no secret
+but shares a file with the endpoint that mints an ingest token, one differs from
+the list beside it by a single conditional paragraph about the owner, one reads
+as pure vocabulary and quietly pulls a layout preference, and three return a
+timestamp that doubles as the write credential for the same path.
+
+Nothing else. Every write in those same files, and every route that was not
+admitted, refuses outright while somebody is inside another record. Credentials,
+integrations, notification channels, share links and grant management are not
+merely hidden from the screen; the server will not serve them.
+
+Two of the refusals are worth naming because they are permanent rather than
+pending. A delegate cannot mint a clinician share link, because that would be a
+door surviving their own revocation. And a delegate cannot reach anything that
+would widen their own access, which is the property the whole feature rests on.
+
 ## [1.35.6] — 2026-08-02
 
 ### Fixed
