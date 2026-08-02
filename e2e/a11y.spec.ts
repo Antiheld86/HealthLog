@@ -664,12 +664,21 @@ const INSIGHTS_ROUTES: readonly RouteCase[] = [
     painted: (page) => page.locator(".recharts-wrapper").first(),
   },
   {
+    // The two states this page's OWN render produces: the list, or the
+    // no-workouts empty state. Never `[role="status"]`, because the busy
+    // skeletons carry it too (`chart-skeleton` in the streamed route shell is
+    // one), so that selector matched the loading tree the server sends before
+    // the page client has mounted anything. On a loaded runner the scan then
+    // landed on a document whose only heading had not rendered yet and blamed
+    // the app for a missing `<h1>` it does have. Same rule as the overview
+    // case above: a sentinel must prove the content, not the placeholder
+    // standing in for it.
     name: "/insights/workouts list",
     path: "/insights/workouts",
     painted: (page) =>
       page
         .locator(
-          '#main-content [data-slot="workout-list"], #main-content [role="status"]',
+          '#main-content [data-slot="workout-list"], #main-content [data-slot="empty-state"]',
         )
         .first(),
   },
@@ -679,9 +688,13 @@ const INSIGHTS_ROUTES: readonly RouteCase[] = [
     painted: (page) => page.locator('[data-slot="workout-detail-header"]'),
   },
   {
+    // `coach-page` is the sizing wrapper around a `<Suspense fallback={null}>`,
+    // so it is on screen while the conversation below it is still nothing at
+    // all. Gate on the conversation surface itself.
     name: "/coach",
     path: "/coach",
-    painted: (page) => page.locator('[data-slot="coach-page"]').first(),
+    painted: (page) =>
+      page.locator('[data-slot="coach-conversation"][data-variant="page"]'),
   },
 ];
 
