@@ -533,7 +533,14 @@ async function postIntake(request: NextRequest, { params }: RouteParams) {
   // v1.36.x — "somebody else marked your dose". This route has no snooze arm,
   // so the state is whichever of the two markings the payload carried. The
   // helper refuses on self, so a person marking their own dose is unaffected.
-  await notifyDelegatedIntake({
+  // Fire and forget, like every neighbour above. The dispatcher awaits each
+  // channel in the cascade, so an unreachable one would have added its whole
+  // timeout to the caregiver's request — the person standing next to the
+  // patient waiting for a dose to register. The helper never throws, and the
+  // owner learning a moment later is the right trade against the tick being
+  // slow. The integration test already polls the ledger rather than relying on
+  // the await, so nothing about the proof weakens.
+  void notifyDelegatedIntake({
     ownerId: user.id,
     actorId: actor.id,
     medicationId: id,

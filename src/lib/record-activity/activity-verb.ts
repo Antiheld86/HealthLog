@@ -54,8 +54,20 @@ export function recordActivityVerbLine(
       });
     case "medication.create":
       return t("recordSharing.activityVerb.medicationCreate", { name });
+    // Both spellings, and the reason is worth keeping. The web client posts to
+    // `POST /api/medications/[id]/intake`, which has audited as
+    // `medication.intake` since v1.0.0; `medications.intake.update` is the
+    // canonical route's action and the one the plan's copy deck named. Mapping
+    // only the second meant the single most-used delegated act — a caregiver
+    // marking a dose — rendered as the generic "made a change" for the person
+    // whose tablets they are.
+    case "medication.intake":
     case "medications.intake.update":
       return t("recordSharing.activityVerb.medicationIntake", { name });
+    // A batch post is still readings arriving; the owner does not care that the
+    // client sent them together.
+    case "measurement.create.batch":
+      return t("recordSharing.activityVerb.measurementCreate", { name });
     default:
       return t("recordSharing.activity.acted", { name });
   }

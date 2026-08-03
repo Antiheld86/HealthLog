@@ -560,7 +560,14 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // on a snooze, resolves both names itself, and never throws; awaited because
   // the latency it adds lands on the caregiver's request and never on the
   // owner's own hot path.
-  await notifyDelegatedIntake({
+  // Fire and forget, like every neighbour above. The dispatcher awaits each
+  // channel in the cascade, so an unreachable one would have added its whole
+  // timeout to the caregiver's request — the person standing next to the
+  // patient waiting for a dose to register. The helper never throws, and the
+  // owner learning a moment later is the right trade against the tick being
+  // slow. The integration test already polls the ledger rather than relying on
+  // the await, so nothing about the proof weakens.
+  void notifyDelegatedIntake({
     ownerId: user.id,
     actorId: actor.id,
     medicationId: existing.medicationId,
