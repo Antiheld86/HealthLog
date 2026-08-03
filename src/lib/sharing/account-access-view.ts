@@ -20,9 +20,13 @@ export interface AccountAccessEntry {
   accountId: string;
   username: string;
   displayName: string | null;
-  /** The grant's level. `"read"` throughout v1. */
+  /** The grant's level, as the owner offered it and the caller accepted it. */
   access: "read" | "write";
-  /** May this caller change that record. Resolved server-side; `false` in v1. */
+  /**
+   * May this caller ADD to that record. Resolved server-side. It never means
+   * edit or delete: those stay with the owner at both levels, and no field
+   * here offers them.
+   */
   canWrite: boolean;
 }
 

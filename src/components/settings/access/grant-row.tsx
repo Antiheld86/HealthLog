@@ -46,10 +46,18 @@ export function GrantRowItem({
   /** What ended it reads differently depending on who is looking. */
   side,
   actions,
+  notice,
 }: {
   grant: GrantRow;
   side: "given" | "received";
   actions?: ReactNode;
+  /**
+   * Something the person has to read before they act on this row, rendered in
+   * the content column rather than beside the button: consent copy is content
+   * (UI-STANDARDS §3), and a sentence squeezed into the action column would
+   * wrap into a stripe nobody reads.
+   */
+  notice?: ReactNode;
 }) {
   const { t } = useTranslations();
   const fmt = useFormatters();
@@ -61,6 +69,11 @@ export function GrantRowItem({
       data-slot="grant-row"
       data-grant-id={grant.id}
       data-grant-state={grant.state}
+      // The level, as an attribute rather than only as a sentence: the browser
+      // journey has to be able to prove that the level a person picked on the
+      // invitation form is the level the server stored, and asserting on
+      // viewport text would pin the copy instead of the value.
+      data-grant-access={grant.access}
       className="flex flex-wrap items-start justify-between gap-3 py-3"
     >
       <div className="min-w-0 flex-1 space-y-1">
@@ -113,6 +126,7 @@ export function GrantRowItem({
             </div>
           )}
         </dl>
+        {notice}
       </div>
       {actions && <div className="flex shrink-0 items-center">{actions}</div>}
     </li>

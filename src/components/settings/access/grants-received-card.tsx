@@ -78,6 +78,7 @@ export function GrantsReceivedCard() {
                 key={grant.id}
                 grant={grant}
                 side="received"
+                notice={renderConsent(grant)}
                 actions={renderActions(grant)}
               />
             ))}
@@ -86,6 +87,27 @@ export function GrantsReceivedCard() {
       </div>
     </SettingsCard>
   );
+
+  /**
+   * The delegate's half of the consent, on the screen where they give it.
+   *
+   * A write invitation asks for something a read invitation does not: that the
+   * person put entries into somebody else's health record under their own
+   * name, permanently, with no way to take one back. That is worth one
+   * sentence before the button rather than a sentence after the first entry.
+   * Shown only while the invitation is unanswered — once accepted, the level
+   * is the row's own line and this would be nagging.
+   */
+  function renderConsent(grant: GrantRow) {
+    if (grant.state !== "PENDING" || grant.access !== "WRITE") return null;
+    return (
+      <p data-slot="grant-write-consent" className="text-foreground text-sm">
+        {t("recordSharing.received.writeConsent", {
+          name: accountLabel(grant.account),
+        })}
+      </p>
+    );
+  }
 
   function renderActions(grant: GrantRow) {
     if (grant.state === "PENDING") {

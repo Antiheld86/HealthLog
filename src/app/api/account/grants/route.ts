@@ -6,7 +6,10 @@
  * one question — "who can see my record, and whose can I see" — and because a
  * client that has to call twice will eventually render half an answer.
  *
- * `POST` offers a grant to somebody already registered on this instance.
+ * `POST` offers a grant to somebody already registered on this instance, at
+ * the level the owner chose. There is no route that raises a live grant: the
+ * level is settled when the invitation is written and the only way to a wider
+ * one is a fresh invitation the delegate accepts again.
  *
  * **Neither is delegable, and that is structural.** Both resolve through bare
  * `requireAuth()`, which refuses outright while the caller is acting on
@@ -111,7 +114,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     });
   }
 
-  const { identifier, expiresAt } = parsed.data;
+  const { identifier, expiresAt, access } = parsed.data;
 
   // Either column, case-insensitively — the same lookup the login form does,
   // so the name somebody signs in with is the name they can be invited by.
@@ -129,18 +132,30 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
 
   try {
-    // `inviteGrant` decides everything about the row: READ and only READ, the
+    // `inviteGrant` decides everything about the row except the level: the
     // self-grant refusal, and the one-live-grant-per-pair rule the partial
-    // unique index backs. None of it is re-decided here.
+    // unique index backs. Neither is re-decided here. The level travels from
+    // the parsed body, where the schema is the one place an omitted field
+    // becomes READ, and it is fixed for the life of the row — the domain
+    // module has no transition that raises it.
     const grant = await inviteGrant({
       grantorId: user.id,
       granteeId: invitee.id,
+      access,
       expiresAt: expiresAt ? new Date(expiresAt) : null,
     });
 
+    // The level is on the audit row, not only in the response: "who was given
+    // what, and by whom" is the question this row exists to answer, and an
+    // entry that recorded the invitation without its level would answer half
+    // of it.
     await auditLog("sharing.grant.invited", {
       userId: user.id,
-      details: { grantId: grant.id, granteeId: invitee.id },
+      details: {
+        grantId: grant.id,
+        granteeId: invitee.id,
+        access: grant.access,
+      },
       ipAddress: getClientIp(request),
     }).catch(() => {});
 
@@ -148,6 +163,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       action: { name: "sharing.grant.invited" },
       meta: {
         grant_id: grant.id,
+        access: grant.access,
         expires: expiresAt !== null && expiresAt !== undefined,
       },
     });

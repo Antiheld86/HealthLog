@@ -98,6 +98,7 @@ async function household() {
   const invited = await inviteGrant({
     grantorId: owner.id,
     granteeId: delegate.id,
+    access: "READ",
   });
   await acceptGrant({ grantId: invited.id, granteeId: delegate.id });
   const session = await signIn(delegate.id);
@@ -223,6 +224,7 @@ describe("delegated reads coalesce to one row a day", () => {
     const invited = await inviteGrant({
       grantorId: owner.id,
       granteeId: second.id,
+      access: "READ",
     });
     await acceptGrant({ grantId: invited.id, granteeId: second.id });
 

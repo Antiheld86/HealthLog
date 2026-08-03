@@ -208,6 +208,21 @@ test.describe("account sharing", () => {
     const chosenDay = isoDayFromNow(30);
     await lapse.fill(chosenDay);
 
+    // The level, through the real control and onto the real wire.
+    //
+    // Same class of gap as the lapse date above, and the reason it is checked
+    // here rather than in a component test is worth stating: the project's
+    // component convention is SSR-only, so no test under `src/` can run this
+    // form's submit path at all. Wire the radio back to a constant and every
+    // one of those stays green. Only the posted body can tell the level a
+    // person picked from the level the card sends.
+    const writeOption = ownerPage.locator(
+      '[data-slot="grant-invite-access-option"][data-access="WRITE"]',
+    );
+    await expect(writeOption).toBeVisible();
+    await writeOption.click();
+    await expect(writeOption).toHaveAttribute("data-selected", "true");
+
     const invitePost = ownerPage.waitForRequest(
       (req) =>
         req.method() === "POST" && req.url().endsWith("/api/account/grants"),
@@ -215,6 +230,7 @@ test.describe("account sharing", () => {
     await submit.click();
     const posted = JSON.parse((await invitePost).postData() ?? "{}") as {
       expiresAt?: string | null;
+      access?: string;
     };
     expect(
       posted.expiresAt,
@@ -222,6 +238,10 @@ test.describe("account sharing", () => {
     ).toBeTruthy();
     // End of the chosen day, not the midnight that starts it.
     expect(posted.expiresAt).toContain(chosenDay.slice(0, 8));
+    expect(
+      posted.access,
+      "the invitation must carry the level the owner chose",
+    ).toBe("WRITE");
 
     const row = ownerPage
       .locator('[data-slot="grants-given-list"] [data-slot="grant-row"]')
@@ -229,6 +249,9 @@ test.describe("account sharing", () => {
     await expect(row).toBeVisible();
     // Pending, not active. The state is the server's answer, rendered.
     await expect(row).toHaveAttribute("data-grant-state", "PENDING");
+    // And the level came back from the database on the list read, which is the
+    // far end of the same wire: form → POST → row → GET → attribute.
+    await expect(row).toHaveAttribute("data-grant-access", "WRITE");
   });
 
   test("the delegate is offered nothing until they accept", async ({
@@ -241,6 +264,12 @@ test.describe("account sharing", () => {
       .first();
     await expect(row).toBeVisible();
     await expect(row).toHaveAttribute("data-grant-state", "PENDING");
+    // The delegate's half of the consent: what they are being offered, and
+    // what accepting it will mean, on the screen where they accept it.
+    await expect(row).toHaveAttribute("data-grant-access", "WRITE");
+    await expect(
+      row.locator('[data-slot="grant-write-consent"]'),
+    ).toBeVisible();
 
     // No switcher yet: `accountAccess.canSwitch` is false while the only
     // grant is pending, and the menu binds that boolean.

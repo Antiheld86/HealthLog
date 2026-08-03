@@ -7089,10 +7089,19 @@
     "eventMedicationIntakeSyncDesc": "Mise à jour entre appareils quand une dose est enregistrée, prise ou ignorée.",
     "eventDailyBriefing": "Résumé quotidien",
     "eventDailyBriefingDesc": "Un résumé matinal et posé de votre journée. Désactivé jusqu'à ce que vous l'activiez.",
+    "eventSecurityAlert": "Nouvelle connexion",
+    "eventSecurityAlertDesc": "Envoyé quand votre compte est utilisé sur un appareil ou depuis un lieu inconnus.",
+    "eventSharedRecordIntake": "Une personne avec accès marque une dose",
+    "eventSharedRecordIntakeDesc": "Envoyé uniquement quand une autre personne le fait, jamais pour vos propres saisies.",
     "security": {
       "newDeviceTitle": "Nouvelle connexion à votre compte",
       "newDeviceBody": "Une nouvelle connexion depuis {device} ({location}). Si ce n'était pas vous, changez votre mot de passe immédiatement.",
       "unknownLocation": "lieu inconnu"
+    },
+    "sharedRecordIntake": {
+      "title": "{name} a marqué une dose",
+      "bodyTaken": "{medication} : marquée comme prise par {name}.",
+      "bodySkipped": "{medication} : marquée comme ignorée par {name}."
     },
     "loginRequired": "Connecte-toi pour gérer les notifications.",
     "someChannelsGloballyDisabled": "Un ou plusieurs canaux sont désactivés dans les paramètres et ne recevront pas de notifications.",
@@ -9424,6 +9433,11 @@
       "identifierLabel": "Nom d'utilisateur ou e-mail",
       "identifierPlaceholder": "Le nom avec lequel elle se connecte",
       "identifierHint": "Cette personne a besoin d'un compte sur cette instance. Une invitation ne peut pas être envoyée à une adresse non inscrite.",
+      "accessLegend": "Ce que cette personne peut faire",
+      "accessReadLabel": "Peut consulter",
+      "accessReadCapability": "Elle peut lire tout ce que ce dossier partage. Elle ne peut rien ajouter ni rien modifier.",
+      "accessWriteLabel": "Peut consulter et ajouter",
+      "accessWriteCapability": "Elle peut aussi ajouter des choses au dossier : des mesures, des résultats d'analyses, des allergies et d'autres observations, un nouveau médicament, et une prise marquée comme faite. Elle ne peut rien modifier ni supprimer, pas même ce qu'elle a ajouté. Vous êtes la seule personne à pouvoir le faire.",
       "expiresLabel": "L'accès prend fin le (facultatif)",
       "expiresHint": "Laissez ce champ vide pour un accès qui dure jusqu'à ce que quelqu'un y mette fin. Une date ici est vérifiée à chaque requête, l'accès s'arrête donc de lui-même à la fin de cette journée.",
       "submit": "Envoyer l'invitation",
@@ -9446,6 +9460,8 @@
       "withdrawInvite": "Retirer",
       "revokeTitle": "Mettre fin à l'accès de {name} ?",
       "revokeBody": "L'accès cesse immédiatement, y compris dans tout navigateur où votre dossier est ouvert. Ce qui a déjà été vu ne peut pas être repris. Vous pouvez inviter de nouveau à tout moment.",
+      "revokeEntriesStay": "Ce que cette personne a saisi reste dans votre dossier, et vous pouvez en supprimer ce que vous voulez.",
+      "revokeAttribution": "Qui a saisi quoi reste visible dans votre vue d'activité pendant {days} jours.",
       "revokeConfirm": "Mettre fin à l'accès"
     },
     "received": {
@@ -9456,6 +9472,7 @@
       "loadError": "La liste n'a pas pu être chargée.",
       "accept": "Accepter",
       "accepting": "Acceptation…",
+      "writeConsent": "Si vous acceptez, ce que vous ajoutez fait partie du dossier de {name}. Vous ne pourrez plus modifier ni supprimer vos entrées ensuite ; {name} est la seule personne à pouvoir le faire.",
       "open": "Ouvrir",
       "renounce": "Rendre",
       "renounceTitle": "Rendre le dossier de {name} ?",

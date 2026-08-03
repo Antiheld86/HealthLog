@@ -5,10 +5,6 @@
  * and only two of them carry a body worth validating. What is NOT here is as
  * deliberate as what is:
  *
- *   * No `access` level. v1 grants READ and only READ, and the level is not a
- *     parameter anywhere in the stack — `inviteGrant` hardcodes it. A field
- *     here would be an input the domain module then ignores, which is the
- *     shape of a promise nobody kept.
  *   * No `userId`, `grantorId` or `granteeId` on any body. Both sides of a
  *     grant come from the authenticated session and the row itself. A body
  *     field naming a party would be an authorization decision made by the
@@ -43,6 +39,23 @@ export const inviteGrantSchema = z.object({
    * remember to renew is worse than one that does not exist.
    */
   expiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
+  /**
+   * What the invitation offers, and the ONLY place the level is defaulted.
+   *
+   * `inviteGrant` takes the level as a required argument, so the domain module
+   * never guesses; this line is the single answer to "what does an omitted
+   * field mean", which keeps an older client's payload valid without a second
+   * copy of the same decision further down. A grant is READ or WRITE from the
+   * moment it is offered and stays that way: there is no endpoint that widens
+   * a live grant, because widening it would carry one consent and it would not
+   * be the delegate's. The way up is a new invitation, accepted again.
+   */
+  access: z
+    .enum(["READ", "WRITE"])
+    .default("READ")
+    .describe(
+      "READ can read the record and change nothing. WRITE can additionally ADD entries (readings, results, observations, a medication, a marked dose) and can still edit or delete nothing, including its own. Omitted means READ, so a client that predates the field keeps working. The level is fixed when the invitation is written: no endpoint raises a live grant, because that would widen what the delegate accepted without asking them again. The way up is a new invitation the delegate accepts.",
+    ),
 });
 
 export type InviteGrantBody = z.infer<typeof inviteGrantSchema>;

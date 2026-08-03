@@ -12507,12 +12507,12 @@ paths:
     post:
       tags:
         - Account sharing
-      summary: Invite an account to read this record
-      description: Offers read access to somebody already registered on this instance; the grant confers nothing until they
-        accept it. An identifier that names no account answers 404 — a deliberate disclosure to an authenticated caller
-        on a household instance, rate-limited to 10 invitations an hour, and the alternative (a silent pending row for a
-        mistyped username) is worse. Refused while acting on another account, so a delegate can neither invite nor
-        re-delegate.
+      summary: Invite an account to this record
+      description: Offers access to somebody already registered on this instance, at READ or WRITE; the grant confers nothing
+        until they accept it. An identifier that names no account answers 404 — a deliberate disclosure to an
+        authenticated caller on a household instance, rate-limited to 10 invitations an hour, and the alternative (a
+        silent pending row for a mistyped username) is worse. Refused while acting on another account, so a delegate can
+        neither invite nor re-delegate.
       requestBody:
         required: true
         content:
@@ -12530,6 +12530,17 @@ paths:
                       format: date-time
                       pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
                     - type: "null"
+                access:
+                  default: READ
+                  description: "READ can read the record and change nothing. WRITE can additionally ADD entries (readings, results,
+                    observations, a medication, a marked dose) and can still edit or delete nothing, including its own.
+                    Omitted means READ, so a client that predates the field keeps working. The level is fixed when the
+                    invitation is written: no endpoint raises a live grant, because that would widen what the delegate
+                    accepted without asking them again. The way up is a new invitation the delegate accepts."
+                  type: string
+                  enum:
+                    - READ
+                    - WRITE
               required:
                 - identifier
       responses:
@@ -36689,8 +36700,9 @@ components:
             - write
         canWrite:
           type: boolean
-          description: Whether this caller may CHANGE that record. Resolved server-side; `false` for every grant in v1. Render it;
-            never derive it.
+          description: "Whether this caller may ADD to that record: true for an accepted WRITE grant, false for a READ one. It
+            never means edit or delete, which stay with the owner at both levels. Resolved server-side. Render it; never
+            derive it."
       required:
         - accountId
         - username

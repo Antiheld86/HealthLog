@@ -19,6 +19,13 @@ import {
   STEP_UP_ELEVATION_TTL_SECONDS,
 } from "./auth/step-up";
 import { hashToken } from "./auth/hmac";
+import {
+  carrierTarget,
+  decideActingCarrier,
+  readSelectorHeader,
+  selectorNamesAnAccount,
+  type ActingCarrier,
+} from "./auth/acting-carrier";
 import { AssistantDisabledError } from "./feature-flags";
 import { ConsentRequiredError } from "./ai/consent-guard";
 import { SCOPE_HEALTH_READ, SCOPE_HEALTH_WRITE } from "./mcp/oauth/config";
@@ -597,69 +604,23 @@ async function authenticateBearer(
 //
 // One function decides, for every transport, whether this request acts on
 // somebody else's record — the same argument that put `resolveBearerToken` in
-// one file for two wires. Two carriers converge here because they are two
-// answers to one question, and two answers that live apart drift.
+// one file for two wires. Two carriers converge on one decision because they
+// are two answers to one question, and two answers that live apart drift.
 //
-// Neither carrier authorises anything. Both merely NAME an account; the grant
-// table decides, on this request, with no cached verdict anywhere. The
-// difference between them is who can set them:
-//
-//   * The cookie transport carries it on the session ROW (`actingAsUserId`).
-//     A browser cannot address that row — the cookie holds a secret whose hash
-//     is the lookup key — so the value is server state, written only by the
-//     switch endpoint after it has validated the grant.
-//   * The Bearer transport carries it in a per-request HEADER. A long-lived
-//     token must not accumulate switch state: stamping it on the ApiToken row
-//     would make the credential itself ambient authority, and the token has to
-//     keep meaning "this person" for as long as it exists.
-//
-// The header is a Bearer-only carrier. On a cookie request it is refused, not
-// ignored — a client that sends a selector over a transport that does not read
-// one believes it is selecting an account and is not, and the failure of that
-// belief is a support case about data that looks wrong.
+// That decision now lives in `./auth/acting-carrier`, because a second caller
+// needs it: the idempotency wrapper files its replay cell under the record a
+// request claims, and it runs before any auth context exists. What stays here
+// is what only this file may do — turning a claim into a data scope after a
+// live grant says so.
 
 /**
- * The per-request account selector, on the Bearer transport only.
+ * The selector header's name, re-exported.
  *
- * Cross-origin JavaScript cannot set it: a custom request header forces a CORS
- * preflight and this app sends no CORS headers at all, so the preflight is
- * never answered. It is a selector regardless — the grant table is what
- * authorises, and the header is treated as hostile input everywhere below.
+ * It is declared beside the carrier reader it belongs to; every route-facing
+ * helper is imported from this module, and the OpenAPI table and the suites
+ * that drive a switched request were written against that path.
  */
-export const ACCOUNT_SELECTOR_HEADER = "x-healthlog-account";
-
-/**
- * Longest selector value worth a database round trip. Account ids are 25-char
- * cuids; anything past this names no account that could exist and is refused
- * as such, on the same path and with the same bytes as an unknown account.
- */
-const MAX_SELECTOR_LENGTH = 64;
-
-/**
- * What, if anything, this request says it is acting as.
- *
- * `misplaced-header` is its own case rather than an error thrown at read time
- * so that every mode below decides for itself — the modes disagree about the
- * session carrier and must not disagree about this one by accident.
- */
-type ActingCarrier =
-  | { kind: "none" }
-  | { kind: "session"; accountId: string }
-  | { kind: "header"; accountId: string }
-  | { kind: "misplaced-header" };
-
-/** The selector header, or null when the request did not send one. */
-async function readSelectorHeader(): Promise<string | null> {
-  try {
-    const headerList = await headers();
-    return headerList.get(ACCOUNT_SELECTOR_HEADER);
-  } catch {
-    // Outside a Next.js request scope (direct unit invocation of a legacy
-    // route) there is no header to read. Same posture as the Bearer branch of
-    // `authenticateCaller`.
-    return null;
-  }
-}
+export { ACCOUNT_SELECTOR_HEADER } from "./auth/acting-carrier";
 
 /**
  * The acting-account carrier for this request.
@@ -677,32 +638,11 @@ async function readSelectorHeader(): Promise<string | null> {
  * next request rather than from the next login.
  */
 async function readActingCarrier(auth: AuthContext): Promise<ActingCarrier> {
-  const header = await readSelectorHeader();
-
-  if (auth.authMethod === "bearer") {
-    // No session row exists on this transport, so the header is the only
-    // carrier there could be.
-    return header === null
-      ? { kind: "none" }
-      : { kind: "header", accountId: header };
-  }
-
-  if (header !== null) return { kind: "misplaced-header" };
-
-  const stamped = auth.session.actingAsUserId ?? null;
-  return stamped === null
-    ? { kind: "none" }
-    : { kind: "session", accountId: stamped };
-}
-
-/** Could this value name an account at all? */
-function selectorNamesAnAccount(value: string): boolean {
-  return value.length > 0 && value.length <= MAX_SELECTOR_LENGTH;
-}
-
-/** The account a carrier names, or null when it names nothing. */
-function carrierTarget(carrier: ActingCarrier): string | null {
-  return "accountId" in carrier ? carrier.accountId : null;
+  return decideActingCarrier({
+    transport: auth.authMethod === "bearer" ? "bearer" : "cookie",
+    stamped: auth.session.actingAsUserId ?? null,
+    header: await readSelectorHeader(),
+  });
 }
 
 /**

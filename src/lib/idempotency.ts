@@ -6,12 +6,21 @@
  * retry within the TTL (24h) for the same `(userId, key, method, path)`
  * tuple returns the cached envelope as a 200 (carrying the original
  * status inside the JSON if needed) — no second side-effect.
+ *
+ * `userId` is the CALLER. Since a caller can act on somebody else's record,
+ * the record the request claims is folded into `key` (see `cellKey`), so the
+ * tuple identifies a request to one person's record rather than a request by
+ * one person. A caller acting only as themselves is unaffected, byte for byte.
  */
 import type { NextRequest } from "next/server";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
+import {
+  readClaimedActingAccount,
+  selectorNamesAnAccount,
+} from "@/lib/auth/acting-carrier";
 import { hashToken } from "@/lib/auth/hmac";
 import { annotate } from "@/lib/logging/context";
 import { isP2002 } from "@/lib/prisma-errors";
@@ -36,6 +45,34 @@ const SUPPORTED_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const PENDING_STATUS = 0;
 
 const KEY_REGEX = /^[A-Za-z0-9_\-:.]{8,128}$/;
+
+/**
+ * Separates the record from the client's key inside a cell's `key` column.
+ *
+ * `KEY_REGEX` above does not admit it, which is the whole reason it was
+ * chosen: a caller cannot hand-craft a key that lands in the cell of a request
+ * they are not making. Changing either one without the other reopens that.
+ */
+const RECORD_SEPARATOR = "|";
+
+/**
+ * The `key` column for a request, given the record it claims to act on.
+ *
+ * Why the key and not the owner column: `IdempotencyKey.userId` is a foreign
+ * key to `users` with a cascade behind it (`prisma/schema.prisma`), so it can
+ * hold one real account id and nothing composite. It keeps holding the ACTOR —
+ * which is what makes "two delegates, one owner, one key" two cells without
+ * anything extra — and the record joins the other half of the composite unique
+ * index instead.
+ *
+ * No carrier means the key the client sent, byte for byte. Every request that
+ * is nobody's delegate therefore files exactly where it filed before, and the
+ * fold cannot change the behaviour of a client that never heard of sharing.
+ */
+function cellKey(clientKey: string, actingAccountId: string | null): string {
+  if (actingAccountId === null) return clientKey;
+  return `${actingAccountId}${RECORD_SEPARATOR}${clientKey}`;
+}
 
 export interface IdempotencyContext {
   userId: string;
@@ -288,6 +325,11 @@ export function isCachableStatus(status: number): boolean {
  * /external clients — without it, every Bearer-authed retry was running
  * the handler again and creating duplicate measurements (audit C-4).
  *
+ * It resolves the CALLER and only the caller — which record they are aiming at
+ * is a separate question, answered by `readClaimedActingAccount()` above and
+ * folded into the key. Neither answer authorises anything: the handler runs
+ * its own `requireAuth()` / `requireRecordAuth()` either way.
+ *
  * Exported for unit testing; production callers should let
  * `withIdempotency()` pick this up automatically via its default arg.
  */
@@ -374,10 +416,32 @@ export function withIdempotency<
     const userId = await userIdResolver(...args);
     if (!userId) return handler(...args);
 
+    // Which RECORD this request is aimed at, as claimed by the transport and
+    // not yet checked against a grant — the check belongs to the handler, and
+    // this runs before it. One delegate posting the same key first for one
+    // person and then for another must not meet themselves in a single cell:
+    // that replays the first person's response, writes nothing to the second
+    // person's record, and reports success. Nothing errors and nothing logs a
+    // conflict, which is why it is folded here rather than left to call sites.
+    //
+    // The consequence of using the CLAIM: inside the 24h window a delegate
+    // whose grant has since ended can still replay a key they already
+    // completed, without the grant check running. They receive bytes they
+    // already had and nothing new is written — a fresh key from them is
+    // refused, because that request reaches the handler.
+    const claimedRecord = await readClaimedActingAccount();
+    if (claimedRecord !== null && !selectorNamesAnAccount(claimedRecord)) {
+      // A claim that names no account that could exist. The request is refused
+      // downstream; skipping the cache keeps a caller from writing an
+      // arbitrarily long key into the table on the way to that refusal, and
+      // never lets one fall back onto the un-delegated cell.
+      return handler(...args);
+    }
+
     const url = new URL(request.url);
     const ctx: IdempotencyContext = {
       userId,
-      key,
+      key: cellKey(key, claimedRecord),
       method: request.method,
       path: url.pathname,
     };

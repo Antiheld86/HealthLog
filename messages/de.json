@@ -7089,10 +7089,19 @@
     "eventMedicationIntakeSyncDesc": "Geräteübergreifende Aktualisierung, wenn eine Dosis protokolliert, eingenommen oder übersprungen wird.",
     "eventDailyBriefing": "Täglicher Überblick",
     "eventDailyBriefingDesc": "Eine ruhige Morgenzusammenfassung deines Tages. Standardmäßig aus, bis du sie aktivierst.",
+    "eventSecurityAlert": "Neue Anmeldung",
+    "eventSecurityAlertDesc": "Wird gesendet, wenn dein Konto auf einem unbekannten Gerät oder von einem unbekannten Ort verwendet wird.",
+    "eventSharedRecordIntake": "Jemand mit Zugriff markiert eine Dosis",
+    "eventSharedRecordIntakeDesc": "Wird nur gesendet, wenn eine andere Person es tut, nie bei deinen eigenen Einträgen.",
     "security": {
       "newDeviceTitle": "Neue Anmeldung bei deinem Konto",
       "newDeviceBody": "Eine neue Anmeldung von {device} ({location}). Falls du das nicht warst, ändere sofort dein Passwort.",
       "unknownLocation": "unbekannter Ort"
+    },
+    "sharedRecordIntake": {
+      "title": "{name} hat eine Dosis markiert",
+      "bodyTaken": "{medication}: von {name} als eingenommen markiert.",
+      "bodySkipped": "{medication}: von {name} als ausgelassen markiert."
     },
     "loginRequired": "Bitte melde dich an, um Benachrichtigungen zu verwalten.",
     "someChannelsGloballyDisabled": "Ein oder mehrere Kanäle sind in den Einstellungen deaktiviert und erhalten keine Benachrichtigungen.",
@@ -9424,6 +9433,11 @@
       "identifierLabel": "Benutzername oder E-Mail",
       "identifierPlaceholder": "Der Name, mit dem sie sich anmeldet",
       "identifierHint": "Die Person braucht ein Konto auf dieser Instanz. An eine E-Mail-Adresse ohne Registrierung lässt sich keine Einladung schicken.",
+      "accessLegend": "Was die Person darf",
+      "accessReadLabel": "Darf lesen",
+      "accessReadCapability": "Sie kann alles lesen, was von dieser Akte geteilt wird. Hinzufügen oder ändern kann sie nichts.",
+      "accessWriteLabel": "Darf lesen und hinzufügen",
+      "accessWriteCapability": "Sie kann außerdem etwas zur Akte hinzufügen: Messwerte, Laborergebnisse, Allergien und andere Beobachtungen, ein neues Medikament und eine als genommen markierte Dosis. Ändern oder löschen kann sie nichts, auch nicht das, was sie selbst eingetragen hat. Das kannst nur du.",
       "expiresLabel": "Zugriff endet am (optional)",
       "expiresHint": "Leer lassen für Zugriff, der gilt, bis ihn jemand beendet. Ein Datum wird bei jeder Anfrage geprüft, der Zugriff endet also am Ende dieses Tages von selbst.",
       "submit": "Einladung senden",
@@ -9446,6 +9460,8 @@
       "withdrawInvite": "Zurückziehen",
       "revokeTitle": "Zugriff von {name} beenden?",
       "revokeBody": "Der Zugriff endet sofort, auch in jedem Browser, in dem deine Akte gerade offen ist. Was bereits gesehen wurde, lässt sich nicht zurückholen. Du kannst jederzeit erneut einladen.",
+      "revokeEntriesStay": "Was diese Person eingetragen hat, bleibt in deiner Akte, und du kannst alles davon selbst entfernen.",
+      "revokeAttribution": "Wer was eingetragen hat, bleibt {days} Tage lang in deiner Aktivitätsübersicht sichtbar.",
       "revokeConfirm": "Zugriff beenden"
     },
     "received": {
@@ -9456,6 +9472,7 @@
       "loadError": "Die Liste konnte nicht geladen werden.",
       "accept": "Annehmen",
       "accepting": "Wird angenommen…",
+      "writeConsent": "Wenn du annimmst, wird das, was du hinzufügst, Teil der Akte von {name}. Ändern oder entfernen kannst du deine Einträge danach nicht mehr; das kann nur {name}.",
       "open": "Öffnen",
       "renounce": "Zurückgeben",
       "renounceTitle": "Akte von {name} zurückgeben?",
