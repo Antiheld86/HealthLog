@@ -2,10 +2,11 @@
  * v1.36.0 — the account-grant state machine. One file, one set of rules.
  *
  * A grant is one account's standing permission to read another account's
- * record, and the row is also the durable record of the consent that created
- * it (there is no second receipt table — see the model docblock in
- * `prisma/schema.prisma`). Everything that decides what a grant currently
- * MEANS lives here, and nothing else in the tree is allowed to decide it.
+ * record, and since v1.36.x to add to it as well, and the row is also the
+ * durable record of the consent that created it (there is no second receipt
+ * table — see the model docblock in `prisma/schema.prisma`). Everything that
+ * decides what a grant currently MEANS lives here, and nothing else in the
+ * tree is allowed to decide it.
  *
  * Why one file rather than the rules at the call sites: two consumers read
  * these rows for different reasons — the acting-account resolver on every
@@ -20,7 +21,7 @@
  * Bearer perimeter that shouts at a mention is the right direction to be
  * wrong in.)
  *
- * Three properties are the whole point, and each is a decision made HERE and
+ * Four properties are the whole point, and each is a decision made HERE and
  * nowhere else:
  *
  *   * **Pending confers nothing.** An invitation is not access. A row with
@@ -36,6 +37,11 @@
  *     the shape it does. Re-inviting the same person mints a NEW row; the
  *     partial unique index in migration 0292 keeps at most one LIVE row per
  *     pair while the history piles up underneath.
+ *   * **The level never widens.** A row is READ or WRITE from the moment it is
+ *     offered, and no transition here raises it. Widening a grant somebody has
+ *     already accepted would change what they agreed to without asking them
+ *     again, and the delegate's consent is half of what makes a write grant
+ *     legitimate. {@link inviteGrant} carries the reasoning.
  *
  * Every write below is a CONDITIONAL update — the state the transition
  * requires is in the `where`, not in a read the caller performed a moment
@@ -145,10 +151,8 @@ export function isGrantActive(
  *
  * Active first, then the level. A READ grant permits reads only; a WRITE grant
  * permits both, because write access to a record without read access describes
- * nothing anyone asked for. v1 never writes a WRITE row (see
- * {@link inviteGrant}), so in v1 this answers `false` for every write — which
- * is the fail-closed arm the resolver wants, reached by the data rather than
- * by a special case.
+ * nothing anyone asked for. The state outranks the level in both directions: a
+ * revoked WRITE grant permits nothing at all, and no level survives an expiry.
  */
 export function grantAllows(
   grant: GrantLifecycle & { access: AccountGrantAccess },
@@ -166,6 +170,14 @@ export interface InviteGrantInput {
   grantorId: string;
   /** The account being invited to read it. */
   granteeId: string;
+  /**
+   * What the invitation offers. Required, with no default in this module: a
+   * level nobody named is a level nobody chose, and the one place an omitted
+   * request field becomes READ is the invite schema
+   * (`src/lib/validations/account-sharing.ts`). Two defaults agreeing today is
+   * how they disagree later.
+   */
+  access: AccountGrantAccess;
   /** Optional lapse date. Null = the grant runs until somebody ends it. */
   expiresAt?: Date | null;
 }
@@ -173,11 +185,16 @@ export interface InviteGrantInput {
 /**
  * Offer a grant. The delegate has access only once they accept it.
  *
- * `access` is not a parameter. v1 grants READ and only READ (design §14): the
- * column exists from day one so that delegated writes become enforcement work
- * instead of migration work, and leaving the level out of the input is what
- * makes "v1 never grants write" a property of this file rather than a promise
- * in a comment.
+ * The level is fixed here and never moves. There is no widen, no PATCH, no
+ * upgrade endpoint, and the absence is the design rather than a gap: write
+ * access needs two consents, the owner's because it is their record and the
+ * delegate's because they are being asked to put something into somebody's
+ * health record under their own name. Acceptance is the single moment those
+ * two meet, and it happens once. Raising a live grant afterwards would carry
+ * one consent, and it would not be the delegate's. The way up is a new
+ * invitation at the level meant, accepted again — the partial unique index
+ * permits it as soon as the old row is ended, and the cost is one revoke and
+ * one accept.
  *
  * Self-grants are refused here rather than by a database CHECK — migration
  * 0292 carries the reason (the schema-driven wipe seeder plants a row with
@@ -198,7 +215,7 @@ export async function inviteGrant(
       data: {
         grantorId: input.grantorId,
         granteeId: input.granteeId,
-        access: "READ",
+        access: input.access,
         invitedAt: now,
         expiresAt: input.expiresAt ?? null,
       },

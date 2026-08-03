@@ -162,6 +162,7 @@ async function household() {
   const invited = await inviteGrant({
     grantorId: owner.id,
     granteeId: delegate.id,
+    access: "READ",
   });
   const grant = await acceptGrant({
     grantId: invited.id,
@@ -260,6 +261,7 @@ describe("acting-account resolver — the decision is never cached", () => {
     const invited = await inviteGrant({
       grantorId: owner.id,
       granteeId: delegate.id,
+      access: "READ",
       expiresAt: new Date(Date.now() + 400),
     });
     await acceptGrant({ grantId: invited.id, granteeId: delegate.id });
@@ -275,7 +277,11 @@ describe("acting-account resolver — the decision is never cached", () => {
   it("refuses the moment the grant is only pending", async () => {
     const owner = await makeUser("owner");
     const delegate = await makeUser("delegate");
-    await inviteGrant({ grantorId: owner.id, granteeId: delegate.id });
+    await inviteGrant({
+      grantorId: owner.id,
+      granteeId: delegate.id,
+      access: "READ",
+    });
     const session = await signIn(delegate.id);
     await switchTo(session.id, owner.id);
 

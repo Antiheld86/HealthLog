@@ -32,7 +32,7 @@ import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
 inviteGrantSchema.meta({
   id: "AccountGrantInvite",
   description:
-    "Offer read access to another account on this instance. `identifier` is the invitee's username or e-mail, matched case-insensitively — the same identifier they sign in with. `expiresAt` is optional; omitted or null means the grant runs until somebody ends it. The access level is not a parameter: v1 grants READ only.",
+    "Offer access to another account on this instance. `identifier` is the invitee's username or e-mail, matched case-insensitively — the same identifier they sign in with. `expiresAt` is optional; omitted or null means the grant runs until somebody ends it. `access` is READ when omitted, so a client that does not know about the field keeps working: READ can read the record and change nothing, WRITE can additionally ADD entries (readings, results, observations, a medication, a marked dose) and can still edit or delete nothing, including its own. The level is fixed when the invitation is written — no endpoint raises a live grant, because that would widen what the delegate accepted without asking them again. The way up is a new invitation the delegate accepts.",
 });
 
 switchAccountSchema.meta({
@@ -205,7 +205,7 @@ const accountAccessEntry = z
     canWrite: z
       .boolean()
       .describe(
-        "Whether this caller may CHANGE that record. Resolved server-side; `false` for every grant in v1. Render it; never derive it.",
+        "Whether this caller may ADD to that record: true for an accepted WRITE grant, false for a READ one. It never means edit or delete, which stay with the owner at both levels. Resolved server-side. Render it; never derive it.",
       ),
   })
   .meta({
@@ -327,9 +327,9 @@ export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
     },
     post: {
       tags: ["Account sharing"],
-      summary: "Invite an account to read this record",
+      summary: "Invite an account to this record",
       description:
-        "Offers read access to somebody already registered on this instance; the grant confers nothing until they accept it. An identifier that names no account answers 404 — a deliberate disclosure to an authenticated caller on a household instance, rate-limited to 10 invitations an hour, and the alternative (a silent pending row for a mistyped username) is worse. Refused while acting on another account, so a delegate can neither invite nor re-delegate.",
+        "Offers access to somebody already registered on this instance, at READ or WRITE; the grant confers nothing until they accept it. An identifier that names no account answers 404 — a deliberate disclosure to an authenticated caller on a household instance, rate-limited to 10 invitations an hour, and the alternative (a silent pending row for a mistyped username) is worse. Refused while acting on another account, so a delegate can neither invite nor re-delegate.",
       requestBody: {
         required: true,
         content: { "application/json": { schema: inviteGrantSchema } },
