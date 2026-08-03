@@ -7089,10 +7089,19 @@
     "eventMedicationIntakeSyncDesc": "Cross-device update when a dose is logged, taken or skipped.",
     "eventDailyBriefing": "Daily briefing",
     "eventDailyBriefingDesc": "One calm morning summary of your day's read. Off until you turn it on.",
+    "eventSecurityAlert": "New sign-in",
+    "eventSecurityAlertDesc": "Sent when your account is used on a device or from a place we have not seen before.",
+    "eventSharedRecordIntake": "Someone you shared your record with marks a dose",
+    "eventSharedRecordIntakeDesc": "Only sent when another person does it, never for your own entries.",
     "security": {
       "newDeviceTitle": "New sign-in to your account",
       "newDeviceBody": "A new sign-in from {device} ({location}). If this wasn't you, change your password immediately.",
       "unknownLocation": "unknown location"
+    },
+    "sharedRecordIntake": {
+      "title": "{name} marked a dose",
+      "bodyTaken": "{medication}: marked as taken by {name}.",
+      "bodySkipped": "{medication}: marked as skipped by {name}."
     },
     "loginRequired": "Please sign in to manage notifications.",
     "someChannelsGloballyDisabled": "One or more channels are turned off in Settings and won’t receive notifications.",

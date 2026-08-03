@@ -7089,10 +7089,19 @@
     "eventMedicationIntakeSyncDesc": "Aggiornamento tra dispositivi quando una dose viene registrata, assunta o saltata.",
     "eventDailyBriefing": "Riepilogo quotidiano",
     "eventDailyBriefingDesc": "Un riepilogo mattutino e tranquillo della tua giornata. Disattivato finché non lo attivi.",
+    "eventSecurityAlert": "Nuovo accesso",
+    "eventSecurityAlertDesc": "Inviato quando il tuo account viene usato su un dispositivo o da un luogo sconosciuti.",
+    "eventSharedRecordIntake": "Una persona con accesso segna una dose",
+    "eventSharedRecordIntakeDesc": "Inviato solo quando lo fa un'altra persona, mai per le tue voci.",
     "security": {
       "newDeviceTitle": "Nuovo accesso al tuo account",
       "newDeviceBody": "Un nuovo accesso da {device} ({location}). Se non sei stato tu, cambia subito la password.",
       "unknownLocation": "posizione sconosciuta"
+    },
+    "sharedRecordIntake": {
+      "title": "{name} ha segnato una dose",
+      "bodyTaken": "{medication}: segnata come assunta da {name}.",
+      "bodySkipped": "{medication}: segnata come saltata da {name}."
     },
     "loginRequired": "Accedi per gestire le notifiche.",
     "someChannelsGloballyDisabled": "Uno o più canali sono disattivati nelle impostazioni e non riceveranno notifiche.",
