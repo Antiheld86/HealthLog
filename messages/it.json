@@ -9489,6 +9489,31 @@
       "opened": "{name} ha aperto la tua cartella {count}×",
       "acted": "{name} ha fatto una modifica nella tua cartella",
       "deletedAccount": "Un account eliminato"
+    },
+    "delegate": {
+      "addOnlyNote": "Puoi aggiungere voci a questa cartella. Solo {name} può modificarle o eliminarle."
+    },
+    "lookingAfter": {
+      "title": "Mi prendo cura di",
+      "description": "Cartelle che altre persone hanno condiviso con te.",
+      "levelRead": "Può consultare",
+      "levelWrite": "Può consultare e aggiungere",
+      "open": "Apri la cartella di {name}"
+    },
+    "toast": {
+      "savedTo": "Salvato nella cartella di {name}."
+    },
+    "activityVerb": {
+      "measurementCreate": "{name} ha aggiunto una misurazione",
+      "labResultCreate": "{name} ha aggiunto un risultato di laboratorio",
+      "allergyCreate": "{name} ha aggiunto un'allergia",
+      "familyHistoryCreate": "{name} ha aggiunto una voce di anamnesi familiare",
+      "illnessEpisodeCreate": "{name} ha aggiunto una malattia",
+      "biomarkerCreate": "{name} ha aggiunto un biomarcatore",
+      "customMetricEntryCreate": "{name} ha registrato un valore personalizzato",
+      "medicationSideEffectCreate": "{name} ha annotato un effetto collaterale",
+      "medicationCreate": "{name} ha aggiunto un farmaco",
+      "medicationIntake": "{name} ha registrato una dose"
     }
   }
 }

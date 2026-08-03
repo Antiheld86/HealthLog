@@ -32,6 +32,7 @@
  * navigation.
  */
 
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { History, MoreVertical, Pencil, Stethoscope } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,13 @@ export function MedicationCardMenu({
   onLogSideEffect,
 }: MedicationCardMenuProps) {
   const { t } = useTranslations();
+  // v1.36.x — noting a side effect is an admitted delegated write; editing the
+  // medication and opening its history editor are not. When nothing in the
+  // menu survives, the trigger goes with it rather than opening onto an empty
+  // sheet. The card itself is untouched: no wash, no badge, no colour change.
+  const { canAdd, canManage } = useRecordCapabilities();
+  const showSideEffect = onLogSideEffect != null && canAdd;
+  if (!canManage && !showSideEffect) return null;
 
   return (
     <DropdownMenu>
@@ -79,17 +87,21 @@ export function MedicationCardMenu({
         className="w-56"
         data-slot="medication-card-menu"
       >
-        <DropdownMenuItem onClick={onEdit}>
-          <Pencil className="mr-2 h-4 w-4" />
-          {t("common.edit")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onOpenHistory}>
-          <History className="mr-2 h-4 w-4" />
-          {t("medications.detail.header.historyLabel")}
-        </DropdownMenuItem>
-        {onLogSideEffect && (
+        {canManage && (
           <>
-            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onEdit}>
+              <Pencil className="mr-2 h-4 w-4" />
+              {t("common.edit")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onOpenHistory}>
+              <History className="mr-2 h-4 w-4" />
+              {t("medications.detail.header.historyLabel")}
+            </DropdownMenuItem>
+          </>
+        )}
+        {showSideEffect && onLogSideEffect && (
+          <>
+            {canManage && <DropdownMenuSeparator />}
             <DropdownMenuItem onClick={onLogSideEffect}>
               <Stethoscope className="mr-2 h-4 w-4" />
               {t("medications.glp1LogSideEffect")}

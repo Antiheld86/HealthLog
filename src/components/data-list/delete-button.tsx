@@ -15,6 +15,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useTranslations } from "@/lib/i18n/context";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 
 /**
  * Shared single-row delete button + confirm dialog for the data-
@@ -25,6 +26,15 @@ import { useTranslations } from "@/lib/i18n/context";
  * so the title/description are passed in rather than reaching for a fixed
  * translation key. `cancelLabel` / `confirmLabel` default to the shared
  * `common.*` strings.
+ *
+ * v1.36.x — this is the one place a row delete is spelled across the app
+ * (measurements, lab results, biomarkers, allergies, family history, custom
+ * metrics, medication inventory), so the delegation rule is enforced here
+ * rather than at twelve call sites: deleting is the owner's alone, at every
+ * grant level, so inside somebody else's record the trigger is absent. Not
+ * disabled — a greyed bin still claims the row is the delegate's to remove.
+ * A caller that ever needs a delete a delegate MAY perform would have to say
+ * so explicitly, and today there is none.
  */
 export function DeleteButton({
   onConfirm,
@@ -47,6 +57,8 @@ export function DeleteButton({
   iconClassName?: string;
 }) {
   const { t } = useTranslations();
+  const { canManage } = useRecordCapabilities();
+  if (!canManage) return null;
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>

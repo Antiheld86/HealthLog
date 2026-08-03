@@ -1,5 +1,6 @@
 "use client";
 
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useEffect, useReducer, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -402,6 +403,9 @@ function MedicationTableRowItem({
   // failure toast + Undo. No card-specific follow-up here; the
   // injection-site prompt stays a card affordance.
   const { intakeLoading, recordIntake } = useMedicationIntake({ medication });
+  // v1.36.x — marking a dose is admitted; a read-only delegate sees the row
+  // without its action pair.
+  const { canAdd } = useRecordCapabilities();
 
   // SAME batched compliance source as the cards.
   const { data: compliance } = useMedicationComplianceSummary(medication.id);
@@ -675,7 +679,7 @@ function MedicationTableRowItem({
       </TableCell>
       <TableCell className="text-sm">{stockCell}</TableCell>
       <TableCell>
-        {medication.active ? (
+        {medication.active && canAdd ? (
           <div className="flex gap-1.5">
             <Button
               size="icon"

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useMounted } from "@/hooks/use-mounted";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import {
   MeasurementForm,
@@ -35,6 +36,7 @@ export function resolveMeasurementReturnTo(
 
 export default function MeasurementsPage() {
   const { isAuthenticated, isLoading } = useAuth();
+  const { canAdd } = useRecordCapabilities();
   const mounted = useMounted();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -149,17 +151,22 @@ export default function MeasurementsPage() {
           </span>
         }
         description={t("measurements.subtitle")}
+        // v1.36.x — entering a reading is one of the verbs a WRITE grant
+        // admits, so this is the header action a delegate keeps. A read-only
+        // delegate loses it entirely rather than meeting a disabled one.
         actions={
-          <Button
-            className="min-h-11 sm:min-h-9"
-            onClick={() => {
-              setReturnTo(null);
-              setDialogOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4" />
-            {t("measurements.addMeasurement")}
-          </Button>
+          canAdd ? (
+            <Button
+              className="min-h-11 sm:min-h-9"
+              onClick={() => {
+                setReturnTo(null);
+                setDialogOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              {t("measurements.addMeasurement")}
+            </Button>
+          ) : null
         }
       />
 

@@ -40,10 +40,16 @@ function makeClient(): QueryClient {
 }
 
 function render(node: React.ReactNode, client?: QueryClient) {
-  const tree = client ? (
-    <QueryClientProvider client={client}>{node}</QueryClientProvider>
-  ) : (
-    node
+  // v1.36.x — every card part now asks what the record on screen allows
+  // before it renders a control, and that answer rides the account query.
+  // The parts that carry no query of their own were rendered here without a
+  // provider; they need one now. Fixtures are the caller's own record, which
+  // is every capability — the delegation cases live in
+  // `src/components/__tests__/delegated-write-affordances.test.tsx`.
+  const tree = (
+    <QueryClientProvider client={client ?? makeClient()}>
+      {node}
+    </QueryClientProvider>
   );
   return renderToStaticMarkup(
     <I18nProvider initialLocale="en">{tree}</I18nProvider>,

@@ -22,18 +22,26 @@
  */
 import { useEffect, useRef, useState } from "react";
 
-export function usePageFileDrop(onFiles: (files: File[]) => void): {
+/**
+ * @param onFiles Where dropped or pasted files go. Omitted inside somebody
+ *   else's record: uploading is not a delegated verb, so the listeners are
+ *   never attached and the drop overlay never appears. Offering the overlay
+ *   and swallowing the file would be worse than the browser's own behaviour.
+ */
+export function usePageFileDrop(onFiles?: (files: File[]) => void): {
   dropActive: boolean;
 } {
   const [dropActive, setDropActive] = useState(false);
   const depthRef = useRef(0);
   const onFilesRef = useRef(onFiles);
+  const enabled = onFiles != null;
 
   useEffect(() => {
     onFilesRef.current = onFiles;
   }, [onFiles]);
 
   useEffect(() => {
+    if (!enabled) return;
     const isFileDrag = (event: DragEvent) =>
       event.dataTransfer?.types?.includes("Files") ?? false;
 
@@ -59,7 +67,7 @@ export function usePageFileDrop(onFiles: (files: File[]) => void): {
       depthRef.current = 0;
       setDropActive(false);
       const files = Array.from(event.dataTransfer?.files ?? []);
-      if (files.length > 0) onFilesRef.current(files);
+      if (files.length > 0) onFilesRef.current?.(files);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || depthRef.current === 0) return;
@@ -70,7 +78,7 @@ export function usePageFileDrop(onFiles: (files: File[]) => void): {
       const files = Array.from(event.clipboardData?.files ?? []);
       if (files.length === 0) return;
       event.preventDefault();
-      onFilesRef.current(files);
+      onFilesRef.current?.(files);
     };
 
     window.addEventListener("dragenter", onDragEnter);
@@ -87,7 +95,7 @@ export function usePageFileDrop(onFiles: (files: File[]) => void): {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("paste", onPaste);
     };
-  }, []);
+  }, [enabled]);
 
   return { dropActive };
 }

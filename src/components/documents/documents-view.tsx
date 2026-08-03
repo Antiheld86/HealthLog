@@ -14,6 +14,7 @@
  * module bounces home. Every `/api/documents/inbound/*` route re-enforces
  * the gate server-side — this is a UX redirect, not the security boundary.
  */
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import {
   useInfiniteQuery,
   useMutation,
@@ -179,6 +180,11 @@ export function closeDocumentSelectionAfterCoachHandoff(
 export function DocumentsView() {
   const { t } = useTranslations();
   const { user, isLoading: authLoading, isAuthenticated } = useAuth();
+  // v1.36.x — uploading a document, filing it, sharing it and asking the AI
+  // about it are none of them delegated verbs. Inside somebody else's record
+  // the vault reads and nothing more: no upload path, no selection, no bulk
+  // bar, no corpus backfill.
+  const { canManage } = useRecordCapabilities();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -369,7 +375,7 @@ export function DocumentsView() {
     },
     [episodeIdFilter, t],
   );
-  const { dropActive } = usePageFileDrop(enqueueFiles);
+  const { dropActive } = usePageFileDrop(canManage ? enqueueFiles : undefined);
 
   const episodes = useIllnessEpisodes(true);
 
@@ -381,6 +387,7 @@ export function DocumentsView() {
   const contentIndex = usage.data?.contentIndex;
   const canIndexContent = contentIndex?.enabled ?? false;
   const showIndexAll =
+    canManage &&
     canIndexContent &&
     contentIndex !== undefined &&
     contentIndex.totalCount > 0 &&
@@ -749,18 +756,22 @@ export function DocumentsView() {
         title={t("documents.title")}
         description={t("documents.subtitle")}
         actions={
-          <Button onClick={() => uploadInputRef.current?.click()}>
-            <Upload className="size-4" aria-hidden />
-            {t("documents.pageUpload")}
-          </Button>
+          canManage ? (
+            <Button onClick={() => uploadInputRef.current?.click()}>
+              <Upload className="size-4" aria-hidden />
+              {t("documents.pageUpload")}
+            </Button>
+          ) : null
         }
       />
 
-      <UploadZone
-        usage={usage.data}
-        inputRef={uploadInputRef}
-        onFiles={enqueueFiles}
-      />
+      {canManage && (
+        <UploadZone
+          usage={usage.data}
+          inputRef={uploadInputRef}
+          onFiles={enqueueFiles}
+        />
+      )}
 
       <DocumentFilterBar
         searchValue={searchDraft}
@@ -802,10 +813,12 @@ export function DocumentsView() {
           description={t("documents.empty.description")}
           ctaSize="lg"
           action={
-            <Button onClick={() => uploadInputRef.current?.click()}>
-              <Upload className="size-4" aria-hidden />
-              {t("documents.empty.action")}
-            </Button>
+            canManage ? (
+              <Button onClick={() => uploadInputRef.current?.click()}>
+                <Upload className="size-4" aria-hidden />
+                {t("documents.empty.action")}
+              </Button>
+            ) : undefined
           }
         />
       ) : showEmpty && isFiltered ? (
@@ -828,9 +841,9 @@ export function DocumentsView() {
           isFetchingNextPage={list.isFetchingNextPage}
           onLoadMore={() => void list.fetchNextPage()}
           selectedIds={selectedIds}
-          onToggleSelected={toggleSelected}
+          onToggleSelected={canManage ? toggleSelected : undefined}
           onOpen={openDetail}
-          onDelete={(id) => deleteBulk([id])}
+          onDelete={canManage ? (id) => deleteBulk([id]) : undefined}
           highlightId={upload.highlightId}
           onPrefetch={prefetchDetail}
         />
@@ -844,7 +857,7 @@ export function DocumentsView() {
         contentIndexEnabled={usage.data?.contentIndex.enabled}
       />
 
-      {selectedIds.size > 0 ? (
+      {canManage && selectedIds.size > 0 ? (
         <DocumentBulkBar
           selectedCount={selectedIds.size}
           episodes={(episodes.data ?? []).map((e) => ({

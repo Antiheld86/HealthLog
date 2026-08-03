@@ -63,7 +63,8 @@ export function DocumentTimeline({
   isFetchingNextPage: boolean;
   onLoadMore: () => void;
   selectedIds: ReadonlySet<string>;
-  onToggleSelected: (id: string, range?: boolean) => void;
+  /** Omitted inside somebody else's record: selection feeds bulk edits. */
+  onToggleSelected?: (id: string, range?: boolean) => void;
   onOpen: (id: string) => void;
   /** Delete key on the focused card — the page owns the undo-able delete. */
   onDelete?: (id: string) => void;

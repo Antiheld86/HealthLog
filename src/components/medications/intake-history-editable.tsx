@@ -17,6 +17,7 @@
  * never float to the top of the table (O-1).
  */
 
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
@@ -61,6 +62,8 @@ export function IntakeHistoryEditable({
   defaultSortBy,
 }: IntakeHistoryEditableProps) {
   const { t } = useTranslations();
+  // v1.36.x — bulk-deleting recorded doses is the owner's alone.
+  const { canManage } = useRecordCapabilities();
   const queryClient = useQueryClient();
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -132,7 +135,7 @@ export function IntakeHistoryEditable({
   return (
     <>
       <div className="space-y-3" data-slot="intake-history-editable-body">
-        {selected.size > 0 && (
+        {canManage && selected.size > 0 && (
           <div
             className="border-border bg-muted/40 flex flex-wrap items-center justify-between gap-2 rounded-md border p-2"
             role="region"

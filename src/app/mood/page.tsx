@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useMounted } from "@/hooks/use-mounted";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { MoodForm } from "@/components/mood/mood-form";
@@ -20,6 +21,7 @@ import { useTranslations } from "@/lib/i18n/context";
 
 export default function MoodPage() {
   const { user, isAuthenticated, isLoading } = useAuth();
+  const { canManage } = useRecordCapabilities();
   const mounted = useMounted();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -95,13 +97,18 @@ export default function MoodPage() {
                 <Wrench className="h-4 w-4" aria-hidden="true" />
               </Link>
             </Button>
-            <Button
-              onClick={() => setDialogOpen(true)}
-              className="min-h-11 sm:min-h-9"
-            >
-              <Plus className="h-4 w-4" />
-              {t("mood.addEntry")}
-            </Button>
+            {/* v1.36.x — a mood entry is not one of the verbs a grant
+                admits, so it stays with the account whose record it is. A
+                delegate at any level gets no add path here. */}
+            {canManage && (
+              <Button
+                onClick={() => setDialogOpen(true)}
+                className="min-h-11 sm:min-h-9"
+              >
+                <Plus className="h-4 w-4" />
+                {t("mood.addEntry")}
+              </Button>
+            )}
           </>
         }
       />

@@ -11,6 +11,19 @@ const captureState = vi.hoisted(() => ({
   nutrientsEnabled: true,
 }));
 
+// v1.36.x — the picker asks what the record allows before it offers a kind.
+// These fixtures are the caller's own record, which is every kind; the
+// delegation cases are covered in
+// `src/components/__tests__/delegated-write-affordances.test.tsx`.
+vi.mock("@/hooks/use-record-capabilities", () => ({
+  useRecordCapabilities: () => ({
+    inSharedRecord: false,
+    canWrite: false,
+    canAdd: true,
+    canManage: true,
+  }),
+}));
+
 vi.mock("react", async (importOriginal) => {
   const actual = await importOriginal<typeof ReactModule>();
   return {

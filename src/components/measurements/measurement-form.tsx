@@ -1,5 +1,6 @@
 "use client";
 
+import { useActiveRecordName } from "@/hooks/use-record-capabilities";
 import { useId, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -238,6 +239,7 @@ export function MeasurementForm({
   footerSlot,
 }: MeasurementFormProps) {
   const { t } = useTranslations();
+  const recordName = useActiveRecordName();
   const queryClient = useQueryClient();
   const unitDisplay = useUnitDisplay();
 
@@ -371,7 +373,19 @@ export function MeasurementForm({
       setNotes("");
       await invalidateKeys(queryClient, measurementDependentKeys);
       await refetchInactiveDailyReads(queryClient);
-      toast.success(t("common.saved"));
+      // v1.36.x — a delegate's receipt names the record. "Saved" alone is
+      // the one confirmation somebody acting for another person does not
+      // need, and the reading has just left their own history for good.
+      toast.success(
+        t("common.saved"),
+        recordName
+          ? {
+              description: t("recordSharing.toast.savedTo", {
+                name: recordName,
+              }),
+            }
+          : undefined,
+      );
       onSuccess?.();
     } catch (err) {
       setError(localizedApiError(err, t, "measurements.saveError"));

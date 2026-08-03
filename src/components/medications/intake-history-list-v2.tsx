@@ -1,5 +1,6 @@
 "use client";
 
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import Link from "next/link";
@@ -586,6 +587,9 @@ function IntakeRowActions({
   onDeleteIntake?: (eventId: string) => void;
   t: ReturnType<typeof useTranslations>["t"];
 }) {
+  // v1.36.x — editing or deleting a recorded dose is the owner's.
+  const { canManage } = useRecordCapabilities();
+  if (!canManage) return null;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>

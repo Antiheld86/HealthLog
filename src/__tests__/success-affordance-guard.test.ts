@@ -256,7 +256,7 @@ const PINNED_AFFORDANCES: Record<
     "toast.success": 2,
   },
   "src/components/medications/take-all-due.ts": { "toast.success": 1 },
-  "src/components/medications/use-medication-intake.ts": { "toast.success": 4 },
+  "src/components/medications/use-medication-intake.ts": { "toast.success": 5 },
   "src/components/medications/wizard/medication-wizard-dialog.tsx": {
     "toast.success": 1,
   },

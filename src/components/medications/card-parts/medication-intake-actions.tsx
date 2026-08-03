@@ -2,6 +2,7 @@ import { Check, Loader2, SkipForward } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useTranslations } from "@/lib/i18n/context";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 
 interface MedicationIntakeActionsProps {
   /** "take" | "skip" while the matching request is in flight, else null. */
@@ -27,6 +28,11 @@ export function MedicationIntakeActions({
   onRecordIntake,
 }: MedicationIntakeActionsProps) {
   const { t } = useTranslations();
+  // v1.36.x — marking a dose taken or skipped is the verb the delegation was
+  // written for. A read-only delegate sees the card and its schedule and no
+  // action row; the card is otherwise unchanged.
+  const { canAdd } = useRecordCapabilities();
+  if (!canAdd) return null;
 
   return (
     <div className="flex gap-2">

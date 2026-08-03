@@ -1,5 +1,7 @@
 "use client";
 
+import { LookingAfterCard } from "@/components/dashboard/looking-after-card";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import React, { Suspense, useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -241,6 +243,7 @@ export default function DashboardPageClient({
     value: number | null | undefined,
   ): number | null =>
     value == null ? null : unitDisplay.toDisplayDelta(type, value);
+  const { canAdd } = useRecordCapabilities();
   const [quickEntryDialog, setQuickEntryDialog] =
     useState<QuickEntryDialog>(null);
 
@@ -900,6 +903,13 @@ export default function DashboardPageClient({
     <div className="space-y-6">
       <PullToRefreshIndicator {...pull} />
       <DashboardHeader onQuickEntry={setQuickEntryDialog} />
+
+      {/* v1.36.x — the caregiver's front door, directly under the greeting
+          and above this account's own day. Somebody who opens the app to
+          check on a parent should not have to go through settings to get
+          there. Renders nothing for an account nobody has shared with, and
+          nothing while a switch is already on. */}
+      <LookingAfterCard />
 
       {/* S2 — the Today hero, promoted above the tile strip (MARC sign-off
           decision 1). Renders the S1 daily digest: the day's read, the
@@ -1976,13 +1986,15 @@ export default function DashboardPageClient({
               title={t("dashboard.emptyTitle")}
               description={t("dashboard.emptyDescription")}
               action={
-                <Button
-                  size="sm"
-                  onClick={() => setQuickEntryDialog("measurement")}
-                >
-                  <Plus className="h-4 w-4" />
-                  {t("dashboard.emptyAddMeasurement")}
-                </Button>
+                canAdd ? (
+                  <Button
+                    size="sm"
+                    onClick={() => setQuickEntryDialog("measurement")}
+                  >
+                    <Plus className="h-4 w-4" />
+                    {t("dashboard.emptyAddMeasurement")}
+                  </Button>
+                ) : undefined
               }
             />
           );

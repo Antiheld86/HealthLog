@@ -47,6 +47,7 @@ export function DocumentSummaryBlock({
   aiEnabled,
   isGenerating,
   actionsDisabled,
+  canGenerate = true,
   onGenerate,
 }: {
   /** The stored, decrypted summary, or null when there is none to show. */
@@ -59,6 +60,12 @@ export function DocumentSummaryBlock({
   isGenerating: boolean;
   /** Capability still resolving — the transport mode isn't known yet. */
   actionsDisabled: boolean;
+  /**
+   * v1.36.x — false inside somebody else's record: a stored summary is
+   * readable, generating one writes to the owner's record and no grant level
+   * admits it. The state line stays; the button goes.
+   */
+  canGenerate?: boolean;
   onGenerate: () => void;
 }) {
   const { t } = useTranslations();
@@ -103,7 +110,7 @@ export function DocumentSummaryBlock({
       <p className="text-muted-foreground text-xs">
         {t(absentCopyKey(summaryState))}
       </p>
-      {aiEnabled ? (
+      {aiEnabled && canGenerate ? (
         <Button
           type="button"
           variant="outline"

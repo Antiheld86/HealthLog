@@ -16,6 +16,7 @@
  * copy. A Share action in the footer opens the clinician share-link create
  * flow (shared `ShareLinkCreateForm`) with this document pre-attached.
  */
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
@@ -246,6 +247,7 @@ export function DocumentDetailSheet({
       (fact) => fact.factType === "OBSERVATION" && fact.status !== "REJECTED",
     ).length ?? 0;
   const { user } = useAuth();
+  const { canManage } = useRecordCapabilities();
   const labsModuleEnabled = user?.modules?.labs !== false;
 
   const episodes = useIllnessEpisodes(true);
@@ -513,15 +515,23 @@ export function DocumentDetailSheet({
             // labels collapse to icon-only (aria-labelled) so three controls
             // never overflow the sheet at 360 px; the labels return at `sm+`.
             <div className="flex w-full items-center justify-between gap-2">
-              <Button
-                variant="ghost"
-                className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                onClick={() => remove.mutate(doc.id)}
-                disabled={remove.isPending}
-              >
-                <Trash2 className="size-4" aria-hidden />
-                {t("documents.detail.delete")}
-              </Button>
+              {/* v1.36.x — deleting, sharing and re-filing a document are the
+                  owner's alone. Inside somebody else's record the sheet reads
+                  the document and offers the download, and the leading slot
+                  simply has nothing in it. */}
+              {canManage ? (
+                <Button
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => remove.mutate(doc.id)}
+                  disabled={remove.isPending}
+                >
+                  <Trash2 className="size-4" aria-hidden />
+                  {t("documents.detail.delete")}
+                </Button>
+              ) : (
+                <span />
+              )}
               <div className="flex items-center gap-2">
                 {aiEnabled ? (
                   // v1.28.52 (Documents R3) — "Ask the Coach" opens the REAL
@@ -546,17 +556,19 @@ export function DocumentDetailSheet({
                     </span>
                   </Button>
                 ) : null}
-                <Button
-                  variant="outline"
-                  onClick={() => setShareOpen(true)}
-                  data-slot="document-share"
-                  aria-label={t("documents.detail.share")}
-                >
-                  <Share2 className="size-4" aria-hidden />
-                  <span className="hidden sm:inline">
-                    {t("documents.detail.share")}
-                  </span>
-                </Button>
+                {canManage && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setShareOpen(true)}
+                    data-slot="document-share"
+                    aria-label={t("documents.detail.share")}
+                  >
+                    <Share2 className="size-4" aria-hidden />
+                    <span className="hidden sm:inline">
+                      {t("documents.detail.share")}
+                    </span>
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   asChild
@@ -620,6 +632,10 @@ export function DocumentDetailSheet({
 
             <DocumentSummaryBlock
               summary={doc.summary}
+              // The stored summary is read; generating one writes to the
+              // owner's record, so a delegate reads what is there and has no
+              // generate control.
+              canGenerate={canManage}
               summaryState={doc.summaryState}
               generatedAtLabel={
                 doc.summaryGeneratedAt
@@ -632,41 +648,43 @@ export function DocumentDetailSheet({
               onGenerate={generateStoredSummary}
             />
 
-            <DocumentAiSection
-              aiEnabled={aiEnabled}
-              autoReadEnabled={autoReadEnabled}
-              indexEnabled={indexEnabled}
-              unavailableReason={capability.data?.reason ?? null}
-              actionsDisabled={capability.isPending}
-              onSuggest={runSuggest}
-              suggestPending={suggest.isPending}
-              suggestErrorKey={
-                suggest.isError ? documentAiErrorKey(suggest.error) : null
-              }
-              onSummarise={runSummary}
-              summaryPending={summary.isPending}
-              suggestion={suggestion}
-              suggestionKindLabel={suggestionKindLabel}
-              suggestionDateLabel={suggestionDateLabel}
-              appliedFields={appliedFields}
-              onUseTitle={applyTitle}
-              onUseKind={applyKind}
-              onUseDate={applyDate}
-              onDismissSuggestion={() => setSuggestion(null)}
-              summaryOutput={summaryOutput}
-              summaryResult={summary.data ?? null}
-              summaryErrorKey={
-                summary.isError ? documentAiErrorKey(summary.error) : null
-              }
-              onCloseSummary={() => {
-                setSummaryOutput(null);
-                summary.reset();
-              }}
-              hasContentIndex={doc.hasContentIndex}
-              contentIndexSource={doc.contentIndexSource}
-              indexPending={indexDoc.isPending}
-              onIndex={runIndex}
-            />
+            {canManage && (
+              <DocumentAiSection
+                aiEnabled={aiEnabled}
+                autoReadEnabled={autoReadEnabled}
+                indexEnabled={indexEnabled}
+                unavailableReason={capability.data?.reason ?? null}
+                actionsDisabled={capability.isPending}
+                onSuggest={runSuggest}
+                suggestPending={suggest.isPending}
+                suggestErrorKey={
+                  suggest.isError ? documentAiErrorKey(suggest.error) : null
+                }
+                onSummarise={runSummary}
+                summaryPending={summary.isPending}
+                suggestion={suggestion}
+                suggestionKindLabel={suggestionKindLabel}
+                suggestionDateLabel={suggestionDateLabel}
+                appliedFields={appliedFields}
+                onUseTitle={applyTitle}
+                onUseKind={applyKind}
+                onUseDate={applyDate}
+                onDismissSuggestion={() => setSuggestion(null)}
+                summaryOutput={summaryOutput}
+                summaryResult={summary.data ?? null}
+                summaryErrorKey={
+                  summary.isError ? documentAiErrorKey(summary.error) : null
+                }
+                onCloseSummary={() => {
+                  setSummaryOutput(null);
+                  summary.reset();
+                }}
+                hasContentIndex={doc.hasContentIndex}
+                contentIndexSource={doc.contentIndexSource}
+                indexPending={indexDoc.isPending}
+                onIndex={runIndex}
+              />
+            )}
 
             {mutationError ? (
               <p role="alert" className="text-destructive text-sm">
@@ -693,6 +711,16 @@ export function DocumentDetailSheet({
                     maxLength={200}
                     placeholder={t("documents.detail.titlePlaceholder")}
                   />
+                ) : !canManage ? (
+                  <p
+                    id="document-title-input"
+                    className={cn(
+                      "min-h-10 px-3 py-2 text-sm",
+                      doc.title === null && "text-muted-foreground",
+                    )}
+                  >
+                    {doc.title ?? t("documents.detail.titlePlaceholder")}
+                  </p>
                 ) : (
                   <button
                     type="button"
@@ -724,8 +752,12 @@ export function DocumentDetailSheet({
                   <Label htmlFor="document-kind-select">
                     {t("documents.detail.kindLabel")}
                   </Label>
+                  {/* Read-only rather than absent: the value IS the content
+                      a delegate came to read, and a form field that shows it
+                      without accepting a change is the honest rendering. */}
                   <Select
                     value={doc.kind}
+                    disabled={!canManage}
                     onValueChange={(value) =>
                       patch.mutate({ kind: value as InboundDocumentKindValue })
                     }
@@ -748,6 +780,7 @@ export function DocumentDetailSheet({
                   </Label>
                   <DateField
                     id="document-date-field"
+                    disabled={!canManage}
                     value={doc.documentDate ?? ""}
                     onChange={(value) =>
                       patch.mutate({
@@ -778,7 +811,7 @@ export function DocumentDetailSheet({
                       {t("documents.detail.noConditions")}
                     </span>
                   ) : null}
-                  {(episodes.data?.length ?? 0) > 0 ? (
+                  {canManage && (episodes.data?.length ?? 0) > 0 ? (
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button

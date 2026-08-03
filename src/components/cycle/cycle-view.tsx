@@ -16,6 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useTranslations } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 import { CycleRing } from "./cycle-ring";
@@ -92,6 +93,10 @@ type CycleTab = (typeof CYCLE_TABS)[number];
 
 export function CycleView() {
   const { t } = useTranslations();
+  // v1.36.x — no grant level admits a cycle write. Inside somebody else's
+  // record the page stays readable and every path into the log-day sheet and
+  // the profile settings is absent, rather than opening onto a refusal.
+  const { canManage } = useRecordCapabilities();
 
   // Deep-link support: `/cycle?tab=insights` opens the insights tab. The value
   // is read ONCE for the initial `defaultValue` (uncontrolled tabs — so normal
@@ -163,24 +168,28 @@ export function CycleView() {
         description={t("cycle.subtitle")}
         actions={
           <>
-            <Button
-              variant="outline"
-              size="icon"
-              className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
-              aria-label={t("cycle.tabs.settings")}
-              title={t("cycle.tabs.settings")}
-              data-slot="cycle-settings-wrench"
-              onClick={() => setTab("settings")}
-            >
-              <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-            </Button>
-            <Button
-              onClick={() => openSheet(today)}
-              className="min-h-11 sm:min-h-9"
-            >
-              <Plus className="h-4 w-4" />
-              {t("cycle.logToday")}
-            </Button>
+            {canManage && (
+              <>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
+                  aria-label={t("cycle.tabs.settings")}
+                  title={t("cycle.tabs.settings")}
+                  data-slot="cycle-settings-wrench"
+                  onClick={() => setTab("settings")}
+                >
+                  <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+                </Button>
+                <Button
+                  onClick={() => openSheet(today)}
+                  className="min-h-11 sm:min-h-9"
+                >
+                  <Plus className="h-4 w-4" />
+                  {t("cycle.logToday")}
+                </Button>
+              </>
+            )}
           </>
         }
       />
@@ -260,7 +269,10 @@ export function CycleView() {
               ) : null}
               {/* Log CTA — first period when no cycle exists yet, next period
                   when the count paused on an overdue cycle. */}
-              {!loading && !calendarError && verdict?.dayOfCycle == null ? (
+              {canManage &&
+              !loading &&
+              !calendarError &&
+              verdict?.dayOfCycle == null ? (
                 <Button
                   variant="outline"
                   className="mt-1 w-full"
@@ -315,12 +327,14 @@ export function CycleView() {
             >
               {t("cycle.tabs.insights")}
             </TabsTrigger>
-            <TabsTrigger
-              value="settings"
-              className="text-xs sm:flex-1 sm:text-sm"
-            >
-              {t("cycle.tabs.settings")}
-            </TabsTrigger>
+            {canManage && (
+              <TabsTrigger
+                value="settings"
+                className="text-xs sm:flex-1 sm:text-sm"
+              >
+                {t("cycle.tabs.settings")}
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="calendar" className="mt-4 space-y-4">
@@ -359,7 +373,7 @@ export function CycleView() {
                             null)
                           : null
                       }
-                      onSelectDay={openSheet}
+                      onSelectDay={canManage ? openSheet : undefined}
                     />
                   </>
                 )}
@@ -429,7 +443,7 @@ export function CycleView() {
               <div className="flex h-32 items-center justify-center">
                 <Loader2 className="text-muted-foreground h-6 w-6 animate-spin motion-reduce:animate-none" />
               </div>
-            ) : profileQuery.data ? (
+            ) : profileQuery.data && canManage ? (
               <CycleSettings
                 key={profileQuery.data.updatedAt}
                 profile={profileQuery.data}

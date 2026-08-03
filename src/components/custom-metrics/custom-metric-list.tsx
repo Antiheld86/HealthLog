@@ -1,5 +1,6 @@
 "use client";
 
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -29,6 +30,14 @@ import type { CustomMetricDto, CustomMetricListResponse } from "./types";
  */
 export function CustomMetricList() {
   const { t } = useTranslations();
+  // v1.36.x — the section is dropped whole inside somebody else's record.
+  // Defining a metric is not a delegated verb, and every row here links to
+  // `/custom-metrics/{id}`, which sharing does not cover: the shell turns a
+  // delegate away at that route, so the rows would be doors into a wall.
+  // Logging a value against a custom metric IS admitted, but there is no
+  // reachable surface for it under a switch, and inventing one is a read-model
+  // change this does not make.
+  const { canManage } = useRecordCapabilities();
   const router = useRouter();
   const [addOpen, setAddOpen] = useState(false);
   const [addFooterEl, setAddFooterEl] = useState<HTMLDivElement | null>(null);
@@ -46,6 +55,8 @@ export function CustomMetricList() {
     // a value) is one tap away — client nav, not a full-page reload.
     router.push(`/custom-metrics/${saved.id}`);
   }
+
+  if (!canManage) return null;
 
   return (
     <section

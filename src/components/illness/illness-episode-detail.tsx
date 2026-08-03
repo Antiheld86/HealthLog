@@ -8,6 +8,7 @@
  * red-flag / pre-onset / nadir). Calm + retrospective — no prediction UI, no
  * alarming colour.
  */
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useState } from "react";
 
 import { EpisodeDocumentsCard } from "@/components/documents/episode-documents-card";
@@ -36,6 +37,9 @@ function todayLocal(): string {
 
 export function IllnessEpisodeDetail({ episodeId }: { episodeId: string }) {
   const { t } = useTranslations();
+  // v1.36.x — logging a day, editing and resolving an episode are the
+  // owner's; a delegate reads the episode.
+  const { canManage } = useRecordCapabilities();
   const fmt = useFormatters();
   const {
     data: episode,
@@ -93,26 +97,28 @@ export function IllnessEpisodeDetail({ episodeId }: { episodeId: string }) {
             </div>
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <Button
-            onClick={() => setLogOpen(true)}
-            className="min-h-11 sm:min-h-9"
-          >
-            {t("illness.logDay")}
-          </Button>
-          {episode ? (
-            <EpisodeMenu
-              episode={episode}
-              onEdit={() => setEditOpen(true)}
-              onResolve={
-                active && !isChronic
-                  ? () => resolve.mutate(episode.id)
-                  : undefined
-              }
-              resolving={resolve.isPending}
-            />
-          ) : null}
-        </div>
+        {canManage && (
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              onClick={() => setLogOpen(true)}
+              className="min-h-11 sm:min-h-9"
+            >
+              {t("illness.logDay")}
+            </Button>
+            {episode ? (
+              <EpisodeMenu
+                episode={episode}
+                onEdit={() => setEditOpen(true)}
+                onResolve={
+                  active && !isChronic
+                    ? () => resolve.mutate(episode.id)
+                    : undefined
+                }
+                resolving={resolve.isPending}
+              />
+            ) : null}
+          </div>
+        )}
       </div>
 
       {episode?.note ? (

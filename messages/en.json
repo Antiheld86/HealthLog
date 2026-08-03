@@ -9489,6 +9489,31 @@
       "opened": "{name} opened your record {count}×",
       "acted": "{name} made a change in your record",
       "deletedAccount": "A deleted account"
+    },
+    "delegate": {
+      "addOnlyNote": "You can add to this record. Changing or removing entries is something only {name} can do."
+    },
+    "lookingAfter": {
+      "title": "Looking after",
+      "description": "Records other people have shared with you.",
+      "levelRead": "Can view",
+      "levelWrite": "Can view and add",
+      "open": "Open {name}'s record"
+    },
+    "toast": {
+      "savedTo": "Saved to {name}'s record."
+    },
+    "activityVerb": {
+      "measurementCreate": "{name} added a reading",
+      "labResultCreate": "{name} added a lab result",
+      "allergyCreate": "{name} added an allergy",
+      "familyHistoryCreate": "{name} added a family history entry",
+      "illnessEpisodeCreate": "{name} added an illness entry",
+      "biomarkerCreate": "{name} added a biomarker",
+      "customMetricEntryCreate": "{name} logged a tracked value",
+      "medicationSideEffectCreate": "{name} noted a side effect",
+      "medicationCreate": "{name} added a medication",
+      "medicationIntake": "{name} marked a dose"
     }
   }
 }

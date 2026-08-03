@@ -7,6 +7,7 @@ import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
+import { recordActivityVerbLine } from "@/lib/record-activity/activity-verb";
 import { accountLabel } from "@/lib/sharing/account-access-view";
 import {
   useRecordActivity,
@@ -113,7 +114,7 @@ function ActivityRow({ entry }: { entry: RecordActivityEntry }) {
     >
       <span className="text-foreground text-sm">
         {entry.accesses === null
-          ? t("recordSharing.activity.acted", { name: who })
+          ? recordActivityVerbLine(t, entry.action, who)
           : t("recordSharing.activity.opened", {
               name: who,
               count: entry.accesses,

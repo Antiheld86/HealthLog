@@ -1,5 +1,6 @@
 "use client";
 
+import { useActiveRecordName } from "@/hooks/use-record-capabilities";
 import { useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -95,6 +96,7 @@ export function LabForm({
   footerSlot,
 }: LabFormProps) {
   const { t } = useTranslations();
+  const recordName = useActiveRecordName();
   const queryClient = useQueryClient();
   const formId = useId();
 
@@ -199,7 +201,16 @@ export function LabForm({
         takenAt: new Date(takenAt).toISOString(),
         ...(note.trim() ? { note: note.trim() } : {}),
       });
-      toast.success(t("labs.form.savedToast"));
+      toast.success(
+        t("labs.form.savedToast"),
+        recordName
+          ? {
+              description: t("recordSharing.toast.savedTo", {
+                name: recordName,
+              }),
+            }
+          : undefined,
+      );
       if (keepOpen) {
         // A real lab report shares one blood-draw date across every
         // analyte — clear the reading but deliberately KEEP `takenAt` so
