@@ -75,7 +75,16 @@ function request(): NextRequest {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The whole shape `getSession()` returns. The session half carries the
+  // acting-account carrier, which the idempotency wrapper reads to decide
+  // whose record a cell belongs to — a fake that omitted it made the wrapper
+  // fail on a field production always has.
   mocks.getSession.mockResolvedValue({
+    session: {
+      id: "session-1",
+      expiresAt: new Date(Date.now() + 60_000),
+      actingAsUserId: null,
+    },
     user: { id: "user-1", role: "USER" },
   });
   mocks.findUnique.mockResolvedValue(null);
