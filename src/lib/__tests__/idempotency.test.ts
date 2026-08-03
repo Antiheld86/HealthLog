@@ -219,7 +219,11 @@ describe("withIdempotency", () => {
     );
     const wrapped = withIdempotency<[NextRequest]>(handler);
     await wrapped(makeRequest("POST", { "idempotency-key": "abc-12345678" }));
-    expect(getSession).toHaveBeenCalledTimes(1);
+    // Twice: once to resolve who is calling, once to read which record they
+    // say they are acting on. The second read is what a delegated write costs
+    // here, and it is a single indexed lookup on a request that is about to
+    // write anyway.
+    expect(getSession).toHaveBeenCalledTimes(2);
     expect(prisma.idempotencyKey.create).toHaveBeenCalledTimes(1);
     const persisted = vi.mocked(prisma.idempotencyKey.create).mock
       .calls[0][0] as { data: { userId: string } };
@@ -534,5 +538,138 @@ describe("isCachableStatus do-not-cache rules (V3 audit)", () => {
     expect(stored).not.toContain(PHI);
     expect(stored).not.toContain("cramps");
     expect(stored.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * The cell is scoped to the record the request claims, not only to the caller.
+ *
+ * `tests/integration/idempotency-record-scoped-cell.test.ts` proves the rows.
+ * These prove the key the wrapper composes, which is what decides whether two
+ * requests meet in one cell — including the two cases a row-level test cannot
+ * show, because both end in no row at all.
+ */
+describe("withIdempotency — record-scoped cells", () => {
+  const CLIENT_KEY = "abc-12345678";
+
+  /** Present these headers to the wrapper for the next call. */
+  function present(values: Record<string, string>): void {
+    vi.mocked(headers).mockResolvedValue({
+      get: (name: string) => values[name.toLowerCase()] ?? null,
+    } as unknown as ReturnType<typeof headers> extends Promise<infer T>
+      ? T
+      : never);
+  }
+
+  /** Sign the caller in over the cookie transport, optionally switched. */
+  function cookieSession(actingAsUserId: string | null): void {
+    vi.mocked(getSession).mockResolvedValue({
+      session: {
+        id: "s-1",
+        expiresAt: new Date(Date.now() + 60_000),
+        actingAsUserId,
+      },
+      user: { id: "u-1", role: "USER" },
+    } as Awaited<ReturnType<typeof getSession>>);
+  }
+
+  async function run(key = CLIENT_KEY): Promise<void> {
+    const handler = vi.fn(async () =>
+      NextResponse.json({ data: { ok: true }, error: null }, { status: 201 }),
+    );
+    const wrapped = withIdempotency<[NextRequest]>(handler, async () => "u-1");
+    await wrapped(makeRequest("POST", { "idempotency-key": key }));
+  }
+
+  /** The key the wrapper looked the cell up under. */
+  function lookedUpKey(): string {
+    const call = vi.mocked(prisma.idempotencyKey.findUnique).mock
+      .calls[0][0] as {
+      where: { userId_key_method_path: { userId: string; key: string } };
+    };
+    return call.where.userId_key_method_path.key;
+  }
+
+  /** The row the wrapper claimed. */
+  function claimed(): { userId: string; key: string } {
+    return (
+      vi.mocked(prisma.idempotencyKey.create).mock.calls[0][0] as {
+        data: { userId: string; key: string };
+      }
+    ).data;
+  }
+
+  it("folds the account named by the Bearer selector into the key", async () => {
+    vi.mocked(getSession).mockResolvedValue(null);
+    present({ "x-healthlog-account": "owner-9" });
+
+    await run();
+
+    expect(lookedUpKey()).toBe(`owner-9|${CLIENT_KEY}`);
+    // The owner column stays the ACTOR. It is a foreign key to `users` with a
+    // cascade behind it, so it can only ever hold a real account id — which is
+    // why the record moved into the key and not into here.
+    expect(claimed()).toMatchObject({
+      userId: "u-1",
+      key: `owner-9|${CLIENT_KEY}`,
+    });
+  });
+
+  it("folds the account the cookie session is switched to", async () => {
+    cookieSession("owner-7");
+    present({});
+
+    await run();
+
+    expect(claimed().key).toBe(`owner-7|${CLIENT_KEY}`);
+  });
+
+  it("keys a request with no acting account byte-for-byte as the client sent it", async () => {
+    cookieSession(null);
+    present({});
+
+    await run();
+
+    expect(lookedUpKey()).toBe(CLIENT_KEY);
+    expect(claimed()).toMatchObject({ userId: "u-1", key: CLIENT_KEY });
+  });
+
+  it("ignores a selector sent over the cookie transport", async () => {
+    // The resolver refuses that request outright (`misplaced_selector`). The
+    // cell must not pretend it named a record either — a claim the request was
+    // never going to be served must not move where its answer is filed.
+    cookieSession(null);
+    present({ "x-healthlog-account": "owner-9" });
+
+    await run();
+
+    expect(claimed().key).toBe(CLIENT_KEY);
+  });
+
+  it("refuses a client key that carries the separator", async () => {
+    // The one way a caller could aim at somebody else's cell: send
+    // `owner-9|abc-12345678` as the key from their own un-switched session. The
+    // key validator does not admit the byte, so the header is malformed and the
+    // wrapper does not cache at all.
+    vi.mocked(getSession).mockResolvedValue(null);
+    present({});
+
+    await run(`owner-9|${CLIENT_KEY}`);
+
+    expect(prisma.idempotencyKey.findUnique).not.toHaveBeenCalled();
+    expect(prisma.idempotencyKey.create).not.toHaveBeenCalled();
+  });
+
+  it("skips the cache when the claimed account names nothing that could exist", async () => {
+    // Longer than any account id. The request is refused downstream; caching it
+    // would let a caller write an arbitrarily long key into the table on the
+    // way to a 403.
+    vi.mocked(getSession).mockResolvedValue(null);
+    present({ "x-healthlog-account": "x".repeat(65) });
+
+    await run();
+
+    expect(prisma.idempotencyKey.findUnique).not.toHaveBeenCalled();
+    expect(prisma.idempotencyKey.create).not.toHaveBeenCalled();
   });
 });

@@ -65,9 +65,13 @@ describe("T1 — the Bearer resolution set is frozen", () => {
     // `defaultUserIdResolver` — resolves the Bearer token to a user id so an
     // idempotency key files under its owner. It authorises nothing: the
     // handler still runs its own `requireAuth()`, and this resolver only
-    // decides which user's cache cell a replay lands in. Narrow in reach and
-    // deliberate, but it is a raw Bearer value becoming a user id, so it
-    // belongs on this list rather than beside it.
+    // decides which cache cell a replay lands in. Since delegated writes it
+    // decides that from two values — the caller resolved here, and the record
+    // the request claims, read through the one acting-account carrier reader
+    // and folded into the key. Both are unchecked selectors; neither widens
+    // what the handler will do. Narrow in reach and deliberate, but it is a
+    // raw Bearer value becoming a user id, so it belongs on this list rather
+    // than beside it.
     "lib/idempotency.ts",
   ].sort();
 

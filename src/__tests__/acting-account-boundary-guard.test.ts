@@ -74,6 +74,9 @@ describe("the acting-account carrier is read in one place", () => {
   const CARRIER_ALLOWLIST = [
     // Projects it off the session row it already loaded.
     "lib/auth/session.ts",
+    // Reads it. The one statement of "what does this request say it is acting
+    // as", for both transports and for every caller that has to ask.
+    "lib/auth/acting-carrier.ts",
     // The resolver. The only thing that acts on the value.
     "lib/api-handler.ts",
     // v1.36.0 — the only thing that WRITES it: the switch endpoint sets it
@@ -115,6 +118,28 @@ describe("the acting-account carrier is read in one place", () => {
     expect(namers).toEqual([
       "lib/auth/acting-carrier.ts",
       "lib/openapi/routes/account-sharing.ts",
+    ]);
+  });
+
+  /**
+   * Who may ask "which record does this request claim" without an auth
+   * context in hand.
+   *
+   * `readClaimedActingAccount()` answers before any grant check has run, so a
+   * caller that treats its answer as permission has skipped the only thing
+   * that grants any. Exactly one caller exists, beside the file that declares
+   * it: the idempotency wrapper, which uses the claim to pick a cache cell and
+   * leaves the check to the handler it wraps. Everything else that needs the
+   * acting account has an auth context by then and goes through
+   * `requireRecordAuth`, which checks a live grant before returning. A second
+   * caller here is a design question, not a patch.
+   */
+  it("the unchecked claim has exactly two consumers", () => {
+    const consumers = filesMatching(/readClaimedActingAccount/);
+    expect(consumers.length).toBeGreaterThan(0);
+    expect(consumers).toEqual([
+      "lib/auth/acting-carrier.ts",
+      "lib/idempotency.ts",
     ]);
   });
 });

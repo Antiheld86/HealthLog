@@ -1,9 +1,14 @@
 /**
  * What a request says it is acting as.
  *
- * It lives apart from `requireRecordAuth`, which acts on the answer, because
- * asking the question and deciding what it permits are different jobs and the
- * asking is about to have more than one caller.
+ * Two things in the app have to answer that question, and they have to answer
+ * it the same way:
+ *
+ *   * `requireRecordAuth` (`src/lib/api-handler.ts`), which turns the claim
+ *     into a data scope after checking a live grant.
+ *   * `withIdempotency` (`src/lib/idempotency.ts`), which files the replay cell
+ *     under the record the request claims — before any handler runs, so it
+ *     cannot wait for the grant check the handler performs.
  *
  * The claim is a SELECTOR and never an authorisation. Nothing in this file
  * looks at a grant, and no caller may treat a carrier as permission: the
@@ -24,6 +29,8 @@
  *     case about data that looks wrong.
  */
 import { headers } from "next/headers";
+
+import { getSession } from "@/lib/auth/session";
 
 /**
  * The per-request account selector, on the Bearer transport only.
@@ -102,4 +109,46 @@ export function carrierTarget(carrier: ActingCarrier): string | null {
 /** Could this value name an account at all? */
 export function selectorNamesAnAccount(value: string): boolean {
   return value.length > 0 && value.length <= MAX_SELECTOR_LENGTH;
+}
+
+/**
+ * The account this request CLAIMS, resolved without an auth context in hand.
+ *
+ * For callers that run BEFORE authentication has been resolved into a context —
+ * today that is the idempotency wrapper, which has to know which record a
+ * request is aimed at before it decides whether the answer is already cached.
+ * It resolves the session itself for exactly one reason: the transport decides
+ * which carrier counts, and "there is a valid session" is what the transport
+ * is. Guessing it from the presence of a cookie or an `Authorization` header
+ * would be a second, weaker answer to a question this file exists to answer
+ * once — and the case it gets wrong (a stale session cookie beside a live
+ * Bearer token) is precisely a delegated write landing in the wrong cell.
+ *
+ * The cost is one indexed session lookup on a request that is already about to
+ * write. It is not shared with the caller's own auth resolution because the
+ * resolver a route passes to `withIdempotency` is pluggable, and threading a
+ * session through that seam would make every custom resolver responsible for a
+ * question none of them asks.
+ *
+ * Returns the CLAIMED account, unverified and unchecked. The grant check
+ * happens later, inside the handler, on every request.
+ */
+export async function readClaimedActingAccount(): Promise<string | null> {
+  const header = await readSelectorHeader();
+  let session: Awaited<ReturnType<typeof getSession>> = null;
+  try {
+    session = await getSession();
+  } catch {
+    // A session that cannot be resolved is not a switched one. The request
+    // still has to be authenticated by whatever wraps this call, and an
+    // unauthenticated request claims nothing.
+    session = null;
+  }
+  return carrierTarget(
+    decideActingCarrier({
+      transport: session ? "cookie" : "bearer",
+      stamped: session?.session.actingAsUserId ?? null,
+      header,
+    }),
+  );
 }
