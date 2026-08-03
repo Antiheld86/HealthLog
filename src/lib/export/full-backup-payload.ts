@@ -53,6 +53,7 @@ export interface FullBackupCounts
   measurements: number;
   medications: number;
   intakeEvents: number;
+  medicationSideEffects: number;
   moodEntries: number;
   cycles: number;
   cycleDayLogs: number;
@@ -186,7 +187,17 @@ export async function buildFullBackupPayload(
     })(),
     prisma.medication.findMany({
       where: { userId },
-      include: { schedules: true },
+      // Side effects ride INSIDE their medication, exactly as the schedules
+      // beside them do. The alternative — a top-level array carrying
+      // `medicationId` — would have to survive a restore that mints new
+      // medication ids for a portable file, which is the id-remap the intake
+      // events already have to work around by drug name. A nested create has
+      // no id to remap: Prisma binds the child to whatever id the parent row
+      // actually got.
+      include: {
+        schedules: true,
+        sideEffects: { orderBy: { occurredAt: "desc" } },
+      },
     }),
     prisma.medicationIntakeEvent.findMany({
       where: disasterRecovery ? { userId } : { userId, deletedAt: null },
@@ -336,6 +347,28 @@ export async function buildFullBackupPayload(
         label: s.label,
         dose: s.dose,
       })),
+      // What the person recorded against the drug, and the reason a drug may
+      // have been stopped. `notes` is the same dual-column arrangement
+      // `Measurement` has and gets the same treatment: a portable export
+      // carries the DECRYPTED note and no ciphertext, a disaster-recovery
+      // payload carries the ciphertext verbatim plus whatever legacy plaintext
+      // the row still holds, and the restore re-encrypts the plaintext case.
+      sideEffects: m.sideEffects.map((s) => ({
+        ...(disasterRecovery
+          ? {
+              id: s.id,
+              notes: s.notes,
+              notesEncrypted: s.notesEncrypted
+                ? Buffer.from(s.notesEncrypted).toString("base64")
+                : null,
+              createdAt: s.createdAt.toISOString(),
+            }
+          : { notes: readNote(s.notesEncrypted, s.notes) }),
+        occurredAt: s.occurredAt.toISOString(),
+        category: s.category,
+        entry: s.entry,
+        severity: s.severity,
+      })),
     })),
     intakeEvents: intakeEvents.map((e) => ({
       ...(disasterRecovery
@@ -428,6 +461,10 @@ export async function buildFullBackupPayload(
       measurements: measurements.length,
       medications: medications.length,
       intakeEvents: intakeEvents.length,
+      medicationSideEffects: medications.reduce(
+        (total, m) => total + m.sideEffects.length,
+        0,
+      ),
       moodEntries: moodEntries.length,
       cycles: cycle.cycles.length,
       cycleDayLogs: cycle.cycleDayLogs.length,

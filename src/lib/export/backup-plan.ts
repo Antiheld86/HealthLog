@@ -210,6 +210,7 @@ export const TWO_ENDED_MODELS = [
   "Medication",
   "MedicationSchedule",
   "MedicationIntakeEvent",
+  "MedicationSideEffect",
   "MoodEntry",
   "MoodEntryTagLink",
   "MoodTag",
@@ -276,8 +277,6 @@ export const COVERAGE_PENDING: Readonly<Record<string, string>> = {
     "Titration history — when a dose went up or down and by how much. A restore rebuilds the current dose and drops the ramp that led to it.",
   MedicationPauseEra:
     "The spans where a medication was deliberately paused. Without them the compliance recomputation counts a deliberate pause as missed doses and the restored account looks non-adherent.",
-  MedicationSideEffect:
-    "Side effects the person recorded against a drug. Restoring the drug without them loses the reason someone may have stopped taking it.",
   MedicationEfficacyTarget:
     "What a medication was supposed to move, and by how much. The drug comes back with no statement of what it was for.",
   MedicationInventoryItem:

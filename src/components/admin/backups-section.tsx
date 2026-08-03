@@ -324,6 +324,9 @@ export function BackupsSection() {
           medications: number;
           intakeEvents: number;
           moodEntries: number;
+          // Optional for the same reason as the keys below: a file written
+          // before side effects rode the wire carries no key at all.
+          medicationSideEffects?: number;
           cycles?: number;
           cycleDayLogs?: number;
           // v1.28 backup-completeness — optional so an older-schema upload
@@ -354,6 +357,7 @@ export function BackupsSection() {
         data.summary.medications +
         data.summary.intakeEvents +
         data.summary.moodEntries +
+        (data.summary.medicationSideEffects ?? 0) +
         (data.summary.cycles ?? 0) +
         (data.summary.cycleDayLogs ?? 0) +
         (data.summary.labResults ?? 0) +
