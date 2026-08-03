@@ -1,16 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
+// v1.36.x — the create arms resolve a RECORD now. The stub returns the caller
+// as both the record and the actor, which is what the resolver itself returns
+// for anyone who has not switched; the substitution proper is proved against
+// real Postgres in `tests/integration/sharing-delegable-writes.test.ts`.
+const SELF = {
+  id: "user-1",
+  username: "tester",
+  role: "USER",
+  timezone: "Europe/Berlin",
+};
+
 vi.mock("@/lib/api-handler", () => ({
   apiHandler: (fn: unknown) => fn,
-  requireAuth: vi.fn(async () => ({
-    user: {
-      id: "user-1",
-      username: "tester",
-      role: "USER",
-      timezone: "Europe/Berlin",
-    },
-  })),
+  requireRecordAuth: vi.fn(async () => ({ user: SELF, actor: SELF })),
 }));
 
 vi.mock("@/lib/idempotency", () => ({

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { fireAndForget } from "@/lib/logging/fire-and-forget";
 import { auditLog } from "@/lib/auth/audit";
@@ -750,7 +750,12 @@ async function sleepListResponse(
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postMeasurement));
 
 async function postMeasurement(request: NextRequest) {
-  const { user } = await requireAuth();
+  // v1.36.x — a delegated write. `user` is the record the reading belongs to,
+  // which every `userId: user.id` below already meant; the caller is somebody
+  // who may or may not be that person. Nothing else in this handler reads the
+  // caller: the safety-floor check, the reminder satisfaction, the rollup
+  // recompute and the cache eviction are all statements about the record.
+  const { user } = await requireRecordAuth("write");
 
   const { data: body, error: jsonError } = await safeJson(request, {
     maxBytes: 64 * 1024,
@@ -777,17 +782,16 @@ async function postMeasurement(request: NextRequest) {
       const auditIssues = sanitiseZodIssues(parsed.error.issues, {
         stripValuesFromMessage: true,
       });
-      prisma.auditLog
-        .create({
-          data: {
-            userId: user.id,
-            action: "measurements.create.batch.validation-failed",
-            details: JSON.stringify({ issues: auditIssues }),
-          },
-        })
-        .catch(() => {
-          /* swallow — 422 response is the contract */
-        });
+      // v1.36.x — through `auditLog()` rather than a bare `prisma.auditLog
+      // .create`, because that helper is the only thing that stamps
+      // `actorUserId`. Filed under the resolved record either way; without the
+      // stamp a delegate's malformed batch would read as the owner's own.
+      void auditLog("measurements.create.batch.validation-failed", {
+        userId: user.id,
+        details: { issues: auditIssues },
+      }).catch(() => {
+        /* swallow — 422 response is the contract */
+      });
       return returnAllZodIssues(parsed.error, 422, {
         errorCode: "measurement.create.invalid",
       });
@@ -934,17 +938,13 @@ async function postMeasurement(request: NextRequest) {
     const auditIssues = sanitiseZodIssues(parsed.error.issues, {
       stripValuesFromMessage: true,
     });
-    prisma.auditLog
-      .create({
-        data: {
-          userId: user.id,
-          action: "measurements.create.validation-failed",
-          details: JSON.stringify({ issues: auditIssues }),
-        },
-      })
-      .catch(() => {
-        /* swallow — 422 response is the contract */
-      });
+    // v1.36.x — see the batch arm above: only `auditLog()` stamps the actor.
+    void auditLog("measurements.create.validation-failed", {
+      userId: user.id,
+      details: { issues: auditIssues },
+    }).catch(() => {
+      /* swallow — 422 response is the contract */
+    });
     return returnAllZodIssues(parsed.error, 422, {
       errorCode: "measurement.create.invalid",
     });

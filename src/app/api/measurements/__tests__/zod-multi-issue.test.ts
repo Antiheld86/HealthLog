@@ -180,18 +180,17 @@ describe("POST /api/measurements — single — 422 multi-issue (v1.4.43 W6)", (
     const res = await POST(postReq({ measuredAt: "junk" }));
     expect(res.status).toBe(422);
     await new Promise((r) => setTimeout(r, 5));
-    expect(prisma.auditLog.create).toHaveBeenCalledTimes(1);
-    const call = vi.mocked(prisma.auditLog.create).mock.calls[0]?.[0] as {
-      data: { userId: string; action: string; details: string };
-    };
-    expect(call.data.userId).toBe("user-1");
-    expect(call.data.action).toBe("measurements.create.validation-failed");
+    // v1.36.x — through the helper, same reason as the GET arm: the create
+    // arms are delegable writes now, and only `auditLog` stamps the delegate.
+    expect(auditLog).toHaveBeenCalledTimes(1);
+    expect(auditLog).toHaveBeenCalledWith(
+      "measurements.create.validation-failed",
+      expect.objectContaining({ userId: "user-1" }),
+    );
   });
 
   it("does not block the 422 when the audit-row write rejects", async () => {
-    vi.mocked(prisma.auditLog.create).mockRejectedValueOnce(
-      new Error("db down"),
-    );
+    vi.mocked(auditLog).mockRejectedValueOnce(new Error("db down"));
     const res = await POST(postReq({ measuredAt: "junk" }));
     expect(res.status).toBe(422);
   });
@@ -259,20 +258,15 @@ describe("POST /api/measurements — batch — 422 multi-issue (v1.4.43 W6)", ()
     );
     expect(res.status).toBe(422);
     await new Promise((r) => setTimeout(r, 5));
-    expect(prisma.auditLog.create).toHaveBeenCalledTimes(1);
-    const call = vi.mocked(prisma.auditLog.create).mock.calls[0]?.[0] as {
-      data: { userId: string; action: string; details: string };
-    };
-    expect(call.data.userId).toBe("user-1");
-    expect(call.data.action).toBe(
+    expect(auditLog).toHaveBeenCalledTimes(1);
+    expect(auditLog).toHaveBeenCalledWith(
       "measurements.create.batch.validation-failed",
+      expect.objectContaining({ userId: "user-1" }),
     );
   });
 
   it("does not block the 422 when the audit-row write rejects", async () => {
-    vi.mocked(prisma.auditLog.create).mockRejectedValueOnce(
-      new Error("db down"),
-    );
+    vi.mocked(auditLog).mockRejectedValueOnce(new Error("db down"));
     const res = await POST(
       postReq([
         { type: "WEIGHT", value: 70, measuredAt: "junk" },
