@@ -13,12 +13,21 @@ import { useTranslations } from "@/lib/i18n/context";
 import { useInviteGrant } from "@/lib/queries/use-account-grants";
 
 /**
- * v1.36.0 — offering somebody read access to this record.
+ * v1.36.0 — offering somebody access to this record.
  *
- * One field, because there is one decision: who. The access level is not
- * offered — v1 grants read and only read, and a control whose only setting is
- * its default is a promise about a future release rather than a choice about
- * this one.
+ * Two decisions: who, and what they may do. The level is a choice at the
+ * invitation and only there — a grant is READ or WRITE from the moment it is
+ * offered, nothing widens it later, and the way to a wider one is a fresh
+ * invitation the other person accepts again. So this form is the one screen
+ * where the owner's half of that consent is given, and the option labels have
+ * to be worth reading.
+ *
+ * The capability sentences say what actually ships rather than the word
+ * "write", which people read as larger than it is. A delegate can ADD:
+ * readings, results, observations, a medication, a dose marked as taken. They
+ * cannot edit or delete anything, including what they added ten seconds ago.
+ * A person who learns that from a support reply rather than from this card was
+ * not told.
  *
  * The invitation confers nothing until the other person accepts it. The card
  * says so above the field rather than after the submit, because that is the
@@ -35,6 +44,9 @@ export function GrantInviteCard() {
   const invite = useInviteGrant();
   const [identifier, setIdentifier] = useState("");
   const [expiresOn, setExpiresOn] = useState("");
+  // READ preselected. The narrower level is the one somebody should have to
+  // choose their way out of, not into.
+  const [access, setAccess] = useState<GrantAccessLevel>("READ");
   const [error, setError] = useState<string | null>(null);
   const [invited, setInvited] = useState<string | null>(null);
 
@@ -45,11 +57,12 @@ export function GrantInviteCard() {
     setError(null);
     setInvited(null);
     invite.mutate(
-      { identifier: value, expiresAt: endOfDayIso(expiresOn) },
+      { identifier: value, access, expiresAt: endOfDayIso(expiresOn) },
       {
         onSuccess: (grant) => {
           setIdentifier("");
           setExpiresOn("");
+          setAccess("READ");
           setInvited(grant.account.username);
         },
         onError: (err) => setError(t(inviteErrorKey(err))),
@@ -82,6 +95,30 @@ export function GrantInviteCard() {
             {t("recordSharing.invite.identifierHint")}
           </p>
         </div>
+        <fieldset className="space-y-1.5" data-slot="grant-invite-access">
+          {/* The `Label` primitive is a `<label>` and cannot name a group, so
+              the legend mirrors its type and its trailing colon by hand rather
+              than mislabelling one radio as the heading of both. */}
+          <legend className="pl-1 text-sm leading-none font-medium after:content-[':']">
+            {t("recordSharing.invite.accessLegend")}
+          </legend>
+          <div className="space-y-2">
+            <AccessOption
+              level="READ"
+              selected={access === "READ"}
+              onSelect={() => setAccess("READ")}
+              label={t("recordSharing.invite.accessReadLabel")}
+              capability={t("recordSharing.invite.accessReadCapability")}
+            />
+            <AccessOption
+              level="WRITE"
+              selected={access === "WRITE"}
+              onSelect={() => setAccess("WRITE")}
+              label={t("recordSharing.invite.accessWriteLabel")}
+              capability={t("recordSharing.invite.accessWriteCapability")}
+            />
+          </div>
+        </fieldset>
         <div className="space-y-1.5">
           <Label htmlFor="grant-invite-expires">
             {t("recordSharing.invite.expiresLabel")}
@@ -119,6 +156,63 @@ export function GrantInviteCard() {
         )}
       </form>
     </SettingsCard>
+  );
+}
+
+/** The two levels an invitation can carry, as the client names them. */
+export type GrantAccessLevel = "READ" | "WRITE";
+
+/**
+ * One level, with the sentence that says what it actually does.
+ *
+ * The capability line is not decoration and it is not a tooltip: it is the
+ * part the owner is consenting to, so it sits under the label where it has to
+ * be read past rather than behind an info icon. Muted because it describes the
+ * option rather than being the option (UI-STANDARDS §3), `text-xs` because
+ * that is the meta floor.
+ */
+function AccessOption({
+  level,
+  selected,
+  onSelect,
+  label,
+  capability,
+}: {
+  level: GrantAccessLevel;
+  selected: boolean;
+  onSelect: () => void;
+  label: string;
+  capability: string;
+}) {
+  return (
+    <label
+      data-slot="grant-invite-access-option"
+      data-access={level}
+      data-selected={selected ? "true" : "false"}
+      className={[
+        "flex min-h-11 cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors",
+        selected
+          ? "border-primary bg-primary/5"
+          : "border-border hover:bg-muted/40",
+      ].join(" ")}
+    >
+      <input
+        type="radio"
+        name="grant-invite-access"
+        value={level}
+        checked={selected}
+        onChange={onSelect}
+        className="sr-only"
+      />
+      <span className="space-y-1">
+        <span className="text-foreground block text-sm font-medium">
+          {label}
+        </span>
+        <span className="text-muted-foreground block text-xs">
+          {capability}
+        </span>
+      </span>
+    </label>
   );
 }
 

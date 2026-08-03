@@ -120,6 +120,13 @@ export interface InviteInput {
   identifier: string;
   /** ISO-8601 with offset, or null for a grant that runs until somebody ends it. */
   expiresAt: string | null;
+  /**
+   * What the invitation offers. Required rather than optional even though the
+   * server defaults an omitted field to READ: a caller that does not name the
+   * level has not decided it, and this is the one moment the level can be
+   * decided at all.
+   */
+  access: "READ" | "WRITE";
 }
 
 export function useInviteGrant() {

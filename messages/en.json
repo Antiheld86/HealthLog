@@ -9424,6 +9424,11 @@
       "identifierLabel": "Username or e-mail",
       "identifierPlaceholder": "The name they sign in with",
       "identifierHint": "They need an account on this instance. Invitations cannot be sent to an e-mail address that has not registered.",
+      "accessLegend": "What they may do",
+      "accessReadLabel": "Can view",
+      "accessReadCapability": "They can read everything this record shares. They cannot add or change anything.",
+      "accessWriteLabel": "Can view and add",
+      "accessWriteCapability": "They can also add to the record: readings, lab results, allergies and other observations, a new medication, and marking a dose as taken. They cannot edit or delete anything, not even what they added. Only you can.",
       "expiresLabel": "Access ends on (optional)",
       "expiresHint": "Leave this empty for access that lasts until somebody ends it. A date here is checked on every request, so access stops on its own at the end of that day.",
       "submit": "Send invitation",
@@ -9446,6 +9451,8 @@
       "withdrawInvite": "Withdraw",
       "revokeTitle": "End {name}'s access?",
       "revokeBody": "They lose access immediately, including any browser they have your record open in. What they have already seen cannot be taken back. You can invite them again at any time.",
+      "revokeEntriesStay": "Anything they entered stays in your record, and you can remove any of it yourself.",
+      "revokeAttribution": "Who entered what stays visible in your activity view for {days} days.",
       "revokeConfirm": "End access"
     },
     "received": {
@@ -9456,6 +9463,7 @@
       "loadError": "The list could not be loaded.",
       "accept": "Accept",
       "accepting": "Accepting…",
+      "writeConsent": "If you accept, what you add becomes part of {name}'s record. You will not be able to change or remove entries afterwards; only {name} can.",
       "open": "Open",
       "renounce": "Hand back",
       "renounceTitle": "Hand {name}'s record back?",

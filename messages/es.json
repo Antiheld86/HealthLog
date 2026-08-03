@@ -9424,6 +9424,11 @@
       "identifierLabel": "Usuario o correo electrónico",
       "identifierPlaceholder": "El nombre con el que inicia sesión",
       "identifierHint": "Necesita una cuenta en esta instancia. No se pueden enviar invitaciones a una dirección que no se haya registrado.",
+      "accessLegend": "Qué puede hacer",
+      "accessReadLabel": "Puede ver",
+      "accessReadCapability": "Puede leer todo lo que este historial comparte. No puede añadir ni cambiar nada.",
+      "accessWriteLabel": "Puede ver y añadir",
+      "accessWriteCapability": "También puede añadir cosas al historial: mediciones, resultados de laboratorio, alergias y otras observaciones, un medicamento nuevo y una dosis marcada como tomada. No puede editar ni eliminar nada, tampoco lo que ha añadido. Solo tú puedes.",
       "expiresLabel": "El acceso termina el (opcional)",
       "expiresHint": "Déjalo vacío para un acceso que dure hasta que alguien lo termine. Una fecha aquí se comprueba en cada petición, así que el acceso se detiene solo al final de ese día.",
       "submit": "Enviar invitación",
@@ -9446,6 +9451,8 @@
       "withdrawInvite": "Retirar",
       "revokeTitle": "¿Finalizar el acceso de {name}?",
       "revokeBody": "Pierde el acceso de inmediato, incluido cualquier navegador donde tenga tu historial abierto. Lo que ya ha visto no se puede recuperar. Puedes volver a invitarle cuando quieras.",
+      "revokeEntriesStay": "Lo que haya añadido se queda en tu historial, y puedes eliminarlo tú cuando quieras.",
+      "revokeAttribution": "Quién añadió qué sigue visible en tu vista de actividad durante {days} días.",
       "revokeConfirm": "Finalizar acceso"
     },
     "received": {
@@ -9456,6 +9463,7 @@
       "loadError": "No se pudo cargar la lista.",
       "accept": "Aceptar",
       "accepting": "Aceptando…",
+      "writeConsent": "Si aceptas, lo que añadas pasa a formar parte del historial de {name}. Después no podrás cambiar ni eliminar entradas; solo {name} puede.",
       "open": "Abrir",
       "renounce": "Devolver",
       "renounceTitle": "¿Devolver el historial de {name}?",

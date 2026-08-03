@@ -9424,6 +9424,11 @@
       "identifierLabel": "Nazwa użytkownika lub e-mail",
       "identifierPlaceholder": "Nazwa, którą się loguje",
       "identifierHint": "Ta osoba potrzebuje konta na tej instancji. Nie można wysłać zaproszenia na niezarejestrowany adres.",
+      "accessLegend": "Co ta osoba może robić",
+      "accessReadLabel": "Może przeglądać",
+      "accessReadCapability": "Może czytać wszystko, co ta karta udostępnia. Nie może niczego dodać ani zmienić.",
+      "accessWriteLabel": "Może przeglądać i dodawać",
+      "accessWriteCapability": "Może też dodawać do karty: pomiary, wyniki badań, alergie i inne obserwacje, nowy lek oraz oznaczenie dawki jako przyjętej. Nie może niczego edytować ani usuwać, także własnych wpisów. Możesz to zrobić tylko ty.",
       "expiresLabel": "Dostęp kończy się (opcjonalnie)",
       "expiresHint": "Zostaw puste, aby dostęp trwał, dopóki ktoś go nie zakończy. Data jest sprawdzana przy każdym żądaniu, więc dostęp kończy się sam z końcem tego dnia.",
       "submit": "Wyślij zaproszenie",
@@ -9446,6 +9451,8 @@
       "withdrawInvite": "Wycofaj",
       "revokeTitle": "Zakończyć dostęp dla {name}?",
       "revokeBody": "Dostęp kończy się natychmiast, także w każdej przeglądarce, w której twoja karta jest otwarta. Tego, co już zostało zobaczone, nie da się cofnąć. Możesz zaprosić ponownie w dowolnej chwili.",
+      "revokeEntriesStay": "To, co ta osoba wpisała, zostaje w twojej karcie i możesz to samodzielnie usunąć.",
+      "revokeAttribution": "Kto co wpisał, pozostaje widoczne w widoku aktywności przez {days} dni.",
       "revokeConfirm": "Zakończ dostęp"
     },
     "received": {
@@ -9456,6 +9463,7 @@
       "loadError": "Nie udało się wczytać listy.",
       "accept": "Akceptuj",
       "accepting": "Akceptowanie…",
+      "writeConsent": "Jeśli zaakceptujesz, to, co dodasz, stanie się częścią karty użytkownika {name}. Później nie będziesz mieć możliwości zmiany ani usunięcia wpisów; może to zrobić tylko {name}.",
       "open": "Otwórz",
       "renounce": "Zwróć",
       "renounceTitle": "Zwrócić kartę użytkownika {name}?",
