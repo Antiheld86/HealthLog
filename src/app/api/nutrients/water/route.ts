@@ -19,9 +19,11 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
+import { auditLog } from "@/lib/auth/audit";
 import {
   apiError,
   apiSuccess,
+  getClientIp,
   returnAllZodIssues,
   safeJson,
 } from "@/lib/api-response";
@@ -134,6 +136,17 @@ async function postWater(request: NextRequest): Promise<Response> {
   // dashboard water tile reflects the new total on the very next read,
   // matching the mood / medication / measurement posture.
   invalidateUserDashboardSnapshot(user.id);
+
+  // A health-data write earns a durable row, like every other one. This was
+  // the last manual write in the nutrients family that only reached the wide
+  // event, which expires; the audit trail is what answers "who put this here"
+  // months later, and with a delegate able to act on a shared record that
+  // question has a second possible answer.
+  await auditLog("nutrient.water.write", {
+    userId: user.id,
+    ipAddress: getClientIp(request),
+    details: { day, mode, amountMl, resultingAmount: row.amount },
+  });
 
   annotate({
     action: { name: "nutrient.water.write" },

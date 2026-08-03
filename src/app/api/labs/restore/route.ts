@@ -14,9 +14,11 @@ import { NextRequest } from "next/server";
 import { z } from "zod/v4";
 
 import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { auditLog } from "@/lib/auth/audit";
 import {
   apiError,
   apiSuccess,
+  getClientIp,
   returnAllZodIssues,
   safeJson,
 } from "@/lib/api-response";
@@ -68,6 +70,16 @@ async function postRestore(request: NextRequest): Promise<Response> {
     data: { deletedAt: null },
   });
   if (count > 0) invalidateUserHealthScore(user.id);
+
+  // Bringing a reading back is a health-data write and earns the same durable
+  // row its delete already writes (`labResult.delete`). Without this the trail
+  // showed a deletion that appeared to be reversed by nobody. Mirrors
+  // `measurement.restore`, which is the same affordance one domain over.
+  await auditLog("labResult.restore", {
+    userId: user.id,
+    ipAddress: getClientIp(request),
+    details: { count },
+  });
 
   annotate({ action: { name: "labs.restore" }, meta: { restored: count } });
 

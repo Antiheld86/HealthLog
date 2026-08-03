@@ -30,8 +30,27 @@ export const DELETE = apiHandler(
       select: { name: true },
     });
 
-    const { count } = await prisma.medicationIntakeEvent.deleteMany({
-      where: { medicationId: id, userId: user.id },
+    // Tombstone, like both siblings (single-event DELETE, bulk-delete). This
+    // was the one destructive verb in the intake family with nothing to
+    // reconstruct from: `deleteMany` removed the rows outright, so a purge
+    // fired by mistake was final, and it was invisible to `/api/sync/changes`
+    // — a client offline at purge time kept every row forever, because a row
+    // that no longer exists produces no tombstone to send.
+    //
+    // Setting `deletedAt` (+ bumping `syncVersion`) makes the rows invisible
+    // to every today / compliance / list read (all of which filter
+    // `deletedAt: null`) while the sync feed emits one tombstone per row. The
+    // nightly tombstone purge collects them later, so nothing grows without
+    // bound. Scope `deletedAt: null` so a second purge counts zero rather than
+    // re-bumping rows already gone.
+    //
+    // No inventory refund, deliberately: the single-event and bulk deletes
+    // refund because "I did not take that dose" puts the pill back in the box.
+    // A purge wipes an entire history as bookkeeping, and refunding every dose
+    // ever taken would inflate the current container count instead.
+    const { count } = await prisma.medicationIntakeEvent.updateMany({
+      where: { medicationId: id, userId: user.id, deletedAt: null },
+      data: { deletedAt: new Date(), syncVersion: { increment: 1 } },
     });
 
     // v1.4.39 W-MED — drop every rollup row for this medication so the

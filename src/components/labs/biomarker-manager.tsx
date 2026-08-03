@@ -26,8 +26,14 @@ import type { BiomarkerDto, BiomarkerListResponse } from "./types";
  * Lives on the Labs page (not Settings) because the catalog IS the Labs
  * feature's primary object. Each marker renders as a single compact row
  * (name + unit inline, reference range / panel on a muted sub-line) with a
- * hide toggle, an edit button (reusing the define/edit sheet), and a delete
- * (the `onDelete: SetNull` FK keeps existing readings, just unlinks them).
+ * hide toggle, an edit button (reusing the define/edit sheet), and a delete.
+ *
+ * Delete removes the marker AND every reading under it, in one transaction —
+ * this line used to claim the `onDelete: SetNull` FK left the readings behind
+ * as unlinked rows, which stopped being true when delete became a "drop this
+ * and its history" action and the confirmation copy was rewritten in all six
+ * locales to say so. Hide is the reversible path and is one row above it, so
+ * the destructive one is deliberately the destructive one.
  *
  * "Hide" is a soft remove: a marker the user no longer needs leaves the
  * active list and the lab-entry pickers but keeps its readings + canonical

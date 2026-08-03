@@ -648,10 +648,23 @@ async function readActingCarrier(auth: AuthContext): Promise<ActingCarrier> {
 /**
  * Record a refused delegation.
  *
- * Written for the OWNER's benefit as much as the operator's: "someone tried to
- * open my record and was turned away" is the question the sharing panel exists
- * to answer. The row names the actor (the caller), the account they aimed at,
- * and why it failed — none of which reaches the response.
+ * The row is filed under the CALLER, with no actor, and it is the operator's
+ * trail rather than the owner's. It names who called, the account they claimed,
+ * and why the claim was refused — none of which reaches the response.
+ *
+ * It is deliberately not filed under the claimed account, and that decision is
+ * worth stating because the opposite reads as the obvious one. A row is only
+ * written for a HEADER refusal, and a header is an unverified per-request
+ * assertion: the value is whatever the caller typed. Filing under it would let
+ * any authenticated caller write rows into any account's activity feed by
+ * naming it, which is a spam vector aimed at exactly the panel that exists to
+ * be trustworthy. Verifying the claim first would mean a grant lookup on a path
+ * whose whole job is to refuse without touching the record.
+ *
+ * What the owner does see is the other half: `recordDelegatedAccess` files a
+ * per-day row under the OWNER, naming the actor, for every delegated read that
+ * succeeded. "Who reached my record" is answered there. "Whose client sent a
+ * malformed claim" is an operator question and stays here.
  *
  * Fire-and-forget: an audit write that fails must not convert a 403 into a 500,
  * because the 403 is the part that protects the record.

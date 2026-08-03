@@ -266,9 +266,12 @@ export function LabBiomarkerDetail({ biomarkerId }: { biomarkerId: string }) {
   }
 
   // v1.18.9 (#41/#3) — delete the biomarker directly from its detail page so
-  // a stray marker is removable without a Settings detour. `onDelete: SetNull`
-  // keeps the readings and unlinks them. On success, invalidate the catalog +
-  // result list and return to the labs surface.
+  // a stray marker is removable without a Settings detour. This removes every
+  // reading under the marker along with it; the line here used to claim
+  // `onDelete: SetNull` kept them, which stopped being true when delete became
+  // a "drop this and its history" action. The confirmation dialog states it in
+  // all six locales, and Hide is the reversible alternative. On success,
+  // invalidate the catalog + result list and return to the labs surface.
   const deleteMarker = useMutation({
     mutationFn: () => apiDelete(`/api/biomarkers/${biomarkerId}`),
     onSuccess: () => {

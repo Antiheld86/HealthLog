@@ -15,7 +15,7 @@ import { NextRequest } from "next/server";
 vi.mock("@/lib/db", () => ({
   prisma: {
     medication: { findUnique: vi.fn() },
-    medicationIntakeEvent: { deleteMany: vi.fn() },
+    medicationIntakeEvent: { updateMany: vi.fn() },
     medicationComplianceRollup: { deleteMany: vi.fn() },
   },
 }));
@@ -82,7 +82,7 @@ beforeEach(() => {
   vi.mocked(prisma.medication.findUnique).mockResolvedValue({
     name: "Test",
   } as never);
-  vi.mocked(prisma.medicationIntakeEvent.deleteMany).mockResolvedValue({
+  vi.mocked(prisma.medicationIntakeEvent.updateMany).mockResolvedValue({
     count: 7,
   } as never);
   vi.mocked(prisma.medicationComplianceRollup.deleteMany).mockResolvedValue({
@@ -116,7 +116,36 @@ describe("DELETE /api/medications/[id]/intake/purge", () => {
     );
     const res = await DELETE(deleteReq(), ROUTE_PARAMS);
     expect(res.status).toBe(404);
-    expect(prisma.medicationIntakeEvent.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.medicationIntakeEvent.updateMany).not.toHaveBeenCalled();
     expect(invalidateUserMedications).not.toHaveBeenCalled();
+  });
+
+  // The purge was the one destructive verb in the intake family that removed
+  // rows outright: a mis-tap was final, and a client offline at purge time
+  // kept every row forever because a row that no longer exists produces no
+  // tombstone. Assert the CALL SHAPE rather than a count — a count comes back
+  // identical from a `deleteMany`, which is exactly the regression this pins.
+  it("tombstones the events instead of removing them", async () => {
+    await DELETE(deleteReq(), ROUTE_PARAMS);
+
+    expect(prisma.medicationIntakeEvent.updateMany).toHaveBeenCalledTimes(1);
+    const call = vi.mocked(prisma.medicationIntakeEvent.updateMany).mock
+      .calls[0][0] as {
+      where: Record<string, unknown>;
+      data: Record<string, unknown>;
+    };
+
+    // Scoped to the caller's own rows for this medication, and to LIVE rows
+    // only, so a second purge counts zero rather than re-stamping tombstones
+    // and re-bumping every syncVersion the clients have already seen.
+    expect(call.where).toEqual({
+      medicationId: "med-1",
+      userId: "user-1",
+      deletedAt: null,
+    });
+
+    // A tombstone the sync feed can carry: a stamp plus a monotonic bump.
+    expect(call.data.deletedAt).toBeInstanceOf(Date);
+    expect(call.data.syncVersion).toEqual({ increment: 1 });
   });
 });

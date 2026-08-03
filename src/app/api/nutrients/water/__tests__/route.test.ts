@@ -38,6 +38,9 @@ vi.mock("@/lib/idempotency", () => ({
       fn(...args),
 }));
 vi.mock("@/lib/logging/transports", () => ({ emitIfSampled: vi.fn() }));
+vi.mock("@/lib/auth/audit", () => ({
+  auditLog: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@/lib/db-compat", () => ({
   ensureDbCompatibility: vi.fn().mockResolvedValue(undefined),
 }));
@@ -58,6 +61,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import { invalidateUserDashboardSnapshot } from "@/lib/cache/invalidate";
 import { NUTRIENT_CATALOG } from "@/lib/nutrients/catalog";
+import { auditLog } from "@/lib/auth/audit";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -216,6 +220,37 @@ describe("POST /api/nutrients/water", () => {
       amount: 500,
       unit: "ml",
     });
+  });
+
+  // A health-data write earns a durable row. This one reached only the wide
+  // event, which expires, so months later nothing could answer who put a
+  // day's total there — a question with two possible answers once a delegate
+  // can act on a shared record.
+  it("writes an audit row naming the day, the mode and the amount", async () => {
+    await POST(postReq({ amountMl: 250, mode: "add", day: "2026-07-16" }));
+
+    expect(auditLog).toHaveBeenCalledTimes(1);
+    const [action, payload] = vi.mocked(auditLog).mock.calls[0] as [
+      string,
+      { userId: string; details: Record<string, unknown> },
+    ];
+    expect(action).toBe("nutrient.water.write");
+    expect(payload.userId).toBe("user-1");
+    expect(payload.details).toMatchObject({
+      day: "2026-07-16",
+      mode: "add",
+      amountMl: 250,
+      resultingAmount: 500,
+    });
+  });
+
+  it("writes no audit row when the module gate refuses", async () => {
+    vi.mocked(requireModuleEnabled).mockResolvedValue({
+      enabled: false,
+      response: apiError("Module disabled", 403),
+    } as never);
+    await POST(postReq({ amountMl: 250, mode: "add", day: "2026-07-16" }));
+    expect(auditLog).not.toHaveBeenCalled();
   });
 });
 
