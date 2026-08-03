@@ -288,6 +288,11 @@ test.describe("account sharing", () => {
       timeout: 10_000,
     });
 
+    // Back to where the rest of this journey happens. The check above leaves
+    // the browser on the dashboard, and Accept lives on the access page.
+    await page.goto("/settings/access");
+    await expect(row).toBeVisible();
+
     await page.locator('[data-slot="grant-accept"]').click();
     await expect(row).toHaveAttribute("data-grant-state", "ACTIVE");
   });
