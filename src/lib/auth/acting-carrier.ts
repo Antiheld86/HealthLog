@@ -112,6 +112,60 @@ export function selectorNamesAnAccount(value: string): boolean {
 }
 
 /**
+ * The session a server-rendered PAGE may prefetch from, or null.
+ *
+ * A server-prefetching page dehydrates a health record into the HTML document
+ * and seeds it into the client's TanStack cache under the key the client cell
+ * will read. That copy is only ever right when the account the page read is
+ * the account the client's ROUTE would answer with, and under a switch it
+ * never is. `getSession()` answers who is CALLING, deliberately and
+ * permanently (`session.ts` — it is the same property that keeps `requireAdmin`
+ * out of a delegate's reach), so a page that prefetches off it seeds the
+ * DELEGATE's record onto a page whose banner names the owner. What happens
+ * next depends only on which mode the route declared, and both endings are
+ * wrong:
+ *
+ *   - a non-delegable route refuses the client's refetch, so the delegate's
+ *     own numbers stay on the owner's dashboard until the tab is closed;
+ *   - a delegable route answers with the owner's rows, so the page shows two
+ *     people at once for as long as the refetch takes.
+ *
+ * Resolving the acting account here instead — reading the record the way a
+ * route does — is the tempting other answer and is worse. The grant check
+ * lives in exactly one function (`requireRecordAuth`), the pages cannot reach
+ * it without an HTTP context, and re-deriving it here would be a second
+ * program deciding "whose record is this" — the thing `grants.ts` warns must
+ * have one answer. Worse, half of what these pages prefetch rides routes that
+ * declared themselves NOT delegable; prefetching the owner's copy would hand a
+ * delegate data the API is on record refusing them.
+ *
+ * So the prefetch is an accelerator that steps aside. Under a switch this
+ * returns null, the page renders its bare client shell, and every cell fetches
+ * through the routes — which is where the grant check is, and the only place
+ * it should ever have been. The cost is one skeleton frame on a delegated
+ * visit; nothing is lost that a fetch does not restore.
+ *
+ * Fail-closed on the ambiguous case too: a selector HEADER on this transport
+ * is `misplaced-header`, which names no account and is not a switch, but it is
+ * a client asserting it meant to be somewhere else. A page has nothing to gain
+ * by prefetching through that, so it does not.
+ */
+export async function getUnswitchedSession(): Promise<Awaited<
+  ReturnType<typeof getSession>
+> | null> {
+  const session = await getSession();
+  if (!session) return null;
+  const carrier = decideActingCarrier({
+    // A page render is a document request: cookie transport by construction,
+    // and `getSession()` returning a session is what that means here.
+    transport: "cookie",
+    stamped: session.session.actingAsUserId ?? null,
+    header: await readSelectorHeader(),
+  });
+  return carrier.kind === "none" ? session : null;
+}
+
+/**
  * The account this request CLAIMS, resolved without an auth context in hand.
  *
  * For callers that run BEFORE authentication has been resolved into a context —

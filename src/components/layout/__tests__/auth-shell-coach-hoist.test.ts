@@ -50,7 +50,14 @@ describe("v1.4.34 IW-B — CoachLaunchProvider hoist", () => {
     // `/api/insights/chat` is not in the proxy's DEMO_MUTATION_ALLOWLIST,
     // so a tappable FAB in demo mode produces a raw 403 on send. The mount
     // must be conditioned on the demo flag.
-    expect(source).toContain("{!demoMode && <LayoutCoachFab />}");
+    //
+    // v1.36.x — `!inSharedRecord` joins the same condition. What that gate is
+    // FOR, and the paint it produces at both grant levels, is asserted against
+    // rendered markup in `auth-shell-shared-record-doors.test.tsx`; this leg
+    // only holds the demo half that predates it.
+    expect(source).toContain(
+      "{!demoMode && !inSharedRecord && <LayoutCoachFab />}",
+    );
   });
 
   it("no longer mounts any Coach surface in the routed insights layout", () => {

@@ -4,7 +4,7 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 
-import { getSession } from "@/lib/auth/session";
+import { getUnswitchedSession } from "@/lib/auth/acting-carrier";
 import { readDashboardSnapshotCached } from "@/lib/dashboard/snapshot-read";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -43,6 +43,11 @@ import InsightsPageClient from "./page-client";
  *    read; and the heavy thick-analytics / comprehensive aggregations, whose
  *    COLD SWR cell is a multi-query scan — prefetching them synchronously would
  *    trade FCP for TTFB. Both stay on the client cells that own them.
+ *  - Record identity: the session comes from `getUnswitchedSession()`, which
+ *    answers null while the browser is acting on somebody else's record. Every
+ *    read below scopes to the CALLER, so under a switch the prefetch would
+ *    serialise the delegate's own rows into a page opened on the owner's
+ *    record. The accessor's docblock carries the argument.
  *  - Fail-soft: no session or a builder hiccup renders the page exactly as
  *    before this wrapper existed — the client cells own the fetch.
  */
@@ -56,7 +61,7 @@ export default async function InsightsPage() {
 
   let dehydratedState = null;
   try {
-    const session = await getSession();
+    const session = await getUnswitchedSession();
     if (session) {
       const { user } = session;
       const { body, locale } = await readDashboardSnapshotCached(user);

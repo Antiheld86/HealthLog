@@ -279,6 +279,20 @@ test.describe("account sharing", () => {
     ).toHaveCount(0);
     await page.keyboard.press("Escape");
 
+    // The positive control for the shell-door assertion further down: the
+    // delegate, in their OWN record, is offered the Coach launcher like anyone
+    // else. Without this line the later "it is gone" check would also pass on
+    // a build where the launcher had stopped rendering for everybody.
+    await page.goto("/");
+    await expect(page.locator('[data-slot="coach-fab"]')).toBeVisible({
+      timeout: 10_000,
+    });
+
+    // Back to where the rest of this journey happens. The check above leaves
+    // the browser on the dashboard, and Accept lives on the access page.
+    await page.goto("/settings/access");
+    await expect(row).toBeVisible();
+
     await page.locator('[data-slot="grant-accept"]').click();
     await expect(row).toHaveAttribute("data-grant-state", "ACTIVE");
   });
@@ -353,6 +367,12 @@ test.describe("account sharing", () => {
     await expect(page.locator('a[href="/settings/account"]')).toHaveCount(0);
     await expect(page.locator('a[href="/coach"]')).toHaveCount(0);
     await expect(page.locator('a[href="/insights"]')).toHaveCount(0);
+
+    // And neither is the door that stood beside the removed entries. The Coach
+    // launcher hangs off the shell rather than off a route, so dropping the
+    // nav entry left it floating over every page in the record — one tap from
+    // a drawer whose every action resolves `requireAuth()` and refuses.
+    await expect(page.locator('[data-slot="coach-fab"]')).toHaveCount(0);
   });
 
   test("a surface sharing does not cover says so", async ({ page }) => {

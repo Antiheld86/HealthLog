@@ -19,11 +19,13 @@ import { queryKeys } from "@/lib/query-keys";
  *    client path (the client cell owns the fetch).
  */
 
-const getSession = vi.fn();
+const getUnswitchedSession = vi.fn();
 const resolveModuleMap = vi.fn();
 const readWorkoutsListCached = vi.fn();
 
-vi.mock("@/lib/auth/session", () => ({ getSession: () => getSession() }));
+vi.mock("@/lib/auth/acting-carrier", () => ({
+  getUnswitchedSession: () => getUnswitchedSession(),
+}));
 vi.mock("@/lib/modules/gate", () => ({
   resolveModuleMap: (id: string) => resolveModuleMap(id),
 }));
@@ -74,7 +76,7 @@ function dehydratedQuery(
 
 describe("/insights/workouts RSC prefetch", () => {
   it("dehydrates the list under the EXACT client key (byte-identical hash)", async () => {
-    getSession.mockResolvedValue(SESSION);
+    getUnswitchedSession.mockResolvedValue(SESSION);
     resolveModuleMap.mockResolvedValue({ workouts: true });
     readWorkoutsListCached.mockResolvedValue(LIST);
 
@@ -88,7 +90,7 @@ describe("/insights/workouts RSC prefetch", () => {
   });
 
   it("reads the same filter the client's `limit: 100` request would", async () => {
-    getSession.mockResolvedValue(SESSION);
+    getUnswitchedSession.mockResolvedValue(SESSION);
     resolveModuleMap.mockResolvedValue({ workouts: true });
     readWorkoutsListCached.mockResolvedValue(LIST);
 
@@ -105,7 +107,7 @@ describe("/insights/workouts RSC prefetch", () => {
   });
 
   it("JSON-round-trips the value to the wire shape (Dates → ISO strings)", async () => {
-    getSession.mockResolvedValue(SESSION);
+    getUnswitchedSession.mockResolvedValue(SESSION);
     resolveModuleMap.mockResolvedValue({ workouts: true });
     const startedAt = new Date("2026-07-18T08:30:00.000Z");
     readWorkoutsListCached.mockResolvedValue({
@@ -129,7 +131,7 @@ describe("/insights/workouts RSC prefetch", () => {
   });
 
   it("fails soft to the bare client when the read throws", async () => {
-    getSession.mockResolvedValue(SESSION);
+    getUnswitchedSession.mockResolvedValue(SESSION);
     resolveModuleMap.mockResolvedValue({ workouts: true });
     readWorkoutsListCached.mockRejectedValue(new Error("db blip"));
 
@@ -138,7 +140,7 @@ describe("/insights/workouts RSC prefetch", () => {
   });
 
   it("skips the prefetch when the workouts module is off", async () => {
-    getSession.mockResolvedValue(SESSION);
+    getUnswitchedSession.mockResolvedValue(SESSION);
     resolveModuleMap.mockResolvedValue({ workouts: false });
 
     const el = (await InsightsWorkoutsPage()) as ReactElement;
@@ -146,8 +148,10 @@ describe("/insights/workouts RSC prefetch", () => {
     expect(readWorkoutsListCached).not.toHaveBeenCalled();
   });
 
+  // Null also means "acting on somebody else's record" — `getUnswitchedSession`
+  // collapses both into the same answer, and the page treats them the same.
   it("fails soft when there is no session", async () => {
-    getSession.mockResolvedValue(null);
+    getUnswitchedSession.mockResolvedValue(null);
     const el = (await InsightsWorkoutsPage()) as ReactElement;
     expect(el.type).not.toBe(HydrationBoundary);
     expect(readWorkoutsListCached).not.toHaveBeenCalled();
@@ -157,6 +161,6 @@ describe("/insights/workouts RSC prefetch", () => {
     process.env.DASHBOARD_SSR_PREFETCH = "false";
     const el = (await InsightsWorkoutsPage()) as ReactElement;
     expect(el.type).not.toBe(HydrationBoundary);
-    expect(getSession).not.toHaveBeenCalled();
+    expect(getUnswitchedSession).not.toHaveBeenCalled();
   });
 });

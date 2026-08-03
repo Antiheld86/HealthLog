@@ -4,7 +4,7 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 
-import { getSession } from "@/lib/auth/session";
+import { getUnswitchedSession } from "@/lib/auth/acting-carrier";
 import { readWorkoutsListCached } from "@/lib/workouts/list-read";
 import { resolveModuleMap } from "@/lib/modules/gate";
 import { queryKeys } from "@/lib/query-keys";
@@ -42,6 +42,11 @@ import InsightsWorkoutsPageClient from "./page-client";
  *    fresh data, so the mounted cell paints immediately and only refetches once
  *    the TTL lapses — the "empty then fills" flash is gone without dropping the
  *    freshness path.
+ *  - Record identity: the session comes from `getUnswitchedSession()`, which
+ *    answers null while the browser is acting on somebody else's record. Every
+ *    read below scopes to the CALLER, so under a switch the prefetch would
+ *    serialise the delegate's own rows into a page opened on the owner's
+ *    record. The accessor's docblock carries the argument.
  *  - Fail-soft: no session, a module lookup hiccup, or a DB blip renders the
  *    page exactly as before this wrapper existed — the client cell owns the
  *    fetch. The prefetch is an accelerator, never a gate.
@@ -57,7 +62,7 @@ export default async function InsightsWorkoutsPage() {
 
   let dehydratedState = null;
   try {
-    const session = await getSession();
+    const session = await getUnswitchedSession();
     if (session) {
       const { user } = session;
       const modules = await resolveModuleMap(user.id);
