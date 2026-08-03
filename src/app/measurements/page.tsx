@@ -157,6 +157,7 @@ export default function MeasurementsPage() {
         actions={
           canAdd ? (
             <Button
+              data-slot="measurement-add"
               className="min-h-11 sm:min-h-9"
               onClick={() => {
                 setReturnTo(null);

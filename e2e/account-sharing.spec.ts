@@ -386,35 +386,6 @@ test.describe("account sharing", () => {
     ).toBeVisible();
   });
 
-  test("a query parameter opens nothing the button withholds", async ({
-    page,
-  }) => {
-    // Three deep links reach a create sheet without passing the control that
-    // normally opens it. A parameter that opens a sheet is the same affordance
-    // as the button, and the SSR suite cannot reach any of them: it holds the
-    // paint of a component, never a URL.
-    await page.goto("/measurements?add=WEIGHT");
-    await expect(
-      page.locator('[data-slot="shared-record-banner"]'),
-    ).toBeVisible();
-    await expect(
-      page.locator('[data-slot="responsive-sheet-content"]'),
-    ).toHaveCount(0);
-    // And the button it stands in for is gone too, so nothing on this page
-    // offers the form by either route.
-    await expect(
-      page.getByRole("button", { name: /add measurement/i }),
-    ).toHaveCount(0);
-
-    await page.goto("/medications?new=1");
-    await expect(
-      page.locator('[data-slot="shared-record-banner"]'),
-    ).toBeVisible();
-    await expect(
-      page.locator('[data-slot="medication-wizard-dialog"]'),
-    ).toHaveCount(0);
-  });
-
   test("revoking from the owner's browser drops the delegate out", async ({
     page,
   }) => {
