@@ -31,6 +31,7 @@
  * administration.
  */
 
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import {
   useCallback,
   useEffect,
@@ -172,6 +173,19 @@ const TAB_SLUGS = [
 type TabSlug = (typeof TAB_SLUGS)[number];
 
 /**
+ * Tabs whose entire content is owner-only work: the schedule editor and its
+ * plan history, the supply ledger, the external-token row, and the advanced
+ * surface (wizard, import, pause, end, purge, delete). A delegation admits
+ * none of it at any level.
+ */
+const OWNER_ONLY_TABS: ReadonlySet<TabSlug> = new Set([
+  "zeitplan",
+  "bestand",
+  "api",
+  "erweitert",
+]);
+
+/**
  * Legacy slugs that point at a dissolved tab. The Erinnerung tab folded
  * into Zeitplan in v1.15.20; old deep-links keep landing on the surface
  * that now owns the reminder controls instead of falling back to the
@@ -222,6 +236,7 @@ export function MedicationDetailTabs({
 }) {
   const { t } = useTranslations();
   const fmt = useFormatters();
+  const { canManage } = useRecordCapabilities();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -273,15 +288,23 @@ export function MedicationDetailTabs({
   // reminds, so the Zeitplan tab (times editor + reminder card +
   // plan-history) does not apply and is dropped from the registry; a
   // stale `?tab=zeitplan` deep-link falls back to the landing tab.
+  // v1.36.x — four tabs are nothing BUT owner work: the schedule editor, the
+  // supply ledger, the external-token row and the advanced surface that holds
+  // the wizard, the import and the destructive zone. None of it is delegated,
+  // so inside somebody else's record they leave the registry entirely rather
+  // than opening onto controls the server refuses — which also means a stale
+  // `?tab=erweitert` deep link lands on the landing tab, the same way an
+  // inapplicable tab already does.
   const availableTabs = useMemo<TabSlug[]>(
     () =>
       TAB_SLUGS.filter(
         (slug) =>
           (slug !== "injektion" || isInjectable) &&
           (slug !== "zeitplan" || !asNeeded) &&
-          (slug !== "wirkung" || hasEfficacyTarget),
+          (slug !== "wirkung" || hasEfficacyTarget) &&
+          (canManage || !OWNER_ONLY_TABS.has(slug)),
       ),
-    [isInjectable, asNeeded, hasEfficacyTarget],
+    [isInjectable, asNeeded, hasEfficacyTarget, canManage],
   );
 
   const requestedRaw = searchParams?.get("tab");

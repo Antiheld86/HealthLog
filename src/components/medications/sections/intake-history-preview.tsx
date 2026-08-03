@@ -14,6 +14,7 @@
  * redundant link is removed (R-medui §4.3).
  */
 
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,8 @@ export function IntakeHistoryPreview({
   onImportOpenChange,
 }: IntakeHistoryPreviewProps) {
   const { t } = useTranslations();
+  // v1.36.x — importing dose history is not a delegated verb.
+  const { canManage } = useRecordCapabilities();
 
   return (
     <>
@@ -42,16 +45,18 @@ export function IntakeHistoryPreview({
         title={t("medications.detail.intake.title")}
         dataSlot="medication-detail-intake-history-section"
         headerExtras={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onImportOpenChange(true)}
-            className="min-h-11 sm:min-h-9"
-            data-slot="intake-history-import"
-          >
-            <Upload aria-hidden="true" className="h-4 w-4" />
-            {t("medications.detail.intake.importButton")}
-          </Button>
+          canManage ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onImportOpenChange(true)}
+              className="min-h-11 sm:min-h-9"
+              data-slot="intake-history-import"
+            >
+              <Upload aria-hidden="true" className="h-4 w-4" />
+              {t("medications.detail.intake.importButton")}
+            </Button>
+          ) : null
         }
       >
         <IntakeHistoryEditable medicationId={medicationId} pageSize={14} />

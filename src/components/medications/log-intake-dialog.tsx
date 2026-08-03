@@ -19,6 +19,7 @@
  * the form state + the medication/slot pickers.
  */
 
+import { useActiveRecordName } from "@/hooks/use-record-capabilities";
 import { useId, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -116,6 +117,7 @@ export function LogIntakeDialog({
   medications,
 }: LogIntakeDialogProps) {
   const { t } = useTranslations();
+  const recordName = useActiveRecordName();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const userTz = user?.timezone || "Europe/Berlin";
@@ -210,6 +212,7 @@ export function LogIntakeDialog({
         ...(doseDeviates && { doseTaken: trimmedDose }),
         t,
         queryClient,
+        recordName,
         // v1.30.1 M7 — a backdated/manual intake now gets the same
         // Undo affordance the card's take/skip path already has.
         undoIntake: (eventId) =>

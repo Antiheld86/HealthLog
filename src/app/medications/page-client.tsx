@@ -1,5 +1,6 @@
 "use client";
 
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
@@ -159,6 +160,11 @@ function MedicationCardSkeleton() {
 export default function MedicationsPageClient() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const { t } = useTranslations();
+  // v1.36.x — adding a medication and marking a dose are both admitted
+  // delegated writes, so a WRITE delegate keeps the Add menu whole. The
+  // take-all-due sweep is not (it rides the bulk intake route), and neither is
+  // the customize page, which sharing does not cover at all.
+  const { canAdd, canManage } = useRecordCapabilities();
   // v1.18.1 (D3) — medications is an opt-out module. When the account has it
   // turned off the whole page disappears (the nav entry is hidden by the same
   // gate) and the list query never fires (the API would 403 anyway).
@@ -417,7 +423,7 @@ export default function MedicationsPageClient() {
               card's own one-tap job). Calm outline variant so the primary
               Add button keeps the visual lead; same responsive 44-px
               mobile tap floor as its neighbours. */}
-          {dueMeds.length >= 2 && (
+          {canManage && dueMeds.length >= 2 && (
             <Button
               variant="outline"
               onClick={() => setTakeAllOpen(true)}
@@ -433,47 +439,51 @@ export default function MedicationsPageClient() {
               Same glyph, slot (left of the add button) and responsive
               44-px mobile tap floor as the dashboard and insights
               headers. */}
-          <Button
-            asChild
-            variant="ghost"
-            size="icon"
-            className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
-          >
-            <Link
-              href="/settings/layout/medications"
-              aria-label={t("medications.customize")}
-              title={t("medications.customize")}
+          {canManage && (
+            <Button
+              asChild
+              variant="ghost"
+              size="icon"
+              className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
             >
-              <Wrench className="h-4 w-4" aria-hidden="true" />
-            </Link>
-          </Button>
+              <Link
+                href="/settings/layout/medications"
+                aria-label={t("medications.customize")}
+                title={t("medications.customize")}
+              >
+                <Wrench className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            </Button>
+          )}
           {/* v1.14.0 — the "Add" button is now a choice: log an intake
               (incl. a backdated one) against an existing medication, or
               create a new medication. v1.12.2 — match the dashboard Add
               button's responsive tap-target floor (`min-h-11 sm:min-h-9`) so
               both primary "add" entry points clear the WCAG 2.5.5 44px mobile
               minimum identically. */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button className="min-h-11 sm:min-h-9">
-                <Plus className="h-4 w-4" />
-                {t("medications.addMedication")}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onSelect={() => setLogIntakeOpen(true)}
-                disabled={activeMeds.length === 0}
-              >
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-                {t("medications.addChoice.logIntake")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={openCreate}>
-                <Pill className="mr-2 h-4 w-4" />
-                {t("medications.addChoice.newMedication")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {canAdd && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="min-h-11 sm:min-h-9">
+                  <Plus className="h-4 w-4" />
+                  {t("medications.addMedication")}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onSelect={() => setLogIntakeOpen(true)}
+                  disabled={activeMeds.length === 0}
+                >
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  {t("medications.addChoice.logIntake")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={openCreate}>
+                  <Pill className="mr-2 h-4 w-4" />
+                  {t("medications.addChoice.newMedication")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
 
@@ -511,10 +521,12 @@ export default function MedicationsPageClient() {
           title={t("medications.emptyTitle")}
           description={t("medications.emptyDescription")}
           action={
-            <Button size="sm" onClick={openCreate}>
-              <Plus className="h-4 w-4" />
-              {t("medications.firstMedication")}
-            </Button>
+            canAdd ? (
+              <Button size="sm" onClick={openCreate}>
+                <Plus className="h-4 w-4" />
+                {t("medications.firstMedication")}
+              </Button>
+            ) : undefined
           }
         />
       ) : tableView ? (

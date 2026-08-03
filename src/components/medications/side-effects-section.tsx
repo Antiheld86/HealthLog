@@ -1,5 +1,6 @@
 "use client";
 
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useId, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -111,6 +112,7 @@ function entryI18nKey(entry: MedicationSideEffectEntry): string {
 
 export function SideEffectsSection({ medicationId }: SideEffectsSectionProps) {
   const { t } = useTranslations();
+  const { canAdd, canManage } = useRecordCapabilities();
   const fmt = useFormatters();
   const queryClient = useQueryClient();
 
@@ -245,17 +247,21 @@ export function SideEffectsSection({ medicationId }: SideEffectsSectionProps) {
           ({items.length})
         </span>
       )}
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => {
-          resetForm();
-          setOpen(true);
-        }}
-      >
-        <Plus className="h-3.5 w-3.5" />
-        {t("medications.sideEffects.addCta")}
-      </Button>
+      {/* v1.36.x — noting a side effect is an admitted delegated write.
+          Removing one that is already noted is not. */}
+      {canAdd && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            resetForm();
+            setOpen(true);
+          }}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          {t("medications.sideEffects.addCta")}
+        </Button>
+      )}
     </>
   );
 
@@ -340,16 +346,18 @@ export function SideEffectsSection({ medicationId }: SideEffectsSectionProps) {
                     </p>
                   )}
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-muted-foreground hover:text-destructive size-11 shrink-0"
-                  aria-label={t("medications.sideEffects.deleteCta")}
-                  onClick={() => setPendingDeleteId(row.id)}
-                  disabled={deleteMutation.isPending}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                {canManage && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-muted-foreground hover:text-destructive size-11 shrink-0"
+                    aria-label={t("medications.sideEffects.deleteCta")}
+                    onClick={() => setPendingDeleteId(row.id)}
+                    disabled={deleteMutation.isPending}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
               </li>
             ))}
           </ul>

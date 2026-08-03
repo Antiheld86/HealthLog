@@ -39,6 +39,7 @@
  * the ledger uses the semantic feedback vocabulary on the row, not the card.
  */
 
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -162,6 +163,10 @@ export function DoseHistoryLedger({
   const fmt = useFormatters();
   const dateFormatPref = useDateFormatPreference();
   const { user } = useAuth();
+  // v1.36.x — a delegate may record a dose, which is what "add" and the
+  // inline "mark taken" do. Editing, deleting, pinning and un-skipping an
+  // existing event are the owner's, so the row menu is absent for them.
+  const { canAdd } = useRecordCapabilities();
   const queryClient = useQueryClient();
   const timeZone = user?.timezone || "Europe/Berlin";
 
@@ -413,16 +418,18 @@ export function DoseHistoryLedger({
             {t("medications.detail.verlauf.summaryEmpty")}
           </p>
         )}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setAddOpen(true)}
-          className="min-h-11 shrink-0 sm:min-h-9"
-          data-slot="ledger-add"
-        >
-          <Plus aria-hidden="true" className="h-4 w-4" />
-          {t("medications.detail.verlauf.add")}
-        </Button>
+        {canAdd && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAddOpen(true)}
+            className="min-h-11 shrink-0 sm:min-h-9"
+            data-slot="ledger-add"
+          >
+            <Plus aria-hidden="true" className="h-4 w-4" />
+            {t("medications.detail.verlauf.add")}
+          </Button>
+        )}
       </div>
 
       {isLoading && (
@@ -571,6 +578,7 @@ function LedgerRowItem({
   onUnpin: (eventId: string) => void;
 }) {
   const { t } = useTranslations();
+  const { canAdd, canManage } = useRecordCapabilities();
   const fmt = useFormatters();
 
   const actionable = isSlotActionable(row);
@@ -676,7 +684,7 @@ function LedgerRowItem({
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
-        {showTakenButton && (
+        {showTakenButton && canAdd && (
           <Button
             variant="outline"
             size="sm"
@@ -697,118 +705,126 @@ function LedgerRowItem({
             {t("medications.detail.verlauf.markTaken")}
           </Button>
         )}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
-              aria-label={t("medications.detail.verlauf.rowActionsLabel", {
-                time: timeLabel,
-              })}
-              data-slot="ledger-row-menu"
-            >
-              <MoreVertical aria-hidden="true" className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" data-slot="ledger-row-menu-content">
-            {actionable && !showTakenButton && (
-              <DropdownMenuItem
-                onClick={() => onMark(row, "taken")}
-                data-slot="ledger-menu-taken"
-              >
-                <Check aria-hidden="true" className="mr-2 size-4" />
-                {t("medications.detail.verlauf.markTaken")}
-              </DropdownMenuItem>
-            )}
-            {actionable && (
-              <DropdownMenuItem
-                onClick={() => onMark(row, "skipped")}
-                data-slot="ledger-mark-skipped"
-              >
-                {skipBusy ? (
-                  <Loader2
-                    aria-hidden="true"
-                    className="mr-2 size-4 animate-spin motion-reduce:animate-none"
-                  />
-                ) : (
-                  <SkipForward aria-hidden="true" className="mr-2 size-4" />
-                )}
-                {t("medications.detail.verlauf.markSkipped")}
-              </DropdownMenuItem>
-            )}
-            {canPin && (
-              <DropdownMenuItem
-                onClick={() => onPin(intake!.id as string, dueContext!.at)}
-                data-slot="ledger-pin"
-              >
-                <Link2 aria-hidden="true" className="mr-2 size-4" />
-                {t("medications.detail.verlauf.pin.action", {
-                  time: fmt.time(new Date(dueContext!.at)),
+        {canManage && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
+                aria-label={t("medications.detail.verlauf.rowActionsLabel", {
+                  time: timeLabel,
                 })}
-              </DropdownMenuItem>
-            )}
-            {canUnpin && (
-              <DropdownMenuItem
-                onClick={() => onUnpin(intake!.id as string)}
-                data-slot="ledger-unpin"
+                data-slot="ledger-row-menu"
               >
-                <Unlink aria-hidden="true" className="mr-2 size-4" />
-                {t("medications.detail.verlauf.pin.release")}
-              </DropdownMenuItem>
-            )}
-            {intake?.id && (
-              <>
+                <MoreVertical aria-hidden="true" className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              data-slot="ledger-row-menu-content"
+            >
+              {actionable && !showTakenButton && (
                 <DropdownMenuItem
-                  onClick={() =>
-                    onEdit({
-                      id: intake.id as string,
-                      takenAt: intake.takenAt,
-                      skipped: intake.skipped,
-                      scheduledFor: intake.scheduledFor,
-                    })
-                  }
-                  data-slot="ledger-edit"
+                  onClick={() => onMark(row, "taken")}
+                  data-slot="ledger-menu-taken"
                 >
-                  <Pencil aria-hidden="true" className="mr-2 size-4" />
-                  {t("medications.detail.intake.rowActions.edit")}
+                  <Check aria-hidden="true" className="mr-2 size-4" />
+                  {t("medications.detail.verlauf.markTaken")}
                 </DropdownMenuItem>
-                {(row.status === "skipped" ||
-                  row.status === "taken_on_time" ||
-                  row.status === "taken_late") && (
+              )}
+              {actionable && (
+                <DropdownMenuItem
+                  onClick={() => onMark(row, "skipped")}
+                  data-slot="ledger-mark-skipped"
+                >
+                  {skipBusy ? (
+                    <Loader2
+                      aria-hidden="true"
+                      className="mr-2 size-4 animate-spin motion-reduce:animate-none"
+                    />
+                  ) : (
+                    <SkipForward aria-hidden="true" className="mr-2 size-4" />
+                  )}
+                  {t("medications.detail.verlauf.markSkipped")}
+                </DropdownMenuItem>
+              )}
+              {canPin && (
+                <DropdownMenuItem
+                  onClick={() => onPin(intake!.id as string, dueContext!.at)}
+                  data-slot="ledger-pin"
+                >
+                  <Link2 aria-hidden="true" className="mr-2 size-4" />
+                  {t("medications.detail.verlauf.pin.action", {
+                    time: fmt.time(new Date(dueContext!.at)),
+                  })}
+                </DropdownMenuItem>
+              )}
+              {canUnpin && (
+                <DropdownMenuItem
+                  onClick={() => onUnpin(intake!.id as string)}
+                  data-slot="ledger-unpin"
+                >
+                  <Unlink aria-hidden="true" className="mr-2 size-4" />
+                  {t("medications.detail.verlauf.pin.release")}
+                </DropdownMenuItem>
+              )}
+              {intake?.id && (
+                <>
                   <DropdownMenuItem
                     onClick={() =>
-                      onToggleSkipped({
+                      onEdit({
                         id: intake.id as string,
+                        takenAt: intake.takenAt,
                         skipped: intake.skipped,
                         scheduledFor: intake.scheduledFor,
                       })
                     }
-                    data-slot="ledger-toggle-skipped"
+                    data-slot="ledger-edit"
                   >
-                    {intake.skipped ? (
-                      <Check aria-hidden="true" className="mr-2 size-4" />
-                    ) : (
-                      <SkipForward aria-hidden="true" className="mr-2 size-4" />
-                    )}
-                    {intake.skipped
-                      ? t("medications.detail.verlauf.markAsTaken")
-                      : t("medications.detail.verlauf.markAsSkipped")}
+                    <Pencil aria-hidden="true" className="mr-2 size-4" />
+                    {t("medications.detail.intake.rowActions.edit")}
                   </DropdownMenuItem>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => onDelete(intake.id as string)}
-                  className="text-destructive focus:text-destructive"
-                  data-slot="ledger-delete"
-                >
-                  <Trash2 aria-hidden="true" className="mr-2 size-4" />
-                  {t("medications.detail.intake.rowActions.delete")}
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+                  {(row.status === "skipped" ||
+                    row.status === "taken_on_time" ||
+                    row.status === "taken_late") && (
+                    <DropdownMenuItem
+                      onClick={() =>
+                        onToggleSkipped({
+                          id: intake.id as string,
+                          skipped: intake.skipped,
+                          scheduledFor: intake.scheduledFor,
+                        })
+                      }
+                      data-slot="ledger-toggle-skipped"
+                    >
+                      {intake.skipped ? (
+                        <Check aria-hidden="true" className="mr-2 size-4" />
+                      ) : (
+                        <SkipForward
+                          aria-hidden="true"
+                          className="mr-2 size-4"
+                        />
+                      )}
+                      {intake.skipped
+                        ? t("medications.detail.verlauf.markAsTaken")
+                        : t("medications.detail.verlauf.markAsSkipped")}
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => onDelete(intake.id as string)}
+                    className="text-destructive focus:text-destructive"
+                    data-slot="ledger-delete"
+                  >
+                    <Trash2 aria-hidden="true" className="mr-2 size-4" />
+                    {t("medications.detail.intake.rowActions.delete")}
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
     </li>
   );

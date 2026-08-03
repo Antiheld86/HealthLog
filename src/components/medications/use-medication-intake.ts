@@ -1,5 +1,6 @@
 "use client";
 
+import { useActiveRecordName } from "@/hooks/use-record-capabilities";
 import { useState } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -94,6 +95,13 @@ export async function runRecordIntake(deps: {
   setIntakeLoading: (value: string | null) => void;
   undoIntake: (eventId: string) => void | Promise<void>;
   onRecorded?: (eventId: string | undefined, skipped: boolean) => void;
+  /**
+   * v1.36.x — the record this dose was written into, when it is not the
+   * caller's own. Two consequences: the toast names it, and the Undo action
+   * goes. A delegate may record a dose and may not remove one, so an Undo
+   * they can see is an Undo the server refuses.
+   */
+  recordName?: string | null;
 }): Promise<void> {
   const {
     medication,
@@ -104,6 +112,7 @@ export async function runRecordIntake(deps: {
     setIntakeLoading,
     undoIntake,
     onRecorded,
+    recordName,
   } = deps;
 
   setIntakeLoading(skipped ? "skip" : "take");
@@ -137,14 +146,20 @@ export async function runRecordIntake(deps: {
           : "medications.intakeToastTaken",
         { name: medication.name },
       ),
-      eventId
+      recordName
         ? {
-            action: {
-              label: t("medications.intakeUndo"),
-              onClick: () => void undoIntake(eventId),
-            },
+            description: t("recordSharing.toast.savedTo", {
+              name: recordName,
+            }),
           }
-        : undefined,
+        : eventId
+          ? {
+              action: {
+                label: t("medications.intakeUndo"),
+                onClick: () => void undoIntake(eventId),
+              },
+            }
+          : undefined,
     );
     await invalidateMedicationReads(queryClient);
     onRecorded?.(eventId, skipped);
@@ -195,6 +210,8 @@ export async function runLogIntake(deps: {
    * carries no action when it's absent.
    */
   undoIntake?: (eventId: string) => void | Promise<void>;
+  /** See {@link runRecordIntake}: names the record, and drops Undo. */
+  recordName?: string | null;
 }): Promise<boolean> {
   const {
     medication,
@@ -205,6 +222,7 @@ export async function runLogIntake(deps: {
     t,
     queryClient,
     undoIntake,
+    recordName,
   } = deps;
   try {
     const body: Record<string, unknown> = { skipped };
@@ -230,7 +248,11 @@ export async function runLogIntake(deps: {
     // a real Undo action to attach; keeps the no-undo call signature
     // identical to the pre-fix behaviour (existing unit tests assert the
     // single-argument call).
-    if (eventId && undoIntake) {
+    if (recordName) {
+      toast.success(message, {
+        description: t("recordSharing.toast.savedTo", { name: recordName }),
+      });
+    } else if (eventId && undoIntake) {
       toast.success(message, {
         action: {
           label: t("medications.intakeUndo"),
@@ -273,6 +295,7 @@ export function useMedicationIntake({
 }: UseMedicationIntakeParams): UseMedicationIntakeResult {
   const queryClient = useQueryClient();
   const { t } = useTranslations();
+  const recordName = useActiveRecordName();
   const [intakeLoading, setIntakeLoading] = useState<string | null>(null);
 
   const undoIntake = (eventId: string) =>
@@ -288,6 +311,7 @@ export function useMedicationIntake({
       setIntakeLoading,
       undoIntake,
       onRecorded,
+      recordName,
     });
 
   return { intakeLoading, recordIntake, undoIntake };
