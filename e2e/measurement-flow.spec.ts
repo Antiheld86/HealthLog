@@ -1,6 +1,7 @@
 import { expect, test } from "./setup/test";
 
 import { STORAGE_STATE_PATH } from "./setup/global-setup";
+import { openMenu } from "./open-menu";
 
 /**
  * Add-measurement flow — exercises the dashboard's quick-entry dropdown,
@@ -109,10 +110,12 @@ test.describe("add measurement flow", () => {
     // at the top-right of `<main>`. Scope the locator there so we don't
     // accidentally match an "Add" button on the sidebar.
     const main = page.locator("main");
-    await main
-      .getByRole("button", { name: /^add$|hinzufügen|hinzufuegen/i })
-      .first()
-      .click();
+    await openMenu(
+      page,
+      main
+        .getByRole("button", { name: /^add$|hinzufügen|hinzufuegen/i })
+        .first(),
+    );
 
     // v1.5 phase-5: the menu items now have distinct labels — the
     // measurement entry says "Measurement" / "Messung" instead of "Add",
