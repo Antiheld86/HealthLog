@@ -115,10 +115,29 @@ interface ChangesData {
   };
 }
 
+/**
+ * The fixture clock: a few days ago, never a fixed calendar date.
+ *
+ * These rows have to sit INSIDE the sync retention horizon
+ * (`TOMBSTONE_RETENTION_DAYS`, 60 + 15 = 75 days) or the route correctly
+ * refuses to serve them and the first page comes back empty. The literal date
+ * this file used to carry satisfied that when it was written and stopped
+ * satisfying it exactly 75 days later: the suite went red at midnight with no
+ * commit behind it, and would have stayed red for good. Anchoring on
+ * `Date.now()` is what stops a fixture ageing out of the window it is meant to
+ * be inside.
+ */
+const FIXTURE_BASE_MS = Date.now() - 5 * 86_400_000;
+
+/** The fixture day for row `i`, as the `YYYY-MM-DD` a mood entry stores. */
+function fixtureDay(i: number): string {
+  return new Date(FIXTURE_BASE_MS + i * 86_400_000).toISOString().slice(0, 10);
+}
+
 /** Seed n live measurements with strictly increasing updatedAt. */
 async function seedLive(n: number): Promise<void> {
   const prisma = getPrismaClient();
-  const base = new Date("2026-05-20T00:00:00.000Z").getTime();
+  const base = FIXTURE_BASE_MS;
   for (let i = 0; i < n; i++) {
     await prisma.measurement.create({
       data: {
@@ -138,13 +157,13 @@ async function seedLive(n: number): Promise<void> {
 /** Seed n live mood entries with strictly increasing updatedAt. */
 async function seedMood(n: number): Promise<string[]> {
   const prisma = getPrismaClient();
-  const base = new Date("2026-05-20T00:00:00.000Z").getTime();
+  const base = FIXTURE_BASE_MS;
   const ids: string[] = [];
   for (let i = 0; i < n; i++) {
     const row = await prisma.moodEntry.create({
       data: {
         userId: TEST_USER_ID,
-        date: `2026-05-${20 + i}`,
+        date: fixtureDay(i),
         mood: "GUT",
         score: 4,
         moodLoggedAt: new Date(base + i * 60_000),
@@ -161,7 +180,7 @@ async function seedIntakes(
   n: number,
 ): Promise<{ medId: string; ids: string[] }> {
   const prisma = getPrismaClient();
-  const base = new Date("2026-05-20T00:00:00.000Z").getTime();
+  const base = FIXTURE_BASE_MS;
   const med = await prisma.medication.create({
     data: {
       userId: TEST_USER_ID,
@@ -233,7 +252,7 @@ describe("GET /api/sync/changes (real Postgres)", () => {
 
   it("surfaces a soft-deleted measurement as a tombstone, never as an upsert", async () => {
     const prisma = getPrismaClient();
-    const base = new Date("2026-05-20T00:00:00.000Z").getTime();
+    const base = FIXTURE_BASE_MS;
     await prisma.measurement.create({
       data: {
         userId: TEST_USER_ID,
