@@ -1,12 +1,12 @@
 /**
  * v1.36.0 — the account-grant state machine. One file, one set of rules.
  *
- * A grant is one account's standing permission to read another account's
- * record, and since v1.36.x to add to it as well, and the row is also the
- * durable record of the consent that created it (there is no second receipt
- * table — see the model docblock in `prisma/schema.prisma`). Everything that
- * decides what a grant currently MEANS lives here, and nothing else in the
- * tree is allowed to decide it.
+ * A grant is one account's standing permission to open another account's
+ * record — to read it, and where the grant says so to add to it. The row is
+ * also the durable record of the consent that created it (there is no second
+ * receipt table — see the model docblock in `prisma/schema.prisma`).
+ * Everything that decides what a grant currently MEANS lives here, and nothing
+ * else in the tree is allowed to decide it.
  *
  * Why one file rather than the rules at the call sites: two consumers read
  * these rows for different reasons — the acting-account resolver on every
@@ -168,7 +168,7 @@ export function grantAllows(
 export interface InviteGrantInput {
   /** The account whose record is being shared. */
   grantorId: string;
-  /** The account being invited to read it. */
+  /** The account being invited to it. */
   granteeId: string;
   /**
    * What the invitation offers. Required, with no default in this module: a
