@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { fireAndForget } from "@/lib/logging/fire-and-forget";
 
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
@@ -139,7 +139,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postLabResult));
 
 async function postLabResult(request: NextRequest) {
-  const { user } = await requireAuth();
+  // v1.36.x — a delegated write. The free-text path may MINT a biomarker, and
+  // it mints it under `user.id`: the marker joins the record's catalogue, not
+  // the caller's, which is the only reading of "add a result to your record"
+  // that leaves the owner with a usable catalogue afterwards.
+  const { user } = await requireRecordAuth("write");
 
   const { data: body, error: jsonError } = await safeJson(request, {
     maxBytes: 16 * 1024,
@@ -157,17 +161,15 @@ async function postLabResult(request: NextRequest) {
     const auditIssues = sanitiseZodIssues(parsed.error.issues, {
       stripValuesFromMessage: true,
     });
-    prisma.auditLog
-      .create({
-        data: {
-          userId: user.id,
-          action: "labs.create.validation-failed",
-          details: JSON.stringify({ issues: auditIssues }),
-        },
-      })
-      .catch(() => {
-        /* swallow — the 422 response is the contract */
-      });
+    // v1.36.x — through `auditLog()`, the only writer that stamps
+    // `actorUserId`. A bare `prisma.auditLog.create` files a delegate's
+    // malformed payload as if the owner had typed it.
+    void auditLog("labs.create.validation-failed", {
+      userId: user.id,
+      details: { issues: auditIssues },
+    }).catch(() => {
+      /* swallow — the 422 response is the contract */
+    });
     return returnAllZodIssues(parsed.error, 422, {
       errorCode: "labs.create.invalid",
     });
