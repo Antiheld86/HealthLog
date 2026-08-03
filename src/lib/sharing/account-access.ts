@@ -14,11 +14,12 @@
  * `canSwitch` and `canWrite`; it never computes them, and there is nothing in
  * the payload it could compute them from.
  *
- * `canWrite` is `false` for every entry in v1, because `inviteGrant` writes
- * READ and only READ. It is resolved here through {@link grantAllows} against
- * the real row rather than hardcoded, so the day a WRITE grant exists the
- * answer changes without this file being edited — and, more importantly, so
- * that nobody has to remember that it should.
+ * `canWrite` is resolved here through {@link grantAllows} against the real
+ * row rather than stored or hardcoded, which is why the level becoming an
+ * invitation choice needed no edit to this file: an accepted WRITE grant
+ * started answering true the moment one could exist. It answers "may add to
+ * this record" and never "may change it" — editing and deleting stay with the
+ * owner at both levels, and no field here offers them.
  *
  * What is deliberately NOT published: the other account's avatar. The avatar
  * bytes are owner-scoped (`/api/user/avatar/{id}` refuses any id but the

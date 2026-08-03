@@ -9424,6 +9424,11 @@
       "identifierLabel": "Nome utente o e-mail",
       "identifierPlaceholder": "Il nome con cui accede",
       "identifierHint": "Serve un account su questa istanza. Non è possibile inviare inviti a un indirizzo non registrato.",
+      "accessLegend": "Che cosa può fare",
+      "accessReadLabel": "Può vedere",
+      "accessReadCapability": "Può leggere tutto ciò che questa cartella condivide. Non può aggiungere né modificare nulla.",
+      "accessWriteLabel": "Può vedere e aggiungere",
+      "accessWriteCapability": "Può anche aggiungere qualcosa alla cartella: misurazioni, risultati di laboratorio, allergie e altre osservazioni, un nuovo farmaco e una dose segnata come presa. Non può modificare né eliminare nulla, nemmeno ciò che ha aggiunto. Puoi farlo solo tu.",
       "expiresLabel": "L'accesso termina il (facoltativo)",
       "expiresHint": "Lascia vuoto per un accesso che dura finché qualcuno non lo termina. Una data qui viene controllata a ogni richiesta, quindi l'accesso si interrompe da solo alla fine di quel giorno.",
       "submit": "Invia invito",
@@ -9446,6 +9451,8 @@
       "withdrawInvite": "Ritira",
       "revokeTitle": "Terminare l'accesso di {name}?",
       "revokeBody": "L'accesso finisce subito, anche in qualsiasi browser in cui la tua cartella è aperta. Ciò che è già stato visto non può essere ritirato. Puoi invitare di nuovo quando vuoi.",
+      "revokeEntriesStay": "Ciò che questa persona ha inserito resta nella tua cartella e sei tu a poterne rimuovere qualsiasi parte.",
+      "revokeAttribution": "Chi ha inserito che cosa resta visibile nella tua vista attività per {days} giorni.",
       "revokeConfirm": "Termina accesso"
     },
     "received": {
@@ -9456,6 +9463,7 @@
       "loadError": "Non è stato possibile caricare l'elenco.",
       "accept": "Accetta",
       "accepting": "Accettazione…",
+      "writeConsent": "Se accetti, ciò che aggiungi entra a far parte della cartella di {name}. Dopo non potrai più modificare o rimuovere le voci; può farlo solo {name}.",
       "open": "Apri",
       "renounce": "Restituisci",
       "renounceTitle": "Restituire la cartella di {name}?",

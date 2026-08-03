@@ -12,6 +12,7 @@ import { useTranslations } from "@/lib/i18n/context";
 import { accountLabel } from "@/lib/sharing/account-access-view";
 import {
   useAccountGrants,
+  useRecordActivity,
   useRevokeGrant,
   type GrantRow,
 } from "@/lib/queries/use-account-grants";
@@ -29,11 +30,21 @@ import {
  * health record to somebody. The confirm dialog exists only because the click
  * target sits in a list and a mis-tap should not end an access silently; it
  * names the person and the act.
+ *
+ * What the dialog SAYS depends on what the grant could do: see
+ * {@link revokeBody}.
  */
+
 export function GrantsGivenCard() {
   const { t } = useTranslations();
   const { data, isLoading, isError, refetch } = useAccountGrants();
   const revoke = useRevokeGrant();
+  // Read for one number: how long the activity view can still say who entered
+  // what. The activity card on this same page holds the query, so this is the
+  // cached answer rather than a second request — and when the server has not
+  // answered yet, the sentence that would need the number is left out instead
+  // of being written around a guessed 365.
+  const activity = useRecordActivity();
 
   const given = data?.given ?? [];
 
@@ -95,11 +106,56 @@ export function GrantsGivenCard() {
             : t("recordSharing.given.revoke")
         }
         title={t("recordSharing.given.revokeTitle", { name })}
-        body={t("recordSharing.given.revokeBody", { name })}
+        body={revokeBody({
+          t,
+          access: grant.access,
+          name,
+          retentionDays: activity.data?.retentionDays,
+        })}
         confirmLabel={t("recordSharing.given.revokeConfirm")}
         pending={revoke.isPending}
         onConfirm={() => revoke.mutate(grant.id)}
       />
     );
   }
+}
+
+/**
+ * What ending this particular access does, as one paragraph.
+ *
+ * Exported and pure because the dialog it feeds only exists after a click, and
+ * an SSR render cannot see inside it — the same reason `endOfDayIso` is
+ * exported from the invite card. The composition is the thing worth pinning:
+ * which sentences appear, and which one is omitted when its number is unknown.
+ *
+ * Two extra sentences for a grant that could add entries, and only for one: a
+ * read grant never put anything in the record, so telling its owner that
+ * "anything they entered stays" would describe something that cannot have
+ * happened. The last sentence is the honest bound on attribution — the activity
+ * view answers "who entered what" for as long as the audit window reaches, and
+ * that window is the operator's setting. It is said with the number the server
+ * resolved, or not said at all.
+ */
+export function revokeBody({
+  t,
+  access,
+  name,
+  retentionDays,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string;
+  access: GrantRow["access"];
+  name: string;
+  /** Undefined until the server has said what the window is. */
+  retentionDays?: number;
+}): string {
+  const lines = [t("recordSharing.given.revokeBody", { name })];
+  if (access === "WRITE") {
+    lines.push(t("recordSharing.given.revokeEntriesStay"));
+    if (retentionDays !== undefined) {
+      lines.push(
+        t("recordSharing.given.revokeAttribution", { days: retentionDays }),
+      );
+    }
+  }
+  return lines.join(" ");
 }

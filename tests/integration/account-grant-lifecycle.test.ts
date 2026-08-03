@@ -32,6 +32,7 @@ import {
   GrantError,
   acceptGrant,
   findActiveGrant,
+  grantAllows,
   inviteGrant,
   renounceGrant,
   revokeGrant,
@@ -98,6 +99,7 @@ async function acceptedGrant() {
   const invited = await inviteGrant({
     grantorId: owner.id,
     granteeId: delegate.id,
+    access: "READ",
   });
   const grant = await acceptGrant({
     grantId: invited.id,
@@ -120,6 +122,7 @@ describe("account grant lifecycle", () => {
     const invited = await inviteGrant({
       grantorId: owner.id,
       granteeId: delegate.id,
+      access: "READ",
     });
     expect(invited.acceptedAt).toBeNull();
     expect(invited.access).toBe("READ");
@@ -147,10 +150,42 @@ describe("account grant lifecycle", () => {
     expect(active?.id).toBe(invited.id);
   });
 
+  it("stores the level the invitation offered, and confers it only once accepted", async () => {
+    // The column, not the argument: a write grant is the one thing in this
+    // feature that lets somebody put data into another person's record, so the
+    // proof that WRITE survives the round trip belongs against real Postgres
+    // rather than against a client fake.
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+
+    const invited = await inviteGrant({
+      grantorId: owner.id,
+      granteeId: delegate.id,
+      access: "WRITE",
+    });
+    const stored = await getPrismaClient().accountGrant.findUniqueOrThrow({
+      where: { id: invited.id },
+    });
+    expect(stored.access).toBe("WRITE");
+    // Offered is not accepted. Both consents or nothing.
+    expect(grantAllows(stored, "write")).toBe(false);
+
+    await acceptGrant({ grantId: invited.id, granteeId: delegate.id });
+    const live = await getPrismaClient().accountGrant.findUniqueOrThrow({
+      where: { id: invited.id },
+    });
+    expect(grantAllows(live, "write")).toBe(true);
+    expect(grantAllows(live, "read")).toBe(true);
+  });
+
   it("refuses an account sharing its record with itself", async () => {
     const solo = await makeUser("solo");
     await expect(
-      inviteGrant({ grantorId: solo.id, granteeId: solo.id }),
+      inviteGrant({
+        grantorId: solo.id,
+        granteeId: solo.id,
+        access: "READ",
+      }),
     ).rejects.toMatchObject({ code: "self_grant" });
     expect(await getPrismaClient().accountGrant.count()).toBe(0);
   });
@@ -163,6 +198,7 @@ describe("account grant lifecycle", () => {
     const invited = await inviteGrant({
       grantorId: owner.id,
       granteeId: delegate.id,
+      access: "READ",
     });
 
     await expect(
@@ -201,6 +237,7 @@ describe("account grant lifecycle", () => {
     const invited = await inviteGrant({
       grantorId: owner.id,
       granteeId: delegate.id,
+      access: "READ",
       expiresAt: new Date(Date.now() - 1000),
     });
 
@@ -215,6 +252,7 @@ describe("account grant lifecycle", () => {
     const invited = await inviteGrant({
       grantorId: owner.id,
       granteeId: delegate.id,
+      access: "READ",
       expiresAt: new Date(Date.now() + 60_000),
     });
     await acceptGrant({ grantId: invited.id, granteeId: delegate.id });
@@ -331,13 +369,25 @@ describe("account grant lifecycle", () => {
   it("refuses a second live grant for the same pair", async () => {
     const owner = await makeUser("owner");
     const delegate = await makeUser("delegate");
-    await inviteGrant({ grantorId: owner.id, granteeId: delegate.id });
+    await inviteGrant({
+      grantorId: owner.id,
+      granteeId: delegate.id,
+      access: "READ",
+    });
 
     await expect(
-      inviteGrant({ grantorId: owner.id, granteeId: delegate.id }),
+      inviteGrant({
+        grantorId: owner.id,
+        granteeId: delegate.id,
+        access: "READ",
+      }),
     ).rejects.toBeInstanceOf(GrantError);
     await expect(
-      inviteGrant({ grantorId: owner.id, granteeId: delegate.id }),
+      inviteGrant({
+        grantorId: owner.id,
+        granteeId: delegate.id,
+        access: "READ",
+      }),
     ).rejects.toMatchObject({ code: "duplicate_live_grant" });
     expect(await getPrismaClient().accountGrant.count()).toBe(1);
   });
@@ -352,6 +402,7 @@ describe("account grant lifecycle", () => {
     const second = await inviteGrant({
       grantorId: owner.id,
       granteeId: delegate.id,
+      access: "READ",
     });
     expect(second.id).not.toBe(first.id);
     expect(second.acceptedAt).toBeNull();
@@ -384,10 +435,15 @@ describe("account grant lifecycle", () => {
       const invited = await inviteGrant({
         grantorId: owner.id,
         granteeId: delegate.id,
+        access: "READ",
       });
       await revokeGrant({ grantId: invited.id, grantorId: owner.id });
     }
-    await inviteGrant({ grantorId: owner.id, granteeId: delegate.id });
+    await inviteGrant({
+      grantorId: owner.id,
+      granteeId: delegate.id,
+      access: "READ",
+    });
     expect(
       await getPrismaClient().accountGrant.count({
         where: { grantorId: owner.id, granteeId: delegate.id },
@@ -484,6 +540,7 @@ describe("account grant lifecycle paths", () => {
     const liveInvite = await inviteGrant({
       grantorId: admin.id,
       granteeId: live.id,
+      access: "READ",
     });
     const liveGrant = await acceptGrant({
       grantId: liveInvite.id,
@@ -492,6 +549,7 @@ describe("account grant lifecycle paths", () => {
     const droppedInvite = await inviteGrant({
       grantorId: admin.id,
       granteeId: dropped.id,
+      access: "READ",
     });
     await acceptGrant({ grantId: droppedInvite.id, granteeId: dropped.id });
     const revoked = await revokeGrant({
