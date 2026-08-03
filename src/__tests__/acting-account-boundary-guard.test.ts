@@ -113,7 +113,7 @@ describe("the acting-account carrier is read in one place", () => {
     const namers = filesMatching(/x-healthlog-account/i);
     expect(namers.length).toBeGreaterThan(0);
     expect(namers).toEqual([
-      "lib/api-handler.ts",
+      "lib/auth/acting-carrier.ts",
       "lib/openapi/routes/account-sharing.ts",
     ]);
   });
