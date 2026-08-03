@@ -55,7 +55,8 @@ export function DocumentCard({
   document: InboundDocumentDto;
   selected: boolean;
   /** `range` = extend the selection from the last anchor (shift-click). */
-  onToggleSelected: (id: string, range?: boolean) => void;
+  /** Omitted inside somebody else's record: selection feeds bulk edits. */
+  onToggleSelected?: (id: string, range?: boolean) => void;
   onOpen: (id: string) => void;
   /** Delete key on the focused card — undo-able delete owned by the page. */
   onDelete?: (id: string) => void;
@@ -173,23 +174,25 @@ export function DocumentCard({
               </p>
             ) : null}
           </div>
-          <Checkbox
-            checked={selected}
-            // Explicit click handling instead of onCheckedChange: the mouse
-            // event carries `shiftKey` for file-manager range selection.
-            // preventDefault stops Radix's internal toggle (state is fully
-            // controlled by the page's selection set anyway).
-            onClick={(e) => {
-              e.preventDefault();
-              onToggleSelected(document.id, e.shiftKey);
-            }}
-            aria-label={t("documents.card.selectLabel", { title })}
-            className={cn(
-              "relative z-10 shrink-0 transition-opacity",
-              "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100",
-              selected && "opacity-100",
-            )}
-          />
+          {onToggleSelected && (
+            <Checkbox
+              checked={selected}
+              // Explicit click handling instead of onCheckedChange: the mouse
+              // event carries `shiftKey` for file-manager range selection.
+              // preventDefault stops Radix's internal toggle (state is fully
+              // controlled by the page's selection set anyway).
+              onClick={(e) => {
+                e.preventDefault();
+                onToggleSelected(document.id, e.shiftKey);
+              }}
+              aria-label={t("documents.card.selectLabel", { title })}
+              className={cn(
+                "relative z-10 shrink-0 transition-opacity",
+                "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100",
+                selected && "opacity-100",
+              )}
+            />
+          )}
         </div>
         {document.conditionLinks.length > 0 ||
         document.servingClass === "attachment" ||
@@ -266,7 +269,7 @@ export function DocumentCard({
           const action = documentCardKeyAction(e.key);
           if (action === "select") {
             e.preventDefault();
-            onToggleSelected(document.id, e.shiftKey);
+            onToggleSelected?.(document.id, e.shiftKey);
           } else if (action === "delete") {
             e.preventDefault();
             onDelete?.(document.id);
@@ -277,7 +280,7 @@ export function DocumentCard({
           cancelLongPress();
           longPressTimer.current = setTimeout(() => {
             longPressFired.current = true;
-            onToggleSelected(document.id);
+            onToggleSelected?.(document.id);
           }, LONG_PRESS_MS);
         }}
         onTouchMove={cancelLongPress}

@@ -12,6 +12,7 @@
  * day-log history, paginated server-side); when nothing has been logged it
  * renders a calm prompt to log a day.
  */
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -91,6 +92,8 @@ export function IllnessDayTimeline({
   onLogDay: () => void;
 }) {
   const { t } = useTranslations();
+  // v1.36.x — logging a day is not a delegated verb.
+  const { canManage } = useRecordCapabilities();
   const { data, isLoading, isError } = useIllnessDayLogList(episodeId, "desc");
 
   const dayLogs = data?.dayLogs ?? [];
@@ -117,13 +120,15 @@ export function IllnessDayTimeline({
             <p className="text-muted-foreground text-sm">
               {t("illness.timeline.empty")}
             </p>
-            <Button
-              variant="outline"
-              className="min-h-11 sm:min-h-9"
-              onClick={onLogDay}
-            >
-              {t("illness.logDay")}
-            </Button>
+            {canManage && (
+              <Button
+                variant="outline"
+                className="min-h-11 sm:min-h-9"
+                onClick={onLogDay}
+              >
+                {t("illness.logDay")}
+              </Button>
+            )}
           </div>
         ) : (
           <div className="space-y-4">

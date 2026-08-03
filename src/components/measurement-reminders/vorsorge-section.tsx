@@ -28,6 +28,7 @@
  *     hosting the per-reminder enable/disable toggles (moved off the
  *     card so the card carries a single med-style kebab).
  */
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -219,6 +220,7 @@ export function VorsorgeSection({
   variant?: "settings" | "page";
 }) {
   const { t } = useTranslations();
+  const { canManage } = useRecordCapabilities();
   const router = useRouter();
   const {
     data: reminders,
@@ -359,7 +361,11 @@ export function VorsorgeSection({
 
   // v1.18.6 (MOD-02) — the primary add affordance reads "hinzufügen" like
   // every other module's add button.
-  const addButton = (
+  // v1.36.x — a checkup reminder belongs to the person whose schedule it is,
+  // and no grant level admits creating, editing or satisfying one. Inside
+  // somebody else's record the schedule stays readable and every control that
+  // would change it is absent.
+  const addButton = canManage ? (
     <Button
       type="button"
       className="min-h-11 shrink-0 sm:min-h-9"
@@ -368,13 +374,13 @@ export function VorsorgeSection({
       <Plus className="h-4 w-4" />
       {t("common.add")}
     </Button>
-  );
+  ) : null;
 
   // v1.18.6 (MOD-01) — the wrench links to the Vorsorge settings page (view,
   // reorder, per-reminder enable toggles), left of the Add button — the
   // canonical medication-page pattern. The old kebab "Anpassen" sheet is
   // gone (MOD-07); its toggles moved to the settings page.
-  const wrenchButton = (
+  const wrenchButton = canManage ? (
     <Button
       asChild
       variant="ghost"
@@ -389,7 +395,7 @@ export function VorsorgeSection({
         <Wrench className="h-4 w-4" aria-hidden="true" />
       </Link>
     </Button>
-  );
+  ) : null;
 
   return (
     <section aria-labelledby="vorsorge-section-title" className="space-y-4">
@@ -709,9 +715,11 @@ export function VorsorgeSection({
           title={t("measurementReminders.empty.title")}
           description={t("measurementReminders.empty.description")}
           action={
-            <Button type="button" onClick={openCreate}>
-              {t("common.add")}
-            </Button>
+            canManage ? (
+              <Button type="button" onClick={openCreate}>
+                {t("common.add")}
+              </Button>
+            ) : undefined
           }
         />
       )}
@@ -787,6 +795,7 @@ function VorsorgeCard({
 }) {
   const { t } = useTranslations();
   const fmt = useFormatters();
+  const { canManage } = useRecordCapabilities();
   // Issue #490 — day-boundary zone for the relative "today / yesterday"
   // bucket must match the zone `fmt.date` renders in (mirror → Berlin).
   // The next-due phrase reads off the SAME zone as the last-done date below
@@ -855,7 +864,7 @@ function VorsorgeCard({
 
   // Single med-style kebab: Edit + Delete. The Delete item is the shared
   // confirm-on-delete control rendered as a full-width menu row.
-  const headerActions = (
+  const headerActions = canManage ? (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
@@ -898,14 +907,14 @@ function VorsorgeCard({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
+  ) : null;
 
   // The measure / mark-done action. One constant appearance in every state —
   // no due-driven tint, no label swap (v1.27.5 retired the former green
   // "do it now" wash; a button that changes colour by schedule state reads as
   // a different control). Due-ness is communicated by the discreet coloured
   // next-due text above.
-  const primaryButton = (
+  const primaryButton = canManage ? (
     <Button
       type="button"
       className="min-h-11 w-full"
@@ -928,7 +937,7 @@ function VorsorgeCard({
         </>
       )}
     </Button>
-  );
+  ) : null;
 
   const deleteDialog = (
     <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
@@ -1114,7 +1123,9 @@ function VorsorgeCard({
           )}
 
           {/* Bottom-pinned single primary action — green when due (MOD-06). */}
-          <div className="mt-auto pt-0">{primaryButton}</div>
+          {primaryButton ? (
+            <div className="mt-auto pt-0">{primaryButton}</div>
+          ) : null}
         </CardContent>
       </Card>
 

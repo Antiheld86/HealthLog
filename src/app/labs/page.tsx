@@ -30,12 +30,18 @@ import { PullToRefreshIndicator } from "@/components/ui/pull-to-refresh-indicato
 import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
 import { useAuth } from "@/hooks/use-auth";
 import { useMounted } from "@/hooks/use-mounted";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 
 export default function LabsPage() {
   const { user, isAuthenticated, isLoading } = useAuth();
+  // v1.36.x — entering a lab result by hand is an admitted delegated write.
+  // Scanning a report is not: it files a document and commits through the OCR
+  // route, and neither is delegated. So a WRITE delegate keeps the manual add
+  // and loses the choice menu around it.
+  const { canAdd, canManage } = useRecordCapabilities();
   const mounted = useMounted();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -94,27 +100,29 @@ export default function LabsPage() {
                 point, left of the primary Add and linking to the Labs settings
                 page (view, sort order, biomarker CRUD + reorder). Mirrors the
                 medication page header's wrench glyph + slot + 44px tap floor. */}
-            <Button
-              asChild
-              variant="ghost"
-              size="icon"
-              className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
-            >
-              <Link
-                href="/settings/layout/labs"
-                aria-label={t("labs.customize")}
-                title={t("labs.customize")}
+            {canManage && (
+              <Button
+                asChild
+                variant="ghost"
+                size="icon"
+                className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
               >
-                <Wrench className="h-4 w-4" aria-hidden="true" />
-              </Link>
-            </Button>
+                <Link
+                  href="/settings/layout/labs"
+                  aria-label={t("labs.customize")}
+                  title={t("labs.customize")}
+                >
+                  <Wrench className="h-4 w-4" aria-hidden="true" />
+                </Link>
+              </Button>
+            )}
             {/* v1.18.10 — the "Add" action is a CHOICE when scanning is
                 available: scan a document (OCR) or add a value by hand. The scan
                 option only appears when the capability probe reports a usable
                 mode (vision, or local OCR opted-in for text-only providers), so
                 the surface stays simple for everyone else. When scanning is
                 unavailable, Add opens the manual form directly. */}
-            {ocrCapability.data?.available ? (
+            {ocrCapability.data?.available && canManage ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button className="min-h-11 sm:min-h-9">
@@ -133,7 +141,7 @@ export default function LabsPage() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-            ) : (
+            ) : canAdd ? (
               <Button
                 onClick={() => setDialogOpen(true)}
                 className="min-h-11 sm:min-h-9"
@@ -141,7 +149,7 @@ export default function LabsPage() {
                 <Plus className="h-4 w-4" />
                 {t("common.add")}
               </Button>
-            )}
+            ) : null}
           </>
         }
       />

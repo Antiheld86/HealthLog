@@ -70,7 +70,12 @@ export interface CycleCalendarProps {
    * renders as the distinct light oval instead of the predicted dot.
    */
   confirmedOvulation?: string | null;
-  onSelectDay: (date: string) => void;
+  /**
+   * Open the day. Omitted inside somebody else's record: no grant level
+   * admits a cycle write, so the cells stay readable and stop being controls
+   * rather than opening a sheet whose every button the server would refuse.
+   */
+  onSelectDay?: (date: string) => void;
   className?: string;
 }
 
@@ -208,34 +213,8 @@ export function CycleCalendar({
                 ? "UNGRADED"
                 : undefined;
 
-          return (
-            <button
-              key={date}
-              type="button"
-              role="gridcell"
-              aria-label={aria}
-              aria-current={isToday ? "date" : undefined}
-              data-flow-level={flowLevel}
-              data-fertile={info?.isFertileWindow ? "true" : undefined}
-              data-predicted={
-                info?.isPredictedPeriod && !info?.isPeriodLogged
-                  ? "true"
-                  : undefined
-              }
-              data-ovulation={
-                isConfirmedOvulation
-                  ? "confirmed"
-                  : isPredictedOvulationDot
-                    ? "predicted"
-                    : undefined
-              }
-              onClick={() => onSelectDay(date)}
-              className={cn(
-                "relative flex aspect-square min-h-11 flex-col items-center justify-center rounded-lg text-sm transition-colors",
-                "hover:bg-accent focus-visible:ring-ring/50 focus-visible:ring-2 focus-visible:outline-none",
-                isToday && "font-semibold",
-              )}
-            >
+          const content = (
+            <>
               {/* Fertile window: a soft full-cell band (calm fill, not a hard
                   ring) so the window reads as a continuous range across days. */}
               {info?.isFertileWindow ? (
@@ -311,7 +290,47 @@ export function CycleCalendar({
                   <span className="bg-muted-foreground/70 h-1 w-1 rounded-full" />
                 ) : null}
               </span>
+            </>
+          );
+
+          const cellClass = cn(
+            "relative flex aspect-square min-h-11 flex-col items-center justify-center rounded-lg text-sm transition-colors",
+            isToday && "font-semibold",
+          );
+          const cellAttrs = {
+            role: "gridcell" as const,
+            "aria-label": aria,
+            "aria-current": isToday ? ("date" as const) : undefined,
+            "data-flow-level": flowLevel,
+            "data-fertile": info?.isFertileWindow ? "true" : undefined,
+            "data-predicted":
+              info?.isPredictedPeriod && !info?.isPeriodLogged
+                ? "true"
+                : undefined,
+            "data-ovulation": isConfirmedOvulation
+              ? "confirmed"
+              : isPredictedOvulationDot
+                ? "predicted"
+                : undefined,
+          };
+
+          return onSelectDay ? (
+            <button
+              key={date}
+              type="button"
+              {...cellAttrs}
+              onClick={() => onSelectDay(date)}
+              className={cn(
+                cellClass,
+                "hover:bg-accent focus-visible:ring-ring/50 focus-visible:ring-2 focus-visible:outline-none",
+              )}
+            >
+              {content}
             </button>
+          ) : (
+            <div key={date} {...cellAttrs} className={cellClass}>
+              {content}
+            </div>
           );
         })}
       </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Pencil } from "lucide-react";
@@ -74,6 +75,7 @@ function parseDecimal(raw: string): number | null {
  */
 export function LabHistoryList({ readings }: { readings: LabResultDto[] }) {
   const { t } = useTranslations();
+  const { canManage } = useRecordCapabilities();
   const queryClient = useQueryClient();
 
   // Client-side column sort over the in-memory reading feed.
@@ -361,17 +363,19 @@ export function LabHistoryList({ readings }: { readings: LabResultDto[] }) {
               </TableCell>
               <TableCell className="pr-4 text-right">
                 <div className="flex items-center justify-end gap-1">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    // v1.18.10 (W10) — 44px touch target on mobile (WCAG
-                    // 2.5.5), compact 36px on desktop.
-                    className="size-11 sm:size-9"
-                    onClick={() => void openEdit(r)}
-                    aria-label={t("labs.editReading")}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
+                  {canManage && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      // v1.18.10 (W10) — 44px touch target on mobile (WCAG
+                      // 2.5.5), compact 36px on desktop.
+                      className="size-11 sm:size-9"
+                      onClick={() => void openEdit(r)}
+                      aria-label={t("labs.editReading")}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  )}
                   <DeleteButton
                     onConfirm={() => deleteMutation.mutate(r.id)}
                     title={t("labs.deleteConfirmTitle")}

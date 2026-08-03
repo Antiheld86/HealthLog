@@ -1,5 +1,6 @@
 "use client";
 
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useMemo } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -77,6 +78,7 @@ function groupReadings(results: LabResultDto[]): MarkerGroup[] {
 
 export function LabList({ onAddFirst }: { onAddFirst?: () => void } = {}) {
   const { t } = useTranslations();
+  const { canAdd } = useRecordCapabilities();
   const { prefs } = useModuleListPrefs("labs");
 
   // v1.22 — a short, factual line under each marker heading describing what the
@@ -167,7 +169,7 @@ export function LabList({ onAddFirst }: { onAddFirst?: () => void } = {}) {
         title={t("labs.emptyTitle")}
         description={t("labs.emptyDescription")}
         action={
-          onAddFirst ? (
+          onAddFirst && canAdd ? (
             <Button onClick={onAddFirst}>{t("labs.addFirst")}</Button>
           ) : undefined
         }

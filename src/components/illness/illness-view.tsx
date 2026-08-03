@@ -15,6 +15,7 @@
  * per-day timeline and correlation card live. Retrospective-only copy — a
  * journal, not a medical device, and it does not diagnose.
  */
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, Plus, Stethoscope, Wrench } from "lucide-react";
@@ -73,6 +74,7 @@ function EpisodeCard({
   view,
 }: EpisodeCardProps) {
   const { t } = useTranslations();
+  const { canManage } = useRecordCapabilities();
   const fmt = useFormatters();
   const active = episode.resolvedAt === null;
   const isChronic = episode.lifecycle === "CHRONIC_ONGOING";
@@ -107,24 +109,26 @@ function EpisodeCard({
               </span>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <Button
-              variant="outline"
-              size="sm"
-              className="min-h-11 sm:min-h-9"
-              onClick={() => onLogDay(episode.id)}
-            >
-              {t("illness.logDay")}
-            </Button>
-            <EpisodeMenu
-              episode={episode}
-              onEdit={() => onEdit(episode)}
-              onResolve={
-                active && !isChronic ? () => onResolve(episode.id) : undefined
-              }
-              resolving={resolving}
-            />
-          </div>
+          {canManage && (
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-11 sm:min-h-9"
+                onClick={() => onLogDay(episode.id)}
+              >
+                {t("illness.logDay")}
+              </Button>
+              <EpisodeMenu
+                episode={episode}
+                onEdit={() => onEdit(episode)}
+                onResolve={
+                  active && !isChronic ? () => onResolve(episode.id) : undefined
+                }
+                resolving={resolving}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
     );
@@ -141,16 +145,18 @@ function EpisodeCard({
             <span className="block truncate">{episode.label}</span>
           </Link>
         </CardTitle>
-        <CardAction>
-          <EpisodeMenu
-            episode={episode}
-            onEdit={() => onEdit(episode)}
-            onResolve={
-              active && !isChronic ? () => onResolve(episode.id) : undefined
-            }
-            resolving={resolving}
-          />
-        </CardAction>
+        {canManage && (
+          <CardAction>
+            <EpisodeMenu
+              episode={episode}
+              onEdit={() => onEdit(episode)}
+              onResolve={
+                active && !isChronic ? () => onResolve(episode.id) : undefined
+              }
+              resolving={resolving}
+            />
+          </CardAction>
+        )}
       </CardHeader>
 
       <CardContent className="flex h-full flex-col space-y-3">
@@ -205,14 +211,16 @@ function EpisodeCard({
             flow, promoted from a busy inline cluster. The card navigates to
             the detail surface on its title link; this is the one explicit
             button. */}
-        <div className="mt-auto pt-0">
-          <Button
-            className="min-h-11 w-full sm:min-h-9"
-            onClick={() => onLogDay(episode.id)}
-          >
-            {t("illness.logDay")}
-          </Button>
-        </div>
+        {canManage && (
+          <div className="mt-auto pt-0">
+            <Button
+              className="min-h-11 w-full sm:min-h-9"
+              onClick={() => onLogDay(episode.id)}
+            >
+              {t("illness.logDay")}
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -308,6 +316,10 @@ function EpisodeGroup({
 
 export function IllnessView() {
   const { t } = useTranslations();
+  // v1.36.x — opening an illness entry is an admitted delegated write. Logging
+  // a day against one, editing it, resolving it and deleting it are not, so a
+  // delegate can start the record of an illness and nothing more.
+  const { canAdd, canManage } = useRecordCapabilities();
   const {
     data: episodes,
     isLoading,
@@ -380,29 +392,33 @@ export function IllnessView() {
           <>
             {/* v1.18.6 (MOD-01) — wrench left of the primary Add, linking to the
                 Illness settings page (view + reorder). */}
-            <Button
-              asChild
-              variant="ghost"
-              size="icon"
-              className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
-            >
-              <Link
-                href="/settings/layout/illness"
-                aria-label={t("illness.customize")}
-                title={t("illness.customize")}
+            {canManage && (
+              <Button
+                asChild
+                variant="ghost"
+                size="icon"
+                className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
               >
-                <Wrench className="h-4 w-4" aria-hidden="true" />
-              </Link>
-            </Button>
+                <Link
+                  href="/settings/layout/illness"
+                  aria-label={t("illness.customize")}
+                  title={t("illness.customize")}
+                >
+                  <Wrench className="h-4 w-4" aria-hidden="true" />
+                </Link>
+              </Button>
+            )}
             {/* v1.18.6 (MOD-02) — the add button reads "hinzufügen" like every
                 other module, not the bespoke "neue Episode". */}
-            <Button
-              onClick={() => setNewOpen(true)}
-              className="min-h-11 sm:min-h-9"
-            >
-              <Plus className="h-4 w-4" />
-              {t("common.add")}
-            </Button>
+            {canAdd && (
+              <Button
+                onClick={() => setNewOpen(true)}
+                className="min-h-11 sm:min-h-9"
+              >
+                <Plus className="h-4 w-4" />
+                {t("common.add")}
+              </Button>
+            )}
           </>
         }
       />
@@ -458,10 +474,12 @@ export function IllnessView() {
           description={t("illness.empty.body")}
           ctaSize="lg"
           action={
-            <Button onClick={() => setNewOpen(true)}>
-              <Plus className="h-4 w-4" />
-              {t("illness.newEpisode")}
-            </Button>
+            canAdd ? (
+              <Button onClick={() => setNewOpen(true)}>
+                <Plus className="h-4 w-4" />
+                {t("illness.newEpisode")}
+              </Button>
+            ) : undefined
           }
         />
       )}

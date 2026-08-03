@@ -10,6 +10,7 @@
  * landing stays a quiet card grid, so the trend is opt-in behind a
  * deliberate click, never pushed at the moment someone arrives to check in.
  */
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { Button } from "@/components/ui/button";
 import {
   useFormatters,
@@ -35,6 +36,8 @@ export function InstrumentDetail({
 }) {
   const { t } = useTranslations();
   const { date: formatDate } = useFormatters();
+  // v1.36.x — see the card: starting a screener is not a delegated verb.
+  const { canManage } = useRecordCapabilities();
   // Issue #490 — day-boundary zone for the relative "today / yesterday"
   // bucket must match the zone `formatDate` renders in (mirror → Berlin).
   const displayTz = useDisplayTimezone();
@@ -73,14 +76,16 @@ export function InstrumentDetail({
 
       {/* The Start action stays reachable here too — the detail is a calm
           reading surface, not a dead end. */}
-      <Button
-        type="button"
-        className="min-h-11 w-full"
-        onClick={onStart}
-        data-slot="instrument-detail-start"
-      >
-        {t("mentalHealth.start")}
-      </Button>
+      {canManage && (
+        <Button
+          type="button"
+          className="min-h-11 w-full"
+          onClick={onStart}
+          data-slot="instrument-detail-start"
+        >
+          {t("mentalHealth.start")}
+        </Button>
+      )}
 
       <AssessmentHistory rows={rows} instrument={instrument} />
 

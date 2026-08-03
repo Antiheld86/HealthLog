@@ -1,8 +1,10 @@
 "use client";
 
+import { accountLabel } from "@/lib/sharing/account-access-view";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -283,7 +285,20 @@ export function MeasurementList({
 }: MeasurementListProps) {
   const { t } = useTranslations();
   const fmt = useFormatters();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  // v1.36.x — inside somebody else's record, only the add path survives:
+  // entering a reading is an admitted delegated write, editing and deleting
+  // one are not. The row controls are dropped rather than disabled.
+  const { canAdd, canManage, inSharedRecord, canWrite } =
+    useRecordCapabilities();
+  const activeRecord = user?.accountAccess?.active ?? null;
+  // Named only when the sentence below is owed: a delegate who may add but
+  // not change. In the caller's own record, and for a read-only delegate who
+  // was offered no add button to be surprised by, there is nothing to explain.
+  const delegateName =
+    inSharedRecord && canWrite && activeRecord
+      ? accountLabel(activeRecord)
+      : null;
   const unitDisplay = useUnitDisplay();
   // v1.32.26 — a single-reading row renders its value + unit in the user's
   // preferred unit (kg↔lb, cm↔in, °C↔°F). A canonical row converts through the
@@ -928,38 +943,58 @@ export function MeasurementList({
           // an outage never reads as "you have no measurements".
           <QueryErrorCard onRetry={() => void refetch()} />
         ) : !data?.measurements?.length ? (
-          // v1.4.15 phase-C5: replaces the bare-text empty rectangle.
-          // Filter-aware copy distinguishes brand-new accounts ("no
-          // measurements yet") from filtered-out lists ("no measurements
-          // match this filter") and exposes the right CTA for each
-          // case.
-          <EmptyState
-            icon={<Activity className="size-6" />}
-            title={
-              typeFilter === "ALL" || lockedType
-                ? t("measurements.emptyTitle")
-                : t("measurements.emptyFilteredTitle")
-            }
-            description={
-              typeFilter === "ALL" || lockedType
-                ? t("measurements.emptyDescription")
-                : t("measurements.emptyFilteredDescription")
-            }
-            action={
-              // v1.8.5 — a locked-type list has no "reset filter" path;
-              // the metric is fixed by the route.
-              typeFilter !== "ALL" && !lockedType ? (
-                <Button variant="outline" onClick={() => setTypeFilter("ALL")}>
-                  {t("measurements.emptyResetFilter")}
-                </Button>
-              ) : onAddFirst ? (
-                <Button onClick={onAddFirst}>
-                  <Plus className="h-4 w-4" />
-                  {t("measurements.emptyAddFirst")}
-                </Button>
-              ) : undefined
-            }
-          />
+          <>
+            {/* v1.4.15 phase-C5: replaces the bare-text empty rectangle.
+                Filter-aware copy distinguishes brand-new accounts ("no
+                measurements yet") from filtered-out lists ("no measurements
+                match this filter") and exposes the right CTA for each case. */}
+            <EmptyState
+              icon={<Activity className="size-6" />}
+              title={
+                typeFilter === "ALL" || lockedType
+                  ? t("measurements.emptyTitle")
+                  : t("measurements.emptyFilteredTitle")
+              }
+              description={
+                typeFilter === "ALL" || lockedType
+                  ? t("measurements.emptyDescription")
+                  : t("measurements.emptyFilteredDescription")
+              }
+              action={
+                // v1.8.5 — a locked-type list has no "reset filter" path;
+                // the metric is fixed by the route.
+                typeFilter !== "ALL" && !lockedType ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => setTypeFilter("ALL")}
+                  >
+                    {t("measurements.emptyResetFilter")}
+                  </Button>
+                ) : onAddFirst && canAdd ? (
+                  <Button onClick={onAddFirst}>
+                    <Plus className="h-4 w-4" />
+                    {t("measurements.emptyAddFirst")}
+                  </Button>
+                ) : undefined
+              }
+            />
+            {/* The one place in the app the asymmetry is spelled out. A
+                delegate who may add will look for the edit control beside the
+                row they just entered, so the list that carries the add button
+                says once, in one muted line, where the limit is. Every other
+                hidden control stays silent: the banner already names the mode,
+                and a chip beside each absent button would be noise. */}
+            {delegateName && (
+              <p
+                data-slot="delegate-add-only-note"
+                className="text-muted-foreground mx-auto max-w-prose text-center text-xs"
+              >
+                {t("recordSharing.delegate.addOnlyNote", {
+                  name: delegateName,
+                })}
+              </p>
+            )}
+          </>
         ) : (
           <>
             {/* Desktop table — rendered only when not mobile (v1.28.42 H3). */}
@@ -978,19 +1013,23 @@ export function MeasurementList({
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10 pl-4">
-                        {/* v1.15.13 — select-all-on-page header checkbox. */}
-                        <Checkbox
-                          checked={
-                            selectAll === "all"
-                              ? true
-                              : selectAll === "some"
-                                ? "indeterminate"
-                                : false
-                          }
-                          disabled={pageIds.length === 0}
-                          onCheckedChange={onToggleSelectAll}
-                          aria-label={t("dataList.selectAll")}
-                        />
+                        {/* v1.15.13 — select-all-on-page header checkbox.
+                            v1.36.x — bulk delete is the owner's alone, so a
+                            delegate gets no selection column. */}
+                        {canManage && (
+                          <Checkbox
+                            checked={
+                              selectAll === "all"
+                                ? true
+                                : selectAll === "some"
+                                  ? "indeterminate"
+                                  : false
+                            }
+                            disabled={pageIds.length === 0}
+                            onCheckedChange={onToggleSelectAll}
+                            aria-label={t("dataList.selectAll")}
+                          />
+                        )}
                       </TableHead>
                       <TableHead className="w-28">
                         {t("measurements.type")}
@@ -1051,7 +1090,7 @@ export function MeasurementList({
                             <TableCell className="pl-4">
                               {/* Grouped/synthetic rows aren't individually
                                 deletable, so they have no checkbox. */}
-                              {!isGrouped && (
+                              {!isGrouped && canManage && (
                                 <Checkbox
                                   checked={isSelected}
                                   onCheckedChange={() => onToggleRow(m.id)}
@@ -1178,15 +1217,17 @@ export function MeasurementList({
                                   </Button>
                                 ) : (
                                   <>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-10 w-10"
-                                      onClick={() => startEdit(m)}
-                                      aria-label={t("common.edit")}
-                                    >
-                                      <Pencil className="h-3.5 w-3.5" />
-                                    </Button>
+                                    {canManage && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-10 w-10"
+                                        onClick={() => startEdit(m)}
+                                        aria-label={t("common.edit")}
+                                      >
+                                        <Pencil className="h-3.5 w-3.5" />
+                                      </Button>
+                                    )}
                                     <DeleteButton
                                       onConfirm={() =>
                                         deleteMutation.mutate(m.id)
@@ -1247,7 +1288,7 @@ export function MeasurementList({
                         <div className="flex items-center gap-2 overflow-hidden">
                           {/* v1.15.13 — multi-select checkbox in a 44px tap
                             target; absent for synthetic grouped rows. */}
-                          {!isGrouped && (
+                          {!isGrouped && canManage && (
                             // v1.15.13 MEDIUM-1 kept the 16px Radix Checkbox
                             // (itself a `<button role=checkbox>`) inside a
                             // 44px wrapper `<button>` for WCAG 2.5.5 — but a
@@ -1375,14 +1416,16 @@ export function MeasurementList({
                             </Button>
                           ) : (
                             <>
-                              <Button
-                                variant="ghost"
-                                size="icon-lg"
-                                onClick={() => startEdit(m)}
-                                aria-label={t("common.edit")}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
+                              {canManage && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon-lg"
+                                  onClick={() => startEdit(m)}
+                                  aria-label={t("common.edit")}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              )}
                               <DeleteButton
                                 iconClassName="h-4 w-4"
                                 onConfirm={() => deleteMutation.mutate(m.id)}

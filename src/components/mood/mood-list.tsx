@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -139,6 +140,9 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
   const { t } = useTranslations();
   const fmt = useFormatters();
   const { isAuthenticated } = useAuth();
+  // v1.36.x — mood is not a delegated verb. Inside somebody else's record the
+  // list stays readable and every control that would change it is absent.
+  const { canManage } = useRecordCapabilities();
   const queryClient = useQueryClient();
   const [moodFilter, setMoodFilterRaw] = useState<string>("ALL");
   // v1.15.13 — management-list source filter + optional date range.
@@ -618,7 +622,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
                 >
                   {t("mood.emptyResetFilter")}
                 </Button>
-              ) : onAddFirst ? (
+              ) : onAddFirst && canManage ? (
                 <Button size="sm" onClick={onAddFirst}>
                   <Plus className="h-4 w-4" />
                   {t("mood.emptyAddFirst")}
@@ -644,18 +648,20 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
                   <TableRow>
                     <TableHead className="w-10 pl-4">
                       {/* v1.15.13 — select-all-on-page header checkbox. */}
-                      <Checkbox
-                        checked={
-                          selectAll === "all"
-                            ? true
-                            : selectAll === "some"
-                              ? "indeterminate"
-                              : false
-                        }
-                        disabled={pageIds.length === 0}
-                        onCheckedChange={onToggleSelectAll}
-                        aria-label={t("dataList.selectAll")}
-                      />
+                      {canManage && (
+                        <Checkbox
+                          checked={
+                            selectAll === "all"
+                              ? true
+                              : selectAll === "some"
+                                ? "indeterminate"
+                                : false
+                          }
+                          disabled={pageIds.length === 0}
+                          onCheckedChange={onToggleSelectAll}
+                          aria-label={t("dataList.selectAll")}
+                        />
+                      )}
                     </TableHead>
                     <SortableHead
                       column="mood"
@@ -695,11 +701,13 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
                         data-state={isSelected ? "selected" : undefined}
                       >
                         <TableCell className="pl-4">
-                          <Checkbox
-                            checked={isSelected}
-                            onCheckedChange={() => onToggleRow(entry.id)}
-                            aria-label={t("dataList.selectRow")}
-                          />
+                          {canManage && (
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => onToggleRow(entry.id)}
+                              aria-label={t("dataList.selectRow")}
+                            />
+                          )}
                         </TableCell>
                         <TableCell className="font-semibold tabular-nums">
                           {entry.score}{" "}
@@ -737,15 +745,17 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
                         </TableCell>
                         <TableCell className="pr-4 text-right">
                           <div className="flex items-center justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => startEdit(entry)}
-                              aria-label={t("common.edit")}
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
+                            {canManage && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => startEdit(entry)}
+                                aria-label={t("common.edit")}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                             <DeleteButton
                               onConfirm={() => deleteMutation.mutate(entry.id)}
                               title={t("mood.deleteConfirmTitle")}
@@ -789,14 +799,16 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
                         stays the single control and owns the 44px hit area
                         via an `after` hit-slop (clicks on a pseudo-element
                         hit-test against its host button). */}
-                      <div className="flex size-11 shrink-0 items-center justify-center">
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => onToggleRow(entry.id)}
-                          aria-label={t("dataList.selectRow")}
-                          className="relative after:absolute after:-inset-3.5"
-                        />
-                      </div>
+                      {canManage && (
+                        <div className="flex size-11 shrink-0 items-center justify-center">
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => onToggleRow(entry.id)}
+                            aria-label={t("dataList.selectRow")}
+                            className="relative after:absolute after:-inset-3.5"
+                          />
+                        </div>
+                      )}
                       <div className="bg-muted flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
                         <span
                           data-testid="mood-row-score"
@@ -834,15 +846,17 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
                         and delete actions meet WCAG 2.5.5 on touch
                         devices. The desktop table keeps its denser
                         h-8 w-8 since pointer targets allow it. */}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="min-h-11 min-w-11"
-                        onClick={() => startEdit(entry)}
-                        aria-label={t("common.edit")}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
+                      {canManage && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="min-h-11 min-w-11"
+                          onClick={() => startEdit(entry)}
+                          aria-label={t("common.edit")}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      )}
                       <DeleteButton
                         onConfirm={() => deleteMutation.mutate(entry.id)}
                         iconClassName="h-4 w-4"

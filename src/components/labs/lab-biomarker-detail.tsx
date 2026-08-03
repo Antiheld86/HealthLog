@@ -1,5 +1,6 @@
 "use client";
 
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -93,6 +94,7 @@ const READINGS_PAGE_SIZE = 200;
  */
 export function LabBiomarkerDetail({ biomarkerId }: { biomarkerId: string }) {
   const { user } = useAuth();
+  const { canAdd, canManage } = useRecordCapabilities();
   const { t, locale } = useTranslations();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -346,17 +348,19 @@ export function LabBiomarkerDetail({ biomarkerId }: { biomarkerId: string }) {
             className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
             iconClassName="h-4 w-4"
           />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
-            onClick={() => setEditOpen(true)}
-            disabled={!marker}
-            aria-label={t("labs.biomarker.edit")}
-            title={t("labs.biomarker.edit")}
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
+          {canManage && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
+              onClick={() => setEditOpen(true)}
+              disabled={!marker}
+              aria-label={t("labs.biomarker.edit")}
+              title={t("labs.biomarker.edit")}
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          )}
           {/* "Show all readings" mirrors the metric sub-pages' `<SubPageShell>`
               control. The full reading feed lives on
               `/labs/[biomarkerId]/values`; the detail page keeps the
@@ -378,18 +382,22 @@ export function LabBiomarkerDetail({ biomarkerId }: { biomarkerId: string }) {
               </Link>
             </Button>
           ) : null}
-          <Button
-            onClick={() => setAddOpen(true)}
-            // v1.18.10 (W10) — on the narrowest phones the h1 + Edit + Delete +
-            // text "Add" button crowd the row and truncate the title hard.
-            // Drop the Add button to icon-only under `sm` (label kept for
-            // screen readers via `aria-label`); the full text returns at `sm+`.
-            className="min-h-11 min-w-11 shrink-0 sm:min-h-9 sm:min-w-0"
-            aria-label={t("labs.addResult")}
-          >
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">{t("labs.addResult")}</span>
-          </Button>
+          {/* v1.36.x — entering a result is an admitted delegated write;
+              renaming or removing the marker is not. */}
+          {canAdd && (
+            <Button
+              onClick={() => setAddOpen(true)}
+              // v1.18.10 (W10) — on the narrowest phones the h1 + Edit + Delete +
+              // text "Add" button crowd the row and truncate the title hard.
+              // Drop the Add button to icon-only under `sm` (label kept for
+              // screen readers via `aria-label`); the full text returns at `sm+`.
+              className="min-h-11 min-w-11 shrink-0 sm:min-h-9 sm:min-w-0"
+              aria-label={t("labs.addResult")}
+            >
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">{t("labs.addResult")}</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -429,9 +437,11 @@ export function LabBiomarkerDetail({ biomarkerId }: { biomarkerId: string }) {
               title={t("labs.detail.emptyTitle")}
               description={t("labs.detail.emptyDescription")}
               action={
-                <Button onClick={() => setAddOpen(true)}>
-                  {t("labs.addResult")}
-                </Button>
+                canAdd ? (
+                  <Button onClick={() => setAddOpen(true)}>
+                    {t("labs.addResult")}
+                  </Button>
+                ) : undefined
               }
             />
           </CardContent>

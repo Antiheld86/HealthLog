@@ -39,6 +39,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { MedicationCardHeader } from "@/components/medications/medication-card-header";
 import {
   useFormatters,
@@ -71,6 +72,10 @@ export function InstrumentCard({
 }) {
   const { t, locale } = useTranslations();
   const { date: formatDate } = useFormatters();
+  // v1.36.x — a screener is answered by the person it is about. No grant
+  // level admits it, so inside somebody else's record the card reads as
+  // history and carries no way to start one.
+  const { canManage } = useRecordCapabilities();
   // Issue #490 — day-boundary zone for the relative "today / yesterday"
   // bucket must match the zone `formatDate` renders in (mirror → Berlin).
   const displayTz = useDisplayTimezone();
@@ -173,11 +178,13 @@ export function InstrumentCard({
         {/* Bottom-pinned single primary action — the med-/Vorsorge card slot.
             Nothing sits below it now: the attribution moved to the header's
             info control, so the Start button stands alone with clean space. */}
-        <div className="mt-auto pt-0">
-          <Button type="button" className="min-h-11 w-full" onClick={onStart}>
-            {t("mentalHealth.start")}
-          </Button>
-        </div>
+        {canManage && (
+          <div className="mt-auto pt-0">
+            <Button type="button" className="min-h-11 w-full" onClick={onStart}>
+              {t("mentalHealth.start")}
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
