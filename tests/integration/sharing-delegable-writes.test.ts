@@ -1,0 +1,867 @@
+/**
+ * The eleven delegated writes, driven as routes, against real Postgres.
+ *
+ * Same construction as `sharing-delegable-routes.test.ts` and for the same
+ * reason: every case imports the shipped `POST` export and calls it, so the
+ * real `apiHandler`, the real `requireRecordAuth`, the real grant table and
+ * the real Prisma writes are what answer. A test that rebuilt a handler would
+ * be testing its own copy of a substitution that happens above the handler
+ * body, and would keep passing after the route stopped performing it.
+ *
+ * The grant is minted through `inviteGrant` + `acceptGrant` rather than
+ * hand-planted, because "a WRITE grant exists" and "a WRITE grant can be
+ * created by the invitation flow this release ships" are different claims and
+ * the second is the one a caregiver depends on.
+ *
+ * Five questions per verb:
+ *
+ *   1. a delegate with a live WRITE grant writes into the OWNER's record —
+ *      the row lands under the owner and NOT under the delegate;
+ *   2. the same delegate under a READ grant is refused
+ *      `sharing.access.denied`, and no row is written;
+ *   3. a caller who was never granted anything is refused the same way;
+ *   4. after revocation the very NEXT request is refused — no re-login, no
+ *      cache window;
+ *   5. a caller who has not switched gets exactly what they got before.
+ *
+ * (5) is the regression that matters most. Eleven verbs changed; a person who
+ * shares nothing must not be able to tell.
+ *
+ * Beyond the five, three properties that are specific rather than structural:
+ * the audit row carries `userId = owner` AND `actorUserId = delegate` (the
+ * pipe, not just the ends — `actingActorFor` reads the wide-event context, so
+ * a stamped row proves the context was set); the side-effect rate bucket keys
+ * on the ACTOR; and both intake routes hand the OWNER and the ACTOR to the
+ * notification helper rather than one id twice.
+ */
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { NextRequest } from "next/server";
+
+import { cookieJar, headerJar } from "./mock-next-headers";
+import { getPrismaClient, truncateAllTables } from "./setup";
+
+vi.mock("next/headers", async () => {
+  const { cookieJar, headerJar } = await import("./mock-next-headers");
+  return {
+    headers: vi.fn(async () => ({
+      get: (name: string) => headerJar.get(name.toLowerCase()) ?? null,
+    })),
+    cookies: vi.fn(async () => ({
+      get: (name: string) => {
+        const value = cookieJar.get(name);
+        return value ? { name, value } : undefined;
+      },
+      set: (name: string, value: string) => {
+        cookieJar.set(name, value);
+      },
+      delete: (name: string) => {
+        cookieJar.delete(name);
+      },
+    })),
+  };
+});
+
+vi.mock("@/lib/db-compat", () => ({
+  ensureDbCompatibility: vi.fn().mockResolvedValue(undefined),
+}));
+
+/**
+ * The one collaborator this file stubs, and only at the seam it is testing.
+ *
+ * What the helper DOES — the cascade, the preference row, the ledger, the
+ * self-refusal, the snooze refusal — is proved end to end against the real
+ * dispatcher in `delegated-intake-notification.test.ts`. What that file cannot
+ * see is whether the two intake routes hand it the owner and the actor the
+ * right way round, because the helper's own self-refusal makes an
+ * `ownerId === actorId` mix-up look exactly like a self-write: silent. So this
+ * file asserts the arguments the routes pass, which is the half of the pipe
+ * the other file leaves open.
+ */
+const notifyDelegatedIntake = vi.fn(async (_input: unknown) => {});
+vi.mock("@/lib/notifications/delegated-intake", () => ({
+  notifyDelegatedIntake: (input: unknown) => notifyDelegatedIntake(input),
+}));
+
+let counter = 0;
+
+async function makeUser(label: string) {
+  const suffix = `${label}-${counter++}`;
+  return getPrismaClient().user.create({
+    data: {
+      username: `dw-${suffix}`,
+      email: `dw-${suffix}@example.test`,
+      displayName: `DW ${suffix}`,
+      role: "USER",
+      timezone: "Europe/Berlin",
+    },
+  });
+}
+
+async function signIn(userId: string) {
+  const session = await getPrismaClient().session.create({
+    data: { userId, expiresAt: new Date(Date.now() + 60_000) },
+  });
+  cookieJar.set("healthlog_session", session.id);
+  return session;
+}
+
+/**
+ * A live grant at the named level, accepted, with the delegate's session
+ * already inside the owner's record.
+ *
+ * Through `inviteGrant` / `acceptGrant` — the shipped transitions — so a
+ * release that could not actually mint a WRITE grant would fail here rather
+ * than pass against a row this file wrote itself.
+ */
+async function switchInto(
+  ownerId: string,
+  delegateId: string,
+  access: "READ" | "WRITE",
+) {
+  const { inviteGrant, acceptGrant } = await import("@/lib/sharing/grants");
+  const invited = await inviteGrant({
+    grantorId: ownerId,
+    granteeId: delegateId,
+    access,
+  });
+  const grant = await acceptGrant({
+    grantId: invited.id,
+    granteeId: delegateId,
+  });
+  expect(grant.access).toBe(access);
+  expect(grant.acceptedAt).not.toBeNull();
+
+  const session = await signIn(delegateId);
+  await getPrismaClient().session.update({
+    where: { id: session.id },
+    data: { actingAsUserId: ownerId },
+  });
+  return { grant, session };
+}
+
+/** A session inside a record nobody ever shared with this caller. */
+async function claimWithoutGrant(ownerId: string, callerId: string) {
+  const session = await signIn(callerId);
+  await getPrismaClient().session.update({
+    where: { id: session.id },
+    data: { actingAsUserId: ownerId },
+  });
+}
+
+async function revoke(grantId: string, ownerId: string) {
+  const { revokeGrant } = await import("@/lib/sharing/grants");
+  await revokeGrant({ grantId, grantorId: ownerId });
+}
+
+type Handler = (
+  request: NextRequest,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  context: { params: Promise<any> },
+) => Promise<Response>;
+
+function postRequest(url: string, body: unknown): NextRequest {
+  return new NextRequest(`http://localhost${url}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+async function post(
+  handler: Handler,
+  url: string,
+  body: unknown,
+  params: Record<string, string> = {},
+): Promise<Response> {
+  return handler(postRequest(url, body), { params: Promise.resolve(params) });
+}
+
+async function payload(response: Response): Promise<{
+  data: unknown;
+  error: unknown;
+  meta?: { errorCode?: string };
+}> {
+  return response.json();
+}
+
+/** The stable refusal, asserted by code rather than by status alone. */
+async function expectDenied(response: Response) {
+  expect(response.status).toBe(403);
+  expect((await payload(response)).meta?.errorCode).toBe(
+    "sharing.access.denied",
+  );
+}
+
+const ISO = "2026-07-15T08:00:00.000Z";
+
+/* -------------------------------------------------------------------------- */
+/* The shape of a delegated-write case                                        */
+/* -------------------------------------------------------------------------- */
+
+interface WriteCase<C> {
+  /** Rows the write depends on, created under the record it will land in. */
+  prepare?: (recordOwnerId: string) => Promise<C>;
+  /** Drive the shipped POST export against the current session. */
+  call: (ctx: C) => Promise<Response>;
+  /** The status a successful write answers with. */
+  ok: number;
+  /** The action the happy path files through `auditLog`. */
+  auditAction: string;
+  /** How many rows this verb has written under a given account. */
+  count: (userId: string) => Promise<number>;
+}
+
+/**
+ * The five legs, run against one verb.
+ *
+ * `prepare` runs against whichever account the write is aimed at, so the
+ * delegated legs build their prerequisites under the OWNER — a delegate
+ * pointing at a metric or a medication of their own is a different test, and
+ * the read suite already pins that it 404s.
+ */
+function writeContract<C>(name: string, c: WriteCase<C>) {
+  const prepare = c.prepare ?? (async () => undefined as C);
+
+  describe(name, () => {
+    it("writes into the owner's record under a live WRITE grant", async () => {
+      const owner = await makeUser("owner");
+      const delegate = await makeUser("delegate");
+      const ctx = await prepare(owner.id);
+
+      await switchInto(owner.id, delegate.id, "WRITE");
+      const response = await c.call(ctx);
+
+      expect(response.status).toBe(c.ok);
+      // Under the owner, and under nobody else. Asserting the owner's count
+      // alone would pass on a handler that wrote a row to each account.
+      expect(await c.count(owner.id)).toBe(1);
+      expect(await c.count(delegate.id)).toBe(0);
+    });
+
+    it("files the audit row under the owner and names the delegate as actor", async () => {
+      const owner = await makeUser("owner");
+      const delegate = await makeUser("delegate");
+      const ctx = await prepare(owner.id);
+
+      await switchInto(owner.id, delegate.id, "WRITE");
+      expect((await c.call(ctx)).status).toBe(c.ok);
+
+      const row = await getPrismaClient().auditLog.findFirst({
+        where: { action: c.auditAction },
+        orderBy: { createdAt: "desc" },
+      });
+      // The row exists at all — the audit assertion below is worthless
+      // against a null, and `toBe(undefined)` would pass on one.
+      expect(row, `no ${c.auditAction} row was written`).not.toBeNull();
+      expect(row?.userId).toBe(owner.id);
+      expect(row?.actorUserId).toBe(delegate.id);
+    });
+
+    it("refuses the same delegate under a READ grant, and writes nothing", async () => {
+      const owner = await makeUser("owner");
+      const delegate = await makeUser("delegate");
+      const ctx = await prepare(owner.id);
+
+      await switchInto(owner.id, delegate.id, "READ");
+      await expectDenied(await c.call(ctx));
+
+      expect(await c.count(owner.id)).toBe(0);
+      expect(await c.count(delegate.id)).toBe(0);
+    });
+
+    it("refuses a caller who names a record they were never granted", async () => {
+      const owner = await makeUser("owner");
+      const stranger = await makeUser("stranger");
+      const ctx = await prepare(owner.id);
+
+      await claimWithoutGrant(owner.id, stranger.id);
+      await expectDenied(await c.call(ctx));
+
+      expect(await c.count(owner.id)).toBe(0);
+      expect(await c.count(stranger.id)).toBe(0);
+    });
+
+    it("refuses the next request after the grant is revoked", async () => {
+      const owner = await makeUser("owner");
+      const delegate = await makeUser("delegate");
+      const ctx = await prepare(owner.id);
+
+      const { grant } = await switchInto(owner.id, delegate.id, "WRITE");
+      expect((await c.call(ctx)).status).toBe(c.ok);
+
+      // No sign-out, no new session, no cache flush. The same browser, the
+      // next request. The refusal comes from the resolver, above the handler
+      // body, so replaying the identical request is the sharpest form of the
+      // question: the ONLY thing that changed is the grant.
+      await revoke(grant.id, owner.id);
+      await expectDenied(await c.call(ctx));
+      expect(await c.count(owner.id)).toBe(1);
+    });
+
+    it("is unchanged for a caller who has not switched", async () => {
+      const plain = await makeUser("plain");
+      const ctx = await prepare(plain.id);
+      await signIn(plain.id);
+
+      const response = await c.call(ctx);
+      expect(response.status).toBe(c.ok);
+      expect(await c.count(plain.id)).toBe(1);
+
+      // And the row is filed as their own act: `actorUserId` stays null, which
+      // is what every row written before the column existed already means.
+      const row = await getPrismaClient().auditLog.findFirst({
+        where: { action: c.auditAction },
+        orderBy: { createdAt: "desc" },
+      });
+      expect(row?.userId).toBe(plain.id);
+      expect(row?.actorUserId).toBeNull();
+    });
+  });
+}
+
+beforeEach(async () => {
+  await truncateAllTables(getPrismaClient());
+  cookieJar.clear();
+  headerJar.clear();
+  notifyDelegatedIntake.mockClear();
+});
+
+/* -------------------------------------------------------------------------- */
+/* 1 — measurements, single and batch                                          */
+/* -------------------------------------------------------------------------- */
+
+const countMeasurements = (userId: string) =>
+  getPrismaClient().measurement.count({ where: { userId } });
+
+writeContract("POST /api/measurements — single", {
+  call: async () => {
+    const { POST } = await import("@/app/api/measurements/route");
+    return post(POST as Handler, "/api/measurements", {
+      type: "WEIGHT",
+      value: 81,
+      measuredAt: ISO,
+    });
+  },
+  ok: 201,
+  auditAction: "measurement.create",
+  count: countMeasurements,
+});
+
+writeContract("POST /api/measurements — batch", {
+  call: async () => {
+    const { POST } = await import("@/app/api/measurements/route");
+    return post(POST as Handler, "/api/measurements", [
+      { type: "WEIGHT", value: 81, measuredAt: ISO },
+    ]);
+  },
+  ok: 201,
+  auditAction: "measurement.create.batch",
+  count: countMeasurements,
+});
+
+/* -------------------------------------------------------------------------- */
+/* 2 — labs, and the biomarker the free-text path mints                        */
+/* -------------------------------------------------------------------------- */
+
+writeContract("POST /api/labs", {
+  call: async () => {
+    const { POST } = await import("@/app/api/labs/route");
+    return post(POST as Handler, "/api/labs", {
+      analyte: "HbA1c",
+      value: 5.2,
+      unit: "mmol/L",
+      takenAt: ISO,
+    });
+  },
+  ok: 201,
+  auditAction: "labResult.create",
+  count: (userId) => getPrismaClient().labResult.count({ where: { userId } }),
+});
+
+describe("POST /api/labs — the marker the free-text path mints", () => {
+  it("joins the OWNER's catalogue, not the delegate's", async () => {
+    // A result added to somebody's record whose marker landed on the helper's
+    // account would leave the owner with a reading they cannot chart. The
+    // mint is a second write, under a second table, on the same request.
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await switchInto(owner.id, delegate.id, "WRITE");
+
+    const { POST } = await import("@/app/api/labs/route");
+    const response = await post(POST as Handler, "/api/labs", {
+      analyte: "Ferritin",
+      value: 120,
+      unit: "µg/L",
+      takenAt: ISO,
+    });
+    expect(response.status).toBe(201);
+
+    const markers = await getPrismaClient().biomarker.findMany({
+      select: { userId: true, name: true },
+    });
+    expect(markers).toEqual([{ userId: owner.id, name: "Ferritin" }]);
+
+    const result = await getPrismaClient().labResult.findFirstOrThrow({});
+    expect(result.userId).toBe(owner.id);
+    expect(result.biomarkerId).not.toBeNull();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 3 — biomarkers                                                             */
+/* -------------------------------------------------------------------------- */
+
+writeContract("POST /api/biomarkers", {
+  call: async () => {
+    const { POST } = await import("@/app/api/biomarkers/route");
+    return post(POST as Handler, "/api/biomarkers", {
+      name: "Ferritin",
+      unit: "µg/L",
+    });
+  },
+  ok: 201,
+  auditAction: "biomarker.create",
+  count: (userId) => getPrismaClient().biomarker.count({ where: { userId } }),
+});
+
+/* -------------------------------------------------------------------------- */
+/* 4 — allergies                                                              */
+/* -------------------------------------------------------------------------- */
+
+writeContract("POST /api/allergies", {
+  call: async () => {
+    const { POST } = await import("@/app/api/allergies/route");
+    return post(POST as Handler, "/api/allergies", {
+      substance: "Penicillin",
+      category: "MEDICATION",
+      severity: "SEVERE",
+    });
+  },
+  ok: 201,
+  auditAction: "allergy.create",
+  count: (userId) => getPrismaClient().allergy.count({ where: { userId } }),
+});
+
+/* -------------------------------------------------------------------------- */
+/* 5 — family history                                                         */
+/* -------------------------------------------------------------------------- */
+
+writeContract("POST /api/family-history", {
+  call: async () => {
+    const { POST } = await import("@/app/api/family-history/route");
+    return post(POST as Handler, "/api/family-history", {
+      relationship: "MOTHER",
+      condition: "Type 2 diabetes",
+    });
+  },
+  ok: 201,
+  auditAction: "family-history.create",
+  count: (userId) =>
+    getPrismaClient().familyHistoryEntry.count({ where: { userId } }),
+});
+
+/* -------------------------------------------------------------------------- */
+/* 6 — illness episodes, and the module gate that follows the record          */
+/* -------------------------------------------------------------------------- */
+
+writeContract("POST /api/illness/episodes", {
+  call: async () => {
+    const { POST } = await import("@/app/api/illness/episodes/route");
+    return post(POST as Handler, "/api/illness/episodes", {
+      label: "Influenza",
+      type: "INFECTION",
+    });
+  },
+  ok: 201,
+  auditAction: "illness.episode.create",
+  count: (userId) =>
+    getPrismaClient().illnessEpisode.count({ where: { userId } }),
+});
+
+describe("POST /api/illness/episodes — the module gate", () => {
+  it("refuses when the OWNER switched illness tracking off, whatever the delegate set", async () => {
+    // The recorded decision: the module map governs which parts of a RECORD
+    // exist, so it is read off the record. A delegate who runs the module on
+    // their own account does not thereby gain an episode surface inside
+    // somebody else's.
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await getPrismaClient().user.update({
+      where: { id: owner.id },
+      data: { modulePreferencesJson: { illness: false } },
+    });
+    await getPrismaClient().user.update({
+      where: { id: delegate.id },
+      data: { modulePreferencesJson: { illness: true } },
+    });
+
+    await switchInto(owner.id, delegate.id, "WRITE");
+    const { POST } = await import("@/app/api/illness/episodes/route");
+    const response = await post(POST as Handler, "/api/illness/episodes", {
+      label: "Influenza",
+      type: "INFECTION",
+    });
+
+    expect(response.status).toBe(403);
+    expect((await payload(response)).meta?.errorCode).toBe("illness.disabled");
+    expect(
+      await getPrismaClient().illnessEpisode.count({
+        where: { userId: owner.id },
+      }),
+    ).toBe(0);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 7 — custom-metric entries                                                  */
+/* -------------------------------------------------------------------------- */
+
+writeContract<string>("POST /api/custom-metrics/[id]/entries", {
+  prepare: async (recordOwnerId) => {
+    const metric = await getPrismaClient().customMetric.create({
+      data: { userId: recordOwnerId, name: "Water", unit: "ml" },
+    });
+    return metric.id;
+  },
+  call: async (metricId) => {
+    const { POST } =
+      await import("@/app/api/custom-metrics/[id]/entries/route");
+    return post(
+      POST as Handler,
+      `/api/custom-metrics/${metricId}/entries`,
+      { value: 250, measuredAt: ISO },
+      { id: metricId },
+    );
+  },
+  ok: 201,
+  auditAction: "customMetricEntry.create",
+  count: (userId) =>
+    getPrismaClient().customMetricEntry.count({ where: { userId } }),
+});
+
+/* -------------------------------------------------------------------------- */
+/* 8 — medication side effects, and the actor-keyed bucket                    */
+/* -------------------------------------------------------------------------- */
+
+async function seedMedication(userId: string, name = "Statin") {
+  return getPrismaClient().medication.create({
+    data: { userId, name, dose: "10mg" },
+  });
+}
+
+writeContract<string>("POST /api/medications/[id]/side-effects", {
+  prepare: async (recordOwnerId) => (await seedMedication(recordOwnerId)).id,
+  call: async (medicationId) => {
+    const { POST } =
+      await import("@/app/api/medications/[id]/side-effects/route");
+    return post(
+      POST as Handler,
+      `/api/medications/${medicationId}/side-effects`,
+      { entry: "NAUSEA", severity: 3 },
+      { id: medicationId },
+    );
+  },
+  ok: 201,
+  auditAction: "medication.sideEffect.create",
+  count: (userId) =>
+    getPrismaClient().medicationSideEffect.count({ where: { userId } }),
+});
+
+describe("POST /api/medications/[id]/side-effects — the bucket follows the actor", () => {
+  it("spends the delegate's allowance in ONE bucket across two records", async () => {
+    // The single condition on which this verb was admitted. On the record key
+    // a delegate could exhaust the owner's allowance and lock them out of
+    // their own log, and could collect a fresh one by switching records. The
+    // `rate_limits` rows are read from the table rather than inferred from a
+    // 429, because a key that is merely wrong still answers 201.
+    const first = await makeUser("owner");
+    const second = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    const firstMed = await seedMedication(first.id, "First");
+    const secondMed = await seedMedication(second.id, "Second");
+
+    const { POST } =
+      await import("@/app/api/medications/[id]/side-effects/route");
+
+    await switchInto(first.id, delegate.id, "WRITE");
+    expect(
+      (
+        await post(
+          POST as Handler,
+          `/api/medications/${firstMed.id}/side-effects`,
+          { entry: "NAUSEA", severity: 3 },
+          { id: firstMed.id },
+        )
+      ).status,
+    ).toBe(201);
+
+    await switchInto(second.id, delegate.id, "WRITE");
+    expect(
+      (
+        await post(
+          POST as Handler,
+          `/api/medications/${secondMed.id}/side-effects`,
+          { entry: "NAUSEA", severity: 2 },
+          { id: secondMed.id },
+        )
+      ).status,
+    ).toBe(201);
+
+    const rows = await getPrismaClient().rateLimit.findMany({
+      where: { key: { startsWith: "medication-side-effect:post:" } },
+    });
+    // One bucket, the delegate's, holding both requests. Two buckets — one per
+    // record — is the failure this asserts against, and it looks identical
+    // from the response side.
+    expect(rows.map((r) => r.key)).toEqual([
+      `medication-side-effect:post:${delegate.id}`,
+    ]);
+    expect(rows[0]?.count).toBe(2);
+  });
+
+  it("still keys on the caller when nobody has switched", async () => {
+    const plain = await makeUser("plain");
+    const med = await seedMedication(plain.id);
+    await signIn(plain.id);
+
+    const { POST } =
+      await import("@/app/api/medications/[id]/side-effects/route");
+    expect(
+      (
+        await post(
+          POST as Handler,
+          `/api/medications/${med.id}/side-effects`,
+          { entry: "NAUSEA", severity: 1 },
+          { id: med.id },
+        )
+      ).status,
+    ).toBe(201);
+
+    const rows = await getPrismaClient().rateLimit.findMany({
+      where: { key: { startsWith: "medication-side-effect:post:" } },
+    });
+    expect(rows.map((r) => r.key)).toEqual([
+      `medication-side-effect:post:${plain.id}`,
+    ]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 9 — adding a medication, with its nested schedule                          */
+/* -------------------------------------------------------------------------- */
+
+writeContract("POST /api/medications", {
+  call: async () => {
+    const { POST } = await import("@/app/api/medications/route");
+    return post(POST as Handler, "/api/medications", {
+      name: "Metformin",
+      dose: "500mg",
+      schedules: [{ windowStart: "08:00", windowEnd: "10:00" }],
+    });
+  },
+  ok: 201,
+  auditAction: "medication.create",
+  count: (userId) => getPrismaClient().medication.count({ where: { userId } }),
+});
+
+describe("POST /api/medications — the nested schedule", () => {
+  it("lands under the owner, because a medication nobody scheduled reminds nobody", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await switchInto(owner.id, delegate.id, "WRITE");
+
+    const { POST } = await import("@/app/api/medications/route");
+    const response = await post(POST as Handler, "/api/medications", {
+      name: "Metformin",
+      dose: "500mg",
+      schedules: [{ windowStart: "08:00", windowEnd: "10:00" }],
+    });
+    expect(response.status).toBe(201);
+
+    const medication = await getPrismaClient().medication.findFirstOrThrow({
+      include: { schedules: true },
+    });
+    expect(medication.userId).toBe(owner.id);
+    expect(medication.schedules).toHaveLength(1);
+    expect(medication.schedules[0]?.windowStart).toBe("08:00");
+    // The schedule hangs off the medication rather than off a user id, so the
+    // only way it could reach the wrong account is through the medication —
+    // asserted above — but the count under the delegate is the cheap proof
+    // that nothing was mirrored.
+    expect(
+      await getPrismaClient().medication.count({
+        where: { userId: delegate.id },
+      }),
+    ).toBe(0);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 10 / 11 — marking a dose                                                    */
+/* -------------------------------------------------------------------------- */
+
+/** A medication of `userId` with one pending slot on it. */
+async function seedPendingDose(userId: string) {
+  const medication = await seedMedication(userId, "Insulin");
+  const event = await getPrismaClient().medicationIntakeEvent.create({
+    data: {
+      userId,
+      medicationId: medication.id,
+      scheduledFor: new Date(),
+    },
+  });
+  return { medicationId: medication.id, intakeId: event.id };
+}
+
+writeContract<{ medicationId: string; intakeId: string }>(
+  "POST /api/medications/intake",
+  {
+    prepare: seedPendingDose,
+    call: async ({ intakeId }) => {
+      const { POST } = await import("@/app/api/medications/intake/route");
+      return post(POST as Handler, "/api/medications/intake", {
+        intakeId,
+        status: "taken",
+      });
+    },
+    ok: 200,
+    auditAction: "medications.intake.update",
+    // The slot row is seeded, so what this counts is the marking: the number
+    // of the account's intake events that now carry a `takenAt`.
+    count: (userId) =>
+      getPrismaClient().medicationIntakeEvent.count({
+        where: { userId, takenAt: { not: null } },
+      }),
+  },
+);
+
+writeContract<{ medicationId: string; intakeId: string }>(
+  "POST /api/medications/[id]/intake",
+  {
+    prepare: async (recordOwnerId) => ({
+      medicationId: (await seedMedication(recordOwnerId, "Insulin")).id,
+      intakeId: "",
+    }),
+    call: async ({ medicationId }) => {
+      const { POST } = await import("@/app/api/medications/[id]/intake/route");
+      return post(
+        POST as Handler,
+        `/api/medications/${medicationId}/intake`,
+        { takenAt: new Date().toISOString() },
+        { id: medicationId },
+      );
+    },
+    ok: 201,
+    auditAction: "medication.intake",
+    count: (userId) =>
+      getPrismaClient().medicationIntakeEvent.count({
+        where: { userId, takenAt: { not: null } },
+      }),
+  },
+);
+
+describe("marking a dose — what the owner is told, and what the rollup recomputed", () => {
+  it("hands the OWNER and the ACTOR to the notification, not one id twice", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    const { medicationId, intakeId } = await seedPendingDose(owner.id);
+    await switchInto(owner.id, delegate.id, "WRITE");
+
+    const { POST } = await import("@/app/api/medications/intake/route");
+    expect(
+      (
+        await post(POST as Handler, "/api/medications/intake", {
+          intakeId,
+          status: "taken",
+        })
+      ).status,
+    ).toBe(200);
+
+    expect(notifyDelegatedIntake).toHaveBeenCalledTimes(1);
+    expect(notifyDelegatedIntake).toHaveBeenCalledWith({
+      ownerId: owner.id,
+      actorId: delegate.id,
+      medicationId,
+      status: "taken",
+    });
+  });
+
+  it("carries the skip through the per-medication arm", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    const medication = await seedMedication(owner.id, "Insulin");
+    await switchInto(owner.id, delegate.id, "WRITE");
+
+    const { POST } = await import("@/app/api/medications/[id]/intake/route");
+    expect(
+      (
+        await post(
+          POST as Handler,
+          `/api/medications/${medication.id}/intake`,
+          { skipped: true, scheduledFor: new Date().toISOString() },
+          { id: medication.id },
+        )
+      ).status,
+    ).toBe(201);
+
+    expect(notifyDelegatedIntake).toHaveBeenCalledWith({
+      ownerId: owner.id,
+      actorId: delegate.id,
+      medicationId: medication.id,
+      status: "skipped",
+    });
+  });
+
+  it("still calls it with one id when nobody has switched", async () => {
+    // The helper refuses on self, so this call is a no-op — but it has to be
+    // MADE with `actorId === ownerId`, or the refusal is being reached for the
+    // wrong reason.
+    const plain = await makeUser("plain");
+    const { medicationId, intakeId } = await seedPendingDose(plain.id);
+    await signIn(plain.id);
+
+    const { POST } = await import("@/app/api/medications/intake/route");
+    expect(
+      (
+        await post(POST as Handler, "/api/medications/intake", {
+          intakeId,
+          status: "taken",
+        })
+      ).status,
+    ).toBe(200);
+
+    expect(notifyDelegatedIntake).toHaveBeenCalledWith({
+      ownerId: plain.id,
+      actorId: plain.id,
+      medicationId,
+      status: "taken",
+    });
+  });
+
+  it("recomputes the compliance rollup under the OWNER's id", async () => {
+    // The dose landed in the owner's record; a rollup row keyed on the
+    // delegate would leave the owner's compliance reading stale and give the
+    // delegate a row about a medication they do not have.
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    const { intakeId } = await seedPendingDose(owner.id);
+    await switchInto(owner.id, delegate.id, "WRITE");
+
+    const { POST } = await import("@/app/api/medications/intake/route");
+    expect(
+      (
+        await post(POST as Handler, "/api/medications/intake", {
+          intakeId,
+          status: "taken",
+        })
+      ).status,
+    ).toBe(200);
+
+    const rollups = await getPrismaClient().medicationComplianceRollup.findMany(
+      { select: { userId: true } },
+    );
+    expect(rollups.length).toBeGreaterThan(0);
+    expect([...new Set(rollups.map((r) => r.userId))]).toEqual([owner.id]);
+  });
+});
