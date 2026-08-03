@@ -381,6 +381,58 @@ describe("dispatchNotification — per-event default policy (v1.4.25 W16c)", () 
 
     expect(sendViaNtfyMock).toHaveBeenCalledTimes(1);
   });
+
+  // v1.36.x — the delegated-dose event goes the other way from
+  // PERSONAL_RECORD: ON without a row, because the owner invited the person
+  // whose action produces it. Both positions of the preference are asserted,
+  // so "default ON" cannot be true only because the dispatcher ignores the
+  // event entirely.
+  it("SHARED_RECORD_INTAKE defaults ON when no preference row exists", async () => {
+    const channel = makeChannel({
+      type: "NTFY",
+      config: JSON.stringify({
+        serverUrl: "https://ntfy.example",
+        topic: "t",
+      }),
+      preferences: [],
+    });
+    vi.mocked(prisma.notificationChannel.findMany).mockResolvedValueOnce([
+      channel,
+    ] as never);
+    sendViaNtfyMock.mockResolvedValueOnce({ ok: true });
+
+    await dispatchNotification({
+      eventType: "SHARED_RECORD_INTAKE",
+      userId: "u-1",
+      title: "Wren marked a dose",
+      message: "Ramipril: marked as taken by Wren.",
+    });
+
+    expect(sendViaNtfyMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("SHARED_RECORD_INTAKE is suppressed by an explicit per-channel opt-out", async () => {
+    const channel = makeChannel({
+      type: "NTFY",
+      config: JSON.stringify({
+        serverUrl: "https://ntfy.example",
+        topic: "t",
+      }),
+      preferences: [{ eventType: "SHARED_RECORD_INTAKE", enabled: false }],
+    });
+    vi.mocked(prisma.notificationChannel.findMany).mockResolvedValueOnce([
+      channel,
+    ] as never);
+
+    await dispatchNotification({
+      eventType: "SHARED_RECORD_INTAKE",
+      userId: "u-1",
+      title: "Wren marked a dose",
+      message: "Ramipril: marked as taken by Wren.",
+    });
+
+    expect(sendViaNtfyMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("dispatchNotification — MOOD_REMINDER single source of truth (v1.7.0)", () => {

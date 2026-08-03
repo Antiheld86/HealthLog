@@ -7089,10 +7089,19 @@
     "eventMedicationIntakeSyncDesc": "Mise à jour entre appareils quand une dose est enregistrée, prise ou ignorée.",
     "eventDailyBriefing": "Résumé quotidien",
     "eventDailyBriefingDesc": "Un résumé matinal et posé de votre journée. Désactivé jusqu'à ce que vous l'activiez.",
+    "eventSecurityAlert": "Nouvelle connexion",
+    "eventSecurityAlertDesc": "Envoyé quand votre compte est utilisé sur un appareil ou depuis un lieu inconnus.",
+    "eventSharedRecordIntake": "Une personne avec accès marque une dose",
+    "eventSharedRecordIntakeDesc": "Envoyé uniquement quand une autre personne le fait, jamais pour vos propres saisies.",
     "security": {
       "newDeviceTitle": "Nouvelle connexion à votre compte",
       "newDeviceBody": "Une nouvelle connexion depuis {device} ({location}). Si ce n'était pas vous, changez votre mot de passe immédiatement.",
       "unknownLocation": "lieu inconnu"
+    },
+    "sharedRecordIntake": {
+      "title": "{name} a marqué une dose",
+      "bodyTaken": "{medication} : marquée comme prise par {name}.",
+      "bodySkipped": "{medication} : marquée comme ignorée par {name}."
     },
     "loginRequired": "Connecte-toi pour gérer les notifications.",
     "someChannelsGloballyDisabled": "Un ou plusieurs canaux sont désactivés dans les paramètres et ne recevront pas de notifications.",

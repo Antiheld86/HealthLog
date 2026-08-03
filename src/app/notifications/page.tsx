@@ -15,6 +15,10 @@ import {
   EVENT_DEFAULT_ENABLED,
   type EventType,
 } from "@/lib/notifications/types";
+import {
+  eventDescriptionTranslationKey,
+  eventTranslationKey,
+} from "@/lib/notifications/event-labels";
 import { queryKeys } from "@/lib/query-keys";
 import { apiGet, apiPut } from "@/lib/api/api-fetch";
 
@@ -36,17 +40,6 @@ interface PreferencesData {
   channels: ChannelInfo[];
   preferences: Preference[];
   eventTypes: string[];
-}
-
-/** Maps SCREAMING_SNAKE event type to translation key, e.g. MEDICATION_REMINDER → eventMedicationReminder */
-function eventTranslationKey(eventType: string): string {
-  return (
-    "notifications.event" +
-    eventType
-      .toLowerCase()
-      .replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())
-      .replace(/^./, (c) => c.toUpperCase())
-  );
 }
 
 export default function NotificationsPage() {
@@ -265,7 +258,7 @@ export default function NotificationsPage() {
           <tbody>
             {eventTypes.map((eventType, idx) => {
               const nameKey = eventTranslationKey(eventType);
-              const descKey = nameKey + "Desc";
+              const descKey = eventDescriptionTranslationKey(eventType);
               return (
                 <tr
                   key={eventType}
@@ -311,7 +304,7 @@ export default function NotificationsPage() {
       <div className="space-y-4 md:hidden">
         {eventTypes.map((eventType) => {
           const nameKey = eventTranslationKey(eventType);
-          const descKey = nameKey + "Desc";
+          const descKey = eventDescriptionTranslationKey(eventType);
           return (
             <div
               key={eventType}

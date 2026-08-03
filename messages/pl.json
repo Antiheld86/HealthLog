@@ -7089,10 +7089,19 @@
     "eventMedicationIntakeSyncDesc": "Aktualizacja między urządzeniami, gdy dawka zostanie zapisana, przyjęta lub pominięta.",
     "eventDailyBriefing": "Codzienne podsumowanie",
     "eventDailyBriefingDesc": "Spokojne poranne podsumowanie Twojego dnia. Wyłączone, dopóki go nie włączysz.",
+    "eventSecurityAlert": "Nowe logowanie",
+    "eventSecurityAlertDesc": "Wysyłane, gdy Twoje konto zostanie użyte na nieznanym urządzeniu lub z nieznanego miejsca.",
+    "eventSharedRecordIntake": "Ktoś z dostępem oznacza dawkę",
+    "eventSharedRecordIntakeDesc": "Wysyłane tylko wtedy, gdy robi to inna osoba, nigdy przy Twoich własnych wpisach.",
     "security": {
       "newDeviceTitle": "Nowe logowanie do Twojego konta",
       "newDeviceBody": "Nowe logowanie z {device} ({location}). Jeśli to nie Ty, natychmiast zmień hasło.",
       "unknownLocation": "nieznana lokalizacja"
+    },
+    "sharedRecordIntake": {
+      "title": "{name} oznaczył(a) dawkę",
+      "bodyTaken": "{medication}: oznaczona jako przyjęta przez {name}.",
+      "bodySkipped": "{medication}: oznaczona jako pominięta przez {name}."
     },
     "loginRequired": "Zaloguj się, aby zarządzać powiadomieniami.",
     "someChannelsGloballyDisabled": "Co najmniej jeden kanał jest wyłączony w ustawieniach i nie będzie otrzymywać powiadomień.",

@@ -112,6 +112,16 @@ export const EVENT_TYPES = [
   // morning window, so a concerning reading always stays on
   // `MEASUREMENT_ANOMALY` and this never bypasses Focus.
   "DAILY_BRIEFING",
+  // v1.36.x — somebody with a write grant on this record marked one of the
+  // owner's doses. The only notification a delegated write produces: every
+  // other shared-record write is bookkeeping and stays in the owner's activity
+  // view, while "somebody said I took my tablets" is a fact about the owner's
+  // own body that they should not have to go looking for. Addressed to the
+  // OWNER — the delegate learns what they did from the response in their own
+  // session, not from a push (there is no channel that could carry it: the
+  // dispatcher addresses a userId, and under record substitution that userId
+  // is the owner by design). Default ON, see EVENT_DEFAULT_ENABLED.
+  "SHARED_RECORD_INTAKE",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 
@@ -179,6 +189,14 @@ export const EVENT_DEFAULT_ENABLED: Record<EventType, boolean> = {
   // channel that has no explicit enabled row, so a fresh account never
   // receives a morning push it did not ask for.
   DAILY_BRIEFING: false,
+  // v1.36.x — ON by default, deliberately against the PERSONAL_RECORD opt-in
+  // precedent. The event cannot exist unless the owner invited a second person
+  // and gave them write access, so there is no backfill class of volume to
+  // protect against; and an owner who has to discover a setting before they
+  // learn that somebody else marks their doses was never told at all. The row
+  // sits in the /notifications matrix from day one, so an owner who finds it
+  // noisy silences it per channel with one switch.
+  SHARED_RECORD_INTAKE: true,
 };
 
 export const CHANNEL_TYPE_LABELS: Record<ChannelType, string> = {

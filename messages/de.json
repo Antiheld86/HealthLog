@@ -7089,10 +7089,19 @@
     "eventMedicationIntakeSyncDesc": "Geräteübergreifende Aktualisierung, wenn eine Dosis protokolliert, eingenommen oder übersprungen wird.",
     "eventDailyBriefing": "Täglicher Überblick",
     "eventDailyBriefingDesc": "Eine ruhige Morgenzusammenfassung deines Tages. Standardmäßig aus, bis du sie aktivierst.",
+    "eventSecurityAlert": "Neue Anmeldung",
+    "eventSecurityAlertDesc": "Wird gesendet, wenn dein Konto auf einem unbekannten Gerät oder von einem unbekannten Ort verwendet wird.",
+    "eventSharedRecordIntake": "Jemand mit Zugriff markiert eine Dosis",
+    "eventSharedRecordIntakeDesc": "Wird nur gesendet, wenn eine andere Person es tut, nie bei deinen eigenen Einträgen.",
     "security": {
       "newDeviceTitle": "Neue Anmeldung bei deinem Konto",
       "newDeviceBody": "Eine neue Anmeldung von {device} ({location}). Falls du das nicht warst, ändere sofort dein Passwort.",
       "unknownLocation": "unbekannter Ort"
+    },
+    "sharedRecordIntake": {
+      "title": "{name} hat eine Dosis markiert",
+      "bodyTaken": "{medication}: von {name} als eingenommen markiert.",
+      "bodySkipped": "{medication}: von {name} als ausgelassen markiert."
     },
     "loginRequired": "Bitte melde dich an, um Benachrichtigungen zu verwalten.",
     "someChannelsGloballyDisabled": "Ein oder mehrere Kanäle sind in den Einstellungen deaktiviert und erhalten keine Benachrichtigungen.",
