@@ -6,6 +6,11 @@ overrides:
   "picomatch@<4.0.4": "^4.0.4"
   "body-parser@<2.3.0": "^2.3.0"
   "fast-uri@<3.1.5": "^3.1.5"
+  # Address4 decoded leading-zero octets as decimal, so `010.0.0.1` parsed as
+  # 10.0.0.1 rather than being rejected. That is the exact alt-notation class
+  # `isPublicUrl` exists to catch, and this copy arrives under the MCP SDK's
+  # rate limiter where nothing of ours screens it.
+  "ip-address@<10.3.1": "^10.3.1"
   "sharp@<0.35.0": "^0.35.3"
 
 allowBuilds:
