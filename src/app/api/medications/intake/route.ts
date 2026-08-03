@@ -13,7 +13,7 @@
  */
 import { NextRequest } from "next/server";
 import { z } from "zod/v4";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
@@ -51,6 +51,7 @@ import {
 } from "@/lib/validations/medication";
 import { queueMedicationIntakeSync } from "@/lib/notifications/medication-intake-sync";
 import { dispatchMedicationIntakeWebClear } from "@/lib/notifications/web-push-clear";
+import { notifyDelegatedIntake } from "@/lib/notifications/delegated-intake";
 import { countOutstandingDosesToday } from "@/lib/medications/outstanding-doses";
 
 const querySchema = z.object({
@@ -217,7 +218,15 @@ export const GET = apiHandler(async (request: NextRequest) => {
 });
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  // v1.36.x — a delegated write, the canonical slot form. Everything the
+  // handler does downstream addresses the RECORD and stays correct: the
+  // cross-device intake sync wakes the OWNER's iOS devices, the web-clear
+  // closes the OWNER's pending dose reminder and rewrites the OWNER's badge,
+  // and the compliance rollup recomputes the OWNER's day. None of them can
+  // address the delegate, and none of them should — the delegate's feedback is
+  // the response they are already awaiting. What the owner gets instead is the
+  // notification at the end of this handler.
+  const { user, actor } = await requireRecordAuth("write");
 
   const { data: body, error } = await safeJson(request, {
     maxBytes: 64 * 1024,
@@ -237,17 +246,13 @@ export const POST = apiHandler(async (request: NextRequest) => {
     const auditIssues = sanitiseZodIssues(parsed.error.issues, {
       stripValuesFromMessage: true,
     });
-    prisma.auditLog
-      .create({
-        data: {
-          userId: user.id,
-          action: "medications.intake.update.validation-failed",
-          details: JSON.stringify({ issues: auditIssues }),
-        },
-      })
-      .catch(() => {
-        /* swallow — 422 response is the contract */
-      });
+    // v1.36.x — through `auditLog()`, the only writer that stamps the actor.
+    void auditLog("medications.intake.update.validation-failed", {
+      userId: user.id,
+      details: { issues: auditIssues },
+    }).catch(() => {
+      /* swallow — 422 response is the contract */
+    });
     return returnAllZodIssues(parsed.error, 422);
   }
 
@@ -550,6 +555,17 @@ export const POST = apiHandler(async (request: NextRequest) => {
       });
     })();
   }
+
+  // v1.36.x — "somebody else marked your dose". The helper refuses on self and
+  // on a snooze, resolves both names itself, and never throws; awaited because
+  // the latency it adds lands on the caregiver's request and never on the
+  // owner's own hot path.
+  await notifyDelegatedIntake({
+    ownerId: user.id,
+    actorId: actor.id,
+    medicationId: existing.medicationId,
+    status,
+  });
 
   return apiSuccess(updated);
 });
