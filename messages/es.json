@@ -9472,6 +9472,31 @@
       "opened": "{name} abrió tu historial {count}×",
       "acted": "{name} hizo un cambio en tu historial",
       "deletedAccount": "Una cuenta eliminada"
+    },
+    "delegate": {
+      "addOnlyNote": "Puedes añadir cosas a este historial. Modificar o borrar entradas solo lo puede hacer {name}."
+    },
+    "lookingAfter": {
+      "title": "Estoy cuidando de",
+      "description": "Historiales que otras personas han compartido contigo.",
+      "levelRead": "Puede ver",
+      "levelWrite": "Puede ver y añadir",
+      "open": "Abrir el historial de {name}"
+    },
+    "toast": {
+      "savedTo": "Guardado en el historial de {name}."
+    },
+    "activityVerb": {
+      "measurementCreate": "{name} añadió una medición",
+      "labResultCreate": "{name} añadió un resultado de laboratorio",
+      "allergyCreate": "{name} añadió una alergia",
+      "familyHistoryCreate": "{name} añadió un antecedente familiar",
+      "illnessEpisodeCreate": "{name} añadió una enfermedad",
+      "biomarkerCreate": "{name} añadió un biomarcador",
+      "customMetricEntryCreate": "{name} registró un valor propio",
+      "medicationSideEffectCreate": "{name} anotó un efecto secundario",
+      "medicationCreate": "{name} añadió un medicamento",
+      "medicationIntake": "{name} registró una dosis"
     }
   }
 }

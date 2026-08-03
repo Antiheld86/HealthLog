@@ -9472,6 +9472,31 @@
       "opened": "{name} hat deine Akte {count}× geöffnet",
       "acted": "{name} hat etwas in deiner Akte geändert",
       "deletedAccount": "Ein gelöschtes Konto"
+    },
+    "delegate": {
+      "addOnlyNote": "Du kannst zu dieser Akte etwas hinzufügen. Einträge ändern oder löschen kann nur {name}."
+    },
+    "lookingAfter": {
+      "title": "Ich kümmere mich um",
+      "description": "Akten, die andere mit dir geteilt haben.",
+      "levelRead": "Darf lesen",
+      "levelWrite": "Darf lesen und hinzufügen",
+      "open": "Akte von {name} öffnen"
+    },
+    "toast": {
+      "savedTo": "In der Akte von {name} gespeichert."
+    },
+    "activityVerb": {
+      "measurementCreate": "{name} hat einen Messwert eingetragen",
+      "labResultCreate": "{name} hat einen Laborwert eingetragen",
+      "allergyCreate": "{name} hat eine Allergie eingetragen",
+      "familyHistoryCreate": "{name} hat einen Eintrag zur Familienanamnese angelegt",
+      "illnessEpisodeCreate": "{name} hat eine Erkrankung angelegt",
+      "biomarkerCreate": "{name} hat einen Biomarker angelegt",
+      "customMetricEntryCreate": "{name} hat einen eigenen Messwert eingetragen",
+      "medicationSideEffectCreate": "{name} hat eine Nebenwirkung notiert",
+      "medicationCreate": "{name} hat ein Medikament angelegt",
+      "medicationIntake": "{name} hat eine Dosis eingetragen"
     }
   }
 }

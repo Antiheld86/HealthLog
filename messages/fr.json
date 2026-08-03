@@ -9472,6 +9472,31 @@
       "opened": "{name} a ouvert votre dossier {count}×",
       "acted": "{name} a fait une modification dans votre dossier",
       "deletedAccount": "Un compte supprimé"
+    },
+    "delegate": {
+      "addOnlyNote": "Vous pouvez ajouter des éléments à ce dossier. Seul {name} peut modifier ou supprimer des entrées."
+    },
+    "lookingAfter": {
+      "title": "Je m'occupe de",
+      "description": "Les dossiers que d'autres personnes partagent avec vous.",
+      "levelRead": "Peut consulter",
+      "levelWrite": "Peut consulter et ajouter",
+      "open": "Ouvrir le dossier de {name}"
+    },
+    "toast": {
+      "savedTo": "Enregistré dans le dossier de {name}."
+    },
+    "activityVerb": {
+      "measurementCreate": "{name} a ajouté une mesure",
+      "labResultCreate": "{name} a ajouté un résultat de laboratoire",
+      "allergyCreate": "{name} a ajouté une allergie",
+      "familyHistoryCreate": "{name} a ajouté un antécédent familial",
+      "illnessEpisodeCreate": "{name} a ajouté une maladie",
+      "biomarkerCreate": "{name} a ajouté un biomarqueur",
+      "customMetricEntryCreate": "{name} a enregistré une valeur personnalisée",
+      "medicationSideEffectCreate": "{name} a noté un effet indésirable",
+      "medicationCreate": "{name} a ajouté un médicament",
+      "medicationIntake": "{name} a enregistré une prise"
     }
   }
 }
