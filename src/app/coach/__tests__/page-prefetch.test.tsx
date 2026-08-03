@@ -15,11 +15,13 @@ import { queryKeys } from "@/lib/query-keys";
  * error path fails soft. The streaming conversation is never prefetched here.
  */
 
-const getSession = vi.fn();
+const getUnswitchedSession = vi.fn();
 const requireAssistantSurface = vi.fn();
 const readCoachNudgeStatus = vi.fn();
 
-vi.mock("@/lib/auth/session", () => ({ getSession: () => getSession() }));
+vi.mock("@/lib/auth/acting-carrier", () => ({
+  getUnswitchedSession: () => getUnswitchedSession(),
+}));
 vi.mock("@/lib/feature-flags", () => ({
   requireAssistantSurface: (s: string) => requireAssistantSurface(s),
 }));
@@ -54,7 +56,9 @@ function dehydratedQuery(
 
 describe("/coach RSC prefetch", () => {
   it("dehydrates the nudge status under the EXACT client key", async () => {
-    getSession.mockResolvedValue({ user: { id: "u1", disableCoach: false } });
+    getUnswitchedSession.mockResolvedValue({
+      user: { id: "u1", disableCoach: false },
+    });
     requireAssistantSurface.mockResolvedValue({});
     readCoachNudgeStatus.mockResolvedValue(NUDGE);
 
@@ -66,7 +70,9 @@ describe("/coach RSC prefetch", () => {
   });
 
   it("skips the prefetch when the user opted out of the Coach", async () => {
-    getSession.mockResolvedValue({ user: { id: "u1", disableCoach: true } });
+    getUnswitchedSession.mockResolvedValue({
+      user: { id: "u1", disableCoach: true },
+    });
     const el = (await CoachPage()) as ReactElement;
     expect(el.type).not.toBe(HydrationBoundary);
     expect(requireAssistantSurface).not.toHaveBeenCalled();
@@ -74,7 +80,9 @@ describe("/coach RSC prefetch", () => {
   });
 
   it("fails soft when the operator Coach flag is off (surface throws)", async () => {
-    getSession.mockResolvedValue({ user: { id: "u1", disableCoach: false } });
+    getUnswitchedSession.mockResolvedValue({
+      user: { id: "u1", disableCoach: false },
+    });
     requireAssistantSurface.mockRejectedValue(new Error("assistant disabled"));
 
     const el = (await CoachPage()) as ReactElement;
@@ -83,7 +91,9 @@ describe("/coach RSC prefetch", () => {
   });
 
   it("fails soft when the read throws", async () => {
-    getSession.mockResolvedValue({ user: { id: "u1", disableCoach: false } });
+    getUnswitchedSession.mockResolvedValue({
+      user: { id: "u1", disableCoach: false },
+    });
     requireAssistantSurface.mockResolvedValue({});
     readCoachNudgeStatus.mockRejectedValue(new Error("db blip"));
 
@@ -91,8 +101,10 @@ describe("/coach RSC prefetch", () => {
     expect(el.type).not.toBe(HydrationBoundary);
   });
 
+  // Null also means "acting on somebody else's record" — `getUnswitchedSession`
+  // collapses both into the same answer, and the page treats them the same.
   it("fails soft when there is no session", async () => {
-    getSession.mockResolvedValue(null);
+    getUnswitchedSession.mockResolvedValue(null);
     const el = (await CoachPage()) as ReactElement;
     expect(el.type).not.toBe(HydrationBoundary);
   });
@@ -101,6 +113,6 @@ describe("/coach RSC prefetch", () => {
     process.env.DASHBOARD_SSR_PREFETCH = "false";
     const el = (await CoachPage()) as ReactElement;
     expect(el.type).not.toBe(HydrationBoundary);
-    expect(getSession).not.toHaveBeenCalled();
+    expect(getUnswitchedSession).not.toHaveBeenCalled();
   });
 });

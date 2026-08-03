@@ -4,7 +4,7 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 
-import { getSession } from "@/lib/auth/session";
+import { getUnswitchedSession } from "@/lib/auth/acting-carrier";
 import { readDashboardSnapshotCached } from "@/lib/dashboard/snapshot-read";
 import { isDashboardSnapshotEnabled } from "@/lib/dashboard/snapshot-flag";
 import {
@@ -64,9 +64,18 @@ function softTimeout<T>(ms: number): Promise<T | undefined> {
  *    key by construction, so the prefetched slice lands instead of refetching.
  *  - Module-gate parity: the digest route gates on `insights`; skip its
  *    prefetch when the module is off (the client hook is disabled then too).
- *  - Fail-soft: no session, a builder hiccup, or a DB blip renders the page
- *    exactly as before this wrapper existed — the client cells own the fetch.
- *    Each prefetch is independent; one failing never blocks the others.
+ *  - Record identity: the session comes from `getUnswitchedSession()`, which
+ *    answers null while the browser is acting on somebody else's record. Every
+ *    read below scopes to `user`, and under a switch `user` is the DELEGATE —
+ *    so the snapshot, the digest and the widget layout would seed one person's
+ *    numbers under a banner naming another, on routes that then refuse the
+ *    refetch that would have corrected them. The accessor's docblock carries
+ *    the full argument, including why resolving the owner here instead is the
+ *    worse answer.
+ *  - Fail-soft: no session, an active switch, a builder hiccup, or a DB blip
+ *    renders the page exactly as before this wrapper existed — the client cells
+ *    own the fetch. Each prefetch is independent; one failing never blocks the
+ *    others.
  */
 export default async function DashboardPage() {
   // Operator/test escape hatch: `DASHBOARD_SSR_PREFETCH=false` renders the
@@ -79,7 +88,7 @@ export default async function DashboardPage() {
   let dehydratedState = null;
   let batchWindow: BatchWindow | undefined;
   try {
-    const session = await getSession();
+    const session = await getUnswitchedSession();
     if (session) {
       const { user } = session;
       const { body, locale } = await readDashboardSnapshotCached(user);

@@ -19,10 +19,12 @@ import { queryKeys } from "@/lib/query-keys";
  * soft to the bare client.
  */
 
-const getSession = vi.fn();
+const getUnswitchedSession = vi.fn();
 const readDashboardSnapshotCached = vi.fn();
 
-vi.mock("@/lib/auth/session", () => ({ getSession: () => getSession() }));
+vi.mock("@/lib/auth/acting-carrier", () => ({
+  getUnswitchedSession: () => getUnswitchedSession(),
+}));
 vi.mock("@/lib/dashboard/snapshot-read", () => ({
   readDashboardSnapshotCached: (u: unknown) => readDashboardSnapshotCached(u),
 }));
@@ -49,7 +51,7 @@ function queriesOf(
 
 describe("/insights RSC prefetch", () => {
   it("dehydrates the snapshot under the locale-keyed client key", async () => {
-    getSession.mockResolvedValue(SESSION);
+    getUnswitchedSession.mockResolvedValue(SESSION);
     readDashboardSnapshotCached.mockResolvedValue({
       body: {
         healthScore: { tension: "steady" },
@@ -71,7 +73,7 @@ describe("/insights RSC prefetch", () => {
   });
 
   it("JSON-round-trips the snapshot body to the wire shape", async () => {
-    getSession.mockResolvedValue(SESSION);
+    getUnswitchedSession.mockResolvedValue(SESSION);
     const cachedAt = new Date("2026-07-18T06:00:00.000Z");
     readDashboardSnapshotCached.mockResolvedValue({
       body: { cachedAt, layout: { version: 1, widgets: [] } },
@@ -88,15 +90,17 @@ describe("/insights RSC prefetch", () => {
   });
 
   it("fails soft to the bare client when the read throws", async () => {
-    getSession.mockResolvedValue(SESSION);
+    getUnswitchedSession.mockResolvedValue(SESSION);
     readDashboardSnapshotCached.mockRejectedValue(new Error("db blip"));
 
     const el = (await InsightsPage()) as ReactElement;
     expect(el.type).not.toBe(HydrationBoundary);
   });
 
+  // Null also means "acting on somebody else's record" — `getUnswitchedSession`
+  // collapses both into the same answer, and the page treats them the same.
   it("fails soft when there is no session", async () => {
-    getSession.mockResolvedValue(null);
+    getUnswitchedSession.mockResolvedValue(null);
     const el = (await InsightsPage()) as ReactElement;
     expect(el.type).not.toBe(HydrationBoundary);
     expect(readDashboardSnapshotCached).not.toHaveBeenCalled();
@@ -106,6 +110,6 @@ describe("/insights RSC prefetch", () => {
     process.env.DASHBOARD_SSR_PREFETCH = "false";
     const el = (await InsightsPage()) as ReactElement;
     expect(el.type).not.toBe(HydrationBoundary);
-    expect(getSession).not.toHaveBeenCalled();
+    expect(getUnswitchedSession).not.toHaveBeenCalled();
   });
 });

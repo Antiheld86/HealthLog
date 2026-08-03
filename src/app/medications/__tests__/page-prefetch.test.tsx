@@ -16,11 +16,13 @@ import { queryKeys } from "@/lib/query-keys";
  *    bare client path (the client cell owns the fetch).
  */
 
-const getSession = vi.fn();
+const getUnswitchedSession = vi.fn();
 const resolveModuleMap = vi.fn();
 const readMedicationsListCached = vi.fn();
 
-vi.mock("@/lib/auth/session", () => ({ getSession: () => getSession() }));
+vi.mock("@/lib/auth/acting-carrier", () => ({
+  getUnswitchedSession: () => getUnswitchedSession(),
+}));
 vi.mock("@/lib/modules/gate", () => ({
   resolveModuleMap: (id: string) => resolveModuleMap(id),
 }));
@@ -56,7 +58,7 @@ function dehydratedQuery(
 
 describe("/medications RSC prefetch", () => {
   it("dehydrates the list under the EXACT client key (byte-identical hash)", async () => {
-    getSession.mockResolvedValue(SESSION);
+    getUnswitchedSession.mockResolvedValue(SESSION);
     resolveModuleMap.mockResolvedValue({ medications: true });
     readMedicationsListCached.mockResolvedValue([
       { id: "m1", name: "Ramipril" },
@@ -72,7 +74,7 @@ describe("/medications RSC prefetch", () => {
   });
 
   it("JSON-round-trips the value to the wire shape (Dates → ISO strings)", async () => {
-    getSession.mockResolvedValue(SESSION);
+    getUnswitchedSession.mockResolvedValue(SESSION);
     resolveModuleMap.mockResolvedValue({ medications: true });
     const takenAt = new Date("2026-07-18T08:30:00.000Z");
     readMedicationsListCached.mockResolvedValue([
@@ -89,7 +91,7 @@ describe("/medications RSC prefetch", () => {
   });
 
   it("fails soft to the bare client when the read throws", async () => {
-    getSession.mockResolvedValue(SESSION);
+    getUnswitchedSession.mockResolvedValue(SESSION);
     resolveModuleMap.mockResolvedValue({ medications: true });
     readMedicationsListCached.mockRejectedValue(new Error("db blip"));
 
@@ -98,7 +100,7 @@ describe("/medications RSC prefetch", () => {
   });
 
   it("skips the prefetch when the medications module is off", async () => {
-    getSession.mockResolvedValue(SESSION);
+    getUnswitchedSession.mockResolvedValue(SESSION);
     resolveModuleMap.mockResolvedValue({ medications: false });
 
     const el = (await MedicationsPage()) as ReactElement;
@@ -106,8 +108,10 @@ describe("/medications RSC prefetch", () => {
     expect(readMedicationsListCached).not.toHaveBeenCalled();
   });
 
+  // Null also means "acting on somebody else's record" — `getUnswitchedSession`
+  // collapses both into the same answer, and the page treats them the same.
   it("fails soft when there is no session", async () => {
-    getSession.mockResolvedValue(null);
+    getUnswitchedSession.mockResolvedValue(null);
     const el = (await MedicationsPage()) as ReactElement;
     expect(el.type).not.toBe(HydrationBoundary);
     expect(readMedicationsListCached).not.toHaveBeenCalled();
@@ -117,6 +121,6 @@ describe("/medications RSC prefetch", () => {
     process.env.DASHBOARD_SSR_PREFETCH = "false";
     const el = (await MedicationsPage()) as ReactElement;
     expect(el.type).not.toBe(HydrationBoundary);
-    expect(getSession).not.toHaveBeenCalled();
+    expect(getUnswitchedSession).not.toHaveBeenCalled();
   });
 });

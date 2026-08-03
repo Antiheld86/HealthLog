@@ -10,6 +10,7 @@ import { LayoutCoachFab } from "@/components/insights/layout-coach-fab";
 import { LayoutCoachMount } from "@/components/insights/layout-coach-mount";
 import { TourLauncher } from "@/components/onboarding/tour-launcher";
 import { clearCachesForSessionEnd, useAuth } from "@/hooks/use-auth";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useTranslations } from "@/lib/i18n/context";
 import { CoachLaunchProvider } from "@/lib/insights/coach-launch-context";
 import { isDestinationInSharedRecord } from "./nav-model";
@@ -72,14 +73,19 @@ export function AuthShell({
     pathname.startsWith("/about") ||
     pathname.startsWith("/c/");
   const isAdminPage = pathname.startsWith("/admin");
+  // v1.36.0 — is this browser inside somebody else's record. Read from the
+  // capability hook rather than off `accountAccess.active` directly: the shell
+  // decides what to mount and the surfaces beneath it decide what to offer,
+  // and the two disagreeing is the whole class of defect this hook exists to
+  // close.
+  const { inSharedRecord } = useRecordCapabilities();
   // v1.36.0 — a page reached while acting on somebody else's record that
   // sharing does not cover. The nav already drops these entries, so arriving
   // here means a bookmark or a browser back button; the panel below explains
   // it instead of letting the page paint a row of 403 error cards. Paint only
   // — every route behind these pages refuses on its own.
   const outsideSharedRecord =
-    user?.accountAccess?.active != null &&
-    !isDestinationInSharedRecord(pathname);
+    inSharedRecord && !isDestinationInSharedRecord(pathname);
   const isOnboardingPage = pathname === "/onboarding";
   const showUnlockNotifier = isAuthenticated && !isPublicPage && !!user?.id;
 
@@ -405,20 +411,39 @@ export function AuthShell({
           <BottomNav />
         </div>
       </div>
-      <LayoutCoachMount />
+      {/*
+        The three mounts below hang off the shell rather than off a route, so
+        they paint on every page the shell serves — including the unavailable
+        panel, which exists to say a page is not part of what was shared. All
+        three are owner-only surfaces, and all three are gated on
+        `!inSharedRecord` for the same reason: Insights and the Coach were
+        deliberately kept out of what sharing covers (`nav-model.ts` — the
+        owner's consent for server-managed LLM egress is theirs, not
+        transferable), and the tour walks an account through modules a delegate
+        does not administer. Every route behind them resolves `requireAuth()`
+        and refuses under a switch, so leaving them mounted offered a delegate
+        a door onto seven modules that answer 403 — chat, conversation delete
+        and rename, attachments, feedback, adopt, suggested actions, and a
+        `POST /api/insights/coach/seen` fired by merely opening the drawer.
+
+        Absent, not disabled: a greyed-out launcher would still say "this
+        exists and does not work for you", and what is true is that it is not
+        part of what this person was given.
+      */}
+      {!inSharedRecord && <LayoutCoachMount />}
       {/* v1.18.6 — the module-tour launcher lives at the shell level so its
           overlay survives the cross-page `router.push`es the tour makes. It
           self-gates: it only auto-opens on the dashboard for a user who has
           not finished/dismissed the tour, and otherwise renders null. Stays
           out of demo mode (the tour PATCHes `/api/onboarding/tour`, which the
           proxy blocks for demo visitors). */}
-      {!demoMode && <TourLauncher />}
+      {!demoMode && !inSharedRecord && <TourLauncher />}
       {/* v1.16.13 — the Coach FAB stays hidden in demo mode. Its send hits
           `/api/insights/chat`, which is not in the proxy's
           `DEMO_MUTATION_ALLOWLIST`, so a demo visitor who tapped it and sent
           got a raw 403. Demo is read-only by design; the FAB has no job
           here, so it's mounted only outside demo mode. */}
-      {!demoMode && <LayoutCoachFab />}
+      {!demoMode && !inSharedRecord && <LayoutCoachFab />}
     </CoachLaunchProvider>
   );
 }

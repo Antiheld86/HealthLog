@@ -104,13 +104,27 @@ describe("S1 — the direct session-resolution set is frozen", () => {
     // RSC prefetch: the server component hydrates the client query cache
     // with the session user's own data. Absence of a session skips the
     // prefetch rather than failing the render.
-    "app/coach/page.tsx": "RSC prefetch of the session user's coach state",
-    "app/insights/page.tsx": "RSC prefetch of the session user's insights",
+    //
+    // These five resolve through `getUnswitchedSession()`, not `getSession()`,
+    // and they stay listed here BECAUSE of it. The helper is still a session
+    // derivation outside `requireAuth` — moving the call one file deeper into
+    // `lib/` would have taken them off this list while changing nothing about
+    // what they do, and a guard that a refactor can walk out of is not one.
+    // What the helper adds is the record identity: it answers null while the
+    // browser acts on somebody else's record, so the cache these pages seed
+    // can only ever hold the caller's own. See
+    // `prefetch-page-caching-guard.test.ts` for the rule that keeps a sixth
+    // prefetching page from reaching for the bare helper.
+    "app/coach/page.tsx":
+      "RSC prefetch of the session user's coach state, skipped under a switch",
+    "app/insights/page.tsx":
+      "RSC prefetch of the session user's insights, skipped under a switch",
     "app/insights/workouts/page.tsx":
-      "RSC prefetch of the session user's workouts",
+      "RSC prefetch of the session user's workouts, skipped under a switch",
     "app/medications/page.tsx":
-      "RSC prefetch of the session user's medications",
-    "app/page.tsx": "RSC prefetch of the session user's dashboard snapshot",
+      "RSC prefetch of the session user's medications, skipped under a switch",
+    "app/page.tsx":
+      "RSC prefetch of the session user's dashboard snapshot, skipped under a switch",
     // Onboarding routing. Reads the actor's own onboarding step to redirect;
     // renders no record data.
     "app/onboarding/[step]/page.tsx":
@@ -119,15 +133,20 @@ describe("S1 — the direct session-resolution set is frozen", () => {
   };
 
   /**
-   * The identity-deriving helpers exported by `lib/auth/session.ts`. The
-   * lifecycle exports (`createSession`, `destroySession`, `destroyAllSessions`,
-   * `destroySessionById`, `destroyOtherSessions`) are deliberately NOT here:
-   * they act on a session, they do not hand the handler an identity to scope
-   * a query by. Adding a sixth deriving helper to `session.ts` means adding
-   * it to this regex.
+   * The identity-deriving helpers exported by `lib/auth/session.ts`, plus the
+   * one that wraps it. The lifecycle exports (`createSession`,
+   * `destroySession`, `destroyAllSessions`, `destroySessionById`,
+   * `destroyOtherSessions`) are deliberately NOT here: they act on a session,
+   * they do not hand the handler an identity to scope a query by. Adding a
+   * further deriving helper means adding it to this regex.
+   *
+   * `getUnswitchedSession` (`lib/auth/acting-carrier.ts`) is listed for the
+   * reason a wrapper is the easiest way to disappear from a guard: it returns
+   * `getSession()`'s answer or null, so a caller of it derives an identity
+   * exactly as much as a caller of the thing it wraps.
    */
   const SESSION_DERIVING_HELPERS =
-    /\b(getSession|getSessionUserLocale|validateSessionFromCookieValue|validateSessionWithCreatedAt)\s*\(/;
+    /\b(getSession|getUnswitchedSession|getSessionUserLocale|validateSessionFromCookieValue|validateSessionWithCreatedAt)\s*\(/;
 
   /**
    * Reaching for the cookie by name is the way around the helpers. Both the

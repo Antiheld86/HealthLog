@@ -4,7 +4,7 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 
-import { getSession } from "@/lib/auth/session";
+import { getUnswitchedSession } from "@/lib/auth/acting-carrier";
 import { requireAssistantSurface } from "@/lib/feature-flags";
 import { readCoachNudgeStatus } from "@/lib/ai/coach/nudge-status";
 import { queryKeys } from "@/lib/query-keys";
@@ -44,6 +44,11 @@ import CoachPageClient from "./page-client";
  *    thread, snapshot, any provider-touching path) is NOT prefetched or warmed
  *    — it depends on URL params + the nudge outcome and must never be triggered
  *    server-side.
+ *  - Record identity: the session comes from `getUnswitchedSession()`, which
+ *    answers null while the browser is acting on somebody else's record. Every
+ *    read below scopes to the CALLER, so under a switch the prefetch would
+ *    serialise the delegate's own rows into a page opened on the owner's
+ *    record. The accessor's docblock carries the argument.
  *  - Fail-soft: no session, the Coach being off, or a DB blip renders the page
  *    exactly as before this wrapper existed — the client cell owns the fetch.
  */
@@ -57,7 +62,7 @@ export default async function CoachPage() {
 
   let dehydratedState = null;
   try {
-    const session = await getSession();
+    const session = await getUnswitchedSession();
     if (session && !session.user.disableCoach) {
       // Throws `AssistantDisabledError` when the operator flag is off → caught
       // below, prefetch skipped, client path stands (and redirects to /insights).

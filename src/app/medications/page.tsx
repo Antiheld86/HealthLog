@@ -4,7 +4,7 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 
-import { getSession } from "@/lib/auth/session";
+import { getUnswitchedSession } from "@/lib/auth/acting-carrier";
 import { readMedicationsListCached } from "@/lib/medications/list-read";
 import { resolveModuleMap } from "@/lib/modules/gate";
 import { queryKeys } from "@/lib/query-keys";
@@ -40,9 +40,16 @@ import MedicationsPageClient from "./page-client";
  *    place the hydrated cards paint immediately and that refetch runs in the
  *    background — the "empty then fills" flash is gone WITHOUT dropping the
  *    freshness guarantee.
- *  - Fail-soft: no session, a module lookup hiccup, or a DB blip renders the
- *    page exactly as before this wrapper existed — the client cell owns the
- *    fetch. The prefetch is an accelerator, never a gate.
+ *  - Record identity: the session comes from `getUnswitchedSession()`, which
+ *    answers null while the browser is acting on somebody else's record.
+ *    `/api/medications` IS delegable, so the client cell corrects itself on its
+ *    `refetchOnMount: "always"` pass — but the frame before that correction
+ *    painted the DELEGATE's medicine cabinet under a banner naming the owner,
+ *    and a flash of the wrong person's medication is still the wrong person's
+ *    medication.
+ *  - Fail-soft: no session, an active switch, a module lookup hiccup, or a DB
+ *    blip renders the page exactly as before this wrapper existed — the client
+ *    cell owns the fetch. The prefetch is an accelerator, never a gate.
  */
 export default async function MedicationsPage() {
   // Global SSR-prefetch kill-switch shared with the dashboard wrapper. The e2e
@@ -54,7 +61,7 @@ export default async function MedicationsPage() {
 
   let dehydratedState = null;
   try {
-    const session = await getSession();
+    const session = await getUnswitchedSession();
     if (session) {
       const { user } = session;
       const modules = await resolveModuleMap(user.id);
