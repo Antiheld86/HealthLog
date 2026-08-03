@@ -426,10 +426,76 @@ writeContract("POST /api/biomarkers", {
 });
 
 /* -------------------------------------------------------------------------- */
-/* 4 — allergies                                                              */
+/* 4 + 5 — allergies and family history, the two that are NOT delegable       */
 /* -------------------------------------------------------------------------- */
 
-writeContract("POST /api/allergies", {
+/**
+ * The opposite contract, and it earns its place beside the admitted ones.
+ *
+ * Both of these verbs were admitted and then withdrawn, and the argument for
+ * admitting them was never wrong: an allergy is a plain statement about the
+ * record's own body and the single most useful thing a caregiver could
+ * contribute. What they lack is a caller. The only surface in the product that
+ * posts to either lives in Settings, and a switch closes `/settings` — so no
+ * delegate can reach the form at any grant level, and admitting the write
+ * would freeze a permission ahead of anything that exercises it.
+ *
+ * Both READ arms stay delegable; the read suite pins them. What is pinned here
+ * is the pair that has to move together: the route refuses, and the owner's own
+ * unswitched write still lands. Withdrawing a delegated write by breaking the
+ * ordinary one would be the worse bug, and no other test in this file would
+ * have noticed.
+ *
+ * Re-admitting means flipping `requireAuth()` back to `requireRecordAuth`,
+ * re-listing the route in `delegable-surface-guard.test.ts`, and replacing this
+ * block with a `writeContract` — in the same diff as the caregiver-reachable
+ * surface that made it worth doing.
+ */
+function refusedWriteContract(
+  name: string,
+  c: {
+    call: () => Promise<Response>;
+    ok: number;
+    count: (userId: string) => Promise<number>;
+  },
+) {
+  describe(name, () => {
+    for (const access of ["READ", "WRITE"] as const) {
+      it(`refuses a delegate holding a ${access} grant, and writes nothing`, async () => {
+        const owner = await makeUser("owner");
+        const delegate = await makeUser("delegate");
+
+        await switchInto(owner.id, delegate.id, access);
+        const response = await c.call();
+
+        // The undeclared-mode refusal, not the no-grant one: the route names
+        // no sharing mode at all, so the carrier is refused before any grant
+        // is consulted. A WRITE grant makes no difference, which is the point.
+        expect(response.status).toBe(403);
+        expect((await payload(response)).meta?.errorCode).toBe(
+          "sharing.not_permitted",
+        );
+
+        // Neither account, not just not the owner's — a handler that fell
+        // back to the caller would have written a row somewhere.
+        expect(await c.count(owner.id)).toBe(0);
+        expect(await c.count(delegate.id)).toBe(0);
+      });
+    }
+
+    it("still lets the owner write it themselves", async () => {
+      const owner = await makeUser("owner");
+      await signIn(owner.id);
+
+      const response = await c.call();
+
+      expect(response.status).toBe(c.ok);
+      expect(await c.count(owner.id)).toBe(1);
+    });
+  });
+}
+
+refusedWriteContract("POST /api/allergies", {
   call: async () => {
     const { POST } = await import("@/app/api/allergies/route");
     return post(POST as Handler, "/api/allergies", {
@@ -439,15 +505,10 @@ writeContract("POST /api/allergies", {
     });
   },
   ok: 201,
-  auditAction: "allergy.create",
   count: (userId) => getPrismaClient().allergy.count({ where: { userId } }),
 });
 
-/* -------------------------------------------------------------------------- */
-/* 5 — family history                                                         */
-/* -------------------------------------------------------------------------- */
-
-writeContract("POST /api/family-history", {
+refusedWriteContract("POST /api/family-history", {
   call: async () => {
     const { POST } = await import("@/app/api/family-history/route");
     return post(POST as Handler, "/api/family-history", {
@@ -456,7 +517,6 @@ writeContract("POST /api/family-history", {
     });
   },
   ok: 201,
-  auditAction: "family-history.create",
   count: (userId) =>
     getPrismaClient().familyHistoryEntry.count({ where: { userId } }),
 });
