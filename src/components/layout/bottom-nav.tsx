@@ -21,6 +21,7 @@ import type { ModuleKey } from "@/lib/modules/registry";
 import { useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useMounted } from "@/hooks/use-mounted";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import {
   Sheet,
   SheetContent,
@@ -97,6 +98,8 @@ export function BottomNav() {
   // the same resolved payload, so the two bars cannot disagree about what a
   // delegate is offered.
   const sharedRecord = user?.accountAccess?.active != null;
+  const { canAdd, canManage } = useRecordCapabilities();
+  const canCapture = canAdd || canManage;
 
   // v1.17.1 (F-1) — the More hub is the model-computed hub: every visible
   // feature destination that isn't a primary slot, plus the shared utility
@@ -191,18 +194,24 @@ export function BottomNav() {
               collar (a `bg-card` ring that punches it out of the bar) plus
               a stronger shadow so it reads as the bar's primary CTA rather
               than a fifth flush tab. */}
+          {/* v1.36.x — a read-only delegate has nothing to capture: every
+              surface behind the picker is refused for them, so the bar's
+              primary CTA goes rather than opening onto an empty sheet. At
+              WRITE the picker itself drops the kinds the grant excludes. */}
           <div className="flex flex-1 items-center justify-center">
-            <button
-              type="button"
-              aria-label={t("nav.capture.title")}
-              aria-haspopup="dialog"
-              aria-expanded={captureOpen}
-              onClick={() => setCaptureOpen(true)}
-              data-testid="bottom-nav-capture"
-              className="bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-ring/70 ring-card -mt-5 flex h-14 w-14 items-center justify-center rounded-full shadow-lg ring-4 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-            >
-              <Plus className="h-7 w-7" />
-            </button>
+            {canCapture && (
+              <button
+                type="button"
+                aria-label={t("nav.capture.title")}
+                aria-haspopup="dialog"
+                aria-expanded={captureOpen}
+                onClick={() => setCaptureOpen(true)}
+                data-testid="bottom-nav-capture"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-ring/70 ring-card -mt-5 flex h-14 w-14 items-center justify-center rounded-full shadow-lg ring-4 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+              >
+                <Plus className="h-7 w-7" />
+              </button>
+            )}
           </div>
 
           {primaryRight.map(renderPrimary)}

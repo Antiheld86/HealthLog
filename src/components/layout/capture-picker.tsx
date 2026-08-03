@@ -21,6 +21,10 @@ import {
 import { sheetBodyHasUnsavedInput } from "@/components/dashboard/quick-entry-sheets";
 import { useTranslations } from "@/lib/i18n/context";
 import { useModuleEnabled } from "@/hooks/use-module-enabled";
+import {
+  useRecordCapabilities,
+  type RecordCapabilities,
+} from "@/hooks/use-record-capabilities";
 
 /**
  * The center "Log" capture action (iOS parity — the bottom bar's
@@ -48,6 +52,45 @@ import { useModuleEnabled } from "@/hooks/use-module-enabled";
 
 type CaptureKind = "measurement" | "medication" | "mood" | "water";
 
+/**
+ * v1.36.x — which of the four capture surfaces a delegation admits.
+ *
+ * A WRITE grant covers entering a reading and marking a dose. It does not
+ * cover a mood entry or a glass of water: those verbs stay on the owner's own
+ * authentication and the server refuses them under a switch. The picker is the
+ * fastest path into all four on a phone, so it is the surface where offering
+ * an unadmitted one costs the most.
+ */
+const DELEGABLE_CAPTURE_KINDS: ReadonlySet<CaptureKind> = new Set([
+  "measurement",
+  "medication",
+]);
+
+/** The order the chooser lists them in. */
+const CAPTURE_KIND_ORDER: ReadonlyArray<CaptureKind> = [
+  "measurement",
+  "medication",
+  "mood",
+  "water",
+];
+
+/**
+ * The capture kinds to offer, given what the record allows and whether the
+ * nutrients module is on. Exported pure so the delegation rule can be pinned
+ * without opening a sheet: an SSR test cannot tap the button that opens it.
+ */
+export function visibleCaptureKinds(
+  caps: Pick<RecordCapabilities, "canAdd" | "canManage">,
+  nutrientsEnabled: boolean,
+  kinds: ReadonlyArray<CaptureKind>,
+): CaptureKind[] {
+  return kinds.filter((kind) => {
+    if (kind === "water" && !nutrientsEnabled) return false;
+    if (caps.canManage) return true;
+    return caps.canAdd && DELEGABLE_CAPTURE_KINDS.has(kind);
+  });
+}
+
 interface CapturePickerProps {
   /** Whether the picker chooser sheet is open. */
   open: boolean;
@@ -58,6 +101,12 @@ interface CapturePickerProps {
 export function CapturePicker({ open, onOpenChange }: CapturePickerProps) {
   const { t } = useTranslations();
   const nutrientsEnabled = useModuleEnabled("nutrients");
+  const capabilities = useRecordCapabilities();
+  const offered = visibleCaptureKinds(
+    capabilities,
+    nutrientsEnabled,
+    CAPTURE_KIND_ORDER,
+  );
   const [kind, setKind] = useState<CaptureKind | null>(null);
   const [footerEl, setFooterEl] = useState<HTMLDivElement | null>(null);
   // v1.30.1 — mirrors `QuickEntrySheets`' `confirmDiscardOpen`: hold a
@@ -66,7 +115,7 @@ export function CapturePicker({ open, onOpenChange }: CapturePickerProps) {
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
 
   function chooseKind(next: CaptureKind) {
-    if (next === "water" && !nutrientsEnabled) return;
+    if (!offered.includes(next)) return;
     // Close the chooser first, then open the form sheet so only one
     // bottom-sheet is mounted at a time (no stacked backdrops).
     onOpenChange(false);
@@ -89,7 +138,7 @@ export function CapturePicker({ open, onOpenChange }: CapturePickerProps) {
     closeForm();
   }
 
-  const options: ReadonlyArray<{
+  const allOptions: ReadonlyArray<{
     kind: CaptureKind;
     label: string;
     description: string;
@@ -120,6 +169,7 @@ export function CapturePicker({ open, onOpenChange }: CapturePickerProps) {
       icon: GlassWater,
     },
   ];
+  const options = allOptions.filter((opt) => offered.includes(opt.kind));
 
   const formTitleByKind: Record<CaptureKind, string> = {
     measurement: t("measurements.addMeasurement"),
@@ -145,27 +195,25 @@ export function CapturePicker({ open, onOpenChange }: CapturePickerProps) {
           className="grid grid-cols-1 gap-2"
           data-testid="capture-picker-options"
         >
-          {options.map((opt) =>
-            opt.kind !== "water" || nutrientsEnabled ? (
-              <button
-                key={opt.kind}
-                type="button"
-                data-testid={`capture-picker-${opt.kind}`}
-                onClick={() => chooseKind(opt.kind)}
-                className="border-border hover:bg-accent/40 focus-visible:ring-ring/50 flex min-h-14 items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
-              >
-                <span className="bg-primary/10 text-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-full">
-                  <opt.icon className="h-5 w-5" aria-hidden="true" />
+          {options.map((opt) => (
+            <button
+              key={opt.kind}
+              type="button"
+              data-testid={`capture-picker-${opt.kind}`}
+              onClick={() => chooseKind(opt.kind)}
+              className="border-border hover:bg-accent/40 focus-visible:ring-ring/50 flex min-h-14 items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
+            >
+              <span className="bg-primary/10 text-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-full">
+                <opt.icon className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">{opt.label}</span>
+                <span className="text-muted-foreground block text-xs">
+                  {opt.description}
                 </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium">{opt.label}</span>
-                  <span className="text-muted-foreground block text-xs">
-                    {opt.description}
-                  </span>
-                </span>
-              </button>
-            ) : null,
-          )}
+              </span>
+            </button>
+          ))}
         </div>
       </ResponsiveSheet>
 

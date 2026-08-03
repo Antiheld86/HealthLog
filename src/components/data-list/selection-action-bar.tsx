@@ -15,6 +15,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useTranslations } from "@/lib/i18n/context";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 
 /**
  * Selection action bar for the data-management lists (measurements +
@@ -29,6 +30,11 @@ import { useTranslations } from "@/lib/i18n/context";
  *
  * The confirm copy is passed in because the title/body differ per surface
  * (measurements vs mood) and the count is interpolated by the caller.
+ *
+ * v1.36.x — bulk delete is the owner's alone at every grant level, so the bar
+ * is absent inside somebody else's record. The row checkboxes that feed it are
+ * dropped at their lists for the same reason; this guard is the backstop, so a
+ * list that forgets cannot leave a delete button floating over the page.
  */
 export function SelectionActionBar({
   count,
@@ -46,8 +52,9 @@ export function SelectionActionBar({
   confirmBody: string;
 }) {
   const { t } = useTranslations();
+  const { canManage } = useRecordCapabilities();
 
-  if (count <= 0) return null;
+  if (count <= 0 || !canManage) return null;
 
   return (
     <div
