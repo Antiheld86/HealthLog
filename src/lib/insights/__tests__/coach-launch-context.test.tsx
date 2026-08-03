@@ -1,11 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import {
-  CoachLaunchProvider,
-  resolveLaunchState,
-  useCoachLaunch,
-} from "../coach-launch-context";
+import type { AccountAccess } from "@/lib/sharing/account-access-view";
 
 /**
  * v1.4.27 R3d MB4 — Coach launch context smoke contract.
@@ -19,7 +15,47 @@ import {
  *   3. The hook returns `null` when called outside the provider —
  *      consumers degrade gracefully (e.g. the launch button renders
  *      nothing rather than crashing).
+ *   4. v1.36.x — the provider publishes nothing inside somebody else's
+ *      record, so (3) also covers every consumer under a switch. The shell
+ *      mounts no drawer there, and a launch call that opened nothing was a
+ *      button that silently did nothing on every page that offers one.
+ *
+ * Mutation check, run: dropping the `inSharedRecord` arm from the provider's
+ * value memo → "publishes nothing inside somebody else's record" goes red
+ * with the full context shape in the diff.
  */
+
+const OWNER = {
+  accountId: "acct-owner",
+  username: "owner",
+  displayName: "Margarethe",
+  access: "write" as const,
+  canWrite: true,
+};
+
+const mockAccessRef: { value: AccountAccess } = {
+  value: { accounts: [OWNER], active: null, canSwitch: true },
+};
+
+vi.mock("@/hooks/use-auth", () => ({
+  useAuth: () => ({
+    user: {
+      id: "delegate",
+      username: "delegate",
+      email: null,
+      role: "USER",
+      avatarUrl: null,
+      modules: {},
+      accountAccess: mockAccessRef.value,
+    },
+    isAuthenticated: true,
+    isLoading: false,
+    refetch: vi.fn(),
+  }),
+}));
+
+const { CoachLaunchProvider, resolveLaunchState, useCoachLaunch } =
+  await import("../coach-launch-context");
 
 function Probe({ output }: { output: string[] }) {
   const launch = useCoachLaunch();
@@ -71,6 +107,41 @@ describe("CoachLaunchProvider", () => {
     );
     expect(html).toContain('data-slot="child-mount"');
     expect(html).toContain("child");
+  });
+
+  it("publishes nothing inside somebody else's record, at both levels", () => {
+    for (const access of ["read", "write"] as const) {
+      mockAccessRef.value = {
+        accounts: [OWNER],
+        active: { ...OWNER, access, canWrite: access === "write" },
+        canSwitch: true,
+      };
+      const output: string[] = [];
+      renderToStaticMarkup(
+        <CoachLaunchProvider>
+          <Probe output={output} />
+        </CoachLaunchProvider>,
+      );
+      // The whole recorded value, not a boolean: a failure prints the shape
+      // that leaked rather than `false !== true`.
+      expect(output, `grant level: ${access}`).toEqual(["null"]);
+    }
+    mockAccessRef.value = { accounts: [OWNER], active: null, canSwitch: true };
+  });
+
+  it("still renders its children there — only the launch value is withheld", () => {
+    mockAccessRef.value = {
+      accounts: [OWNER],
+      active: OWNER,
+      canSwitch: true,
+    };
+    const html = renderToStaticMarkup(
+      <CoachLaunchProvider>
+        <div data-slot="child-mount">child</div>
+      </CoachLaunchProvider>,
+    );
+    mockAccessRef.value = { accounts: [OWNER], active: null, canSwitch: true };
+    expect(html).toContain('data-slot="child-mount"');
   });
 });
 

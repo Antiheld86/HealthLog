@@ -43,6 +43,7 @@ import { ProseBlocks } from "@/components/insights/prose-blocks";
 import { PriorityCard } from "@/components/daily/priority-card";
 import { useCoachCheckinAction } from "@/hooks/use-coach-checkin";
 import { usePriorityItemDismiss } from "@/hooks/use-priority-item-dismiss";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useTranslations } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 import type { DailyDigest } from "@/lib/daily/digest";
@@ -99,6 +100,14 @@ export function TodayHero({
   // the reason a mount gate lived here at all.
   const { keep, letGo } = useCoachCheckinAction();
   const dismissItem = usePriorityItemDismiss();
+  // The rail's two mutating affordances — dismissing an observation and
+  // answering a coach check-in — are neither of them an admitted create, so
+  // they ask `canManage` and are absent at both grant levels. Both write
+  // through routes that resolve the CALLER (`POST /api/daily/digest/dismiss`,
+  // `PATCH /api/coach/plans/[id]`), which under a switch means a 403 rather
+  // than a stray row; the control still goes, because an affordance the
+  // server is on record refusing should not be on the page.
+  const { canManage } = useRecordCapabilities();
 
   // The coach check-in card's keep / let-go intents carry the plan id after the
   // ":" (a closed two-intent allowlist); adjust is an href handled by the card
@@ -325,8 +334,12 @@ export function TodayHero({
                 <PriorityCard
                   key={`${item.kind}-${i}`}
                   item={item}
-                  onAction={handleAction}
-                  onDismiss={(itemKey) => dismissItem.mutate(itemKey)}
+                  onAction={canManage ? handleAction : undefined}
+                  onDismiss={
+                    canManage
+                      ? (itemKey) => dismissItem.mutate(itemKey)
+                      : undefined
+                  }
                   actionsPending={
                     item.kind === "coach_checkin" &&
                     (keep.isPending || letGo.isPending)

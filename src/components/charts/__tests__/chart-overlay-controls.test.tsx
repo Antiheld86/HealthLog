@@ -1,13 +1,48 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { I18nProvider } from "@/lib/i18n/context";
+import type { AccountAccess } from "@/lib/sharing/account-access-view";
 
-import {
+const OWNER = {
+  accountId: "acct-owner",
+  username: "owner",
+  displayName: "Margarethe",
+  access: "write" as const,
+  canWrite: true,
+};
+
+const OWN_RECORD: AccountAccess = {
+  accounts: [OWNER],
+  active: null,
+  canSwitch: true,
+};
+
+const mockAccessRef: { value: AccountAccess } = { value: OWN_RECORD };
+
+// The cog asks `useRecordCapabilities`, which reads the account payload.
+vi.mock("@/hooks/use-auth", () => ({
+  useAuth: () => ({
+    user: {
+      id: "delegate",
+      username: "delegate",
+      email: null,
+      role: "USER",
+      avatarUrl: null,
+      modules: {},
+      accountAccess: mockAccessRef.value,
+    },
+    isAuthenticated: true,
+    isLoading: false,
+    refetch: vi.fn(),
+  }),
+}));
+
+const {
   ChartOverlayControls,
   ChartOverlayControlsBody,
   DEFAULT_CHART_OVERLAY_PREFS,
-  type ChartOverlayPrefs,
-} from "../chart-overlay-controls";
+} = await import("../chart-overlay-controls");
+type ChartOverlayPrefs = import("../chart-overlay-controls").ChartOverlayPrefs;
 
 /**
  * v1.4.18 — per-chart overlay-controls popover.
@@ -46,6 +81,34 @@ describe("<ChartOverlayControls>", () => {
 
     expect(html).toContain('data-slot="chart-overlay-controls-trigger"');
     expect(html).toContain('aria-label="Chart overlay settings"');
+  });
+
+  it("is absent inside somebody else's record, at both levels", () => {
+    // v1.36.x — every toggle persists through
+    // `PUT /api/dashboard/chart-overlay-prefs`, which resolves the caller and
+    // refuses under a switch, and the preference belongs to the person rather
+    // than to the record. Absent, not disabled: a greyed cog would still
+    // claim the chart is the delegate's to configure.
+    //
+    // Mutation check, run: dropping the `if (!canManage) return null` bail
+    // from `<ChartOverlayControls>` → both legs go red on the trigger slot.
+    for (const access of ["read", "write"] as const) {
+      mockAccessRef.value = {
+        accounts: [OWNER],
+        active: { ...OWNER, access, canWrite: access === "write" },
+        canSwitch: true,
+      };
+      const html = renderToStaticMarkup(
+        withProvider(
+          <ChartOverlayControls
+            prefs={DEFAULT_CHART_OVERLAY_PREFS}
+            onChange={() => {}}
+          />,
+        ),
+      );
+      expect(html, `grant level: ${access}`).toBe("");
+    }
+    mockAccessRef.value = OWN_RECORD;
   });
 
   it("default prefs match the clean-line baseline (every toggle OFF)", () => {

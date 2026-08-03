@@ -26,6 +26,7 @@ import { ListRow } from "@/components/ui/list-row";
 import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { apiGet } from "@/lib/api/api-fetch";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
@@ -46,6 +47,12 @@ export function EpisodeDocumentsCard({ episodeId }: { episodeId: string }) {
   const { t } = useTranslations();
   const format = useFormatters();
   const { user } = useAuth();
+  // Linking a document to an episode writes through
+  // `POST /api/documents/inbound/bulk`, the same endpoint the vault gates on
+  // `canManage` throughout. The episode side of the same link had no gate at
+  // all, so the vault refused what this card offered. Reading the linked
+  // documents stays: the list rows and "show all" are pure navigation.
+  const { canManage } = useRecordCapabilities();
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const moduleEnabled = user?.modules?.inboundDocuments === true;
@@ -139,20 +146,28 @@ export function EpisodeDocumentsCard({ episodeId }: { episodeId: string }) {
           )}
 
           <div className="flex flex-wrap items-center gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPickerOpen(true)}
-            >
-              <Link2 className="size-4" aria-hidden />
-              {t("documents.episodeCard.link")}
-            </Button>
-            <Button asChild variant="outline" size="sm">
-              <Link href={vaultHref}>
-                <Upload className="size-4" aria-hidden />
-                {t("documents.episodeCard.upload")}
-              </Link>
-            </Button>
+            {canManage ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPickerOpen(true)}
+                >
+                  <Link2 className="size-4" aria-hidden />
+                  {t("documents.episodeCard.link")}
+                </Button>
+                {/* The upload affordance is a deep link into the vault with
+                    this episode pre-filtered. The vault's own upload control
+                    is `canManage`-gated, so an ungated link here would send a
+                    delegate to a page with nothing to press. */}
+                <Button asChild variant="outline" size="sm">
+                  <Link href={vaultHref}>
+                    <Upload className="size-4" aria-hidden />
+                    {t("documents.episodeCard.upload")}
+                  </Link>
+                </Button>
+              </>
+            ) : null}
             {hasMore ? (
               <Button
                 asChild
@@ -169,11 +184,13 @@ export function EpisodeDocumentsCard({ episodeId }: { episodeId: string }) {
         </CardContent>
       </Card>
 
-      <DocumentLinkPicker
-        episodeId={episodeId}
-        open={pickerOpen}
-        onOpenChange={setPickerOpen}
-      />
+      {canManage ? (
+        <DocumentLinkPicker
+          episodeId={episodeId}
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+        />
+      ) : null}
     </>
   );
 }

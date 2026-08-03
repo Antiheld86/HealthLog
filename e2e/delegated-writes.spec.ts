@@ -9,19 +9,22 @@
  *
  * ## Why it gates itself instead of seeding a WRITE grant directly
  *
- * The grant level is chosen in the invitation form, which is another chunk's
- * work. Rather than mint a WRITE row behind the UI's back — which would prove
- * the journey works for a grant no person can create — the journey looks for
- * the level control and stands down when it is not there yet.
+ * The grant level is chosen in the invitation form. Rather than mint a WRITE
+ * row behind the UI's back — which would prove the journey works for a grant
+ * no person can create — the journey looks for the level control and stands
+ * down when it is not there yet.
  *
- * **To enable this once the invite form ships its level control:** if it lands
- * under a different `data-slot` than the constant below, change that one
- * string. Nothing else in this file assumes anything about the control except
- * that picking WRITE and submitting mints a WRITE grant.
+ * That guard was written against a `data-slot` the form never shipped under
+ * (`grant-invite-level`; the control landed as `grant-invite-access-option`),
+ * so from the day the control arrived until 2026-08-03 every test in this file
+ * skipped and the whole delegated-write journey ran nowhere. The file said out
+ * loud what to change and nobody changed it, which is the standing lesson
+ * about a check that cannot fail: the skip is quiet, and a quiet skip and a
+ * passing suite look identical in a CI summary.
  *
- * The skip is deliberately loud rather than silent: it names the missing
- * control, so a run where the control exists and the journey still does not
- * execute reads as a bug in this file rather than as an absence upstream.
+ * The constant is the real one now. If it moves again, change that one string:
+ * nothing else here assumes anything about the control except that choosing
+ * WRITE and submitting mints a WRITE grant.
  *
  * ## What this spec cannot cover
  *
@@ -45,10 +48,10 @@ import {
  * The invitation form's grant-level control. The journey runs when this is on
  * the page and stands down when it is not. One string, one place.
  */
-const GRANT_LEVEL_SLOT = "grant-invite-level";
+const GRANT_LEVEL_SLOT = "grant-invite-access-option";
 
 /** The value the level control carries for a grant that may add entries. */
-const WRITE_LEVEL_VALUE = "write";
+const WRITE_LEVEL_VALUE = "WRITE";
 
 test.describe("delegated writes", () => {
   // One journey in order, like the read-only sibling: each step is the next
@@ -110,9 +113,11 @@ test.describe("delegated writes", () => {
       await expect(submit).toBeEnabled({ timeout: 1000 });
     }).toPass({ timeout: 15_000 });
 
-    await ownerPage
-      .locator(`[data-slot="${GRANT_LEVEL_SLOT}"]`)
-      .selectOption(WRITE_LEVEL_VALUE);
+    const writeOption = ownerPage.locator(
+      `[data-slot="${GRANT_LEVEL_SLOT}"][data-access="${WRITE_LEVEL_VALUE}"]`,
+    );
+    await writeOption.click();
+    await expect(writeOption).toHaveAttribute("data-selected", "true");
 
     // Read the posted body: a level control that renders and sends a hardcoded
     // level would pass every render assertion and ship a read-only grant.
@@ -125,7 +130,7 @@ test.describe("delegated writes", () => {
       access?: string;
     };
     expect(
-      posted.access?.toLowerCase(),
+      posted.access,
       "the invitation must carry the level the owner chose",
     ).toBe(WRITE_LEVEL_VALUE);
   });
@@ -162,8 +167,14 @@ test.describe("delegated writes", () => {
         res.request().method() === "POST" &&
         res.url().endsWith("/api/measurements"),
     );
-    await page.getByRole("button", { name: /add measurement/i }).click();
-    await page.locator('input[name="value"], #value').first().fill("71.5");
+    // Stable attributes and the form's real fields, neither of which this
+    // step had. It looked for a button named "Add measurement" (the header
+    // reads "Add") and then for a `value` input (the form opens on blood
+    // pressure, which has three). Both were wrong from the day they were
+    // written and nobody found out, because the whole file was skipping.
+    await page.locator('[data-slot="measurement-add"]').click();
+    await page.locator("#sys").fill("124");
+    await page.locator("#dia").fill("78");
     await page.getByRole("button", { name: /^save$/i }).click();
     expect((await post).status(), "the write must be accepted").toBeLessThan(
       300,
@@ -178,6 +189,28 @@ test.describe("delegated writes", () => {
     await expect(page.getByRole("button", { name: /^delete$/i })).toHaveCount(
       0,
     );
+  });
+
+  test("a deep link opens exactly what the level admits", async ({ page }) => {
+    // The gate binds to the level the server resolved, not to a blanket
+    // "somebody else's record" flag. Both halves matter and only a browser
+    // can show either: the SSR suite holds a component's paint, never a URL.
+    //
+    // Admitted: entering a reading, so `?add=` opens the same sheet the
+    // header button opens.
+    await page.goto("/measurements?add=WEIGHT");
+    await expect(
+      page.locator('[data-slot="shared-record-banner"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-slot="responsive-sheet-content"]').first(),
+    ).toBeVisible();
+
+    // Also admitted: adding a medication with its schedule.
+    await page.goto("/medications?new=1");
+    await expect(
+      page.locator('[data-slot="medication-wizard-dialog"]'),
+    ).toBeVisible();
   });
 
   test("the owner sees that somebody else was in their record", async () => {

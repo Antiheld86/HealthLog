@@ -111,10 +111,36 @@ describe("<PriorityCard>", () => {
           kind: "coach_checkin",
           actions: [{ labelKey: "daily.action.logDose", intent: "dose.log" }],
         })}
+        onAction={() => {}}
       />,
     );
     expect(html).toContain("<button");
     expect(html).toContain("Log dose");
+  });
+
+  it("omits a non-navigation action entirely when no handler is passed", () => {
+    // v1.36.x — the caller withholds `onAction` inside somebody else's
+    // record. The mutating half of the rail must then be absent, not an
+    // inert button: `TodayHero` passes no handler at either grant level, and
+    // a rendered control that calls nothing is worse than one that 403s.
+    const html = render(
+      <PriorityCard
+        item={item({
+          kind: "coach_checkin",
+          actions: [
+            { labelKey: "daily.action.logDose", intent: "dose.log" },
+            {
+              labelKey: "daily.action.viewCheckups",
+              intent: "checkup.view",
+              href: "/checkups",
+            },
+          ],
+        })}
+      />,
+    );
+    expect(html).not.toContain("Log dose");
+    // Navigation is untouched — reading is never what a delegation withholds.
+    expect(html).toContain('href="/checkups"');
   });
 
   it("resolves action label keys through the active locale", () => {

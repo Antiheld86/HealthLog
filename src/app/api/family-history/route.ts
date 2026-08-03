@@ -12,7 +12,7 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -62,11 +62,22 @@ export const POST = apiHandler(
 );
 
 async function postFamilyHistory(request: NextRequest): Promise<Response> {
-  // v1.36.x — a delegated write, and the one where third-party health data is
-  // present by design: the row describes the record's relatives. It is stored
-  // as the record's own, exactly as the delegable READ arm above already
-  // serves it, and the audit trail names who entered it.
-  const { user } = await requireRecordAuth("write");
+  // v1.36.x — not a delegated write, though the GET above is delegable. The
+  // reasoning is written out at the sibling arm in `api/allergies/route.ts`
+  // and is the same here: the only surface that posts to either route is the
+  // manager in Settings → Anamnese, and `/settings/*` is closed inside a
+  // shared record, so no delegate can reach the form at any level. An
+  // admitted write with no reachable caller is a permission frozen ahead of
+  // the surface that would exercise it.
+  //
+  // This arm carried an extra reason to wait. The row describes the record's
+  // RELATIVES, so it is the one admitted write where third-party health
+  // information is present by design — and frequently the delegate is that
+  // relative, asserting a condition about themselves into somebody else's
+  // record. The classification admitted it and named the discomfort. Landing
+  // it together with the surface that offers it means the copy on that surface
+  // can say whose statement the row is, which no route comment can.
+  const { user } = await requireAuth();
 
   const { data: rawBody, error: jsonError } = await safeJson(request, {
     maxBytes: 16 * 1024,
