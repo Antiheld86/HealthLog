@@ -39,7 +39,10 @@
  * the ledger uses the semantic feedback vocabulary on the row, not the card.
  */
 
-import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
+import {
+  useActiveRecordName,
+  useRecordCapabilities,
+} from "@/hooks/use-record-capabilities";
 import { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -167,6 +170,12 @@ export function DoseHistoryLedger({
   // inline "mark taken" do. Editing, deleting, pinning and un-skipping an
   // existing event are the owner's, so the row menu is absent for them.
   const { canAdd } = useRecordCapabilities();
+  // The record this ledger's writes land in, when it is not the caller's own.
+  // The two sibling intake paths in `use-medication-intake.ts` already drop
+  // Undo and name the record; this third one builds its own toast and missed
+  // both, so a delegate met an Undo the server refuses on every dose they
+  // marked — the most-encountered of the set.
+  const recordName = useActiveRecordName();
   const queryClient = useQueryClient();
   const timeZone = user?.timezone || "Europe/Berlin";
 
@@ -282,20 +291,26 @@ export function DoseHistoryLedger({
               : "medications.intakeToastTaken",
             { name: medicationName },
           ),
-          eventId
+          recordName
             ? {
-                action: {
-                  label: t("medications.intakeUndo"),
-                  onClick: () =>
-                    void runUndoIntake({
-                      medication: { id: medicationId, name: medicationName },
-                      eventId,
-                      t,
-                      queryClient,
-                    }),
-                },
+                description: t("recordSharing.toast.savedTo", {
+                  name: recordName,
+                }),
               }
-            : undefined,
+            : eventId
+              ? {
+                  action: {
+                    label: t("medications.intakeUndo"),
+                    onClick: () =>
+                      void runUndoIntake({
+                        medication: { id: medicationId, name: medicationName },
+                        eventId,
+                        t,
+                        queryClient,
+                      }),
+                  },
+                }
+              : undefined,
         );
         await invalidateKeys(queryClient, [
           ...medicationDependentKeys,
@@ -314,7 +329,15 @@ export function DoseHistoryLedger({
         setMarking(null);
       }
     },
-    [marking, medicationId, medicationName, queryClient, queryKey, t],
+    [
+      marking,
+      medicationId,
+      medicationName,
+      queryClient,
+      queryKey,
+      recordName,
+      t,
+    ],
   );
 
   /**

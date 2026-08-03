@@ -36,6 +36,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { apiGet, apiPut } from "@/lib/api/api-fetch";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
 import { useAuth } from "@/hooks/use-auth";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import type {
   MedicationEfficacyDTO,
@@ -388,6 +389,11 @@ function RetargetControl({
   onChanged: () => void;
 }) {
   const { t } = useTranslations();
+  // Repointing what a medication is judged against rewrites a setting the
+  // owner chose — not an admitted create, and `PUT .../efficacy/target`
+  // resolves the caller, so it is refused at both grant levels. The Wirkung
+  // tab itself stays readable; only the dial goes.
+  const { canManage } = useRecordCapabilities();
   const [value, setValue] = useState<string>("");
   const [busy, setBusy] = useState(false);
 
@@ -437,7 +443,7 @@ function RetargetControl({
     }
   };
 
-  if (items.length === 0) return null;
+  if (!canManage || items.length === 0) return null;
 
   return (
     <div

@@ -983,21 +983,28 @@ function VorsorgeCard({
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              <Button
-                type="button"
-                size="sm"
-                className="min-h-11 sm:min-h-9"
-                onClick={onPrimaryAction}
-                disabled={busy}
-              >
-                {isLinked
-                  ? t(
-                      isScreening
-                        ? "measurementReminders.startCheckIn"
-                        : "measurementReminders.measureNow",
-                    )
-                  : t("measurementReminders.markDone")}
-              </Button>
+              {/* The same gate the cards branch applies through
+                  `primaryButton`. The list branch used to inline its own
+                  ungated copy, and which branch a person sees is a per-browser
+                  preference that survives the switch — so the identical action
+                  was offered or withheld depending on a view toggle. */}
+              {canManage ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="min-h-11 sm:min-h-9"
+                  onClick={onPrimaryAction}
+                  disabled={busy}
+                >
+                  {isLinked
+                    ? t(
+                        isScreening
+                          ? "measurementReminders.startCheckIn"
+                          : "measurementReminders.measureNow",
+                      )
+                    : t("measurementReminders.markDone")}
+                </Button>
+              ) : null}
               {headerActions}
             </div>
           </CardContent>

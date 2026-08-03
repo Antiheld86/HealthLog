@@ -170,8 +170,16 @@ export default function MeasurementsPage() {
         }
       />
 
+      {/* v1.36.x — the sheet answers the same question the header button
+          answers. `?add=<TYPE>` opens it without passing the button, and a
+          deep link is the same affordance as the control that produces it, so
+          it gets the same gate. Gating the open rather than only the param
+          also covers the first-paint window: `canAdd` reads true until
+          `/api/auth/me` settles, and a sheet opened in that frame withdraws
+          when the answer lands instead of standing on a form the server
+          refuses. */}
       <ResponsiveSheet
-        open={dialogOpen}
+        open={dialogOpen && canAdd}
         onOpenChange={(open) => {
           setDialogOpen(open);
           if (!open) {

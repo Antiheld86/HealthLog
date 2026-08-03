@@ -19,6 +19,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CalendarClock, CheckCircle2, Plus } from "lucide-react";
 
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useTranslations, useDisplayTimezone } from "@/lib/i18n/context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,12 @@ export function VorsorgeDashboardCard() {
   // phrase in, so the two screens still agree when the device sits elsewhere.
   const displayTz = useDisplayTimezone();
   const router = useRouter();
+  // The same answer `/checkups` gives the same action. Satisfying a reminder
+  // is not one of the verbs a delegation admits at any level
+  // (`POST /api/measurement-reminders/[id]/satisfy` resolves the caller), and
+  // the dashboard summary offering what the dedicated page withholds was the
+  // tell that this row had never been asked.
+  const { canManage } = useRecordCapabilities();
   const { data: reminders, isLoading } = useMeasurementReminders();
   const { satisfy } = useMeasurementReminderMutations();
   const [now] = useState(() => Date.now());
@@ -137,29 +144,31 @@ export function VorsorgeDashboardCard() {
                         })}
                       </Badge>
                     </div>
-                    <Button
-                      type="button"
-                      size="default"
-                      className="min-h-11 shrink-0 sm:min-h-9"
-                      onClick={() => onPrimaryAction(reminder)}
-                      disabled={satisfy.isPending}
-                    >
-                      {isLinked ? (
-                        <>
-                          <Plus className="h-4 w-4" />
-                          {t(
-                            isScreening
-                              ? "measurementReminders.startCheckIn"
-                              : "measurementReminders.captureValue",
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 className="h-4 w-4" />
-                          {t("measurementReminders.markDone")}
-                        </>
-                      )}
-                    </Button>
+                    {canManage ? (
+                      <Button
+                        type="button"
+                        size="default"
+                        className="min-h-11 shrink-0 sm:min-h-9"
+                        onClick={() => onPrimaryAction(reminder)}
+                        disabled={satisfy.isPending}
+                      >
+                        {isLinked ? (
+                          <>
+                            <Plus className="h-4 w-4" />
+                            {t(
+                              isScreening
+                                ? "measurementReminders.startCheckIn"
+                                : "measurementReminders.captureValue",
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="h-4 w-4" />
+                            {t("measurementReminders.markDone")}
+                          </>
+                        )}
+                      </Button>
+                    ) : null}
                   </li>
                 </ListRow>
               );

@@ -95,6 +95,11 @@ export interface PriorityCardProps {
    * Tap handler for non-navigation actions. Receives the action's stable
    * `intent` token. Navigation actions (those carrying an `href`) render as
    * links and do not call this.
+   *
+   * Omitting it does not render an inert button: an action with no `href` and
+   * no handler is not offered at all. A button whose only job is to call a
+   * handler nobody passed is a control that says "this works" and does
+   * nothing, which is the one outcome worse than a refusal.
    */
   onAction?: (intent: string) => void;
   /**
@@ -129,7 +134,13 @@ export function PriorityCard({
 }: PriorityCardProps) {
   const { t } = useTranslations();
   const Icon = KIND_ICON[item.kind];
-  const actions = item.actions.slice(0, 3);
+  // Navigation always survives; a mutating action survives only when somebody
+  // is there to run it. That is what removes the whole non-navigation half of
+  // this card inside a record the caller may not change, without this file
+  // learning anything about grants.
+  const actions = item.actions
+    .filter((action) => action.href || onAction)
+    .slice(0, 3);
   const hue = KIND_HUE[item.kind];
   // S12 — the quiet "reached" moment: the milestone card swaps the generic
   // fade-in for the `.milestone-reached` treatment (a soft `--success` halo
@@ -187,15 +198,23 @@ export function PriorityCard({
         ) : null}
         {actions.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2 pt-1">
-            {actions.map((action) => (
-              <ActionButton
-                key={action.intent}
-                action={action}
-                label={t(action.labelKey)}
-                onAction={onAction}
-                pending={actionsPending}
-              />
-            ))}
+            {actions.map((action) =>
+              action.href ? (
+                <ActionLink
+                  key={action.intent}
+                  href={action.href}
+                  label={t(action.labelKey)}
+                />
+              ) : onAction ? (
+                <ActionButton
+                  key={action.intent}
+                  action={action}
+                  label={t(action.labelKey)}
+                  onAction={onAction}
+                  pending={actionsPending}
+                />
+              ) : null,
+            )}
           </div>
         ) : null}
       </CardContent>
@@ -203,6 +222,26 @@ export function PriorityCard({
   );
 }
 
+/** A navigation action. Always offered — reading is never delegated away. */
+function ActionLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        buttonVariants({ variant: "outline", size: "sm" }),
+        ACTION_SIZE,
+      )}
+    >
+      {label}
+    </Link>
+  );
+}
+
+/**
+ * A mutating action. `onAction` is required rather than optional so the type
+ * carries the rule: this button cannot be rendered without the handler that
+ * makes it do something.
+ */
 function ActionButton({
   action,
   label,
@@ -211,22 +250,9 @@ function ActionButton({
 }: {
   action: PriorityItemAction;
   label: string;
-  onAction?: (intent: string) => void;
+  onAction: (intent: string) => void;
   pending?: boolean;
 }) {
-  if (action.href) {
-    return (
-      <Link
-        href={action.href}
-        className={cn(
-          buttonVariants({ variant: "outline", size: "sm" }),
-          ACTION_SIZE,
-        )}
-      >
-        {label}
-      </Link>
-    );
-  }
   return (
     <Button
       variant="outline"

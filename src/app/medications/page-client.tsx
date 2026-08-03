@@ -617,8 +617,11 @@ export default function MedicationsPageClient() {
           "Vollständig bearbeiten" reopens the wizard in edit mode from
           there); the list page wizard only ever creates. The wizard owns
           its own ResponsiveSheet shell with the sticky footer. */}
+      {/* v1.36.x — `?new=1` (the retired `/medications/new` route redirects
+          here) opens the create wizard without passing the gated Add control,
+          so the wizard asks the same `canAdd` the control asks. */}
       <MedicationWizardDialog
-        open={dialogOpen}
+        open={dialogOpen && canAdd}
         onOpenChange={setDialogOpen}
         mode="create"
         onSuccess={closeDialog}

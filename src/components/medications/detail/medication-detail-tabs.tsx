@@ -893,8 +893,12 @@ export function MedicationDetailTabs({
       {/* Structural edit — the wizard stays the name / class / cadence-kind
           / schedule tool. Hydrates from the medication payload in edit
           mode; closing it leaves the user on the same tab. */}
+      {/* v1.36.x — `?edit=1` opens this wizard straight from the list kebab.
+          Correcting an existing medication is refused at both grant levels
+          (`PUT /api/medications/[id]` is not delegable), so the deep link is
+          gated exactly like the hero button it stands in for. */}
       <MedicationWizardDialog
-        open={editOpen}
+        open={editOpen && canManage}
         onOpenChange={setEditOpen}
         mode="edit"
         initial={payload}
