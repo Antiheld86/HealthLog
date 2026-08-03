@@ -26,11 +26,18 @@
  * The registry below is keyed by `TwoEndedModel`, so a name added to the plan's
  * two-ended list without a row seeded and counted here does not compile.
  *
- * What this still does not prove: that a restored row carries the right VALUES.
- * It asks whether the rows came back, not whether they came back intact —
- * `admin-backups-canonical-roundtrip.test.ts` is where field-level fidelity is
- * asserted. A restore that wrote one row per model with every column defaulted
- * would satisfy this file and fail that one.
+ * What this still does not prove, with one exception: that a restored row
+ * carries the right VALUES. It asks whether the rows came back, not whether
+ * they came back intact — `admin-backups-canonical-roundtrip.test.ts` is where
+ * field-level fidelity is asserted. A restore that wrote one row per model with
+ * every column defaulted would satisfy this file and fail that one.
+ *
+ * The exception is the medication side effect. Its note lives in an encrypted
+ * column beside a legacy plaintext one, so "the row came back" and "the note
+ * came back" are genuinely different answers here: a restore that dropped the
+ * ciphertext would still be counted as recovered by everything above. The
+ * severity, the category and the entry are asserted alongside it, because a
+ * side effect without them says something happened and not what.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -40,6 +47,7 @@ process.env.ENCRYPTION_KEY ??=
 import type { PrismaClient } from "@/generated/prisma/client";
 import { encrypt, encryptBytes } from "@/lib/crypto";
 import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
+import { readNote } from "@/lib/crypto/note-cipher";
 import { buildFullBackupPayload } from "@/lib/export/full-backup-payload";
 import { TWO_ENDED_MODELS, type TwoEndedModel } from "@/lib/export/backup-plan";
 import { POST } from "@/app/api/admin/backups/[id]/restore/route";
@@ -74,6 +82,7 @@ vi.mock("@/lib/cache/invalidate", () => ({
 
 const OWNER_ID = "round-trip-owner";
 const AT = (iso: string) => new Date(iso);
+const SIDE_EFFECT_NOTE = "nausea for two hours after the evening dose";
 
 beforeEach(async () => {
   await truncateAllTables(getPrismaClient());
@@ -94,6 +103,8 @@ const COUNT_BACK: Record<
     p.medicationSchedule.count({ where: { medication: { userId } } }),
   MedicationIntakeEvent: (p, userId) =>
     p.medicationIntakeEvent.count({ where: { userId } }),
+  MedicationSideEffect: (p, userId) =>
+    p.medicationSideEffect.count({ where: { userId } }),
   MoodEntry: (p, userId) => p.moodEntry.count({ where: { userId } }),
   MoodEntryTagLink: (p, userId) =>
     p.moodEntryTagLink.count({ where: { moodEntry: { userId } } }),
@@ -181,6 +192,19 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       medicationId: medication.id,
       scheduledFor: AT("2026-07-01T08:00:00.000Z"),
       takenAt: AT("2026-07-01T08:04:00.000Z"),
+    },
+  });
+  // The one row in this fixture that is also checked field by field after the
+  // restore — see the assertion at the end of the test for why.
+  await prisma.medicationSideEffect.create({
+    data: {
+      userId: OWNER_ID,
+      medicationId: medication.id,
+      occurredAt: AT("2026-07-01T21:00:00.000Z"),
+      category: "GI",
+      entry: "NAUSEA",
+      severity: 3,
+      notesEncrypted: encryptToBytes(SIDE_EFFECT_NOTE),
     },
   });
 
@@ -477,5 +501,34 @@ describe("every model the plan claims two-ended survives a real restore", () => 
         "without them, which is a backup that reports success and hands back " +
         "less than it was given",
     ).toEqual([]);
+
+    const sideEffect = await prisma.medicationSideEffect.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+      include: { medication: { select: { name: true, userId: true } } },
+    });
+    expect({
+      category: sideEffect.category,
+      entry: sideEffect.entry,
+      severity: sideEffect.severity,
+      occurredAt: sideEffect.occurredAt.toISOString(),
+      medication: sideEffect.medication.name,
+      medicationOwner: sideEffect.medication.userId,
+      note: readNote(sideEffect.notesEncrypted, sideEffect.notes),
+    }).toEqual({
+      category: "GI",
+      entry: "NAUSEA",
+      severity: 3,
+      occurredAt: "2026-07-01T21:00:00.000Z",
+      medication: "Round-trip tablet",
+      medicationOwner: OWNER_ID,
+      note: SIDE_EFFECT_NOTE,
+    });
+    // The note must be BACK IN THE COLUMN it came from, not carried as
+    // plaintext: a restore that writes a portable export's decrypted note into
+    // `notes` reads identically through `readNote` above and has quietly
+    // un-encrypted the account's free text.
+    expect(sideEffect.notes, "plaintext must not come back in the column").toBe(
+      null,
+    );
   });
 });

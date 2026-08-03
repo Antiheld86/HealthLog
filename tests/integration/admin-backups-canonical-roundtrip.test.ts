@@ -284,6 +284,19 @@ describe("canonical disaster-recovery backup round-trip", () => {
       },
       include: { schedules: true },
     });
+    const sideEffect = await prisma.medicationSideEffect.create({
+      data: {
+        id: "side-effect-dr",
+        userId: ownerId,
+        medicationId: medication.id,
+        occurredAt: new Date("2026-06-27T21:00:00.000Z"),
+        category: "INJECTION_SITE",
+        entry: "INJECTION_SWELLING",
+        severity: 4,
+        notesEncrypted: encryptToBytes("swollen for a day after the injection"),
+        createdAt: new Date("2026-06-27T21:10:00.000Z"),
+      },
+    });
     const intake = await prisma.medicationIntakeEvent.create({
       data: {
         id: "intake-dr",
@@ -583,6 +596,15 @@ describe("canonical disaster-recovery backup round-trip", () => {
         where: { id: intake.id },
       }),
     ).toEqual(intake);
+    // Byte-for-byte, ciphertext included: a canonical payload carries the
+    // encrypted note verbatim, so the same instance's key reads back exactly
+    // what it wrote. Re-encrypting here would still decrypt to the same words
+    // and would still be a different row than the one the file described.
+    expect(
+      await prisma.medicationSideEffect.findUniqueOrThrow({
+        where: { id: sideEffect.id },
+      }),
+    ).toEqual(sideEffect);
     expect(
       await prisma.cycleProfile.findUniqueOrThrow({
         where: { id: cycleProfile.id },

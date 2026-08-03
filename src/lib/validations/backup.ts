@@ -49,6 +49,8 @@ import {
   MedicationCategory,
   MedicationDeliveryForm,
   MedicationScheduleType,
+  MedicationSideEffectCategory,
+  MedicationSideEffectEntry,
   OvulationTest,
   RhythmClassification,
   SecondarySymptom,
@@ -129,6 +131,28 @@ const medicationScheduleSchema = z
   })
   .passthrough();
 
+/**
+ * One recorded side effect, carried inside its medication.
+ *
+ * `notes` is the decrypted note in a portable export and the row's legacy
+ * plaintext column in a canonical DR file; `notesEncrypted` is the base64
+ * ciphertext and rides only in the DR case. The restore prefers the ciphertext
+ * and encrypts the plaintext when that is all the file has, so neither shape
+ * loses the note and neither writes plaintext back into the column.
+ */
+const medicationSideEffectSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    occurredAt: isoDateTime,
+    category: z.enum(MedicationSideEffectCategory),
+    entry: z.enum(MedicationSideEffectEntry),
+    severity: z.number().int().min(1).max(5),
+    notes: z.string().nullable().optional(),
+    notesEncrypted: base64BytesSchema.nullable().optional(),
+    createdAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
 const medicationSchema = z
   .object({
     id: z.string().min(1).optional(),
@@ -160,6 +184,9 @@ const medicationSchema = z
     createdAt: isoDateTime.optional(),
     updatedAt: isoDateTime.optional(),
     schedules: z.array(medicationScheduleSchema).default([]),
+    // Defaulted so a file written before side effects rode the wire still
+    // parses, and a drug with none writes [].
+    sideEffects: z.array(medicationSideEffectSchema).default([]),
   })
   .passthrough();
 
@@ -907,6 +934,8 @@ export interface BackupSummary {
   measurements: number;
   medications: number;
   intakeEvents: number;
+  /** Side effects recorded against a drug, across every medication. */
+  medicationSideEffects: number;
   moodEntries: number;
   /** v1.15.0 — observed cycle spans in the backup. */
   cycles: number;
@@ -953,6 +982,10 @@ export function summarizeBackup(payload: BackupPayload): BackupSummary {
     measurements: payload.measurements.length,
     medications: payload.medications.length,
     intakeEvents: payload.intakeEvents.length,
+    medicationSideEffects: payload.medications.reduce(
+      (sum, medication) => sum + medication.sideEffects.length,
+      0,
+    ),
     moodEntries: payload.moodEntries.length,
     cycles: payload.cycles.length,
     cycleDayLogs: payload.cycleDayLogs.length,

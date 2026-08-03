@@ -105,6 +105,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       export_measurements_count: counts.measurements,
       export_medications_count: counts.medications,
       export_intake_count: counts.intakeEvents,
+      export_medication_side_effect_count: counts.medicationSideEffects,
       export_mood_count: counts.moodEntries,
       export_cycle_count: counts.cycles,
       export_cycle_day_log_count: counts.cycleDayLogs,

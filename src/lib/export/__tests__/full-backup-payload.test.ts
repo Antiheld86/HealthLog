@@ -37,6 +37,7 @@ import { restoreProfileData } from "../profile-backup";
 
 const deletedAt = new Date("2026-07-19T12:00:00.000Z");
 const measurementNote = encryptToBytes("canonical measurement note");
+const sideEffectNote = encryptToBytes("nausea after the evening dose");
 
 const appSettings = {
   id: "singleton",
@@ -131,6 +132,29 @@ function makePrisma() {
               doseWindows: [
                 { timeOfDay: "08:00", start: "07:30", end: "09:00" },
               ],
+            },
+          ],
+          sideEffects: [
+            {
+              id: "side-effect-canonical",
+              occurredAt: new Date("2026-07-18T21:00:00.000Z"),
+              category: "GI",
+              entry: "NAUSEA",
+              severity: 3,
+              notes: null,
+              notesEncrypted: sideEffectNote,
+              createdAt: new Date("2026-07-18T21:05:00.000Z"),
+            },
+            {
+              // A row the note backfill has not reached: plaintext only.
+              id: "side-effect-legacy",
+              occurredAt: new Date("2026-07-17T21:00:00.000Z"),
+              category: "COGNITIVE",
+              entry: "DIZZINESS",
+              severity: 1,
+              notes: "legacy plaintext note",
+              notesEncrypted: null,
+              createdAt: new Date("2026-07-17T21:05:00.000Z"),
             },
           ],
         },
@@ -489,6 +513,90 @@ describe("buildFullBackupPayload disaster-recovery mode", () => {
         purpose: "disaster-recovery",
       }),
     ).rejects.toBe(failure);
+  });
+});
+
+/**
+ * Side effects ride inside their medication, and the note rides with them.
+ *
+ * The two shapes differ on purpose: a portable export is the human-readable
+ * artefact, so it carries the DECRYPTED note and no ciphertext at all; the
+ * disaster-recovery file carries the ciphertext verbatim so the same instance's
+ * key reads it back unchanged. Both are asserted, because emitting ciphertext
+ * into a portable export and losing the note are opposite failures of the same
+ * decision.
+ */
+describe("buildFullBackupPayload — medication side effects", () => {
+  it("decrypts the note and emits no ciphertext in a portable export", async () => {
+    installSectionMocks();
+
+    const { payload, counts } = await buildFullBackupPayload(
+      makePrisma() as never,
+      "user-1",
+      {
+        purpose: "portable-export",
+        exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+      },
+    );
+    const parsed = parseBackupPayload(payload);
+
+    expect(parsed.medications[0].sideEffects).toEqual([
+      {
+        occurredAt: "2026-07-18T21:00:00.000Z",
+        category: "GI",
+        entry: "NAUSEA",
+        severity: 3,
+        notes: "nausea after the evening dose",
+      },
+      {
+        occurredAt: "2026-07-17T21:00:00.000Z",
+        category: "COGNITIVE",
+        entry: "DIZZINESS",
+        severity: 1,
+        notes: "legacy plaintext note",
+      },
+    ]);
+    expect(JSON.stringify(payload)).not.toContain(
+      Buffer.from(sideEffectNote).toString("base64"),
+    );
+    expect(counts.medicationSideEffects).toBe(2);
+  });
+
+  it("carries the ciphertext verbatim in a disaster-recovery payload", async () => {
+    installSectionMocks();
+
+    const { payload } = await buildFullBackupPayload(
+      makePrisma() as never,
+      "user-1",
+      {
+        purpose: "disaster-recovery",
+        exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+      },
+    );
+    const parsed = parseBackupPayload(payload);
+
+    expect(parsed.medications[0].sideEffects).toEqual([
+      {
+        id: "side-effect-canonical",
+        occurredAt: "2026-07-18T21:00:00.000Z",
+        category: "GI",
+        entry: "NAUSEA",
+        severity: 3,
+        notes: null,
+        notesEncrypted: Buffer.from(sideEffectNote).toString("base64"),
+        createdAt: "2026-07-18T21:05:00.000Z",
+      },
+      {
+        id: "side-effect-legacy",
+        occurredAt: "2026-07-17T21:00:00.000Z",
+        category: "COGNITIVE",
+        entry: "DIZZINESS",
+        severity: 1,
+        notes: "legacy plaintext note",
+        notesEncrypted: null,
+        createdAt: "2026-07-17T21:05:00.000Z",
+      },
+    ]);
   });
 });
 
