@@ -13,7 +13,7 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -74,7 +74,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postEpisode));
 
 async function postEpisode(request: NextRequest): Promise<Response> {
-  const { user } = await requireAuth();
+  // v1.36.x — a delegated write. The module gate below follows the RECORD, not
+  // the caller: whether illness tracking exists is a property of the record, so
+  // a delegate who runs the module on their own account does not thereby gain
+  // an episode surface inside somebody else's.
+  const { user } = await requireRecordAuth("write");
 
   const gate = await requireIllnessEnabled(user.id);
   if (!gate.enabled) return gate.response;

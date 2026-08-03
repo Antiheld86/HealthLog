@@ -10,16 +10,17 @@
  *       occurredAt?, notes? }. Category is verified against the
  *       authoritative entry → category mapping; mismatch → 422.
  *
- * Auth: cookie-session via requireAuth(); the medication is verified
- * to belong to the caller before any read/write.
- * Rate-limit: 30/min/user on the POST path.
+ * Auth: a session via requireRecordAuth(); the medication is verified to
+ * belong to the RECORD before any read/write, so a delegate reaches the
+ * owner's medications and none of their own.
+ * Rate-limit: 30/min on the POST path, keyed on the ACTOR (see the call site).
  * Audit-log every mutation with the affected row id.
  */
 
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { auditLog } from "@/lib/auth/audit";
 import { annotate } from "@/lib/logging/context";
 import {
@@ -97,17 +98,28 @@ export const GET = apiHandler(
 
 export const POST = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.36.x — a delegated write. `user` is the record the entry lands under;
+    // `actor` is whoever is typing, and the two differ only under a switch.
+    const { user, actor } = await requireRecordAuth("write");
     const { id } = await params;
 
     const guard = await assertMedicationOwnership(id, user.id);
     if (guard) return guard;
 
-    // Per-user POST rate-limit — 30/min comfortably absorbs a session
+    // Per-caller POST rate-limit — 30/min comfortably absorbs a session
     // of bulk back-fill (e.g. "log yesterday's symptoms") while cutting
     // off automated abuse.
+    //
+    // v1.36.x — the bucket keys on the ACTOR, not on the resolved record, and
+    // this is the one condition on which delegating this verb was admitted. On
+    // the record key a delegate could exhaust the owner's allowance and lock
+    // them out of their own log, and could collect a fresh one by switching to
+    // another record. On the actor key they burn their own, once, wherever
+    // they are. `medications/compliance` set the same precedent on the read
+    // side. `actor.id` equals `user.id` for everyone who has not switched, so
+    // the bucket a self-writer lands in is byte-identical to before.
     const rl = await checkRateLimit(
-      `medication-side-effect:post:${user.id}`,
+      `medication-side-effect:post:${actor.id}`,
       POST_RATE_LIMIT,
       POST_WINDOW_MS,
     );

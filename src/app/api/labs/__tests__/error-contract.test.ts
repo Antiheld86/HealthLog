@@ -50,6 +50,7 @@ vi.mock("next/headers", () => ({
 import { POST } from "../route";
 import { PUT } from "../[id]/route";
 import { prisma } from "@/lib/db";
+import { auditLog } from "@/lib/auth/audit";
 import { getSession } from "@/lib/auth/session";
 
 const SESSION = {
@@ -93,6 +94,10 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(getSession).mockResolvedValue(SESSION as never);
   vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never);
+  // v1.36.x — the create arm's validation breadcrumb goes through the
+  // `auditLog` helper, the only writer that stamps `actorUserId`. The route
+  // chains `.catch()` onto it, so the stub has to return a promise.
+  vi.mocked(auditLog).mockResolvedValue(undefined);
 });
 
 describe("lab result error contract", () => {

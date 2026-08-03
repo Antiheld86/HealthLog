@@ -295,26 +295,21 @@ describe("v1.4.43 W6 — multi-issue 422 envelope", () => {
     await GET(makeRequest("status=junk"), ROUTE_PARAMS);
     await POST(postReq({ takenAt: "junk" }), ROUTE_PARAMS);
     await new Promise((r) => setTimeout(r, 5));
-    // v1.36.0 — the GET's breadcrumb goes through the `auditLog` helper (the
-    // only writer that stamps `actorUserId`); the POST's still writes the row
-    // directly, because that arm cannot be reached under a switch.
+    // v1.36.x — both breadcrumbs go through the `auditLog` helper, the only
+    // writer that stamps `actorUserId`. The POST arm is a delegable write now,
+    // so a row it files without the stamp would read as the owner's own.
     expect(auditLog).toHaveBeenCalledWith(
       "medications.intake.list.validation-failed",
       expect.objectContaining({ userId: "user-1" }),
     );
-    expect(prisma.auditLog.create).toHaveBeenCalled();
-    const actions = vi
-      .mocked(prisma.auditLog.create)
-      .mock.calls.map(
-        (c) => (c[0] as { data: { action: string } }).data.action,
-      );
-    expect(actions).toContain("medications.intake.create.validation-failed");
+    expect(auditLog).toHaveBeenCalledWith(
+      "medications.intake.create.validation-failed",
+      expect.objectContaining({ userId: "user-1" }),
+    );
   });
 
   it("POST does not block the 422 when the audit-row write rejects", async () => {
-    vi.mocked(prisma.auditLog.create).mockRejectedValueOnce(
-      new Error("db down"),
-    );
+    vi.mocked(auditLog).mockRejectedValueOnce(new Error("db down"));
     const res = await POST(postReq({ takenAt: "junk" }), ROUTE_PARAMS);
     expect(res.status).toBe(422);
   });

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
@@ -91,7 +91,11 @@ export const GET = apiHandler(async () => {
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postBiomarker));
 
 async function postBiomarker(request: NextRequest) {
-  const { user } = await requireAuth();
+  // v1.36.x — a delegated write: the marker joins the record's catalogue. The
+  // duplicate pre-check and the `@@unique([userId, name])` backstop both scope
+  // to the same resolved id, so a delegate adding a marker the owner already
+  // tracks gets the ordinary 409 rather than a second copy.
+  const { user } = await requireRecordAuth("write");
 
   const { data: body, error: jsonError } = await safeJson(request, {
     maxBytes: 16 * 1024,
@@ -107,17 +111,13 @@ async function postBiomarker(request: NextRequest) {
     const auditIssues = sanitiseZodIssues(parsed.error.issues, {
       stripValuesFromMessage: true,
     });
-    prisma.auditLog
-      .create({
-        data: {
-          userId: user.id,
-          action: "labs.biomarker.create.validation-failed",
-          details: JSON.stringify({ issues: auditIssues }),
-        },
-      })
-      .catch(() => {
-        /* swallow — the 422 response is the contract */
-      });
+    // v1.36.x — through `auditLog()`, the only writer that stamps the actor.
+    void auditLog("labs.biomarker.create.validation-failed", {
+      userId: user.id,
+      details: { issues: auditIssues },
+    }).catch(() => {
+      /* swallow — the 422 response is the contract */
+    });
     return returnAllZodIssues(parsed.error, 422, {
       errorCode: "labs.biomarker.create.invalid",
     });

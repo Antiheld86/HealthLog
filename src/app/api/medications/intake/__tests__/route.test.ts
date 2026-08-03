@@ -773,20 +773,18 @@ describe("v1.4.43 W6 — multi-issue 422 envelope", () => {
     const res = await POST(postReq({ status: "broken" }));
     expect(res.status).toBe(422);
     await new Promise((r) => setTimeout(r, 5));
-    expect(prisma.auditLog.create).toHaveBeenCalledTimes(1);
-    const call = vi.mocked(prisma.auditLog.create).mock.calls[0]?.[0] as {
-      data: { userId: string; action: string };
-    };
-    expect(call.data.action).toBe(
+    // v1.36.x — through the helper, same reason as the GET arm above: the
+    // POST is a delegable write and only `auditLog` stamps the delegate.
+    expect(auditLog).toHaveBeenCalledTimes(1);
+    expect(auditLog).toHaveBeenCalledWith(
       "medications.intake.update.validation-failed",
+      expect.objectContaining({ userId: "user-1" }),
     );
   });
 
   it("does not block the 422 when the audit-row write rejects", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-    vi.mocked(prisma.auditLog.create).mockRejectedValueOnce(
-      new Error("db down"),
-    );
+    vi.mocked(auditLog).mockRejectedValueOnce(new Error("db down"));
     const res = await POST(postReq({ status: "broken" }));
     expect(res.status).toBe(422);
   });

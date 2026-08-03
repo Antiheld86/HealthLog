@@ -11,7 +11,7 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -67,7 +67,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postAllergy));
 
 async function postAllergy(request: NextRequest): Promise<Response> {
-  const { user } = await requireAuth();
+  // v1.36.x — a delegated write, and the cleanest of them: the row is a plain
+  // statement about the record's own body, and the caller appears in the audit
+  // trail rather than in the row.
+  const { user } = await requireRecordAuth("write");
 
   const { data: rawBody, error: jsonError } = await safeJson(request, {
     maxBytes: 16 * 1024,

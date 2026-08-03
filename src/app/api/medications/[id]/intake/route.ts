@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -29,6 +29,7 @@ import { reconcileOneShotState } from "@/lib/medications/lifecycle";
 import { assertMedicationOwnership } from "@/lib/medications/route-guards";
 import { invalidateUserMedications } from "@/lib/cache/invalidate";
 import { queueMedicationIntakeSync } from "@/lib/notifications/medication-intake-sync";
+import { notifyDelegatedIntake } from "@/lib/notifications/delegated-intake";
 import { recomputeMedicationComplianceForEvent } from "@/lib/rollups/medication-compliance-rollups";
 import {
   applyCanonicalSlotWrite,
@@ -47,7 +48,10 @@ export const POST = apiHandler(
 );
 
 async function postIntake(request: NextRequest, { params }: RouteParams) {
-  const { user, authMethod } = await requireAuth();
+  // v1.36.x — a delegated write, the per-medication form of the same verb.
+  // `user` is the record the dose belongs to; `actor` is whoever pressed the
+  // button, and is used for nothing but the owner's notification below.
+  const { user, actor, authMethod } = await requireRecordAuth("write");
   // v1.32.8 (iOS #64) — write provenance derived from the transport, never
   // client-asserted: a Bearer/native call stores `API`, a cookie/browser call
   // stores `WEB`. The other `IntakeSource` values are producer-owned by OTHER
@@ -92,20 +96,13 @@ async function postIntake(request: NextRequest, { params }: RouteParams) {
     const auditIssues = sanitiseZodIssues(parsed.error.issues, {
       stripValuesFromMessage: true,
     });
-    prisma.auditLog
-      .create({
-        data: {
-          userId: user.id,
-          action: "medications.intake.create.validation-failed",
-          details: JSON.stringify({
-            issues: auditIssues,
-            medicationId: id,
-          }),
-        },
-      })
-      .catch(() => {
-        /* swallow — 422 response is the contract */
-      });
+    // v1.36.x — through `auditLog()`, the only writer that stamps the actor.
+    void auditLog("medications.intake.create.validation-failed", {
+      userId: user.id,
+      details: { issues: auditIssues, medicationId: id },
+    }).catch(() => {
+      /* swallow — 422 response is the contract */
+    });
     return returnAllZodIssues(parsed.error, 422);
   }
 
@@ -531,6 +528,16 @@ async function postIntake(request: NextRequest, { params }: RouteParams) {
   queueMedicationIntakeSync({
     userId: user.id,
     originDeviceToken: request.headers.get("x-device-id"),
+  });
+
+  // v1.36.x — "somebody else marked your dose". This route has no snooze arm,
+  // so the state is whichever of the two markings the payload carried. The
+  // helper refuses on self, so a person marking their own dose is unaffected.
+  await notifyDelegatedIntake({
+    ownerId: user.id,
+    actorId: actor.id,
+    medicationId: id,
+    status: skipped ? "skipped" : "taken",
   });
 
   return apiSuccess(event, 201);

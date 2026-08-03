@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
@@ -89,7 +89,11 @@ async function postCustomMetricEntry(
   request: NextRequest,
   { params }: RouteParams,
 ) {
-  const { user } = await requireAuth();
+  // v1.36.x — a delegated write. The ownership hop runs first and now resolves
+  // against the record, so a delegate can only add a value to a metric the
+  // OWNER defined; their own metric of the same name is unreachable from in
+  // here and 404s.
+  const { user } = await requireRecordAuth("write");
   const { id } = await params;
 
   const metric = await prisma.customMetric.findFirst({
@@ -114,17 +118,13 @@ async function postCustomMetricEntry(
     const auditIssues = sanitiseZodIssues(parsed.error.issues, {
       stripValuesFromMessage: true,
     });
-    prisma.auditLog
-      .create({
-        data: {
-          userId: user.id,
-          action: "custom-metric.entry.create.validation-failed",
-          details: JSON.stringify({ issues: auditIssues, customMetricId: id }),
-        },
-      })
-      .catch(() => {
-        /* swallow — the 422 response is the contract */
-      });
+    // v1.36.x — through `auditLog()`, the only writer that stamps the actor.
+    void auditLog("custom-metric.entry.create.validation-failed", {
+      userId: user.id,
+      details: { issues: auditIssues, customMetricId: id },
+    }).catch(() => {
+      /* swallow — the 422 response is the contract */
+    });
     return returnAllZodIssues(parsed.error, 422);
   }
 

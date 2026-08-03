@@ -12,7 +12,7 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -62,7 +62,11 @@ export const POST = apiHandler(
 );
 
 async function postFamilyHistory(request: NextRequest): Promise<Response> {
-  const { user } = await requireAuth();
+  // v1.36.x — a delegated write, and the one where third-party health data is
+  // present by design: the row describes the record's relatives. It is stored
+  // as the record's own, exactly as the delegable READ arm above already
+  // serves it, and the audit trail names who entered it.
+  const { user } = await requireRecordAuth("write");
 
   const { data: rawBody, error: jsonError } = await safeJson(request, {
     maxBytes: 16 * 1024,

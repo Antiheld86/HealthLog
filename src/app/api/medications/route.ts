@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate, getEvent } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -93,7 +93,12 @@ async function respondWithExistingMirror(
 }
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  // v1.36.x — a delegated write, and the asymmetric one: a delegate can ADD a
+  // medication with its whole nested schedule, and can never edit or delete
+  // it afterwards — `PUT /api/medications/[id]` and the DELETE beside it stay
+  // on `requireAuth()` and refuse under a switch. Adding is help; rewriting
+  // the owner's cabinet is not.
+  const { user } = await requireRecordAuth("write");
 
   const { data: body, error: jsonError } = await safeJson(request, {
     maxBytes: 64 * 1024,

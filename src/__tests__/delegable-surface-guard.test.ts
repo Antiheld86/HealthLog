@@ -210,6 +210,159 @@ function modulesNaming(files: readonly string[], symbol: string): string[] {
   return files.filter((rel) => namesSymbol(rel, symbol));
 }
 
+/* -------------------------------------------------------------------------- */
+/* The call matcher: which symbol is called, and with what                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One call site, with its callee resolved back to the ORIGINAL exported name
+ * and its first argument, when that argument is a plain string literal.
+ *
+ * The membership matcher above answers "does this module name the symbol",
+ * which is the right question for an allowlist and the wrong one for the write
+ * leg: `requireRecordAuth("read")` and `requireRecordAuth("write")` name the
+ * same identifier and mean opposite things. So this walks call expressions and
+ * resolves the callee through the module's own import table — an aliased
+ * import (`requireRecordAuth as resolveRecord`) and a namespace-qualified call
+ * (`auth.requireRecordAuth`) both come back as `requireRecordAuth`, which is
+ * the property that makes "the write set equals this literal" hold against a
+ * module that renames its import.
+ */
+interface CallSite {
+  /** The original exported name, after alias resolution. */
+  name: string;
+  /** The first argument when it is a string literal; null otherwise. */
+  firstArg: string | null;
+}
+
+function callSitesIn(source: string, fileName: string): CallSite[] {
+  const parsed = ts.createSourceFile(
+    fileName,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    fileName.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+
+  // local name -> original exported name, and the set of namespace imports.
+  const aliases = new Map<string, string>();
+  const namespaces = new Set<string>();
+  parsed.forEachChild((node) => {
+    if (!ts.isImportDeclaration(node)) return;
+    const bindings = node.importClause?.namedBindings;
+    if (!bindings) return;
+    if (ts.isNamespaceImport(bindings)) {
+      namespaces.add(bindings.name.text);
+      return;
+    }
+    for (const spec of bindings.elements) {
+      aliases.set(spec.name.text, (spec.propertyName ?? spec.name).text);
+    }
+  });
+
+  const calls: CallSite[] = [];
+  const walk = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      let name: string | null = null;
+      if (ts.isIdentifier(callee)) {
+        name = aliases.get(callee.text) ?? callee.text;
+      } else if (
+        ts.isPropertyAccessExpression(callee) &&
+        ts.isIdentifier(callee.expression) &&
+        namespaces.has(callee.expression.text)
+      ) {
+        name = callee.name.text;
+      }
+      if (name !== null) {
+        const first = node.arguments[0];
+        calls.push({
+          name,
+          firstArg: first && ts.isStringLiteralLike(first) ? first.text : null,
+        });
+      }
+    }
+    node.forEachChild(walk);
+  };
+  parsed.forEachChild(walk);
+  return calls;
+}
+
+const callCache = new Map<string, CallSite[]>();
+
+function callSites(rel: string): CallSite[] {
+  const cached = callCache.get(rel);
+  if (cached !== undefined) return cached;
+  const found = callSitesIn(read(rel), rel);
+  callCache.set(rel, found);
+  return found;
+}
+
+/**
+ * Every call in this module that reaches the audit table through the Prisma
+ * client instead of through `auditLog()`.
+ *
+ * Matched structurally: a call whose callee is `<something>.auditLog.<verb>`,
+ * read off the property-access chain rather than off the file's text, so a
+ * comment or a string discussing the old shape cannot produce a finding and a
+ * call broken across lines cannot hide one. The delegated actor column is
+ * stamped in exactly one place, so any client-level write against this table
+ * is a row filed with no actor.
+ */
+const AUDIT_WRITE_VERBS = new Set([
+  "create",
+  "createMany",
+  "createManyAndReturn",
+  "upsert",
+  "update",
+  "updateMany",
+]);
+
+function directAuditWritesIn(source: string, fileName: string): string[] {
+  const parsed = ts.createSourceFile(
+    fileName,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const found: string[] = [];
+  const walk = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      if (
+        ts.isPropertyAccessExpression(callee) &&
+        AUDIT_WRITE_VERBS.has(callee.name.text) &&
+        ts.isPropertyAccessExpression(callee.expression) &&
+        callee.expression.name.text === "auditLog"
+      ) {
+        found.push(
+          `${callee.expression.expression.getText()}.auditLog.${callee.name.text}`,
+        );
+      }
+    }
+    node.forEachChild(walk);
+  };
+  parsed.forEachChild(walk);
+  return found;
+}
+
+/** Does this module call `symbol` anywhere, under any import name? */
+function callsSymbol(rel: string, symbol: string): boolean {
+  if (!read(rel).includes(symbol)) return false;
+  return callSites(rel).some((c) => c.name === symbol);
+}
+
+/** The `GrantNeed` literals this module passes to the record resolver. */
+function recordNeeds(rel: string): Set<string> {
+  if (!read(rel).includes(RECORD_RESOLVER)) return new Set();
+  return new Set(
+    callSites(rel)
+      .filter((c) => c.name === RECORD_RESOLVER && c.firstArg !== null)
+      .map((c) => c.firstArg as string),
+  );
+}
+
 /** Names of the top-level functions a module exports. */
 function exportedFunctionNames(rel: string): string[] {
   const parsed = ts.createSourceFile(
@@ -244,15 +397,18 @@ function exportedFunctionNames(rel: string): string[] {
  * route's description — the argument for why a delegate reading or writing
  * through it cannot extend their own reach.
  *
- * Note what a member means: the MODULE reaches the resolver, and in every case
- * below that is the GET arm alone. The write arms in these same files still
- * resolve through `requireAuth()`, which refuses outright while a switch is
- * active, so admitting a file here admits a read and nothing more. A delegable
- * write is a separate decision that would have to be made at each of them.
+ * Note what a member means: the MODULE reaches the resolver. Until v1.36.x
+ * that was the GET arm alone in every case; eleven of these files now also
+ * reach it from a POST arm, and those eleven are frozen a second time in
+ * {@link DELEGABLE_WRITE_ROUTES} with their own leg below. Membership here is
+ * therefore necessary and not sufficient for a delegable write: a file can sit
+ * in this list and still refuse every mutation, which is what the other
+ * thirty-one do. Any write arm not named in the write literal is a diff two
+ * lists have to agree on.
  */
 const DELEGABLE_ROUTES: Record<string, string> = {
   "app/api/measurements/route.ts":
-    "The record's readings. The GET returns values, units, timestamps and notes scoped `userId: user.id` and offers no control affordance; the POST arms in the same file keep `requireAuth()` and so refuse under a switch.",
+    "The record's readings. The GET returns values, units, timestamps and notes scoped `userId: user.id`; the POST arms are delegable writes (see the write literal) and the PUT / DELETE beside them are not.",
   "app/api/measurements/[id]/route.ts":
     "One reading of the record, fetched by id and guarded against the resolved user before it is serialised. The PUT and DELETE beside it keep `requireAuth()`.",
   "app/api/measurements/series/route.ts":
@@ -264,11 +420,11 @@ const DELEGABLE_ROUTES: Record<string, string> = {
   "app/api/measurement-reminders/[id]/route.ts":
     "One reminder of the record, fetched by id then guarded against the resolved user. The PUT and DELETE keep `requireAuth()`.",
   "app/api/labs/route.ts":
-    "The record's lab results. The only nested include is the biomarker's own reference range — no third party, no credential. Creating a result stays on `requireAuth()`.",
+    "The record's lab results. The only nested include is the biomarker's own reference range — no third party, no credential. Creating a result is a delegable write; editing and deleting one are not.",
   "app/api/labs/[id]/route.ts":
     "One lab result of the record, fetched by id then guarded against the resolved user before anything is serialised.",
   "app/api/biomarkers/route.ts":
-    "The record's biomarker catalogue: the analytes this account tracks and the ranges it tracks them against. No writes on the read arm.",
+    "The record's biomarker catalogue: the analytes this account tracks and the ranges it tracks them against. Adding a marker is a delegable write; the PUT and DELETE on the sibling route are refused.",
   "app/api/biomarkers/[id]/route.ts":
     "One biomarker of the record, fetch-then-guard against the resolved user.",
   "app/api/allergies/route.ts":
@@ -292,7 +448,7 @@ const DELEGABLE_ROUTES: Record<string, string> = {
   "app/api/custom-metrics/[id]/route.ts":
     "One custom metric of the record, scoped by the resolved user id in the query itself.",
   "app/api/custom-metrics/[id]/entries/route.ts":
-    "The entries of one custom metric, reached only after the metric itself resolves under the record's user id — the ownership hop runs before the entry query.",
+    "The entries of one custom metric, reached only after the metric itself resolves under the record's user id — the ownership hop runs before the entry query, on the read arm and on the delegable create arm alike.",
   "app/api/personal-records/route.ts":
     "The record's personal bests, `where: { userId: user.id }`. Nothing else in the file.",
   "app/api/sleep/night/route.ts":
@@ -304,7 +460,7 @@ const DELEGABLE_ROUTES: Record<string, string> = {
   "app/api/nutrients/daily/route.ts":
     "One nutrient's daily series over the record, scoped by the resolved user id.",
   "app/api/illness/episodes/route.ts":
-    "The record's illness episodes. Module-gated on the record; the create arm keeps `requireAuth()`.",
+    "The record's illness episodes. Module-gated on the record on both arms, so a delegate gets the surface only where the owner switched it on; the create arm is a delegable write.",
   "app/api/illness/episodes/[id]/route.ts":
     "One episode of the record, fetch-then-guard against the resolved user.",
   "app/api/illness/episodes/[id]/day-logs/route.ts":
@@ -328,17 +484,66 @@ const DELEGABLE_ROUTES: Record<string, string> = {
   "app/api/medications/[id]/schedule-revisions/route.ts":
     "One medication's archived schedule eras, behind the same ownership guard. The create arm keeps `requireAuth()` and its compliance backfill with it.",
   "app/api/medications/[id]/side-effects/route.ts":
-    "One medication's recorded side effects, behind the same ownership guard. The rate limit in this file belongs to the create arm.",
+    "One medication's recorded side effects, behind the same ownership guard. The rate limit in this file belongs to the create arm, which is a delegable write and keys its bucket on the ACTOR for exactly that reason.",
   "app/api/medications/[id]/inventory/route.ts":
     "One medication's inventory, behind the same ownership guard. The rate limit in this file belongs to the create arm.",
   "app/api/medications/[id]/phase-config/route.ts":
     "One medication's reminder phase config, behind the same ownership guard. The upsert arm keeps `requireAuth()`.",
   "app/api/medications/[id]/intake/route.ts":
-    "One medication's intake history, behind the same ownership guard. The taking of a dose is a write and stays on `requireAuth()`.",
+    "One medication's intake history, behind the same ownership guard. Marking a dose is a delegable write, and the one that notifies the owner rather than only filing an audit row.",
   "app/api/medications/intake/route.ts":
-    "The account-wide intake list, scoped through the resolved user. Its cache cell keys on the same id it scopes to.",
+    "The account-wide intake list, scoped through the resolved user. Its cache cell keys on the same id it scopes to, and the canonical slot write on the POST arm is delegable.",
   "app/api/medications/compliance/route.ts":
     "Batched compliance across the record's cabinet. The one delegable read that spends a quota, so its rate-limit bucket keys on the ACTOR: a delegate must burn their own allowance rather than lock the owner out, and must not collect a fresh one by switching records.",
+};
+
+/**
+ * Route modules permitted to WRITE into a record that may not be the caller's.
+ *
+ * A strict subset of {@link DELEGABLE_ROUTES}, and the shorter list on purpose:
+ * a delegate adds to a record and never rewrites it. No delete, no edit, no
+ * restore, no import, no sync ingest sits here, and `PUT /api/medications/[id]`
+ * is deliberately absent — adding a medication is in, correcting one is not,
+ * including the one the delegate created ten seconds ago with a typo in the
+ * dose. Every member is a create.
+ *
+ * Membership is decided by the ARGUMENT, not by the identifier: a module joins
+ * this list when it passes `"write"` to `requireRecordAuth`. That is what the
+ * thirty-one read-only delegable modules do not do, and it is the difference
+ * the identifier matcher above cannot see.
+ *
+ * Every member also has to call `auditLog`, asserted below. That is not a
+ * stylistic preference. The decision not to add a `writtenBy` column to eleven
+ * tables rests entirely on the audit trail carrying the actor, and `auditLog`
+ * is the only writer that stamps `actorUserId` — a member that filed its rows
+ * through a bare `prisma.auditLog.create`, or filed none at all, would make a
+ * delegate's contribution indistinguishable from the owner's own. Asserting it
+ * here is what turns that decision from a thing nobody has forgotten yet into
+ * a property of the list.
+ */
+const DELEGABLE_WRITE_ROUTES: Record<string, string> = {
+  "app/api/measurements/route.ts":
+    "Entering a reading. Both POST arms — single and batch — land rows under the resolved record; the safety-floor check, the reminder satisfaction and the rollup recompute all address the same record and are correct under substitution.",
+  "app/api/labs/route.ts":
+    "Entering a lab result. The free-text path may mint a biomarker, and mints it into the RECORD's catalogue — a result added to somebody's record that left the marker on the helper's account would be worse than useless to the owner.",
+  "app/api/biomarkers/route.ts":
+    "Adding an analyte to the record's catalogue. A name the record already tracks is the ordinary 409 from the same `(userId, name)` uniqueness the owner would hit themselves.",
+  "app/api/allergies/route.ts":
+    "Adding an allergy. The cleanest admission in the set: a plain statement about the record's own body, and the single most useful thing a caregiver can contribute.",
+  "app/api/family-history/route.ts":
+    "Adding a family-history entry. Third-party health data by design — the row describes the record's relatives — and it is stored as the record's own, which is exactly how the delegable read arm already serves it.",
+  "app/api/illness/episodes/route.ts":
+    "Opening an illness episode. The module gate runs against the RECORD before the write, so a delegate cannot create an episode inside a record whose owner switched the module off.",
+  "app/api/custom-metrics/[id]/entries/route.ts":
+    "Adding a value to one of the record's own metrics. The metric resolves under the record first, so a delegate can only feed a definition the owner made.",
+  "app/api/medications/[id]/side-effects/route.ts":
+    "Recording a side effect. Admitted on one condition, met at the call site: the POST rate bucket keys on the ACTOR, so a delegate burns their own allowance rather than the owner's and cannot collect a fresh one by switching records.",
+  "app/api/medications/route.ts":
+    "Adding a medication with its nested schedule. The schedule is the point — a medication nobody scheduled reminds nobody of anything. The edit and delete verbs on the sibling route stay refused.",
+  "app/api/medications/intake/route.ts":
+    "Marking a dose, canonical slot form. The cross-device sync, the web-push dose-clear and the badge recount stay addressed to the OWNER, which is correct: it is their dose and their devices. The owner also gets told who marked it.",
+  "app/api/medications/[id]/intake/route.ts":
+    "Marking a dose, per-medication form. Same family, same ownership guard against the record, same notification to the owner; this arm has no snooze, so the state is always one of the two markings.",
 };
 
 /**
@@ -360,11 +565,11 @@ const ACTOR_ROUTES: Record<string, string> = {
 };
 
 /**
- * Entries across both lists. Pinned so that the reason-loop below cannot stay
- * a formality by accident: every addition has to be counted here as well as
- * listed above, which is one more place a careless admission has to pass.
+ * Entries across all three lists. Pinned so that the reason-loop below cannot
+ * stay a formality by accident: every addition has to be counted here as well
+ * as listed above, which is one more place a careless admission has to pass.
  */
-const FROZEN_ENTRY_COUNT = 46;
+const FROZEN_ENTRY_COUNT = 57;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —
@@ -475,6 +680,131 @@ describe("the matchers see what they look for", () => {
     expect(PROSE_ONLY_MODULE.includes(RECORD_RESOLVER)).toBe(true);
     expect(PROSE_ONLY_MODULE.includes(ACTOR_RESOLVER)).toBe(true);
     expect(PROSE_ONLY_MODULE.includes("requireAdmin")).toBe(true);
+  });
+
+  it("reads the need argument through a direct, aliased and namespaced call", () => {
+    // The write leg turns on this and nothing else. `requireRecordAuth("read")`
+    // and `requireRecordAuth("write")` are the same identifier, so the
+    // identifier matcher above cannot tell a delegable read from a delegable
+    // write; if this matcher silently returned an empty set, the write leg
+    // would compare an empty set to an empty literal and agree with itself.
+    expect([...callSitesIn(DELEGABLE_MODULE, "d.ts")]).toContainEqual({
+      name: RECORD_RESOLVER,
+      firstArg: "read",
+    });
+
+    const WRITE_MODULE = `
+      import { requireRecordAuth as resolveRecord } from "@/lib/api-handler";
+
+      export const POST = apiHandler(async () => {
+        const { user } = await resolveRecord("write");
+        await auditLog("thing.create", { userId: user.id });
+        return apiSuccess({ id: user.id });
+      });
+    `;
+    const aliased = callSitesIn(WRITE_MODULE, "w.ts");
+    // Resolved back through the import table: the call site itself reads
+    // `resolveRecord(`, and a matcher keyed on the written name would report
+    // this module as neither a read nor a write.
+    expect(aliased).toContainEqual({
+      name: RECORD_RESOLVER,
+      firstArg: "write",
+    });
+    expect(aliased.some((c) => c.name === "auditLog")).toBe(true);
+
+    const NAMESPACED_WRITE = `
+      import * as auth from "@/lib/api-handler";
+
+      export const POST = auth.apiHandler(async () => {
+        const { user } = await auth.requireRecordAuth("write");
+        return apiSuccess({ id: user.id });
+      });
+    `;
+    expect(callSitesIn(NAMESPACED_WRITE, "nw.ts")).toContainEqual({
+      name: RECORD_RESOLVER,
+      firstArg: "write",
+    });
+  });
+
+  it("does not read a need out of prose or an unrelated string", () => {
+    // The word "write" appears twice as raw text here and neither occurrence
+    // is an argument to the resolver. A grep-shaped matcher enrols this file.
+    const NOT_A_WRITE = `
+      /** This route is delegable for reads. It must never write. */
+      import { requireRecordAuth } from "@/lib/api-handler";
+
+      const MODE = "write";
+
+      export const GET = apiHandler(async () => {
+        const { user } = await requireRecordAuth("read");
+        return apiSuccess({ id: user.id, mode: MODE });
+      });
+    `;
+    const sites = callSitesIn(NOT_A_WRITE, "nr.ts");
+    // Non-zero: the parse produced call sites, so the negative below is a
+    // measurement rather than an empty walk.
+    expect(sites.length).toBeGreaterThan(0);
+    expect(sites).toContainEqual({ name: RECORD_RESOLVER, firstArg: "read" });
+    expect(sites).not.toContainEqual({
+      name: RECORD_RESOLVER,
+      firstArg: "write",
+    });
+    expect(NOT_A_WRITE.includes('"write"')).toBe(true);
+  });
+
+  it("does not count an imported-but-uncalled auditLog", () => {
+    // Leg (e)'s audit assertion asks whether the module CALLS the helper. An
+    // import the module never reaches would satisfy an identifier matcher and
+    // stamp no actor on anything.
+    const IMPORTED_ONLY = `
+      import { auditLog } from "@/lib/auth/audit";
+      import { requireRecordAuth } from "@/lib/api-handler";
+
+      export const POST = apiHandler(async () => {
+        const { user } = await requireRecordAuth("write");
+        return apiSuccess({ id: user.id, helper: auditLog.name });
+      });
+    `;
+    const sites = callSitesIn(IMPORTED_ONLY, "io.ts");
+    expect(sites).toContainEqual({ name: RECORD_RESOLVER, firstArg: "write" });
+    expect(sites.some((c) => c.name === "auditLog")).toBe(false);
+    // …while the identifier matcher, which is the one this would have fooled,
+    // says yes.
+    expect(identifiersIn(IMPORTED_ONLY, "io.ts").has("auditLog")).toBe(true);
+  });
+
+  it("sees a client-level audit write, and not a comment about one", () => {
+    const OFFENDER = `
+      import { prisma } from "@/lib/db";
+      import { requireRecordAuth } from "@/lib/api-handler";
+
+      export const POST = apiHandler(async () => {
+        const { user } = await requireRecordAuth("write");
+        prisma.auditLog
+          .create({ data: { userId: user.id, action: "thing.failed" } })
+          .catch(() => {});
+        return apiSuccess({ id: user.id });
+      });
+    `;
+    // Split across lines exactly as the shipped call sites were. A matcher
+    // demanding a literal `prisma.auditLog.create(` on one line finds nothing
+    // here — the class of bug this repository has already shipped twice.
+    expect(directAuditWritesIn(OFFENDER, "off.ts")).toEqual([
+      "prisma.auditLog.create",
+    ]);
+
+    const PROSE = `
+      import { auditLog } from "@/lib/auth/audit";
+
+      export const POST = apiHandler(async () => {
+        // Through auditLog() rather than a bare prisma.auditLog.create,
+        // because only the helper stamps the actor.
+        await auditLog("thing.created", {});
+        return apiSuccess({});
+      });
+    `;
+    expect(directAuditWritesIn(PROSE, "prose.ts")).toEqual([]);
+    expect(PROSE.includes("prisma.auditLog.create")).toBe(true);
   });
 
   it("the co-occurrence rule fires on a module that does both", () => {
@@ -597,6 +927,7 @@ describe("every frozen entry carries a reason", () => {
   it("names why the route may say what it says", () => {
     const entries = [
       ...Object.entries(DELEGABLE_ROUTES),
+      ...Object.entries(DELEGABLE_WRITE_ROUTES),
       ...Object.entries(ACTOR_ROUTES),
     ];
 
@@ -678,6 +1009,91 @@ describe("(d) the out-of-band Bearer surfaces stay out of the switch", () => {
       expect(ids.has(ACTOR_RESOLVER)).toBe(false);
     },
   );
+});
+
+/* -------------------------------------------------------------------------- */
+/* (e) the delegable WRITE set                                                */
+/* -------------------------------------------------------------------------- */
+
+describe("(e) the delegable write set is frozen", () => {
+  it("equals the frozen write list", () => {
+    const scanned = routeModules();
+    expect(scanned.length).toBeGreaterThan(ROUTE_MODULE_FLOOR);
+
+    const writing = scanned.filter((rel) => recordNeeds(rel).has("write"));
+    expect(writing).toEqual(Object.keys(DELEGABLE_WRITE_ROUTES).sort());
+  });
+
+  it("is a strict subset of the delegable set", () => {
+    // A module cannot write into a record it may not read. The read list is
+    // where the argument for each file lives, so a write entry with no read
+    // entry would be an admission with no recorded reason.
+    for (const rel of Object.keys(DELEGABLE_WRITE_ROUTES)) {
+      expect(DELEGABLE_ROUTES, rel).toHaveProperty([rel]);
+    }
+    expect(Object.keys(DELEGABLE_WRITE_ROUTES).length).toBeLessThan(
+      Object.keys(DELEGABLE_ROUTES).length,
+    );
+  });
+
+  it("leaves the rest of the delegable set reading only", () => {
+    // The non-zero half of the leg above, and the one that makes an empty
+    // matcher fail: the read-only remainder must be found, must be large, and
+    // must be found by the SAME matcher that decided the write set. If
+    // `recordNeeds` stopped returning anything, this drops to zero and fails
+    // rather than agreeing that nothing writes.
+    const readOnly = Object.keys(DELEGABLE_ROUTES).filter(
+      (rel) => !(rel in DELEGABLE_WRITE_ROUTES),
+    );
+    expect(readOnly.length).toBeGreaterThan(20);
+    for (const rel of readOnly) {
+      const needs = recordNeeds(rel);
+      expect(needs.has("read"), `${rel} does not resolve a record read`).toBe(
+        true,
+      );
+      expect(needs.has("write"), `${rel} writes without being listed`).toBe(
+        false,
+      );
+    }
+  });
+
+  it("every write module files its rows through auditLog", () => {
+    // The condition of admission, enforced. `auditLog()` is the only writer
+    // that stamps `actorUserId`; a delegated write recorded without it is
+    // indistinguishable from the owner having done it themselves, and the
+    // decision NOT to add a provenance column to eleven tables was taken on
+    // the strength of this trail existing.
+    const modules = Object.keys(DELEGABLE_WRITE_ROUTES);
+    expect(modules.length).toBeGreaterThan(0);
+
+    for (const rel of modules) {
+      expect(callsSymbol(rel, "auditLog"), `${rel} never calls auditLog`).toBe(
+        true,
+      );
+    }
+  });
+
+  it("no write module reaches the audit table without the helper", () => {
+    // The other half of the same property, and the failure this repository
+    // actually shipped: the helper is imported and used on the happy path
+    // while a validation-failure breadcrumb goes straight to the table, where
+    // it lands with `actorUserId` NULL — a delegate's malformed payload filed
+    // as if the owner had typed it. Eleven such calls existed across these
+    // files before the write migration.
+    //
+    // AST, not text, per this file's own doctrine: these modules explain in
+    // prose why they no longer call the client directly, and a comment saying
+    // so must not be the thing that trips the guard.
+    const modules = Object.keys(DELEGABLE_WRITE_ROUTES);
+    expect(modules.length).toBeGreaterThan(0);
+
+    for (const rel of modules) {
+      expect(
+        directAuditWritesIn(read(rel), rel),
+        `${rel} writes an audit row without the helper`,
+      ).toEqual([]);
+    }
+  });
 });
 
 /* -------------------------------------------------------------------------- */
