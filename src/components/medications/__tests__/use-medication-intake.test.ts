@@ -3,6 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 
 import { toast } from "sonner";
 import {
+  intakeToastOptions,
   runLogIntake,
   runRecordIntake,
   runUndoIntake,
@@ -473,5 +474,69 @@ describe("runUndoIntake — shared soft-delete", () => {
 
     expect(toast.error).toHaveBeenCalledWith("medications.intakeUndoFailed");
     expect(toast.success).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * v1.36.x — the one decision every intake surface shares.
+ *
+ * Three surfaces record a dose and all three showed the same success toast:
+ * the cards, the log-intake dialog, and the dose-history ledger. Two of them
+ * learned to name the record and drop Undo inside somebody else's; the ledger
+ * built its own copy of the ternary and learned neither, so a delegate met a
+ * dead Undo on every dose they marked. This is the copy that is left.
+ *
+ * Whole objects rather than field probes: when one person's record is being
+ * separated from another's, a failure should print what would have been shown
+ * rather than `false !== true`.
+ *
+ * Mutation check, run: making `intakeToastOptions` ignore `recordName` → the
+ * two shared-record legs go red, printing the Undo action they returned.
+ */
+describe("intakeToastOptions — the shared toast decision", () => {
+  const onUndo = vi.fn();
+
+  it("carries an Undo in the caller's own record", () => {
+    expect(
+      intakeToastOptions({ recordName: null, eventId: "evt-1", t, onUndo }),
+    ).toEqual({
+      action: {
+        label: "medications.intakeUndo",
+        onClick: expect.any(Function),
+      },
+    });
+  });
+
+  it("names the record and offers no Undo inside somebody else's", () => {
+    expect(
+      intakeToastOptions({
+        recordName: "Margarethe",
+        eventId: "evt-1",
+        t,
+        onUndo,
+      }),
+    ).toEqual({ description: "recordSharing.toast.savedTo:Margarethe" });
+  });
+
+  it("still names the record when the write returned no event id", () => {
+    // The two arms are not alternatives: the receipt is owed either way, and
+    // an absent event id must not fall through to a bare "Saved".
+    expect(
+      intakeToastOptions({
+        recordName: "Margarethe",
+        eventId: undefined,
+        t,
+        onUndo,
+      }),
+    ).toEqual({ description: "recordSharing.toast.savedTo:Margarethe" });
+  });
+
+  it("carries nothing when there is neither a record to name nor an undo", () => {
+    expect(
+      intakeToastOptions({ recordName: null, eventId: undefined, t, onUndo }),
+    ).toBeUndefined();
+    expect(
+      intakeToastOptions({ recordName: null, eventId: "evt-1", t }),
+    ).toBeUndefined();
   });
 });

@@ -180,6 +180,28 @@ test.describe("delegated writes", () => {
     );
   });
 
+  test("a deep link opens exactly what the level admits", async ({ page }) => {
+    // The gate binds to the level the server resolved, not to a blanket
+    // "somebody else's record" flag. Both halves matter and only a browser
+    // can show either: the SSR suite holds a component's paint, never a URL.
+    //
+    // Admitted: entering a reading, so `?add=` opens the same sheet the
+    // header button opens.
+    await page.goto("/measurements?add=WEIGHT");
+    await expect(
+      page.locator('[data-slot="shared-record-banner"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-slot="responsive-sheet-content"]').first(),
+    ).toBeVisible();
+
+    // Also admitted: adding a medication with its schedule.
+    await page.goto("/medications?new=1");
+    await expect(
+      page.locator('[data-slot="medication-wizard-dialog"]'),
+    ).toBeVisible();
+  });
+
   test("the owner sees that somebody else was in their record", async () => {
     await ownerPage.goto("/settings/access");
     const rows = ownerPage.locator('[data-slot="record-activity-row"]');

@@ -30,6 +30,54 @@ interface MedicationIntakeIdentity {
 }
 
 /**
+ * What rides alongside a successful intake toast — and the one place that
+ * decides it.
+ *
+ * Three surfaces record a dose: the medication cards through
+ * {@link runRecordIntake}, the log-intake dialog through {@link runLogIntake},
+ * and the dose-history ledger, which builds its own POST because it also has
+ * an optimistic cache patch to make. All three showed the same success toast
+ * and all three had to reach the same two conclusions:
+ *
+ *   - inside somebody else's record, name the record. "Saved" alone is the one
+ *     confirmation a person acting for somebody else does not need.
+ *   - and drop Undo there. A delegate may record a dose and may not remove
+ *     one, so an Undo they can see is an Undo the server refuses.
+ *
+ * Two of the three learned that; the ledger did not, which is a delegate
+ * meeting a dead Undo on every dose they mark. Three copies of one ternary is
+ * how that happens, so there is one now.
+ */
+export function intakeToastOptions(input: {
+  /** The record the dose landed in, or null in the caller's own. */
+  recordName: string | null | undefined;
+  /** The created event, when the POST returned one. */
+  eventId: string | undefined;
+  t: Translator;
+  /** Reverse the write. Omitted where the caller offers no undo at all. */
+  onUndo?: (eventId: string) => void;
+}):
+  | { description: string }
+  | { action: { label: string; onClick: () => void } }
+  | undefined {
+  const { recordName, eventId, t, onUndo } = input;
+  if (recordName) {
+    return {
+      description: t("recordSharing.toast.savedTo", { name: recordName }),
+    };
+  }
+  if (eventId && onUndo) {
+    return {
+      action: {
+        label: t("medications.intakeUndo"),
+        onClick: () => onUndo(eventId),
+      },
+    };
+  }
+  return undefined;
+}
+
+/**
  * v1.12.2 — the take / skip + Undo intake orchestration shared by the
  * generic {@link MedicationCard} and the {@link Glp1MedicationCard}.
  *
@@ -146,20 +194,12 @@ export async function runRecordIntake(deps: {
           : "medications.intakeToastTaken",
         { name: medication.name },
       ),
-      recordName
-        ? {
-            description: t("recordSharing.toast.savedTo", {
-              name: recordName,
-            }),
-          }
-        : eventId
-          ? {
-              action: {
-                label: t("medications.intakeUndo"),
-                onClick: () => void undoIntake(eventId),
-              },
-            }
-          : undefined,
+      intakeToastOptions({
+        recordName,
+        eventId,
+        t,
+        onUndo: (id) => void undoIntake(id),
+      }),
     );
     await invalidateMedicationReads(queryClient);
     onRecorded?.(eventId, skipped);
@@ -248,17 +288,14 @@ export async function runLogIntake(deps: {
     // a real Undo action to attach; keeps the no-undo call signature
     // identical to the pre-fix behaviour (existing unit tests assert the
     // single-argument call).
-    if (recordName) {
-      toast.success(message, {
-        description: t("recordSharing.toast.savedTo", { name: recordName }),
-      });
-    } else if (eventId && undoIntake) {
-      toast.success(message, {
-        action: {
-          label: t("medications.intakeUndo"),
-          onClick: () => void undoIntake(eventId),
-        },
-      });
+    const options = intakeToastOptions({
+      recordName,
+      eventId,
+      t,
+      onUndo: undoIntake ? (id) => void undoIntake(id) : undefined,
+    });
+    if (options) {
+      toast.success(message, options);
     } else {
       toast.success(message);
     }

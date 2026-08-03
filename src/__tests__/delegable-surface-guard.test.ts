@@ -428,11 +428,11 @@ const DELEGABLE_ROUTES: Record<string, string> = {
   "app/api/biomarkers/[id]/route.ts":
     "One biomarker of the record, fetch-then-guard against the resolved user.",
   "app/api/allergies/route.ts":
-    "The record's allergy list — the single most useful thing a caregiver can read, and a plain list of the owner's own rows.",
+    "The record's allergy list — the single most useful thing a caregiver can read, and a plain list of the owner's own rows. The POST beside it is NOT delegable and is deliberately absent from the write literal below: the only surface that posts to it lives under `/settings`, which a switch closes, so admitting the write would freeze a permission ahead of any caller for it. The route comment carries the argument.",
   "app/api/allergies/[id]/route.ts":
     "One allergy of the record, fetch-then-guard against the resolved user.",
   "app/api/family-history/route.ts":
-    "The record's family history. The payload describes the owner's relatives, so it is the one admitted read where third-party health information is present by design rather than by accident; a caregiver reading it is the use the feature exists for, and the row is stored as the owner's.",
+    "The record's family history. The payload describes the owner's relatives, so it is the one admitted read where third-party health information is present by design rather than by accident; a caregiver reading it is the use the feature exists for, and the row is stored as the owner's. Its POST is not delegable, for the reason its allergy sibling gives plus one of its own — see the route comment.",
   "app/api/family-history/[id]/route.ts":
     "One family-history entry of the record, fetch-then-guard against the resolved user.",
   "app/api/mental-health/assessments/route.ts":
@@ -512,6 +512,17 @@ const DELEGABLE_ROUTES: Record<string, string> = {
  * thirty-one read-only delegable modules do not do, and it is the difference
  * the identifier matcher above cannot see.
  *
+ * v1.36.x — `POST /api/allergies` and `POST /api/family-history` left this
+ * list, and the removal is worth reading before either is proposed again. The
+ * argument for admitting them was never wrong; what they lacked was a caller.
+ * The only surface in the product that posts to either lives in Settings →
+ * Anamnese, and a switch closes `/settings` — so a delegate could not reach
+ * the form at any grant level, and the two entries were a permission frozen
+ * ahead of the surface that would exercise it. Both delegable READ arms stay:
+ * a caregiver reading the allergy list is what the feature is for. Whoever
+ * builds a caregiver-reachable medical-history surface adds them back in the
+ * same diff, which is the two-ended change this list is meant to hold to.
+ *
  * Every member also has to call `auditLog`, asserted below. That is not a
  * stylistic preference. The decision not to add a `writtenBy` column to eleven
  * tables rests entirely on the audit trail carrying the actor, and `auditLog`
@@ -528,10 +539,6 @@ const DELEGABLE_WRITE_ROUTES: Record<string, string> = {
     "Entering a lab result. The free-text path may mint a biomarker, and mints it into the RECORD's catalogue — a result added to somebody's record that left the marker on the helper's account would be worse than useless to the owner.",
   "app/api/biomarkers/route.ts":
     "Adding an analyte to the record's catalogue. A name the record already tracks is the ordinary 409 from the same `(userId, name)` uniqueness the owner would hit themselves.",
-  "app/api/allergies/route.ts":
-    "Adding an allergy. The cleanest admission in the set: a plain statement about the record's own body, and the single most useful thing a caregiver can contribute.",
-  "app/api/family-history/route.ts":
-    "Adding a family-history entry. Third-party health data by design — the row describes the record's relatives — and it is stored as the record's own, which is exactly how the delegable read arm already serves it.",
   "app/api/illness/episodes/route.ts":
     "Opening an illness episode. The module gate runs against the RECORD before the write, so a delegate cannot create an episode inside a record whose owner switched the module off.",
   "app/api/custom-metrics/[id]/entries/route.ts":
@@ -569,7 +576,7 @@ const ACTOR_ROUTES: Record<string, string> = {
  * stay a formality by accident: every addition has to be counted here as well
  * as listed above, which is one more place a careless admission has to pass.
  */
-const FROZEN_ENTRY_COUNT = 57;
+const FROZEN_ENTRY_COUNT = 55;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —

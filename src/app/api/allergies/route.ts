@@ -11,7 +11,7 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -67,10 +67,37 @@ export const GET = apiHandler(async (request: NextRequest) => {
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postAllergy));
 
 async function postAllergy(request: NextRequest): Promise<Response> {
-  // v1.36.x — a delegated write, and the cleanest of them: the row is a plain
-  // statement about the record's own body, and the caller appears in the audit
-  // trail rather than in the row.
-  const { user } = await requireRecordAuth("write");
+  // v1.36.x — the GET above is delegable and this is not, which is the
+  // opposite of where the classification landed and worth the paragraph.
+  //
+  // Nothing about the row changed: it is still a plain statement about the
+  // record's own body, still the single most useful thing a caregiver could
+  // contribute, and the argument for admitting it still holds. What it does
+  // not have is a caller. The only place in the product that posts here is the
+  // allergy manager in Settings → Anamnese, and `/settings/*` is not a
+  // shared-record destination — the shell shows the "not part of what was
+  // shared" panel there, so no delegate can reach the form at any level.
+  //
+  // An admitted write with no reachable surface is the one-ended change this
+  // repository keeps rediscovering (CLAUDE.md, "A two-ended change carries
+  // both ends"): the permission ships, the consumer is the follow-up, and
+  // nothing in the gate notices because every other check proves the other
+  // end. The frozen list is built the other way round on purpose — its own
+  // actor-surface note says the rest "arrive as their own diffs; naming them
+  // before they exist would freeze a guess."
+  //
+  // So this arm waits for the surface that would exercise it, and the two
+  // land together. Choosing that surface is design work, not a fix: allergies
+  // and family history have exactly one home today, that home is a personal
+  // account surface a switch rightly closes, and bolting a second copy onto a
+  // shared page would split one concept across two places. Re-admitting is
+  // one line here plus one entry in `delegable-surface-guard.test.ts` plus the
+  // paragraph that argues it — which is exactly the reviewed diff that guard
+  // exists to force.
+  //
+  // The half that was always the point is untouched: a caregiver can still
+  // READ the allergy list inside the record.
+  const { user } = await requireAuth();
 
   const { data: rawBody, error: jsonError } = await safeJson(request, {
     maxBytes: 16 * 1024,

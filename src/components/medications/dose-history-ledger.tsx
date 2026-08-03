@@ -94,7 +94,10 @@ import {
   refetchInactiveDailyReads,
 } from "@/lib/query-keys";
 import type { DoseHistoryStatus } from "@/lib/medications/scheduling/dose-history";
-import { runUndoIntake } from "@/components/medications/use-medication-intake";
+import {
+  intakeToastOptions,
+  runUndoIntake,
+} from "@/components/medications/use-medication-intake";
 import { IntakeEditDialog } from "@/components/medications/intake-edit-dialog";
 import { LedgerAddDialog } from "@/components/medications/dose-history-add-dialog";
 import {
@@ -291,26 +294,20 @@ export function DoseHistoryLedger({
               : "medications.intakeToastTaken",
             { name: medicationName },
           ),
-          recordName
-            ? {
-                description: t("recordSharing.toast.savedTo", {
-                  name: recordName,
-                }),
-              }
-            : eventId
-              ? {
-                  action: {
-                    label: t("medications.intakeUndo"),
-                    onClick: () =>
-                      void runUndoIntake({
-                        medication: { id: medicationId, name: medicationName },
-                        eventId,
-                        t,
-                        queryClient,
-                      }),
-                  },
-                }
-              : undefined,
+          // The shared decision, not a fourth copy of it: name the record it
+          // landed in, and withhold an Undo the server would refuse there.
+          intakeToastOptions({
+            recordName,
+            eventId,
+            t,
+            onUndo: (id) =>
+              void runUndoIntake({
+                medication: { id: medicationId, name: medicationName },
+                eventId: id,
+                t,
+                queryClient,
+              }),
+          }),
         );
         await invalidateKeys(queryClient, [
           ...medicationDependentKeys,
