@@ -22,13 +22,30 @@
  * local seen-stamp keys on a stable value (kept for the existing client
  * contract).
  */
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
 import { requireAssistantSurface } from "@/lib/feature-flags";
 import { readCoachNudgeStatus } from "@/lib/ai/coach/nudge-status";
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  // The RECORD's unread signal, not the caller's. The tempting reading is that
+  // the FAB is the delegate's own chrome and should keep answering about the
+  // delegate's own Coach — and that is exactly the defect this feature already
+  // shipped once, in a different place: an actor answer paints the delegate's
+  // unread dot on a page whose banner names somebody else. The shell hides the
+  // FAB while a switch is on, but this route is in the refusal log precisely
+  // because the query fires before `/api/auth/me` has resolved and the shell
+  // knows to hide it, so "the client never renders it" is not a property to
+  // rest a data scope on.
+  //
+  // What crosses the wire is a timestamp, a boolean and a conversation id, all
+  // of the record's own Coach thread. The Coach CHAT stays refused under a
+  // switch and that is not in tension with this: chat spends the owner's AI
+  // budget and writes into their conversation, and reading whether the thread
+  // has something unopened does neither.
+  const { user } = await requireRecordAuth("read");
+  // Operator-level flag — an `AppSettings` singleton, unaffected by whose
+  // record is open.
   await requireAssistantSurface("coach");
 
   // Shared with the `/coach` RSC prefetch (`src/app/coach/page.tsx`) so both

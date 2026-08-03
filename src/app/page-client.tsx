@@ -156,7 +156,7 @@ import {
 import type { DataSummary } from "@/lib/analytics/trends";
 import { mergeSlimAndThickAnalytics } from "@/lib/analytics/merge-slim-thick";
 import { isWindowSufficient } from "@/lib/analytics/window-confidence";
-import { buildDashboardBands } from "@/lib/dashboard/bands";
+import { buildDashboardBands, viewerBandProfile } from "@/lib/dashboard/bands";
 import { resolveWeightTargetOverride } from "@/lib/analytics/effective-range";
 import { toProfileSex } from "@/lib/profile/sex";
 import { apiGet } from "@/lib/api/api-fetch";
@@ -742,17 +742,28 @@ export default function DashboardPageClient({
   // `thresholdsData` is never fetched, so the client copy falls back to the
   // height-derived band for the frames before `serverBands` lands — exactly
   // as it already did for every other profile-derived number.
+  // v1.36.x — the profile this fallback reads is the CALLER's, and under a
+  // switch the caller is the delegate. `viewerBandProfile` is where that is
+  // decided and argued; the effect here is that a delegated visit draws no
+  // client-side band at all and waits for the snapshot's, which resolve
+  // against the record.
+  const inSharedRecord = user?.accountAccess?.active != null;
   const clientBands = useMemo(
     () =>
-      buildDashboardBands({
-        dateOfBirth: user?.dateOfBirth ? new Date(user.dateOfBirth) : null,
-        gender: toProfileSex(user?.gender),
-        heightCm: user?.heightCm ?? null,
-        weightTargetOverride: resolveWeightTargetOverride(
-          thresholdsData?.overrides ?? null,
+      buildDashboardBands(
+        viewerBandProfile(
+          {
+            dateOfBirth: user?.dateOfBirth ? new Date(user.dateOfBirth) : null,
+            gender: toProfileSex(user?.gender),
+            heightCm: user?.heightCm ?? null,
+            weightTargetOverride: resolveWeightTargetOverride(
+              thresholdsData?.overrides ?? null,
+            ),
+          },
+          inSharedRecord,
         ),
-      }),
-    [user, thresholdsData],
+      ),
+    [user, thresholdsData, inSharedRecord],
   );
   const bands = serverBands ?? clientBands;
   const bpTargets = bands.bpTargets;

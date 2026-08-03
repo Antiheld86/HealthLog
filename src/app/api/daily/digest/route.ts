@@ -15,7 +15,7 @@
  * standard 403 `module.disabled` envelope even over a Bearer token. The rail's
  * data-tile inputs inherit their own module gates via the snapshot builder.
  */
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import { NO_STORE_BUT_BFCACHE } from "@/lib/http/cache-headers";
@@ -24,7 +24,14 @@ import { loadDailyDigest } from "@/lib/daily/load-digest";
 export const dynamic = "force-dynamic";
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  // The record's Today hero. Same family as the dashboard snapshot and
+  // admitted on the same argument: an aggregate over the record's own data,
+  // assembled from already-cached values with no provider on the path. The
+  // module gate below now runs against the RECORD, which is the behaviour that
+  // matters — a delegate gets the hero only where the owner switched insights
+  // on, never where the delegate did. Re-examine with the snapshot when
+  // per-module scope lands; a digest is a summary of several modules at once.
+  const { user } = await requireRecordAuth("read");
   const m = await requireModuleEnabled(user.id, "insights");
   if (!m.enabled) return m.response;
 
