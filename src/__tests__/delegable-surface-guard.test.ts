@@ -403,7 +403,7 @@ function exportedFunctionNames(rel: string): string[] {
  * {@link DELEGABLE_WRITE_ROUTES} with their own leg below. Membership here is
  * therefore necessary and not sufficient for a delegable write: a file can sit
  * in this list and still refuse every mutation, which is what the other
- * thirty-one do. Any write arm not named in the write literal is a diff two
+ * forty-one do. Any write arm not named in the write literal is a diff two
  * lists have to agree on.
  */
 const DELEGABLE_ROUTES: Record<string, string> = {
@@ -495,6 +495,28 @@ const DELEGABLE_ROUTES: Record<string, string> = {
     "The account-wide intake list, scoped through the resolved user. Its cache cell keys on the same id it scopes to, and the canonical slot write on the POST arm is delegable.",
   "app/api/medications/compliance/route.ts":
     "Batched compliance across the record's cabinet. The one delegable read that spends a quota, so its rate-limit bucket keys on the ACTOR: a delegate must burn their own allowance rather than lock the owner out, and must not collect a fresh one by switching records.",
+
+  // The front door. Eight reads admitted together because `/` is the first
+  // page a delegate lands on and every one of them was refusing there, which
+  // made the entry point of the feature the worst surface in it. Six are
+  // aggregates or record state; two are presentation blobs whose write arms
+  // stay bare, and those two say so in their own line below.
+  "app/api/dashboard/snapshot/route.ts":
+    "The record's tile strip, and the widest aggregate in the product. Admitted on the whole-record grant: every input is a module the delegate may read directly, the briefing prose is lifted read-only off the owner's row rather than generated, and no credential or integration endpoint is in the payload. First route to re-examine if per-module scope ever lands.",
+  "app/api/daily/digest/route.ts":
+    "The record's Today hero. Same family and same argument as the snapshot, assembled from already-cached values with no provider on the path; the `insights` module gate now resolves against the RECORD, so a delegate gets the hero only where the owner switched it on.",
+  "app/api/gamification/achievements/route.ts":
+    "The record's badges, every one derived from the record's own history. Read-only in fact as well as in declaration since v1.35.3 moved the unlock INSERT onto the sweep job. Spans every module carrying a badge category, so it joins the snapshot and the digest in the per-module-scope re-examination.",
+  "app/api/insights/coach/nudge-status/route.ts":
+    "Whether the RECORD's Coach thread holds something unopened — a timestamp, a boolean and a conversation id. Not in tension with the Coach chat staying refused: chat spends the owner's AI budget and writes into their conversation, and this reads neither.",
+  "app/api/coach/reminders/route.ts":
+    "The record's reminder ledger. A 'remind me about X' note is a statement about the owner's own health, stored and encrypted on their row — the same shape as a mood note. The POST beside it keeps `requireAuth()`: writing into somebody's Coach memory puts a delegate's words in the voice the Coach reads back to the owner.",
+  "app/api/settings/reminder-thresholds/route.ts":
+    "The record's low-stock runway and reorder lead, which decide whether the OWNER's medication cards read 'low stock'. Projects exactly two integers out of `notificationPrefs`; the channels and endpoints in that object are unreachable from here and the route that serves it whole stays refused. No write arm exists.",
+  "app/api/dashboard/widgets/route.ts":
+    "The record's dashboard layout, read only. Settled by a fact rather than a preference: the snapshot already carries this layout and the client seeds the same cache cell from it, so an actor answer would put two people's arrangements in one key. The PUT and DELETE stay bare — a delegate adds to a record, never redecorates it.",
+  "app/api/medications/layout/route.ts":
+    "The record's medication-list presentation, read only. The stored `order` is a list of the OWNER's medication ids and unknown ids are dropped at apply time, so the caller's own order resolves to nothing against the owner's cabinet. The PUT and DELETE stay bare, and this is the refusal a delegate can actually walk into, since `/medications` is a shared destination.",
 };
 
 /**
@@ -553,15 +575,23 @@ const DELEGABLE_WRITE_ROUTES: Record<string, string> = {
  *
  * The intended members are the surfaces a switched session needs in order to
  * stay usable and to get back out: the account bootstrap payload, the switch
- * endpoint, logout, the native refresh route, the locale read. Two of them
+ * endpoint, logout, the native refresh route, the locale setter. Four of them
  * exist so far. The rest arrive as their own diffs here; naming them before
  * they exist would freeze a guess.
+ *
+ * Note that "the caller's own thing" is the test, not "read-only": the locale
+ * setter WRITES, and writes to the caller's own row resolved from their own
+ * session. No grant is consulted because none is needed.
  */
 const ACTOR_ROUTES: Record<string, string> = {
   "app/api/account/switch/route.ts":
     "The way back out. Every other route refuses under a switch, so if this one did too a browser could enter a record and never leave it. It reads and writes exactly one row — the caller's own session — renders nothing of the owner's, and grants nothing: the account it stamps is validated against a live grant first, and the stamp is re-checked on every request after.",
   "app/api/auth/me/route.ts":
     "The app shell reads it on every boot, including while a switch is on: the switcher, the banner naming whose record is open, and the route back out all bind this payload. Every field it returns is the caller's own — their preferences, their modules, their identity — and the one field about the switch says only which records they may open and which they are inside. It reads no row of the owner's, and its `accountAccess` block grants nothing: the resolver re-checks the grant on every delegated request regardless of what this payload said a moment ago.",
+  "app/api/auth/me/locale/route.ts":
+    "The UI language belongs to the person reading the screen, never to the record on it. Under a record scope this would transplant a delegate's choice onto the owner's row and send the owner's cron mail in a language they may not read. It has to keep working rather than merely refuse safely: the switcher's mount-time backfill fires on every page load, including the shared dashboard.",
+  "app/api/feature-flags/route.ts":
+    "Reads the `AppSettings` singleton and no user row at all, so there is no record for a switch to substitute. It answers about the deployment, which for this purpose is the caller's side of the request; the shell gates the Coach launcher and the assistant surfaces on it, so a 403 here is a piece of chrome deciding it does not exist.",
 };
 
 /**
@@ -569,7 +599,7 @@ const ACTOR_ROUTES: Record<string, string> = {
  * stay a formality by accident: every addition has to be counted here as well
  * as listed above, which is one more place a careless admission has to pass.
  */
-const FROZEN_ENTRY_COUNT = 57;
+const FROZEN_ENTRY_COUNT = 67;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —

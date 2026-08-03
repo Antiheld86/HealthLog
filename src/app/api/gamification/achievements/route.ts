@@ -1,4 +1,4 @@
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { requireModuleEnabled, resolveModuleMap } from "@/lib/modules/gate";
 import { annotate } from "@/lib/logging/context";
 import { apiSuccess } from "@/lib/api-response";
@@ -34,7 +34,22 @@ interface IosAchievement {
 export const dynamic = "force-dynamic";
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  // The record's badges. Every one of them is derived from the record's own
+  // history — the metrics, the module map and the unlock dates all come off
+  // the resolved account — so a delegate reads what the owner earned rather
+  // than a copy of their own tally under the owner's name. Nothing here is a
+  // preference of the person looking except the translation, and that resolves
+  // per request from the caller's locale below.
+  //
+  // Admitted as an aggregate on the whole-record grant. The badge grid spans
+  // every module that carries a badge category, so it joins the snapshot and
+  // the digest in the set to re-examine if per-module scope ever lands.
+  //
+  // Read-only in fact as well as in declaration: v1.35.3 moved the unlock
+  // INSERT onto the sweep job, so there is no write for a read grant to have
+  // to refuse. `requireRecordAuth("read")` would refuse a non-safe method
+  // anyway; this file exports no other verb.
+  const { user } = await requireRecordAuth("read");
 
   // v1.18.0 — when the account has the achievements module turned off the
   // whole gamification surface disappears: no badge evaluation, no unlock

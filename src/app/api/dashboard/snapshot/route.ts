@@ -29,7 +29,7 @@
  * read-only from `User.insightsCachedText`. The nightly
  * `insight-pregenerate` cron keeps that cache warm.
  */
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { apiSuccess } from "@/lib/api-response";
 import { NO_STORE_BUT_BFCACHE } from "@/lib/http/cache-headers";
@@ -38,7 +38,23 @@ import { readDashboardSnapshotCached } from "@/lib/dashboard/snapshot-read";
 export const dynamic = "force-dynamic";
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  // The record's tile strip, and the reason `/` is a shared destination at
+  // all. A delegate who cannot read this reads an empty dashboard under a
+  // banner naming the person whose record they just opened.
+  //
+  // The aggregate objection — a summary can carry a finding from a module the
+  // grant does not cover — is void while a grant is whole-record and
+  // all-or-nothing: there is no module the delegate may not read directly.
+  // This is the WIDEST aggregate in the product, so when per-module scope
+  // lands it is the first route to re-examine, and the re-examination is about
+  // the builder's inputs, not about this line. What the payload does not carry
+  // is as much the point: no credential, no integration endpoint, no
+  // notification channel, and the briefing prose is lifted read-only off the
+  // owner's own row rather than generated, so no provider is reachable here.
+  //
+  // The cache cell keys on the resolved id, so the owner's snapshot lands in
+  // the owner's cell and a delegated read neither reads nor poisons their own.
+  const { user } = await requireRecordAuth("read");
   annotate({ action: { name: "dashboard.snapshot" } });
 
   const timings: Record<string, number> = {};

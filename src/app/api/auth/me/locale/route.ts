@@ -22,7 +22,7 @@
 import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireActorAuth } from "@/lib/api-handler";
 import { apiError, apiSuccess, safeJson } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { locales, type Locale } from "@/lib/i18n/config";
@@ -37,7 +37,22 @@ function isLocale(value: unknown): value is Locale {
 }
 
 export const PUT = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  // An actor surface, and the clearest case for the mode existing at all: the
+  // UI language belongs to the person reading the screen, never to the record
+  // on it. Under a record scope this would write the delegate's choice onto
+  // the OWNER's row and then send the owner's cron mail in a language they may
+  // not read — a preference silently transplanted between two people.
+  //
+  // It has to keep working while a switch is on rather than merely refuse
+  // safely: the language switcher fires a mount-time backfill on every page
+  // load, including the shared dashboard, and a 403 there breaks switching
+  // language for as long as the delegate stays inside the record.
+  //
+  // This is a WRITE on an actor surface, which is exactly right and worth
+  // naming, because the mode carries no method escalation: the row it updates
+  // is the caller's own, resolved from their own session, and no grant is
+  // consulted or needed.
+  const { user } = await requireActorAuth();
   annotate({ action: { name: "user.locale.update" } });
 
   const { data: body, error: jsonError } = await safeJson(request, {

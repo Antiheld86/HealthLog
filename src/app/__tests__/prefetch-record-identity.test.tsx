@@ -9,12 +9,17 @@
  *   - `getSession()` answers who is CALLING and deliberately never the record
  *     being acted on (`src/lib/auth/session.ts`), so the RSC read the
  *     delegate's own rows;
- *   - a NON-delegable route (`/api/dashboard/snapshot`, `/api/daily/digest`,
- *     `/api/dashboard/widgets`) refuses the refetch outright, so the seeded
- *     value is what stays on screen — under a banner naming somebody else;
- *   - a DELEGABLE route (`/api/measurements/series-batch`, `/api/medications`)
- *     answers with the owner's rows, so the same page paints two people at
- *     once until the refetch lands.
+ *   - a NON-delegable route (`/api/user/thresholds`, `/api/mood/analytics`)
+ *     refuses the refetch outright, so the seeded value is what stays on
+ *     screen — under a banner naming somebody else;
+ *   - a DELEGABLE route (`/api/dashboard/snapshot`, `/api/daily/digest`,
+ *     `/api/dashboard/widgets`, `/api/measurements/series-batch`,
+ *     `/api/medications`) answers with the owner's rows, so the same page
+ *     paints two people at once until the refetch lands.
+ *
+ * The front-door reads moved from the first bullet to the second when `/` was
+ * made usable under a switch. That changed which ending a bad prefetch has,
+ * not whether it is one.
  *
  * These tests assert what reaches the cache, not which branch ran. Each one
  * reads the dehydrated queries off the returned `<HydrationBoundary>` and

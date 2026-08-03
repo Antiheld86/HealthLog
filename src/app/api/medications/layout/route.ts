@@ -11,7 +11,7 @@
  * lives on its own `User` column (`medication_list_layout_json`) per
  * the per-surface-column convention.
  */
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiSuccess,
   buildPayloadDiagnostic,
@@ -75,11 +75,21 @@ async function buildMedicationListLayout(
 }
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  // Read: the RECORD's presentation. Write: refused — see the PUT and DELETE.
+  //
+  // Same split as `/api/dashboard/widgets`, and here the read half decides
+  // itself: `order` is a list of MEDICATION IDS, and unknown ids are dropped
+  // at apply time. The caller's own order names the caller's own medications,
+  // so serving it against the owner's cabinet would resolve to nothing and the
+  // owner's list would fall back to default order — a preference that cannot
+  // apply is not a preference, it is noise. `/medications` is a shared
+  // destination, so this is a list a delegate really does see.
+  const { user } = await requireRecordAuth("read");
 
-  // 5-minute TTL matches the dashboard-widgets / insights-layout
-  // caches; the blob changes only on a view toggle or an order save,
-  // which invalidates via `invalidateUserMedicationListLayout()`.
+  // 5-minute TTL matches the dashboard-widgets / insights-layout caches; the
+  // blob changes only on a view toggle or an order save, which invalidates via
+  // `invalidateUserMedicationListLayout()`. Keyed on the resolved id, so a
+  // delegated read fills the owner's cell and never their own.
   const layout = await cached(
     caches.medicationListLayout as ServerCache<MedicationListLayoutWithToken>,
     user.id,
@@ -90,6 +100,13 @@ export const GET = apiHandler(async () => {
 });
 
 export const PUT = apiHandler(async (request: NextRequest) => {
+  // Bare on purpose, so it refuses under a switch while the GET does not. The
+  // reorder handle sits on `/medications`, which IS a shared destination, so
+  // this is the one refusal on the front-door set a delegate can actually walk
+  // into — and it is the correct one: the stored order is what the OWNER sees
+  // on their own next visit, and a helper tidying somebody else's cabinet into
+  // their preferred sequence is a change the owner never asked for and would
+  // have to undo by hand.
   const { user } = await requireAuth();
 
   const { data: rawBody, error: jsonError } = await safeJson(request, {
@@ -194,6 +211,8 @@ export const PUT = apiHandler(async (request: NextRequest) => {
 });
 
 export const DELETE = apiHandler(async () => {
+  // Bare, for the reason on the PUT: wiping somebody else's stored order is
+  // the same edit with a bigger blast radius.
   const { user } = await requireAuth();
 
   await prisma.user.update({
