@@ -191,6 +191,13 @@ function AccessOption({
       data-selected={selected ? "true" : "false"}
       className={[
         "flex min-h-11 cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors",
+        // The radio itself is `sr-only`, so the browser's own focus ring lands
+        // on a zero-size box: keyboard focus moved through this fieldset with
+        // nothing visible moving with it. WCAG 2.4.7, on the screen where
+        // somebody decides who may write into their health record. The label
+        // wears the ring instead, on the same `ring-ring/50 ring-2` token the
+        // capture picker's options use.
+        "has-[:focus-visible]:ring-ring/50 has-[:focus-visible]:ring-2",
         selected
           ? "border-primary bg-primary/5"
           : "border-border hover:bg-muted/40",

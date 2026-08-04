@@ -9438,7 +9438,7 @@
       "accessReadLabel": "Peut consulter",
       "accessReadCapability": "Elle peut lire tout ce que ce dossier partage. Elle ne peut rien ajouter ni rien modifier.",
       "accessWriteLabel": "Peut consulter et ajouter",
-      "accessWriteCapability": "Elle peut aussi ajouter au dossier : des mesures, des résultats de laboratoire, un nouvel analyte à suivre, une entrée de maladie, une valeur sur une mesure que vous suivez vous-même, un effet indésirable lié à un médicament, un nouveau médicament, et marquer une dose comme prise ou sautée. Elle ne peut rien modifier ni supprimer, pas même ce qu'elle a ajouté, et elle ne peut pas reporter un de vos rappels. Vous seul le pouvez.",
+      "accessWriteCapability": "Elle peut aussi ajouter au dossier : des mesures, des résultats de laboratoire, un nouvel analyte à suivre, une entrée de maladie, un effet indésirable lié à un médicament, un nouveau médicament, et marquer une dose comme prise ou sautée. Elle ne peut rien modifier ni supprimer, pas même ce qu'elle a ajouté, et elle ne peut pas reporter un de vos rappels. Vous seul le pouvez.",
       "expiresLabel": "L'accès prend fin le (facultatif)",
       "expiresHint": "Laissez ce champ vide pour un accès qui dure jusqu'à ce que quelqu'un y mette fin. Une date ici est vérifiée à chaque requête, l'accès s'arrête donc de lui-même à la fin de cette journée.",
       "submit": "Envoyer l'invitation",

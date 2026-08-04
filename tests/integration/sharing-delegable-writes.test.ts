@@ -451,22 +451,27 @@ writeContract("POST /api/biomarkers", {
  * block with a `writeContract` — in the same diff as the caregiver-reachable
  * surface that made it worth doing.
  */
-function refusedWriteContract(
+function refusedWriteContract<C = undefined>(
   name: string,
   c: {
-    call: () => Promise<Response>;
+    /** Seed whatever the write needs, owned by the RECORD. Mirrors `writeContract`. */
+    prepare?: (recordOwnerId: string) => Promise<C>;
+    call: (ctx: C) => Promise<Response>;
     ok: number;
     count: (userId: string) => Promise<number>;
   },
 ) {
+  const prepare = c.prepare ?? (async () => undefined as C);
+
   describe(name, () => {
     for (const access of ["READ", "WRITE"] as const) {
       it(`refuses a delegate holding a ${access} grant, and writes nothing`, async () => {
         const owner = await makeUser("owner");
         const delegate = await makeUser("delegate");
+        const ctx = await prepare(owner.id);
 
         await switchInto(owner.id, delegate.id, access);
-        const response = await c.call();
+        const response = await c.call(ctx);
 
         // The undeclared-mode refusal, not the no-grant one: the route names
         // no sharing mode at all, so the carrier is refused before any grant
@@ -485,9 +490,10 @@ function refusedWriteContract(
 
     it("still lets the owner write it themselves", async () => {
       const owner = await makeUser("owner");
+      const ctx = await prepare(owner.id);
       await signIn(owner.id);
 
-      const response = await c.call();
+      const response = await c.call(ctx);
 
       expect(response.status).toBe(c.ok);
       expect(await c.count(owner.id)).toBe(1);
@@ -574,10 +580,26 @@ describe("POST /api/illness/episodes — the module gate", () => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* 7 — custom-metric entries                                                  */
+/* 7 — custom-metric entries, the third that is NOT delegable                 */
 /* -------------------------------------------------------------------------- */
 
-writeContract<string>("POST /api/custom-metrics/[id]/entries", {
+/**
+ * The third withdrawal, one release after the other two, and the delay is what
+ * makes it worth a paragraph: the rule that removed allergies and family
+ * history fitted this route exactly and was applied to two of the three.
+ *
+ * The only surface that posts a tracked value is the entry form on
+ * `/custom-metrics/{id}`, which is not a shared-record destination — the shell
+ * renders "not part of what was shared" there before the form mounts, and
+ * `custom-metric-list.tsx` said so in its own comment while returning null. So
+ * the permission shipped named on the consent screen, in six languages, with
+ * nothing behind it.
+ *
+ * The GET arm stays delegable and the read suite pins it. Re-admitting means
+ * the same three moves the block above names, in the same diff as the surface
+ * that makes it reachable.
+ */
+refusedWriteContract<string>("POST /api/custom-metrics/[id]/entries", {
   prepare: async (recordOwnerId) => {
     const metric = await getPrismaClient().customMetric.create({
       data: { userId: recordOwnerId, name: "Water", unit: "ml" },
@@ -595,7 +617,6 @@ writeContract<string>("POST /api/custom-metrics/[id]/entries", {
     );
   },
   ok: 201,
-  auditAction: "customMetricEntry.create",
   count: (userId) =>
     getPrismaClient().customMetricEntry.count({ where: { userId } }),
 });
@@ -896,6 +917,114 @@ describe("POST /api/medications/intake — what a delegate may NOT do with it", 
       select: { snoozedUntil: true },
     });
     expect(med.snoozedUntil?.toISOString()).toBe(until.toISOString());
+  });
+});
+
+/**
+ * The way round the sibling route's refusal, closed.
+ *
+ * `POST /api/medications/intake` refuses a delegate changing a dose the owner
+ * already recorded. This route reaches the same rows through the slot upsert,
+ * so without the same rule it was simply the other door: an explicit skip
+ * posted onto a taken slot flipped the outcome and refunded the inventory the
+ * take had consumed.
+ *
+ * The rule compares OUTCOMES rather than refusing every write onto an actioned
+ * slot, and the third case is why. A double tap, an offline replay and a retry
+ * after a partial batch all re-post the SAME decision, and a caregiver hits all
+ * three; refusing those would make the feature unreliable exactly when somebody
+ * is standing in a kitchen with a pill box.
+ *
+ * Each case asserts the ROW, not only the status. A 403 that had already
+ * written the flip would be worse than no refusal at all, because it would read
+ * as protection.
+ */
+describe("POST /api/medications/[id]/intake — the slot upsert is not a way round", () => {
+  async function seedTakenSlot(ownerId: string) {
+    const medication = await seedMedication(ownerId, "Insulin");
+    const slot = new Date();
+    slot.setSeconds(0, 0);
+    const event = await getPrismaClient().medicationIntakeEvent.create({
+      data: {
+        userId: ownerId,
+        medicationId: medication.id,
+        scheduledFor: slot,
+        takenAt: slot,
+      },
+    });
+    return { medicationId: medication.id, slot, eventId: event.id };
+  }
+
+  async function postIntake(
+    medicationId: string,
+    body: Record<string, unknown>,
+  ) {
+    const { POST } = await import("@/app/api/medications/[id]/intake/route");
+    return post(
+      POST as Handler,
+      `/api/medications/${medicationId}/intake`,
+      body,
+      { id: medicationId },
+    );
+  }
+
+  it("refuses a delegate flipping the owner's taken dose to skipped", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    const { medicationId, slot, eventId } = await seedTakenSlot(owner.id);
+
+    await switchInto(owner.id, delegate.id, "WRITE");
+    const response = await postIntake(medicationId, {
+      skipped: true,
+      scheduledFor: slot.toISOString(),
+    });
+
+    expect(response.status).toBe(403);
+    expect((await payload(response)).meta?.errorCode).toBe(
+      "sharing.not_permitted",
+    );
+
+    const row = await getPrismaClient().medicationIntakeEvent.findUniqueOrThrow(
+      { where: { id: eventId }, select: { takenAt: true, skipped: true } },
+    );
+    expect(row.skipped).toBe(false);
+    expect(row.takenAt).not.toBeNull();
+  });
+
+  it("still accepts a delegate re-posting the same decision", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    const { medicationId, slot, eventId } = await seedTakenSlot(owner.id);
+
+    await switchInto(owner.id, delegate.id, "WRITE");
+    const response = await postIntake(medicationId, {
+      takenAt: new Date().toISOString(),
+      scheduledFor: slot.toISOString(),
+    });
+
+    expect([200, 201]).toContain(response.status);
+    const row = await getPrismaClient().medicationIntakeEvent.findUniqueOrThrow(
+      { where: { id: eventId }, select: { skipped: true, takenAt: true } },
+    );
+    expect(row.skipped).toBe(false);
+    expect(row.takenAt).not.toBeNull();
+  });
+
+  it("still lets the owner correct their own dose", async () => {
+    const owner = await makeUser("owner");
+    const { medicationId, slot, eventId } = await seedTakenSlot(owner.id);
+    await signIn(owner.id);
+
+    const response = await postIntake(medicationId, {
+      skipped: true,
+      scheduledFor: slot.toISOString(),
+    });
+
+    expect([200, 201]).toContain(response.status);
+    const row = await getPrismaClient().medicationIntakeEvent.findUniqueOrThrow(
+      { where: { id: eventId }, select: { skipped: true } },
+    );
+    expect(row.skipped).toBe(true);
   });
 });
 

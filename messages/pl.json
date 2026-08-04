@@ -9438,7 +9438,7 @@
       "accessReadLabel": "Może przeglądać",
       "accessReadCapability": "Może czytać wszystko, co ta karta udostępnia. Nie może niczego dodać ani zmienić.",
       "accessWriteLabel": "Może przeglądać i dodawać",
-      "accessWriteCapability": "Może też dodawać do kartoteki: pomiary, wyniki badań, nowy analit do śledzenia, wpis o chorobie, wartość we własnej mierze, działanie niepożądane leku, nowy lek oraz oznaczyć dawkę jako przyjętą lub pominiętą. Nie może niczego edytować ani usuwać, nawet tego, co sama dodała, ani odłożyć żadnego z Twoich przypomnień. Tylko Ty możesz.",
+      "accessWriteCapability": "Może też dodawać do kartoteki: pomiary, wyniki badań, nowy analit do śledzenia, wpis o chorobie, działanie niepożądane leku, nowy lek oraz oznaczyć dawkę jako przyjętą lub pominiętą. Nie może niczego edytować ani usuwać, nawet tego, co sama dodała, ani odłożyć żadnego z Twoich przypomnień. Tylko Ty możesz.",
       "expiresLabel": "Dostęp kończy się (opcjonalnie)",
       "expiresHint": "Zostaw puste, aby dostęp trwał, dopóki ktoś go nie zakończy. Data jest sprawdzana przy każdym żądaniu, więc dostęp kończy się sam z końcem tego dnia.",
       "submit": "Wyślij zaproszenie",

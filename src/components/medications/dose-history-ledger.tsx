@@ -564,8 +564,12 @@ export function DoseHistoryLedger({
  * Every settled row (taken / skipped / a past missed day / ad-hoc) carries
  * ONLY the kebab: Bearbeiten, the Übersprungen↔Genommen toggle, Löschen —
  * and, for a past missed slot, the Genommen / Übersprungen backfill marks.
+ *
+ * v1.36.x — exported for the delegated-affordance suite. The row's capability
+ * gating is the interesting part and the ledger around it needs a payload, a
+ * medication and a query client to paint one row.
  */
-function LedgerRowItem({
+export function LedgerRowItem({
   row,
   marking,
   isToday,
@@ -723,6 +727,35 @@ function LedgerRowItem({
               <Check aria-hidden="true" className="size-4" />
             )}
             {t("medications.detail.verlauf.markTaken")}
+          </Button>
+        )}
+        {/* v1.36.x — the other half of the same admitted verb. Marking a dose
+            taken OR skipped is one capability, and the medication card offers
+            both; this ledger offered a delegate only the first, because skip
+            lives in the kebab and the kebab is owner-only (it also holds edit,
+            re-attribute and delete). Rather than mix admitted and withheld
+            items in one menu, a delegate gets skip as its own control beside
+            take, which is the shape the card already uses. The owner keeps it
+            where it was. */}
+        {showTakenButton && canAdd && !canManage && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onMark(row, "skipped")}
+            disabled={takeBusy || skipBusy}
+            aria-busy={skipBusy || undefined}
+            className="min-h-9"
+            data-slot="ledger-mark-skipped"
+          >
+            {skipBusy ? (
+              <Loader2
+                aria-hidden="true"
+                className="size-4 animate-spin motion-reduce:animate-none"
+              />
+            ) : (
+              <SkipForward aria-hidden="true" className="size-4" />
+            )}
+            {t("medications.detail.verlauf.markSkipped")}
           </Button>
         )}
         {canManage && (

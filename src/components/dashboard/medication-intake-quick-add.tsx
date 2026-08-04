@@ -29,8 +29,12 @@ import {
   type DefaultMedicationOption,
 } from "@/lib/medications/default-medication";
 import { useAuth } from "@/hooks/use-auth";
+import { useActiveRecordName } from "@/hooks/use-record-capabilities";
 import { ApiError, apiGet, apiPost } from "@/lib/api/api-fetch";
-import { runUndoIntake } from "@/components/medications/use-medication-intake";
+import {
+  intakeToastOptions,
+  runUndoIntake,
+} from "@/components/medications/use-medication-intake";
 
 /**
  * v1.4.37 W7b — dashboard "Hinzufügen" → "Medikamenteneinnahme" quick-add.
@@ -111,6 +115,8 @@ export function MedicationIntakeQuickAdd({
   // logged-out mounts behave unchanged.
   const { user } = useAuth();
   const userTz = user?.timezone || "Europe/Berlin";
+  // The record this dose lands in, or null in the caller's own.
+  const recordName = useActiveRecordName();
 
   const { data: medicationsRaw, isLoading: medicationsLoading } = useQuery({
     queryKey: queryKeys.medications(),
@@ -220,26 +226,35 @@ export function MedicationIntakeQuickAdd({
         queryKey: queryKeys.complianceChartInline(),
       });
 
-      toast.success(
-        t("common.saved"),
-        eventId && selectedMedication
-          ? {
-              action: {
-                label: t("medications.intakeUndo"),
-                onClick: () =>
-                  void runUndoIntake({
-                    medication: {
-                      id: medicationId,
-                      name: selectedMedication.name,
-                    },
-                    eventId,
-                    t,
-                    queryClient,
-                  }),
-              },
-            }
+      // v1.36.x — the shared decision, not a fourth copy of it. This surface
+      // was left out of the collapse that took the other three: it offered a
+      // delegate an Undo hitting `DELETE /api/medications/{id}/intake/{id}`,
+      // which is not delegable and refuses, and it confirmed with a bare
+      // "Saved" — the one confirmation a person acting for somebody else does
+      // not need. It is reachable by a write delegate from the capture picker
+      // and from the dashboard quick-add, so both mattered.
+      const options = intakeToastOptions({
+        recordName,
+        eventId,
+        t,
+        onUndo: selectedMedication
+          ? (id) =>
+              void runUndoIntake({
+                medication: {
+                  id: medicationId,
+                  name: selectedMedication.name,
+                },
+                eventId: id,
+                t,
+                queryClient,
+              })
           : undefined,
-      );
+      });
+      if (options) {
+        toast.success(t("common.saved"), options);
+      } else {
+        toast.success(t("common.saved"));
+      }
       onSuccess?.();
     } catch (err) {
       setError(

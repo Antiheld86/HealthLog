@@ -34,6 +34,8 @@ import {
   refetchInactiveDailyReads,
 } from "@/lib/query-keys";
 import { apiPost } from "@/lib/api/api-fetch";
+import { useActiveRecordName } from "@/hooks/use-record-capabilities";
+import { intakeToastOptions } from "@/components/medications/use-medication-intake";
 import type { QueryKey } from "@tanstack/react-query";
 import type { LedgerSchedule } from "@/components/medications/dose-history-ledger";
 
@@ -132,6 +134,8 @@ export function LedgerAddDialog({
 }: LedgerAddDialogProps) {
   const { t } = useTranslations();
   const queryClient = useQueryClient();
+  // The record this dose lands in, or null in the caller's own.
+  const recordName = useActiveRecordName();
   const formId = useId();
 
   const [takenAt, setTakenAt] = useState(() => toDateTimeLocal(new Date()));
@@ -166,14 +170,28 @@ export function LedgerAddDialog({
       // apiPost throws so the catch below surfaces it rather than silently
       // dropping the dose.
       await apiPost(`/api/medications/${medicationId}/intake`, body);
-      toast.success(
-        t(
-          skipped
-            ? "medications.intakeToastSkipped"
-            : "medications.intakeToastTaken",
-          { name: medicationName },
-        ),
+      // v1.36.x — the shared decision. This surface offers no Undo, so what
+      // it was missing is the other half: inside somebody else's record the
+      // confirmation names the record, because "Taken" alone is the one
+      // confirmation a person acting for somebody else does not need. The
+      // ledger's "+ Eintrag" button that opens this dialog is gated on
+      // `canAdd`, so a delegate reaches it.
+      const toastOptions = intakeToastOptions({
+        recordName,
+        eventId: undefined,
+        t,
+      });
+      const message = t(
+        skipped
+          ? "medications.intakeToastSkipped"
+          : "medications.intakeToastTaken",
+        { name: medicationName },
       );
+      if (toastOptions) {
+        toast.success(message, toastOptions);
+      } else {
+        toast.success(message);
+      }
       await invalidateKeys(queryClient, [
         ...medicationDependentKeys,
         ledgerKey,

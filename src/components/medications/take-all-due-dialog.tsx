@@ -21,6 +21,7 @@ import { CheckCheck, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
 import { useTranslations } from "@/lib/i18n/context";
+import { useActiveRecordName } from "@/hooks/use-record-capabilities";
 import { formatDose } from "@/lib/medications/format-dose";
 import { formatTimeWindowRange } from "@/lib/time-window-format";
 import {
@@ -42,13 +43,19 @@ export function TakeAllDueDialog({
 }: TakeAllDueDialogProps) {
   const { t, locale } = useTranslations();
   const queryClient = useQueryClient();
+  const recordName = useActiveRecordName();
   const [submitting, setSubmitting] = useState(false);
 
   async function handleConfirm() {
     if (submitting) return;
     setSubmitting(true);
     try {
-      await runTakeAllDue({ medications: dueMedications, t, queryClient });
+      await runTakeAllDue({
+        medications: dueMedications,
+        t,
+        queryClient,
+        recordName,
+      });
       // Close regardless of partial failures — the summary toast carries
       // the counts and failed medications stay due on the page behind it.
       onOpenChange(false);

@@ -256,10 +256,20 @@ export function DocumentDetailSheet({
   // the review-first assist, the session-only summary, and content indexing.
   // The affordance itself is gated on `assistAvailable` (from usage); the
   // probe only resolves the transport mode + the actionable unavailable reason.
-  const capability = useDocumentAiCapability(open && documentId !== null);
+  //
+  // v1.36.x — and neither probe fires inside somebody else's record. The
+  // document reads behind this sheet are delegable; the AI verbs above them are
+  // not, and both of these routes stay on the caller's own authentication. A
+  // delegate would fire two queries that must 403 in order to compute an
+  // affordance every branch below already withholds on `canManage`.
+  const capability = useDocumentAiCapability(
+    canManage && open && documentId !== null,
+  );
   // When auto-read is ON, reading happens automatically on upload — the manual
   // per-document AI action row is redundant and collapses away.
-  const autoRead = useDocumentsAutoAiRead(open && documentId !== null);
+  const autoRead = useDocumentsAutoAiRead(
+    canManage && open && documentId !== null,
+  );
   const suggest = useSuggestDetails();
   const summary = useDocumentSummary();
   // Stored generation has an independent mutation state so transient

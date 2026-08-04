@@ -12,10 +12,14 @@ type Translator = (
  * The activity view renders every non-read row as one generic line: "somebody
  * made a change in your record". That was honest while sharing was read-only
  * and no delegate could make one. Now a delegate can enter a reading, a lab
- * result, an allergy, a family-history entry, an illness entry, a biomarker,
- * a tracked value, a side effect, a medication, and can mark a dose taken —
- * and "made a change" for ten different things is a way of answering nothing.
- * An owner reading this at breakfast wants the verb.
+ * result, an illness entry, a biomarker, a side effect, a medication, and can
+ * mark a dose taken — and "made a change" for seven different things is a way
+ * of answering nothing. An owner reading this at breakfast wants the verb.
+ *
+ * The map keeps a line for allergies, family history and a tracked value even
+ * though a delegate can no longer add any of the three: rows written while
+ * they were admitted sit in the same table and still have to render as
+ * something, which is the same reason the fallback below exists.
  *
  * ## Why unknown actions fall back rather than fail
  *

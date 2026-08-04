@@ -27,7 +27,12 @@ import { createHash } from "node:crypto";
 
 import { NextResponse } from "next/server";
 
-import { apiHandler, requireAuth, type AuthContext } from "@/lib/api-handler";
+import {
+  apiHandler,
+  requireAuth,
+  requireRecordAuth,
+  type AuthContext,
+} from "@/lib/api-handler";
 import { apiError, apiSuccess, getClientIp } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
@@ -437,9 +442,23 @@ async function postUpload(request: Request): Promise<Response> {
 
 export const POST = apiHandler(withIdempotency<[Request]>(postUpload));
 
-/** GET — list the caller's documents (search / filter / sort / paginate). */
+/**
+ * GET — list the record's documents (search / filter / sort / paginate).
+ *
+ * v1.36.x — delegable. `/documents` carries `sharedRecord: true` in the nav
+ * model, so the shell offers the destination under a switch and every read
+ * behind it refused: the vault rendered a query-error card, and the illness
+ * page's episode-documents tile rendered another one beside it. A clinical
+ * letter is health data belonging to the record, and reading it is the whole
+ * point of handing somebody the record.
+ *
+ * The POST above is NOT delegable and keeps `requireAuth()`. Uploading is not
+ * a verb the grant admits, and the module-level split matters here: the
+ * resolver escalates any non-safe method to `"write"`, so the two arms have to
+ * declare separately rather than share one line.
+ */
 export const GET = apiHandler(async (request: Request) => {
-  const { user } = await requireAuth();
+  const { user } = await requireRecordAuth("read");
 
   const gate = await requireModuleEnabled(user.id, "inboundDocuments");
   if (!gate.enabled) return gate.response;

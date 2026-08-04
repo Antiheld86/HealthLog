@@ -9438,7 +9438,7 @@
       "accessReadLabel": "Puede ver",
       "accessReadCapability": "Puede leer todo lo que este historial comparte. No puede añadir ni cambiar nada.",
       "accessWriteLabel": "Puede ver y añadir",
-      "accessWriteCapability": "También puede añadir a la ficha: mediciones, resultados de laboratorio, un nuevo analito a seguir, una entrada de enfermedad, un valor en una métrica propia, un efecto secundario de un medicamento, un medicamento nuevo, y marcar una dosis como tomada u omitida. No puede editar ni borrar nada, ni siquiera lo que añadió, ni aplazar uno de tus recordatorios. Solo tú puedes.",
+      "accessWriteCapability": "También puede añadir a la ficha: mediciones, resultados de laboratorio, un nuevo analito a seguir, una entrada de enfermedad, un efecto secundario de un medicamento, un medicamento nuevo, y marcar una dosis como tomada u omitida. No puede editar ni borrar nada, ni siquiera lo que añadió, ni aplazar uno de tus recordatorios. Solo tú puedes.",
       "expiresLabel": "El acceso termina el (opcional)",
       "expiresHint": "Déjalo vacío para un acceso que dure hasta que alguien lo termine. Una fecha aquí se comprueba en cada petición, así que el acceso se detiene solo al final de ese día.",
       "submit": "Enviar invitación",

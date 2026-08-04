@@ -26,9 +26,46 @@ import { MoodForm } from "@/components/mood/mood-form";
 import { MedicationIntakeQuickAdd } from "@/components/dashboard/medication-intake-quick-add";
 import { WaterQuickAddSheet } from "@/components/insights/nutrients/water-quick-add-sheet";
 import { useTranslations } from "@/lib/i18n/context";
+import {
+  useRecordCapabilities,
+  type RecordCapabilities,
+} from "@/hooks/use-record-capabilities";
 
 export type QuickEntryDialog =
   "measurement" | "mood" | "medicationIntake" | "water" | null;
+
+/**
+ * v1.36.x — which of the four the delegation admits, and the same rule the
+ * capture picker states at length.
+ *
+ * A WRITE grant covers entering a reading and marking a dose. A mood entry and
+ * a glass of water are not admitted verbs and the server refuses both under a
+ * switch.
+ */
+const DELEGABLE_QUICK_ENTRIES: ReadonlySet<NonNullable<QuickEntryDialog>> =
+  new Set(["measurement", "medicationIntake"]);
+
+/**
+ * The sheet that may actually be on screen.
+ *
+ * `DashboardHeader` gates the menu items that set this state, and that was the
+ * whole gate — so it held only for as long as the answer was already known.
+ * `resolveRecordCapabilities(undefined)` reads as the caller's own record
+ * until `/api/auth/me` settles, and the switch flow ends in a hard reload that
+ * wipes the persisted cache, so a delegate's first paint carries all four menu
+ * items. One of them opened a sheet that then stayed open on a form the server
+ * refuses.
+ *
+ * Re-deriving the open sheet from the current answer withdraws it instead.
+ * Pure and exported so the rule can be pinned without a click.
+ */
+export function admittedQuickEntry(
+  open: QuickEntryDialog,
+  caps: Pick<RecordCapabilities, "canAdd" | "canManage">,
+): QuickEntryDialog {
+  if (open === null || caps.canManage) return open;
+  return caps.canAdd && DELEGABLE_QUICK_ENTRIES.has(open) ? open : null;
+}
 
 /**
  * v1.11.3 F3 — guard the quick-entry sheets against an accidental
@@ -101,6 +138,10 @@ export function QuickEntrySheets({
   onClose: () => void;
 }) {
   const { t } = useTranslations();
+  const capabilities = useRecordCapabilities();
+  // Re-derived on every render, never latched: the answer can arrive after the
+  // sheet is already open. See `admittedQuickEntry`.
+  const openSheet = admittedQuickEntry(open, capabilities);
   // v1.4.27 R4 RC2 — DOM handles for the form action-row portal target
   // on each quick-entry sheet. The Sheet branch sticky-pins this slot.
   const [measurementFooterEl, setMeasurementFooterEl] =
@@ -132,7 +173,7 @@ export function QuickEntrySheets({
   return (
     <>
       <ResponsiveSheet
-        open={open === "measurement"}
+        open={openSheet === "measurement"}
         onOpenChange={handleQuickEntryOpenChange}
         title={t("measurements.addMeasurement")}
         footer={<div ref={setMeasurementFooterEl} className="flex w-full" />}
@@ -144,7 +185,7 @@ export function QuickEntrySheets({
         />
       </ResponsiveSheet>
       <ResponsiveSheet
-        open={open === "mood"}
+        open={openSheet === "mood"}
         onOpenChange={handleQuickEntryOpenChange}
         title={t("mood.addEntry")}
         footer={<div ref={setMoodFooterEl} className="flex w-full" />}
@@ -160,7 +201,7 @@ export function QuickEntrySheets({
           (Cancel + Save) portals into the sticky-pinned slot so it
           stays reachable above the soft keyboard on mobile. */}
       <ResponsiveSheet
-        open={open === "medicationIntake"}
+        open={openSheet === "medicationIntake"}
         onOpenChange={handleQuickEntryOpenChange}
         title={t("dashboard.medicationIntakeQuickAdd.sheetTitle")}
         description={t("dashboard.medicationIntakeQuickAdd.sheetDescription")}
@@ -175,7 +216,7 @@ export function QuickEntrySheets({
         />
       </ResponsiveSheet>
       <WaterQuickAddSheet
-        open={open === "water"}
+        open={openSheet === "water"}
         onOpenChange={handleQuickEntryOpenChange}
         onSuccess={onClose}
       />

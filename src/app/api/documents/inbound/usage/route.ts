@@ -7,7 +7,7 @@
  * still hold TOAST bytes until the purge job reclaims them, so "deleted"
  * bytes are never invisible weight and an undo never changes usage.
  */
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
 import { prisma } from "@/lib/db";
 import {
@@ -21,8 +21,20 @@ import type { DocumentUsageDto } from "@/lib/validations/inbound-documents";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * v1.36.x — delegable. The quota gauge is the least of it: this payload also
+ * carries the filter bar's condition chips (the record's episodes that hold a
+ * live document link) and the index-coverage counts, so without it the vault a
+ * delegate may read loses its filters and reads as a flat pile. Every figure is
+ * the record's own. The `assistAvailable` flag is an availability boolean of
+ * the same integration-adjacent kind `nutrients` already returns — no
+ * credential, endpoint or token crosses the wire, and every AI action it would
+ * gate stays refused under a switch.
+ *
+ * No write arm exists on this route.
+ */
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  const { user } = await requireRecordAuth("read");
   const gate = await requireModuleEnabled(user.id, "inboundDocuments");
   if (!gate.enabled) return gate.response;
 

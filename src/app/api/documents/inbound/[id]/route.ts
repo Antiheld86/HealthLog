@@ -9,7 +9,7 @@
  */
 import { NextRequest } from "next/server";
 
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
@@ -61,9 +61,22 @@ async function enforceWriteRateLimit(userId: string): Promise<Response | null> {
   return response;
 }
 
+/**
+ * GET — one document of the record, with its facts and condition links.
+ *
+ * v1.36.x — delegable. The list beside it is; opening a row from that list is
+ * the same read one document deeper, and a vault whose rows cannot be opened
+ * is a vault the delegate can only count. The row is fetched under the
+ * resolved user id before anything is serialised, so the substitution reaches
+ * the query rather than a filter after it.
+ *
+ * The PATCH and DELETE below keep `requireAuth()`. Retyping a document,
+ * relabelling it and deleting it are edits, and an edit stays with the owner —
+ * including of a document the delegate has just read.
+ */
 export const GET = apiHandler(
   async (_request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    const { user } = await requireRecordAuth("read");
     const gate = await requireModuleEnabled(user.id, "inboundDocuments");
     if (!gate.enabled) return gate.response;
 

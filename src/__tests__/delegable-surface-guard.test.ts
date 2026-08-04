@@ -448,7 +448,7 @@ const DELEGABLE_ROUTES: Record<string, string> = {
   "app/api/custom-metrics/[id]/route.ts":
     "One custom metric of the record, scoped by the resolved user id in the query itself.",
   "app/api/custom-metrics/[id]/entries/route.ts":
-    "The entries of one custom metric, reached only after the metric itself resolves under the record's user id — the ownership hop runs before the entry query, on the read arm and on the delegable create arm alike.",
+    "The entries of one custom metric, reached only after the metric itself resolves under the record's user id — the ownership hop runs before the entry query. The READ arm only: the POST left the write literal below in v1.36.x for the reason its allergy and family-history siblings did, and the route comment carries the argument.",
   "app/api/personal-records/route.ts":
     "The record's personal bests, `where: { userId: user.id }`. Nothing else in the file.",
   "app/api/sleep/night/route.ts":
@@ -517,6 +517,23 @@ const DELEGABLE_ROUTES: Record<string, string> = {
     "The record's dashboard layout, read only. Settled by a fact rather than a preference: the snapshot already carries this layout and the client seeds the same cache cell from it, so an actor answer would put two people's arrangements in one key. The PUT and DELETE stay bare — a delegate adds to a record, never redecorates it.",
   "app/api/medications/layout/route.ts":
     "The record's medication-list presentation, read only. The stored `order` is a list of the OWNER's medication ids and unknown ids are dropped at apply time, so the caller's own order resolves to nothing against the owner's cabinet. The PUT and DELETE stay bare, and this is the refusal a delegate can actually walk into, since `/medications` is a shared destination.",
+
+  // The document vault. Five reads admitted together for the reason the front
+  // door's eight were: `/documents` carries `sharedRecord: true`, so the shell
+  // offers the destination and every read behind it refused — the same failure
+  // v1.36.1 describes as fixed on `/`. Uploading, retyping, deleting, linking,
+  // indexing and every AI verb stay bare; the split is per-arm, because the
+  // resolver escalates a non-safe method to `"write"` on its own.
+  "app/api/documents/inbound/route.ts":
+    "The record's document list. The GET never selects the encrypted blob column and scopes every predicate to the resolved user id; the POST upload beside it is not delegable and keeps `requireAuth()`.",
+  "app/api/documents/inbound/[id]/route.ts":
+    "One document of the record with its staged facts and condition links, fetched under the resolved user id before anything is serialised. The PATCH and DELETE are edits and stay with the owner.",
+  "app/api/documents/inbound/[id]/thumbnail/route.ts":
+    "One document's thumbnail — the tile that makes the admitted list browsable. Owner-scoped through the 1:1 relation on the resolved document; the read-quota bucket keys on the ACTOR because decrypting costs something.",
+  "app/api/documents/inbound/[id]/original/route.ts":
+    "The document itself, which is the read the rest of the vault exists to reach: a caregiver needs the discharge letter, not its filing card. Same owner-scoped lookup, and the same actor-keyed bucket as the thumbnail, tighter because it decrypts the whole file.",
+  "app/api/documents/inbound/usage/route.ts":
+    "The record's vault state: quota, the filter bar's condition chips, and index coverage. Without it the admitted list loses its filters. The `assistAvailable` boolean is the same integration-adjacent availability flag `nutrients` already returns — no credential, endpoint or token — and every AI action it would gate stays refused. No write arm exists.",
 };
 
 /**
@@ -545,6 +562,15 @@ const DELEGABLE_ROUTES: Record<string, string> = {
  * builds a caregiver-reachable medical-history surface adds them back in the
  * same diff, which is the two-ended change this list is meant to hold to.
  *
+ * `POST /api/custom-metrics/[id]/entries` followed them out, one release late,
+ * and the delay is the lesson: the rule that removed the other two was applied
+ * to two of the three routes it fitted. The only surface that posts a tracked
+ * value is the entry form on `/custom-metrics/{id}`, which is not a
+ * shared-record destination — the shell renders the unavailable panel there
+ * before the form mounts, and `custom-metric-list.tsx` says so in its own
+ * comment while returning null. So the capability shipped named on the consent
+ * screen, in six languages, with nothing behind it. Its READ arm stays.
+ *
  * Every member also has to call `auditLog`, asserted below. That is not a
  * stylistic preference. The decision not to add a `writtenBy` column to eleven
  * tables rests entirely on the audit trail carrying the actor, and `auditLog`
@@ -563,8 +589,6 @@ const DELEGABLE_WRITE_ROUTES: Record<string, string> = {
     "Adding an analyte to the record's catalogue. A name the record already tracks is the ordinary 409 from the same `(userId, name)` uniqueness the owner would hit themselves.",
   "app/api/illness/episodes/route.ts":
     "Opening an illness episode. The module gate runs against the RECORD before the write, so a delegate cannot create an episode inside a record whose owner switched the module off.",
-  "app/api/custom-metrics/[id]/entries/route.ts":
-    "Adding a value to one of the record's own metrics. The metric resolves under the record first, so a delegate can only feed a definition the owner made.",
   "app/api/medications/[id]/side-effects/route.ts":
     "Recording a side effect. Admitted on one condition, met at the call site: the POST rate bucket keys on the ACTOR, so a delegate burns their own allowance rather than the owner's and cannot collect a fresh one by switching records.",
   "app/api/medications/route.ts":
@@ -606,7 +630,7 @@ const ACTOR_ROUTES: Record<string, string> = {
  * stay a formality by accident: every addition has to be counted here as well
  * as listed above, which is one more place a careless admission has to pass.
  */
-const FROZEN_ENTRY_COUNT = 65;
+const FROZEN_ENTRY_COUNT = 69;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —

@@ -100,10 +100,15 @@ import { DeleteButton } from "@/components/data-list/delete-button";
 import { SelectionActionBar } from "@/components/data-list/selection-action-bar";
 import { MedicationCardMenu } from "@/components/medications/medication-card-menu";
 import { MedicationIntakeActions } from "@/components/medications/card-parts/medication-intake-actions";
-import { visibleCaptureKinds } from "@/components/layout/capture-picker";
+import {
+  admittedCaptureKind,
+  visibleCaptureKinds,
+} from "@/components/layout/capture-picker";
+import { admittedQuickEntry } from "@/components/dashboard/quick-entry-sheets";
 import { TodayHero } from "@/components/daily/today-hero";
 import { VorsorgeDashboardCard } from "@/components/measurement-reminders/vorsorge-dashboard-card";
 import { EpisodeDocumentsCard } from "@/components/documents/episode-documents-card";
+import { LedgerRowItem } from "@/components/medications/dose-history-ledger";
 import { queryKeys } from "@/lib/query-keys";
 import type { DailyDigest } from "@/lib/daily/digest";
 import type { MeasurementReminder } from "@/hooks/use-measurement-reminders";
@@ -348,6 +353,12 @@ describe("linking a document to an illness episode", () => {
       expect(html).not.toContain(">Link<");
       expect(html).not.toContain("Upload");
       // The card itself stays — reading the episode's documents is a read.
+      // v1.36.x — and the resolver agrees now. This line was true of the
+      // intent and false of the route: the card's list query hit
+      // `GET /api/documents/inbound`, which resolved the CALLER and 403'd, so
+      // the card that "stays" rendered a query-error tile. That GET is
+      // delegable; `delegable-surface-guard.test.ts` freezes it and
+      // `sharing-delegable-routes.test.ts` drives it.
       expect(html).toContain('data-slot="episode-documents-card"');
     }
   });
@@ -380,5 +391,128 @@ describe("the capture picker's kinds", () => {
     expect(
       visibleCaptureKinds({ canAdd: true, canManage: true }, false, [...ALL]),
     ).toEqual(["measurement", "medication", "mood"]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The dose-history ledger's row actions                                      */
+/* -------------------------------------------------------------------------- */
+
+describe("marking a dose from the dose history", () => {
+  const node = (
+    <ul>
+      <LedgerRowItem
+        row={{
+          kind: "slot",
+          at: "2026-08-04T07:00:00.000Z",
+          timeOfDay: "07:00",
+          status: "upcoming",
+          intake: null,
+        }}
+        marking={null}
+        isToday
+        onMark={() => {}}
+        onToggleSkipped={() => {}}
+        onEdit={() => {}}
+        onDelete={() => {}}
+        onPin={() => {}}
+        onUnpin={() => {}}
+      />
+    </ul>
+  );
+
+  it("offers the owner take beside the kebab that holds the rest", () => {
+    const html = render(OWN_RECORD, node);
+    expect(html).toContain('data-slot="ledger-mark-taken"');
+    expect(html).toContain('data-slot="ledger-row-menu"');
+  });
+
+  it("offers a write delegate BOTH markings, and no row menu", () => {
+    // Taken and skipped are one admitted verb, not two — the medication card
+    // has always offered the pair. This surface offered a delegate only the
+    // first, because skip lives in the kebab and the kebab also holds edit,
+    // re-attribute and delete, which are the owner's. So skip gets its own
+    // control here rather than the menu opening up.
+    const html = render(WRITABLE, node);
+    expect(html).toContain('data-slot="ledger-mark-taken"');
+    expect(html).toContain('data-slot="ledger-mark-skipped"');
+    expect(html).not.toContain('data-slot="ledger-row-menu"');
+  });
+
+  it("offers a read-only delegate neither", () => {
+    const html = render(READ_ONLY, node);
+    expect(html).not.toContain('data-slot="ledger-mark-taken"');
+    expect(html).not.toContain('data-slot="ledger-mark-skipped"');
+    expect(html).not.toContain('data-slot="ledger-row-menu"');
+    // The row itself stays — reading the history is a read.
+    expect(html).toContain('data-slot="ledger-row"');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The first-paint window                                                     */
+/* -------------------------------------------------------------------------- */
+
+describe("a form opened before the record answered", () => {
+  /**
+   * The gap both capture surfaces had. `resolveRecordCapabilities(undefined)`
+   * reads as the caller's own record until `/api/auth/me` settles, and the
+   * switch flow ends in a hard reload that wipes the persisted cache — so the
+   * window is widest exactly when a delegate arrives. Both surfaces gated the
+   * CHOOSER at tap time and never asked again, which left the form standing
+   * once the answer landed.
+   *
+   * These assert the re-derivation, which is what closes it. What they cannot
+   * assert is the render, because there is no click here: the SSR note at the
+   * top of the file applies.
+   */
+  it("withdraws a capture form the shrunken offer no longer holds", () => {
+    // The chooser offered four; the answer arrives and offers two.
+    expect(admittedCaptureKind("mood", ["measurement", "medication"])).toBe(
+      null,
+    );
+    expect(admittedCaptureKind("water", ["measurement", "medication"])).toBe(
+      null,
+    );
+    // …and leaves an admitted one exactly where it was.
+    expect(
+      admittedCaptureKind("medication", ["measurement", "medication"]),
+    ).toBe("medication");
+    expect(admittedCaptureKind(null, ["measurement"])).toBe(null);
+  });
+
+  it("withdraws a dashboard quick-entry sheet the delegation does not admit", () => {
+    const DELEGATE = { canAdd: true, canManage: false };
+    expect(admittedQuickEntry("mood", DELEGATE)).toBe(null);
+    expect(admittedQuickEntry("water", DELEGATE)).toBe(null);
+    expect(admittedQuickEntry("measurement", DELEGATE)).toBe("measurement");
+    expect(admittedQuickEntry("medicationIntake", DELEGATE)).toBe(
+      "medicationIntake",
+    );
+  });
+
+  it("withdraws every quick-entry sheet from a read-only delegate", () => {
+    const READER = { canAdd: false, canManage: false };
+    for (const sheet of [
+      "measurement",
+      "mood",
+      "medicationIntake",
+      "water",
+    ] as const) {
+      expect(admittedQuickEntry(sheet, READER), sheet).toBe(null);
+    }
+  });
+
+  it("leaves the owner's own sheets alone", () => {
+    const OWNER_CAPS = { canAdd: true, canManage: true };
+    for (const sheet of [
+      "measurement",
+      "mood",
+      "medicationIntake",
+      "water",
+    ] as const) {
+      expect(admittedQuickEntry(sheet, OWNER_CAPS), sheet).toBe(sheet);
+    }
+    expect(admittedQuickEntry(null, OWNER_CAPS)).toBe(null);
   });
 });

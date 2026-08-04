@@ -22,12 +22,15 @@ import {
  * ## The two answers, and why there are two
  *
  * A grant at WRITE admits a short, closed list of verbs: entering readings,
- * lab results, an illness entry, a biomarker, a tracked value, a side effect, a
- * medication, and marking a dose taken or skipped. It admits nothing else.
+ * lab results, an illness entry, a biomarker, a side effect, a medication, and
+ * marking a dose taken or skipped. It admits nothing else.
  * Allergies and family history were on this list and left it before v1.36.1
  * shipped — the argument for them held, but the only surface that posts to
  * either lives under `/settings`, which a switch closes, so the permission had
- * no reachable caller. `delegable-surface-guard.test.ts` carries that argument
+ * no reachable caller. Logging a value on a tracked metric left for the same
+ * reason one release later: its only form sits on `/custom-metrics/{id}`,
+ * which a switch closes too.
+ * `delegable-surface-guard.test.ts` carries that argument
  * in full and is the list that binds; this paragraph has to agree with it. Editing, deleting, restoring, purging, importing and
  * bulk-acting stay with the owner, including on an entry the delegate added
  * themselves a minute ago, and so does every create the list does not name

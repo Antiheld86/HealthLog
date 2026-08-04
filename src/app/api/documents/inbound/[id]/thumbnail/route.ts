@@ -19,7 +19,7 @@
  */
 import { NextResponse } from "next/server";
 
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiError } from "@/lib/api-response";
 import { prisma } from "@/lib/db";
 import { decryptThumbnail } from "@/lib/documents/store";
@@ -40,15 +40,25 @@ export const dynamic = "force-dynamic";
 const THUMBNAIL_READ_LIMIT_PER_HOUR = 3000;
 const THUMBNAIL_READ_WINDOW_MS = 60 * 60 * 1000;
 
+/**
+ * v1.36.x — delegable. The vault grid is a wall of thumbnails, so a list a
+ * delegate may read whose tiles all 403 is the list without the part that
+ * makes it browsable. The thumbnail carries no more than the document it
+ * belongs to, which the same delegate may open.
+ *
+ * The bucket keys on the ACTOR, following `medications/compliance`: this read
+ * spends decryption CPU, so a delegate burns their own allowance rather than
+ * the owner's, and cannot collect a fresh one by switching records.
+ */
 export const GET = apiHandler(
   async (_request: Request, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    const { user, actor } = await requireRecordAuth("read");
 
     const gate = await requireModuleEnabled(user.id, "inboundDocuments");
     if (!gate.enabled) return gate.response;
 
     const rl = await checkRateLimit(
-      `documents-thumbnail:${user.id}`,
+      `documents-thumbnail:${actor.id}`,
       THUMBNAIL_READ_LIMIT_PER_HOUR,
       THUMBNAIL_READ_WINDOW_MS,
     );

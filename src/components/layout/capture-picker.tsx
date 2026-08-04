@@ -75,6 +75,34 @@ const CAPTURE_KIND_ORDER: ReadonlyArray<CaptureKind> = [
 ];
 
 /**
+ * The kind whose form may actually be on screen.
+ *
+ * Gating the chooser is not enough, and the gap is widest exactly when it
+ * matters. `resolveRecordCapabilities(undefined)` answers "your own record"
+ * until `/api/auth/me` settles — deliberately, so no add button blanks on
+ * every cold load — and the switch flow ends in a hard reload that wipes the
+ * persisted query cache. So a delegate's first paint offers all four kinds for
+ * as long as that query takes. `chooseKind` refused an unoffered kind at tap
+ * time and then never asked again, so a tap landing inside that window opened
+ * a form and left it open once the answer arrived: the delegate ends up
+ * standing on a form posting to a route the server refuses.
+ *
+ * Re-deriving the open form from the CURRENT offer is what closes it. Same
+ * shape `/measurements` and the medication wizard already use (`open={x &&
+ * capability}`) — a control that appears and withdraws is a much smaller lie
+ * than one that stays and 403s.
+ *
+ * Pure and exported so the rule can be pinned without a click; an SSR test
+ * cannot tap the button that opens the sheet.
+ */
+export function admittedCaptureKind(
+  kind: CaptureKind | null,
+  offered: ReadonlyArray<CaptureKind>,
+): CaptureKind | null {
+  return kind !== null && offered.includes(kind) ? kind : null;
+}
+
+/**
  * The capture kinds to offer, given what the record allows and whether the
  * nutrients module is on. Exported pure so the delegation rule can be pinned
  * without opening a sheet: an SSR test cannot tap the button that opens it.
@@ -108,6 +136,9 @@ export function CapturePicker({ open, onOpenChange }: CapturePickerProps) {
     CAPTURE_KIND_ORDER,
   );
   const [kind, setKind] = useState<CaptureKind | null>(null);
+  // Re-derived on every render, never latched: the offer can shrink under a
+  // sheet that is already open. See `admittedCaptureKind`.
+  const openKind = admittedCaptureKind(kind, offered);
   const [footerEl, setFooterEl] = useState<HTMLDivElement | null>(null);
   // v1.30.1 — mirrors `QuickEntrySheets`' `confirmDiscardOpen`: hold a
   // dismiss attempt here instead of closing outright when the form
@@ -177,10 +208,10 @@ export function CapturePicker({ open, onOpenChange }: CapturePickerProps) {
     mood: t("mood.addEntry"),
     water: t("nutrients.hydration.quickAddTitle"),
   };
-  // `kind === null` keeps the form sheet closed (the title is unread then);
-  // the mood label is the harmless default, matching the prior ternary's
-  // else branch.
-  const formTitle = kind ? formTitleByKind[kind] : t("mood.addEntry");
+  // `openKind === null` keeps the form sheet closed (the title is unread
+  // then); the mood label is the harmless default, matching the prior
+  // ternary's else branch.
+  const formTitle = openKind ? formTitleByKind[openKind] : t("mood.addEntry");
 
   return (
     <>
@@ -219,26 +250,26 @@ export function CapturePicker({ open, onOpenChange }: CapturePickerProps) {
 
       {/* The chosen capture surface, reusing the existing form. */}
       <ResponsiveSheet
-        open={kind !== null && kind !== "water"}
+        open={openKind !== null && openKind !== "water"}
         onOpenChange={handleFormOpenChange}
         title={formTitle}
         footer={<div ref={setFooterEl} className="flex w-full" />}
       >
-        {kind === "measurement" && (
+        {openKind === "measurement" && (
           <MeasurementForm
             onSuccess={closeForm}
             onCancel={closeForm}
             footerSlot={footerEl}
           />
         )}
-        {kind === "medication" && (
+        {openKind === "medication" && (
           <MedicationIntakeQuickAdd
             onSuccess={closeForm}
             onCancel={closeForm}
             footerSlot={footerEl}
           />
         )}
-        {kind === "mood" && (
+        {openKind === "mood" && (
           <MoodForm
             onSuccess={closeForm}
             onCancel={closeForm}
@@ -247,7 +278,7 @@ export function CapturePicker({ open, onOpenChange }: CapturePickerProps) {
         )}
       </ResponsiveSheet>
 
-      {nutrientsEnabled && kind === "water" && (
+      {openKind === "water" && (
         <WaterQuickAddSheet
           open
           onOpenChange={handleFormOpenChange}

@@ -1756,3 +1756,308 @@ describe("GET /api/medications/compliance — the bucket follows the actor", () 
     );
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* The document vault                                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * v1.36.x — `/documents` carries `sharedRecord: true`, so the shell offered
+ * the destination under a switch while every read behind it refused: the vault
+ * painted a query-error card, and the illness page's episode-documents tile
+ * painted another beside it. A clinical letter is health data belonging to the
+ * record, and reading it is much of the point of handing somebody the record.
+ *
+ * Five GET arms moved. The upload, the retype, the delete, the episode link
+ * and every AI verb did not, and `delegable-surface-guard.test.ts` is what
+ * freezes that split — this file asserts the moved arms actually substitute.
+ */
+async function enableDocuments(userId: string, enabled = true) {
+  await getPrismaClient().user.update({
+    where: { id: userId },
+    data: { modulePreferencesJson: { inboundDocuments: enabled } },
+  });
+}
+
+async function seedDocument(userId: string, title: string) {
+  const { encryptDocumentContent } = await import("@/lib/documents/store");
+  const { content, codec } = encryptDocumentContent(
+    Buffer.from(`${title} body`, "utf8"),
+  );
+  return getPrismaClient().inboundDocument.create({
+    data: {
+      userId,
+      title,
+      filename: `${title}.pdf`,
+      mimeType: "application/pdf",
+      byteSize: 11,
+      contentEncrypted: content,
+      contentCodec: codec,
+    },
+  });
+}
+
+describe("GET /api/documents/inbound", () => {
+  it("lists the owner's documents to a delegate, never the delegate's own", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await enableDocuments(owner.id);
+    await enableDocuments(delegate.id);
+    await seedDocument(owner.id, "owner-letter");
+    await seedDocument(delegate.id, "delegate-letter");
+
+    await switchInto(owner.id, delegate.id);
+    const { GET } = await import("@/app/api/documents/inbound/route");
+    const response = await call(GET as Handler, "/api/documents/inbound");
+
+    expect(response.status).toBe(200);
+    const payload = (await body(response)).data as {
+      documents: { title: string | null }[];
+    };
+    // Both named, separately: an empty list satisfies "the delegate's rows are
+    // absent" while hiding the failure this whole feature is about.
+    expect(payload.documents.map((d) => d.title)).toEqual(["owner-letter"]);
+  });
+
+  it("follows the OWNER's module switch, not the delegate's", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await enableDocuments(owner.id, false);
+    await enableDocuments(delegate.id, true);
+
+    await switchInto(owner.id, delegate.id);
+    const { GET } = await import("@/app/api/documents/inbound/route");
+    const response = await call(GET as Handler, "/api/documents/inbound");
+
+    expect(response.status).toBe(403);
+    expect((await body(response)).meta?.errorCode).toBe("module.disabled");
+  });
+
+  it("refuses the next request after the grant is revoked", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await enableDocuments(owner.id);
+    await seedDocument(owner.id, "owner-letter");
+
+    const { GET } = await import("@/app/api/documents/inbound/route");
+    const { grant } = await switchInto(owner.id, delegate.id);
+    expect((await call(GET as Handler, "/api/documents/inbound")).status).toBe(
+      200,
+    );
+
+    await revokeGrant(grant.id);
+    await expectDenied(await call(GET as Handler, "/api/documents/inbound"));
+  });
+
+  it("is unchanged for a caller who has not switched", async () => {
+    const plain = await makeUser("plain");
+    await enableDocuments(plain.id);
+    await seedDocument(plain.id, "my-letter");
+    await signIn(plain.id);
+
+    const { GET } = await import("@/app/api/documents/inbound/route");
+    const response = await call(GET as Handler, "/api/documents/inbound");
+    expect(response.status).toBe(200);
+    const payload = (await body(response)).data as {
+      documents: { title: string | null }[];
+    };
+    expect(payload.documents.map((d) => d.title)).toEqual(["my-letter"]);
+  });
+
+  it("refuses the upload arm beside it, at either grant level", async () => {
+    // The half that must NOT have moved. The module-level split is the whole
+    // reason the two arms declare separately, and a future edit that hoisted
+    // one resolver to the top of the file would make this go red rather than
+    // quietly admitting uploads.
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await enableDocuments(owner.id);
+
+    const grant = await getPrismaClient().accountGrant.create({
+      data: {
+        grantorId: owner.id,
+        granteeId: delegate.id,
+        access: "WRITE",
+        acceptedAt: new Date(),
+      },
+    });
+    const session = await signIn(delegate.id);
+    await getPrismaClient().session.update({
+      where: { id: session.id },
+      data: { actingAsUserId: owner.id },
+    });
+    expect(grant.access).toBe("WRITE");
+
+    const { POST } = await import("@/app/api/documents/inbound/route");
+    const form = new FormData();
+    form.set(
+      "file",
+      new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], "scan.pdf", {
+        type: "application/pdf",
+      }),
+    );
+    const response = await (
+      POST as unknown as (r: Request) => Promise<Response>
+    )(
+      new NextRequest("http://localhost/api/documents/inbound", {
+        method: "POST",
+        body: form,
+      }),
+    );
+
+    // The undeclared-mode refusal: the POST arm names no sharing mode, so the
+    // carrier is refused before any grant is read.
+    expect(response.status).toBe(403);
+    expect((await body(response)).meta?.errorCode).toBe(
+      "sharing.not_permitted",
+    );
+    expect(
+      await getPrismaClient().inboundDocument.count({
+        where: { userId: owner.id },
+      }),
+    ).toBe(0);
+    expect(
+      await getPrismaClient().inboundDocument.count({
+        where: { userId: delegate.id },
+      }),
+    ).toBe(0);
+  });
+});
+
+describe("the per-document reads", () => {
+  it("serves the owner's document, its file and its thumbnail slot", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await enableDocuments(owner.id);
+    const doc = await seedDocument(owner.id, "owner-letter");
+    // The delegate's own document, so a handler that fell back to the caller
+    // would resolve something rather than 404 and the assertion would be about
+    // absence instead of substitution.
+    const mine = await seedDocument(delegate.id, "delegate-letter");
+
+    await switchInto(owner.id, delegate.id);
+
+    const detail = await import("@/app/api/documents/inbound/[id]/route");
+    const detailResponse = await call(
+      detail.GET as Handler,
+      `/api/documents/inbound/${doc.id}`,
+      { id: doc.id },
+    );
+    expect(detailResponse.status).toBe(200);
+    expect(
+      ((await body(detailResponse)).data as { title: string | null }).title,
+    ).toBe("owner-letter");
+
+    // The delegate's OWN document is unreachable from inside the record: the
+    // query is scoped to the resolved user, so their id resolves to nothing.
+    const mineResponse = await call(
+      detail.GET as Handler,
+      `/api/documents/inbound/${mine.id}`,
+      { id: mine.id },
+    );
+    expect(mineResponse.status).toBe(404);
+
+    const original =
+      await import("@/app/api/documents/inbound/[id]/original/route");
+    const fileResponse = await call(
+      original.GET as Handler,
+      `/api/documents/inbound/${doc.id}/original`,
+      { id: doc.id },
+    );
+    expect(fileResponse.status).toBe(200);
+    expect(await fileResponse.text()).toContain("owner-letter body");
+  });
+
+  it("keys the read quota on the ACTOR, not the record", async () => {
+    // The `medications/compliance` rule, applied to the two reads that spend
+    // decryption CPU: a delegate burns their own allowance rather than locking
+    // the owner out, and cannot collect a fresh one by switching records.
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await enableDocuments(owner.id);
+    const doc = await seedDocument(owner.id, "owner-letter");
+
+    await switchInto(owner.id, delegate.id);
+    const original =
+      await import("@/app/api/documents/inbound/[id]/original/route");
+    expect(
+      (
+        await call(
+          original.GET as Handler,
+          `/api/documents/inbound/${doc.id}/original`,
+          { id: doc.id },
+        )
+      ).status,
+    ).toBe(200);
+
+    const keys = (
+      await getPrismaClient().rateLimit.findMany({
+        where: { key: { startsWith: "documents-original:" } },
+      })
+    ).map((row) => row.key);
+    expect(keys).toEqual([`documents-original:${delegate.id}`]);
+  });
+
+  it("refuses the detail read once the grant ends", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await enableDocuments(owner.id);
+    const doc = await seedDocument(owner.id, "owner-letter");
+
+    const { GET } = await import("@/app/api/documents/inbound/[id]/route");
+    const { grant } = await switchInto(owner.id, delegate.id);
+    expect(
+      (
+        await call(GET as Handler, `/api/documents/inbound/${doc.id}`, {
+          id: doc.id,
+        })
+      ).status,
+    ).toBe(200);
+
+    await revokeGrant(grant.id);
+    await expectDenied(
+      await call(GET as Handler, `/api/documents/inbound/${doc.id}`, {
+        id: doc.id,
+      }),
+    );
+  });
+});
+
+describe("GET /api/documents/inbound/usage", () => {
+  it("reports the record's vault, not the delegate's", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await enableDocuments(owner.id);
+    await seedDocument(owner.id, "owner-letter");
+    await seedDocument(delegate.id, "delegate-a");
+    await seedDocument(delegate.id, "delegate-b");
+
+    await switchInto(owner.id, delegate.id);
+    const { GET } = await import("@/app/api/documents/inbound/usage/route");
+    const response = await call(GET as Handler, "/api/documents/inbound/usage");
+
+    expect(response.status).toBe(200);
+    const payload = (await body(response)).data as {
+      contentIndex: { totalCount: number };
+    };
+    // One, not two: the counts follow the record. Both accounts hold rows, so
+    // a zero here would be a different failure and this is not it.
+    expect(payload.contentIndex.totalCount).toBe(1);
+  });
+
+  it("is unchanged for a caller who has not switched", async () => {
+    const plain = await makeUser("plain");
+    await enableDocuments(plain.id);
+    await seedDocument(plain.id, "a");
+    await seedDocument(plain.id, "b");
+    await signIn(plain.id);
+
+    const { GET } = await import("@/app/api/documents/inbound/usage/route");
+    const response = await call(GET as Handler, "/api/documents/inbound/usage");
+    expect(response.status).toBe(200);
+    expect(
+      ((await body(response)).data as { contentIndex: { totalCount: number } })
+        .contentIndex.totalCount,
+    ).toBe(2);
+  });
+});

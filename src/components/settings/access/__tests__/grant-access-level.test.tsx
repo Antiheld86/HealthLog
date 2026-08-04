@@ -85,6 +85,23 @@ describe("offering a level", () => {
     expect(html).toContain('data-access="WRITE" data-selected="false"');
   });
 
+  it("shows keyboard focus on the option the radio is hidden inside", () => {
+    // The radio is `sr-only`, so the browser's own ring lands on a zero-size
+    // box and tabbing through this fieldset moved an invisible selection —
+    // WCAG 2.4.7, on the screen where somebody grants write access to their
+    // health record. The label wears the ring instead, and `has-[:focus-visible]`
+    // is what carries it from the input to the label.
+    const html = render(<GrantInviteCard />);
+    const options = html.match(
+      /<label[^>]*data-slot="grant-invite-access-option"[^>]*>/g,
+    );
+    expect(options).toHaveLength(2);
+    for (const option of options ?? []) {
+      expect(option, option).toContain("has-[:focus-visible]:ring-2");
+      expect(option, option).toContain("has-[:focus-visible]:ring-ring/50");
+    }
+  });
+
   it("says what the wider level actually does, and what it does not", () => {
     const html = render(<GrantInviteCard />);
     // The thing a person reading "write access" gets wrong.
@@ -96,6 +113,12 @@ describe("offering a level", () => {
     // the presence of the rest: a consent notice that over-promises is worse
     // than one that is merely incomplete.
     expect(html).not.toContain("allergies");
+    // v1.36.x — and the same again for logging a value on a tracked metric.
+    // The route was admitted, the copy promised it, and no delegate could
+    // reach a surface that posts one: `/custom-metrics/{id}` is not a
+    // shared-record destination, so the shell answers before the form does.
+    // The permission and the sentence went together.
+    expect(html).not.toContain("a metric you track yourself");
     // Deferring a reminder is the capability the same request could reach and
     // delegation does not cover; the notice has to say so.
     expect(html).toContain("cannot defer one of your reminders");

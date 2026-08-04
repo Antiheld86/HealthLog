@@ -34,9 +34,9 @@ export function CustomMetricList() {
   // Defining a metric is not a delegated verb, and every row here links to
   // `/custom-metrics/{id}`, which sharing does not cover: the shell turns a
   // delegate away at that route, so the rows would be doors into a wall.
-  // Logging a value against a custom metric IS admitted, but there is no
-  // reachable surface for it under a switch, and inventing one is a read-model
-  // change this does not make.
+  // Logging a value against a custom metric was admitted for a release and is
+  // not any more: this paragraph named the gap, the release shipped over it,
+  // and the write withdrew rather than the sentence staying true.
   const { canManage } = useRecordCapabilities();
   const router = useRouter();
   const [addOpen, setAddOpen] = useState(false);
