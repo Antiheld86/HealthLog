@@ -82,21 +82,29 @@ export default function MoodPage() {
                 links to /settings/mood, which owns the tag groups, custom
                 tags, visibility, and picker order. Same glyph, slot (left
                 of the add button) and responsive 44-px mobile tap floor
-                as the medications header. */}
-            <Button
-              asChild
-              variant="ghost"
-              size="icon"
-              className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
-            >
-              <Link
-                href="/settings/layout/mood"
-                aria-label={t("mood.customize")}
-                title={t("mood.customize")}
+                as the medications header.
+
+                v1.36.x — and gated like the other four wrenches. It was the
+                one of five left open, so a delegate tapped it straight into
+                the "not part of what was shared" panel: `/settings` is not a
+                shared-record destination and the shell answers before the
+                page does. */}
+            {canManage && (
+              <Button
+                asChild
+                variant="ghost"
+                size="icon"
+                className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
               >
-                <Wrench className="h-4 w-4" aria-hidden="true" />
-              </Link>
-            </Button>
+                <Link
+                  href="/settings/layout/mood"
+                  aria-label={t("mood.customize")}
+                  title={t("mood.customize")}
+                >
+                  <Wrench className="h-4 w-4" aria-hidden="true" />
+                </Link>
+              </Button>
+            )}
             {/* v1.36.x — a mood entry is not one of the verbs a grant
                 admits, so it stays with the account whose record it is. A
                 delegate at any level gets no add path here. */}

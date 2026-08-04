@@ -9438,7 +9438,7 @@
       "accessReadLabel": "Può vedere",
       "accessReadCapability": "Può leggere tutto ciò che questa cartella condivide. Non può aggiungere né modificare nulla.",
       "accessWriteLabel": "Può vedere e aggiungere",
-      "accessWriteCapability": "Può anche aggiungere alla cartella: misurazioni, risultati di laboratorio, un nuovo analita da seguire, una voce di malattia, un valore su una metrica che segui tu, un effetto collaterale di un farmaco, un nuovo farmaco e segnare una dose come presa o saltata. Non può modificare né eliminare nulla, nemmeno ciò che ha aggiunto, e non può rimandare uno dei tuoi promemoria. Solo tu puoi.",
+      "accessWriteCapability": "Può anche aggiungere alla cartella: misurazioni, risultati di laboratorio, un nuovo analita da seguire, una voce di malattia, un effetto collaterale di un farmaco, un nuovo farmaco e segnare una dose come presa o saltata. Non può modificare né eliminare nulla, nemmeno ciò che ha aggiunto, e non può rimandare uno dei tuoi promemoria. Solo tu puoi.",
       "expiresLabel": "L'accesso termina il (facoltativo)",
       "expiresHint": "Lascia vuoto per un accesso che dura finché qualcuno non lo termina. Una data qui viene controllata a ogni richiesta, quindi l'accesso si interrompe da solo alla fine di quel giorno.",
       "submit": "Invia invito",

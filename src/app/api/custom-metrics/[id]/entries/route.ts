@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
@@ -89,11 +89,20 @@ async function postCustomMetricEntry(
   request: NextRequest,
   { params }: RouteParams,
 ) {
-  // v1.36.x — a delegated write. The ownership hop runs first and now resolves
-  // against the record, so a delegate can only add a value to a metric the
-  // OWNER defined; their own metric of the same name is unreachable from in
-  // here and 404s.
-  const { user } = await requireRecordAuth("write");
+  // v1.36.x — NOT a delegated write, and it was one for a release. It left
+  // the admitted set for the reason `POST /api/allergies` and
+  // `POST /api/family-history` left it in the same release: no delegate can
+  // reach a surface that posts here. The only one is the entry form on
+  // `/custom-metrics/{id}`, and that route is not a shared-record destination,
+  // so the shell turns a delegate away before the form mounts — the rule was
+  // applied to two of the three siblings and this one was missed.
+  //
+  // A permission with no caller is a permission frozen ahead of the surface
+  // that would exercise it, and the consent screen was naming a capability the
+  // product did not offer. Whoever builds a delegate-reachable way to log a
+  // tracked value adds it back in the same diff: the argument for admitting it
+  // was never wrong, and the GET arm above stays delegable meanwhile.
+  const { user } = await requireAuth();
   const { id } = await params;
 
   const metric = await prisma.customMetric.findFirst({

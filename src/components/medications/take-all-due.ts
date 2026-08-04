@@ -33,12 +33,23 @@
  *
  * The due set is small (a handful of medications, never the 500-entry
  * sync scale), so N sequential round trips are negligible.
+ *
+ * v1.36.x — a delegate may drive this, and the loop cannot half-apply on
+ * them. The two refusals v1.36.1 added for a delegate — snoozing, and
+ * changing an event the owner already resolved — live on
+ * `POST /api/medications/intake`, the account-wide slot route, which this
+ * loop does not call. The route it does call has no snooze arm at all, and
+ * the derivation above cannot put a resolved dose in the set: an event with
+ * a `takenAt` closes its window status, and `takenEarlyDaysAgo` drops the
+ * day-scale case ahead of it. Every entry it sends is `skipped: false` on a
+ * slot still in play, which is the same request the card's own button makes.
  */
 
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { apiPost } from "@/lib/api/api-fetch";
+import { intakeToastOptions } from "@/components/medications/use-medication-intake";
 import { invalidateMedicationReads } from "@/lib/query-keys";
 import {
   reduceCurrentWindowStatus,
@@ -211,8 +222,16 @@ export async function runTakeAllDue(deps: {
   medications: DueMedication[];
   t: Translator;
   queryClient: QueryClient;
+  /**
+   * v1.36.x — the record the batch lands in, when it is not the caller's own.
+   * The sweep is a delegated write now, so its summary carries the same
+   * receipt every single-dose confirmation does: a helper who confirms four
+   * tablets is told whose four they were. It offers no Undo, so the helper's
+   * other half is a no-op here.
+   */
+  recordName?: string | null;
 }): Promise<{ taken: number; failed: number }> {
-  const { medications, t, queryClient } = deps;
+  const { medications, t, queryClient, recordName } = deps;
   let taken = 0;
   let failed = 0;
 
@@ -244,7 +263,13 @@ export async function runTakeAllDue(deps: {
   }
 
   if (failed === 0) {
-    toast.success(t("medications.takeAllDue.successToast", { count: taken }));
+    const options = intakeToastOptions({ recordName, eventId: undefined, t });
+    const message = t("medications.takeAllDue.successToast", { count: taken });
+    if (options) {
+      toast.success(message, options);
+    } else {
+      toast.success(message);
+    }
   } else if (taken > 0) {
     toast.error(t("medications.takeAllDue.partialToast", { taken, failed }));
   } else {

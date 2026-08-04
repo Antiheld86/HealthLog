@@ -1,5 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
+
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -30,6 +32,22 @@ import { describe, expect, it } from "vitest";
  * here rather than a line each page remembers: the five pages that prefetch
  * today all made the same mistake independently, which is what a rule looks
  * like when nothing states it.
+ *
+ * Rule 3 was checked by two regexes until 2026-08-04, and neither could fail
+ * on the shape that matters. `/getUnswitchedSession\s*\(/` is satisfied by the
+ * doc comment every one of these pages carries, so the "calls the right
+ * helper" leg passed on prose. `/getSession\s*\(/` is not satisfied by
+ * `import { getSession as loadSession }` — no parenthesis follows the name —
+ * so the "never reaches the wrong one" leg passed on an aliased import. Both
+ * legs were green with the dashboard genuinely prefetching off the
+ * switch-blind session, which is the exact defect they exist for.
+ *
+ * So membership is decided from the AST now: the module's import table
+ * resolves every local name back to the symbol it was exported as, and only
+ * CALL expressions count. A comment cannot enrol a page and an alias cannot
+ * hide one. `describe("the call matcher sees what it looks for")` proves both
+ * halves against synthetic modules, so the day the matcher stops matching is
+ * the day this file goes red rather than quiet.
  */
 
 const APP_DIR = join(process.cwd(), "src", "app");
@@ -76,6 +94,60 @@ function isPublicRoute(routePath: string): boolean {
   return PUBLIC_ROUTE_PREFIXES.some((p) => routePath.startsWith(p));
 }
 
+/**
+ * The names of every function this module CALLS, resolved back to the symbol
+ * each one was exported as.
+ *
+ * Calls only — an import the page never reaches proves nothing, and neither
+ * does a sentence in a comment. Aliases resolve through the module's own
+ * import table (`getSession as loadSession` comes back as `getSession`), and a
+ * namespace-qualified call (`auth.getSession()`) comes back the same way. Both
+ * are the shapes the regexes could not see.
+ */
+export function calledSymbolsIn(source: string, fileName: string): Set<string> {
+  const parsed = ts.createSourceFile(
+    fileName,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+
+  const aliases = new Map<string, string>();
+  const namespaces = new Set<string>();
+  parsed.forEachChild((node) => {
+    if (!ts.isImportDeclaration(node)) return;
+    const bindings = node.importClause?.namedBindings;
+    if (!bindings) return;
+    if (ts.isNamespaceImport(bindings)) {
+      namespaces.add(bindings.name.text);
+      return;
+    }
+    for (const spec of bindings.elements) {
+      aliases.set(spec.name.text, (spec.propertyName ?? spec.name).text);
+    }
+  });
+
+  const called = new Set<string>();
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      if (ts.isIdentifier(callee)) {
+        called.add(aliases.get(callee.text) ?? callee.text);
+      } else if (
+        ts.isPropertyAccessExpression(callee) &&
+        ts.isIdentifier(callee.expression) &&
+        namespaces.has(callee.expression.text)
+      ) {
+        called.add(callee.name.text);
+      }
+    }
+    node.forEachChild(visit);
+  };
+  parsed.forEachChild(visit);
+  return called;
+}
+
 const prefetchingPages = walk(APP_DIR)
   .map((file) => ({ file, source: readFileSync(file, "utf8") }))
   .filter(
@@ -87,7 +159,24 @@ const prefetchingPages = walk(APP_DIR)
     source,
     routePath: routePathFor(file),
     rel: relative(process.cwd(), file),
+    called: calledSymbolsIn(source, file),
   }));
+
+/**
+ * Every page that prefetches today, named.
+ *
+ * The walk is what covers a NEW page; this literal is what covers a page that
+ * stops being found. Rule 3's legs report an empty offender list both when
+ * every page complies and when the detector stopped seeing them, and the
+ * dashboard pin alone would not notice four of the five going quiet.
+ */
+const PREFETCHING_ROUTES = [
+  "/",
+  "/coach",
+  "/insights",
+  "/insights/workouts",
+  "/medications",
+] as const;
 
 describe("server-prefetching pages cannot leak a cacheable record", () => {
   it("finds the prefetching pages at all (guard is not vacuous)", () => {
@@ -95,6 +184,12 @@ describe("server-prefetching pages cannot leak a cacheable record", () => {
     // The dashboard is the canonical one; if it stops matching, the detection
     // heuristic has drifted and every assertion below is silently skipped.
     expect(prefetchingPages.map((p) => p.routePath)).toContain("/");
+    // And the other four with it. A page that stops being detected takes its
+    // own coverage down silently, so the set is frozen: adding a prefetching
+    // page is a line here, and losing one is a failure rather than a shrug.
+    expect(prefetchingPages.map((p) => p.routePath).sort()).toEqual(
+      [...PREFETCHING_ROUTES].sort(),
+    );
   });
 
   it("keeps every prefetching page behind the session gate", () => {
@@ -139,8 +234,8 @@ describe("server-prefetching pages cannot seed a switched session", () => {
    * meant: the session a prefetching page acts on came from the accessor that
    * refuses under a switch.
    */
-  const UNSWITCHED = /\bgetUnswitchedSession\s*\(/;
-  const RAW_SESSION = /\bgetSession\s*\(/;
+  const UNSWITCHED = "getUnswitchedSession";
+  const RAW_SESSION = "getSession";
 
   it("resolves every prefetching page's session through getUnswitchedSession", () => {
     // Non-vacuous, and it has to be said again in this block: `missing` is
@@ -150,7 +245,7 @@ describe("server-prefetching pages cannot seed a switched session", () => {
     expect(prefetchingPages.length).toBeGreaterThan(0);
 
     const missing = prefetchingPages
-      .filter((p) => !UNSWITCHED.test(p.source))
+      .filter((p) => !p.called.has(UNSWITCHED))
       .map((p) => p.rel);
     expect(
       missing,
@@ -160,11 +255,97 @@ describe("server-prefetching pages cannot seed a switched session", () => {
 
   it("lets no prefetching page reach getSession directly", () => {
     const offenders = prefetchingPages
-      .filter((p) => RAW_SESSION.test(p.source))
+      .filter((p) => p.called.has(RAW_SESSION))
       .map((p) => p.rel);
     expect(
       offenders,
       "getSession() answers who is CALLING — prefetching off it seeds the delegate's record onto the owner's page",
     ).toEqual([]);
+  });
+});
+
+describe("the call matcher sees what it looks for", () => {
+  /**
+   * Against strings, not the tree. Every leg above reports an empty offender
+   * list, and that sentence is worth exactly as much as the evidence that the
+   * matcher could have said otherwise. Each case below is a shape the two
+   * regexes this file used to carry got wrong.
+   */
+  it("does not read a call out of a doc comment", () => {
+    const PROSE_ONLY = `
+      /**
+       * Record identity: the session comes from \`getUnswitchedSession()\`,
+       * which refuses to answer under a switch.
+       */
+      import { getSession } from "@/lib/auth/session";
+
+      export default async function Page() {
+        const session = await getSession();
+        return <HydrationBoundary state={dehydrate(qc)} />;
+      }
+    `;
+    const called = calledSymbolsIn(PROSE_ONLY, "prose.tsx");
+    // The parse produced calls, so the negative below is a measurement.
+    expect(called.size).toBeGreaterThan(0);
+    expect(called.has("getUnswitchedSession")).toBe(false);
+    expect(called.has("getSession")).toBe(true);
+    // …and the raw text says otherwise, which is what the old leg read.
+    expect(/getUnswitchedSession\s*\(/.test(PROSE_ONLY)).toBe(true);
+  });
+
+  it("resolves an aliased import back to the symbol it was exported as", () => {
+    const ALIASED = `
+      import { getSession as loadSession } from "@/lib/auth/session";
+
+      export default async function Page() {
+        const session = await loadSession();
+        return null;
+      }
+    `;
+    expect(calledSymbolsIn(ALIASED, "alias.tsx").has("getSession")).toBe(true);
+    // The alias is why the old leg missed it: nothing in the file reads
+    // `getSession(`, so a regex keyed on the call shape found nothing.
+    expect(/\bgetSession\s*\(/.test(ALIASED)).toBe(false);
+  });
+
+  it("resolves a namespace-qualified call", () => {
+    const NAMESPACED = `
+      import * as auth from "@/lib/auth/session";
+
+      export default async function Page() {
+        const session = await auth.getSession();
+        return null;
+      }
+    `;
+    expect(calledSymbolsIn(NAMESPACED, "ns.tsx").has("getSession")).toBe(true);
+  });
+
+  it("does not count an imported-but-uncalled helper", () => {
+    const IMPORTED_ONLY = `
+      import { getUnswitchedSession } from "@/lib/auth/acting-carrier";
+      import { getSession } from "@/lib/auth/session";
+
+      export default async function Page() {
+        const session = await getSession();
+        return <span>{getUnswitchedSession.name}</span>;
+      }
+    `;
+    const called = calledSymbolsIn(IMPORTED_ONLY, "io.tsx");
+    expect(called.has("getUnswitchedSession")).toBe(false);
+    expect(called.has("getSession")).toBe(true);
+  });
+
+  it("finds the plain call the compliant pages make", () => {
+    const COMPLIANT = `
+      import { getUnswitchedSession } from "@/lib/auth/acting-carrier";
+
+      export default async function Page() {
+        const session = await getUnswitchedSession();
+        return null;
+      }
+    `;
+    const called = calledSymbolsIn(COMPLIANT, "ok.tsx");
+    expect(called.has("getUnswitchedSession")).toBe(true);
+    expect(called.has("getSession")).toBe(false);
   });
 });

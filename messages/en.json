@@ -9438,7 +9438,7 @@
       "accessReadLabel": "Can view",
       "accessReadCapability": "They can read everything this record shares. They cannot add or change anything.",
       "accessWriteLabel": "Can view and add",
-      "accessWriteCapability": "They can also add to the record: readings, lab results, a new analyte to track, an illness entry, a value on a metric you track yourself, a side effect against a drug, a new medication, and marking a dose taken or skipped. They cannot edit or delete anything, not even what they added, and they cannot defer one of your reminders. Only you can.",
+      "accessWriteCapability": "They can also add to the record: readings, lab results, a new analyte to track, an illness entry, a side effect against a drug, a new medication, and marking a dose taken or skipped. They cannot edit or delete anything, not even what they added, and they cannot defer one of your reminders. Only you can.",
       "expiresLabel": "Access ends on (optional)",
       "expiresHint": "Leave this empty for access that lasts until somebody ends it. A date here is checked on every request, so access stops on its own at the end of that day.",
       "submit": "Send invitation",

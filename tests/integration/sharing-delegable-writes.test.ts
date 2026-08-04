@@ -451,22 +451,27 @@ writeContract("POST /api/biomarkers", {
  * block with a `writeContract` — in the same diff as the caregiver-reachable
  * surface that made it worth doing.
  */
-function refusedWriteContract(
+function refusedWriteContract<C = undefined>(
   name: string,
   c: {
-    call: () => Promise<Response>;
+    /** Seed whatever the write needs, owned by the RECORD. Mirrors `writeContract`. */
+    prepare?: (recordOwnerId: string) => Promise<C>;
+    call: (ctx: C) => Promise<Response>;
     ok: number;
     count: (userId: string) => Promise<number>;
   },
 ) {
+  const prepare = c.prepare ?? (async () => undefined as C);
+
   describe(name, () => {
     for (const access of ["READ", "WRITE"] as const) {
       it(`refuses a delegate holding a ${access} grant, and writes nothing`, async () => {
         const owner = await makeUser("owner");
         const delegate = await makeUser("delegate");
+        const ctx = await prepare(owner.id);
 
         await switchInto(owner.id, delegate.id, access);
-        const response = await c.call();
+        const response = await c.call(ctx);
 
         // The undeclared-mode refusal, not the no-grant one: the route names
         // no sharing mode at all, so the carrier is refused before any grant
@@ -485,9 +490,10 @@ function refusedWriteContract(
 
     it("still lets the owner write it themselves", async () => {
       const owner = await makeUser("owner");
+      const ctx = await prepare(owner.id);
       await signIn(owner.id);
 
-      const response = await c.call();
+      const response = await c.call(ctx);
 
       expect(response.status).toBe(c.ok);
       expect(await c.count(owner.id)).toBe(1);
@@ -574,10 +580,26 @@ describe("POST /api/illness/episodes — the module gate", () => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* 7 — custom-metric entries                                                  */
+/* 7 — custom-metric entries, the third that is NOT delegable                 */
 /* -------------------------------------------------------------------------- */
 
-writeContract<string>("POST /api/custom-metrics/[id]/entries", {
+/**
+ * The third withdrawal, one release after the other two, and the delay is what
+ * makes it worth a paragraph: the rule that removed allergies and family
+ * history fitted this route exactly and was applied to two of the three.
+ *
+ * The only surface that posts a tracked value is the entry form on
+ * `/custom-metrics/{id}`, which is not a shared-record destination — the shell
+ * renders "not part of what was shared" there before the form mounts, and
+ * `custom-metric-list.tsx` said so in its own comment while returning null. So
+ * the permission shipped named on the consent screen, in six languages, with
+ * nothing behind it.
+ *
+ * The GET arm stays delegable and the read suite pins it. Re-admitting means
+ * the same three moves the block above names, in the same diff as the surface
+ * that makes it reachable.
+ */
+refusedWriteContract<string>("POST /api/custom-metrics/[id]/entries", {
   prepare: async (recordOwnerId) => {
     const metric = await getPrismaClient().customMetric.create({
       data: { userId: recordOwnerId, name: "Water", unit: "ml" },
@@ -595,7 +617,6 @@ writeContract<string>("POST /api/custom-metrics/[id]/entries", {
     );
   },
   ok: 201,
-  auditAction: "customMetricEntry.create",
   count: (userId) =>
     getPrismaClient().customMetricEntry.count({ where: { userId } }),
 });

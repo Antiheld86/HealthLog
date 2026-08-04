@@ -143,8 +143,12 @@ const PINNED_AFFORDANCES: Record<
     "toast.success": 2,
   },
   "src/components/cycle/cycle-phase-crosstab.tsx": { "text-success": 1 },
+  // v1.36.x — two call sites, one decision: the intake toast routes through
+  // `intakeToastOptions()`, which returns `undefined` in the caller's own
+  // record, and sonner's one-argument form is what the unit tests assert. So
+  // the if/else that `runLogIntake` already uses landed here too.
   "src/components/dashboard/medication-intake-quick-add.tsx": {
-    "toast.success": 1,
+    "toast.success": 2,
   },
   "src/components/dashboard/range-display.tsx": { "text-success": 2 },
   "src/components/documents/document-card.tsx": { "text-success": 1 },
@@ -211,8 +215,9 @@ const PINNED_AFFORDANCES: Record<
   "src/components/medications/card-parts/medication-status-pill.tsx": {
     "text-success": 1,
   },
+  // Same pair, same reason as the dashboard quick-add above.
   "src/components/medications/dose-history-add-dialog.tsx": {
-    "toast.success": 1,
+    "toast.success": 2,
   },
   "src/components/medications/dose-history-ledger.tsx": {
     "text-success": 2,
@@ -255,7 +260,8 @@ const PINNED_AFFORDANCES: Record<
   "src/components/medications/sections/settings-section.tsx": {
     "toast.success": 2,
   },
-  "src/components/medications/take-all-due.ts": { "toast.success": 1 },
+  // Same pair again: the batch summary names the record it landed in.
+  "src/components/medications/take-all-due.ts": { "toast.success": 2 },
   // v1.36.x — one fewer: the log-intake path's three-armed toast collapsed
   // into the shared `intakeToastOptions` decision plus a single call pair.
   "src/components/medications/use-medication-intake.ts": { "toast.success": 4 },

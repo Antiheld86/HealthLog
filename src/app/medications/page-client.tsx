@@ -161,9 +161,13 @@ export default function MedicationsPageClient() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const { t } = useTranslations();
   // v1.36.x — adding a medication and marking a dose are both admitted
-  // delegated writes, so a WRITE delegate keeps the Add menu whole. The
-  // take-all-due sweep is not (it rides the bulk intake route), and neither is
-  // the customize page, which sharing does not cover at all.
+  // delegated writes, so a WRITE delegate keeps the Add menu whole. So is the
+  // take-all-due sweep, which was withheld on a note saying it rode the bulk
+  // intake route: it does not, and its own docblock says why not. It loops
+  // `POST /api/medications/{id}/intake` — the delegable write, byte-identical
+  // to tapping each card in turn — so withholding it made a caregiver with
+  // five morning tablets tap five times for nothing. The customize page stays
+  // withheld; sharing does not cover it at all.
   const { canAdd, canManage } = useRecordCapabilities();
   // v1.18.1 (D3) — medications is an opt-out module. When the account has it
   // turned off the whole page disappears (the nav entry is hidden by the same
@@ -423,7 +427,7 @@ export default function MedicationsPageClient() {
               card's own one-tap job). Calm outline variant so the primary
               Add button keeps the visual lead; same responsive 44-px
               mobile tap floor as its neighbours. */}
-          {canManage && dueMeds.length >= 2 && (
+          {canAdd && dueMeds.length >= 2 && (
             <Button
               variant="outline"
               onClick={() => setTakeAllOpen(true)}
@@ -636,7 +640,11 @@ export default function MedicationsPageClient() {
           through the per-medication intake route in a loop (slot
           attribution + inventory consumption identical to N individual
           taps — see take-all-due.ts); failed medications stay due. */}
-      {takeAllOpen && (
+      {/* Gated on the same answer the button is, for the first-paint reason
+          `/measurements` documents: `canAdd` reads true until `/api/auth/me`
+          settles, and a dialog opened in that frame withdraws when the answer
+          lands rather than standing on a confirm the server would refuse. */}
+      {takeAllOpen && canAdd && (
         <TakeAllDueDialog
           open={takeAllOpen}
           onOpenChange={setTakeAllOpen}

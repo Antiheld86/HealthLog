@@ -28,7 +28,7 @@
  */
 import { NextResponse } from "next/server";
 
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiError } from "@/lib/api-response";
 import { prisma } from "@/lib/db";
 import { decryptDocumentContent } from "@/lib/documents/store";
@@ -107,15 +107,23 @@ function safeDownloadName(
   return cleaned.length > 0 ? cleaned : `document-${id}.${ext}`;
 }
 
+/**
+ * v1.36.x — delegable, and the read the rest of the vault exists to reach: a
+ * caregiver looking at a discharge letter needs the letter, not its filing
+ * card. Same file, same 1:1 owner-scoped lookup, resolved against the record.
+ *
+ * The bucket keys on the ACTOR for the reason the thumbnail's does — this one
+ * decrypts a whole document per call, so it is the tighter of the two.
+ */
 export const GET = apiHandler(
   async (_request: Request, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    const { user, actor } = await requireRecordAuth("read");
 
     const gate = await requireModuleEnabled(user.id, "inboundDocuments");
     if (!gate.enabled) return gate.response;
 
     const rl = await checkRateLimit(
-      `documents-original:${user.id}`,
+      `documents-original:${actor.id}`,
       ORIGINAL_READ_LIMIT_PER_HOUR,
       ORIGINAL_READ_WINDOW_MS,
     );

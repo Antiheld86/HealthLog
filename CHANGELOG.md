@@ -2,6 +2,54 @@
 
 ## [Unreleased]
 
+### Added
+
+- The document vault opens inside a shared record. `/documents` was offered in
+  the navigation of somebody else's record and then refused every read behind
+  it, so the page rendered an error card and the illness view rendered another
+  one beside it. A clinical letter is health data belonging to the record, and
+  reading it is much of the reason to hand somebody the record in the first
+  place. The list, a document and its file, the preview tiles and the filter
+  bar all answer now. Uploading, retyping, deleting, linking a document to an
+  illness and every AI action stay with the owner.
+
+- "Take all due" is offered to somebody with write access. Marking a dose is
+  one of the things that access admits, and the sweep records exactly the doses
+  the individual cards would. It was withheld on a note about a different
+  endpoint that it does not use. A helper with five morning tablets to confirm
+  taps once.
+
+- Marking a dose skipped is offered wherever marking it taken is. The dose
+  history offered a delegate one of the pair and not the other, though both are
+  the same admitted verb and the medication card already offered both.
+
+### Changed
+
+- Write access no longer covers logging a value on a metric you track
+  yourself. The capability shipped named on the consent screen with nothing
+  behind it: the only form that records one sits on a page a shared record does
+  not open, so nobody could have used it. The consent copy now lists what the
+  level actually admits. Reading those values stays.
+
+### Fixed
+
+- A control could be tapped in the moment before the app knew whose record was
+  on screen, leaving somebody stranded in a form the server would refuse. The
+  capture sheet and the dashboard's quick-entry sheets now withdraw the form
+  when the answer arrives rather than standing on it, which is what the
+  measurements page and the medication wizard already did.
+
+- Recording a dose from the dashboard quick-add says which record it landed in
+  and no longer offers an Undo that only the owner may use.
+
+- The access-level options on the invitation screen are visible when reached by
+  keyboard. The radio itself is hidden by design and its label carried no focus
+  ring, so tabbing through the one screen where write access is granted moved
+  an invisible selection.
+
+- The customise link on the mood page no longer leads a delegate to a page that
+  tells them it is not part of what was shared.
+
 ## [1.36.1] — 2026-08-04
 
 ### Added
