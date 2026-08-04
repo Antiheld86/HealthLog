@@ -920,6 +920,114 @@ describe("POST /api/medications/intake — what a delegate may NOT do with it", 
   });
 });
 
+/**
+ * The way round the sibling route's refusal, closed.
+ *
+ * `POST /api/medications/intake` refuses a delegate changing a dose the owner
+ * already recorded. This route reaches the same rows through the slot upsert,
+ * so without the same rule it was simply the other door: an explicit skip
+ * posted onto a taken slot flipped the outcome and refunded the inventory the
+ * take had consumed.
+ *
+ * The rule compares OUTCOMES rather than refusing every write onto an actioned
+ * slot, and the third case is why. A double tap, an offline replay and a retry
+ * after a partial batch all re-post the SAME decision, and a caregiver hits all
+ * three; refusing those would make the feature unreliable exactly when somebody
+ * is standing in a kitchen with a pill box.
+ *
+ * Each case asserts the ROW, not only the status. A 403 that had already
+ * written the flip would be worse than no refusal at all, because it would read
+ * as protection.
+ */
+describe("POST /api/medications/[id]/intake — the slot upsert is not a way round", () => {
+  async function seedTakenSlot(ownerId: string) {
+    const medication = await seedMedication(ownerId, "Insulin");
+    const slot = new Date();
+    slot.setSeconds(0, 0);
+    const event = await getPrismaClient().medicationIntakeEvent.create({
+      data: {
+        userId: ownerId,
+        medicationId: medication.id,
+        scheduledFor: slot,
+        takenAt: slot,
+      },
+    });
+    return { medicationId: medication.id, slot, eventId: event.id };
+  }
+
+  async function postIntake(
+    medicationId: string,
+    body: Record<string, unknown>,
+  ) {
+    const { POST } = await import("@/app/api/medications/[id]/intake/route");
+    return post(
+      POST as Handler,
+      `/api/medications/${medicationId}/intake`,
+      body,
+      { id: medicationId },
+    );
+  }
+
+  it("refuses a delegate flipping the owner's taken dose to skipped", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    const { medicationId, slot, eventId } = await seedTakenSlot(owner.id);
+
+    await switchInto(owner.id, delegate.id, "WRITE");
+    const response = await postIntake(medicationId, {
+      skipped: true,
+      scheduledFor: slot.toISOString(),
+    });
+
+    expect(response.status).toBe(403);
+    expect((await payload(response)).meta?.errorCode).toBe(
+      "sharing.not_permitted",
+    );
+
+    const row = await getPrismaClient().medicationIntakeEvent.findUniqueOrThrow(
+      { where: { id: eventId }, select: { takenAt: true, skipped: true } },
+    );
+    expect(row.skipped).toBe(false);
+    expect(row.takenAt).not.toBeNull();
+  });
+
+  it("still accepts a delegate re-posting the same decision", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    const { medicationId, slot, eventId } = await seedTakenSlot(owner.id);
+
+    await switchInto(owner.id, delegate.id, "WRITE");
+    const response = await postIntake(medicationId, {
+      takenAt: new Date().toISOString(),
+      scheduledFor: slot.toISOString(),
+    });
+
+    expect([200, 201]).toContain(response.status);
+    const row = await getPrismaClient().medicationIntakeEvent.findUniqueOrThrow(
+      { where: { id: eventId }, select: { skipped: true, takenAt: true } },
+    );
+    expect(row.skipped).toBe(false);
+    expect(row.takenAt).not.toBeNull();
+  });
+
+  it("still lets the owner correct their own dose", async () => {
+    const owner = await makeUser("owner");
+    const { medicationId, slot, eventId } = await seedTakenSlot(owner.id);
+    await signIn(owner.id);
+
+    const response = await postIntake(medicationId, {
+      skipped: true,
+      scheduledFor: slot.toISOString(),
+    });
+
+    expect([200, 201]).toContain(response.status);
+    const row = await getPrismaClient().medicationIntakeEvent.findUniqueOrThrow(
+      { where: { id: eventId }, select: { skipped: true } },
+    );
+    expect(row.skipped).toBe(true);
+  });
+});
+
 writeContract<{ medicationId: string; intakeId: string }>(
   "POST /api/medications/[id]/intake",
   {

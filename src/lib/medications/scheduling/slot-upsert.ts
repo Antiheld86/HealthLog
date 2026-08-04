@@ -62,6 +62,24 @@ export interface ApplyCanonicalSlotWriteInput {
    */
   createSource: "WEB" | "API" | "REMINDER" | "APPLE_HEALTH";
   /**
+   * v1.36.x — refuse a write that would change an outcome the owner has
+   * already recorded, instead of applying it last-write-wins.
+   *
+   * Set by the intake routes when the caller is a DELEGATE. Marking a dose
+   * is an admitted contribution; changing a decision the owner already made
+   * is an edit, and edits stay with the owner. The sibling route
+   * `POST /api/medications/intake` refuses this in its own handler, which
+   * left this one as the way round it — the flag is here rather than at the
+   * call site because this is where the existing row is already loaded, so
+   * the check costs no extra query and cannot race the update.
+   *
+   * "Change" means a DIFFERENT outcome. Re-posting the same decision still
+   * applies, because a double tap, an offline replay and a retry after a
+   * partial batch failure all look like that, and refusing them would make
+   * the feature unreliable in exactly the situation a caregiver is in.
+   */
+  refuseOutcomeChange?: boolean;
+  /**
    * v1.8.5 — resolved + server-validated injection site to persist on a
    * taken write. `null` = no site (the column stays / is set NULL). Only
    * ever non-null on an explicit taken write for a tracking-enabled
@@ -113,6 +131,16 @@ export interface ApplyCanonicalSlotWriteResult {
    * already-actioned slot and was treated as a no-op (C2 no-downgrade).
    */
   noDowngradeNoOp: boolean;
+  /**
+   * v1.36.x — the write would have CHANGED an outcome the owner already
+   * recorded, and the caller asked for that to be refused rather than
+   * applied. Nothing was written; the caller turns this into a 403.
+   *
+   * Distinct from `noDowngradeNoOp`, which is a silent no-op for a sync
+   * echo that carried no decision. This one means a decision arrived and
+   * disagreed with the one that is already there.
+   */
+  outcomeChangeRefused: boolean;
 }
 
 const SLOT_ROW_SELECT = {
@@ -284,6 +312,7 @@ export async function applyCanonicalSlotWrite(
       // (there was no prior row), so inventory should decrement.
       consumedTransition: takenAt !== null,
       noDowngradeNoOp: false,
+      outcomeChangeRefused: false,
     };
   } catch (err) {
     if (!isP2002(err)) throw err;
@@ -322,10 +351,34 @@ async function applyToExisting(
     attributionSource,
     doseTaken = null,
     externalId = null,
+    refuseOutcomeChange = false,
   } = input;
 
   const existingActioned = existing.takenAt !== null || existing.skipped;
   const incomingIsPendingEcho = !isExplicitTaken && !isExplicitSkip;
+
+  // v1.36.x — a delegate may record a decision on a slot that is still open;
+  // they may not overturn one the owner already made. Compare the OUTCOMES
+  // rather than refusing every write onto an actioned slot: re-posting the
+  // same decision is a replay (double tap, offline catch-up, a retry after a
+  // partial batch), and those have to keep working.
+  //
+  // Ordered before the C2 echo branch on purpose — an echo carries no
+  // decision, so it can never be an overturn, and letting it fall through
+  // keeps the sync cursor advancing exactly as before.
+  if (refuseOutcomeChange && existingActioned && !incomingIsPendingEcho) {
+    const existingWasSkip = existing.skipped;
+    const incomingIsSkip = isExplicitSkip;
+    if (existingWasSkip !== incomingIsSkip) {
+      return {
+        row: existing,
+        outcome: "updated",
+        consumedTransition: false,
+        noDowngradeNoOp: false,
+        outcomeChangeRefused: true,
+      };
+    }
+  }
 
   // C2 — never clear a recorded dose with a pending projection echo. An
   // iOS offline re-sync replays a PENDING projection (no takenAt,
@@ -341,6 +394,7 @@ async function applyToExisting(
       outcome: "updated",
       consumedTransition: false,
       noDowngradeNoOp: true,
+      outcomeChangeRefused: false,
     };
   }
 
@@ -385,6 +439,7 @@ async function applyToExisting(
     outcome: "updated",
     consumedTransition,
     noDowngradeNoOp: false,
+    outcomeChangeRefused: false,
   };
 }
 

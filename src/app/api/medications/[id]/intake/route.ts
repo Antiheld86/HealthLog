@@ -52,6 +52,38 @@ async function postIntake(request: NextRequest, { params }: RouteParams) {
   // `user` is the record the dose belongs to; `actor` is whoever pressed the
   // button, and is used for nothing but the owner's notification below.
   const { user, actor, authMethod } = await requireRecordAuth("write");
+
+  // v1.36.1 follow-up — the sibling route `POST /api/medications/intake`
+  // refuses a delegate changing a dose the owner already recorded. This route
+  // reaches the same rows through the slot upsert, so without the same rule it
+  // is simply the way round the other one: an explicit skip posted onto a
+  // taken slot flips the outcome and refunds the inventory the take consumed.
+  // The flag rides into `applyCanonicalSlotWrite`, which is where the existing
+  // row is already loaded, so the check adds no query and cannot race.
+  const isDelegated = actor.id !== user.id;
+
+  /**
+   * The refusal itself, shared by both upsert call sites so the two cannot
+   * drift apart. Files under the OWNER — `auditLog` stamps the actor from the
+   * request's acting context — so a refused attempt reaches the activity panel
+   * the same way the sibling route's does, under the same action name.
+   */
+  function refuseOutcomeChange(): Response {
+    annotate({
+      action: { name: "medications.intake.update.refused" },
+      meta: { reason: "resolved_event" },
+    });
+    void auditLog("medications.intake.update.refused", {
+      userId: user.id,
+      ipAddress: getClientIp(request),
+      details: { medicationId: id, reason: "resolved_event" },
+    });
+    return apiError(
+      "Changing a dose that is already recorded is not part of shared access",
+      403,
+      { errorCode: "sharing.not_permitted" },
+    );
+  }
   // v1.32.8 (iOS #64) — write provenance derived from the transport, never
   // client-asserted: a Bearer/native call stores `API`, a cookie/browser call
   // stores `WEB`. The other `IntakeSource` values are producer-owned by OTHER
@@ -334,6 +366,7 @@ async function postIntake(request: NextRequest, { params }: RouteParams) {
       isExplicitSkip,
       idempotencyKey: idempotencyKey ?? null,
       createSource: intakeSource,
+      refuseOutcomeChange: isDelegated,
       // v1.8.5 — resolved + validated site (null unless a tracking-on
       // injection taken write supplied an allowed site).
       injectionSite: resolvedInjectionSite,
@@ -342,6 +375,7 @@ async function postIntake(request: NextRequest, { params }: RouteParams) {
       // carried one).
       doseTaken: resolvedDoseTaken,
     });
+    if (applied.outcomeChangeRefused) return refuseOutcomeChange();
     event = applied.row;
     consumedTransition = applied.consumedTransition;
     // Reset the snooze when a dose is actually recorded (not on a
@@ -400,10 +434,12 @@ async function postIntake(request: NextRequest, { params }: RouteParams) {
         isExplicitSkip,
         idempotencyKey: idempotencyKey ?? null,
         createSource: intakeSource,
+        refuseOutcomeChange: isDelegated,
         injectionSite: resolvedInjectionSite,
         attributionSource,
         doseTaken: resolvedDoseTaken,
       });
+      if (applied.outcomeChangeRefused) return refuseOutcomeChange();
       event = applied.row;
       consumedTransition = applied.consumedTransition;
       if (!skipped && !applied.noDowngradeNoOp) {
