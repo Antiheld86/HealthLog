@@ -89,7 +89,16 @@ describe("offering a level", () => {
     const html = render(<GrantInviteCard />);
     // The thing a person reading "write access" gets wrong.
     expect(html).toContain("cannot edit or delete anything");
-    expect(html).toContain("marking a dose as taken");
+    expect(html).toContain("marking a dose taken or skipped");
+    // v1.36.1 — the copy named allergies, which left the admitted set before
+    // this shipped, and it did so on the one screen where somebody decides who
+    // may write into their health record. Assert the withdrawal too, not only
+    // the presence of the rest: a consent notice that over-promises is worse
+    // than one that is merely incomplete.
+    expect(html).not.toContain("allergies");
+    // Deferring a reminder is the capability the same request could reach and
+    // delegation does not cover; the notice has to say so.
+    expect(html).toContain("cannot defer one of your reminders");
     // And the narrow option still says it is narrow.
     expect(html).toContain("They cannot add or change anything.");
   });

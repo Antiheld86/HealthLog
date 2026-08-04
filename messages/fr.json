@@ -9391,6 +9391,7 @@
     "banner": {
       "viewing": "Vous êtes dans le dossier de {name}",
       "readOnly": "Vous pouvez le lire, pas le modifier.",
+      "canAdd": "Vous pouvez y ajouter, mais pas modifier ni supprimer ce qui s'y trouve.",
       "leave": "Revenir à mon dossier"
     },
     "switcher": {
@@ -9437,7 +9438,7 @@
       "accessReadLabel": "Peut consulter",
       "accessReadCapability": "Elle peut lire tout ce que ce dossier partage. Elle ne peut rien ajouter ni rien modifier.",
       "accessWriteLabel": "Peut consulter et ajouter",
-      "accessWriteCapability": "Elle peut aussi ajouter des choses au dossier : des mesures, des résultats d'analyses, des allergies et d'autres observations, un nouveau médicament, et une prise marquée comme faite. Elle ne peut rien modifier ni supprimer, pas même ce qu'elle a ajouté. Vous êtes la seule personne à pouvoir le faire.",
+      "accessWriteCapability": "Elle peut aussi ajouter au dossier : des mesures, des résultats de laboratoire, un nouvel analyte à suivre, une entrée de maladie, une valeur sur une mesure que vous suivez vous-même, un effet indésirable lié à un médicament, un nouveau médicament, et marquer une dose comme prise ou sautée. Elle ne peut rien modifier ni supprimer, pas même ce qu'elle a ajouté, et elle ne peut pas reporter un de vos rappels. Vous seul le pouvez.",
       "expiresLabel": "L'accès prend fin le (facultatif)",
       "expiresHint": "Laissez ce champ vide pour un accès qui dure jusqu'à ce que quelqu'un y mette fin. Une date ici est vérifiée à chaque requête, l'accès s'arrête donc de lui-même à la fin de cette journée.",
       "submit": "Envoyer l'invitation",
@@ -9513,7 +9514,8 @@
       "customMetricEntryCreate": "{name} a enregistré une valeur personnalisée",
       "medicationSideEffectCreate": "{name} a noté un effet indésirable",
       "medicationCreate": "{name} a ajouté un médicament",
-      "medicationIntake": "{name} a enregistré une prise"
+      "medicationIntake": "{name} a enregistré une prise",
+      "medicationIntakeRefused": "{name} a tenté de modifier une dose ou de reporter un rappel, et a été refusé"
     }
   }
 }

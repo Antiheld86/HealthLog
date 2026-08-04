@@ -283,6 +283,61 @@ export const POST = apiHandler(async (request: NextRequest) => {
     return apiError("Intake event not found", 404);
   }
 
+  // v1.36.1 — this route is admitted for delegates because marking a dose is
+  // the thing a person standing next to the patient needs to do. It is an
+  // UPDATE, though, and two of the transitions it can express are not that.
+  //
+  // Snoozing writes `snoozedUntil` on the OWNER's medication row, and the
+  // reminder cron skips a medication for as long as that stamp is in the
+  // future. The field is unbounded, the owner is deliberately not notified of
+  // a delegated snooze (there is nothing useful to say about a thirty-minute
+  // deferral), and the activity feed renders the whole family as "marked a
+  // dose". So a delegate could switch the owner's medication reminders off for
+  // years, and every surface that exists to make delegation visible would
+  // describe it as marking a dose. In an adherence product that is the worst
+  // thing on this route.
+  //
+  // Flipping an already-resolved event is the other one: taken to skipped and
+  // back rewrites the owner's compliance history and refunds inventory. The
+  // shipped promise, on the consent screen and in the release notes, is that
+  // editing what is already there stays with the owner. Marking a dose that is
+  // still open is a contribution; changing a decision the owner already
+  // recorded is an edit.
+  //
+  // Both refuse for a delegate and stay open to the owner, who is the only
+  // person the snooze and the correction were ever for.
+  if (actor.id !== user.id) {
+    const alreadyResolved = existing.takenAt !== null || existing.skipped;
+    const refusal =
+      status === "snoozed"
+        ? "snooze"
+        : alreadyResolved
+          ? "resolved_event"
+          : null;
+    if (refusal) {
+      annotate({
+        action: { name: "medications.intake.update.refused" },
+        meta: { reason: refusal },
+      });
+      // Filed under the OWNER. `auditLog` stamps the actor itself from the
+      // request's acting context, which is what puts this on the trail the
+      // owner's activity panel reads — a refused attempt to change their
+      // record is worth as much to them as a successful one.
+      await auditLog("medications.intake.update.refused", {
+        userId: user.id,
+        ipAddress: getClientIp(request),
+        details: { intakeId, status, reason: refusal },
+      });
+      return apiError(
+        refusal === "snooze"
+          ? "Snoozing a reminder is not part of shared access"
+          : "Changing a dose that is already recorded is not part of shared access",
+        403,
+        { errorCode: "sharing.not_permitted" },
+      );
+    }
+  }
+
   // v1.8.5 — resolve + server-validate the optional injection site for a
   // "taken" toggle. A site outside the medication's effective allowed
   // set is a hard 422; non-injection / tracking-off / non-taken drops it.
@@ -557,9 +612,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
 
   // v1.36.x — "somebody else marked your dose". The helper refuses on self and
-  // on a snooze, resolves both names itself, and never throws; awaited because
-  // the latency it adds lands on the caregiver's request and never on the
-  // owner's own hot path.
+  // on a snooze, resolves both names itself, and never throws.
+  //
   // Fire and forget, like every neighbour above. The dispatcher awaits each
   // channel in the cascade, so an unreachable one would have added its whole
   // timeout to the caregiver's request — the person standing next to the

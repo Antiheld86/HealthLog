@@ -796,6 +796,109 @@ writeContract<{ medicationId: string; intakeId: string }>(
   },
 );
 
+/**
+ * The two transitions the same route can express that are NOT marking a dose.
+ *
+ * `POST /api/medications/intake` is admitted because a caregiver standing next
+ * to the patient has to be able to say the tablet went down. It is an update,
+ * though, and the body can carry two other things.
+ *
+ * Snoozing writes `snoozedUntil` on the OWNER's medication row, and the
+ * reminder cron skips a medication for as long as that stamp is in the future.
+ * The field takes any future instant, the owner is deliberately not notified of
+ * a delegated snooze, and the activity feed renders the whole family as
+ * "marked a dose" — so before this was closed, a delegate could switch the
+ * owner's medication reminders off for years and every surface built to make
+ * delegation visible would have called it marking a dose.
+ *
+ * Flipping an already-resolved event is the second: taken to skipped rewrites
+ * the owner's compliance history and refunds inventory, and the consent screen
+ * promises that changing what is already there stays with the owner.
+ *
+ * Both assert the DATA, not only the status: a 403 that had already written
+ * `snoozedUntil` would be worse than no refusal at all, because it would read
+ * as protection.
+ */
+describe("POST /api/medications/intake — what a delegate may NOT do with it", () => {
+  it("refuses to snooze the owner's reminders, and writes no stamp", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    const { medicationId, intakeId } = await seedPendingDose(owner.id);
+
+    await switchInto(owner.id, delegate.id, "WRITE");
+    const { POST } = await import("@/app/api/medications/intake/route");
+    const response = await post(POST as Handler, "/api/medications/intake", {
+      intakeId,
+      status: "snoozed",
+      snoozedUntil: new Date(Date.now() + 5 * 365 * 86_400_000).toISOString(),
+    });
+
+    expect(response.status).toBe(403);
+    expect((await payload(response)).meta?.errorCode).toBe(
+      "sharing.not_permitted",
+    );
+
+    // The reminder cron reads this column and skips the medication while it is
+    // in the future. It has to still be null.
+    const med = await getPrismaClient().medication.findUniqueOrThrow({
+      where: { id: medicationId },
+      select: { snoozedUntil: true },
+    });
+    expect(med.snoozedUntil).toBeNull();
+  });
+
+  it("refuses to flip a dose the owner already recorded, and leaves it alone", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    const { intakeId } = await seedPendingDose(owner.id);
+
+    // The owner took it themselves.
+    const takenAt = new Date(Date.now() - 3_600_000);
+    await getPrismaClient().medicationIntakeEvent.update({
+      where: { id: intakeId },
+      data: { takenAt },
+    });
+
+    await switchInto(owner.id, delegate.id, "WRITE");
+    const { POST } = await import("@/app/api/medications/intake/route");
+    const response = await post(POST as Handler, "/api/medications/intake", {
+      intakeId,
+      status: "skipped",
+    });
+
+    expect(response.status).toBe(403);
+
+    const event =
+      await getPrismaClient().medicationIntakeEvent.findUniqueOrThrow({
+        where: { id: intakeId },
+        select: { takenAt: true, skipped: true },
+      });
+    expect(event.skipped).toBe(false);
+    expect(event.takenAt?.toISOString()).toBe(takenAt.toISOString());
+  });
+
+  it("still lets the owner snooze their own reminder", async () => {
+    const owner = await makeUser("owner");
+    const { medicationId, intakeId } = await seedPendingDose(owner.id);
+    await signIn(owner.id);
+
+    const until = new Date(Date.now() + 1_800_000);
+    const { POST } = await import("@/app/api/medications/intake/route");
+    const response = await post(POST as Handler, "/api/medications/intake", {
+      intakeId,
+      status: "snoozed",
+      snoozedUntil: until.toISOString(),
+    });
+
+    expect(response.status).toBe(200);
+    const med = await getPrismaClient().medication.findUniqueOrThrow({
+      where: { id: medicationId },
+      select: { snoozedUntil: true },
+    });
+    expect(med.snoozedUntil?.toISOString()).toBe(until.toISOString());
+  });
+});
+
 writeContract<{ medicationId: string; intakeId: string }>(
   "POST /api/medications/[id]/intake",
   {

@@ -9391,6 +9391,7 @@
     "banner": {
       "viewing": "You are in {name}'s record",
       "readOnly": "You can read it, not change it.",
+      "canAdd": "You can add to it, but not change or delete what is there.",
       "leave": "Back to my record"
     },
     "switcher": {
@@ -9437,7 +9438,7 @@
       "accessReadLabel": "Can view",
       "accessReadCapability": "They can read everything this record shares. They cannot add or change anything.",
       "accessWriteLabel": "Can view and add",
-      "accessWriteCapability": "They can also add to the record: readings, lab results, allergies and other observations, a new medication, and marking a dose as taken. They cannot edit or delete anything, not even what they added. Only you can.",
+      "accessWriteCapability": "They can also add to the record: readings, lab results, a new analyte to track, an illness entry, a value on a metric you track yourself, a side effect against a drug, a new medication, and marking a dose taken or skipped. They cannot edit or delete anything, not even what they added, and they cannot defer one of your reminders. Only you can.",
       "expiresLabel": "Access ends on (optional)",
       "expiresHint": "Leave this empty for access that lasts until somebody ends it. A date here is checked on every request, so access stops on its own at the end of that day.",
       "submit": "Send invitation",
@@ -9513,7 +9514,8 @@
       "customMetricEntryCreate": "{name} logged a tracked value",
       "medicationSideEffectCreate": "{name} noted a side effect",
       "medicationCreate": "{name} added a medication",
-      "medicationIntake": "{name} marked a dose"
+      "medicationIntake": "{name} marked a dose",
+      "medicationIntakeRefused": "{name} tried to change a dose or defer a reminder, and was refused"
     }
   }
 }

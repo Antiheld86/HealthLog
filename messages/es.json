@@ -9391,6 +9391,7 @@
     "banner": {
       "viewing": "Estás en el historial de {name}",
       "readOnly": "Puedes leerlo, no modificarlo.",
+      "canAdd": "Puedes añadir cosas, pero no cambiar ni borrar lo que hay.",
       "leave": "Volver a mi historial"
     },
     "switcher": {
@@ -9437,7 +9438,7 @@
       "accessReadLabel": "Puede ver",
       "accessReadCapability": "Puede leer todo lo que este historial comparte. No puede añadir ni cambiar nada.",
       "accessWriteLabel": "Puede ver y añadir",
-      "accessWriteCapability": "También puede añadir cosas al historial: mediciones, resultados de laboratorio, alergias y otras observaciones, un medicamento nuevo y una dosis marcada como tomada. No puede editar ni eliminar nada, tampoco lo que ha añadido. Solo tú puedes.",
+      "accessWriteCapability": "También puede añadir a la ficha: mediciones, resultados de laboratorio, un nuevo analito a seguir, una entrada de enfermedad, un valor en una métrica propia, un efecto secundario de un medicamento, un medicamento nuevo, y marcar una dosis como tomada u omitida. No puede editar ni borrar nada, ni siquiera lo que añadió, ni aplazar uno de tus recordatorios. Solo tú puedes.",
       "expiresLabel": "El acceso termina el (opcional)",
       "expiresHint": "Déjalo vacío para un acceso que dure hasta que alguien lo termine. Una fecha aquí se comprueba en cada petición, así que el acceso se detiene solo al final de ese día.",
       "submit": "Enviar invitación",
@@ -9513,7 +9514,8 @@
       "customMetricEntryCreate": "{name} registró un valor propio",
       "medicationSideEffectCreate": "{name} anotó un efecto secundario",
       "medicationCreate": "{name} añadió un medicamento",
-      "medicationIntake": "{name} registró una dosis"
+      "medicationIntake": "{name} registró una dosis",
+      "medicationIntakeRefused": "{name} intentó cambiar una dosis o aplazar un recordatorio, y fue rechazado"
     }
   }
 }

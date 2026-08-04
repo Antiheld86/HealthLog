@@ -64,6 +64,16 @@ export function recordActivityVerbLine(
     case "medication.intake":
     case "medications.intake.update":
       return t("recordSharing.activityVerb.medicationIntake", { name });
+    // The refused half of the same route, and it earns a line of its own for
+    // the reason the whole panel exists. Deferring a reminder and rewriting a
+    // dose the owner already recorded are the two things that request can
+    // express and delegation does not cover. Folding them into "marked a dose"
+    // is what made the gap dangerous in the first place: the owner would have
+    // seen the sentence for a contribution against an attempt to switch their
+    // reminders off. An attempt that was refused is still something the person
+    // whose record it is should be able to see.
+    case "medications.intake.update.refused":
+      return t("recordSharing.activityVerb.medicationIntakeRefused", { name });
     // A batch post is still readings arriving; the owner does not care that the
     // client sent them together.
     case "measurement.create.batch":

@@ -71,9 +71,19 @@
 - The activity feed showed a blank line when a delegate marked a dose, because
   the sentence was keyed on a name the route does not use.
 
+- Marking a dose and deferring a reminder went through the same request, so
+  somebody with write access could postpone one of your medication reminders
+  rather than only record a dose. There was no upper bound on how far, you were
+  not told, and the activity feed described it as marking a dose. Deferring a
+  reminder is yours alone now, and so is changing a dose you already recorded.
+
+- Inside somebody else's record the BMI chart divided their weights by the
+  height of whoever was looking. It draws nothing there now rather than a
+  number belonging to two different people.
+
 ### Internal
 
-- Two high-severity advisories on the outbound HTTP path, published after the
+- Three high-severity advisories on the outbound HTTP path, published after the
   last release, are closed. One of them is in the client that backs the
   application's single documented egress boundary, so the dispatcher's own suite
   was re-run against the new version rather than assumed.
