@@ -2,6 +2,88 @@
 
 ## [Unreleased]
 
+## [1.36.1] — 2026-08-04
+
+### Added
+
+- Somebody you have given access to can now write into your record, not only
+  read it. The point of sharing a record is usually that another person is
+  doing something about it: a partner logging the blood pressure they just
+  took, someone recording that the evening dose went down. Read-only access
+  made them watch that happen and then ask you to type it in.
+
+  A grant now carries a level. Read access is exactly what it was. Write access
+  admits a short, closed list of things a second person may add: a reading, a
+  lab result, a biomarker to the catalogue, an illness entry, a value on a
+  metric you track yourself, a side effect against a drug, a medication, and
+  marking a dose taken or skipped. It admits nothing else. Editing, deleting,
+  restoring and importing stay with you, including on an entry the other person
+  added a minute ago.
+
+  Every entry a delegate makes is stored as yours, because it is a fact about
+  your body and belongs in your record whoever wrote it down. Who wrote it is
+  in the trail rather than in the row, so the record reads the same either way
+  and the question "who put this here" still has an answer months later.
+
+  The access panel gained a feed of what has actually been contributed, and you
+  are told when somebody marks one of your doses.
+
+- A control the record refuses is now simply absent rather than present and
+  broken. Before this, a delegate opened a page inside somebody else's record,
+  saw the button, filled the form, and was refused by the server. Nothing
+  leaked, because the refusal was right. It still taught them the product was
+  broken. A greyed-out button says "this exists and does not work for you"; a
+  control that is not there says "this is not part of what you were given",
+  which is the truth.
+
+- An invitation can name the day the access lapses, set when it is sent.
+
+### Fixed
+
+- The first page a delegate landed on was the worst page in the feature. Ten
+  requests behind the dashboard refused, so the tile strip had no numbers and
+  the hero rendered an error card, while every feature page underneath worked
+  perfectly. Each of those ten has been decided rather than waved through: eight
+  read the record, and the two that describe the person reading the screen — the
+  interface language and the deployment's own switches — keep answering about
+  them.
+
+- The dashboard drew blood-pressure targets, the weight range and every shaded
+  band on a chart from the date of birth, sex and height of whoever was looking
+  rather than whose record was open. Inside somebody else's record that meant a
+  stranger's reference ranges painted over their readings, and because the page
+  could not load the record's own bands it stayed that way for the whole visit.
+
+- Deleting a medication's dose history removed the rows outright. A mis-tap was
+  final, and a phone that was offline at the time kept every deleted dose
+  forever, because a row that no longer exists has nothing to tell anyone about.
+  The history is now retired the way every other deletion in the app already
+  works.
+
+- Recording a side effect against a medication and then restoring from a backup
+  lost it. The rows travel with their medication now, and a round trip through
+  the real backup and the real restore proves it rather than a list asserting it.
+
+- Adding water by hand and undoing a deleted lab result both wrote health data
+  and left no durable record of who did it. Both write one now, like every
+  neighbouring action.
+
+- The activity feed showed a blank line when a delegate marked a dose, because
+  the sentence was keyed on a name the route does not use.
+
+### Internal
+
+- Two high-severity advisories on the outbound HTTP path, published after the
+  last release, are closed. One of them is in the client that backs the
+  application's single documented egress boundary, so the dispatcher's own suite
+  was re-run against the new version rather than assumed.
+
+- A journey test clicked a menu after waiting for the network to go quiet, which
+  is not the same as waiting for the page to become interactive. The click
+  landed on markup the browser had not wired up yet and was lost, and the test
+  then spent thirty seconds waiting for a menu that was never going to open. It
+  waits for the control to report itself open now.
+
 ## [1.36.0] — 2026-08-02
 
 ### Added
