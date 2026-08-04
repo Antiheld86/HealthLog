@@ -28,7 +28,11 @@ import { expect, type Locator, type Page } from "@playwright/test";
  * nothing.
  */
 export async function openMenu(page: Page, trigger: Locator): Promise<void> {
-  await expect(trigger).toBeVisible();
+  // A bare `.click()` carries Playwright's own 30 s actionability wait, so the
+  // visibility check that replaces it has to be at least as patient. Left on
+  // the default expect timeout this helper made the wait SHORTER than the code
+  // it replaced, and a slow dashboard failed here instead of at the menu.
+  await expect(trigger).toBeVisible({ timeout: 30_000 });
 
   for (let attempt = 0; attempt < 5; attempt++) {
     await trigger.click();
