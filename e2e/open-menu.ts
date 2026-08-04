@@ -14,53 +14,49 @@ import { expect, type Locator, type Page } from "@playwright/test";
  * HTML, so it is present long before the client bundle finishes. The gate has
  * to be the element's own state, not the network's.
  *
- * This is the failure that took two branches to read: the quick-add trigger on
- * the dashboard, clicked, no menu in the failure snapshot, and no defect in the
- * component. It surfaces when the machine is loaded — a heavier suite is enough
- * to push hydration past the click — so it reads as a branch-specific
- * regression when it is a race the spec always had.
+ * The check is on the MENU, not on the trigger, and that detail is the whole
+ * reason this file has a comment. Radix marks the rest of the page
+ * `aria-hidden` while a menu is open, and Playwright's role locators ignore
+ * anything hidden from the accessibility tree — so a trigger found through
+ * `getByRole` stops matching the moment the click succeeds. Re-reading its
+ * attributes afterwards does not report "not open", it hangs until the test
+ * budget runs out, which is a failure that points at the trigger and means the
+ * opposite.
  *
- * The signal is the trigger's own open state. Radix stamps `data-state="open"`;
- * a hand-rolled trigger carries `aria-expanded="true"` off React state. Either
- * one only appears once a handler ran, which is exactly the thing being waited
- * for. Retry the click rather than raising a timeout: the problem is a lost
- * event, and waiting longer for a click that was already swallowed does
- * nothing.
+ * Retry the click rather than raising a timeout: the problem is a lost event,
+ * and waiting longer for a click that was already swallowed does nothing.
  */
 export async function openMenu(page: Page, trigger: Locator): Promise<void> {
   // A bare `.click()` carries Playwright's own 30 s actionability wait, so the
-  // visibility check that replaces it has to be at least as patient. Left on
-  // the default expect timeout this helper made the wait SHORTER than the code
-  // it replaced, and a slow dashboard failed here instead of at the menu.
+  // visibility check that replaces it has to be at least as patient.
   await expect(trigger).toBeVisible({ timeout: 30_000 });
+
+  const menu = page.locator(
+    '[role="menu"], [role="dialog"][data-state="open"], [data-slot="capture-picker"]',
+  );
 
   for (let attempt = 0; attempt < 5; attempt++) {
     await trigger.click();
-    if (await isOpen(trigger)) return;
-    // Swallowed by a not-yet-hydrated trigger. Give the bundle a moment and
-    // spend another click.
-    await page.waitForTimeout(250);
+    if (
+      await menu
+        .first()
+        .isVisible()
+        .catch(() => false)
+    )
+      return;
+    try {
+      await expect(menu.first()).toBeVisible({ timeout: 1_500 });
+      return;
+    } catch {
+      // Swallowed by a not-yet-hydrated trigger. Give the bundle a moment and
+      // spend another click. The trigger is re-clicked by locator, so a Radix
+      // portal that moved focus does not matter.
+      await page.waitForTimeout(250);
+    }
   }
 
-  // Out of attempts. Fail naming the state the trigger was actually in, rather
-  // than letting the caller time out on a menu item that was never going to
-  // appear.
-  const state = await trigger.getAttribute("data-state");
-  const expanded = await trigger.getAttribute("aria-expanded");
-  throw new Error(
-    `openMenu: the trigger never opened after 5 clicks (data-state=${state}, aria-expanded=${expanded}). ` +
-      "The page is most likely still hydrating; the trigger is in the server HTML and takes clicks before React attaches.",
-  );
-}
-
-async function isOpen(trigger: Locator): Promise<boolean> {
-  for (let i = 0; i < 10; i++) {
-    const [state, expanded] = await Promise.all([
-      trigger.getAttribute("data-state"),
-      trigger.getAttribute("aria-expanded"),
-    ]);
-    if (state === "open" || expanded === "true") return true;
-    await trigger.page().waitForTimeout(100);
-  }
-  return false;
+  await expect(
+    menu.first(),
+    "the menu never opened after 5 clicks — the page is most likely still hydrating, and the trigger takes clicks before React attaches",
+  ).toBeVisible({ timeout: 5_000 });
 }
