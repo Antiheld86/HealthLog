@@ -30,7 +30,7 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 export const GET = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireRecordAuth("read");
+    const { user } = await requireRecordAuth("read", "illness");
 
     const gate = await requireIllnessEnabled(user.id);
     if (!gate.enabled) return gate.response;

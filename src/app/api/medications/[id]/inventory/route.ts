@@ -44,7 +44,7 @@ const POST_WINDOW_MS = 60_000;
 
 export const GET = apiHandler(
   async (_request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireRecordAuth("read");
+    const { user } = await requireRecordAuth("read", "medications");
     const { id } = await params;
 
     const guard = await assertMedicationOwnership(id, user.id);

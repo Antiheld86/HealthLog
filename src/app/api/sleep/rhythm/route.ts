@@ -26,7 +26,7 @@ import { buildSleepRhythm } from "@/lib/insights/derived/sleep-rhythm";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "measurements");
 
   // Per-domain gate: the sleep-rhythm read serves only the sleep module's
   // view surfaces (Sleep page + iOS), so it gates on the sleep module.

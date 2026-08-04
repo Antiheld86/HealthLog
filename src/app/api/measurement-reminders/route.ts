@@ -36,7 +36,7 @@ async function resolveTimezone(userId: string): Promise<string> {
 }
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "measurements");
 
   const reminders = await prisma.measurementReminder.findMany({
     where: { userId: user.id, deletedAt: null },

@@ -26,7 +26,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
  * detail page keeps the per-id route for the grid.
  */
 export const GET = apiHandler(async () => {
-  const { user, actor } = await requireRecordAuth("read");
+  const { user, actor } = await requireRecordAuth("read", "medications");
 
   // v1.36.0 — the bucket keys on the ACTOR while everything below it scopes to
   // the record. Two reasons, and both are the same reason from opposite ends:

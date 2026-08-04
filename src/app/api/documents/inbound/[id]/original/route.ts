@@ -117,7 +117,7 @@ function safeDownloadName(
  */
 export const GET = apiHandler(
   async (_request: Request, { params }: RouteParams) => {
-    const { user, actor } = await requireRecordAuth("read");
+    const { user, actor } = await requireRecordAuth("read", "documents");
 
     const gate = await requireModuleEnabled(user.id, "inboundDocuments");
     if (!gate.enabled) return gate.response;

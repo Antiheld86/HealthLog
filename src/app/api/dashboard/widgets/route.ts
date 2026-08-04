@@ -196,7 +196,7 @@ export const GET = apiHandler(async () => {
   // matter, which comparison baseline reads correctly for it. A delegate
   // opening somebody's dashboard should see it arranged the way its owner
   // arranged it.
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "record");
 
   // 5-minute TTL per blueprint §5; the layout changes only when the user
   // hits the Settings → Dashboard save button, which invalidates this

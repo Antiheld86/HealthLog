@@ -79,7 +79,7 @@ export const GET = apiHandler(async (req: Request) => {
   //
   // The module gate below resolves against the record, so the surface exists
   // for a delegate only where the OWNER switched the Coach on.
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "record");
   const gate = await requireModuleEnabled(user.id, "coach");
   if (!gate.enabled) return gate.response;
 

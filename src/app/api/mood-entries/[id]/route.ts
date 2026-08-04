@@ -36,7 +36,7 @@ function parseTags(tags: string | null): string[] {
 
 export const GET = apiHandler(
   async (_request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireRecordAuth("read");
+    const { user } = await requireRecordAuth("read", "mind");
 
     const { id } = await params;
 

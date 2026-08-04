@@ -27,7 +27,7 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 export const GET = apiHandler(
   async (_request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireRecordAuth("read");
+    const { user } = await requireRecordAuth("read", "measurements");
 
     const { id } = await params;
 

@@ -33,7 +33,7 @@ import { NextRequest } from "next/server";
 const APPLE_HEALTH_MIRROR_CAP = 30;
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "medications");
 
   // Cache the list shape on userId. The 60 s fresh TTL bounds the
   // cross-midnight staleness window for `todayEventCount` and the
@@ -98,7 +98,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // it afterwards — `PUT /api/medications/[id]` and the DELETE beside it stay
   // on `requireAuth()` and refuse under a switch. Adding is help; rewriting
   // the owner's cabinet is not.
-  const { user } = await requireRecordAuth("write");
+  const { user } = await requireRecordAuth("write", "medications");
 
   const { data: body, error: jsonError } = await safeJson(request, {
     maxBytes: 64 * 1024,

@@ -70,7 +70,7 @@ function toResolved(
 }
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "labs");
 
   const params = Object.fromEntries(request.nextUrl.searchParams);
   const parsed = listLabResultsSchema.safeParse(params);
@@ -143,7 +143,7 @@ async function postLabResult(request: NextRequest) {
   // it mints it under `user.id`: the marker joins the record's catalogue, not
   // the caller's, which is the only reading of "add a result to your record"
   // that leaves the owner with a usable catalogue afterwards.
-  const { user } = await requireRecordAuth("write");
+  const { user } = await requireRecordAuth("write", "labs");
 
   const { data: body, error: jsonError } = await safeJson(request, {
     maxBytes: 16 * 1024,

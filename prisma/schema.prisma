@@ -52,6 +52,28 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
+  /// v1.37.0 — since when this account is a record somebody else runs.
+  ///
+  /// A managed profile is a person who cannot run their own record: it has a
+  /// display name and no credentials, never signs in, and is administered
+  /// end to end by whoever holds an active MANAGE grant on it. The marker is
+  /// what separates that case from an ordinary adult who granted management
+  /// of their own record — the identity and reach surfaces open for the
+  /// former and stay shut for the latter, and the gate is this column rather
+  /// than the grant, so no argument about a grant level can reach them.
+  ///
+  /// A timestamp rather than a boolean, for a reason the schema has to keep
+  /// possible: it says since when, and clearing it is the emancipation act —
+  /// the day the person takes their own record over, credentials attach and
+  /// this goes back to NULL, with the grants and the whole activity trail
+  /// spanning the transition untouched.
+  ///
+  /// Consumers land in this release: the guardian resolver in
+  /// `src/lib/api-handler.ts` reads it on every guardian request, the
+  /// notification dispatcher fans reminders out to the guardians' channels on
+  /// it, and the creation flow is what writes it.
+  managedProfileAt DateTime? @map("managed_profile_at")
+
   // Profile
   heightCm    Float?    @map("height_cm")
   dateOfBirth DateTime? @map("date_of_birth")
@@ -5904,6 +5926,14 @@ model ClinicianShareLinkDocument {
 enum AccountGrantAccess {
   READ
   WRITE
+  /// v1.37.0 — full management of the record's data: everything WRITE reaches,
+  /// plus the edit, delete and restore verbs beside it, plus the record-wide
+  /// derived surfaces. Never the identity and reach surfaces — credentials,
+  /// channels, tokens, integrations, grant management, AI configuration —
+  /// which stay unreachable at every invited level, because a manager who
+  /// could mint a credential would survive their own revocation. MANAGE is
+  /// whole-record by construction: `scopeJson` must be NULL on a MANAGE row.
+  MANAGE
 
   @@map("account_grant_access")
 }
@@ -5969,6 +5999,24 @@ model AccountGrant {
   granteeId String @map("grantee_id")
 
   access AccountGrantAccess @default(READ)
+
+  /// v1.37.0 — which sections of the record this grant opens.
+  ///
+  /// NULL means the entire record, which is exactly what every row written
+  /// before this column existed was consented as — so there is no backfill and
+  /// nobody is asked to consent again. A non-NULL value is a non-empty array
+  /// of `ShareDomain` keys (`src/lib/sharing/scope.ts`).
+  ///
+  /// Read fail-closed through `normaliseScope` in `src/lib/sharing/grants.ts`
+  /// and nowhere else: a malformed non-NULL blob resolves to the empty set and
+  /// refuses every section, the opposite direction from the module preference
+  /// normaliser, because this column answers an authorization question and
+  /// that one answers a presentation question.
+  ///
+  /// Always NULL on a MANAGE row. Management is whole-record: "they can do
+  /// anything, but only to part of you" promises a boundary that cannot be
+  /// kept once edits are in play.
+  scopeJson Json? @map("scope_json")
 
   /// When the invitation was offered. A domain event, so re-offering an
   /// invitation on the same pending row moves it; `createdAt` below is row

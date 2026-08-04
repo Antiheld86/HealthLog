@@ -76,7 +76,7 @@ async function enforceWriteRateLimit(userId: string): Promise<Response | null> {
  */
 export const GET = apiHandler(
   async (_request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireRecordAuth("read");
+    const { user } = await requireRecordAuth("read", "documents");
     const gate = await requireModuleEnabled(user.id, "inboundDocuments");
     if (!gate.enabled) return gate.response;
 

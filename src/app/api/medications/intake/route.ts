@@ -85,7 +85,7 @@ const updateSchema = z.object({
 });
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "medications");
 
   const parsed = querySchema.safeParse(
     Object.fromEntries(request.nextUrl.searchParams),
@@ -226,7 +226,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // address the delegate, and none of them should — the delegate's feedback is
   // the response they are already awaiting. What the owner gets instead is the
   // notification at the end of this handler.
-  const { user, actor } = await requireRecordAuth("write");
+  const { user, actor } = await requireRecordAuth("write", "medications");
 
   const { data: body, error } = await safeJson(request, {
     maxBytes: 64 * 1024,

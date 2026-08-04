@@ -42,7 +42,7 @@ const querySchema = z.object({
 
 export const GET = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireRecordAuth("read");
+    const { user } = await requireRecordAuth("read", "medications");
     const { id } = await params;
 
     // v1.4.25 W21 Fix-N — privacy gate hoisted to the shared helper.

@@ -155,7 +155,7 @@ async function switchTo(accountId: string | null): Promise<Response> {
 /** A delegable read, exactly as a migrated route builds one. */
 const delegableRead: (request: NextRequest) => Promise<Response> = apiHandler(
   async () => {
-    const { user, actor } = await requireRecordAuth("read");
+    const { user, actor } = await requireRecordAuth("read", "measurements");
     const rows = await prisma.measurement.findMany({
       where: { userId: user.id },
       orderBy: { value: "asc" },

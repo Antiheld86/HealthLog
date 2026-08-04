@@ -47,9 +47,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
   //
   // Read-only in fact as well as in declaration: v1.35.3 moved the unlock
   // INSERT onto the sweep job, so there is no write for a read grant to have
-  // to refuse. `requireRecordAuth("read")` would refuse a non-safe method
+  // to refuse. `requireRecordAuth("read", "record")` would refuse a non-safe method
   // anyway; this file exports no other verb.
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "record");
 
   // v1.18.0 — when the account has the achievements module turned off the
   // whole gamification surface disappears: no badge evaluation, no unlock

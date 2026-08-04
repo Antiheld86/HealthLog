@@ -41,7 +41,7 @@ function parseTags(tags: string | null): string[] {
 }
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "mind");
 
   const params = Object.fromEntries(request.nextUrl.searchParams);
   const parsed = listMoodEntriesSchema.safeParse(params);

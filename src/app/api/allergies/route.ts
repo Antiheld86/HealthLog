@@ -29,7 +29,7 @@ import {
 import { toAllergyDTO } from "@/lib/records/dto";
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "profile");
 
   const params = new URL(request.url).searchParams;
   const parsed = allergyListQuerySchema.safeParse({

@@ -34,7 +34,7 @@ import { DEFAULT_TIMEZONE, shiftDateKey, userDayKey } from "@/lib/tz/format";
 export const dynamic = "force-dynamic";
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "measurements");
 
   const gate = await requireModuleEnabled(user.id, "nutrients");
   if (!gate.enabled) return gate.response;

@@ -58,7 +58,7 @@ import type {
 import { Prisma } from "@/generated/prisma/client";
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "measurements");
 
   const params = Object.fromEntries(request.nextUrl.searchParams);
   const parsed = listMeasurementsSchema.safeParse(params);
@@ -755,7 +755,7 @@ async function postMeasurement(request: NextRequest) {
   // who may or may not be that person. Nothing else in this handler reads the
   // caller: the safety-floor check, the reminder satisfaction, the rollup
   // recompute and the cache eviction are all statements about the record.
-  const { user } = await requireRecordAuth("write");
+  const { user } = await requireRecordAuth("write", "measurements");
 
   const { data: body, error: jsonError } = await safeJson(request, {
     maxBytes: 64 * 1024,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
-import type { User } from "@/generated/prisma/client";
+import type { AccountGrant, User } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { WideEventBuilder } from "./logging/event-builder";
 import { annotate, eventStorage, getEvent } from "./logging/context";
@@ -32,9 +32,11 @@ import { SCOPE_HEALTH_READ, SCOPE_HEALTH_WRITE } from "./mcp/oauth/config";
 import {
   findActiveGrant,
   grantAllows,
+  grantCoversDomain,
   touchGrantUsage,
   type GrantNeed,
 } from "./sharing/grants";
+import type { ShareScope } from "./sharing/scope";
 
 /**
  * HTTP methods a read-only credential may use on the REST surface. A request
@@ -770,10 +772,20 @@ export interface RecordAuthContext extends AuthContext {
  *   method must BOTH be satisfiable, so a delegable GET handler that grows a
  *   POST export cannot quietly inherit the read grant's permission. An unknown
  *   method (no event context) counts as a write and is refused, the same
- *   fail-closed posture as the MCP audience guard above.
+ *   fail-closed posture as the MCP audience guard above. A route declaring
+ *   `"manage"` refuses everything below it regardless of method: the method
+ *   can only escalate what the declaration asked for, never satisfy it.
+ * @param domain v1.37.0 — which section of the record the route touches, or
+ *   `"record"` when it reads across sections. Required, and the requirement is
+ *   the fail-closed lever: a delegable route without a classification does not
+ *   typecheck, so the set of routes carrying one cannot fall behind the set of
+ *   routes that are delegable. The value is frozen per module by
+ *   `src/__tests__/delegable-surface-guard.test.ts` and reviewed against the
+ *   design's clustering table; this function only enforces what was declared.
  */
 export async function requireRecordAuth(
   need: GrantNeed,
+  domain: ShareScope,
 ): Promise<RecordAuthContext> {
   const auth = await authenticateCaller();
   const carrier = await readActingCarrier(auth);
@@ -789,6 +801,101 @@ export async function requireRecordAuth(
     throw refuseUndeclaredMode(auth, carrier, "misplaced_selector");
   }
 
+  const method = (getEvent()?.getHttpMethod() ?? "").toUpperCase();
+  const effectiveNeed: GrantNeed =
+    need !== "read" || !READ_HTTP_METHODS.has(method) ? escalate(need) : "read";
+
+  return resolveSwitchedRecord(auth, carrier, (grant) => {
+    if (!grantAllows(grant, effectiveNeed)) return "insufficient_access";
+    // Level first, then scope, and the order is visible on the wire in exactly
+    // one way: not at all. Both refusals are the same error with the same
+    // bytes, and only the audit reason differs — so the ordering is a choice
+    // about what the operator's trail says happened, not about what the caller
+    // learns. It says the bigger thing: a delegate who was never given this
+    // level is a different story from one whose sections do not reach here.
+    if (!grantCoversDomain(grant, domain)) return "out_of_scope";
+    return null;
+  });
+}
+
+/**
+ * The need a non-safe method implies, for a route that declared `need`.
+ *
+ * A PUT on a route declaring `"read"` needs a write grant, which is what this
+ * has always done. A PUT on a route declaring `"manage"` needs a MANAGE grant
+ * and must not be reduced to a write — so the escalation raises the floor to
+ * `"write"` and never lowers a declaration that already sits above it.
+ */
+function escalate(need: GrantNeed): GrantNeed {
+  return need === "manage" ? "manage" : "write";
+}
+
+/**
+ * v1.37.0 — a guardian surface: this route administers a managed profile.
+ *
+ * The other declaration, and a separate function rather than a flag on the one
+ * above, for the reason `requireActorAuth` is also separate: the guard freezes
+ * each declaration as its own list, so a route moving between them is a diff a
+ * human reviews rather than an argument about a parameter.
+ *
+ * What it admits is narrower than it looks. An active MANAGE grant is
+ * necessary and NOT sufficient — the record must also carry the managed-profile
+ * marker. That second condition is the identity fence, and it is the line
+ * between "manage my data" and "own my account": an adult who granted
+ * management of their own record reaches none of this, at any level, by any
+ * argument, because their record has no marker and never will while they hold
+ * it. A managed profile has no self to reserve these surfaces for, so its
+ * guardian holds them.
+ *
+ * The fence is gated on the marker rather than on the grant precisely so that
+ * no future change to what MANAGE means can reach through it. Widening MANAGE
+ * would widen `requireRecordAuth`; it would not touch this function.
+ */
+export async function requireGuardianAuth(): Promise<RecordAuthContext> {
+  const auth = await authenticateCaller();
+  const carrier = await readActingCarrier(auth);
+
+  if (carrier.kind === "none") {
+    // The owner of an ordinary record, reaching their own settings. Same
+    // do-no-harm posture as the record resolver: without a carrier this is the
+    // request it always was.
+    return { ...auth, actor: auth.user, grantId: null };
+  }
+  if (carrier.kind === "misplaced-header") {
+    throw refuseUndeclaredMode(auth, carrier, "misplaced_selector");
+  }
+
+  return resolveSwitchedRecord(auth, carrier, (grant, owner) => {
+    if (!grantAllows(grant, "manage")) return "insufficient_access";
+    if (owner.managedProfileAt === null) return "guardian_only";
+    return null;
+  });
+}
+
+/**
+ * The shared body of both record resolvers: turn a selector into an owner, or
+ * refuse.
+ *
+ * Everything either resolver does with a carrier lives here except the
+ * admission rule itself, which arrives as `admit` — a function of the grant
+ * and the owner returning an audit reason to refuse with, or null to proceed.
+ * The split is where it is because the two resolvers differ in exactly that
+ * one decision and in nothing else, and two copies of the grant lookup, the
+ * refusal shape, the usage stamp and the owner's access row would be two
+ * copies to keep in step.
+ *
+ * The owner row is loaded BEFORE the admission runs, which is a change from
+ * v1.36.0's ordering and a deliberate one: the guardian rule is a fact about
+ * the owner, so it cannot be decided before the owner is known. Nothing about
+ * the refusal moved — every arm below is the same error with the same bytes,
+ * and an admission that refuses after the load costs one query it does not use
+ * and tells the caller nothing extra.
+ */
+async function resolveSwitchedRecord(
+  auth: AuthContext,
+  carrier: Extract<ActingCarrier, { accountId: string }>,
+  admit: (grant: AccountGrant, owner: User) => string | null,
+): Promise<RecordAuthContext> {
   /** Every refusal below is this one error, with the reason kept off the wire. */
   const denied = (reason: string): SharingAccessDeniedError => {
     annotate({ meta: { sharing_refusal: reason } });
@@ -799,10 +906,6 @@ export async function requireRecordAuth(
   if (!selectorNamesAnAccount(carrier.accountId)) {
     throw denied("malformed_selector");
   }
-
-  const method = (getEvent()?.getHttpMethod() ?? "").toUpperCase();
-  const effectiveNeed: GrantNeed =
-    need === "write" || !READ_HTTP_METHODS.has(method) ? "write" : "read";
 
   // Loaded here, on this request, every request. Not memoised on the session,
   // not cached in the process, not carried on the token: a revocation has to
@@ -818,7 +921,6 @@ export async function requireRecordAuth(
     granteeId: auth.user.id,
   });
   if (!grant) throw denied("no_active_grant");
-  if (!grantAllows(grant, effectiveNeed)) throw denied("insufficient_access");
 
   const owner = await prisma.user.findUnique({
     where: { id: grant.grantorId },
@@ -827,6 +929,9 @@ export async function requireRecordAuth(
   // is deleted with it. Fail closed anyway: an authorization we cannot resolve
   // to a person is not one to act on.
   if (!owner) throw denied("owner_missing");
+
+  const refusal = admit(grant, owner);
+  if (refusal !== null) throw denied(refusal);
 
   getEvent()?.setActingAs(owner.id);
   // Fire-and-forget, the `ApiToken.lastUsedAt` posture: the read must not wait

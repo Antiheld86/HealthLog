@@ -130,7 +130,10 @@ async function seedWeight(userId: string, value: number) {
  */
 const delegableRead: (request: NextRequest) => Promise<Response> = apiHandler(
   async () => {
-    const { user, actor, grantId } = await requireRecordAuth("read");
+    const { user, actor, grantId } = await requireRecordAuth(
+      "read",
+      "measurements",
+    );
     const rows = await prisma.measurement.findMany({
       where: { userId: user.id },
       orderBy: { value: "asc" },
@@ -163,6 +166,7 @@ async function household() {
     grantorId: owner.id,
     granteeId: delegate.id,
     access: "READ",
+    scope: null,
   });
   const grant = await acceptGrant({
     grantId: invited.id,
@@ -262,6 +266,7 @@ describe("acting-account resolver — the decision is never cached", () => {
       grantorId: owner.id,
       granteeId: delegate.id,
       access: "READ",
+      scope: null,
       expiresAt: new Date(Date.now() + 400),
     });
     await acceptGrant({ grantId: invited.id, granteeId: delegate.id });
@@ -281,6 +286,7 @@ describe("acting-account resolver — the decision is never cached", () => {
       grantorId: owner.id,
       granteeId: delegate.id,
       access: "READ",
+      scope: null,
     });
     const session = await signIn(delegate.id);
     await switchTo(session.id, owner.id);

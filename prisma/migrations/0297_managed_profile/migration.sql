@@ -1,0 +1,29 @@
+-- v1.37.0 — a record somebody else runs.
+--
+-- A managed profile is an account for a person who cannot run their own
+-- record: a child, a parent under care. It has a display name, no e-mail and
+-- no password, never signs in, and is administered by whoever holds an active
+-- MANAGE grant on it.
+--
+-- One column, and the whole of the feature's identity fence hangs off it. An
+-- invited adult who granted management of their OWN record must never reach
+-- the settings, integrations, notification routing, grant management, AI
+-- configuration, export or deletion of that record — those are the surfaces
+-- that would let a manager outlive their own revocation. On a managed profile
+-- there is no self to reserve them for, so the guardian holds them. The gate
+-- is this column and not the grant level, which is what makes the two cases
+-- structurally different rather than differently argued.
+--
+-- A timestamp rather than a boolean, deliberately. It says since when, which
+-- the activity trail needs to be readable across the transition, and clearing
+-- it is the emancipation act: the day the person takes the record over,
+-- credentials attach (`email` and `password_hash` are already nullable, so
+-- nothing here has to change for that) and this goes back to NULL. The grants
+-- survive untouched — the handover changes who holds the revoke button, not
+-- which rows exist.
+--
+-- No index. The column is read by primary key, on a row the request already
+-- loaded, and the one enumeration that scans for marked rows (the reminder
+-- fan-out) resolves them from the grant side.
+
+ALTER TABLE "users" ADD COLUMN "managed_profile_at" TIMESTAMPTZ(3);

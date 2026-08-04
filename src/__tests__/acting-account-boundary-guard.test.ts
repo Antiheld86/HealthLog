@@ -168,16 +168,25 @@ describe("the cookie-only helpers cannot see the acting account", () => {
     expect(body).not.toContain("readActingCarrier");
   });
 
-  it("substitutes a data-scope user in exactly one function", () => {
+  it("substitutes a data-scope user in exactly two functions", () => {
     const src = read("lib/api-handler.ts");
     const record = functionBody(src, "requireRecordAuth");
     expect(record).toContain("readActingCarrier");
 
+    // v1.37.0 — the guardian resolver is the second function that acts on the
+    // carrier, and it is a second declaration rather than a level on the
+    // first: it admits the surfaces of a record NOBODY runs themselves, gated
+    // on the managed-profile marker rather than on the grant.
+    const guardian = functionBody(src, "requireGuardianAuth");
+    expect(guardian.length).toBeGreaterThan(0);
+    expect(guardian).toContain("readActingCarrier");
+    expect(guardian).toContain("managedProfileAt");
+
     // `readActingCarrier` is what turns a request into "acting as somebody
-    // else". Two callers: the bare path, which refuses on it, and the record
-    // path, which acts on it. A third would be a mode nobody declared.
+    // else". Three callers: the bare path, which refuses on it, and the two
+    // record paths, which act on it. A fourth would be a mode nobody declared.
     const callers = (src.match(/await readActingCarrier\(/g) ?? []).length;
-    expect(callers).toBe(2);
+    expect(callers).toBe(3);
   });
 });
 

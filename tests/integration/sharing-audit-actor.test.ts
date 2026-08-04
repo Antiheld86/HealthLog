@@ -76,7 +76,7 @@ async function signIn(userId: string) {
  */
 const delegableAction: (request: NextRequest) => Promise<Response> = apiHandler(
   async () => {
-    const { user } = await requireRecordAuth("read");
+    const { user } = await requireRecordAuth("read", "measurements");
     await auditLog("measurement.read", {
       userId: user.id,
       details: { via: "test" },
@@ -99,6 +99,7 @@ async function household() {
     grantorId: owner.id,
     granteeId: delegate.id,
     access: "READ",
+    scope: null,
   });
   await acceptGrant({ grantId: invited.id, granteeId: delegate.id });
   const session = await signIn(delegate.id);
@@ -162,7 +163,7 @@ describe("who the trail says did it", () => {
 
     const handler: (request: NextRequest) => Promise<Response> = apiHandler(
       async () => {
-        const { actor } = await requireRecordAuth("read");
+        const { actor } = await requireRecordAuth("read", "measurements");
         await auditLog("delegate.own.act", { userId: actor.id });
         return NextResponse.json({ data: { ok: true }, error: null });
       },
@@ -225,6 +226,7 @@ describe("delegated reads coalesce to one row a day", () => {
       grantorId: owner.id,
       granteeId: second.id,
       access: "READ",
+      scope: null,
     });
     await acceptGrant({ grantId: invited.id, granteeId: second.id });
 

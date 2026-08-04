@@ -109,7 +109,7 @@ let handlerRuns = 0;
 const delegableWrite: (request: NextRequest) => Promise<Response> = apiHandler(
   withIdempotency<[NextRequest]>(async () => {
     handlerRuns += 1;
-    const { user } = await requireRecordAuth("write");
+    const { user } = await requireRecordAuth("write", "measurements");
     const row = await prisma.measurement.create({
       data: {
         userId: user.id,

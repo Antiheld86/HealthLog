@@ -458,7 +458,7 @@ export const POST = apiHandler(withIdempotency<[Request]>(postUpload));
  * declare separately rather than share one line.
  */
 export const GET = apiHandler(async (request: Request) => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "documents");
 
   const gate = await requireModuleEnabled(user.id, "inboundDocuments");
   if (!gate.enabled) return gate.response;

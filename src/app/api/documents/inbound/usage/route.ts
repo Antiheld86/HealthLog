@@ -34,7 +34,7 @@ export const dynamic = "force-dynamic";
  * No write arm exists on this route.
  */
 export const GET = apiHandler(async () => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "documents");
   const gate = await requireModuleEnabled(user.id, "inboundDocuments");
   if (!gate.enabled) return gate.response;
 

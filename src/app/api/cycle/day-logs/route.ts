@@ -48,7 +48,7 @@ export const POST = apiHandler(withIdempotency<[NextRequest]>(postDayLog));
  * row id. Gated + owner-scoped + `deletedAt:null`.
  */
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "cycle");
 
   const gate = await requireCycleEnabled(user.id, user.gender);
   if (!gate.enabled) return gate.response;

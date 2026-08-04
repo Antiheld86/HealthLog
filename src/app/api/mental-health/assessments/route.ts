@@ -99,7 +99,7 @@ function respondExisting(row: Parameters<typeof shapeRow>[0]): Response {
 }
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "mind");
   // Opt-in module (default OFF): the screener history is unreachable until the
   // account turns the mental-health module on. Enforced server-side even for a
   // valid Bearer token (the nav entry / page redirect are UX-only).

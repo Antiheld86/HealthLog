@@ -31,7 +31,7 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 export const GET = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireRecordAuth("read");
+    const { user } = await requireRecordAuth("read", "profile");
 
     const { id } = await params;
     const row = await prisma.allergy.findUnique({ where: { id } });

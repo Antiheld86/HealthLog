@@ -142,6 +142,13 @@ export const POST = apiHandler(async (request: NextRequest) => {
       grantorId: user.id,
       granteeId: invitee.id,
       access,
+      // The entire record, which is what this endpoint has always offered and
+      // what every stored grant means. Named rather than defaulted, because
+      // the domain module takes the scope as a required argument for the same
+      // reason it takes the level as one: a scope nobody chose is not a scope.
+      // The consent surface that lets an owner narrow it lands beside this
+      // line, in this release.
+      scope: null,
       expiresAt: expiresAt ? new Date(expiresAt) : null,
     });
 

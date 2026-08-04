@@ -64,7 +64,7 @@ function serialiseBiomarker(row: {
 
 export const GET = apiHandler(
   async (_request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireRecordAuth("read");
+    const { user } = await requireRecordAuth("read", "labs");
     const { id } = await params;
 
     const row = await prisma.biomarker.findFirst({ where: { id } });

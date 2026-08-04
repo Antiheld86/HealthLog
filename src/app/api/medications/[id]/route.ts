@@ -76,7 +76,7 @@ function reconcileScheduleWindow(
 
 export const GET = apiHandler(
   async (_request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireRecordAuth("read");
+    const { user } = await requireRecordAuth("read", "medications");
 
     const { id } = await params;
     const medication = await prisma.medication.findUnique({

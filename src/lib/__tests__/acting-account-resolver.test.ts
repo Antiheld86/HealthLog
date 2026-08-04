@@ -31,14 +31,19 @@ interface GrantRow {
   id: string;
   grantorId: string;
   granteeId: string;
-  access: "READ" | "WRITE";
+  access: "READ" | "WRITE" | "MANAGE";
+  /** v1.37.0 — NULL is the entire record; an array narrows to those sections. */
+  scopeJson: string[] | null;
   acceptedAt: Date | null;
   revokedAt: Date | null;
   expiresAt: Date | null;
 }
 
 const grantRows: GrantRow[] = [];
-const userRows = new Map<string, { id: string; role: string }>();
+const userRows = new Map<
+  string,
+  { id: string; role: string; managedProfileAt: Date | null }
+>();
 const touched: string[] = [];
 
 vi.mock("@/lib/db", () => ({
@@ -112,6 +117,7 @@ import {
   ACCOUNT_SELECTOR_HEADER,
   apiHandler,
   requireActorAuth,
+  requireGuardianAuth,
   requireAdmin,
   requireAuth,
   requireCookieAuth,
@@ -128,8 +134,18 @@ import type { WideEvent } from "@/lib/logging/types";
 const OWNER = "owner-1";
 const DELEGATE = "delegate-1";
 
-function user(id: string, role: "USER" | "ADMIN" = "USER") {
-  return { id, role, username: id, email: `${id}@example.test` };
+function user(
+  id: string,
+  role: "USER" | "ADMIN" = "USER",
+  managedProfileAt: Date | null = null,
+) {
+  return {
+    id,
+    role,
+    username: id,
+    email: `${id}@example.test`,
+    managedProfileAt,
+  };
 }
 
 /** Sign the delegate in over the cookie transport. */
@@ -172,6 +188,7 @@ function liveGrant(overrides: Partial<GrantRow> = {}): GrantRow {
     grantorId: OWNER,
     granteeId: DELEGATE,
     access: "READ",
+    scopeJson: null,
     acceptedAt: new Date(Date.now() - 60_000),
     revokedAt: null,
     expiresAt: null,
@@ -252,7 +269,9 @@ describe("do no harm — nothing is acting as anyone", () => {
     const actor = await resolveInRoute(() => requireActorAuth());
     expect(actor.user.id).toBe(DELEGATE);
 
-    const record = await resolveInRoute(() => requireRecordAuth("read"));
+    const record = await resolveInRoute(() =>
+      requireRecordAuth("read", "measurements"),
+    );
     expect(record.user.id).toBe(DELEGATE);
     expect(record.actor.id).toBe(DELEGATE);
     expect(record.grantId).toBeNull();
@@ -266,7 +285,7 @@ describe("do no harm — nothing is acting as anyone", () => {
 
   it("leaves the wide event's actor identity alone", async () => {
     signedInCookie(null);
-    const call = route(() => requireRecordAuth("read"));
+    const call = route(() => requireRecordAuth("read", "measurements"));
     await call();
 
     expect(lastEvent().auth?.user_id).toBe(DELEGATE);
@@ -382,7 +401,7 @@ describe("requireRecordAuth — substitution", () => {
     const grant = liveGrant();
 
     const resolved: RecordAuthContext = await resolveInRoute(() =>
-      requireRecordAuth("read"),
+      requireRecordAuth("read", "measurements"),
     );
     expect(resolved.user.id).toBe(OWNER);
     expect(resolved.actor.id).toBe(DELEGATE);
@@ -394,7 +413,9 @@ describe("requireRecordAuth — substitution", () => {
     selector(OWNER);
     liveGrant();
 
-    const resolved = await resolveInRoute(() => requireRecordAuth("read"));
+    const resolved = await resolveInRoute(() =>
+      requireRecordAuth("read", "measurements"),
+    );
     expect(resolved.user.id).toBe(OWNER);
     expect(resolved.actor.id).toBe(DELEGATE);
   });
@@ -403,7 +424,7 @@ describe("requireRecordAuth — substitution", () => {
     signedInCookie(OWNER);
     liveGrant();
 
-    await route(() => requireRecordAuth("read"))();
+    await route(() => requireRecordAuth("read", "measurements"))();
     expect(lastEvent().auth?.user_id).toBe(DELEGATE);
     expect(lastEvent().auth?.acting_as).toBe(OWNER);
   });
@@ -412,7 +433,7 @@ describe("requireRecordAuth — substitution", () => {
     signedInCookie(OWNER);
     const grant = liveGrant();
 
-    await resolveInRoute(() => requireRecordAuth("read"));
+    await resolveInRoute(() => requireRecordAuth("read", "measurements"));
     await new Promise((r) => setTimeout(r, 0));
     expect(touched).toEqual([grant.id]);
   });
@@ -420,7 +441,9 @@ describe("requireRecordAuth — substitution", () => {
 
 describe("requireRecordAuth — every way a grant can fail", () => {
   const refused = async (): Promise<Response> => {
-    const response = await route(() => requireRecordAuth("read"))();
+    const response = await route(() =>
+      requireRecordAuth("read", "measurements"),
+    )();
     expect(response.status).toBe(403);
     expect((await response.clone().json()).meta.errorCode).toBe(
       "sharing.access.denied",
@@ -456,7 +479,9 @@ describe("requireRecordAuth — every way a grant can fail", () => {
     signedInCookie(OWNER);
     liveGrant();
 
-    const response = await route(() => requireRecordAuth("read"))("POST");
+    const response = await route(() =>
+      requireRecordAuth("read", "measurements"),
+    )("POST");
     expect(response.status).toBe(403);
     expect((await response.json()).meta.errorCode).toBe(
       "sharing.access.denied",
@@ -467,7 +492,9 @@ describe("requireRecordAuth — every way a grant can fail", () => {
     signedInCookie(OWNER);
     liveGrant();
 
-    const response = await route(() => requireRecordAuth("write"))();
+    const response = await route(() =>
+      requireRecordAuth("write", "measurements"),
+    )();
     expect(response.status).toBe(403);
   });
 
@@ -478,7 +505,9 @@ describe("requireRecordAuth — every way a grant can fail", () => {
     signedInCookie(OWNER);
     liveGrant({ access: "WRITE" });
 
-    const response = await route(() => requireRecordAuth("write"))("POST");
+    const response = await route(() =>
+      requireRecordAuth("write", "measurements"),
+    )("POST");
     expect(response.status).toBe(200);
   });
 
@@ -488,7 +517,9 @@ describe("requireRecordAuth — every way a grant can fail", () => {
     // guard.
     signedInCookie(OWNER);
     liveGrant();
-    await expect(requireRecordAuth("read")).rejects.toMatchObject({
+    await expect(
+      requireRecordAuth("read", "measurements"),
+    ).rejects.toMatchObject({
       errorCode: "sharing.access.denied",
     });
   });
@@ -496,7 +527,9 @@ describe("requireRecordAuth — every way a grant can fail", () => {
   it("refuses a selector too long to name an account, without querying", async () => {
     signedInBearer();
     selector("x".repeat(65));
-    await expect(requireRecordAuth("read")).rejects.toMatchObject({
+    await expect(
+      requireRecordAuth("read", "measurements"),
+    ).rejects.toMatchObject({
       errorCode: "sharing.access.denied",
     });
     expect(prisma.accountGrant.findFirst).not.toHaveBeenCalled();
@@ -506,7 +539,9 @@ describe("requireRecordAuth — every way a grant can fail", () => {
     signedInCookie(null);
     selector(OWNER);
     liveGrant();
-    await expect(requireRecordAuth("read")).rejects.toMatchObject({
+    await expect(
+      requireRecordAuth("read", "measurements"),
+    ).rejects.toMatchObject({
       errorCode: "sharing.not_permitted",
     });
   });
@@ -526,7 +561,9 @@ describe("refusals do not enumerate", () => {
   it("answers identically for an account that does not exist and one that granted nothing", async () => {
     signedInBearer();
     selector("no-such-account-at-all");
-    const missing = await route(() => requireRecordAuth("read"))();
+    const missing = await route(() =>
+      requireRecordAuth("read", "measurements"),
+    )();
     const missingBody = await missing.text();
 
     vi.clearAllMocks();
@@ -536,7 +573,9 @@ describe("refusals do not enumerate", () => {
     // granted this caller anything.
     userRows.set("real-stranger", user("real-stranger"));
     selector("real-stranger");
-    const present = await route(() => requireRecordAuth("read"))();
+    const present = await route(() =>
+      requireRecordAuth("read", "measurements"),
+    )();
     const presentBody = await present.text();
 
     expect(missing.status).toBe(present.status);
@@ -549,7 +588,9 @@ describe("refusals do not enumerate", () => {
     signedInBearer();
     selector(OWNER);
     liveGrant({ revokedAt: new Date(Date.now() - 1000) });
-    const revoked = await route(() => requireRecordAuth("read"))();
+    const revoked = await route(() =>
+      requireRecordAuth("read", "measurements"),
+    )();
     const revokedBody = await revoked.text();
 
     vi.clearAllMocks();
@@ -557,7 +598,9 @@ describe("refusals do not enumerate", () => {
     grantRows.length = 0;
     signedInBearer();
     selector(OWNER);
-    const never = await route(() => requireRecordAuth("read"))();
+    const never = await route(() =>
+      requireRecordAuth("read", "measurements"),
+    )();
 
     expect(revokedBody).toBe(await never.text());
   });
@@ -567,7 +610,9 @@ describe("refusals do not enumerate", () => {
     selector(OWNER);
     liveGrant({ expiresAt: new Date(Date.now() - 1000) });
 
-    const body = await (await route(() => requireRecordAuth("read"))()).text();
+    const body = await (
+      await route(() => requireRecordAuth("read", "measurements"))()
+    ).text();
     expect(body).not.toContain("expire");
     expect(body).not.toContain("grant");
     expect(sharingAuditCalls()[0][1]).toMatchObject({
@@ -616,5 +661,238 @@ describe("the cookie-only helpers stay out of reach of a switch", () => {
 
     const ctx = await requireFreshMfa(300);
     expect(ctx.user.id).toBe(DELEGATE);
+  });
+});
+
+/**
+ * v1.37.0 — the section fence.
+ *
+ * A scoped grant is a door policy: the sections it names open, the others do
+ * not answer at all. Every refusal below is the same 403 with the same body as
+ * every other sharing refusal — only the audit reason differs — so these
+ * assert the reason on the row and the bytes on the wire separately.
+ */
+describe("a scoped grant reaches only the sections it names", () => {
+  it("admits a route whose section the grant names", async () => {
+    signedInCookie(OWNER);
+    liveGrant({ scopeJson: ["medications"] });
+
+    const ctx = await resolveInRoute(() =>
+      requireRecordAuth("read", "medications"),
+    );
+    expect(ctx.user.id).toBe(OWNER);
+    expect(ctx.actor.id).toBe(DELEGATE);
+  });
+
+  it("refuses a route whose section the grant does not name", async () => {
+    signedInCookie(OWNER);
+    liveGrant({ scopeJson: ["medications"] });
+
+    const response = await route(() =>
+      requireRecordAuth("read", "measurements"),
+    )();
+    expect(response.status).toBe(403);
+    expect(sharingAuditCalls()[0][1]).toMatchObject({
+      details: expect.objectContaining({ reason: "out_of_scope" }),
+    });
+  });
+
+  it("refuses every record-wide route, at any scope", async () => {
+    // The invariant: an aggregate reads across sections and there is no honest
+    // partial answer to one. Not filtered — refused.
+    signedInCookie(OWNER);
+    liveGrant({ scopeJson: ["medications", "measurements", "labs"] });
+
+    const response = await route(() => requireRecordAuth("read", "record"))();
+    expect(response.status).toBe(403);
+    expect(sharingAuditCalls()[0][1]).toMatchObject({
+      details: expect.objectContaining({ reason: "out_of_scope" }),
+    });
+  });
+
+  it("refuses everything when the stored scope is unreadable", async () => {
+    // Fail-closed, end to end: a blob the normaliser cannot read opens
+    // nothing, including a section the blob might have happened to name.
+    signedInCookie(OWNER);
+    liveGrant({ scopeJson: "medications" as unknown as string[] });
+
+    for (const domain of ["medications", "measurements", "record"] as const) {
+      const response = await route(() => requireRecordAuth("read", domain))();
+      expect(response.status, domain).toBe(403);
+    }
+  });
+
+  it("leaves a NULL-scope grant reaching everything, as before", async () => {
+    // The no-regression leg. Every grant in the product is this one.
+    signedInCookie(OWNER);
+    liveGrant({ scopeJson: null });
+
+    for (const domain of [
+      "measurements",
+      "medications",
+      "labs",
+      "profile",
+      "illness",
+      "mind",
+      "cycle",
+      "documents",
+      "record",
+    ] as const) {
+      const ctx = await resolveInRoute(() => requireRecordAuth("read", domain));
+      expect(ctx.user.id, domain).toBe(OWNER);
+    }
+  });
+
+  it("says the same thing on the wire as every other refusal", async () => {
+    signedInCookie(OWNER);
+    liveGrant({ scopeJson: ["medications"] });
+    const outOfScope = await route(() =>
+      requireRecordAuth("read", "measurements"),
+    )();
+    const outOfScopeBody = await outOfScope.text();
+
+    grantRows.length = 0;
+    liveGrant({ access: "READ" });
+    const insufficient = await route(() =>
+      requireRecordAuth("write", "measurements"),
+    )();
+
+    expect(outOfScope.status).toBe(insufficient.status);
+    expect(outOfScopeBody).toBe(await insufficient.text());
+    expect(outOfScopeBody).not.toContain("scope");
+    expect(outOfScopeBody).not.toContain("section");
+  });
+});
+
+/**
+ * v1.37.0 — the third level, at the resolver.
+ */
+describe("a route declaring manage refuses everything below it", () => {
+  it("admits a MANAGE grant", async () => {
+    signedInCookie(OWNER);
+    liveGrant({ access: "MANAGE" });
+
+    const ctx = await resolveInRoute(
+      () => requireRecordAuth("manage", "measurements"),
+      "DELETE",
+    );
+    expect(ctx.user.id).toBe(OWNER);
+  });
+
+  it("refuses a WRITE grant on a safe method", async () => {
+    // The method cannot satisfy a declaration, only escalate one. A GET on a
+    // manage-declaring route is still a manage question.
+    signedInCookie(OWNER);
+    liveGrant({ access: "WRITE" });
+
+    const response = await route(() =>
+      requireRecordAuth("manage", "measurements"),
+    )("GET");
+    expect(response.status).toBe(403);
+    expect(sharingAuditCalls()[0][1]).toMatchObject({
+      details: expect.objectContaining({ reason: "insufficient_access" }),
+    });
+  });
+
+  it("lets a MANAGE grant satisfy a route that only asked for a write", async () => {
+    signedInCookie(OWNER);
+    liveGrant({ access: "MANAGE" });
+
+    const ctx = await resolveInRoute(
+      () => requireRecordAuth("write", "labs"),
+      "POST",
+    );
+    expect(ctx.user.id).toBe(OWNER);
+  });
+});
+
+/**
+ * v1.37.0 — the identity fence.
+ *
+ * The single most important arm in the release: the line between "manage my
+ * data" and "own my account". An invited adult's MANAGE grant reaches the
+ * record's health data and NONE of its settings, integrations, routing, grant
+ * management or deletion. The gate is the managed-profile marker on the
+ * record, not the level on the grant.
+ */
+describe("the guardian resolver gates on the marker, not the grant", () => {
+  it("admits a MANAGE grant on a marked record", async () => {
+    signedInCookie(OWNER);
+    userRows.set(OWNER, user(OWNER, "USER", new Date("2026-08-04T00:00:00Z")));
+    liveGrant({ access: "MANAGE" });
+
+    const ctx = await resolveInRoute(() => requireGuardianAuth());
+    expect(ctx.user.id).toBe(OWNER);
+    expect(ctx.actor.id).toBe(DELEGATE);
+    expect(ctx.grantId).toBe("grant-1");
+  });
+
+  it("refuses a MANAGE grant on an ordinary adult's record", async () => {
+    // The fence. The grant is perfect and the answer is still no, because the
+    // record has an owner who runs it.
+    signedInCookie(OWNER);
+    userRows.set(OWNER, user(OWNER, "USER", null));
+    liveGrant({ access: "MANAGE" });
+
+    const response = await route(() => requireGuardianAuth())();
+    expect(response.status).toBe(403);
+    expect(sharingAuditCalls()[0][1]).toMatchObject({
+      details: expect.objectContaining({ reason: "guardian_only" }),
+    });
+  });
+
+  it("refuses a WRITE grant on a marked record", async () => {
+    // The marker is necessary and not sufficient either way round.
+    signedInCookie(OWNER);
+    userRows.set(OWNER, user(OWNER, "USER", new Date("2026-08-04T00:00:00Z")));
+    liveGrant({ access: "WRITE" });
+
+    const response = await route(() => requireGuardianAuth())();
+    expect(response.status).toBe(403);
+    expect(sharingAuditCalls()[0][1]).toMatchObject({
+      details: expect.objectContaining({ reason: "insufficient_access" }),
+    });
+  });
+
+  it("ignores the scope on a marked record, because MANAGE carries none", async () => {
+    signedInCookie(OWNER);
+    userRows.set(OWNER, user(OWNER, "USER", new Date("2026-08-04T00:00:00Z")));
+    liveGrant({ access: "MANAGE", scopeJson: null });
+
+    const ctx = await resolveInRoute(() => requireGuardianAuth());
+    expect(ctx.user.id).toBe(OWNER);
+  });
+
+  it("serves the caller's own record when nothing is acting as anyone", async () => {
+    // Do no harm: the owner of an ordinary record reaching their own settings
+    // is the request it always was, and no grant question is asked.
+    signedInCookie(null);
+
+    const ctx = await resolveInRoute(() => requireGuardianAuth());
+    expect(ctx.user.id).toBe(DELEGATE);
+    expect(ctx.grantId).toBeNull();
+    expect(prisma.accountGrant.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("says the same thing on the wire as every other refusal", async () => {
+    signedInCookie(OWNER);
+    userRows.set(OWNER, user(OWNER, "USER", null));
+    liveGrant({ access: "MANAGE" });
+    const fenced = await route(() => requireGuardianAuth())();
+    const fencedBody = await fenced.text();
+
+    // Compared against the oldest refusal in the feature: no grant at all. The
+    // two are as far apart in meaning as this feature gets — "you were never
+    // given anything" and "you were given management of a record whose owner
+    // runs it" — and the caller must not be able to tell them apart.
+    grantRows.length = 0;
+    const insufficient = await route(() =>
+      requireRecordAuth("read", "measurements"),
+    )();
+
+    expect(fenced.status).toBe(insufficient.status);
+    expect(fencedBody).toBe(await insufficient.text());
+    expect(fencedBody).not.toContain("guardian");
+    expect(fencedBody).not.toContain("managed");
   });
 });

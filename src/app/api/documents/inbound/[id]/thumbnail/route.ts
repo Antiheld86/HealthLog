@@ -52,7 +52,7 @@ const THUMBNAIL_READ_WINDOW_MS = 60 * 60 * 1000;
  */
 export const GET = apiHandler(
   async (_request: Request, { params }: RouteParams) => {
-    const { user, actor } = await requireRecordAuth("read");
+    const { user, actor } = await requireRecordAuth("read", "documents");
 
     const gate = await requireModuleEnabled(user.id, "inboundDocuments");
     if (!gate.enabled) return gate.response;

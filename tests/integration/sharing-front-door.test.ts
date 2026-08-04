@@ -98,6 +98,7 @@ async function switchInto(
     grantorId: ownerId,
     granteeId: delegateId,
     access,
+    scope: null,
   });
   const grant = await acceptGrant({
     grantId: invited.id,

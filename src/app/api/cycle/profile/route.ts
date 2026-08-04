@@ -14,7 +14,7 @@ import { toCycleProfileDTO } from "@/lib/cycle/dto";
 export const dynamic = "force-dynamic";
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "cycle");
 
   const gate = await requireCycleEnabled(user.id, user.gender);
   if (!gate.enabled) return gate.response;

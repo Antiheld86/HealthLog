@@ -379,6 +379,8 @@ export const USER_KEPT_FIELDS: Readonly<Record<string, string>> = {
   oidcSub: "a sign-in credential — the external identity binding",
   createdAt: "when the account was created; the account is preserved",
   updatedAt: "row bookkeeping maintained by Prisma",
+  managedProfileAt:
+    "whether this record is one somebody else runs — account shape, not record content. Clearing it would strip the guardian's reach from a record that has no credentials of its own, leaving an account nobody can open, administer or delete. Emptying a record is not emancipating the person in it.",
   totpSecretEncrypted: "a second-factor credential",
   totpConfirmedAt: "second-factor enrolment state",
   totpLastStep:
