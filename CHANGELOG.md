@@ -33,6 +33,16 @@
 
 ### Fixed
 
+- Somebody with write access could still overturn a dose you had already
+  recorded. The rule that keeps that with the owner was on one request and the
+  medication card reaches the same entry through another, where an explicit
+  "skipped" was applied rather than refused, and the stock the dose had used
+  was credited back on the way. Both now refuse a decision that disagrees with
+  the one already there. Re-sending the same decision still works, because a
+  second tap, a phone catching up after no signal and a retry after a partial
+  sweep all look like that, and somebody standing over a pill box hits all
+  three.
+
 - A control could be tapped in the moment before the app knew whose record was
   on screen, leaving somebody stranded in a form the server would refuse. The
   capture sheet and the dashboard's quick-entry sheets now withdraw the form
