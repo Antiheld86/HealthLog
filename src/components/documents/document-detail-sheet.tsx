@@ -533,7 +533,12 @@ export function DocumentDetailSheet({
                 <span />
               )}
               <div className="flex items-center gap-2">
-                {aiEnabled ? (
+                {/* v1.36.x — `launch` is the one entry point that rendered
+                    without asking whether a drawer exists to open. It is null
+                    inside somebody else's record (the shell mounts no drawer
+                    there), and `/documents` is a shared-record destination, so
+                    this is the Coach button a delegate actually meets. */}
+                {aiEnabled && launch ? (
                   // v1.28.52 (Documents R3) — "Ask the Coach" opens the REAL
                   // coach conversation scoped to this document in the SIDE
                   // DRAWER (the maximize control there expands it to the full
@@ -545,7 +550,7 @@ export function DocumentDetailSheet({
                     variant="outline"
                     onClick={() => {
                       onOpenChange(false);
-                      launch?.askCoach(null, undefined, false, doc.id);
+                      launch.askCoach(null, undefined, false, doc.id);
                     }}
                     data-slot="document-chat-open"
                     aria-label={t("documents.chat.openAria")}

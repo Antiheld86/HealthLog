@@ -1,6 +1,7 @@
 import { expect, test } from "./setup/test";
 
 import { STORAGE_STATE_PATH } from "./setup/global-setup";
+import { openMenu } from "./open-menu";
 
 /**
  * Add-measurement flow — exercises the dashboard's quick-entry dropdown,
@@ -14,6 +15,16 @@ import { STORAGE_STATE_PATH } from "./setup/global-setup";
  */
 test.describe("add measurement flow", () => {
   test.use({ storageState: STORAGE_STATE_PATH });
+
+  // This journey lands on the dashboard, which is the most expensive page in
+  // the product to render cold: the route segment suspends behind the server
+  // render and shows `loading.tsx` until it resolves. On a shared runner with
+  // the whole suite in flight that has overrun the 30 s default, and the test
+  // then died on the quick-add trigger rather than on anything it is about.
+  // The subject here is the add-then-appears round trip, not the dashboard's
+  // cold-start latency, so the budget is the page's and the assertions stay
+  // exactly as tight as they were.
+  test.setTimeout(90_000);
 
   test("creating a weight reading surfaces it in the list", async ({
     page,
@@ -103,16 +114,25 @@ test.describe("add measurement flow", () => {
     );
 
     await page.goto("/", { waitUntil: "domcontentloaded" });
+    // Past the route-level skeleton first. `networkidle` says nothing about
+    // whether the suspended segment resolved, and every locator below lives
+    // inside the content that replaces it.
+    await expect(page.locator('[data-slot="dashboard-loading"]')).toHaveCount(
+      0,
+      { timeout: 60_000 },
+    );
     await page.waitForLoadState("networkidle");
 
     // Open the "Add" dropdown — the dashboard's quick-entry trigger sits
     // at the top-right of `<main>`. Scope the locator there so we don't
     // accidentally match an "Add" button on the sidebar.
     const main = page.locator("main");
-    await main
-      .getByRole("button", { name: /^add$|hinzufügen|hinzufuegen/i })
-      .first()
-      .click();
+    await openMenu(
+      page,
+      main
+        .getByRole("button", { name: /^add$|hinzufügen|hinzufuegen/i })
+        .first(),
+    );
 
     // v1.5 phase-5: the menu items now have distinct labels — the
     // measurement entry says "Measurement" / "Messung" instead of "Add",

@@ -13,6 +13,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useTranslations } from "@/lib/i18n/context";
 import {
   COMPARISON_BASELINES,
@@ -89,8 +90,18 @@ export function ChartOverlayControls({
   onChange,
   triggerClassName,
   hasComparisonData = true,
-}: ChartOverlayControlsProps): ReactElement {
+}: ChartOverlayControlsProps): ReactElement | null {
   const { t } = useTranslations();
+  // The cog is gated here rather than at each of the eight charts that mount
+  // it, so the three chart wrappers cannot drift apart on the same question.
+  // Every toggle persists through `PUT /api/dashboard/chart-overlay-prefs`,
+  // which resolves the caller and refuses under a switch; and the preference
+  // belongs to the person reading the chart, not to the record — the same
+  // reasoning that keeps the mood tag layout off the delegable list. So a
+  // delegate reads the owner's chart in its stored shape and is not offered a
+  // dial that would silently fail.
+  const { canManage } = useRecordCapabilities();
+  if (!canManage) return null;
 
   return (
     <DropdownMenu>

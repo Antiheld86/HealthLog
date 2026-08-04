@@ -68,10 +68,12 @@ function softTimeout<T>(ms: number): Promise<T | undefined> {
  *    answers null while the browser is acting on somebody else's record. Every
  *    read below scopes to `user`, and under a switch `user` is the DELEGATE —
  *    so the snapshot, the digest and the widget layout would seed one person's
- *    numbers under a banner naming another, on routes that then refuse the
- *    refetch that would have corrected them. The accessor's docblock carries
- *    the full argument, including why resolving the owner here instead is the
- *    worse answer.
+ *    numbers under a banner naming another. Since those three became delegable
+ *    reads the client's refetch does correct it, which makes the failure a
+ *    flash of the wrong person's dashboard rather than a permanent one; that
+ *    is a smaller bug and not a different one, so the accessor still steps
+ *    aside here. Its docblock carries the full argument, including why
+ *    resolving the owner here instead is the worse answer.
  *  - Fail-soft: no session, an active switch, a builder hiccup, or a DB blip
  *    renders the page exactly as before this wrapper existed — the client cells
  *    own the fetch. Each prefetch is independent; one failing never blocks the

@@ -1,6 +1,7 @@
 import { expect, test } from "./setup/test";
 
 import { STORAGE_STATE_PATH } from "./setup/global-setup";
+import { openMenu } from "./open-menu";
 import {
   mockDashboardSnapshot,
   WEIGHT_ONLY_SUMMARIES,
@@ -66,7 +67,7 @@ test.describe("water capture", () => {
         if (toastMayOverlap) {
           await capture.dispatchEvent("click");
         } else {
-          await capture.click();
+          await openMenu(page, capture);
         }
         const option = page.getByTestId("capture-picker-water");
         await expect(option).toBeVisible();
@@ -78,7 +79,10 @@ test.describe("water capture", () => {
           await option.click();
         }
       } else {
-        await page.locator('[data-tour-id="dashboard-quick-add"]').click();
+        await openMenu(
+          page,
+          page.locator('[data-tour-id="dashboard-quick-add"]'),
+        );
         await page.getByRole("menuitem", { name: "Log water" }).click();
       }
       await expect(

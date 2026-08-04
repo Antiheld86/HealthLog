@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import type { CoachScopeSource, CoachScopeWindow } from "@/lib/ai/coach/types";
 
 /**
@@ -191,7 +192,30 @@ export interface CoachLaunchProviderProps {
   children: ReactNode;
 }
 
+/**
+ * Owns the drawer's launch state — and publishes it only where a drawer
+ * exists to receive it.
+ *
+ * v1.36.x — the shell stopped mounting `<LayoutCoachMount>` inside somebody
+ * else's record, and this provider kept answering: `askCoach()` set an open
+ * flag that nothing was reading, so every per-page Coach entry point became a
+ * button that did nothing at all. A control that errors tells a person where
+ * they stand; one that silently does nothing tells them the product is
+ * broken.
+ *
+ * The gate lives here, on the publisher, rather than in `useCoachLaunch()`.
+ * Six components read this context and five already treat `null` as "no Coach
+ * here", so withholding the value fixes all of them at once and a seventh
+ * inherits the rule. Putting it in the hook instead would drag the account
+ * query into every one of those components for an answer that is the same in
+ * all of them.
+ *
+ * Nothing is taken away by this: `/insights` and `/coach` are not
+ * shared-record destinations, so the Coach is outside what sharing covers to
+ * begin with.
+ */
 export function CoachLaunchProvider({ children }: CoachLaunchProviderProps) {
+  const { inSharedRecord } = useRecordCapabilities();
   const [open, setOpen] = useState<boolean>(false);
   const [closeIntent, setCloseIntent] = useState<CoachCloseIntent | null>(null);
   const [prefill, setPrefill] = useState<string | null>(null);
@@ -277,20 +301,24 @@ export function CoachLaunchProvider({ children }: CoachLaunchProviderProps) {
     [],
   );
 
-  const value = useMemo<CoachLaunchValue>(
-    () => ({
-      open,
-      closeIntent,
-      prefill,
-      autoSend,
-      scope,
-      documentId,
-      workoutId,
-      askCoach,
-      registerScope,
-      setOpen: handleSetOpen,
-    }),
+  const value = useMemo<CoachLaunchValue | null>(
+    () =>
+      inSharedRecord
+        ? null
+        : {
+            open,
+            closeIntent,
+            prefill,
+            autoSend,
+            scope,
+            documentId,
+            workoutId,
+            askCoach,
+            registerScope,
+            setOpen: handleSetOpen,
+          },
     [
+      inSharedRecord,
       closeIntent,
       open,
       prefill,
@@ -316,6 +344,12 @@ export function CoachLaunchProvider({ children }: CoachLaunchProviderProps) {
  * `<CoachLaunchProvider>` so consumer components can degrade gracefully
  * (e.g. the hero strip's "Ask the coach" action stays disabled until
  * the provider mounts).
+ *
+ * v1.36.x — also `null` inside somebody else's record, and by the same
+ * mechanism: the provider publishes nothing there (see its own docblock), so
+ * every consumer's existing `if (!launch) return null` becomes right without
+ * being told. Kept as a plain context read on purpose — the answer is decided
+ * once, in the provider, rather than by a hook that six components call.
  */
 export function useCoachLaunch(): CoachLaunchValue | null {
   return useContext(CoachLaunchContext);

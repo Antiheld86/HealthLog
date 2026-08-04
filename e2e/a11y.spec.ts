@@ -3,6 +3,7 @@ import type { Locator, Page, Route } from "@playwright/test";
 import { expect, test } from "./setup/test";
 
 import { STORAGE_STATE_PATH } from "./setup/global-setup";
+import { openMenu } from "./open-menu";
 import { POPULATED_SUMMARIES } from "./utils/mock-dashboard-snapshot";
 
 type AxeViolation = Awaited<
@@ -902,10 +903,12 @@ test.describe("axe-core authenticated route and state matrix", () => {
         await expect(page.locator('[data-slot="lab-list"]')).toBeVisible({
           timeout: 15_000,
         });
-        await page
-          .locator('#main-content [data-slot="dropdown-menu-trigger"]')
-          .first()
-          .click();
+        await openMenu(
+          page,
+          page
+            .locator('#main-content [data-slot="dropdown-menu-trigger"]')
+            .first(),
+        );
         await page.getByRole("menuitem").first().click();
         const sheet = page.locator('[data-slot="responsive-sheet-content"]');
         await expect(sheet.locator('input[type="file"]')).toHaveCount(1);
@@ -947,10 +950,12 @@ test.describe("axe-core authenticated route and state matrix", () => {
         await expect(page.locator("[data-medication-id]").first()).toBeVisible({
           timeout: 15_000,
         });
-        await page
-          .locator('#main-content [data-slot="dropdown-menu-trigger"]')
-          .first()
-          .click();
+        await openMenu(
+          page,
+          page
+            .locator('#main-content [data-slot="dropdown-menu-trigger"]')
+            .first(),
+        );
         await page.getByRole("menuitem").last().click();
         const dialog = page.locator('[data-slot="medication-wizard-dialog"]');
         blocking.push(

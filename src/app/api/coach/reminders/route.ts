@@ -17,7 +17,7 @@
  * for the in-app tile). Omitted returns the non-terminal set (proposed / active
  * / due / surfaced), soonest-due first.
  */
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
@@ -69,7 +69,17 @@ function toDto(row: ReminderRow, note: string) {
 }
 
 export const GET = apiHandler(async (req: Request) => {
-  const { user } = await requireAuth();
+  // The RECORD's reminder ledger. A "remind me about X" note is a statement
+  // about the owner's own health, stored on the owner's row and encrypted with
+  // it — the same shape as a mood note or a measurement note, both of which
+  // are already delegable reads. A delegate reading it is the caregiver case
+  // the feature exists for; an actor answer here would light the FAB's dot for
+  // the delegate's own ledger while the page shows another person's record,
+  // which is the failure mode this whole mode system exists to prevent.
+  //
+  // The module gate below resolves against the record, so the surface exists
+  // for a delegate only where the OWNER switched the Coach on.
+  const { user } = await requireRecordAuth("read");
   const gate = await requireModuleEnabled(user.id, "coach");
   if (!gate.enabled) return gate.response;
 
@@ -121,6 +131,13 @@ export const GET = apiHandler(async (req: Request) => {
 });
 
 export const POST = apiHandler(async (req: Request) => {
+  // Deliberately still bare, so it refuses under a switch. Writing into
+  // somebody else's Coach memory is not adding a reading to their record: the
+  // note is what the Coach reads back to the OWNER in their own conversation,
+  // and putting a delegate's words in that voice is not a thing a caregiver
+  // grant should buy. A delegate who wants to record something writes it where
+  // it belongs — a measurement, a side effect, an allergy — all of which are
+  // delegable creates that file an audit row naming them.
   const { user } = await requireAuth();
   const gate = await requireModuleEnabled(user.id, "coach");
   if (!gate.enabled) return gate.response;

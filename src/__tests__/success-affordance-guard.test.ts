@@ -256,7 +256,9 @@ const PINNED_AFFORDANCES: Record<
     "toast.success": 2,
   },
   "src/components/medications/take-all-due.ts": { "toast.success": 1 },
-  "src/components/medications/use-medication-intake.ts": { "toast.success": 5 },
+  // v1.36.x — one fewer: the log-intake path's three-armed toast collapsed
+  // into the shared `intakeToastOptions` decision plus a single call pair.
+  "src/components/medications/use-medication-intake.ts": { "toast.success": 4 },
   "src/components/medications/wizard/medication-wizard-dialog.tsx": {
     "toast.success": 1,
   },

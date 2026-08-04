@@ -2,10 +2,11 @@
  * POST /api/admin/backups/[id]/restore — admin-only disaster recovery.
  *
  * After owner and schema validation, one transaction replaces every
- * serialized owner-scoped class: measurements, medication history, mood and
- * rated factors, cycle data, labs/biomarkers, illness history, allergies,
- * family history, workout summaries, and inbound documents. Document content
- * and summary ciphertext are decoded from base64 and persisted verbatim.
+ * serialized owner-scoped class: measurements, medication history including the
+ * side effects recorded against a drug, mood and rated factors, cycle data,
+ * labs/biomarkers, illness history, allergies, family history, workout
+ * summaries, and inbound documents. Document content and summary ciphertext are
+ * decoded from base64 and persisted verbatim.
  *
  * Metadata-only portable document exports are rejected before mutation; the
  * importer never fabricates content. Audit rows remain outside the wipe, and
@@ -582,6 +583,32 @@ const handler = apiHandler(
                     cyclicOnWeeks: s.cyclicOnWeeks ?? null,
                     cyclicOffWeeks: s.cyclicOffWeeks ?? null,
                     doseWindows: (s.doseWindows ?? null) as never,
+                  })),
+                },
+                // Written in the same `create` as the drug, so the FK binds to
+                // the id this row actually got. A canonical DR file preserves
+                // the medication's id and a portable one mints a fresh cuid;
+                // neither case needs the old `medicationId` from the file,
+                // which is why the payload does not carry it. The note follows
+                // the measurement contract next to it: ciphertext verbatim when
+                // the file has it, legacy plaintext encrypted on the way in,
+                // and the plaintext column left null either way.
+                sideEffects: {
+                  create: m.sideEffects.map((s) => ({
+                    ...(s.id ? { id: s.id } : {}),
+                    userId: ownerId,
+                    occurredAt: new Date(s.occurredAt),
+                    category: s.category,
+                    entry: s.entry,
+                    severity: s.severity,
+                    notes: null,
+                    notesEncrypted:
+                      s.notesEncrypted == null
+                        ? encryptNote(s.notes ?? null)
+                        : decodeEncryptedBytes(s.notesEncrypted),
+                    ...(s.createdAt
+                      ? { createdAt: new Date(s.createdAt) }
+                      : {}),
                   })),
                 },
               },

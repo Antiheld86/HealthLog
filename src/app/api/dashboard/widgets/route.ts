@@ -5,7 +5,7 @@
  * hasn't customized yet). PUT replaces the supplied layout fields atomically.
  * DELETE resets web-controlled choices and preserves the other preferences.
  */
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiSuccess,
   buildPayloadDiagnostic,
@@ -180,11 +180,28 @@ async function buildDashboardLayout(
 }
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  // Read: the RECORD's layout. Write: refused — see the PUT and DELETE below.
+  //
+  // The split is the whole decision, and the read half is settled by a fact
+  // rather than by taste: the dashboard SNAPSHOT already carries this layout
+  // in its `layout` field, the client seeds `queryKeys.dashboardWidgets()`
+  // from it, and the snapshot is a record read. Two writers, one cache cell.
+  // If this route answered with the caller's own layout, that cell would hold
+  // the owner's arrangement one moment and the delegate's the next, which is
+  // the same-key-different-content poisoning the query-key factory exists to
+  // prevent — and it would decide which of the owner's tiles get rendered.
+  //
+  // The layout is also a statement about the record and not only about a
+  // person: which of THIS record's signals are worth a tile, which hero items
+  // matter, which comparison baseline reads correctly for it. A delegate
+  // opening somebody's dashboard should see it arranged the way its owner
+  // arranged it.
+  const { user } = await requireRecordAuth("read");
 
   // 5-minute TTL per blueprint §5; the layout changes only when the user
   // hits the Settings → Dashboard save button, which invalidates this
-  // cache via `invalidateUserDashboardWidgets()`.
+  // cache via `invalidateUserDashboardWidgets()`. Keyed on the resolved id, so
+  // a delegated read fills the owner's cell and never their own.
   const layout = await cached(
     caches.dashboardWidgets as ServerCache<DashboardLayoutWithToken>,
     user.id,
@@ -195,6 +212,17 @@ export const GET = apiHandler(async () => {
 });
 
 export const PUT = apiHandler(async (request: NextRequest) => {
+  // Bare on purpose: this refuses while a switch is on, and the GET above does
+  // not. `requireRecordAuth` escalates every non-safe method to `"write"`, so
+  // declaring the module once would have handed any WRITE-capable grant the
+  // power to rearrange the owner's dashboard — and a delegate's job is to add
+  // to a record, never to redecorate somebody else's app. Nothing a caregiver
+  // needs to do requires moving another person's tiles.
+  //
+  // The visible cost is the comparison-baseline toggle on the dashboard hero,
+  // which persists through here and therefore 403s under a switch. That is the
+  // right refusal: the baseline is stored on the owner's row and a delegate
+  // flipping it would change what the owner sees on their own next visit.
   const { user } = await requireAuth();
 
   const { data: rawBody, error: jsonError } = await safeJson(request, {
@@ -411,6 +439,8 @@ export const PUT = apiHandler(async (request: NextRequest) => {
 });
 
 export const DELETE = apiHandler(async () => {
+  // Bare, for the reason spelled out on the PUT: resetting somebody else's
+  // dashboard to defaults is the loudest possible version of redecorating it.
   const { user } = await requireAuth();
 
   const { normalized, updatedAt } = await prisma.$transaction(

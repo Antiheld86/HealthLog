@@ -181,3 +181,45 @@ export function buildDashboardBands(profile: {
 // The snapshot builder re-exports `buildDashboardBands` under the historic
 // `buildTargetBands` name (see dashboard/snapshot.ts) so callers and the
 // parity test keep working without a duplicate export living in this file.
+
+/** The profile facts `buildDashboardBands` derives a band from. */
+export interface BandProfile {
+  dateOfBirth: Date | null;
+  gender: ProfileSex;
+  heightCm: number | null;
+  weightTargetOverride: { min: number; max: number } | null;
+}
+
+/**
+ * Which profile the dashboard's CLIENT-side band fallback may compute from.
+ *
+ * The fallback exists because the server-resolved bands arrive with the
+ * snapshot and the charts have to draw before that: it recomputes the same
+ * numbers from the profile the page already holds. That profile comes from
+ * `/api/auth/me`, which is an actor surface — it answers about the person
+ * logged in and deliberately never about the record they are acting on. So
+ * while a switch is active it describes the DELEGATE, and drawing a band from
+ * it puts one person's reference ranges over another person's readings: a
+ * thirty-year-old helper's blood-pressure target shading an eighty-year-old's
+ * chart, which looks like a reading and is not one.
+ *
+ * Under a switch this therefore answers with nothing. The charts render
+ * unshaded until the snapshot's own bands land, and unshaded is honest —
+ * an absent band says nothing, while a borrowed one says something false.
+ *
+ * A pure function rather than three ternaries at the call site, because this
+ * is the whole of the decision and it should be possible to state it, test it,
+ * and break it in one place.
+ */
+export function viewerBandProfile(
+  profile: BandProfile,
+  inSharedRecord: boolean,
+): BandProfile {
+  if (!inSharedRecord) return profile;
+  return {
+    dateOfBirth: null,
+    gender: null,
+    heightCm: null,
+    weightTargetOverride: null,
+  };
+}
