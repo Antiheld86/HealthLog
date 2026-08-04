@@ -22,9 +22,13 @@ import {
  * ## The two answers, and why there are two
  *
  * A grant at WRITE admits a short, closed list of verbs: entering readings,
- * lab results, allergies, family history, an illness entry, a biomarker, a
- * tracked value, a side effect, a medication, and marking a dose taken. It
- * admits nothing else. Editing, deleting, restoring, purging, importing and
+ * lab results, an illness entry, a biomarker, a tracked value, a side effect, a
+ * medication, and marking a dose taken or skipped. It admits nothing else.
+ * Allergies and family history were on this list and left it before v1.36.1
+ * shipped — the argument for them held, but the only surface that posts to
+ * either lives under `/settings`, which a switch closes, so the permission had
+ * no reachable caller. `delegable-surface-guard.test.ts` carries that argument
+ * in full and is the list that binds; this paragraph has to agree with it. Editing, deleting, restoring, purging, importing and
  * bulk-acting stay with the owner, including on an entry the delegate added
  * themselves a minute ago, and so does every create the list does not name
  * (a mood entry, a screener, a cycle day). Two booleans carry that:

@@ -74,10 +74,14 @@ export interface NotifyDelegatedIntakeInput {
  * Tell the owner that somebody else marked one of their doses.
  *
  * Never throws: a notification that fails is not a reason to fail the write
- * that produced it. Await it — the call sites reach this only on a delegated
- * write, so the added latency lands on the caregiver's request and never on
- * the owner's own hot path, and awaiting is what makes "one row in
- * `push_attempts`" a thing a test can assert rather than a thing it can race.
+ * that produced it. The call sites do NOT await it, and this line used to say
+ * the opposite. The dispatcher awaits each channel of the cascade in turn, so
+ * one unreachable channel added its whole timeout to the request of the person
+ * standing next to the patient waiting for a dose to register — which is the
+ * one request in this product that should never be slow. The owner learning a
+ * moment later is the better trade. The integration test polls the
+ * `push_attempts` ledger rather than relying on the await, so nothing about
+ * the proof depends on the caller's choice here.
  */
 export async function notifyDelegatedIntake(
   input: NotifyDelegatedIntakeInput,

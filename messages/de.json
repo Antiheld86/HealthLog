@@ -9391,6 +9391,7 @@
     "banner": {
       "viewing": "Du bist in der Akte von {name}",
       "readOnly": "Du kannst sie lesen, nicht ändern.",
+      "canAdd": "Du kannst etwas hinzufügen, aber nichts ändern oder löschen.",
       "leave": "Zurück zu meiner Akte"
     },
     "switcher": {
@@ -9437,7 +9438,7 @@
       "accessReadLabel": "Darf lesen",
       "accessReadCapability": "Sie kann alles lesen, was von dieser Akte geteilt wird. Hinzufügen oder ändern kann sie nichts.",
       "accessWriteLabel": "Darf lesen und hinzufügen",
-      "accessWriteCapability": "Sie kann außerdem etwas zur Akte hinzufügen: Messwerte, Laborergebnisse, Allergien und andere Beobachtungen, ein neues Medikament und eine als genommen markierte Dosis. Ändern oder löschen kann sie nichts, auch nicht das, was sie selbst eingetragen hat. Das kannst nur du.",
+      "accessWriteCapability": "Sie kann außerdem etwas zur Akte hinzufügen: Messwerte, Laborergebnisse, einen neuen Laborwert, einen Krankheitseintrag, einen Wert auf einer selbst angelegten Messgröße, eine Nebenwirkung zu einem Medikament, ein neues Medikament und eine Dosis als genommen oder ausgelassen markieren. Ändern oder löschen kann sie nichts, auch nicht das, was sie selbst eingetragen hat, und eine deiner Erinnerungen verschieben kann sie auch nicht. Das kannst nur du.",
       "expiresLabel": "Zugriff endet am (optional)",
       "expiresHint": "Leer lassen für Zugriff, der gilt, bis ihn jemand beendet. Ein Datum wird bei jeder Anfrage geprüft, der Zugriff endet also am Ende dieses Tages von selbst.",
       "submit": "Einladung senden",
@@ -9513,7 +9514,8 @@
       "customMetricEntryCreate": "{name} hat einen eigenen Messwert eingetragen",
       "medicationSideEffectCreate": "{name} hat eine Nebenwirkung notiert",
       "medicationCreate": "{name} hat ein Medikament angelegt",
-      "medicationIntake": "{name} hat eine Dosis eingetragen"
+      "medicationIntake": "{name} hat eine Dosis eingetragen",
+      "medicationIntakeRefused": "{name} wollte eine Dosis ändern oder eine Erinnerung verschieben und wurde abgewiesen"
     }
   }
 }

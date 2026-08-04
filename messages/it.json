@@ -9391,6 +9391,7 @@
     "banner": {
       "viewing": "Sei nella cartella di {name}",
       "readOnly": "Puoi leggerla, non modificarla.",
+      "canAdd": "Puoi aggiungere qualcosa, ma non modificare né eliminare ciò che c'è.",
       "leave": "Torna alla mia cartella"
     },
     "switcher": {
@@ -9437,7 +9438,7 @@
       "accessReadLabel": "Può vedere",
       "accessReadCapability": "Può leggere tutto ciò che questa cartella condivide. Non può aggiungere né modificare nulla.",
       "accessWriteLabel": "Può vedere e aggiungere",
-      "accessWriteCapability": "Può anche aggiungere qualcosa alla cartella: misurazioni, risultati di laboratorio, allergie e altre osservazioni, un nuovo farmaco e una dose segnata come presa. Non può modificare né eliminare nulla, nemmeno ciò che ha aggiunto. Puoi farlo solo tu.",
+      "accessWriteCapability": "Può anche aggiungere alla cartella: misurazioni, risultati di laboratorio, un nuovo analita da seguire, una voce di malattia, un valore su una metrica che segui tu, un effetto collaterale di un farmaco, un nuovo farmaco e segnare una dose come presa o saltata. Non può modificare né eliminare nulla, nemmeno ciò che ha aggiunto, e non può rimandare uno dei tuoi promemoria. Solo tu puoi.",
       "expiresLabel": "L'accesso termina il (facoltativo)",
       "expiresHint": "Lascia vuoto per un accesso che dura finché qualcuno non lo termina. Una data qui viene controllata a ogni richiesta, quindi l'accesso si interrompe da solo alla fine di quel giorno.",
       "submit": "Invia invito",
@@ -9513,7 +9514,8 @@
       "customMetricEntryCreate": "{name} ha registrato un valore personalizzato",
       "medicationSideEffectCreate": "{name} ha annotato un effetto collaterale",
       "medicationCreate": "{name} ha aggiunto un farmaco",
-      "medicationIntake": "{name} ha registrato una dose"
+      "medicationIntake": "{name} ha registrato una dose",
+      "medicationIntakeRefused": "{name} ha provato a modificare una dose o a rimandare un promemoria, ed è stato rifiutato"
     }
   }
 }

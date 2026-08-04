@@ -75,13 +75,19 @@ export function SharedRecordBanner() {
         <span className="text-foreground font-medium">
           {t("recordSharing.banner.viewing", { name })}
         </span>{" "}
-        {/* Resolved server-side. `canWrite` is false for every grant in v1, and
-            the day it is not, this line stops claiming otherwise on its own. */}
-        {!active.canWrite && (
-          <span className="text-muted-foreground">
-            {t("recordSharing.banner.readOnly")}
-          </span>
-        )}
+        {/* Resolved server-side, and it says something at BOTH levels now.
+            v1.36.1 is the release that made `canWrite` true, and until this
+            line changed the write case rendered nothing at all: a delegate who
+            could add to somebody's health record was told only whose record it
+            was. That matters more than the read case, not less, and the rest of
+            the product leans on it — a control the record refuses is absent
+            rather than disabled, on the stated grounds that the banner names
+            the mode globally. It has to actually do that. */}
+        <span className="text-muted-foreground">
+          {active.canWrite
+            ? t("recordSharing.banner.canAdd")
+            : t("recordSharing.banner.readOnly")}
+        </span>
       </p>
       <button
         type="button"

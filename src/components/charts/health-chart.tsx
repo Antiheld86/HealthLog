@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { queryKeys } from "@/lib/query-keys";
 import { apiGet } from "@/lib/api/api-fetch";
 import {
@@ -684,8 +685,23 @@ export function HealthChart({
   // every chart card.
   const viewportWidth = useViewportWidth();
 
+  // v1.36.1 — `useAuth()` answers about the person at the keyboard, and under a
+  // switch that is the delegate. Dividing the OWNER's weights by the
+  // DELEGATE's height squared produces a plausible-looking BMI that is simply
+  // somebody else's, shaded by fixed category bands, on a page that names the
+  // owner. The same substitution was fixed for the reference bands in this
+  // release; this is the same mistake one component over, and a wrong health
+  // figure is worse than an absent one.
+  //
+  // Inside a shared record the chart therefore draws no BMI at all rather than
+  // a wrong one. Publishing the owner's height to every client that can read
+  // their weights is a bigger decision than this fix, and it belongs with the
+  // per-module scope work rather than here.
+  const { inSharedRecord } = useRecordCapabilities();
   const bmiDivisor =
-    valueMode === "bmi" && user?.heightCm ? (user.heightCm / 100) ** 2 : null;
+    valueMode === "bmi" && !inSharedRecord && user?.heightCm
+      ? (user.heightCm / 100) ** 2
+      : null;
 
   // v1.4.28 FB-D2 (R1.2 H0) — derive a bounded date window from the
   // active range selector so the chart fetches only what it will

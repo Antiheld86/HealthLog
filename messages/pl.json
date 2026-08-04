@@ -9391,6 +9391,7 @@
     "banner": {
       "viewing": "Jesteś w karcie użytkownika {name}",
       "readOnly": "Możesz ją czytać, nie zmieniać.",
+      "canAdd": "Możesz coś dodać, ale nie zmieniać ani usuwać tego, co już jest.",
       "leave": "Wróć do mojej karty"
     },
     "switcher": {
@@ -9437,7 +9438,7 @@
       "accessReadLabel": "Może przeglądać",
       "accessReadCapability": "Może czytać wszystko, co ta karta udostępnia. Nie może niczego dodać ani zmienić.",
       "accessWriteLabel": "Może przeglądać i dodawać",
-      "accessWriteCapability": "Może też dodawać do karty: pomiary, wyniki badań, alergie i inne obserwacje, nowy lek oraz oznaczenie dawki jako przyjętej. Nie może niczego edytować ani usuwać, także własnych wpisów. Możesz to zrobić tylko ty.",
+      "accessWriteCapability": "Może też dodawać do kartoteki: pomiary, wyniki badań, nowy analit do śledzenia, wpis o chorobie, wartość we własnej mierze, działanie niepożądane leku, nowy lek oraz oznaczyć dawkę jako przyjętą lub pominiętą. Nie może niczego edytować ani usuwać, nawet tego, co sama dodała, ani odłożyć żadnego z Twoich przypomnień. Tylko Ty możesz.",
       "expiresLabel": "Dostęp kończy się (opcjonalnie)",
       "expiresHint": "Zostaw puste, aby dostęp trwał, dopóki ktoś go nie zakończy. Data jest sprawdzana przy każdym żądaniu, więc dostęp kończy się sam z końcem tego dnia.",
       "submit": "Wyślij zaproszenie",
@@ -9513,7 +9514,8 @@
       "customMetricEntryCreate": "{name} zapisał własny pomiar",
       "medicationSideEffectCreate": "{name} zanotował działanie niepożądane",
       "medicationCreate": "{name} dodał lek",
-      "medicationIntake": "{name} zapisał przyjęcie dawki"
+      "medicationIntake": "{name} zapisał przyjęcie dawki",
+      "medicationIntakeRefused": "{name} próbował(a) zmienić dawkę lub odłożyć przypomnienie i został(a) odrzucony(-a)"
     }
   }
 }
