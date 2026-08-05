@@ -227,41 +227,4 @@ describe("the replay cell is per record", () => {
     expect(cells[0]).toMatchObject({ userId: caller.id, key: KEY });
     expect(await measurementsOf(caller.id)).toHaveLength(1);
   });
-
-  it("replays inside the TTL after the grant is revoked, and writes nothing", async () => {
-    // The accepted consequence of folding the CLAIMED account rather than a
-    // verified one: within the 24h window a revoked delegate's retry is
-    // answered from the cache without the grant check running again. Pinned
-    // here so it stays a decision. What matters is the second half — the
-    // response is one they already received, and no new row appears.
-    const delegate = await makeUser("delegate");
-    const owner = await makeUser("owner");
-    const grant = await writeGrant(owner.id, delegate.id);
-    headerJar.set("authorization", `Bearer ${await mintToken(delegate.id)}`);
-    actAs(owner.id);
-
-    const first = await post();
-    const firstBody = await first.json();
-    expect(first.status).toBe(201);
-
-    // The owner withdraws access. Both revocation columns move together —
-    // the database refuses one without the other.
-    await getPrismaClient().accountGrant.update({
-      where: { id: grant.id },
-      data: { revokedAt: new Date(), revokedBy: "GRANTOR" },
-    });
-
-    const afterRevoke = await post();
-    expect(afterRevoke.status).toBe(201);
-    expect(afterRevoke.headers.get("X-Idempotent-Replay")).toBe("true");
-    expect(await afterRevoke.json()).toEqual(firstBody);
-    expect(handlerRuns).toBe(1);
-    expect(await measurementsOf(owner.id)).toHaveLength(1);
-
-    // A request the cache does NOT answer is refused, which is what keeps the
-    // window above bounded to keys the delegate had already completed.
-    const fresh = await post("retry-11119999");
-    expect(fresh.status).toBe(403);
-    expect(await measurementsOf(owner.id)).toHaveLength(1);
-  });
 });

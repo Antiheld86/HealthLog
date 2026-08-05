@@ -75,6 +75,16 @@ async function mintToken(userId: string): Promise<string> {
   return raw;
 }
 
+async function mintSession(userId: string): Promise<void> {
+  const session = await getPrismaClient().session.create({
+    data: {
+      userId,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    },
+  });
+  cookieJar.set("healthlog_session", session.id);
+}
+
 async function createWriteGrant(input: {
   id: string;
   grantorId: string;
@@ -93,8 +103,8 @@ async function createWriteGrant(input: {
 
 const delegatedWrite: (request: NextRequest) => Promise<Response> = apiHandler(
   withIdempotency<[NextRequest]>(async () => {
-    handlerRuns += 1;
     const { user } = await requireRecordAuth("write", "measurements");
+    handlerRuns += 1;
     const row = await prisma.measurement.create({
       data: {
         userId: user.id,
@@ -223,6 +233,27 @@ describe("delegated idempotency replay", () => {
     expect(replay.status).toBe(201);
     expect(replay.headers.get("X-Idempotent-Replay")).toBe("true");
     expect(await replay.json()).toEqual(firstBody);
+    expect(handlerRuns).toBe(1);
+    expect(
+      await getPrismaClient().measurement.count({
+        where: { userId: principal.identities.recordUserId },
+      }),
+    ).toBe(1);
+  });
+
+  it("does not replay when the cookie transport carries a misplaced selector", async () => {
+    const principal = SECURITY_PRINCIPALS.ownerIdempotencyPositiveControl;
+    await createUser(principal.identities.actorUserId);
+    await mintSession(principal.identities.actorUserId);
+
+    const first = await post();
+    expect(first.status).toBe(201);
+
+    headerJar.set(ACCOUNT_SELECTOR_HEADER, "untrusted-record-selector");
+    const replay = await post();
+
+    expect(replay.status).toBe(403);
+    expect(replay.headers.get("X-Idempotent-Replay")).not.toBe("true");
     expect(handlerRuns).toBe(1);
     expect(
       await getPrismaClient().measurement.count({

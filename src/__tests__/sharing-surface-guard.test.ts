@@ -2849,6 +2849,31 @@ describe("(h) the guardian route set is frozen", () => {
 });
 
 /* -------------------------------------------------------------------------- */
+/* (i) the delegated replay boundary                                           */
+/* -------------------------------------------------------------------------- */
+
+describe("(i) delegated replay is re-authorized", () => {
+  it("checks the current grant before returning a cached delegated body", () => {
+    const replay = functionSource(
+      "lib/idempotency.ts",
+      "canReplayDelegatedResponse",
+    );
+    expect(replay.length).toBeGreaterThan(0);
+    expect(replay).toContain("findActiveGrant");
+    expect(replay).toContain("grantorId: recordUserId");
+    expect(replay).toContain("granteeId: actorUserId");
+
+    const wrapper = functionSource("lib/idempotency.ts", "withIdempotency");
+    expect(wrapper.length).toBeGreaterThan(0);
+    expect(wrapper).toContain("claimedRecord === undefined");
+    const authorization = wrapper.indexOf("canReplayDelegatedResponse");
+    const replayReturn = wrapper.indexOf("return cached.response");
+    expect(authorization).toBeGreaterThan(-1);
+    expect(replayReturn).toBeGreaterThan(authorization);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* The counter-test: quiet on the innocent tree                               */
 /* -------------------------------------------------------------------------- */
 

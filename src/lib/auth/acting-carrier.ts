@@ -184,10 +184,16 @@ export async function getUnswitchedSession(): Promise<Awaited<
  * session through that seam would make every custom resolver responsible for a
  * question none of them asks.
  *
- * Returns the CLAIMED account, unverified and unchecked. The grant check
- * happens later, inside the handler, on every request.
+ * Returns the CLAIMED account, unverified and unchecked. `undefined` means
+ * the carrier was unsafe to resolve: today, that is a selector header on a
+ * cookie request. The idempotency wrapper must then skip replay and let the
+ * handler issue its normal refusal instead of treating ambiguity as an
+ * unswitched own-record request. The grant check happens later, inside the
+ * handler, on every request.
  */
-export async function readClaimedActingAccount(): Promise<string | null> {
+export async function readClaimedActingAccount(): Promise<
+  string | null | undefined
+> {
   const header = await readSelectorHeader();
   let session: Awaited<ReturnType<typeof getSession>> = null;
   try {
@@ -198,11 +204,11 @@ export async function readClaimedActingAccount(): Promise<string | null> {
     // unauthenticated request claims nothing.
     session = null;
   }
-  return carrierTarget(
-    decideActingCarrier({
-      transport: session ? "cookie" : "bearer",
-      stamped: session?.session.actingAsUserId ?? null,
-      header,
-    }),
-  );
+  const carrier = decideActingCarrier({
+    transport: session ? "cookie" : "bearer",
+    stamped: session?.session.actingAsUserId ?? null,
+    header,
+  });
+  if (carrier.kind === "misplaced-header") return undefined;
+  return carrierTarget(carrier);
 }
