@@ -12,6 +12,9 @@ import { NextRequest } from "next/server";
 vi.mock("@/lib/db", () => ({
   prisma: {
     nutrientIntakeDay: {
+      // v1.37.0 — the route reads the day total before the upsert so the
+      // audit row can name what a `set` replaced (C4).
+      findUnique: vi.fn(),
       upsert: vi.fn(),
       update: vi.fn(),
     },
@@ -101,6 +104,11 @@ beforeEach(() => {
     remaining: 59,
     resetAt: Date.now() + 60_000,
   });
+  // No stored row unless a test says otherwise; the pre-image read is
+  // best-effort and a missing day is the ordinary first write.
+  vi.mocked(prisma.nutrientIntakeDay.findUnique).mockResolvedValue(
+    null as never,
+  );
   vi.mocked(prisma.nutrientIntakeDay.upsert).mockResolvedValue({
     day: "2026-07-16",
     nutrient: "water",

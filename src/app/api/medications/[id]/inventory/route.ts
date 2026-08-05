@@ -6,7 +6,8 @@
  *
  * Per-item operations live on the `[itemId]` sub-route.
  *
- * Auth: cookie-session via requireAuth(); the medication is verified
+ * Auth: cookie-session or Bearer, resolved through `requireRecordAuth`; the
+ *   medication is verified
  * to belong to the caller before any read/write touches inventory.
  * Rate-limit 30/min/user on the POST path (creation is the only
  * surface that can spam writes; GET is read-only and benign).
@@ -16,7 +17,7 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { auditLog } from "@/lib/auth/audit";
 import { annotate } from "@/lib/logging/context";
 import {
@@ -91,16 +92,22 @@ export const GET = apiHandler(
 
 export const POST = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Recording the stock the low-stock notification reads;
+    // that notification rings the record's own phone.
+    const { user, actor } = await requireRecordAuth("manage", "medications");
     const { id } = await params;
 
     const guard = await assertMedicationOwnership(id, user.id);
     if (guard) return guard;
 
-    // Per-user POST rate-limit — 30/min is generous for normal pen
+    // Per-caller POST rate-limit — 30/min is generous for normal pen
     // registrations but cuts off the spam case.
+    //
+    // v1.37.0 — C1: the bucket keys on the ACTOR, so a manager burns their
+    // own allowance rather than the owner's and cannot collect a fresh one by
+    // switching records.
     const rl = await checkRateLimit(
-      `medication-inventory:post:${user.id}`,
+      `medication-inventory:post:${actor.id}`,
       POST_RATE_LIMIT,
       POST_WINDOW_MS,
     );

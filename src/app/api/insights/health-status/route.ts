@@ -15,7 +15,7 @@
  * MeasurementType, so the wire carries the type tokens only.
  */
 import { apiError, apiSuccess } from "@/lib/api-response";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { checkAnalyticsReadRateLimit } from "@/lib/rate-limit";
 import { requireModuleEnabled } from "@/lib/modules/gate";
@@ -28,7 +28,9 @@ import { summariseHealthStatus } from "@/lib/insights/health-status";
 export const dynamic = "force-dynamic";
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE-level read: computed over the whole record, with no
+  // provider anywhere on the path.
+  const { user } = await requireRecordAuth("manage", "record");
 
   const m = await requireModuleEnabled(user.id, "insights");
   if (!m.enabled) return m.response;

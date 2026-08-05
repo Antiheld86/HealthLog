@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import { apiSuccess, getClientIp } from "@/lib/api-response";
@@ -12,7 +12,10 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. It tombstones rather than deletes (since the
+    // delegated-write release) and drops only rollups that recompute, so the
+    // history it clears is reconstructable from the rows themselves.
+    const { user } = await requireRecordAuth("manage", "medications");
 
     const { id } = await params;
     // v1.5.5 C-E3-3 — route purge through the same ownership predicate

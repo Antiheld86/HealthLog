@@ -10,6 +10,7 @@ import {
   sanitiseZodIssues,
 } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
+import { overwriteDetails } from "@/lib/sharing/audit-details";
 import { prisma } from "@/lib/db";
 import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
 import {
@@ -83,7 +84,12 @@ export const GET = apiHandler(
 
 export const PUT = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE, and the closest call in this domain: a reference range
+    // recolours every reading under it, so this is the one admitted edit whose
+    // error is silent rather than visible. C4 on the audit row is what puts it
+    // in the owner's feed. The DELETE below stays refused — it takes the
+    // readings with it and files an id.
+    const { user } = await requireRecordAuth("manage", "labs");
     const { id } = await params;
 
     const existing = await prisma.biomarker.findFirst({ where: { id } });
@@ -107,17 +113,16 @@ export const PUT = apiHandler(
       const auditIssues = sanitiseZodIssues(parsed.error.issues, {
         stripValuesFromMessage: true,
       });
-      prisma.auditLog
-        .create({
-          data: {
-            userId: user.id,
-            action: "labs.biomarker.update.validation-failed",
-            details: JSON.stringify({ issues: auditIssues, biomarkerId: id }),
-          },
-        })
-        .catch(() => {
-          /* swallow — the 422 response is the contract */
-        });
+      // v1.37.0 — through `auditLog()` rather than a bare `prisma.auditLog
+      // .create`, because that helper is the only writer that stamps
+      // `actorUserId`. Filed under the resolved record either way; without the
+      // stamp a manager's malformed payload would read as the owner's own.
+      void auditLog("labs.biomarker.update.validation-failed", {
+        userId: user.id,
+        details: { issues: auditIssues, biomarkerId: id },
+      }).catch(() => {
+        /* swallow — the 422 response is the contract */
+      });
       return returnAllZodIssues(parsed.error, 422, {
         errorCode: "labs.biomarker.update.invalid",
       });
@@ -175,7 +180,32 @@ export const PUT = apiHandler(
     await auditLog("biomarker.update", {
       userId: user.id,
       ipAddress: getClientIp(request),
-      details: { biomarkerId: id },
+      // C4, and this is the edit that needs it most: a reference range
+      // recolours every reading under it, so the error is silent. The feed has
+      // to show the range that was there before. The context note is named and
+      // never quoted; it is encrypted on the row.
+      details: {
+        biomarkerId: id,
+        ...overwriteDetails({
+          before: {
+            name: existing.name,
+            unit: existing.unit,
+            lowerBound: existing.lowerBound,
+            upperBound: existing.upperBound,
+            panel: existing.panel,
+            hidden: existing.hidden,
+          },
+          after: {
+            name: updated.name,
+            unit: updated.unit,
+            lowerBound: updated.lowerBound,
+            upperBound: updated.upperBound,
+            panel: updated.panel,
+            hidden: updated.hidden,
+          },
+          redacted: d.context !== undefined ? ["context"] : [],
+        }),
+      },
     });
 
     annotate({

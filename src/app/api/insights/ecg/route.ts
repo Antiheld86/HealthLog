@@ -40,7 +40,7 @@ import {
   returnAllZodIssues,
   safeJson,
 } from "@/lib/api-response";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { requireAssistantSurface } from "@/lib/feature-flags";
 import { requireModuleEnabled } from "@/lib/modules/gate";
@@ -106,7 +106,11 @@ const ecgIngestSchema = z
   .strict();
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE-level read: the record's own recordings, listed without
+  // touching the encrypted waveform. The POST below is a device ingest and
+  // keeps `requireAuth()`: a delegate's phone must never move somebody else's
+  // sync.
+  const { user } = await requireRecordAuth("manage", "record");
   const m = await requireModuleEnabled(user.id, "insights");
   if (!m.enabled) return m.response;
   await requireAssistantSurface("insightStatus");

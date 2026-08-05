@@ -13,7 +13,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod/v4";
 
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { auditLog } from "@/lib/auth/audit";
 import {
   apiError,
@@ -39,10 +39,17 @@ const restoreSchema = z.object({
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postRestore));
 
 async function postRestore(request: NextRequest): Promise<Response> {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE. The undo beside a delete the level already admits; the
+  // `where` only ever clears a tombstone the record already carried, so a
+  // foreign or live id is a no-op.
+  const { user, actor } = await requireRecordAuth("manage", "labs");
 
+  // v1.37.0 — C1: the bucket keys on the ACTOR, the frozen precedent from
+  // `medications/compliance`. A manager burns their own allowance rather than
+  // locking the owner out of their own record, and cannot collect a fresh one
+  // by switching records.
   const rl = await checkRateLimit(
-    `labs:restore:${user.id}`,
+    `labs:restore:${actor.id}`,
     RATE_LIMIT_MAX,
     RATE_LIMIT_WINDOW_MS,
   );

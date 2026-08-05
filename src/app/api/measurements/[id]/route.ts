@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
+import { overwriteDetails } from "@/lib/sharing/audit-details";
 import {
   apiSuccess,
   apiError,
@@ -57,7 +58,10 @@ export const GET = apiHandler(
 
 export const PUT = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Correcting somebody else's reading is management of
+    // their record, not a contribution to it, and the previous value is gone
+    // the moment this lands: the audit row below carries it.
+    const { user } = await requireRecordAuth("manage", "measurements");
 
     const { id } = await params;
 
@@ -91,20 +95,19 @@ export const PUT = apiHandler(
       const auditIssues = sanitiseZodIssues(parsed.error.issues, {
         stripValuesFromMessage: true,
       });
-      prisma.auditLog
-        .create({
-          data: {
-            userId: user.id,
-            action: "measurements.update.validation-failed",
-            details: JSON.stringify({
-              issues: auditIssues,
-              measurementId: id,
-            }),
-          },
-        })
-        .catch(() => {
-          /* swallow — 422 response is the contract */
-        });
+      // v1.37.0 — through `auditLog()` rather than a bare `prisma.auditLog
+      // .create`, because that helper is the only writer that stamps
+      // `actorUserId`. Filed under the resolved record either way; without the
+      // stamp a manager's malformed payload would read as the owner's own.
+      void auditLog("measurements.update.validation-failed", {
+        userId: user.id,
+        details: {
+          issues: auditIssues,
+          measurementId: id,
+        },
+      }).catch(() => {
+        /* swallow — 422 response is the contract */
+      });
       return returnAllZodIssues(parsed.error, 422);
     }
 
@@ -202,7 +205,21 @@ export const PUT = apiHandler(
     await auditLog("measurement.update", {
       userId: user.id,
       ipAddress: getClientIp(request),
-      details: { measurementId: id },
+      // C4 — the overwritten scalars. Without them the owner's feed says a
+      // reading changed and cannot say from what. The note is named and never
+      // quoted: it is encrypted on the row and copying it here would make the
+      // audit table a second store for it.
+      details: {
+        measurementId: id,
+        ...overwriteDetails({
+          before: { value: existing.value, measuredAt: existing.measuredAt },
+          after: {
+            value: measurement.value,
+            measuredAt: measurement.measuredAt,
+          },
+          redacted: data.notes !== undefined ? ["notes"] : [],
+        }),
+      },
     });
 
     annotate({
@@ -260,7 +277,10 @@ export const PUT = apiHandler(
 
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. The row tombstones and `measurements/restore` puts it
+    // back, so the destruction is reversible by the owner and by whoever did
+    // it; the audit row already names the reading and its type.
+    const { user } = await requireRecordAuth("manage", "measurements");
 
     const { id } = await params;
 

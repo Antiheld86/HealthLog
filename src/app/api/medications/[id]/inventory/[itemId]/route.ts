@@ -21,8 +21,12 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { auditLog } from "@/lib/auth/audit";
+import {
+  destroyedDetails,
+  overwriteDetails,
+} from "@/lib/sharing/audit-details";
 import { annotate } from "@/lib/logging/context";
 import {
   apiError,
@@ -45,7 +49,8 @@ type RouteParams = { params: Promise<{ id: string; itemId: string }> };
 
 export const PATCH = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Correcting a stock item's state or count.
+    const { user } = await requireRecordAuth("manage", "medications");
     const { id, itemId } = await params;
 
     const { data: body, error: jsonError } = await safeJson(request, {
@@ -193,20 +198,46 @@ export const PATCH = apiHandler(
         },
       });
 
-      return { prevState: existing.state, updated };
+      return {
+        prevState: existing.state,
+        // v1.37.0 — the pre-image the audit row carries (C4).
+        previous: {
+          unitsRemaining: Number(existing.unitsRemaining),
+          unitsTotal: Number(existing.unitsTotal),
+          firstUseAt: existing.firstUseAt,
+          printedExpiry: existing.printedExpiry,
+        },
+        updated,
+      };
     });
 
     if ("notFound" in outcome) return apiError("Inventory item not found", 404);
-    const { prevState, updated } = outcome;
+    const { prevState, previous, updated } = outcome;
 
     await auditLog("medication.inventory.update", {
       userId: user.id,
       ipAddress: getClientIp(request),
+      // C4 — the counts and dates this edit replaced, beside the state
+      // transition the row already carried.
       details: {
         medicationId: id,
         itemId,
         prevState,
         nextState: updated.state,
+        ...overwriteDetails({
+          before: {
+            unitsRemaining: previous.unitsRemaining,
+            unitsTotal: previous.unitsTotal,
+            firstUseAt: previous.firstUseAt,
+            printedExpiry: previous.printedExpiry,
+          },
+          after: {
+            unitsRemaining: Number(updated.unitsRemaining),
+            unitsTotal: Number(updated.unitsTotal),
+            firstUseAt: updated.firstUseAt,
+            printedExpiry: updated.printedExpiry,
+          },
+        }),
       },
     });
 
@@ -231,7 +262,9 @@ export const PATCH = apiHandler(
 
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE, and a hard delete. The audit row already carried the
+    // final state and the units left; C3 adds what the container WAS.
+    const { user } = await requireRecordAuth("manage", "medications");
     const { id, itemId } = await params;
 
     // v1.32.22 (M5) — take the same per-medication advisory lock the intake
@@ -255,11 +288,27 @@ export const DELETE = apiHandler(
     await auditLog("medication.inventory.delete", {
       userId: user.id,
       ipAddress: getClientIp(request),
+      // C3 — the container's own identity: its label, its expiry, what it
+      // held. The row is gone; this is what is left of it.
       details: {
         medicationId: id,
         itemId,
         finalState: existing.state,
-        unitsRemaining: existing.unitsRemaining,
+        unitsRemaining: Number(existing.unitsRemaining),
+        ...destroyedDetails({
+          model: "MedicationInventoryItem",
+          id: itemId,
+          label:
+            existing.doseStrength ??
+            existing.manufacturer ??
+            existing.containerType,
+          effectiveAt: existing.expiresAt ?? existing.printedExpiry,
+          extra: {
+            containerType: existing.containerType,
+            unitsTotal: Number(existing.unitsTotal),
+            printedExpiry: existing.printedExpiry,
+          },
+        }),
       },
     });
 

@@ -12,9 +12,13 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
+import {
+  destroyedDetails,
+  overwriteDetails,
+} from "@/lib/sharing/audit-details";
 import {
   apiSuccess,
   apiError,
@@ -49,12 +53,26 @@ export const GET = apiHandler(
 
 export const PATCH = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Correcting an allergy entry, with the replaced fields
+    // on the audit row.
+    const { user } = await requireRecordAuth("manage", "profile");
 
     const { id } = await params;
+    // The pre-image the audit row needs (C4). Encrypted columns stay out of
+    // the select: the feed names them and never quotes them.
     const existing = await prisma.allergy.findUnique({
       where: { id },
-      select: { id: true, userId: true, deletedAt: true },
+      select: {
+        id: true,
+        userId: true,
+        deletedAt: true,
+        substance: true,
+        category: true,
+        type: true,
+        severity: true,
+        status: true,
+        onsetAt: true,
+      },
     });
     if (
       !existing ||
@@ -101,7 +119,34 @@ export const PATCH = apiHandler(
     await auditLog("allergy.update", {
       userId: user.id,
       ipAddress: getClientIp(request),
-      details: { allergyId: id },
+      // C4 — the replaced fields. The reaction and the note are named and
+      // never quoted; both are encrypted at rest and the audit table is not a
+      // second store for them.
+      details: {
+        allergyId: id,
+        ...overwriteDetails({
+          before: {
+            substance: existing.substance,
+            category: existing.category,
+            type: existing.type,
+            severity: existing.severity,
+            status: existing.status,
+            onsetAt: existing.onsetAt,
+          },
+          after: {
+            substance: updated.substance,
+            category: updated.category,
+            type: updated.type,
+            severity: updated.severity,
+            status: updated.status,
+            onsetAt: updated.onsetAt,
+          },
+          redacted: [
+            ...(entry.reaction !== undefined ? ["reaction"] : []),
+            ...(entry.note !== undefined ? ["note"] : []),
+          ],
+        }),
+      },
     });
 
     annotate({
@@ -114,12 +159,27 @@ export const PATCH = apiHandler(
 
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE, and a hard delete: the row goes and the audit row is
+    // what is left. C3 below is the condition this admission rests on.
+    const { user } = await requireRecordAuth("manage", "profile");
 
     const { id } = await params;
+    // Widened for the audit row (C3): what was destroyed, in plaintext columns
+    // only. `reactionEncrypted` and `notesEncrypted` are deliberately absent —
+    // lifting a decrypted reaction into the audit table would give it a second
+    // retention story and no rotation.
     const existing = await prisma.allergy.findUnique({
       where: { id },
-      select: { id: true, userId: true },
+      select: {
+        id: true,
+        userId: true,
+        substance: true,
+        category: true,
+        type: true,
+        severity: true,
+        status: true,
+        onsetAt: true,
+      },
     });
     if (!existing || existing.userId !== user.id) {
       return apiError("Allergy not found", 404);
@@ -136,7 +196,23 @@ export const DELETE = apiHandler(
     await auditLog("allergy.delete", {
       userId: user.id,
       ipAddress: getClientIp(request),
-      details: { allergyId: id },
+      // C3 — the allergen, its severity and its recorded date, and never the
+      // encrypted reaction text.
+      details: {
+        allergyId: id,
+        ...destroyedDetails({
+          model: "Allergy",
+          id,
+          label: existing.substance,
+          effectiveAt: existing.onsetAt,
+          extra: {
+            category: existing.category,
+            type: existing.type,
+            severity: existing.severity,
+            status: existing.status,
+          },
+        }),
+      },
     });
 
     annotate({

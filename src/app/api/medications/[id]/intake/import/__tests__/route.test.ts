@@ -59,6 +59,7 @@ vi.mock("next/headers", () => ({
 
 import { POST } from "../route";
 import { prisma } from "@/lib/db";
+import { auditLog } from "@/lib/auth/audit";
 import { getSession } from "@/lib/auth/session";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -91,6 +92,9 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
   vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never);
+  // v1.37.0 — `resetAllMocks` clears the factory's resolved value and the
+  // route chains `.catch()` on this fire-and-forget call.
+  vi.mocked(auditLog).mockResolvedValue(undefined as never);
   vi.mocked(checkRateLimit).mockResolvedValue({
     allowed: true,
     remaining: 60,
@@ -179,19 +183,19 @@ describe("POST /api/medications/[id]/intake/import — 422 multi-issue (v1.4.43 
     );
     expect(res.status).toBe(422);
     await new Promise((r) => setTimeout(r, 5));
-    expect(prisma.auditLog.create).toHaveBeenCalledTimes(1);
-    const call = vi.mocked(prisma.auditLog.create).mock.calls[0]?.[0] as {
-      data: { userId: string; action: string };
-    };
-    expect(call.data.action).toBe(
+    // v1.37.0 — the breadcrumb goes through `auditLog()`, the only writer
+    // that stamps `actorUserId`.
+    const breadcrumbs = vi
+      .mocked(auditLog)
+      .mock.calls.filter(([name]) => name.endsWith("validation-failed"));
+    expect(breadcrumbs).toHaveLength(1);
+    expect(breadcrumbs[0]?.[0]).toBe(
       "medications.intake.import.validation-failed",
     );
   });
 
   it("does not block the 422 when the audit-row write rejects", async () => {
-    vi.mocked(prisma.auditLog.create).mockRejectedValueOnce(
-      new Error("db down"),
-    );
+    vi.mocked(auditLog).mockRejectedValueOnce(new Error("db down"));
     const res = await POST(
       postReq([{ datum: "not-a-date", uhrzeit: "07:00:00" }]),
       ROUTE_CTX,

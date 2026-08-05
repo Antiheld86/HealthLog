@@ -66,6 +66,16 @@ export interface WideEvent {
      * dashboard that conflates them cannot answer either.
      */
     acting_as?: string;
+    /**
+     * v1.37.0 — set when this request is acting on somebody else's record and
+     * that somebody could have asked for the generation themselves. It is the
+     * one fact the generated reads consult before enqueuing a provider job:
+     * a manager's navigation must not spend the owner's budget or ship the
+     * owner's record to the owner's provider. Absent means "generate as
+     * usual", which is what every self-request, every guardian request on a
+     * managed profile and every background job is.
+     */
+    delegated_generation?: "suppressed";
   };
 
   // Business-Daten (was wurde getan)

@@ -24,7 +24,7 @@ import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
 import { auditLog } from "@/lib/auth/audit";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiSuccess, apiError, getClientIp } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { satisfyReminder } from "@/lib/measurement-reminders/satisfy";
@@ -36,7 +36,9 @@ const DEFAULT_TIMEZONE = "Europe/Berlin";
 
 export const POST = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Marking a reminder satisfied re-anchors a schedule the level
+    // already admits arming and editing.
+    const { user } = await requireRecordAuth("manage", "measurements");
     const { id } = await params;
 
     const existing = await prisma.measurementReminder.findFirst({

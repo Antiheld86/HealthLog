@@ -780,7 +780,7 @@ export interface RecordAuthContext extends AuthContext {
  *   the fail-closed lever: a delegable route without a classification does not
  *   typecheck, so the set of routes carrying one cannot fall behind the set of
  *   routes that are delegable. The value is frozen per module by
- *   `src/__tests__/delegable-surface-guard.test.ts` and reviewed against the
+ *   `src/__tests__/sharing-surface-guard.test.ts` and reviewed against the
  *   design's clustering table; this function only enforces what was declared.
  */
 export async function requireRecordAuth(
@@ -934,6 +934,16 @@ async function resolveSwitchedRecord(
   if (refusal !== null) throw denied(refusal);
 
   getEvent()?.setActingAs(owner.id);
+  // v1.37.0 — and whether this request may spend the owner's provider budget.
+  // MANAGE opens the generated reads; it does not open the generation behind
+  // them, because the owner would pay for and consent to an egress they did
+  // not cause. A managed profile is the exception and the reason the marker is
+  // read here rather than the grant: it has no self to protect from its own
+  // guardian. Stamped where the owner row is already loaded, so no generator
+  // has to be told; see `src/lib/sharing/delegated-generation.ts`.
+  if (owner.id !== auth.user.id && owner.managedProfileAt === null) {
+    getEvent()?.setDelegatedGenerationSuppressed();
+  }
   // Fire-and-forget, the `ApiToken.lastUsedAt` posture: the read must not wait
   // on the bookkeeping, and the bookkeeping failing must not fail the read.
   void touchGrantUsage(grant.id);

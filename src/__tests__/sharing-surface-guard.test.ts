@@ -1,5 +1,5 @@
 /**
- * Structural guards on the delegable, guardian and actor-surface allowlists.
+ * Structural guards on the sharing, guardian and actor-surface allowlists.
  *
  * `requireRecordAuth` is a declaration: this route may act on somebody else's
  * health record, at a named level and over a named section of it.
@@ -74,6 +74,8 @@ import { describe, expect, it } from "vitest";
 import { ENTIRE_RECORD, SHARE_DOMAINS } from "@/lib/sharing/scope";
 import type { ShareScope } from "@/lib/sharing/scope";
 
+import { ADMITTED_MUTATING_HANDLERS } from "../../tests/fixtures/v137/sharing-matrix";
+
 const SRC = join(process.cwd(), "src");
 
 /** The delegable declaration. Frozen by `DELEGABLE_ROUTES`. */
@@ -129,15 +131,21 @@ const COOKIE_ONLY_HELPERS = [
 
 /**
  * Floors, not counts. The tree today holds 447 route modules (440 of them under
- * `app/api/`) and 2,338 source files, of which 346 route modules resolve auth
+ * `app/api/`) and 2,338 source files, of which 236 route modules resolve auth
  * the ordinary way. These numbers exist so that a scan which collapses to a
  * handful of files — a changed enumeration, a moved `src`, a `cwd` that is not
  * the repo root — fails instead of agreeing with an empty allowlist. They sit
  * far below today's figures so ordinary churn never touches them.
+ *
+ * v1.37.0 — the bare-`requireAuth` floor came down from 250 to 200 because
+ * that population SHRANK by seventy modules in one release: the MANAGE
+ * perimeter moved them onto the record resolver. The floor is a "did the scan
+ * happen" tripwire, not a budget, and leaving it above the real figure would
+ * have made it fire on the change it was supposed to survive.
  */
 const ROUTE_MODULE_FLOOR = 300;
 const SOURCE_FILE_FLOOR = 1500;
-const BARE_REQUIRE_AUTH_FLOOR = 250;
+const BARE_REQUIRE_AUTH_FLOOR = 200;
 
 /* -------------------------------------------------------------------------- */
 /* The file set                                                               */
@@ -411,6 +419,254 @@ function callsSymbol(rel: string, symbol: string): boolean {
   return callSites(rel).some((c) => c.name === symbol);
 }
 
+/**
+ * v1.37.0 — the exported HTTP verbs whose bodies reach the record resolver at
+ * a given level.
+ *
+ * The membership matchers above answer "does this MODULE manage", which is the
+ * right question for the frozen list and the wrong one for two conditions the
+ * classification attached to VERBS. A module can hold a delegable read arm and
+ * a MANAGE mutation, and "does the module call `auditLog`" is a question about
+ * the file while "does the destructive arm file a row" is a question about the
+ * handler. This resolves the export each call sits under, so the legs below
+ * can ask the second one.
+ *
+ * Same alias resolution as `callSitesIn`: an aliased or namespace-qualified
+ * import comes back under its original name. The verb names are the Next.js
+ * route contract, so the set is closed and a helper function that happens to
+ * call the resolver is not mistaken for a handler.
+ */
+const HTTP_VERB_EXPORTS = new Set([
+  "GET",
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+  "HEAD",
+  "OPTIONS",
+]);
+
+/** The non-safe verbs: the ones that can destroy or rewrite. */
+const MUTATING_VERBS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+function resolverVerbsIn(rel: string, need: string): string[] {
+  if (!read(rel).includes(RECORD_RESOLVER)) return [];
+  const source = read(rel);
+  const parsed = ts.createSourceFile(
+    rel,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+
+  const aliases = new Map<string, string>();
+  const namespaces = new Set<string>();
+  parsed.forEachChild((node) => {
+    if (!ts.isImportDeclaration(node)) return;
+    const bindings = node.importClause?.namedBindings;
+    if (!bindings) return;
+    if (ts.isNamespaceImport(bindings)) {
+      namespaces.add(bindings.name.text);
+      return;
+    }
+    for (const spec of bindings.elements) {
+      aliases.set(spec.name.text, (spec.propertyName ?? spec.name).text);
+    }
+  });
+
+  // Module-level functions the handlers delegate to. Several routes export
+  // `apiHandler(withIdempotency(postThing))` and resolve the record inside
+  // `postThing`, so a walk that stopped at the export's own subtree would
+  // report "declares nothing" for a route that plainly declares something.
+  const localFunctions = new Map<string, ts.FunctionDeclaration>();
+  parsed.forEachChild((node) => {
+    if (ts.isFunctionDeclaration(node) && node.name) {
+      localFunctions.set(node.name.text, node);
+    }
+  });
+
+  const declares = (subtree: ts.Node, seen = new Set<string>()): boolean => {
+    let found = false;
+    const walk = (node: ts.Node): void => {
+      if (found) return;
+      if (ts.isIdentifier(node) && localFunctions.has(node.text)) {
+        if (!seen.has(node.text)) {
+          seen.add(node.text);
+          if (declares(localFunctions.get(node.text) as ts.Node, seen)) {
+            found = true;
+            return;
+          }
+        }
+      }
+      if (ts.isCallExpression(node)) {
+        const callee = node.expression;
+        let name: string | null = null;
+        if (ts.isIdentifier(callee)) {
+          name = aliases.get(callee.text) ?? callee.text;
+        } else if (
+          ts.isPropertyAccessExpression(callee) &&
+          ts.isIdentifier(callee.expression) &&
+          namespaces.has(callee.expression.text)
+        ) {
+          name = callee.name.text;
+        }
+        if (
+          name === RECORD_RESOLVER &&
+          literalArg(node.arguments[0]) === need
+        ) {
+          found = true;
+          return;
+        }
+      }
+      node.forEachChild(walk);
+    };
+    subtree.forEachChild(walk);
+    return found;
+  };
+
+  const verbs: string[] = [];
+  parsed.forEachChild((node) => {
+    if (ts.isVariableStatement(node)) {
+      const exported = node.modifiers?.some(
+        (m) => m.kind === ts.SyntaxKind.ExportKeyword,
+      );
+      if (!exported) return;
+      for (const decl of node.declarationList.declarations) {
+        if (!ts.isIdentifier(decl.name)) continue;
+        if (!HTTP_VERB_EXPORTS.has(decl.name.text)) continue;
+        if (declares(decl)) verbs.push(decl.name.text);
+      }
+      return;
+    }
+    if (ts.isFunctionDeclaration(node) && node.name) {
+      const exported = node.modifiers?.some(
+        (m) => m.kind === ts.SyntaxKind.ExportKeyword,
+      );
+      if (!exported || !HTTP_VERB_EXPORTS.has(node.name.text)) return;
+      if (declares(node)) verbs.push(node.name.text);
+    }
+  });
+  return verbs.sort();
+}
+
+/**
+ * The keys of every `details` object literal this module passes to
+ * `auditLog()`.
+ *
+ * Read structurally, so the keys the reviewer can see at the call site are the
+ * ones the assertion is made against. Nested literals count — a conditional
+ * spread is the shape a route uses when a fact only exists on one branch, and
+ * the alternative (filing the key with a null on every request) is worse than
+ * the widening: absence should read as absence on the wire.
+ */
+function auditDetailKeysIn(rel: string): string[][] {
+  if (!read(rel).includes("auditLog")) return [];
+  const parsed = ts.createSourceFile(
+    rel,
+    read(rel),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const found: string[][] = [];
+  const walk = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "auditLog" &&
+      node.arguments[1] !== undefined &&
+      ts.isObjectLiteralExpression(node.arguments[1])
+    ) {
+      for (const prop of node.arguments[1].properties) {
+        if (
+          ts.isPropertyAssignment(prop) &&
+          ts.isIdentifier(prop.name) &&
+          prop.name.text === "details" &&
+          ts.isObjectLiteralExpression(prop.initializer)
+        ) {
+          const keys: string[] = [];
+          const collect = (inner: ts.Node): void => {
+            if (ts.isPropertyAssignment(inner) && ts.isIdentifier(inner.name)) {
+              keys.push(inner.name.text);
+            }
+            if (ts.isShorthandPropertyAssignment(inner)) {
+              keys.push(inner.name.text);
+            }
+            inner.forEachChild(collect);
+          };
+          collect(prop.initializer);
+          found.push(keys);
+        }
+      }
+    }
+    node.forEachChild(walk);
+  };
+  parsed.forEachChild(walk);
+  return found;
+}
+
+/** The bucket-key expressions this module passes to a rate limiter. */
+const RATE_LIMITERS = new Set(["checkRateLimit", "checkAuthSurfaceRateLimit"]);
+
+function rateLimitKeysIn(rel: string): string[] {
+  const source = read(rel);
+  if (![...RATE_LIMITERS].some((name) => source.includes(name))) return [];
+  const parsed = ts.createSourceFile(
+    rel,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const keys: string[] = [];
+  const walk = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      RATE_LIMITERS.has(node.expression.text) &&
+      node.arguments[0] !== undefined
+    ) {
+      keys.push(node.arguments[0].getText(parsed));
+    }
+    node.forEachChild(walk);
+  };
+  parsed.forEachChild(walk);
+  return keys;
+}
+
+/**
+ * v1.37.0 — the two MANAGE members whose reconstruction is real and is not
+ * shaped like C3's helper. Frozen with their reason lines, for the same reason
+ * every other exception in this file is: an unnamed exception is a hole, and a
+ * named one is a decision somebody has to re-read to widen.
+ *
+ * The values are the audit-detail keys that DO the reconstructing, asserted by
+ * the leg below, so an exception cannot survive the deletion of the thing it
+ * excuses.
+ */
+const MANAGE_RECONSTRUCTION_BY_HAND: Record<
+  string,
+  { keys: readonly string[]; why: string }
+> = {
+  "app/api/medications/[id]/side-effects/[logId]/route.ts": {
+    keys: ["entry", "severity", "occurredAt"],
+    why: "A hard delete whose audit row already reconstructed the destroyed thing before this release — the only place the tree did §7.5 correctly on its own. It stays as it is rather than being re-routed through the C3 helper, because the helper would add nothing and the one defect here is the opposite one: `entry` is encrypted on the row and is held in the audit row as plaintext. That duplication is pre-existing, is named in the classification, and is not made worse by admitting the verb.",
+  },
+  "app/api/illness/episodes/[id]/day-logs/route.ts": {
+    keys: ["date", "previousSymptoms", "revived"],
+    why: "C3 in this domain's shape, and the shape is why the helper does not fit: nothing is deleted. The upsert's UPDATE branch forces `deletedAt: null` — reviving a day the owner removed — and replaces that day's symptom links wholesale. What has to survive is therefore the date, the symptom set that was there, and the revival, none of which is a destroyed ROW with an id.",
+  },
+};
+
+/** The MANAGE modules carrying a given condition tag. */
+function manageModulesWith(tag: ConditionTag): string[] {
+  return Object.entries(DELEGABLE_MANAGE_ROUTES)
+    .filter(([, entry]) => entry.conditions.includes(tag))
+    .map(([rel]) => rel)
+    .sort();
+}
+
 /** The `GrantNeed` literals this module passes to the record resolver. */
 function recordNeeds(rel: string): Set<string> {
   if (!read(rel).includes(RECORD_RESOLVER)) return new Set();
@@ -508,6 +764,35 @@ interface DelegableEntry {
   domain: ShareScope;
   /** Why a delegate reaching it cannot extend their own reach. */
   why: string;
+}
+
+/**
+ * v1.37.0 — the conditions a MANAGE admission was granted on.
+ *
+ * The classification pass admitted several verbs only WITH a named condition:
+ * an actor-keyed rate bucket, an audit row that says what was destroyed, a
+ * suppressed generation enqueue. A tag here is not a note — it is the half of
+ * the admission that lives in code, and the legs below check the code carries
+ * it. A verb whose condition is not implemented is a verb that was refused.
+ *
+ *   * **C1** the rate bucket keys on the ACTOR.
+ *   * **C2** actor-facing strings resolve to the ACTOR's locale.
+ *   * **C3** a hard delete files what it destroyed: model, id, label, date.
+ *   * **C4** an overwrite files the field family and the previous scalars.
+ *   * **C5** the delegated path enqueues no generation.
+ *   * **C6** the delegated arm refuses the sync client's `externalId`.
+ *   * **C7** a schedule replacement files the cadence and the slots it took.
+ *   * **C8** a re-created row keeps the original's provenance.
+ *   * **C9** work that outlives the request is joined by id to an
+ *     actor-stamped audit row.
+ */
+type ConditionTag =
+  "C1" | "C2" | "C3" | "C4" | "C5" | "C6" | "C7" | "C8" | "C9";
+
+/** One frozen MANAGE admission: its section, its conditions, and its reason. */
+interface ManageEntry extends DelegableEntry {
+  /** The conditions this admission was granted on. Empty is a real answer. */
+  conditions: readonly ConditionTag[];
 }
 
 /**
@@ -771,6 +1056,222 @@ const DELEGABLE_ROUTES: Record<string, DelegableEntry> = {
     domain: "documents",
     why: "The record's vault state: quota, the filter bar's condition chips, and index coverage. Without it the admitted list loses its filters. The `assistAvailable` boolean is the same integration-adjacent availability flag `nutrients` already returns — no credential, endpoint or token — and every AI action it would gate stays refused. No write arm exists.",
   },
+
+  /* ------------------------------------------------------------------ */
+  /* v1.37.0 — the fifty-one modules that became delegable at MANAGE.    */
+  /*                                                                    */
+  /* They were not reachable on a shared record at any level before this */
+  /* release, and they are not reachable at READ or WRITE now: every one */
+  /* of them declares `"manage"`. They carry an entry here because leg   */
+  /* (a) freezes the set of modules naming the resolver at all, and      */
+  /* because leg (f) needs the section to check the call sites against —  */
+  /* the admission argument itself lives in the manage literal below.    */
+  /* ------------------------------------------------------------------ */
+
+  "app/api/measurements/bulk-delete/route.ts": {
+    domain: "measurements",
+    why: "Tombstoning a selection. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/measurements/restore/route.ts": {
+    domain: "measurements",
+    why: "Undoing a deletion, which is a management act once the manager holds the delete. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/measurement-reminders/[id]/complete/route.ts": {
+    domain: "measurements",
+    why: "Marking a reminder satisfied. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/measurement-reminders/[id]/satisfy/route.ts": {
+    domain: "measurements",
+    why: "The same primitive from the other caller. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/labs/restore/route.ts": {
+    domain: "labs",
+    why: "Restoring tombstoned results, scoped so a foreign or live id is a no-op. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/illness/episodes/[id]/resolve/route.ts": {
+    domain: "illness",
+    why: "Closing an episode. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/illness/episodes/[id]/restore/route.ts": {
+    domain: "illness",
+    why: "Reopening a deleted episode with its day logs intact. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/mood-entries/bulk-delete/route.ts": {
+    domain: "mind",
+    why: "Tombstoning a selection. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/mood-entries/restore/route.ts": {
+    domain: "mind",
+    why: "Undoing it. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/cycle/cycles/[id]/route.ts": {
+    domain: "cycle",
+    why: "Deleting one cycle; soft, audited, tombstoned to sync. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/cycle/day-logs/[id]/route.ts": {
+    domain: "cycle",
+    why: "Editing and deleting one day; the delete soft-deletes. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/cycle/period/route.ts": {
+    domain: "cycle",
+    why: "Setting a period boundary, which re-anchors the neighbouring cycles. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/medications/[id]/schedule-revisions/[revisionId]/route.ts": {
+    domain: "medications",
+    why: "Editing and deleting an era; the delete is hard, so C3 carries its dates and dose. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/medications/[id]/inventory/[itemId]/route.ts": {
+    domain: "medications",
+    why: "Editing and deleting a stock item; the delete is hard and already carries its final state, so C3 adds the label and expiry. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/medications/[id]/side-effects/[logId]/route.ts": {
+    domain: "medications",
+    why: "Removing a side-effect record. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/medications/[id]/glp1/route.ts": {
+    domain: "medications",
+    why: "Recording a titration step. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/medications/[id]/intake/[eventId]/route.ts": {
+    domain: "medications",
+    why: "Correcting and deleting a dose. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/medications/[id]/intake/bulk-delete/route.ts": {
+    domain: "medications",
+    why: "Tombstoning a run of doses. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/medications/[id]/intake/purge/route.ts": {
+    domain: "medications",
+    why: "Clearing a medication's intake history. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/medications/[id]/intake/import/route.ts": {
+    domain: "medications",
+    why: "Importing a dose history for one medication. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/medications/intake/dose-history-import/route.ts": {
+    domain: "medications",
+    why: "The whole-regimen form of the same import, same worker, same properties. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/nutrients/water/route.ts": {
+    domain: "measurements",
+    why: "Logging hydration. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/biomarker-assessment/route.ts": {
+    domain: "record",
+    why: "Reading the generated biomarker assessment. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/blood-pressure-status/route.ts": {
+    domain: "record",
+    why: "The generated blood-pressure assessment. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/bmi-status/route.ts": {
+    domain: "record",
+    why: "The generated BMI assessment. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/medication-compliance-status/route.ts": {
+    domain: "record",
+    why: "The generated compliance assessment. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/metric-status/route.ts": {
+    domain: "record",
+    why: "The generic per-metric assessment, and the widest of them. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/mood-status/route.ts": {
+    domain: "record",
+    why: "The generated mood assessment. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/pulse-status/route.ts": {
+    domain: "record",
+    why: "The generated pulse assessment. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/weight-status/route.ts": {
+    domain: "record",
+    why: "The generated weight assessment. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/narrative/route.ts": {
+    domain: "record",
+    why: "The period narrative. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/derived/route.ts": {
+    domain: "record",
+    why: "The derived-score assessment, AI-warmed. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/derived/batch/route.ts": {
+    domain: "record",
+    why: "The deterministic batch form of the same read, no provider on this one. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/breathing-screening/route.ts": {
+    domain: "record",
+    why: "A deterministic screening read over the record's own data. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/cards/route.ts": {
+    domain: "record",
+    why: "The alert cards, from a rule engine rather than a provider. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/coach-read/route.ts": {
+    domain: "record",
+    why: "The two server-authoritative lines above a metric chart. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/comprehensive/route.ts": {
+    domain: "record",
+    why: "The heaviest SQL aggregation in the product, cached per record; no provider on the path. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/correlations/route.ts": {
+    domain: "record",
+    why: "Correlations over the record's own series. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/glp1-plateau/route.ts": {
+    domain: "record",
+    why: "A deterministic plateau read. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/glp1-timeline/route.ts": {
+    domain: "record",
+    why: "The titration timeline. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/health-status/route.ts": {
+    domain: "record",
+    why: "The composite status read. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/labs-changes/route.ts": {
+    domain: "record",
+    why: "What moved in the record's labs. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/patterns/route.ts": {
+    domain: "record",
+    why: "The record's correlation patterns. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/patterns/[id]/route.ts": {
+    domain: "record",
+    why: "Dismissing one pattern. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/pulse/intraday/route.ts": {
+    domain: "record",
+    why: "The intraday pulse series. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/rhythm-events/route.ts": {
+    domain: "record",
+    why: "Rhythm events over the record's own recordings. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/targets/route.ts": {
+    domain: "record",
+    why: "The record's resolved targets. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/ecg/route.ts": {
+    domain: "record",
+    why: "Listing the record's ECG recordings. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/insights/ecg/[id]/route.ts": {
+    domain: "record",
+    why: "One ECG recording of the record. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/dashboard/summary/route.ts": {
+    domain: "record",
+    why: "The record's summary strip, beside the snapshot that is already delegable. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/export/health-record/route.ts": {
+    domain: "record",
+    why: "The doctor report, a guardian in the paediatrician's office, and the one export surface an invited manager reaches. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
 };
 
 /**
@@ -856,7 +1357,358 @@ const DELEGABLE_WRITE_ROUTES: Record<string, string> = {
  * across the tree. A blinded second-argument matcher drops the second count to
  * zero and fails, rather than agreeing that nothing manages anything.
  */
-const DELEGABLE_MANAGE_ROUTES: Record<string, DelegableEntry> = {};
+const DELEGABLE_MANAGE_ROUTES: Record<string, ManageEntry> = {
+  "app/api/measurements/[id]/route.ts": {
+    domain: "measurements",
+    conditions: ["C4"],
+    why: "Editing and deleting a reading. The delete tombstones and the audit row already names the reading; the edit needs C4 because a value overwritten with no before-image cannot be read back out of the feed.",
+  },
+  "app/api/measurements/bulk-delete/route.ts": {
+    domain: "measurements",
+    conditions: ["C1"],
+    why: "Tombstoning a selection. Reconstruction rides the rows, not the details; C1 so a manager burns their own bucket.",
+  },
+  "app/api/measurements/restore/route.ts": {
+    domain: "measurements",
+    conditions: ["C1"],
+    why: "Undoing a deletion, which is a management act once the manager holds the delete. C1.",
+  },
+  "app/api/measurement-reminders/route.ts": {
+    domain: "measurements",
+    conditions: [],
+    why: "Arming a preventive-care reminder. It rings the record's own phone, which is the person the reminder is about.",
+  },
+  "app/api/measurement-reminders/[id]/route.ts": {
+    domain: "measurements",
+    conditions: ["C3", "C4"],
+    why: "Editing and deleting one reminder. The delete is hard and its details are an id, so C3; the edit takes C4.",
+  },
+  "app/api/measurement-reminders/[id]/complete/route.ts": {
+    domain: "measurements",
+    conditions: [],
+    why: "Marking a reminder satisfied. Additive management of a schedule the level admits.",
+  },
+  "app/api/measurement-reminders/[id]/satisfy/route.ts": {
+    domain: "measurements",
+    conditions: [],
+    why: "The same primitive from the other caller.",
+  },
+  "app/api/labs/[id]/route.ts": {
+    domain: "labs",
+    conditions: ["C4"],
+    why: "Editing and deleting a lab result. The delete soft-deletes with a restore route beside it; the edit takes C4.",
+  },
+  "app/api/labs/restore/route.ts": {
+    domain: "labs",
+    conditions: ["C1"],
+    why: "Restoring tombstoned results, scoped so a foreign or live id is a no-op. C1.",
+  },
+  "app/api/biomarkers/[id]/route.ts": {
+    domain: "labs",
+    conditions: ["C4"],
+    why: "Editing an analyte's reference range, the one admitted edit whose error is silent, which is why C4 puts it in the feed. The DELETE beside it stays refused.",
+  },
+  "app/api/allergies/route.ts": {
+    domain: "profile",
+    conditions: [],
+    why: "Recording an allergy. Reachable through the record's settings on a managed profile, dormant on an invited one, and argued as such.",
+  },
+  "app/api/allergies/[id]/route.ts": {
+    domain: "profile",
+    conditions: ["C3", "C4"],
+    why: "Correcting and removing an allergy. The delete is hard, so C3 carries the allergen, severity and date and never the encrypted reaction text; the edit takes C4.",
+  },
+  "app/api/family-history/route.ts": {
+    domain: "profile",
+    conditions: [],
+    why: "Recording a relative's condition. Third-party data by design, admitted on the same reasoning the read arm was.",
+  },
+  "app/api/family-history/[id]/route.ts": {
+    domain: "profile",
+    conditions: ["C4"],
+    why: "Correcting and removing one entry; the delete soft-deletes. C4 on the edit.",
+  },
+  "app/api/illness/episodes/[id]/route.ts": {
+    domain: "illness",
+    conditions: ["C4"],
+    why: "Editing and deleting an episode; the delete soft-deletes. C4 on the edit.",
+  },
+  "app/api/illness/episodes/[id]/resolve/route.ts": {
+    domain: "illness",
+    conditions: [],
+    why: "Closing an episode.",
+  },
+  "app/api/illness/episodes/[id]/restore/route.ts": {
+    domain: "illness",
+    conditions: [],
+    why: "Reopening a deleted episode with its day logs intact.",
+  },
+  "app/api/illness/episodes/[id]/day-logs/route.ts": {
+    domain: "illness",
+    conditions: ["C3"],
+    why: "Writing a day of an episode. The upsert revives a tombstoned day and replaces that day's symptom links, so C3 names the date, the previous symptom set, and the revival.",
+  },
+  "app/api/mood-entries/route.ts": {
+    domain: "mind",
+    conditions: ["C6"],
+    why: "Recording a mood observation. C6: the delegated arm refuses `externalId`, which is the sync client's upsert handle and not a person's.",
+  },
+  "app/api/mood-entries/[id]/route.ts": {
+    domain: "mind",
+    conditions: ["C4"],
+    why: "Editing and deleting an entry; the delete soft-deletes. C4 on the edit.",
+  },
+  "app/api/mood-entries/bulk-delete/route.ts": {
+    domain: "mind",
+    conditions: ["C1"],
+    why: "Tombstoning a selection. C1.",
+  },
+  "app/api/mood-entries/restore/route.ts": {
+    domain: "mind",
+    conditions: ["C1"],
+    why: "Undoing it. C1.",
+  },
+  "app/api/mental-health/assessments/route.ts": {
+    domain: "mind",
+    conditions: ["C1", "C2"],
+    why: "Recording a screener administered by the manager. C1, and C2 because the crisis-resource copy must be in the language of the person holding the phone.",
+  },
+  "app/api/cycle/cycles/[id]/route.ts": {
+    domain: "cycle",
+    conditions: [],
+    why: "Deleting one cycle; soft, audited, tombstoned to sync.",
+  },
+  "app/api/cycle/day-logs/route.ts": {
+    domain: "cycle",
+    conditions: ["C4"],
+    why: "Writing a day of the cycle log. The upsert replaces the day, so C4 names the date and the fields replaced.",
+  },
+  "app/api/cycle/day-logs/[id]/route.ts": {
+    domain: "cycle",
+    conditions: ["C4"],
+    why: "Editing and deleting one day; the delete soft-deletes. C4 on the edit.",
+  },
+  "app/api/cycle/period/route.ts": {
+    domain: "cycle",
+    conditions: ["C4"],
+    why: "Setting a period boundary, which re-anchors the neighbouring cycles. C4 on the dates it moves.",
+  },
+  "app/api/cycle/symptoms/custom/route.ts": {
+    domain: "cycle",
+    conditions: ["C1"],
+    why: "Adding to the record's own symptom vocabulary. C1.",
+  },
+  "app/api/medications/[id]/route.ts": {
+    domain: "medications",
+    conditions: ["C4", "C7"],
+    why: "Replacing a medication and its schedule. C4, and C7 because the previous cadence and the tombstoned pending slots are the only unrecoverable part. The DELETE beside it stays refused.",
+  },
+  "app/api/medications/[id]/schedule-revisions/route.ts": {
+    domain: "medications",
+    conditions: [],
+    why: "Archiving a schedule era the compliance engine reads.",
+  },
+  "app/api/medications/[id]/schedule-revisions/[revisionId]/route.ts": {
+    domain: "medications",
+    conditions: ["C3", "C4"],
+    why: "Editing and deleting an era; the delete is hard, so C3 carries its dates and dose. C4 on the edit.",
+  },
+  "app/api/medications/[id]/inventory/route.ts": {
+    domain: "medications",
+    conditions: ["C1"],
+    why: "Recording stock the low-stock notification reads. C1.",
+  },
+  "app/api/medications/[id]/inventory/[itemId]/route.ts": {
+    domain: "medications",
+    conditions: ["C3", "C4"],
+    why: "Editing and deleting a stock item; the delete is hard and already carries its final state, so C3 adds the label and expiry. C4 on the edit.",
+  },
+  "app/api/medications/[id]/side-effects/[logId]/route.ts": {
+    domain: "medications",
+    conditions: [],
+    why: "Removing a side-effect record. The one hard delete in the tree whose details already reconstruct.",
+  },
+  "app/api/medications/[id]/glp1/route.ts": {
+    domain: "medications",
+    conditions: ["C1"],
+    why: "Recording a titration step. C1.",
+  },
+  "app/api/medications/[id]/intake/[eventId]/route.ts": {
+    domain: "medications",
+    conditions: ["C4", "C8"],
+    why: "Correcting and deleting a dose. The correction tombstones and re-creates, so C8 preserves the original's source and C4 names what changed; the delete soft-deletes.",
+  },
+  "app/api/medications/[id]/intake/bulk-delete/route.ts": {
+    domain: "medications",
+    conditions: ["C1"],
+    why: "Tombstoning a run of doses. C1.",
+  },
+  "app/api/medications/[id]/intake/purge/route.ts": {
+    domain: "medications",
+    conditions: [],
+    why: "Clearing a medication's intake history. Tombstones since the delegated-write release and drops only recomputable rollups.",
+  },
+  "app/api/medications/[id]/intake/import/route.ts": {
+    domain: "medications",
+    conditions: ["C1", "C9"],
+    why: "Importing a dose history for one medication. Additive with duplicates skipped and honest provenance. C1, C9.",
+  },
+  "app/api/medications/intake/dose-history-import/route.ts": {
+    domain: "medications",
+    conditions: ["C1", "C9"],
+    why: "The whole-regimen form of the same import, same worker, same properties. C1, C9.",
+  },
+  "app/api/nutrients/water/route.ts": {
+    domain: "measurements",
+    conditions: ["C1", "C4"],
+    why: "Logging hydration. It overwrites a day total with no per-entry ledger, so C4 carries the previous total; C1 on the bucket.",
+  },
+  "app/api/insights/biomarker-assessment/route.ts": {
+    domain: "record",
+    conditions: ["C5"],
+    why: "Reading the generated biomarker assessment. C5: a cache miss must not enqueue generation on a delegated path.",
+  },
+  "app/api/insights/blood-pressure-status/route.ts": {
+    domain: "record",
+    conditions: ["C5"],
+    why: "The generated blood-pressure assessment. C5.",
+  },
+  "app/api/insights/bmi-status/route.ts": {
+    domain: "record",
+    conditions: ["C5"],
+    why: "The generated BMI assessment. C5.",
+  },
+  "app/api/insights/medication-compliance-status/route.ts": {
+    domain: "record",
+    conditions: ["C5"],
+    why: "The generated compliance assessment. C5.",
+  },
+  "app/api/insights/metric-status/route.ts": {
+    domain: "record",
+    conditions: ["C5"],
+    why: "The generic per-metric assessment, and the widest of them. C5.",
+  },
+  "app/api/insights/mood-status/route.ts": {
+    domain: "record",
+    conditions: ["C5"],
+    why: "The generated mood assessment. C5.",
+  },
+  "app/api/insights/pulse-status/route.ts": {
+    domain: "record",
+    conditions: ["C5"],
+    why: "The generated pulse assessment. C5.",
+  },
+  "app/api/insights/weight-status/route.ts": {
+    domain: "record",
+    conditions: ["C5"],
+    why: "The generated weight assessment. C5.",
+  },
+  "app/api/insights/narrative/route.ts": {
+    domain: "record",
+    conditions: ["C5"],
+    why: "The period narrative. It warms unconditionally rather than on a miss, so C5 matters more here than anywhere.",
+  },
+  "app/api/insights/derived/route.ts": {
+    domain: "record",
+    conditions: ["C5"],
+    why: "The derived-score assessment, AI-warmed. C5.",
+  },
+  "app/api/insights/derived/batch/route.ts": {
+    domain: "record",
+    conditions: ["C1"],
+    why: "The deterministic batch form of the same read, no provider on this one. C1.",
+  },
+  "app/api/insights/breathing-screening/route.ts": {
+    domain: "record",
+    conditions: [],
+    why: "A deterministic screening read over the record's own data.",
+  },
+  "app/api/insights/cards/route.ts": {
+    domain: "record",
+    conditions: [],
+    why: "The alert cards, from a rule engine rather than a provider.",
+  },
+  "app/api/insights/coach-read/route.ts": {
+    domain: "record",
+    conditions: [],
+    why: "The two server-authoritative lines above a metric chart. Pure compute, no provider, no cache table.",
+  },
+  "app/api/insights/comprehensive/route.ts": {
+    domain: "record",
+    conditions: [],
+    why: "The heaviest SQL aggregation in the product, cached per record; no provider on the path.",
+  },
+  "app/api/insights/correlations/route.ts": {
+    domain: "record",
+    conditions: [],
+    why: "Correlations over the record's own series. No LLM, no cache table.",
+  },
+  "app/api/insights/glp1-plateau/route.ts": {
+    domain: "record",
+    conditions: [],
+    why: "A deterministic plateau read.",
+  },
+  "app/api/insights/glp1-timeline/route.ts": {
+    domain: "record",
+    conditions: [],
+    why: "The titration timeline.",
+  },
+  "app/api/insights/health-status/route.ts": {
+    domain: "record",
+    conditions: [],
+    why: "The composite status read.",
+  },
+  "app/api/insights/labs-changes/route.ts": {
+    domain: "record",
+    conditions: [],
+    why: "What moved in the record's labs.",
+  },
+  "app/api/insights/patterns/route.ts": {
+    domain: "record",
+    conditions: [],
+    why: "The record's correlation patterns.",
+  },
+  "app/api/insights/patterns/[id]/route.ts": {
+    domain: "record",
+    conditions: [],
+    why: "Dismissing one pattern. The dismissal stores its own evidence hash and effect size, so it reverses and reads back.",
+  },
+  "app/api/insights/pulse/intraday/route.ts": {
+    domain: "record",
+    conditions: [],
+    why: "The intraday pulse series.",
+  },
+  "app/api/insights/rhythm-events/route.ts": {
+    domain: "record",
+    conditions: [],
+    why: "Rhythm events over the record's own recordings.",
+  },
+  "app/api/insights/targets/route.ts": {
+    domain: "record",
+    conditions: [],
+    why: "The record's resolved targets.",
+  },
+  "app/api/insights/ecg/route.ts": {
+    domain: "record",
+    conditions: [],
+    why: "Listing the record's ECG recordings. The POST arm beside it is a device ingest and stays refused.",
+  },
+  "app/api/insights/ecg/[id]/route.ts": {
+    domain: "record",
+    conditions: [],
+    why: "One ECG recording of the record.",
+  },
+  "app/api/dashboard/summary/route.ts": {
+    domain: "record",
+    conditions: [],
+    why: "The record's summary strip, beside the snapshot that is already delegable.",
+  },
+  "app/api/export/health-record/route.ts": {
+    domain: "record",
+    conditions: ["C1"],
+    why: "The doctor report, a guardian in the paediatrician's office, and the one export surface an invited manager reaches. C1 moves the shared export bucket to the actor.",
+  },
+};
 
 /**
  * v1.37.0 — route modules permitted to administer a MANAGED PROFILE: a record
@@ -908,12 +1760,14 @@ const ACTOR_ROUTES: Record<string, string> = {
  * stay a formality by accident: every addition has to be counted here as well
  * as listed above, which is one more place a careless admission has to pass.
  *
- * v1.37.0 — unchanged at 69, because the two new literals land empty. It is
- * one number rather than one per list on purpose: filling either of them
- * collides here by construction, so two people filling them at once find out
- * from the merge rather than from production.
+ * v1.37.0 — 69 → 190 as the MANAGE perimeter lands: 51 modules join the
+ * delegable list (108), and the manage literal fills with 70. The guardian
+ * literal is still empty, so the number moves again when it fills. It is one
+ * number rather than one per list on purpose: filling either of the new
+ * literals collides here by construction, so two people filling them at once
+ * find out from the merge rather than from production.
  */
-const FROZEN_ENTRY_COUNT = 69;
+const FROZEN_ENTRY_COUNT = 190;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —
@@ -1514,21 +2368,31 @@ describe("(e) the delegable write set is frozen", () => {
     );
   });
 
-  it("leaves the rest of the delegable set reading only", () => {
+  it("leaves the rest of the delegable set off the write level", () => {
     // The non-zero half of the leg above, and the one that makes an empty
-    // matcher fail: the read-only remainder must be found, must be large, and
-    // must be found by the SAME matcher that decided the write set. If
-    // `recordNeeds` stopped returning anything, this drops to zero and fails
-    // rather than agreeing that nothing writes.
-    const readOnly = Object.keys(DELEGABLE_ROUTES).filter(
+    // matcher fail: the remainder must be found, must be large, and must be
+    // found by the SAME matcher that decided the write set. If `recordNeeds`
+    // stopped returning anything, this drops to zero and fails rather than
+    // agreeing that nothing writes.
+    //
+    // v1.37.0 — the remainder is no longer "read-only". A module can now be
+    // delegable because it declares `"manage"` and nothing else: the fifty-one
+    // that joined this list in this release are exactly that, and demanding a
+    // `"read"` from them would be demanding they open at a level the
+    // classification refused. What every non-write member must still be is
+    // NOT a write: `"write"` is the one level whose members are frozen
+    // separately, and a module that grew a write arm without joining that
+    // literal is the diff this leg exists to catch.
+    const remainder = Object.keys(DELEGABLE_ROUTES).filter(
       (rel) => !(rel in DELEGABLE_WRITE_ROUTES),
     );
-    expect(readOnly.length).toBeGreaterThan(20);
-    for (const rel of readOnly) {
+    expect(remainder.length).toBeGreaterThan(20);
+    for (const rel of remainder) {
       const needs = recordNeeds(rel);
-      expect(needs.has("read"), `${rel} does not resolve a record read`).toBe(
-        true,
-      );
+      expect(
+        needs.has("read") || needs.has("manage"),
+        `${rel} resolves no record level at all`,
+      ).toBe(true);
       expect(needs.has("write"), `${rel} writes without being listed`).toBe(
         false,
       );
@@ -1634,16 +2498,54 @@ describe("(g) the MANAGE route set is frozen", () => {
     const scanned = routeModules();
     expect(scanned.length).toBeGreaterThan(ROUTE_MODULE_FLOOR);
 
-    // The literal is empty today, so the assertion below is `[] === []` and
-    // proves nothing by itself. What carries it is the matcher that produced
-    // the left-hand side being the SAME one that produced a large non-empty
-    // read set two legs up — `recordNeeds` decides both, so a blinded matcher
+    // The evidence the matcher works, kept from when this literal was empty:
+    // the left-hand side below is produced by the SAME `recordNeeds` that
+    // produces a large non-empty read set two legs up, so a blinded matcher
     // fails leg (e) loudly before this one can agree with itself.
     const readNeeds = scanned.filter((rel) => recordNeeds(rel).has("read"));
     expect(readNeeds.length).toBeGreaterThan(20);
 
     const managing = scanned.filter((rel) => recordNeeds(rel).has("manage"));
     expect(managing).toEqual(Object.keys(DELEGABLE_MANAGE_ROUTES).sort());
+  });
+
+  it("declares MANAGE on a verb handler, not somewhere in the file", () => {
+    // The per-verb resolution the conditions below need, and its own non-zero
+    // evidence: every frozen member must resolve at least one exported handler
+    // declaring `"manage"`. A matcher that stopped finding handlers fails on
+    // the first member rather than agreeing that nothing mutates.
+    let total = 0;
+    for (const rel of Object.keys(DELEGABLE_MANAGE_ROUTES)) {
+      const verbs = resolverVerbsIn(rel, "manage");
+      expect(
+        verbs.length,
+        `${rel} declares manage outside a handler`,
+      ).toBeGreaterThan(0);
+      total += verbs.length;
+    }
+    expect(total).toBeGreaterThan(Object.keys(DELEGABLE_MANAGE_ROUTES).length);
+  });
+
+  it("keeps the admitted mutation inventory complete and discoverable", () => {
+    expect(ADMITTED_MUTATING_HANDLERS.length).toBeGreaterThan(0);
+    expect(ADMITTED_MUTATING_HANDLERS.length).toBe(62);
+
+    const expected = ADMITTED_MUTATING_HANDLERS.map(
+      ({ handlerModule, action, level }) =>
+        `${handlerModule}:${action}:${level}`,
+    ).sort();
+    const discovered = Object.keys(DELEGABLE_ROUTES)
+      .flatMap((rel) =>
+        ["write", "manage"].flatMap((need) =>
+          resolverVerbsIn(rel, need)
+            .filter((verb) => MUTATING_VERBS.has(verb))
+            .map((verb) => `${rel}:${verb}:${need}`),
+        ),
+      )
+      .sort();
+
+    expect(discovered.length).toBeGreaterThan(0);
+    expect(discovered).toEqual(expected);
   });
 
   it("is a subset of the delegable set", () => {
@@ -1655,12 +2557,25 @@ describe("(g) the MANAGE route set is frozen", () => {
     }
   });
 
-  it("every manage module files its rows through auditLog", () => {
+  it("every mutating manage module files its rows through auditLog", () => {
     // Inherited from the write leg's condition of admission, and it matters
     // more here: a MANAGE verb rewrites or removes record data, and `auditLog`
     // is the only writer that stamps `actorUserId`. A destruction filed
     // without an actor is indistinguishable from the owner having done it.
-    for (const rel of Object.keys(DELEGABLE_MANAGE_ROUTES)) {
+    //
+    // Scoped to the modules whose MANAGE arm is a mutation, which the write
+    // leg did not have to say because every member of that literal was one.
+    // Twenty-seven members here are GETs — the generated and derived reads,
+    // which open at MANAGE because they read the record whole, not because
+    // they change it. Demanding an audit row from a read would either be
+    // unsatisfiable or satisfied by writing a row per navigation, and the
+    // second is worse than the first.
+    const mutating = Object.keys(DELEGABLE_MANAGE_ROUTES).filter((rel) =>
+      resolverVerbsIn(rel, "manage").some((verb) => MUTATING_VERBS.has(verb)),
+    );
+    expect(mutating.length).toBeGreaterThan(30);
+
+    for (const rel of mutating) {
       expect(callsSymbol(rel, "auditLog"), `${rel} never calls auditLog`).toBe(
         true,
       );
@@ -1674,6 +2589,215 @@ describe("(g) the MANAGE route set is frozen", () => {
         `${rel} writes an audit row without the helper`,
       ).toEqual([]);
     }
+  });
+
+  it("every destructive manage arm is reconstructable or tombstoned", () => {
+    // The rule the level ships under, in the part a machine can check: a verb
+    // that removes rows either leaves them (a tombstone the owner can restore
+    // or the sync feed can carry) or files what it destroyed. A module that
+    // does neither is the failure this leg exists to catch — the hard delete
+    // whose audit row is an id pointing at nothing.
+    const destructive = Object.keys(DELEGABLE_MANAGE_ROUTES).filter((rel) =>
+      resolverVerbsIn(rel, "manage").includes("DELETE"),
+    );
+    expect(destructive.length).toBeGreaterThan(10);
+
+    for (const rel of destructive) {
+      const entry = DELEGABLE_MANAGE_ROUTES[rel];
+      const tombstones = identifiers(rel).has("deletedAt");
+      expect(
+        tombstones ||
+          entry.conditions.includes("C3") ||
+          rel in MANAGE_RECONSTRUCTION_BY_HAND,
+        `${rel} destroys rows without a tombstone and without C3`,
+      ).toBe(true);
+    }
+  });
+
+  it("the hand-shaped reconstructions still name what they carry", () => {
+    // The exception map's own leg. Each member claims specific audit-detail
+    // keys do the reconstructing; if those keys leave the handler the excuse
+    // goes with them, and this fails rather than the module quietly becoming
+    // an id-only delete under a reason line that says otherwise.
+    const members = Object.entries(MANAGE_RECONSTRUCTION_BY_HAND);
+    expect(members.length).toBeGreaterThan(0);
+
+    for (const [rel, { keys, why }] of members) {
+      expect(why.trim().length, `${rel} has no reason`).toBeGreaterThan(0);
+      expect(DELEGABLE_MANAGE_ROUTES, rel).toHaveProperty([rel]);
+      const carried = auditDetailKeysIn(rel);
+      expect(carried.length, `${rel} files no audit details`).toBeGreaterThan(
+        0,
+      );
+      const satisfied = carried.some((names) =>
+        keys.every((key) => names.includes(key)),
+      );
+      expect(satisfied, `${rel} no longer files ${keys.join(", ")}`).toBe(true);
+    }
+  });
+
+  it("C3 modules name what they destroyed", () => {
+    // The condition as code: a hard delete files the model, the id, a human
+    // label and the date, through the shared helper — and the `details`
+    // literal at the call site still names the row's own id, so the reviewer
+    // reading the handler sees what the row is about without opening the
+    // helper.
+    const members = manageModulesWith("C3");
+    expect(members.length).toBeGreaterThan(0);
+
+    for (const rel of members) {
+      if (rel in MANAGE_RECONSTRUCTION_BY_HAND) continue;
+      expect(
+        callsSymbol(rel, "destroyedDetails"),
+        `${rel} carries C3 and never calls destroyedDetails`,
+      ).toBe(true);
+      const named = auditDetailKeysIn(rel).some((keys) =>
+        keys.some((key) => /(^id$|Id$)/.test(key)),
+      );
+      expect(named, `${rel} files no id on any audit details literal`).toBe(
+        true,
+      );
+    }
+  });
+
+  it("C4 modules name what they overwrote", () => {
+    const members = manageModulesWith("C4");
+    expect(members.length).toBeGreaterThan(10);
+
+    for (const rel of members) {
+      expect(
+        callsSymbol(rel, "overwriteDetails"),
+        `${rel} carries C4 and never calls overwriteDetails`,
+      ).toBe(true);
+    }
+  });
+
+  it("C1 modules burn the actor's rate allowance, never the record's", () => {
+    // The frozen precedent from `medications/compliance`, asserted on the
+    // bucket key itself rather than on the presence of `actor` anywhere in
+    // the file. Both halves matter: the key must name the actor, and no key
+    // in the module may still name the record — a module that keys one bucket
+    // correctly and leaves a second on `user.id` lets a manager lock the
+    // owner out through the one nobody looked at.
+    const members = manageModulesWith("C1");
+    expect(members.length).toBeGreaterThan(10);
+
+    for (const rel of members) {
+      const keys = rateLimitKeysIn(rel);
+      expect(
+        keys.length,
+        `${rel} carries C1 and rate-limits nothing`,
+      ).toBeGreaterThan(0);
+      for (const key of keys) {
+        expect(key, `${rel} keys a bucket on the record`).toContain("actor.id");
+        expect(key, `${rel} keys a bucket on the record`).not.toContain(
+          "user.id",
+        );
+      }
+    }
+  });
+
+  it("C5 is enforced at the enqueue, not at the ten call sites", () => {
+    // The condition that costs the owner money if it is wrong, and the one
+    // place it is implemented. Ten frozen entries carry C5; nine of them
+    // reach the provider through `resolveReadOnlyStatusMiss` and the tenth
+    // (the narrative) enqueues in its own handler. Asserting the choke point
+    // rather than the ten modules is deliberate — a generator added later
+    // inherits the suppression without knowing it exists — so the anchor has
+    // to be exactly here.
+    expect(manageModulesWith("C5").length).toBe(10);
+
+    const miss = functionSource(
+      "lib/insights/status-cache.ts",
+      "resolveReadOnlyStatusMiss",
+    );
+    expect(miss.length).toBeGreaterThan(0);
+    expect(miss).toContain("delegatedGenerationSuppressed");
+
+    expect(
+      callsSymbol(
+        "app/api/insights/narrative/route.ts",
+        "delegatedGenerationSuppressed",
+      ),
+    ).toBe(true);
+
+    // …and the fact it reads has to be stamped. The resolver is where the
+    // owner row is in hand, so it is the only place that can decide it.
+    const resolver = functionSource(
+      "lib/api-handler.ts",
+      "resolveSwitchedRecord",
+    );
+    expect(resolver.length).toBeGreaterThan(0);
+    expect(resolver).toContain("setDelegatedGenerationSuppressed");
+  });
+
+  it("the remaining conditions are carried where they were argued", () => {
+    // C2, C6, C7, C8 and C9 are one or two modules each, so they are asserted
+    // by name rather than by a family rule. Each expectation is the shape of
+    // the condition, not a spelling of it: the locale the screener resolves,
+    // the refusal the mood create carries, the two facts a schedule
+    // replacement files, the provenance a moved dose keeps, and the job id
+    // that joins an import to the person who started it.
+    const screener = "app/api/mental-health/assessments/route.ts";
+    expect(manageModulesWith("C2")).toEqual([screener]);
+    expect(read(screener)).toContain("actor.locale");
+
+    const mood = "app/api/mood-entries/route.ts";
+    expect(manageModulesWith("C6")).toEqual([mood]);
+    expect(read(mood)).toContain("mood.create.external_id_not_delegable");
+
+    const medication = "app/api/medications/[id]/route.ts";
+    expect(manageModulesWith("C7")).toEqual([medication]);
+    const cadence = auditDetailKeysIn(medication).some(
+      (keys) =>
+        keys.includes("replacedCadence") &&
+        keys.includes("tombstonedSlotCount"),
+    );
+    expect(cadence, "the schedule replacement files no cadence").toBe(true);
+
+    const dose = "app/api/medications/[id]/intake/[eventId]/route.ts";
+    expect(manageModulesWith("C8")).toEqual([dose]);
+    // The hardcoded provenance this condition removed. A re-created row that
+    // stamps `WEB` says a human typed a dose that arrived from a device.
+    expect(read(dose)).not.toContain('createSource: "WEB"');
+
+    expect(manageModulesWith("C9")).toEqual([
+      "app/api/medications/[id]/intake/import/route.ts",
+      "app/api/medications/intake/dose-history-import/route.ts",
+    ]);
+    for (const rel of manageModulesWith("C9")) {
+      const joined = auditDetailKeysIn(rel).some((keys) =>
+        keys.includes("jobId"),
+      );
+      expect(joined, `${rel} enqueues work no audit row names`).toBe(true);
+    }
+  });
+
+  it("every frozen condition tag is one the file defines", () => {
+    // The membership assertion the domain column already has, for the other
+    // review-sensitive column. A tag nobody checks is a condition nobody
+    // implemented, so the tag set and the legs above have to move together.
+    const checked: ConditionTag[] = [
+      "C1",
+      "C2",
+      "C3",
+      "C4",
+      "C5",
+      "C6",
+      "C7",
+      "C8",
+      "C9",
+    ];
+    let tagged = 0;
+    for (const [rel, entry] of Object.entries(DELEGABLE_MANAGE_ROUTES)) {
+      for (const tag of entry.conditions) {
+        expect(checked, `${rel}: ${tag}`).toContain(tag);
+        tagged += 1;
+      }
+    }
+    // Non-zero evidence: the tags are the admission, so an empty condition
+    // column across seventy entries is a transcription that dropped them.
+    expect(tagged).toBeGreaterThan(40);
   });
 });
 

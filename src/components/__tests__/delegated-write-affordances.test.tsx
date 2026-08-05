@@ -360,7 +360,7 @@ describe("linking a document to an illness episode", () => {
       // intent and false of the route: the card's list query hit
       // `GET /api/documents/inbound`, which resolved the CALLER and 403'd, so
       // the card that "stays" rendered a query-error tile. That GET is
-      // delegable; `delegable-surface-guard.test.ts` freezes it and
+      // delegable; `sharing-surface-guard.test.ts` freezes it and
       // `sharing-delegable-routes.test.ts` drives it.
       expect(html).toContain('data-slot="episode-documents-card"');
     }

@@ -11,7 +11,7 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -91,13 +91,16 @@ async function postAllergy(request: NextRequest): Promise<Response> {
   // and family history have exactly one home today, that home is a personal
   // account surface a switch rightly closes, and bolting a second copy onto a
   // shared page would split one concept across two places. Re-admitting is
-  // one line here plus one entry in `delegable-surface-guard.test.ts` plus the
+  // one line here plus one entry in `sharing-surface-guard.test.ts` plus the
   // paragraph that argues it — which is exactly the reviewed diff that guard
   // exists to force.
   //
   // The half that was always the point is untouched: a caregiver can still
   // READ the allergy list inside the record.
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE. Recording an allergy for somebody whose record you
+  // manage is the case the level exists for; on a managed profile it is the
+  // guardian's ordinary act. Additive, audited, and the row is the record's.
+  const { user } = await requireRecordAuth("manage", "profile");
 
   const { data: rawBody, error: jsonError } = await safeJson(request, {
     maxBytes: 16 * 1024,

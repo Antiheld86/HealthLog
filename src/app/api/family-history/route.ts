@@ -12,7 +12,7 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -77,7 +77,9 @@ async function postFamilyHistory(request: NextRequest): Promise<Response> {
   // record. The classification admitted it and named the discomfort. Landing
   // it together with the surface that offers it means the copy on that surface
   // can say whose statement the row is, which no route comment can.
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE. Third-party data by design, admitted on the same
+  // reasoning the read arm was: it is the record's own health background.
+  const { user } = await requireRecordAuth("manage", "profile");
 
   const { data: rawBody, error: jsonError } = await safeJson(request, {
     maxBytes: 16 * 1024,

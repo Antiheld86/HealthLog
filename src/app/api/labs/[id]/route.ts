@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
@@ -10,6 +10,7 @@ import {
   sanitiseZodIssues,
 } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
+import { overwriteDetails } from "@/lib/sharing/audit-details";
 import { prisma } from "@/lib/db";
 import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
 import {
@@ -90,7 +91,10 @@ export const GET = apiHandler(
 
 export const PUT = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Correcting a transcribed lab result is the ordinary
+    // reason somebody manages a record; the previous numbers ride the audit
+    // row below.
+    const { user } = await requireRecordAuth("manage", "labs");
     const { id } = await params;
 
     const existing = await prisma.labResult.findFirst({
@@ -116,17 +120,16 @@ export const PUT = apiHandler(
       const auditIssues = sanitiseZodIssues(parsed.error.issues, {
         stripValuesFromMessage: true,
       });
-      prisma.auditLog
-        .create({
-          data: {
-            userId: user.id,
-            action: "labs.update.validation-failed",
-            details: JSON.stringify({ issues: auditIssues, labResultId: id }),
-          },
-        })
-        .catch(() => {
-          /* swallow — the 422 response is the contract */
-        });
+      // v1.37.0 — through `auditLog()` rather than a bare `prisma.auditLog
+      // .create`, because that helper is the only writer that stamps
+      // `actorUserId`. Filed under the resolved record either way; without the
+      // stamp a manager's malformed payload would read as the owner's own.
+      void auditLog("labs.update.validation-failed", {
+        userId: user.id,
+        details: { issues: auditIssues, labResultId: id },
+      }).catch(() => {
+        /* swallow — the 422 response is the contract */
+      });
       return returnAllZodIssues(parsed.error, 422, {
         errorCode: "labs.update.invalid",
       });
@@ -223,7 +226,34 @@ export const PUT = apiHandler(
     await auditLog("labResult.update", {
       userId: user.id,
       ipAddress: getClientIp(request),
-      details: { labResultId: id },
+      // C4 — the replaced result. The note is named and never quoted: it is
+      // encrypted on the row.
+      details: {
+        labResultId: id,
+        ...overwriteDetails({
+          before: {
+            analyte: existing.analyte,
+            value: existing.value,
+            valueText: existing.valueText,
+            unit: existing.unit,
+            panel: existing.panel,
+            referenceLow: existing.referenceLow,
+            referenceHigh: existing.referenceHigh,
+            takenAt: existing.takenAt,
+          },
+          after: {
+            analyte: updated.analyte,
+            value: updated.value,
+            valueText: updated.valueText,
+            unit: updated.unit,
+            panel: updated.panel,
+            referenceLow: updated.referenceLow,
+            referenceHigh: updated.referenceHigh,
+            takenAt: updated.takenAt,
+          },
+          redacted: d.note !== undefined ? ["note"] : [],
+        }),
+      },
     });
 
     annotate({ action: { name: "labs.update" }, meta: { labResultId: id } });
@@ -236,7 +266,9 @@ export const PUT = apiHandler(
 
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Soft-delete with `labs/restore` beside it, so the
+    // reading is reconstructable from the row itself.
+    const { user } = await requireRecordAuth("manage", "labs");
     const { id } = await params;
 
     const existing = await prisma.labResult.findFirst({

@@ -15,7 +15,7 @@
  */
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import { auditLog } from "@/lib/auth/audit";
 import { annotate } from "@/lib/logging/context";
 import {
@@ -224,17 +224,22 @@ export const GET = apiHandler(
  */
 export const POST = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. A titration step is record data and the dose is what
+    // the server acts on; administering one is the case the level names.
+    const { user, actor } = await requireRecordAuth("manage", "medications");
     const { id } = await params;
 
     const guard = await assertMedicationOwnership(id, user.id);
     if (guard) return guard;
 
-    // Per-user POST rate-limit — matches the 30/min sibling routes
+    // Per-caller POST rate-limit — matches the 30/min sibling routes
     // (inventory, side-effects). Generous for a hand-driven session,
     // tight enough to cut off the spam case.
+    //
+    // v1.37.0 — C1: keyed on the ACTOR, so a manager burns their own
+    // allowance and cannot collect a fresh one by switching records.
     const rl = await checkRateLimit(
-      `medication-glp1:post:${user.id}`,
+      `medication-glp1:post:${actor.id}`,
       POST_RATE_LIMIT,
       POST_WINDOW_MS,
     );

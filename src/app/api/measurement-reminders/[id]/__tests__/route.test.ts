@@ -18,6 +18,14 @@ import { NextRequest } from "next/server";
 vi.mock("@/lib/api-handler", () => ({
   apiHandler: <T extends (...args: unknown[]) => unknown>(fn: T) => fn,
   requireAuth: vi.fn(async () => ({ user: { id: "u1", locale: "en" } })),
+  // v1.37.0 — the mutating arms resolve the RECORD at MANAGE. `actor` is the
+  // caller and equals `user` for everyone acting on their own reminders,
+  // which is what this suite exercises.
+  requireRecordAuth: vi.fn(async () => ({
+    user: { id: "u1", locale: "en" },
+    actor: { id: "u1", locale: "en" },
+    grantId: null,
+  })),
 }));
 
 vi.mock("@/lib/auth/audit", () => ({

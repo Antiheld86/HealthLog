@@ -30,7 +30,7 @@ import {
  * no reachable caller. Logging a value on a tracked metric left for the same
  * reason one release later: its only form sits on `/custom-metrics/{id}`,
  * which a switch closes too.
- * `delegable-surface-guard.test.ts` carries that argument
+ * `sharing-surface-guard.test.ts` carries that argument
  * in full and is the list that binds; this paragraph has to agree with it. Editing, deleting, restoring, purging, importing and
  * bulk-acting stay with the owner, including on an entry the delegate added
  * themselves a minute ago, and so does every create the list does not name

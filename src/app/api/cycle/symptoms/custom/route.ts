@@ -24,7 +24,7 @@ import {
   returnAllZodIssues,
   safeJson,
 } from "@/lib/api-response";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -68,15 +68,21 @@ export const GET = apiHandler(async () => {
 });
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE. The record's own symptom vocabulary, which the day-log
+  // writes the level admits need in order to say anything.
+  const { user, actor } = await requireRecordAuth("manage", "cycle");
 
   const gate = await requireCycleEnabled(user.id, user.gender);
   if (!gate.enabled) return gate.response;
 
   // Cap mutation rate so a single session can't flood the encrypted-label
   // catalogue (each create runs an encrypt + audit write).
+  // v1.37.0 — C1: the bucket keys on the ACTOR, the frozen precedent from
+  // `medications/compliance`. A manager burns their own allowance rather than
+  // locking the owner out of their own record, and cannot collect a fresh one
+  // by switching records.
   const rl = await checkRateLimit(
-    `cycle:symptom:custom:${user.id}`,
+    `cycle:symptom:custom:${actor.id}`,
     30,
     60_000,
   );

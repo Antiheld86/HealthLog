@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
+import { overwriteDetails } from "@/lib/sharing/audit-details";
 import {
   apiSuccess,
   apiError,
@@ -187,7 +188,13 @@ export const GET = apiHandler(
 
 export const PUT = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE, and the strongest candidate in the domain: a manager
+    // administering somebody's regimen is the case the level exists for. What
+    // it destroys is scheduling anchors, not history — the tombstone `where`
+    // below excludes every actioned row — and the previous cadence is the one
+    // genuinely unrecoverable part, which is what C7 puts in the audit row.
+    // The DELETE beside it stays refused.
+    const { user } = await requireRecordAuth("manage", "medications");
 
     const { id } = await params;
     // v1.5.5 C-E3-3 — route ownership check through the shared helper
@@ -206,6 +213,10 @@ export const PUT = apiHandler(
         active: true,
         createdAt: true,
         asNeeded: true,
+        // v1.37.0 — the pre-image the audit row carries (C4).
+        name: true,
+        dose: true,
+        endsOn: true,
         _count: { select: { schedules: true } },
       },
     });
@@ -440,6 +451,17 @@ export const PUT = apiHandler(
       };
     });
 
+    // v1.37.0 — C7. What a schedule replacement destroys, captured for the
+    // audit row: the cadence that was there and the pending slots that were
+    // tombstoned with it. A feed line saying "changed a medication" cannot
+    // answer "back to what?", and unlike a row a schedule keeps ACTING after
+    // the manager's grant ends.
+    let replacedCadence: string | null = null;
+    let replacedScheduleCount: number | null = null;
+    let tombstonedSlotCount: number | null = null;
+    let tombstonedFrom: Date | null = null;
+    let tombstonedTo: Date | null = null;
+
     // If schedules provided, replace all
     if (schedules && normalisedSchedules) {
       // v1.16.3 — effective dating. Before the wholesale replace below wipes
@@ -467,6 +489,25 @@ export const PUT = apiHandler(
           reminderGraceMinutes: row.reminderGraceMinutes,
         }),
       );
+      replacedScheduleCount = previousRows.length;
+      replacedCadence =
+        previousRows.length > 0
+          ? previousRows
+              .map((row) =>
+                [
+                  row.timesOfDay,
+                  row.rrule ?? "",
+                  row.rollingIntervalDays !== null
+                    ? `every ${row.rollingIntervalDays}d`
+                    : "",
+                  row.daysOfWeek ?? "",
+                ]
+                  .filter((part) => part !== "")
+                  .join(" "),
+              )
+              .join(" | ")
+          : null;
+
       if (
         previousRows.length > 0 &&
         schedulesMateriallyDiffer(
@@ -564,6 +605,16 @@ export const PUT = apiHandler(
         where: tombstoneWhere,
         select: { scheduledFor: true },
       });
+      // C7 — the count and the day range of the anchors that went.
+      tombstonedSlotCount = tombstoned.length;
+      for (const row of tombstoned) {
+        if (tombstonedFrom === null || row.scheduledFor < tombstonedFrom) {
+          tombstonedFrom = row.scheduledFor;
+        }
+        if (tombstonedTo === null || row.scheduledFor > tombstonedTo) {
+          tombstonedTo = row.scheduledFor;
+        }
+      }
       await prisma.medicationIntakeEvent.updateMany({
         where: tombstoneWhere,
         data: { deletedAt: new Date(), syncVersion: { increment: 1 } },
@@ -729,7 +780,37 @@ export const PUT = apiHandler(
     await auditLog("medication.update", {
       userId: user.id,
       ipAddress: getClientIp(request),
-      details: { medicationId: id },
+      // C4 on what the medication row itself lost, and C7 on the schedule:
+      // the cadence that was replaced, and how many pending slots went with
+      // it over which days.
+      details: {
+        medicationId: id,
+        ...overwriteDetails({
+          before: {
+            name: existing.name,
+            dose: existing.dose,
+            active: existing.active,
+            asNeeded: existing.asNeeded,
+            endsOn: existing.endsOn,
+          },
+          after: {
+            name: medication.name,
+            dose: medication.dose,
+            active: medication.active,
+            asNeeded: medication.asNeeded,
+            endsOn: medication.endsOn,
+          },
+        }),
+        ...(replacedScheduleCount !== null
+          ? {
+              replacedCadence,
+              replacedScheduleCount,
+              tombstonedSlotCount,
+              tombstonedFrom: tombstonedFrom?.toISOString() ?? null,
+              tombstonedTo: tombstonedTo?.toISOString() ?? null,
+            }
+          : {}),
+      },
     });
 
     annotate({

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { auditLog } from "@/lib/auth/audit";
+import { overwriteDetails } from "@/lib/sharing/audit-details";
 import {
   apiSuccess,
   apiError,
@@ -11,7 +12,7 @@ import {
 import { updateMoodEntrySchema, getScoreForMood } from "@/lib/validations/mood";
 import { NextRequest } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
 import { encryptNote, shapeMoodNote } from "@/lib/crypto/note-cipher";
@@ -62,7 +63,8 @@ export const GET = apiHandler(
 
 export const PUT = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Correcting an entry in a record somebody manages.
+    const { user } = await requireRecordAuth("manage", "mind");
 
     const { id } = await params;
 
@@ -97,17 +99,16 @@ export const PUT = apiHandler(
       const auditIssues = sanitiseZodIssues(parsed.error.issues, {
         stripValuesFromMessage: true,
       });
-      prisma.auditLog
-        .create({
-          data: {
-            userId: user.id,
-            action: "mood-entries.update.validation-failed",
-            details: JSON.stringify({ issues: auditIssues, moodEntryId: id }),
-          },
-        })
-        .catch(() => {
-          /* swallow — 422 response is the contract */
-        });
+      // v1.37.0 — through `auditLog()` rather than a bare `prisma.auditLog
+      // .create`, because that helper is the only writer that stamps
+      // `actorUserId`. Filed under the resolved record either way; without the
+      // stamp a manager's malformed payload would read as the owner's own.
+      void auditLog("mood-entries.update.validation-failed", {
+        userId: user.id,
+        details: { issues: auditIssues, moodEntryId: id },
+      }).catch(() => {
+        /* swallow — 422 response is the contract */
+      });
       return returnAllZodIssues(parsed.error, 422, {
         errorCode: "mood.update.invalid",
       });
@@ -227,7 +228,29 @@ export const PUT = apiHandler(
     await auditLog("moodEntry.update", {
       userId: user.id,
       ipAddress: getClientIp(request),
-      details: { moodEntryId: id },
+      // C4 — the replaced fields. The note and the free-text tags are named
+      // and never quoted; the note is encrypted at rest.
+      details: {
+        moodEntryId: id,
+        ...overwriteDetails({
+          before: {
+            mood: existing.mood,
+            score: existing.score,
+            moodLoggedAt: existing.moodLoggedAt,
+          },
+          after: {
+            mood: entry.mood,
+            score: entry.score,
+            moodLoggedAt: entry.moodLoggedAt,
+          },
+          redacted: [
+            ...(data.note !== undefined ? ["note"] : []),
+            ...(data.tags !== undefined ? ["tags"] : []),
+            ...(data.tagKeys !== undefined ? ["tagKeys"] : []),
+            ...(data.ratedFactors !== undefined ? ["ratedFactors"] : []),
+          ],
+        }),
+      },
     });
 
     annotate({
@@ -280,7 +303,8 @@ export const PUT = apiHandler(
 
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Soft delete with `mood-entries/restore` beside it.
+    const { user } = await requireRecordAuth("manage", "mind");
 
     const { id } = await params;
 

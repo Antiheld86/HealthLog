@@ -6,7 +6,7 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import { apiError, getClientIp } from "@/lib/api-response";
@@ -16,7 +16,10 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Soft, audited, and it emits a sync tombstone, so the
+    // cycle is reconstructable from its own row. The whole-domain eraser
+    // (`DELETE /api/cycle/all`) stays the owner's at every level.
+    const { user } = await requireRecordAuth("manage", "cycle");
 
     const gate = await requireCycleEnabled(user.id, user.gender);
     if (!gate.enabled) return gate.response;

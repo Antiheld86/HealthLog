@@ -19,7 +19,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod/v4";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -50,10 +50,16 @@ const restoreSchema = z.object({
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postRestore));
 
 async function postRestore(request: NextRequest): Promise<Response> {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE. A manager who holds the delete holds the undo; the
+  // `where` below only ever clears a tombstone the record already carried.
+  const { user, actor } = await requireRecordAuth("manage", "measurements");
 
+  // v1.37.0 — C1: the bucket keys on the ACTOR, the frozen precedent from
+  // `medications/compliance`. A manager burns their own allowance rather than
+  // locking the owner out of their own record, and cannot collect a fresh one
+  // by switching records.
   const rl = await checkRateLimit(
-    `measurements:restore:${user.id}`,
+    `measurements:restore:${actor.id}`,
     RATE_LIMIT_MAX,
     RATE_LIMIT_WINDOW_MS,
   );

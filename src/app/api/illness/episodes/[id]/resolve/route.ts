@@ -10,7 +10,7 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -28,7 +28,9 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 export const PATCH = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Closing an episode; the window it writes is the
+    // record's own and the reopen is one route over.
+    const { user } = await requireRecordAuth("manage", "illness");
 
     const gate = await requireIllnessEnabled(user.id);
     if (!gate.enabled) return gate.response;

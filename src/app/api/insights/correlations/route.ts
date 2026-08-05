@@ -15,7 +15,7 @@
  * lives in `src/lib/insights/correlation-discovery.ts`; this route only
  * fetches + day-keys + responds. No LLM, no narrative, no cache table.
  */
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiError, apiSuccess } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { checkAnalyticsReadRateLimit } from "@/lib/rate-limit";
@@ -70,7 +70,9 @@ function tzDayKey(at: Date, tz: string): string {
 }
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE-level read: computed over the whole record, with no
+  // provider anywhere on the path.
+  const { user } = await requireRecordAuth("manage", "record");
 
   // v1.15.20 — shared analytics-read budget (generous; caps runaway loops).
   const rl = await checkAnalyticsReadRateLimit(user.id);

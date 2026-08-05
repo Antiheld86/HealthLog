@@ -102,6 +102,21 @@ export class WideEventBuilder {
     return this;
   }
 
+  /**
+   * v1.37.0 — record that provider generation is closed on this request.
+   *
+   * Merges for the same reason `setActingAs` does, and is stamped in the same
+   * place: the record resolver, which is where the owner row is in hand. It is
+   * read back through `delegatedGenerationSuppressed()`.
+   */
+  setDelegatedGenerationSuppressed(): this {
+    this.event.auth = {
+      ...(this.event.auth ?? {}),
+      delegated_generation: "suppressed",
+    };
+    return this;
+  }
+
   setAction(action: WideEvent["action"]): this {
     this.event.action = action;
     return this;

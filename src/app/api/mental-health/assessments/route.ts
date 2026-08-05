@@ -18,7 +18,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
@@ -151,7 +151,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postAssessment));
 
 async function postAssessment(request: NextRequest): Promise<Response> {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE. A screener administered by the manager and transcribed
+  // into the record: the ordinary way this instrument is used when the person
+  // it is about cannot run their own record. The row records what the person
+  // in the room reported; the audit row says who typed it.
+  const { user, actor } = await requireRecordAuth("manage", "mind");
 
   // Opt-in module (default OFF) — same gate as GET.
   const gate = await requireModuleEnabled(user.id, "mentalHealth");
@@ -160,8 +164,11 @@ async function postAssessment(request: NextRequest): Promise<Response> {
   // Write rate-limit: a screener is a deliberate, infrequent action, so the
   // bucket is tight — it only caps a double-tap / scripted loop minting
   // duplicate trend points (the recall window is 2 weeks; 30/hour is generous).
+  // v1.37.0 — C1: the bucket keys on the ACTOR, so a manager burns their own
+  // allowance rather than the owner's and cannot collect a fresh one by
+  // switching records.
   const rl = await checkRateLimit(
-    `mental-health-create:${user.id}`,
+    `mental-health-create:${actor.id}`,
     30,
     60 * 60 * 1000,
   );
@@ -245,7 +252,14 @@ async function postAssessment(request: NextRequest): Promise<Response> {
   const total = scoreTotal(id, items);
   const band = severityBand(id, total);
   const flagged = isSafetyFlagged(id, items);
-  const presentedLocale = locale ?? user.locale ?? "en";
+  // C2 — the locale of the person holding the phone, not of the record.
+  // `presentedLocale` is used twice: it is stored on the row as what was
+  // shown, and it selects the crisis-resource copy returned on a positive
+  // item 9. Under a switch the reader is the MANAGER, and crisis resources in
+  // a language they cannot read are a safety failure, not a presentation bug.
+  // `actor` is the caller in every case and equals `user` for everyone acting
+  // on their own record, so this is the record's own locale for them.
+  const presentedLocale = locale ?? actor.locale ?? "en";
   const when = takenAt ? new Date(takenAt) : new Date();
 
   // Encrypt the per-item answers + the (unscored) functional-impairment follow-up.

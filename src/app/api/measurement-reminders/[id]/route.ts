@@ -10,7 +10,11 @@ import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
 import { auditLog } from "@/lib/auth/audit";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import {
+  destroyedDetails,
+  overwriteDetails,
+} from "@/lib/sharing/audit-details";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiSuccess,
   apiError,
@@ -62,7 +66,9 @@ export const GET = apiHandler(
 
 export const PATCH = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Editing a reminder re-anchors when the record's own
+    // phone rings, which is management of the schedule the level admits.
+    const { user } = await requireRecordAuth("manage", "measurements");
     const { id } = await params;
 
     const existing = await prisma.measurementReminder.findFirst({
@@ -87,17 +93,16 @@ export const PATCH = apiHandler(
       const auditIssues = sanitiseZodIssues(parsed.error.issues, {
         stripValuesFromMessage: true,
       });
-      prisma.auditLog
-        .create({
-          data: {
-            userId: user.id,
-            action: "measurement-reminders.update.validation-failed",
-            details: JSON.stringify({ issues: auditIssues, reminderId: id }),
-          },
-        })
-        .catch(() => {
-          /* swallow — 422 response is the contract */
-        });
+      // v1.37.0 — through `auditLog()` rather than a bare `prisma.auditLog
+      // .create`, because that helper is the only writer that stamps
+      // `actorUserId`. Filed under the resolved record either way; without the
+      // stamp a manager's malformed payload would read as the owner's own.
+      void auditLog("measurement-reminders.update.validation-failed", {
+        userId: user.id,
+        details: { issues: auditIssues, reminderId: id },
+      }).catch(() => {
+        /* swallow — 422 response is the contract */
+      });
       return returnAllZodIssues(parsed.error, 422);
     }
 
@@ -183,7 +188,33 @@ export const PATCH = apiHandler(
     await auditLog("measurementReminder.update", {
       userId: user.id,
       ipAddress: getClientIp(request),
-      details: { reminderId: id },
+      // C4 — what the edit replaced. A cadence change moves when somebody's
+      // phone rings; the feed has to be able to say what it used to be.
+      details: {
+        reminderId: id,
+        ...overwriteDetails({
+          before: {
+            label: existing.label,
+            measurementType: existing.measurementType,
+            intervalDays: existing.intervalDays,
+            rrule: existing.rrule,
+            anchorDate: existing.anchorDate,
+            notifyHour: existing.notifyHour,
+            enabled: existing.enabled,
+            nextDueAt: existing.nextDueAt,
+          },
+          after: {
+            label: updated.label,
+            measurementType: updated.measurementType,
+            intervalDays: updated.intervalDays,
+            rrule: updated.rrule,
+            anchorDate: updated.anchorDate,
+            notifyHour: updated.notifyHour,
+            enabled: updated.enabled,
+            nextDueAt: updated.nextDueAt,
+          },
+        }),
+      },
     });
 
     annotate({
@@ -197,7 +228,10 @@ export const PATCH = apiHandler(
 
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE, and the one verb in this family that destroys without
+    // a tombstone: the row goes, so the audit row below is the only thing left
+    // that knows what it was for.
+    const { user } = await requireRecordAuth("manage", "measurements");
     const { id } = await params;
 
     const existing = await prisma.measurementReminder.findUnique({
@@ -218,7 +252,25 @@ export const DELETE = apiHandler(
     await auditLog("measurementReminder.delete", {
       userId: user.id,
       ipAddress: getClientIp(request),
-      details: { reminderId: id },
+      // C3 — a hard delete, so the details carry the identity of what went:
+      // the label the owner wrote, what it watched, when it was next due. An
+      // id alone would say a preventive-care recall disappeared and never say
+      // what it was for.
+      details: {
+        reminderId: id,
+        ...destroyedDetails({
+          model: "MeasurementReminder",
+          id,
+          label: existing.label,
+          effectiveAt: existing.nextDueAt,
+          extra: {
+            measurementType: existing.measurementType,
+            intervalDays: existing.intervalDays,
+            rrule: existing.rrule,
+            origin: existing.origin,
+          },
+        }),
+      },
     });
 
     annotate({

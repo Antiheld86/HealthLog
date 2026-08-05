@@ -4,7 +4,7 @@ import {
   generateBloodPressureStatusForUser,
   resolveBloodPressureStatusLocale,
 } from "@/lib/insights/blood-pressure-status";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
 import { requireAssistantSurface } from "@/lib/feature-flags";
@@ -13,7 +13,10 @@ import { requireModuleEnabled } from "@/lib/modules/gate";
 export const dynamic = "force-dynamic";
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE-level read: a generated assessment over the whole
+  // record, which is not a section a scoped grant can name. The miss behind it
+  // enqueues nothing while a delegate is holding the request.
+  const { user } = await requireRecordAuth("manage", "record");
   const m = await requireModuleEnabled(user.id, "insights");
   if (!m.enabled) return m.response;
   await requireAssistantSurface("insightStatus");

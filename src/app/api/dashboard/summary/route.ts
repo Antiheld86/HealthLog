@@ -51,7 +51,7 @@
  * map the shared snapshot builder uses (`disabledSummaryTypes`); the filter
  * runs OUTSIDE the cache because a module toggle does not evict it.
  */
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { prisma } from "@/lib/db";
@@ -347,7 +347,9 @@ interface ActivityDayRow {
 }
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE-level read: computed over the whole record, with no
+  // provider anywhere on the path.
+  const { user } = await requireRecordAuth("manage", "record");
   annotate({ action: { name: "dashboard.summary" } });
 
   // v1.4.25 W7b — anchor every day-bucket call to the user's display

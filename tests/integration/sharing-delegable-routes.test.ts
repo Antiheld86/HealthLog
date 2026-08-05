@@ -1769,7 +1769,7 @@ describe("GET /api/medications/compliance — the bucket follows the actor", () 
  * record, and reading it is much of the point of handing somebody the record.
  *
  * Five GET arms moved. The upload, the retype, the delete, the episode link
- * and every AI verb did not, and `delegable-surface-guard.test.ts` is what
+ * and every AI verb did not, and `sharing-surface-guard.test.ts` is what
  * freezes that split — this file asserts the moved arms actually substitute.
  */
 async function enableDocuments(userId: string, enabled = true) {

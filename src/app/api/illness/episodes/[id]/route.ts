@@ -10,9 +10,10 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
+import { overwriteDetails } from "@/lib/sharing/audit-details";
 import {
   apiSuccess,
   apiError,
@@ -55,7 +56,10 @@ export const GET = apiHandler(
 
 export const PATCH = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. The module gate below resolves against the RECORD, so
+    // a manager cannot edit an episode in a record whose owner switched the
+    // module off.
+    const { user } = await requireRecordAuth("manage", "illness");
 
     const gate = await requireIllnessEnabled(user.id);
     if (!gate.enabled) return gate.response;
@@ -69,6 +73,11 @@ export const PATCH = apiHandler(
         deletedAt: true,
         onsetAt: true,
         resolvedAt: true,
+        // v1.37.0 — the pre-image the audit row carries (C4).
+        label: true,
+        type: true,
+        lifecycle: true,
+        parentConditionId: true,
       },
     });
     if (
@@ -150,7 +159,29 @@ export const PATCH = apiHandler(
     await auditLog("illness.episode.update", {
       userId: user.id,
       ipAddress: getClientIp(request),
-      details: { episodeId: id },
+      // C4 — the replaced fields; the note is named and never quoted.
+      details: {
+        episodeId: id,
+        ...overwriteDetails({
+          before: {
+            label: existing.label,
+            type: existing.type,
+            lifecycle: existing.lifecycle,
+            onsetAt: existing.onsetAt,
+            resolvedAt: existing.resolvedAt,
+            parentConditionId: existing.parentConditionId,
+          },
+          after: {
+            label: updated.label,
+            type: updated.type,
+            lifecycle: updated.lifecycle,
+            onsetAt: updated.onsetAt,
+            resolvedAt: updated.resolvedAt,
+            parentConditionId: updated.parentConditionId,
+          },
+          redacted: entry.note !== undefined ? ["note"] : [],
+        }),
+      },
     });
 
     annotate({
@@ -167,7 +198,9 @@ export const PATCH = apiHandler(
 
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Soft delete with a restore route beside it; the day
+    // logs under the episode come back with it.
+    const { user } = await requireRecordAuth("manage", "illness");
 
     const gate = await requireIllnessEnabled(user.id);
     if (!gate.enabled) return gate.response;

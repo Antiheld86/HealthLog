@@ -448,7 +448,7 @@ writeContract("POST /api/biomarkers", {
  * have noticed.
  *
  * Re-admitting means flipping `requireAuth()` back to `requireRecordAuth`,
- * re-listing the route in `delegable-surface-guard.test.ts`, and replacing this
+ * re-listing the route in `sharing-surface-guard.test.ts`, and replacing this
  * block with a `writeContract` — in the same diff as the caregiver-reachable
  * surface that made it worth doing.
  */

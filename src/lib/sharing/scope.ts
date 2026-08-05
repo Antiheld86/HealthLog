@@ -6,7 +6,7 @@
  * holds nothing else: no predicate, no storage, no route knowledge. The
  * predicates live in `grants.ts` beside the rest of what a grant means, and
  * the per-route classification lives on the call sites, frozen by
- * `src/__tests__/delegable-surface-guard.test.ts`.
+ * `src/__tests__/sharing-surface-guard.test.ts`.
  *
  * Two properties are the whole reason the file exists separately.
  *

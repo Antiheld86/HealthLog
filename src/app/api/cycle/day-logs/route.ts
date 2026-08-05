@@ -14,9 +14,10 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
+import { overwriteDetails } from "@/lib/sharing/audit-details";
 import {
   apiSuccess,
   apiError,
@@ -75,8 +76,24 @@ export const GET = apiHandler(async (request: NextRequest) => {
   return apiSuccess(row ? toCycleDayLogDTO(row) : null);
 });
 
+/**
+ * The day-log fields a write actually carried, for the audit row. Names only:
+ * every one of these is either intimate or encrypted at rest, and the audit
+ * table is not a second store for either.
+ */
+function replacedDayLogFields(entry: Record<string, unknown>): string[] {
+  const carried = ["date", "source", "externalId", "loggedAt"];
+  return Object.entries(entry)
+    .filter(([key, value]) => value !== undefined && !carried.includes(key))
+    .map(([key]) => key)
+    .sort();
+}
+
 async function postDayLog(request: NextRequest): Promise<Response> {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE. The upsert replaces the day, which is what edit means
+  // here; the gate below resolves `user.gender` against the RECORD, so the
+  // module follows the record rather than the caller.
+  const { user } = await requireRecordAuth("manage", "cycle");
 
   const gate = await requireCycleEnabled(user.id, user.gender);
   if (!gate.enabled) return gate.response;
@@ -139,7 +156,21 @@ async function postDayLog(request: NextRequest): Promise<Response> {
   await auditLog("cycle.day-log.upsert", {
     userId: user.id,
     ipAddress: getClientIp(request),
-    details: { dayLogId: result.id, existed: result.existed },
+    // C4 in this domain's shape: the date and the fields the write replaced,
+    // named and never valued. This is the product's most sensitive domain and
+    // §7.5's "no full-row snapshots" is at its sharpest here — a feed line
+    // saying which day was rewritten is the whole requirement, and the values
+    // behind it stay on the row where they are already encrypted.
+    details: {
+      dayLogId: result.id,
+      existed: result.existed,
+      date: entry.date,
+      ...overwriteDetails({
+        before: {},
+        after: {},
+        redacted: result.existed ? replacedDayLogFields(entry) : [],
+      }),
+    },
   });
 
   annotate({
