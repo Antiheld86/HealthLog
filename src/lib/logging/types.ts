@@ -1,3 +1,5 @@
+import type { ProviderWorkAuthority } from "@/lib/sharing/provider-work-authority";
+
 /** Log-Levels in aufsteigender Schwere */
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -76,6 +78,8 @@ export interface WideEvent {
      * managed profile and every background job is.
      */
     delegated_generation?: "suppressed";
+    /** Durable authority copied into provider queue payloads. */
+    provider_work_authority?: ProviderWorkAuthority;
   };
 
   // Business-Daten (was wurde getan)

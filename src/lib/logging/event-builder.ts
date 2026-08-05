@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { WideEvent, LogLevel, EventKind } from "./types";
+import type { ProviderWorkAuthority } from "@/lib/sharing/provider-work-authority";
 import { LOG_LEVEL_PRIORITY } from "./types";
 import { getDeployContext } from "./config";
 import { redactOptional, redactSecrets } from "./redact";
@@ -113,6 +114,14 @@ export class WideEventBuilder {
     this.event.auth = {
       ...(this.event.auth ?? {}),
       delegated_generation: "suppressed",
+    };
+    return this;
+  }
+
+  setProviderWorkAuthority(authority: ProviderWorkAuthority): this {
+    this.event.auth = {
+      ...(this.event.auth ?? {}),
+      provider_work_authority: authority,
     };
     return this;
   }

@@ -66,7 +66,17 @@ describe("runInsightStatusGenerate", () => {
       "medication-compliance": vi.fn(),
     };
     await runInsightStatusGenerate(
-      { userId: "u1", metric: "weight", locale: "en" },
+      {
+        userId: "u1",
+        metric: "weight",
+        locale: "en",
+        authority: {
+          origin: "owner",
+          recordUserId: "u1",
+          actorUserId: "u1",
+          grantId: null,
+        },
+      },
       generators,
     );
     expect(weight).toHaveBeenCalledWith("u1", { locale: "en", force: true });
@@ -78,7 +88,17 @@ describe("runInsightStatusGenerate", () => {
     await expect(
       runInsightStatusGenerate(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        { userId: "u1", metric: "nope" as any, locale: "de" },
+        {
+          userId: "u1",
+          metric: "nope" as any,
+          locale: "de",
+          authority: {
+            origin: "owner",
+            recordUserId: "u1",
+            actorUserId: "u1",
+            grantId: null,
+          },
+        },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         {} as any,
       ),
@@ -118,7 +138,17 @@ describe("enqueueStatusGeneration", () => {
     });
     expect(send).toHaveBeenCalledWith(
       INSIGHT_STATUS_GENERATE_QUEUE,
-      { userId: "u1", metric: "mood", locale: "en" },
+      {
+        userId: "u1",
+        metric: "mood",
+        locale: "en",
+        authority: {
+          origin: "system",
+          recordUserId: "u1",
+          actorUserId: null,
+          grantId: null,
+        },
+      },
       expect.objectContaining({ singletonKey: "u1:mood" }),
     );
   });

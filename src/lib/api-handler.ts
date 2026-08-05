@@ -793,6 +793,12 @@ export async function requireRecordAuth(
   if (carrier.kind === "none") {
     // Do no harm: without a carrier this is byte-for-byte the pre-v1.36.0
     // request, resolved by the same `authenticateCaller` every other mode uses.
+    getEvent()?.setProviderWorkAuthority({
+      origin: "owner",
+      recordUserId: auth.user.id,
+      actorUserId: auth.user.id,
+      grantId: null,
+    });
     return { ...auth, actor: auth.user, grantId: null };
   }
   if (carrier.kind === "misplaced-header") {
@@ -944,6 +950,12 @@ async function resolveSwitchedRecord(
   if (owner.id !== auth.user.id && owner.managedProfileAt === null) {
     getEvent()?.setDelegatedGenerationSuppressed();
   }
+  getEvent()?.setProviderWorkAuthority({
+    origin: owner.managedProfileAt === null ? "delegate" : "guardian",
+    recordUserId: owner.id,
+    actorUserId: auth.user.id,
+    grantId: grant.id,
+  });
   // Fire-and-forget, the `ApiToken.lastUsedAt` posture: the read must not wait
   // on the bookkeeping, and the bookkeeping failing must not fail the read.
   void touchGrantUsage(grant.id);

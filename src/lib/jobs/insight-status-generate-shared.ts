@@ -15,6 +15,11 @@
 import type { SupportedLocale } from "@/lib/insights/status-shared";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { annotate } from "@/lib/logging/context";
+import {
+  mayEnqueueProviderWork,
+  providerWorkAuthorityForRecord,
+  type ProviderWorkAuthority,
+} from "@/lib/sharing/provider-work-authority";
 
 export const INSIGHT_STATUS_GENERATE_QUEUE = "insight-status-generate";
 
@@ -91,6 +96,8 @@ export interface InsightStatusGeneratePayload {
   metric: InsightStatusScope;
   /** Resolved client locale — the cache key the route reads against. */
   locale: SupportedLocale;
+  /** Durable admission authority, checked again before worker dispatch. */
+  authority?: ProviderWorkAuthority;
 }
 
 /**
@@ -120,8 +127,16 @@ export interface InsightStatusGeneratePayload {
  * the requested language.
  */
 export async function enqueueStatusGeneration(
-  payload: InsightStatusGeneratePayload,
+  payload: Omit<InsightStatusGeneratePayload, "authority">,
 ): Promise<void> {
+  const authority = providerWorkAuthorityForRecord(payload.userId);
+  if (!mayEnqueueProviderWork(authority)) {
+    annotate({
+      action: { name: "insights.status.generate.refused" },
+      meta: { metric: payload.metric, reason: "provider_authority" },
+    });
+    return;
+  }
   const boss = getGlobalBoss();
   if (!boss) {
     annotate({
@@ -131,7 +146,7 @@ export async function enqueueStatusGeneration(
     return;
   }
   try {
-    await boss.send(INSIGHT_STATUS_GENERATE_QUEUE, payload, {
+    await boss.send(INSIGHT_STATUS_GENERATE_QUEUE, { ...payload, authority }, {
       singletonKey: `${payload.userId}:${payload.metric}`,
       // De-dupe within a short window so a polling client doesn't enqueue
       // a fresh job on every tick while a generation is already running.

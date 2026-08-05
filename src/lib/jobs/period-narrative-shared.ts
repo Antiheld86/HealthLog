@@ -13,6 +13,11 @@
  */
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { annotate } from "@/lib/logging/context";
+import {
+  mayEnqueueProviderWork,
+  providerWorkAuthorityForRecord,
+  type ProviderWorkAuthority,
+} from "@/lib/sharing/provider-work-authority";
 import type { NarrativePeriod } from "@/lib/insights/narrative/period-narrative";
 import type { Locale } from "@/lib/i18n/config";
 
@@ -36,6 +41,8 @@ export interface PeriodNarrativePayload {
   period?: NarrativePeriod;
   /** Locale to warm; defaults to the app default (`en`) when absent. */
   locale?: Locale;
+  /** Present only for an on-demand record warm. */
+  authority?: ProviderWorkAuthority;
 }
 
 /**
@@ -50,6 +57,14 @@ export async function enqueueNarrativeWarm(payload: {
   period: NarrativePeriod;
   locale: Locale;
 }): Promise<void> {
+  const authority = providerWorkAuthorityForRecord(payload.userId);
+  if (!mayEnqueueProviderWork(authority)) {
+    annotate({
+      action: { name: "insights.narrative.warm.refused" },
+      meta: { period: payload.period, reason: "provider_authority" },
+    });
+    return;
+  }
   const boss = getGlobalBoss();
   if (!boss) return;
   try {
@@ -59,6 +74,7 @@ export async function enqueueNarrativeWarm(payload: {
         userId: payload.userId,
         period: payload.period,
         locale: payload.locale,
+        authority,
       } satisfies PeriodNarrativePayload,
       {
         singletonKey: `warm:${payload.userId}:${payload.period}:${payload.locale}`,

@@ -37,6 +37,13 @@ vi.mock("@/lib/db-compat", () => ({
   ensureDbCompatibility: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/feature-flags", () => ({
+  getAssistantFlags: vi.fn().mockResolvedValue({
+    briefing: true,
+    insightStatus: false,
+  }),
+}));
+
 import {
   ACCOUNT_SELECTOR_HEADER,
   apiHandler,
@@ -46,9 +53,13 @@ import { hashToken } from "@/lib/auth/hmac";
 import {
   providerCredentialPolicy,
   type ProviderWorkAuthority,
+  withProviderWorkAuthority,
 } from "@/lib/sharing/provider-work-authority";
-import { enqueueStatusGeneration } from "@/lib/jobs/insight-status-generate-shared";
 import { runInsightStatusGenerate } from "@/lib/jobs/insight-status-generate";
+import type { InsightStatusGeneratePayload } from "@/lib/jobs/insight-status-generate";
+import { resolveProvider } from "@/lib/ai/provider";
+import { invalidateStatusInsightsForTypes } from "@/lib/insights/status-invalidation";
+import { warmOneNarrative } from "@/lib/jobs/period-narrative-warm";
 
 const PROVIDER_ORIGIN_KEY = "provider-origin-test-key";
 let tokenNumber = 0;
@@ -97,12 +108,15 @@ async function grantManage(input: {
 const enqueueFromSharedMutation: (request: NextRequest) => Promise<Response> =
   apiHandler(async () => {
     const { user } = await requireRecordAuth("manage", "medications");
-    await enqueueStatusGeneration({
-      userId: user.id,
-      metric: "weight",
-      locale: "en",
-    });
+    await invalidateStatusInsightsForTypes(user.id, ["WEIGHT"]);
     return NextResponse.json({ data: { queued: true }, error: null });
+  });
+
+const resolveFromSharedRead: (request: NextRequest) => Promise<Response> =
+  apiHandler(async () => {
+    const { user } = await requireRecordAuth("manage", "record");
+    const provider = await resolveProvider(user.id);
+    return NextResponse.json({ data: { provider: provider.type }, error: null });
   });
 
 function runMutation(): Promise<Response> {
@@ -110,6 +124,12 @@ function runMutation(): Promise<Response> {
     new NextRequest("http://localhost/api/test/provider-origin", {
       method: "POST",
     }),
+  );
+}
+
+function runSharedRead(): Promise<Response> {
+  return resolveFromSharedRead(
+    new NextRequest("http://localhost/api/test/provider-origin-read"),
   );
 }
 
@@ -136,11 +156,12 @@ describe("sharing provider origin", () => {
     const response = await runMutation();
 
     expect(response.status).toBe(200);
-    expect(send).toHaveBeenCalledTimes(1);
-    const payload = send.mock.calls[0]![1] as {
-      authority: ProviderWorkAuthority;
-      userId: string;
-    };
+    expect(send).toHaveBeenCalledTimes(3);
+    const payload = (
+      send.mock.calls as unknown as Array<
+        [string, InsightStatusGeneratePayload, unknown]
+      >
+    )[0]![1];
     expect(payload.userId).toBe("provider-owner");
     expect(payload.authority).toEqual(
       authority({
@@ -152,7 +173,15 @@ describe("sharing provider origin", () => {
     );
 
     const generate = vi.fn().mockResolvedValue(undefined);
-    await runInsightStatusGenerate(payload, { weight: generate });
+    await runInsightStatusGenerate(payload, {
+      general: vi.fn(),
+      "blood-pressure": vi.fn(),
+      weight: generate,
+      pulse: vi.fn(),
+      bmi: vi.fn(),
+      mood: vi.fn(),
+      "medication-compliance": vi.fn(),
+    });
 
     expect(generate).toHaveBeenCalledWith("provider-owner", {
       locale: "en",
@@ -192,13 +221,38 @@ describe("sharing provider origin", () => {
           grantId: "provider-delegated-grant",
         }),
       },
-      { weight: generate },
+      {
+        general: vi.fn(),
+        "blood-pressure": vi.fn(),
+        weight: generate,
+        pulse: vi.fn(),
+        bmi: vi.fn(),
+        mood: vi.fn(),
+        "medication-compliance": vi.fn(),
+      },
     );
 
     expect(generate).not.toHaveBeenCalled();
+
+    const narrativeGenerate = vi.fn().mockResolvedValue(null);
+    await warmOneNarrative(
+      {
+        userId: "provider-record",
+        period: "week",
+        authority: authority({
+          origin: "delegate",
+          recordUserId: "provider-record",
+          actorUserId: "provider-delegate",
+          grantId: "provider-delegated-grant",
+        }),
+      },
+      narrativeGenerate,
+    );
+
+    expect(narrativeGenerate).not.toHaveBeenCalled();
   });
 
-  it("keeps a managed-profile Guardian on operator/default provider configuration", () => {
+  it("keeps a managed-profile Guardian on operator/default provider configuration", async () => {
     const guardian = authority({
       origin: "guardian",
       recordUserId: "managed-record",
@@ -217,5 +271,90 @@ describe("sharing provider origin", () => {
         }),
       ),
     ).toBe("deny");
+
+    await getPrismaClient().user.create({
+      data: {
+        id: "managed-record",
+        username: "managed-record",
+        email: "managed-record@example.test",
+        role: "USER",
+        managedProfileAt: new Date(),
+        aiProvider: "LOCAL",
+        aiBaseUrl: "https://guardian-byok.example.test/v1",
+      },
+    });
+    await createUser("guardian-actor");
+    await grantManage({
+      id: "guardian-grant",
+      recordUserId: "managed-record",
+      actorUserId: "guardian-actor",
+    });
+
+    const provider = await withProviderWorkAuthority(guardian, () =>
+      resolveProvider("managed-record"),
+    );
+
+    expect(provider.type).toBe("none");
+  });
+
+  it("returns no personal provider from the shared comprehensive-read origin", async () => {
+    await getPrismaClient().user.create({
+      data: {
+        id: "provider-read-record",
+        username: "provider-read-record",
+        email: "provider-read-record@example.test",
+        role: "USER",
+        aiProvider: "LOCAL",
+        aiBaseUrl: "https://llm.example.test/v1",
+      },
+    });
+    await createUser("provider-read-delegate");
+    await grantManage({
+      id: "provider-read-grant",
+      recordUserId: "provider-read-record",
+      actorUserId: "provider-read-delegate",
+    });
+
+    headerJar.set(
+      "authorization",
+      `Bearer ${await mintToken("provider-read-record")}`,
+    );
+    const owner = await runSharedRead();
+    expect((await owner.json()).data.provider).not.toBe("none");
+
+    headerJar.set(
+      "authorization",
+      `Bearer ${await mintToken("provider-read-delegate")}`,
+    );
+    headerJar.set(ACCOUNT_SELECTOR_HEADER, "provider-read-record");
+    const delegated = await runSharedRead();
+
+    expect((await delegated.json()).data.provider).toBe("none");
+  });
+
+  it("allows explicit system narrative work as the nightly positive control", async () => {
+    await createUser("provider-nightly");
+    const narrativeGenerate = vi.fn().mockResolvedValue(null);
+
+    await warmOneNarrative(
+      {
+        userId: "provider-nightly",
+        period: "week",
+        locale: "en",
+        authority: authority({
+          origin: "system",
+          recordUserId: "provider-nightly",
+          actorUserId: null,
+          grantId: null,
+        }),
+      },
+      narrativeGenerate,
+    );
+
+    expect(narrativeGenerate).toHaveBeenCalledWith("provider-nightly", {
+      period: "week",
+      locale: "en",
+      force: true,
+    });
   });
 });
