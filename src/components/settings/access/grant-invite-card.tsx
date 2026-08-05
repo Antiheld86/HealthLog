@@ -7,13 +7,18 @@ import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/hooks/use-auth";
+import { useQueryClientMounted } from "@/hooks/_internal/use-query-client-safe";
 import { useModuleEnabled } from "@/hooks/use-module-enabled";
 import { ApiError } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
 import { useInviteGrant } from "@/lib/queries/use-account-grants";
 import { SHARE_DOMAINS, type ShareDomain } from "@/lib/sharing/scope";
+import { DEFAULT_TIMEZONE, isValidTimezone } from "@/lib/tz/format";
+import { wallClockInTz, zonedWallClockToUtc } from "@/lib/tz/wall-clock";
 
 /**
  * v1.37.0 — offering somebody access to this record.
@@ -72,6 +77,7 @@ import { SHARE_DOMAINS, type ShareDomain } from "@/lib/sharing/scope";
 export function GrantInviteCard() {
   const { t } = useTranslations();
   const invite = useInviteGrant();
+  const ownerTimezone = useInvitationOwnerTimezone();
   const [identifier, setIdentifier] = useState("");
   const [expiresOn, setExpiresOn] = useState("");
   // READ preselected. The narrower level is the one somebody should have to
@@ -119,7 +125,7 @@ export function GrantInviteCard() {
         identifier: value,
         access,
         scope: choice.scope,
-        expiresAt: endOfDayIso(expiresOn),
+        expiresAt: endOfDayIso(expiresOn, ownerTimezone),
       },
       {
         onSuccess: (grant) => {
@@ -289,15 +295,18 @@ export function GrantInviteCard() {
           <Label htmlFor="grant-invite-expires">
             {t("recordSharing.invite.expiresLabel")}
           </Label>
-          <Input
+          <DateField
             id="grant-invite-expires"
             data-slot="grant-invite-expires"
-            type="date"
             value={expiresOn}
-            min={tomorrowIso()}
-            onChange={(e) => setExpiresOn(e.target.value)}
+            min={tomorrowIso(ownerTimezone)}
+            onChange={setExpiresOn}
+            aria-describedby="grant-invite-expires-hint"
           />
-          <p className="text-muted-foreground text-xs">
+          <p
+            id="grant-invite-expires-hint"
+            className="text-muted-foreground text-xs"
+          >
             {t("recordSharing.invite.expiresHint")}
           </p>
         </div>
@@ -568,24 +577,64 @@ function optionClass(selected: boolean): string {
 /**
  * The chosen day, as the instant access stops.
  *
- * A date input yields a bare `YYYY-MM-DD`, and the grant's `expiresAt` is
- * checked live against `now` on every request. Anchoring at the END of the
- * chosen day in the browser's own zone is what makes "until the 30th" mean the
- * 30th rather than the midnight that starts it, which is the reading anybody
- * picking a date has in mind. Empty means no lapse date, which is the default
- * and stays the common case.
+ * The shared date field yields a bare `YYYY-MM-DD`, and the grant's
+ * `expiresAt` is checked live against `now` on every request. Anchoring at the
+ * end of the chosen day in the owner's timezone makes "until the 30th" mean
+ * the owner's entire 30th, regardless of the browser's zone. Empty means no
+ * lapse date, which is the default and stays the common case.
  */
-export function endOfDayIso(day: string): string | null {
+export function endOfDayIso(day: string, timeZone: string): string | null {
   if (day.length === 0) return null;
-  const end = new Date(`${day}T23:59:59.999`);
-  return Number.isNaN(end.getTime()) ? null : end.toISOString();
+  if (!isValidTimezone(timeZone)) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (!match) return null;
+  const [, year, month, date] = match;
+  const calendarDate = new Date(
+    Date.UTC(Number(year), Number(month) - 1, Number(date)),
+  );
+  if (
+    calendarDate.getUTCFullYear() !== Number(year) ||
+    calendarDate.getUTCMonth() !== Number(month) - 1 ||
+    calendarDate.getUTCDate() !== Number(date)
+  ) {
+    return null;
+  }
+  const end = zonedWallClockToUtc(
+    {
+      year: Number(year),
+      month: Number(month),
+      day: Number(date),
+      hour: 23,
+      minute: 59,
+      second: 59,
+    },
+    timeZone,
+  );
+  return new Date(end.getTime() + 999).toISOString();
 }
 
 /** The earliest day worth offering: a grant that lapses today confers nothing. */
-function tomorrowIso(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function tomorrowIso(timeZone: string): string {
+  const zone = isValidTimezone(timeZone) ? timeZone : DEFAULT_TIMEZONE;
+  const today = wallClockInTz(new Date(), zone);
+  const tomorrow = new Date(
+    Date.UTC(today.year, today.month - 1, today.day) + 86_400_000,
+  );
+  return `${tomorrow.getUTCFullYear()}-${String(
+    tomorrow.getUTCMonth() + 1,
+  ).padStart(2, "0")}-${String(tomorrow.getUTCDate()).padStart(2, "0")}`;
+}
+
+function useInvitationOwnerTimezone(): string {
+  const hasQueryClient = useQueryClientMounted();
+  if (!hasQueryClient) return DEFAULT_TIMEZONE;
+  // The invitation surface is only available in the owner's own record. Its
+  // profile timezone therefore defines the calendar day an expiry names.
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const { user } = useAuth();
+  return isValidTimezone(user?.timezone ?? "")
+    ? (user?.timezone as string)
+    : DEFAULT_TIMEZONE;
 }
 
 /**

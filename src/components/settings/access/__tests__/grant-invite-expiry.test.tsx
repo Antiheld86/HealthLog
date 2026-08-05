@@ -1,4 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "@/lib/i18n/context";
@@ -36,30 +38,52 @@ function render(node: React.ReactNode): string {
 }
 
 describe("grant invitation lapse date", () => {
-  it("offers a date control on the invitation form", () => {
+  it("uses the shared date field on the invitation form", () => {
     const html = render(<GrantInviteCard />);
     expect(html).toContain('data-slot="grant-invite-expires"');
-    expect(html).toContain('type="date"');
+    expect(html).toContain('data-slot="date-field"');
+    expect(html).not.toContain('type="date"');
   });
 
-  it("maps a chosen day to the end of that day, not its midnight", () => {
-    const iso = endOfDayIso("2026-09-30");
-    expect(iso).not.toBeNull();
-    const end = new Date(iso as string);
-    // Read back in the same zone the mapping used, so the assertion holds
-    // wherever the suite runs rather than only under the pinned UTC clock.
-    expect(end.getFullYear()).toBe(2026);
-    expect(end.getMonth()).toBe(8);
-    expect(end.getDate()).toBe(30);
-    expect(end.getHours()).toBe(23);
-    expect(end.getMinutes()).toBe(59);
+  it("maps a chosen day to the owner's local end of day", () => {
+    expect(endOfDayIso("2026-03-29", "America/New_York")).toBe(
+      "2026-03-30T03:59:59.999Z",
+    );
+    expect(endOfDayIso("2026-10-25", "Europe/Berlin")).toBe(
+      "2026-10-25T22:59:59.999Z",
+    );
   });
 
   it("treats an empty field as no lapse date", () => {
-    expect(endOfDayIso("")).toBeNull();
+    expect(endOfDayIso("", "Europe/Berlin")).toBeNull();
   });
 
   it("refuses a value that is not a date rather than sending an invalid instant", () => {
-    expect(endOfDayIso("not-a-date")).toBeNull();
+    expect(endOfDayIso("not-a-date", "Europe/Berlin")).toBeNull();
+  });
+
+  it("announces retryable failures without clearing the invitation", () => {
+    const source = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/settings/access/grant-invite-card.tsx",
+      ),
+      "utf8",
+    );
+    const onError = source.slice(
+      source.indexOf("onError: (err) => setError"),
+      source.indexOf(
+        "    );\n  };",
+        source.indexOf("onError: (err) => setError"),
+      ),
+    );
+
+    expect(onError).toContain("setError(t(inviteErrorKey(err)))");
+    expect(onError).not.toContain("setIdentifier");
+    expect(onError).not.toContain("setExpiresOn");
+    expect(source).toContain('role="alert"');
+    expect(source).toContain(
+      "invite.isPending || identifier.trim().length === 0",
+    );
   });
 });
