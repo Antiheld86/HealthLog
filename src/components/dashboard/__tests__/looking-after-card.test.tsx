@@ -39,21 +39,28 @@ const mockAccessRef: { value: AccountAccess } = {
   value: { accounts: [], active: null, canSwitch: false },
 };
 
+const mockAccount = () => ({
+  id: "delegate",
+  username: "delegate",
+  email: null,
+  role: "USER",
+  avatarUrl: null,
+  modules: {},
+  accountAccess: mockAccessRef.value,
+});
+
 vi.mock("@/hooks/use-auth", () => ({
   useAuth: () => ({
-    user: {
-      id: "delegate",
-      username: "delegate",
-      email: null,
-      role: "USER",
-      avatarUrl: null,
-      modules: {},
-      accountAccess: mockAccessRef.value,
-    },
+    user: mockAccount(),
     isAuthenticated: true,
     isLoading: false,
     refetch: vi.fn(),
   }),
+  // The card reads the mount-pinned accessor: it paints inside the dashboard's
+  // streamed boundary, where reading the grants on the hydration render would
+  // disagree with the server and cost the whole streamed tree. These cases are
+  // about the MOUNTED render, so the accessor answers the account.
+  useAccountOnceMounted: () => mockAccount(),
 }));
 
 vi.mock("@/hooks/use-account-switch", () => ({

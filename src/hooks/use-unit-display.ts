@@ -16,7 +16,7 @@
  */
 import { useMemo } from "react";
 
-import { useAuth } from "@/hooks/use-auth";
+import { useAccountOnceMounted, useAuth } from "@/hooks/use-auth";
 import {
   applyDisplayTransform,
   applyDisplayTransformDelta,
@@ -48,8 +48,35 @@ export interface UnitDisplay {
 
 export function useUnitDisplay(): UnitDisplay {
   const { user } = useAuth();
+  return useDisplayForPreference(user?.unitPreference);
+}
+
+/**
+ * The same sugar, with the preference withheld from the SSR pass and the
+ * hydration render.
+ *
+ * A surface that paints inside a streamed page boundary hydrates after the app
+ * shell has already answered `/api/auth/me`, so an imperial account renders
+ * "lb" on the hydration render where the server — which has no account payload
+ * at all — rendered "kg". React calls that a mismatch and discards the streamed
+ * tree; on `/` that is the whole RSC prefetch. Reading the preference one
+ * render later costs nothing the server had anyway. See
+ * `useAccountOnceMounted`.
+ *
+ * Kept separate from `useUnitDisplay` rather than folded into it: most callers
+ * render only after their own data lands, well past mount, and would pay a
+ * needless indirection for a hazard they do not have.
+ */
+export function useUnitDisplayOnceMounted(): UnitDisplay {
+  const user = useAccountOnceMounted();
+  return useDisplayForPreference(user?.unitPreference);
+}
+
+function useDisplayForPreference(
+  rawPreference: string | null | undefined,
+): UnitDisplay {
   const preference: UnitPreference =
-    user?.unitPreference === "imperial" ? "imperial" : "metric";
+    rawPreference === "imperial" ? "imperial" : "metric";
 
   return useMemo<UnitDisplay>(() => {
     const transformFor = (type: string) =>

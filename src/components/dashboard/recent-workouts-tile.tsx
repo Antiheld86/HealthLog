@@ -66,7 +66,15 @@ function renderRow(workout: WorkoutListEntry, sportName: string) {
 
 export function RecentWorkoutsTile() {
   const { t, locale } = useTranslations();
-  const { data, isLoading, isError, refetch } = useWorkouts({ limit: 3 });
+  const { data, isError, refetch } = useWorkouts({ limit: 3 });
+
+  // A query's `isLoading` is not a hydration-safe branch: TanStack reports the
+  // optimistic mount fetch on the client's very first render and cannot on the
+  // server, so an `isLoading` gate renders one thing in the streamed HTML and
+  // another in the hydration render — React #418, and the whole streamed
+  // dashboard is discarded. Gate on what both sides can see instead: whether
+  // the cell holds an answer yet.
+  const showLoading = !data && !isError;
   const workouts = data?.workouts ?? [];
 
   return (
@@ -95,7 +103,7 @@ export function RecentWorkoutsTile() {
         }
       />
 
-      {isLoading ? (
+      {showLoading ? (
         // v1.4.43 W11-L6 — reserve roughly the loaded tile height
         // (3 workouts × ~3 rem rows + spacing) so the surrounding
         // dashboard layout doesn't reflow once the data lands.

@@ -4,8 +4,8 @@ import { LookingAfterCard } from "@/components/dashboard/looking-after-card";
 import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import React, { Suspense, useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/hooks/use-auth";
-import { useUnitDisplay } from "@/hooks/use-unit-display";
+import { useAccountOnceMounted, useAuth } from "@/hooks/use-auth";
+import { useUnitDisplayOnceMounted } from "@/hooks/use-unit-display";
 import { useMounted } from "@/hooks/use-mounted";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { PullToRefreshIndicator } from "@/components/ui/pull-to-refresh-indicator";
@@ -226,8 +226,18 @@ export default function DashboardPageClient({
    */
   batchWindow?: BatchWindow;
 } = {}) {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
   const mounted = useMounted();
+  // The account payload is withheld until this boundary has mounted, so the
+  // hydration render paints exactly what the server streamed. The dashboard
+  // hydrates after the app shell, whose mount already fetched `/api/auth/me`,
+  // and every account-derived branch below — the BMI chart's `heightCm` gate,
+  // the personalised weight bands, the module gates, the unit labels — would
+  // otherwise render one thing on the server and another here. With the RSC
+  // prefetch on, that costs the whole streamed dashboard: React #418, tree
+  // discarded, the prefetch paid for and thrown away. See
+  // `useAccountOnceMounted`.
+  const user = useAccountOnceMounted();
   const { t } = useTranslations();
   const fmt = useFormatters();
   const queryClient = useQueryClient();
@@ -235,7 +245,7 @@ export default function DashboardPageClient({
   // weight chart. `td` converts an ABSOLUTE reading (affine, so a temperature
   // picks up the °F offset); `tdd` converts a DELTA / slope (factor only, so a
   // Δ never inherits the offset). Metric users take the identity path.
-  const unitDisplay = useUnitDisplay();
+  const unitDisplay = useUnitDisplayOnceMounted();
   const td = (type: string, value: number | null | undefined): number | null =>
     value == null ? null : unitDisplay.toDisplay(type, value);
   const tdd = (
@@ -302,8 +312,14 @@ export default function DashboardPageClient({
   // its own cached route. Gated on the `insights` module (the digest is
   // the AI-narrative daily layer; the route 403s when insights is off)
   // and the auth state so a logged-out / gated account never fires it.
-  const insightsEnabled = useModuleEnabled("insights");
-  const digestQuery = useDailyDigest(isAuthenticated && insightsEnabled);
+  // Two readings of one flag, on purpose. The FETCH gate takes the live
+  // module map, so an account with insights off never fires the request. The
+  // RENDER gate below takes the mount-pinned account, so the hydration render
+  // agrees with the server (which had no account, and therefore the default-on
+  // answer). See `useAccountOnceMounted`.
+  const insightsModuleEnabled = useModuleEnabled("insights");
+  const insightsEnabled = user?.modules?.insights !== false;
+  const digestQuery = useDailyDigest(isAuthenticated && insightsModuleEnabled);
 
   // v1.29.1 — the v1.29.0 selected-score-ring cluster is removed from the web
   // hero (Marc, live-use: uneven, wasted tile space). The snapshot still

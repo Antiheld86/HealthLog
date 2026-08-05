@@ -17,7 +17,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/use-auth";
+import { useAccountOnceMounted } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
 import { useDashboardSnapshot } from "@/lib/queries/use-dashboard-snapshot";
 import { queryKeys } from "@/lib/query-keys";
@@ -149,7 +149,13 @@ function readExpanded(): boolean {
  * with status icon + label + CTA + dismiss-x.
  */
 export function GettingStartedChecklist() {
-  const { user } = useAuth();
+  // Withheld until mounted: this card lives inside the dashboard's streamed
+  // boundary and its whole render turns on `if (!user) return null` below. The
+  // shell has usually answered `/api/auth/me` before the boundary hydrates, so
+  // reading the payload on the hydration render would paint a card where the
+  // server painted nothing — a mismatch that discards the streamed dashboard.
+  // See `useAccountOnceMounted`.
+  const user = useAccountOnceMounted();
   const { t } = useTranslations();
 
   const [dismissedIds, setDismissedIds] = useState<Set<ChecklistItemId>>(() =>
