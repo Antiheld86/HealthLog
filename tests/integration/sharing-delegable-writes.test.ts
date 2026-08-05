@@ -940,10 +940,36 @@ describe("POST /api/medications/intake — what a delegate may NOT do with it", 
  * as protection.
  */
 describe("POST /api/medications/[id]/intake — the slot upsert is not a way round", () => {
+  /**
+   * A medication with a real schedule window, and one dose in it the owner
+   * already recorded.
+   *
+   * The window is the part that took three attempts to get right. A "taken"
+   * write on this route does not honour the `scheduledFor` in the body: it
+   * resolves the slot by BAND from `takenAt`, so an unscheduled medication has
+   * no slot to converge onto, the write lands as a standalone ad-hoc row, and
+   * the canonical slot upsert is never called at all. Every assertion about
+   * what the upsert refuses then passes whatever the upsert does. The window is
+   * anchored two hours back so the dose is in the past (a forward `takenAt` is
+   * a 422 before any of this) and outside the route's 60 s dedup window.
+   */
   async function seedTakenSlot(ownerId: string) {
     const medication = await seedMedication(ownerId, "Insulin");
-    const slot = new Date();
-    slot.setSeconds(0, 0);
+    const slot = new Date(Date.now() - 2 * 3_600_000);
+    slot.setMinutes(0, 0, 0);
+    // The window is stated in the record owner's own zone, not in UTC.
+    const localHour = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Berlin",
+      hour: "2-digit",
+      hour12: false,
+    }).format(slot);
+    await getPrismaClient().medicationSchedule.create({
+      data: {
+        medicationId: medication.id,
+        windowStart: `${localHour}:00`,
+        windowEnd: `${localHour}:45`,
+      },
+    });
     const event = await getPrismaClient().medicationIntakeEvent.create({
       data: {
         userId: ownerId,
@@ -1008,6 +1034,54 @@ describe("POST /api/medications/[id]/intake — the slot upsert is not a way rou
     );
     expect(row.skipped).toBe(false);
     expect(row.takenAt).not.toBeNull();
+  });
+
+  it("refuses to move the time on a dose the owner already recorded", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    const { medicationId, slot, eventId } = await seedTakenSlot(owner.id);
+
+    await switchInto(owner.id, delegate.id, "WRITE");
+    // Inside the window, so the band binds this onto the slot the owner
+    // already recorded rather than opening an ad-hoc row beside it. Five
+    // minutes late is what a second tap looks like.
+    const movedTo = new Date(slot.getTime() + 5 * 60_000);
+    const replay = {
+      takenAt: movedTo.toISOString(),
+      doseTaken: "two tablets",
+      idempotencyKey: "delegated-same-outcome-replay",
+    };
+    const response = await postIntake(medicationId, replay);
+
+    // Same decision, so this is not a refusal: it answers, and it answers with
+    // the row that is already there. What it must never do is move the record.
+    expect([200, 201]).toContain(response.status);
+    const replayResponse = await postIntake(medicationId, replay);
+    expect([200, 201]).toContain(replayResponse.status);
+
+    const all = await getPrismaClient().medicationIntakeEvent.findMany({
+      where: { userId: owner.id },
+      select: { id: true, takenAt: true, scheduledFor: true, doseTaken: true },
+    });
+    // One row, not two: the write converged onto the owner's dose instead of
+    // opening a second one beside it. Without this the case below would pass
+    // on an ad-hoc row while the owner's record sat untouched next to it.
+    expect(all).toHaveLength(1);
+    const row = await getPrismaClient().medicationIntakeEvent.findUniqueOrThrow(
+      {
+        where: { id: eventId },
+        select: {
+          takenAt: true,
+          scheduledFor: true,
+          doseTaken: true,
+          skipped: true,
+        },
+      },
+    );
+    expect(row.takenAt?.toISOString()).toBe(slot.toISOString());
+    expect(row.scheduledFor.toISOString()).toBe(slot.toISOString());
+    expect(row.doseTaken).toBeNull();
+    expect(row.skipped).toBe(false);
   });
 
   it("still lets the owner correct their own dose", async () => {
