@@ -27,10 +27,14 @@ const workerAuthority = new AsyncLocalStorage<ProviderWorkAuthority>();
 
 export function providerCredentialPolicy(
   authority: ProviderWorkAuthority | null,
+  managedProfileAt: Date | null = null,
 ): ProviderCredentialPolicy {
   if (authority === null) return "deny";
   if (authority.origin === "delegate") return "deny";
   if (authority.origin === "guardian") return "operator-default";
+  if (authority.origin === "system" && managedProfileAt !== null) {
+    return "operator-default";
+  }
   return "personal";
 }
 

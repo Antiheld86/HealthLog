@@ -405,11 +405,8 @@ async function resolveAdminCodexProvider(): Promise<AIProvider | null> {
  *   4. Nothing configured → NoProvider().
  */
 export async function resolveProvider(userId: string): Promise<AIProvider> {
-  const policy = providerCredentialPolicy(
-    providerWorkAuthorityForRecord(userId),
-  );
-  if (policy === "deny") return new NoProvider();
-  if (policy === "operator-default") return resolveAdminProvider();
+  const authority = providerWorkAuthorityForRecord(userId);
+  if (providerCredentialPolicy(authority) === "deny") return new NoProvider();
 
   const userRow = await prisma.user.findUnique({
     where: { id: userId },
@@ -423,8 +420,14 @@ export async function resolveProvider(userId: string): Promise<AIProvider> {
       aiCompatBaseUrl: true,
       aiCompatKeyEncrypted: true,
       aiCompatModel: true,
+      managedProfileAt: true,
     },
   });
+  const policy = providerCredentialPolicy(
+    authority,
+    userRow?.managedProfileAt ?? null,
+  );
+  if (policy === "operator-default") return resolveAdminProvider();
 
   // 1. Per-user Anthropic / Local
   if (userRow) {
@@ -470,16 +473,8 @@ export async function resolveProvider(userId: string): Promise<AIProvider> {
 export async function resolveProviderChain(
   userId: string,
 ): Promise<ProviderChainResolved[]> {
-  const policy = providerCredentialPolicy(
-    providerWorkAuthorityForRecord(userId),
-  );
-  if (policy === "deny") return [];
-  if (policy === "operator-default") {
-    const provider = await resolveAdminProvider();
-    return provider.type === "none"
-      ? []
-      : [{ providerType: "admin-openai", instance: provider }];
-  }
+  const authority = providerWorkAuthorityForRecord(userId);
+  if (providerCredentialPolicy(authority) === "deny") return [];
 
   const userRow = await prisma.user.findUnique({
     where: { id: userId },
@@ -495,8 +490,19 @@ export async function resolveProviderChain(
       aiCompatModel: true,
       aiProviderChain: true,
       useCentralCodex: true,
+      managedProfileAt: true,
     },
   });
+  const policy = providerCredentialPolicy(
+    authority,
+    userRow?.managedProfileAt ?? null,
+  );
+  if (policy === "operator-default") {
+    const provider = await resolveAdminProvider();
+    return provider.type === "none"
+      ? []
+      : [{ providerType: "admin-openai", instance: provider }];
+  }
 
   const rawChain = userRow?.aiProviderChain ?? null;
   const chain = parseProviderChain(rawChain).filter((e) => e.enabled);
@@ -634,10 +640,8 @@ export function userRowHasProviderCredential(
 export async function hasAnyConfiguredProvider(
   userId: string,
 ): Promise<boolean> {
-  const policy = providerCredentialPolicy(
-    providerWorkAuthorityForRecord(userId),
-  );
-  if (policy === "deny") return false;
+  const authority = providerWorkAuthorityForRecord(userId);
+  if (providerCredentialPolicy(authority) === "deny") return false;
   const userRow = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -654,9 +658,11 @@ export async function hasAnyConfiguredProvider(
       codexAccessTokenEncrypted: true,
       codexRefreshTokenEncrypted: true,
       useCentralCodex: true,
+      managedProfileAt: true,
     },
   });
   if (!userRow) return false;
+  const policy = providerCredentialPolicy(authority, userRow.managedProfileAt);
   const settings = await prisma.appSettings.findUnique({
     where: { id: "singleton" },
     select: {
@@ -790,10 +796,10 @@ function resolveManagedByFromRow(
 export async function resolveProviderAvailability(
   userId: string,
 ): Promise<{ aiAvailable: boolean; managedBy: ProviderManagedBy | null }> {
-  const policy = providerCredentialPolicy(
-    providerWorkAuthorityForRecord(userId),
-  );
-  if (policy === "deny") return { aiAvailable: false, managedBy: null };
+  const authority = providerWorkAuthorityForRecord(userId);
+  if (providerCredentialPolicy(authority) === "deny") {
+    return { aiAvailable: false, managedBy: null };
+  }
   const userRow = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -810,9 +816,11 @@ export async function resolveProviderAvailability(
       codexAccessTokenEncrypted: true,
       codexRefreshTokenEncrypted: true,
       useCentralCodex: true,
+      managedProfileAt: true,
     },
   });
   if (!userRow) return { aiAvailable: false, managedBy: null };
+  const policy = providerCredentialPolicy(authority, userRow.managedProfileAt);
   const settings = await prisma.appSettings.findUnique({
     where: { id: "singleton" },
     select: {

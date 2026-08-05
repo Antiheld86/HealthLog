@@ -57,7 +57,12 @@ import {
 } from "@/lib/sharing/provider-work-authority";
 import { runInsightStatusGenerate } from "@/lib/jobs/insight-status-generate";
 import type { InsightStatusGeneratePayload } from "@/lib/jobs/insight-status-generate";
-import { resolveProvider } from "@/lib/ai/provider";
+import {
+  hasAnyConfiguredProvider,
+  resolveProvider,
+  resolveProviderAvailability,
+  resolveProviderChain,
+} from "@/lib/ai/provider";
 import { invalidateStatusInsightsForTypes } from "@/lib/insights/status-invalidation";
 import { warmOneNarrative } from "@/lib/jobs/period-narrative-warm";
 
@@ -356,5 +361,40 @@ describe("sharing provider origin", () => {
       locale: "en",
       force: true,
     });
+  });
+
+  it("keeps system work for a managed record off stale personal providers", async () => {
+    await getPrismaClient().user.create({
+      data: {
+        id: "managed-system-record",
+        username: "managed-system-record",
+        email: "managed-system-record@example.test",
+        role: "USER",
+        managedProfileAt: new Date(),
+        aiProvider: "LOCAL",
+        aiBaseUrl: "https://stale-managed-provider.example.test/v1",
+      },
+    });
+    const system = authority({
+      origin: "system",
+      recordUserId: "managed-system-record",
+      actorUserId: null,
+      grantId: null,
+    });
+
+    const [provider, chain, configured, availability] =
+      await withProviderWorkAuthority(system, async () =>
+        Promise.all([
+          resolveProvider("managed-system-record"),
+          resolveProviderChain("managed-system-record"),
+          hasAnyConfiguredProvider("managed-system-record"),
+          resolveProviderAvailability("managed-system-record"),
+        ]),
+      );
+
+    expect(provider.type).toBe("none");
+    expect(chain).toEqual([]);
+    expect(configured).toBe(false);
+    expect(availability).toEqual({ aiAvailable: false, managedBy: null });
   });
 });
