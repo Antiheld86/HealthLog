@@ -1,0 +1,587 @@
+export const SHARING_DOMAINS = [
+  "measurements",
+  "medications",
+  "labs",
+  "profile",
+  "illness",
+  "mind",
+  "cycle",
+  "documents",
+] as const;
+
+export type SharingDomain = (typeof SHARING_DOMAINS)[number];
+export type SharingScope = SharingDomain | "record";
+export type DelegatedLevel = "write" | "manage";
+export type MutatingAction = "POST" | "PUT" | "PATCH" | "DELETE";
+export type RecordKind = "shared" | "managed";
+export type MutationEffect =
+  "create" | "update" | "delete" | "restore" | "upsert" | "export";
+
+export interface MutatingHandlerContract {
+  readonly handlerModule: `app/api/${string}/route.ts`;
+  readonly route: `/api/${string}`;
+  readonly action: MutatingAction;
+  readonly recordKind: RecordKind;
+  readonly scope: SharingScope;
+  readonly level: DelegatedLevel;
+  readonly ownRecord: {
+    readonly actor: "record-owner";
+    readonly expected: "allow";
+  };
+  readonly deniedLevel: {
+    readonly actor: "delegate";
+    readonly level: "read" | "write";
+    readonly expected: "deny";
+  };
+  readonly admittedLevel: {
+    readonly actor: "delegate";
+    readonly expected: "allow";
+  };
+  readonly actorAttribution: {
+    readonly field: "actorUserId";
+    readonly expected: "acting-delegate";
+  };
+  readonly resultingEffect: {
+    readonly expected: "applied-once";
+    readonly mutation: MutationEffect;
+  };
+  readonly sideEffect: {
+    readonly recordTarget: "resolved-record";
+    readonly delegatedProviderEgress: "deny";
+  };
+  readonly encryptedFieldCarveOut: "never-assert-decrypted-field-content";
+}
+
+function handler(
+  handlerModule: `app/api/${string}/route.ts`,
+  route: `/api/${string}`,
+  action: MutatingAction,
+  scope: SharingScope,
+  level: DelegatedLevel,
+  mutation: MutationEffect,
+): MutatingHandlerContract {
+  return {
+    handlerModule,
+    route,
+    action,
+    recordKind: "shared",
+    scope,
+    level,
+    ownRecord: { actor: "record-owner", expected: "allow" },
+    deniedLevel: {
+      actor: "delegate",
+      level: level === "write" ? "read" : "write",
+      expected: "deny",
+    },
+    admittedLevel: { actor: "delegate", expected: "allow" },
+    actorAttribution: {
+      field: "actorUserId",
+      expected: "acting-delegate",
+    },
+    resultingEffect: { expected: "applied-once", mutation },
+    sideEffect: {
+      recordTarget: "resolved-record",
+      delegatedProviderEgress: "deny",
+    },
+    encryptedFieldCarveOut: "never-assert-decrypted-field-content",
+  };
+}
+
+export const ADMITTED_MUTATING_HANDLERS = [
+  handler(
+    "app/api/measurements/route.ts",
+    "/api/measurements",
+    "POST",
+    "measurements",
+    "write",
+    "create",
+  ),
+  handler(
+    "app/api/labs/route.ts",
+    "/api/labs",
+    "POST",
+    "labs",
+    "write",
+    "create",
+  ),
+  handler(
+    "app/api/biomarkers/route.ts",
+    "/api/biomarkers",
+    "POST",
+    "labs",
+    "write",
+    "create",
+  ),
+  handler(
+    "app/api/illness/episodes/route.ts",
+    "/api/illness/episodes",
+    "POST",
+    "illness",
+    "write",
+    "create",
+  ),
+  handler(
+    "app/api/medications/[id]/side-effects/route.ts",
+    "/api/medications/[id]/side-effects",
+    "POST",
+    "medications",
+    "write",
+    "create",
+  ),
+  handler(
+    "app/api/medications/route.ts",
+    "/api/medications",
+    "POST",
+    "medications",
+    "write",
+    "create",
+  ),
+  handler(
+    "app/api/medications/intake/route.ts",
+    "/api/medications/intake",
+    "POST",
+    "medications",
+    "write",
+    "create",
+  ),
+  handler(
+    "app/api/medications/[id]/intake/route.ts",
+    "/api/medications/[id]/intake",
+    "POST",
+    "medications",
+    "write",
+    "create",
+  ),
+  handler(
+    "app/api/measurements/[id]/route.ts",
+    "/api/measurements/[id]",
+    "PUT",
+    "measurements",
+    "manage",
+    "update",
+  ),
+  handler(
+    "app/api/measurements/[id]/route.ts",
+    "/api/measurements/[id]",
+    "DELETE",
+    "measurements",
+    "manage",
+    "delete",
+  ),
+  handler(
+    "app/api/measurements/bulk-delete/route.ts",
+    "/api/measurements/bulk-delete",
+    "POST",
+    "measurements",
+    "manage",
+    "delete",
+  ),
+  handler(
+    "app/api/measurements/restore/route.ts",
+    "/api/measurements/restore",
+    "POST",
+    "measurements",
+    "manage",
+    "restore",
+  ),
+  handler(
+    "app/api/measurement-reminders/route.ts",
+    "/api/measurement-reminders",
+    "POST",
+    "measurements",
+    "manage",
+    "create",
+  ),
+  handler(
+    "app/api/measurement-reminders/[id]/route.ts",
+    "/api/measurement-reminders/[id]",
+    "PATCH",
+    "measurements",
+    "manage",
+    "update",
+  ),
+  handler(
+    "app/api/measurement-reminders/[id]/route.ts",
+    "/api/measurement-reminders/[id]",
+    "DELETE",
+    "measurements",
+    "manage",
+    "delete",
+  ),
+  handler(
+    "app/api/measurement-reminders/[id]/complete/route.ts",
+    "/api/measurement-reminders/[id]/complete",
+    "POST",
+    "measurements",
+    "manage",
+    "update",
+  ),
+  handler(
+    "app/api/measurement-reminders/[id]/satisfy/route.ts",
+    "/api/measurement-reminders/[id]/satisfy",
+    "POST",
+    "measurements",
+    "manage",
+    "update",
+  ),
+  handler(
+    "app/api/labs/[id]/route.ts",
+    "/api/labs/[id]",
+    "PUT",
+    "labs",
+    "manage",
+    "update",
+  ),
+  handler(
+    "app/api/labs/[id]/route.ts",
+    "/api/labs/[id]",
+    "DELETE",
+    "labs",
+    "manage",
+    "delete",
+  ),
+  handler(
+    "app/api/labs/restore/route.ts",
+    "/api/labs/restore",
+    "POST",
+    "labs",
+    "manage",
+    "restore",
+  ),
+  handler(
+    "app/api/biomarkers/[id]/route.ts",
+    "/api/biomarkers/[id]",
+    "PUT",
+    "labs",
+    "manage",
+    "update",
+  ),
+  handler(
+    "app/api/allergies/route.ts",
+    "/api/allergies",
+    "POST",
+    "profile",
+    "manage",
+    "create",
+  ),
+  handler(
+    "app/api/allergies/[id]/route.ts",
+    "/api/allergies/[id]",
+    "PATCH",
+    "profile",
+    "manage",
+    "update",
+  ),
+  handler(
+    "app/api/allergies/[id]/route.ts",
+    "/api/allergies/[id]",
+    "DELETE",
+    "profile",
+    "manage",
+    "delete",
+  ),
+  handler(
+    "app/api/family-history/route.ts",
+    "/api/family-history",
+    "POST",
+    "profile",
+    "manage",
+    "create",
+  ),
+  handler(
+    "app/api/family-history/[id]/route.ts",
+    "/api/family-history/[id]",
+    "PATCH",
+    "profile",
+    "manage",
+    "update",
+  ),
+  handler(
+    "app/api/family-history/[id]/route.ts",
+    "/api/family-history/[id]",
+    "DELETE",
+    "profile",
+    "manage",
+    "delete",
+  ),
+  handler(
+    "app/api/illness/episodes/[id]/route.ts",
+    "/api/illness/episodes/[id]",
+    "PATCH",
+    "illness",
+    "manage",
+    "update",
+  ),
+  handler(
+    "app/api/illness/episodes/[id]/route.ts",
+    "/api/illness/episodes/[id]",
+    "DELETE",
+    "illness",
+    "manage",
+    "delete",
+  ),
+  handler(
+    "app/api/illness/episodes/[id]/resolve/route.ts",
+    "/api/illness/episodes/[id]/resolve",
+    "PATCH",
+    "illness",
+    "manage",
+    "update",
+  ),
+  handler(
+    "app/api/illness/episodes/[id]/restore/route.ts",
+    "/api/illness/episodes/[id]/restore",
+    "POST",
+    "illness",
+    "manage",
+    "restore",
+  ),
+  handler(
+    "app/api/illness/episodes/[id]/day-logs/route.ts",
+    "/api/illness/episodes/[id]/day-logs",
+    "POST",
+    "illness",
+    "manage",
+    "upsert",
+  ),
+  handler(
+    "app/api/medications/[id]/route.ts",
+    "/api/medications/[id]",
+    "PUT",
+    "medications",
+    "manage",
+    "update",
+  ),
+  handler(
+    "app/api/medications/[id]/schedule-revisions/route.ts",
+    "/api/medications/[id]/schedule-revisions",
+    "POST",
+    "medications",
+    "manage",
+    "create",
+  ),
+  handler(
+    "app/api/medications/[id]/schedule-revisions/[revisionId]/route.ts",
+    "/api/medications/[id]/schedule-revisions/[revisionId]",
+    "PATCH",
+    "medications",
+    "manage",
+    "update",
+  ),
+  handler(
+    "app/api/medications/[id]/schedule-revisions/[revisionId]/route.ts",
+    "/api/medications/[id]/schedule-revisions/[revisionId]",
+    "DELETE",
+    "medications",
+    "manage",
+    "delete",
+  ),
+  handler(
+    "app/api/medications/[id]/inventory/route.ts",
+    "/api/medications/[id]/inventory",
+    "POST",
+    "medications",
+    "manage",
+    "create",
+  ),
+  handler(
+    "app/api/medications/[id]/inventory/[itemId]/route.ts",
+    "/api/medications/[id]/inventory/[itemId]",
+    "PATCH",
+    "medications",
+    "manage",
+    "update",
+  ),
+  handler(
+    "app/api/medications/[id]/inventory/[itemId]/route.ts",
+    "/api/medications/[id]/inventory/[itemId]",
+    "DELETE",
+    "medications",
+    "manage",
+    "delete",
+  ),
+  handler(
+    "app/api/medications/[id]/side-effects/[logId]/route.ts",
+    "/api/medications/[id]/side-effects/[logId]",
+    "DELETE",
+    "medications",
+    "manage",
+    "delete",
+  ),
+  handler(
+    "app/api/medications/[id]/glp1/route.ts",
+    "/api/medications/[id]/glp1",
+    "POST",
+    "medications",
+    "manage",
+    "create",
+  ),
+  handler(
+    "app/api/medications/[id]/intake/[eventId]/route.ts",
+    "/api/medications/[id]/intake/[eventId]",
+    "PUT",
+    "medications",
+    "manage",
+    "update",
+  ),
+  handler(
+    "app/api/medications/[id]/intake/[eventId]/route.ts",
+    "/api/medications/[id]/intake/[eventId]",
+    "DELETE",
+    "medications",
+    "manage",
+    "delete",
+  ),
+  handler(
+    "app/api/medications/[id]/intake/bulk-delete/route.ts",
+    "/api/medications/[id]/intake/bulk-delete",
+    "POST",
+    "medications",
+    "manage",
+    "delete",
+  ),
+  handler(
+    "app/api/medications/[id]/intake/purge/route.ts",
+    "/api/medications/[id]/intake/purge",
+    "DELETE",
+    "medications",
+    "manage",
+    "delete",
+  ),
+  handler(
+    "app/api/medications/[id]/intake/import/route.ts",
+    "/api/medications/[id]/intake/import",
+    "POST",
+    "medications",
+    "manage",
+    "create",
+  ),
+  handler(
+    "app/api/medications/intake/dose-history-import/route.ts",
+    "/api/medications/intake/dose-history-import",
+    "POST",
+    "medications",
+    "manage",
+    "create",
+  ),
+  handler(
+    "app/api/mood-entries/route.ts",
+    "/api/mood-entries",
+    "POST",
+    "mind",
+    "manage",
+    "create",
+  ),
+  handler(
+    "app/api/mood-entries/[id]/route.ts",
+    "/api/mood-entries/[id]",
+    "PUT",
+    "mind",
+    "manage",
+    "update",
+  ),
+  handler(
+    "app/api/mood-entries/[id]/route.ts",
+    "/api/mood-entries/[id]",
+    "DELETE",
+    "mind",
+    "manage",
+    "delete",
+  ),
+  handler(
+    "app/api/mood-entries/bulk-delete/route.ts",
+    "/api/mood-entries/bulk-delete",
+    "POST",
+    "mind",
+    "manage",
+    "delete",
+  ),
+  handler(
+    "app/api/mood-entries/restore/route.ts",
+    "/api/mood-entries/restore",
+    "POST",
+    "mind",
+    "manage",
+    "restore",
+  ),
+  handler(
+    "app/api/mental-health/assessments/route.ts",
+    "/api/mental-health/assessments",
+    "POST",
+    "mind",
+    "manage",
+    "create",
+  ),
+  handler(
+    "app/api/cycle/cycles/[id]/route.ts",
+    "/api/cycle/cycles/[id]",
+    "DELETE",
+    "cycle",
+    "manage",
+    "delete",
+  ),
+  handler(
+    "app/api/cycle/day-logs/route.ts",
+    "/api/cycle/day-logs",
+    "POST",
+    "cycle",
+    "manage",
+    "upsert",
+  ),
+  handler(
+    "app/api/cycle/day-logs/[id]/route.ts",
+    "/api/cycle/day-logs/[id]",
+    "PATCH",
+    "cycle",
+    "manage",
+    "update",
+  ),
+  handler(
+    "app/api/cycle/day-logs/[id]/route.ts",
+    "/api/cycle/day-logs/[id]",
+    "DELETE",
+    "cycle",
+    "manage",
+    "delete",
+  ),
+  handler(
+    "app/api/cycle/period/route.ts",
+    "/api/cycle/period",
+    "POST",
+    "cycle",
+    "manage",
+    "update",
+  ),
+  handler(
+    "app/api/cycle/symptoms/custom/route.ts",
+    "/api/cycle/symptoms/custom",
+    "POST",
+    "cycle",
+    "manage",
+    "create",
+  ),
+  handler(
+    "app/api/nutrients/water/route.ts",
+    "/api/nutrients/water",
+    "POST",
+    "measurements",
+    "manage",
+    "upsert",
+  ),
+  handler(
+    "app/api/insights/patterns/[id]/route.ts",
+    "/api/insights/patterns/[id]",
+    "PATCH",
+    "record",
+    "manage",
+    "update",
+  ),
+  handler(
+    "app/api/export/health-record/route.ts",
+    "/api/export/health-record",
+    "POST",
+    "record",
+    "manage",
+    "export",
+  ),
+] as const satisfies readonly MutatingHandlerContract[];
