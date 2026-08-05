@@ -80,6 +80,9 @@ export const inviteGrantSchema = z
     scope: z
       .array(z.enum(SHARE_DOMAINS))
       .min(1)
+      .refine((scope) => new Set(scope).size === scope.length, {
+        message: "Each section can be selected only once",
+      })
       .nullable()
       .optional()
       .describe(

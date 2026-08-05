@@ -422,13 +422,15 @@ describe("inviteGrant, on scope", () => {
     );
   });
 
-  it("writes the sections it was given, deduplicated", async () => {
+  it("refuses duplicate sections rather than widening their meaning", async () => {
     const { db, writes } = captureScopeDb();
-    await inviteGrant(
-      { ...pair, access: "WRITE", scope: ["labs", "medications", "labs"] },
-      db,
-    );
-    expect(writes[0].scopeJson).toEqual(["labs", "medications"]);
+    await expect(
+      inviteGrant(
+        { ...pair, access: "WRITE", scope: ["labs", "medications", "labs"] },
+        db,
+      ),
+    ).rejects.toMatchObject({ code: "invalid_scope" });
+    expect(writes).toHaveLength(0);
   });
 
   it("refuses a scope that cannot mean anything, before anything is written", async () => {

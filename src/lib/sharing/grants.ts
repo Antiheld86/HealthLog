@@ -253,6 +253,10 @@ export function normaliseScope(stored: Prisma.JsonValue | null): ResolvedScope {
   const domains = new Set<ShareDomain>();
   for (const entry of stored) {
     if (!isShareDomain(entry)) return EMPTY_SCOPE;
+    // A scope is a subset, not merely an array of recognisable values. A
+    // duplicated key is malformed rather than a second consent to the same
+    // domain, so it receives no partial credit.
+    if (domains.has(entry)) return EMPTY_SCOPE;
     domains.add(entry);
   }
   return domains;
@@ -361,6 +365,9 @@ export async function inviteGrant(
     if (input.access === "MANAGE") throw new GrantError("invalid_scope");
     if (scope.length === 0) throw new GrantError("invalid_scope");
     if (!scope.every(isShareDomain)) throw new GrantError("invalid_scope");
+    if (new Set(scope).size !== scope.length) {
+      throw new GrantError("invalid_scope");
+    }
   }
 
   const now = new Date();
@@ -377,10 +384,7 @@ export async function inviteGrant(
         // to open everything. The two nulls are one keystroke apart and mean
         // opposite things here.
         //
-        // Deduplicated on the way in: a set the owner ticked twice is one
-        // section, and storing it twice would make two rows with the same
-        // meaning look different to anything that reads them back.
-        scopeJson: scope === null ? Prisma.DbNull : [...new Set(scope)],
+        scopeJson: scope === null ? Prisma.DbNull : scope,
         invitedAt: now,
         expiresAt: input.expiresAt ?? null,
       },
