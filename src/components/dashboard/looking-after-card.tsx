@@ -5,7 +5,7 @@ import { HeartHandshake, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { TileHeader } from "@/components/insights/tile-header";
 import { useAccountSwitch } from "@/hooks/use-account-switch";
-import { useAuth } from "@/hooks/use-auth";
+import { useAccountOnceMounted } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
 import {
   accountLabel,
@@ -49,7 +49,12 @@ import {
  */
 export function LookingAfterCard() {
   const { t } = useTranslations();
-  const { user } = useAuth();
+  // Withheld until mounted: this card sits inside the dashboard's streamed
+  // boundary and renders nothing without grants. The shell has usually answered
+  // `/api/auth/me` before the boundary hydrates, so reading the grants on the
+  // hydration render paints a card where the server painted none — a mismatch
+  // that discards the streamed dashboard. See `useAccountOnceMounted`.
+  const user = useAccountOnceMounted();
   const switchAccount = useAccountSwitch();
 
   const access = user?.accountAccess;

@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { queryKeys } from "@/lib/query-keys";
 import { apiGet, apiFetchRaw, ApiError } from "@/lib/api/api-fetch";
 import { retryOnceOnTransientError } from "@/lib/queries/retry-transient";
+import { useMounted } from "@/hooks/use-mounted";
 import { useTranslations } from "@/lib/i18n/context";
 import type {
   TimeFormatPreference,
@@ -392,6 +393,54 @@ export function useAuth() {
     error: query.error,
     refetch: query.refetch,
   };
+}
+
+/**
+ * The account payload, withheld from the SSR pass and the hydration render.
+ *
+ * ## The problem it solves
+ *
+ * The app shell sits in the streamed HTML shell and hydrates first; mounting it
+ * fires `/api/auth/me`. A page below a `loading.tsx` is a streamed Suspense
+ * boundary and hydrates LATER — routinely after that response has landed. React
+ * replays the boundary's first render as a hydration render, and at that moment
+ * `useAuth().user` holds a payload the server never had, because an RSC renders
+ * with no query cache at all. Any branch that consults the account then renders
+ * one thing in the streamed HTML and another in the browser, React reports #418
+ * and discards the whole streamed tree.
+ *
+ * That stayed invisible while every page kept its own data behind a
+ * `useMounted()` skeleton gate: both sides painted the same silhouette. The
+ * dashboard's RSC prefetch (`src/app/page.tsx`) removed the silhouette — real
+ * tiles render on both sides now — and the divergence surfaced as a bailout on
+ * every cold load of `/`, throwing away exactly the paint the prefetch buys.
+ *
+ * `useMounted()` answers with its SERVER snapshot during SSR *and* during
+ * hydration, then with the client one from the first re-render, so this pins the
+ * hydration render to what the server rendered and hands the payload over one
+ * render later. A component mounted by a client-side navigation never sees the
+ * pin (`useSyncExternalStore` consults the server snapshot only while
+ * hydrating), and `user === null` beside a settled query is not a new state: it
+ * is what every consumer already renders on a cold load, before `/me` answers.
+ *
+ * ## Why `useAuth` itself must NOT do this
+ *
+ * Tried, and it breaks the app. Several surfaces drive a REDIRECT off the
+ * payload — the document vault sends you to `/` when
+ * `user.modules.inboundDocuments` is not `true`, and its effect only waits on
+ * `isLoading`, which is already false by then. A hydration render that answers
+ * "no account" makes that effect fire for real, and the vault bounces to the
+ * dashboard on every load. The same shape would latch into any `useState`
+ * initializer seeded from the account.
+ *
+ * So the withholding is opt-in, and belongs to components that RENDER the
+ * account rather than navigate on it. Reach for it in anything that paints
+ * inside a streamed page boundary; leave the redirect gates on `useAuth`.
+ */
+export function useAccountOnceMounted(): AuthUser | null {
+  const { user } = useAuth();
+  const mounted = useMounted();
+  return mounted ? user : null;
 }
 
 /**
