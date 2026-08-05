@@ -367,9 +367,10 @@ async function applyToExisting(
   // decision, so it can never be an overturn, and letting it fall through
   // keeps the sync cursor advancing exactly as before.
   if (refuseOutcomeChange && existingActioned && !incomingIsPendingEcho) {
-    const existingWasSkip = existing.skipped;
-    const incomingIsSkip = isExplicitSkip;
-    if (existingWasSkip !== incomingIsSkip) {
+    // A different decision is refused outright. Taken to skipped and back
+    // rewrites the owner's compliance history and refunds the inventory the
+    // take consumed, and the consent screen promises that stays with them.
+    if (existing.skipped !== isExplicitSkip) {
       return {
         row: existing,
         outcome: "updated",
@@ -378,6 +379,16 @@ async function applyToExisting(
         outcomeChangeRefused: true,
       };
     }
+
+    // A same-outcome replay is a no-op: it must preserve the facts already
+    // recorded for the owner's slot rather than falling through to the update.
+    return {
+      row: existing,
+      outcome: "updated",
+      consumedTransition: false,
+      noDowngradeNoOp: true,
+      outcomeChangeRefused: false,
+    };
   }
 
   // C2 — never clear a recorded dose with a pending projection echo. An
