@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./setup/test";
 
 import { ACCESSIBILITY_STATES } from "../tests/fixtures/v137/e2e-journeys";
 
