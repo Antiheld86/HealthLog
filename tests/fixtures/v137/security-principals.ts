@@ -65,7 +65,7 @@ export async function mutateThenRestore<T>(
   mutate: () => Promise<T>,
   restore: (result: T) => Promise<void>,
 ): Promise<T> {
-  let result: T;
+  let result: T | undefined;
   let completed = false;
 
   try {
