@@ -220,14 +220,19 @@ const accountAccessEntry = z
     username: z.string(),
     displayName: z.string().nullable(),
     access: z
-      .enum(["read", "write", "manage"])
+      .enum(["read", "write"])
       .describe(
-        "The grant's resolved level, under the name v1.36.0 published. Identical to `level` — both come from one server-side expression — and kept because shipped clients read it. New code reads `level`.",
+        "The legacy grant level that shipped clients decode. MANAGE serializes as `write` here; new code reads canonical `level`.",
       ),
     level: z
       .enum(["read", "write", "manage"])
       .describe(
         "The grant's resolved level. `manage` additionally admits changing and removing entries on the delegable surfaces; it never reaches the identity surfaces (settings, connections, tokens, consent, grant management), which stay refused on an invited record at every level. Render it; never derive it from `canWrite`.",
+      ),
+    recordKind: z
+      .enum(["self", "shared", "managed"])
+      .describe(
+        "Server-resolved presentation metadata for the record. It is never accepted as an authorization input.",
       ),
     sections: z
       .array(shareSection)
@@ -256,6 +261,11 @@ export const accountAccessBlock = z
       .nullable()
       .describe(
         "The record this session is inside right now, resolved to a full entry rather than an id to look up — so a banner can name the person without joining two fields. Null when the caller is in their own record, and ALWAYS null on the Bearer transport: a token carries its selector per request and this endpoint refuses one.",
+      ),
+    recordKind: z
+      .enum(["self", "shared", "managed"])
+      .describe(
+        "The server-resolved kind of the record currently in view. `self` applies when `active` is null.",
       ),
     canSwitch: z
       .boolean()

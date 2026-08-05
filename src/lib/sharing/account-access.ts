@@ -104,24 +104,32 @@ export async function resolveAccountAccess(auth: {
     where: { granteeId: actorId, revokedAt: null },
     orderBy: { createdAt: "desc" },
     include: {
-      grantor: { select: { id: true, username: true, displayName: true } },
+      grantor: {
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          managedProfileAt: true,
+        },
+      },
     },
   });
 
   const accounts: AccountAccessEntry[] = rows
     .filter((grant) => isGrantActive(grant, now))
     .map((grant) => {
-      // One expression, two names. `access` is what v1.36.0 published and
-      // what shipped clients read; `level` is what the three-level contract
-      // calls it. Deriving both from one lookup is what stops them saying
-      // different things about the same row.
+      // `access` is the shipped two-level field, so MANAGE remains write for
+      // clients that have not learned the canonical level. `level` names the
+      // complete three-level contract.
       const level = LEVEL[grant.access];
       return {
         accountId: grant.grantor.id,
         username: grant.grantor.username,
         displayName: grant.grantor.displayName,
-        access: level,
+        access: level === "read" ? "read" : "write",
         level,
+        recordKind:
+          grant.grantor.managedProfileAt === null ? "shared" : "managed",
         sections: resolveGrantSections(grant.scopeJson),
         canWrite: grantAllows(grant, "write", now),
       };
@@ -132,5 +140,10 @@ export async function resolveAccountAccess(auth: {
       ? null
       : (accounts.find((a) => a.accountId === stamped) ?? null);
 
-  return { accounts, active, canSwitch: accounts.length > 0 };
+  return {
+    accounts,
+    active,
+    recordKind: active?.recordKind ?? "self",
+    canSwitch: accounts.length > 0,
+  };
 }

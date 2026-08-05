@@ -23,6 +23,26 @@ import type { ShareDomain } from "@/lib/sharing/scope";
 /** What a grant lets its holder do, resolved. */
 export type AccountAccessLevel = "read" | "write" | "manage";
 
+/** The two values published by the original account-access contract. */
+export type LegacyAccountAccessLevel = "read" | "write";
+
+/** The server-resolved kind of record a presentation is naming. */
+export type AccountRecordKind = "self" | "shared" | "managed";
+
+/**
+ * Read the portion of an account-access entry that an older whole-record
+ * client understands. A scoped entry is refused rather than guessed at.
+ */
+export function decodeLegacyWholeRecordAccess(
+  value: unknown,
+): LegacyAccountAccessLevel | null {
+  if (value === null || typeof value !== "object") return null;
+  const entry = value as { access?: unknown; sections?: unknown };
+  if (entry.access !== "read" && entry.access !== "write") return null;
+  if (entry.sections !== undefined && entry.sections !== null) return null;
+  return entry.access;
+}
+
 /** One account this caller may act on. */
 export interface AccountAccessEntry {
   /** The account whose record it is — the value `POST /api/account/switch` takes. */
@@ -37,13 +57,18 @@ export interface AccountAccessEntry {
    * assigned from one expression in `account-access.ts`, so they cannot come
    * apart; `level` is the name to write new code against.
    */
-  access: AccountAccessLevel;
+  access: LegacyAccountAccessLevel;
   /**
    * v1.37.0 — the same resolved level, under the name the three-level
    * contract speaks. Read it; never derive it from `canWrite`, and never
    * derive `canWrite` from it.
    */
   level: AccountAccessLevel;
+  /**
+   * What kind of record this is. This is presentation metadata only; it is
+   * resolved by the server and never accepted as an authorization input.
+   */
+  recordKind: AccountRecordKind;
   /**
    * v1.37.0 — which sections of the record this grant opens, or `null` for
    * the entire record.
@@ -81,6 +106,8 @@ export interface AccountAccess {
    * and always null on the Bearer transport.
    */
   active: AccountAccessEntry | null;
+  /** The server-resolved kind of the record currently in view. */
+  recordKind?: AccountRecordKind;
   /** Is there anywhere to switch to. */
   canSwitch: boolean;
 }

@@ -9520,6 +9520,8 @@
       "description": "Historiales que otras personas han compartido contigo.",
       "levelRead": "Puede ver",
       "levelWrite": "Puede ver y añadir",
+      "kindShared": "Registro compartido",
+      "kindManaged": "Perfil administrado",
       "open": "Abrir el historial de {name}"
     },
     "toast": {

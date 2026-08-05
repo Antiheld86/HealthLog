@@ -56,6 +56,7 @@ const OWNER = {
   access: "read" as const,
   level: "read" as const,
   sections: null,
+  recordKind: "shared" as const,
   canWrite: false,
 };
 

@@ -9520,6 +9520,8 @@
       "description": "Karty, które udostępniły ci inne osoby.",
       "levelRead": "Może przeglądać",
       "levelWrite": "Może przeglądać i dodawać",
+      "kindShared": "Udostępniona karta",
+      "kindManaged": "Zarządzany profil",
       "open": "Otwórz kartę użytkownika {name}"
     },
     "toast": {

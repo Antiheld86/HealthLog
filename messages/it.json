@@ -9520,6 +9520,8 @@
       "description": "Cartelle che altre persone hanno condiviso con te.",
       "levelRead": "Può consultare",
       "levelWrite": "Può consultare e aggiungere",
+      "kindShared": "Cartella condivisa",
+      "kindManaged": "Profilo gestito",
       "open": "Apri la cartella di {name}"
     },
     "toast": {

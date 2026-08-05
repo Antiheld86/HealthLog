@@ -97,6 +97,12 @@ export function LookingAfterCard() {
                   <span className="text-muted-foreground block truncate text-xs">
                     {levelLabel(entry, t)}
                   </span>
+                  <span className="text-muted-foreground block truncate text-xs">
+                    {recordKindLabel(entry, t)}
+                  </span>
+                  <span className="text-muted-foreground block truncate text-xs">
+                    {scopeLabel(entry, t)}
+                  </span>
                 </span>
                 {switchAccount.isPending && (
                   <Loader2
@@ -128,7 +134,34 @@ function levelLabel(
   entry: AccountAccessEntry,
   t: (key: string) => string,
 ): string {
+  if (entry.level === "manage") {
+    return t("recordSharing.row.canManage");
+  }
   return entry.canWrite
     ? t("recordSharing.lookingAfter.levelWrite")
     : t("recordSharing.lookingAfter.levelRead");
+}
+
+function recordKindLabel(
+  entry: AccountAccessEntry,
+  t: (key: string) => string,
+): string {
+  return entry.recordKind === "managed"
+    ? t("recordSharing.lookingAfter.kindManaged")
+    : t("recordSharing.lookingAfter.kindShared");
+}
+
+function scopeLabel(
+  entry: AccountAccessEntry,
+  t: (key: string) => string,
+): string {
+  if (entry.sections === null) {
+    return t("recordSharing.row.entireRecord");
+  }
+  if (entry.sections.length === 0) {
+    return t("recordSharing.row.noSections");
+  }
+  return entry.sections
+    .map((domain) => t(`recordSharing.section.${domain}.label`))
+    .join(", ");
 }

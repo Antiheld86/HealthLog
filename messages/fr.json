@@ -9520,6 +9520,8 @@
       "description": "Les dossiers que d'autres personnes partagent avec vous.",
       "levelRead": "Peut consulter",
       "levelWrite": "Peut consulter et ajouter",
+      "kindShared": "Dossier partagé",
+      "kindManaged": "Profil géré",
       "open": "Ouvrir le dossier de {name}"
     },
     "toast": {

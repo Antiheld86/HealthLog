@@ -9520,6 +9520,8 @@
       "description": "Akten, die andere mit dir geteilt haben.",
       "levelRead": "Darf lesen",
       "levelWrite": "Darf lesen und hinzufügen",
+      "kindShared": "Geteilte Akte",
+      "kindManaged": "Verwaltetes Profil",
       "open": "Akte von {name} öffnen"
     },
     "toast": {

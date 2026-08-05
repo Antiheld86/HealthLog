@@ -98,6 +98,8 @@ export interface RecordCapabilities {
    * nothing; it is a real answer and reads as one.
    */
   sections: AccountAccessEntry["sections"];
+  /** The server-resolved kind of the record currently in view. */
+  recordKind: AccountAccessEntry["recordKind"] | "self";
 }
 
 /**
@@ -122,6 +124,7 @@ export function resolveRecordCapabilities(
       // to tell those apart would have to guess.
       level: null,
       sections: null,
+      recordKind: "self",
     };
   }
   return {
@@ -131,6 +134,7 @@ export function resolveRecordCapabilities(
     canManage: false,
     level: active.level,
     sections: active.sections,
+    recordKind: active.recordKind,
   };
 }
 

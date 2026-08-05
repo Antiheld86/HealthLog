@@ -34,6 +34,7 @@ import type { AccountAccess } from "@/lib/sharing/account-access-view";
 export const NO_ACCOUNT_ACCESS: AccountAccess = {
   accounts: [],
   active: null,
+  recordKind: "self",
   canSwitch: false,
 };
 
@@ -347,6 +348,12 @@ function coerceAccountAccess(value: unknown): AccountAccess {
   return {
     accounts: block.accounts,
     active: block.active ?? null,
+    recordKind:
+      block.recordKind === "self" ||
+      block.recordKind === "shared" ||
+      block.recordKind === "managed"
+        ? block.recordKind
+        : "self",
     canSwitch: block.canSwitch === true,
   };
 }

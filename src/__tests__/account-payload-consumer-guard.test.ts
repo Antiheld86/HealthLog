@@ -80,6 +80,19 @@ const NOT_A_CONSUMER = new Set([
   join(SRC, "app", "api", "auth", "me", "route.ts"),
 ]);
 
+const ACCOUNT_ENTRY_CONSUMER = join(
+  SRC,
+  "components",
+  "dashboard",
+  "looking-after-card.tsx",
+);
+const ACTIVE_RECORD_CONSUMER = join(SRC, "hooks", "use-record-capabilities.ts");
+const ACCOUNT_ACCESS_ADDITIVE_FIELDS = [
+  "level",
+  "sections",
+  "recordKind",
+] as const;
+
 /**
  * Fields with no client reader, each with the reason it is nonetheless
  * correct for the payload to carry it. An entry here is a claim; write one
@@ -191,5 +204,25 @@ describe("account payload consumer guard", () => {
       ).toContain(field);
       expect(reason.length).toBeGreaterThan(20);
     }
+  });
+
+  it("has non-zero entry and active-record readers for additive access fields", () => {
+    const entrySource = stripComments(
+      readFileSync(ACCOUNT_ENTRY_CONSUMER, "utf8"),
+    );
+    const activeSource = stripComments(
+      readFileSync(ACTIVE_RECORD_CONSUMER, "utf8"),
+    );
+
+    const readerCount = ACCOUNT_ACCESS_ADDITIVE_FIELDS.reduce(
+      (count, field) => {
+        expect(entrySource).toMatch(new RegExp(`entry\\.${field}(?![\\w$])`));
+        expect(activeSource).toMatch(new RegExp(`active\\.${field}(?![\\w$])`));
+        return count + 2;
+      },
+      0,
+    );
+
+    expect(readerCount).toBeGreaterThan(0);
   });
 });

@@ -27,6 +27,7 @@ const READ_ONLY: AccountAccessEntry = {
   access: "read",
   level: "read",
   sections: null,
+  recordKind: "shared",
   canWrite: false,
 };
 
@@ -39,7 +40,7 @@ const WRITABLE: AccountAccessEntry = {
 
 const MANAGING: AccountAccessEntry = {
   ...READ_ONLY,
-  access: "manage",
+  access: "write",
   level: "manage",
   canWrite: true,
 };
@@ -64,6 +65,7 @@ describe("resolveRecordCapabilities", () => {
       // apart from a real one.
       level: null,
       sections: null,
+      recordKind: "self",
     });
     expect(resolveRecordCapabilities(undefined)).toEqual(
       resolveRecordCapabilities(null),
@@ -78,6 +80,7 @@ describe("resolveRecordCapabilities", () => {
       canManage: false,
       level: "read",
       sections: null,
+      recordKind: "shared",
     });
   });
 
@@ -91,6 +94,7 @@ describe("resolveRecordCapabilities", () => {
       canManage: false,
       level: "write",
       sections: null,
+      recordKind: "shared",
     });
   });
 
@@ -121,6 +125,7 @@ describe("resolveRecordCapabilities", () => {
       canManage: false,
       level: "manage",
       sections: null,
+      recordKind: "shared",
     });
   });
 

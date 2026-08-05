@@ -117,6 +117,7 @@ const OWNER_READ: AccountAccessEntry = {
   access: "read" as const,
   level: "read" as const,
   sections: null,
+  recordKind: "shared" as const,
   canWrite: false,
 };
 const OWNER_WRITE: AccountAccessEntry = {

@@ -9520,6 +9520,8 @@
       "description": "Records other people have shared with you.",
       "levelRead": "Can view",
       "levelWrite": "Can view and add",
+      "kindShared": "Shared record",
+      "kindManaged": "Managed profile",
       "open": "Open {name}'s record"
     },
     "toast": {

@@ -10,6 +10,7 @@ const OWNER = {
   access: "write" as const,
   level: "write" as const,
   sections: null,
+  recordKind: "shared" as const,
   canWrite: true,
 };
 

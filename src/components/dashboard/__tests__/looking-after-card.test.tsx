@@ -27,6 +27,7 @@ const GRANDMOTHER = {
   access: "read" as const,
   level: "read" as const,
   sections: null,
+  recordKind: "shared" as const,
   canWrite: false,
 };
 const FATHER = {
@@ -36,6 +37,7 @@ const FATHER = {
   access: "write" as const,
   level: "write" as const,
   sections: null,
+  recordKind: "shared" as const,
   canWrite: true,
 };
 
