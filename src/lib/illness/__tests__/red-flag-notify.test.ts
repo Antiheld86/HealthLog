@@ -10,10 +10,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const findFirstMock = vi.fn();
 const createMock = vi.fn();
 const dispatchMock = vi.fn();
+const userFindUniqueMock = vi.fn();
 
 vi.mock("@/lib/db", () => ({
   prisma: {
-    pushAttempt: {
+    user: {
+      findUnique: (...a: unknown[]) => userFindUniqueMock(...a),
+    },
+    notificationEvent: {
       findFirst: (...a: unknown[]) => findFirstMock(...a),
       create: (...a: unknown[]) => createMock(...a),
     },
@@ -45,6 +49,7 @@ const feverFlag: IllnessRedFlag = {
 };
 
 beforeEach(() => {
+  userFindUniqueMock.mockReset().mockResolvedValue({ managedProfileAt: null });
   findFirstMock.mockReset().mockResolvedValue(null);
   createMock.mockReset().mockResolvedValue({});
   dispatchMock.mockReset().mockResolvedValue(undefined);
@@ -96,14 +101,34 @@ describe("notifyIllnessRedFlag", () => {
     expect(createMock).not.toHaveBeenCalled();
   });
 
-  it("stamps the ledger anchor before dispatching", async () => {
+  it("stamps the record event anchor before dispatching", async () => {
     await notifyIllnessRedFlag({
       userId: "u1",
       episodeId: "e9",
       redFlags: [feverFlag],
     });
     expect(createMock).toHaveBeenCalledTimes(1);
-    expect(createMock.mock.calls[0][0].data.reason).toContain("e9");
+    expect(createMock.mock.calls[0][0].data).toMatchObject({
+      recordUserId: "u1",
+      eventType: "SYSTEM_ALERT",
+      dedupKey: expect.stringContaining("e9"),
+    });
+  });
+
+  it("does not dispatch or write an anchor for a managed profile", async () => {
+    userFindUniqueMock.mockResolvedValueOnce({
+      managedProfileAt: new Date("2026-08-06T00:00:00.000Z"),
+    });
+
+    await notifyIllnessRedFlag({
+      userId: "managed-record",
+      episodeId: "e1",
+      redFlags: [feverFlag],
+    });
+
+    expect(findFirstMock).not.toHaveBeenCalled();
+    expect(createMock).not.toHaveBeenCalled();
+    expect(dispatchMock).not.toHaveBeenCalled();
   });
 
   it("never throws when dispatch fails", async () => {

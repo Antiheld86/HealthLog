@@ -11,10 +11,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const findFirstMock = vi.fn();
 const createMock = vi.fn();
 const dispatchMock = vi.fn();
+const userFindUniqueMock = vi.fn();
 
 vi.mock("@/lib/db", () => ({
   prisma: {
-    pushAttempt: {
+    user: {
+      findUnique: (...a: unknown[]) => userFindUniqueMock(...a),
+    },
+    notificationEvent: {
       findFirst: (...a: unknown[]) => findFirstMock(...a),
       create: (...a: unknown[]) => createMock(...a),
     },
@@ -50,6 +54,7 @@ const glucoseLowSymptomatic: SafetyFloorDecision = {
 };
 
 beforeEach(() => {
+  userFindUniqueMock.mockReset().mockResolvedValue({ managedProfileAt: null });
   findFirstMock.mockReset().mockResolvedValue(null);
   createMock.mockReset().mockResolvedValue({});
   dispatchMock.mockReset().mockResolvedValue(undefined);
@@ -101,13 +106,26 @@ describe("notifySafetyFloor", () => {
     expect(createMock).not.toHaveBeenCalled();
   });
 
-  it("stamps the ledger anchor (keyed by reason) before dispatching", async () => {
+  it("stamps the record event anchor (keyed by reason) before dispatching", async () => {
     await notifySafetyFloor({ userId: "u9", decision: bpHigh });
     expect(createMock).toHaveBeenCalledTimes(1);
-    expect(createMock.mock.calls[0][0].data.reason).toContain(
-      "bp_hypertensive",
-    );
-    expect(createMock.mock.calls[0][0].data.eventType).toBe("SYSTEM_ALERT");
+    expect(createMock.mock.calls[0][0].data).toMatchObject({
+      recordUserId: "u9",
+      eventType: "SYSTEM_ALERT",
+      dedupKey: expect.stringContaining("bp_hypertensive"),
+    });
+  });
+
+  it("does not dispatch or write an anchor for a managed profile", async () => {
+    userFindUniqueMock.mockResolvedValueOnce({
+      managedProfileAt: new Date("2026-08-06T00:00:00.000Z"),
+    });
+
+    await notifySafetyFloor({ userId: "managed-record", decision: bpHigh });
+
+    expect(findFirstMock).not.toHaveBeenCalled();
+    expect(createMock).not.toHaveBeenCalled();
+    expect(dispatchMock).not.toHaveBeenCalled();
   });
 
   it("never throws when dispatch fails", async () => {
