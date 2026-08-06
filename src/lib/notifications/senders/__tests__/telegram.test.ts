@@ -2,8 +2,9 @@
  * Telegram sender unit tests.
  *
  * v1.7.0 SB-SCHED-4 / code-correctness H2 — the pre-send delete must be
- * scoped to the single dose slot `{ medicationId, scheduleId, date,
- * phase, timeOfDay }`, NOT the whole medication. A multi-time-of-day
+ * scoped to the recipient and single dose slot `{ recipientUserId,
+ * medicationId, scheduleId, date, phase, timeOfDay }`, NOT the whole
+ * medication. A multi-time-of-day
  * schedule keeps a distinct ledger row per slot; the legacy whole-
  * medication wipe deleted the morning row when the evening slot fired,
  * which made the worker's dedup `findUnique` miss and re-send the
@@ -94,7 +95,8 @@ describe("sendViaTelegram — per-slot delete scope (H2)", () => {
     expect(findUniqueMock).toHaveBeenCalledTimes(1);
     expect(findUniqueMock).toHaveBeenCalledWith({
       where: {
-        medicationId_scheduleId_date_phase_timeOfDay: {
+        recipientUserId_medicationId_scheduleId_date_phase_timeOfDay: {
+          recipientUserId: "user-1",
           medicationId: "med-1",
           scheduleId: "sched-1",
           date: "2025-06-10",
@@ -120,7 +122,8 @@ describe("sendViaTelegram — per-slot delete scope (H2)", () => {
     expect(deleteMock).toHaveBeenCalledTimes(1);
     expect(deleteMock).toHaveBeenCalledWith({
       where: {
-        medicationId_scheduleId_date_phase_timeOfDay: {
+        recipientUserId_medicationId_scheduleId_date_phase_timeOfDay: {
+          recipientUserId: "user-1",
           medicationId: "med-1",
           scheduleId: "sched-1",
           date: "2025-06-10",
@@ -153,6 +156,77 @@ describe("sendViaTelegram — per-slot delete scope (H2)", () => {
 
     expect(findUniqueMock).not.toHaveBeenCalled();
     expect(deleteMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps two recipients' identical subject slots independent", async () => {
+    await sendViaTelegram(
+      { botToken: "bot-token", chatId: "guardian-chat-a" },
+      {
+        ...reminderPayload(),
+        userId: "managed-record",
+        recordUserId: "managed-record",
+        recipientUserId: "guardian-a",
+      },
+    );
+    await sendViaTelegram(
+      { botToken: "bot-token", chatId: "guardian-chat-b" },
+      {
+        ...reminderPayload(),
+        userId: "managed-record",
+        recordUserId: "managed-record",
+        recipientUserId: "guardian-b",
+      },
+    );
+
+    expect(upsertMock).toHaveBeenCalledTimes(2);
+    expect(upsertMock.mock.calls.map((call) => call[0].where)).toEqual([
+      {
+        recipientUserId_medicationId_scheduleId_date_phase_timeOfDay: {
+          recipientUserId: "guardian-a",
+          medicationId: "med-1",
+          scheduleId: "sched-1",
+          date: "2025-06-10",
+          phase: "YELLOW",
+          timeOfDay: "20:00",
+        },
+      },
+      {
+        recipientUserId_medicationId_scheduleId_date_phase_timeOfDay: {
+          recipientUserId: "guardian-b",
+          medicationId: "med-1",
+          scheduleId: "sched-1",
+          date: "2025-06-10",
+          phase: "YELLOW",
+          timeOfDay: "20:00",
+        },
+      },
+    ]);
+  });
+
+  it("updates one recipient slot when its Telegram chat changes", async () => {
+    findUniqueMock.mockResolvedValue({ chatId: "old-chat", messageId: 123 });
+
+    await sendViaTelegram(
+      { botToken: "bot-token", chatId: "new-chat" },
+      reminderPayload(),
+    );
+
+    expect(deleteMessageMock).toHaveBeenCalledWith("bot-token", "old-chat", 123);
+    expect(upsertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          recipientUserId_medicationId_scheduleId_date_phase_timeOfDay: {
+            recipientUserId: "user-1",
+            medicationId: "med-1",
+            scheduleId: "sched-1",
+            date: "2025-06-10",
+            phase: "YELLOW",
+            timeOfDay: "20:00",
+          },
+        },
+        update: { chatId: "new-chat", messageId: 999 },
+      }),
+    );
   });
 });
 
