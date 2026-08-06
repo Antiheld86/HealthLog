@@ -12,7 +12,6 @@ import { useTranslations } from "@/lib/i18n/context";
 import { accountLabel } from "@/lib/sharing/account-access-view";
 import {
   useAccountGrants,
-  useRecordActivity,
   useRevokeGrant,
   type GrantRow,
 } from "@/lib/queries/use-account-grants";
@@ -39,12 +38,6 @@ export function GrantsGivenCard() {
   const { t } = useTranslations();
   const { data, isLoading, isError, refetch } = useAccountGrants();
   const revoke = useRevokeGrant();
-  // Read for one number: how long the activity view can still say who entered
-  // what. The activity card on this same page holds the query, so this is the
-  // cached answer rather than a second request — and when the server has not
-  // answered yet, the sentence that would need the number is left out instead
-  // of being written around a guessed 365.
-  const activity = useRecordActivity();
 
   const given = data?.given ?? [];
 
@@ -95,6 +88,10 @@ export function GrantsGivenCard() {
     // Only a live grant can be ended. An already-ended row keeps its history
     // and loses its button, rather than offering an act that would 409.
     if (grant.state !== "ACTIVE" && grant.state !== "PENDING") return null;
+    // The row and the window arrive together. A grant that can be revoked came
+    // out of a resolved payload, so there is no state in which this control
+    // exists and the number behind its disclosure does not.
+    if (!data) return null;
     const name = accountLabel(grant.account);
     return (
       <ConfirmButton
@@ -110,7 +107,7 @@ export function GrantsGivenCard() {
           t,
           access: grant.access,
           name,
-          retentionDays: activity.data?.retentionDays,
+          retentionDays: data.retentionDays,
         })}
         confirmLabel={t("recordSharing.given.revokeConfirm")}
         pending={revoke.isPending}
@@ -134,10 +131,17 @@ export function GrantsGivenCard() {
  * condition is "not READ" rather than "is WRITE", so the level that can also
  * change and remove entries carries both sentences too — for a manage grant
  * the question "what happens to what they did" is the sharper one, not the
- * softer. The last sentence is the honest bound on attribution — the activity
+ * softer. The last sentence is the honest bound on attribution: the activity
  * view answers "who entered what" for as long as the audit window reaches, and
- * that window is the operator's setting. It is said with the number the server
- * resolved, or not said at all.
+ * that window is the operator's setting.
+ *
+ * v1.37.0 — `retentionDays` is required, and that is the whole fix. It used to
+ * be optional and came from a second query, so the disclosure appeared only
+ * when that query happened to have answered: two owners performing the same
+ * act read different paragraphs, and the one who read less had no way to tell.
+ * The number rides the grant list now, so a caller with a grant to revoke
+ * cannot be without it and this function has no branch that omits the
+ * sentence.
  */
 export function revokeBody({
   t,
@@ -148,17 +152,15 @@ export function revokeBody({
   t: (key: string, params?: Record<string, string | number>) => string;
   access: GrantRow["access"];
   name: string;
-  /** Undefined until the server has said what the window is. */
-  retentionDays?: number;
+  /** The audit window, off the same payload the row came from. */
+  retentionDays: number;
 }): string {
   const lines = [t("recordSharing.given.revokeBody", { name })];
   if (access !== "READ") {
     lines.push(t("recordSharing.given.revokeEntriesStay"));
-    if (retentionDays !== undefined) {
-      lines.push(
-        t("recordSharing.given.revokeAttribution", { days: retentionDays }),
-      );
-    }
+    lines.push(
+      t("recordSharing.given.revokeAttribution", { days: retentionDays }),
+    );
   }
   return lines.join(" ");
 }

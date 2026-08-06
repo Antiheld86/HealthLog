@@ -111,6 +111,12 @@ const grantListResponse = z
   .object({
     given: z.array(grantView),
     received: z.array(grantView),
+    retentionDays: z
+      .number()
+      .int()
+      .describe(
+        "How long the record's activity feed can still attribute an entry to the person who made it, in days. Resolved from the instance's audit retention setting (365 by default, operator-configurable), NOT a constant. It rides this payload so a client ending an access can state the window in the same breath, without a second request whose timing would decide whether the owner was told.",
+      ),
   })
   .meta({
     id: "AccountGrantList",

@@ -37000,9 +37000,18 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AccountGrant"
+        retentionDays:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: How long the record's activity feed can still attribute an entry to the person who made it, in days.
+            Resolved from the instance's audit retention setting (365 by default, operator-configurable), NOT a
+            constant. It rides this payload so a client ending an access can state the window in the same breath,
+            without a second request whose timing would decide whether the owner was told.
       required:
         - given
         - received
+        - retentionDays
       additionalProperties: false
       description: "Both directions at once: `given` are the grants this account has offered on its own record, `received` are
         the ones offered to it. Capped at 100 rows per direction, newest first."
