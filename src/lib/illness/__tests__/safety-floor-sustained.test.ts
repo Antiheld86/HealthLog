@@ -12,8 +12,13 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-/** In-memory record event stream so the 24h dedupe behaves across calls. */
-const ledger: Array<{ recordUserId: string; dedupKey: string }> = [];
+/** In-memory event claims so the 24h dedupe behaves across calls. */
+const ledger: Array<{
+  recordUserId: string;
+  eventType: string;
+  dedupKey: string;
+  createdAt: Date;
+}> = [];
 const measurementFindMany = vi.fn();
 const dispatchMock = vi.fn();
 
@@ -24,31 +29,6 @@ vi.mock("@/lib/db", () => ({
     },
     user: {
       findUnique: vi.fn().mockResolvedValue({ managedProfileAt: null }),
-    },
-    notificationEvent: {
-      findFirst: ({
-        where,
-      }: {
-        where: { recordUserId: string; dedupKey: string };
-      }) => {
-        const hit = ledger.find(
-          (r) =>
-            r.recordUserId === where.recordUserId &&
-            r.dedupKey === where.dedupKey,
-        );
-        return Promise.resolve(hit ? { id: "prior" } : null);
-      },
-      create: ({
-        data,
-      }: {
-        data: { recordUserId: string; dedupKey: string };
-      }) => {
-        ledger.push({
-          recordUserId: data.recordUserId,
-          dedupKey: data.dedupKey,
-        });
-        return Promise.resolve({});
-      },
     },
   },
 }));
@@ -63,6 +43,29 @@ vi.mock("@/lib/modules/gate", () => ({
 
 vi.mock("@/lib/notifications/dispatch-localised", () => ({
   dispatchLocalisedNotification: (...a: unknown[]) => dispatchMock(...a),
+}));
+
+vi.mock("@/lib/notifications/reminder-dedup", () => ({
+  claimNotificationEvent: (
+    _prisma: unknown,
+    input: {
+      recordUserId: string;
+      eventType: string;
+      dedupKey: string;
+      since: Date;
+    },
+  ) => {
+    const existing = ledger.find(
+      (event) =>
+        event.recordUserId === input.recordUserId &&
+        event.eventType === input.eventType &&
+        event.dedupKey === input.dedupKey &&
+        event.createdAt >= input.since,
+    );
+    if (existing) return Promise.resolve(false);
+    ledger.push({ ...input, createdAt: new Date() });
+    return Promise.resolve(true);
+  },
 }));
 
 import { runSafetyFloorCheck } from "../safety-floor-check";
