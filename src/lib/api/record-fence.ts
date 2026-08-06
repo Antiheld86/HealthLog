@@ -38,13 +38,23 @@
  * `/me` on every poll cycle, forever. Do not "tighten" this rule.
  *
  * The case mismatch-only appears to give up — a service-worker disk-cache hit
- * that predates the fence and therefore carries no echo — is closed elsewhere:
- * `public/sw.js` names its caches by the app release and its `activate` handler
- * deletes every `healthlog-(static|pages|data)-*` cache not in the current set,
- * so the deploy that ships the fence evicts every pre-fence cached response
- * before one can be served. A POST-fence cached record response does carry the
- * echo it was cached with, so replaying it after a switch is a mismatch and is
- * discarded.
+ * that predates the fence and therefore carries no echo — is closed by two
+ * other things, and it is worth being exact about which one does what:
+ *
+ *   * `public/sw.js` names its caches by the app release and its `activate`
+ *     handler deletes every `healthlog-(static|pages|data)-*` cache not in the
+ *     current set, so the deploy that ships the fence evicts every pre-fence
+ *     cached response before one can be served. Executed in
+ *     `e2e/v137-record-session-fence-offline.spec.ts`;
+ *   * a POST-fence cached record response is stored under a `Vary` on the two
+ *     fence headers (`attachRecordContextEcho`), so `cache.match()` will not
+ *     hand it to a request asserting a different context — or none. That is
+ *     what covers the EXTERNAL switch, where this browser never ran its own
+ *     cache wipe and the previous record's entries are still on disk. Also
+ *     executed in that spec, and it fails when the `Vary` is removed.
+ *
+ * The client-side discard below is the third layer, over responses that reach
+ * it. It is not what protects the disk.
  */
 
 import {

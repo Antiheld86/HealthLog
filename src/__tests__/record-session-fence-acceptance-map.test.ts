@@ -95,11 +95,11 @@ const CASES: AcceptanceCase[] = [
   },
   {
     id: "FENCE-AC-07",
-    case: "IndexedDB and CacheStorage seeded with an owner snapshot, switch in, go offline",
+    case: "CacheStorage seeded with one record's responses; the disk layer cannot serve them under another",
     home: "e2e/v137-record-session-fence-offline.spec.ts",
     runner: "playwright",
     instrument:
-      "Positive control first — the owner snapshot really was in CacheStorage before the switch, asserted by a non-zero entry count. Then the eviction claim of the cache-version policy, then a zero entry count after the switch, then offline with the target record still named. It lives in its own spec and its own Playwright project because every other project sets serviceWorkers: 'block', under which the data cache is never populated and the positive control could not pass whatever the application did.",
+      "Two tests, contents and serving, because the first alone is not the claim. CONTENTS: a non-zero seeded entry count as the positive control, the cache-version eviction, then every stored response carrying the target's scope and none the previous record's. SERVING: after an EXTERNAL switch — the path on which the app never runs its cache wipe, so the previous record's entries survive — cache.match() under the stored context hits (positive control) and under the new context misses. Removing the Vary block makes the serving test fail and leaves the contents test green, which is why both exist. NOT asserted: a zero entry count after a switch (the wipe is real but the reload refills it within milliseconds), and no offline leg — a bare page-context fetch cannot match a Vary-keyed entry, which is itself the property the serving test proves. Its own spec and its own Playwright project because every other project sets serviceWorkers: 'block', under which the data cache is never populated and the positive control could not pass whatever the application did.",
   },
   {
     id: "FENCE-AC-08",
