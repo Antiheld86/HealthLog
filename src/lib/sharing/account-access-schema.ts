@@ -61,6 +61,33 @@ export const accountAccessBlockSchema = z.object({
   canSwitch: z.boolean(),
 });
 
+/** Both published views of the active record must name the same resolved grant. */
+function matchesCanonicalAccountAccessEntry(
+  active: z.infer<typeof accountAccessEntrySchema>,
+  canonical: z.infer<typeof accountAccessEntrySchema>,
+): boolean {
+  const activeSections = active.sections;
+  const canonicalSections = canonical.sections;
+  const sameSections =
+    activeSections === null || canonicalSections === null
+      ? activeSections === canonicalSections
+      : activeSections.length === canonicalSections.length &&
+        activeSections.every(
+          (section, index) => section === canonicalSections[index],
+        );
+
+  return (
+    active.accountId === canonical.accountId &&
+    active.username === canonical.username &&
+    active.displayName === canonical.displayName &&
+    active.access === canonical.access &&
+    active.level === canonical.level &&
+    active.recordKind === canonical.recordKind &&
+    active.canWrite === canonical.canWrite &&
+    sameSections
+  );
+}
+
 /** Parse the server-resolved access block as a closed presentation contract. */
 export function parseAccountAccess(value: unknown): AccountAccess | null {
   const parsed = accountAccessBlockSchema.safeParse(value);
@@ -88,7 +115,12 @@ export function parseAccountAccess(value: unknown): AccountAccess | null {
   const canonicalActive = accounts.find(
     (entry) => entry.accountId === active.accountId,
   );
-  if (!canonicalActive) return null;
+  if (
+    !canonicalActive ||
+    !matchesCanonicalAccountAccessEntry(active, canonicalActive)
+  ) {
+    return null;
+  }
 
   return { accounts, active: canonicalActive, recordKind, canSwitch };
 }

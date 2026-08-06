@@ -64,6 +64,15 @@ test.describe.serial("scoped sharing browser journeys", () => {
       );
       await expect(entry).toHaveCount(1);
 
+      const unexpectedOcrCapability =
+        record.domain === "labs"
+          ? page.waitForRequest(
+              (request) =>
+                request.method() === "GET" &&
+                new URL(request.url()).pathname === "/api/labs/ocr/capability",
+              { timeout: 500 },
+            )
+          : null;
       const read = page.waitForResponse(
         (response) =>
           response.request().method() === "GET" &&
@@ -82,6 +91,9 @@ test.describe.serial("scoped sharing browser journeys", () => {
         page.locator('[data-slot="shared-record-unavailable"]'),
       ).toHaveCount(0);
       await read;
+      if (unexpectedOcrCapability) {
+        await expect(unexpectedOcrCapability).rejects.toThrow(/Timeout/);
+      }
 
       await leaveRecord(page);
     });

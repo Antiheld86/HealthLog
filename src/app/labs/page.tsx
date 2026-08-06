@@ -17,7 +17,10 @@ import {
 import { LabForm } from "@/components/labs/lab-form";
 import { LabList } from "@/components/labs/lab-list";
 import { OcrReviewDialog } from "@/components/labs/ocr-review-dialog";
-import { useOcrCapability } from "@/components/labs/use-ocr-extract";
+import {
+  shouldProbeOcrCapability,
+  useOcrCapability,
+} from "@/components/labs/use-ocr-extract";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -53,7 +56,6 @@ export default function LabsPage() {
   // v1.18.9 — Lab-OCR "Scan a report" dialog. The scan affordance only shows
   // when the user's configured AI provider can read images (capability probe).
   const [scanOpen, setScanOpen] = useState(false);
-  const ocrCapability = useOcrCapability(isAuthenticated);
 
   // Gated on the resolved `modules.labs` flag from `GET /api/auth/me` (the
   // per-user toggle AND the operator server-wide kill-switch). Default-on: an
@@ -61,6 +63,15 @@ export default function LabsPage() {
   // explicit `false`. Every `/api/labs/*` route also enforces the gate
   // server-side, so this is a UX redirect, not the security boundary.
   const enabled = inSharedRecord || user?.modules?.labs !== false;
+  const ocrCapability = useOcrCapability(
+    shouldProbeOcrCapability({
+      isAuthenticated,
+      isLoading,
+      labsEnabled: enabled,
+      mounted,
+      canManage,
+    }),
+  );
 
   const refreshVisible = useCallback(
     () => queryClient.invalidateQueries({ type: "active" }),

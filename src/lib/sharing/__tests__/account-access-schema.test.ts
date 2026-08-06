@@ -59,6 +59,31 @@ describe("parseAccountAccess", () => {
   });
 
   it.each([
+    [
+      "legacy access and resolved level",
+      { access: "write", level: "write", canWrite: true },
+      {},
+    ],
+    ["record kind", { recordKind: "managed" }, { recordKind: "managed" }],
+    ["scope", { sections: ["measurements"] }, {}],
+    [
+      "resolved write capability",
+      { access: "write", level: "write", canWrite: true },
+      {},
+    ],
+    ["username", { username: "different-record" }, {}],
+    ["display name", { displayName: "Different record" }, {}],
+  ])(
+    "fails closed when active disagrees with its canonical entry on %s",
+    (_field, activeOverrides, blockOverrides) => {
+      const active = { ...sharedEntry, ...activeOverrides };
+      const block = accessBlock({ active, ...blockOverrides });
+
+      expect(parseAccountAccess(block)).toBeNull();
+    },
+  );
+
+  it.each([
     ["unknown level", { level: "owner" }],
     ["unknown record kind", { recordKind: "other" }],
     ["unknown section", { sections: ["other"] }],
