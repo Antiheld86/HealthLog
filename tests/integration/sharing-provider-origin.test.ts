@@ -121,7 +121,10 @@ const resolveFromSharedRead: (request: NextRequest) => Promise<Response> =
   apiHandler(async () => {
     const { user } = await requireRecordAuth("manage", "record");
     const provider = await resolveProvider(user.id);
-    return NextResponse.json({ data: { provider: provider.type }, error: null });
+    return NextResponse.json({
+      data: { provider: provider.type },
+      error: null,
+    });
   });
 
 function runMutation(): Promise<Response> {

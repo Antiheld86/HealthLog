@@ -146,17 +146,21 @@ export async function enqueueStatusGeneration(
     return;
   }
   try {
-    await boss.send(INSIGHT_STATUS_GENERATE_QUEUE, { ...payload, authority }, {
-      singletonKey: `${payload.userId}:${payload.metric}`,
-      // De-dupe within a short window so a polling client doesn't enqueue
-      // a fresh job on every tick while a generation is already running.
-      singletonSeconds: 120,
-      // Transient provider / pool failures retry with backoff instead of
-      // leaving the card on "preparing" until the next nightly cron.
-      retryLimit: 3,
-      retryDelay: 60,
-      retryBackoff: true,
-    });
+    await boss.send(
+      INSIGHT_STATUS_GENERATE_QUEUE,
+      { ...payload, authority },
+      {
+        singletonKey: `${payload.userId}:${payload.metric}`,
+        // De-dupe within a short window so a polling client doesn't enqueue
+        // a fresh job on every tick while a generation is already running.
+        singletonSeconds: 120,
+        // Transient provider / pool failures retry with backoff instead of
+        // leaving the card on "preparing" until the next nightly cron.
+        retryLimit: 3,
+        retryDelay: 60,
+        retryBackoff: true,
+      },
+    );
     annotate({
       action: { name: "insights.status.generate.enqueued" },
       meta: { metric: payload.metric },

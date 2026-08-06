@@ -18,10 +18,7 @@ export interface ProviderWorkAuthority {
   grantId: string | null;
 }
 
-export type ProviderCredentialPolicy =
-  | "personal"
-  | "operator-default"
-  | "deny";
+export type ProviderCredentialPolicy = "personal" | "operator-default" | "deny";
 
 const workerAuthority = new AsyncLocalStorage<ProviderWorkAuthority>();
 

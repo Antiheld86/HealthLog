@@ -168,8 +168,7 @@ describe("shared intake import attribution", () => {
     const response = await getImportStatus(
       new NextRequest(
         `http://localhost/api/medications/${medication.id}/intake/import/${job.id}/status`,
-        {
-        },
+        {},
       ),
       { params: Promise.resolve({ id: medication.id, jobId: job.id }) },
     );
