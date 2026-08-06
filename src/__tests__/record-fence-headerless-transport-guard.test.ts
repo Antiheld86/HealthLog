@@ -29,12 +29,37 @@
  * `src={src}` is caught, because that is the shape the real offenders had and a
  * matcher that only read inline literals would have found two of the six and
  * reported success. It does NOT trace a path built by a helper, assembled
- * across two hops, or returned from a hook — a future offender in that shape
- * slips this guard. Said here rather than discovered later.
+ * across two hops, or returned from a hook.
  *
  * It also only knows the routes it can RESOLVE. A path whose route module it
  * cannot find is reported separately rather than silently passing, because an
  * unresolvable path is the one case where a green result would mean nothing.
+ *
+ * ### The blind spots, named
+ *
+ * Every one of these issues a browser request that carries no record-session
+ * assertion, and none of them is matched here. They are written down rather
+ * than matched because each is either absent from the tree today or costs more
+ * to detect than it currently buys — but a future offender in any of these
+ * shapes SLIPS this guard, and that is the thing to know before trusting a
+ * green run:
+ *
+ *   * `srcSet` on an `<img>` / `<source>`, and `poster` on a `<video>`;
+ *   * `<object data=…>` and `<embed src=…>`;
+ *   * `<form action="/api/…">`, which navigates on submit;
+ *   * `window.open("/api/…")`;
+ *   * `navigator.sendBeacon("/api/…")`, which is fire-and-forget and cannot
+ *     carry a custom header at all;
+ *   * a CSS `url("/api/…")` in a style attribute, a styled component, or a
+ *     stylesheet;
+ *   * props SPREAD onto an element (`<img {...props} />`) where the path
+ *     arrives from a caller;
+ *   * anything outside `src/components` and `src/app` — those are the only two
+ *     trees walked.
+ *
+ * The `element.src = "/api/…"` ASSIGNMENT form IS matched, because it is cheap
+ * and the tree already contains one (`umami-script.tsx`, an unfenced route, so
+ * no offender today — but it is proof the shape occurs here).
  */
 import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -210,6 +235,13 @@ function headerlessReferences(file: string, source: string): Reference[] {
   )) {
     record(m.index, "window.location", m[1] ?? m[2] ?? "");
   }
+  // The imperative form: `el.src = "/api/…"`. A JSX attribute is the common
+  // shape and the one the real offenders had, but a script or image built in
+  // an effect issues exactly the same headerless request — and the tree
+  // already contains that shape, so this is not a hypothetical.
+  for (const m of source.matchAll(/\.\s*(src|href)\s*=\s*([^;\n]+)/g)) {
+    record(m.index, `.${m[1]} =`, m[2]);
+  }
   return found;
 }
 
@@ -238,6 +270,22 @@ describe("no headerless browser transport reaches a fenced route", () => {
     expect(unresolved.map((r) => `${r.file}:${r.line} → ${r.path}`)).toEqual(
       [],
     );
+  });
+
+  it("matches the imperative `.src =` form, not only JSX attributes", () => {
+    // A new matcher that matches nothing is a check that cannot fail, so it is
+    // anchored to a real occurrence: the monitoring script builds its element
+    // in an effect and assigns `.src`. That route is UNFENCED, so it is not an
+    // offender — which is exactly why it makes a safe anchor, and why this leg
+    // asserts the reference is SEEN rather than that it is refused.
+    const assignments = references.filter((r) => r.sink === ".src =");
+    expect(assignments.length).toBeGreaterThan(0);
+    expect(assignments.map((r) => r.path)).toContain(
+      "/api/monitoring/umami-script",
+    );
+    expect(
+      resolveRouteModules("/api/monitoring/umami-script").some(isFenced),
+    ).toBe(false);
   });
 
   it("resolves a known fenced route, so the fenced check is live", () => {
