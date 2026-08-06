@@ -52,6 +52,7 @@
  * transition computed against the stale row.
  */
 import { prisma } from "@/lib/db";
+import { auditLog } from "@/lib/auth/audit";
 import { isP2002 } from "@/lib/prisma-errors";
 import { clearActingSessions } from "@/lib/sharing/acting-session";
 import {
@@ -469,6 +470,7 @@ export async function inviteManagedProfileGuardian(input: {
   profileId: string;
   guardianId: string;
   granteeId: string;
+  expiresAt?: Date | null;
 }): Promise<AccountGrant> {
   return prisma.$transaction(async (tx) => {
     return withManagedProfileLock(tx, input.profileId, async (profile) => {
@@ -485,16 +487,30 @@ export async function inviteManagedProfileGuardian(input: {
         select: { id: true },
       });
       if (!guardian) throw new ManagedProfileLifecycleError("not_guardian");
-      return inviteGrant(
+      const grantee = await tx.user.findUnique({
+        where: { id: input.granteeId },
+        select: { managedProfileAt: true },
+      });
+      if (grantee?.managedProfileAt) {
+        throw new ManagedProfileLifecycleError("managed_grantee");
+      }
+      const grant = await inviteGrant(
         {
           grantorId: profile.id,
           granteeId: input.granteeId,
           access: "MANAGE",
           scope: null,
-          expiresAt: null,
+          expiresAt: input.expiresAt ?? null,
         },
         tx,
       );
+      await auditLog("managed_profile.guardian.invited", {
+        userId: profile.id,
+        actorUserId: input.guardianId,
+        details: { grantId: grant.id },
+        client: tx,
+      });
+      return grant;
     });
   });
 }
@@ -524,28 +540,49 @@ export async function revokeManagedProfileGuardian(input: {
         where: {
           id: input.grantId,
           grantorId: profile.id,
-          ...activeGuardianWhere(new Date()),
+          access: "MANAGE",
+          revokedAt: null,
         },
-        select: { id: true, granteeId: true },
+        select: {
+          id: true,
+          granteeId: true,
+          acceptedAt: true,
+          expiresAt: true,
+        },
       });
       if (!target) throw new ManagedProfileLifecycleError("not_guardian");
       if (target.granteeId === input.guardianId) {
         throw new ManagedProfileLifecycleError("not_guardian");
       }
 
-      const activeGuardians = await tx.accountGrant.count({
-        where: { grantorId: profile.id, ...activeGuardianWhere(new Date()) },
-      });
-      if (activeGuardians <= 1) throw new LastManagedGuardianError();
+      const now = new Date();
+      const targetIsActive =
+        target.acceptedAt !== null &&
+        (target.expiresAt === null || target.expiresAt > now);
+      if (targetIsActive) {
+        const activeGuardians = await tx.accountGrant.count({
+          where: { grantorId: profile.id, ...activeGuardianWhere(now) },
+        });
+        if (activeGuardians <= 1) throw new LastManagedGuardianError();
+      }
 
       await tx.accountGrant.update({
         where: { id: target.id },
-        data: { revokedAt: new Date(), revokedBy: "GRANTOR" },
+        // `revokedBy` records which grant party withdrew access. The managed
+        // profile is the grantor; the individual Guardian is durable audit
+        // attribution below rather than an overloaded enum value.
+        data: { revokedAt: now, revokedBy: "GRANTOR" },
       });
       await clearActingSessions(
         { grantorId: profile.id, granteeId: target.granteeId },
         tx,
       );
+      await auditLog("managed_profile.guardian.revoked", {
+        userId: profile.id,
+        actorUserId: input.guardianId,
+        details: { grantId: target.id },
+        client: tx,
+      });
       return tx.accountGrant.findUniqueOrThrow({ where: { id: target.id } });
     });
   });

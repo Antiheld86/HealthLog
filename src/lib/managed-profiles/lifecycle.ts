@@ -12,7 +12,7 @@ export const activeGuardianWhere = (now: Date) => ({
 });
 
 export type ManagedProfileLifecycleErrorCode =
-  "not_found" | "not_managed" | "not_guardian";
+  "not_found" | "not_managed" | "not_guardian" | "managed_grantee";
 
 export class ManagedProfileLifecycleError extends Error {
   constructor(readonly code: ManagedProfileLifecycleErrorCode) {

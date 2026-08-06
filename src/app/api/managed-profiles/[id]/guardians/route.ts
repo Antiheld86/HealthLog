@@ -24,7 +24,10 @@ const INVITE_LIMIT = 10;
 const INVITE_WINDOW_MS = 60 * 60 * 1000;
 
 const guardianInviteSchema = z
-  .object({ identifier: z.string().trim().min(1).max(320) })
+  .object({
+    identifier: z.string().trim().min(1).max(255),
+    expiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
+  })
   .strict();
 
 /** Invite another Guardian from a cookie-backed, freshly verified session. */
@@ -63,6 +66,9 @@ export const POST = apiHandler(
         profileId: id,
         guardianId: user.id,
         granteeId: invitee.id,
+        expiresAt: parsed.data.expiresAt
+          ? new Date(parsed.data.expiresAt)
+          : null,
       });
       annotate({
         action: { name: "managed_profile.guardian.invited" },
@@ -81,6 +87,11 @@ export const POST = apiHandler(
         });
       }
       if (error instanceof ManagedProfileLifecycleError) {
+        if (error.code === "managed_grantee") {
+          return apiError("A managed profile cannot be a Guardian", 422, {
+            errorCode: "managed_profile.guardian.managed_invitee",
+          });
+        }
         return apiError("Managed profile not found", 404, {
           errorCode: "managed_profile.not_found",
         });

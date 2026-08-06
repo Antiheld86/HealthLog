@@ -144,7 +144,7 @@ afterEach(async () => {
     "DROP FUNCTION IF EXISTS fail_managed_profile_delete_audit()",
   );
   await prisma.$executeRawUnsafe(
-    'DROP TRIGGER IF EXISTS managed_guardian_audit_failure ON audit_logs',
+    "DROP TRIGGER IF EXISTS managed_guardian_audit_failure ON audit_logs",
   );
   await prisma.$executeRawUnsafe(
     "DROP FUNCTION IF EXISTS fail_managed_guardian_audit()",
@@ -291,10 +291,10 @@ describe("managed profile lifecycle (real Postgres)", () => {
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          identifier: secondGuardian.user.username,
-          expiresAt: invitationExpiry.toISOString(),
-        }),
+          body: JSON.stringify({
+            identifier: secondGuardian.user.username,
+            expiresAt: invitationExpiry.toISOString(),
+          }),
         },
       ),
       { params: Promise.resolve({ id: profile.id }) },
@@ -353,7 +353,12 @@ describe("managed profile lifecycle (real Postgres)", () => {
     const audit = await getPrismaClient().auditLog.findMany({
       where: {
         userId: profile.id,
-        action: { in: ["managed_profile.guardian.invited", "managed_profile.guardian.revoked"] },
+        action: {
+          in: [
+            "managed_profile.guardian.invited",
+            "managed_profile.guardian.revoked",
+          ],
+        },
       },
       orderBy: { createdAt: "asc" },
     });
@@ -379,19 +384,20 @@ describe("managed profile lifecycle (real Postgres)", () => {
       locale: "en",
       timezone: "UTC",
     });
-    const { POST: inviteGuardian } = await import(
-      "@/app/api/managed-profiles/[id]/guardians/route"
-    );
-    const { DELETE: revokeGuardian } = await import(
-      "@/app/api/managed-profiles/[id]/guardians/[grantId]/route"
-    );
+    const { POST: inviteGuardian } =
+      await import("@/app/api/managed-profiles/[id]/guardians/route");
+    const { DELETE: revokeGuardian } =
+      await import("@/app/api/managed-profiles/[id]/guardians/[grantId]/route");
     const invite = async () => {
       const response = await inviteGuardian(
-        new NextRequest(`http://localhost/api/managed-profiles/${profile.id}/guardians`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ identifier: secondGuardian.user.username }),
-        }),
+        new NextRequest(
+          `http://localhost/api/managed-profiles/${profile.id}/guardians`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ identifier: secondGuardian.user.username }),
+          },
+        ),
         { params: Promise.resolve({ id: profile.id }) },
       );
       expect(response.status).toBe(201);
@@ -435,21 +441,25 @@ describe("managed profile lifecycle (real Postgres)", () => {
       locale: "en",
       timezone: "UTC",
     });
-    const { POST: inviteGuardian } = await import(
-      "@/app/api/managed-profiles/[id]/guardians/route"
-    );
+    const { POST: inviteGuardian } =
+      await import("@/app/api/managed-profiles/[id]/guardians/route");
 
     const response = await inviteGuardian(
-      new NextRequest(`http://localhost/api/managed-profiles/${profile.id}/guardians`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ identifier: managedInvitee.username }),
-      }),
+      new NextRequest(
+        `http://localhost/api/managed-profiles/${profile.id}/guardians`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ identifier: managedInvitee.username }),
+        },
+      ),
       { params: Promise.resolve({ id: profile.id }) },
     );
     expect(response.status).toBe(422);
     expect(
-      await getPrismaClient().accountGrant.count({ where: { grantorId: profile.id } }),
+      await getPrismaClient().accountGrant.count({
+        where: { grantorId: profile.id },
+      }),
     ).toBe(1);
   });
 
@@ -469,18 +479,20 @@ describe("managed profile lifecycle (real Postgres)", () => {
       "CREATE FUNCTION fail_managed_guardian_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action = 'managed_profile.guardian.invited' THEN RAISE EXCEPTION 'managed Guardian audit failure'; END IF; RETURN NEW; END; $$",
     );
     await prisma.$executeRawUnsafe(
-      'CREATE TRIGGER managed_guardian_audit_failure BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION fail_managed_guardian_audit()',
+      "CREATE TRIGGER managed_guardian_audit_failure BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION fail_managed_guardian_audit()",
     );
-    const { POST: inviteGuardian } = await import(
-      "@/app/api/managed-profiles/[id]/guardians/route"
-    );
+    const { POST: inviteGuardian } =
+      await import("@/app/api/managed-profiles/[id]/guardians/route");
 
     const response = await inviteGuardian(
-      new NextRequest(`http://localhost/api/managed-profiles/${profile.id}/guardians`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ identifier: secondGuardian.user.username }),
-      }),
+      new NextRequest(
+        `http://localhost/api/managed-profiles/${profile.id}/guardians`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ identifier: secondGuardian.user.username }),
+        },
+      ),
       { params: Promise.resolve({ id: profile.id }) },
     );
     expect(response.status).toBe(500);
@@ -502,11 +514,10 @@ describe("managed profile lifecycle (real Postgres)", () => {
       "CREATE FUNCTION fail_managed_guardian_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action = 'managed_profile.guardian.revoked' THEN RAISE EXCEPTION 'managed Guardian audit failure'; END IF; RETURN NEW; END; $$",
     );
     await prisma.$executeRawUnsafe(
-      'CREATE TRIGGER managed_guardian_audit_failure BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION fail_managed_guardian_audit()',
+      "CREATE TRIGGER managed_guardian_audit_failure BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION fail_managed_guardian_audit()",
     );
-    const { DELETE: revokeGuardian } = await import(
-      "@/app/api/managed-profiles/[id]/guardians/[grantId]/route"
-    );
+    const { DELETE: revokeGuardian } =
+      await import("@/app/api/managed-profiles/[id]/guardians/[grantId]/route");
 
     const response = await revokeGuardian(
       new NextRequest(
@@ -517,7 +528,9 @@ describe("managed profile lifecycle (real Postgres)", () => {
     );
     expect(response.status).toBe(500);
     expect(
-      await prisma.accountGrant.findUniqueOrThrow({ where: { id: secondGrant.id } }),
+      await prisma.accountGrant.findUniqueOrThrow({
+        where: { id: secondGrant.id },
+      }),
     ).toMatchObject({ revokedAt: null });
     expect(
       await prisma.session.findUniqueOrThrow({
