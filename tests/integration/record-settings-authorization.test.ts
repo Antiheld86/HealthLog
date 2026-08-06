@@ -78,5 +78,8 @@ describe("record settings authorization", () => {
     expect(route).toContain("actorUserId: access.actorId");
     expect(route).toContain("details: { changed }");
     expect(route).not.toContain("details: { recordId:");
+    expect(route).toContain("invalidateUserMedications(access.recordId, {");
+    expect(route).toContain("invalidateUserHealthScore(access.recordId)");
+    expect(route).toContain("getAllEffectiveRanges(record, overrides)");
   });
 });

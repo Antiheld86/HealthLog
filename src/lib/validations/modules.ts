@@ -38,7 +38,7 @@ import {
  * opt into it gets a clean 422 rather than persisting an inert `true` the
  * gate would ignore anyway.
  */
-const WRITABLE_MODULE_KEYS = MODULE_KEYS.filter(
+export const WRITABLE_MODULE_KEYS = MODULE_KEYS.filter(
   (k) => moduleDelegatesTo(k) === undefined && !isCodeDisabledModule(k),
 );
 

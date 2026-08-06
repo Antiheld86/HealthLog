@@ -4434,6 +4434,76 @@
       }
     },
     "sharedRecord": {
+      "managedSettings": {
+        "profile": {
+          "title": "Profil",
+          "displayName": "Wyświetlana nazwa",
+          "height": "Wzrost (cm)",
+          "dateOfBirth": "Data urodzenia",
+          "gender": "Płeć",
+          "notSpecified": "Nie podano",
+          "male": "Mężczyzna",
+          "female": "Kobieta",
+          "other": "Inna",
+          "locale": "Język",
+          "systemDefault": "Ustawienie systemowe",
+          "timezone": "Strefa czasowa",
+          "units": "Jednostki",
+          "metric": "Metryczne",
+          "imperial": "Imperialne",
+          "timeFormat": "Format czasu",
+          "automatic": "Automatyczny",
+          "hour12": "12-godzinny",
+          "hour24": "24-godzinny",
+          "dateFormat": "Format daty",
+          "dateDmy": "Dzień / miesiąc / rok",
+          "dateMdy": "Miesiąc / dzień / rok",
+          "dateYmd": "Rok / miesiąc / dzień"
+        },
+        "modules": { "title": "Moduły" },
+        "notifications": {
+          "title": "Powiadomienia",
+          "moodReminder": "Włącz przypomnienie nastroju",
+          "reminderHour": "Godzina przypomnienia nastroju",
+          "lowStockRunwayDays": "Dni do niskiego stanu zapasów",
+          "reorderLeadDays": "Wyprzedzenie ponownego zamówienia"
+        },
+        "thresholds": {
+          "title": "Cele",
+          "metric": "Metryka",
+          "minimum": "Minimum",
+          "maximum": "Maksimum"
+        },
+        "coach": {
+          "title": "Trener",
+          "disable": "Wyłącz trenera",
+          "tone": "Ton",
+          "warm": "Ciepły",
+          "neutral": "Neutralny",
+          "concise": "Zwięzły",
+          "verbosity": "Szczegółowość",
+          "brief": "Krótka",
+          "default": "Domyślna",
+          "detailed": "Szczegółowa",
+          "defaultWindow": "Domyślny okres",
+          "last7days": "Ostatnie 7 dni",
+          "last30days": "Ostatnie 30 dni",
+          "last90days": "Ostatnie 90 dni",
+          "allTime": "Cały okres",
+          "showEvidence": "Domyślnie pokazuj źródła",
+          "excludedMetrics": "Wykluczone metryki",
+          "dataClusters": "Grupy danych",
+          "customClusters": "Użyj własnego wyboru grup",
+          "value": "{value}"
+        },
+        "insights": {
+          "title": "Wnioski",
+          "sections": "Sekcje przeglądu",
+          "tiles": "Kafelki nawigacji",
+          "item": "{id}",
+          "order": "Kolejność"
+        }
+      },
       "unavailableTitle": "Niedostępne w tym udostępnionym rekordzie",
       "unavailableDescription": "Ten obszar Ustawień jest celowo niedostępny podczas przeglądania rekordu innej osoby.",
       "integrationStatusDescription": "Stan połączenia dla tego zarządzanego rekordu. Elementy sterujące połączeniem są niedostępne."

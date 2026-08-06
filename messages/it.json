@@ -4434,6 +4434,76 @@
       }
     },
     "sharedRecord": {
+      "managedSettings": {
+        "profile": {
+          "title": "Profilo",
+          "displayName": "Nome visualizzato",
+          "height": "Altezza (cm)",
+          "dateOfBirth": "Data di nascita",
+          "gender": "Genere",
+          "notSpecified": "Non specificato",
+          "male": "Uomo",
+          "female": "Donna",
+          "other": "Altro",
+          "locale": "Lingua",
+          "systemDefault": "Predefinito di sistema",
+          "timezone": "Fuso orario",
+          "units": "Unità",
+          "metric": "Metrico",
+          "imperial": "Imperiale",
+          "timeFormat": "Formato ora",
+          "automatic": "Automatico",
+          "hour12": "12 ore",
+          "hour24": "24 ore",
+          "dateFormat": "Formato data",
+          "dateDmy": "Giorno / mese / anno",
+          "dateMdy": "Mese / giorno / anno",
+          "dateYmd": "Anno / mese / giorno"
+        },
+        "modules": { "title": "Moduli" },
+        "notifications": {
+          "title": "Notifiche",
+          "moodReminder": "Attiva promemoria dell’umore",
+          "reminderHour": "Ora del promemoria dell’umore",
+          "lowStockRunwayDays": "Giorni prima delle scorte basse",
+          "reorderLeadDays": "Margine per il riordino"
+        },
+        "thresholds": {
+          "title": "Obiettivi",
+          "metric": "Metrica",
+          "minimum": "Minimo",
+          "maximum": "Massimo"
+        },
+        "coach": {
+          "title": "Coach",
+          "disable": "Disattiva Coach",
+          "tone": "Tono",
+          "warm": "Caldo",
+          "neutral": "Neutro",
+          "concise": "Conciso",
+          "verbosity": "Livello di dettaglio",
+          "brief": "Breve",
+          "default": "Predefinito",
+          "detailed": "Dettagliato",
+          "defaultWindow": "Periodo predefinito",
+          "last7days": "Ultimi 7 giorni",
+          "last30days": "Ultimi 30 giorni",
+          "last90days": "Ultimi 90 giorni",
+          "allTime": "Tutto il periodo",
+          "showEvidence": "Mostra le fonti per impostazione predefinita",
+          "excludedMetrics": "Metriche escluse",
+          "dataClusters": "Gruppi di dati",
+          "customClusters": "Usa una selezione personalizzata di gruppi",
+          "value": "{value}"
+        },
+        "insights": {
+          "title": "Analisi",
+          "sections": "Sezioni della panoramica",
+          "tiles": "Riquadri di navigazione",
+          "item": "{id}",
+          "order": "Ordine"
+        }
+      },
       "unavailableTitle": "Non disponibile in questo record condiviso",
       "unavailableDescription": "Questa area delle Impostazioni non è disponibile intenzionalmente mentre visualizzi il record di un’altra persona.",
       "integrationStatusDescription": "Stato di connessione per questo record gestito. I controlli di connessione non sono disponibili."

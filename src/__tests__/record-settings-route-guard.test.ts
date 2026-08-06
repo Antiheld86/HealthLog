@@ -57,5 +57,10 @@ describe("record settings route guard", () => {
     for (const family of families) {
       expect(source).toContain(`case \"${family}\"`);
     }
+    expect(source).toContain("if (!isManagedRecordSettingsFamily(rawFamily))");
+    expect(source).toContain('apiError("Settings family not found", 404)');
+    expect(
+      source.indexOf("isManagedRecordSettingsFamily(rawFamily)"),
+    ).toBeLessThan(source.indexOf("const context = await requireGuardianAuth"));
   });
 });

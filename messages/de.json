@@ -4434,6 +4434,76 @@
       }
     },
     "sharedRecord": {
+      "managedSettings": {
+        "profile": {
+          "title": "Profil",
+          "displayName": "Anzeigename",
+          "height": "Größe (cm)",
+          "dateOfBirth": "Geburtsdatum",
+          "gender": "Geschlecht",
+          "notSpecified": "Nicht angegeben",
+          "male": "Männlich",
+          "female": "Weiblich",
+          "other": "Andere Angabe",
+          "locale": "Sprache",
+          "systemDefault": "Systemstandard",
+          "timezone": "Zeitzone",
+          "units": "Einheiten",
+          "metric": "Metrisch",
+          "imperial": "Imperial",
+          "timeFormat": "Zeitformat",
+          "automatic": "Automatisch",
+          "hour12": "12 Stunden",
+          "hour24": "24 Stunden",
+          "dateFormat": "Datumsformat",
+          "dateDmy": "Tag / Monat / Jahr",
+          "dateMdy": "Monat / Tag / Jahr",
+          "dateYmd": "Jahr / Monat / Tag"
+        },
+        "modules": { "title": "Module" },
+        "notifications": {
+          "title": "Benachrichtigungen",
+          "moodReminder": "Stimmungserinnerung aktivieren",
+          "reminderHour": "Uhrzeit der Stimmungserinnerung",
+          "lowStockRunwayDays": "Tage bis zum niedrigen Bestand",
+          "reorderLeadDays": "Vorlaufzeit für Nachbestellung"
+        },
+        "thresholds": {
+          "title": "Zielwerte",
+          "metric": "Messwert",
+          "minimum": "Minimum",
+          "maximum": "Maximum"
+        },
+        "coach": {
+          "title": "Coach",
+          "disable": "Coach deaktivieren",
+          "tone": "Ton",
+          "warm": "Herzlich",
+          "neutral": "Neutral",
+          "concise": "Knapp",
+          "verbosity": "Ausführlichkeit",
+          "brief": "Kurz",
+          "default": "Standard",
+          "detailed": "Ausführlich",
+          "defaultWindow": "Standardzeitraum",
+          "last7days": "Letzte 7 Tage",
+          "last30days": "Letzte 30 Tage",
+          "last90days": "Letzte 90 Tage",
+          "allTime": "Gesamter Zeitraum",
+          "showEvidence": "Evidenz standardmäßig anzeigen",
+          "excludedMetrics": "Ausgeschlossene Messwerte",
+          "dataClusters": "Datenbereiche",
+          "customClusters": "Eigene Auswahl von Datenbereichen verwenden",
+          "value": "{value}"
+        },
+        "insights": {
+          "title": "Erkenntnisse",
+          "sections": "Übersichtsbereiche",
+          "tiles": "Navigationskacheln",
+          "item": "{id}",
+          "order": "Reihenfolge"
+        }
+      },
       "unavailableTitle": "In diesem geteilten Datensatz nicht verfügbar",
       "unavailableDescription": "Dieser Einstellungsbereich ist beim Anzeigen des Datensatzes einer anderen Person bewusst nicht verfügbar.",
       "integrationStatusDescription": "Verbindungsstatus für diesen verwalteten Datensatz. Verbindungssteuerungen sind nicht verfügbar."

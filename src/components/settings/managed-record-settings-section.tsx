@@ -7,12 +7,19 @@ import { Settings } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { apiGet, apiPatch } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
+import { MODULE_REGISTRY } from "@/lib/modules/registry";
 import { queryKeys } from "@/lib/query-keys";
 import {
   assertRecordSettingsResponseForRecord,
+  MANAGED_RECORD_SETTINGS_MODULE_DEFAULTS,
   safeParseManagedRecordSettingsPatch,
   type ManagedRecordSettingsFamily,
 } from "@/lib/record-settings";
+import {
+  METRIC_BOUNDS,
+  type ThresholdMetric,
+} from "@/lib/analytics/effective-range";
+import { ALL_METRICS } from "@/lib/validations/thresholds";
 import { Button } from "@/components/ui/button";
 import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { SettingsCardHeader } from "./_card-header";
@@ -60,6 +67,22 @@ const COACH_DATA_CLUSTERS = [
   "mobility",
   "environment",
 ] as const;
+const METRIC_LABEL_KEYS: Record<ThresholdMetric, string> = {
+  WEIGHT: "thresholds.metricWeight",
+  BLOOD_PRESSURE_SYS: "thresholds.metricBpSys",
+  BLOOD_PRESSURE_DIA: "thresholds.metricBpDia",
+  PULSE: "thresholds.metricPulse",
+  BODY_FAT: "thresholds.metricBodyFat",
+  SLEEP_DURATION: "thresholds.metricSleep",
+  ACTIVITY_STEPS: "thresholds.metricSteps",
+  BLOOD_GLUCOSE_FASTING: "thresholds.metricGlucoseFasting",
+  BLOOD_GLUCOSE_POSTPRANDIAL: "thresholds.metricGlucosePostprandial",
+  BLOOD_GLUCOSE_RANDOM: "thresholds.metricGlucoseRandom",
+  BLOOD_GLUCOSE_BEDTIME: "thresholds.metricGlucoseBedtime",
+  TOTAL_BODY_WATER: "thresholds.metricBodyWater",
+  BONE_MASS: "thresholds.metricBoneMass",
+  OXYGEN_SATURATION: "thresholds.metricOxygenSaturation",
+};
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -100,6 +123,7 @@ function ProfileSettingsForm({
   onSave,
   saveLabel,
 }: SettingsFormProps) {
+  const { t } = useTranslations();
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -121,7 +145,7 @@ function ProfileSettingsForm({
   return (
     <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={submit}>
       <label className="grid gap-1 text-sm" htmlFor="managed-display-name">
-        Display name
+        {t("settings.sharedRecord.managedSettings.profile.displayName")}
         <input
           className="border-input bg-background rounded-md border px-3 py-2"
           defaultValue={asString(settings.displayName)}
@@ -131,7 +155,7 @@ function ProfileSettingsForm({
         />
       </label>
       <label className="grid gap-1 text-sm" htmlFor="managed-height">
-        Height (cm)
+        {t("settings.sharedRecord.managedSettings.profile.height")}
         <input
           className="border-input bg-background rounded-md border px-3 py-2"
           defaultValue={
@@ -146,7 +170,7 @@ function ProfileSettingsForm({
         />
       </label>
       <label className="grid gap-1 text-sm" htmlFor="managed-date-of-birth">
-        Date of birth
+        {t("settings.sharedRecord.managedSettings.profile.dateOfBirth")}
         <input
           className="border-input bg-background rounded-md border px-3 py-2"
           defaultValue={asString(settings.dateOfBirth)}
@@ -157,7 +181,7 @@ function ProfileSettingsForm({
         />
       </label>
       <label className="grid gap-1 text-sm" htmlFor="managed-gender">
-        Gender
+        {t("settings.sharedRecord.managedSettings.profile.gender")}
         <select
           className="border-input bg-background rounded-md border px-3 py-2"
           defaultValue={asString(settings.gender)}
@@ -165,14 +189,22 @@ function ProfileSettingsForm({
           id="managed-gender"
           name="gender"
         >
-          <option value="">Not specified</option>
-          <option value="MALE">Male</option>
-          <option value="FEMALE">Female</option>
-          <option value="OTHER">Other</option>
+          <option value="">
+            {t("settings.sharedRecord.managedSettings.profile.notSpecified")}
+          </option>
+          <option value="MALE">
+            {t("settings.sharedRecord.managedSettings.profile.male")}
+          </option>
+          <option value="FEMALE">
+            {t("settings.sharedRecord.managedSettings.profile.female")}
+          </option>
+          <option value="OTHER">
+            {t("settings.sharedRecord.managedSettings.profile.other")}
+          </option>
         </select>
       </label>
       <label className="grid gap-1 text-sm" htmlFor="managed-locale">
-        Locale
+        {t("settings.sharedRecord.managedSettings.profile.locale")}
         <select
           className="border-input bg-background rounded-md border px-3 py-2"
           defaultValue={asString(settings.locale)}
@@ -180,7 +212,9 @@ function ProfileSettingsForm({
           id="managed-locale"
           name="locale"
         >
-          <option value="">System default</option>
+          <option value="">
+            {t("settings.sharedRecord.managedSettings.profile.systemDefault")}
+          </option>
           {["de", "en", "es", "fr", "it", "pl"].map((locale) => (
             <option key={locale} value={locale}>
               {locale}
@@ -189,7 +223,7 @@ function ProfileSettingsForm({
         </select>
       </label>
       <label className="grid gap-1 text-sm" htmlFor="managed-timezone">
-        Timezone
+        {t("settings.sharedRecord.managedSettings.profile.timezone")}
         <input
           className="border-input bg-background rounded-md border px-3 py-2"
           defaultValue={asString(settings.timezone, "Europe/Berlin")}
@@ -200,7 +234,7 @@ function ProfileSettingsForm({
         />
       </label>
       <label className="grid gap-1 text-sm" htmlFor="managed-units">
-        Units
+        {t("settings.sharedRecord.managedSettings.profile.units")}
         <select
           className="border-input bg-background rounded-md border px-3 py-2"
           defaultValue={asString(settings.unitPreference, "metric")}
@@ -208,12 +242,16 @@ function ProfileSettingsForm({
           id="managed-units"
           name="unitPreference"
         >
-          <option value="metric">Metric</option>
-          <option value="imperial">Imperial</option>
+          <option value="metric">
+            {t("settings.sharedRecord.managedSettings.profile.metric")}
+          </option>
+          <option value="imperial">
+            {t("settings.sharedRecord.managedSettings.profile.imperial")}
+          </option>
         </select>
       </label>
       <label className="grid gap-1 text-sm" htmlFor="managed-time-format">
-        Time format
+        {t("settings.sharedRecord.managedSettings.profile.timeFormat")}
         <select
           className="border-input bg-background rounded-md border px-3 py-2"
           defaultValue={asString(settings.timeFormat, "AUTO")}
@@ -221,13 +259,19 @@ function ProfileSettingsForm({
           id="managed-time-format"
           name="timeFormat"
         >
-          <option value="AUTO">Automatic</option>
-          <option value="H12">12-hour</option>
-          <option value="H24">24-hour</option>
+          <option value="AUTO">
+            {t("settings.sharedRecord.managedSettings.profile.automatic")}
+          </option>
+          <option value="H12">
+            {t("settings.sharedRecord.managedSettings.profile.hour12")}
+          </option>
+          <option value="H24">
+            {t("settings.sharedRecord.managedSettings.profile.hour24")}
+          </option>
         </select>
       </label>
       <label className="grid gap-1 text-sm" htmlFor="managed-date-format">
-        Date format
+        {t("settings.sharedRecord.managedSettings.profile.dateFormat")}
         <select
           className="border-input bg-background rounded-md border px-3 py-2"
           defaultValue={asString(settings.dateFormat, "AUTO")}
@@ -235,10 +279,18 @@ function ProfileSettingsForm({
           id="managed-date-format"
           name="dateFormat"
         >
-          <option value="AUTO">Automatic</option>
-          <option value="DMY">Day / month / year</option>
-          <option value="MDY">Month / day / year</option>
-          <option value="YMD">Year / month / day</option>
+          <option value="AUTO">
+            {t("settings.sharedRecord.managedSettings.profile.automatic")}
+          </option>
+          <option value="DMY">
+            {t("settings.sharedRecord.managedSettings.profile.dateDmy")}
+          </option>
+          <option value="MDY">
+            {t("settings.sharedRecord.managedSettings.profile.dateMdy")}
+          </option>
+          <option value="YMD">
+            {t("settings.sharedRecord.managedSettings.profile.dateYmd")}
+          </option>
         </select>
       </label>
       <div className="sm:col-span-2">
@@ -254,10 +306,12 @@ function ModulesSettingsForm({
   onSave,
   saveLabel,
 }: SettingsFormProps) {
+  const { t } = useTranslations();
   const preferences = asRecord(settings.modulePreferences);
-  const entries = Object.entries(preferences).sort(([left], [right]) =>
-    left.localeCompare(right),
-  );
+  const entries = Object.entries(MANAGED_RECORD_SETTINGS_MODULE_DEFAULTS) as [
+    keyof typeof MANAGED_RECORD_SETTINGS_MODULE_DEFAULTS,
+    boolean,
+  ][];
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -271,15 +325,19 @@ function ModulesSettingsForm({
 
   return (
     <form className="mt-4 space-y-3" onSubmit={submit}>
-      {entries.map(([key, enabled]) => (
+      {entries.map(([key, defaultEnabled]) => (
         <label className="flex items-center gap-3 text-sm" key={key}>
           <input
-            defaultChecked={enabled === true}
+            defaultChecked={
+              preferences[key] === undefined
+                ? defaultEnabled
+                : preferences[key] === true
+            }
             disabled={disabled}
             name={key}
             type="checkbox"
           />
-          {key}
+          {t(MODULE_REGISTRY[key].labelKey)}
         </label>
       ))}
       <SaveButton disabled={disabled} label={saveLabel} />
@@ -293,6 +351,7 @@ function NotificationsSettingsForm({
   onSave,
   saveLabel,
 }: SettingsFormProps) {
+  const { t } = useTranslations();
   const preferences = asRecord(settings.notificationPreferences);
   const medication = asRecord(preferences.medication);
   const mood = asRecord(preferences.mood);
@@ -324,10 +383,10 @@ function NotificationsSettingsForm({
           name="moodReminderEnabled"
           type="checkbox"
         />
-        Enable mood reminder
+        {t("settings.sharedRecord.managedSettings.notifications.moodReminder")}
       </label>
       <label className="grid gap-1 text-sm" htmlFor="managed-reminder-hour">
-        Mood reminder hour
+        {t("settings.sharedRecord.managedSettings.notifications.reminderHour")}
         <input
           className="border-input bg-background rounded-md border px-3 py-2"
           defaultValue={asNumber(mood.reminderHour, 22)}
@@ -340,7 +399,9 @@ function NotificationsSettingsForm({
         />
       </label>
       <label className="grid gap-1 text-sm" htmlFor="managed-low-stock">
-        Low-stock runway days
+        {t(
+          "settings.sharedRecord.managedSettings.notifications.lowStockRunwayDays",
+        )}
         <input
           className="border-input bg-background rounded-md border px-3 py-2"
           defaultValue={
@@ -357,7 +418,9 @@ function NotificationsSettingsForm({
         />
       </label>
       <label className="grid gap-1 text-sm" htmlFor="managed-reorder-lead">
-        Reorder lead days
+        {t(
+          "settings.sharedRecord.managedSettings.notifications.reorderLeadDays",
+        )}
         <input
           className="border-input bg-background rounded-md border px-3 py-2"
           defaultValue={asNumber(medication.reorderLeadDays, 10)}
@@ -382,20 +445,30 @@ function ThresholdsSettingsForm({
   onSave,
   saveLabel,
 }: SettingsFormProps) {
+  const { t } = useTranslations();
   const overrides = asRecord(settings.overrides);
-  const metrics = Object.keys(overrides);
-  const metric = metrics[0] ?? "WEIGHT";
-  const firstRange = asRecord(overrides[metric]);
+  const effective = asRecord(settings.effective);
+  const [metric, setMetric] = useState<ThresholdMetric>(ALL_METRICS[0]);
+  const overrideRange = asRecord(overrides[metric]);
+  const defaultRange = asRecord(asRecord(effective[metric]).range);
+  const bounds = METRIC_BOUNDS[metric];
+  const minimum = asNumber(
+    overrideRange.min,
+    asNumber(defaultRange.greenMin, bounds.min),
+  );
+  const maximum = asNumber(
+    overrideRange.max,
+    asNumber(defaultRange.greenMax, bounds.max),
+  );
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const selectedMetric = asString(form.get("metric"), metric);
     onSave({
       overrides: {
-        [selectedMetric]: {
-          min: formNumber(form, "minimum", asNumber(firstRange.min, 0)),
-          max: formNumber(form, "maximum", asNumber(firstRange.max, 0)),
+        [metric]: {
+          min: formNumber(form, "minimum", minimum),
+          max: formNumber(form, "maximum", maximum),
         },
       },
     });
@@ -404,40 +477,43 @@ function ThresholdsSettingsForm({
   return (
     <form className="mt-4 grid gap-4 sm:grid-cols-3" onSubmit={submit}>
       <label className="grid gap-1 text-sm" htmlFor="managed-threshold-metric">
-        Metric
+        {t("settings.sharedRecord.managedSettings.thresholds.metric")}
         <select
           className="border-input bg-background rounded-md border px-3 py-2"
-          defaultValue={metric}
+          onChange={(event) => setMetric(event.target.value as ThresholdMetric)}
+          value={metric}
           disabled={disabled}
           id="managed-threshold-metric"
           name="metric"
         >
-          {[...new Set([metric, ...metrics])].map((entry) => (
+          {ALL_METRICS.map((entry) => (
             <option key={entry} value={entry}>
-              {entry}
+              {t(METRIC_LABEL_KEYS[entry])}
             </option>
           ))}
         </select>
       </label>
       <label className="grid gap-1 text-sm" htmlFor="managed-threshold-minimum">
-        Minimum
+        {t("settings.sharedRecord.managedSettings.thresholds.minimum")}
         <input
           className="border-input bg-background rounded-md border px-3 py-2"
-          defaultValue={asNumber(firstRange.min, 0)}
+          defaultValue={minimum}
           disabled={disabled}
           id="managed-threshold-minimum"
+          key={`${metric}-minimum`}
           name="minimum"
           required
           type="number"
         />
       </label>
       <label className="grid gap-1 text-sm" htmlFor="managed-threshold-maximum">
-        Maximum
+        {t("settings.sharedRecord.managedSettings.thresholds.maximum")}
         <input
           className="border-input bg-background rounded-md border px-3 py-2"
-          defaultValue={asNumber(firstRange.max, 0)}
+          defaultValue={maximum}
           disabled={disabled}
           id="managed-threshold-maximum"
+          key={`${metric}-maximum`}
           name="maximum"
           required
           type="number"
@@ -456,6 +532,7 @@ function CoachSettingsForm({
   onSave,
   saveLabel,
 }: SettingsFormProps) {
+  const { t } = useTranslations();
   const preferences = asRecord(settings.preferences);
   const excluded = new Set(asStringArray(preferences.excludeMetrics));
   const dataClusters = new Set(asStringArray(preferences.dataClusters));
@@ -493,11 +570,11 @@ function CoachSettingsForm({
           name="disableCoach"
           type="checkbox"
         />
-        Disable Coach
+        {t("settings.sharedRecord.managedSettings.coach.disable")}
       </label>
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="grid gap-1 text-sm" htmlFor="managed-coach-tone">
-          Tone
+          {t("settings.sharedRecord.managedSettings.coach.tone")}
           <select
             className="border-input bg-background rounded-md border px-3 py-2"
             defaultValue={asString(preferences.tone, "warm")}
@@ -505,13 +582,19 @@ function CoachSettingsForm({
             id="managed-coach-tone"
             name="tone"
           >
-            <option value="warm">Warm</option>
-            <option value="neutral">Neutral</option>
-            <option value="concise">Concise</option>
+            <option value="warm">
+              {t("settings.sharedRecord.managedSettings.coach.warm")}
+            </option>
+            <option value="neutral">
+              {t("settings.sharedRecord.managedSettings.coach.neutral")}
+            </option>
+            <option value="concise">
+              {t("settings.sharedRecord.managedSettings.coach.concise")}
+            </option>
           </select>
         </label>
         <label className="grid gap-1 text-sm" htmlFor="managed-coach-verbosity">
-          Verbosity
+          {t("settings.sharedRecord.managedSettings.coach.verbosity")}
           <select
             className="border-input bg-background rounded-md border px-3 py-2"
             defaultValue={asString(preferences.verbosity, "default")}
@@ -519,13 +602,19 @@ function CoachSettingsForm({
             id="managed-coach-verbosity"
             name="verbosity"
           >
-            <option value="brief">Brief</option>
-            <option value="default">Default</option>
-            <option value="detailed">Detailed</option>
+            <option value="brief">
+              {t("settings.sharedRecord.managedSettings.coach.brief")}
+            </option>
+            <option value="default">
+              {t("settings.sharedRecord.managedSettings.coach.default")}
+            </option>
+            <option value="detailed">
+              {t("settings.sharedRecord.managedSettings.coach.detailed")}
+            </option>
           </select>
         </label>
         <label className="grid gap-1 text-sm" htmlFor="managed-coach-window">
-          Default window
+          {t("settings.sharedRecord.managedSettings.coach.defaultWindow")}
           <select
             className="border-input bg-background rounded-md border px-3 py-2"
             defaultValue={asString(preferences.defaultWindow, "allTime")}
@@ -533,10 +622,18 @@ function CoachSettingsForm({
             id="managed-coach-window"
             name="defaultWindow"
           >
-            <option value="last7days">Last 7 days</option>
-            <option value="last30days">Last 30 days</option>
-            <option value="last90days">Last 90 days</option>
-            <option value="allTime">All time</option>
+            <option value="last7days">
+              {t("settings.sharedRecord.managedSettings.coach.last7days")}
+            </option>
+            <option value="last30days">
+              {t("settings.sharedRecord.managedSettings.coach.last30days")}
+            </option>
+            <option value="last90days">
+              {t("settings.sharedRecord.managedSettings.coach.last90days")}
+            </option>
+            <option value="allTime">
+              {t("settings.sharedRecord.managedSettings.coach.allTime")}
+            </option>
           </select>
         </label>
       </div>
@@ -547,10 +644,12 @@ function CoachSettingsForm({
           name="showEvidenceByDefault"
           type="checkbox"
         />
-        Show evidence by default
+        {t("settings.sharedRecord.managedSettings.coach.showEvidence")}
       </label>
       <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Excluded metrics</legend>
+        <legend className="text-sm font-medium">
+          {t("settings.sharedRecord.managedSettings.coach.excludedMetrics")}
+        </legend>
         {COACH_EXCLUDE_METRICS.map((metric) => (
           <label
             className="mr-4 inline-flex items-center gap-2 text-sm"
@@ -562,12 +661,16 @@ function CoachSettingsForm({
               name={`exclude-${metric}`}
               type="checkbox"
             />
-            {metric}
+            {t("settings.sharedRecord.managedSettings.coach.value", {
+              value: metric,
+            })}
           </label>
         ))}
       </fieldset>
       <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Data clusters</legend>
+        <legend className="text-sm font-medium">
+          {t("settings.sharedRecord.managedSettings.coach.dataClusters")}
+        </legend>
         <label className="mb-2 flex items-center gap-2 text-sm">
           <input
             defaultChecked={Array.isArray(preferences.dataClusters)}
@@ -575,7 +678,7 @@ function CoachSettingsForm({
             name="useCustomClusters"
             type="checkbox"
           />
-          Use a custom cluster selection
+          {t("settings.sharedRecord.managedSettings.coach.customClusters")}
         </label>
         {COACH_DATA_CLUSTERS.map((cluster) => (
           <label
@@ -588,7 +691,9 @@ function CoachSettingsForm({
               name={`cluster-${cluster}`}
               type="checkbox"
             />
-            {cluster}
+            {t("settings.sharedRecord.managedSettings.coach.value", {
+              value: cluster,
+            })}
           </label>
         ))}
       </fieldset>
@@ -622,6 +727,7 @@ function InsightsSettingsForm({
   onSave,
   saveLabel,
 }: SettingsFormProps) {
+  const { t } = useTranslations();
   const layout = asRecord(settings.layout);
   const sections = layoutItems(layout.sections);
   const tiles = layoutItems(layout.tiles);
@@ -646,7 +752,9 @@ function InsightsSettingsForm({
   const renderItems = (kind: "section" | "tile", items: LayoutItem[]) => (
     <fieldset className="space-y-2">
       <legend className="text-sm font-medium">
-        {kind === "section" ? "Overview sections" : "Navigation tiles"}
+        {kind === "section"
+          ? t("settings.sharedRecord.managedSettings.insights.sections")
+          : t("settings.sharedRecord.managedSettings.insights.tiles")}
       </legend>
       {items.map((item) => (
         <div className="flex items-center gap-3 text-sm" key={item.id}>
@@ -657,13 +765,15 @@ function InsightsSettingsForm({
               name={`${kind}-visible-${item.id}`}
               type="checkbox"
             />
-            {item.id}
+            {t("settings.sharedRecord.managedSettings.insights.item", {
+              id: item.id,
+            })}
           </label>
           <label
             className="flex items-center gap-2"
             htmlFor={`${kind}-order-${item.id}`}
           >
-            Order
+            {t("settings.sharedRecord.managedSettings.insights.order")}
             <input
               className="border-input bg-background w-16 rounded-md border px-2 py-1"
               defaultValue={item.order}
@@ -770,7 +880,7 @@ export function ManagedRecordSettingsSection({
     <SettingsCard aria-busy={query.isLoading}>
       <SettingsCardHeader
         icon={Settings}
-        title={t(`settings.sections.${family}.title`)}
+        title={t(`settings.sharedRecord.managedSettings.${family}.title`)}
       />
       {query.data ? (
         <>

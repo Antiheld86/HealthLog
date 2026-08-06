@@ -14,11 +14,16 @@ import {
 } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
 import {
+  invalidateUserHealthScore,
   invalidateUserInsightsLayout,
+  invalidateUserMedications,
   invalidateUserProfile,
 } from "@/lib/cache/invalidate";
 import { prisma, toJson } from "@/lib/db";
-import { type ThresholdOverridesJson } from "@/lib/analytics/effective-range";
+import {
+  getAllEffectiveRanges,
+  type ThresholdOverridesJson,
+} from "@/lib/analytics/effective-range";
 import {
   isManagedRecordSettingsFamily,
   managedModulePreferencesFrom,
@@ -117,11 +122,15 @@ export const GET = apiHandler(
         };
         break;
       }
-      case "thresholds":
+      case "thresholds": {
+        const overrides = (record.thresholdsJson ??
+          {}) as ThresholdOverridesJson;
         settings = {
-          overrides: (record.thresholdsJson ?? {}) as ThresholdOverridesJson,
+          overrides,
+          effective: getAllEffectiveRanges(record, overrides),
         };
         break;
+      }
       case "coach": {
         const preferences = parseCoachPrefs(record.coachPrefsJson);
         settings = {
@@ -211,6 +220,9 @@ export const PATCH = apiHandler(
             },
           });
           invalidateUserProfile(access.recordId);
+          if (patch.timezone !== undefined) {
+            invalidateUserMedications(access.recordId, { evict: true });
+          }
           settings = {
             ...record,
             dateOfBirth: record.dateOfBirth?.toISOString().slice(0, 10) ?? null,
@@ -232,6 +244,7 @@ export const PATCH = apiHandler(
             where: { id: access.recordId },
             data: { modulePreferencesJson: toJson(modulePreferences) },
           });
+          invalidateUserHealthScore(access.recordId);
           settings = { modulePreferences };
           changed = Object.keys(patch.modulePreferences);
           break;

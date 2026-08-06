@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isManagedRecordSettingsFamily,
   MANAGED_RECORD_SETTINGS_FIELD_ALLOWLIST,
+  MANAGED_RECORD_SETTINGS_MODULE_DEFAULTS,
+  managedModulePreferencesFrom,
   parseManagedRecordSettingsPatch,
 } from "@/lib/record-settings/configuration";
+import { WRITABLE_MODULE_KEYS } from "@/lib/validations/modules";
 
 describe("managed record settings configuration contract", () => {
   it("enumerates the only target-record fields each settings DTO may write", () => {
@@ -95,4 +99,29 @@ describe("managed record settings configuration contract", () => {
   ] as const)("accepts a typed %s patch", (family, patch) => {
     expect(() => parseManagedRecordSettingsPatch(family, patch)).not.toThrow();
   });
+
+  it("uses the complete canonical module inventory for a fresh record", () => {
+    expect(Object.keys(MANAGED_RECORD_SETTINGS_MODULE_DEFAULTS)).toEqual(
+      WRITABLE_MODULE_KEYS,
+    );
+    expect(managedModulePreferencesFrom(null)).toEqual(
+      MANAGED_RECORD_SETTINGS_MODULE_DEFAULTS,
+    );
+  });
+
+  it("accepts only the canonical profile gender enum", () => {
+    expect(() =>
+      parseManagedRecordSettingsPatch("profile", { gender: "MALE" }),
+    ).not.toThrow();
+    expect(() =>
+      parseManagedRecordSettingsPatch("profile", { gender: "UNKNOWN" }),
+    ).toThrow();
+  });
+
+  it.each(["toString", "constructor", "__proto__", "hasOwnProperty"])(
+    "rejects inherited family name %s",
+    (family) => {
+      expect(isManagedRecordSettingsFamily(family)).toBe(false);
+    },
+  );
 });

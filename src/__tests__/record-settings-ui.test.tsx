@@ -5,6 +5,27 @@ import { describe, expect, it } from "vitest";
 
 const fromRoot = (...segments: string[]) => resolve(process.cwd(), ...segments);
 
+function expectMatchingMessageKeys(expected: unknown, actual: unknown): void {
+  if (
+    expected === null ||
+    typeof expected !== "object" ||
+    actual === null ||
+    typeof actual !== "object"
+  ) {
+    expect(typeof actual).toBe(typeof expected);
+    return;
+  }
+
+  const expectedRecord = expected as Record<string, unknown>;
+  const actualRecord = actual as Record<string, unknown>;
+  expect(Object.keys(actualRecord).sort()).toEqual(
+    Object.keys(expectedRecord).sort(),
+  );
+  for (const key of Object.keys(expectedRecord)) {
+    expectMatchingMessageKeys(expectedRecord[key], actualRecord[key]);
+  }
+}
+
 describe("managed record settings UI", () => {
   it("gates shared deep links and renders integration status without controls", async () => {
     const [
@@ -54,10 +75,31 @@ describe("managed record settings UI", () => {
     expect(managedSettingsView).not.toContain("/api/auth/");
     expect(managedSettingsView).not.toContain("/api/user/");
     expect(managedSettingsView).not.toContain("<textarea");
+    expect(managedSettingsView).not.toContain("Display name");
+    expect(managedSettingsView).not.toContain("Enable mood reminder");
+    const referenceMessages = JSON.parse(localeBundles[0]).settings.sharedRecord
+      .managedSettings;
     for (const bundle of localeBundles) {
-      expect(bundle).toContain('"sharedRecord"');
-      expect(bundle).toContain('"unavailableTitle"');
-      expect(bundle).toContain('"integrationStatusDescription"');
+      const sharedRecord = JSON.parse(bundle).settings.sharedRecord;
+      expect(sharedRecord).toMatchObject({
+        unavailableTitle: expect.any(String),
+        integrationStatusDescription: expect.any(String),
+        managedSettings: {
+          profile: {
+            title: expect.any(String),
+            displayName: expect.any(String),
+          },
+          modules: { title: expect.any(String) },
+          notifications: { title: expect.any(String) },
+          thresholds: { title: expect.any(String) },
+          coach: { title: expect.any(String) },
+          insights: { title: expect.any(String) },
+        },
+      });
+      expectMatchingMessageKeys(
+        referenceMessages,
+        sharedRecord.managedSettings,
+      );
     }
   });
 });

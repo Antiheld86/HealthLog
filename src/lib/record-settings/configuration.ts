@@ -4,8 +4,12 @@ import {
   ACCEPTED_INSIGHTS_TILE_IDS,
   INSIGHTS_SECTION_IDS,
 } from "@/lib/insights-layout";
+import { MODULE_REGISTRY } from "@/lib/modules/registry";
 import { coachPrefsSchema } from "@/lib/validations/coach-prefs";
-import { modulePrefsPatchSchema } from "@/lib/validations/modules";
+import {
+  modulePrefsPatchSchema,
+  WRITABLE_MODULE_KEYS,
+} from "@/lib/validations/modules";
 import { thresholdsUpdateSchema } from "@/lib/validations/thresholds";
 
 /**
@@ -54,7 +58,7 @@ const profilePatchSchema = z
     displayName: z.string().trim().min(1).max(100).nullable().optional(),
     heightCm: z.number().finite().min(30).max(300).nullable().optional(),
     dateOfBirth: z.string().date().nullable().optional(),
-    gender: z.string().trim().min(1).max(64).nullable().optional(),
+    gender: z.enum(["MALE", "FEMALE", "OTHER"]).nullable().optional(),
     locale: z.enum(["de", "en", "es", "fr", "it", "pl"]).nullable().optional(),
     timezone: timezoneSchema.optional(),
     unitPreference: z.enum(["metric", "imperial"]).optional(),
@@ -161,7 +165,7 @@ export type ManagedRecordSettingsPatch = {
 export function isManagedRecordSettingsFamily(
   value: string,
 ): value is ManagedRecordSettingsFamily {
-  return value in MANAGED_RECORD_SETTINGS_PATCH_SCHEMAS;
+  return Object.hasOwn(MANAGED_RECORD_SETTINGS_PATCH_SCHEMAS, value);
 }
 
 /** Parse one named DTO family. Strict schemas make an actor field a 422. */
@@ -179,15 +183,28 @@ export function safeParseManagedRecordSettingsPatch<
   return MANAGED_RECORD_SETTINGS_PATCH_SCHEMAS[family].safeParse(value);
 }
 
+/**
+ * The same direct module inventory and default posture as `/api/auth/me/modules`.
+ * Every entry is present for a fresh record so a Guardian can administer the
+ * whole supported surface instead of seeing only previously persisted keys.
+ */
+export const MANAGED_RECORD_SETTINGS_MODULE_DEFAULTS = Object.freeze(
+  Object.fromEntries(
+    WRITABLE_MODULE_KEYS.map((key) => [key, !MODULE_REGISTRY[key].optIn]),
+  ),
+) as Readonly<Record<(typeof WRITABLE_MODULE_KEYS)[number], boolean>>;
+
 /** Preserve only directly-owned module keys from a legacy persisted blob. */
 export function managedModulePreferencesFrom(
   raw: unknown,
 ): ManagedRecordSettingsPatch["modules"]["modulePreferences"] {
+  const allowed: Record<string, boolean> = {
+    ...MANAGED_RECORD_SETTINGS_MODULE_DEFAULTS,
+  };
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
-    return {};
+    return allowed;
   }
 
-  const allowed: Record<string, boolean> = {};
   for (const [key, value] of Object.entries(raw)) {
     const parsed = modulePrefsPatchSchema.safeParse({ [key]: value });
     if (parsed.success && value !== undefined) {

@@ -4434,6 +4434,76 @@
       }
     },
     "sharedRecord": {
+      "managedSettings": {
+        "profile": {
+          "title": "Profil",
+          "displayName": "Nom affiché",
+          "height": "Taille (cm)",
+          "dateOfBirth": "Date de naissance",
+          "gender": "Genre",
+          "notSpecified": "Non précisé",
+          "male": "Homme",
+          "female": "Femme",
+          "other": "Autre",
+          "locale": "Langue",
+          "systemDefault": "Valeur système",
+          "timezone": "Fuseau horaire",
+          "units": "Unités",
+          "metric": "Métrique",
+          "imperial": "Impérial",
+          "timeFormat": "Format de l’heure",
+          "automatic": "Automatique",
+          "hour12": "12 heures",
+          "hour24": "24 heures",
+          "dateFormat": "Format de date",
+          "dateDmy": "Jour / mois / année",
+          "dateMdy": "Mois / jour / année",
+          "dateYmd": "Année / mois / jour"
+        },
+        "modules": { "title": "Modules" },
+        "notifications": {
+          "title": "Notifications",
+          "moodReminder": "Activer le rappel d’humeur",
+          "reminderHour": "Heure du rappel d’humeur",
+          "lowStockRunwayDays": "Jours avant stock faible",
+          "reorderLeadDays": "Délai de réapprovisionnement"
+        },
+        "thresholds": {
+          "title": "Objectifs",
+          "metric": "Mesure",
+          "minimum": "Minimum",
+          "maximum": "Maximum"
+        },
+        "coach": {
+          "title": "Coach",
+          "disable": "Désactiver le Coach",
+          "tone": "Ton",
+          "warm": "Chaleureux",
+          "neutral": "Neutre",
+          "concise": "Concis",
+          "verbosity": "Niveau de détail",
+          "brief": "Bref",
+          "default": "Par défaut",
+          "detailed": "Détaillé",
+          "defaultWindow": "Période par défaut",
+          "last7days": "7 derniers jours",
+          "last30days": "30 derniers jours",
+          "last90days": "90 derniers jours",
+          "allTime": "Depuis toujours",
+          "showEvidence": "Afficher les sources par défaut",
+          "excludedMetrics": "Mesures exclues",
+          "dataClusters": "Groupes de données",
+          "customClusters": "Utiliser une sélection personnalisée de groupes",
+          "value": "{value}"
+        },
+        "insights": {
+          "title": "Analyses",
+          "sections": "Sections d’aperçu",
+          "tiles": "Tuiles de navigation",
+          "item": "{id}",
+          "order": "Ordre"
+        }
+      },
       "unavailableTitle": "Indisponible dans ce dossier partagé",
       "unavailableDescription": "Cette section des réglages est volontairement indisponible lorsque vous consultez le dossier d’une autre personne.",
       "integrationStatusDescription": "État de connexion pour ce dossier géré. Les commandes de connexion ne sont pas disponibles."
