@@ -1,6 +1,6 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
 import { onRecordFenceMismatch } from "@/lib/api/record-fence";
@@ -35,27 +35,98 @@ import { holdForRecordSessionReconcile } from "@/lib/query-keys/record-session-t
  * this is"), and a single subscriber with a mode flag is how they start
  * answering each other's.
  */
+
+/** Is this the account payload's cell? */
+function isAccountQuery(queryKey: readonly unknown[]): boolean {
+  const authMe = queryKeys.authMe() as readonly unknown[];
+  return (
+    queryKey.length === authMe.length &&
+    queryKey.every((part, i) => part === authMe[i])
+  );
+}
+
+/**
+ * The reconciliation itself, as a plain function over a `QueryClient`.
+ *
+ * Extracted from the effect body for the reason `subscribeToGrantLoss` is: a
+ * test can drive a real cache through it and check what happened, which is the
+ * only way to tell a reconciler that holds from one that quietly refetches the
+ * record it is supposed to be holding.
+ *
+ * ## The two things the first version got wrong
+ *
+ * **It cleared the cache while the shell was still mounted.**
+ * `queryClient.clear()` drops every entry, and a mounted observer whose entry
+ * disappears refetches immediately — so the tab that had just been told to hold
+ * fired `/api/dashboard/snapshot` and `/api/medications` under the very context
+ * it could not prove. The removal therefore waits until AFTER `/api/auth/me`
+ * has answered: by then the hold has unmounted the protected children, so there
+ * is no observer left to trigger anything.
+ *
+ * **It cancelled every in-flight query, including the `/me` a previous
+ * reconcile had started.** Under a burst of 409s — which is exactly what a
+ * stale tab produces, one per errored query — each new reconcile cancelled the
+ * request that would have ended the hold, and the tab never recovered. Two
+ * fixes, both needed: the cancellation excludes the account cell, and a
+ * reconcile already in flight swallows a second trigger rather than restarting.
+ */
+export function createRecordFenceReconciler(
+  queryClient: QueryClient,
+  refetchAccount: () => Promise<unknown> = fetchMe,
+): () => void {
+  let inFlight = false;
+
+  return () => {
+    // A burst of 409s is one signal, not many. Restarting on each would cancel
+    // the request that ends the hold and livelock the tab.
+    if (inFlight) return;
+    inFlight = true;
+
+    // Hold FIRST. This is what unmounts the protected children, and everything
+    // below depends on them being gone.
+    holdForRecordSessionReconcile();
+
+    // Cancel record traffic, never the account payload: the `/me` below is the
+    // only thing that can release the hold.
+    void queryClient.cancelQueries({
+      predicate: (query) => !isAccountQuery(query.queryKey),
+    });
+
+    void queryClient
+      .fetchQuery({
+        queryKey: queryKeys.authMe(),
+        queryFn: refetchAccount,
+        // NETWORK-ONLY, and this is load-bearing rather than a precaution. The
+        // app's default `staleTime` is not zero, so a plain `fetchQuery` would
+        // hand back the cached account payload — the one carrying the context
+        // this browser has just been told is wrong — and release the hold
+        // without ever asking the server. The whole reconciliation would then
+        // be a no-op that looked like a success.
+        staleTime: 0,
+      })
+      .then(() => {
+        // Now, and not before: the children are unmounted, so removing their
+        // entries cannot remount an observer that refetches.
+        queryClient.removeQueries({
+          predicate: (query) => !isAccountQuery(query.queryKey),
+        });
+      })
+      .catch(() => {
+        // Offline, or the server is down. The hold stays, which is the correct
+        // place to be stuck: nothing renders under a context this browser
+        // cannot prove, and the next successful `/me` releases it.
+      })
+      .finally(() => {
+        inFlight = false;
+      });
+  };
+}
+
 export function RecordSessionFenceBridge() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    /**
-     * Held, then reconciled. `fetchMe` adopts the context and settles the
-     * transition itself, so nothing here decides what the browser is allowed
-     * to render next — the server's answer does.
-     */
-    const reconcile = () => {
-      holdForRecordSessionReconcile();
-      void queryClient.cancelQueries();
-      queryClient.clear();
-      void queryClient
-        .fetchQuery({ queryKey: queryKeys.authMe(), queryFn: fetchMe })
-        .catch(() => {
-          // Offline, or the server is down. The hold stays, which is the
-          // correct place to be stuck: nothing renders under a context this
-          // browser cannot prove, and the next successful `/me` releases it.
-        });
-    };
+    const reconcile = createRecordFenceReconciler(queryClient);
 
     // The in-flight / cached-response arm, raised by the transport wrapper.
     const disposeMismatch = onRecordFenceMismatch(reconcile);
