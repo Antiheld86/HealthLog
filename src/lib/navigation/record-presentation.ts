@@ -18,6 +18,21 @@ export interface RecordPresentation {
 export function resolveRecordPresentation(
   entry: Pick<AccountAccessEntry, "canWrite" | "level" | "recordKind">,
 ): RecordPresentation {
+  const validRecordKind =
+    entry.recordKind === "shared" || entry.recordKind === "managed";
+  const validAccess =
+    (entry.level === "read" && entry.canWrite === false) ||
+    ((entry.level === "write" || entry.level === "manage") &&
+      entry.canWrite === true);
+
+  // `parseAccountAccess` normally makes this branch unreachable. Keep the
+  // presentation boundary defensive anyway: a stale cache or an untyped
+  // consumer must never turn contradictory data into a stronger affordance or
+  // claim that the browser is inside somebody else's record.
+  if (!validRecordKind || !validAccess) {
+    return { access: "view", recordKind: "self" };
+  }
+
   return {
     access:
       entry.level === "manage"
