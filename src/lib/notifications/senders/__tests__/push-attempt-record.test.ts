@@ -41,6 +41,7 @@ const hoisted = vi.hoisted(() => ({
   webPushGenerateRequestDetailsMock: vi.fn(),
   sendTelegramMessageMock: vi.fn(),
   deleteTelegramMessageMock: vi.fn(),
+  addWarningMock: vi.fn(),
 }));
 
 vi.mock("@parse/node-apn", () => {
@@ -98,7 +99,7 @@ vi.mock("@/lib/crypto", () => ({
 vi.mock("@/lib/logging/context", () => ({
   getEvent: () => ({
     addExternalCall: vi.fn(),
-    addWarning: vi.fn(),
+    addWarning: hoisted.addWarningMock,
     setError: vi.fn(),
   }),
 }));
@@ -142,6 +143,7 @@ import {
 import { sendViaWebPush } from "@/lib/notifications/senders/web-push";
 import { sendViaTelegram } from "@/lib/notifications/senders/telegram";
 import { sendViaNtfy } from "@/lib/notifications/senders/ntfy";
+import { recordPushAttemptForPayload } from "@/lib/notifications/senders/push-attempt-record";
 import { prisma } from "@/lib/db";
 
 const TEST_EC_PEM_LINES = [
@@ -217,6 +219,35 @@ afterEach(() => {
 async function flushMicrotasks(): Promise<void> {
   await new Promise((resolve) => setImmediate(resolve));
 }
+
+describe("recordPushAttemptForPayload — attribution boundary", () => {
+  it("rejects a partial delivery identity without writing a ledger row", async () => {
+    recordPushAttemptForPayload(
+      { recordUserId: "record-1" },
+      "recipient-1",
+      {
+        channel: "TELEGRAM",
+        eventType: "MEDICATION_REMINDER",
+        result: "ok",
+      },
+    );
+    recordPushAttemptForPayload(
+      { recipientUserId: "recipient-1" },
+      "recipient-1",
+      {
+        channel: "TELEGRAM",
+        eventType: "MEDICATION_REMINDER",
+        result: "ok",
+      },
+    );
+    await flushMicrotasks();
+
+    expect(prisma.pushAttempt.create).not.toHaveBeenCalled();
+    expect(hoisted.addWarningMock).toHaveBeenCalledWith(
+      "push_attempt_ledger_write_failed invalid_attribution",
+    );
+  });
+});
 
 describe("recordPushAttempt — APNS sender", () => {
   it("writes one ok row when the dispatch succeeds", async () => {
