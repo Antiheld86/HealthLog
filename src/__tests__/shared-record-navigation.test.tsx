@@ -114,4 +114,22 @@ describe("shared-record navigation", () => {
       }),
     ).toEqual({ access: "manage", recordKind: "managed" });
   });
+
+  it("fails closed when a malformed entry reaches presentation", () => {
+    expect(
+      resolveRecordPresentation({
+        level: "manage",
+        canWrite: false,
+        recordKind: "managed",
+      } as never),
+    ).toEqual({ access: "view", recordKind: "self" });
+
+    expect(
+      resolveRecordPresentation({
+        level: "unknown",
+        canWrite: true,
+        recordKind: "shared",
+      } as never),
+    ).toEqual({ access: "view", recordKind: "self" });
+  });
 });
