@@ -37,12 +37,12 @@ interface RouteFamily {
 }
 
 const SHARED_RECORD_ROUTE_FAMILIES: readonly RouteFamily[] = [
-  ...WHOLE_RECORD_ROUTE_FAMILIES.map((href) => ({
+  ...WHOLE_RECORD_ROUTE_FAMILIES.map((href): RouteFamily => ({
     href,
     scope: ENTIRE_RECORD,
   })),
-  ...SHARE_DOMAINS.flatMap((domain) =>
-    SHARED_RECORD_DOMAIN_ROUTE_FAMILIES[domain].map((href) => ({
+  ...SHARE_DOMAINS.flatMap((domain): RouteFamily[] =>
+    SHARED_RECORD_DOMAIN_ROUTE_FAMILIES[domain].map((href): RouteFamily => ({
       href,
       scope: domain,
     })),

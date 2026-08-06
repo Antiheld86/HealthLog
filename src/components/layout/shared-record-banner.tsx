@@ -5,6 +5,7 @@ import { Eye, Loader2, LogOut } from "lucide-react";
 import { useAccountSwitch } from "@/hooks/use-account-switch";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
+import { resolveRecordPresentation } from "@/lib/navigation/record-presentation";
 import { accountLabel } from "@/lib/sharing/account-access-view";
 
 /**
@@ -59,12 +60,15 @@ export function SharedRecordBanner() {
   if (!active) return null;
 
   const name = accountLabel(active);
+  const presentation = resolveRecordPresentation(active);
 
   return (
     <div
       role="status"
       data-slot="shared-record-banner"
       data-account-id={active.accountId}
+      data-access-level={presentation.access}
+      data-record-kind={presentation.recordKind}
       className="bg-warning/15 border-warning/40 flex items-start gap-3 border-b px-3 py-2 text-xs sm:items-center"
     >
       <Eye
@@ -75,18 +79,9 @@ export function SharedRecordBanner() {
         <span className="text-foreground font-medium">
           {t("recordSharing.banner.viewing", { name })}
         </span>{" "}
-        {/* Resolved server-side, and it says something at BOTH levels now.
-            v1.36.1 is the release that made `canWrite` true, and until this
-            line changed the write case rendered nothing at all: a delegate who
-            could add to somebody's health record was told only whose record it
-            was. That matters more than the read case, not less, and the rest of
-            the product leans on it — a control the record refuses is absent
-            rather than disabled, on the stated grounds that the banner names
-            the mode globally. It has to actually do that. */}
         <span className="text-muted-foreground">
-          {active.canWrite
-            ? t("recordSharing.banner.canAdd")
-            : t("recordSharing.banner.readOnly")}
+          {recordKindLabel(presentation.recordKind, t)}.{" "}
+          {accessLabel(presentation.access, t)}
         </span>
       </p>
       <button
@@ -108,4 +103,23 @@ export function SharedRecordBanner() {
       </button>
     </div>
   );
+}
+
+function accessLabel(
+  access: ReturnType<typeof resolveRecordPresentation>["access"],
+  t: ReturnType<typeof useTranslations>["t"],
+): string {
+  if (access === "manage") return t("recordSharing.row.canManage");
+  return access === "view-and-add"
+    ? t("recordSharing.banner.canAdd")
+    : t("recordSharing.banner.readOnly");
+}
+
+function recordKindLabel(
+  recordKind: ReturnType<typeof resolveRecordPresentation>["recordKind"],
+  t: ReturnType<typeof useTranslations>["t"],
+): string {
+  return recordKind === "managed"
+    ? t("recordSharing.lookingAfter.kindManaged")
+    : t("recordSharing.lookingAfter.kindShared");
 }
