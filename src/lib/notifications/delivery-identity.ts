@@ -1,10 +1,13 @@
+import { randomUUID } from "node:crypto";
+
 import { prisma } from "@/lib/db";
 import {
   activeGuardianWhere,
   withManagedProfileLock,
 } from "@/lib/managed-profiles/lifecycle";
+import type { Prisma } from "@/generated/prisma/client";
 import type {
-  ManagedGuardianFanoutEvent,
+  ChannelType,
   NotificationPayload,
 } from "@/lib/notifications/types";
 
@@ -82,11 +85,11 @@ export async function resolveManagedGuardianRecipientIds(
  * own destination. Legacy payloads remain valid only for ordinary self
  * delivery; a managed record must name an active Guardian explicitly. This is
  * a preflight for recipient channel selection; managed delivery is authorized
- * again under the same lock at each provider egress below.
+ * again under the same lock at each provider egress claim below.
  *
- * Cross-principal authorization linearizes at the locked grant read below.
- * The egress helper keeps the same lock through the actual provider call, so
- * a revocation cannot commit between Guardian authorization and delivery.
+ * Cross-principal authorization preflight uses the locked grant read below.
+ * The final authorization is a separate short transaction that commits a
+ * durable egress claim immediately before the provider operation starts.
  */
 export async function resolveNotificationDeliveryIdentity(
   payload: NotificationPayload,
@@ -124,54 +127,112 @@ export async function resolveNotificationDeliveryIdentity(
 }
 
 /**
- * Execute a single managed Guardian channel send while holding the lifecycle
- * advisory lock. The provider call intentionally remains inside this short
- * transaction: managed Guardian revocation and expiry transitions take the
- * same lock, so neither can commit after this authorization but before egress.
+ * Create the final authorization claim for one managed Guardian channel.
+ *
+ * The claim commits while holding the same lifecycle lock as Guardian
+ * revocation and expiry. Its commit is the linearization point: if a
+ * revocation commits first, this returns null and no provider operation may
+ * start. If the claim commits first, it authorizes one provider operation
+ * that is already in flight from the lifecycle's perspective. The provider
+ * operation runs only after this transaction commits, so slow networks never
+ * retain a database transaction, advisory lock, or pooled connection. This is
+ * the logical send time, not a promise that a later revocation or expiry can
+ * recall an already-authorized provider operation before its first byte.
  */
-export async function withManagedGuardianEgressAuthorization<T>(
+export async function claimManagedGuardianEgressAuthorization(
   delivery: NotificationDeliveryIdentity,
-  send: () => Promise<T>,
-): Promise<T | null> {
-  if (!delivery.managed) return send();
+  channel: ChannelType,
+  eventType: string,
+): Promise<{ id: string } | null> {
+  if (!delivery.managed) return null;
 
   return withManagedGuardianAuthorization(
     delivery.recordUserId,
     delivery.recipientUserId,
-    send,
-    { maxWait: 5_000, timeout: 60_000 },
+    async (tx) => {
+      const id = randomUUID();
+      const claims = await tx.$queryRaw<Array<{ id: string }>>`
+        INSERT INTO "notification_egress_authorizations" (
+          "id",
+          "record_user_id",
+          "recipient_user_id",
+          "channel",
+          "event_type",
+          "authorized_at"
+        )
+        SELECT
+          ${id},
+          ${delivery.recordUserId},
+          ${delivery.recipientUserId},
+          ${channel},
+          ${eventType},
+          clock_timestamp()
+        WHERE EXISTS (
+          SELECT 1
+          FROM "account_grants"
+          WHERE "grantor_id" = ${delivery.recordUserId}
+            AND "grantee_id" = ${delivery.recipientUserId}
+            AND "access" = 'MANAGE'::"account_grant_access"
+            AND "accepted_at" IS NOT NULL
+            AND "revoked_at" IS NULL
+            AND (
+              "expires_at" IS NULL
+              OR "expires_at" > clock_timestamp()
+            )
+        )
+        RETURNING "id"
+      `;
+      return claims[0] ?? null;
+    },
   );
+}
+
+/**
+ * Record a completed provider operation outside the lifecycle transaction.
+ * This is observability only: authorization always rechecks the active grant,
+ * and every retry creates a new claim regardless of a prior outcome.
+ */
+export async function completeManagedGuardianEgressAuthorization(
+  authorizationId: string,
+  outcome: "ok" | "hard_reject" | "transient_failure" | "sender_threw",
+): Promise<void> {
+  try {
+    await prisma.notificationEgressAuthorization.update({
+      where: { id: authorizationId },
+      data: { completedAt: new Date(), outcome },
+    });
+  } catch {
+    // The claim is intentionally durable even if the best-effort completion
+    // marker cannot be written after an otherwise independent provider call.
+  }
 }
 
 async function withManagedGuardianAuthorization<T>(
   recordUserId: string,
   recipientUserId: string,
-  operation: () => Promise<T>,
-  options?: { maxWait: number; timeout: number },
+  operation: (tx: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T | null> {
-  return prisma.$transaction(
-    (tx) =>
-      withManagedProfileLock(tx, recordUserId, async (lockedRecord) => {
-        if (lockedRecord?.managedProfileAt == null) return null;
+  return prisma.$transaction((tx) =>
+    withManagedProfileLock(tx, recordUserId, async (lockedRecord) => {
+      if (lockedRecord?.managedProfileAt == null) return null;
 
-        const recipient = await tx.user.findUnique({
-          where: { id: recipientUserId },
-          select: { managedProfileAt: true },
-        });
-        if (!recipient || recipient.managedProfileAt != null) return null;
+      const recipient = await tx.user.findUnique({
+        where: { id: recipientUserId },
+        select: { managedProfileAt: true },
+      });
+      if (!recipient || recipient.managedProfileAt != null) return null;
 
-        const guardian = await tx.accountGrant.findFirst({
-          where: {
-            grantorId: recordUserId,
-            granteeId: recipientUserId,
-            ...activeGuardianWhere(new Date()),
-          },
-          select: { id: true },
-        });
-        if (!guardian) return null;
+      const guardian = await tx.accountGrant.findFirst({
+        where: {
+          grantorId: recordUserId,
+          granteeId: recipientUserId,
+          ...activeGuardianWhere(new Date()),
+        },
+        select: { id: true },
+      });
+      if (!guardian) return null;
 
-        return operation();
-      }),
-    options,
+      return operation(tx);
+    }),
   );
 }

@@ -17,6 +17,8 @@ const sent = vi.hoisted(() => ({
 const ntfyEgress = vi.hoisted(() => ({
   block: null as Promise<void> | null,
   onStart: null as (() => void) | null,
+  error: null as Error | null,
+  outcome: null as { ok: false; reason: string } | null,
 }));
 
 vi.mock("@/lib/notifications/senders/ntfy", async () => {
@@ -37,6 +39,8 @@ vi.mock("@/lib/notifications/senders/ntfy", async () => {
     ) => {
       ntfyEgress.onStart?.();
       if (ntfyEgress.block) await ntfyEgress.block;
+      if (ntfyEgress.error) throw ntfyEgress.error;
+      if (ntfyEgress.outcome) return ntfyEgress.outcome;
       const recipientUserId = payload.recipientUserId ?? payload.userId;
       sent.ntfy.push({
         recipientUserId,
@@ -199,6 +203,8 @@ async function addChannel(
 beforeEach(async () => {
   ntfyEgress.block = null;
   ntfyEgress.onStart = null;
+  ntfyEgress.error = null;
+  ntfyEgress.outcome = null;
   sent.deliveries.length = 0;
   sent.ntfy.length = 0;
   sent.apns.length = 0;
@@ -375,6 +381,22 @@ describe("Guardian fan-out (real Postgres)", () => {
       expect(attempts).toHaveLength(expected.length);
       expect(attempts).toEqual(expect.arrayContaining(expected));
     });
+    const claims =
+      await getPrismaClient().notificationEgressAuthorization.findMany({
+        where: { eventType: "MEDICATION_REMINDER" },
+        select: {
+          channel: true,
+          recordUserId: true,
+          recipientUserId: true,
+          eventType: true,
+        },
+      });
+    const expectedClaims = expected.map((claim) => ({
+      ...claim,
+      eventType: "MEDICATION_REMINDER",
+    }));
+    expect(claims).toHaveLength(expectedClaims.length);
+    expect(claims).toEqual(expect.arrayContaining(expectedClaims));
 
     await dispatchNotification({
       eventType: "MEDICATION_REMINDER",
@@ -391,7 +413,7 @@ describe("Guardian fan-out (real Postgres)", () => {
     ).resolves.toBe(expected.length);
   });
 
-  it("keeps a Guardian revocation from committing while its channel egress is in flight", async () => {
+  it("allows Guardian revocation to commit while a claimed channel egress is in flight", async () => {
     const [record, recipient, reserveGuardian] = await Promise.all([
       createUser({ label: "record", locale: "en", managed: true }),
       createUser({ label: "recipient", locale: "en" }),
@@ -424,19 +446,27 @@ describe("Guardian fan-out (real Postgres)", () => {
       message: "record message",
     });
     await egressStarted;
+    await expect(
+      getPrismaClient().notificationEgressAuthorization.count({
+        where: {
+          recordUserId: record.id,
+          recipientUserId: recipient.id,
+          channel: "NTFY",
+        },
+      }),
+    ).resolves.toBe(1);
 
     const revocation = revokeGrant({
       grantId: recipientGrant.id,
       grantorId: record.id,
     });
-    await expectPromiseToRemainPending(revocation);
+    await expectPromiseToSettle(revocation);
 
     releaseEgress();
     await delivery;
-    await revocation;
   });
 
-  it("keeps a Guardian expiry transition from committing while its channel egress is in flight", async () => {
+  it("allows Guardian expiry to commit while a claimed channel egress is in flight", async () => {
     const [record, recipient, reserveGuardian] = await Promise.all([
       createUser({ label: "record", locale: "en", managed: true }),
       createUser({ label: "recipient", locale: "en" }),
@@ -469,6 +499,15 @@ describe("Guardian fan-out (real Postgres)", () => {
       message: "record message",
     });
     await egressStarted;
+    await expect(
+      getPrismaClient().notificationEgressAuthorization.count({
+        where: {
+          recordUserId: record.id,
+          recipientUserId: recipient.id,
+          channel: "NTFY",
+        },
+      }),
+    ).resolves.toBe(1);
 
     const expiry = getPrismaClient().$transaction((tx) =>
       withManagedProfileLock(tx, record.id, () =>
@@ -478,21 +517,131 @@ describe("Guardian fan-out (real Postgres)", () => {
         }),
       ),
     );
-    await expectPromiseToRemainPending(expiry);
+    await expectPromiseToSettle(expiry);
 
     releaseEgress();
     await delivery;
-    await expiry;
+  });
+
+  it("records a timed-out provider after the authorization claim has committed", async () => {
+    const [record, recipient, reserveGuardian] = await Promise.all([
+      createUser({ label: "record", locale: "en", managed: true }),
+      createUser({ label: "recipient", locale: "en" }),
+      createUser({ label: "reserve-guardian", locale: "de" }),
+    ]);
+    await Promise.all([
+      addGuardian(record.id, recipient.id),
+      addGuardian(record.id, reserveGuardian.id),
+      addChannel(recipient.id, "NTFY"),
+    ]);
+    ntfyEgress.error = new Error("provider timeout");
+
+    await expect(
+      dispatchNotification({
+        eventType: "MEDICATION_REMINDER",
+        userId: record.id,
+        title: "record reminder",
+        message: "record message",
+      }),
+    ).resolves.toEqual({
+      dispatched: false,
+      channelsAttempted: 1,
+      channelsSucceeded: 0,
+    });
+
+    await expect(
+      getPrismaClient().notificationEgressAuthorization.findFirstOrThrow({
+        where: {
+          recordUserId: record.id,
+          recipientUserId: recipient.id,
+          channel: "NTFY",
+        },
+        select: { eventType: true, outcome: true, completedAt: true },
+      }),
+    ).resolves.toEqual({
+      eventType: "MEDICATION_REMINDER",
+      outcome: "sender_threw",
+      completedAt: expect.any(Date),
+    });
+  });
+
+  it("creates a new claim for each retry and stops after Guardian revocation", async () => {
+    const [record, recipient, reserveGuardian] = await Promise.all([
+      createUser({ label: "record", locale: "en", managed: true }),
+      createUser({ label: "recipient", locale: "en" }),
+      createUser({ label: "reserve-guardian", locale: "de" }),
+    ]);
+    await Promise.all([
+      addGuardian(record.id, recipient.id),
+      addGuardian(record.id, reserveGuardian.id),
+      addChannel(recipient.id, "NTFY"),
+    ]);
+    const grant = await getPrismaClient().accountGrant.findFirstOrThrow({
+      where: { grantorId: record.id, granteeId: recipient.id },
+      select: { id: true },
+    });
+    const payload = {
+      eventType: "MEDICATION_REMINDER" as const,
+      userId: record.id,
+      recordUserId: record.id,
+      recipientUserId: recipient.id,
+      title: "record reminder",
+      message: "record message",
+    };
+
+    ntfyEgress.error = new Error("provider timeout");
+    await dispatchNotification(payload);
+    await getPrismaClient().notificationChannel.update({
+      where: { userId_type: { userId: recipient.id, type: "NTFY" } },
+      data: { consecutiveFailures: 0, nextRetryAt: null },
+    });
+    ntfyEgress.error = null;
+    ntfyEgress.outcome = { ok: false, reason: "provider_unavailable" };
+    await dispatchNotification(payload);
+
+    const beforeRevocation =
+      await getPrismaClient().notificationEgressAuthorization.findMany({
+        where: {
+          recordUserId: record.id,
+          recipientUserId: recipient.id,
+          channel: "NTFY",
+        },
+        select: { id: true, outcome: true },
+        orderBy: { authorizedAt: "asc" },
+      });
+    expect(beforeRevocation).toEqual([
+      { id: expect.any(String), outcome: "sender_threw" },
+      { id: expect.any(String), outcome: "transient_failure" },
+    ]);
+    expect(beforeRevocation[0]!.id).not.toBe(beforeRevocation[1]!.id);
+
+    await revokeGrant({ grantId: grant.id, grantorId: record.id });
+    ntfyEgress.outcome = null;
+    await expect(dispatchNotification(payload)).resolves.toEqual({
+      dispatched: false,
+      channelsAttempted: 0,
+      channelsSucceeded: 0,
+    });
+    expect(sent.ntfy).toEqual([]);
+    await expect(
+      getPrismaClient().notificationEgressAuthorization.count({
+        where: {
+          recordUserId: record.id,
+          recipientUserId: recipient.id,
+          channel: "NTFY",
+        },
+      }),
+    ).resolves.toBe(2);
   });
 });
 
-async function expectPromiseToRemainPending(promise: Promise<unknown>) {
+async function expectPromiseToSettle(promise: Promise<unknown>) {
   const settled = await Promise.race([
     promise.then(
       () => true,
       () => true,
     ),
-    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 25)),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 250)),
   ]);
-  expect(settled).toBe(false);
+  expect(settled).toBe(true);
 }

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const transactionMock = vi.fn();
+const authorizationClaimQueryMock = vi.fn();
+const authorizationUpdateMock = vi.fn();
 
 vi.mock("@/lib/db", () => ({
   prisma: {
@@ -11,6 +13,9 @@ vi.mock("@/lib/db", () => ({
     },
     user: { findUnique: vi.fn() },
     accountGrant: { findMany: vi.fn() },
+    notificationEgressAuthorization: {
+      update: (...args: unknown[]) => authorizationUpdateMock(...args),
+    },
     auditLog: { create: vi.fn() },
     $transaction: (...args: unknown[]) => transactionMock(...args),
   },
@@ -66,6 +71,8 @@ const recipientUserId = "guardian-recipient";
 
 beforeEach(() => {
   vi.resetAllMocks();
+  authorizationClaimQueryMock.mockResolvedValue([{ id: "authorization" }]);
+  authorizationUpdateMock.mockResolvedValue({ id: "authorization" });
   vi.mocked(prisma.user.findUnique).mockResolvedValue({
     managedProfileAt: new Date(),
   } as never);
@@ -85,7 +92,7 @@ beforeEach(() => {
   transactionMock.mockImplementation(
     async (operation: (tx: unknown) => Promise<unknown>) =>
       operation({
-        $queryRaw: vi.fn(),
+        $queryRaw: (...args: unknown[]) => authorizationClaimQueryMock(...args),
         user: {
           findUnique: vi.fn(async ({ where }: { where: { id: string } }) =>
             where.id === recordUserId
@@ -132,12 +139,79 @@ describe("notification delivery identity", () => {
         message: "Record schedule",
       }),
     );
-    // Preflight chooses recipient channels, then the provider call is
-    // re-authorized under the managed-profile lock for the actual egress.
+    // Preflight chooses recipient channels, then a short locked transaction
+    // records the final authorization claim before provider I/O starts.
     expect(transactionMock).toHaveBeenCalledTimes(2);
-    expect(transactionMock).toHaveBeenLastCalledWith(expect.any(Function), {
-      maxWait: 5_000,
-      timeout: 60_000,
+    expect(transactionMock).toHaveBeenLastCalledWith(expect.any(Function));
+    expect(authorizationClaimQueryMock).toHaveBeenCalledTimes(3);
+    expect(authorizationUpdateMock).toHaveBeenCalledWith({
+      where: { id: "authorization" },
+      data: { completedAt: expect.any(Date), outcome: "ok" },
+    });
+  });
+
+  it("does not invoke a provider when final Guardian authorization is revoked", async () => {
+    let transactionCount = 0;
+    transactionMock.mockImplementation(
+      async (operation: (tx: unknown) => Promise<unknown>) => {
+        transactionCount += 1;
+        return operation({
+          $queryRaw: (...args: unknown[]) =>
+            authorizationClaimQueryMock(...args),
+          user: {
+            findUnique: vi.fn(async ({ where }: { where: { id: string } }) =>
+              where.id === recordUserId
+                ? { managedProfileAt: new Date() }
+                : { managedProfileAt: null },
+            ),
+          },
+          accountGrant: {
+            findFirst: vi.fn(async () =>
+              transactionCount === 1 ? { id: "grant" } : null,
+            ),
+          },
+        });
+      },
+    );
+
+    const outcome = await dispatchNotification({
+      eventType: "MEDICATION_REMINDER",
+      userId: recordUserId,
+      recordUserId,
+      recipientUserId,
+      title: "Record content",
+      message: "Record schedule",
+    });
+
+    expect(outcome).toEqual({
+      dispatched: false,
+      channelsAttempted: 0,
+      channelsSucceeded: 0,
+    });
+    expect(authorizationClaimQueryMock).toHaveBeenCalledTimes(2);
+    expect(sendViaWebPushMock).not.toHaveBeenCalled();
+  });
+
+  it("records a provider timeout on the claim without retaining the lifecycle lock", async () => {
+    sendViaWebPushMock.mockRejectedValue(new Error("provider timeout"));
+
+    const outcome = await dispatchNotification({
+      eventType: "MEDICATION_REMINDER",
+      userId: recordUserId,
+      recordUserId,
+      recipientUserId,
+      title: "Record content",
+      message: "Record schedule",
+    });
+
+    expect(outcome).toEqual({
+      dispatched: false,
+      channelsAttempted: 1,
+      channelsSucceeded: 0,
+    });
+    expect(authorizationUpdateMock).toHaveBeenCalledWith({
+      where: { id: "authorization" },
+      data: { completedAt: expect.any(Date), outcome: "sender_threw" },
     });
   });
 

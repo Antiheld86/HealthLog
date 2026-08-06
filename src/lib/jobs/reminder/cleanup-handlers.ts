@@ -127,9 +127,9 @@ export async function handleMoodReminderCleanup(
  * notification events are claims rather than delivery diagnostics, but after
  * the same horizon their dedup windows have elapsed and they have no reader.
  *
- * The DELETE is unbounded by user. Both ledgers therefore carry a direct
- * `created_at` index, so a `WHERE created_at < cutoff` scan is bounded by the
- * size of the trailing edge rather than the live working set. On a
+ * The DELETE is unbounded by user. The event and attempt ledgers carry direct
+ * `created_at` indexes, and final egress claims carry `authorized_at`, so each
+ * trailing-edge scan is bounded by the size of the live working set. On a
  * one-million-row table with the documented retention
  * window, the daily prune touches ~11k rows (1M / 90d × 1d) and
  * completes in milliseconds.
@@ -153,9 +153,20 @@ export async function handlePushAttemptCleanup(
       const deletedEvents = await p.notificationEvent.deleteMany({
         where: { createdAt: { lt: cutoff } },
       });
-      const deleted = deletedAttempts.count + deletedEvents.count;
+      const deletedAuthorizations =
+        await p.notificationEgressAuthorization.deleteMany({
+          where: { authorizedAt: { lt: cutoff } },
+        });
+      const deleted =
+        deletedAttempts.count +
+        deletedEvents.count +
+        deletedAuthorizations.count;
       evt.addMeta("push_attempt_cleanup_deleted", deletedAttempts.count);
       evt.addMeta("notification_event_cleanup_deleted", deletedEvents.count);
+      evt.addMeta(
+        "notification_egress_authorization_cleanup_deleted",
+        deletedAuthorizations.count,
+      );
       return jobDone({ deleted });
     } catch (err) {
       evt.addWarning(`push-attempt-cleanup failed: ${err}`);

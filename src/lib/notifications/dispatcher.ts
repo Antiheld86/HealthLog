@@ -31,9 +31,10 @@ import {
 } from "@/lib/notifications/client-managed-apns";
 import { recordPushAttempt } from "@/lib/notifications/senders/push-attempt-record";
 import {
+  claimManagedGuardianEgressAuthorization,
+  completeManagedGuardianEgressAuthorization,
   resolveManagedGuardianRecipientIds,
   resolveNotificationDeliveryIdentity,
-  withManagedGuardianEgressAuthorization,
 } from "@/lib/notifications/delivery-identity";
 
 /**
@@ -300,25 +301,54 @@ export async function dispatchNotification(
       }
 
       try {
-        const outcome = await withManagedGuardianEgressAuthorization(
-          delivery,
-          () =>
-            sendToChannel(
-              channel.type as ChannelType,
-              channel.config,
-              delivery.recipientUserId,
-              recipientPayload,
-            ),
+        const prepared = prepareChannelSend(
+          channel.type as ChannelType,
+          channel.config,
+          delivery.recipientUserId,
+          recipientPayload,
         );
-        if (outcome === null) {
-          getEvent()?.addWarning(
-            "Guardian notification authorization changed before channel egress",
-          );
-          continue;
+        let outcome: SendOutcome;
+        if ("outcome" in prepared) {
+          outcome = prepared.outcome;
+          channelsAttempted += 1;
+        } else {
+          const authorization = delivery.managed
+            ? await claimManagedGuardianEgressAuthorization(
+                delivery,
+                channel.type as ChannelType,
+                recipientPayload.eventType,
+              )
+            : null;
+          if (delivery.managed && authorization === null) {
+            getEvent()?.addWarning(
+              "Guardian notification authorization changed before channel egress",
+            );
+            continue;
+          }
+
+          channelsAttempted += 1;
+          try {
+            outcome = await prepared.send();
+          } catch (err) {
+            if (authorization) {
+              await completeManagedGuardianEgressAuthorization(
+                authorization.id,
+                "sender_threw",
+              );
+            }
+            throw err;
+          }
+          if (authorization) {
+            await completeManagedGuardianEgressAuthorization(
+              authorization.id,
+              outcome.ok
+                ? "ok"
+                : outcome.hardReject
+                  ? "hard_reject"
+                  : "transient_failure",
+            );
+          }
         }
-
-        channelsAttempted += 1;
-
         if (outcome.ok) {
           await recordChannelSuccess({
             id: channel.id,
@@ -387,12 +417,20 @@ export async function dispatchNotification(
   };
 }
 
-async function sendToChannel(
+type PreparedChannelSend =
+  { send: () => Promise<SendOutcome> } | { outcome: SendOutcome };
+
+/**
+ * Decrypt and validate a recipient-owned channel before the final managed
+ * Guardian authorization claim. The returned closure is the only code that
+ * can begin provider I/O, and is invoked immediately after that claim commits.
+ */
+function prepareChannelSend(
   type: ChannelType,
   encryptedConfig: string,
   recipientUserId: string,
   payload: NotificationPayload,
-): Promise<SendOutcome> {
+): PreparedChannelSend {
   let decrypted: string;
   try {
     decrypted = decrypt(encryptedConfig);
@@ -406,9 +444,11 @@ async function sendToChannel(
     // a key-rotation gap every channel would otherwise auto-disable for the
     // wrong reason.
     return {
-      ok: false,
-      hardReject: true,
-      reason: `${type.toLowerCase()}_config_decrypt_failed`,
+      outcome: {
+        ok: false,
+        hardReject: true,
+        reason: `${type.toLowerCase()}_config_decrypt_failed`,
+      },
     };
   }
 
@@ -421,12 +461,14 @@ async function sendToChannel(
         getEvent()?.addWarning("Failed to parse Telegram channel config");
         // Malformed config decodes the same on every retry — permanent.
         return {
-          ok: false,
-          hardReject: true,
-          reason: "telegram_config_parse_failed",
+          outcome: {
+            ok: false,
+            hardReject: true,
+            reason: "telegram_config_parse_failed",
+          },
         };
       }
-      return sendViaTelegram(config, payload);
+      return { send: () => sendViaTelegram(config, payload) };
     }
     case "NTFY": {
       let config: NtfyChannelConfig;
@@ -436,12 +478,14 @@ async function sendToChannel(
         getEvent()?.addWarning("Failed to parse ntfy channel config");
         // Malformed config decodes the same on every retry — permanent.
         return {
-          ok: false,
-          hardReject: true,
-          reason: "ntfy_config_parse_failed",
+          outcome: {
+            ok: false,
+            hardReject: true,
+            reason: "ntfy_config_parse_failed",
+          },
         };
       }
-      return sendViaNtfy(config, payload);
+      return { send: () => sendViaNtfy(config, payload) };
     }
     case "WEBHOOK": {
       let config: WebhookChannelConfig;
@@ -451,12 +495,14 @@ async function sendToChannel(
         getEvent()?.addWarning("Failed to parse webhook channel config");
         // Malformed config decodes the same on every retry — permanent.
         return {
-          ok: false,
-          hardReject: true,
-          reason: "webhook_config_parse_failed",
+          outcome: {
+            ok: false,
+            hardReject: true,
+            reason: "webhook_config_parse_failed",
+          },
         };
       }
-      return sendViaWebhook(config, payload);
+      return { send: () => sendViaWebhook(config, payload) };
     }
     case "EMAIL": {
       let config: EmailChannelConfig;
@@ -466,15 +512,17 @@ async function sendToChannel(
         getEvent()?.addWarning("Failed to parse email channel config");
         // Malformed config decodes the same on every retry — permanent.
         return {
-          ok: false,
-          hardReject: true,
-          reason: "email_config_parse_failed",
+          outcome: {
+            ok: false,
+            hardReject: true,
+            reason: "email_config_parse_failed",
+          },
         };
       }
-      return sendViaEmail(config, payload);
+      return { send: () => sendViaEmail(config, payload) };
     }
     case "WEB_PUSH": {
-      return sendViaWebPush(recipientUserId, payload);
+      return { send: () => sendViaWebPush(recipientUserId, payload) };
     }
     case "APNS": {
       // APNs config lives on the Device row, not in the channel config.
@@ -482,14 +530,16 @@ async function sendToChannel(
       // we just keep the symmetric path so future per-user overrides
       // (e.g. a custom APNs topic) can hang off the channel without
       // changing the dispatcher shape.
-      return sendViaApns(recipientUserId, payload);
+      return { send: () => sendViaApns(recipientUserId, payload) };
     }
     default:
       getEvent()?.addWarning(`Unknown notification channel type: ${type}`);
       return {
-        ok: false,
-        hardReject: false,
-        reason: "unknown_channel_type",
+        outcome: {
+          ok: false,
+          hardReject: false,
+          reason: "unknown_channel_type",
+        },
       };
   }
 }
