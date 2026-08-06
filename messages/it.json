@@ -9522,7 +9522,7 @@
     },
     "unavailable": {
       "title": "Non fa parte dell'accesso condiviso",
-      "description": "La condivisione riguarda la cartella sanitaria in sé. Impostazioni, servizi collegati, notifiche e funzioni di IA restano alla persona proprietaria dell'account.",
+      "description": "La condivisione riguarda la cartella sanitaria in sé, compresa l'anamnesi. Le impostazioni dell'account, i servizi collegati, le notifiche e le funzioni di IA restano alla persona proprietaria dell'account.",
       "leave": "Torna alla mia cartella"
     },
     "state": {

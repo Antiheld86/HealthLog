@@ -9522,7 +9522,7 @@
     },
     "unavailable": {
       "title": "Gehört nicht zum geteilten Zugriff",
-      "description": "Geteilt wird die Gesundheitsakte selbst. Einstellungen, verbundene Dienste, Benachrichtigungen und die KI-Funktionen bleiben bei der Person, der das Konto gehört.",
+      "description": "Geteilt wird die Gesundheitsakte selbst, einschließlich der Vorgeschichte unter Anamnese. Kontoeinstellungen, verbundene Dienste, Benachrichtigungen und die KI-Funktionen bleiben bei der Person, der das Konto gehört.",
       "leave": "Zurück zu meiner Akte"
     },
     "state": {

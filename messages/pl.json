@@ -9522,7 +9522,7 @@
     },
     "unavailable": {
       "title": "Nie należy do udostępnionego dostępu",
-      "description": "Udostępniana jest sama karta zdrowia. Ustawienia, połączone usługi, powiadomienia i funkcje SI pozostają przy osobie, do której należy konto.",
+      "description": "Udostępniana jest sama karta zdrowia, w tym wywiad zdrowotny w sekcji Anamneza. Ustawienia konta, połączone usługi, powiadomienia i funkcje SI pozostają przy osobie, do której należy konto.",
       "leave": "Wróć do mojej karty"
     },
     "state": {
