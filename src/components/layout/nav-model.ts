@@ -177,7 +177,7 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
     href: "/profile",
     sharedRecord: true,
     sharedRecordOnly: true,
-    tKey: "settings.sections.anamnesis.title",
+    tKey: "nav.profile",
     icon: ClipboardList,
     tourId: "nav-profile",
   },

@@ -356,6 +356,7 @@ test.describe.serial("scoped sharing browser journeys", () => {
     await expect(banner).toHaveAttribute("data-record-kind", "shared");
 
     await page.goto("/");
+    await expect(banner).toHaveAttribute("data-access-level", "manage");
     const generatedRead = await page.evaluate(async () => {
       const response = await fetch("/api/dashboard/summary");
       return response.status;
