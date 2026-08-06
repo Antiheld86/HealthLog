@@ -8,7 +8,7 @@ const authRef: {
   active: {
     accountId: string;
     recordKind: "managed" | "shared";
-    level: "manage";
+    level: "manage" | "write" | "read";
     sections: null;
     canWrite: true;
   } | null;
@@ -38,10 +38,13 @@ vi.mock("../managed-record-settings-section", () => ({
 vi.mock("../managed-integration-status", () => ({
   ManagedIntegrationStatus: () => <div data-slot="managed-integrations" />,
 }));
+vi.mock("../record-anamnesis-section", () => ({
+  RecordAnamnesisSection: () => <div data-slot="record-anamnesis" />,
+}));
 
 import { RecordSettingsSectionGate } from "../record-settings-section-gate";
 
-function render(section: "modules" | "integrations") {
+function render(section: "modules" | "integrations" | "anamnesis" | "labs") {
   return renderToStaticMarkup(
     <I18nProvider initialLocale="en">
       <RecordSettingsSectionGate section={section}>
@@ -76,5 +79,84 @@ describe("RecordSettingsSectionGate", () => {
 
     expect(html).toContain("managed-settings");
     expect(html).not.toContain("actor-settings");
+  });
+
+  /**
+   * The record-content destination, and the two ways it must not open.
+   *
+   * The branch keys on the SLUG as well as on the classification. Keying on
+   * the kind alone would render the allergy and family-history managers under
+   * the heading of any future `manage-writable` destination — silently,
+   * because a category matched where a page was meant.
+   */
+  describe("the anamnesis destination", () => {
+    it("opens for an adult manager on an ordinary shared record", () => {
+      authRef.isLoading = false;
+      authRef.active = {
+        accountId: "shared-record",
+        recordKind: "shared",
+        level: "manage",
+        sections: null,
+        canWrite: true,
+      };
+
+      const html = render("anamnesis");
+
+      expect(html).toContain("record-anamnesis");
+      expect(html).not.toContain("actor-settings");
+      expect(html).not.toContain("managed-settings");
+    });
+
+    it("opens for a Guardian, rather than the guardian configuration panel", () => {
+      authRef.isLoading = false;
+      authRef.active = {
+        accountId: "managed-record",
+        recordKind: "managed",
+        level: "manage",
+        sections: null,
+        canWrite: true,
+      };
+
+      const html = render("anamnesis");
+
+      expect(html).toContain("record-anamnesis");
+      expect(html).not.toContain("managed-settings");
+    });
+
+    it("stays shut below MANAGE", () => {
+      authRef.isLoading = false;
+      authRef.active = {
+        accountId: "shared-record",
+        recordKind: "shared",
+        level: "write",
+        sections: null,
+        canWrite: true,
+      };
+
+      const html = render("anamnesis");
+
+      expect(html).not.toContain("record-anamnesis");
+      expect(html).toContain("shared-record-settings-unavailable-title");
+    });
+
+    it("does not lend its page to another destination of the same kind", () => {
+      // `labs` is `adult-shared-unavailable` today, so this passes for the
+      // right reason now; the claim it pins is that the branch asks WHICH
+      // page, not which category. A second `manage-writable` slug added
+      // without an arm falls through to the refusal panel.
+      authRef.isLoading = false;
+      authRef.active = {
+        accountId: "shared-record",
+        recordKind: "shared",
+        level: "manage",
+        sections: null,
+        canWrite: true,
+      };
+
+      const html = render("labs");
+
+      expect(html).not.toContain("record-anamnesis");
+      expect(html).toContain("shared-record-settings-unavailable-title");
+    });
   });
 });

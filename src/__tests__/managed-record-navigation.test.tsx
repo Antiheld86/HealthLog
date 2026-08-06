@@ -151,6 +151,21 @@ describe("managed record navigation", () => {
     }
   });
 
+  it("offers a managed entry below MANAGE nothing at all", () => {
+    // A guardian grant is always MANAGE today, which is exactly why the level
+    // check was easy to leave out of the managed branch. Without it a managed
+    // entry that ever arrived below MANAGE would list destinations the section
+    // gate refuses, sending somebody to a page that explains it cannot open.
+    recordRef.value = { kind: "managed", level: "read" };
+    const html = renderSettings();
+
+    for (const section of SETTINGS_SECTIONS) {
+      expect(html, section.slug).not.toContain(
+        `href="/settings/${section.slug}"`,
+      );
+    }
+  });
+
   it("keeps the exit control present while administering a managed record", () => {
     recordRef.value = { kind: "managed", level: "manage" };
     const html = renderToStaticMarkup(

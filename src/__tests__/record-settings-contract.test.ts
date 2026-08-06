@@ -10,6 +10,7 @@ import {
   isManageDelegateSettingsDestination,
   SETTINGS_DESTINATION_INVENTORY,
 } from "@/lib/record-settings/classification";
+import { RECORD_CONTENT_SECTIONS } from "@/components/settings/record-settings-section-gate";
 import { toRecordSettingsDto } from "@/lib/record-settings/dto";
 import { resolveManagedIntegrationState } from "@/lib/record-settings/integrations";
 import { assertRecordSettingsResponseForRecord } from "@/lib/record-settings/response";
@@ -112,6 +113,23 @@ describe("record settings contract", () => {
         guardianOnly,
       ).toBe(false);
     }
+  });
+
+  it("gives every record-content destination a page of its own", () => {
+    // Both directions, and the first is the one that matters. `manage-writable`
+    // is a classification; the gate has to know which PAGE each slug is, or a
+    // destination added to the kind would silently inherit the allergy and
+    // family-history managers under its own heading. The map is what says
+    // which, and this is what stops the two drifting apart — a new
+    // manage-writable slug fails here, at the moment it is added, rather than
+    // rendering somebody else's forms.
+    const classified = Object.keys(SETTINGS_DESTINATION_INVENTORY)
+      .filter(isManageDelegateSettingsDestination)
+      .sort();
+    const rendered = Object.keys(RECORD_CONTENT_SECTIONS).sort();
+
+    expect(classified).not.toHaveLength(0);
+    expect(rendered).toEqual(classified);
   });
 
   it("leaves exactly one destination on the manage-writable list", () => {

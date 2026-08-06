@@ -8,17 +8,25 @@
  */
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
+import { getAuditLogRetentionDays } from "@/lib/jobs/audit-log-cleanup";
 import { annotate } from "@/lib/logging/context";
 import { ENCRYPTED_COLUMNS } from "@/lib/crypto/encrypted-columns";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Retention windows. These mirror the defaults + env names the cleanup jobs
- * read (`coach-message-cleanup.ts`, `audit-log-cleanup.ts`, the reminder
- * cleanup handlers); read here directly so the dashboard never imports a
- * pg-boss job module. Off-host backup retention is operator infrastructure
- * (not an app setting), so it is disclosed as prose, not a number.
+ * Retention windows, as the privacy dashboard states them.
+ *
+ * The audit window comes from `getAuditLogRetentionDays()` rather than from a
+ * second parse of the same variable. It used to be re-implemented here with
+ * its own default and its own floor, which is two implementations of one
+ * disclosure — and this surface, the sharing panel and the purge job all quote
+ * the number to the same person. A drift between them is a page telling
+ * somebody their data is kept for a length of time it is not.
+ *
+ * The rest still parse locally so the dashboard never imports a pg-boss job
+ * module. Off-host backup retention is operator infrastructure (not an app
+ * setting), so it is disclosed as prose, not a number.
  */
 function resolveRetention() {
   const intEnv = (name: string, fallback: number, min: number): number => {
@@ -28,7 +36,7 @@ function resolveRetention() {
   };
   return {
     coachMessagesDays: intEnv("COACH_MESSAGE_RETENTION_DAYS", 365, 30),
-    auditLogDays: intEnv("AUDIT_LOG_RETENTION_DAYS", 365, 7),
+    auditLogDays: getAuditLogRetentionDays(),
     // The push-attempt + mood-dispatch ledgers are a fixed 90-day window.
     deliveryLogDays: 90,
   };

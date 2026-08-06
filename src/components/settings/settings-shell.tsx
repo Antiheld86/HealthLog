@@ -460,10 +460,17 @@ export function SettingsShell({
       ? allVisibleSections
       : allVisibleSections.filter((section) => {
           const kind = classifySettingsDestination(section.slug).kind;
+          // Every destination on either list needs MANAGE, so the level is
+          // checked once for both record kinds rather than only for the adult
+          // one. A guardian grant is always MANAGE today, which is exactly why
+          // the check was easy to leave out — and a managed entry that ever
+          // arrived below it would have listed destinations the section gate
+          // refuses, sending somebody to a page that explains it cannot open.
+          if (activeRecord.level !== "manage") return false;
           if (activeRecord.recordKind === "managed") {
             return kind === "managed-guardian" || kind === "manage-writable";
           }
-          return kind === "manage-writable" && activeRecord.level === "manage";
+          return kind === "manage-writable";
         });
   const activeSection = allVisibleSections.find(
     (section) => section.slug === activeSlug,
