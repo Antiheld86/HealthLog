@@ -943,6 +943,14 @@ const DELEGABLE_ROUTES: Record<string, DelegableEntry> = {
     domain: "cycle",
     why: "The record's cycle history. Whether cycle tracking applies is a property of the record, and the gate gets there by re-loading the profile and gender for the resolved user id — note that the `gender` argument at the call site is dead (`requireCycleEnabled` names it `_gender`), so it is the id that carries the substitution, not that argument.",
   },
+  "app/api/cycle/calendar/route.ts": {
+    domain: "cycle",
+    why: "The initial cycle calendar read. Its gate resolves tracking eligibility from the substituted record id, and the handler only reads that record's bounded calendar inputs.",
+  },
+  "app/api/cycle/insights/route.ts": {
+    domain: "cycle",
+    why: "The initial cycle insights read. Its rate-limit key and every phase-correlation input use the resolved record id; it creates no provider egress or mutation.",
+  },
   "app/api/cycle/day-logs/route.ts": {
     domain: "cycle",
     why: 'One day of the record\'s cycle log. The `auditLog("cycle.day-log.upsert")` in this file belongs to the PUT, which keeps `requireAuth()`.',
@@ -1799,8 +1807,9 @@ const ACTOR_ROUTES: Record<string, string> = {
  * settings add two guardian-only entries: 194 → 196. Field-specific
  * managed-record configuration adds one more: 196 → 197. The bounded
  * read-only profile summary makes the next explicit admission: 197 → 198.
+ * The two initial Cycle reads follow as separate, scoped admissions: 198 → 200.
  */
-const FROZEN_ENTRY_COUNT = 198;
+const FROZEN_ENTRY_COUNT = 200;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —
