@@ -52,7 +52,7 @@ export interface TelegramSendResult extends SendOutcome {
 /**
  * Delete the existing Telegram reminder message for a single dose slot
  * before re-sending it. v1.7.0 SB-SCHED-4 — scoped to the exact slot
- * `{ medicationId, scheduleId, date, phase, timeOfDay }` (the same
+ * `{ recipientUserId, medicationId, scheduleId, date, phase, timeOfDay }` (the same
  * composite the tracking upsert keys on), NOT the whole medication. A
  * medication with `timesOfDay = ["08:00","20:00"]` has two distinct
  * ledger rows per day; the pre-v1.7 whole-medication wipe deleted the
@@ -62,6 +62,7 @@ export interface TelegramSendResult extends SendOutcome {
  */
 async function deleteExistingReminders(
   botToken: string,
+  recipientUserId: string,
   medicationId: string,
   scheduleId: string,
   date: string,
@@ -71,7 +72,8 @@ async function deleteExistingReminders(
   try {
     const existing = await prisma.telegramReminderMessage.findUnique({
       where: {
-        medicationId_scheduleId_date_phase_timeOfDay: {
+        recipientUserId_medicationId_scheduleId_date_phase_timeOfDay: {
+          recipientUserId,
           medicationId,
           scheduleId,
           date,
@@ -89,17 +91,6 @@ async function deleteExistingReminders(
       // Best-effort: message may already be deleted
     }
 
-    await prisma.telegramReminderMessage.delete({
-      where: {
-        medicationId_scheduleId_date_phase_timeOfDay: {
-          medicationId,
-          scheduleId,
-          date,
-          phase,
-          timeOfDay,
-        },
-      },
-    });
   } catch (err) {
     getEvent()?.addWarning(`Failed to delete existing reminders: ${err}`);
   }
@@ -136,6 +127,7 @@ export async function sendViaTelegram(
   if (medicationId && scheduleId && phase && date) {
     await deleteExistingReminders(
       config.botToken,
+      userId,
       medicationId,
       scheduleId,
       date,
@@ -220,7 +212,8 @@ export async function sendViaTelegram(
     try {
       await prisma.telegramReminderMessage.upsert({
         where: {
-          medicationId_scheduleId_date_phase_timeOfDay: {
+          recipientUserId_medicationId_scheduleId_date_phase_timeOfDay: {
+            recipientUserId: userId,
             medicationId,
             scheduleId,
             date,
@@ -229,6 +222,7 @@ export async function sendViaTelegram(
           },
         },
         create: {
+          recipientUserId: userId,
           medicationId,
           scheduleId,
           chatId: config.chatId,

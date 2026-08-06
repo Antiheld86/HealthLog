@@ -15,7 +15,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const sendTelegramMessageMock = vi.fn();
 const deleteMessageMock = vi.fn();
 const findUniqueMock = vi.fn();
-const deleteMock = vi.fn();
 const upsertMock = vi.fn();
 const userFindUniqueMock = vi.fn();
 
@@ -31,7 +30,6 @@ vi.mock("@/lib/db", () => ({
     },
     telegramReminderMessage: {
       findUnique: (...args: unknown[]) => findUniqueMock(...args),
-      delete: (...args: unknown[]) => deleteMock(...args),
       upsert: (...args: unknown[]) => upsertMock(...args),
     },
   },
@@ -79,7 +77,6 @@ describe("sendViaTelegram — per-slot delete scope (H2)", () => {
     sendTelegramMessageMock.mockResolvedValue({ ok: true, messageId: 999 });
     deleteMessageMock.mockResolvedValue(undefined);
     findUniqueMock.mockResolvedValue(null);
-    deleteMock.mockResolvedValue(undefined);
     upsertMock.mockResolvedValue(undefined);
     userFindUniqueMock.mockResolvedValue({ locale: "en" });
     scheduleTelegramAutoDeleteMock.mockResolvedValue(undefined);
@@ -107,7 +104,7 @@ describe("sendViaTelegram — per-slot delete scope (H2)", () => {
     });
   });
 
-  it("deletes only the matching slot's ledger row, leaving sibling slots untouched", async () => {
+  it("replaces only the matching slot's remote message, leaving its tracking row for update", async () => {
     // The 20:00 slot has a prior row; the lookup returns it.
     findUniqueMock.mockResolvedValue({
       chatId: "chat-1",
@@ -118,20 +115,22 @@ describe("sendViaTelegram — per-slot delete scope (H2)", () => {
 
     // The Telegram message for the old 20:00 row is deleted...
     expect(deleteMessageMock).toHaveBeenCalledWith("bot-token", "chat-1", 123);
-    // ...and exactly that single ledger row is removed (scoped delete, not deleteMany).
-    expect(deleteMock).toHaveBeenCalledTimes(1);
-    expect(deleteMock).toHaveBeenCalledWith({
-      where: {
-        recipientUserId_medicationId_scheduleId_date_phase_timeOfDay: {
-          recipientUserId: "user-1",
-          medicationId: "med-1",
-          scheduleId: "sched-1",
-          date: "2025-06-10",
-          phase: "YELLOW",
-          timeOfDay: "20:00",
+    // The tracking row stays in place so the recipient-scoped upsert updates
+    // it rather than creating a second row when the chat binding changes.
+    expect(upsertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          recipientUserId_medicationId_scheduleId_date_phase_timeOfDay: {
+            recipientUserId: "user-1",
+            medicationId: "med-1",
+            scheduleId: "sched-1",
+            date: "2025-06-10",
+            phase: "YELLOW",
+            timeOfDay: "20:00",
+          },
         },
-      },
-    });
+      }),
+    );
   });
 
   it("does not delete anything when no prior row exists for the slot", async () => {
@@ -140,7 +139,6 @@ describe("sendViaTelegram — per-slot delete scope (H2)", () => {
     await sendViaTelegram(config, reminderPayload());
 
     expect(deleteMessageMock).not.toHaveBeenCalled();
-    expect(deleteMock).not.toHaveBeenCalled();
     // It still sends + tracks the new message.
     expect(sendTelegramMessageMock).toHaveBeenCalledTimes(1);
     expect(upsertMock).toHaveBeenCalledTimes(1);
@@ -155,7 +153,6 @@ describe("sendViaTelegram — per-slot delete scope (H2)", () => {
     );
 
     expect(findUniqueMock).not.toHaveBeenCalled();
-    expect(deleteMock).not.toHaveBeenCalled();
   });
 
   it("keeps two recipients' identical subject slots independent", async () => {

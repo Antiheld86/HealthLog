@@ -50,6 +50,34 @@ CREATE TABLE "notification_events" (
 CREATE INDEX "notification_events_record_user_id_event_type_dedup_key_created_at_desc_idx"
     ON "notification_events" ("record_user_id", "event_type", "dedup_key", "created_at" DESC);
 
+-- Tracking belongs to the account that received the Telegram message. The
+-- prior subject-only key collapsed multiple delegated recipients into one row.
+ALTER TABLE "telegram_reminder_messages"
+    ADD COLUMN "recipient_user_id" TEXT;
+
+UPDATE "telegram_reminder_messages" AS "message"
+SET "recipient_user_id" = "medication"."user_id"
+FROM "medications" AS "medication"
+WHERE "medication"."id" = "message"."medication_id";
+
+ALTER TABLE "telegram_reminder_messages"
+    ALTER COLUMN "recipient_user_id" SET NOT NULL,
+    ADD CONSTRAINT "telegram_reminder_messages_recipient_user_id_fkey"
+        FOREIGN KEY ("recipient_user_id") REFERENCES "users"("id")
+        ON DELETE CASCADE ON UPDATE CASCADE;
+
+DROP INDEX "telegram_reminder_messages_med_sched_date_phase_tod_key";
+
+CREATE UNIQUE INDEX "telegram_reminder_messages_recipient_slot_key"
+    ON "telegram_reminder_messages" (
+        "recipient_user_id",
+        "medication_id",
+        "schedule_id",
+        "date",
+        "phase",
+        "time_of_day"
+    );
+
 CREATE FUNCTION enforce_push_attempt_attribution()
 RETURNS TRIGGER
 LANGUAGE plpgsql

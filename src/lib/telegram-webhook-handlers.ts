@@ -90,10 +90,17 @@ function resolveBotLocale(value: string | null | undefined): Locale {
   return "de";
 }
 
-async function cleanupReminderTracking(medicationId: string): Promise<void> {
+async function cleanupReminderTracking(
+  recipientUserId: string,
+  medicationId: string,
+): Promise<void> {
   try {
     await prisma.telegramReminderMessage.deleteMany({
-      where: { medicationId },
+      where: {
+        recipientUserId,
+        medicationId,
+        medication: { userId: recipientUserId },
+      },
     });
   } catch {
     // Best-effort cleanup
@@ -153,6 +160,7 @@ async function resolveReminderSlot(input: {
 }): Promise<Date | null> {
   const reminder = await prisma.telegramReminderMessage.findFirst({
     where: {
+      recipientUserId: input.userId,
       medicationId: input.medicationId,
       chatId: input.chatId,
       messageId: input.messageId,
@@ -398,7 +406,7 @@ export async function handleCallback(update: TelegramUpdate) {
     if (messageId) {
       await deleteMessage(botToken, chatId, messageId);
     }
-    await cleanupReminderTracking(medicationId);
+    await cleanupReminderTracking(user.id, medicationId);
   } else if (data.startsWith("snooze:")) {
     // Format: "snooze:{medicationId}:{minutes}"
     const parts = data.split(":");
@@ -443,7 +451,7 @@ export async function handleCallback(update: TelegramUpdate) {
     if (messageId) {
       await deleteMessage(botToken, chatId, messageId);
     }
-    await cleanupReminderTracking(medicationId);
+    await cleanupReminderTracking(user.id, medicationId);
   } else if (data.startsWith("skip:")) {
     const medicationId = data.slice("skip:".length).trim();
     if (!medicationId) {
@@ -586,7 +594,7 @@ export async function handleCallback(update: TelegramUpdate) {
     if (messageId) {
       await deleteMessage(botToken, chatId, messageId);
     }
-    await cleanupReminderTracking(medicationId);
+    await cleanupReminderTracking(user.id, medicationId);
   } else if (data.startsWith("ack:")) {
     const medicationId = data.slice("ack:".length).trim();
     if (!medicationId) {
@@ -613,7 +621,7 @@ export async function handleCallback(update: TelegramUpdate) {
     if (messageId) {
       await deleteMessage(botToken, chatId, messageId);
     }
-    await cleanupReminderTracking(medicationId);
+    await cleanupReminderTracking(user.id, medicationId);
   } else if (data.startsWith("add:")) {
     // Format: "add:{medicationId}" or "add:{medicationId}:umid:{userMsgId}"
     const withoutPrefix = data.slice("add:".length);

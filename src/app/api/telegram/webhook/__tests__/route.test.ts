@@ -291,6 +291,14 @@ describe("Telegram webhook — callback dispatch", () => {
     const res = await POST(tgRequest(callbackUpdate("taken:med-1")));
     expect(res.status).toBe(200);
 
+    expect(prisma.telegramReminderMessage.deleteMany).toHaveBeenCalledWith({
+      where: {
+        recipientUserId: "user-1",
+        medicationId: "med-1",
+        medication: { userId: "user-1" },
+      },
+    });
+
     // No schedules wired → the take is ad-hoc and inserts standalone.
     expect(prisma.medicationIntakeEvent.create).toHaveBeenCalledTimes(1);
     const intakeArgs = vi.mocked(prisma.medicationIntakeEvent.create).mock
@@ -778,6 +786,16 @@ describe("Telegram webhook — slot convergence (v1.16.9)", () => {
 
     const res = await POST(tgRequest(callbackUpdate("taken:med-1")));
     expect(res.status).toBe(200);
+
+    expect(prisma.telegramReminderMessage.findFirst).toHaveBeenCalledWith({
+      where: {
+        recipientUserId: "user-1",
+        medicationId: "med-1",
+        chatId: "7777",
+        messageId: 555,
+      },
+      select: { date: true, timeOfDay: true },
+    });
 
     // The pending row was updated in place — never a duplicate insert.
     expect(prisma.medicationIntakeEvent.create).not.toHaveBeenCalled();
