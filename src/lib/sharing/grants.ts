@@ -54,7 +54,13 @@
 import { prisma } from "@/lib/db";
 import { isP2002 } from "@/lib/prisma-errors";
 import { clearActingSessions } from "@/lib/sharing/acting-session";
-import { reduceManagedProfileGuardian } from "@/lib/managed-profiles/lifecycle";
+import {
+  activeGuardianWhere,
+  LastManagedGuardianError,
+  ManagedProfileLifecycleError,
+  reduceManagedProfileGuardian,
+  withManagedProfileLock,
+} from "@/lib/managed-profiles/lifecycle";
 import { ENTIRE_RECORD, isShareDomain } from "@/lib/sharing/scope";
 import type { ShareDomain, ShareScope } from "@/lib/sharing/scope";
 import { Prisma } from "@/generated/prisma/client";
@@ -415,47 +421,130 @@ export interface AcceptGrantInput {
  */
 export async function acceptGrant(
   input: AcceptGrantInput,
-  db: GrantDb = prisma,
 ): Promise<AccountGrant> {
-  const now = new Date();
-  const { count } = await db.accountGrant.updateMany({
-    where: {
-      id: input.grantId,
-      granteeId: input.granteeId,
-      acceptedAt: null,
-      revokedAt: null,
-      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-    },
-    data: { acceptedAt: now },
-  });
+  return prisma.$transaction((tx) => acceptGrantInTransaction(input, tx));
+}
 
-  if (count === 0) {
-    throw await refusalFor(input.grantId, { granteeId: input.granteeId }, db);
-  }
-
-  const accepted = await db.accountGrant.findUniqueOrThrow({
+async function acceptGrantInTransaction(
+  input: AcceptGrantInput,
+  tx: Prisma.TransactionClient,
+): Promise<AccountGrant> {
+  const candidate = await tx.accountGrant.findUnique({
     where: { id: input.grantId },
-    include: { grantor: { select: { managedProfileAt: true } } },
+    select: { grantorId: true, access: true },
   });
-
-  // The expiry belongs to the invitation, not to a Guardian relationship. A
-  // managed profile still lets its creator set an expiry while the invitation
-  // waits for the other adult's consent, but once accepted the MANAGE grant is
-  // standing until a Guardian explicitly ends it. Ordinary adult-record grants
-  // retain their requested expiry unchanged.
-  if (accepted.access === "MANAGE" && accepted.grantor.managedProfileAt) {
-    await db.accountGrant.updateMany({
-      where: {
-        id: accepted.id,
-        granteeId: input.granteeId,
-        acceptedAt: { not: null },
-        revokedAt: null,
-      },
-      data: { expiresAt: null },
-    });
+  if (!candidate) {
+    throw await refusalFor(input.grantId, { granteeId: input.granteeId }, tx);
   }
 
-  return db.accountGrant.findUniqueOrThrow({ where: { id: input.grantId } });
+  const accept = async (managedProfile: boolean) => {
+    const now = new Date();
+    const { count } = await tx.accountGrant.updateMany({
+      where: {
+        id: input.grantId,
+        granteeId: input.granteeId,
+        acceptedAt: null,
+        revokedAt: null,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      },
+      data: {
+        acceptedAt: now,
+        ...(managedProfile ? { expiresAt: null } : {}),
+      },
+    });
+    if (count === 0) {
+      throw await refusalFor(input.grantId, { granteeId: input.granteeId }, tx);
+    }
+    return tx.accountGrant.findUniqueOrThrow({ where: { id: input.grantId } });
+  };
+
+  if (candidate.access !== "MANAGE") return accept(false);
+
+  return withManagedProfileLock(tx, candidate.grantorId, async (profile) =>
+    accept(Boolean(profile?.managedProfileAt)),
+  );
+}
+
+export async function inviteManagedProfileGuardian(input: {
+  profileId: string;
+  guardianId: string;
+  granteeId: string;
+}): Promise<AccountGrant> {
+  return prisma.$transaction(async (tx) => {
+    return withManagedProfileLock(tx, input.profileId, async (profile) => {
+      if (!profile) throw new ManagedProfileLifecycleError("not_found");
+      if (!profile.managedProfileAt) {
+        throw new ManagedProfileLifecycleError("not_managed");
+      }
+      const guardian = await tx.accountGrant.findFirst({
+        where: {
+          grantorId: profile.id,
+          granteeId: input.guardianId,
+          ...activeGuardianWhere(new Date()),
+        },
+        select: { id: true },
+      });
+      if (!guardian) throw new ManagedProfileLifecycleError("not_guardian");
+      return inviteGrant(
+        {
+          grantorId: profile.id,
+          granteeId: input.granteeId,
+          access: "MANAGE",
+          scope: null,
+          expiresAt: null,
+        },
+        tx,
+      );
+    });
+  });
+}
+
+export async function revokeManagedProfileGuardian(input: {
+  profileId: string;
+  guardianId: string;
+  grantId: string;
+}): Promise<AccountGrant> {
+  return prisma.$transaction(async (tx) => {
+    return withManagedProfileLock(tx, input.profileId, async (profile) => {
+      if (!profile) throw new ManagedProfileLifecycleError("not_found");
+      if (!profile.managedProfileAt) {
+        throw new ManagedProfileLifecycleError("not_managed");
+      }
+      const requester = await tx.accountGrant.findFirst({
+        where: {
+          grantorId: profile.id,
+          granteeId: input.guardianId,
+          ...activeGuardianWhere(new Date()),
+        },
+        select: { id: true },
+      });
+      if (!requester) throw new ManagedProfileLifecycleError("not_guardian");
+
+      const target = await tx.accountGrant.findFirst({
+        where: {
+          id: input.grantId,
+          grantorId: profile.id,
+          ...activeGuardianWhere(new Date()),
+        },
+        select: { id: true, granteeId: true },
+      });
+      if (!target) throw new ManagedProfileLifecycleError("not_guardian");
+      if (target.granteeId === input.guardianId) {
+        throw new ManagedProfileLifecycleError("not_guardian");
+      }
+
+      const activeGuardians = await tx.accountGrant.count({
+        where: { grantorId: profile.id, ...activeGuardianWhere(new Date()) },
+      });
+      if (activeGuardians <= 1) throw new LastManagedGuardianError();
+
+      await tx.accountGrant.update({
+        where: { id: target.id },
+        data: { revokedAt: new Date(), revokedBy: "GRANTOR" },
+      });
+      return tx.accountGrant.findUniqueOrThrow({ where: { id: target.id } });
+    });
+  });
 }
 
 export interface RevokeGrantInput {

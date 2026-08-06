@@ -42,6 +42,16 @@ describe("managed-profile contract", () => {
     ).toBe(false);
   });
 
+  it("does not claim notification fanout before its consent plan exists", async () => {
+    const source = await readFile(
+      path.join(root, "prisma/schema.prisma"),
+      "utf8",
+    );
+
+    expect(source).not.toContain("notification dispatcher fans reminders");
+    expect(source).toContain("later notification plan");
+  });
+
   it("uses the same record lock for every Guardian-reducing transition", async () => {
     const lifecycle = await readFile(
       path.join(root, "src/lib/managed-profiles/lifecycle.ts"),

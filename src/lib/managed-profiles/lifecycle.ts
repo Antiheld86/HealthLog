@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/db";
+import { auditLog } from "@/lib/auth/audit";
 import type { Prisma } from "@/generated/prisma/client";
 
 type Transaction = Prisma.TransactionClient;
 
-const ACTIVE_GUARDIAN = (now: Date) => ({
+export const activeGuardianWhere = (now: Date) => ({
   access: "MANAGE" as const,
   acceptedAt: { not: null },
   revokedAt: null,
@@ -65,7 +66,7 @@ export async function reduceManagedProfileGuardian<T>(
     if (!profile?.managedProfileAt) return reduction();
 
     const activeGuardians = await tx.accountGrant.count({
-      where: { grantorId: profile.id, ...ACTIVE_GUARDIAN(new Date()) },
+      where: { grantorId: profile.id, ...activeGuardianWhere(new Date()) },
     });
     if (activeGuardians <= 1) throw new LastManagedGuardianError();
 
@@ -87,7 +88,7 @@ export async function deleteGuardianAccountWithLifecycle<T>(
     const grants = await tx.accountGrant.findMany({
       where: {
         granteeId: guardianId,
-        ...ACTIVE_GUARDIAN(now),
+        ...activeGuardianWhere(now),
         grantor: { managedProfileAt: { not: null } },
       },
       select: { grantorId: true },
@@ -103,14 +104,14 @@ export async function deleteGuardianAccountWithLifecycle<T>(
           where: {
             grantorId,
             granteeId: guardianId,
-            ...ACTIVE_GUARDIAN(new Date()),
+            ...activeGuardianWhere(new Date()),
           },
           select: { id: true },
         });
         if (!stillActive) return;
 
         const activeGuardians = await tx.accountGrant.count({
-          where: { grantorId, ...ACTIVE_GUARDIAN(new Date()) },
+          where: { grantorId, ...activeGuardianWhere(new Date()) },
         });
         if (activeGuardians <= 1) throw new LastManagedGuardianError();
       });
@@ -135,12 +136,17 @@ export async function deleteManagedProfile(input: {
         where: {
           grantorId: profile.id,
           granteeId: input.guardianId,
-          ...ACTIVE_GUARDIAN(new Date()),
+          ...activeGuardianWhere(new Date()),
         },
         select: { id: true },
       });
       if (!guardian) throw new ManagedProfileLifecycleError("not_guardian");
 
+      await auditLog("managed_profile.deleted", {
+        userId: input.guardianId,
+        details: { profileId: profile.id },
+        client: tx,
+      });
       await tx.user.delete({ where: { id: profile.id } });
     });
   });

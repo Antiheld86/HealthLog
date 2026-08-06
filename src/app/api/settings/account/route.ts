@@ -57,17 +57,17 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
   const userId = user.id;
   const username = user.username;
 
-  // Log BEFORE deletion. The audit row's userId is SetNull post-cascade
-  // (per schema), but we then immediately purge it below for GDPR Art. 17
-  // erasure completeness — see comment further down.
-  await auditLog("user.account.delete", {
-    userId,
-    ipAddress: getClientIp(request),
-    details: { username },
-  });
-
   try {
     await deleteGuardianAccountWithLifecycle(userId, async (tx) => {
+      // The invariant has now passed, so this success event cannot survive a
+      // refusal. It is purged with the rest of the account's audit history.
+      await auditLog("user.account.delete", {
+        userId,
+        ipAddress: getClientIp(request),
+        details: { username },
+        client: tx,
+      });
+
       // Destroy all sessions before the user row goes, inside the same record
       // lifecycle transaction so a refusal leaves every account state intact.
       await tx.session.deleteMany({ where: { userId } });

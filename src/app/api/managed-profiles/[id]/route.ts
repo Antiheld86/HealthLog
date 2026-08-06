@@ -6,7 +6,6 @@ import {
   requireFreshMfa,
 } from "@/lib/api-handler";
 import { apiError, apiSuccess } from "@/lib/api-response";
-import { auditLog } from "@/lib/auth/audit";
 import {
   deleteManagedProfile,
   ManagedProfileLifecycleError,
@@ -32,10 +31,6 @@ export const DELETE = apiHandler(
       throw error;
     }
 
-    await auditLog("managed_profile.deleted", {
-      userId: user.id,
-      details: { profileId: id },
-    }).catch(() => {});
     annotate({
       action: { name: "managed_profile.delete" },
       meta: { profile_id: id },
