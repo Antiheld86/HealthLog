@@ -1,7 +1,4 @@
-export type RecordSettingsRelationship =
-  | "guardian"
-  | "self"
-  | "adult-manager";
+export type RecordSettingsRelationship = "guardian" | "self" | "adult-manager";
 
 export interface RecordSettingsAccess {
   actorId: string;

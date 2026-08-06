@@ -1,10 +1,7 @@
 import type { SettingsSectionSlug } from "@/components/settings/section-slugs";
 
 export type SettingsDestinationKind =
-  | "personal"
-  | "managed-guardian"
-  | "adult-shared-unavailable"
-  | "unavailable";
+  "personal" | "managed-guardian" | "adult-shared-unavailable" | "unavailable";
 
 export interface SettingsDestinationClassification {
   kind: SettingsDestinationKind;
@@ -72,15 +69,17 @@ export const SETTINGS_DESTINATION_INVENTORY = {
   advanced: PERSONAL,
   privacy: PERSONAL,
   about: PERSONAL,
-} as const satisfies Record<SettingsSectionSlug, SettingsDestinationClassification>;
+} as const satisfies Record<
+  SettingsSectionSlug,
+  SettingsDestinationClassification
+>;
 
 export function classifySettingsDestination(
   destination: string,
 ): SettingsDestinationClassification {
   return (
-    SETTINGS_DESTINATION_INVENTORY[
-      destination as SettingsSectionSlug
-    ] ?? UNAVAILABLE
+    SETTINGS_DESTINATION_INVENTORY[destination as SettingsSectionSlug] ??
+    UNAVAILABLE
   );
 }
 

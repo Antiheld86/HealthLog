@@ -4,6 +4,7 @@ export {
   type RecordSettingsAccess,
 } from "./access";
 export { toRecordSettingsDto, type RecordSettingsDto } from "./dto";
+export { resolveManagedIntegrationState } from "./integrations";
 export {
   classifySettingsDestination,
   isGuardianSettingsWriteAllowed,

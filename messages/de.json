@@ -4433,6 +4433,11 @@
         "system": "System"
       }
     },
+    "sharedRecord": {
+      "unavailableTitle": "In diesem geteilten Datensatz nicht verfügbar",
+      "unavailableDescription": "Dieser Einstellungsbereich ist beim Anzeigen des Datensatzes einer anderen Person bewusst nicht verfügbar.",
+      "integrationStatusDescription": "Verbindungsstatus für diesen verwalteten Datensatz. Verbindungssteuerungen sind nicht verfügbar."
+    },
     "sections": {
       "account": {
         "title": "Konto",

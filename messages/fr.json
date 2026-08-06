@@ -4433,6 +4433,11 @@
         "system": "Système"
       }
     },
+    "sharedRecord": {
+      "unavailableTitle": "Indisponible dans ce dossier partagé",
+      "unavailableDescription": "Cette section des réglages est volontairement indisponible lorsque vous consultez le dossier d’une autre personne.",
+      "integrationStatusDescription": "État de connexion pour ce dossier géré. Les commandes de connexion ne sont pas disponibles."
+    },
     "sections": {
       "account": {
         "title": "Compte",

@@ -4433,6 +4433,11 @@
         "system": "Sistema"
       }
     },
+    "sharedRecord": {
+      "unavailableTitle": "No disponible en este registro compartido",
+      "unavailableDescription": "Esta sección de Ajustes no está disponible intencionadamente mientras consultas el registro de otra persona.",
+      "integrationStatusDescription": "Estado de conexión de este registro gestionado. Los controles de conexión no están disponibles."
+    },
     "sections": {
       "account": {
         "title": "Cuenta",

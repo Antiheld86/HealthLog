@@ -4433,6 +4433,11 @@
         "system": "System"
       }
     },
+    "sharedRecord": {
+      "unavailableTitle": "Unavailable in this shared record",
+      "unavailableDescription": "This Settings area is intentionally unavailable while viewing another person's record.",
+      "integrationStatusDescription": "Connection status for this managed record. Connection controls are unavailable."
+    },
     "sections": {
       "account": {
         "title": "Account",

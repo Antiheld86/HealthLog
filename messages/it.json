@@ -4433,6 +4433,11 @@
         "system": "Sistema"
       }
     },
+    "sharedRecord": {
+      "unavailableTitle": "Non disponibile in questo record condiviso",
+      "unavailableDescription": "Questa area delle Impostazioni non è disponibile intenzionalmente mentre visualizzi il record di un’altra persona.",
+      "integrationStatusDescription": "Stato di connessione per questo record gestito. I controlli di connessione non sono disponibili."
+    },
     "sections": {
       "account": {
         "title": "Account",

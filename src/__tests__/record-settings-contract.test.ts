@@ -10,6 +10,7 @@ import {
   SETTINGS_DESTINATION_INVENTORY,
 } from "@/lib/record-settings/classification";
 import { toRecordSettingsDto } from "@/lib/record-settings/dto";
+import { resolveManagedIntegrationState } from "@/lib/record-settings/integrations";
 import { recordSettingsKeys } from "@/lib/query-keys";
 
 describe("record settings contract", () => {
@@ -35,6 +36,11 @@ describe("record settings contract", () => {
       "record-settings",
       "record-1",
       "detail",
+    ]);
+    expect(recordSettingsKeys.recordSettingsIntegrations("record-1")).toEqual([
+      "record-settings",
+      "record-1",
+      "integrations",
     ]);
   });
 
@@ -65,5 +71,29 @@ describe("record settings contract", () => {
     expect(isGuardianSettingsWriteAllowed("notifications")).toBe(true);
     expect(isGuardianSettingsWriteAllowed("integrations")).toBe(false);
     expect(isGuardianSettingsWriteAllowed("ai")).toBe(false);
+  });
+
+  it("does not report a synthetic ledger row as a managed connection", () => {
+    const connected = {
+      withings: false,
+      whoop: false,
+      fitbit: false,
+      nightscout: false,
+      polar: false,
+      oura: false,
+      "google-health": false,
+      strava: false,
+    } as const;
+
+    expect(
+      resolveManagedIntegrationState("connected", connected, "withings"),
+    ).toBe("disconnected");
+    expect(
+      resolveManagedIntegrationState(
+        "error_reauth",
+        { ...connected, oura: true },
+        "oura",
+      ),
+    ).toBe("error_reauth");
   });
 });

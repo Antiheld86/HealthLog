@@ -4433,6 +4433,11 @@
         "system": "System"
       }
     },
+    "sharedRecord": {
+      "unavailableTitle": "Niedostępne w tym udostępnionym rekordzie",
+      "unavailableDescription": "Ten obszar Ustawień jest celowo niedostępny podczas przeglądania rekordu innej osoby.",
+      "integrationStatusDescription": "Stan połączenia dla tego zarządzanego rekordu. Elementy sterujące połączeniem są niedostępne."
+    },
     "sections": {
       "account": {
         "title": "Konto",
