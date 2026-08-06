@@ -14,6 +14,9 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { cookieJar, headerJar } from "./mock-next-headers";
@@ -328,5 +331,76 @@ describe("the lifecycle verbs leave their own trail", () => {
       owner.id,
     ]);
     expect(trail.every((r) => r.actorUserId === null)).toBe(true);
+  });
+});
+
+/**
+ * A view-only delegate sends a query the route cannot parse.
+ *
+ * This is the sharpest case the activity feed has, and it shipped saying the
+ * wrong thing. `GET /api/mood-entries` resolves `requireRecordAuth("read",
+ * "mind")` and files `mood-entries.list.validation-failed` through `auditLog`
+ * on a malformed query — deliberately through the helper, because that is what
+ * stamps `actorUserId` and the row is meant to be attributable. The feed
+ * selects every actor-stamped row with no action allowlist, and the verb map
+ * had no arm for any `*.validation-failed` action, so the owner was told that
+ * a person holding VIEW-ONLY access had made a change in their record.
+ *
+ * Nothing had changed. Nothing could have: the request was refused at the
+ * schema. So the whole round trip is asserted here rather than only the map —
+ * that the row lands, that it is attributed, and that the sentence the owner
+ * would read is an attempt rather than an act.
+ */
+describe("a refused read is reported as a refused read", () => {
+  it("files an attributable row and renders it as an attempt, not a change", async () => {
+    const { owner, delegate } = await household();
+
+    const { GET } = await import("@/app/api/mood-entries/route");
+    const response = await GET(
+      new NextRequest("http://localhost/api/mood-entries?limit=not-a-number", {
+        method: "GET",
+      }),
+    );
+    expect(response.status).toBe(422);
+
+    // The breadcrumb is fire-and-forget, which is the property that made it
+    // invisible to a guard reading only awaited calls.
+    await settle();
+    const rows = await rowsFor("mood-entries.list.validation-failed");
+    expect(rows, "no breadcrumb row was written").toHaveLength(1);
+    expect(rows[0]?.userId).toBe(owner.id);
+    expect(rows[0]?.actorUserId).toBe(delegate.id);
+
+    // Which means it reaches the owner's feed: same predicate the route uses.
+    const feedRows = await getPrismaClient().auditLog.findMany({
+      where: {
+        userId: owner.id,
+        actorUserId: { not: null },
+        NOT: { actorUserId: owner.id },
+      },
+    });
+    expect(feedRows.map((r) => r.action)).toContain(
+      "mood-entries.list.validation-failed",
+    );
+
+    // And what it says there. The English bundle is read rather than a key
+    // asserted, because the defect was the SENTENCE, not the wiring.
+    const { recordActivityVerbLine } =
+      await import("@/lib/record-activity/activity-verb");
+    const en = JSON.parse(
+      await readFile(join(process.cwd(), "messages/en.json"), "utf8"),
+    ) as Record<string, Record<string, Record<string, string>>>;
+    const sentence = recordActivityVerbLine(
+      (key, params) =>
+        (en.recordSharing.activityVerb[key.split(".").pop()!] ?? key).replace(
+          "{name}",
+          String(params?.name ?? ""),
+        ),
+      rows[0]!.action,
+      "Alex",
+    );
+
+    expect(sentence).not.toContain("made a change");
+    expect(sentence).toBe("Alex sent a mood search this record could not read");
   });
 });

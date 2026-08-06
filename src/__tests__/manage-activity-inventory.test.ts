@@ -1,5 +1,5 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
 
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
@@ -53,7 +53,8 @@ import { recordActivityVerbLine } from "@/lib/record-activity/activity-verb";
  * both halves against synthetic modules, including the one shape that silenced
  * the sibling guard: a resolver call prettier broke across lines.
  */
-const API = join(process.cwd(), "src/app/api");
+const SRC = join(process.cwd(), "src");
+const API = join(SRC, "app/api");
 const MESSAGES = join(process.cwd(), "messages");
 const ACTIVITY_ROUTE = join(
   process.cwd(),
@@ -64,10 +65,31 @@ const GRANTS_GIVEN_CARD = join(
   "src/components/settings/access/grants-given-card.tsx",
 );
 
-/** The declaration a MANAGE-level route makes. */
+/** The declaration a record-delegated route makes, at any level. */
 const RECORD_RESOLVER = "requireRecordAuth";
-/** The level this file is the inventory of. */
-const MANAGE = "manage";
+
+/**
+ * Rows the feed cannot show, and the reason each one cannot.
+ *
+ * `src/lib/api-handler.ts` is a direct import of every route, so the walk
+ * below reaches the three actions the auth kit files itself. None of them can
+ * appear in a record owner's activity view, and the reason is the same for all
+ * three: they are filed under `auth.user.id` — the CALLER — at a point where
+ * no record has been resolved. The feed selects rows where `userId` is the
+ * owner and `actorUserId` is somebody else, so a caller-filed row is excluded
+ * twice over.
+ *
+ * Frozen at three. A fourth entry is a claim about a row nobody looked at, and
+ * the leg below fails rather than letting one join quietly.
+ */
+const NOT_IN_THE_FEED = [
+  // The bearer path never resolves a record at all.
+  "auth.bearer.failure",
+  // Step-up is cookie-only and filed under the account being elevated.
+  "auth.stepup.elevation.rejected",
+  // `auditRefusal` files under the refused caller, before a record exists.
+  "sharing.access.denied",
+] as const;
 /** What an action with no sentence of its own renders as. */
 const FALLBACK_KEY = "recordSharing.activity.acted";
 /** The six bundles the product ships. */
@@ -86,15 +108,24 @@ function routeFiles(dir: string): string[] {
 }
 
 interface ModuleFacts {
-  /** Does the module pass `"manage"` to the record resolver anywhere. */
-  managesRecord: boolean;
+  /** Does the module reach the record resolver at ANY level. */
+  delegatesRecord: boolean;
   /**
-   * The action names of the module's AWAITED `auditLog("…")` calls.
+   * Every action the module hands to `auditLog("…")`, awaited or not.
    *
-   * Awaited on purpose: a fire-and-forget breadcrumb on a validation failure
-   * is not something to narrate to the owner.
+   * v1.37.0 — this used to keep only the AWAITED calls, on the reasoning that
+   * a fire-and-forget breadcrumb is not worth narrating. The feed disagrees,
+   * and the feed is what the owner reads: `/api/account/activity` selects on
+   * `actorUserId IS NOT NULL` with no action filter and no await in sight, so
+   * a `void auditLog(…)` breadcrumb lands in the view exactly like an awaited
+   * row. Ten `*.validation-failed` actions were invisible to this guard for
+   * that reason and rendered to owners as "made a change in your record" —
+   * including one a READ delegate can trigger. A guard whose inclusion rule
+   * differs from its subject's proves a property about the wrong set.
    */
-  awaitedAuditActions: string[];
+  auditActions: string[];
+  /** First-party modules this one imports, resolved to files. */
+  imports: string[];
 }
 
 /**
@@ -119,8 +150,15 @@ export function moduleFacts(source: string, fileName: string): ModuleFacts {
 
   const aliases = new Map<string, string>();
   const namespaces = new Set<string>();
+  const importPaths: string[] = [];
   parsed.forEachChild((node) => {
     if (!ts.isImportDeclaration(node)) return;
+    if (ts.isStringLiteral(node.moduleSpecifier)) {
+      const resolved = resolveFirstParty(node.moduleSpecifier.text, fileName);
+      if (resolved !== null && !resolved.includes("__tests__")) {
+        importPaths.push(resolved);
+      }
+    }
     const bindings = node.importClause?.namedBindings;
     if (!bindings) return;
     if (ts.isNamespaceImport(bindings)) {
@@ -151,28 +189,69 @@ export function moduleFacts(source: string, fileName: string): ModuleFacts {
     return first && ts.isStringLiteralLike(first) ? first.text : null;
   };
 
-  let managesRecord = false;
-  const awaitedAuditActions: string[] = [];
+  let delegatesRecord = false;
+  const auditActions: string[] = [];
 
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node)) {
       const name = calleeName(node.expression);
-      if (name === RECORD_RESOLVER && firstStringArg(node) === MANAGE) {
-        managesRecord = true;
-      }
-    }
-    if (ts.isAwaitExpression(node) && ts.isCallExpression(node.expression)) {
-      const call = node.expression;
-      if (calleeName(call.expression) === "auditLog") {
-        const action = firstStringArg(call);
-        if (action !== null) awaitedAuditActions.push(action);
+      if (name === RECORD_RESOLVER) delegatesRecord = true;
+      if (name === "auditLog") {
+        const action = firstStringArg(node);
+        if (action !== null) auditActions.push(action);
       }
     }
     node.forEachChild(visit);
   };
   parsed.forEachChild(visit);
 
-  return { managesRecord, awaitedAuditActions };
+  return { delegatesRecord, auditActions, imports: importPaths };
+}
+
+/**
+ * A module specifier resolved to a first-party file, or null.
+ *
+ * `@/…` and relative paths only. A package import is somebody else's tree and
+ * cannot be walked usefully.
+ */
+export function resolveFirstParty(
+  specifier: string,
+  fromFile: string,
+): string | null {
+  let base: string;
+  if (specifier.startsWith("@/")) base = join(SRC, specifier.slice(2));
+  else if (specifier.startsWith(".")) base = join(dirname(fromFile), specifier);
+  else return null;
+  for (const candidate of [
+    `${base}.ts`,
+    `${base}.tsx`,
+    join(base, "index.ts"),
+  ]) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Every action one route module can file, including through what it imports.
+ *
+ * One level deep, deliberately. The transitive closure pulls in the whole auth
+ * and grant machinery through `api-handler`, which reports actions no request
+ * to this route can file; one level is where a route's own collaborators live
+ * — the import-admission module and the medication lifecycle module are both
+ * direct imports of the routes that use them, and both were invisible to a
+ * walk that read only `route.ts`.
+ */
+function actionsReachableFrom(
+  file: string,
+  read: (path: string) => ModuleFacts,
+): string[] {
+  const own = read(file);
+  const out = [...own.auditActions];
+  for (const imported of own.imports) {
+    out.push(...read(imported).auditActions);
+  }
+  return out;
 }
 
 /** The message key one action resolves to, or the fallback. */
@@ -232,8 +311,8 @@ describe("the matcher sees what it looks for", () => {
     // own line and a substring test goes quiet with nothing else changed.
     expect(REFORMATTED.includes('requireRecordAuth("manage"')).toBe(false);
     const facts = moduleFacts(REFORMATTED, "r.ts");
-    expect(facts.managesRecord).toBe(true);
-    expect(facts.awaitedAuditActions).toEqual(["thing.delete"]);
+    expect(facts.delegatesRecord).toBe(true);
+    expect(facts.auditActions).toEqual(["thing.delete"]);
   });
 
   it("matches an aliased and a namespace-qualified resolver call", () => {
@@ -247,10 +326,9 @@ describe("the matcher sees what it looks for", () => {
         return apiSuccess({ id: user.id });
       });
     `;
-    expect(moduleFacts(ALIASED, "a.ts")).toEqual({
-      managesRecord: true,
-      awaitedAuditActions: ["thing.aliased"],
-    });
+    const facts = moduleFacts(ALIASED, "a.ts");
+    expect(facts.delegatesRecord).toBe(true);
+    expect(facts.auditActions).toEqual(["thing.aliased"]);
 
     const NAMESPACED = `
       import * as auth from "@/lib/api-handler";
@@ -260,27 +338,28 @@ describe("the matcher sees what it looks for", () => {
         return apiSuccess({ id: user.id });
       });
     `;
-    expect(moduleFacts(NAMESPACED, "n.ts").managesRecord).toBe(true);
+    expect(moduleFacts(NAMESPACED, "n.ts").delegatesRecord).toBe(true);
   });
 
-  it("does not enrol a write route that only talks about managing", () => {
-    const WRITE_ONLY = `
-      /** Delegable for writes. It must never take requireRecordAuth("manage"). */
-      import { requireRecordAuth } from "@/lib/api-handler";
-
-      const LEVEL = "manage";
+  it("does not enrol a route that only talks about delegating", () => {
+    const ACTOR_ONLY = `
+      /** An actor surface. It must never take requireRecordAuth("manage"). */
+      import { requireActorAuth } from "@/lib/api-handler";
 
       export const POST = apiHandler(async () => {
-        const { user } = await requireRecordAuth("write", "labs");
-        return apiSuccess({ id: user.id, level: LEVEL });
+        const { user } = await requireActorAuth();
+        return apiSuccess({ id: user.id });
       });
     `;
     // The raw text carries the exact substring a naive membership test uses.
-    expect(WRITE_ONLY.includes('requireRecordAuth("manage")')).toBe(true);
-    expect(moduleFacts(WRITE_ONLY, "wo.ts").managesRecord).toBe(false);
+    expect(ACTOR_ONLY.includes('requireRecordAuth("manage")')).toBe(true);
+    expect(moduleFacts(ACTOR_ONLY, "ao.ts").delegatesRecord).toBe(false);
   });
 
-  it("reads only the awaited audit calls", () => {
+  it("reads the fire-and-forget audit calls too", () => {
+    // The defect this file shipped with. `void auditLog(…)` was invisible
+    // here and perfectly visible in the owner's feed, so ten refusal
+    // breadcrumbs rendered as "made a change in your record".
     const MIXED = `
       import { requireRecordAuth } from "@/lib/api-handler";
       import { auditLog } from "@/lib/auth/audit";
@@ -292,9 +371,26 @@ describe("the matcher sees what it looks for", () => {
         return apiSuccess({ id: user.id });
       });
     `;
-    expect(moduleFacts(MIXED, "m.ts").awaitedAuditActions).toEqual([
+    expect(moduleFacts(MIXED, "m.ts").auditActions).toEqual([
+      "thing.breadcrumb",
       "thing.delete",
     ]);
+  });
+
+  it("resolves a first-party import and skips a package one", () => {
+    // The other half of the same defect: two of the twelve unmapped actions
+    // were filed by library modules the routes import, which a walk over
+    // `route.ts` alone could not see.
+    const admission = resolveFirstParty(
+      "@/lib/medications/intake-import-admission",
+      join(API, "medications/route.ts"),
+    );
+    expect(admission).not.toBeNull();
+    expect(readFileSync(admission!, "utf8")).toContain(
+      "medication.intake.import.kickoff.denied",
+    );
+    expect(resolveFirstParty("next/server", "x.ts")).toBeNull();
+    expect(resolveFirstParty("@/lib/nothing-here", "x.ts")).toBeNull();
   });
 
   it("still reports the fallback for an action nobody mapped", () => {
@@ -305,30 +401,62 @@ describe("the matcher sees what it looks for", () => {
   });
 });
 
-describe("every MANAGE action has a sentence of its own", () => {
+describe("every delegated action has a sentence of its own", () => {
   const routes = routeFiles(API);
-  const manageModules = routes
-    .map((file) => ({ file, ...moduleFacts(readFileSync(file, "utf8"), file) }))
-    .filter((m) => m.managesRecord);
-  const actions = [
-    ...new Set(manageModules.flatMap((m) => m.awaitedAuditActions)),
-  ].sort();
+  const cache = new Map<string, ModuleFacts>();
+  const read = (file: string): ModuleFacts => {
+    let facts = cache.get(file);
+    if (!facts) {
+      facts = moduleFacts(readFileSync(file, "utf8"), file);
+      cache.set(file, facts);
+    }
+    return facts;
+  };
 
-  it("matches the MANAGE modules, and not zero of them", () => {
+  const delegatedModules = routes.filter((file) => read(file).delegatesRecord);
+  const excluded = new Set<string>(NOT_IN_THE_FEED);
+  const reachable = [
+    ...new Set(
+      delegatedModules.flatMap((file) => actionsReachableFrom(file, read)),
+    ),
+  ].sort();
+  const actions = reachable.filter((action) => !excluded.has(action));
+
+  it("matches the delegated modules, and not zero of them", () => {
     // A walk that finds nothing agrees with an inventory that covers nothing.
     expect(routes.length).toBeGreaterThan(300);
-    expect(manageModules.length).toBeGreaterThan(0);
+    expect(delegatedModules.length).toBeGreaterThan(0);
     // Named anchors, so a matcher that collapsed to one stray file fails
     // rather than clearing the floor. Deleting a reading and purging a dose
-    // history are the two acts the level exists for and the two an owner most
-    // needs named.
-    const found = manageModules.map((m) => relative(process.cwd(), m.file));
+    // history are the two acts MANAGE exists for; the mood list is the READ
+    // route whose refusal breadcrumb reaches the feed, and it is here because
+    // the level is no longer part of the inclusion rule.
+    const found = delegatedModules.map((file) => relative(process.cwd(), file));
     expect(found).toContain("src/app/api/measurements/[id]/route.ts");
     expect(found).toContain(
       "src/app/api/medications/[id]/intake/purge/route.ts",
     );
+    expect(found).toContain("src/app/api/mood-entries/route.ts");
     // And the actions themselves were read, not merely looked for.
-    expect(actions.length).toBeGreaterThan(40);
+    expect(actions.length).toBeGreaterThan(60);
+  });
+
+  it("reaches the actions a route files through what it imports", () => {
+    // Both halves of the fix, pinned against the two that were invisible.
+    expect(actions).toContain("medication.intake.import.kickoff.denied");
+    expect(actions).toContain("medication.oneShot.reconciled");
+    // And the fire-and-forget half, on the READ route that started this.
+    expect(actions).toContain("mood-entries.list.validation-failed");
+  });
+
+  it("excludes exactly the three rows the feed cannot show", () => {
+    // The exclusion list is the one place a real action could be hidden, so
+    // its size is pinned and every member is asserted to have been REACHED —
+    // an entry naming an action nothing files would be a claim about nothing.
+    expect(NOT_IN_THE_FEED).toHaveLength(3);
+    for (const action of NOT_IN_THE_FEED) {
+      expect(reachable, action).toContain(action);
+    }
   });
 
   it("gives every one of them a specific verb rather than the fallback", () => {
@@ -338,10 +466,44 @@ describe("every MANAGE action has a sentence of its own", () => {
 
     expect(
       generic,
-      "a MANAGE action with no verb line renders to the owner as the generic " +
-        "'made a change'. Add a case to activity-verb.ts and a sentence to " +
-        "all six bundles.",
+      "a delegated action with no verb line renders to the owner as the " +
+        "generic 'made a change'. Add a case to activity-verb.ts and a " +
+        "sentence to all six bundles — or, if the row genuinely should not " +
+        "reach the feed, stop stamping the actor on it.",
     ).toEqual([]);
+  });
+
+  it("never reports a refused attempt as something that happened", () => {
+    // The half of the HIGH finding that a coverage count cannot express. Every
+    // one of these rows is an attempt that changed NOTHING, and the generic
+    // line told the owner their record had been edited. A future arm that maps
+    // `…validation-failed` onto an ordinary verb would be the same defect with
+    // coverage, so the shape of the key is asserted rather than its presence.
+    const attempts = actions.filter(
+      (action) =>
+        action.endsWith(".validation-failed") || action.endsWith(".denied"),
+    );
+    expect(attempts.length).toBeGreaterThan(10);
+
+    const dishonest = attempts.filter(
+      (action) => !/\.(rejected|denied)[A-Z]/.test(verbKeyFor(action).key),
+    );
+    expect(
+      dishonest,
+      "an attempt that was refused must not render as an act that happened",
+    ).toEqual([]);
+
+    // And the sentences themselves say so, in the source language. A key named
+    // `rejected…` whose EN text read "added a reading" would pass the check
+    // above and be exactly the lie it exists to stop.
+    const en = bundle("en");
+    for (const action of attempts) {
+      const sentence = leaf(en, verbKeyFor(action).key);
+      expect(typeof sentence, action).toBe("string");
+      expect(String(sentence), action).toMatch(
+        /tried to|could not|was refused|search this record/,
+      );
+    }
   });
 
   it("resolves every verb key in all six bundles", () => {
