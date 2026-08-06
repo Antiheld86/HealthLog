@@ -114,4 +114,55 @@ describe("notification delivery identity", () => {
       }),
     );
   });
+
+  it("refuses a managed record without an explicit recipient", async () => {
+    const outcome = await dispatchNotification({
+      eventType: "MEDICATION_REMINDER",
+      userId: recordUserId,
+      title: "Record content",
+      message: "Record schedule",
+    });
+
+    expect(outcome).toEqual({
+      dispatched: false,
+      channelsAttempted: 0,
+      channelsSucceeded: 0,
+    });
+    expect(prisma.notificationChannel.findMany).not.toHaveBeenCalled();
+    expect(sendViaWebPushMock).not.toHaveBeenCalled();
+  });
+
+  it("uses the recipient preference without changing record content", async () => {
+    vi.mocked(prisma.notificationChannel.findMany).mockResolvedValue([
+      {
+        id: "recipient-channel",
+        userId: recipientUserId,
+        type: "WEB_PUSH",
+        config: "{}",
+        nextRetryAt: null,
+        preferences: [{ eventType: "MEDICATION_REMINDER", enabled: false }],
+      },
+    ] as never);
+
+    const outcome = await dispatchNotification({
+      eventType: "MEDICATION_REMINDER",
+      userId: recordUserId,
+      recordUserId,
+      recipientUserId,
+      title: "Record content",
+      message: "Record schedule",
+    });
+
+    expect(outcome).toEqual({
+      dispatched: false,
+      channelsAttempted: 0,
+      channelsSucceeded: 0,
+    });
+    expect(prisma.notificationChannel.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: recipientUserId, enabled: true },
+      }),
+    );
+    expect(sendViaWebPushMock).not.toHaveBeenCalled();
+  });
 });

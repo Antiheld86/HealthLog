@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { getEvent } from "@/lib/logging/context";
+import type { NotificationPayload } from "@/lib/notifications/types";
 
 /**
  * v1.4.49 — fire-and-forget push-attempt ledger write.
@@ -54,6 +55,27 @@ interface AttributedPushAttemptRecord extends PushAttemptRecordBase {
 
 export type PushAttemptRecord =
   SelfPushAttemptRecord | AttributedPushAttemptRecord;
+
+/**
+ * Preserve the supplied record subject while a sender records delivery for
+ * the recipient selected by the dispatcher. The legacy `userId` property in
+ * sender call sites is deliberately ignored here: 0298 stores it as a
+ * recipient mirror and the explicit pair is authoritative.
+ */
+export function recordPushAttemptForPayload(
+  payload: Pick<NotificationPayload, "recordUserId" | "recipientUserId">,
+  legacyUserId: string,
+  record: PushAttemptRecordBase & { userId?: string },
+): void {
+  recordPushAttempt({
+    recordUserId: payload.recordUserId ?? legacyUserId,
+    recipientUserId: payload.recipientUserId ?? legacyUserId,
+    channel: record.channel,
+    eventType: record.eventType,
+    result: record.result,
+    reason: record.reason,
+  });
+}
 
 export function recordPushAttempt(record: PushAttemptRecord): void {
   const recordUserId = "userId" in record ? record.userId : record.recordUserId;

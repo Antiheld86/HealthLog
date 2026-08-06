@@ -252,7 +252,15 @@ export interface EmailChannelConfig {
 
 export interface NotificationPayload {
   eventType: EventType;
+  /**
+   * Health-record subject retained for established self-delivery callers.
+   * Managed delivery must also declare `recordUserId` and `recipientUserId`.
+   */
   userId: string;
+  /** The health record that supplies notification content and calculations. */
+  recordUserId?: string;
+  /** The account whose channel, locale, and preferences receive the delivery. */
+  recipientUserId?: string;
   title: string;
   message: string;
   /** Channel-specific extras (e.g. medicationId for Telegram inline buttons) */

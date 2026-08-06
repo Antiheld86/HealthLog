@@ -7,7 +7,7 @@ import type {
 } from "@/lib/notifications/types";
 import type { SendOutcome } from "@/lib/notifications/retry-policy";
 import { getEvent } from "@/lib/logging/context";
-import { recordPushAttempt } from "@/lib/notifications/senders/push-attempt-record";
+import { recordPushAttemptForPayload } from "@/lib/notifications/senders/push-attempt-record";
 import { loadEmailConfig } from "@/lib/notifications/senders/email-config";
 import { plainPushText } from "@/lib/notifications/strip-emoji";
 
@@ -97,12 +97,13 @@ export async function sendViaEmail(
   config: EmailChannelConfig,
   payload: NotificationPayload,
 ): Promise<SendOutcome> {
+  const userId = payload.recipientUserId ?? payload.userId;
   const start = performance.now();
 
   const transport = getTransporter();
   if (!transport) {
     // Operator hasn't configured SMTP — soft skip, no channel burn.
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId: payload.userId,
       channel: "EMAIL",
       eventType: payload.eventType,
@@ -113,7 +114,7 @@ export async function sendViaEmail(
   }
 
   if (!config.recipient) {
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId: payload.userId,
       channel: "EMAIL",
       eventType: payload.eventType,
@@ -143,7 +144,7 @@ export async function sendViaEmail(
       method: "sendMail",
       duration_ms: Math.round(performance.now() - start),
     });
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId: payload.userId,
       channel: "EMAIL",
       eventType: payload.eventType,
@@ -158,7 +159,7 @@ export async function sendViaEmail(
       duration_ms: Math.round(performance.now() - start),
       error: classified.message,
     });
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId: payload.userId,
       channel: "EMAIL",
       eventType: payload.eventType,

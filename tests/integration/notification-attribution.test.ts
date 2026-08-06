@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getPrismaClient, truncateAllTables } from "./setup";
+import { resolveNotificationDeliveryIdentity } from "@/lib/notifications/delivery-identity";
 import { recordPushAttempt } from "@/lib/notifications/senders/push-attempt-record";
 
 let sequence = 0;
@@ -172,5 +173,46 @@ describe("notification attribution (real Postgres)", () => {
         where: { id: attempt.id },
       }),
     ).toBeNull();
+  });
+
+  it("principal resolution accepts only an explicit managed subject and human recipient", async () => {
+    const recordUser = await createUser("record", true);
+    const recipientUser = await createUser("recipient");
+    const ordinaryRecord = await createUser("ordinary");
+
+    await expect(
+      resolveNotificationDeliveryIdentity({
+        eventType: "MEDICATION_REMINDER",
+        userId: recordUser.id,
+        recordUserId: recordUser.id,
+        recipientUserId: recipientUser.id,
+        title: "Record content",
+        message: "Record schedule",
+      }),
+    ).resolves.toEqual({
+      recordUserId: recordUser.id,
+      recipientUserId: recipientUser.id,
+      managed: true,
+    });
+
+    await expect(
+      resolveNotificationDeliveryIdentity({
+        eventType: "MEDICATION_REMINDER",
+        userId: recordUser.id,
+        title: "Record content",
+        message: "Record schedule",
+      }),
+    ).resolves.toBeNull();
+
+    await expect(
+      resolveNotificationDeliveryIdentity({
+        eventType: "MEDICATION_REMINDER",
+        userId: ordinaryRecord.id,
+        recordUserId: ordinaryRecord.id,
+        recipientUserId: recipientUser.id,
+        title: "Record content",
+        message: "Record schedule",
+      }),
+    ).resolves.toBeNull();
   });
 });

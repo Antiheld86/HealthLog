@@ -8,7 +8,7 @@ import { classifyTelegramError } from "@/lib/notifications/retry-policy";
 import { prisma } from "@/lib/db";
 import type { ReminderPhase } from "@/generated/prisma/client";
 import { getEvent } from "@/lib/logging/context";
-import { recordPushAttempt } from "@/lib/notifications/senders/push-attempt-record";
+import { recordPushAttemptForPayload } from "@/lib/notifications/senders/push-attempt-record";
 import { scheduleTelegramAutoDelete } from "@/lib/telegram-cleanup";
 import {
   buildMoodKeyboard,
@@ -18,8 +18,8 @@ import { defaultLocale, locales, type Locale } from "@/lib/i18n/config";
 
 /**
  * v1.19.0 — resolve the bot locale for an interactive reminder. The
- * sender knows the user via `payload.userId`; the keyboard labels need
- * the user's locale. Defaults to "de" (the historical bot default) when
+ * sender knows the recipient through the delivery identity; keyboard labels
+ * need that account's locale. Defaults to "de" when
  * unset, matching the webhook's `resolveBotLocale`.
  */
 async function resolveSenderLocale(userId: string): Promise<Locale> {
@@ -118,6 +118,7 @@ export async function sendViaTelegram(
   config: TelegramChannelConfig,
   payload: NotificationPayload,
 ): Promise<TelegramSendResult> {
+  const userId = payload.recipientUserId ?? payload.userId;
   const medicationId = payload.metadata?.medicationId as string | undefined;
   const scheduleId = payload.metadata?.scheduleId as string | undefined;
   const phase = payload.metadata?.phase as string | undefined;
@@ -152,24 +153,25 @@ export async function sendViaTelegram(
   let interactiveKeyboard:
     | { inline_keyboard: { text: string; callback_data: string }[][] }
     | undefined;
-  if (!replyMarkup) {
+  const selfDelivery = payload.recordUserId === payload.recipientUserId;
+  if (selfDelivery && !replyMarkup) {
     if (payload.eventType === "MOOD_REMINDER") {
       interactiveKeyboard = buildMoodKeyboard(
-        await resolveSenderLocale(payload.userId),
+        await resolveSenderLocale(userId),
       );
     } else if (payload.eventType === "MEASUREMENT_REMINDER" && reminderId) {
       interactiveKeyboard = buildMeasurementKeyboard(
         reminderId,
-        await resolveSenderLocale(payload.userId),
+        await resolveSenderLocale(userId),
       );
     }
   }
 
   // Build reply markup
   const keyboard =
-    replyMarkup ??
+    (selfDelivery ? replyMarkup : undefined) ??
     interactiveKeyboard ??
-    (payload.eventType === "MEDICATION_REMINDER" && medicationId
+    (selfDelivery && payload.eventType === "MEDICATION_REMINDER" && medicationId
       ? {
           inline_keyboard: [
             [
@@ -251,13 +253,11 @@ export async function sendViaTelegram(
   // tapped prompt is deleted immediately by the webhook callback handler;
   // this row is the fallback and is harmless once the message is gone.
   if (result.ok && result.messageId && interactiveKeyboard) {
-    await scheduleTelegramAutoDelete(payload.userId, config.chatId, [
-      result.messageId,
-    ]);
+    await scheduleTelegramAutoDelete(userId, config.chatId, [result.messageId]);
   }
 
   if (result.ok) {
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId: payload.userId,
       channel: "TELEGRAM",
       eventType: payload.eventType,
@@ -266,7 +266,7 @@ export async function sendViaTelegram(
     return { ok: true, messageId: result.messageId };
   }
   const classified = classifyTelegramError(result.errorDescription);
-  recordPushAttempt({
+  recordPushAttemptForPayload(payload, userId, {
     userId: payload.userId,
     channel: "TELEGRAM",
     eventType: payload.eventType,

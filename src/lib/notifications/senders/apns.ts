@@ -29,7 +29,7 @@ import apn from "@parse/node-apn";
 import { prisma } from "@/lib/db";
 import { getEvent } from "@/lib/logging/context";
 import type { SendOutcome } from "@/lib/notifications/retry-policy";
-import { recordPushAttempt } from "@/lib/notifications/senders/push-attempt-record";
+import { recordPushAttemptForPayload } from "@/lib/notifications/senders/push-attempt-record";
 import { plainPushText } from "@/lib/notifications/strip-emoji";
 
 export interface ApnsPayload {
@@ -532,11 +532,13 @@ export async function sendViaApns(
     metadata?: Record<string, unknown>;
     discreet?: boolean;
     urgent?: boolean;
+    recordUserId?: string;
+    recipientUserId?: string;
   },
 ): Promise<SendOutcome> {
   const config = loadApnsConfig();
   if (!config) {
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId,
       channel: "APNS",
       eventType: payload.eventType,
@@ -565,7 +567,7 @@ export async function sendViaApns(
   if (devices.length === 0) {
     // Same rationale as web-push: a user who hasn't paired an iPhone yet
     // shouldn't see the channel auto-disabled. Treat as soft "no recipient".
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId,
       channel: "APNS",
       eventType: payload.eventType,
@@ -626,6 +628,10 @@ export async function sendViaApns(
       process.env.APNS_CRITICAL_ENTITLEMENT === "true";
 
     let result: Awaited<ReturnType<typeof sendApnsPush>> | null = null;
+    const managedDelivery =
+      payload.recordUserId !== undefined &&
+      payload.recipientUserId !== undefined &&
+      payload.recordUserId !== payload.recipientUserId;
     // Discreet mode (cycle privacy): the lock-screen-visible routing
     // metadata must not carry the event name. Collapse the category /
     // threadId / collapseId and the data eventType to a generic value so
@@ -677,7 +683,7 @@ export async function sendViaApns(
           // ignores categories it doesn't know about, so adding the key
           // here is safe for event-types that don't have an actionable
           // category registered yet — they fall back to a plain alert.
-          category: routingEvent,
+          category: managedDelivery ? undefined : routingEvent,
           // Future-proof for an iOS Notification Service Extension. iOS
           // ignores the flag when no extension is registered, so it's a
           // no-op on today's binary but unblocks NSE work without a
@@ -742,7 +748,7 @@ export async function sendViaApns(
   }
 
   if (anySuccess) {
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId,
       channel: "APNS",
       eventType: payload.eventType,
@@ -755,7 +761,7 @@ export async function sendViaApns(
   // until the user re-registers from a fresh iOS install.
   if (deadDeviceIds.length === devices.length) {
     const reason = lastFailureReason ?? "apns_all_devices_unregistered";
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId,
       channel: "APNS",
       eventType: payload.eventType,
@@ -771,7 +777,7 @@ export async function sendViaApns(
   }
 
   const reason = lastFailureReason ?? "apns_send_failed";
-  recordPushAttempt({
+  recordPushAttemptForPayload(payload, userId, {
     userId,
     channel: "APNS",
     eventType: payload.eventType,
