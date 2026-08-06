@@ -128,6 +128,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   setEnv();
   resetApnsForTesting();
 });
@@ -366,6 +367,25 @@ describe("sendApnsPush — failure classification", () => {
     expect(r.ok).toBe(false);
     expect(r.reason).toBe("apns_network_error");
     expect(r.shouldDisable).toBeFalsy();
+  });
+
+  it("bounds a provider send that never settles", async () => {
+    vi.useFakeTimers();
+    sendMock.mockImplementationOnce(() => new Promise(() => undefined));
+
+    const result = sendApnsPush({
+      deviceToken: "abc",
+      environment: "sandbox",
+      payload: { alert: { title: "t", body: "b" } },
+    });
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    await expect(result).resolves.toMatchObject({
+      ok: false,
+      reason: "apns_timeout",
+      shouldDisable: false,
+    });
   });
 });
 

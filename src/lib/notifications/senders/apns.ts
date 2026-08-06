@@ -146,6 +146,53 @@ const PERMANENT_APNS_REASONS = new Set<string>([
  */
 const APNS_COLLAPSE_ID_MAX_BYTES = 64;
 
+/**
+ * node-apn owns an HTTP/2 connection pool but exposes no AbortSignal on
+ * Provider.send(). Bound the promise at this boundary so a stuck Apple
+ * connection cannot prevent the dispatcher's later fallback channels.
+ */
+const APNS_PROVIDER_SEND_TIMEOUT_MS = 5_000;
+
+class ApnsProviderTimeoutError extends Error {
+  constructor() {
+    super(
+      `APNs provider send timed out after ${APNS_PROVIDER_SEND_TIMEOUT_MS}ms`,
+    );
+    this.name = "ApnsProviderTimeoutError";
+  }
+}
+
+/**
+ * Observe both branches of the provider promise even after the timeout wins.
+ * That prevents a late rejection from becoming an unhandled rejection while
+ * retaining a hard upper bound for the dispatcher.
+ */
+function awaitBoundedApnsProviderSend<T>(operation: Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new ApnsProviderTimeoutError());
+    }, APNS_PROVIDER_SEND_TIMEOUT_MS);
+
+    operation.then(
+      (result) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve(result);
+      },
+      (error: unknown) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
+}
+
 let cachedConfig: ApnsConfig | null | undefined;
 const providers = new Map<"sandbox" | "production", apn.Provider>();
 
@@ -467,16 +514,28 @@ export async function sendApnsPush(
   const start = performance.now();
   let result: Awaited<ReturnType<apn.Provider["send"]>>;
   try {
-    result = await provider.send(note, input.deviceToken);
+    result = await awaitBoundedApnsProviderSend(
+      provider.send(note, input.deviceToken),
+    );
   } catch (err) {
-    const message = err instanceof Error ? err.message : "send_failed";
+    const timedOut = err instanceof ApnsProviderTimeoutError;
+    const message = timedOut
+      ? `APNs provider send timed out after ${APNS_PROVIDER_SEND_TIMEOUT_MS}ms`
+      : err instanceof Error
+        ? err.message
+        : "send_failed";
     getEvent()?.addExternalCall({
       service: "apns",
       method: "send",
       duration_ms: Math.round(performance.now() - start),
-      error: message,
+      error: timedOut ? "timeout" : message,
     });
-    return { ok: false, reason: "apns_network_error", message };
+    return {
+      ok: false,
+      reason: timedOut ? "apns_timeout" : "apns_network_error",
+      shouldDisable: false,
+      message,
+    };
   }
 
   const duration = Math.round(performance.now() - start);
@@ -864,16 +923,28 @@ export async function sendApnsRawPush(
   const start = performance.now();
   let result: Awaited<ReturnType<apn.Provider["send"]>>;
   try {
-    result = await provider.send(note, input.deviceToken);
+    result = await awaitBoundedApnsProviderSend(
+      provider.send(note, input.deviceToken),
+    );
   } catch (err) {
-    const message = err instanceof Error ? err.message : "send_failed";
+    const timedOut = err instanceof ApnsProviderTimeoutError;
+    const message = timedOut
+      ? `APNs provider send timed out after ${APNS_PROVIDER_SEND_TIMEOUT_MS}ms`
+      : err instanceof Error
+        ? err.message
+        : "send_failed";
     getEvent()?.addExternalCall({
       service: "apns",
       method: `send_${input.pushType}`,
       duration_ms: Math.round(performance.now() - start),
-      error: message,
+      error: timedOut ? "timeout" : message,
     });
-    return { ok: false, reason: "apns_network_error", message };
+    return {
+      ok: false,
+      reason: timedOut ? "apns_timeout" : "apns_network_error",
+      shouldDisable: false,
+      message,
+    };
   }
 
   const duration = Math.round(performance.now() - start);

@@ -235,6 +235,42 @@ describe("APNs dispatcher integration", () => {
     expect(audit).toBeTruthy();
   });
 
+  it("bounds a hung APNs provider and falls through to Telegram", async () => {
+    const { encrypt } = await import("@/lib/crypto");
+    await seedApnsChannel();
+    await seedDevice({ apnsToken: "hung-apns-token" });
+    await getPrismaClient().notificationChannel.create({
+      data: {
+        userId: TEST_USER_ID,
+        type: "TELEGRAM",
+        enabled: true,
+        config: encrypt(
+          JSON.stringify({ botToken: "telegram-token", chatId: "chat-id" }),
+        ),
+      },
+    });
+
+    apnsSendMock.mockImplementationOnce(() => new Promise(() => undefined));
+    telegramSendMock.mockResolvedValueOnce({ ok: true, messageId: 42 });
+
+    const { dispatchNotification } =
+      await import("@/lib/notifications/dispatcher");
+    const result = await dispatchNotification({
+      userId: TEST_USER_ID,
+      eventType: "MEDICATION_REMINDER",
+      title: "fallback",
+      message: "fallback",
+    });
+
+    expect(apnsSendMock).toHaveBeenCalledTimes(1);
+    expect(telegramSendMock).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      dispatched: true,
+      channelsAttempted: 2,
+      channelsSucceeded: 1,
+    });
+  }, 7_000);
+
   it("falls through to Telegram when APNS is disabled", async () => {
     const { encrypt } = await import("@/lib/crypto");
     // Pre-existing disabled APNS channel from a previous failure run.
