@@ -79,7 +79,8 @@ export function AuthShell({
   // decides what to mount and the surfaces beneath it decide what to offer,
   // and the two disagreeing is the whole class of defect this hook exists to
   // close.
-  const { inSharedRecord, recordKind, sections } = useRecordCapabilities();
+  const { inSharedRecord, recordKind, sections, accessRefused } =
+    useRecordCapabilities();
   // A managed profile has a deliberately small Settings surface of its own.
   // Let that route family reach its record-aware gate; adult shared records
   // stay in the generic refusal branch even at MANAGE.
@@ -241,6 +242,23 @@ export function AuthShell({
       <div className="flex h-dvh items-center justify-center" role="status">
         <Loader2 className="text-primary h-6 w-6 animate-spin motion-reduce:animate-none" />
         <span className="sr-only">{t("nav.loadingScreen")}</span>
+      </div>
+    );
+  }
+
+  // A present but malformed access block is not the older-server case. The
+  // server may still be switched, so mounting children here could fetch target
+  // data under owner controls. Offer only the actor-scoped way out.
+  if (accessRefused) {
+    return (
+      <div
+        data-slot="invalid-record-access-refusal"
+        className="flex min-h-dvh flex-col"
+      >
+        <MaintainershipBanner />
+        <main className="mx-auto w-full max-w-screen-xl px-4 py-10 md:px-6">
+          <SharedRecordUnavailable />
+        </main>
       </div>
     );
   }

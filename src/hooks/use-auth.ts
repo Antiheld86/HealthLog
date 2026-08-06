@@ -23,7 +23,10 @@ import { storeTimezone } from "@/lib/timezone-mirror";
 import type { ModuleKey } from "@/lib/modules/registry";
 import type { TourProgress } from "@/lib/onboarding/tour-progress";
 import { clearOfflineCachesForSessionEnd } from "@/lib/pwa/query-persister";
-import { setRecordScope } from "@/lib/query-keys/record-scope";
+import {
+  setRecordScope,
+  setRefusedRecordScope,
+} from "@/lib/query-keys/record-scope";
 import type { AccountAccess } from "@/lib/sharing/account-access-view";
 import { parseAccountAccess } from "@/lib/sharing/account-access-schema";
 
@@ -38,6 +41,9 @@ export const NO_ACCOUNT_ACCESS: AccountAccess = {
   recordKind: "self",
   canSwitch: false,
 };
+
+/** Whether the account-access block was absent, valid, or refused as malformed. */
+export type AccountAccessStatus = "absent" | "valid" | "invalid";
 
 /**
  * v1.18.6 — resume point for the module tour as the client sees it on
@@ -193,6 +199,13 @@ export interface AuthUser {
    * the empty one — no accounts, no active record, no switcher.
    */
   accountAccess?: AccountAccess;
+  /**
+   * The parser outcome for `accountAccess`. An absent block is the only
+   * owner-compatible fallback: it is how older server images answered before
+   * sharing existed. A present malformed block stays explicitly refused so a
+   * server-side switch cannot paint owner controls in the target record.
+   */
+  accountAccessStatus?: AccountAccessStatus;
 }
 
 /**
@@ -253,7 +266,7 @@ export function isAuthVerdictUnknown(error: unknown): boolean {
   return true;
 }
 
-async function fetchMe(): Promise<AuthUser> {
+export async function fetchMe(): Promise<AuthUser> {
   // v1.16.4 — routed through the typed wrapper; a non-OK /me (401)
   // throws `ApiError`, which `useAuth` treats as "not authenticated"
   // exactly like the old hand-rolled throw.
@@ -300,8 +313,13 @@ async function fetchMe(): Promise<AuthUser> {
   // whatever the switch flow stamped before its reload, the block is what the
   // resolver will actually honour on the next request, so the mirror tracks it
   // rather than the client's memory of what it asked for.
-  const accountAccess = coerceAccountAccess(data.accountAccess);
-  setRecordScope(accountAccess.active?.accountId ?? null);
+  const { accountAccess, status: accountAccessStatus } =
+    resolveAccountAccess(data);
+  if (accountAccessStatus === "invalid") {
+    setRefusedRecordScope();
+  } else {
+    setRecordScope(accountAccess.active?.accountId ?? null);
+  }
   return {
     ...(data as AuthUser),
     disableCoach: data.disableCoach ?? false,
@@ -329,21 +347,32 @@ async function fetchMe(): Promise<AuthUser> {
         ? data.moduleAvailability
         : {},
     accountAccess,
+    accountAccessStatus,
   };
 }
 
 /**
  * Read the sharing block off a payload that may not carry one.
  *
- * Fails CLOSED, unlike the module maps above: an older server image (or a
- * malformed block) resolves to no accounts, no active record, and no switcher.
- * The module gates fail open because a missing map must never blank the nav;
- * this one fails closed because the affordance it drives asks the server to
- * open somebody else's health record, and an affordance offered on a server
- * that cannot honour it is worse than one that is missing.
+ * A genuinely missing field is the pre-sharing server contract and remains an
+ * own-record fallback. Once a server publishes the field, every other value —
+ * including `undefined` as an own property and `null` — is a malformed block,
+ * not permission to fall back to the caller's own presentation.
  */
-function coerceAccountAccess(value: unknown): AccountAccess {
-  return parseAccountAccess(value) ?? NO_ACCOUNT_ACCESS;
+function resolveAccountAccess(value: object): {
+  accountAccess: AccountAccess;
+  status: AccountAccessStatus;
+} {
+  if (!Object.hasOwn(value, "accountAccess")) {
+    return { accountAccess: NO_ACCOUNT_ACCESS, status: "absent" };
+  }
+
+  const accountAccess = parseAccountAccess(
+    (value as { accountAccess?: unknown }).accountAccess,
+  );
+  return accountAccess
+    ? { accountAccess, status: "valid" }
+    : { accountAccess: NO_ACCOUNT_ACCESS, status: "invalid" };
 }
 
 export function useAuth() {

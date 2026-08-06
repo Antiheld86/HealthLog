@@ -52,6 +52,7 @@
 import type { QueryKey } from "@tanstack/react-query";
 
 const STORAGE_KEY = "healthlog-record-scope";
+const REFUSED_RECORD_SCOPE = "__healthlog_refused_record__";
 
 /**
  * The in-process copy. Seeded from storage on first read so the hash function
@@ -113,6 +114,18 @@ export function setRecordScope(accountId: string | null): void {
   }
 }
 
+/**
+ * Keep a malformed active-record response out of the caller's own cache slot.
+ *
+ * No record id from an invalid payload is trusted, but `null` would make
+ * record-scoped reads share the caller's own cache identity. This sentinel is
+ * a cache partition only; the shell refuses the presentation until the caller
+ * leaves the server-side switch.
+ */
+export function setRefusedRecordScope(): void {
+  setRecordScope(REFUSED_RECORD_SCOPE);
+}
+
 /** True while this browser is reading somebody else's record. */
 export function isReadingSharedRecord(): boolean {
   return getRecordScope() !== null;
@@ -138,6 +151,10 @@ export function recordScopedQueryKeyHashFn(queryKey: QueryKey): string {
           }, {})
       : val,
   );
+  // `/api/auth/me` identifies the caller, never the record they are reading.
+  // Its query begins before `fetchMe` can resolve or refuse the record scope,
+  // so it must remain reachable across that transition.
+  if (queryKey[0] === "auth") return key;
   const record = getRecordScope();
   return record === null ? key : `record:${record}|${key}`;
 }

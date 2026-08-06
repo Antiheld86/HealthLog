@@ -72,6 +72,19 @@ describe("resolveRecordCapabilities", () => {
     );
   });
 
+  it("refuses a malformed published block instead of treating it as own record", () => {
+    expect(resolveRecordCapabilities(null, true)).toEqual({
+      inSharedRecord: true,
+      canWrite: false,
+      canAdd: false,
+      canManage: false,
+      level: null,
+      sections: [],
+      recordKind: "shared",
+      accessRefused: true,
+    });
+  });
+
   it("a read-only delegate adds nothing", () => {
     expect(resolveRecordCapabilities(READ_ONLY)).toEqual({
       inSharedRecord: true,

@@ -71,6 +71,8 @@ import {
  * search a button in gets a sentence.
  */
 export interface RecordCapabilities {
+  /** A present account-access block was malformed and must not mount a record. */
+  accessRefused?: boolean;
   /** Is this browser acting on somebody else's record right now. */
   inSharedRecord: boolean;
   /** The grant's resolved level for the record on screen. */
@@ -111,7 +113,20 @@ export interface RecordCapabilities {
  */
 export function resolveRecordCapabilities(
   active: AccountAccessEntry | null | undefined,
+  accessRefused = false,
 ): RecordCapabilities {
+  if (accessRefused) {
+    return {
+      accessRefused: true,
+      inSharedRecord: true,
+      canWrite: false,
+      canAdd: false,
+      canManage: false,
+      level: null,
+      sections: [],
+      recordKind: "shared",
+    };
+  }
   if (!active) {
     return {
       inSharedRecord: false,
@@ -156,7 +171,10 @@ export function resolveRecordCapabilities(
  */
 export function useRecordCapabilities(): RecordCapabilities {
   const { user } = useAuth();
-  return resolveRecordCapabilities(user?.accountAccess?.active);
+  return resolveRecordCapabilities(
+    user?.accountAccess?.active,
+    user?.accountAccessStatus === "invalid",
+  );
 }
 
 /**

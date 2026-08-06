@@ -51,6 +51,45 @@ async function leaveRecord(page: Page) {
   );
 }
 
+function withDivergentActiveAccountAccess(body: unknown): unknown {
+  if (body === null || typeof body !== "object") {
+    throw new Error("Expected an object from /api/auth/me");
+  }
+
+  const envelope = body as { data?: unknown };
+  const payload = "data" in envelope ? envelope.data : envelope;
+  if (payload === null || typeof payload !== "object") {
+    throw new Error("Expected an auth payload from /api/auth/me");
+  }
+
+  const auth = payload as {
+    accountAccess?: {
+      active?: {
+        access?: unknown;
+        level?: unknown;
+        canWrite?: unknown;
+      } | null;
+    };
+  };
+  if (!auth.accountAccess?.active) {
+    throw new Error("Expected a switched account-access payload");
+  }
+
+  const corrupted = {
+    ...auth,
+    accountAccess: {
+      ...auth.accountAccess,
+      active: {
+        ...auth.accountAccess.active,
+        access: "write",
+        level: "write",
+        canWrite: true,
+      },
+    },
+  };
+  return "data" in envelope ? { ...envelope, data: corrupted } : corrupted;
+}
+
 test.describe.serial("scoped sharing browser journeys", () => {
   test.use({ storageState: SCOPE_DELEGATE_STORAGE_STATE_PATH });
 
@@ -98,6 +137,76 @@ test.describe.serial("scoped sharing browser journeys", () => {
       await leaveRecord(page);
     });
   }
+
+  test("refuses a malformed switched payload before owner controls or reads mount", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await openSwitcher(page);
+
+    const entry = page.locator(
+      '[data-slot="account-switcher-entry"][data-account-username="e2e-scope-labs"]',
+    );
+    await expect(entry).toHaveCount(1);
+
+    let corruptNextAuthPayload = true;
+    await page.route("**/api/auth/me", async (route) => {
+      const response = await route.fetch();
+      if (!corruptNextAuthPayload) {
+        await route.fulfill({ response });
+        return;
+      }
+      corruptNextAuthPayload = false;
+      await route.fulfill({
+        response,
+        json: withDivergentActiveAccountAccess(await response.json()),
+      });
+    });
+
+    const ownerOnlyReads: string[] = [];
+    const trackOwnerOnlyRead = (request: {
+      method(): string;
+      url(): string;
+    }) => {
+      if (request.method() !== "GET") return;
+      const path = new URL(request.url()).pathname;
+      if (
+        [
+          "/api/labs/ocr/capability",
+          "/api/insights/coach/nudge-status",
+          "/api/coach/about-me/questions",
+          "/api/auth/me/notification-prefs",
+        ].includes(path)
+      ) {
+        ownerOnlyReads.push(path);
+      }
+    };
+    page.on("request", trackOwnerOnlyRead);
+    try {
+      await entry.click();
+
+      await expect(page).toHaveURL(/\/labs$/);
+      await expect(
+        page.locator('[data-slot="invalid-record-access-refusal"]'),
+      ).toBeVisible();
+      await expect(
+        page.locator('[data-slot="shared-record-unavailable-leave"]'),
+      ).toBeVisible();
+      await expect(page.locator('[data-tour-id="labs-hero"]')).toHaveCount(0);
+      await expect(
+        page.locator('[data-slot="shared-record-banner"]'),
+      ).toHaveCount(0);
+      expect(ownerOnlyReads).toEqual([]);
+
+      await page
+        .locator('[data-slot="shared-record-unavailable-leave"]')
+        .click();
+      await expect(page).toHaveURL(/\/$/);
+    } finally {
+      page.off("request", trackOwnerOnlyRead);
+      await page.unroute("**/api/auth/me");
+    }
+  });
 
   test("keeps an adult READ grant read-only and outside Settings", async ({
     page,

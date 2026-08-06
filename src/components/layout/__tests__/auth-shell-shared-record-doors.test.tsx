@@ -52,6 +52,9 @@ const mockAccessRef: { value: AccountAccess } = {
   value: { accounts: [], active: null, canSwitch: false },
 };
 const mockAuthLoadingRef = { value: false };
+const mockAccountAccessStatusRef = {
+  value: "valid" as "absent" | "valid" | "invalid",
+};
 
 vi.mock("@/hooks/use-auth", () => ({
   useAuth: () => ({
@@ -63,6 +66,7 @@ vi.mock("@/hooks/use-auth", () => ({
       avatarUrl: null,
       modules: {},
       accountAccess: mockAccessRef.value,
+      accountAccessStatus: mockAccountAccessStatusRef.value,
     },
     isAuthenticated: true,
     isAuthUnknown: false,
@@ -138,9 +142,14 @@ const MANAGED_GUARDIAN: AccountAccessEntry = {
   canWrite: true,
 };
 
-function render(access: AccountAccess, pathname = "/"): string {
+function render(
+  access: AccountAccess,
+  pathname = "/",
+  accountAccessStatus: "absent" | "valid" | "invalid" = "valid",
+): string {
   mockAccessRef.value = access;
   mockPathRef.value = pathname;
+  mockAccountAccessStatusRef.value = accountAccessStatus;
   return renderToStaticMarkup(
     <QueryClientProvider client={new QueryClient()}>
       <I18nProvider initialLocale="en">
@@ -202,6 +211,18 @@ describe("<AuthShell> — the owner-only doors", () => {
     const html = render(OWN_RECORD);
     for (const slot of DOORS) {
       expect(html, `${slot} must exist in one's own record`).toContain(slot);
+    }
+  });
+
+  it("refuses an invalid record block without mounting owner-only doors or children", () => {
+    const html = render(OWN_RECORD, "/", "invalid");
+
+    expect(html).toContain("sentinel-unavailable");
+    expect(html).not.toContain("sentinel-page");
+    for (const slot of DOORS) {
+      expect(html, `${slot} must not paint for a refused record`).not.toContain(
+        slot,
+      );
     }
   });
 
