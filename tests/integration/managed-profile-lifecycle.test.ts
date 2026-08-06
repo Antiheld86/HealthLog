@@ -143,6 +143,12 @@ afterEach(async () => {
   await prisma.$executeRawUnsafe(
     "DROP FUNCTION IF EXISTS fail_managed_profile_delete_audit()",
   );
+  await prisma.$executeRawUnsafe(
+    'DROP TRIGGER IF EXISTS managed_guardian_audit_failure ON audit_logs',
+  );
+  await prisma.$executeRawUnsafe(
+    "DROP FUNCTION IF EXISTS fail_managed_guardian_audit()",
+  );
 });
 
 describe("managed profile lifecycle (real Postgres)", () => {
@@ -275,6 +281,7 @@ describe("managed profile lifecycle (real Postgres)", () => {
       locale: "en",
       timezone: "UTC",
     });
+    const invitationExpiry = new Date(Date.now() + 60 * 60 * 1000);
 
     const { POST: inviteGuardian } =
       await import("@/app/api/managed-profiles/[id]/guardians/route");
@@ -284,7 +291,10 @@ describe("managed profile lifecycle (real Postgres)", () => {
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ identifier: secondGuardian.user.username }),
+        body: JSON.stringify({
+          identifier: secondGuardian.user.username,
+          expiresAt: invitationExpiry.toISOString(),
+        }),
         },
       ),
       { params: Promise.resolve({ id: profile.id }) },
@@ -292,6 +302,9 @@ describe("managed profile lifecycle (real Postgres)", () => {
     expect(invited.status).toBe(201);
     const invitation = (await invited.json()).data;
     expect(invitation.acceptedAt).toBeNull();
+    expect(new Date(invitation.expiresAt).getTime()).toBe(
+      invitationExpiry.getTime(),
+    );
 
     cookieJar.set("healthlog_session", secondGuardian.sessionId);
     const { POST: acceptInvitation } =
@@ -306,6 +319,11 @@ describe("managed profile lifecycle (real Postgres)", () => {
       { params: Promise.resolve({ id: invitation.id }) },
     );
     expect(accepted.status).toBe(200);
+    expect(
+      await getPrismaClient().accountGrant.findUniqueOrThrow({
+        where: { id: invitation.id },
+      }),
+    ).toMatchObject({ acceptedAt: expect.any(Date), expiresAt: null });
     await getPrismaClient().session.update({
       where: { id: secondGuardian.sessionId },
       data: { actingAsUserId: profile.id },
@@ -332,6 +350,180 @@ describe("managed profile lifecycle (real Postgres)", () => {
         where: { id: secondGuardian.sessionId },
       }),
     ).toMatchObject({ actingAsUserId: null });
+    const audit = await getPrismaClient().auditLog.findMany({
+      where: {
+        userId: profile.id,
+        action: { in: ["managed_profile.guardian.invited", "managed_profile.guardian.revoked"] },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(audit).toHaveLength(2);
+    expect(audit.map((entry) => entry.actorUserId)).toEqual([
+      creator.user.id,
+      creator.user.id,
+    ]);
+    expect(audit.map((entry) => JSON.parse(entry.details ?? "{}"))).toEqual([
+      { grantId: invitation.id },
+      { grantId: invitation.id },
+    ]);
+  });
+
+  it("withdraws a pending Guardian invitation without touching the active count and permits re-invitation", async () => {
+    const creator = await createFreshMfaUser("creator");
+    const secondGuardian = await createFreshMfaUser("second-guardian");
+    cookieJar.set("healthlog_session", creator.sessionId);
+    const { profile } = await createManagedProfile({
+      creatorId: creator.user.id,
+      displayName: "Managed profile",
+      dateOfBirth: null,
+      locale: "en",
+      timezone: "UTC",
+    });
+    const { POST: inviteGuardian } = await import(
+      "@/app/api/managed-profiles/[id]/guardians/route"
+    );
+    const { DELETE: revokeGuardian } = await import(
+      "@/app/api/managed-profiles/[id]/guardians/[grantId]/route"
+    );
+    const invite = async () => {
+      const response = await inviteGuardian(
+        new NextRequest(`http://localhost/api/managed-profiles/${profile.id}/guardians`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ identifier: secondGuardian.user.username }),
+        }),
+        { params: Promise.resolve({ id: profile.id }) },
+      );
+      expect(response.status).toBe(201);
+      return (await response.json()).data;
+    };
+
+    const pending = await invite();
+    const withdrawn = await revokeGuardian(
+      new NextRequest(
+        `http://localhost/api/managed-profiles/${profile.id}/guardians/${pending.id}`,
+        { method: "DELETE" },
+      ),
+      { params: Promise.resolve({ id: profile.id, grantId: pending.id }) },
+    );
+    expect(withdrawn.status).toBe(200);
+    expect(
+      await getPrismaClient().accountGrant.findUniqueOrThrow({
+        where: { id: pending.id },
+      }),
+    ).toMatchObject({ acceptedAt: null, revokedAt: expect.any(Date) });
+
+    const replacement = await invite();
+    expect(replacement.id).not.toBe(pending.id);
+    expect(replacement.acceptedAt).toBeNull();
+  });
+
+  it("refuses a managed profile as a Guardian invitee", async () => {
+    const creator = await createFreshMfaUser("creator");
+    cookieJar.set("healthlog_session", creator.sessionId);
+    const { profile } = await createManagedProfile({
+      creatorId: creator.user.id,
+      displayName: "Managed profile",
+      dateOfBirth: null,
+      locale: "en",
+      timezone: "UTC",
+    });
+    const { profile: managedInvitee } = await createManagedProfile({
+      creatorId: creator.user.id,
+      displayName: "Another managed profile",
+      dateOfBirth: null,
+      locale: "en",
+      timezone: "UTC",
+    });
+    const { POST: inviteGuardian } = await import(
+      "@/app/api/managed-profiles/[id]/guardians/route"
+    );
+
+    const response = await inviteGuardian(
+      new NextRequest(`http://localhost/api/managed-profiles/${profile.id}/guardians`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ identifier: managedInvitee.username }),
+      }),
+      { params: Promise.resolve({ id: profile.id }) },
+    );
+    expect(response.status).toBe(422);
+    expect(
+      await getPrismaClient().accountGrant.count({ where: { grantorId: profile.id } }),
+    ).toBe(1);
+  });
+
+  it("rolls Guardian invitations back when their audit entry fails", async () => {
+    const creator = await createFreshMfaUser("creator");
+    const secondGuardian = await createFreshMfaUser("second-guardian");
+    cookieJar.set("healthlog_session", creator.sessionId);
+    const { profile } = await createManagedProfile({
+      creatorId: creator.user.id,
+      displayName: "Managed profile",
+      dateOfBirth: null,
+      locale: "en",
+      timezone: "UTC",
+    });
+    const prisma = getPrismaClient();
+    await prisma.$executeRawUnsafe(
+      "CREATE FUNCTION fail_managed_guardian_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action = 'managed_profile.guardian.invited' THEN RAISE EXCEPTION 'managed Guardian audit failure'; END IF; RETURN NEW; END; $$",
+    );
+    await prisma.$executeRawUnsafe(
+      'CREATE TRIGGER managed_guardian_audit_failure BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION fail_managed_guardian_audit()',
+    );
+    const { POST: inviteGuardian } = await import(
+      "@/app/api/managed-profiles/[id]/guardians/route"
+    );
+
+    const response = await inviteGuardian(
+      new NextRequest(`http://localhost/api/managed-profiles/${profile.id}/guardians`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ identifier: secondGuardian.user.username }),
+      }),
+      { params: Promise.resolve({ id: profile.id }) },
+    );
+    expect(response.status).toBe(500);
+    expect(
+      await prisma.accountGrant.count({ where: { grantorId: profile.id } }),
+    ).toBe(1);
+  });
+
+  it("rolls active Guardian revocation back when its audit entry fails", async () => {
+    const { creator, profile, secondGuardian, secondGrant } =
+      await createTwoGuardians();
+    cookieJar.set("healthlog_session", creator.sessionId);
+    await getPrismaClient().session.update({
+      where: { id: secondGuardian.sessionId },
+      data: { actingAsUserId: profile.id },
+    });
+    const prisma = getPrismaClient();
+    await prisma.$executeRawUnsafe(
+      "CREATE FUNCTION fail_managed_guardian_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action = 'managed_profile.guardian.revoked' THEN RAISE EXCEPTION 'managed Guardian audit failure'; END IF; RETURN NEW; END; $$",
+    );
+    await prisma.$executeRawUnsafe(
+      'CREATE TRIGGER managed_guardian_audit_failure BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION fail_managed_guardian_audit()',
+    );
+    const { DELETE: revokeGuardian } = await import(
+      "@/app/api/managed-profiles/[id]/guardians/[grantId]/route"
+    );
+
+    const response = await revokeGuardian(
+      new NextRequest(
+        `http://localhost/api/managed-profiles/${profile.id}/guardians/${secondGrant.id}`,
+        { method: "DELETE" },
+      ),
+      { params: Promise.resolve({ id: profile.id, grantId: secondGrant.id }) },
+    );
+    expect(response.status).toBe(500);
+    expect(
+      await prisma.accountGrant.findUniqueOrThrow({ where: { id: secondGrant.id } }),
+    ).toMatchObject({ revokedAt: null });
+    expect(
+      await prisma.session.findUniqueOrThrow({
+        where: { id: secondGuardian.sessionId },
+      }),
+    ).toMatchObject({ actingAsUserId: profile.id });
   });
 
   it("rolls managed Guardian acceptance back when the grant update fails", async () => {
