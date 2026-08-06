@@ -80,7 +80,12 @@ export function ManagedIntegrationStatus() {
 
   if (statusQuery.isLoading || !statusQuery.data) {
     return (
-      <SettingsCard aria-busy="true" aria-live="polite">
+      <SettingsCard
+        aria-busy="true"
+        aria-live="polite"
+        data-record-id={recordId ?? undefined}
+        data-record-settings-family="integrations"
+      >
         <SettingsCardHeader
           icon={Plug}
           title={t("settings.sections.integrations.title")}
@@ -91,7 +96,11 @@ export function ManagedIntegrationStatus() {
   }
 
   return (
-    <SettingsCard aria-labelledby="managed-integration-status-title">
+    <SettingsCard
+      aria-labelledby="managed-integration-status-title"
+      data-record-id={recordId ?? undefined}
+      data-record-settings-family="integrations"
+    >
       <SettingsCardHeader
         icon={Plug}
         title={t("settings.sections.integrations.title")}

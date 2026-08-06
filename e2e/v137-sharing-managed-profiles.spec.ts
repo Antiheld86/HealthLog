@@ -22,4 +22,18 @@ test.describe("sharing release journey anchors", () => {
       "manage-mutation-activity-and-fenced-settings",
     ]);
   });
+
+  test("managed profile lifecycle", () => {
+    const managedJourneyNames = RELEASE_JOURNEYS.filter((journey) =>
+      [
+        "managed-profile-creation-delegation-and-revocation",
+        "manage-mutation-activity-and-fenced-settings",
+      ].includes(journey.name),
+    ).map((journey) => journey.name);
+
+    expect(managedJourneyNames).toEqual([
+      "managed-profile-creation-delegation-and-revocation",
+      "manage-mutation-activity-and-fenced-settings",
+    ]);
+  });
 });
