@@ -118,6 +118,25 @@ export class WideEventBuilder {
     return this;
   }
 
+  /**
+   * v1.37.0 — record the record context this request resolved.
+   *
+   * Merges for the same reason `setActingAs` does. Written by exactly one
+   * caller, the record-session fence, and read back by `apiHandler` to attach
+   * the response echo. `apiHandler` deliberately does NOT derive the context
+   * itself: doing so would put a session read on every public route and make
+   * the echo a second derivation rather than a report of the one that was used.
+   */
+  setRecordContext(context: { epoch: number; scope: string | null }): this {
+    this.event.auth = { ...(this.event.auth ?? {}), record_context: context };
+    return this;
+  }
+
+  /** The record context the fence stamped, or undefined if it never ran. */
+  getRecordContext(): { epoch: number; scope: string | null } | undefined {
+    return this.event.auth?.record_context;
+  }
+
   setProviderWorkAuthority(authority: ProviderWorkAuthority): this {
     this.event.auth = {
       ...(this.event.auth ?? {}),

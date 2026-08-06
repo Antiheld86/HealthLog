@@ -37,6 +37,8 @@ import {
   type GrantNeed,
 } from "./sharing/grants";
 import type { ShareScope } from "./sharing/scope";
+import { RECORD_FENCE_ERROR_CODE } from "./sharing/record-session-fence-contract";
+import { assertRecordSessionFence } from "./sharing/record-session-fence";
 
 /**
  * HTTP methods a read-only credential may use on the REST surface. A request
@@ -136,6 +138,38 @@ export class SharingNotPermittedError extends SharingAuthError {
   constructor() {
     super(403, "This endpoint cannot be used while acting on another account");
     this.name = "SharingNotPermittedError";
+  }
+}
+
+/**
+ * v1.37.0 — "the record this session is on is not the record you asserted."
+ *
+ * A third sibling rather than a branch, so it rides the existing
+ * `SharingAuthError` arm below with no new serialisation code. The status is
+ * the one thing that differs and it differs on purpose: 409, not 403, because
+ * this is not a refusal of access. The caller may well be entitled to both
+ * records. What failed is agreement about WHICH one, and the instruction the
+ * code carries is "reconcile through `/api/auth/me` and try again", not "you
+ * have lost this record".
+ *
+ * That distinction is load-bearing for deploy compatibility: the currently
+ * shipped bundle reacts to `sharing.access.denied` by leaving the record and
+ * hard-navigating, which is exactly the wrong response to a transient
+ * disagreement and exactly the right one for a bundle too old to reconcile. See
+ * `src/lib/sharing/record-session-fence-contract.ts` for why the fence hands
+ * each bundle the code it can act on.
+ *
+ * The body carries `meta.errorCode` and nothing else — no current epoch, no
+ * current scope. A client may learn its context from exactly two responses
+ * (`GET /api/auth/me` and `POST /api/account/switch`), and putting the truth in
+ * this refusal would open a third path, one that arrives on the very requests
+ * whose context is in doubt.
+ */
+export class RecordSessionChangedError extends SharingAuthError {
+  readonly errorCode = RECORD_FENCE_ERROR_CODE;
+  constructor() {
+    super(409, "The record this session is on has changed");
+    this.name = "RecordSessionChangedError";
   }
 }
 
@@ -393,6 +427,16 @@ export type AuthContext = {
      * below reads it.
      */
     readonly actingAsUserId?: string | null;
+    /**
+     * v1.37.0 — how many times this session's record selector has moved. The
+     * record-session fence compares it against what the request asserted.
+     *
+     * Optional for the same reason as `actingAsUserId` above, and `undefined`
+     * reads as `0` — which is the fence's exemption, so a hand-built test
+     * context keeps meaning "a session that never switched". Read only by the
+     * fence.
+     */
+    readonly recordEpoch?: number;
   };
   user: User;
   /**

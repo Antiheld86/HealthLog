@@ -94,6 +94,20 @@ describe("the acting-account carrier is read in one place", () => {
     // whole auth context for exactly this reason: had it taken the id, the
     // route would name the column too, and the list would grow per surface.
     "lib/sharing/account-access.ts",
+    // v1.37.0 — the record-session fence COMPARES it and never writes it. It
+    // reads the value off the `AuthContext` the resolver already holds rather
+    // than from the row, which is the property the fence rests on: the scope
+    // the handler serves under and the epoch the fence validated are one row
+    // read, so they cannot straddle a switch. A version of this file that
+    // resolved its own session would be a second answer to "whose record is
+    // this" and would also be wrong more often.
+    "lib/sharing/record-session-fence.ts",
+    // v1.37.0 — names the column in prose only. The matcher does not exempt
+    // comments and is left that way on purpose (see the note above), so the
+    // module that explains the fence has to be listed. It imports nothing at
+    // all, which the fence's own unit test asserts, so it can read no column
+    // even in principle.
+    "lib/sharing/record-session-fence-contract.ts",
   ].sort();
 
   it("no other file reads or writes the carrier column", () => {
