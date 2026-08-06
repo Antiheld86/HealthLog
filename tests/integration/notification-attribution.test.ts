@@ -228,6 +228,46 @@ describe("notification attribution (real Postgres)", () => {
     expect(await getPrismaClient().pushAttempt.count()).toBe(0);
   });
 
+  it("uses database time for expiry at the final egress claim", async () => {
+    const recordUser = await createUser("database-clock-record", true);
+    const recipientUser = await createUser("database-clock-recipient");
+    const actualNow = Date.now();
+    await createGuardianGrant({
+      recordUserId: recordUser.id,
+      recipientUserId: recipientUser.id,
+      expiresAt: new Date(actualNow - 1_000),
+    });
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(actualNow - 60_000));
+    try {
+      const delivery = await resolveNotificationDeliveryIdentity({
+        eventType: "MEDICATION_REMINDER",
+        userId: recordUser.id,
+        recordUserId: recordUser.id,
+        recipientUserId: recipientUser.id,
+        title: "record reminder",
+        message: "record message",
+      });
+      expect(delivery).toMatchObject({ managed: true });
+
+      await expect(
+        claimManagedGuardianEgressAuthorization(
+          delivery!,
+          "NTFY",
+          "MEDICATION_REMINDER",
+        ),
+      ).resolves.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(
+      await getPrismaClient().notificationEgressAuthorization.count(),
+    ).toBe(0);
+    expect(await getPrismaClient().pushAttempt.count()).toBe(0);
+  });
+
   it("allows exactly one concurrent claim for a notification event", async () => {
     const recordUser = await createUser("claim-record", true);
     const client = getPrismaClient();
