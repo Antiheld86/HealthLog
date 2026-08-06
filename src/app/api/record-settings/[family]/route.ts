@@ -297,11 +297,16 @@ export const PATCH = apiHandler(
             ...((current?.thresholdsJson ?? {}) as ThresholdOverridesJson),
             ...patch.overrides,
           };
-          await prisma.user.update({
+          const record = await prisma.user.update({
             where: { id: access.recordId },
             data: { thresholdsJson: toJson(overrides) },
+            select: { heightCm: true, dateOfBirth: true, gender: true },
           });
-          settings = { overrides };
+          invalidateUserProfile(access.recordId);
+          settings = {
+            overrides,
+            effective: getAllEffectiveRanges(record, overrides),
+          };
           changed = Object.keys(patch.overrides);
           break;
         }

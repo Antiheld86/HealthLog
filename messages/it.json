@@ -4494,6 +4494,31 @@
           "excludedMetrics": "Metriche escluse",
           "dataClusters": "Gruppi di dati",
           "customClusters": "Usa una selezione personalizzata di gruppi",
+          "metrics": {
+            "bp": "Pressione arteriosa",
+            "weight": "Peso",
+            "pulse": "Polso",
+            "mood": "Umore",
+            "compliance": "Aderenza ai farmaci",
+            "hrv": "Variabilità della frequenza cardiaca",
+            "sleep": "Sonno",
+            "restingHr": "Frequenza cardiaca a riposo",
+            "steps": "Passi",
+            "medications": "Farmaci",
+            "anthropometrics": "Misure corporee"
+          },
+          "clusters": {
+            "cardio": "Salute cardiovascolare",
+            "body": "Composizione corporea",
+            "activity": "Attività",
+            "workouts": "Allenamenti",
+            "sleep": "Sonno",
+            "mood": "Umore",
+            "glucose": "Glucosio",
+            "medication": "Farmaci",
+            "mobility": "Mobilità",
+            "environment": "Ambiente"
+          },
           "value": "{value}"
         },
         "insights": {
@@ -4501,7 +4526,22 @@
           "sections": "Sezioni della panoramica",
           "tiles": "Riquadri di navigazione",
           "item": "{id}",
-          "order": "Ordine"
+          "order": "Ordine",
+          "unknownItem": "Analisi non disponibile",
+          "sectionLabels": {
+            "wellnessScores": "Punteggi di benessere",
+            "dailyBriefing": "Riepilogo giornaliero",
+            "vitals": "Parametri vitali",
+            "trends": "Tendenze",
+            "periodReview": "Riepilogo del periodo",
+            "cycleSummary": "Riepilogo del ciclo",
+            "signals": "Segnali",
+            "rhythmEvents": "Eventi del ritmo",
+            "healthStatus": "Stato di salute",
+            "breathing": "Respirazione",
+            "labsChanges": "Variazioni di laboratorio",
+            "ecg": "ECG"
+          }
         }
       },
       "unavailableTitle": "Non disponibile in questo record condiviso",

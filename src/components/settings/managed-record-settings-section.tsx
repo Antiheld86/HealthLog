@@ -7,6 +7,10 @@ import { Settings } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { apiGet, apiPatch } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
+import {
+  normalizeInsightsTileId,
+  type InsightsSectionId,
+} from "@/lib/insights-layout";
 import { MODULE_REGISTRY } from "@/lib/modules/registry";
 import { queryKeys } from "@/lib/query-keys";
 import {
@@ -20,6 +24,7 @@ import {
   type ThresholdMetric,
 } from "@/lib/analytics/effective-range";
 import { ALL_METRICS } from "@/lib/validations/thresholds";
+import { SUB_PAGE_TABS } from "@/components/insights/insights-tab-strip";
 import { Button } from "@/components/ui/button";
 import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { SettingsCardHeader } from "./_card-header";
@@ -67,6 +72,63 @@ const COACH_DATA_CLUSTERS = [
   "mobility",
   "environment",
 ] as const;
+const COACH_EXCLUDE_METRIC_LABEL_KEYS: Record<
+  (typeof COACH_EXCLUDE_METRICS)[number],
+  string
+> = {
+  bp: "settings.sharedRecord.managedSettings.coach.metrics.bp",
+  weight: "settings.sharedRecord.managedSettings.coach.metrics.weight",
+  pulse: "settings.sharedRecord.managedSettings.coach.metrics.pulse",
+  mood: "settings.sharedRecord.managedSettings.coach.metrics.mood",
+  compliance: "settings.sharedRecord.managedSettings.coach.metrics.compliance",
+  hrv: "settings.sharedRecord.managedSettings.coach.metrics.hrv",
+  sleep: "settings.sharedRecord.managedSettings.coach.metrics.sleep",
+  resting_hr: "settings.sharedRecord.managedSettings.coach.metrics.restingHr",
+  steps: "settings.sharedRecord.managedSettings.coach.metrics.steps",
+  medications:
+    "settings.sharedRecord.managedSettings.coach.metrics.medications",
+  anthropometrics:
+    "settings.sharedRecord.managedSettings.coach.metrics.anthropometrics",
+};
+const COACH_DATA_CLUSTER_LABEL_KEYS: Record<
+  (typeof COACH_DATA_CLUSTERS)[number],
+  string
+> = {
+  cardio: "settings.sharedRecord.managedSettings.coach.clusters.cardio",
+  body: "settings.sharedRecord.managedSettings.coach.clusters.body",
+  activity: "settings.sharedRecord.managedSettings.coach.clusters.activity",
+  workouts: "settings.sharedRecord.managedSettings.coach.clusters.workouts",
+  sleep: "settings.sharedRecord.managedSettings.coach.clusters.sleep",
+  mood: "settings.sharedRecord.managedSettings.coach.clusters.mood",
+  glucose: "settings.sharedRecord.managedSettings.coach.clusters.glucose",
+  medication: "settings.sharedRecord.managedSettings.coach.clusters.medication",
+  mobility: "settings.sharedRecord.managedSettings.coach.clusters.mobility",
+  environment:
+    "settings.sharedRecord.managedSettings.coach.clusters.environment",
+};
+const INSIGHTS_SECTION_LABEL_KEYS: Record<InsightsSectionId, string> = {
+  "wellness-scores":
+    "settings.sharedRecord.managedSettings.insights.sectionLabels.wellnessScores",
+  "daily-briefing":
+    "settings.sharedRecord.managedSettings.insights.sectionLabels.dailyBriefing",
+  vitals: "settings.sharedRecord.managedSettings.insights.sectionLabels.vitals",
+  trends: "settings.sharedRecord.managedSettings.insights.sectionLabels.trends",
+  "period-review":
+    "settings.sharedRecord.managedSettings.insights.sectionLabels.periodReview",
+  "cycle-summary":
+    "settings.sharedRecord.managedSettings.insights.sectionLabels.cycleSummary",
+  signals:
+    "settings.sharedRecord.managedSettings.insights.sectionLabels.signals",
+  "rhythm-events":
+    "settings.sharedRecord.managedSettings.insights.sectionLabels.rhythmEvents",
+  "health-status":
+    "settings.sharedRecord.managedSettings.insights.sectionLabels.healthStatus",
+  breathing:
+    "settings.sharedRecord.managedSettings.insights.sectionLabels.breathing",
+  "labs-changes":
+    "settings.sharedRecord.managedSettings.insights.sectionLabels.labsChanges",
+  ecg: "settings.sharedRecord.managedSettings.insights.sectionLabels.ecg",
+};
 const METRIC_LABEL_KEYS: Record<ThresholdMetric, string> = {
   WEIGHT: "thresholds.metricWeight",
   BLOOD_PRESSURE_SYS: "thresholds.metricBpSys",
@@ -107,6 +169,40 @@ function asStringArray(value: unknown): string[] {
 function formNumber(form: FormData, name: string, fallback: number): number {
   const value = Number(form.get(name));
   return Number.isFinite(value) ? value : fallback;
+}
+
+function coachMetricLabel(
+  t: ReturnType<typeof useTranslations>["t"],
+  metric: (typeof COACH_EXCLUDE_METRICS)[number],
+): string {
+  return t(COACH_EXCLUDE_METRIC_LABEL_KEYS[metric]);
+}
+
+function coachClusterLabel(
+  t: ReturnType<typeof useTranslations>["t"],
+  cluster: (typeof COACH_DATA_CLUSTERS)[number],
+): string {
+  return t(COACH_DATA_CLUSTER_LABEL_KEYS[cluster]);
+}
+
+function insightItemLabel(
+  t: ReturnType<typeof useTranslations>["t"],
+  kind: "section" | "tile",
+  id: string,
+): string {
+  if (kind === "section") {
+    const labelKey = INSIGHTS_SECTION_LABEL_KEYS[id as InsightsSectionId];
+    return labelKey
+      ? t(labelKey)
+      : t("settings.sharedRecord.managedSettings.insights.unknownItem");
+  }
+
+  const normalizedId = normalizeInsightsTileId(id);
+  if (normalizedId === "overview") return t("insights.navOverview");
+  const tab = SUB_PAGE_TABS[normalizedId as keyof typeof SUB_PAGE_TABS];
+  return tab
+    ? t(tab.labelKey)
+    : t("settings.sharedRecord.managedSettings.insights.unknownItem");
 }
 
 function SaveButton({ disabled, label }: { disabled: boolean; label: string }) {
@@ -661,9 +757,7 @@ function CoachSettingsForm({
               name={`exclude-${metric}`}
               type="checkbox"
             />
-            {t("settings.sharedRecord.managedSettings.coach.value", {
-              value: metric,
-            })}
+            {coachMetricLabel(t, metric)}
           </label>
         ))}
       </fieldset>
@@ -691,9 +785,7 @@ function CoachSettingsForm({
               name={`cluster-${cluster}`}
               type="checkbox"
             />
-            {t("settings.sharedRecord.managedSettings.coach.value", {
-              value: cluster,
-            })}
+            {coachClusterLabel(t, cluster)}
           </label>
         ))}
       </fieldset>
@@ -765,9 +857,7 @@ function InsightsSettingsForm({
               name={`${kind}-visible-${item.id}`}
               type="checkbox"
             />
-            {t("settings.sharedRecord.managedSettings.insights.item", {
-              id: item.id,
-            })}
+            {insightItemLabel(t, kind, item.id)}
           </label>
           <label
             className="flex items-center gap-2"

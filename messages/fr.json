@@ -4494,6 +4494,31 @@
           "excludedMetrics": "Mesures exclues",
           "dataClusters": "Groupes de données",
           "customClusters": "Utiliser une sélection personnalisée de groupes",
+          "metrics": {
+            "bp": "Tension artérielle",
+            "weight": "Poids",
+            "pulse": "Pouls",
+            "mood": "Humeur",
+            "compliance": "Adhérence aux médicaments",
+            "hrv": "Variabilité de la fréquence cardiaque",
+            "sleep": "Sommeil",
+            "restingHr": "Fréquence cardiaque au repos",
+            "steps": "Pas",
+            "medications": "Médicaments",
+            "anthropometrics": "Mesures corporelles"
+          },
+          "clusters": {
+            "cardio": "Santé cardiovasculaire",
+            "body": "Composition corporelle",
+            "activity": "Activité",
+            "workouts": "Entraînements",
+            "sleep": "Sommeil",
+            "mood": "Humeur",
+            "glucose": "Glucose",
+            "medication": "Médicaments",
+            "mobility": "Mobilité",
+            "environment": "Environnement"
+          },
           "value": "{value}"
         },
         "insights": {
@@ -4501,7 +4526,22 @@
           "sections": "Sections d’aperçu",
           "tiles": "Tuiles de navigation",
           "item": "{id}",
-          "order": "Ordre"
+          "order": "Ordre",
+          "unknownItem": "Analyse indisponible",
+          "sectionLabels": {
+            "wellnessScores": "Scores de bien-être",
+            "dailyBriefing": "Brief quotidien",
+            "vitals": "Signes vitaux",
+            "trends": "Tendances",
+            "periodReview": "Bilan de période",
+            "cycleSummary": "Résumé du cycle",
+            "signals": "Signaux",
+            "rhythmEvents": "Événements de rythme",
+            "healthStatus": "État de santé",
+            "breathing": "Respiration",
+            "labsChanges": "Évolutions de laboratoire",
+            "ecg": "ECG"
+          }
         }
       },
       "unavailableTitle": "Indisponible dans ce dossier partagé",

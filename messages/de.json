@@ -4494,6 +4494,31 @@
           "excludedMetrics": "Ausgeschlossene Messwerte",
           "dataClusters": "Datenbereiche",
           "customClusters": "Eigene Auswahl von Datenbereichen verwenden",
+          "metrics": {
+            "bp": "Blutdruck",
+            "weight": "Gewicht",
+            "pulse": "Puls",
+            "mood": "Stimmung",
+            "compliance": "Medikamenteneinnahme",
+            "hrv": "Herzfrequenzvariabilität",
+            "sleep": "Schlaf",
+            "restingHr": "Ruhepuls",
+            "steps": "Schritte",
+            "medications": "Medikamente",
+            "anthropometrics": "Körpermaße"
+          },
+          "clusters": {
+            "cardio": "Herz-Kreislauf",
+            "body": "Körperzusammensetzung",
+            "activity": "Aktivität",
+            "workouts": "Trainings",
+            "sleep": "Schlaf",
+            "mood": "Stimmung",
+            "glucose": "Glukose",
+            "medication": "Medikation",
+            "mobility": "Mobilität",
+            "environment": "Umgebung"
+          },
           "value": "{value}"
         },
         "insights": {
@@ -4501,7 +4526,22 @@
           "sections": "Übersichtsbereiche",
           "tiles": "Navigationskacheln",
           "item": "{id}",
-          "order": "Reihenfolge"
+          "order": "Reihenfolge",
+          "unknownItem": "Nicht verfügbare Erkenntnis",
+          "sectionLabels": {
+            "wellnessScores": "Wellnesswerte",
+            "dailyBriefing": "Tagesüberblick",
+            "vitals": "Vitalwerte",
+            "trends": "Trends",
+            "periodReview": "Periodenrückblick",
+            "cycleSummary": "Zyklusübersicht",
+            "signals": "Signale",
+            "rhythmEvents": "Rhythmusereignisse",
+            "healthStatus": "Gesundheitsstatus",
+            "breathing": "Atmung",
+            "labsChanges": "Laborveränderungen",
+            "ecg": "EKG"
+          }
         }
       },
       "unavailableTitle": "In diesem geteilten Datensatz nicht verfügbar",

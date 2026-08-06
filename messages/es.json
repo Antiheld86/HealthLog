@@ -4494,6 +4494,31 @@
           "excludedMetrics": "Métricas excluidas",
           "dataClusters": "Grupos de datos",
           "customClusters": "Usar una selección personalizada de grupos",
+          "metrics": {
+            "bp": "Presión arterial",
+            "weight": "Peso",
+            "pulse": "Pulso",
+            "mood": "Ánimo",
+            "compliance": "Adherencia a la medicación",
+            "hrv": "Variabilidad de la frecuencia cardíaca",
+            "sleep": "Sueño",
+            "restingHr": "Frecuencia cardíaca en reposo",
+            "steps": "Pasos",
+            "medications": "Medicamentos",
+            "anthropometrics": "Medidas corporales"
+          },
+          "clusters": {
+            "cardio": "Salud cardiovascular",
+            "body": "Composición corporal",
+            "activity": "Actividad",
+            "workouts": "Entrenamientos",
+            "sleep": "Sueño",
+            "mood": "Ánimo",
+            "glucose": "Glucosa",
+            "medication": "Medicación",
+            "mobility": "Movilidad",
+            "environment": "Entorno"
+          },
           "value": "{value}"
         },
         "insights": {
@@ -4501,7 +4526,22 @@
           "sections": "Secciones del resumen",
           "tiles": "Mosaicos de navegación",
           "item": "{id}",
-          "order": "Orden"
+          "order": "Orden",
+          "unknownItem": "Análisis no disponible",
+          "sectionLabels": {
+            "wellnessScores": "Puntuaciones de bienestar",
+            "dailyBriefing": "Resumen diario",
+            "vitals": "Signos vitales",
+            "trends": "Tendencias",
+            "periodReview": "Revisión del período",
+            "cycleSummary": "Resumen del ciclo",
+            "signals": "Señales",
+            "rhythmEvents": "Eventos de ritmo",
+            "healthStatus": "Estado de salud",
+            "breathing": "Respiración",
+            "labsChanges": "Cambios de laboratorio",
+            "ecg": "ECG"
+          }
         }
       },
       "unavailableTitle": "No disponible en este registro compartido",

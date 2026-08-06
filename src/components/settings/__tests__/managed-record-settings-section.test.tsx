@@ -7,12 +7,15 @@ import { ALL_METRICS } from "@/lib/validations/thresholds";
 
 import { ManagedRecordSettingsForm } from "../managed-record-settings-section";
 
+const LOCALES = ["de", "en", "es", "fr", "it", "pl"] as const;
+
 const render = (
   family: Parameters<typeof ManagedRecordSettingsForm>[0]["family"],
   settings: Record<string, unknown>,
+  locale: (typeof LOCALES)[number] = "en",
 ) =>
   renderToStaticMarkup(
-    <I18nProvider initialLocale="en">
+    <I18nProvider initialLocale={locale}>
       <ManagedRecordSettingsForm
         disabled={false}
         family={family}
@@ -89,5 +92,37 @@ describe("managed record settings forms", () => {
     }
     expect(thresholds).toContain('value="10"');
     expect(thresholds).toContain('value="20"');
+  });
+
+  it("uses localized display inventories instead of raw Coach and Insight IDs", () => {
+    for (const locale of LOCALES) {
+      const coach = render(
+        "coach",
+        {
+          preferences: {
+            excludeMetrics: ["bp"],
+            dataClusters: ["cardio"],
+          },
+        },
+        locale,
+      );
+      const insights = render(
+        "insights",
+        {
+          layout: {
+            version: 2,
+            sections: [{ id: "unknown-section", visible: true, order: 0 }],
+            tiles: [{ id: "unknown-tile", visible: true, order: 0 }],
+          },
+        },
+        locale,
+      );
+
+      expect(coach).not.toContain(">bp<");
+      expect(coach).not.toContain(">cardio<");
+      expect(insights).not.toContain(">unknown-section<");
+      expect(insights).not.toContain(">unknown-tile<");
+      expect(insights).not.toContain("settings.sharedRecord");
+    }
   });
 });

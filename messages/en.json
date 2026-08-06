@@ -4494,6 +4494,31 @@
           "excludedMetrics": "Excluded metrics",
           "dataClusters": "Data clusters",
           "customClusters": "Use a custom cluster selection",
+          "metrics": {
+            "bp": "Blood pressure",
+            "weight": "Weight",
+            "pulse": "Pulse",
+            "mood": "Mood",
+            "compliance": "Medication adherence",
+            "hrv": "Heart rate variability",
+            "sleep": "Sleep",
+            "restingHr": "Resting heart rate",
+            "steps": "Steps",
+            "medications": "Medications",
+            "anthropometrics": "Body measurements"
+          },
+          "clusters": {
+            "cardio": "Cardiovascular health",
+            "body": "Body composition",
+            "activity": "Activity",
+            "workouts": "Workouts",
+            "sleep": "Sleep",
+            "mood": "Mood",
+            "glucose": "Glucose",
+            "medication": "Medication",
+            "mobility": "Mobility",
+            "environment": "Environment"
+          },
           "value": "{value}"
         },
         "insights": {
@@ -4501,7 +4526,22 @@
           "sections": "Overview sections",
           "tiles": "Navigation tiles",
           "item": "{id}",
-          "order": "Order"
+          "order": "Order",
+          "unknownItem": "Unavailable insight",
+          "sectionLabels": {
+            "wellnessScores": "Wellness scores",
+            "dailyBriefing": "Daily briefing",
+            "vitals": "Vitals",
+            "trends": "Trends",
+            "periodReview": "Period review",
+            "cycleSummary": "Cycle summary",
+            "signals": "Signals",
+            "rhythmEvents": "Rhythm events",
+            "healthStatus": "Health status",
+            "breathing": "Breathing",
+            "labsChanges": "Lab changes",
+            "ecg": "ECG"
+          }
         }
       },
       "unavailableTitle": "Unavailable in this shared record",

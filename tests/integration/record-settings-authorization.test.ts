@@ -81,5 +81,14 @@ describe("record settings authorization", () => {
     expect(route).toContain("invalidateUserMedications(access.recordId, {");
     expect(route).toContain("invalidateUserHealthScore(access.recordId)");
     expect(route).toContain("getAllEffectiveRanges(record, overrides)");
+    expect(route).toContain(
+      "effective: getAllEffectiveRanges(record, overrides)",
+    );
+    expect(route).toContain("invalidateUserProfile(access.recordId)");
+    expect(
+      route.lastIndexOf("invalidateUserProfile(access.recordId)"),
+    ).toBeGreaterThan(
+      route.indexOf("data: { thresholdsJson: toJson(overrides) }"),
+    );
   });
 });

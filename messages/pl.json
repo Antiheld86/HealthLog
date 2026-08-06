@@ -4494,6 +4494,31 @@
           "excludedMetrics": "Wykluczone metryki",
           "dataClusters": "Grupy danych",
           "customClusters": "Użyj własnego wyboru grup",
+          "metrics": {
+            "bp": "Ciśnienie krwi",
+            "weight": "Masa ciała",
+            "pulse": "Tętno",
+            "mood": "Nastrój",
+            "compliance": "Przestrzeganie przyjmowania leków",
+            "hrv": "Zmienność rytmu serca",
+            "sleep": "Sen",
+            "restingHr": "Tętno spoczynkowe",
+            "steps": "Kroki",
+            "medications": "Leki",
+            "anthropometrics": "Wymiary ciała"
+          },
+          "clusters": {
+            "cardio": "Zdrowie sercowo-naczyniowe",
+            "body": "Skład ciała",
+            "activity": "Aktywność",
+            "workouts": "Treningi",
+            "sleep": "Sen",
+            "mood": "Nastrój",
+            "glucose": "Glukoza",
+            "medication": "Leki",
+            "mobility": "Mobilność",
+            "environment": "Środowisko"
+          },
           "value": "{value}"
         },
         "insights": {
@@ -4501,7 +4526,22 @@
           "sections": "Sekcje przeglądu",
           "tiles": "Kafelki nawigacji",
           "item": "{id}",
-          "order": "Kolejność"
+          "order": "Kolejność",
+          "unknownItem": "Niedostępna analiza",
+          "sectionLabels": {
+            "wellnessScores": "Wyniki dobrostanu",
+            "dailyBriefing": "Codzienny przegląd",
+            "vitals": "Parametry życiowe",
+            "trends": "Trendy",
+            "periodReview": "Przegląd okresu",
+            "cycleSummary": "Podsumowanie cyklu",
+            "signals": "Sygnały",
+            "rhythmEvents": "Zdarzenia rytmu",
+            "healthStatus": "Stan zdrowia",
+            "breathing": "Oddychanie",
+            "labsChanges": "Zmiany wyników laboratoryjnych",
+            "ecg": "EKG"
+          }
         }
       },
       "unavailableTitle": "Niedostępne w tym udostępnionym rekordzie",
