@@ -84,8 +84,10 @@ describe("managed record settings forms", () => {
       ),
     });
 
-    for (const module of Object.keys(MANAGED_RECORD_SETTINGS_MODULE_DEFAULTS)) {
-      expect(modules).toContain(`name="${module}"`);
+    for (const moduleKey of Object.keys(
+      MANAGED_RECORD_SETTINGS_MODULE_DEFAULTS,
+    )) {
+      expect(modules).toContain(`name="${moduleKey}"`);
     }
     for (const metric of ALL_METRICS) {
       expect(thresholds).toContain(`value="${metric}"`);
