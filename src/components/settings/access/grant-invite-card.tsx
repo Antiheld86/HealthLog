@@ -297,7 +297,15 @@ export function GrantInviteCard() {
           </Label>
           <DateField
             id="grant-invite-expires"
+            // `data-slot` rides `{...rest}` onto `DateField`'s HIDDEN mirror
+            // input — the one that carries the ISO value for a native submit.
+            // A browser test that targeted it found an invisible element and a
+            // `fill()` that typed into nothing. `data-testid` is the
+            // primitive's own affordance for the VISIBLE overlay, which is the
+            // control a person actually types into, so the browser test uses
+            // that and the slot stays where every other caller expects it.
             data-slot="grant-invite-expires"
+            data-testid="grant-invite-expires-input"
             value={expiresOn}
             min={tomorrowIso(ownerTimezone)}
             onChange={setExpiresOn}

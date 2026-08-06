@@ -203,10 +203,19 @@ test.describe("account sharing", () => {
     // date mapping, and BOTH still pass with the card wired back to `null`.
     // Only reading the posted body proves the value a person typed is the
     // value the server receives, which is the half that was missing.
-    const lapse = ownerPage.locator('[data-slot="grant-invite-expires"]');
+    // The VISIBLE overlay, not the hidden ISO mirror: `data-slot` rides
+    // `{...rest}` onto `DateField`'s hidden input, so the old selector resolved
+    // to an element that can never be visible and typed into nothing.
+    const lapse = ownerPage.getByTestId("grant-invite-expires-input");
     await expect(lapse).toBeVisible();
     const chosenDay = isoDayFromNow(30);
     await lapse.fill(chosenDay);
+    // The overlay commits on blur; without it the ISO text sits in local state
+    // and the hidden mirror still holds the old value when the form submits.
+    await lapse.blur();
+    await expect(
+      ownerPage.locator('input[data-slot="grant-invite-expires"]'),
+    ).toHaveValue(chosenDay);
 
     // The level, through the real control and onto the real wire.
     //
