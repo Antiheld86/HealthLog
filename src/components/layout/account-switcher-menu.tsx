@@ -13,6 +13,7 @@ import { useAccountSwitch } from "@/hooks/use-account-switch";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
 import { resolveRecordPresentation } from "@/lib/navigation/record-presentation";
+import { sharedRecordLandingHref } from "@/lib/navigation/shared-record";
 import { accountLabel } from "@/lib/sharing/account-access-view";
 
 /**
@@ -92,7 +93,12 @@ export function AccountSwitcherMenuItems() {
                 data-record-kind={presentation.recordKind}
                 className="cursor-pointer"
                 disabled={switchAccount.isPending}
-                onClick={() => switchAccount.mutate(account.accountId)}
+                onClick={() =>
+                  switchAccount.switchTo(
+                    account.accountId,
+                    sharedRecordLandingHref(account.sections),
+                  )
+                }
               >
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate">{accountLabel(account)}</span>

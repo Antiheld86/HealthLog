@@ -161,7 +161,7 @@ describe("<LookingAfterCard>", () => {
     });
 
     expect(html).toMatch(
-      /aria-label="Open Managed profile&#x27;s record; Can read the record, add to it, and change or remove what is in it; Managed profile"/,
+      /aria-label="Open Managed profile&#x27;s record; Can read the record, add to it, and change or remove what is in it; Managed profile;/,
     );
   });
 

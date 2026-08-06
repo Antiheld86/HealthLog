@@ -18,7 +18,7 @@ export const SHARED_RECORD_DOMAIN_ROUTE_FAMILIES = {
   measurements: ["/measurements"],
   medications: ["/medications"],
   labs: ["/labs"],
-  profile: ["/settings/anamnesis"],
+  profile: ["/profile"],
   illness: ["/illness"],
   mind: ["/mood", "/mental-wellbeing"],
   cycle: ["/cycle"],
@@ -85,6 +85,13 @@ export function resolveSharedRecordNavigation(
       );
     },
   };
+}
+
+/** The first scope-presentable location to load after a record switch. */
+export function sharedRecordLandingHref(
+  sections: readonly ShareDomain[] | null,
+): string {
+  return resolveSharedRecordNavigation(sections).destinationHrefs[0] ?? "/";
 }
 
 /**

@@ -2,6 +2,7 @@ import {
   Activity,
   Bell,
   Brain,
+  ClipboardList,
   Droplets,
   FileScan,
   FlaskConical,
@@ -77,6 +78,8 @@ export interface NavDestination {
    * owner gave for their own use, so those surfaces stay owner-only in v1.
    */
   sharedRecord?: boolean;
+  /** A record-only view, intentionally absent from the actor's own nav. */
+  sharedRecordOnly?: boolean;
 }
 
 /**
@@ -169,6 +172,14 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
     icon: FlaskConical,
     tourId: "nav-labs",
     requiresModule: "labs",
+  },
+  {
+    href: "/profile",
+    sharedRecord: true,
+    sharedRecordOnly: true,
+    tKey: "settings.sections.anamnesis.title",
+    icon: ClipboardList,
+    tourId: "nav-profile",
   },
   // v1.18.1 — the illness/condition journal sits in the clinical spine
   // next to Labs. Born-gated: `requiresModule: "illness"` reads the
@@ -316,6 +327,11 @@ function isNavDestinationVisible(
   ) {
     return false;
   }
+  // A shared record's server-resolved scope decides which health-domain doors
+  // exist. The actor's module preferences describe their own dashboard and
+  // must not hide a domain the target record explicitly granted.
+  if (sharedRecord) return true;
+  if (d.sharedRecordOnly) return false;
   if (!d.requiresModule) return true;
   if (!mounted) return false;
   return modules?.[d.requiresModule] !== false;

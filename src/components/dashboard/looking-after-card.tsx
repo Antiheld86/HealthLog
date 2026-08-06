@@ -11,6 +11,7 @@ import {
   resolveRecordPresentation,
   type RecordPresentation,
 } from "@/lib/navigation/record-presentation";
+import { sharedRecordLandingHref } from "@/lib/navigation/shared-record";
 import {
   accountLabel,
   type AccountAccessEntry,
@@ -83,6 +84,9 @@ export function LookingAfterCard() {
         <ul className="divide-y">
           {accounts.map((entry) => {
             const presentation = resolveRecordPresentation(entry);
+            const level = levelLabel(entry, presentation, t);
+            const kind = recordKindLabel(entry, t);
+            const scope = scopeLabel(entry, t);
 
             return (
               <li key={entry.accountId}>
@@ -93,10 +97,20 @@ export function LookingAfterCard() {
                   data-access-level={presentation.access}
                   data-record-kind={presentation.recordKind}
                   disabled={switchAccount.isPending}
-                  onClick={() => switchAccount.mutate(entry.accountId)}
-                  aria-label={t("recordSharing.lookingAfter.open", {
-                    name: accountLabel(entry),
-                  })}
+                  onClick={() =>
+                    switchAccount.switchTo(
+                      entry.accountId,
+                      sharedRecordLandingHref(entry.sections),
+                    )
+                  }
+                  aria-label={[
+                    t("recordSharing.lookingAfter.open", {
+                      name: accountLabel(entry),
+                    }),
+                    level,
+                    kind,
+                    scope,
+                  ].join("; ")}
                   className="hover:bg-accent/40 focus-visible:ring-ring/50 flex min-h-11 w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
                 >
                   <span className="min-w-0 flex-1">
@@ -104,13 +118,13 @@ export function LookingAfterCard() {
                       {accountLabel(entry)}
                     </span>
                     <span className="text-muted-foreground block truncate text-xs">
-                      {levelLabel(entry, presentation, t)}
+                      {level}
                     </span>
                     <span className="text-muted-foreground block truncate text-xs">
-                      {recordKindLabel(entry, t)}
+                      {kind}
                     </span>
                     <span className="text-muted-foreground block truncate text-xs">
-                      {scopeLabel(entry, t)}
+                      {scope}
                     </span>
                   </span>
                   {switchAccount.isPending && (

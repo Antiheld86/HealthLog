@@ -102,10 +102,13 @@ async function postSwitch(accountId: string | null): Promise<SwitchResponse> {
  * sequence. Two copies of "wipe, then reload" is one copy too many for a step
  * whose order is the safety property.
  */
-async function landOnRecord(accountId: string | null): Promise<never> {
+async function landOnRecord(
+  accountId: string | null,
+  destination = "/",
+): Promise<never> {
   setRecordScope(accountId);
   await clearOfflineCachesForRecordSwitch();
-  window.location.assign("/");
+  window.location.assign(destination);
   // The document is being replaced. Nothing after this runs, and the promise
   // deliberately never settles so no caller paints a "done" state over a page
   // that is on its way out.
@@ -124,15 +127,21 @@ export function useAccountSwitch() {
   const { t } = useTranslations();
   const queryClient = useQueryClient();
 
-  return useMutation({
+  const mutation = useMutation({
     mutationKey: queryKeys.accountSwitchMutation(),
-    mutationFn: async (accountId: string | null) => {
+    mutationFn: async ({
+      accountId,
+      destination,
+    }: {
+      accountId: string | null;
+      destination: string;
+    }) => {
       await postSwitch(accountId);
       // The in-memory cache holds the record we are leaving. Clearing it here
       // as well as reloading costs nothing and closes the window in which a
       // failed navigation would leave the old entries reachable.
       queryClient.clear();
-      return landOnRecord(accountId);
+      return landOnRecord(accountId, destination);
     },
     onError: (error: unknown) => {
       toast.error(
@@ -142,6 +151,16 @@ export function useAccountSwitch() {
       );
     },
   });
+
+  return {
+    ...mutation,
+    /** Preserve the established own-record and exit call sites. */
+    mutate: (accountId: string | null) =>
+      mutation.mutate({ accountId, destination: "/" }),
+    /** Enter a scoped record directly at a server-presentable destination. */
+    switchTo: (accountId: string, destination: string) =>
+      mutation.mutate({ accountId, destination }),
+  };
 }
 
 /**
