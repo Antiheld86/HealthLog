@@ -6036,7 +6036,10 @@ model AccountGrant {
   revokedBy AccountGrantRevoker? @map("revoked_by")
 
   /// Optional lapse date. Checked live on every resolution, so an expired
-  /// grant stops conferring access without anything having to sweep it.
+  /// grant stops conferring access without anything having to sweep it. A
+  /// managed-profile invitation may carry an expiry while awaiting consent;
+  /// accepting its MANAGE grant clears this field because an active Guardian
+  /// ends only through an explicit lifecycle transition.
   expiresAt  DateTime? @map("expires_at")
   /// Refreshed fire-and-forget when the grant is exercised, the same posture
   /// as `ApiToken.lastUsedAt`. The owner's panel reads it to answer "is this

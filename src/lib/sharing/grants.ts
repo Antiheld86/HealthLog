@@ -432,6 +432,28 @@ export async function acceptGrant(
     throw await refusalFor(input.grantId, { granteeId: input.granteeId }, db);
   }
 
+  const accepted = await db.accountGrant.findUniqueOrThrow({
+    where: { id: input.grantId },
+    include: { grantor: { select: { managedProfileAt: true } } },
+  });
+
+  // The expiry belongs to the invitation, not to a Guardian relationship. A
+  // managed profile still lets its creator set an expiry while the invitation
+  // waits for the other adult's consent, but once accepted the MANAGE grant is
+  // standing until a Guardian explicitly ends it. Ordinary adult-record grants
+  // retain their requested expiry unchanged.
+  if (accepted.access === "MANAGE" && accepted.grantor.managedProfileAt) {
+    await db.accountGrant.updateMany({
+      where: {
+        id: accepted.id,
+        granteeId: input.granteeId,
+        acceptedAt: { not: null },
+        revokedAt: null,
+      },
+      data: { expiresAt: null },
+    });
+  }
+
   return db.accountGrant.findUniqueOrThrow({ where: { id: input.grantId } });
 }
 
