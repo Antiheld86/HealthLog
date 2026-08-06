@@ -51,6 +51,7 @@ import type {
 const mockAccessRef: { value: AccountAccess } = {
   value: { accounts: [], active: null, canSwitch: false },
 };
+const mockAuthLoadingRef = { value: false };
 
 vi.mock("@/hooks/use-auth", () => ({
   useAuth: () => ({
@@ -65,7 +66,7 @@ vi.mock("@/hooks/use-auth", () => ({
     },
     isAuthenticated: true,
     isAuthUnknown: false,
-    isLoading: false,
+    isLoading: mockAuthLoadingRef.value,
     refetch: vi.fn(),
   }),
   clearCachesForSessionEnd: vi.fn(),
@@ -169,6 +170,31 @@ const DOORS = [
 ] as const;
 
 describe("<AuthShell> — the owner-only doors", () => {
+  it("holds protected children until record capabilities resolve", () => {
+    mockAuthLoadingRef.value = true;
+    try {
+      const html = render(OWN_RECORD, "/medications");
+
+      expect(html).toContain('data-slot="record-scope-hydration-gate"');
+      expect(html).not.toContain("sentinel-page");
+      expect(html).not.toContain("sentinel-coach-fab");
+    } finally {
+      mockAuthLoadingRef.value = false;
+    }
+  });
+
+  it("does not delay public routes for record capability resolution", () => {
+    mockAuthLoadingRef.value = true;
+    try {
+      const html = render(OWN_RECORD, "/auth/login");
+
+      expect(html).toContain("sentinel-page");
+      expect(html).not.toContain('data-slot="record-scope-hydration-gate"');
+    } finally {
+      mockAuthLoadingRef.value = false;
+    }
+  });
+
   it("mounts all three in the caller's own record", () => {
     // The half that makes the rest mean something. Without it, a shell that
     // had simply dropped the Coach and the tour for everybody would satisfy
