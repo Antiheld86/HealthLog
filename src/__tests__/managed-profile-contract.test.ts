@@ -15,6 +15,16 @@ describe("managed-profile contract", () => {
     expect(source).not.toContain("requireFreshMfaIfEnrolled");
   });
 
+  it("requires a cookie-backed fresh MFA proof for profile deletion", async () => {
+    const source = await readFile(
+      path.join(root, "src/app/api/managed-profiles/[id]/route.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain("requireFreshMfa");
+    expect(source).not.toContain("requireFreshMfaIfEnrolled");
+  });
+
   it("does not publish an emancipation API surface", async () => {
     const source = await readFile(
       path.join(root, "prisma/schema.prisma"),

@@ -54,6 +54,7 @@
 import { prisma } from "@/lib/db";
 import { isP2002 } from "@/lib/prisma-errors";
 import { clearActingSessions } from "@/lib/sharing/acting-session";
+import { reduceManagedProfileGuardian } from "@/lib/managed-profiles/lifecycle";
 import { ENTIRE_RECORD, isShareDomain } from "@/lib/sharing/scope";
 import type { ShareDomain, ShareScope } from "@/lib/sharing/scope";
 import { Prisma } from "@/generated/prisma/client";
@@ -473,9 +474,10 @@ export interface RevokeGrantInput {
  */
 export async function revokeGrant(
   input: RevokeGrantInput,
-  db: GrantDb = prisma,
 ): Promise<AccountGrant> {
-  return endGrant(input.grantId, { grantorId: input.grantorId }, "GRANTOR", db);
+  return prisma.$transaction((tx) =>
+    endGrant(input.grantId, { grantorId: input.grantorId }, "GRANTOR", tx),
+  );
 }
 
 export interface RenounceGrantInput {
@@ -494,9 +496,10 @@ export interface RenounceGrantInput {
  */
 export async function renounceGrant(
   input: RenounceGrantInput,
-  db: GrantDb = prisma,
 ): Promise<AccountGrant> {
-  return endGrant(input.grantId, { granteeId: input.granteeId }, "GRANTEE", db);
+  return prisma.$transaction((tx) =>
+    endGrant(input.grantId, { granteeId: input.granteeId }, "GRANTEE", tx),
+  );
 }
 
 /**
@@ -533,7 +536,9 @@ export interface EndedGrant {
 export async function revokeGrantAndClearSwitch(
   input: RevokeGrantInput,
 ): Promise<EndedGrant> {
-  return endAndClear((tx) => revokeGrant(input, tx));
+  return endAndClear((tx) =>
+    endGrant(input.grantId, { grantorId: input.grantorId }, "GRANTOR", tx),
+  );
 }
 
 /**
@@ -547,7 +552,9 @@ export async function revokeGrantAndClearSwitch(
 export async function renounceGrantAndClearSwitch(
   input: RenounceGrantInput,
 ): Promise<EndedGrant> {
-  return endAndClear((tx) => renounceGrant(input, tx));
+  return endAndClear((tx) =>
+    endGrant(input.grantId, { granteeId: input.granteeId }, "GRANTEE", tx),
+  );
 }
 
 // ── Resolution ──────────────────────────────────────────────────────────────
@@ -625,16 +632,42 @@ async function endGrant(
   grantId: string,
   actor: { grantorId: string } | { granteeId: string },
   revokedBy: "GRANTOR" | "GRANTEE",
-  db: GrantDb,
+  db: Prisma.TransactionClient,
 ): Promise<AccountGrant> {
-  const { count } = await db.accountGrant.updateMany({
-    where: { id: grantId, ...actor, revokedAt: null },
-    data: { revokedAt: new Date(), revokedBy },
+  const current = await db.accountGrant.findUnique({
+    where: { id: grantId },
+    select: {
+      grantorId: true,
+      granteeId: true,
+      access: true,
+      acceptedAt: true,
+      revokedAt: true,
+      expiresAt: true,
+    },
   });
 
-  if (count === 0) throw await refusalFor(grantId, actor, db);
+  const end = async () => {
+    const { count } = await db.accountGrant.updateMany({
+      where: { id: grantId, ...actor, revokedAt: null },
+      data: { revokedAt: new Date(), revokedBy },
+    });
+    if (count === 0) throw await refusalFor(grantId, actor, db);
+    return db.accountGrant.findUniqueOrThrow({ where: { id: grantId } });
+  };
 
-  return db.accountGrant.findUniqueOrThrow({ where: { id: grantId } });
+  const actorOwnsGrant =
+    current &&
+    ("grantorId" in actor
+      ? current.grantorId === actor.grantorId
+      : current.granteeId === actor.granteeId);
+  const isActiveManagedGuardian =
+    current?.access === "MANAGE" &&
+    current.acceptedAt !== null &&
+    current.revokedAt === null &&
+    (current.expiresAt === null || current.expiresAt > new Date());
+
+  if (!actorOwnsGrant || !isActiveManagedGuardian) return end();
+  return reduceManagedProfileGuardian(db, current.grantorId, end);
 }
 
 /**

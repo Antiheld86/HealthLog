@@ -10,9 +10,8 @@ import {
   inviteGrant,
 } from "@/lib/sharing/grants";
 import {
-  LastManagedGuardianError,
   clearManagedProfileMarker,
-  deleteManagedProfile,
+  ManagedProfileLifecycleError,
 } from "@/lib/managed-profiles/lifecycle";
 
 vi.mock("next/headers", async () => {
@@ -243,7 +242,7 @@ describe("managed profile lifecycle (real Postgres)", () => {
     ).not.toBeNull();
   });
 
-  it("deletes a managed profile only through its fresh-MFA Guardian path", async () => {
+  it("deletes a managed profile through its fresh-MFA Guardian route", async () => {
     const guardian = await signInWithFreshMfa();
     const { profile } = await createManagedProfile({
       creatorId: guardian.id,
@@ -253,10 +252,14 @@ describe("managed profile lifecycle (real Postgres)", () => {
       timezone: "UTC",
     });
 
-    await deleteManagedProfile({
-      profileId: profile.id,
-      guardianId: guardian.id,
-    });
+    const { DELETE } = await import("@/app/api/managed-profiles/[id]/route");
+    const response = await DELETE(
+      new NextRequest(`http://localhost/api/managed-profiles/${profile.id}`, {
+        method: "DELETE",
+      }),
+      { params: Promise.resolve({ id: profile.id }) },
+    );
+    expect(response.status).toBe(200);
     expect(
       await getPrismaClient().user.findUnique({ where: { id: profile.id } }),
     ).toBeNull();
@@ -279,6 +282,6 @@ describe("managed profile lifecycle (real Postgres)", () => {
     expect(cleared.managedProfileAt).toBeNull();
     await expect(
       clearManagedProfileMarker({ profileId: "missing-profile" }),
-    ).rejects.toBeInstanceOf(LastManagedGuardianError);
+    ).rejects.toBeInstanceOf(ManagedProfileLifecycleError);
   });
 });
