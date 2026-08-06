@@ -132,7 +132,13 @@ describe("notification delivery identity", () => {
         message: "Record schedule",
       }),
     );
-    expect(transactionMock).toHaveBeenCalledTimes(1);
+    // Preflight chooses recipient channels, then the provider call is
+    // re-authorized under the managed-profile lock for the actual egress.
+    expect(transactionMock).toHaveBeenCalledTimes(2);
+    expect(transactionMock).toHaveBeenLastCalledWith(expect.any(Function), {
+      maxWait: 5_000,
+      timeout: 60_000,
+    });
   });
 
   it("refuses a managed record without an explicit recipient", async () => {

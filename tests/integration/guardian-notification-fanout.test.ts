@@ -33,11 +33,11 @@ vi.mock("@/lib/notifications/senders/ntfy", async () => {
         eventType: string;
         title: string;
         message: string;
-    },
-  ) => {
-    ntfyEgress.onStart?.();
-    if (ntfyEgress.block) await ntfyEgress.block;
-    const recipientUserId = payload.recipientUserId ?? payload.userId;
+      },
+    ) => {
+      ntfyEgress.onStart?.();
+      if (ntfyEgress.block) await ntfyEgress.block;
+      const recipientUserId = payload.recipientUserId ?? payload.userId;
       sent.ntfy.push({
         recipientUserId,
         title: payload.title,
@@ -402,10 +402,11 @@ describe("Guardian fan-out (real Postgres)", () => {
       addGuardian(record.id, reserveGuardian.id),
       addChannel(recipient.id, "NTFY"),
     ]);
-    const recipientGrant = await getPrismaClient().accountGrant.findFirstOrThrow({
-      where: { grantorId: record.id, granteeId: recipient.id },
-      select: { id: true },
-    });
+    const recipientGrant =
+      await getPrismaClient().accountGrant.findFirstOrThrow({
+        where: { grantorId: record.id, granteeId: recipient.id },
+        select: { id: true },
+      });
     let releaseEgress!: () => void;
     let markEgressStarted!: () => void;
     ntfyEgress.block = new Promise<void>((resolve) => {
@@ -446,10 +447,11 @@ describe("Guardian fan-out (real Postgres)", () => {
       addGuardian(record.id, reserveGuardian.id),
       addChannel(recipient.id, "NTFY"),
     ]);
-    const recipientGrant = await getPrismaClient().accountGrant.findFirstOrThrow({
-      where: { grantorId: record.id, granteeId: recipient.id },
-      select: { id: true },
-    });
+    const recipientGrant =
+      await getPrismaClient().accountGrant.findFirstOrThrow({
+        where: { grantorId: record.id, granteeId: recipient.id },
+        select: { id: true },
+      });
     let releaseEgress!: () => void;
     let markEgressStarted!: () => void;
     ntfyEgress.block = new Promise<void>((resolve) => {

@@ -33,6 +33,7 @@ import { recordPushAttempt } from "@/lib/notifications/senders/push-attempt-reco
 import {
   resolveManagedGuardianRecipientIds,
   resolveNotificationDeliveryIdentity,
+  withManagedGuardianEgressAuthorization,
 } from "@/lib/notifications/delivery-identity";
 
 /**
@@ -298,15 +299,25 @@ export async function dispatchNotification(
         continue;
       }
 
-      channelsAttempted += 1;
-
       try {
-        const outcome = await sendToChannel(
-          channel.type as ChannelType,
-          channel.config,
-          delivery.recipientUserId,
-          recipientPayload,
+        const outcome = await withManagedGuardianEgressAuthorization(
+          delivery,
+          () =>
+            sendToChannel(
+              channel.type as ChannelType,
+              channel.config,
+              delivery.recipientUserId,
+              recipientPayload,
+            ),
         );
+        if (outcome === null) {
+          getEvent()?.addWarning(
+            "Guardian notification authorization changed before channel egress",
+          );
+          continue;
+        }
+
+        channelsAttempted += 1;
 
         if (outcome.ok) {
           await recordChannelSuccess({

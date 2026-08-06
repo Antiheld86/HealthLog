@@ -5821,6 +5821,7 @@ model NotificationEvent {
   recordUser User @relation(fields: [recordUserId], references: [id], onDelete: Cascade)
 
   @@index([recordUserId, eventType, dedupKey, createdAt(sort: Desc)])
+  @@index([createdAt], map: "notification_events_created_at_idx")
   @@map("notification_events")
 }
 

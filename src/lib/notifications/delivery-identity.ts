@@ -80,13 +80,13 @@ export async function resolveManagedGuardianRecipientIds(
 /**
  * Resolve notification identities without treating a managed record as its
  * own destination. Legacy payloads remain valid only for ordinary self
- * delivery; a managed record must name an active Guardian explicitly.
+ * delivery; a managed record must name an active Guardian explicitly. This is
+ * a preflight for recipient channel selection; managed delivery is authorized
+ * again under the same lock at each provider egress below.
  *
- * Cross-principal authorization linearizes at the locked grant read below,
- * immediately before the dispatcher selects a channel. A revocation that
- * commits before that read prevents delivery; one that commits afterwards
- * affects later dispatches but cannot recall provider work already in flight.
- * The provider call deliberately runs outside the short database transaction.
+ * Cross-principal authorization linearizes at the locked grant read below.
+ * The egress helper keeps the same lock through the actual provider call, so
+ * a revocation cannot commit between Guardian authorization and delivery.
  */
 export async function resolveNotificationDeliveryIdentity(
   payload: NotificationPayload,
@@ -118,27 +118,60 @@ export async function resolveNotificationDeliveryIdentity(
 
   if (!isManagedGuardianFanoutAllowed(payload)) return null;
 
-  return prisma.$transaction(async (tx) =>
-    withManagedProfileLock(tx, recordUserId, async (lockedRecord) => {
-      if (lockedRecord?.managedProfileAt == null) return null;
+  return withManagedGuardianAuthorization(recordUserId, recipientUserId, () =>
+    Promise.resolve({ recordUserId, recipientUserId, managed: true }),
+  );
+}
 
-      const recipient = await tx.user.findUnique({
-        where: { id: recipientUserId },
-        select: { managedProfileAt: true },
-      });
-      if (!recipient || recipient.managedProfileAt != null) return null;
+/**
+ * Execute a single managed Guardian channel send while holding the lifecycle
+ * advisory lock. The provider call intentionally remains inside this short
+ * transaction: managed Guardian revocation and expiry transitions take the
+ * same lock, so neither can commit after this authorization but before egress.
+ */
+export async function withManagedGuardianEgressAuthorization<T>(
+  delivery: NotificationDeliveryIdentity,
+  send: () => Promise<T>,
+): Promise<T | null> {
+  if (!delivery.managed) return send();
 
-      const guardian = await tx.accountGrant.findFirst({
-        where: {
-          grantorId: recordUserId,
-          granteeId: recipientUserId,
-          ...activeGuardianWhere(new Date()),
-        },
-        select: { id: true },
-      });
-      if (!guardian) return null;
+  return withManagedGuardianAuthorization(
+    delivery.recordUserId,
+    delivery.recipientUserId,
+    send,
+    { maxWait: 5_000, timeout: 60_000 },
+  );
+}
 
-      return { recordUserId, recipientUserId, managed: true };
-    }),
+async function withManagedGuardianAuthorization<T>(
+  recordUserId: string,
+  recipientUserId: string,
+  operation: () => Promise<T>,
+  options?: { maxWait: number; timeout: number },
+): Promise<T | null> {
+  return prisma.$transaction(
+    (tx) =>
+      withManagedProfileLock(tx, recordUserId, async (lockedRecord) => {
+        if (lockedRecord?.managedProfileAt == null) return null;
+
+        const recipient = await tx.user.findUnique({
+          where: { id: recipientUserId },
+          select: { managedProfileAt: true },
+        });
+        if (!recipient || recipient.managedProfileAt != null) return null;
+
+        const guardian = await tx.accountGrant.findFirst({
+          where: {
+            grantorId: recordUserId,
+            granteeId: recipientUserId,
+            ...activeGuardianWhere(new Date()),
+          },
+          select: { id: true },
+        });
+        if (!guardian) return null;
+
+        return operation();
+      }),
+    options,
   );
 }

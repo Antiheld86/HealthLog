@@ -127,10 +127,10 @@ export async function handleMoodReminderCleanup(
  * notification events are claims rather than delivery diagnostics, but after
  * the same horizon their dedup windows have elapsed and they have no reader.
  *
- * The DELETE is unbounded by user — the index covers `created_at`
- * directly, so a `WHERE created_at < cutoff` scan is bounded by the
- * size of the trailing-edge of the table rather than the live working
- * set. On a one-million-row table with the documented retention
+ * The DELETE is unbounded by user. Both ledgers therefore carry a direct
+ * `created_at` index, so a `WHERE created_at < cutoff` scan is bounded by the
+ * size of the trailing edge rather than the live working set. On a
+ * one-million-row table with the documented retention
  * window, the daily prune touches ~11k rows (1M / 90d × 1d) and
  * completes in milliseconds.
  */
