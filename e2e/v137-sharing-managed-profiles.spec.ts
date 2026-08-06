@@ -18,6 +18,43 @@ const DOMAIN_READS = {
   documents: "/api/documents/inbound",
 } as const;
 
+/**
+ * v1.37.0 — the record-session assertion the app is currently sending.
+ *
+ * The two API probes in this file are deliberate: they check a status code the
+ * UI does not surface (a MANAGE-only generated read) and a payload the UI
+ * paginates. But a bare `fetch` inside `page.evaluate` carries no
+ * record-session headers, and the fence refuses an unasserted request on any
+ * session that has been inside a shared record — so the probes started failing
+ * with 403 for a reason that had nothing to do with what they test.
+ *
+ * They are NOT an old-bundle simulation and must not become one: that case is
+ * covered deliberately in `src/__tests__/record-session-fence-compat.test.ts`
+ * and `tests/integration/record-session-fence.test.ts`, where the 403 and the
+ * recovery are the subject. Here the subject is the grant level, so the probe
+ * asserts exactly what the app beside it asserts — copied off a real app
+ * request rather than computed, so it cannot drift from what the client
+ * actually believes.
+ */
+function trackFenceAssertion(page: Page): () => {
+  "x-healthlog-record-epoch": string;
+  "x-healthlog-record-scope": string;
+} {
+  let latest = { epoch: "bootstrap", scope: "bootstrap" };
+  page.on("request", (request) => {
+    const headers = request.headers();
+    const epoch = headers["x-healthlog-record-epoch"];
+    const scope = headers["x-healthlog-record-scope"];
+    if (epoch === undefined || scope === undefined) return;
+    if (epoch === "bootstrap") return;
+    latest = { epoch, scope };
+  });
+  return () => ({
+    "x-healthlog-record-epoch": latest.epoch,
+    "x-healthlog-record-scope": latest.scope,
+  });
+}
+
 async function openSwitcher(page: Page) {
   await page.getByRole("button", { name: "User menu" }).first().click();
   await page.locator('[data-slot="account-switcher-trigger"]').click();
@@ -294,6 +331,7 @@ test.describe.serial("scoped sharing browser journeys", () => {
   test("lets an adult WRITE grant add only to the selected record", async ({
     page,
   }) => {
+    const fenceHeaders = trackFenceAssertion(page);
     const record = E2E_LEVEL_RECORDS.find(
       (candidate) => candidate.access === "WRITE",
     );
@@ -324,10 +362,10 @@ test.describe.serial("scoped sharing browser journeys", () => {
     expect((await post).status()).toBeLessThan(300);
 
     await page.reload();
-    const payload = await page.evaluate(async () => {
-      const response = await fetch("/api/measurements");
+    const payload = await page.evaluate(async (headers) => {
+      const response = await fetch("/api/measurements", { headers });
       return { status: response.status, body: await response.json() };
-    });
+    }, fenceHeaders());
     expect(payload.status).toBeLessThan(300);
     expect(JSON.stringify(payload.body)).toContain("124");
     await expect(banner).toHaveAttribute("data-account-id", accountId);
@@ -342,6 +380,7 @@ test.describe.serial("scoped sharing browser journeys", () => {
   test("opens MANAGE-only generated reads without opening adult Settings", async ({
     page,
   }) => {
+    const fenceHeaders = trackFenceAssertion(page);
     const record = E2E_LEVEL_RECORDS.find(
       (candidate) =>
         candidate.access === "MANAGE" && candidate.recordKind === "shared",
@@ -357,10 +396,10 @@ test.describe.serial("scoped sharing browser journeys", () => {
 
     await page.goto("/");
     await expect(banner).toHaveAttribute("data-access-level", "manage");
-    const generatedRead = await page.evaluate(async () => {
-      const response = await fetch("/api/dashboard/summary");
+    const generatedRead = await page.evaluate(async (headers) => {
+      const response = await fetch("/api/dashboard/summary", { headers });
       return response.status;
-    });
+    }, fenceHeaders());
     expect(generatedRead).toBeLessThan(300);
     await expect(
       page.locator('[data-slot="shared-record-unavailable"]'),

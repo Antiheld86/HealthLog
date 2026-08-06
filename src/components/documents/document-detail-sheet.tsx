@@ -64,6 +64,7 @@ import {
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import { useCoachLaunch } from "@/lib/insights/coach-launch-context";
 import { invalidateKeys, queryKeys } from "@/lib/query-keys";
+import { useFencedObjectUrl } from "@/hooks/use-fenced-object-url";
 import { cn } from "@/lib/utils";
 import {
   INBOUND_DOCUMENT_KINDS,
@@ -105,7 +106,12 @@ function InlinePreview({
   title: string;
 }) {
   const [loaded, setLoaded] = useState(false);
-  const src = `/api/documents/inbound/${documentId}/original`;
+  // v1.37.0 — the bytes come through the app transport, which carries the
+  // record-session assertion; a browser-issued `src="/api/…"` cannot, and the
+  // fence refuses it on any session that has been inside a shared record.
+  const { url: src, failed } = useFencedObjectUrl(
+    `/api/documents/inbound/${documentId}/original`,
+  );
   const isPdf = mimeType === "application/pdf";
   // Chromium's PDF viewer grabs focus while it initialises — BEFORE the
   // frame's `load` event — stranding keyboard events inside the embedded
@@ -144,12 +150,23 @@ function InlinePreview({
 
   return (
     <div className="relative max-h-[55vh] overflow-auto overscroll-contain rounded-lg">
-      {!loaded ? (
+      {failed ? (
+        // The preview could not be fetched — refused, offline, or still
+        // rendering server-side. A permanent skeleton would read as "loading
+        // forever"; the sheet's own metadata and the download control below
+        // still work.
+        <p
+          data-slot="document-preview-unavailable"
+          className="text-muted-foreground py-8 text-center text-sm"
+        >
+          {title}
+        </p>
+      ) : !loaded || src === null ? (
         <Skeleton
           className={cn("w-full rounded-lg", isPdf ? "h-[55vh]" : "h-64")}
         />
       ) : null}
-      {isPdf ? (
+      {src === null || failed ? null : isPdf ? (
         // No `sandbox` attribute by design: Chromium force-downloads PDFs
         // in sandboxed frames instead of rendering them. The serve
         // response itself carries `default-src 'none'` +
@@ -487,7 +504,13 @@ export function DocumentDetailSheet({
 
   const title = doc?.title ?? doc?.filename ?? t("documents.card.untitled");
   const Icon = doc ? DOCUMENT_KIND_ICONS[doc.kind] : null;
-  const originalHref = doc ? `/api/documents/inbound/${doc.id}/original` : "#";
+  // v1.37.0 — an object URL over transport-fetched bytes rather than a bare
+  // `/api/…` href. A download navigation carries no record-session assertion,
+  // so the fence refuses it once the session has been inside a shared record.
+  // Null until the blob lands; the anchor is disabled rather than dead.
+  const { url: originalHref } = useFencedObjectUrl(
+    doc ? `/api/documents/inbound/${doc.id}/original` : null,
+  );
 
   return (
     <>
@@ -590,7 +613,11 @@ export function DocumentDetailSheet({
                   data-slot="document-download"
                   aria-label={t("documents.detail.download")}
                 >
-                  <a href={originalHref} download={doc.filename ?? undefined}>
+                  <a
+                    href={originalHref ?? "#"}
+                    download={doc.filename ?? undefined}
+                    aria-disabled={originalHref === null}
+                  >
                     <Download className="size-4" aria-hidden />
                     <span className="hidden sm:inline">
                       {t("documents.detail.download")}
@@ -637,7 +664,11 @@ export function DocumentDetailSheet({
                   {formatBytes(doc.byteSize, locale)}
                 </p>
                 <Button asChild size="sm" className="mt-1">
-                  <a href={originalHref} download={doc.filename ?? undefined}>
+                  <a
+                    href={originalHref ?? "#"}
+                    download={doc.filename ?? undefined}
+                    aria-disabled={originalHref === null}
+                  >
                     <Download className="size-4" aria-hidden />
                     {t("documents.detail.download")}
                   </a>
