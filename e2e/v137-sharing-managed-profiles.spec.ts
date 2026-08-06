@@ -146,14 +146,13 @@ test.describe.serial("scoped sharing browser journeys", () => {
     await page.getByRole("button", { name: /^save$/i }).click();
     expect((await post).status()).toBeLessThan(300);
 
-    const read = page.waitForResponse(
-      (response) =>
-        response.request().method() === "GET" &&
-        new URL(response.url()).pathname === "/api/measurements",
-    );
     await page.reload();
-    const payload = await read;
-    expect(JSON.stringify(await payload.json())).toContain("124");
+    const payload = await page.evaluate(async () => {
+      const response = await fetch("/api/measurements");
+      return { status: response.status, body: await response.json() };
+    });
+    expect(payload.status).toBeLessThan(300);
+    expect(JSON.stringify(payload.body)).toContain("124");
     await expect(banner).toHaveAttribute("data-account-id", accountId);
 
     await page.goto("/settings/account");
@@ -179,13 +178,12 @@ test.describe.serial("scoped sharing browser journeys", () => {
     await expect(banner).toHaveAttribute("data-access-level", "manage");
     await expect(banner).toHaveAttribute("data-record-kind", "shared");
 
-    const generatedRead = page.waitForResponse(
-      (response) =>
-        response.request().method() === "GET" &&
-        new URL(response.url()).pathname === "/api/dashboard/summary",
-    );
     await page.goto("/");
-    expect((await generatedRead).status()).toBeLessThan(300);
+    const generatedRead = await page.evaluate(async () => {
+      const response = await fetch("/api/dashboard/summary");
+      return response.status;
+    });
+    expect(generatedRead).toBeLessThan(300);
     await expect(
       page.locator('[data-slot="shared-record-unavailable"]'),
     ).toHaveCount(0);

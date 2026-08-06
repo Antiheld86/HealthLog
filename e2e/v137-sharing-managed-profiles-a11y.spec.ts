@@ -60,7 +60,7 @@ test.describe("shared record accessibility states", () => {
   test("the shared profile read error state has no WCAG violations", async ({
     page,
   }) => {
-    await page.route("**/api/profile/summary", (route) =>
+    await page.route("**/api/profile/summary**", (route) =>
       route.fulfill({ status: 500, body: "{}" }),
     );
     await openProfileRecord(page);
