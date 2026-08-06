@@ -15,7 +15,7 @@ import { accountLabel } from "@/lib/sharing/account-access-view";
  * are switched will log their own blood pressure into somebody else's record,
  * and there is no undo for a reading that was never theirs. So the banner
  * states three things in one line — that this is not your record, whose it is,
- * and that you can only read it — and carries the way out beside them.
+ * and what sharing level applies — and carries the way out beside them.
  *
  * ## Why it looks like this
  *
@@ -29,9 +29,9 @@ import { accountLabel } from "@/lib/sharing/account-access-view";
  * somebody stops seeing after the third switch, and the failure mode here is
  * a person who has stopped noticing.
  *
- * The name is `text-foreground` and the qualifier `text-muted-foreground`, per
- * the two-tier text rule — the person's name is content, the read-only note is
- * meta.
+ * The name and qualifier both use `text-foreground`: the warning wash is too
+ * dark for the muted token at this text size, while the foreground token keeps
+ * the context legible at the same contrast floor as the name.
  *
  * The row is the inline-action shape from UI-STANDARDS §11 rather than a
  * centred wrapping stack: sentence `min-w-0 flex-1`, action `shrink-0`, so the
@@ -79,7 +79,10 @@ export function SharedRecordBanner() {
         <span className="text-foreground font-medium">
           {t("recordSharing.banner.viewing", { name })}
         </span>{" "}
-        <span className="text-muted-foreground">
+        <span
+          data-slot="shared-record-banner-context"
+          className="text-foreground"
+        >
           {recordKindLabel(presentation.recordKind, t)}.{" "}
           {accessLabel(presentation.access, t)}
         </span>

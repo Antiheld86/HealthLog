@@ -51,8 +51,7 @@ async function leaveRecord(page: Page) {
   );
 }
 
-test.describe("scoped sharing browser journeys", () => {
-  test.describe.configure({ mode: "serial" });
+test.describe.serial("scoped sharing browser journeys", () => {
   test.use({ storageState: SCOPE_DELEGATE_STORAGE_STATE_PATH });
 
   for (const record of E2E_SCOPE_RECORDS) {

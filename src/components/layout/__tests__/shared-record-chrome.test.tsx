@@ -169,6 +169,19 @@ describe("<SharedRecordBanner>", () => {
     expect(html).toContain("bg-warning/15");
     expect(html).toContain("border-warning/40");
   });
+
+  it("keeps the warning-banner context copy at the foreground contrast floor", () => {
+    const html = render(
+      { accounts: [OWNER], active: OWNER, canSwitch: true },
+      <SharedRecordBanner />,
+    );
+    const context = html.match(
+      /<span[^>]*data-slot="shared-record-banner-context"[^>]*>/,
+    )?.[0];
+
+    expect(context).toContain("text-foreground");
+    expect(context).not.toContain("text-muted-foreground");
+  });
 });
 
 describe("<AccountSwitcherMenuItems>", () => {
