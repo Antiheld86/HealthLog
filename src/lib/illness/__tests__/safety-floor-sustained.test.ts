@@ -6,14 +6,14 @@
  * opened the episode's correlation tab. These tests pin the on-write seam:
  * a sustained run escalates on INGEST through the SAME illness red-flag push,
  * with the SAME run length (RED_FLAG_RUN_DAYS) and absolute floors the detector
- * uses, and the 24h ledger dedupe stops a 4th reading re-firing the alarm.
+ * uses, and the 24h record-event dedupe stops a 4th reading re-firing the alarm.
  *
  * Calendar-day bucketing runs against TZ=UTC (the gate's contract).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-/** In-memory pushAttempt ledger so the 24h dedupe behaves across calls. */
-const ledger: Array<{ userId: string; reason: string }> = [];
+/** In-memory record event stream so the 24h dedupe behaves across calls. */
+const ledger: Array<{ recordUserId: string; dedupKey: string }> = [];
 const measurementFindMany = vi.fn();
 const dispatchMock = vi.fn();
 
@@ -22,15 +22,31 @@ vi.mock("@/lib/db", () => ({
     measurement: {
       findMany: (...a: unknown[]) => measurementFindMany(...a),
     },
-    pushAttempt: {
-      findFirst: ({ where }: { where: { userId: string; reason: string } }) => {
+    user: {
+      findUnique: vi.fn().mockResolvedValue({ managedProfileAt: null }),
+    },
+    notificationEvent: {
+      findFirst: ({
+        where,
+      }: {
+        where: { recordUserId: string; dedupKey: string };
+      }) => {
         const hit = ledger.find(
-          (r) => r.userId === where.userId && r.reason === where.reason,
+          (r) =>
+            r.recordUserId === where.recordUserId &&
+            r.dedupKey === where.dedupKey,
         );
         return Promise.resolve(hit ? { id: "prior" } : null);
       },
-      create: ({ data }: { data: { userId: string; reason: string } }) => {
-        ledger.push({ userId: data.userId, reason: data.reason });
+      create: ({
+        data,
+      }: {
+        data: { recordUserId: string; dedupKey: string };
+      }) => {
+        ledger.push({
+          recordUserId: data.recordUserId,
+          dedupKey: data.dedupKey,
+        });
         return Promise.resolve({});
       },
     },

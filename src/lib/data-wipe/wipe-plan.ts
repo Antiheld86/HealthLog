@@ -161,6 +161,7 @@ export const WIPE_MODELS = [
   "NotificationChannel",
   "PushSubscription",
   "PushAttempt",
+  "NotificationEvent",
   "Device",
   "TelegramScheduledDeletion",
   "TelegramPromptContext",
@@ -421,6 +422,7 @@ export const WIPE_OWNER_FIELDS: Readonly<Record<string, readonly string[]>> = {
   // attribution and must not let deleting a manager erase another record's
   // import history.
   MedicationIntakeImportJob: ["recordUserId"],
+  NotificationEvent: ["recordUserId"],
   // Both sides. Wiping only the grantor side would leave the account still
   // holding read access to other people's records after it asked for
   // everything of its own to be deleted.
