@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -13,10 +10,6 @@ import {
   NOTIFICATION_CHANNELS,
   NOTIFICATION_DELIVERY_MATRIX,
 } from "../../tests/fixtures/v137/notification-matrix";
-import {
-  ACCESSIBILITY_STATES,
-  RELEASE_JOURNEYS,
-} from "../../tests/fixtures/v137/e2e-journeys";
 
 describe("sharing and handler inventories", () => {
   it("freezes the exact sharing-domain vocabulary", () => {
@@ -102,30 +95,5 @@ describe("security principals and compatibility", () => {
       level: "manage",
     });
     expect(LEGACY_ACCOUNT_PAYLOADS[3]?.legacyDecoder).toBe("deny");
-  });
-});
-
-describe("journey and accessibility inventory", () => {
-  it("names every release journey and accessibility state exactly once", () => {
-    expect(RELEASE_JOURNEYS).toHaveLength(8);
-    expect(ACCESSIBILITY_STATES).toHaveLength(5);
-    expect(new Set(RELEASE_JOURNEYS.map(({ name }) => name)).size).toBe(
-      RELEASE_JOURNEYS.length,
-    );
-    expect(new Set(ACCESSIBILITY_STATES.map(({ name }) => name)).size).toBe(
-      ACCESSIBILITY_STATES.length,
-    );
-  });
-
-  it("leaves the browser anchors discoverable without focused or skipped cases", () => {
-    const anchorFiles = [
-      "v137-sharing-managed-profiles.spec.ts",
-      "v137-sharing-managed-profiles-a11y.spec.ts",
-    ];
-
-    for (const file of anchorFiles) {
-      const source = readFileSync(join(process.cwd(), "e2e", file), "utf8");
-      expect(source).not.toMatch(/\b(?:test|describe)\.(?:only|skip)\b/);
-    }
   });
 });

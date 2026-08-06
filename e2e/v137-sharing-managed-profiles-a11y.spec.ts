@@ -34,13 +34,6 @@ test.describe("shared record accessibility states", () => {
   test.describe.configure({ mode: "serial" });
   test.use({ storageState: SCOPE_A11Y_STORAGE_STATE_PATH });
 
-  test.beforeEach(({}, testInfo) => {
-    test.skip(
-      testInfo.project.name !== "chromium-desktop",
-      "isolated shared-record accessibility session",
-    );
-  });
-
   test("success and empty shared profile states have no WCAG violations", async ({
     page,
   }) => {

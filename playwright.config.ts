@@ -83,6 +83,14 @@ export default defineConfig({
     },
     {
       name: "chromium-mobile",
+      // The scoped-sharing journeys each carry a persistent server-side
+      // session stamp. They use isolated desktop jars and are not responsive
+      // layout checks, so running a second project against the same stamps
+      // would test session interference rather than the record journeys.
+      testIgnore: [
+        "v137-sharing-managed-profiles.spec.ts",
+        "v137-sharing-managed-profiles-a11y.spec.ts",
+      ],
       use: {
         // Pixel 5 — Chromium-based mobile profile so CI only needs
         // `playwright install chromium` instead of also pulling

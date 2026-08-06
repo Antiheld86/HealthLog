@@ -29,13 +29,6 @@ test.describe("scoped sharing browser journeys", () => {
   test.describe.configure({ mode: "serial" });
   test.use({ storageState: SCOPE_DELEGATE_STORAGE_STATE_PATH });
 
-  test.beforeEach(({}, testInfo) => {
-    test.skip(
-      testInfo.project.name !== "chromium-desktop",
-      "scoped sharing seed has one session and runs once",
-    );
-  });
-
   for (const record of E2E_SCOPE_RECORDS) {
     test(`opens only the ${record.domain} record doorway`, async ({ page }) => {
       await page.goto("/");
