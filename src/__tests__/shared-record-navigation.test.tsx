@@ -41,6 +41,33 @@ describe("shared-record navigation", () => {
     expect(isDestinationInSharedRecord("/medications", ["labs"])).toBe(false);
   });
 
+  it("keeps profile facts outside Settings and makes profile the scoped doorway", () => {
+    const navigation = resolveSharedRecordNavigation(["profile"]);
+
+    expect(SHARED_RECORD_DOMAIN_ROUTE_FAMILIES.profile).toEqual(["/profile"]);
+    expect(navigation.destinationHrefs).toEqual(["/profile"]);
+    expect(navigation.allowsPath("/profile")).toBe(true);
+    expect(navigation.allowsPath("/settings/anamnesis")).toBe(false);
+  });
+
+  it("uses the active record scope instead of the actor's module flags", () => {
+    const actorModules = {
+      medications: false,
+      labs: false,
+      mood: false,
+      mentalHealth: false,
+      cycle: false,
+      illness: false,
+      inboundDocuments: false,
+    };
+
+    expect(
+      visibleNavDestinations(actorModules, true, true, ["medications"]).map(
+        (destination) => destination.href,
+      ),
+    ).toEqual(["/medications"]);
+  });
+
   it("keeps whole-record navigation distinct from an all-sections scope", () => {
     const wholeRecord = resolveSharedRecordNavigation(null);
     const allSections = resolveSharedRecordNavigation([...SHARE_DOMAINS]);
