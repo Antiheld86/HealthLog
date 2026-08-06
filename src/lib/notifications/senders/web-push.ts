@@ -9,6 +9,7 @@ import { recordPushAttemptForPayload } from "@/lib/notifications/senders/push-at
 import { isPublicUrl } from "@/lib/validations/notifications";
 import { safeFetch } from "@/lib/safe-fetch";
 import { plainPushText } from "@/lib/notifications/strip-emoji";
+import { isManagedGuardianDelivery } from "@/lib/notifications/managed-delivery";
 
 /**
  * Send Web Push notification to all subscribed devices of a user.
@@ -30,6 +31,7 @@ export async function sendViaWebPush(
   payload: NotificationPayload,
 ): Promise<SendOutcome> {
   try {
+    const managedDelivery = isManagedGuardianDelivery(payload);
     // Lazy import to avoid issues when web-push is not installed
     const webpush = await import("web-push");
 
@@ -116,6 +118,7 @@ export async function sendViaWebPush(
       // target. Only relative paths are honoured so a poisoned metadata
       // value can never point the SW at a foreign origin.
       url:
+        !managedDelivery &&
         typeof payload.metadata?.url === "string" &&
         payload.metadata.url.startsWith("/")
           ? payload.metadata.url

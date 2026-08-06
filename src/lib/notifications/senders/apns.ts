@@ -31,6 +31,7 @@ import { getEvent } from "@/lib/logging/context";
 import type { SendOutcome } from "@/lib/notifications/retry-policy";
 import { recordPushAttemptForPayload } from "@/lib/notifications/senders/push-attempt-record";
 import { plainPushText } from "@/lib/notifications/strip-emoji";
+import { isManagedGuardianDelivery } from "@/lib/notifications/managed-delivery";
 
 export interface ApnsPayload {
   /** APNs `aps.alert.title` + `aps.alert.body`. */
@@ -628,10 +629,7 @@ export async function sendViaApns(
       process.env.APNS_CRITICAL_ENTITLEMENT === "true";
 
     let result: Awaited<ReturnType<typeof sendApnsPush>> | null = null;
-    const managedDelivery =
-      payload.recordUserId !== undefined &&
-      payload.recipientUserId !== undefined &&
-      payload.recordUserId !== payload.recipientUserId;
+    const managedDelivery = isManagedGuardianDelivery(payload);
     // Discreet mode (cycle privacy): the lock-screen-visible routing
     // metadata must not carry the event name. Collapse the category /
     // threadId / collapseId and the data eventType to a generic value so
@@ -671,10 +669,16 @@ export async function sendViaApns(
             // In discreet mode also drop cycle-semantic metadata (e.g. `phase`)
             // so a future cycle push can't name a cycle concept on the wire even
             // though the allowlist permits `phase` (QA LOW).
+            // A Guardian may read a managed record but must never receive
+            // an iOS action identifier or deep link that can mutate it.
+            // Keep the ordinary event envelope so opening the notification
+            // follows the normal authorised record-selection flow.
             ...pickIosMetadata(
-              payload.discreet
-                ? stripCycleMetadata(payload.metadata)
-                : payload.metadata,
+              managedDelivery
+                ? undefined
+                : payload.discreet
+                  ? stripCycleMetadata(payload.metadata)
+                  : payload.metadata,
             ),
           },
           threadId: routingEvent,

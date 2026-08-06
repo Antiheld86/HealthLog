@@ -620,7 +620,6 @@ describe("sendViaApns — dispatcher fan-out", () => {
       title: "t",
       message: "m",
       eventType: "MEDICATION_REMINDER",
-      userId: "record-1",
       recordUserId: "record-1",
       recipientUserId: "guardian-1",
       metadata: {

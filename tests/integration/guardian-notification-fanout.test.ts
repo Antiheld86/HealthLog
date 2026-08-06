@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const sent = vi.hoisted(() => ({
+  deliveries: [] as Array<{
+    channel: "NTFY" | "APNS" | "WEB_PUSH" | "TELEGRAM";
+    recordUserId: string;
+    recipientUserId: string;
+  }>,
   ntfy: [] as Array<{
     recipientUserId: string;
     title: string;
@@ -9,29 +14,125 @@ const sent = vi.hoisted(() => ({
   apns: [] as Array<{ recipientUserId: string; recordUserId?: string }>,
 }));
 
-vi.mock("@/lib/notifications/senders/ntfy", () => ({
-  sendViaNtfy: async (
-    _config: unknown,
-    payload: { recipientUserId?: string; title: string; message: string },
-  ) => {
-    sent.ntfy.push({
-      recipientUserId: payload.recipientUserId ?? "missing",
-      title: payload.title,
-      message: payload.message,
-    });
-    return { ok: true };
-  },
-}));
+vi.mock("@/lib/notifications/senders/ntfy", async () => {
+  const { recordPushAttemptForPayload } = await vi.importActual<
+    typeof import("@/lib/notifications/senders/push-attempt-record")
+  >("@/lib/notifications/senders/push-attempt-record");
+  return {
+    sendViaNtfy: async (
+      _config: unknown,
+      payload: {
+        userId: string;
+        recordUserId?: string;
+        recipientUserId?: string;
+        eventType: string;
+        title: string;
+        message: string;
+      },
+    ) => {
+      const recipientUserId = payload.recipientUserId ?? payload.userId;
+      sent.ntfy.push({
+        recipientUserId,
+        title: payload.title,
+        message: payload.message,
+      });
+      sent.deliveries.push({
+        channel: "NTFY",
+        recordUserId: payload.recordUserId ?? payload.userId,
+        recipientUserId,
+      });
+      recordPushAttemptForPayload(payload, recipientUserId, {
+        userId: payload.userId,
+        channel: "NTFY",
+        eventType: payload.eventType,
+        result: "ok",
+      });
+      return { ok: true };
+    },
+  };
+});
 
-vi.mock("@/lib/notifications/senders/apns", () => ({
-  sendViaApns: async (
-    recipientUserId: string,
-    payload: { recordUserId?: string },
-  ) => {
-    sent.apns.push({ recipientUserId, recordUserId: payload.recordUserId });
-    return { ok: true };
-  },
-}));
+vi.mock("@/lib/notifications/senders/apns", async () => {
+  const { recordPushAttemptForPayload } = await vi.importActual<
+    typeof import("@/lib/notifications/senders/push-attempt-record")
+  >("@/lib/notifications/senders/push-attempt-record");
+  return {
+    sendViaApns: async (
+      recipientUserId: string,
+      payload: { userId: string; recordUserId?: string; eventType: string },
+    ) => {
+      sent.apns.push({ recipientUserId, recordUserId: payload.recordUserId });
+      sent.deliveries.push({
+        channel: "APNS",
+        recordUserId: payload.recordUserId ?? payload.userId,
+        recipientUserId,
+      });
+      recordPushAttemptForPayload(payload, recipientUserId, {
+        userId: payload.userId,
+        channel: "APNS",
+        eventType: payload.eventType,
+        result: "ok",
+      });
+      return { ok: true };
+    },
+  };
+});
+
+vi.mock("@/lib/notifications/senders/web-push", async () => {
+  const { recordPushAttemptForPayload } = await vi.importActual<
+    typeof import("@/lib/notifications/senders/push-attempt-record")
+  >("@/lib/notifications/senders/push-attempt-record");
+  return {
+    sendViaWebPush: async (
+      recipientUserId: string,
+      payload: { userId: string; recordUserId?: string; eventType: string },
+    ) => {
+      sent.deliveries.push({
+        channel: "WEB_PUSH",
+        recordUserId: payload.recordUserId ?? payload.userId,
+        recipientUserId,
+      });
+      recordPushAttemptForPayload(payload, recipientUserId, {
+        userId: payload.userId,
+        channel: "WEB_PUSH",
+        eventType: payload.eventType,
+        result: "ok",
+      });
+      return { ok: true };
+    },
+  };
+});
+
+vi.mock("@/lib/notifications/senders/telegram", async () => {
+  const { recordPushAttemptForPayload } = await vi.importActual<
+    typeof import("@/lib/notifications/senders/push-attempt-record")
+  >("@/lib/notifications/senders/push-attempt-record");
+  return {
+    sendViaTelegram: async (
+      _config: unknown,
+      payload: {
+        userId: string;
+        recordUserId?: string;
+        recipientUserId?: string;
+        eventType: string;
+      },
+    ) => {
+      const recipientUserId = payload.recipientUserId ?? payload.userId;
+      sent.deliveries.push({
+        channel: "TELEGRAM",
+        recordUserId: payload.recordUserId ?? payload.userId,
+        recipientUserId,
+      });
+      recordPushAttemptForPayload(payload, recipientUserId, {
+        userId: payload.userId,
+        channel: "TELEGRAM",
+        eventType: payload.eventType,
+        result: "ok",
+      });
+      return { ok: true };
+    },
+  };
+});
 
 import { encrypt } from "@/lib/crypto";
 import type { Locale } from "@/lib/i18n/config";
@@ -73,7 +174,7 @@ async function addGuardian(recordUserId: string, recipientUserId: string) {
 
 async function addChannel(
   userId: string,
-  type: "NTFY" | "APNS",
+  type: "NTFY" | "APNS" | "WEB_PUSH" | "TELEGRAM",
   enabled = true,
 ) {
   await getPrismaClient().notificationChannel.create({
@@ -87,6 +188,7 @@ async function addChannel(
 }
 
 beforeEach(async () => {
+  sent.deliveries.length = 0;
   sent.ntfy.length = 0;
   sent.apns.length = 0;
   await truncateAllTables(getPrismaClient());
@@ -198,5 +300,83 @@ describe("Guardian fan-out (real Postgres)", () => {
         { recipientUserId: guardianDe.id, recordUserId: record.id },
       ]),
     );
+  });
+
+  it("writes the complete two-record, two-Guardian, four-channel attribution matrix", async () => {
+    const [recordA, recordB, guardianOne, guardianTwo, ordinaryRecord] =
+      await Promise.all([
+        createUser({ label: "record-a", locale: "en", managed: true }),
+        createUser({ label: "record-b", locale: "de", managed: true }),
+        createUser({ label: "guardian-one", locale: "en" }),
+        createUser({ label: "guardian-two", locale: "de" }),
+        createUser({ label: "ordinary-record", locale: "en" }),
+      ]);
+    const guardianIds = [guardianOne.id, guardianTwo.id];
+    const recordIds = [recordA.id, recordB.id];
+    const channelTypes = ["NTFY", "APNS", "WEB_PUSH", "TELEGRAM"] as const;
+
+    await Promise.all([
+      ...recordIds.flatMap((recordUserId) =>
+        guardianIds.map((recipientUserId) =>
+          addGuardian(recordUserId, recipientUserId),
+        ),
+      ),
+      // An ordinary adult's MANAGE grant must never cause fan-out.
+      addGuardian(ordinaryRecord.id, guardianOne.id),
+      ...guardianIds.flatMap((userId) =>
+        channelTypes.map((type) => addChannel(userId, type)),
+      ),
+    ]);
+
+    await Promise.all(
+      recordIds.map((userId) =>
+        dispatchNotification({
+          eventType: "MEDICATION_REMINDER",
+          userId,
+          title: "record reminder",
+          message: "record message",
+        }),
+      ),
+    );
+
+    const expected = recordIds.flatMap((recordUserId) =>
+      guardianIds.flatMap((recipientUserId) =>
+        channelTypes.map((channel) => ({
+          channel,
+          recordUserId,
+          recipientUserId,
+        })),
+      ),
+    );
+    expect(sent.deliveries).toHaveLength(expected.length);
+    expect(sent.deliveries).toEqual(expect.arrayContaining(expected));
+    expect(
+      sent.deliveries.some((delivery) =>
+        recordIds.includes(delivery.recipientUserId),
+      ),
+    ).toBe(false);
+
+    await vi.waitFor(async () => {
+      const attempts = await getPrismaClient().pushAttempt.findMany({
+        where: { eventType: "MEDICATION_REMINDER" },
+        select: { channel: true, recordUserId: true, recipientUserId: true },
+      });
+      expect(attempts).toHaveLength(expected.length);
+      expect(attempts).toEqual(expect.arrayContaining(expected));
+    });
+
+    await dispatchNotification({
+      eventType: "MEDICATION_REMINDER",
+      userId: ordinaryRecord.id,
+      title: "ordinary reminder",
+      message: "ordinary message",
+    });
+
+    expect(sent.deliveries).toHaveLength(expected.length);
+    await expect(
+      getPrismaClient().pushAttempt.count({
+        where: { eventType: "MEDICATION_REMINDER" },
+      }),
+    ).resolves.toBe(expected.length);
   });
 });

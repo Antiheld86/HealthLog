@@ -165,7 +165,7 @@ describe("web-push reminder push — stable tag + badge", () => {
     expect(body.tag).toBe("REMINDER");
   });
 
-  it("uses an ordinary landing route without a persistent prompt for a managed Guardian", async () => {
+  it("uses an ordinary landing route without actions for a managed Guardian", async () => {
     findManyMock.mockResolvedValue([SUB]);
     vi.spyOn(global, "fetch").mockResolvedValue(
       new Response(null, { status: 201 }),
@@ -186,7 +186,7 @@ describe("web-push reminder push — stable tag + badge", () => {
       generateRequestDetailsMock.mock.calls[0][1] as string,
     );
     expect(body.url).toBe("/");
-    expect(body.requireInteraction).toBe(false);
+    expect(body.actions).toBeUndefined();
   });
 });
 
