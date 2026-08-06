@@ -1745,7 +1745,12 @@ const DELEGABLE_MANAGE_ROUTES: Record<string, ManageEntry> = {
  * the auth layer, or "no module reaches it" would be true because the symbol
  * had been renamed rather than because no module reaches it.
  */
-const GUARDIAN_ROUTES: Record<string, string> = {};
+const GUARDIAN_ROUTES: Record<string, string> = {
+  "app/api/record-settings/route.ts":
+    "The managed record's settings descriptor; it is refused for an adult record even with MANAGE.",
+  "app/api/record-settings/integrations/route.ts":
+    "Verified integration connection status for the managed record, without any provider control surface.",
+};
 
 /**
  * Route modules that deliberately resolve the ACTOR and keep working under a
@@ -1784,9 +1789,10 @@ const ACTOR_ROUTES: Record<string, string> = {
  * number rather than one per list on purpose: filling either of the new
  * literals collides here by construction, so two people filling them at once
  * find out from the merge rather than from production. Import-status polling
- * adds two record entries and two MANAGE entries: 190 → 194.
+ * adds two record entries and two MANAGE entries: 190 → 194. Managed-record
+ * settings add two guardian-only entries: 194 → 196.
  */
-const FROZEN_ENTRY_COUNT = 194;
+const FROZEN_ENTRY_COUNT = 196;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —
