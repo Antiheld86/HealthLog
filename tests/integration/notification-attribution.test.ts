@@ -55,4 +55,122 @@ describe("notification attribution (real Postgres)", () => {
       });
     });
   });
+
+  it("persistence leaves explicit self attribution unchanged", async () => {
+    const self = await createUser("self");
+
+    const attempt = await getPrismaClient().pushAttempt.create({
+      data: {
+        userId: self.id,
+        recordUserId: self.id,
+        recipientUserId: self.id,
+        channel: "NTFY",
+        eventType: "MEDICATION_REMINDER",
+        result: "ok",
+      },
+      select: {
+        userId: true,
+        recordUserId: true,
+        recipientUserId: true,
+      },
+    });
+
+    expect(attempt).toEqual({
+      userId: self.id,
+      recordUserId: self.id,
+      recipientUserId: self.id,
+    });
+  });
+
+  it("persistence maps an omitted pair from the legacy recipient", async () => {
+    const self = await createUser("legacy");
+
+    const attempt = await getPrismaClient().pushAttempt.create({
+      data: {
+        userId: self.id,
+        channel: "NTFY",
+        eventType: "MEDICATION_REMINDER",
+        result: "ok",
+      },
+      select: {
+        recordUserId: true,
+        recipientUserId: true,
+      },
+    });
+
+    expect(attempt).toEqual({
+      recordUserId: self.id,
+      recipientUserId: self.id,
+    });
+  });
+
+  it("persistence rejects a partial or contradictory principal pair atomically", async () => {
+    const recordUser = await createUser("record", true);
+    const recipientUser = await createUser("recipient");
+    const otherUser = await createUser("other");
+
+    await expect(
+      getPrismaClient().pushAttempt.create({
+        data: {
+          userId: recipientUser.id,
+          recordUserId: recordUser.id,
+          channel: "NTFY",
+          eventType: "MEDICATION_REMINDER",
+          result: "ok",
+        },
+      }),
+    ).rejects.toThrow("push attempt attribution requires both principals");
+
+    await expect(
+      getPrismaClient().pushAttempt.create({
+        data: {
+          userId: otherUser.id,
+          recordUserId: recordUser.id,
+          recipientUserId: recipientUser.id,
+          channel: "NTFY",
+          eventType: "MEDICATION_REMINDER",
+          result: "ok",
+        },
+      }),
+    ).rejects.toThrow("push attempt recipient must match user_id");
+
+    expect(await getPrismaClient().pushAttempt.count()).toBe(0);
+  });
+
+  it("persistence refuses a managed recipient and cascades an attributed recipient deletion", async () => {
+    const recordUser = await createUser("record", true);
+    const recipientUser = await createUser("recipient");
+    const managedRecipient = await createUser("managed-recipient", true);
+
+    await expect(
+      getPrismaClient().pushAttempt.create({
+        data: {
+          userId: managedRecipient.id,
+          recordUserId: recordUser.id,
+          recipientUserId: managedRecipient.id,
+          channel: "NTFY",
+          eventType: "MEDICATION_REMINDER",
+          result: "ok",
+        },
+      }),
+    ).rejects.toThrow("managed profile cannot receive notification delivery");
+
+    const attempt = await getPrismaClient().pushAttempt.create({
+      data: {
+        userId: recipientUser.id,
+        recordUserId: recordUser.id,
+        recipientUserId: recipientUser.id,
+        channel: "NTFY",
+        eventType: "MEDICATION_REMINDER",
+        result: "ok",
+      },
+    });
+    await getPrismaClient().user.delete({ where: { id: recipientUser.id } });
+
+    expect(
+      await getPrismaClient().pushAttempt.findUnique({
+        where: { id: attempt.id },
+      }),
+    ).toBeNull();
+  });
 });
