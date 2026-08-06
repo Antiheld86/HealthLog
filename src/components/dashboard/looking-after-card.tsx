@@ -104,10 +104,10 @@ export function LookingAfterCard() {
                       {accountLabel(entry)}
                     </span>
                     <span className="text-muted-foreground block truncate text-xs">
-                      {levelLabel(presentation, t)}
+                      {levelLabel(entry, presentation, t)}
                     </span>
                     <span className="text-muted-foreground block truncate text-xs">
-                      {recordKindLabel(presentation, t)}
+                      {recordKindLabel(entry, t)}
                     </span>
                     <span className="text-muted-foreground block truncate text-xs">
                       {scopeLabel(entry, t)}
@@ -141,10 +141,11 @@ export function LookingAfterCard() {
  * clothes.
  */
 function levelLabel(
+  entry: AccountAccessEntry,
   presentation: RecordPresentation,
   t: (key: string) => string,
 ): string {
-  if (presentation.access === "manage") {
+  if (entry.level === "manage") {
     return t("recordSharing.row.canManage");
   }
   return presentation.access === "view-and-add"
@@ -153,10 +154,10 @@ function levelLabel(
 }
 
 function recordKindLabel(
-  presentation: RecordPresentation,
+  entry: AccountAccessEntry,
   t: (key: string) => string,
 ): string {
-  return presentation.recordKind === "managed"
+  return entry.recordKind === "managed"
     ? t("recordSharing.lookingAfter.kindManaged")
     : t("recordSharing.lookingAfter.kindShared");
 }
