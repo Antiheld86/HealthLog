@@ -4,6 +4,10 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { resolveGuardianRecordSettingsAccess } from "@/lib/record-settings/access";
+import {
+  classifySettingsDestination,
+  SETTINGS_DESTINATION_INVENTORY,
+} from "@/lib/record-settings/classification";
 
 const fromRoot = (...segments: string[]) => resolve(process.cwd(), ...segments);
 
@@ -31,5 +35,17 @@ describe("record settings authorization", () => {
     expect(authMeRoute).not.toContain("requireRecordAuth");
     expect(recordSettingsRoute).toContain("requireGuardianAuth");
     expect(recordSettingsRoute).toContain("toRecordSettingsDto");
+  });
+
+  it("keeps settings classification exhaustive and fail closed", () => {
+    expect(Object.keys(SETTINGS_DESTINATION_INVENTORY)).not.toHaveLength(0);
+    expect(classifySettingsDestination("integrations")).toMatchObject({
+      kind: "managed-guardian",
+      guardianWritable: false,
+    });
+    expect(classifySettingsDestination("ai").kind).toBe("unavailable");
+    expect(classifySettingsDestination("unknown-settings-path").kind).toBe(
+      "unavailable",
+    );
   });
 });
