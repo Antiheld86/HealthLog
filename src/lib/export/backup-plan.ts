@@ -405,7 +405,9 @@ export const NOT_IN_BACKUP_MODELS: Readonly<Record<string, string>> = {
 
   // Ledgers whose meaning is local to the deployment.
   PushAttempt:
-    "A 90-day delivery ledger for this host's sends, and since v1.33.1 also the anchor rows the reminder dedup writes under a sentinel channel. Both describe what this instance did; restoring either onto another host would assert sends it never made, and the dedup anchors would suppress reminders that host still owes.",
+    "A 90-day delivery ledger for this host's sends. Restoring it onto another host would assert sends it never made.",
+  NotificationEvent:
+    "A local notification dedup anchor. Restoring it onto another host would suppress reminders and safety notices that host still owes.",
   AuditLog:
     "An append-only record of actions taken on this instance. Merging one instance's audit trail into another's would make the trail untrue.",
   CoachUsage:

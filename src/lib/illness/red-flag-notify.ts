@@ -15,19 +15,20 @@
  * the strongest tier those channels support.
  *
  * Owner-scoped (the authenticated episode owner) and module-gated by the
- * caller (`requireIllnessEnabled`). De-duplicated through the `pushAttempt`
- * ledger: at most one escalation per episode per rolling window, so a
+ * caller (`requireIllnessEnabled`). De-duplicated through a record event:
+ * at most one escalation per episode per rolling window, so a
  * correlation surface that is re-read repeatedly never re-fires the alarm.
  */
 import { prisma } from "@/lib/db";
 import { getEvent } from "@/lib/logging/context";
 import { dispatchLocalisedNotification } from "@/lib/notifications/dispatch-localised";
+import { claimNotificationEvent } from "@/lib/notifications/reminder-dedup";
 import type { IllnessRedFlag } from "@/lib/illness/correlation";
 
 /** One escalation per episode per this window. */
 const DEDUPE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-/** Stable ledger reason prefix so the dedupe lookup is exact-matchable. */
+/** Stable event key prefix so the dedupe lookup is exact-matchable. */
 const LEDGER_REASON_PREFIX = "illness_red_flag:";
 
 /**
@@ -44,16 +45,26 @@ export async function notifyIllnessRedFlag(input: {
   if (redFlags.length === 0) return;
 
   try {
-    // Dedupe: skip when an escalation for THIS episode already landed in the
-    // ledger within the window. The episode id rides the `reason` column so
-    // the lookup is exact without a schema change.
+    // Plan 11 adds approved guardian fanout for this safety signal. Until
+    // then, managed profiles must not produce a direct delivery or anchor.
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { managedProfileAt: true },
+    });
+    if (user?.managedProfileAt) return;
+
+    // Claim this episode's record event before provider egress. The claim
+    // serializes concurrent readers without holding a transaction open for
+    // delivery itself.
     const reason = `${LEDGER_REASON_PREFIX}${episodeId}`;
     const since = new Date(Date.now() - DEDUPE_WINDOW_MS);
-    const prior = await prisma.pushAttempt.findFirst({
-      where: { userId, reason, createdAt: { gte: since } },
-      select: { id: true },
+    const claimed = await claimNotificationEvent(prisma, {
+      recordUserId: userId,
+      eventType: "SYSTEM_ALERT",
+      dedupKey: reason,
+      since,
     });
-    if (prior) return;
+    if (!claimed) return;
 
     // Prefer the most clinically actionable reason for the body. Both copy
     // keys already exist in every locale bundle (i18n integrity guarantee).
@@ -61,19 +72,6 @@ export async function notifyIllnessRedFlag(input: {
     const messageKey = fever
       ? "illness.correlation.redFlagFever"
       : "illness.correlation.redFlagSpo2";
-
-    // Stamp the ledger BEFORE dispatching so a slow/duplicate concurrent read
-    // can't double-fire. The senders write their own per-channel rows too;
-    // this synthetic row is purely the dedupe anchor.
-    await prisma.pushAttempt.create({
-      data: {
-        userId,
-        channel: "WEB_PUSH",
-        eventType: "SYSTEM_ALERT",
-        result: "skipped",
-        reason,
-      },
-    });
 
     await dispatchLocalisedNotification({
       userId,

@@ -5,7 +5,7 @@ import type {
 import type { SendOutcome } from "@/lib/notifications/retry-policy";
 import { classifyHttpStatus } from "@/lib/notifications/retry-policy";
 import { getEvent } from "@/lib/logging/context";
-import { recordPushAttempt } from "@/lib/notifications/senders/push-attempt-record";
+import { recordPushAttemptForPayload } from "@/lib/notifications/senders/push-attempt-record";
 import { safeFetch } from "@/lib/safe-fetch";
 import { plainPushText } from "@/lib/notifications/strip-emoji";
 import { isUrgentPayload } from "@/lib/notifications/types";
@@ -23,6 +23,7 @@ export async function sendViaNtfy(
   config: NtfyChannelConfig,
   payload: NotificationPayload,
 ): Promise<SendOutcome> {
+  const userId = payload.recipientUserId ?? payload.userId;
   const start = performance.now();
   try {
     const url = `${config.serverUrl.replace(/\/$/, "")}/${encodeURIComponent(config.topic)}`;
@@ -84,7 +85,7 @@ export async function sendViaNtfy(
     });
 
     if (res.ok) {
-      recordPushAttempt({
+      recordPushAttemptForPayload(payload, userId, {
         userId: payload.userId,
         channel: "NTFY",
         eventType: payload.eventType,
@@ -93,7 +94,7 @@ export async function sendViaNtfy(
       return { ok: true, statusCode: res.status };
     }
     const classified = classifyHttpStatus(res.status, "ntfy");
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId: payload.userId,
       channel: "NTFY",
       eventType: payload.eventType,
@@ -114,7 +115,7 @@ export async function sendViaNtfy(
       duration_ms: Math.round(performance.now() - start),
       error: message,
     });
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId: payload.userId,
       channel: "NTFY",
       eventType: payload.eventType,

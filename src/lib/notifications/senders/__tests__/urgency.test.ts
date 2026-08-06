@@ -35,6 +35,11 @@ vi.mock("@/lib/logging/context", () => ({
 
 vi.mock("@/lib/notifications/senders/push-attempt-record", () => ({
   recordPushAttempt: (...args: unknown[]) => recordPushAttemptMock(...args),
+  recordPushAttemptForPayload: (
+    _payload: unknown,
+    _recipientUserId: string,
+    attempt: unknown,
+  ) => recordPushAttemptMock(attempt),
 }));
 
 vi.mock("@/lib/db", () => ({

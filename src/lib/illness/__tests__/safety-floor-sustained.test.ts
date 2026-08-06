@@ -6,14 +6,19 @@
  * opened the episode's correlation tab. These tests pin the on-write seam:
  * a sustained run escalates on INGEST through the SAME illness red-flag push,
  * with the SAME run length (RED_FLAG_RUN_DAYS) and absolute floors the detector
- * uses, and the 24h ledger dedupe stops a 4th reading re-firing the alarm.
+ * uses, and the 24h record-event dedupe stops a 4th reading re-firing the alarm.
  *
  * Calendar-day bucketing runs against TZ=UTC (the gate's contract).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-/** In-memory pushAttempt ledger so the 24h dedupe behaves across calls. */
-const ledger: Array<{ userId: string; reason: string }> = [];
+/** In-memory event claims so the 24h dedupe behaves across calls. */
+const ledger: Array<{
+  recordUserId: string;
+  eventType: string;
+  dedupKey: string;
+  createdAt: Date;
+}> = [];
 const measurementFindMany = vi.fn();
 const dispatchMock = vi.fn();
 
@@ -22,17 +27,8 @@ vi.mock("@/lib/db", () => ({
     measurement: {
       findMany: (...a: unknown[]) => measurementFindMany(...a),
     },
-    pushAttempt: {
-      findFirst: ({ where }: { where: { userId: string; reason: string } }) => {
-        const hit = ledger.find(
-          (r) => r.userId === where.userId && r.reason === where.reason,
-        );
-        return Promise.resolve(hit ? { id: "prior" } : null);
-      },
-      create: ({ data }: { data: { userId: string; reason: string } }) => {
-        ledger.push({ userId: data.userId, reason: data.reason });
-        return Promise.resolve({});
-      },
+    user: {
+      findUnique: vi.fn().mockResolvedValue({ managedProfileAt: null }),
     },
   },
 }));
@@ -47,6 +43,29 @@ vi.mock("@/lib/modules/gate", () => ({
 
 vi.mock("@/lib/notifications/dispatch-localised", () => ({
   dispatchLocalisedNotification: (...a: unknown[]) => dispatchMock(...a),
+}));
+
+vi.mock("@/lib/notifications/reminder-dedup", () => ({
+  claimNotificationEvent: (
+    _prisma: unknown,
+    input: {
+      recordUserId: string;
+      eventType: string;
+      dedupKey: string;
+      since: Date;
+    },
+  ) => {
+    const existing = ledger.find(
+      (event) =>
+        event.recordUserId === input.recordUserId &&
+        event.eventType === input.eventType &&
+        event.dedupKey === input.dedupKey &&
+        event.createdAt >= input.since,
+    );
+    if (existing) return Promise.resolve(false);
+    ledger.push({ ...input, createdAt: new Date() });
+    return Promise.resolve(true);
+  },
 }));
 
 import { runSafetyFloorCheck } from "../safety-floor-check";

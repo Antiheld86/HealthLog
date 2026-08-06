@@ -5,7 +5,7 @@ import type {
 import type { SendOutcome } from "@/lib/notifications/retry-policy";
 import { classifyHttpStatus } from "@/lib/notifications/retry-policy";
 import { getEvent } from "@/lib/logging/context";
-import { recordPushAttempt } from "@/lib/notifications/senders/push-attempt-record";
+import { recordPushAttemptForPayload } from "@/lib/notifications/senders/push-attempt-record";
 import { safeFetch } from "@/lib/safe-fetch";
 import { plainPushText } from "@/lib/notifications/strip-emoji";
 
@@ -32,6 +32,7 @@ export async function sendViaWebhook(
   config: WebhookChannelConfig,
   payload: NotificationPayload,
 ): Promise<SendOutcome> {
+  const userId = payload.recipientUserId ?? payload.userId;
   const start = performance.now();
   try {
     const headers: Record<string, string> = {
@@ -82,7 +83,7 @@ export async function sendViaWebhook(
     });
 
     if (res.ok) {
-      recordPushAttempt({
+      recordPushAttemptForPayload(payload, userId, {
         userId: payload.userId,
         channel: "WEBHOOK",
         eventType: payload.eventType,
@@ -91,7 +92,7 @@ export async function sendViaWebhook(
       return { ok: true, statusCode: res.status };
     }
     const classified = classifyHttpStatus(res.status, "webhook");
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId: payload.userId,
       channel: "WEBHOOK",
       eventType: payload.eventType,
@@ -112,7 +113,7 @@ export async function sendViaWebhook(
       duration_ms: Math.round(performance.now() - start),
       error: message,
     });
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId: payload.userId,
       channel: "WEBHOOK",
       eventType: payload.eventType,

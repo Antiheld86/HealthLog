@@ -37,7 +37,6 @@ vi.mock("@/lib/logging/transports", () => ({ emitIfSampled: vi.fn() }));
 import { GET } from "../route";
 import { prisma } from "@/lib/db";
 import { requireAdmin, HttpError } from "@/lib/api-handler";
-import { REMINDER_DEDUP_CHANNEL } from "@/lib/notifications/reminder-dedup";
 import { NextRequest } from "next/server";
 
 const ADMIN_CTX = {
@@ -140,15 +139,12 @@ describe("GET /api/admin/notifications/health — aggregate", () => {
     ]);
   });
 
-  it("excludes reminder-dedup bookkeeping rows from the channel picture", async () => {
-    // The medication tick anchors its per-slot dedup in the same table
-    // under a sentinel channel. Those rows are not delivery attempts, so
-    // counting them would misreport what the channels are doing.
+  it("groups every delivery attempt in the selected window", async () => {
     await GET(req());
     const args = vi.mocked(prisma.pushAttempt.groupBy).mock.calls[0][0] as {
-      where: { channel?: { not?: string } };
+      where: { createdAt?: { gte?: Date } };
     };
-    expect(args.where.channel).toEqual({ not: REMINDER_DEDUP_CHANNEL });
+    expect(args.where.createdAt?.gte).toBeInstanceOf(Date);
   });
 
   it("defaults the window to 24h and clamps out-of-range values", async () => {

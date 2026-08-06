@@ -9,7 +9,7 @@
  *     only when a Telegram send succeeds. A user on email / APNs / ntfy
  *     therefore never had a ledger row, so the 15-minute tick re-fired the
  *     same overdue notice for the rest of the day — roughly fifty mails per
- *     missed dose. The anchor now lives in `push_attempts` and is written
+ *     missed dose. The anchor now lives in `notification_events` and is written
  *     for every dispatched slot regardless of channel outcome.
  *
  *  2. **Coarser must not mean quieter.** The dedup is per phase and per
@@ -24,18 +24,18 @@
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
-interface FakePushAttempt {
-  userId: string;
-  channel: string;
+interface FakeNotificationEvent {
+  recordUserId: string;
   eventType: string;
-  result: string;
-  reason: string | null;
+  dedupKey: string;
   createdAt: Date;
 }
 
-const pushAttempts: FakePushAttempt[] = [];
+const notificationEvents: FakeNotificationEvent[] = [];
 
 const prismaMock = {
+  $queryRaw: vi.fn().mockResolvedValue([{ locked: 1 }]),
+  $transaction: vi.fn(),
   telegramScheduledDeletion: {
     findMany: vi.fn().mockResolvedValue([]),
     deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
@@ -56,11 +56,11 @@ const prismaMock = {
   telegramReminderMessage: {
     findUnique: vi.fn().mockResolvedValue(null),
   },
-  pushAttempt: {
+  notificationEvent: {
     create: vi.fn(
-      async ({ data }: { data: Omit<FakePushAttempt, "createdAt"> }) => {
-        pushAttempts.push({ ...data, createdAt: new Date() });
-        return { id: `pa-${pushAttempts.length}` };
+      async ({ data }: { data: Omit<FakeNotificationEvent, "createdAt"> }) => {
+        notificationEvents.push({ ...data, createdAt: new Date() });
+        return { id: `ne-${notificationEvents.length}` };
       },
     ),
     findFirst: vi.fn(
@@ -68,17 +68,17 @@ const prismaMock = {
         where,
       }: {
         where: {
-          userId: string;
+          recordUserId: string;
           eventType: string;
-          reason: string;
+          dedupKey: string;
           createdAt?: { gte: Date };
         };
       }) =>
-        pushAttempts.find(
+        notificationEvents.find(
           (row) =>
-            row.userId === where.userId &&
+            row.recordUserId === where.recordUserId &&
             row.eventType === where.eventType &&
-            row.reason === where.reason &&
+            row.dedupKey === where.dedupKey &&
             (where.createdAt?.gte === undefined ||
               row.createdAt >= where.createdAt.gte),
         ) ?? null,
@@ -189,7 +189,8 @@ async function tickAt(iso: string): Promise<void> {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  pushAttempts.length = 0;
+  notificationEvents.length = 0;
+  prismaMock.$transaction.mockImplementation(async (run) => run(prismaMock));
   vi.useFakeTimers();
   prismaMock.telegramScheduledDeletion.findMany.mockResolvedValue([]);
   prismaMock.telegramPromptContext.deleteMany.mockResolvedValue({ count: 0 });
@@ -331,8 +332,8 @@ describe("issue #664 — dedup follows the scheduled occurrence across midnight"
     await tickAt("2026-07-28T22:30:00.000Z");
 
     expect(dispatchNotification).toHaveBeenCalledTimes(1);
-    expect(pushAttempts).toHaveLength(1);
-    expect(pushAttempts[0]?.reason).toBe(
+    expect(notificationEvents).toHaveLength(1);
+    expect(notificationEvents[0]?.dedupKey).toBe(
       "med:med-1:sched-1:23:45:YELLOW:2026-07-28",
     );
   });

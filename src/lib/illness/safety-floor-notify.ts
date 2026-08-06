@@ -13,13 +13,14 @@
  *   - The body always echoes the (already re-confirmed) reading value.
  *
  * Dedup: at most one push per (user, reason) per rolling 24h window, anchored
- * on a synthetic `pushAttempt` row keyed by reason — so a user re-checking a
+ * on a record event keyed by reason — so a user re-checking a
  * stubbornly-high reading repeatedly doesn't get spammed. Owner-scoped, never
  * throws (a notification failure must not break the measurement write).
  */
 import { prisma } from "@/lib/db";
 import { getEvent } from "@/lib/logging/context";
 import { dispatchLocalisedNotification } from "@/lib/notifications/dispatch-localised";
+import { claimNotificationEvent } from "@/lib/notifications/reminder-dedup";
 import { convertGlucose, type GlucoseUnit } from "@/lib/glucose";
 import {
   GLUCOSE_HYPO,
@@ -31,7 +32,7 @@ import {
 /** One escalation per (user, reason) per this window. */
 const DEDUPE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-/** Stable ledger reason prefix so the dedupe lookup is exact-matchable. */
+/** Stable event key prefix so the dedupe lookup is exact-matchable. */
 const LEDGER_REASON_PREFIX = "safety_floor:";
 
 /**
@@ -113,26 +114,23 @@ export async function notifySafetyFloor(input: {
   if (!decision) return;
 
   try {
+    // Plan 11 adds approved guardian fanout for this safety signal. Until
+    // then, managed profiles must not produce a direct delivery or anchor.
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { managedProfileAt: true },
+    });
+    if (user?.managedProfileAt) return;
+
     const reason = `${LEDGER_REASON_PREFIX}${decision.reason}`;
     const since = new Date(Date.now() - DEDUPE_WINDOW_MS);
-    const prior = await prisma.pushAttempt.findFirst({
-      where: { userId, reason, createdAt: { gte: since } },
-      select: { id: true },
+    const claimed = await claimNotificationEvent(prisma, {
+      recordUserId: userId,
+      eventType: "SYSTEM_ALERT",
+      dedupKey: reason,
+      since,
     });
-    if (prior) return;
-
-    // Stamp the ledger BEFORE dispatching so a concurrent confirm can't
-    // double-fire. The senders write their own per-channel rows; this
-    // synthetic row is purely the dedupe anchor.
-    await prisma.pushAttempt.create({
-      data: {
-        userId,
-        channel: "WEB_PUSH",
-        eventType: "SYSTEM_ALERT",
-        result: "skipped",
-        reason,
-      },
-    });
+    if (!claimed) return;
 
     const { titleKey, messageKey } = copyKeysFor(decision);
     await dispatchLocalisedNotification({

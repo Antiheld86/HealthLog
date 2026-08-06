@@ -68,7 +68,6 @@ vi.mock("@/lib/crypto", () => ({
 import { GET } from "../route";
 import { prisma } from "@/lib/db";
 import { requireAdmin, HttpError } from "@/lib/api-handler";
-import { REMINDER_DEDUP_CHANNEL } from "@/lib/notifications/reminder-dedup";
 
 const ADMIN_USER_ID = "admin-1";
 const ADMIN_CTX = {
@@ -97,6 +96,8 @@ interface DiagnosticEnvelope {
       configPresent: boolean;
     }>;
     recentPushAttempts: Array<{
+      recordUserId: string;
+      recipientUserId: string;
       eventType: string;
       channel: string;
       result: string;
@@ -341,6 +342,8 @@ describe("GET /api/admin/notifications/diagnostic — recentPushAttempts", () =>
     // mapping step normalises to an ISO string under `at`.
     vi.mocked(prisma.pushAttempt.findMany).mockResolvedValue([
       {
+        recordUserId: "managed-record",
+        recipientUserId: ADMIN_USER_ID,
         eventType: "MEDICATION_REMINDER",
         channel: "APNS",
         result: "ok",
@@ -348,6 +351,8 @@ describe("GET /api/admin/notifications/diagnostic — recentPushAttempts", () =>
         createdAt: new Date("2026-05-22T09:00:00.000Z"),
       },
       {
+        recordUserId: ADMIN_USER_ID,
+        recipientUserId: ADMIN_USER_ID,
         eventType: "MOOD_REMINDER",
         channel: "TELEGRAM",
         result: "error",
@@ -362,6 +367,8 @@ describe("GET /api/admin/notifications/diagnostic — recentPushAttempts", () =>
     expect(res.status).toBe(200);
     expect(body.data.recentPushAttempts).toEqual([
       {
+        recordUserId: "managed-record",
+        recipientUserId: ADMIN_USER_ID,
         eventType: "MEDICATION_REMINDER",
         channel: "APNS",
         result: "ok",
@@ -369,6 +376,8 @@ describe("GET /api/admin/notifications/diagnostic — recentPushAttempts", () =>
         at: "2026-05-22T09:00:00.000Z",
       },
       {
+        recordUserId: ADMIN_USER_ID,
+        recipientUserId: ADMIN_USER_ID,
         eventType: "MOOD_REMINDER",
         channel: "TELEGRAM",
         result: "error",
@@ -386,28 +395,24 @@ describe("GET /api/admin/notifications/diagnostic — recentPushAttempts", () =>
 
     expect(vi.mocked(prisma.pushAttempt.findMany)).toHaveBeenCalledTimes(1);
     const args = vi.mocked(prisma.pushAttempt.findMany).mock.calls[0]?.[0] as {
-      where: { userId: string };
+      where: { recipientUserId: string };
       orderBy: { createdAt: "desc" };
       take: number;
     };
-    expect(args.where.userId).toBe(ADMIN_USER_ID);
+    expect(args.where.recipientUserId).toBe(ADMIN_USER_ID);
     expect(args.orderBy).toEqual({ createdAt: "desc" });
     expect(args.take).toBe(20);
   });
 
-  it("excludes reminder-dedup bookkeeping rows so the last 20 are real sends", async () => {
-    // The medication tick anchors its per-slot dedup in this table under a
-    // sentinel channel. Letting those rows into the trailing window would
-    // push the actual delivery attempts — the thing an operator opens this
-    // endpoint for — off the list.
+  it("reads recipient-scoped delivery attempts without bookkeeping sentinels", async () => {
     vi.mocked(requireAdmin).mockResolvedValue(ADMIN_CTX);
     vi.mocked(prisma.pushAttempt.findMany).mockResolvedValue([] as never);
 
     await GET();
 
     const args = vi.mocked(prisma.pushAttempt.findMany).mock.calls[0]?.[0] as {
-      where: { channel?: { not?: string } };
+      where: { recipientUserId?: string };
     };
-    expect(args.where.channel).toEqual({ not: REMINDER_DEDUP_CHANNEL });
+    expect(args.where).toEqual({ recipientUserId: ADMIN_USER_ID });
   });
 });

@@ -86,7 +86,9 @@ function makeChannel(over: Partial<MockChannel> = {}): MockChannel {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(prisma.user.findUnique).mockResolvedValue(null as never);
+  vi.mocked(prisma.user.findUnique).mockResolvedValue({
+    managedProfileAt: null,
+  } as never);
   // Default: every update returns a counter of 1 — individual tests
   // override the resolved value when they need to drive a specific
   // failure count (e.g. the "5th in a row" give-up test).

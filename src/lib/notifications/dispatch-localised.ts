@@ -45,6 +45,8 @@ import type { EventType } from "@/lib/notifications/types";
 
 interface DispatchLocalisedOptions {
   userId: string;
+  recordUserId?: string;
+  recipientUserId?: string;
   titleKey: string;
   messageKey: string;
   params?: Record<string, string | number>;
@@ -147,7 +149,9 @@ async function resolveRecipientLocale(userId: string): Promise<Locale> {
 export async function dispatchLocalisedNotification(
   opts: DispatchLocalisedOptions,
 ): Promise<void> {
-  const locale = await resolveRecipientLocale(opts.userId);
+  const locale = await resolveRecipientLocale(
+    opts.recipientUserId ?? opts.userId,
+  );
   const t = getServerTranslator(locale).t;
 
   const title = t(opts.titleKey, opts.params);
@@ -173,6 +177,8 @@ export async function dispatchLocalisedNotification(
   await dispatchNotification({
     eventType: opts.eventType ?? "SYSTEM_ALERT",
     userId: opts.userId,
+    recordUserId: opts.recordUserId,
+    recipientUserId: opts.recipientUserId,
     title,
     message,
     metadata,

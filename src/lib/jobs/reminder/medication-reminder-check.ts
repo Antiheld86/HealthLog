@@ -31,9 +31,9 @@ import {
   getPhaseKeyboard,
 } from "@/lib/jobs/reminder-phases";
 import {
-  hasReminderDedupAnchor,
+  claimNotificationEvent,
   medicationReminderDedupKey,
-  writeReminderDedupAnchor,
+  REMINDER_DEDUP_LOOKBACK_MS,
 } from "@/lib/notifications/reminder-dedup";
 import { getUserTodayBounds as getUserTodayBoundsUtil } from "@/lib/tz/local-day";
 import { getWorkerPrisma, parseTimeToMinutes } from "./shared";
@@ -544,13 +544,9 @@ export async function handleReminderCheck(
               continue;
             }
 
-            // Already notified for this slot, phase and local day? The
-            // anchor lives in `push_attempts` and is stamped for every
-            // dispatched slot regardless of which channels delivered. It
-            // used to be the Telegram message ledger, which is written only
-            // when a Telegram send succeeds — so a user on email / APNs /
-            // ntfy had no row and the tick re-sent the same overdue notice
-            // every 15 minutes for the rest of the day.
+            // Claim this slot/phase/local-day record event before mutable RED
+            // handling or provider egress. The short locked transaction keeps
+            // concurrent reminder ticks from both minting and delivering it.
             const dedupReason = medicationReminderDedupKey({
               medicationId: med.id,
               scheduleId: schedule.id,
@@ -561,15 +557,14 @@ export async function handleReminderCheck(
               }),
             });
 
-            if (
-              await hasReminderDedupAnchor(prisma, {
-                userId: med.user.id,
+            if (med.notificationsEnabled) {
+              const claimed = await claimNotificationEvent(prisma, {
+                recordUserId: med.user.id,
                 eventType: "MEDICATION_REMINDER",
-                reason: dedupReason,
-                now,
-              })
-            ) {
-              continue;
+                dedupKey: dedupReason,
+                since: new Date(now.getTime() - REMINDER_DEDUP_LOOKBACK_MS),
+              });
+              if (!claimed) continue;
             }
 
             const doseInfo = schedule.dose ?? med.dose;
@@ -650,15 +645,6 @@ export async function handleReminderCheck(
                 "notification_phase",
                 `${currentPhase}:${med.name}:${slotTime}`,
               );
-
-              // Stamp the dedup anchor BEFORE dispatching: a crash between
-              // the two costs this phase's notice, a repeat costs the user
-              // a notification every 15 minutes until the day rolls.
-              await writeReminderDedupAnchor(prisma, {
-                userId: med.user.id,
-                eventType: "MEDICATION_REMINDER",
-                reason: dedupReason,
-              });
 
               try {
                 await dispatchNotification({
