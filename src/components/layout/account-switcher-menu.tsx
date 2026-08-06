@@ -89,6 +89,7 @@ export function AccountSwitcherMenuItems() {
                 key={account.accountId}
                 data-slot="account-switcher-entry"
                 data-account-id={account.accountId}
+                data-account-username={account.username}
                 data-access-level={presentation.access}
                 data-record-kind={presentation.recordKind}
                 className="cursor-pointer"

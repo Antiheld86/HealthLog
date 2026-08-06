@@ -30,9 +30,9 @@ async function openRecord(page: Page, username: string) {
   await page.goto("/");
   await openSwitcher(page);
 
-  const entry = page
-    .locator('[data-slot="account-switcher-entry"]')
-    .filter({ hasText: username });
+  const entry = page.locator(
+    `[data-slot="account-switcher-entry"][data-account-username="${username}"]`,
+  );
   await expect(entry).toHaveCount(1);
   const accountId = await entry.getAttribute("data-account-id");
   if (accountId === null) {
@@ -59,9 +59,9 @@ test.describe.serial("scoped sharing browser journeys", () => {
       await page.goto("/");
       await openSwitcher(page);
 
-      const entry = page
-        .locator('[data-slot="account-switcher-entry"]')
-        .filter({ hasText: record.username });
+      const entry = page.locator(
+        `[data-slot="account-switcher-entry"][data-account-username="${record.username}"]`,
+      );
       await expect(entry).toHaveCount(1);
 
       const read = page.waitForResponse(

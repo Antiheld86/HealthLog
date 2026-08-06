@@ -15,9 +15,9 @@ async function openProfileRecord(page: Page) {
   await page.goto("/");
   await page.getByRole("button", { name: "User menu" }).first().click();
   await page.locator('[data-slot="account-switcher-trigger"]').click();
-  const entry = page
-    .locator('[data-slot="account-switcher-entry"]')
-    .filter({ hasText: "e2e-scope-profile" });
+  const entry = page.locator(
+    '[data-slot="account-switcher-entry"][data-account-username="e2e-scope-profile"]',
+  );
   await expect(entry).toHaveCount(1);
   await entry.click();
   await expect(page).toHaveURL(/\/profile$/);
@@ -60,11 +60,10 @@ test.describe("shared record accessibility states", () => {
   test("the shared profile read error state has no WCAG violations", async ({
     page,
   }) => {
-    await openProfileRecord(page);
     await page.route("**/api/profile/summary", (route) =>
       route.fulfill({ status: 500, body: "{}" }),
     );
-    await page.reload();
+    await openProfileRecord(page);
     await expect(page.locator('[data-slot="query-error-card"]')).toBeVisible();
     await scan(page);
     await leaveRecord(page);
