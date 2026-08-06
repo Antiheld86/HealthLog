@@ -1,0 +1,198 @@
+import { z } from "zod/v4";
+
+import {
+  ACCEPTED_INSIGHTS_TILE_IDS,
+  INSIGHTS_SECTION_IDS,
+} from "@/lib/insights-layout";
+import { coachPrefsSchema } from "@/lib/validations/coach-prefs";
+import { modulePrefsPatchSchema } from "@/lib/validations/modules";
+import { thresholdsUpdateSchema } from "@/lib/validations/thresholds";
+
+/**
+ * The target-record configuration boundary. These literals are both the DTO
+ * contract and the reviewable answer to which fields a Guardian may change.
+ * Identity, credentials, delivery channels, memories, provider connections,
+ * and every future field fail closed because no family accepts them.
+ */
+export const MANAGED_RECORD_SETTINGS_FIELD_ALLOWLIST = {
+  profile: [
+    "displayName",
+    "heightCm",
+    "dateOfBirth",
+    "gender",
+    "locale",
+    "timezone",
+    "unitPreference",
+    "timeFormat",
+    "dateFormat",
+  ],
+  modules: ["modulePreferences"],
+  notifications: ["moodReminderEnabled", "notificationPreferences"],
+  thresholds: ["overrides"],
+  coach: ["disableCoach", "preferences"],
+  insights: ["layout"],
+} as const;
+
+export type ManagedRecordSettingsFamily =
+  keyof typeof MANAGED_RECORD_SETTINGS_FIELD_ALLOWLIST;
+
+const timezoneSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .refine((timezone) => {
+    try {
+      Intl.DateTimeFormat(undefined, { timeZone: timezone });
+      return true;
+    } catch {
+      return false;
+    }
+  }, "Expected an IANA timezone");
+
+const profilePatchSchema = z
+  .object({
+    displayName: z.string().trim().min(1).max(100).nullable().optional(),
+    heightCm: z.number().finite().min(30).max(300).nullable().optional(),
+    dateOfBirth: z.string().date().nullable().optional(),
+    gender: z.string().trim().min(1).max(64).nullable().optional(),
+    locale: z.enum(["de", "en", "es", "fr", "it", "pl"]).nullable().optional(),
+    timezone: timezoneSchema.optional(),
+    unitPreference: z.enum(["metric", "imperial"]).optional(),
+    timeFormat: z.enum(["AUTO", "H12", "H24"]).optional(),
+    dateFormat: z.enum(["AUTO", "DMY", "MDY", "YMD"]).optional(),
+  })
+  .strict();
+
+const insightsLayoutSchema = z
+  .object({
+    version: z.union([z.literal(1), z.literal(2)]),
+    sections: z
+      .array(
+        z
+          .object({
+            id: z.enum(INSIGHTS_SECTION_IDS),
+            visible: z.boolean(),
+            order: z.number().int().min(0).max(99),
+          })
+          .strict(),
+      )
+      .max(50)
+      .optional(),
+    tiles: z
+      .array(
+        z
+          .object({
+            id: z.enum(ACCEPTED_INSIGHTS_TILE_IDS),
+            visible: z.boolean(),
+            order: z.number().int().min(0).max(99),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(ACCEPTED_INSIGHTS_TILE_IDS.length)
+      .optional(),
+  })
+  .strict();
+
+// Delivery ownership is the actor's personal channel choice. A Guardian may
+// set only the record's reminder timing and low-stock thresholds, never hand
+// a managed record to an actor's phone or provider channel.
+const managedNotificationPreferencesSchema = z
+  .object({
+    medication: z
+      .object({
+        lowStockRunwayDays: z.number().int().min(1).max(60).nullable(),
+        reorderLeadDays: z.number().int().min(0).max(60),
+      })
+      .strict()
+      .partial()
+      .optional(),
+    mood: z
+      .object({ reminderHour: z.number().int().min(0).max(23) })
+      .strict()
+      .partial()
+      .optional(),
+  })
+  .strict();
+
+const managedCoachPreferencesSchema = coachPrefsSchema
+  .pick({
+    tone: true,
+    verbosity: true,
+    excludeMetrics: true,
+    showEvidenceByDefault: true,
+    defaultWindow: true,
+    dataClusters: true,
+  })
+  .strict();
+
+const MANAGED_RECORD_SETTINGS_PATCH_SCHEMAS = {
+  profile: profilePatchSchema,
+  modules: z.object({ modulePreferences: modulePrefsPatchSchema }).strict(),
+  notifications: z
+    .object({
+      moodReminderEnabled: z.boolean().optional(),
+      notificationPreferences: managedNotificationPreferencesSchema.optional(),
+    })
+    .strict(),
+  thresholds: z.object({ overrides: thresholdsUpdateSchema }).strict(),
+  coach: z
+    .object({
+      disableCoach: z.boolean().optional(),
+      preferences: managedCoachPreferencesSchema.optional(),
+    })
+    .strict(),
+  insights: z.object({ layout: insightsLayoutSchema }).strict(),
+} as const;
+
+export type ManagedRecordSettingsPatch = {
+  profile: z.infer<typeof profilePatchSchema>;
+  modules: z.infer<(typeof MANAGED_RECORD_SETTINGS_PATCH_SCHEMAS)["modules"]>;
+  notifications: z.infer<
+    (typeof MANAGED_RECORD_SETTINGS_PATCH_SCHEMAS)["notifications"]
+  >;
+  thresholds: z.infer<
+    (typeof MANAGED_RECORD_SETTINGS_PATCH_SCHEMAS)["thresholds"]
+  >;
+  coach: z.infer<(typeof MANAGED_RECORD_SETTINGS_PATCH_SCHEMAS)["coach"]>;
+  insights: z.infer<(typeof MANAGED_RECORD_SETTINGS_PATCH_SCHEMAS)["insights"]>;
+};
+
+export function isManagedRecordSettingsFamily(
+  value: string,
+): value is ManagedRecordSettingsFamily {
+  return value in MANAGED_RECORD_SETTINGS_PATCH_SCHEMAS;
+}
+
+/** Parse one named DTO family. Strict schemas make an actor field a 422. */
+export function parseManagedRecordSettingsPatch<
+  Family extends ManagedRecordSettingsFamily,
+>(family: Family, value: unknown): ManagedRecordSettingsPatch[Family] {
+  return MANAGED_RECORD_SETTINGS_PATCH_SCHEMAS[family].parse(
+    value,
+  ) as ManagedRecordSettingsPatch[Family];
+}
+
+export function safeParseManagedRecordSettingsPatch<
+  Family extends ManagedRecordSettingsFamily,
+>(family: Family, value: unknown) {
+  return MANAGED_RECORD_SETTINGS_PATCH_SCHEMAS[family].safeParse(value);
+}
+
+/** Preserve only directly-owned module keys from a legacy persisted blob. */
+export function managedModulePreferencesFrom(
+  raw: unknown,
+): ManagedRecordSettingsPatch["modules"]["modulePreferences"] {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return {};
+  }
+
+  const allowed: Record<string, boolean> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const parsed = modulePrefsPatchSchema.safeParse({ [key]: value });
+    if (parsed.success && value !== undefined) {
+      allowed[key] = value as boolean;
+    }
+  }
+  return allowed;
+}

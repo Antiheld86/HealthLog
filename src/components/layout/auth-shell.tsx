@@ -78,14 +78,21 @@ export function AuthShell({
   // decides what to mount and the surfaces beneath it decide what to offer,
   // and the two disagreeing is the whole class of defect this hook exists to
   // close.
-  const { inSharedRecord } = useRecordCapabilities();
+  const { inSharedRecord, recordKind } = useRecordCapabilities();
+  // A managed profile has a deliberately small Settings surface of its own.
+  // Let that route family reach its record-aware gate; adult shared records
+  // stay in the generic refusal branch even at MANAGE.
+  const isManagedRecordSettingsPath =
+    recordKind === "managed" && pathname.startsWith("/settings");
   // v1.36.0 — a page reached while acting on somebody else's record that
   // sharing does not cover. The nav already drops these entries, so arriving
   // here means a bookmark or a browser back button; the panel below explains
   // it instead of letting the page paint a row of 403 error cards. Paint only
   // — every route behind these pages refuses on its own.
   const outsideSharedRecord =
-    inSharedRecord && !isDestinationInSharedRecord(pathname);
+    inSharedRecord &&
+    !isDestinationInSharedRecord(pathname) &&
+    !isManagedRecordSettingsPath;
   const isOnboardingPage = pathname === "/onboarding";
   const showUnlockNotifier = isAuthenticated && !isPublicPage && !!user?.id;
 
@@ -222,7 +229,7 @@ export function AuthShell({
   // flight: the role is unknown until the payload lands, and mounting
   // `/admin/*` children early would fire admin queries that 403 for a
   // non-admin before the redirect effect can move them away.
-  if (isLoading && isAdminPage) {
+  if (isLoading && (isAdminPage || pathname.startsWith("/settings"))) {
     return (
       <div className="flex h-dvh items-center justify-center" role="status">
         <Loader2 className="text-primary h-6 w-6 animate-spin motion-reduce:animate-none" />

@@ -11,6 +11,7 @@ import { apiGet } from "@/lib/api/api-fetch";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
+import { assertRecordSettingsResponseForRecord } from "@/lib/record-settings";
 
 type ManagedIntegrationState =
   "connected" | "error_transient" | "error_reauth" | "disconnected" | "parked";
@@ -63,10 +64,13 @@ export function ManagedIntegrationStatus() {
   const recordId = activeRecord?.accountId ?? null;
   const statusQuery = useQuery({
     queryKey: queryKeys.recordSettingsIntegrations(recordId ?? ""),
-    queryFn: () =>
-      apiGet<ManagedIntegrationStatusResponse>(
+    queryFn: async () => {
+      const response = await apiGet<ManagedIntegrationStatusResponse>(
         "/api/record-settings/integrations",
-      ),
+      );
+      assertRecordSettingsResponseForRecord(response, recordId);
+      return response;
+    },
     enabled: activeRecord?.recordKind === "managed" && recordId !== null,
   });
 

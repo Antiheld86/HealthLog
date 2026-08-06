@@ -1750,6 +1750,8 @@ const GUARDIAN_ROUTES: Record<string, string> = {
     "The managed record's settings descriptor; it is refused for an adult record even with MANAGE.",
   "app/api/record-settings/integrations/route.ts":
     "Verified integration connection status for the managed record, without any provider control surface.",
+  "app/api/record-settings/[family]/route.ts":
+    "The closed, field-specific managed-record configuration DTOs; identity and credentials remain excluded.",
 };
 
 /**
@@ -1790,9 +1792,10 @@ const ACTOR_ROUTES: Record<string, string> = {
  * literals collides here by construction, so two people filling them at once
  * find out from the merge rather than from production. Import-status polling
  * adds two record entries and two MANAGE entries: 190 → 194. Managed-record
- * settings add two guardian-only entries: 194 → 196.
+ * settings add two guardian-only entries: 194 → 196. Field-specific
+ * managed-record configuration adds one more: 196 → 197.
  */
-const FROZEN_ENTRY_COUNT = 196;
+const FROZEN_ENTRY_COUNT = 197;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —

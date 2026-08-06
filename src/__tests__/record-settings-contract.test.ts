@@ -11,6 +11,7 @@ import {
 } from "@/lib/record-settings/classification";
 import { toRecordSettingsDto } from "@/lib/record-settings/dto";
 import { resolveManagedIntegrationState } from "@/lib/record-settings/integrations";
+import { assertRecordSettingsResponseForRecord } from "@/lib/record-settings/response";
 import { recordSettingsKeys } from "@/lib/query-keys";
 
 describe("record settings contract", () => {
@@ -95,5 +96,20 @@ describe("record settings contract", () => {
         "oura",
       ),
     ).toBe("error_reauth");
+  });
+
+  it("rejects a late response for another record in a second tab", () => {
+    expect(() =>
+      assertRecordSettingsResponseForRecord(
+        { recordId: "managed-record-b" },
+        "managed-record-a",
+      ),
+    ).toThrow("did not match its key");
+    expect(() =>
+      assertRecordSettingsResponseForRecord(
+        { recordId: "managed-record-a" },
+        "managed-record-a",
+      ),
+    ).not.toThrow();
   });
 });

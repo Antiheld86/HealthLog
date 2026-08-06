@@ -8,6 +8,7 @@ import {
   classifySettingsDestination,
   SETTINGS_DESTINATION_INVENTORY,
 } from "@/lib/record-settings/classification";
+import { MANAGED_RECORD_SETTINGS_FIELD_ALLOWLIST } from "@/lib/record-settings";
 
 const fromRoot = (...segments: string[]) => resolve(process.cwd(), ...segments);
 
@@ -47,5 +48,35 @@ describe("record settings authorization", () => {
     expect(classifySettingsDestination("unknown-settings-path").kind).toBe(
       "unavailable",
     );
+  });
+
+  it("uses one guardian-only record resolver for every writable DTO family", async () => {
+    const route = await readFile(
+      fromRoot("src/app/api/record-settings/[family]/route.ts"),
+      "utf8",
+    );
+    const guardian = resolveGuardianRecordSettingsAccess({
+      actor: { id: "guardian-1" },
+      grantId: "grant-1",
+      user: { id: "managed-record-1", managedProfileAt: new Date() },
+    });
+    const adultManager = resolveGuardianRecordSettingsAccess({
+      actor: { id: "adult-manager" },
+      grantId: "grant-1",
+      user: { id: "adult-record-1", managedProfileAt: null },
+    });
+
+    expect(guardian?.recordId).toBe("managed-record-1");
+    expect(adultManager).toBeNull();
+    expect(route).toContain("requireGuardianAuth");
+    expect(route).toContain("resolveGuardianRecordSettingsAccess");
+    for (const family of Object.keys(MANAGED_RECORD_SETTINGS_FIELD_ALLOWLIST)) {
+      expect(route).toContain(`case \"${family}\"`);
+    }
+    expect(route).toContain("record-settings.${family}.update");
+    expect(route).toContain("userId: access.recordId");
+    expect(route).toContain("actorUserId: access.actorId");
+    expect(route).toContain("details: { changed }");
+    expect(route).not.toContain("details: { recordId:");
   });
 });

@@ -126,6 +126,16 @@ const OWNER_WRITE: AccountAccessEntry = {
   level: "write",
   canWrite: true,
 };
+const MANAGED_GUARDIAN: AccountAccessEntry = {
+  accountId: "managed-record",
+  username: "managed-record",
+  displayName: "Managed profile",
+  access: "write" as const,
+  level: "manage" as const,
+  sections: null,
+  recordKind: "managed" as const,
+  canWrite: true,
+};
 
 function render(access: AccountAccess, pathname = "/"): string {
   mockAccessRef.value = access;
@@ -198,5 +208,12 @@ describe("<AuthShell> — the owner-only doors", () => {
     for (const slot of DOORS) {
       expect(html).not.toContain(slot);
     }
+  });
+
+  it("admits a switched Guardian to the record-aware Settings gate", () => {
+    const html = render(SWITCHED(MANAGED_GUARDIAN), "/settings/integrations");
+
+    expect(html).toContain("sentinel-page");
+    expect(html).not.toContain("sentinel-unavailable");
   });
 });

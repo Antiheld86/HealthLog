@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { LayoutModuleGate } from "@/components/settings/layout-module-gate";
+import { RecordSettingsSectionGate } from "@/components/settings/record-settings-section-gate";
 import {
   LAYOUT_GROUPS,
   LAYOUT_GROUP_IDS,
@@ -68,11 +69,13 @@ export default async function SettingsLayoutModulePage({ params }: PageProps) {
         headingId,
       }}
     >
-      <section aria-labelledby={headingId} className="space-y-6">
-        <LayoutModuleGate moduleGate={group.moduleGate}>
-          <Body />
-        </LayoutModuleGate>
-      </section>
+      <RecordSettingsSectionGate section="layout">
+        <section aria-labelledby={headingId} className="space-y-6">
+          <LayoutModuleGate moduleGate={group.moduleGate}>
+            <Body />
+          </LayoutModuleGate>
+        </section>
+      </RecordSettingsSectionGate>
     </SettingsShell>
   );
 }

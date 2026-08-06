@@ -12,3 +12,13 @@ export {
   type SettingsDestinationClassification,
   type SettingsDestinationKind,
 } from "./classification";
+export {
+  isManagedRecordSettingsFamily,
+  managedModulePreferencesFrom,
+  MANAGED_RECORD_SETTINGS_FIELD_ALLOWLIST,
+  parseManagedRecordSettingsPatch,
+  safeParseManagedRecordSettingsPatch,
+  type ManagedRecordSettingsFamily,
+  type ManagedRecordSettingsPatch,
+} from "./configuration";
+export { assertRecordSettingsResponseForRecord } from "./response";

@@ -12,6 +12,8 @@ export const recordSettingsKeys = {
     ["record-settings", recordId, "integrations"] as const,
   profile: (recordId: string) =>
     ["record-settings", recordId, "profile"] as const,
+  family: (recordId: string, family: string) =>
+    ["record-settings", recordId, family] as const,
   /** Named aliases stay unambiguous when assembled into `queryKeys`. */
   recordSettingsDetail: (recordId: string) =>
     ["record-settings", recordId, "detail"] as const,
@@ -19,4 +21,6 @@ export const recordSettingsKeys = {
     ["record-settings", recordId, "integrations"] as const,
   recordSettingsProfile: (recordId: string) =>
     ["record-settings", recordId, "profile"] as const,
+  recordSettingsFamily: (recordId: string, family: string) =>
+    ["record-settings", recordId, family] as const,
 };
