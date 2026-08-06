@@ -23,6 +23,7 @@
 import type { ZodOpenApiObject } from "zod-openapi";
 import { z } from "zod/v4";
 
+import { accountAccessBlockSchema } from "@/lib/sharing/account-access-schema";
 import { SHARE_DOMAINS } from "@/lib/sharing/scope";
 import {
   inviteGrantSchema,
@@ -210,72 +211,11 @@ export const accountSelectorParameter: NonNullable<
 
 // ── What the client is told it may do ────────────────────────────────────────
 
-const accountAccessEntry = z
-  .object({
-    accountId: z
-      .string()
-      .describe(
-        "The account whose record it is — the value POST /api/account/switch takes, and the value the X-HealthLog-Account header carries.",
-      ),
-    username: z.string(),
-    displayName: z.string().nullable(),
-    access: z
-      .enum(["read", "write"])
-      .describe(
-        "The legacy grant level that shipped clients decode. MANAGE serializes as `write` here; new code reads canonical `level`.",
-      ),
-    level: z
-      .enum(["read", "write", "manage"])
-      .describe(
-        "The grant's resolved level. `manage` additionally admits changing and removing entries on the delegable surfaces; it never reaches the identity surfaces (settings, connections, tokens, consent, grant management), which stay refused on an invited record at every level. Render it; never derive it from `canWrite`.",
-      ),
-    recordKind: z
-      .enum(["self", "shared", "managed"])
-      .describe(
-        "Server-resolved presentation metadata for the record. It is never accepted as an authorization input.",
-      ),
-    sections: z
-      .array(shareSection)
-      .nullable()
-      .describe(
-        "The sections of that record this caller may open, or null for the entire record. Null is first-class and is what every pre-v1.37.0 grant carries; a MANAGE grant always carries it too. A non-null array names the open sections and NOTHING else answers — a client that switches into a scoped record without honouring this gets the standard 403 on every out-of-scope route, fail-closed and byte-identical to every other sharing refusal, which is safe but reads as a wall of errors. An empty array means the grant opens nothing. Ordered by the consent screen's reading order.",
-      ),
-    canWrite: z
-      .boolean()
-      .describe(
-        "Whether this caller may ADD to that record: true for an accepted WRITE or MANAGE grant, false for a READ one. On its own it never means edit or delete — a WRITE grant adds and does nothing more. What MANAGE additionally admits is said by `level`. Resolved server-side. Render it; never derive it.",
-      ),
-  })
-  .meta({
-    id: "AccountAccessEntry",
-    description:
-      "One account this caller may act on. No avatar is published: the avatar bytes are owner-scoped, so a URL here would resolve to a refusal. Clients paint their initials fallback.",
-  });
-
-export const accountAccessBlock = z
-  .object({
-    accounts: z
-      .array(accountAccessEntry)
-      .describe("Every record this caller may open, newest grant first."),
-    active: accountAccessEntry
-      .nullable()
-      .describe(
-        "The record this session is inside right now, resolved to a full entry rather than an id to look up — so a banner can name the person without joining two fields. Null when the caller is in their own record, and ALWAYS null on the Bearer transport: a token carries its selector per request and this endpoint refuses one.",
-      ),
-    recordKind: z
-      .enum(["self", "shared", "managed"])
-      .describe(
-        "The server-resolved kind of the record currently in view. `self` applies when `active` is null.",
-      ),
-    canSwitch: z
-      .boolean()
-      .describe("Whether there is anywhere to switch to. Bind it directly."),
-  })
-  .meta({
-    id: "AccountAccess",
-    description:
-      "Account sharing, resolved. This block is the ONLY source of switchability and writability: the server publishes what the caller may do and the client renders it. A client that computed either from grant data would be a second program deciding one person's access to a health record, and the two answer differently the first time an expiry or a revocation appears. Always present — an account nobody has shared with gets an empty list, not a missing field.",
-  });
+export const accountAccessBlock = accountAccessBlockSchema.meta({
+  id: "AccountAccess",
+  description:
+    "Account sharing, resolved. This block is the ONLY source of switchability and writability: the server publishes what the caller may do and the client renders it. A client that computed either from grant data would be a second program deciding one person's access to a health record, and the two answer differently the first time an expiry or a revocation appears. Always present — an account nobody has shared with gets an empty list, not a missing field.",
+});
 
 /**
  * The account payload, documented for the one field this release adds.

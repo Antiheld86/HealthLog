@@ -25,6 +25,7 @@ import type { TourProgress } from "@/lib/onboarding/tour-progress";
 import { clearOfflineCachesForSessionEnd } from "@/lib/pwa/query-persister";
 import { setRecordScope } from "@/lib/query-keys/record-scope";
 import type { AccountAccess } from "@/lib/sharing/account-access-view";
+import { parseAccountAccess } from "@/lib/sharing/account-access-schema";
 
 /**
  * v1.36.0 — an account with no sharing at all. The shape `fetchMe` falls back
@@ -342,20 +343,7 @@ async function fetchMe(): Promise<AuthUser> {
  * that cannot honour it is worse than one that is missing.
  */
 function coerceAccountAccess(value: unknown): AccountAccess {
-  if (value === null || typeof value !== "object") return NO_ACCOUNT_ACCESS;
-  const block = value as Partial<AccountAccess>;
-  if (!Array.isArray(block.accounts)) return NO_ACCOUNT_ACCESS;
-  return {
-    accounts: block.accounts,
-    active: block.active ?? null,
-    recordKind:
-      block.recordKind === "self" ||
-      block.recordKind === "shared" ||
-      block.recordKind === "managed"
-        ? block.recordKind
-        : "self",
-    canSwitch: block.canSwitch === true,
-  };
+  return parseAccountAccess(value) ?? NO_ACCOUNT_ACCESS;
 }
 
 export function useAuth() {
