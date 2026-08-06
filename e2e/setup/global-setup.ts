@@ -94,6 +94,33 @@ export const E2E_SCOPE_RECORDS = [
 ] as const;
 
 /**
+ * Whole-record grants used to prove the three adult access levels and the
+ * separate managed-profile boundary in a real browser session.
+ */
+export const E2E_LEVEL_RECORDS = [
+  {
+    username: "e2e-level-read",
+    access: "READ",
+    recordKind: "shared",
+  },
+  {
+    username: "e2e-level-write",
+    access: "WRITE",
+    recordKind: "shared",
+  },
+  {
+    username: "e2e-level-manage",
+    access: "MANAGE",
+    recordKind: "shared",
+  },
+  {
+    username: "e2e-level-managed",
+    access: "MANAGE",
+    recordKind: "managed",
+  },
+] as const;
+
+/**
  * Weights seeded one per account, chosen so neither can be mistaken for the
  * other in rendered markup and neither collides with a value any other spec
  * writes.
@@ -324,6 +351,59 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
         [
           cuid(),
           JSON.stringify([record.domain]),
+          now,
+          record.username,
+          E2E_SCOPE_DELEGATE.username,
+        ],
+      );
+    }
+
+    // Whole-record fixtures intentionally sit beside the narrow records
+    // above. They make the browser prove the presentation and mutation
+    // boundaries of READ, WRITE, MANAGE, and a guardian-managed record
+    // without changing the invitation lifecycle fixture below.
+    for (const record of E2E_LEVEL_RECORDS) {
+      await pool.query(
+        `INSERT INTO users
+          (id, username, email, password_hash, role, created_at, updated_at,
+           managed_profile_at, onboarding_completed_at,
+           onboarding_tour_completed, module_preferences_json)
+         VALUES ($1, $2, $3, NULL, 'USER', $4, $4, $5, $4, true, $6::jsonb)
+         ON CONFLICT (username) DO UPDATE SET
+           email = EXCLUDED.email,
+           password_hash = NULL,
+           updated_at = EXCLUDED.updated_at,
+           managed_profile_at = EXCLUDED.managed_profile_at,
+           onboarding_completed_at = EXCLUDED.onboarding_completed_at,
+           onboarding_tour_completed = EXCLUDED.onboarding_tour_completed,
+           module_preferences_json = EXCLUDED.module_preferences_json`,
+        [
+          cuid(),
+          record.username,
+          `${record.username}@healthlog.test`,
+          now,
+          record.recordKind === "managed" ? now : null,
+          JSON.stringify({
+            medications: true,
+            labs: true,
+            illness: true,
+            mood: true,
+            mentalHealth: true,
+            inboundDocuments: true,
+          }),
+        ],
+      );
+
+      await pool.query(
+        `INSERT INTO account_grants
+          (id, grantor_id, grantee_id, access, scope_json, invited_at,
+           accepted_at, created_at)
+         SELECT $1, owner.id, delegate.id, $2, NULL, $3, $3, $3
+         FROM users owner, users delegate
+         WHERE owner.username = $4 AND delegate.username = $5`,
+        [
+          cuid(),
+          record.access,
           now,
           record.username,
           E2E_SCOPE_DELEGATE.username,
