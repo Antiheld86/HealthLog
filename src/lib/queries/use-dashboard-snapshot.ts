@@ -40,16 +40,19 @@ import {
 import { apiGet } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
+import { getRecordScope } from "@/lib/query-keys/record-scope";
 import { DASHBOARD_REFETCH_INTERVAL_MS } from "@/lib/queries/refetch-interval";
 import { retryOnceOnTransientError } from "@/lib/queries/retry-transient";
 import type { DashboardSnapshot } from "@/lib/dashboard/snapshot";
 
-async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
+async function fetchDashboardSnapshot(
+  signal?: AbortSignal,
+): Promise<DashboardSnapshot> {
   // Routed through the typed wrapper so a failure carries its HTTP
   // status (`ApiError`) for the transient-retry predicate, and the
   // default 15 s timeout keeps a stalled response from pinning the
   // whole dashboard on its skeleton.
-  return apiGet<DashboardSnapshot>("/api/dashboard/snapshot");
+  return apiGet<DashboardSnapshot>("/api/dashboard/snapshot", { signal });
 }
 
 /** Handoff freshness window — mirrors the hook's `staleTime`. */
@@ -68,6 +71,7 @@ const PRELOAD_MAX_AGE_MS = 60_000;
 let preloadedSnapshot: {
   promise: Promise<DashboardSnapshot>;
   startedAt: number;
+  recordScope: string | null;
 } | null = null;
 
 export function _resetDashboardSnapshotPreloadForTests(): void {
@@ -88,7 +92,10 @@ export function _resetDashboardSnapshotPreloadForTests(): void {
  * `queryFn` consumes it; preload errors are swallowed by design — the
  * mounted cell owns error surfacing with its own fresh attempt.
  */
-export function prefetchDashboardSnapshot(queryClient: QueryClient) {
+export function prefetchDashboardSnapshot(
+  queryClient: QueryClient,
+  signal?: AbortSignal,
+) {
   // Expired handoff from a previous visit — drop it so a long-idle slot
   // can never serve stale data.
   if (
@@ -128,22 +135,30 @@ export function prefetchDashboardSnapshot(queryClient: QueryClient) {
   if (freshest > 0) {
     return;
   }
-  const promise = fetchDashboardSnapshot();
+  const recordScope = getRecordScope();
+  const promise = fetchDashboardSnapshot(signal);
   promise.catch(() => {
     // Swallow + clear so an unconsumed failed preload (racing 401 on
     // login, transient network) never becomes an unhandled rejection and
     // never gets handed to a later mount.
     if (preloadedSnapshot?.promise === promise) preloadedSnapshot = null;
   });
-  preloadedSnapshot = { promise, startedAt: Date.now() };
+  preloadedSnapshot = { promise, startedAt: Date.now(), recordScope };
 }
 
 /** Single-use consume of the preload handoff; `null` when absent/expired. */
 function takePreloadedSnapshot(): Promise<DashboardSnapshot> | null {
   if (!preloadedSnapshot) return null;
-  const { promise, startedAt } = preloadedSnapshot;
+  const { promise, startedAt, recordScope } = preloadedSnapshot;
   preloadedSnapshot = null;
-  return Date.now() - startedAt < PRELOAD_MAX_AGE_MS ? promise : null;
+  // A handoff is not query-cached, so it needs the same record boundary as a
+  // query cache entry. A scope move while it is in flight must make the next
+  // mounted dashboard fetch afresh instead of adopting a response from the
+  // record that just ended.
+  return Date.now() - startedAt < PRELOAD_MAX_AGE_MS &&
+    recordScope === getRecordScope()
+    ? promise
+    : null;
 }
 
 function makeSnapshotQueryFn(queryClient: QueryClient) {

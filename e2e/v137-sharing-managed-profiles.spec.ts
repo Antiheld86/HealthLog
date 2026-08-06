@@ -138,7 +138,7 @@ test.describe.serial("scoped sharing browser journeys", () => {
     });
   }
 
-  test("refuses a malformed switched payload before owner controls or reads mount", async ({
+  test("refuses a malformed switched payload before target or owner reads mount", async ({
     page,
   }) => {
     await page.goto("/");
@@ -149,14 +149,20 @@ test.describe.serial("scoped sharing browser journeys", () => {
     );
     await expect(entry).toHaveCount(1);
 
-    let corruptNextAuthPayload = true;
+    // The switch normally writes this mirror before its full reload. Remove it
+    // in the new document so the global preloaders cannot guess an own-record
+    // scope while `/api/auth/me` is still deciding whether the target is safe.
+    await page.addInitScript(() => {
+      localStorage.removeItem("healthlog-record-scope");
+    });
+
+    let corruptAuthPayload = true;
     await page.route("**/api/auth/me", async (route) => {
       const response = await route.fetch();
-      if (!corruptNextAuthPayload) {
+      if (!corruptAuthPayload) {
         await route.fulfill({ response });
         return;
       }
-      corruptNextAuthPayload = false;
       await route.fulfill({
         response,
         json: withDivergentActiveAccountAccess(await response.json()),
@@ -182,6 +188,24 @@ test.describe.serial("scoped sharing browser journeys", () => {
       }
     };
     page.on("request", trackOwnerOnlyRead);
+    const targetPreloads: string[] = [];
+    const trackTargetPreload = (request: {
+      method(): string;
+      url(): string;
+    }) => {
+      if (request.method() !== "GET") return;
+      const path = new URL(request.url()).pathname;
+      if (
+        [
+          "/api/dashboard/snapshot",
+          "/api/medications",
+          "/api/medications/compliance",
+        ].includes(path)
+      ) {
+        targetPreloads.push(path);
+      }
+    };
+    page.on("request", trackTargetPreload);
     try {
       await entry.click();
 
@@ -196,14 +220,46 @@ test.describe.serial("scoped sharing browser journeys", () => {
       await expect(
         page.locator('[data-slot="shared-record-banner"]'),
       ).toHaveCount(0);
-      expect(ownerOnlyReads).toEqual([]);
 
+      // Both global preloader routes must remain inert while the malformed
+      // response is refused, even though the scope mirror was intentionally
+      // cleared before each reload.
+      await page.goto("/");
+      await expect(
+        page.locator('[data-slot="invalid-record-access-refusal"]'),
+      ).toBeVisible();
+      await page.goto("/medications");
+      await expect(
+        page.locator('[data-slot="invalid-record-access-refusal"]'),
+      ).toBeVisible();
+      expect(ownerOnlyReads).toEqual([]);
+      expect(targetPreloads).toEqual([]);
+
+      // Leave the refused record, then demand fresh own-record reads. This
+      // catches a response that was parked under the owner hash while the
+      // refusal was on screen and would otherwise paint without a new request.
+      corruptAuthPayload = false;
+      const freshDashboard = page.waitForResponse(
+        (response) =>
+          response.request().method() === "GET" &&
+          new URL(response.url()).pathname === "/api/dashboard/snapshot",
+      );
       await page
         .locator('[data-slot="shared-record-unavailable-leave"]')
         .click();
       await expect(page).toHaveURL(/\/$/);
+      await freshDashboard;
+
+      const freshMedications = page.waitForResponse(
+        (response) =>
+          response.request().method() === "GET" &&
+          new URL(response.url()).pathname === "/api/medications",
+      );
+      await page.goto("/medications");
+      await freshMedications;
     } finally {
       page.off("request", trackOwnerOnlyRead);
+      page.off("request", trackTargetPreload);
       await page.unroute("**/api/auth/me");
     }
   });

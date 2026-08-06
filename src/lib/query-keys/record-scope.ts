@@ -60,6 +60,11 @@ const REFUSED_RECORD_SCOPE = "__healthlog_refused_record__";
  */
 let scope: string | null = null;
 let seeded = false;
+const scopeListeners = new Set<() => void>();
+
+function notifyScopeListeners(): void {
+  for (const listener of scopeListeners) listener();
+}
 
 function readMirror(): string | null {
   try {
@@ -112,6 +117,34 @@ export function setRecordScope(accountId: string | null): void {
   } catch {
     /* storage unavailable — the in-process copy still partitions this tab */
   }
+  notifyScopeListeners();
+}
+
+/**
+ * React bridge for consumers that must stop work as soon as another tab moves
+ * the session to a different record. `storage` never fires in the tab that
+ * wrote the mirror, so local writes notify directly above; other tabs adopt
+ * the new value before notifying their subscribers.
+ */
+export function subscribeToRecordScope(listener: () => void): () => void {
+  scopeListeners.add(listener);
+  if (typeof window === "undefined") {
+    return () => scopeListeners.delete(listener);
+  }
+  const onStorage = (event: StorageEvent) => {
+    if (event.key !== STORAGE_KEY) return;
+    scope =
+      event.newValue === null || event.newValue.length === 0
+        ? null
+        : event.newValue;
+    seeded = true;
+    notifyScopeListeners();
+  };
+  window.addEventListener("storage", onStorage);
+  return () => {
+    scopeListeners.delete(listener);
+    window.removeEventListener("storage", onStorage);
+  };
 }
 
 /**

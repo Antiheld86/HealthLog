@@ -29,15 +29,18 @@ import { apiGet } from "@/lib/api/api-fetch";
  */
 export const MEDICATIONS_LIST_STALE_TIME_MS = 15_000;
 
-export function prefetchMedicationsList(queryClient: QueryClient): void {
+export function prefetchMedicationsList(
+  queryClient: QueryClient,
+  signal?: AbortSignal,
+): void {
   void queryClient.prefetchQuery({
     queryKey: queryKeys.medications(),
-    queryFn: () => apiGet("/api/medications"),
+    queryFn: () => apiGet("/api/medications", { signal }),
     staleTime: MEDICATIONS_LIST_STALE_TIME_MS,
   });
   void queryClient.prefetchQuery({
     queryKey: queryKeys.medicationComplianceSummary(),
-    queryFn: () => apiGet("/api/medications/compliance"),
+    queryFn: () => apiGet("/api/medications/compliance", { signal }),
     staleTime: MEDICATIONS_LIST_STALE_TIME_MS,
   });
 }
