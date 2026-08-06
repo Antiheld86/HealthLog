@@ -1,0 +1,647 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const sent = vi.hoisted(() => ({
+  deliveries: [] as Array<{
+    channel: "NTFY" | "APNS" | "WEB_PUSH" | "TELEGRAM";
+    recordUserId: string;
+    recipientUserId: string;
+  }>,
+  ntfy: [] as Array<{
+    recipientUserId: string;
+    title: string;
+    message: string;
+  }>,
+  apns: [] as Array<{ recipientUserId: string; recordUserId?: string }>,
+}));
+
+const ntfyEgress = vi.hoisted(() => ({
+  block: null as Promise<void> | null,
+  onStart: null as (() => void) | null,
+  error: null as Error | null,
+  outcome: null as { ok: false; reason: string } | null,
+}));
+
+vi.mock("@/lib/notifications/senders/ntfy", async () => {
+  const { recordPushAttemptForPayload } = await vi.importActual<
+    typeof import("@/lib/notifications/senders/push-attempt-record")
+  >("@/lib/notifications/senders/push-attempt-record");
+  return {
+    sendViaNtfy: async (
+      _config: unknown,
+      payload: {
+        userId: string;
+        recordUserId?: string;
+        recipientUserId?: string;
+        eventType: string;
+        title: string;
+        message: string;
+      },
+    ) => {
+      ntfyEgress.onStart?.();
+      if (ntfyEgress.block) await ntfyEgress.block;
+      if (ntfyEgress.error) throw ntfyEgress.error;
+      if (ntfyEgress.outcome) return ntfyEgress.outcome;
+      const recipientUserId = payload.recipientUserId ?? payload.userId;
+      sent.ntfy.push({
+        recipientUserId,
+        title: payload.title,
+        message: payload.message,
+      });
+      sent.deliveries.push({
+        channel: "NTFY",
+        recordUserId: payload.recordUserId ?? payload.userId,
+        recipientUserId,
+      });
+      recordPushAttemptForPayload(payload, recipientUserId, {
+        userId: payload.userId,
+        channel: "NTFY",
+        eventType: payload.eventType,
+        result: "ok",
+      });
+      return { ok: true };
+    },
+  };
+});
+
+vi.mock("@/lib/notifications/senders/apns", async () => {
+  const { recordPushAttemptForPayload } = await vi.importActual<
+    typeof import("@/lib/notifications/senders/push-attempt-record")
+  >("@/lib/notifications/senders/push-attempt-record");
+  return {
+    sendViaApns: async (
+      recipientUserId: string,
+      payload: { userId: string; recordUserId?: string; eventType: string },
+    ) => {
+      sent.apns.push({ recipientUserId, recordUserId: payload.recordUserId });
+      sent.deliveries.push({
+        channel: "APNS",
+        recordUserId: payload.recordUserId ?? payload.userId,
+        recipientUserId,
+      });
+      recordPushAttemptForPayload(payload, recipientUserId, {
+        userId: payload.userId,
+        channel: "APNS",
+        eventType: payload.eventType,
+        result: "ok",
+      });
+      return { ok: true };
+    },
+  };
+});
+
+vi.mock("@/lib/notifications/senders/web-push", async () => {
+  const { recordPushAttemptForPayload } = await vi.importActual<
+    typeof import("@/lib/notifications/senders/push-attempt-record")
+  >("@/lib/notifications/senders/push-attempt-record");
+  return {
+    sendViaWebPush: async (
+      recipientUserId: string,
+      payload: { userId: string; recordUserId?: string; eventType: string },
+    ) => {
+      sent.deliveries.push({
+        channel: "WEB_PUSH",
+        recordUserId: payload.recordUserId ?? payload.userId,
+        recipientUserId,
+      });
+      recordPushAttemptForPayload(payload, recipientUserId, {
+        userId: payload.userId,
+        channel: "WEB_PUSH",
+        eventType: payload.eventType,
+        result: "ok",
+      });
+      return { ok: true };
+    },
+  };
+});
+
+vi.mock("@/lib/notifications/senders/telegram", async () => {
+  const { recordPushAttemptForPayload } = await vi.importActual<
+    typeof import("@/lib/notifications/senders/push-attempt-record")
+  >("@/lib/notifications/senders/push-attempt-record");
+  return {
+    sendViaTelegram: async (
+      _config: unknown,
+      payload: {
+        userId: string;
+        recordUserId?: string;
+        recipientUserId?: string;
+        eventType: string;
+      },
+    ) => {
+      const recipientUserId = payload.recipientUserId ?? payload.userId;
+      sent.deliveries.push({
+        channel: "TELEGRAM",
+        recordUserId: payload.recordUserId ?? payload.userId,
+        recipientUserId,
+      });
+      recordPushAttemptForPayload(payload, recipientUserId, {
+        userId: payload.userId,
+        channel: "TELEGRAM",
+        eventType: payload.eventType,
+        result: "ok",
+      });
+      return { ok: true };
+    },
+  };
+});
+
+import { encrypt } from "@/lib/crypto";
+import type { Locale } from "@/lib/i18n/config";
+import { withManagedProfileLock } from "@/lib/managed-profiles/lifecycle";
+import { dispatchNotification } from "@/lib/notifications/dispatcher";
+import { revokeGrant } from "@/lib/sharing/grants";
+import { getPrismaClient, truncateAllTables } from "./setup";
+
+let sequence = 0;
+
+async function createUser(input: {
+  label: string;
+  locale: "en" | "de";
+  managed?: boolean;
+  clientManaged?: boolean;
+}) {
+  const suffix = sequence++;
+  return getPrismaClient().user.create({
+    data: {
+      username: `${input.label}-${suffix}`,
+      email: `${input.label}-${suffix}@example.test`,
+      locale: input.locale,
+      managedProfileAt: input.managed ? new Date() : null,
+      notificationPrefs: input.clientManaged
+        ? { medication: { clientManaged: true } }
+        : undefined,
+    },
+  });
+}
+
+async function addGuardian(recordUserId: string, recipientUserId: string) {
+  await getPrismaClient().accountGrant.create({
+    data: {
+      grantorId: recordUserId,
+      granteeId: recipientUserId,
+      access: "MANAGE",
+      acceptedAt: new Date(),
+    },
+  });
+}
+
+async function addChannel(
+  userId: string,
+  type: "NTFY" | "APNS" | "WEB_PUSH" | "TELEGRAM",
+  enabled = true,
+) {
+  await getPrismaClient().notificationChannel.create({
+    data: {
+      userId,
+      type,
+      enabled,
+      config: encrypt("{}"),
+    },
+  });
+}
+
+beforeEach(async () => {
+  ntfyEgress.block = null;
+  ntfyEgress.onStart = null;
+  ntfyEgress.error = null;
+  ntfyEgress.outcome = null;
+  sent.deliveries.length = 0;
+  sent.ntfy.length = 0;
+  sent.apns.length = 0;
+  await truncateAllTables(getPrismaClient());
+});
+
+describe("Guardian fan-out (real Postgres)", () => {
+  it("isolates recipient locale and global preference across two Guardians and two records", async () => {
+    const [recordA, recordB, guardianEn, guardianDe] = await Promise.all([
+      createUser({ label: "record-a", locale: "en", managed: true }),
+      createUser({ label: "record-b", locale: "de", managed: true }),
+      createUser({ label: "guardian-en", locale: "en" }),
+      createUser({ label: "guardian-de", locale: "de" }),
+    ]);
+    await Promise.all([
+      addGuardian(recordA.id, guardianEn.id),
+      addGuardian(recordA.id, guardianDe.id),
+      addGuardian(recordB.id, guardianEn.id),
+      addGuardian(recordB.id, guardianDe.id),
+      addChannel(guardianEn.id, "NTFY"),
+      addChannel(guardianDe.id, "NTFY"),
+    ]);
+
+    const renderForRecipient = (locale: Locale) => ({
+      title: `title-${locale}`,
+      message: `message-${locale}`,
+    });
+    await dispatchNotification({
+      eventType: "MEDICATION_REMINDER",
+      userId: recordA.id,
+      title: "record-a-title",
+      message: "record-a-message",
+      renderForRecipient,
+    });
+
+    expect(sent.ntfy).toEqual(
+      expect.arrayContaining([
+        {
+          recipientUserId: guardianEn.id,
+          title: "title-en",
+          message: "message-en",
+        },
+        {
+          recipientUserId: guardianDe.id,
+          title: "title-de",
+          message: "message-de",
+        },
+      ]),
+    );
+
+    await getPrismaClient().notificationPreference.create({
+      data: {
+        channel: {
+          connect: { userId_type: { userId: guardianEn.id, type: "NTFY" } },
+        },
+        eventType: "MEDICATION_REMINDER",
+        enabled: false,
+      },
+    });
+    sent.ntfy.length = 0;
+
+    await dispatchNotification({
+      eventType: "MEDICATION_REMINDER",
+      userId: recordB.id,
+      title: "record-b-title",
+      message: "record-b-message",
+      renderForRecipient,
+    });
+
+    expect(sent.ntfy).toEqual([
+      {
+        recipientUserId: guardianDe.id,
+        title: "title-de",
+        message: "message-de",
+      },
+    ]);
+  });
+
+  it("bypasses client-managed suppression for each Guardian but not self delivery", async () => {
+    const [record, guardianEn, guardianDe] = await Promise.all([
+      createUser({ label: "record", locale: "en", managed: true }),
+      createUser({
+        label: "guardian-en",
+        locale: "en",
+        clientManaged: true,
+      }),
+      createUser({
+        label: "guardian-de",
+        locale: "de",
+        clientManaged: true,
+      }),
+    ]);
+    await Promise.all([
+      addGuardian(record.id, guardianEn.id),
+      addGuardian(record.id, guardianDe.id),
+      addChannel(guardianEn.id, "APNS"),
+      addChannel(guardianDe.id, "APNS"),
+    ]);
+
+    await dispatchNotification({
+      eventType: "MEDICATION_REMINDER",
+      userId: record.id,
+      title: "record-title",
+      message: "record-message",
+    });
+
+    expect(sent.apns).toEqual(
+      expect.arrayContaining([
+        { recipientUserId: guardianEn.id, recordUserId: record.id },
+        { recipientUserId: guardianDe.id, recordUserId: record.id },
+      ]),
+    );
+  });
+
+  it("writes the complete two-record, two-Guardian, four-channel attribution matrix", async () => {
+    const [recordA, recordB, guardianOne, guardianTwo, ordinaryRecord] =
+      await Promise.all([
+        createUser({ label: "record-a", locale: "en", managed: true }),
+        createUser({ label: "record-b", locale: "de", managed: true }),
+        createUser({ label: "guardian-one", locale: "en" }),
+        createUser({ label: "guardian-two", locale: "de" }),
+        createUser({ label: "ordinary-record", locale: "en" }),
+      ]);
+    const guardianIds = [guardianOne.id, guardianTwo.id];
+    const recordIds = [recordA.id, recordB.id];
+    const channelTypes = ["NTFY", "APNS", "WEB_PUSH", "TELEGRAM"] as const;
+
+    await Promise.all([
+      ...recordIds.flatMap((recordUserId) =>
+        guardianIds.map((recipientUserId) =>
+          addGuardian(recordUserId, recipientUserId),
+        ),
+      ),
+      // An ordinary adult's MANAGE grant must never cause fan-out.
+      addGuardian(ordinaryRecord.id, guardianOne.id),
+      ...guardianIds.flatMap((userId) =>
+        channelTypes.map((type) => addChannel(userId, type)),
+      ),
+    ]);
+
+    await Promise.all(
+      recordIds.map((userId) =>
+        dispatchNotification({
+          eventType: "MEDICATION_REMINDER",
+          userId,
+          title: "record reminder",
+          message: "record message",
+        }),
+      ),
+    );
+
+    const expected = recordIds.flatMap((recordUserId) =>
+      guardianIds.flatMap((recipientUserId) =>
+        channelTypes.map((channel) => ({
+          channel,
+          recordUserId,
+          recipientUserId,
+        })),
+      ),
+    );
+    expect(sent.deliveries).toHaveLength(expected.length);
+    expect(sent.deliveries).toEqual(expect.arrayContaining(expected));
+    expect(
+      sent.deliveries.some((delivery) =>
+        recordIds.includes(delivery.recipientUserId),
+      ),
+    ).toBe(false);
+
+    await vi.waitFor(async () => {
+      const attempts = await getPrismaClient().pushAttempt.findMany({
+        where: { eventType: "MEDICATION_REMINDER" },
+        select: { channel: true, recordUserId: true, recipientUserId: true },
+      });
+      expect(attempts).toHaveLength(expected.length);
+      expect(attempts).toEqual(expect.arrayContaining(expected));
+    });
+    const claims =
+      await getPrismaClient().notificationEgressAuthorization.findMany({
+        where: { eventType: "MEDICATION_REMINDER" },
+        select: {
+          channel: true,
+          recordUserId: true,
+          recipientUserId: true,
+          eventType: true,
+        },
+      });
+    const expectedClaims = expected.map((claim) => ({
+      ...claim,
+      eventType: "MEDICATION_REMINDER",
+    }));
+    expect(claims).toHaveLength(expectedClaims.length);
+    expect(claims).toEqual(expect.arrayContaining(expectedClaims));
+
+    await dispatchNotification({
+      eventType: "MEDICATION_REMINDER",
+      userId: ordinaryRecord.id,
+      title: "ordinary reminder",
+      message: "ordinary message",
+    });
+
+    expect(sent.deliveries).toHaveLength(expected.length);
+    await expect(
+      getPrismaClient().pushAttempt.count({
+        where: { eventType: "MEDICATION_REMINDER" },
+      }),
+    ).resolves.toBe(expected.length);
+  });
+
+  it("allows Guardian revocation to commit while a claimed channel egress is in flight", async () => {
+    const [record, recipient, reserveGuardian] = await Promise.all([
+      createUser({ label: "record", locale: "en", managed: true }),
+      createUser({ label: "recipient", locale: "en" }),
+      createUser({ label: "reserve-guardian", locale: "de" }),
+    ]);
+    await Promise.all([
+      addGuardian(record.id, recipient.id),
+      addGuardian(record.id, reserveGuardian.id),
+      addChannel(recipient.id, "NTFY"),
+    ]);
+    const recipientGrant =
+      await getPrismaClient().accountGrant.findFirstOrThrow({
+        where: { grantorId: record.id, granteeId: recipient.id },
+        select: { id: true },
+      });
+    let releaseEgress!: () => void;
+    let markEgressStarted!: () => void;
+    ntfyEgress.block = new Promise<void>((resolve) => {
+      releaseEgress = resolve;
+    });
+    const egressStarted = new Promise<void>((resolve) => {
+      markEgressStarted = resolve;
+    });
+    ntfyEgress.onStart = markEgressStarted;
+
+    const delivery = dispatchNotification({
+      eventType: "MEDICATION_REMINDER",
+      userId: record.id,
+      title: "record reminder",
+      message: "record message",
+    });
+    await egressStarted;
+    await expect(
+      getPrismaClient().notificationEgressAuthorization.count({
+        where: {
+          recordUserId: record.id,
+          recipientUserId: recipient.id,
+          channel: "NTFY",
+        },
+      }),
+    ).resolves.toBe(1);
+
+    const revocation = revokeGrant({
+      grantId: recipientGrant.id,
+      grantorId: record.id,
+    });
+    await expectPromiseToSettle(revocation);
+
+    releaseEgress();
+    await delivery;
+  });
+
+  it("allows Guardian expiry to commit while a claimed channel egress is in flight", async () => {
+    const [record, recipient, reserveGuardian] = await Promise.all([
+      createUser({ label: "record", locale: "en", managed: true }),
+      createUser({ label: "recipient", locale: "en" }),
+      createUser({ label: "reserve-guardian", locale: "de" }),
+    ]);
+    await Promise.all([
+      addGuardian(record.id, recipient.id),
+      addGuardian(record.id, reserveGuardian.id),
+      addChannel(recipient.id, "NTFY"),
+    ]);
+    const recipientGrant =
+      await getPrismaClient().accountGrant.findFirstOrThrow({
+        where: { grantorId: record.id, granteeId: recipient.id },
+        select: { id: true },
+      });
+    let releaseEgress!: () => void;
+    let markEgressStarted!: () => void;
+    ntfyEgress.block = new Promise<void>((resolve) => {
+      releaseEgress = resolve;
+    });
+    const egressStarted = new Promise<void>((resolve) => {
+      markEgressStarted = resolve;
+    });
+    ntfyEgress.onStart = markEgressStarted;
+
+    const delivery = dispatchNotification({
+      eventType: "MEDICATION_REMINDER",
+      userId: record.id,
+      title: "record reminder",
+      message: "record message",
+    });
+    await egressStarted;
+    await expect(
+      getPrismaClient().notificationEgressAuthorization.count({
+        where: {
+          recordUserId: record.id,
+          recipientUserId: recipient.id,
+          channel: "NTFY",
+        },
+      }),
+    ).resolves.toBe(1);
+
+    const expiry = getPrismaClient().$transaction((tx) =>
+      withManagedProfileLock(tx, record.id, () =>
+        tx.accountGrant.update({
+          where: { id: recipientGrant.id },
+          data: { expiresAt: new Date() },
+        }),
+      ),
+    );
+    await expectPromiseToSettle(expiry);
+
+    releaseEgress();
+    await delivery;
+  });
+
+  it("records a timed-out provider after the authorization claim has committed", async () => {
+    const [record, recipient, reserveGuardian] = await Promise.all([
+      createUser({ label: "record", locale: "en", managed: true }),
+      createUser({ label: "recipient", locale: "en" }),
+      createUser({ label: "reserve-guardian", locale: "de" }),
+    ]);
+    await Promise.all([
+      addGuardian(record.id, recipient.id),
+      addGuardian(record.id, reserveGuardian.id),
+      addChannel(recipient.id, "NTFY"),
+    ]);
+    ntfyEgress.error = new Error("provider timeout");
+
+    await expect(
+      dispatchNotification({
+        eventType: "MEDICATION_REMINDER",
+        userId: record.id,
+        title: "record reminder",
+        message: "record message",
+      }),
+    ).resolves.toEqual({
+      dispatched: false,
+      channelsAttempted: 1,
+      channelsSucceeded: 0,
+    });
+
+    await expect(
+      getPrismaClient().notificationEgressAuthorization.findFirstOrThrow({
+        where: {
+          recordUserId: record.id,
+          recipientUserId: recipient.id,
+          channel: "NTFY",
+        },
+        select: { eventType: true, outcome: true, completedAt: true },
+      }),
+    ).resolves.toEqual({
+      eventType: "MEDICATION_REMINDER",
+      outcome: "sender_threw",
+      completedAt: expect.any(Date),
+    });
+  });
+
+  it("creates a new claim for each retry and stops after Guardian revocation", async () => {
+    const [record, recipient, reserveGuardian] = await Promise.all([
+      createUser({ label: "record", locale: "en", managed: true }),
+      createUser({ label: "recipient", locale: "en" }),
+      createUser({ label: "reserve-guardian", locale: "de" }),
+    ]);
+    await Promise.all([
+      addGuardian(record.id, recipient.id),
+      addGuardian(record.id, reserveGuardian.id),
+      addChannel(recipient.id, "NTFY"),
+    ]);
+    const grant = await getPrismaClient().accountGrant.findFirstOrThrow({
+      where: { grantorId: record.id, granteeId: recipient.id },
+      select: { id: true },
+    });
+    const payload = {
+      eventType: "MEDICATION_REMINDER" as const,
+      userId: record.id,
+      recordUserId: record.id,
+      recipientUserId: recipient.id,
+      title: "record reminder",
+      message: "record message",
+    };
+
+    ntfyEgress.error = new Error("provider timeout");
+    await dispatchNotification(payload);
+    await getPrismaClient().notificationChannel.update({
+      where: { userId_type: { userId: recipient.id, type: "NTFY" } },
+      data: { consecutiveFailures: 0, nextRetryAt: null },
+    });
+    ntfyEgress.error = null;
+    ntfyEgress.outcome = { ok: false, reason: "provider_unavailable" };
+    await dispatchNotification(payload);
+
+    const beforeRevocation =
+      await getPrismaClient().notificationEgressAuthorization.findMany({
+        where: {
+          recordUserId: record.id,
+          recipientUserId: recipient.id,
+          channel: "NTFY",
+        },
+        select: { id: true, outcome: true },
+        orderBy: { authorizedAt: "asc" },
+      });
+    expect(beforeRevocation).toEqual([
+      { id: expect.any(String), outcome: "sender_threw" },
+      { id: expect.any(String), outcome: "transient_failure" },
+    ]);
+    expect(beforeRevocation[0]!.id).not.toBe(beforeRevocation[1]!.id);
+
+    await revokeGrant({ grantId: grant.id, grantorId: record.id });
+    ntfyEgress.outcome = null;
+    await expect(dispatchNotification(payload)).resolves.toEqual({
+      dispatched: false,
+      channelsAttempted: 0,
+      channelsSucceeded: 0,
+    });
+    expect(sent.ntfy).toEqual([]);
+    await expect(
+      getPrismaClient().notificationEgressAuthorization.count({
+        where: {
+          recordUserId: record.id,
+          recipientUserId: recipient.id,
+          channel: "NTFY",
+        },
+      }),
+    ).resolves.toBe(2);
+  });
+});
+
+async function expectPromiseToSettle(promise: Promise<unknown>) {
+  const settled = await Promise.race([
+    promise.then(
+      () => true,
+      () => true,
+    ),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 250)),
+  ]);
+  expect(settled).toBe(true);
+}

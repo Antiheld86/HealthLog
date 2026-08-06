@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getPrismaClient, truncateAllTables } from "./setup";
-import { resolveNotificationDeliveryIdentity } from "@/lib/notifications/delivery-identity";
 import {
-  claimNotificationEvent,
-} from "@/lib/notifications/reminder-dedup";
+  claimManagedGuardianEgressAuthorization,
+  resolveNotificationDeliveryIdentity,
+} from "@/lib/notifications/delivery-identity";
+import { claimNotificationEvent } from "@/lib/notifications/reminder-dedup";
 import { recordPushAttempt } from "@/lib/notifications/senders/push-attempt-record";
 
 let sequence = 0;
@@ -139,6 +140,132 @@ describe("notification attribution (real Postgres)", () => {
     expect(
       await client.notificationEvent.findUnique({ where: { id: event.id } }),
     ).toBeNull();
+  });
+
+  it("provides the created-at index used by global notification event retention", async () => {
+    const indexes = await getPrismaClient().$queryRaw<
+      Array<{ indexname: string }>
+    >`
+      SELECT indexname
+      FROM pg_indexes
+      WHERE schemaname = current_schema()
+        AND tablename = 'notification_events'
+    `;
+
+    expect(indexes.map(({ indexname }) => indexname)).toContain(
+      "notification_events_created_at_idx",
+    );
+  });
+
+  it("refuses a revoked Guardian after identity preflight but before the final egress claim", async () => {
+    const recordUser = await createUser("expiry-record", true);
+    const recipientUser = await createUser("expiry-recipient");
+    const grant = await createGuardianGrant({
+      recordUserId: recordUser.id,
+      recipientUserId: recipientUser.id,
+    });
+    const delivery = await resolveNotificationDeliveryIdentity({
+      eventType: "MEDICATION_REMINDER",
+      userId: recordUser.id,
+      recordUserId: recordUser.id,
+      recipientUserId: recipientUser.id,
+      title: "record reminder",
+      message: "record message",
+    });
+    expect(delivery).toMatchObject({ managed: true });
+
+    await getPrismaClient().accountGrant.update({
+      where: { id: grant.id },
+      data: { revokedAt: new Date(), revokedBy: "GRANTOR" },
+    });
+
+    await expect(
+      claimManagedGuardianEgressAuthorization(
+        delivery!,
+        "NTFY",
+        "MEDICATION_REMINDER",
+      ),
+    ).resolves.toBeNull();
+    expect(
+      await getPrismaClient().notificationEgressAuthorization.count(),
+    ).toBe(0);
+    expect(await getPrismaClient().pushAttempt.count()).toBe(0);
+  });
+
+  it("refuses an expired Guardian after identity preflight but before the final egress claim", async () => {
+    const recordUser = await createUser("expiry-record", true);
+    const recipientUser = await createUser("expiry-recipient");
+    const grant = await createGuardianGrant({
+      recordUserId: recordUser.id,
+      recipientUserId: recipientUser.id,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    const delivery = await resolveNotificationDeliveryIdentity({
+      eventType: "MEDICATION_REMINDER",
+      userId: recordUser.id,
+      recordUserId: recordUser.id,
+      recipientUserId: recipientUser.id,
+      title: "record reminder",
+      message: "record message",
+    });
+    expect(delivery).toMatchObject({ managed: true });
+
+    await getPrismaClient().accountGrant.update({
+      where: { id: grant.id },
+      data: { expiresAt: new Date(Date.now() - 1) },
+    });
+
+    await expect(
+      claimManagedGuardianEgressAuthorization(
+        delivery!,
+        "NTFY",
+        "MEDICATION_REMINDER",
+      ),
+    ).resolves.toBeNull();
+    expect(
+      await getPrismaClient().notificationEgressAuthorization.count(),
+    ).toBe(0);
+    expect(await getPrismaClient().pushAttempt.count()).toBe(0);
+  });
+
+  it("uses database time for expiry at the final egress claim", async () => {
+    const recordUser = await createUser("database-clock-record", true);
+    const recipientUser = await createUser("database-clock-recipient");
+    const actualNow = Date.now();
+    await createGuardianGrant({
+      recordUserId: recordUser.id,
+      recipientUserId: recipientUser.id,
+      expiresAt: new Date(actualNow - 1_000),
+    });
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(actualNow - 60_000));
+    try {
+      const delivery = await resolveNotificationDeliveryIdentity({
+        eventType: "MEDICATION_REMINDER",
+        userId: recordUser.id,
+        recordUserId: recordUser.id,
+        recipientUserId: recipientUser.id,
+        title: "record reminder",
+        message: "record message",
+      });
+      expect(delivery).toMatchObject({ managed: true });
+
+      await expect(
+        claimManagedGuardianEgressAuthorization(
+          delivery!,
+          "NTFY",
+          "MEDICATION_REMINDER",
+        ),
+      ).resolves.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(
+      await getPrismaClient().notificationEgressAuthorization.count(),
+    ).toBe(0);
+    expect(await getPrismaClient().pushAttempt.count()).toBe(0);
   });
 
   it("allows exactly one concurrent claim for a notification event", async () => {

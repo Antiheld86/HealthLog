@@ -128,6 +128,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   setEnv();
   resetApnsForTesting();
 });
@@ -366,6 +367,25 @@ describe("sendApnsPush — failure classification", () => {
     expect(r.ok).toBe(false);
     expect(r.reason).toBe("apns_network_error");
     expect(r.shouldDisable).toBeFalsy();
+  });
+
+  it("bounds a provider send that never settles", async () => {
+    vi.useFakeTimers();
+    sendMock.mockImplementationOnce(() => new Promise(() => undefined));
+
+    const result = sendApnsPush({
+      deviceToken: "abc",
+      environment: "sandbox",
+      payload: { alert: { title: "t", body: "b" } },
+    });
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    await expect(result).resolves.toMatchObject({
+      ok: false,
+      reason: "apns_timeout",
+      shouldDisable: false,
+    });
   });
 });
 
@@ -608,6 +628,31 @@ describe("sendViaApns — dispatcher fan-out", () => {
     expect(note.payload.medicationId).toBe("med-1");
     expect(note.payload.scheduleId).toBe("sched-1");
     expect(note.payload.eventType).toBe("MEDICATION_REMINDER");
+  });
+
+  it("omits action metadata and categories for a managed Guardian", async () => {
+    vi.mocked(prisma.device.findMany).mockResolvedValueOnce([
+      { id: "d1", apnsToken: "tok-a", apnsEnvironment: "sandbox" },
+    ] as never);
+    sendMock.mockResolvedValueOnce({ sent: [{ device: "tok-a" }], failed: [] });
+
+    await sendViaApns("guardian-1", {
+      title: "t",
+      message: "m",
+      eventType: "MEDICATION_REMINDER",
+      recordUserId: "record-1",
+      recipientUserId: "guardian-1",
+      metadata: {
+        medicationId: "med-1",
+        scheduleId: "sched-1",
+        reminderId: "rem-1",
+        url: "/medications/med-1",
+      },
+    });
+
+    const note = sendMock.mock.calls[0][0];
+    expect(note.category).toBeUndefined();
+    expect(note.payload).toEqual({ eventType: "MEDICATION_REMINDER" });
   });
 
   it("forwards reminderId on MEASUREMENT_REMINDER and strips unlisted keys", async () => {

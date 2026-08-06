@@ -45,8 +45,9 @@ export async function notifyIllnessRedFlag(input: {
   if (redFlags.length === 0) return;
 
   try {
-    // Plan 11 adds approved guardian fanout for this safety signal. Until
-    // then, managed profiles must not produce a direct delivery or anchor.
+    // Red-flag alerts are deliberately outside the closed Guardian fan-out
+    // allowlist. Managed records therefore retain the existing no-delivery,
+    // no-anchor behaviour for this distinct SYSTEM_ALERT producer.
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { managedProfileAt: true },

@@ -863,6 +863,8 @@ model User {
   pushAttemptsForRecord          PushAttempt[]                  @relation("PushAttemptRecordUser")
   pushAttemptsReceived           PushAttempt[]                  @relation("PushAttemptRecipientUser")
   notificationEvents             NotificationEvent[]
+  notificationEgressAuthorizationsForRecord NotificationEgressAuthorization[] @relation("NotificationEgressAuthorizationRecordUser")
+  notificationEgressAuthorizationsReceived  NotificationEgressAuthorization[] @relation("NotificationEgressAuthorizationRecipientUser")
   telegramReminderMessages       TelegramReminderMessage[]
   // v1.10.3 — per-(user, day) Strain personal-anchor cache (day-total
   // TRIMP + running EWMA reference) so the nightly Strain engine anchors
@@ -5821,7 +5823,35 @@ model NotificationEvent {
   recordUser User @relation(fields: [recordUserId], references: [id], onDelete: Cascade)
 
   @@index([recordUserId, eventType, dedupKey, createdAt(sort: Desc)])
+  @@index([createdAt], map: "notification_events_created_at_idx")
   @@map("notification_events")
+}
+
+// A managed Guardian channel send crosses a revocable authorization boundary.
+// The dispatcher creates this claim while it holds the managed-profile
+// lifecycle lock, then commits before starting provider I/O. That committed
+// claim is the linearization point: a revocation that commits first prevents
+// the send, while a revocation that commits later does not cancel the one
+// already-authorized provider operation. No notification content, channel
+// credentials, or event deduplication keys are retained here. Completion is
+// observational only; authorization and retry decisions never read it.
+model NotificationEgressAuthorization {
+  id              String   @id @default(cuid())
+  recordUserId    String   @map("record_user_id")
+  recipientUserId String   @map("recipient_user_id")
+  channel         String
+  eventType       String   @map("event_type")
+  authorizedAt    DateTime @default(now()) @map("authorized_at")
+  completedAt     DateTime? @map("completed_at")
+  outcome         String?
+
+  recordUser    User @relation("NotificationEgressAuthorizationRecordUser", fields: [recordUserId], references: [id], onDelete: Cascade)
+  recipientUser User @relation("NotificationEgressAuthorizationRecipientUser", fields: [recipientUserId], references: [id], onDelete: Cascade)
+
+  @@index([authorizedAt], map: "notification_egress_authorizations_authorized_at_idx")
+  @@index([recordUserId, recipientUserId, authorizedAt(sort: Desc)])
+  @@index([recipientUserId, authorizedAt(sort: Desc)], map: "notification_egress_auth_recipient_authorized_at_idx")
+  @@map("notification_egress_authorizations")
 }
 
 // `result` is one of `"ok"` | `"error"` | `"skipped"` — `skipped`

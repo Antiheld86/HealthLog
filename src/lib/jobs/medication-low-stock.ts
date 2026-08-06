@@ -497,11 +497,26 @@ export async function runMedicationLowStockTick(
               schedules: med.schedules,
               today: now,
             });
+            const renderForRecipient = (locale: Locale) => {
+              const rendered = buildLowStockPayload({
+                locale,
+                medName: med.name,
+                runwayDays: evaluation.runwayDays ?? 0,
+                unitsRemaining: evaluation.unitsRemaining,
+                expiredUnits: evaluation.expiredUnits,
+                leadDays,
+                triggerDays,
+                schedules: med.schedules,
+                today: now,
+              });
+              return { title: rendered.title, message: rendered.body };
+            };
             const outcome = await dispatchImpl({
               eventType: "MEDICATION_LOW_STOCK",
               userId: user.id,
               title,
               message: body,
+              renderForRecipient,
               metadata: {
                 scheduledAt: now.toISOString(),
                 medicationId: med.id,

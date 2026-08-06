@@ -287,6 +287,25 @@ describe("Telegram webhook — rate limit", () => {
 });
 
 describe("Telegram webhook — callback dispatch", () => {
+  it("rejects a callback tied to a managed Guardian reminder without mutating the record", async () => {
+    vi.mocked(prisma.telegramReminderMessage.findFirst).mockResolvedValueOnce({
+      medication: { userId: "managed-record" },
+    } as never);
+
+    const res = await POST(tgRequest(callbackUpdate("taken:med-1")));
+
+    expect(res.status).toBe(200);
+    expect(prisma.medication.findFirst).not.toHaveBeenCalled();
+    expect(prisma.medicationIntakeEvent.create).not.toHaveBeenCalled();
+    expect(prisma.medication.update).not.toHaveBeenCalled();
+    expect(deleteMessage).not.toHaveBeenCalled();
+    expect(answerTelegramCallbackQuery).toHaveBeenCalledWith(
+      "decrypted:ENC(token-blob)",
+      "cb-1",
+      "Invalid action.",
+    );
+  });
+
   it("'taken:<medId>' creates a MedicationIntakeEvent + clears snoozedUntil + acks the callback", async () => {
     const res = await POST(tgRequest(callbackUpdate("taken:med-1")));
     expect(res.status).toBe(200);

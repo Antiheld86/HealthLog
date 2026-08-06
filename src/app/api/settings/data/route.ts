@@ -10,6 +10,10 @@ import {
 import { annotate } from "@/lib/logging/context";
 import { invalidateUserData } from "@/lib/cache/invalidate";
 import {
+  LastManagedGuardianError,
+  protectManagedProfilesDuringDataWipe,
+} from "@/lib/managed-profiles/lifecycle";
+import {
   resolveWipeDelegate,
   USER_RESET,
   wipeDelegateKey,
@@ -66,27 +70,45 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
 
   const userId = user.id;
 
-  const counts = await prisma.$transaction(
-    async (tx) => {
-      const perModel: Record<string, number> = {};
-      for (const model of WIPE_MODELS) {
-        const { count } = await resolveWipeDelegate(tx, model).deleteMany({
-          where: { userId },
-        });
-        if (count > 0) perModel[wipeDelegateKey(model)] = count;
-      }
+  let counts: Record<string, number>;
+  try {
+    counts = await prisma.$transaction(
+      async (tx) => {
+        // This precedes every data delete and holds the managed-record locks
+        // through AccountGrant removal. A queued Guardian egress claim thus
+        // rechecks after this wipe commits instead of sending from a grant
+        // this transaction has already deleted.
+        await protectManagedProfilesDuringDataWipe(tx, userId);
 
-      // The account row survives; the personal data carried on its own columns
-      // does not. Same classification contract as the model list.
-      await tx.user.update({ where: { id: userId }, data: USER_RESET });
+        const perModel: Record<string, number> = {};
+        for (const model of WIPE_MODELS) {
+          const { count } = await resolveWipeDelegate(tx, model).deleteMany({
+            where: { userId },
+          });
+          if (count > 0) perModel[wipeDelegateKey(model)] = count;
+        }
 
-      return perModel;
-    },
-    {
-      timeout: WIPE_TRANSACTION_TIMEOUT_MS,
-      maxWait: WIPE_TRANSACTION_MAX_WAIT_MS,
-    },
-  );
+        // The account row survives; the personal data carried on its own columns
+        // does not. Same classification contract as the model list.
+        await tx.user.update({ where: { id: userId }, data: USER_RESET });
+
+        return perModel;
+      },
+      {
+        timeout: WIPE_TRANSACTION_TIMEOUT_MS,
+        maxWait: WIPE_TRANSACTION_MAX_WAIT_MS,
+      },
+    );
+  } catch (error) {
+    if (error instanceof LastManagedGuardianError) {
+      return apiError(
+        "Add another Guardian or delete the managed profile first",
+        409,
+        { errorCode: "managed_profile.guardian.required" },
+      );
+    }
+    throw error;
+  }
 
   const deletedRows = Object.values(counts).reduce((sum, n) => sum + n, 0);
 

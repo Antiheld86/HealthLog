@@ -162,6 +162,10 @@ export const WIPE_MODELS = [
   "PushSubscription",
   "PushAttempt",
   "NotificationEvent",
+  // A Guardian egress claim belongs to both the record whose data prompted
+  // the notification and the recipient whose channel would receive it. A
+  // wipe by either account must remove it; see WIPE_OWNER_FIELDS below.
+  "NotificationEgressAuthorization",
   "Device",
   "TelegramScheduledDeletion",
   "TelegramPromptContext",
@@ -423,6 +427,7 @@ export const WIPE_OWNER_FIELDS: Readonly<Record<string, readonly string[]>> = {
   // import history.
   MedicationIntakeImportJob: ["recordUserId"],
   NotificationEvent: ["recordUserId"],
+  NotificationEgressAuthorization: ["recordUserId", "recipientUserId"],
   // Both sides. Wiping only the grantor side would leave the account still
   // holding read access to other people's records after it asked for
   // everything of its own to be deleted.
