@@ -31,22 +31,51 @@ import { getEvent } from "@/lib/logging/context";
  *                    the sender contracts surface without contacting
  *                    the upstream provider.
  */
-export interface PushAttemptRecord {
-  userId: string;
+interface PushAttemptRecordBase {
   channel: "APNS" | "WEB_PUSH" | "TELEGRAM" | "NTFY" | "WEBHOOK" | "EMAIL";
   eventType: string;
   result: "ok" | "error" | "skipped";
   reason?: string | null;
 }
 
+/** Existing self-delivery callers map the record and recipient to one account. */
+interface SelfPushAttemptRecord extends PushAttemptRecordBase {
+  userId: string;
+  recordUserId?: never;
+  recipientUserId?: never;
+}
+
+/** Managed delivery always supplies both principals without inference. */
+interface AttributedPushAttemptRecord extends PushAttemptRecordBase {
+  userId?: never;
+  recordUserId: string;
+  recipientUserId: string;
+}
+
+export type PushAttemptRecord =
+  SelfPushAttemptRecord | AttributedPushAttemptRecord;
+
 export function recordPushAttempt(record: PushAttemptRecord): void {
+  const recordUserId = "userId" in record ? record.userId : record.recordUserId;
+  const recipientUserId =
+    "userId" in record ? record.userId : record.recipientUserId;
+
+  if (!recordUserId || !recipientUserId) {
+    getEvent()?.addWarning(
+      "push_attempt_ledger_write_failed invalid_attribution",
+    );
+    return;
+  }
+
   // The `void` here is the doubly-explicit form: we want neither the
   // caller nor a linter to wait on this promise. The `.catch` traps
   // a rejected promise without surfacing it to the caller.
   void prisma.pushAttempt
     .create({
       data: {
-        userId: record.userId,
+        userId: recipientUserId,
+        recordUserId,
+        recipientUserId,
         channel: record.channel,
         eventType: record.eventType,
         result: record.result,

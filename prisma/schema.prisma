@@ -860,7 +860,8 @@ model User {
   // 20 attempts ordered by recency. Daily prune at 03:35 Europe/Berlin
   // retires rows older than 90 days (see `handlePushAttemptCleanup` in
   // `reminder-worker.ts`).
-  pushAttempts                   PushAttempt[]
+  pushAttemptsForRecord          PushAttempt[]                  @relation("PushAttemptRecordUser")
+  pushAttemptsReceived           PushAttempt[]                  @relation("PushAttemptRecipientUser")
   // v1.10.3 — per-(user, day) Strain personal-anchor cache (day-total
   // TRIMP + running EWMA reference) so the nightly Strain engine anchors
   // the 0–100 map to the user's own training load without re-integrating
@@ -5812,17 +5813,26 @@ model ConsentReceipt {
 // classified `web_push_*` reason; Telegram / NTFY likewise mirror
 // their sender-side `SendOutcome.reason`.
 model PushAttempt {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  channel   String // "APNS" | "WEB_PUSH" | "TELEGRAM" | "NTFY"
-  eventType String   @map("event_type") // dispatcher event-type string
-  result    String // "ok" | "error" | "skipped"
-  reason    String? // sender-side reason on error/skip; null on ok
-  createdAt DateTime @default(now()) @map("created_at")
+  id              String   @id @default(cuid())
+  /// Legacy recipient mirror. Migration 0298 preserves established writers
+  /// while the database trigger requires it to equal `recipientUserId`.
+  userId          String   @map("user_id")
+  /// The health-record subject. This supplies calculation context and content.
+  recordUserId    String?  @map("record_user_id")
+  /// The account whose channel, preferences, and locale receive the delivery.
+  recipientUserId String?  @map("recipient_user_id")
+  channel         String // "APNS" | "WEB_PUSH" | "TELEGRAM" | "NTFY"
+  eventType       String   @map("event_type") // dispatcher event-type string
+  result          String // "ok" | "error" | "skipped"
+  reason          String? // sender-side reason on error/skip; null on ok
+  createdAt       DateTime @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recordUser    User? @relation("PushAttemptRecordUser", fields: [recordUserId], references: [id], onDelete: Cascade)
+  recipientUser User? @relation("PushAttemptRecipientUser", fields: [recipientUserId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt(sort: Desc)])
+  @@index([recordUserId, createdAt(sort: Desc)])
+  @@index([recipientUserId, createdAt(sort: Desc)])
   @@map("push_attempts")
 }
 

@@ -5,12 +5,13 @@ import { recordPushAttempt } from "@/lib/notifications/senders/push-attempt-reco
 
 let sequence = 0;
 
-async function createUser(label: string) {
+async function createUser(label: string, managed = false) {
   const suffix = sequence++;
   return getPrismaClient().user.create({
     data: {
       username: `${label}-${suffix}`,
       email: `${label}-${suffix}@example.test`,
+      managedProfileAt: managed ? new Date() : null,
     },
   });
 }
@@ -21,7 +22,7 @@ beforeEach(async () => {
 
 describe("notification attribution (real Postgres)", () => {
   it("persistence retains distinct record and recipient principals", async () => {
-    const recordUser = await createUser("record");
+    const recordUser = await createUser("record", true);
     const recipientUser = await createUser("recipient");
 
     recordPushAttempt({
