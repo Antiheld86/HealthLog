@@ -9585,7 +9585,8 @@
       "errorFailed": "The invitation could not be sent. Please try again.",
       "errorScope": "Those sections cannot be shared like that. Pick at least one section, or share the entire record.",
       "errorManageBrowserOnly": "Manage access can only be offered in a browser, because it asks for your second factor.",
-      "errorStepUp": "Confirm your second factor, then try again."
+      "errorStepUp": "Confirm your second factor, then try again.",
+      "errorOffline": "That did not reach the server. Your invitation is still here — check your connection and try again."
     },
     "given": {
       "title": "Who can open my record",
@@ -9742,6 +9743,21 @@
         "label": "Documents",
         "detail": "Everything stored in the document vault."
       }
+    },
+    "actionError": {
+      "retry": "Try again",
+      "offline": "That did not reach the server. Nothing has changed — check your connection and try again.",
+      "rateLimited": "Too many attempts in a row. Wait a minute and try again.",
+      "acceptExpired": "That invitation has lapsed. Ask for a new one.",
+      "acceptWithdrawn": "That invitation was withdrawn.",
+      "acceptNotPending": "That invitation has already been accepted.",
+      "acceptNotFound": "That invitation is no longer there.",
+      "acceptFailed": "The invitation could not be accepted.",
+      "lastGuardian": "This is the only person looking after that profile, so this access cannot end yet. Add another guardian first, or delete the profile.",
+      "alreadyEnded": "That access has already ended.",
+      "notFound": "That access is no longer there.",
+      "revokeFailed": "The access could not be ended.",
+      "renounceFailed": "The access could not be handed back."
     }
   }
 }

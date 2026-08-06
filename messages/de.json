@@ -9585,7 +9585,8 @@
       "errorFailed": "Die Einladung konnte nicht gesendet werden. Bitte noch einmal versuchen.",
       "errorScope": "So lassen sich diese Bereiche nicht teilen. Wähle mindestens einen Bereich aus oder teile die gesamte Akte.",
       "errorManageBrowserOnly": "Verwaltenden Zugriff kannst du nur im Browser vergeben, weil dabei dein zweiter Faktor abgefragt wird.",
-      "errorStepUp": "Bestätige deinen zweiten Faktor und versuche es erneut."
+      "errorStepUp": "Bestätige deinen zweiten Faktor und versuche es erneut.",
+      "errorOffline": "Das hat den Server nicht erreicht. Deine Einladung steht noch hier — prüfe deine Verbindung und versuche es erneut."
     },
     "given": {
       "title": "Wer meine Akte öffnen kann",
@@ -9742,6 +9743,21 @@
         "label": "Dokumente",
         "detail": "Alles, was im Dokumententresor liegt."
       }
+    },
+    "actionError": {
+      "retry": "Erneut versuchen",
+      "offline": "Das hat den Server nicht erreicht. Es hat sich nichts geändert — prüfe deine Verbindung und versuche es erneut.",
+      "rateLimited": "Zu viele Versuche hintereinander. Warte eine Minute und versuche es erneut.",
+      "acceptExpired": "Diese Einladung ist abgelaufen. Bitte um eine neue.",
+      "acceptWithdrawn": "Diese Einladung wurde zurückgezogen.",
+      "acceptNotPending": "Diese Einladung wurde bereits angenommen.",
+      "acceptNotFound": "Diese Einladung gibt es nicht mehr.",
+      "acceptFailed": "Die Einladung konnte nicht angenommen werden.",
+      "lastGuardian": "Diese Person kümmert sich als Einzige um dieses Profil, deshalb kann der Zugriff noch nicht enden. Füge zuerst eine weitere betreuende Person hinzu oder lösche das Profil.",
+      "alreadyEnded": "Dieser Zugriff ist bereits beendet.",
+      "notFound": "Diesen Zugriff gibt es nicht mehr.",
+      "revokeFailed": "Der Zugriff konnte nicht beendet werden.",
+      "renounceFailed": "Der Zugriff konnte nicht zurückgegeben werden."
     }
   }
 }

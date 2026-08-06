@@ -9585,7 +9585,8 @@
       "errorFailed": "Nie udało się wysłać zaproszenia. Spróbuj ponownie.",
       "errorScope": "Tych sekcji nie da się udostępnić w ten sposób. Wybierz co najmniej jedną sekcję albo udostępnij całą kartotekę.",
       "errorManageBrowserOnly": "Dostęp zarządzający można przyznać tylko w przeglądarce, ponieważ wymaga drugiego składnika logowania.",
-      "errorStepUp": "Potwierdź drugi składnik logowania i spróbuj ponownie."
+      "errorStepUp": "Potwierdź drugi składnik logowania i spróbuj ponownie.",
+      "errorOffline": "To nie dotarło do serwera. Twoje zaproszenie nadal tu jest — sprawdź połączenie i spróbuj ponownie."
     },
     "given": {
       "title": "Kto może otworzyć moją kartę",
@@ -9742,6 +9743,21 @@
         "label": "Dokumenty",
         "detail": "Wszystko, co jest przechowywane w sejfie dokumentów."
       }
+    },
+    "actionError": {
+      "retry": "Spróbuj ponownie",
+      "offline": "To nie dotarło do serwera. Nic się nie zmieniło — sprawdź połączenie i spróbuj ponownie.",
+      "rateLimited": "Zbyt wiele prób pod rząd. Odczekaj minutę i spróbuj ponownie.",
+      "acceptExpired": "To zaproszenie wygasło. Poproś o nowe.",
+      "acceptWithdrawn": "To zaproszenie zostało wycofane.",
+      "acceptNotPending": "To zaproszenie zostało już przyjęte.",
+      "acceptNotFound": "Tego zaproszenia już nie ma.",
+      "acceptFailed": "Nie udało się przyjąć zaproszenia.",
+      "lastGuardian": "Ta osoba jako jedyna opiekuje się tym profilem, więc ten dostęp nie może się jeszcze zakończyć. Dodaj najpierw kolejną osobę opiekującą się profilem albo usuń profil.",
+      "alreadyEnded": "Ten dostęp już się zakończył.",
+      "notFound": "Tego dostępu już nie ma.",
+      "revokeFailed": "Nie udało się zakończyć dostępu.",
+      "renounceFailed": "Nie udało się zwrócić dostępu."
     }
   }
 }

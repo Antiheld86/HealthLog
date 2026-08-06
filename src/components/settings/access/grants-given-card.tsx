@@ -2,6 +2,10 @@
 
 import { Loader2, Users } from "lucide-react";
 
+import {
+  GrantActionAlert,
+  grantActionErrorKey,
+} from "@/components/settings/access/grant-action-error";
 import { GrantRowItem } from "@/components/settings/access/grant-row";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
@@ -75,6 +79,7 @@ export function GrantsGivenCard() {
                 key={grant.id}
                 grant={grant}
                 side="given"
+                notice={renderFailure(grant)}
                 actions={renderRevoke(grant)}
               />
             ))}
@@ -83,6 +88,28 @@ export function GrantsGivenCard() {
       </div>
     </SettingsCard>
   );
+
+  /**
+   * A refused revoke, on the row it was refused for.
+   *
+   * The confirm dialog has already closed by the time the server answers, so
+   * without this a refusal is invisible: the list looks the same, and the one
+   * refusal that matters — a managed profile that would be left with nobody
+   * looking after it — arrived as silence. Read off the mutation rather than
+   * copied into local state, so `variables` is what decides which row wears
+   * it.
+   */
+  function renderFailure(grant: GrantRow) {
+    if (!revoke.isError || revoke.variables !== grant.id) return null;
+    return (
+      <GrantActionAlert
+        grantId={grant.id}
+        message={t(grantActionErrorKey(revoke.error, "revoke"))}
+        retrying={revoke.isPending}
+        onRetry={() => revoke.mutate(grant.id)}
+      />
+    );
+  }
 
   function renderRevoke(grant: GrantRow) {
     // Only a live grant can be ended. An already-ended row keeps its history

@@ -9585,7 +9585,8 @@
       "errorFailed": "L'invitation n'a pas pu être envoyée. Veuillez réessayer.",
       "errorScope": "Ces rubriques ne peuvent pas être partagées ainsi. Choisissez au moins une rubrique, ou partagez le dossier complet.",
       "errorManageBrowserOnly": "Un accès de gestion ne peut être proposé que depuis un navigateur, car il demande votre deuxième facteur.",
-      "errorStepUp": "Confirmez votre deuxième facteur, puis réessayez."
+      "errorStepUp": "Confirmez votre deuxième facteur, puis réessayez.",
+      "errorOffline": "Cela n'a pas atteint le serveur. Votre invitation est toujours là — vérifiez votre connexion et réessayez."
     },
     "given": {
       "title": "Qui peut ouvrir mon dossier",
@@ -9742,6 +9743,21 @@
         "label": "Documents",
         "detail": "Tout ce qui est conservé dans le coffre à documents."
       }
+    },
+    "actionError": {
+      "retry": "Réessayer",
+      "offline": "Cela n'a pas atteint le serveur. Rien n'a changé — vérifiez votre connexion et réessayez.",
+      "rateLimited": "Trop de tentatives d'affilée. Attendez une minute et réessayez.",
+      "acceptExpired": "Cette invitation a expiré. Demandez-en une nouvelle.",
+      "acceptWithdrawn": "Cette invitation a été retirée.",
+      "acceptNotPending": "Cette invitation a déjà été acceptée.",
+      "acceptNotFound": "Cette invitation n'existe plus.",
+      "acceptFailed": "L'invitation n'a pas pu être acceptée.",
+      "lastGuardian": "Cette personne est la seule à s'occuper de ce profil, donc cet accès ne peut pas encore prendre fin. Ajoutez d'abord une autre personne responsable, ou supprimez le profil.",
+      "alreadyEnded": "Cet accès a déjà pris fin.",
+      "notFound": "Cet accès n'existe plus.",
+      "revokeFailed": "L'accès n'a pas pu être terminé.",
+      "renounceFailed": "L'accès n'a pas pu être rendu."
     }
   }
 }

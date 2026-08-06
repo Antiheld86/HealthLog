@@ -9585,7 +9585,8 @@
       "errorFailed": "No se pudo enviar la invitación. Inténtalo de nuevo.",
       "errorScope": "Esas secciones no se pueden compartir así. Elige al menos una sección o comparte todo el historial.",
       "errorManageBrowserOnly": "El acceso de gestión solo se puede ofrecer desde un navegador, porque pide tu segundo factor.",
-      "errorStepUp": "Confirma tu segundo factor y vuelve a intentarlo."
+      "errorStepUp": "Confirma tu segundo factor y vuelve a intentarlo.",
+      "errorOffline": "Esto no llegó al servidor. Tu invitación sigue aquí: comprueba tu conexión e inténtalo de nuevo."
     },
     "given": {
       "title": "Quién puede abrir mi historial",
@@ -9742,6 +9743,21 @@
         "label": "Documentos",
         "detail": "Todo lo que está guardado en el archivo de documentos."
       }
+    },
+    "actionError": {
+      "retry": "Inténtalo de nuevo",
+      "offline": "Esto no llegó al servidor. No ha cambiado nada: comprueba tu conexión e inténtalo de nuevo.",
+      "rateLimited": "Demasiados intentos seguidos. Espera un minuto e inténtalo de nuevo.",
+      "acceptExpired": "Esa invitación ha caducado. Pide una nueva.",
+      "acceptWithdrawn": "Esa invitación fue retirada.",
+      "acceptNotPending": "Esa invitación ya se aceptó.",
+      "acceptNotFound": "Esa invitación ya no existe.",
+      "acceptFailed": "No se pudo aceptar la invitación.",
+      "lastGuardian": "Esta es la única persona que cuida de ese perfil, así que este acceso todavía no puede terminar. Añade otra persona responsable primero, o elimina el perfil.",
+      "alreadyEnded": "Ese acceso ya ha terminado.",
+      "notFound": "Ese acceso ya no existe.",
+      "revokeFailed": "No se pudo terminar el acceso.",
+      "renounceFailed": "No se pudo devolver el acceso."
     }
   }
 }

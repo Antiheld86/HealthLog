@@ -9585,7 +9585,8 @@
       "errorFailed": "Non è stato possibile inviare l'invito. Riprova.",
       "errorScope": "Queste sezioni non si possono condividere così. Scegli almeno una sezione oppure condividi l'intera cartella.",
       "errorManageBrowserOnly": "L'accesso di gestione si può offrire solo da un browser, perché richiede il tuo secondo fattore.",
-      "errorStepUp": "Conferma il tuo secondo fattore e riprova."
+      "errorStepUp": "Conferma il tuo secondo fattore e riprova.",
+      "errorOffline": "La richiesta non ha raggiunto il server. Il tuo invito è ancora qui: controlla la connessione e riprova."
     },
     "given": {
       "title": "Chi può aprire la mia cartella",
@@ -9742,6 +9743,21 @@
         "label": "Documenti",
         "detail": "Tutto ciò che è conservato nell'archivio documenti."
       }
+    },
+    "actionError": {
+      "retry": "Riprova",
+      "offline": "La richiesta non ha raggiunto il server. Non è cambiato nulla: controlla la connessione e riprova.",
+      "rateLimited": "Troppi tentativi di fila. Aspetta un minuto e riprova.",
+      "acceptExpired": "Questo invito è scaduto. Chiedine uno nuovo.",
+      "acceptWithdrawn": "Questo invito è stato ritirato.",
+      "acceptNotPending": "Questo invito è già stato accettato.",
+      "acceptNotFound": "Questo invito non esiste più.",
+      "acceptFailed": "Non è stato possibile accettare l'invito.",
+      "lastGuardian": "Questa è l'unica persona che si occupa di quel profilo, quindi questo accesso non può ancora finire. Aggiungi prima un'altra persona responsabile, oppure elimina il profilo.",
+      "alreadyEnded": "Questo accesso è già terminato.",
+      "notFound": "Questo accesso non esiste più.",
+      "revokeFailed": "Non è stato possibile terminare l'accesso.",
+      "renounceFailed": "Non è stato possibile restituire l'accesso."
     }
   }
 }
