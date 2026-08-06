@@ -4,8 +4,6 @@ import { getPrismaClient, truncateAllTables } from "./setup";
 import { resolveNotificationDeliveryIdentity } from "@/lib/notifications/delivery-identity";
 import {
   claimNotificationEvent,
-  hasReminderDedupAnchor,
-  writeReminderDedupAnchor,
 } from "@/lib/notifications/reminder-dedup";
 import { recordPushAttempt } from "@/lib/notifications/senders/push-attempt-record";
 
@@ -115,26 +113,28 @@ describe("notification attribution (real Postgres)", () => {
     const client = getPrismaClient();
     const now = new Date();
 
-    await writeReminderDedupAnchor(client, {
-      userId: recordUser.id,
-      eventType: "MEDICATION_REMINDER",
-      reason: "med:slot",
-    });
-
     await expect(
-      hasReminderDedupAnchor(client, {
-        userId: recordUser.id,
+      claimNotificationEvent(client, {
+        recordUserId: recordUser.id,
         eventType: "MEDICATION_REMINDER",
-        reason: "med:slot",
-        now,
+        dedupKey: "med:slot",
+        since: new Date(now.getTime() - 48 * 60 * 60 * 1000),
       }),
     ).resolves.toBe(true);
-    expect(await client.pushAttempt.count()).toBe(0);
+    await expect(
+      claimNotificationEvent(client, {
+        recordUserId: recordUser.id,
+        eventType: "MEDICATION_REMINDER",
+        dedupKey: "med:slot",
+        since: new Date(now.getTime() - 48 * 60 * 60 * 1000),
+      }),
+    ).resolves.toBe(false);
 
     const event = await client.notificationEvent.findFirstOrThrow({
       where: { recordUserId: recordUser.id, dedupKey: "med:slot" },
       select: { id: true },
     });
+    expect(await client.pushAttempt.count()).toBe(0);
     await client.user.delete({ where: { id: recordUser.id } });
     expect(
       await client.notificationEvent.findUnique({ where: { id: event.id } }),

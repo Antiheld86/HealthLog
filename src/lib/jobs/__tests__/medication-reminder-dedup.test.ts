@@ -34,6 +34,8 @@ interface FakeNotificationEvent {
 const notificationEvents: FakeNotificationEvent[] = [];
 
 const prismaMock = {
+  $queryRaw: vi.fn().mockResolvedValue([{ locked: 1 }]),
+  $transaction: vi.fn(),
   telegramScheduledDeletion: {
     findMany: vi.fn().mockResolvedValue([]),
     deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
@@ -188,6 +190,7 @@ async function tickAt(iso: string): Promise<void> {
 beforeEach(() => {
   vi.clearAllMocks();
   notificationEvents.length = 0;
+  prismaMock.$transaction.mockImplementation(async (run) => run(prismaMock));
   vi.useFakeTimers();
   prismaMock.telegramScheduledDeletion.findMany.mockResolvedValue([]);
   prismaMock.telegramPromptContext.deleteMany.mockResolvedValue({ count: 0 });

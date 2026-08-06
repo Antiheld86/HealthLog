@@ -20,6 +20,7 @@
 import { prisma } from "@/lib/db";
 import { getEvent } from "@/lib/logging/context";
 import { dispatchLocalisedNotification } from "@/lib/notifications/dispatch-localised";
+import { claimNotificationEvent } from "@/lib/notifications/reminder-dedup";
 import { convertGlucose, type GlucoseUnit } from "@/lib/glucose";
 import {
   GLUCOSE_HYPO,
@@ -123,26 +124,13 @@ export async function notifySafetyFloor(input: {
 
     const reason = `${LEDGER_REASON_PREFIX}${decision.reason}`;
     const since = new Date(Date.now() - DEDUPE_WINDOW_MS);
-    const prior = await prisma.notificationEvent.findFirst({
-      where: {
-        recordUserId: userId,
-        eventType: "SYSTEM_ALERT",
-        dedupKey: reason,
-        createdAt: { gte: since },
-      },
-      select: { id: true },
+    const claimed = await claimNotificationEvent(prisma, {
+      recordUserId: userId,
+      eventType: "SYSTEM_ALERT",
+      dedupKey: reason,
+      since,
     });
-    if (prior) return;
-
-    // Stamp the record event before dispatching so a concurrent confirm
-    // cannot double-fire. Delivery attempts remain channel diagnostics.
-    await prisma.notificationEvent.create({
-      data: {
-        recordUserId: userId,
-        eventType: "SYSTEM_ALERT",
-        dedupKey: reason,
-      },
-    });
+    if (!claimed) return;
 
     const { titleKey, messageKey } = copyKeysFor(decision);
     await dispatchLocalisedNotification({

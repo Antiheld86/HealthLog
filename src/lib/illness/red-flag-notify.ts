@@ -22,6 +22,7 @@
 import { prisma } from "@/lib/db";
 import { getEvent } from "@/lib/logging/context";
 import { dispatchLocalisedNotification } from "@/lib/notifications/dispatch-localised";
+import { claimNotificationEvent } from "@/lib/notifications/reminder-dedup";
 import type { IllnessRedFlag } from "@/lib/illness/correlation";
 
 /** One escalation per episode per this window. */
@@ -52,20 +53,18 @@ export async function notifyIllnessRedFlag(input: {
     });
     if (user?.managedProfileAt) return;
 
-    // Dedupe: skip when an escalation for THIS episode already landed in the
-    // record event stream within the window.
+    // Claim this episode's record event before provider egress. The claim
+    // serializes concurrent readers without holding a transaction open for
+    // delivery itself.
     const reason = `${LEDGER_REASON_PREFIX}${episodeId}`;
     const since = new Date(Date.now() - DEDUPE_WINDOW_MS);
-    const prior = await prisma.notificationEvent.findFirst({
-      where: {
-        recordUserId: userId,
-        eventType: "SYSTEM_ALERT",
-        dedupKey: reason,
-        createdAt: { gte: since },
-      },
-      select: { id: true },
+    const claimed = await claimNotificationEvent(prisma, {
+      recordUserId: userId,
+      eventType: "SYSTEM_ALERT",
+      dedupKey: reason,
+      since,
     });
-    if (prior) return;
+    if (!claimed) return;
 
     // Prefer the most clinically actionable reason for the body. Both copy
     // keys already exist in every locale bundle (i18n integrity guarantee).
@@ -73,16 +72,6 @@ export async function notifyIllnessRedFlag(input: {
     const messageKey = fever
       ? "illness.correlation.redFlagFever"
       : "illness.correlation.redFlagSpo2";
-
-    // Stamp the record event before dispatching so a slow/duplicate concurrent
-    // read cannot double-fire. Delivery attempts remain channel diagnostics.
-    await prisma.notificationEvent.create({
-      data: {
-        recordUserId: userId,
-        eventType: "SYSTEM_ALERT",
-        dedupKey: reason,
-      },
-    });
 
     await dispatchLocalisedNotification({
       userId,
