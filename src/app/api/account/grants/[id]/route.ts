@@ -34,6 +34,7 @@ import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
 import { GRANT_PARTY_SELECT, toGrantView } from "@/lib/sharing/grant-view";
+import { LastManagedGuardianError } from "@/lib/managed-profiles/lifecycle";
 import { GrantError, revokeGrantAndClearSwitch } from "@/lib/sharing/grants";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -75,6 +76,11 @@ export const DELETE = apiHandler(
       });
     } catch (err) {
       if (err instanceof GrantError) return revokeErrorResponse(err);
+      if (err instanceof LastManagedGuardianError) {
+        return apiError("Add another Guardian before ending this access", 409, {
+          errorCode: "managed_profile.guardian.required",
+        });
+      }
       throw err;
     }
   },

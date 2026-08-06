@@ -16,11 +16,10 @@
 --
 -- A timestamp rather than a boolean, deliberately. It says since when, which
 -- the activity trail needs to be readable across the transition, and clearing
--- it is the emancipation act: the day the person takes the record over,
--- credentials attach (`email` and `password_hash` are already nullable, so
--- nothing here has to change for that) and this goes back to NULL. The grants
--- survive untouched — the handover changes who holds the revoke button, not
--- which rows exist.
+-- it leaves a future-compatible NULL state. This migration deliberately adds
+-- no transition route or credential attachment flow. If a later handover is
+-- designed, `email` and `password_hash` are already nullable and the grants
+-- can survive untouched while the product defines who holds the revoke button.
 --
 -- No index. The column is read by primary key, on a row the request already
 -- loaded, and the one enumeration that scans for marked rows (the reminder

@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/db";
 import { auditLog } from "@/lib/auth/audit";
 import { apiSuccess, apiError, getClientIp } from "@/lib/api-response";
-import { destroyAllSessions } from "@/lib/auth/session";
 import { NextRequest } from "next/server";
 import {
   apiHandler,
@@ -9,6 +8,10 @@ import {
   MFA_STEP_UP_MAX_AGE_SECONDS,
 } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
+import {
+  deleteGuardianAccountWithLifecycle,
+  LastManagedGuardianError,
+} from "@/lib/managed-profiles/lifecycle";
 
 export const dynamic = "force-dynamic";
 
@@ -54,27 +57,41 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
   const userId = user.id;
   const username = user.username;
 
-  // Log BEFORE deletion. The audit row's userId is SetNull post-cascade
-  // (per schema), but we then immediately purge it below for GDPR Art. 17
-  // erasure completeness — see comment further down.
-  await auditLog("user.account.delete", {
-    userId,
-    ipAddress: getClientIp(request),
-    details: { username },
-  });
+  try {
+    await deleteGuardianAccountWithLifecycle(userId, async (tx) => {
+      // The invariant has now passed, so this success event cannot survive a
+      // refusal. It is purged with the rest of the account's audit history.
+      await auditLog("user.account.delete", {
+        userId,
+        ipAddress: getClientIp(request),
+        details: { username },
+        client: tx,
+      });
 
-  // Destroy all sessions first
-  await destroyAllSessions(userId);
+      // Destroy all sessions before the user row goes, inside the same record
+      // lifecycle transaction so a refusal leaves every account state intact.
+      await tx.session.deleteMany({ where: { userId } });
 
-  // Audit V3 NEW-V3-2 / GDPR Art. 17 fix: AuditLog rows have
-  // `onDelete: SetNull` in the schema, which keeps PII (IP addresses, login
-  // city geo) attached to the record after the user is deleted. We explicitly
-  // purge them inside the same logical operation so account deletion is
-  // genuinely complete erasure.
-  await prisma.auditLog.deleteMany({ where: { userId } });
+      // Audit V3 NEW-V3-2 / GDPR Art. 17 fix: AuditLog rows have
+      // `onDelete: SetNull` in the schema, which keeps PII (IP addresses, login
+      // city geo) attached to the record after the user is deleted. We explicitly
+      // purge them inside the same logical operation so account deletion is
+      // genuinely complete erasure.
+      await tx.auditLog.deleteMany({ where: { userId } });
 
-  // Delete user — all other related data is removed via onDelete: Cascade
-  await prisma.user.delete({ where: { id: userId } });
+      // Delete user — all other related data is removed via onDelete: Cascade.
+      await tx.user.delete({ where: { id: userId } });
+    });
+  } catch (error) {
+    if (error instanceof LastManagedGuardianError) {
+      return apiError(
+        "Add another Guardian or delete the managed profile first",
+        409,
+        { errorCode: "managed_profile.guardian.required" },
+      );
+    }
+    throw error;
+  }
 
   annotate({
     action: { name: "settings.account.delete" },
