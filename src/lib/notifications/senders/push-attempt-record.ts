@@ -67,9 +67,30 @@ export function recordPushAttemptForPayload(
   legacyUserId: string,
   record: PushAttemptRecordBase & { userId?: string },
 ): void {
+  const hasRecordUserId = payload.recordUserId !== undefined;
+  const hasRecipientUserId = payload.recipientUserId !== undefined;
+
+  if (hasRecordUserId !== hasRecipientUserId) {
+    getEvent()?.addWarning(
+      "push_attempt_ledger_write_failed invalid_attribution",
+    );
+    return;
+  }
+
+  if (!hasRecordUserId) {
+    recordPushAttempt({
+      userId: legacyUserId,
+      channel: record.channel,
+      eventType: record.eventType,
+      result: record.result,
+      reason: record.reason,
+    });
+    return;
+  }
+
   recordPushAttempt({
-    recordUserId: payload.recordUserId ?? legacyUserId,
-    recipientUserId: payload.recipientUserId ?? legacyUserId,
+    recordUserId: payload.recordUserId!,
+    recipientUserId: payload.recipientUserId!,
     channel: record.channel,
     eventType: record.eventType,
     result: record.result,
