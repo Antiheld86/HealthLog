@@ -66,7 +66,7 @@ export function AccountSwitcherMenuItems() {
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent
           data-slot="account-switcher-menu"
-          className="w-60"
+          className="max-h-(--radix-dropdown-menu-content-available-height) w-60 overflow-x-hidden overflow-y-auto"
         >
           <DropdownMenuItem
             data-slot="account-switcher-own"
