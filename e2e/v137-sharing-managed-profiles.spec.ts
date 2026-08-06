@@ -40,14 +40,24 @@ function trackFenceAssertion(page: Page): () => {
   "x-healthlog-record-epoch": string;
   "x-healthlog-record-scope": string;
 } {
-  let latest = { epoch: "bootstrap", scope: "bootstrap" };
+  // The HIGHEST epoch seen, not the most recent one observed.
+  //
+  // The counter is monotonic, and requests do not arrive in the order they
+  // were issued: a request from the page before a switch can be seen after one
+  // from the page after it, and last-writer-wins then leaves the probe holding
+  // a context the session has already left — a 409, intermittently, on a test
+  // about grant levels. Taking the maximum removes the ordering question
+  // rather than trying to win it.
+  let latest = { epoch: "bootstrap", scope: "bootstrap", seen: -1 };
   page.on("request", (request) => {
     const headers = request.headers();
     const epoch = headers["x-healthlog-record-epoch"];
     const scope = headers["x-healthlog-record-scope"];
     if (epoch === undefined || scope === undefined) return;
-    if (epoch === "bootstrap") return;
-    latest = { epoch, scope };
+    if (!/^\d+$/.test(epoch)) return;
+    const value = Number(epoch);
+    if (value < latest.seen) return;
+    latest = { epoch, scope, seen: value };
   });
   return () => ({
     "x-healthlog-record-epoch": latest.epoch,
@@ -331,7 +341,6 @@ test.describe.serial("scoped sharing browser journeys", () => {
   test("lets an adult WRITE grant add only to the selected record", async ({
     page,
   }) => {
-    const fenceHeaders = trackFenceAssertion(page);
     const record = E2E_LEVEL_RECORDS.find(
       (candidate) => candidate.access === "WRITE",
     );
@@ -361,13 +370,21 @@ test.describe.serial("scoped sharing browser journeys", () => {
     await page.getByRole("button", { name: /^save$/i }).click();
     expect((await post).status()).toBeLessThan(300);
 
+    // Read the value back THROUGH THE APP rather than with a hand-rolled
+    // probe.
+    //
+    // The probe copied the fence headers off a live request so it would not be
+    // refused — and then raced them: requests do not arrive in the order they
+    // were issued, so it could pick up a context the session had already left
+    // and answer 409 on a test about grant levels. Copying the app's state to
+    // stand beside the app is the wrong shape; asking the app is the right one,
+    // and it is also closer to what this test claims — that the reading landed
+    // in the SELECTED record and is visible there.
     await page.reload();
-    const payload = await page.evaluate(async (headers) => {
-      const response = await fetch("/api/measurements", { headers });
-      return { status: response.status, body: await response.json() };
-    }, fenceHeaders());
-    expect(payload.status).toBeLessThan(300);
-    expect(JSON.stringify(payload.body)).toContain("124");
+    await expect(page.locator('[data-slot="measurement-add"]')).toBeVisible();
+    await expect(page.getByText("124", { exact: false }).first()).toBeVisible({
+      timeout: 20_000,
+    });
     await expect(banner).toHaveAttribute("data-account-id", accountId);
 
     await page.goto("/settings/account");

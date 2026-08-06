@@ -117,13 +117,18 @@ export default defineConfig({
       testIgnore: [
         "v137-sharing-managed-profiles.spec.ts",
         "v137-sharing-managed-profiles-a11y.spec.ts",
-        // v1.37.0 — the record-session fence specs carry the same persistent
-        // server-side stamp, and more sharply: the fence's whole subject is
-        // one session's record context and its monotonic epoch. Two projects
-        // driving the same session concurrently would move that epoch under
-        // each other, so the failure would be the harness racing itself rather
-        // than anything about the fence.
+        // v1.37.0 — every spec that MOVES a session's record selector runs in
+        // exactly one project.
+        //
+        // Each of these now has its own login and its own session row (see
+        // `FENCE_STORAGE_STATE_PATH` in `e2e/setup/global-setup.ts`), which is
+        // what lets them run beside each other at any worker count. A second
+        // PROJECT is the one thing a separate jar cannot fix: it would drive
+        // the very same row from two browsers at once, moving the epoch under
+        // itself. The scoped-sharing journeys above are excluded for the same
+        // reason, one release earlier.
         "v137-record-session-fence.spec.ts",
+        "v137-sharing-cross-tab-session.spec.ts",
         // Runs only in the service-worker project.
         "v137-record-session-fence-offline.spec.ts",
       ],

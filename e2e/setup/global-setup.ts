@@ -170,6 +170,37 @@ export const SCOPE_A11Y_STORAGE_STATE_PATH = resolve(
   "e2e/setup/storageStateScopeA11y.json",
 );
 
+/**
+ * v1.37.0 — one jar per SWITCHING spec, for the reason spelled out at
+ * `DELEGATE_STORAGE_STATE_PATH` above and now applied to the scope delegate as
+ * well.
+ *
+ * The record-session fence made the cost visible. Four specs moved the same
+ * session row's record selector — the two fence specs, the cross-tab journey
+ * and the scoped-sharing journey — and the fence's whole subject is that row's
+ * context and its monotonic epoch. On one worker they never overlapped; on two
+ * they moved the epoch under each other, and the failure was the harness racing
+ * itself. Passing only at `--workers=1` is not a passing suite: CI runs two.
+ *
+ * A separate LOGIN, not a separate account: the selector lives on the session
+ * row, so two jars for one account are two independent contexts. The grants,
+ * the fixtures and the assertions all stay exactly as they were.
+ */
+export const FENCE_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateFence.json",
+);
+
+export const FENCE_OFFLINE_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateFenceOffline.json",
+);
+
+export const CROSS_TAB_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateCrossTab.json",
+);
+
 async function hashPassword(password: string): Promise<string> {
   return hash(password, {
     memoryCost: 19456,
@@ -535,6 +566,29 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
       );
     }
 
+    // v1.37.0 — clear what the browser suite WRITES, so the suite can be run
+    // twice.
+    //
+    // The adult-WRITE journey saves a blood-pressure reading through the real
+    // form, and the form stamps a minute-rounded `measuredAt`. Two runs inside
+    // the same minute therefore collide on the natural key
+    // (user, type, measured_at, source) — the second save is a duplicate, and
+    // the journey asserts its POST succeeded. It has always been that way; it
+    // used to surface as a 500 and now surfaces as the 409 the route learned to
+    // give, which is what made it legible. A suite that cannot be re-run is a
+    // suite whose green is a statement about the clock.
+    //
+    // Only rows the journey itself creates: MANUAL, and carrying no
+    // `external_id`, which is what distinguishes them from the seeded markers
+    // above.
+    await pool.query(
+      `DELETE FROM measurements
+        WHERE user_id = (SELECT id FROM users WHERE username = $1)
+          AND source = 'MANUAL'
+          AND external_id IS NULL`,
+      ["e2e-level-write"],
+    );
+
     // Console (instead of structured logging) is intentional here —
     // global-setup runs outside the app's logging context, and the
     // line is useful when debugging a CI failure where the seed didn't
@@ -542,42 +596,58 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     console.log(
       `[e2e/global-setup] seeded user ${E2E_USER.username} (${E2E_USER.email})`,
     );
+    // Log the fixture accounts in here and persist their cookie jars so specs
+    // can reuse them via `test.use({ storageState })`. This is the documented
+    // Playwright pattern (`docs/auth.md`) and the only way to avoid the
+    // per-spec login + rate-limit dance.
+    const baseURL =
+      config.projects[0]?.use.baseURL ??
+      process.env.E2E_BASE_URL ??
+      "http://localhost:3000";
+
+    /**
+     * Log one account in, clearing the login bucket first.
+     *
+     * The ceiling is FIVE attempts per IP per quarter-hour and this setup now
+     * signs in eight times, so clearing once before the batch is no longer
+     * enough — the sixth would be answered by the fixture's own 429 rather
+     * than by the product. Only the auth surfaces' buckets are touched, and
+     * only between logins this setup is itself performing.
+     */
+    const capture = async (
+      account: { username: string; password: string },
+      path: string,
+    ): Promise<void> => {
+      await pool.query(`DELETE FROM rate_limits WHERE key LIKE 'auth:%'`);
+      await captureAuthState(baseURL, account, path);
+    };
+
+    // The shared jar every authenticated spec reads.
+    await capture(E2E_USER, STORAGE_STATE_PATH);
+
+    // v1.36.0 — the owner's jar. The sharing journey needs both sides of a
+    // grant signed in at once, and the login endpoint is IP-rate-limited, so
+    // the owner is logged in here rather than inside the spec.
+    await capture(E2E_OWNER, OWNER_STORAGE_STATE_PATH);
+
+    // The delegate's own jar for that journey. Same account as the shared one,
+    // deliberately a different session row — see DELEGATE_STORAGE_STATE_PATH
+    // for what happens when the journey switches the shared row instead.
+    await capture(E2E_USER, DELEGATE_STORAGE_STATE_PATH);
+
+    await capture(E2E_SCOPE_DELEGATE, SCOPE_DELEGATE_STORAGE_STATE_PATH);
+    await capture(E2E_SCOPE_DELEGATE, SCOPE_A11Y_STORAGE_STATE_PATH);
+
+    // v1.37.0 — one jar per switching spec. See the block comment on
+    // FENCE_STORAGE_STATE_PATH: these three used to share the scope delegate's
+    // row with the scoped-sharing journey, which is why the suite only passed
+    // on a single worker.
+    await capture(E2E_SCOPE_DELEGATE, FENCE_STORAGE_STATE_PATH);
+    await capture(E2E_SCOPE_DELEGATE, FENCE_OFFLINE_STORAGE_STATE_PATH);
+    await capture(E2E_SCOPE_DELEGATE, CROSS_TAB_STORAGE_STATE_PATH);
   } finally {
     await pool.end();
   }
-
-  // Log the fixture accounts in here and persist their cookie jars so specs
-  // can reuse them via `test.use({ storageState })`. This is the documented
-  // Playwright pattern (`docs/auth.md`) and the only way to avoid the per-spec
-  // login + rate-limit dance.
-  const baseURL =
-    config.projects[0]?.use.baseURL ??
-    process.env.E2E_BASE_URL ??
-    "http://localhost:3000";
-
-  // The shared jar every authenticated spec reads.
-  await captureAuthState(baseURL, E2E_USER, STORAGE_STATE_PATH);
-
-  // v1.36.0 — the owner's jar. The sharing journey needs both sides of a grant
-  // signed in at once, and the login endpoint is IP-rate-limited, so the owner
-  // is logged in here rather than inside the spec.
-  await captureAuthState(baseURL, E2E_OWNER, OWNER_STORAGE_STATE_PATH);
-
-  // The delegate's own jar for that journey. Same account as the shared one,
-  // deliberately a different session row — see DELEGATE_STORAGE_STATE_PATH for
-  // what happens when the journey switches the shared row instead.
-  await captureAuthState(baseURL, E2E_USER, DELEGATE_STORAGE_STATE_PATH);
-
-  await captureAuthState(
-    baseURL,
-    E2E_SCOPE_DELEGATE,
-    SCOPE_DELEGATE_STORAGE_STATE_PATH,
-  );
-  await captureAuthState(
-    baseURL,
-    E2E_SCOPE_DELEGATE,
-    SCOPE_A11Y_STORAGE_STATE_PATH,
-  );
 }
 
 /**

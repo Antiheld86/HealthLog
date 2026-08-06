@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 
 import { expect, test } from "./setup/test";
-import { SCOPE_DELEGATE_STORAGE_STATE_PATH } from "./setup/test-helpers";
+import { CROSS_TAB_STORAGE_STATE_PATH } from "./setup/test-helpers";
 
 async function openSwitcher(page: Page) {
   await page.getByRole("button", { name: "User menu" }).first().click();
@@ -21,7 +21,7 @@ test.describe.serial("cross-tab shared-record session switches", () => {
     browser,
   }) => {
     const context = await browser.newContext({
-      storageState: SCOPE_DELEGATE_STORAGE_STATE_PATH,
+      storageState: CROSS_TAB_STORAGE_STATE_PATH,
     });
     const switchingPage = await context.newPage();
     const peerPage = await context.newPage();

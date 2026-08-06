@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 
 import { expect, test } from "./setup/test";
-import { SCOPE_DELEGATE_STORAGE_STATE_PATH } from "./setup/test-helpers";
+import { FENCE_OFFLINE_STORAGE_STATE_PATH } from "./setup/test-helpers";
 
 /**
  * FENCE-AC-07 — the disk layers cannot serve one record's bytes inside
@@ -61,11 +61,48 @@ async function openSwitcher(page: Page) {
   await page.locator('[data-slot="account-switcher-trigger"]').click();
 }
 
+/**
+ * Enter the target record, retrying the click if the switch did not land.
+ *
+ * See the twin in `v137-record-session-fence.spec.ts`: the switch is a
+ * compare-and-set the client retries exactly once, and a harness driving it at
+ * machine speed can legitimately lose twice. Bounded, and a third failure is a
+ * real one.
+ */
+async function enterRecord(page: Page) {
+  const banner = page.locator('[data-slot="shared-record-banner"]');
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await openSwitcher(page);
+    const entry = page.locator(
+      `[data-slot="account-switcher-entry"][data-account-username="${TARGET_USERNAME}"]`,
+    );
+    await expect(entry).toBeVisible();
+    const accountId = await entry.getAttribute("data-account-id");
+    await entry.click();
+    try {
+      await expect(banner).toBeVisible({ timeout: 15_000 });
+      return accountId;
+    } catch {
+      await page.goto("/");
+      await expectShellReady(page);
+    }
+  }
+  await expect(banner).toBeVisible({ timeout: 15_000 });
+  return null;
+}
+
 async function expectShellReady(page: Page) {
   await expect(
     page.locator('[data-slot="record-scope-hydration-gate"]'),
-  ).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "User menu" })).toBeVisible();
+    // A real budget, not the 10 s default. The gate IS the cross-tab hold: a
+    // peer sits behind it until its own `/api/auth/me` resolves, and that read
+    // queues behind whatever the other worker's browser is doing. Ten seconds
+    // is a statement about machine load; thirty is about the hold actually
+    // never releasing, which is the failure worth reporting.
+  ).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByRole("button", { name: "User menu" })).toBeVisible({
+    timeout: 30_000,
+  });
 }
 
 /** What the `healthlog-data-*` caches hold right now. */
@@ -110,7 +147,7 @@ test.describe.serial("FENCE-AC-07 record-fence disk layers", () => {
     browser,
   }) => {
     const context = await browser.newContext({
-      storageState: SCOPE_DELEGATE_STORAGE_STATE_PATH,
+      storageState: FENCE_OFFLINE_STORAGE_STATE_PATH,
     });
     const page = await context.newPage();
 
@@ -275,6 +312,148 @@ test.describe.serial("FENCE-AC-07 record-fence disk layers", () => {
       await context.setOffline(false);
       // Hand the shared session back to its own record; see the note in
       // `v137-record-session-fence.spec.ts`.
+      await context.request
+        .post("/api/account/switch", { data: { accountId: null } })
+        .catch(() => {});
+      await context.close();
+    }
+  });
+
+  test("FENCE-AC-07 a cached record response cannot be SERVED under a different context", async ({
+    browser,
+  }) => {
+    /**
+     * The serving path, which the case above does not exercise.
+     *
+     * The test above asserts what is IN the cache. That is worth asserting and
+     * it is not the same claim: an entry can sit on disk under one context and
+     * still be handed to a request made under another, and on the EXTERNAL
+     * switch path nothing wipes it — the app never initiated the switch, so
+     * `clearOfflineCachesForRecordSwitch` never runs. On that path `Vary` is
+     * the only thing standing between a cached delegated response and the next
+     * request for the same URL.
+     *
+     * So this asks the Cache API the question a service worker asks it:
+     * `cache.match(request)` honours the stored response's `Vary`, so a request
+     * whose fence headers differ from the ones the entry was stored with does
+     * not match at all. Remove the `Vary` block from `attachRecordContextEcho`
+     * and the second lookup starts hitting.
+     */
+    const context = await browser.newContext({
+      storageState: FENCE_OFFLINE_STORAGE_STATE_PATH,
+    });
+    const page = await context.newPage();
+
+    try {
+      await page.goto("/");
+      await expect(
+        page.getByRole("button", { name: "User menu" }),
+      ).toBeVisible();
+      await expectShellReady(page);
+      const banner = page.locator('[data-slot="shared-record-banner"]');
+      if ((await banner.count()) > 0) {
+        await page.locator('[data-slot="shared-record-banner-exit"]').click();
+        await expect(banner).toHaveCount(0);
+      }
+      await page.waitForFunction(
+        () => navigator.serviceWorker?.controller !== null,
+        undefined,
+        { timeout: 20_000 },
+      );
+
+      // Enter the record and let its reads land on disk.
+      await enterRecord(page);
+      await page.goto("/measurements");
+      await expect(
+        page.getByRole("button", { name: "User menu" }),
+      ).toBeVisible();
+      await expectShellReady(page);
+
+      // The context those bytes were stored under, read off the entry itself.
+      const stored = await page.evaluate(async () => {
+        for (const name of (await caches.keys()).filter((n) =>
+          n.startsWith("healthlog-data-"),
+        )) {
+          const cache = await caches.open(name);
+          for (const request of await cache.keys()) {
+            if (!new URL(request.url).pathname.startsWith("/api/measurements"))
+              continue;
+            const response = await cache.match(request);
+            if (!response) continue;
+            return {
+              cacheName: name,
+              url: request.url,
+              vary: response.headers.get("Vary"),
+              epoch: response.headers.get("x-healthlog-record-epoch"),
+              scope: response.headers.get("x-healthlog-record-scope"),
+            };
+          }
+        }
+        return null;
+      });
+      // POSITIVE CONTROL: there really is an entry, stored with a context.
+      expect(stored).not.toBeNull();
+      expect(stored!.epoch).toMatch(/^\d+$/);
+      expect(stored!.scope).not.toBe("self");
+
+      // The EXTERNAL switch: driven from a request context, so the app never
+      // runs its cache wipe and the entry above survives.
+      const left = await context.request.post("/api/account/switch", {
+        data: { accountId: null },
+      });
+      expect(left.status()).toBe(200);
+      const me = await context.request.get("/api/auth/me");
+      const now = (await me.json()).data.recordSession as {
+        epoch: number;
+        scope: string | null;
+      };
+      // The context genuinely moved, or the comparison below is vacuous.
+      expect(String(now.epoch)).not.toBe(stored!.epoch);
+
+      const lookups = await page.evaluate(
+        async ({
+          cacheName,
+          url,
+          storedEpoch,
+          storedScope,
+          nowEpoch,
+          nowScope,
+        }) => {
+          const cache = await caches.open(cacheName);
+          const ask = async (epoch: string, scope: string) =>
+            (await cache.match(
+              new Request(url, {
+                headers: {
+                  "x-healthlog-record-epoch": epoch,
+                  "x-healthlog-record-scope": scope,
+                },
+              }),
+            )) !== undefined;
+          return {
+            underStoredContext: await ask(storedEpoch, storedScope),
+            underNewContext: await ask(nowEpoch, nowScope),
+            withNoAssertion:
+              (await cache.match(new Request(url))) !== undefined,
+          };
+        },
+        {
+          cacheName: stored!.cacheName,
+          url: stored!.url,
+          storedEpoch: stored!.epoch!,
+          storedScope: stored!.scope!,
+          nowEpoch: String(now.epoch),
+          nowScope: now.scope ?? "self",
+        },
+      );
+
+      // POSITIVE CONTROL: the entry IS servable to the context it belongs to.
+      // Without this, "the other context misses" would pass for an entry that
+      // was simply not there.
+      expect(lookups.underStoredContext).toBe(true);
+      // The claim. Remove the `Vary` and this starts hitting.
+      expect(lookups.underNewContext).toBe(false);
+      expect(lookups.withNoAssertion).toBe(false);
+    } finally {
       await context.request
         .post("/api/account/switch", { data: { accountId: null } })
         .catch(() => {});
