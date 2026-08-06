@@ -9,6 +9,7 @@ import {
   isDestinationInSharedRecord,
   visibleNavDestinations,
 } from "@/components/layout/nav-model";
+import { resolveRecordPresentation } from "@/lib/navigation/record-presentation";
 
 describe("shared-record navigation", () => {
   it("keeps every granted route family in one closed eight-domain inventory", () => {
@@ -54,5 +55,36 @@ describe("shared-record navigation", () => {
     expect(navigation.allowsPath("/documents/record-1")).toBe(true);
     expect(navigation.allowsPath("/settings/account")).toBe(false);
     expect(navigation.allowsPath("/new-unclassified-route")).toBe(false);
+  });
+
+  it("keeps server-resolved access and record kind distinct in chrome", () => {
+    expect(
+      resolveRecordPresentation({
+        level: "read",
+        canWrite: false,
+        recordKind: "shared",
+      }),
+    ).toEqual({ access: "view", recordKind: "shared" });
+    expect(
+      resolveRecordPresentation({
+        level: "write",
+        canWrite: true,
+        recordKind: "shared",
+      }),
+    ).toEqual({ access: "view-and-add", recordKind: "shared" });
+    expect(
+      resolveRecordPresentation({
+        level: "manage",
+        canWrite: true,
+        recordKind: "shared",
+      }),
+    ).toEqual({ access: "manage", recordKind: "shared" });
+    expect(
+      resolveRecordPresentation({
+        level: "manage",
+        canWrite: true,
+        recordKind: "managed",
+      }),
+    ).toEqual({ access: "manage", recordKind: "managed" });
   });
 });

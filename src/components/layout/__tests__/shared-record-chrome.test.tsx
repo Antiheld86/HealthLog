@@ -134,6 +134,31 @@ describe("<SharedRecordBanner>", () => {
     expect(html).not.toContain("read it, not change it");
   });
 
+  it("names MANAGE and a managed profile without reducing either to add access", () => {
+    const managedProfile = {
+      ...OWNER,
+      accountId: "managed-profile",
+      access: "write" as const,
+      level: "manage" as const,
+      recordKind: "managed" as const,
+      canWrite: true,
+    };
+    const html = render(
+      {
+        accounts: [managedProfile],
+        active: managedProfile,
+        canSwitch: true,
+      },
+      <SharedRecordBanner />,
+    );
+
+    expect(html).toContain('data-access-level="manage"');
+    expect(html).toContain('data-record-kind="managed"');
+    expect(html).toContain("Managed profile");
+    expect(html).toContain("change or remove what is in it");
+    expect(html).not.toContain("add to it, but not change");
+  });
+
   it("uses the warning register, not a subtle tint", () => {
     // Somebody who stops noticing the banner logs their own reading into
     // another person's record. The visual register is part of the contract.
