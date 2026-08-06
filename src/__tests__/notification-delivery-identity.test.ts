@@ -60,12 +60,9 @@ const recipientUserId = "guardian-recipient";
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(prisma.user.findUnique).mockImplementation(async (args) => {
-    const id = (args as { where: { id: string } }).where.id;
-    return id === recordUserId
-      ? ({ managedProfileAt: new Date() } as never)
-      : (null as never);
-  });
+  vi.mocked(prisma.user.findUnique).mockResolvedValue({
+    managedProfileAt: new Date(),
+  } as never);
   vi.mocked(prisma.notificationChannel.findMany).mockResolvedValue([
     {
       id: "recipient-channel",

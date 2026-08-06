@@ -59,6 +59,8 @@ interface DiagnosticChannel {
 }
 
 interface DiagnosticPushAttempt {
+  recordUserId: string;
+  recipientUserId: string;
   eventType: string;
   channel: string;
   result: string;
@@ -170,18 +172,23 @@ export const GET = apiHandler(async () => {
       where: { userId: user.id },
       select: { type: true, enabled: true, config: true },
     }),
-    // v1.4.49 — trailing 20 push attempts for the calling admin's own
-    // account. The `(user_id, created_at DESC)` index on `push_attempts`
-    // turns the orderBy + take into a single index scan, so the cost is
-    // bounded regardless of the user's lifetime push volume.
+    // Trailing delivery attempts for the calling account as recipient. The
+    // recipient index keeps the bounded diagnostic read independent of the
+    // account's lifetime notification volume.
     prisma.pushAttempt.findMany({
       // The reminder tick's per-slot dedup anchors live in this table under
       // a sentinel channel. They are bookkeeping, not delivery attempts,
       // and would push the real sends out of the trailing window.
-      where: { userId: user.id, channel: { not: REMINDER_DEDUP_CHANNEL } },
+      where: {
+        recipientUserId: user.id,
+        channel: { not: REMINDER_DEDUP_CHANNEL },
+      },
       orderBy: { createdAt: "desc" },
       take: 20,
       select: {
+        userId: true,
+        recordUserId: true,
+        recipientUserId: true,
         eventType: true,
         channel: true,
         result: true,
@@ -215,6 +222,8 @@ export const GET = apiHandler(async () => {
   // `DiagnosticPushAttempt` interface above (the existing consumer
   // contract uses `at`, not `createdAt`).
   const recentPushAttempts: DiagnosticPushAttempt[] = pushAttempts.map((a) => ({
+    recordUserId: a.recordUserId ?? a.userId,
+    recipientUserId: a.recipientUserId ?? a.userId,
     eventType: a.eventType,
     channel: a.channel,
     result: a.result,
