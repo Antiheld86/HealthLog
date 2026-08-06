@@ -306,6 +306,10 @@ describe("managed profile lifecycle (real Postgres)", () => {
       { params: Promise.resolve({ id: invitation.id }) },
     );
     expect(accepted.status).toBe(200);
+    await getPrismaClient().session.update({
+      where: { id: secondGuardian.sessionId },
+      data: { actingAsUserId: profile.id },
+    });
 
     cookieJar.set("healthlog_session", creator.sessionId);
     const { DELETE: revokeGuardian } =
@@ -323,6 +327,11 @@ describe("managed profile lifecycle (real Postgres)", () => {
         where: { id: invitation.id },
       }),
     ).toMatchObject({ revokedBy: "GRANTOR" });
+    expect(
+      await getPrismaClient().session.findUniqueOrThrow({
+        where: { id: secondGuardian.sessionId },
+      }),
+    ).toMatchObject({ actingAsUserId: null });
   });
 
   it("rolls managed Guardian acceptance back when the grant update fails", async () => {

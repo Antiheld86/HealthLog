@@ -542,6 +542,10 @@ export async function revokeManagedProfileGuardian(input: {
         where: { id: target.id },
         data: { revokedAt: new Date(), revokedBy: "GRANTOR" },
       });
+      await clearActingSessions(
+        { grantorId: profile.id, granteeId: target.granteeId },
+        tx,
+      );
       return tx.accountGrant.findUniqueOrThrow({ where: { id: target.id } });
     });
   });
