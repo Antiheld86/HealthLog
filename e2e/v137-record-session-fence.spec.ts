@@ -45,7 +45,16 @@ const RECORD_READS = [
 const EPOCH_HEADER = "x-healthlog-record-epoch";
 const SCOPE_HEADER = "x-healthlog-record-scope";
 
-const TARGET_USERNAME = "e2e-scope-labs";
+/**
+ * A WHOLE-record READ grant, deliberately not a narrowed one.
+ *
+ * The narrowed `e2e-scope-labs` fixture opens only its labs section, so the
+ * nav drops the other destinations and the record reads this file drives are
+ * refused as out-of-scope before the fence ever matters. Section narrowing is
+ * `v137-sharing-managed-profiles.spec.ts`'s subject; here it is noise that
+ * hides the thing under test.
+ */
+const TARGET_USERNAME = "e2e-level-read";
 
 async function openSwitcher(page: Page) {
   await page.getByRole("button", { name: "User menu" }).first().click();
@@ -64,6 +73,22 @@ function deferred() {
     release = resolve;
   });
   return { promise, release };
+}
+
+/**
+ * Leave any record this session is already inside.
+ *
+ * These specs each begin by switching INTO a record, so they need to start
+ * outside one — and the session is shared with the other sharing journeys, so
+ * "outside one" is not something a fresh page can assume. Without this the
+ * file passes in isolation and fails whenever it runs after a spec that left
+ * the session switched, which is the least useful kind of failure.
+ */
+async function ensureOwnRecord(page: Page) {
+  const banner = page.locator('[data-slot="shared-record-banner"]');
+  if ((await banner.count()) === 0) return;
+  await page.locator('[data-slot="shared-record-banner-exit"]').click();
+  await expect(banner).toHaveCount(0);
 }
 
 /** Wait for the shell to be usable again — the paired positive control. */
@@ -94,6 +119,11 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
   test("FENCE-AC-01 a peer reconciles to the exact new epoch and scope, in both directions", async ({
     browser,
   }) => {
+    // Two full switches, two peer reloads each, and a poll that reloads until
+    // the server write is visible to the second tab. That does not fit the
+    // 30 s default, and a test that times out reports a failure that says
+    // nothing about the fence.
+    test.setTimeout(120_000);
     const context = await browser.newContext({
       storageState: SCOPE_DELEGATE_STORAGE_STATE_PATH,
     });
@@ -105,6 +135,10 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
     try {
       await Promise.all([initiator.goto("/"), peer.goto("/")]);
       await expectShellReady(peer);
+      await expectShellReady(initiator);
+      await ensureOwnRecord(initiator);
+      await peer.reload();
+      await expectShellReady(peer);
 
       await openSwitcher(initiator);
       const entry = switcherEntry(initiator);
@@ -112,11 +146,17 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
       const accountId = await entry.getAttribute("data-account-id");
       expect(accountId).not.toBeNull();
 
-      peerAssertions.length = 0;
       await entry.click();
       await expect(
         initiator.locator('[data-slot="shared-record-banner"]'),
       ).toBeVisible();
+
+      // Cleared HERE, not before the click: between the click and the reload
+      // the peer is still issuing reads under the context it had, and counting
+      // those made the assertion below compare a pre-switch `self` against the
+      // post-switch account. Only what the peer asserts once it has reconciled
+      // is evidence about reconciliation.
+      peerAssertions.length = 0;
 
       // The peer reaches a usable shell again — the positive control, without
       // which every assertion below would pass on a wedged page.
@@ -139,7 +179,6 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
       expect(inRecordEpoch).toBeGreaterThan(0);
 
       // ── and the same on the way out ───────────────────────────────────
-      peerAssertions.length = 0;
       await initiator
         .locator('[data-slot="shared-record-banner-exit"]')
         .click();
@@ -147,11 +186,21 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
         initiator.locator('[data-slot="shared-record-banner"]'),
       ).toHaveCount(0);
 
-      await peer.reload();
-      await expectShellReady(peer);
-      await expect(
-        peer.locator('[data-slot="shared-record-banner"]'),
-      ).toHaveCount(0);
+      peerAssertions.length = 0;
+      // Polled with reloads rather than reloaded once. The initiator's banner
+      // disappearing means its own document navigated, not that the server
+      // write has landed and become visible to another tab — asserting on one
+      // reload made this leg a race against the switch-out commit.
+      await expect
+        .poll(
+          async () => {
+            await peer.reload();
+            await expectShellReady(peer);
+            return peer.locator('[data-slot="shared-record-banner"]').count();
+          },
+          { timeout: 40_000 },
+        )
+        .toBe(0);
 
       expect(peerAssertions.length).toBeGreaterThan(0);
       for (const assertion of peerAssertions) {
@@ -161,6 +210,16 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
         expect(Number(assertion.epoch)).toBeGreaterThan(inRecordEpoch);
       }
     } finally {
+      // Hand the shared session back to its own record.
+      //
+      // These fixtures' storage state is shared with the other sharing
+      // journeys, and every test here deliberately moves the session's record
+      // selector. Leaving it switched makes the NEXT spec fail for a reason
+      // that has nothing to do with it — which is how a green file and a red
+      // suite happen at the same time.
+      await context.request
+        .post("/api/account/switch", { data: { accountId: null } })
+        .catch(() => {});
       await context.close();
     }
   });
@@ -180,6 +239,7 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
       await Promise.all([initiator.goto("/"), peer.goto("/")]);
       await expectShellReady(peer);
       await expectShellReady(initiator);
+      await ensureOwnRecord(initiator);
 
       // Drive the switch server-side and abort the response on the way back:
       // the write lands, the initiator never learns it did, and no commit
@@ -212,6 +272,16 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
       ).toBeVisible();
       expect(peerAssertions.some((a) => a.scope === accountId)).toBe(true);
     } finally {
+      // Hand the shared session back to its own record.
+      //
+      // These fixtures' storage state is shared with the other sharing
+      // journeys, and every test here deliberately moves the session's record
+      // selector. Leaving it switched makes the NEXT spec fail for a reason
+      // that has nothing to do with it — which is how a green file and a red
+      // suite happen at the same time.
+      await context.request
+        .post("/api/account/switch", { data: { accountId: null } })
+        .catch(() => {});
       await context.close();
     }
   });
@@ -227,6 +297,10 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
 
     try {
       await Promise.all([initiator.goto("/"), peer.goto("/")]);
+      await expectShellReady(peer);
+      await expectShellReady(initiator);
+      await ensureOwnRecord(initiator);
+      await peer.reload();
       await expectShellReady(peer);
 
       await openSwitcher(initiator);
@@ -251,6 +325,16 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
       await peer.reload();
       await expectShellReady(peer);
     } finally {
+      // Hand the shared session back to its own record.
+      //
+      // These fixtures' storage state is shared with the other sharing
+      // journeys, and every test here deliberately moves the session's record
+      // selector. Leaving it switched makes the NEXT spec fail for a reason
+      // that has nothing to do with it — which is how a green file and a red
+      // suite happen at the same time.
+      await context.request
+        .post("/api/account/switch", { data: { accountId: null } })
+        .catch(() => {});
       await context.close();
     }
   });
@@ -262,10 +346,25 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
       storageState: SCOPE_DELEGATE_STORAGE_STATE_PATH,
     });
     const peer = await context.newPage();
+    // Collected from the very start: the refusal can land on a poll the app
+    // issues by itself, before this test navigates anywhere.
+    const refusals: string[] = [];
+    peer.on("response", (response) => {
+      const path = new URL(response.url()).pathname;
+      if (response.status() !== 409) return;
+      // ANY refused API read, not one of a named five. Which cells a page
+      // mounts is a rendering decision that moves with the product, and a
+      // hard-coded list turns "the fence refused the stale tab" into "the
+      // fence refused one of the paths I happened to name" — which is how
+      // this case first passed while observing nothing.
+      if (!path.startsWith("/api/")) return;
+      refusals.push(path);
+    });
 
     try {
       await peer.goto("/");
       await expectShellReady(peer);
+      await ensureOwnRecord(peer);
 
       // A switch driven from a request context that runs no client journal at
       // all — the "raw or external" case the cooperative layer cannot see.
@@ -281,19 +380,53 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
       });
       expect(response.status()).toBe(200);
 
-      // The tab is now asserting a context the row has left. Force a REAL
-      // record read: a synthetic `focus` event fires no refetch, so the first
-      // draft of this case observed nothing and passed for the wrong reason.
-      // A client-side navigation mounts a page whose cells fetch.
-      const refused = peer.waitForResponse(
-        (r) =>
-          (RECORD_READS as readonly string[]).includes(
-            new URL(r.url()).pathname,
-          ) && r.status() === 409,
-        { timeout: 20_000 },
-      );
-      await peer.goto("/medications");
-      await refused;
+      // The tab is now asserting a context the row has left — but observing
+      // the refusal takes one deliberate step, and the reason is worth stating
+      // because it is a property of the design rather than a quirk of the test.
+      //
+      // `GET /api/auth/me` is UNFENCED (it is the reconciliation bootstrap and
+      // must answer while the context is unknown) and it is one of the two
+      // responses a client may ADOPT from. So whenever the app happens to
+      // re-read `/me` before it reads a record, it silently adopts the new
+      // context and no stale assertion is ever sent. That is correct — and it
+      // means a test that just navigates observes nothing, which is how the
+      // first draft of this case passed while proving nothing.
+      //
+      // The window the fence exists for is the opposite ordering: a suspended
+      // peer whose RECORD read goes out before any reconciliation. Holding
+      // `/me` produces exactly that ordering, deterministically.
+      // Held exactly once, and never unrouted: calling `unroute` while a
+      // handler is still parked inside its `await` abandons that route, and
+      // the `continue()` on the far side then throws "Route is already
+      // handled". Letting the handler fall through after the first hold keeps
+      // one owner for the route from start to finish.
+      const heldMe: { release: (() => void) | null; done: boolean } = {
+        release: null,
+        done: false,
+      };
+      await peer.route("**/api/auth/me", async (route) => {
+        if (heldMe.done) {
+          await route.continue();
+          return;
+        }
+        heldMe.done = true;
+        await new Promise<void>((resolve) => {
+          heldMe.release = resolve;
+        });
+        await route.continue();
+      });
+
+      const soft = peer.locator('aside[aria-label="Sidebar"]');
+      await expect(soft).toBeVisible();
+      await soft.getByRole("link", { name: "Measurements" }).click();
+
+      await expect
+        .poll(() => refusals.length, { timeout: 20_000 })
+        .toBeGreaterThan(0);
+
+      // Let the reconciliation through and confirm the tab recovers rather
+      // than sitting on the refusal.
+      heldMe.release?.();
 
       // Reconciled, not evicted: the tab ends up INSIDE the record the
       // external switch put it in, with a usable shell.
@@ -302,6 +435,16 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
       ).toBeVisible({ timeout: 20_000 });
       await expectShellReady(peer);
     } finally {
+      // Hand the shared session back to its own record.
+      //
+      // These fixtures' storage state is shared with the other sharing
+      // journeys, and every test here deliberately moves the session's record
+      // selector. Leaving it switched makes the NEXT spec fail for a reason
+      // that has nothing to do with it — which is how a green file and a red
+      // suite happen at the same time.
+      await context.request
+        .post("/api/account/switch", { data: { accountId: null } })
+        .catch(() => {});
       await context.close();
     }
   });
@@ -316,66 +459,87 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
 
     try {
       // The intercept goes on BEFORE the first navigation. Installed after the
-      // page had already loaded, it matched nothing — the only request for
-      // that path had come and gone, and the case passed while observing
-      // nothing at all.
-      let heldEcho: string | null = null;
-      let heldScope: string | null = null;
-      const held: { release: (() => void) | null } = { release: null };
-      let holdArmed = false;
+      // page had already loaded, it matched nothing — the only request for that
+      // path had come and gone, and the case passed while observing nothing.
+      //
+      // And it holds `/api/measurements`, a FENCED record read. The first
+      // version held `/api/auth/me` because that one is alive on every boot —
+      // but `/me` is an actor surface, the fence never runs on it, and it
+      // therefore echoes no record context at all. Holding it captured a null
+      // echo forever, which is the same "observed nothing" failure wearing a
+      // different path.
+      const held: {
+        armed: boolean;
+        release: (() => void) | null;
+        epoch: string | null;
+        scope: string | null;
+      } = { armed: false, release: null, epoch: null, scope: null };
 
-      await page.route("**/api/auth/me", async (route) => {
-        // `/api/auth/me` is the one read EVERY record keeps alive, on every
-        // boot, regardless of which sections a narrowed grant opens — the
-        // previous choice was dormant under the target's grant, so it never
-        // resolved across the switch.
-        if (!holdArmed) {
+      await page.route("**/api/measurements**", async (route) => {
+        if (!held.armed) {
           await route.continue();
           return;
         }
-        holdArmed = false;
+        held.armed = false;
         const response = await route.fetch();
-        heldEcho = response.headers()["x-healthlog-record-epoch"] ?? null;
-        heldScope = response.headers()["x-healthlog-record-scope"] ?? null;
+        held.epoch = response.headers()["x-healthlog-record-epoch"] ?? null;
+        held.scope = response.headers()["x-healthlog-record-scope"] ?? null;
         await new Promise<void>((resolve) => {
           held.release = resolve;
         });
-        await route.fulfill({ response });
+        await route.fulfill({ response }).catch(() => {});
       });
 
       await page.goto("/");
       await expectShellReady(page);
+      await ensureOwnRecord(page);
 
       await openSwitcher(page);
       const entry = switcherEntry(page);
       await expect(entry).toBeVisible();
+      const accountId = await entry.getAttribute("data-account-id");
       await entry.click();
       await expect(
         page.locator('[data-slot="shared-record-banner"]'),
       ).toBeVisible({ timeout: 20_000 });
 
-      // Now arm the hold and make the app issue the read again, so a response
-      // is genuinely in flight while the context moves back.
-      holdArmed = true;
-      const leaving = page
-        .locator('[data-slot="shared-record-banner-exit"]')
+      // Arm the hold, then make the app issue the read inside the record.
+      held.armed = true;
+      const sidebar = page.locator('aside[aria-label="Sidebar"]');
+      await expect(sidebar).toBeVisible();
+      await sidebar
+        .getByRole("link", { name: "Measurements" })
         .click({ noWaitAfter: true });
 
       await expect
         .poll(() => held.release !== null, { timeout: 20_000 })
         .toBe(true);
+
+      // The response was admitted under the record's context and says so.
+      // Proof the intercept saw a real fenced read rather than matching
+      // nothing, which is the whole failure mode this case kept falling into.
+      expect(held.epoch).toMatch(/^\d+$/);
+      expect(held.scope).toBe(accountId);
+
+      // Now move the context out from under it, and only then let it land.
+      const leaving = page
+        .locator('[data-slot="shared-record-banner-exit"]')
+        .click({ noWaitAfter: true });
+      await page.waitForTimeout(500);
       held.release?.();
       await leaving.catch(() => {});
 
-      // The held response carried a real echo — proof the intercept saw the
-      // request rather than matching nothing.
-      expect(heldEcho).not.toBeNull();
-      expect(heldScope).not.toBeNull();
-
-      // And the page settles on the record it is actually in, without painting
-      // the one the held response described.
+      // The page settles on the record it is actually in — its own — without
+      // painting the one the held response described.
+      await expect(
+        page.locator('[data-slot="shared-record-banner"]'),
+      ).toHaveCount(0, { timeout: 20_000 });
       await expectShellReady(page);
     } finally {
+      // Hand the shared session back to its own record.
+      await context.request
+        .post("/api/account/switch", { data: { accountId: null } })
+        .catch(() => {});
       await context.close();
     }
   });
