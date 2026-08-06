@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getPrismaClient, truncateAllTables } from "./setup";
 import { resolveNotificationDeliveryIdentity } from "@/lib/notifications/delivery-identity";
+import {
+  hasReminderDedupAnchor,
+  writeReminderDedupAnchor,
+} from "@/lib/notifications/reminder-dedup";
 import { recordPushAttempt } from "@/lib/notifications/senders/push-attempt-record";
 
 let sequence = 0;
@@ -102,6 +106,37 @@ describe("notification attribution (real Postgres)", () => {
       recordUserId: self.id,
       recipientUserId: self.id,
     });
+  });
+
+  it("persists a managed reminder anchor as a record event without a delivery attempt", async () => {
+    const recordUser = await createUser("managed-record", true);
+    const client = getPrismaClient();
+    const now = new Date();
+
+    await writeReminderDedupAnchor(client, {
+      userId: recordUser.id,
+      eventType: "MEDICATION_REMINDER",
+      reason: "med:slot",
+    });
+
+    await expect(
+      hasReminderDedupAnchor(client, {
+        userId: recordUser.id,
+        eventType: "MEDICATION_REMINDER",
+        reason: "med:slot",
+        now,
+      }),
+    ).resolves.toBe(true);
+    expect(await client.pushAttempt.count()).toBe(0);
+
+    const event = await client.notificationEvent.findFirstOrThrow({
+      where: { recordUserId: recordUser.id, dedupKey: "med:slot" },
+      select: { id: true },
+    });
+    await client.user.delete({ where: { id: recordUser.id } });
+    expect(
+      await client.notificationEvent.findUnique({ where: { id: event.id } }),
+    ).toBeNull();
   });
 
   it("persistence maps an omitted pair from the legacy recipient", async () => {

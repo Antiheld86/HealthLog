@@ -862,6 +862,7 @@ model User {
   // `reminder-worker.ts`).
   pushAttemptsForRecord          PushAttempt[]                  @relation("PushAttemptRecordUser")
   pushAttemptsReceived           PushAttempt[]                  @relation("PushAttemptRecipientUser")
+  notificationEvents             NotificationEvent[]
   // v1.10.3 — per-(user, day) Strain personal-anchor cache (day-total
   // TRIMP + running EWMA reference) so the nightly Strain engine anchors
   // the 0–100 map to the user's own training load without re-integrating
@@ -5804,6 +5805,22 @@ model ConsentReceipt {
 // `channel` is the dispatcher `ChannelType` string (`APNS`,
 // `WEB_PUSH`, `TELEGRAM`, `NTFY`).
 //
+// Record-scoped notification events are durable event anchors rather than
+// channel delivery records. They intentionally name no recipient, which keeps
+// scheduler deduplication independent from future Guardian fan-out.
+model NotificationEvent {
+  id           String   @id @default(cuid())
+  recordUserId String   @map("record_user_id")
+  eventType    String   @map("event_type")
+  dedupKey     String   @map("dedup_key")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  recordUser User @relation(fields: [recordUserId], references: [id], onDelete: Cascade)
+
+  @@index([recordUserId, eventType, dedupKey, createdAt(sort: Desc)])
+  @@map("notification_events")
+}
+
 // `result` is one of `"ok"` | `"error"` | `"skipped"` — `skipped`
 // covers the "no recipient" / "config missing" soft cases.
 //

@@ -68,7 +68,6 @@ vi.mock("@/lib/crypto", () => ({
 import { GET } from "../route";
 import { prisma } from "@/lib/db";
 import { requireAdmin, HttpError } from "@/lib/api-handler";
-import { REMINDER_DEDUP_CHANNEL } from "@/lib/notifications/reminder-dedup";
 
 const ADMIN_USER_ID = "admin-1";
 const ADMIN_CTX = {
@@ -405,19 +404,15 @@ describe("GET /api/admin/notifications/diagnostic — recentPushAttempts", () =>
     expect(args.take).toBe(20);
   });
 
-  it("excludes reminder-dedup bookkeeping rows so the last 20 are real sends", async () => {
-    // The medication tick anchors its per-slot dedup in this table under a
-    // sentinel channel. Letting those rows into the trailing window would
-    // push the actual delivery attempts — the thing an operator opens this
-    // endpoint for — off the list.
+  it("reads recipient-scoped delivery attempts without bookkeeping sentinels", async () => {
     vi.mocked(requireAdmin).mockResolvedValue(ADMIN_CTX);
     vi.mocked(prisma.pushAttempt.findMany).mockResolvedValue([] as never);
 
     await GET();
 
     const args = vi.mocked(prisma.pushAttempt.findMany).mock.calls[0]?.[0] as {
-      where: { channel?: { not?: string } };
+      where: { recipientUserId?: string };
     };
-    expect(args.where.channel).toEqual({ not: REMINDER_DEDUP_CHANNEL });
+    expect(args.where).toEqual({ recipientUserId: ADMIN_USER_ID });
   });
 });

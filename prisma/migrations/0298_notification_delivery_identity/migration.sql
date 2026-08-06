@@ -34,6 +34,22 @@ CREATE INDEX "push_attempts_recipient_user_id_created_at_desc_idx"
 CREATE INDEX "push_attempts_record_user_id_created_at_desc_idx"
     ON "push_attempts" ("record_user_id", "created_at" DESC);
 
+CREATE TABLE "notification_events" (
+    "id" TEXT NOT NULL,
+    "record_user_id" TEXT NOT NULL,
+    "event_type" TEXT NOT NULL,
+    "dedup_key" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "notification_events_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "notification_events_record_user_id_fkey"
+        FOREIGN KEY ("record_user_id") REFERENCES "users"("id")
+        ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE INDEX "notification_events_record_user_id_event_type_dedup_key_created_at_desc_idx"
+    ON "notification_events" ("record_user_id", "event_type", "dedup_key", "created_at" DESC);
+
 CREATE FUNCTION enforce_push_attempt_attribution()
 RETURNS TRIGGER
 LANGUAGE plpgsql

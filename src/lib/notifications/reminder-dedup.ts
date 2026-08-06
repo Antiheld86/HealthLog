@@ -8,9 +8,9 @@
  * ntfy had no row, so the tick re-sent the same overdue notice on every
  * pass for the rest of the local day.
  *
- * The anchor now lives in `push_attempts`, the ledger the daily briefing
- * and the illness escalation already use for the same purpose. Two
- * properties matter and both are deliberate:
+ * The anchor now lives in `notification_events`, a record-scoped event ledger
+ * rather than a channel delivery record. Two properties matter and both are
+ * deliberate:
  *
  *  - **Written per dispatched slot, not per successful send.** Anchoring
  *    on a delivered push would re-open the flood the moment a channel
@@ -19,24 +19,14 @@
  *    for that phase rather than risking a repeat; the next phase still
  *    escalates, and the next local day starts clean.
  *
- * The rows are bookkeeping, not delivery attempts, so they carry the
- * `DEDUP` channel sentinel and the operator-facing notification surfaces
- * filter them out.
  */
 import type { PrismaClient } from "@/generated/prisma/client";
 
 /**
- * Channel sentinel for a bookkeeping row. Never a real delivery target —
- * `/api/admin/notifications/{health,diagnostic}` exclude it so the
- * per-channel health picture stays a picture of actual sends.
- */
-export const REMINDER_DEDUP_CHANNEL = "DEDUP";
-
-/**
  * How far back the anchor lookup reads. The key already carries the local
  * date, so anything older than this cannot match; the bound exists to keep
- * the read on the `(user_id, created_at DESC)` index. Two days covers every
- * timezone offset plus a DST shift.
+ * the read on the record/event/key index. Two days covers every timezone
+ * offset plus a DST shift.
  */
 const ANCHOR_LOOKBACK_MS = 48 * 60 * 60 * 1000;
 
@@ -79,11 +69,11 @@ export async function hasReminderDedupAnchor(
   input: { userId: string; eventType: string; reason: string; now: Date },
 ): Promise<boolean> {
   try {
-    const row = await prisma.pushAttempt.findFirst({
+    const row = await prisma.notificationEvent.findFirst({
       where: {
-        userId: input.userId,
+        recordUserId: input.userId,
         eventType: input.eventType,
-        reason: input.reason,
+        dedupKey: input.reason,
         createdAt: { gte: new Date(input.now.getTime() - ANCHOR_LOOKBACK_MS) },
       },
       select: { id: true },
@@ -104,13 +94,11 @@ export async function writeReminderDedupAnchor(
   input: { userId: string; eventType: string; reason: string },
 ): Promise<void> {
   try {
-    await prisma.pushAttempt.create({
+    await prisma.notificationEvent.create({
       data: {
-        userId: input.userId,
-        channel: REMINDER_DEDUP_CHANNEL,
+        recordUserId: input.userId,
         eventType: input.eventType,
-        result: "skipped",
-        reason: input.reason,
+        dedupKey: input.reason,
       },
     });
   } catch {
