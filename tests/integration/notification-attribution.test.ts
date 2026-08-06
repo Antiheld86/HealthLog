@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getPrismaClient, truncateAllTables } from "./setup";
 import { resolveNotificationDeliveryIdentity } from "@/lib/notifications/delivery-identity";
 import {
+  claimNotificationEvent,
   hasReminderDedupAnchor,
   writeReminderDedupAnchor,
 } from "@/lib/notifications/reminder-dedup";
@@ -138,6 +139,79 @@ describe("notification attribution (real Postgres)", () => {
     expect(
       await client.notificationEvent.findUnique({ where: { id: event.id } }),
     ).toBeNull();
+  });
+
+  it("allows exactly one concurrent claim for a notification event", async () => {
+    const recordUser = await createUser("claim-record", true);
+    const client = getPrismaClient();
+    const since = new Date(Date.now() - 60_000);
+    const input = {
+      recordUserId: recordUser.id,
+      eventType: "MEDICATION_REMINDER",
+      dedupKey: "med:race",
+      since,
+    };
+
+    const results = await Promise.all([
+      claimNotificationEvent(client, input),
+      claimNotificationEvent(client, input),
+    ]);
+
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(
+      await client.notificationEvent.count({
+        where: {
+          recordUserId: recordUser.id,
+          eventType: "MEDICATION_REMINDER",
+          dedupKey: "med:race",
+        },
+      }),
+    ).toBe(1);
+  });
+
+  it("uses the rolling window and allows a retry after a failed claim", async () => {
+    const client = getPrismaClient();
+    const missingRecordId = `missing-claim-${sequence++}`;
+    const missingInput = {
+      recordUserId: missingRecordId,
+      eventType: "SYSTEM_ALERT",
+      dedupKey: "safety:retry",
+      since: new Date(Date.now() - 24 * 60 * 60 * 1000),
+    };
+
+    await expect(claimNotificationEvent(client, missingInput)).resolves.toBe(
+      false,
+    );
+    await client.user.create({
+      data: {
+        id: missingRecordId,
+        username: `claim-retry-${sequence++}`,
+        email: `claim-retry-${sequence++}@example.test`,
+      },
+    });
+    await expect(claimNotificationEvent(client, missingInput)).resolves.toBe(
+      true,
+    );
+
+    const recordUser = await createUser("expired-claim", true);
+    const now = new Date();
+    await client.notificationEvent.create({
+      data: {
+        recordUserId: recordUser.id,
+        eventType: "SYSTEM_ALERT",
+        dedupKey: "safety:window",
+        createdAt: new Date(now.getTime() - 25 * 60 * 60 * 1000),
+      },
+    });
+
+    await expect(
+      claimNotificationEvent(client, {
+        recordUserId: recordUser.id,
+        eventType: "SYSTEM_ALERT",
+        dedupKey: "safety:window",
+        since: new Date(now.getTime() - 24 * 60 * 60 * 1000),
+      }),
+    ).resolves.toBe(true);
   });
 
   it("keeps Telegram reminder tracking independent for each recipient slot", async () => {

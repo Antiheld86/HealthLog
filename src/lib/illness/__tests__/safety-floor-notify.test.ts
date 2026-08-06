@@ -12,6 +12,7 @@ const findFirstMock = vi.fn();
 const createMock = vi.fn();
 const dispatchMock = vi.fn();
 const userFindUniqueMock = vi.fn();
+const claimMock = vi.fn();
 
 vi.mock("@/lib/db", () => ({
   prisma: {
@@ -31,6 +32,10 @@ vi.mock("@/lib/logging/context", () => ({
 
 vi.mock("@/lib/notifications/dispatch-localised", () => ({
   dispatchLocalisedNotification: (...a: unknown[]) => dispatchMock(...a),
+}));
+
+vi.mock("@/lib/notifications/reminder-dedup", () => ({
+  claimNotificationEvent: (...a: unknown[]) => claimMock(...a),
 }));
 
 import { notifySafetyFloor } from "../safety-floor-notify";
@@ -58,6 +63,7 @@ beforeEach(() => {
   findFirstMock.mockReset().mockResolvedValue(null);
   createMock.mockReset().mockResolvedValue({});
   dispatchMock.mockReset().mockResolvedValue(undefined);
+  claimMock.mockReset().mockResolvedValue(true);
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -99,21 +105,23 @@ describe("notifySafetyFloor", () => {
     expect(opts.params).toEqual({ value: 2.7, unit: "mmol/L", threshold: 3 });
   });
 
-  it("de-dupes by reason when a recent ledger row exists", async () => {
-    findFirstMock.mockResolvedValueOnce({ id: "prior" });
+  it("does not dispatch when a concurrent claimant owns the safety event", async () => {
+    claimMock.mockResolvedValueOnce(false);
     await notifySafetyFloor({ userId: "u1", decision: bpHigh });
     expect(dispatchMock).not.toHaveBeenCalled();
-    expect(createMock).not.toHaveBeenCalled();
+    expect(claimMock).toHaveBeenCalledTimes(1);
   });
 
-  it("stamps the record event anchor (keyed by reason) before dispatching", async () => {
+  it("claims the record event anchor (keyed by reason) before dispatching", async () => {
     await notifySafetyFloor({ userId: "u9", decision: bpHigh });
-    expect(createMock).toHaveBeenCalledTimes(1);
-    expect(createMock.mock.calls[0][0].data).toMatchObject({
-      recordUserId: "u9",
-      eventType: "SYSTEM_ALERT",
-      dedupKey: expect.stringContaining("bp_hypertensive"),
-    });
+    expect(claimMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        recordUserId: "u9",
+        eventType: "SYSTEM_ALERT",
+        dedupKey: expect.stringContaining("bp_hypertensive"),
+      }),
+    );
   });
 
   it("does not dispatch or write an anchor for a managed profile", async () => {
@@ -123,8 +131,7 @@ describe("notifySafetyFloor", () => {
 
     await notifySafetyFloor({ userId: "managed-record", decision: bpHigh });
 
-    expect(findFirstMock).not.toHaveBeenCalled();
-    expect(createMock).not.toHaveBeenCalled();
+    expect(claimMock).not.toHaveBeenCalled();
     expect(dispatchMock).not.toHaveBeenCalled();
   });
 
