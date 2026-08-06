@@ -4433,6 +4433,119 @@
         "system": "Sistema"
       }
     },
+    "sharedRecord": {
+      "managedSettings": {
+        "profile": {
+          "title": "Profilo",
+          "displayName": "Nome visualizzato",
+          "height": "Altezza (cm)",
+          "dateOfBirth": "Data di nascita",
+          "gender": "Genere",
+          "notSpecified": "Non specificato",
+          "male": "Uomo",
+          "female": "Donna",
+          "other": "Altro",
+          "locale": "Lingua",
+          "systemDefault": "Predefinito di sistema",
+          "timezone": "Fuso orario",
+          "units": "Unità",
+          "metric": "Metrico",
+          "imperial": "Imperiale",
+          "timeFormat": "Formato ora",
+          "automatic": "Automatico",
+          "hour12": "12 ore",
+          "hour24": "24 ore",
+          "dateFormat": "Formato data",
+          "dateDmy": "Giorno / mese / anno",
+          "dateMdy": "Mese / giorno / anno",
+          "dateYmd": "Anno / mese / giorno"
+        },
+        "modules": { "title": "Moduli" },
+        "notifications": {
+          "title": "Notifiche",
+          "moodReminder": "Attiva promemoria dell’umore",
+          "reminderHour": "Ora del promemoria dell’umore",
+          "lowStockRunwayDays": "Giorni prima delle scorte basse",
+          "reorderLeadDays": "Margine per il riordino"
+        },
+        "thresholds": {
+          "title": "Obiettivi",
+          "metric": "Metrica",
+          "minimum": "Minimo",
+          "maximum": "Massimo"
+        },
+        "coach": {
+          "title": "Coach",
+          "disable": "Disattiva Coach",
+          "tone": "Tono",
+          "warm": "Caldo",
+          "neutral": "Neutro",
+          "concise": "Conciso",
+          "verbosity": "Livello di dettaglio",
+          "brief": "Breve",
+          "default": "Predefinito",
+          "detailed": "Dettagliato",
+          "defaultWindow": "Periodo predefinito",
+          "last7days": "Ultimi 7 giorni",
+          "last30days": "Ultimi 30 giorni",
+          "last90days": "Ultimi 90 giorni",
+          "allTime": "Tutto il periodo",
+          "showEvidence": "Mostra le fonti per impostazione predefinita",
+          "excludedMetrics": "Metriche escluse",
+          "dataClusters": "Gruppi di dati",
+          "customClusters": "Usa una selezione personalizzata di gruppi",
+          "metrics": {
+            "bp": "Pressione arteriosa",
+            "weight": "Peso",
+            "pulse": "Polso",
+            "mood": "Umore",
+            "compliance": "Aderenza ai farmaci",
+            "hrv": "Variabilità della frequenza cardiaca",
+            "sleep": "Sonno",
+            "restingHr": "Frequenza cardiaca a riposo",
+            "steps": "Passi",
+            "medications": "Farmaci",
+            "anthropometrics": "Misure corporee"
+          },
+          "clusters": {
+            "cardio": "Salute cardiovascolare",
+            "body": "Composizione corporea",
+            "activity": "Attività",
+            "workouts": "Allenamenti",
+            "sleep": "Sonno",
+            "mood": "Umore",
+            "glucose": "Glucosio",
+            "medication": "Farmaci",
+            "mobility": "Mobilità",
+            "environment": "Ambiente"
+          }
+        },
+        "insights": {
+          "title": "Analisi",
+          "sections": "Sezioni della panoramica",
+          "tiles": "Riquadri di navigazione",
+          "order": "Ordine",
+          "unknownItem": "Analisi non disponibile",
+          "sectionLabels": {
+            "wellnessScores": "Punteggi di benessere",
+            "dailyBriefing": "Riepilogo giornaliero",
+            "vitals": "Parametri vitali",
+            "trends": "Tendenze",
+            "periodReview": "Riepilogo del periodo",
+            "cycleSummary": "Riepilogo del ciclo",
+            "signals": "Segnali",
+            "rhythmEvents": "Eventi del ritmo",
+            "healthStatus": "Stato di salute",
+            "breathing": "Respirazione",
+            "labsChanges": "Variazioni di laboratorio",
+            "ecg": "ECG"
+          }
+        }
+      },
+      "unavailableTitle": "Non disponibile in questo record condiviso",
+      "unavailableDescription": "Questa area delle Impostazioni non è disponibile intenzionalmente mentre visualizzi il record di un’altra persona.",
+      "integrationStatusDescription": "Stato di connessione per questo record gestito. I controlli di connessione non sono disponibili."
+    },
     "sections": {
       "account": {
         "title": "Account",

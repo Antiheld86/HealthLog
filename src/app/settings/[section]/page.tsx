@@ -39,6 +39,7 @@ import {
   type SettingsSectionSlug,
 } from "@/components/settings/section-slugs";
 import { SettingsShell } from "@/components/settings/settings-shell";
+import { RecordSettingsSectionGate } from "@/components/settings/record-settings-section-gate";
 
 /**
  * Dynamic settings section route. Each of the `SETTINGS_SECTION_SLUGS`
@@ -128,5 +129,11 @@ export default async function SettingsSectionPage({ params }: PageProps) {
     <SectionPlaceholder slug={section} />
   );
 
-  return <SettingsShell active={section}>{body}</SettingsShell>;
+  return (
+    <SettingsShell active={section}>
+      <RecordSettingsSectionGate section={section}>
+        {body}
+      </RecordSettingsSectionGate>
+    </SettingsShell>
+  );
 }

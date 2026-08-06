@@ -4433,6 +4433,119 @@
         "system": "System"
       }
     },
+    "sharedRecord": {
+      "managedSettings": {
+        "profile": {
+          "title": "Profil",
+          "displayName": "Anzeigename",
+          "height": "Größe (cm)",
+          "dateOfBirth": "Geburtsdatum",
+          "gender": "Geschlecht",
+          "notSpecified": "Nicht angegeben",
+          "male": "Männlich",
+          "female": "Weiblich",
+          "other": "Andere Angabe",
+          "locale": "Sprache",
+          "systemDefault": "Systemstandard",
+          "timezone": "Zeitzone",
+          "units": "Einheiten",
+          "metric": "Metrisch",
+          "imperial": "Imperial",
+          "timeFormat": "Zeitformat",
+          "automatic": "Automatisch",
+          "hour12": "12 Stunden",
+          "hour24": "24 Stunden",
+          "dateFormat": "Datumsformat",
+          "dateDmy": "Tag / Monat / Jahr",
+          "dateMdy": "Monat / Tag / Jahr",
+          "dateYmd": "Jahr / Monat / Tag"
+        },
+        "modules": { "title": "Module" },
+        "notifications": {
+          "title": "Benachrichtigungen",
+          "moodReminder": "Stimmungserinnerung aktivieren",
+          "reminderHour": "Uhrzeit der Stimmungserinnerung",
+          "lowStockRunwayDays": "Tage bis zum niedrigen Bestand",
+          "reorderLeadDays": "Vorlaufzeit für Nachbestellung"
+        },
+        "thresholds": {
+          "title": "Zielwerte",
+          "metric": "Messwert",
+          "minimum": "Minimum",
+          "maximum": "Maximum"
+        },
+        "coach": {
+          "title": "Coach",
+          "disable": "Coach deaktivieren",
+          "tone": "Ton",
+          "warm": "Herzlich",
+          "neutral": "Neutral",
+          "concise": "Knapp",
+          "verbosity": "Ausführlichkeit",
+          "brief": "Kurz",
+          "default": "Standard",
+          "detailed": "Ausführlich",
+          "defaultWindow": "Standardzeitraum",
+          "last7days": "Letzte 7 Tage",
+          "last30days": "Letzte 30 Tage",
+          "last90days": "Letzte 90 Tage",
+          "allTime": "Gesamter Zeitraum",
+          "showEvidence": "Evidenz standardmäßig anzeigen",
+          "excludedMetrics": "Ausgeschlossene Messwerte",
+          "dataClusters": "Datenbereiche",
+          "customClusters": "Eigene Auswahl von Datenbereichen verwenden",
+          "metrics": {
+            "bp": "Blutdruck",
+            "weight": "Gewicht",
+            "pulse": "Puls",
+            "mood": "Stimmung",
+            "compliance": "Medikamenteneinnahme",
+            "hrv": "Herzfrequenzvariabilität",
+            "sleep": "Schlaf",
+            "restingHr": "Ruhepuls",
+            "steps": "Schritte",
+            "medications": "Medikamente",
+            "anthropometrics": "Körpermaße"
+          },
+          "clusters": {
+            "cardio": "Herz-Kreislauf",
+            "body": "Körperzusammensetzung",
+            "activity": "Aktivität",
+            "workouts": "Trainings",
+            "sleep": "Schlaf",
+            "mood": "Stimmung",
+            "glucose": "Glukose",
+            "medication": "Medikation",
+            "mobility": "Mobilität",
+            "environment": "Umgebung"
+          }
+        },
+        "insights": {
+          "title": "Erkenntnisse",
+          "sections": "Übersichtsbereiche",
+          "tiles": "Navigationskacheln",
+          "order": "Reihenfolge",
+          "unknownItem": "Nicht verfügbare Erkenntnis",
+          "sectionLabels": {
+            "wellnessScores": "Wellnesswerte",
+            "dailyBriefing": "Tagesüberblick",
+            "vitals": "Vitalwerte",
+            "trends": "Trends",
+            "periodReview": "Periodenrückblick",
+            "cycleSummary": "Zyklusübersicht",
+            "signals": "Signale",
+            "rhythmEvents": "Rhythmusereignisse",
+            "healthStatus": "Gesundheitsstatus",
+            "breathing": "Atmung",
+            "labsChanges": "Laborveränderungen",
+            "ecg": "EKG"
+          }
+        }
+      },
+      "unavailableTitle": "In diesem geteilten Datensatz nicht verfügbar",
+      "unavailableDescription": "Dieser Einstellungsbereich ist beim Anzeigen des Datensatzes einer anderen Person bewusst nicht verfügbar.",
+      "integrationStatusDescription": "Verbindungsstatus für diesen verwalteten Datensatz. Verbindungssteuerungen sind nicht verfügbar."
+    },
     "sections": {
       "account": {
         "title": "Konto",

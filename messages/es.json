@@ -4433,6 +4433,119 @@
         "system": "Sistema"
       }
     },
+    "sharedRecord": {
+      "managedSettings": {
+        "profile": {
+          "title": "Perfil",
+          "displayName": "Nombre visible",
+          "height": "Altura (cm)",
+          "dateOfBirth": "Fecha de nacimiento",
+          "gender": "Género",
+          "notSpecified": "No especificado",
+          "male": "Hombre",
+          "female": "Mujer",
+          "other": "Otro",
+          "locale": "Idioma",
+          "systemDefault": "Predeterminado del sistema",
+          "timezone": "Zona horaria",
+          "units": "Unidades",
+          "metric": "Métrico",
+          "imperial": "Imperial",
+          "timeFormat": "Formato de hora",
+          "automatic": "Automático",
+          "hour12": "12 horas",
+          "hour24": "24 horas",
+          "dateFormat": "Formato de fecha",
+          "dateDmy": "Día / mes / año",
+          "dateMdy": "Mes / día / año",
+          "dateYmd": "Año / mes / día"
+        },
+        "modules": { "title": "Módulos" },
+        "notifications": {
+          "title": "Notificaciones",
+          "moodReminder": "Activar recordatorio de ánimo",
+          "reminderHour": "Hora del recordatorio de ánimo",
+          "lowStockRunwayDays": "Días hasta existencias bajas",
+          "reorderLeadDays": "Días de margen para reponer"
+        },
+        "thresholds": {
+          "title": "Objetivos",
+          "metric": "Métrica",
+          "minimum": "Mínimo",
+          "maximum": "Máximo"
+        },
+        "coach": {
+          "title": "Asistente",
+          "disable": "Desactivar asistente",
+          "tone": "Tono",
+          "warm": "Cálido",
+          "neutral": "Neutro",
+          "concise": "Conciso",
+          "verbosity": "Nivel de detalle",
+          "brief": "Breve",
+          "default": "Predeterminado",
+          "detailed": "Detallado",
+          "defaultWindow": "Periodo predeterminado",
+          "last7days": "Últimos 7 días",
+          "last30days": "Últimos 30 días",
+          "last90days": "Últimos 90 días",
+          "allTime": "Todo el tiempo",
+          "showEvidence": "Mostrar evidencia de forma predeterminada",
+          "excludedMetrics": "Métricas excluidas",
+          "dataClusters": "Grupos de datos",
+          "customClusters": "Usar una selección personalizada de grupos",
+          "metrics": {
+            "bp": "Presión arterial",
+            "weight": "Peso",
+            "pulse": "Pulso",
+            "mood": "Ánimo",
+            "compliance": "Adherencia a la medicación",
+            "hrv": "Variabilidad de la frecuencia cardíaca",
+            "sleep": "Sueño",
+            "restingHr": "Frecuencia cardíaca en reposo",
+            "steps": "Pasos",
+            "medications": "Medicamentos",
+            "anthropometrics": "Medidas corporales"
+          },
+          "clusters": {
+            "cardio": "Salud cardiovascular",
+            "body": "Composición corporal",
+            "activity": "Actividad",
+            "workouts": "Entrenamientos",
+            "sleep": "Sueño",
+            "mood": "Ánimo",
+            "glucose": "Glucosa",
+            "medication": "Medicación",
+            "mobility": "Movilidad",
+            "environment": "Entorno"
+          }
+        },
+        "insights": {
+          "title": "Análisis",
+          "sections": "Secciones del resumen",
+          "tiles": "Mosaicos de navegación",
+          "order": "Orden",
+          "unknownItem": "Análisis no disponible",
+          "sectionLabels": {
+            "wellnessScores": "Puntuaciones de bienestar",
+            "dailyBriefing": "Resumen diario",
+            "vitals": "Signos vitales",
+            "trends": "Tendencias",
+            "periodReview": "Revisión del período",
+            "cycleSummary": "Resumen del ciclo",
+            "signals": "Señales",
+            "rhythmEvents": "Eventos de ritmo",
+            "healthStatus": "Estado de salud",
+            "breathing": "Respiración",
+            "labsChanges": "Cambios de laboratorio",
+            "ecg": "ECG"
+          }
+        }
+      },
+      "unavailableTitle": "No disponible en este registro compartido",
+      "unavailableDescription": "Esta sección de Ajustes no está disponible intencionadamente mientras consultas el registro de otra persona.",
+      "integrationStatusDescription": "Estado de conexión de este registro gestionado. Los controles de conexión no están disponibles."
+    },
     "sections": {
       "account": {
         "title": "Cuenta",

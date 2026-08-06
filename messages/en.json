@@ -4433,6 +4433,119 @@
         "system": "System"
       }
     },
+    "sharedRecord": {
+      "managedSettings": {
+        "profile": {
+          "title": "Profile",
+          "displayName": "Display name",
+          "height": "Height (cm)",
+          "dateOfBirth": "Date of birth",
+          "gender": "Gender",
+          "notSpecified": "Not specified",
+          "male": "Male",
+          "female": "Female",
+          "other": "Other",
+          "locale": "Locale",
+          "systemDefault": "System default",
+          "timezone": "Timezone",
+          "units": "Units",
+          "metric": "Metric",
+          "imperial": "Imperial",
+          "timeFormat": "Time format",
+          "automatic": "Automatic",
+          "hour12": "12-hour",
+          "hour24": "24-hour",
+          "dateFormat": "Date format",
+          "dateDmy": "Day / month / year",
+          "dateMdy": "Month / day / year",
+          "dateYmd": "Year / month / day"
+        },
+        "modules": { "title": "Modules" },
+        "notifications": {
+          "title": "Notifications",
+          "moodReminder": "Enable mood reminder",
+          "reminderHour": "Mood reminder hour",
+          "lowStockRunwayDays": "Low-stock runway days",
+          "reorderLeadDays": "Reorder lead days"
+        },
+        "thresholds": {
+          "title": "Targets",
+          "metric": "Metric",
+          "minimum": "Minimum",
+          "maximum": "Maximum"
+        },
+        "coach": {
+          "title": "Coach",
+          "disable": "Disable Coach",
+          "tone": "Tone",
+          "warm": "Warm",
+          "neutral": "Neutral",
+          "concise": "Concise",
+          "verbosity": "Verbosity",
+          "brief": "Brief",
+          "default": "Default",
+          "detailed": "Detailed",
+          "defaultWindow": "Default window",
+          "last7days": "Last 7 days",
+          "last30days": "Last 30 days",
+          "last90days": "Last 90 days",
+          "allTime": "All time",
+          "showEvidence": "Show evidence by default",
+          "excludedMetrics": "Excluded metrics",
+          "dataClusters": "Data clusters",
+          "customClusters": "Use a custom cluster selection",
+          "metrics": {
+            "bp": "Blood pressure",
+            "weight": "Weight",
+            "pulse": "Pulse",
+            "mood": "Mood",
+            "compliance": "Medication adherence",
+            "hrv": "Heart rate variability",
+            "sleep": "Sleep",
+            "restingHr": "Resting heart rate",
+            "steps": "Steps",
+            "medications": "Medications",
+            "anthropometrics": "Body measurements"
+          },
+          "clusters": {
+            "cardio": "Cardiovascular health",
+            "body": "Body composition",
+            "activity": "Activity",
+            "workouts": "Workouts",
+            "sleep": "Sleep",
+            "mood": "Mood",
+            "glucose": "Glucose",
+            "medication": "Medication",
+            "mobility": "Mobility",
+            "environment": "Environment"
+          }
+        },
+        "insights": {
+          "title": "Insights",
+          "sections": "Overview sections",
+          "tiles": "Navigation tiles",
+          "order": "Order",
+          "unknownItem": "Unavailable insight",
+          "sectionLabels": {
+            "wellnessScores": "Wellness scores",
+            "dailyBriefing": "Daily briefing",
+            "vitals": "Vitals",
+            "trends": "Trends",
+            "periodReview": "Period review",
+            "cycleSummary": "Cycle summary",
+            "signals": "Signals",
+            "rhythmEvents": "Rhythm events",
+            "healthStatus": "Health status",
+            "breathing": "Breathing",
+            "labsChanges": "Lab changes",
+            "ecg": "ECG"
+          }
+        }
+      },
+      "unavailableTitle": "Unavailable in this shared record",
+      "unavailableDescription": "This Settings area is intentionally unavailable while viewing another person's record.",
+      "integrationStatusDescription": "Connection status for this managed record. Connection controls are unavailable."
+    },
     "sections": {
       "account": {
         "title": "Account",
