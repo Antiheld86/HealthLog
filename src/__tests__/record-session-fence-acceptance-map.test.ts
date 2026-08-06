@@ -96,10 +96,10 @@ const CASES: AcceptanceCase[] = [
   {
     id: "FENCE-AC-07",
     case: "IndexedDB and CacheStorage seeded with an owner snapshot, switch in, go offline",
-    home: "e2e/v137-record-session-fence.spec.ts",
+    home: "e2e/v137-record-session-fence-offline.spec.ts",
     runner: "playwright",
     instrument:
-      "Positive control first — the owner snapshot really was in CacheStorage before the switch, asserted by a non-zero entry count. Then the eviction claim of the cache-version policy, then a zero entry count after the switch, then offline with the target's own data reachable.",
+      "Positive control first — the owner snapshot really was in CacheStorage before the switch, asserted by a non-zero entry count. Then the eviction claim of the cache-version policy, then a zero entry count after the switch, then offline with the target record still named. It lives in its own spec and its own Playwright project because every other project sets serviceWorkers: 'block', under which the data cache is never populated and the positive control could not pass whatever the application did.",
   },
   {
     id: "FENCE-AC-08",

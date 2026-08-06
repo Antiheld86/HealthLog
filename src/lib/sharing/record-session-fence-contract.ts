@@ -38,12 +38,17 @@
  *     the client's context is unknown — it is where the client LEARNS the
  *     context it would otherwise have to assert.
  *
- * That list is about the auth HELPERS, not about routes, and it is not
- * absolute: `POST /api/admin/backups/[id]/restore` composes the idempotency
- * wrapper OUTSIDE `apiHandler`, so it is fence-visible through the idempotency
- * arm even though `requireAdmin` itself is unfenced. That is wanted. An
- * idempotent admin write under an unprovable context should be refused like any
- * other.
+ * That list is about the auth HELPERS, not about routes, and it is not quite
+ * absolute — but the exception is narrower than it first looks and the exact
+ * shape matters. `POST /api/admin/backups/[id]/restore` composes the
+ * idempotency wrapper OUTSIDE `apiHandler`, so the wrapper's own fence check
+ * does run on it. That check refuses only the STALE half: an `unfenced-client`
+ * verdict falls through to the handler, and the handler's `requireAdmin` is
+ * unfenced, so a headerless admin request is served exactly as before. So the
+ * accurate claim is "an idempotent admin write under a context the client
+ * asserted WRONGLY is refused", not "admin routes are fenced". A pre-fence
+ * admin tab keeps working, which is the deploy-compatibility posture
+ * everywhere else too.
  *
  * ─── Why there are two refusals and not one ───────────────────────────────
  *

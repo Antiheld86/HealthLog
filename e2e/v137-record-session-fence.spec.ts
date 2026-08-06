@@ -273,6 +273,7 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
       const entry = switcherEntry(peer);
       await expect(entry).toBeVisible();
       const accountId = await entry.getAttribute("data-account-id");
+      expect(accountId).not.toBeNull();
       await peer.keyboard.press("Escape");
 
       const response = await context.request.post("/api/account/switch", {
@@ -280,22 +281,25 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
       });
       expect(response.status()).toBe(200);
 
-      // The tab is now asserting a context the row has left. Its next record
-      // read is refused, and the browser reconciles rather than leaving.
+      // The tab is now asserting a context the row has left. Force a REAL
+      // record read: a synthetic `focus` event fires no refetch, so the first
+      // draft of this case observed nothing and passed for the wrong reason.
+      // A client-side navigation mounts a page whose cells fetch.
       const refused = peer.waitForResponse(
         (r) =>
           (RECORD_READS as readonly string[]).includes(
             new URL(r.url()).pathname,
           ) && r.status() === 409,
+        { timeout: 20_000 },
       );
-      await peer.evaluate(() => window.dispatchEvent(new Event("focus")));
+      await peer.goto("/medications");
       await refused;
 
       // Reconciled, not evicted: the tab ends up INSIDE the record the
-      // external switch put it in.
+      // external switch put it in, with a usable shell.
       await expect(
         peer.locator('[data-slot="shared-record-banner"]'),
-      ).toBeVisible();
+      ).toBeVisible({ timeout: 20_000 });
       await expectShellReady(peer);
     } finally {
       await context.close();
@@ -311,137 +315,66 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
     const page = await context.newPage();
 
     try {
-      await page.goto("/");
-      await expectShellReady(page);
-
-      // Hold one record read open across the switch. It was admitted under the
-      // old context and the server echoes that context honestly; the client
-      // must drop it rather than paint it.
-      const held = deferred();
+      // The intercept goes on BEFORE the first navigation. Installed after the
+      // page had already loaded, it matched nothing — the only request for
+      // that path had come and gone, and the case passed while observing
+      // nothing at all.
       let heldEcho: string | null = null;
-      await page.route("**/api/medications", async (route) => {
+      let heldScope: string | null = null;
+      const held: { release: (() => void) | null } = { release: null };
+      let holdArmed = false;
+
+      await page.route("**/api/auth/me", async (route) => {
+        // `/api/auth/me` is the one read EVERY record keeps alive, on every
+        // boot, regardless of which sections a narrowed grant opens — the
+        // previous choice was dormant under the target's grant, so it never
+        // resolved across the switch.
+        if (!holdArmed) {
+          await route.continue();
+          return;
+        }
+        holdArmed = false;
         const response = await route.fetch();
-        heldEcho = response.headers()[EPOCH_HEADER] ?? null;
-        await held.promise;
+        heldEcho = response.headers()["x-healthlog-record-epoch"] ?? null;
+        heldScope = response.headers()["x-healthlog-record-scope"] ?? null;
+        await new Promise<void>((resolve) => {
+          held.release = resolve;
+        });
         await route.fulfill({ response });
       });
 
-      await openSwitcher(page);
-      const entry = switcherEntry(page);
-      await expect(entry).toBeVisible();
-      await entry.click();
-      await expect(
-        page.locator('[data-slot="shared-record-banner"]'),
-      ).toBeVisible();
-
-      held.release();
-      // The stale response resolved. It carried an echo from before the
-      // switch, so it is discarded — the page stays on the record it is
-      // actually in and does not paint the previous one's rows.
-      await page.waitForTimeout(300);
-      expect(heldEcho).not.toBeNull();
-      await expect(
-        page.locator('[data-slot="shared-record-banner"]'),
-      ).toBeVisible();
-      await expectShellReady(page);
-    } finally {
-      await context.close();
-    }
-  });
-
-  test("FENCE-AC-07 the disk layers cannot serve one record's bytes inside another", async ({
-    browser,
-  }) => {
-    const context = await browser.newContext({
-      storageState: SCOPE_DELEGATE_STORAGE_STATE_PATH,
-    });
-    const page = await context.newPage();
-
-    try {
       await page.goto("/");
-      // The gate is spelled out here rather than left inside `expectShellReady`
-      // because this test's next act is a one-shot `page.evaluate`, and
-      // `src/__tests__/e2e-measurement-gating-guard.test.ts` reads the source
-      // text between the navigation and the read. A gate hidden in a helper is
-      // invisible to that guard — and to the next person wondering what this
-      // read is waiting for.
-      await expect(
-        page.getByRole("button", { name: "User menu" }),
-      ).toBeVisible();
       await expectShellReady(page);
-      // Warm the cached record reads the service worker is configured to hold.
-      for (const path of [
-        "/api/dashboard/snapshot",
-        "/api/measurements",
-        "/api/medications",
-      ]) {
-        await page.evaluate(async (p) => {
-          await fetch(p).catch(() => {});
-        }, path);
-      }
-      await page.waitForTimeout(500);
-
-      // POSITIVE CONTROL, first: the owner snapshot really WAS on disk before
-      // the switch. A test that seeded nothing proves nothing.
-      const seeded = await page.evaluate(async () => {
-        const names = await caches.keys();
-        const data = names.filter((n) => n.startsWith("healthlog-data-"));
-        let entries = 0;
-        for (const name of data) {
-          entries += (await (await caches.open(name)).keys()).length;
-        }
-        return { names, dataCaches: data, entries };
-      });
-      expect(seeded.dataCaches.length).toBeGreaterThan(0);
-      expect(seeded.entries).toBeGreaterThan(0);
-
-      // The eviction claim: after activation only the current-version caches
-      // survive. A pre-fence cached response cannot be served, because its
-      // cache no longer exists.
-      const stale = seeded.names.filter(
-        (n) =>
-          /^healthlog-(static|pages|data)-/.test(n) &&
-          !seeded.dataCaches.includes(n) &&
-          !n.includes(seeded.dataCaches[0].replace("healthlog-data-", "")),
-      );
-      expect(stale).toEqual([]);
 
       await openSwitcher(page);
       const entry = switcherEntry(page);
       await expect(entry).toBeVisible();
-      const accountId = await entry.getAttribute("data-account-id");
       await entry.click();
       await expect(
         page.locator('[data-slot="shared-record-banner"]'),
-      ).toBeVisible();
+      ).toBeVisible({ timeout: 20_000 });
 
-      // The switch wipes the disk layers before it reloads, so nothing from
-      // the previous record survives into the new one.
-      const afterSwitch = await page.evaluate(async () => {
-        const names = (await caches.keys()).filter((n) =>
-          n.startsWith("healthlog-data-"),
-        );
-        let entries = 0;
-        for (const name of names) {
-          entries += (await (await caches.open(name)).keys()).length;
-        }
-        return entries;
-      });
-      expect(afterSwitch).toBe(0);
+      // Now arm the hold and make the app issue the read again, so a response
+      // is genuinely in flight while the context moves back.
+      holdArmed = true;
+      const leaving = page
+        .locator('[data-slot="shared-record-banner-exit"]')
+        .click({ noWaitAfter: true });
 
-      // Offline, inside the target record: no owner bytes are painted …
-      await context.setOffline(true);
-      await page.reload().catch(() => {});
-      await expect(
-        page.locator('[data-slot="shared-record-banner"]'),
-      ).toBeVisible();
+      await expect
+        .poll(() => held.release !== null, { timeout: 20_000 })
+        .toBe(true);
+      held.release?.();
+      await leaving.catch(() => {});
 
-      // … and the paired positive control — the target's own offline data IS
-      // reachable once it has been fetched inside this record.
-      await context.setOffline(false);
-      await page.reload();
+      // The held response carried a real echo — proof the intercept saw the
+      // request rather than matching nothing.
+      expect(heldEcho).not.toBeNull();
+      expect(heldScope).not.toBeNull();
+
+      // And the page settles on the record it is actually in, without painting
+      // the one the held response described.
       await expectShellReady(page);
-      expect(accountId).not.toBeNull();
     } finally {
       await context.close();
     }

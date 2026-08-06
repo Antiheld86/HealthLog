@@ -25,10 +25,19 @@
 -- silently, and a fence whose counter can silently fail to move is a fence that
 -- passes stale requests. A row trigger cannot be forgotten.
 --
--- BEFORE, not AFTER, and that timing is load-bearing: the trigger overwrites
--- whatever `record_epoch` the incoming statement supplied, so no writer can set
--- the epoch itself even by trying. The counter belongs to the database in the
--- strong sense.
+-- BEFORE, not AFTER, and that timing is load-bearing: on any statement that
+-- moves the selector, the trigger overwrites whatever `record_epoch` the
+-- incoming statement supplied, so a writer cannot steer the counter while
+-- switching.
+--
+-- What that does NOT cover, stated because the first draft of this comment
+-- overstated it: a statement that names `record_epoch` and does NOT change
+-- `acting_as_user_id` never fires this trigger at all, so it writes the column
+-- freely. The trigger owns the counter on the path that matters — every
+-- selector move — and what keeps application code away from the column
+-- otherwise is the source guard in
+-- `src/__tests__/record-session-fence-guard.test.ts`, which holds the set of
+-- files naming it to one.
 --
 -- `UPDATE OF "acting_as_user_id"` plus the `WHEN` clause keep the two writes
 -- that touch a session on nearly every request off the trigger entirely — the

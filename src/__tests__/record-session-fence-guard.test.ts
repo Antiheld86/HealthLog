@@ -89,12 +89,15 @@ const FENCED_RESOLVERS = ["requireRecordAuth", "requireGuardianAuth"] as const;
 /**
  * The helpers that deliberately do NOT consult the fence.
  *
- * This is a statement about the HELPERS and must not be read as "no admin route
- * is ever fenced". `POST /api/admin/backups/[id]/restore` composes
- * `withIdempotency` OUTSIDE `apiHandler`, so it is fence-visible through the
- * idempotency arm even though `requireAdmin` itself is on this list — and that
- * is wanted, not an oversight. An idempotent admin write under an unprovable
- * context should be refused like any other.
+ * This is a statement about the HELPERS. It must not be read as "no admin route
+ * is ever fenced", and it must not be read as the reverse either.
+ * `POST /api/admin/backups/[id]/restore` composes `withIdempotency` OUTSIDE
+ * `apiHandler`, so the wrapper's fence check runs on it — but that check
+ * refuses only the STALE half. An `unfenced-client` verdict falls through to
+ * the handler, whose `requireAdmin` is on this list, so a headerless admin
+ * request is served exactly as it was before the fence existed. The accurate
+ * claim is therefore narrow: an idempotent admin write under a context the
+ * client asserted WRONGLY is refused; one that asserts nothing is not.
  *
  * Each entry's reason, once:
  *
