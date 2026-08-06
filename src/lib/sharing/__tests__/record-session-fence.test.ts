@@ -330,6 +330,64 @@ describe("the contract module is safe in the browser bundle", () => {
   });
 });
 
+describe("attachRecordContextEcho", () => {
+  async function attach(
+    context: { epoch: number; scope: string | null } | undefined,
+    initial?: Record<string, string>,
+  ): Promise<Headers> {
+    const { attachRecordContextEcho } =
+      await import("@/lib/sharing/record-session-fence");
+    const headers = new Headers(initial);
+    attachRecordContextEcho(headers, context);
+    return headers;
+  }
+
+  it("declares that the answer varies on the two fence headers", async () => {
+    // Without this a shared cache — one reverse proxy away — would key a
+    // delegated record response on URL alone and serve it to the next request
+    // for the same URL under a different context. One person's record handed
+    // to another by an infrastructure change nobody thought was a code change.
+    const headers = await attach({ epoch: 4, scope: "owner-1" });
+    const vary = (headers.get("Vary") ?? "")
+      .split(",")
+      .map((part) => part.trim().toLowerCase());
+    expect(vary).toContain(RECORD_EPOCH_HEADER);
+    expect(vary).toContain(RECORD_SCOPE_HEADER);
+  });
+
+  it("keeps a Vary the route had already set", async () => {
+    const headers = await attach(
+      { epoch: 1, scope: null },
+      { Vary: "Accept-Encoding" },
+    );
+    const vary = (headers.get("Vary") ?? "")
+      .split(",")
+      .map((part) => part.trim().toLowerCase());
+    expect(vary).toContain("accept-encoding");
+    expect(vary).toContain(RECORD_EPOCH_HEADER);
+  });
+
+  it("does not repeat a header the route already varied on", async () => {
+    const headers = await attach(
+      { epoch: 1, scope: null },
+      { Vary: `Accept-Encoding, ${RECORD_EPOCH_HEADER.toUpperCase()}` },
+    );
+    const vary = (headers.get("Vary") ?? "")
+      .split(",")
+      .map((part) => part.trim().toLowerCase());
+    expect(vary.filter((v) => v === RECORD_EPOCH_HEADER)).toHaveLength(1);
+  });
+
+  it("adds nothing at all when no record scope was resolved", async () => {
+    // The response carries no echo, so there is nothing for a cache to vary
+    // on — and claiming otherwise would fragment the cache key of every public
+    // route for no reason.
+    const headers = await attach(undefined);
+    expect(headers.get("Vary")).toBeNull();
+    expect(headers.get(RECORD_EPOCH_HEADER)).toBeNull();
+  });
+});
+
 describe("assertRecordSessionFence", () => {
   beforeEach(() => {
     headerJar.clear();

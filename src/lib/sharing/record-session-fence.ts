@@ -103,6 +103,33 @@ export function attachRecordContextEcho(
   if (!context) return;
   headers.set(RECORD_EPOCH_HEADER, String(context.epoch));
   headers.set(RECORD_SCOPE_HEADER, recordScopeHeaderValue(context.scope));
+  // And declare that the answer DEPENDS on those two request headers.
+  //
+  // Nothing between the browser and this app caches today — the responses that
+  // reach here are private and same-origin. But a shared cache is one reverse
+  // proxy away, and without `Vary` the first one to appear would key a
+  // delegated record response on URL alone and hand it to the next request for
+  // the same URL under a different context. That is one person's health record
+  // served to another, produced by an infrastructure change nobody thought was
+  // a code change.
+  //
+  // Appended rather than assigned: a route that already varies on something
+  // (`Accept-Encoding`, a locale header) must keep it. Case-insensitive
+  // de-duplication, because a value repeated in two spellings is the sort of
+  // header that makes a proxy give up and cache nothing.
+  const existing = headers
+    .get("Vary")
+    ?.split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  const names = new Set((existing ?? []).map((part) => part.toLowerCase()));
+  const merged = [...(existing ?? [])];
+  for (const header of [RECORD_EPOCH_HEADER, RECORD_SCOPE_HEADER]) {
+    if (names.has(header.toLowerCase())) continue;
+    names.add(header.toLowerCase());
+    merged.push(header);
+  }
+  headers.set("Vary", merged.join(", "));
 }
 
 /**
