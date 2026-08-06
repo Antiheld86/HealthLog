@@ -9,6 +9,11 @@ import {
   findActiveGrant,
   inviteGrant,
 } from "@/lib/sharing/grants";
+import {
+  LastManagedGuardianError,
+  clearManagedProfileMarker,
+  deleteManagedProfile,
+} from "@/lib/managed-profiles/lifecycle";
 
 vi.mock("next/headers", async () => {
   const { cookieJar, headerJar } = await import("./mock-next-headers");
@@ -209,5 +214,71 @@ describe("managed profile lifecycle (real Postgres)", () => {
         new Date(Date.now() + 24 * 60 * 60 * 1000),
       ),
     ).not.toBeNull();
+  });
+
+  it("refuses to delete a Guardian account when it would leave a managed profile behind", async () => {
+    const guardian = await signInWithFreshMfa();
+    const { profile } = await createManagedProfile({
+      creatorId: guardian.id,
+      displayName: "Managed profile",
+      dateOfBirth: null,
+      locale: "en",
+      timezone: "UTC",
+    });
+    const { DELETE } = await import("@/app/api/settings/account/route");
+
+    const response = await DELETE(
+      new NextRequest("http://localhost/api/settings/account", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirm: "DELETE_ACCOUNT" }),
+      }),
+    );
+    expect(response.status).toBe(409);
+    expect(
+      await getPrismaClient().user.findUnique({ where: { id: guardian.id } }),
+    ).not.toBeNull();
+    expect(
+      await getPrismaClient().user.findUnique({ where: { id: profile.id } }),
+    ).not.toBeNull();
+  });
+
+  it("deletes a managed profile only through its fresh-MFA Guardian path", async () => {
+    const guardian = await signInWithFreshMfa();
+    const { profile } = await createManagedProfile({
+      creatorId: guardian.id,
+      displayName: "Managed profile",
+      dateOfBirth: null,
+      locale: "en",
+      timezone: "UTC",
+    });
+
+    await deleteManagedProfile({
+      profileId: profile.id,
+      guardianId: guardian.id,
+    });
+    expect(
+      await getPrismaClient().user.findUnique({ where: { id: profile.id } }),
+    ).toBeNull();
+  });
+
+  it("keeps marker clearing internal while stopping managed behavior", async () => {
+    const guardian = await signInWithFreshMfa();
+    const { profile } = await createManagedProfile({
+      creatorId: guardian.id,
+      displayName: "Managed profile",
+      dateOfBirth: null,
+      locale: "en",
+      timezone: "UTC",
+    });
+
+    await clearManagedProfileMarker({ profileId: profile.id });
+    const cleared = await getPrismaClient().user.findUniqueOrThrow({
+      where: { id: profile.id },
+    });
+    expect(cleared.managedProfileAt).toBeNull();
+    await expect(
+      clearManagedProfileMarker({ profileId: "missing-profile" }),
+    ).rejects.toBeInstanceOf(LastManagedGuardianError);
   });
 });

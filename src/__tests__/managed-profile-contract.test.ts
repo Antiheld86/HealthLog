@@ -31,4 +31,25 @@ describe("managed-profile contract", () => {
       routes.some((entry) => entry.toLowerCase().includes("emancip")),
     ).toBe(false);
   });
+
+  it("uses the same record lock for every Guardian-reducing transition", async () => {
+    const lifecycle = await readFile(
+      path.join(root, "src/lib/managed-profiles/lifecycle.ts"),
+      "utf8",
+    );
+    const grants = await readFile(
+      path.join(root, "src/lib/sharing/grants.ts"),
+      "utf8",
+    );
+    const accountDeletion = await readFile(
+      path.join(root, "src/app/api/settings/account/route.ts"),
+      "utf8",
+    );
+
+    expect(lifecycle).toContain("pg_advisory_xact_lock");
+    expect(lifecycle).toContain("clearManagedProfileMarker");
+    expect(lifecycle).toContain("deleteManagedProfile");
+    expect(grants).toContain("reduceManagedProfileGuardian");
+    expect(accountDeletion).toContain("deleteGuardianAccountWithLifecycle");
+  });
 });
