@@ -18,3 +18,9 @@
  */
 export const cookieJar = new Map<string, string>();
 export const headerJar = new Map<string, string>();
+
+/**
+ * Session snapshots for invoking concurrent route handlers as different users.
+ * A request consumes one entry when its mocked cookie store is created.
+ */
+export const queuedSessionIds: string[] = [];
