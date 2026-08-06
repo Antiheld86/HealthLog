@@ -164,6 +164,30 @@ describe("web-push reminder push — stable tag + badge", () => {
     );
     expect(body.tag).toBe("REMINDER");
   });
+
+  it("uses an ordinary landing route without a persistent prompt for a managed Guardian", async () => {
+    findManyMock.mockResolvedValue([SUB]);
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(null, { status: 201 }),
+    );
+
+    await sendViaWebPush("guardian-1", {
+      eventType: "MEDICATION_REMINDER",
+      userId: "record-1",
+      recordUserId: "record-1",
+      recipientUserId: "guardian-1",
+      title: "Time for your dose",
+      message: "Ramipril 5mg",
+      urgent: true,
+      metadata: { url: "/medications/med-1" },
+    });
+
+    const body = JSON.parse(
+      generateRequestDetailsMock.mock.calls[0][1] as string,
+    );
+    expect(body.url).toBe("/");
+    expect(body.requireInteraction).toBe(false);
+  });
 });
 
 describe("clear-on-taken push", () => {

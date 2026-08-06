@@ -146,6 +146,24 @@ describe("ntfy urgent mapping", () => {
     expect(headers.Priority).toBe("5");
     expect(headers.Tags).toBe("reminder");
   });
+
+  it("does not send ntfy action headers to a managed Guardian", async () => {
+    safeFetchMock.mockResolvedValue({ ok: true, status: 200 });
+    await sendViaNtfy(
+      { serverUrl: "https://ntfy.example.com", topic: "t" },
+      payload({
+        userId: "record-1",
+        recordUserId: "record-1",
+        recipientUserId: "guardian-1",
+      }),
+    );
+    const headers = (
+      safeFetchMock.mock.calls[0][1] as {
+        headers: Record<string, string>;
+      }
+    ).headers;
+    expect(headers.Actions).toBeUndefined();
+  });
 });
 
 describe("webhook urgent mapping", () => {

@@ -610,6 +610,32 @@ describe("sendViaApns — dispatcher fan-out", () => {
     expect(note.payload.eventType).toBe("MEDICATION_REMINDER");
   });
 
+  it("omits action metadata and categories for a managed Guardian", async () => {
+    vi.mocked(prisma.device.findMany).mockResolvedValueOnce([
+      { id: "d1", apnsToken: "tok-a", apnsEnvironment: "sandbox" },
+    ] as never);
+    sendMock.mockResolvedValueOnce({ sent: [{ device: "tok-a" }], failed: [] });
+
+    await sendViaApns("guardian-1", {
+      title: "t",
+      message: "m",
+      eventType: "MEDICATION_REMINDER",
+      userId: "record-1",
+      recordUserId: "record-1",
+      recipientUserId: "guardian-1",
+      metadata: {
+        medicationId: "med-1",
+        scheduleId: "sched-1",
+        reminderId: "rem-1",
+        url: "/medications/med-1",
+      },
+    });
+
+    const note = sendMock.mock.calls[0][0];
+    expect(note.category).toBeUndefined();
+    expect(note.payload).toEqual({ eventType: "MEDICATION_REMINDER" });
+  });
+
   it("forwards reminderId on MEASUREMENT_REMINDER and strips unlisted keys", async () => {
     // The iOS "Erledigt" action POSTs the reminder completion directly
     // from a foreground / handled notification, so the reminder's id must

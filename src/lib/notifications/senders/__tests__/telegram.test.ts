@@ -200,6 +200,26 @@ describe("sendViaTelegram — per-slot delete scope (H2)", () => {
     ]);
   });
 
+  it("omits a record's inline actions for a managed Guardian", async () => {
+    await sendViaTelegram(
+      { botToken: "bot-token", chatId: "guardian-chat" },
+      {
+        ...reminderPayload({
+          replyMarkup: {
+            inline_keyboard: [[{ text: "Take", callback_data: "taken:med-1" }]],
+          },
+        }),
+        userId: "managed-record",
+        recordUserId: "managed-record",
+        recipientUserId: "guardian-1",
+      },
+    );
+
+    expect(
+      sendTelegramMessageMock.mock.calls[0][3].replyMarkup,
+    ).toBeUndefined();
+  });
+
   it("updates one recipient slot when its Telegram chat changes", async () => {
     findUniqueMock.mockResolvedValue({ chatId: "old-chat", messageId: 123 });
 
