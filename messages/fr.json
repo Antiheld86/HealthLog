@@ -9758,6 +9758,9 @@
       "notFound": "Cet accès n'existe plus.",
       "revokeFailed": "L'accès n'a pas pu être terminé.",
       "renounceFailed": "L'accès n'a pas pu être rendu."
+    },
+    "anamnesis": {
+      "relativeNote": "Un antécédent familial décrit les proches de cette personne. Ne l'ajoutez que si elle voudrait le voir consigné ici."
     }
   }
 }

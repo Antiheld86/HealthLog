@@ -9758,6 +9758,9 @@
       "notFound": "Ese acceso ya no existe.",
       "revokeFailed": "No se pudo terminar el acceso.",
       "renounceFailed": "No se pudo devolver el acceso."
+    },
+    "anamnesis": {
+      "relativeNote": "Una entrada de antecedentes familiares describe a los familiares de esta persona. Añádela solo si querría que quedara registrada aquí."
     }
   }
 }

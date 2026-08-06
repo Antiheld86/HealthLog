@@ -9758,6 +9758,9 @@
       "notFound": "Diesen Zugriff gibt es nicht mehr.",
       "revokeFailed": "Der Zugriff konnte nicht beendet werden.",
       "renounceFailed": "Der Zugriff konnte nicht zurückgegeben werden."
+    },
+    "anamnesis": {
+      "relativeNote": "Ein Eintrag zur Familienanamnese beschreibt die Angehörigen dieser Person. Trage ihn nur ein, wenn sie das hier festgehalten haben möchte."
     }
   }
 }

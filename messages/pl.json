@@ -9758,6 +9758,9 @@
       "notFound": "Tego dostępu już nie ma.",
       "revokeFailed": "Nie udało się zakończyć dostępu.",
       "renounceFailed": "Nie udało się zwrócić dostępu."
+    },
+    "anamnesis": {
+      "relativeNote": "Wpis w wywiadzie rodzinnym opisuje bliskich tej osoby. Dodaj go tylko wtedy, gdy chciałaby, żeby został tu zapisany."
     }
   }
 }

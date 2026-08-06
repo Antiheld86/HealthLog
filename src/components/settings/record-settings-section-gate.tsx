@@ -10,6 +10,7 @@ import { classifySettingsDestination } from "@/lib/record-settings";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { ManagedIntegrationStatus } from "@/components/settings/managed-integration-status";
 import { ManagedRecordSettingsSection } from "@/components/settings/managed-record-settings-section";
+import { RecordAnamnesisSection } from "@/components/settings/record-anamnesis-section";
 import { SettingsCard } from "@/components/settings/settings-card";
 import type { SettingsSectionSlug } from "@/components/settings/section-slugs";
 
@@ -35,7 +36,7 @@ export function RecordSettingsSectionGate({
   children: ReactNode;
 }) {
   const { isLoading } = useAuth();
-  const { inSharedRecord, recordKind } = useRecordCapabilities();
+  const { inSharedRecord, recordKind, level } = useRecordCapabilities();
   const { t } = useTranslations();
 
   // A shared session must never begin by mounting the actor's Settings
@@ -53,6 +54,21 @@ export function RecordSettingsSectionGate({
   if (!inSharedRecord) return children;
 
   const destination = classifySettingsDestination(section);
+
+  // v1.37.0 — the one destination that is record CONTENT rather than record
+  // configuration, and therefore the one every MANAGE holder reaches: a
+  // Guardian inside the profile they administer, and an adult delegate whose
+  // grant is MANAGE. Both post to routes that already resolve
+  // `requireRecordAuth("manage", "profile")`; before this the forms had no
+  // reachable page and the permission had no caller.
+  //
+  // Checked before the managed branches so a Guardian gets the same record
+  // surface an adult manager does, rather than the guardian configuration
+  // panel, which has no family for it.
+  if (destination.kind === "manage-writable" && level === "manage") {
+    return <RecordAnamnesisSection />;
+  }
+
   if (
     recordKind === "managed" &&
     destination.kind === "managed-guardian" &&

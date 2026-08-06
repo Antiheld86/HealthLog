@@ -7,6 +7,7 @@ import {
 import {
   classifySettingsDestination,
   isGuardianSettingsWriteAllowed,
+  isManageDelegateSettingsDestination,
   SETTINGS_DESTINATION_INVENTORY,
 } from "@/lib/record-settings/classification";
 import { toRecordSettingsDto } from "@/lib/record-settings/dto";
@@ -72,6 +73,55 @@ describe("record settings contract", () => {
     expect(isGuardianSettingsWriteAllowed("notifications")).toBe(true);
     expect(isGuardianSettingsWriteAllowed("integrations")).toBe(false);
     expect(isGuardianSettingsWriteAllowed("ai")).toBe(false);
+  });
+
+  /**
+   * v1.37.0 — the anamnesis destination, which is the one piece of record
+   * CONTENT under `/settings`.
+   *
+   * `POST /api/allergies` and `POST /api/family-history` have resolved
+   * `requireRecordAuth("manage", "profile")` since MANAGE shipped, while the
+   * only form that posts to either was classified unavailable — an admitted
+   * write with no reachable caller. These three legs are the classification
+   * half of closing that; the integration file drives the routes themselves.
+   */
+  it("opens the anamnesis destination to everybody the routes already admit", () => {
+    expect(classifySettingsDestination("anamnesis")).toEqual({
+      kind: "manage-writable",
+      guardianWritable: true,
+    });
+    // The Guardian half. Before this the destination existed and was
+    // read-only for the one person the profile exists for.
+    expect(isGuardianSettingsWriteAllowed("anamnesis")).toBe(true);
+    // The adult-delegate half, and its boundary in the same breath: a MANAGE
+    // grant opens the record's health background and nothing else under
+    // Settings. Record CONFIGURATION — modules, thresholds, notification
+    // routing — stays with the owner even though a Guardian may change it.
+    expect(isManageDelegateSettingsDestination("anamnesis")).toBe(true);
+    for (const guardianOnly of [
+      "account",
+      "modules",
+      "notifications",
+      "thresholds",
+      "insights",
+      "coach",
+      "integrations",
+    ]) {
+      expect(
+        isManageDelegateSettingsDestination(guardianOnly),
+        guardianOnly,
+      ).toBe(false);
+    }
+  });
+
+  it("leaves exactly one destination on the manage-writable list", () => {
+    // The list is short on purpose and a second entry is a consent decision,
+    // not a classification tidy-up. Pinning the count means a destination
+    // cannot join it as a side effect of somebody reclassifying a neighbour.
+    const manageWritable = Object.entries(SETTINGS_DESTINATION_INVENTORY)
+      .filter(([, value]) => value.kind === "manage-writable")
+      .map(([slug]) => slug);
+    expect(manageWritable).toEqual(["anamnesis"]);
   });
 
   it("does not report a synthetic ledger row as a managed connection", () => {

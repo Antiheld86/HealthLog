@@ -9758,6 +9758,9 @@
       "notFound": "Questo accesso non esiste più.",
       "revokeFailed": "Non è stato possibile terminare l'accesso.",
       "renounceFailed": "Non è stato possibile restituire l'accesso."
+    },
+    "anamnesis": {
+      "relativeNote": "Una voce di anamnesi familiare descrive i parenti di questa persona. Aggiungila solo se vorrebbe vederla registrata qui."
     }
   }
 }

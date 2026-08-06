@@ -9758,6 +9758,9 @@
       "notFound": "That access is no longer there.",
       "revokeFailed": "The access could not be ended.",
       "renounceFailed": "The access could not be handed back."
+    },
+    "anamnesis": {
+      "relativeNote": "A family history entry describes this person's relatives. Add it only when they would want it recorded here."
     }
   }
 }

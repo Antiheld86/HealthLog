@@ -8,6 +8,7 @@ export { resolveManagedIntegrationState } from "./integrations";
 export {
   classifySettingsDestination,
   isGuardianSettingsWriteAllowed,
+  isManageDelegateSettingsDestination,
   SETTINGS_DESTINATION_INVENTORY,
   type SettingsDestinationClassification,
   type SettingsDestinationKind,
