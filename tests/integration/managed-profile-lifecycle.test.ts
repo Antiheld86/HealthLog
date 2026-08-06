@@ -3,6 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { cookieJar, headerJar } from "./mock-next-headers";
 import { getPrismaClient, truncateAllTables } from "./setup";
+import { createManagedProfile } from "@/lib/managed-profiles/create";
+import {
+  acceptGrant,
+  findActiveGrant,
+  inviteGrant,
+} from "@/lib/sharing/grants";
 
 vi.mock("next/headers", async () => {
   const { cookieJar, headerJar } = await import("./mock-next-headers");
@@ -50,6 +56,16 @@ async function signInWithFreshMfa() {
   });
   cookieJar.set("healthlog_session", session.id);
   return guardian;
+}
+
+async function makeAdult(label: string) {
+  const suffix = sequence++;
+  return getPrismaClient().user.create({
+    data: {
+      username: `${label}-${suffix}`,
+      email: `${label}-${suffix}@example.test`,
+    },
+  });
 }
 
 function createRequest(body: unknown): NextRequest {
@@ -156,5 +172,42 @@ describe("managed profile lifecycle (real Postgres)", () => {
       }),
     ).toBe(0);
     expect(await prisma.accountGrant.count()).toBe(0);
+  });
+
+  it("second Guardian accepts through the ordinary invitation and does not expire", async () => {
+    const creator = await signInWithFreshMfa();
+    const secondGuardian = await makeAdult("second-guardian");
+    const { profile } = await createManagedProfile({
+      creatorId: creator.id,
+      displayName: "Managed profile",
+      dateOfBirth: null,
+      locale: "en",
+      timezone: "UTC",
+    });
+    const invitationExpiry = new Date(Date.now() + 60 * 60 * 1000);
+
+    const invitation = await inviteGrant({
+      grantorId: profile.id,
+      granteeId: secondGuardian.id,
+      access: "MANAGE",
+      scope: null,
+      expiresAt: invitationExpiry,
+    });
+    expect(invitation.acceptedAt).toBeNull();
+    expect(invitation.expiresAt).toEqual(invitationExpiry);
+
+    const accepted = await acceptGrant({
+      grantId: invitation.id,
+      granteeId: secondGuardian.id,
+    });
+    expect(accepted.acceptedAt).not.toBeNull();
+    expect(accepted.expiresAt).toBeNull();
+    expect(
+      await findActiveGrant(
+        { grantorId: profile.id, granteeId: secondGuardian.id },
+        getPrismaClient(),
+        new Date(Date.now() + 24 * 60 * 60 * 1000),
+      ),
+    ).not.toBeNull();
   });
 });

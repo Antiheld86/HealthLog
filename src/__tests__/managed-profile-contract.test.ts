@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -22,5 +22,13 @@ describe("managed-profile contract", () => {
     );
 
     expect(source.toLowerCase()).not.toContain("emancipation");
+
+    const routes = await readdir(
+      path.join(root, "src/app/api/managed-profiles"),
+      { recursive: true },
+    );
+    expect(
+      routes.some((entry) => entry.toLowerCase().includes("emancip")),
+    ).toBe(false);
   });
 });
