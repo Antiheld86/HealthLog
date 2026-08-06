@@ -138,6 +138,11 @@ export const SCOPE_DELEGATE_STORAGE_STATE_PATH = resolve(
   "e2e/setup/storageStateScopeDelegate.json",
 );
 
+export const SCOPE_A11Y_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateScopeA11y.json",
+);
+
 async function hashPassword(password: string): Promise<string> {
   return hash(password, {
     memoryCost: 19456,
@@ -487,6 +492,11 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     baseURL,
     E2E_SCOPE_DELEGATE,
     SCOPE_DELEGATE_STORAGE_STATE_PATH,
+  );
+  await captureAuthState(
+    baseURL,
+    E2E_SCOPE_DELEGATE,
+    SCOPE_A11Y_STORAGE_STATE_PATH,
   );
 }
 
