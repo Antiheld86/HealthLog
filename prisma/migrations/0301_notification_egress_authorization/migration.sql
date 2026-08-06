@@ -30,3 +30,12 @@ CREATE INDEX "notification_egress_authorizations_record_user_id_recipient_user_i
         "recipient_user_id",
         "authorized_at" DESC
     );
+
+-- A recipient can erase their account without owning the underlying record.
+-- PostgreSQL needs a recipient-first access path for that FK cascade and for
+-- the explicit Delete All Data predicate over recipient_user_id.
+CREATE INDEX "notification_egress_auth_recipient_authorized_at_idx"
+    ON "notification_egress_authorizations" (
+        "recipient_user_id",
+        "authorized_at" DESC
+    );

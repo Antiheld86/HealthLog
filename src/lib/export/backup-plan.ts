@@ -408,6 +408,8 @@ export const NOT_IN_BACKUP_MODELS: Readonly<Record<string, string>> = {
     "A 90-day delivery ledger for this host's sends. Restoring it onto another host would assert sends it never made.",
   NotificationEvent:
     "A local notification dedup anchor. Restoring it onto another host would suppress reminders and safety notices that host still owes.",
+  NotificationEgressAuthorization:
+    "A short-lived, deployment-local Guardian egress ledger. It retains no notification content, credentials, or deduplication key, and its outcome is observation rather than authorization; restoring it would nevertheless carry stale send history to a host that must recheck the live grant before every send. Exclude it so a backup never exports notification-derived privacy metadata or makes a restored host reason from another host's delivery work.",
   AuditLog:
     "An append-only record of actions taken on this instance. Merging one instance's audit trail into another's would make the trail untrue.",
   CoachUsage:

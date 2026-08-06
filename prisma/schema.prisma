@@ -5850,6 +5850,7 @@ model NotificationEgressAuthorization {
 
   @@index([authorizedAt], map: "notification_egress_authorizations_authorized_at_idx")
   @@index([recordUserId, recipientUserId, authorizedAt(sort: Desc)])
+  @@index([recipientUserId, authorizedAt(sort: Desc)], map: "notification_egress_auth_recipient_authorized_at_idx")
   @@map("notification_egress_authorizations")
 }
 

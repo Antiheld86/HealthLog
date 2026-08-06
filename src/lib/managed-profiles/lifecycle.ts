@@ -121,6 +121,68 @@ export async function deleteGuardianAccountWithLifecycle<T>(
   });
 }
 
+/**
+ * Hold every managed-record lock affected by a data wipe, then prove that the
+ * wipe will not leave a managed profile with no active Guardian. The caller
+ * keeps the transaction open through the AccountGrant deletion, so a final
+ * notification egress claim observes either the live grants before the wipe
+ * or the committed deletion afterwards; it cannot authorize in between.
+ *
+ * A data wipe keeps the account and its managed-profile marker. It therefore
+ * refuses rather than silently turning the last Guardian removal into an
+ * unmanaged profile. Deleting the managed profile remains the explicit
+ * product action for that case.
+ */
+export async function protectManagedProfilesDuringDataWipe(
+  tx: Transaction,
+  userId: string,
+): Promise<void> {
+  const affectedProfiles = await tx.accountGrant.findMany({
+    where: {
+      OR: [{ grantorId: userId }, { granteeId: userId }],
+      grantor: { managedProfileAt: { not: null } },
+    },
+    select: { grantorId: true },
+    distinct: ["grantorId"],
+    orderBy: { grantorId: "asc" },
+  });
+
+  // Acquire every key before reading the final state. Sorting is required
+  // because a wipe can affect more than one managed profile.
+  for (const { grantorId } of affectedProfiles) {
+    await withManagedProfileLock(tx, grantorId, async () => undefined);
+  }
+
+  // Re-read after all locks are held. A concurrent acceptance, revocation,
+  // expiry reduction, or notification claim uses the same key and is now
+  // ordered entirely before or after this transaction.
+  const now = new Date();
+  for (const { grantorId } of affectedProfiles) {
+    await withManagedProfileLock(tx, grantorId, async (profile) => {
+      if (!profile?.managedProfileAt) return;
+
+      const [activeGuardians, guardiansRemovedByWipe] = await Promise.all([
+        tx.accountGrant.count({
+          where: { grantorId: profile.id, ...activeGuardianWhere(now) },
+        }),
+        tx.accountGrant.count({
+          where: {
+            AND: [
+              { grantorId: profile.id },
+              { OR: [{ grantorId: userId }, { granteeId: userId }] },
+              activeGuardianWhere(now),
+            ],
+          },
+        }),
+      ]);
+
+      if (activeGuardians <= guardiansRemovedByWipe) {
+        throw new LastManagedGuardianError();
+      }
+    });
+  }
+}
+
 export async function deleteManagedProfile(input: {
   profileId: string;
   guardianId: string;
