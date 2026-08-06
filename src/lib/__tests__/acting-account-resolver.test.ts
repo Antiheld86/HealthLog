@@ -151,10 +151,16 @@ function user(
 /**
  * Sign the delegate in over the cookie transport.
  *
- * `recordEpoch` defaults to 0, which is the record-session fence's exemption:
- * a session that has never been pointed at another record is served without a
- * fence header, so every pre-fence case in this file keeps meaning what it
- * meant. Cases that want the fence live pass an epoch explicitly.
+ * v1.37.0 — this also attaches a TRUTHFUL record-session assertion, because
+ * that is what the shipped browser client does on every same-origin request.
+ * Without it every switched case in this file would be testing the fence's
+ * pre-fence-bundle arm rather than the resolver arm it was written for: a
+ * session pointed at a record is fenced, and a request carrying no assertion at
+ * all is refused with 403 before the resolver decides anything.
+ *
+ * `recordEpoch` defaults to 0. A session at 0 pointed at its own record is the
+ * fence's exemption, so the un-switched cases are byte-for-byte what they were.
+ * Cases that want a stale or absent assertion override the headers themselves.
  */
 function signedInCookie(
   actingAsUserId: string | null = null,
@@ -170,6 +176,8 @@ function signedInCookie(
     },
     user: user(DELEGATE, role) as never,
   });
+  headerJar.set("x-healthlog-record-epoch", String(recordEpoch));
+  headerJar.set("x-healthlog-record-scope", actingAsUserId ?? "self");
 }
 
 /** Sign the delegate in over the Bearer transport. */
@@ -904,5 +912,117 @@ describe("the guardian resolver gates on the marker, not the grant", () => {
     expect(fencedBody).toBe(await insufficient.text());
     expect(fencedBody).not.toContain("guardian");
     expect(fencedBody).not.toContain("managed");
+  });
+});
+
+/**
+ * v1.37.0 — the record-session fence, from the resolver's side.
+ *
+ * The integration file proves the refusal against a real database with the
+ * `lastUsedAt` / `sharing.record.accessed` instrument. What this adds is the
+ * cheapest falsifiable statement of the same property: the grant query is not
+ * issued at all.
+ *
+ * The instrument is `prisma.accountGrant.findFirst`, not a mocked
+ * `findActiveGrant`. This file deliberately does not mock `@/lib/sharing/grants`
+ * — the resolver consuming that module's own idea of "active" is a property
+ * under test here, and a mocked predicate would report it working while it was
+ * broken. The Prisma spy is one layer lower, is honest about the same fact, and
+ * costs nothing.
+ */
+describe("the record-session fence, above the grant lookup", () => {
+  it("issues no grant query when the asserted epoch is behind", async () => {
+    signedInCookie(OWNER, "USER", 4);
+    liveGrant();
+    headerJar.set("x-healthlog-record-epoch", "3");
+    headerJar.set("x-healthlog-record-scope", OWNER);
+
+    const res = await route(() => requireRecordAuth("read", "measurements"))();
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).meta.errorCode).toBe("sharing.session.changed");
+    // The whole point: nothing was asked of the grant table.
+    expect(prisma.accountGrant.findFirst).not.toHaveBeenCalled();
+    // And nothing was stamped on it either.
+    expect(touched).toEqual([]);
+  });
+
+  it("issues no grant query when the client sent no assertion at all", async () => {
+    signedInCookie(OWNER, "USER", 4);
+    liveGrant();
+    // A bundle that predates the fence: no assertion on the wire at all.
+    headerJar.delete("x-healthlog-record-epoch");
+    headerJar.delete("x-healthlog-record-scope");
+
+    const res = await route(() => requireRecordAuth("read", "measurements"))();
+
+    expect(res.status).toBe(403);
+    expect((await res.json()).meta.errorCode).toBe("sharing.access.denied");
+    expect(prisma.accountGrant.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("POSITIVE CONTROL: a matching assertion does reach the grant query", async () => {
+    // Without this the test above would pass for a resolver that never queried
+    // the grant table at all.
+    signedInCookie(OWNER, "USER", 4);
+    liveGrant();
+    headerJar.set("x-healthlog-record-epoch", "4");
+    headerJar.set("x-healthlog-record-scope", OWNER);
+
+    const ctx = await resolveInRoute(() =>
+      requireRecordAuth("read", "measurements"),
+    );
+
+    expect(ctx.user.id).toBe(OWNER);
+    expect(prisma.accountGrant.findFirst).toHaveBeenCalled();
+    expect(touched).toEqual(["grant-1"]);
+  });
+
+  it("guards the guardian resolver the same way", async () => {
+    signedInCookie(OWNER, "USER", 2);
+    userRows.set(OWNER, user(OWNER, "USER", new Date()));
+    liveGrant({ access: "MANAGE" });
+    headerJar.set("x-healthlog-record-epoch", "1");
+    headerJar.set("x-healthlog-record-scope", OWNER);
+
+    const res = await route(() => requireGuardianAuth())();
+
+    expect(res.status).toBe(409);
+    expect(prisma.accountGrant.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("leaves a never-switched session alone, header or no header", async () => {
+    // The exemption. A session at epoch 0 pointed at its own record is served
+    // byte-for-byte as it was before the fence existed.
+    signedInCookie(null, "USER", 0);
+    headerJar.delete("x-healthlog-record-epoch");
+    headerJar.delete("x-healthlog-record-scope");
+    const ctx = await resolveInRoute(() =>
+      requireRecordAuth("read", "measurements"),
+    );
+    expect(ctx.user.id).toBe(DELEGATE);
+    expect(prisma.accountGrant.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("echoes the context it served under, and only when it resolved one", async () => {
+    signedInCookie(OWNER, "USER", 4);
+    liveGrant();
+    headerJar.set("x-healthlog-record-epoch", "4");
+    headerJar.set("x-healthlog-record-scope", OWNER);
+    const served = await route(() =>
+      requireRecordAuth("read", "measurements"),
+    )();
+    expect(served.headers.get("x-healthlog-record-epoch")).toBe("4");
+    expect(served.headers.get("x-healthlog-record-scope")).toBe(OWNER);
+
+    // An actor surface decides nothing about a record and therefore echoes
+    // nothing. A client that discarded on ABSENCE would throw this away, and
+    // with it the public `/api/version` poll.
+    headerJar.clear();
+    signedInCookie(null, "USER", 0);
+    const actor = await route(() => requireActorAuth())();
+    expect(actor.status).toBe(200);
+    expect(actor.headers.get("x-healthlog-record-epoch")).toBeNull();
+    expect(actor.headers.get("x-healthlog-record-scope")).toBeNull();
   });
 });

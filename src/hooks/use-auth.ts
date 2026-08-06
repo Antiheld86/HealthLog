@@ -210,6 +210,21 @@ export interface AuthUser {
    * server-side switch cannot paint owner controls in the target record.
    */
   accountAccessStatus?: AccountAccessStatus;
+  /**
+   * v1.37.0 — the record-session context the server says this browser is in.
+   *
+   * `epoch` counts how many times this session's record selector has moved and
+   * `scope` names the record it is pointed at (null for one's own). Adopted by
+   * `fetchMe` and then attached to every same-origin request, so a request
+   * formed under a context that has since moved is refused rather than served
+   * against the wrong record.
+   *
+   * Null on the Bearer transport, which carries no such state. Optional so
+   * existing `AuthUser` fixtures stay valid; an absent field is an older server
+   * image and leaves the client unadopted, which the `bootstrap` sentinel makes
+   * safe.
+   */
+  recordSession?: { epoch: number; scope: string | null } | null;
 }
 
 /**

@@ -118,11 +118,13 @@ export function resolveRecordCapabilities(
   active: AccountAccessEntry | null | undefined,
   accessRefused = false,
   recordSessionPending = false,
+  contextUnproven = false,
 ): RecordCapabilities {
-  if (accessRefused || recordSessionPending) {
+  if (accessRefused || recordSessionPending || contextUnproven) {
     return {
       accessRefused: accessRefused || undefined,
-      recordSessionPending: recordSessionPending || undefined,
+      recordSessionPending:
+        recordSessionPending || contextUnproven || undefined,
       inSharedRecord: true,
       canWrite: false,
       canAdd: false,
@@ -174,6 +176,36 @@ export function resolveRecordCapabilities(
  * withdraws is a much smaller lie than one that stays and 403s, and the
  * banner lands from the same query in the same frame.
  */
+/**
+ * v1.37.0 — do the two answers about "which record is this" agree.
+ *
+ * `/api/auth/me` publishes the question twice, from two different angles, and
+ * that is deliberate rather than redundant:
+ *
+ *   * `accountAccess.active` is the RE-DECIDED answer. An entry reaches it only
+ *     by surviving a live-grant pass, so a selector left behind by a lapsed
+ *     grant reads as "not switched".
+ *   * `recordSession.scope` is the RAW selector, the same value the fence
+ *     compares a request's assertion against.
+ *
+ * When they disagree the session is pointed at a record the grant no longer
+ * opens: every delegable route will refuse, while `active` being null makes
+ * this hook answer "your own record, all controls". That combination paints an
+ * add button on a page whose every write is about to 403 — the exact failure
+ * `canAdd` was introduced to end. So a disagreement holds instead.
+ *
+ * A null or absent `recordSession` is not a disagreement. It is the Bearer
+ * transport (no session row, no switch state) or a server image that predates
+ * the field, and neither is a reason to blank the app.
+ */
+export function recordContextIsUnproven(
+  recordSession: { epoch: number; scope: string | null } | null | undefined,
+  active: AccountAccessEntry | null | undefined,
+): boolean {
+  if (recordSession == null) return false;
+  return recordSession.scope !== (active?.accountId ?? null);
+}
+
 export function useRecordCapabilities(): RecordCapabilities {
   const { user } = useAuth();
   const transition = useRecordSessionTransition();
@@ -181,6 +213,7 @@ export function useRecordCapabilities(): RecordCapabilities {
     user?.accountAccess?.active,
     user?.accountAccessStatus === "invalid",
     transition.phase !== "ready",
+    recordContextIsUnproven(user?.recordSession, user?.accountAccess?.active),
   );
 }
 

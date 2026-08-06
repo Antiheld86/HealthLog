@@ -118,8 +118,45 @@ const grantListResponse = z
       "Both directions at once: `given` are the grants this account has offered on its own record, `received` are the ones offered to it. Capped at 100 rows per direction, newest first.",
   });
 
+/**
+ * The record-session context, as the two surfaces a client may ADOPT one from
+ * publish it.
+ *
+ * Both carry it in the response BODY, and that is the rule rather than a
+ * coincidence: every other response reports its context in headers, and those
+ * are for validating a response the client already has, never for learning one.
+ * Two body-carrying sources, both actor surfaces that resolve canonical session
+ * state, and no third path — which is why the 409 refusal below carries only an
+ * error code and never the current epoch.
+ */
+const recordSessionState = z
+  .object({
+    epoch: z
+      .number()
+      .int()
+      .describe(
+        "How many times this browser session's record selector has moved. Monotonic, server-issued, and scoped to this session. Send it back as the `X-HealthLog-Record-Epoch` header on every subsequent same-origin request, and as `expectedEpoch` when switching.",
+      ),
+    scope: z
+      .string()
+      .nullable()
+      .describe(
+        "The account this session is pointed at, or null for its own record. Send it back as the `X-HealthLog-Record-Scope` header, with `self` standing for null.",
+      ),
+  })
+  .meta({
+    id: "RecordSessionState",
+    description:
+      "Where the record-session fence says this browser session is. Cookie transport only — null on Bearer, which carries its selector per request and accumulates no session state to be stale about. A client adopts this and then asserts it on every same-origin request, so a request formed under a context that has since moved is refused rather than served against the wrong record.",
+  });
+
 const switchResponse = z
   .object({
+    recordSession: recordSessionState
+      .nullable()
+      .describe(
+        "The context this session is now in, when the request supplied `expectedEpoch`. Null when it did not: an unconditional switch does not read the new epoch back, and a number computed client-side would be wrong the moment the target equalled the current selector. Adopt this value; do not derive it.",
+      ),
     actingAs: z
       .object({
         accountId: z.string(),
@@ -182,6 +219,12 @@ const sharingRefusal = {
   content: { "application/json": { schema: errorEnvelope } },
 };
 
+const recordSessionChanged = {
+  description:
+    "The record this browser session is on is not the record the request asserted. `meta.errorCode` is `sharing.session.changed`. It is not a refusal of access — the caller may well be entitled to both records — so do not leave the record and do not clear the session. Re-read GET /api/auth/me with a network-only request, adopt the `recordSession` it returns, and retry. The body deliberately carries no epoch or scope: a client may adopt a context from GET /api/auth/me and POST /api/account/switch only, and a refusal is not a third source of truth.",
+  content: { "application/json": { schema: errorEnvelope } },
+};
+
 /**
  * The per-request account selector, published once.
  *
@@ -209,6 +252,43 @@ export const accountSelectorParameter: NonNullable<
     "Act on another account's record for THIS request. Bearer transport only — the browser session carries its switch on the session row, and sending this header alongside a cookie is refused rather than ignored. The value is an `accountId` from `accountAccess.accounts` on GET /api/auth/me. It is a SELECTOR and not a permission: the grant is re-checked on every request, so a revocation lands on the next one rather than at the next login, and a selector naming an account that granted nothing is refused with 403 `sharing.access.denied` — byte-identical to one naming an account that does not exist, so the refusal is not an enumeration oracle. NEVER attach it to the sync engine, device or notification registration, or any auth/refresh call: those are about the person holding the token, not the record being read, and the account payload refuses the header outright for exactly that reason.",
 };
 
+/**
+ * The record-session fence's two request headers, published once.
+ *
+ * Cookie transport only, and stated as such in both descriptions: a Bearer
+ * client neither sends these nor receives them back, and the native contract is
+ * unchanged by the fence in every direction. A browser client attaches both to
+ * every same-origin request — there is no per-route opt-in, because a route
+ * that had to remember is a route that will forget.
+ *
+ * Defined here rather than inline for the same reason the account selector
+ * above is: `src/__tests__/record-session-fence-guard.test.ts` holds the header
+ * names to exactly four files — the contract module that declares them, the
+ * server fence that reads them, the client module that attaches them, and this
+ * one, which publishes them.
+ */
+export const recordEpochParameter: NonNullable<
+  NonNullable<ZodOpenApiObject["components"]>["parameters"]
+>[string] = {
+  name: "X-HealthLog-Record-Epoch",
+  in: "header",
+  required: false,
+  schema: { type: "string", maxLength: 15 },
+  description:
+    "The record-session epoch this client believes it is on, taken from `recordSession.epoch` on GET /api/auth/me or POST /api/account/switch. Cookie transport only; a Bearer client neither sends nor receives it. Send the literal `bootstrap` before the account payload has resolved. A browser session that has never been pointed at another record is served without either header, which is what keeps a tab open across the deploy working. Once a session HAS entered a shared record it stays fenced permanently, in both directions: a mismatching epoch is refused with 409 `sharing.session.changed` (reconcile through GET /api/auth/me and retry), and an absent header is refused with 403 `sharing.access.denied` (a client predating the fence, which recovers by leaving the record and reloading).",
+};
+
+export const recordScopeParameter: NonNullable<
+  NonNullable<ZodOpenApiObject["components"]>["parameters"]
+>[string] = {
+  name: "X-HealthLog-Record-Scope",
+  in: "header",
+  required: false,
+  schema: { type: "string", maxLength: 64 },
+  description:
+    "The record this client believes it is inside, taken from `recordSession.scope`, with the literal `self` standing for one's own record. Sent alongside `X-HealthLog-Record-Epoch` on every same-origin request; one without the other is treated as a stale assertion, not as an absent one. Cookie transport only. Both headers are echoed back on any response that actually resolved a record scope, and a client discards a response whose echo contradicts the context it is now on — a response carrying no echo resolved no record scope and is served normally.",
+};
+
 // ── What the client is told it may do ────────────────────────────────────────
 
 export const accountAccessBlock = accountAccessBlockSchema.meta({
@@ -231,6 +311,7 @@ const accountPayload = z
     id: z.string(),
     username: z.string(),
     accountAccess: accountAccessBlock,
+    recordSession: recordSessionState.nullable(),
   })
   .meta({
     id: "AccountPayload",
@@ -466,7 +547,7 @@ export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Account sharing"],
       summary: "Act on a granted record, or return to your own",
       description:
-        "Cookie transport only; a Bearer caller gets 400 (`meta.errorCode: sharing.switch.wrong_transport`) and should send the `X-HealthLog-Account` header on the requests it wants scoped instead. The grant is validated here so the client gets an honest refusal immediately, but the stamp authorises nothing on its own — every following request re-checks the grant. `accountId: null` clears the switch and always works, including from inside a switched session: this endpoint is the way out.",
+        "Cookie transport only; a Bearer caller gets 400 (`meta.errorCode: sharing.switch.wrong_transport`) and should send the `X-HealthLog-Account` header on the requests it wants scoped instead. The grant is validated here so the client gets an honest refusal immediately, but the stamp authorises nothing on its own — every following request re-checks the grant. `accountId: null` clears the switch and always works, including from inside a switched session: this endpoint is the way out, and it is deliberately not fenced for that reason — a session whose context cannot be proved must still be able to leave. Supply `expectedEpoch` to make the write conditional: two tabs switching at once resolve to one monotonic outcome, and the loser is refused with 409 `sharing.session.changed` rather than silently overwriting the winner. Reconcile through GET /api/auth/me and retry once against the reconciled epoch.",
       requestBody: {
         required: true,
         content: { "application/json": { schema: switchAccountSchema } },
@@ -487,6 +568,7 @@ export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: { "application/json": { schema: errorEnvelope } },
         },
         "403": sharingRefusal,
+        "409": recordSessionChanged,
         "422": {
           description: "Validation failed.",
           content: { "application/json": { schema: errorEnvelope } },

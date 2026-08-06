@@ -108,6 +108,28 @@ export type InviteGrantBody = z.infer<typeof inviteGrantSchema>;
  */
 export const switchAccountSchema = z.object({
   accountId: z.string().min(1).max(MAX_ACCOUNT_ID_LENGTH).nullable(),
+  /**
+   * v1.37.0 — the record epoch the caller believes this session is at.
+   *
+   * Present turns the selector write into a compare-and-set: exactly one of two
+   * tabs pressing the switcher at the same moment lands, and the loser gets a
+   * 409 rather than silently overwriting the winner. It is not a credential —
+   * the epoch is server-issued, monotonic, and scoped to the caller's own
+   * session, so naming it can only ever refuse the caller's own write.
+   *
+   * Absent keeps the pre-fence unconditional write, and that arm is reachable
+   * only by a bundle that predates the fence: the switcher is rendered from
+   * `/api/auth/me` data, so a fence-aware client has necessarily adopted a
+   * context before it can offer a switch at all.
+   */
+  expectedEpoch: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe(
+      "The record epoch the caller believes this browser session is at, as published by GET /api/auth/me or a previous switch. Present makes the write conditional: if another tab moved the selector first the switch is refused with 409 sharing.session.changed and the caller reconciles through /api/auth/me. Omitted keeps the unconditional write, which is what a client predating the record-session fence sends. Cookie transport only.",
+    ),
 });
 
 export type SwitchAccountBody = z.infer<typeof switchAccountSchema>;

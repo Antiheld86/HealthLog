@@ -31,6 +31,7 @@ import {
 } from "@/lib/modules/gate";
 import { parseTourProgress } from "@/lib/onboarding/tour-progress";
 import { resolveAccountAccess } from "@/lib/sharing/account-access";
+import { recordSessionForPayload } from "@/lib/sharing/record-session-fence";
 
 export const dynamic = "force-dynamic";
 
@@ -173,5 +174,23 @@ export const GET = apiHandler(async () => {
     // directly. Always present — an account with no grants gets an empty list,
     // not a missing field.
     accountAccess,
+    // v1.37.0 — the record-session fence's bootstrap, and the only place a
+    // browser can learn its context from scratch.
+    //
+    // `epoch` is the session row's selector counter; `scope` is the account the
+    // session is pointed at, or null for its own record. The client adopts both
+    // and attaches them to every subsequent same-origin request, so the server
+    // can refuse a request formed under a context that has since moved. This
+    // response and `POST /api/account/switch` are the only two a client may
+    // ADOPT from — every other response carries the context in headers, and
+    // those are used to validate a response, never to learn one.
+    //
+    // Null on the Bearer transport, which has no session row and no switch
+    // state to be stale about. A native client neither sends nor receives the
+    // fence headers; the frozen contract is untouched.
+    // Derived by the fence rather than read off the context here: the columns
+    // behind it have one reader by design, and a route that projected them
+    // itself would be a second statement of what a record context is.
+    recordSession: recordSessionForPayload(auth),
   });
 });

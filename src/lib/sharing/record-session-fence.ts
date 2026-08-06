@@ -45,6 +45,7 @@ import {
   RECORD_EPOCH_HEADER,
   RECORD_SCOPE_HEADER,
   parseAssertedContext,
+  recordScopeHeaderValue,
   recordSessionFenceVerdict,
   type AssertedRecordContext,
 } from "@/lib/sharing/record-session-fence-contract";
@@ -74,6 +75,56 @@ export async function readAssertedRecordContext(): Promise<AssertedRecordContext
   } catch {
     return { kind: "absent" };
   }
+}
+
+/**
+ * Copy the context this response was served under onto its headers.
+ *
+ * Called once, from `apiHandler`, with whatever the fence stamped on the wide
+ * event — which is `undefined` on every response that never resolved a record
+ * scope. So the echo appears on exactly the responses where it means something,
+ * and its ABSENCE means "nothing about a record was decided here" rather than
+ * "unknown". That is what lets the browser's rule be discard-on-mismatch rather
+ * than discard-on-absence: a discard-on-absence client would throw away the
+ * public `/api/version` poll, the switcher list, admin, `/me` and every static
+ * response.
+ *
+ * It lives here, not in `apiHandler`, so the two header names stay inside the
+ * fence: declared in the contract module, read here, attached by the browser's
+ * `src/lib/api/record-fence.ts`, and published by the OpenAPI route module. A
+ * fifth file naming them is a route deciding something the fence decides once.
+ */
+export function attachRecordContextEcho(
+  headers: Headers,
+  context: { epoch: number; scope: string | null } | undefined,
+): void {
+  if (!context) return;
+  headers.set(RECORD_EPOCH_HEADER, String(context.epoch));
+  headers.set(RECORD_SCOPE_HEADER, recordScopeHeaderValue(context.scope));
+}
+
+/**
+ * The record context to publish in the account payload, for a client that has
+ * none yet.
+ *
+ * `GET /api/auth/me` is the fence's bootstrap: a browser cannot assert a
+ * context until something tells it one, and this is that something. It lives
+ * here rather than in the route because the two columns behind it have one
+ * reader by design — a route projecting them itself would be a second statement
+ * of what a record context is, and the second copy is the one that drifts.
+ *
+ * Null on the Bearer transport, which has no session row and no switch state to
+ * be stale about. The native client neither sends nor receives fence headers,
+ * and this field tells it so explicitly rather than by omission.
+ */
+export function recordSessionForPayload(
+  auth: AuthContext,
+): { epoch: number; scope: string | null } | null {
+  if (auth.authMethod !== "cookie") return null;
+  return {
+    epoch: auth.session.recordEpoch ?? 0,
+    scope: auth.session.actingAsUserId ?? null,
+  };
 }
 
 /**
