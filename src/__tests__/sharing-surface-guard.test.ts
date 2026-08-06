@@ -879,6 +879,10 @@ const DELEGABLE_ROUTES: Record<string, DelegableEntry> = {
     domain: "profile",
     why: "The record's health-profile facts, read through `readHealthProfileFacts(user.id)`. The module holds write helpers, and the GET calls none of them.",
   },
+  "app/api/profile/summary/route.ts": {
+    domain: "profile",
+    why: "The bounded shared profile read combines only the record's allergies, family history, and current lifestyle facts. It carries no settings, AI configuration, mutations, or encrypted free text.",
+  },
   "app/api/mood-entries/route.ts": {
     domain: "mind",
     why: "The record's mood entries. The nested include is the tag vocabulary — a key and a kind, no identifiers. Note that `GET /api/mood/tags` is refused and stays refused: it pulls the owner's tag LAYOUT, which is a presentation preference and belongs to the person, not the record.",
@@ -1793,9 +1797,10 @@ const ACTOR_ROUTES: Record<string, string> = {
  * find out from the merge rather than from production. Import-status polling
  * adds two record entries and two MANAGE entries: 190 → 194. Managed-record
  * settings add two guardian-only entries: 194 → 196. Field-specific
- * managed-record configuration adds one more: 196 → 197.
+ * managed-record configuration adds one more: 196 → 197. The bounded
+ * read-only profile summary makes the next explicit admission: 197 → 198.
  */
-const FROZEN_ENTRY_COUNT = 197;
+const FROZEN_ENTRY_COUNT = 198;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —
