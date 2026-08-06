@@ -148,16 +148,25 @@ function user(
   };
 }
 
-/** Sign the delegate in over the cookie transport. */
+/**
+ * Sign the delegate in over the cookie transport.
+ *
+ * `recordEpoch` defaults to 0, which is the record-session fence's exemption:
+ * a session that has never been pointed at another record is served without a
+ * fence header, so every pre-fence case in this file keeps meaning what it
+ * meant. Cases that want the fence live pass an epoch explicitly.
+ */
 function signedInCookie(
   actingAsUserId: string | null = null,
   role: "USER" | "ADMIN" = "USER",
+  recordEpoch = 0,
 ): void {
   vi.mocked(getSession).mockResolvedValue({
     session: {
       id: "session-1",
       expiresAt: new Date(Date.now() + 3_600_000),
       actingAsUserId,
+      recordEpoch,
     },
     user: user(DELEGATE, role) as never,
   });
@@ -649,6 +658,7 @@ describe("the cookie-only helpers stay out of reach of a switch", () => {
         id: "session-1",
         expiresAt: new Date(Date.now() + 3_600_000),
         actingAsUserId: OWNER,
+        recordEpoch: 0,
       },
       user: {
         ...user(DELEGATE),

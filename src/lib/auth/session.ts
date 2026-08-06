@@ -246,7 +246,12 @@ export async function createSession(
 }
 
 export async function getSession(): Promise<{
-  session: { id: string; expiresAt: Date; actingAsUserId: string | null };
+  session: {
+    id: string;
+    expiresAt: Date;
+    actingAsUserId: string | null;
+    recordEpoch: number;
+  };
   user: User;
 } | null> {
   try {
@@ -363,6 +368,15 @@ export async function getSession(): Promise<{
       // `src/__tests__/acting-account-boundary-guard.test.ts` freezes the set
       // of files allowed to touch this field.
       actingAsUserId: session.actingAsUserId,
+      // v1.37.0 — the selector's move counter, projected off the same row for
+      // the same reason. It is what makes the fence's central property true:
+      // the epoch a request is validated against and the `actingAsUserId` the
+      // handler is about to serve under are one row read, so they cannot
+      // straddle a switch that landed between two queries.
+      //
+      // Written by a database trigger only (migration 0302); nothing in the
+      // application assigns it, and the `BEFORE` timing means nothing can.
+      recordEpoch: session.recordEpoch,
     },
     user: session.user,
   };
