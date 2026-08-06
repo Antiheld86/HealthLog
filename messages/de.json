@@ -4518,14 +4518,12 @@
             "medication": "Medikation",
             "mobility": "Mobilität",
             "environment": "Umgebung"
-          },
-          "value": "{value}"
+          }
         },
         "insights": {
           "title": "Erkenntnisse",
           "sections": "Übersichtsbereiche",
           "tiles": "Navigationskacheln",
-          "item": "{id}",
           "order": "Reihenfolge",
           "unknownItem": "Nicht verfügbare Erkenntnis",
           "sectionLabels": {

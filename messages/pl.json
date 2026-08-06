@@ -4518,14 +4518,12 @@
             "medication": "Leki",
             "mobility": "Mobilność",
             "environment": "Środowisko"
-          },
-          "value": "{value}"
+          }
         },
         "insights": {
           "title": "Wnioski",
           "sections": "Sekcje przeglądu",
           "tiles": "Kafelki nawigacji",
-          "item": "{id}",
           "order": "Kolejność",
           "unknownItem": "Niedostępna analiza",
           "sectionLabels": {

@@ -4518,14 +4518,12 @@
             "medication": "Medicación",
             "mobility": "Movilidad",
             "environment": "Entorno"
-          },
-          "value": "{value}"
+          }
         },
         "insights": {
           "title": "Análisis",
           "sections": "Secciones del resumen",
           "tiles": "Mosaicos de navegación",
-          "item": "{id}",
           "order": "Orden",
           "unknownItem": "Análisis no disponible",
           "sectionLabels": {

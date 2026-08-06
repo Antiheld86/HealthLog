@@ -4518,14 +4518,12 @@
             "medication": "Medication",
             "mobility": "Mobility",
             "environment": "Environment"
-          },
-          "value": "{value}"
+          }
         },
         "insights": {
           "title": "Insights",
           "sections": "Overview sections",
           "tiles": "Navigation tiles",
-          "item": "{id}",
           "order": "Order",
           "unknownItem": "Unavailable insight",
           "sectionLabels": {

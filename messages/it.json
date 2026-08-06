@@ -4518,14 +4518,12 @@
             "medication": "Farmaci",
             "mobility": "Mobilità",
             "environment": "Ambiente"
-          },
-          "value": "{value}"
+          }
         },
         "insights": {
           "title": "Analisi",
           "sections": "Sezioni della panoramica",
           "tiles": "Riquadri di navigazione",
-          "item": "{id}",
           "order": "Ordine",
           "unknownItem": "Analisi non disponibile",
           "sectionLabels": {
