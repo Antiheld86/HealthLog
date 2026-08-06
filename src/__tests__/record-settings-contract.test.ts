@@ -4,6 +4,11 @@ import {
   assertRecordSettingsAccess,
   type RecordSettingsAccess,
 } from "@/lib/record-settings/access";
+import {
+  classifySettingsDestination,
+  isGuardianSettingsWriteAllowed,
+  SETTINGS_DESTINATION_INVENTORY,
+} from "@/lib/record-settings/classification";
 import { toRecordSettingsDto } from "@/lib/record-settings/dto";
 import { recordSettingsKeys } from "@/lib/query-keys";
 
@@ -44,5 +49,21 @@ describe("record settings contract", () => {
     expect(() => assertRecordSettingsAccess(access, "guardian")).toThrow(
       "Guardian configuration is unavailable for this record",
     );
+  });
+
+  it("classifies every Settings destination and limits Guardian writes", () => {
+    expect(Object.keys(SETTINGS_DESTINATION_INVENTORY)).not.toHaveLength(0);
+    expect(classifySettingsDestination("integrations")).toMatchObject({
+      kind: "managed-guardian",
+      guardianWritable: false,
+    });
+    expect(classifySettingsDestination("ai").kind).toBe("unavailable");
+    expect(classifySettingsDestination("dashboard").kind).toBe(
+      "adult-shared-unavailable",
+    );
+    expect(isGuardianSettingsWriteAllowed("account")).toBe(true);
+    expect(isGuardianSettingsWriteAllowed("notifications")).toBe(true);
+    expect(isGuardianSettingsWriteAllowed("integrations")).toBe(false);
+    expect(isGuardianSettingsWriteAllowed("ai")).toBe(false);
   });
 });
