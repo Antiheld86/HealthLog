@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 
 import type { ModuleKey } from "@/lib/modules/registry";
+import { isSharedRecordPathPresentable } from "@/lib/navigation/shared-record";
+import type { ShareDomain } from "@/lib/sharing/scope";
 
 /**
  * v1.17.1 — the single navigation information-model.
@@ -305,8 +307,15 @@ function isNavDestinationVisible(
   modules: ModuleVisibilityMap | undefined,
   mounted = true,
   sharedRecord = false,
+  sections: readonly ShareDomain[] | null = null,
 ): boolean {
-  if (sharedRecord && d.sharedRecord !== true) return false;
+  if (
+    sharedRecord &&
+    (d.sharedRecord !== true ||
+      !isSharedRecordPathPresentable(d.href, sections))
+  ) {
+    return false;
+  }
   if (!d.requiresModule) return true;
   if (!mounted) return false;
   return modules?.[d.requiresModule] !== false;
@@ -325,12 +334,11 @@ function isNavDestinationVisible(
  * `false`: a surface nobody has classified is not one to open inside somebody
  * else's record.
  */
-export function isDestinationInSharedRecord(pathname: string): boolean {
-  return NAV_DESTINATIONS.some((d) => {
-    if (!d.sharedRecord) return false;
-    if (d.href === "/") return pathname === "/";
-    return pathname === d.href || pathname.startsWith(`${d.href}/`);
-  });
+export function isDestinationInSharedRecord(
+  pathname: string,
+  sections: readonly ShareDomain[] | null = null,
+): boolean {
+  return isSharedRecordPathPresentable(pathname, sections);
 }
 
 /**
@@ -348,9 +356,10 @@ export function visibleNavDestinations(
   modules: ModuleVisibilityMap | undefined,
   mounted = true,
   sharedRecord = false,
+  sections: readonly ShareDomain[] | null = null,
 ): NavDestination[] {
   return NAV_DESTINATIONS.filter((d) =>
-    isNavDestinationVisible(d, modules, mounted, sharedRecord),
+    isNavDestinationVisible(d, modules, mounted, sharedRecord, sections),
   );
 }
 
@@ -389,11 +398,14 @@ export function mobileMoreHubDestinations(opts: {
   mounted?: boolean;
   /** v1.36.0 — acting on somebody else's record. Defaults to own. */
   sharedRecord?: boolean;
+  /** Server-resolved scope for the active shared record. */
+  sections?: readonly ShareDomain[] | null;
 }): MobileMoreHubEntry[] {
   return visibleNavDestinations(
     opts.modules,
     opts.mounted ?? true,
     opts.sharedRecord ?? false,
+    opts.sections ?? null,
   )
     .filter((d) => !BOTTOM_NAV_PRIMARY_SLOT_HREFS.includes(d.href))
     .map((d) => ({ href: d.href, tKey: d.tKey, icon: d.icon }));

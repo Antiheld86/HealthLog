@@ -78,7 +78,7 @@ export function AuthShell({
   // decides what to mount and the surfaces beneath it decide what to offer,
   // and the two disagreeing is the whole class of defect this hook exists to
   // close.
-  const { inSharedRecord, recordKind } = useRecordCapabilities();
+  const { inSharedRecord, recordKind, sections } = useRecordCapabilities();
   // A managed profile has a deliberately small Settings surface of its own.
   // Let that route family reach its record-aware gate; adult shared records
   // stay in the generic refusal branch even at MANAGE.
@@ -91,7 +91,7 @@ export function AuthShell({
   // — every route behind these pages refuses on its own.
   const outsideSharedRecord =
     inSharedRecord &&
-    !isDestinationInSharedRecord(pathname) &&
+    !isDestinationInSharedRecord(pathname, sections) &&
     !isManagedRecordSettingsPath;
   const isOnboardingPage = pathname === "/onboarding";
   const showUnlockNotifier = isAuthenticated && !isPublicPage && !!user?.id;
