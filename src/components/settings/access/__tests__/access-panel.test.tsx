@@ -19,7 +19,19 @@ import type {
   RecordActivity,
 } from "@/lib/queries/use-account-grants";
 
-const grantsRef: { value: GrantList } = { value: { given: [], received: [] } };
+const grantsRef: { value: GrantList } = { value: grantList() };
+/**
+ * A grant payload, with the audit window every real one carries.
+ *
+ * v1.37.0 — `retentionDays` rides `GET /api/account/grants` so the revoke
+ * dialog can state how long attribution survives without waiting on a second
+ * request. A fixture that omitted it would be describing a payload the server
+ * cannot send.
+ */
+function grantList(partial: Partial<GrantList> = {}): GrantList {
+  return { given: [], received: [], retentionDays: 365, ...partial };
+}
+
 const activityRef: { value: RecordActivity | undefined } = { value: undefined };
 
 vi.mock("@/lib/queries/use-account-grants", async (importOriginal) => {
@@ -75,7 +87,7 @@ const BASE: GrantRow = {
 
 describe("who can open my record", () => {
   it("says so honestly when nobody can", () => {
-    grantsRef.value = { given: [], received: [] };
+    grantsRef.value = grantList();
     const html = render(<GrantsGivenCard />);
     expect(html).toContain("Nobody else can open your record");
     expect(html).not.toContain('data-slot="grants-given-list"');
@@ -86,7 +98,7 @@ describe("who can open my record", () => {
     // produced. A panel that compared `expiresAt` to the clock would be a
     // second opinion about somebody's access to a health record, and the two
     // would disagree first in the dangerous direction.
-    grantsRef.value = {
+    grantsRef.value = grantList({
       given: [
         { ...BASE, id: "a", state: "ACTIVE" },
         { ...BASE, id: "p", state: "PENDING", acceptedAt: null },
@@ -98,7 +110,7 @@ describe("who can open my record", () => {
         },
       ],
       received: [],
-    };
+    });
     const html = render(<GrantsGivenCard />);
     expect(html).toContain('data-grant-state="ACTIVE"');
     expect(html).toContain('data-grant-state="PENDING"');
@@ -109,7 +121,7 @@ describe("who can open my record", () => {
     // The row IS the consent record. "Who had access, from when to when, and
     // who ended it" is the question the panel exists to answer, and a list
     // that dropped the ended rows could not answer it.
-    grantsRef.value = {
+    grantsRef.value = grantList({
       given: [
         {
           ...BASE,
@@ -119,14 +131,14 @@ describe("who can open my record", () => {
         },
       ],
       received: [],
-    };
+    });
     const html = render(<GrantsGivenCard />);
     expect(html).toContain('data-grant-state="REVOKED"');
     expect(html).toContain("You ended it");
   });
 
   it("distinguishes a withdrawal from a handover", () => {
-    grantsRef.value = {
+    grantsRef.value = grantList({
       given: [
         {
           ...BASE,
@@ -136,7 +148,7 @@ describe("who can open my record", () => {
         },
       ],
       received: [],
-    };
+    });
     const html = render(<GrantsGivenCard />);
     // Two facts, one column. A trail that conflated them would misread an
     // ordinary handover as a falling-out.
@@ -145,20 +157,20 @@ describe("who can open my record", () => {
   });
 
   it("offers no way to end a grant that has already ended", () => {
-    grantsRef.value = {
+    grantsRef.value = grantList({
       given: [{ ...BASE, state: "REVOKED", revokedAt: "2026-02-01T09:00:00Z" }],
       received: [],
-    };
+    });
     const ended = render(<GrantsGivenCard />);
     expect(ended).not.toContain('data-slot="grant-revoke"');
 
-    grantsRef.value = { given: [BASE], received: [] };
+    grantsRef.value = grantList({ given: [BASE] });
     const live = render(<GrantsGivenCard />);
     expect(live).toContain('data-slot="grant-revoke"');
   });
 
   it("says a live grant has never been used rather than leaving a blank", () => {
-    grantsRef.value = { given: [{ ...BASE, lastUsedAt: null }], received: [] };
+    grantsRef.value = grantList({ given: [{ ...BASE, lastUsedAt: null }] });
     const html = render(<GrantsGivenCard />);
     expect(html).toContain("never");
   });
@@ -166,10 +178,10 @@ describe("who can open my record", () => {
 
 describe("records I can open", () => {
   it("offers acceptance on an invitation and nothing else", () => {
-    grantsRef.value = {
+    grantsRef.value = grantList({
       given: [],
       received: [{ ...BASE, state: "PENDING", acceptedAt: null }],
-    };
+    });
     const html = render(<GrantsReceivedCard />);
     expect(html).toContain('data-slot="grant-accept"');
     // Nothing to open and nothing to hand back: an invitation confers nothing.
@@ -178,7 +190,7 @@ describe("records I can open", () => {
   });
 
   it("offers opening and handing back once it is active", () => {
-    grantsRef.value = { given: [], received: [BASE] };
+    grantsRef.value = grantList({ received: [BASE] });
     const html = render(<GrantsReceivedCard />);
     expect(html).toContain('data-slot="grant-open"');
     expect(html).toContain('data-account-id="acct-1"');
@@ -193,14 +205,32 @@ describe("when my record was opened", () => {
     // see would imply a completeness it does not have: somebody checking last
     // spring would read an empty list as "no" when the honest answer is
     // "further back than this reaches".
-    activityRef.value = { entries: [], retentionDays: 90 };
+    activityRef.value = { entries: [], retentionDays: 90, truncated: false };
     const html = render(<RecordActivityCard />);
     expect(html).toContain('data-slot="record-activity-retention"');
     expect(html).toContain("last 90 days");
   });
 
+  it("says when the list is the most recent rows rather than all of them", () => {
+    // The second completeness claim. The window bounds how far back; the row
+    // cap bounds how many, and a list that stopped at its ceiling in silence
+    // let the oldest visible line read as the beginning.
+    activityRef.value = { entries: [], retentionDays: 365, truncated: true };
+    const capped = render(<RecordActivityCard />);
+    expect(capped).toContain('data-slot="record-activity-truncated"');
+    expect(capped).toContain("most recent activity");
+
+    // And it is not an unconditional hedge: a caveat that is always on is one
+    // people learn to skip, which would cost the sentence its meaning on the
+    // one screen where it is true.
+    activityRef.value = { entries: [], retentionDays: 365, truncated: false };
+    const whole = render(<RecordActivityCard />);
+    expect(whole).not.toContain('data-slot="record-activity-truncated"');
+    expect(whole).toContain('data-slot="record-activity-retention"');
+  });
+
   it("prints the operator's window, never a compiled-in 365", () => {
-    activityRef.value = { entries: [], retentionDays: 30 };
+    activityRef.value = { entries: [], retentionDays: 30, truncated: false };
     const html = render(<RecordActivityCard />);
     expect(html).toContain("last 30 days");
     expect(html).not.toContain("365");
@@ -217,6 +247,7 @@ describe("when my record was opened", () => {
   it("counts the openings rather than listing them one by one", () => {
     activityRef.value = {
       retentionDays: 365,
+      truncated: false,
       entries: [
         {
           id: "a1",
@@ -239,6 +270,7 @@ describe("when my record was opened", () => {
     // it themselves.
     activityRef.value = {
       retentionDays: 365,
+      truncated: false,
       entries: [
         {
           id: "a2",

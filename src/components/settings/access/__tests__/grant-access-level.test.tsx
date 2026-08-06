@@ -21,7 +21,18 @@ import { describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/lib/i18n/context";
 import type { GrantList, GrantRow } from "@/lib/queries/use-account-grants";
 
-const grantsRef: { value: GrantList } = { value: { given: [], received: [] } };
+const grantsRef: { value: GrantList } = { value: grantList() };
+/**
+ * A grant payload, with the audit window every real one carries.
+ *
+ * v1.37.0 — `retentionDays` rides `GET /api/account/grants` so the revoke
+ * dialog can state how long attribution survives without waiting on a second
+ * request. A fixture that omitted it would be describing a payload the server
+ * cannot send.
+ */
+function grantList(partial: Partial<GrantList> = {}): GrantList {
+  return { given: [], received: [], retentionDays: 365, ...partial };
+}
 
 vi.mock("@/lib/queries/use-account-grants", async (importOriginal) => {
   const actual =
@@ -154,10 +165,10 @@ describe("offering a level", () => {
 
 describe("accepting a level", () => {
   it("states the level and what accepting it means before the button", () => {
-    grantsRef.value = {
+    grantsRef.value = grantList({
       given: [],
       received: [{ ...BASE, access: "WRITE" }],
-    };
+    });
     const html = render(<GrantsReceivedCard />);
 
     expect(html).toContain('data-grant-access="WRITE"');
@@ -170,7 +181,7 @@ describe("accepting a level", () => {
   });
 
   it("asks a manage invitation for its own, heavier consent", () => {
-    grantsRef.value = { given: [], received: [{ ...BASE, access: "MANAGE" }] };
+    grantsRef.value = grantList({ received: [{ ...BASE, access: "MANAGE" }] });
     const html = render(<GrantsReceivedCard />);
 
     expect(html).toContain('data-grant-access="MANAGE"');
@@ -188,7 +199,7 @@ describe("accepting a level", () => {
   });
 
   it("does not ask a read invitation for a write consent", () => {
-    grantsRef.value = { given: [], received: [{ ...BASE, access: "READ" }] };
+    grantsRef.value = grantList({ received: [{ ...BASE, access: "READ" }] });
     const html = render(<GrantsReceivedCard />);
     expect(html).toContain('data-grant-access="READ"');
     expect(html).not.toContain('data-slot="grant-write-consent"');
@@ -196,7 +207,7 @@ describe("accepting a level", () => {
 
   it("stops saying it once the invitation has been answered", () => {
     // A sentence about a decision already taken is nagging, not consent.
-    grantsRef.value = {
+    grantsRef.value = grantList({
       given: [],
       received: [
         {
@@ -206,7 +217,7 @@ describe("accepting a level", () => {
           acceptedAt: "2026-01-02T11:00:00.000Z",
         },
       ],
-    };
+    });
     const html = render(<GrantsReceivedCard />);
     expect(html).not.toContain('data-slot="grant-write-consent"');
   });
@@ -254,11 +265,24 @@ describe("ending an access, and what it says about what was entered", () => {
     expect(body).toContain('revokeAttribution({"days":90})');
   });
 
-  it("omits the window rather than inventing one", () => {
-    // The number is the operator's setting. A compiled-in 365 here would be
-    // exactly the invented value the sentence exists to avoid.
-    const body = revokeBody({ t, access: "WRITE", name: "Jo" });
+  it("states the operator's window rather than a compiled-in one", () => {
+    // The number is the operator's setting, so an instance running 90 days
+    // says 90 and this file would fail on a hardcoded 365.
+    //
+    // v1.37.0 replaced the case that used to live here. It asserted that the
+    // sentence was OMITTED when the number had not arrived, which was true and
+    // was the defect: the number came off a second query, so whether an owner
+    // was told how long attribution survives depended on which of two requests
+    // landed first. The window rides the grant list now — a caller with a row
+    // to revoke has it — so there is no absent case left to assert.
+    const body = revokeBody({
+      t,
+      access: "WRITE",
+      name: "Jo",
+      retentionDays: 7,
+    });
     expect(body).toContain("recordSharing.given.revokeEntriesStay");
-    expect(body).not.toContain("revokeAttribution");
+    expect(body).toContain('revokeAttribution({"days":7})');
+    expect(body).not.toContain("365");
   });
 });

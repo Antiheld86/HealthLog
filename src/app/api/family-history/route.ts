@@ -62,23 +62,18 @@ export const POST = apiHandler(
 );
 
 async function postFamilyHistory(request: NextRequest): Promise<Response> {
-  // v1.36.x — not a delegated write, though the GET above is delegable. The
-  // reasoning is written out at the sibling arm in `api/allergies/route.ts`
-  // and is the same here: the only surface that posts to either route is the
-  // manager in Settings → Anamnese, and `/settings/*` is closed inside a
-  // shared record, so no delegate can reach the form at any level. An
-  // admitted write with no reachable caller is a permission frozen ahead of
-  // the surface that would exercise it.
+  // v1.37.0 — MANAGE, and reachable. Third-party data by design, admitted on
+  // the same reasoning the read arm was: it is the record's own health
+  // background, and the surface is Settings → Anamnese inside the record
+  // (`src/components/settings/record-anamnesis-section.tsx`).
   //
-  // This arm carried an extra reason to wait. The row describes the record's
-  // RELATIVES, so it is the one admitted write where third-party health
-  // information is present by design — and frequently the delegate is that
-  // relative, asserting a condition about themselves into somebody else's
-  // record. The classification admitted it and named the discomfort. Landing
-  // it together with the surface that offers it means the copy on that surface
-  // can say whose statement the row is, which no route comment can.
-  // v1.37.0 — MANAGE. Third-party data by design, admitted on the same
-  // reasoning the read arm was: it is the record's own health background.
+  // This arm carried an extra reason to wait, and that reason is now answered
+  // where it can be. The row describes the record subject's RELATIVES, so it
+  // is the one admitted write where third-party health information is present
+  // by design — and frequently the delegate IS that relative, asserting a
+  // condition about themselves into somebody else's record. No route comment
+  // can say that to the person filling the form; the card above the form says
+  // it (`recordSharing.anamnesis.relativeNote`).
   const { user } = await requireRecordAuth("manage", "profile");
 
   const { data: rawBody, error: jsonError } = await safeJson(request, {

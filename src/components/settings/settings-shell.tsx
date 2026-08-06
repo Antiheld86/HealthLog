@@ -439,19 +439,39 @@ export function SettingsShell({
       modules?.[section.moduleGate] !== false,
   );
 
-  // The server has already resolved which record is active. In a managed
-  // profile, only guardian settings are a navigation destination; the section
-  // gate remains responsible for refusing any direct URL that is not here.
+  // The server has already resolved which record is active, and which
+  // destinations that record offers depends on what kind of record it is. The
+  // section gate remains responsible for refusing any direct URL that is not
+  // on the list; this filter only stops the nav from offering one.
+  //
   // Keep `allVisibleSections` for the active heading so a direct unavailable
   // link identifies itself before the gate explains why it cannot open.
+  //
+  //   * A managed profile shows its guardian configuration AND the record
+  //     content a MANAGE holder may write — the guardian holds MANAGE, so the
+  //     second set is theirs as well.
+  //   * An ordinary shared record at MANAGE shows only the record content. A
+  //     delegate manages somebody's health record, not their account: modules,
+  //     thresholds and notification routing stay with the owner.
+  //   * Every other shared record shows nothing here, because it reaches no
+  //     Settings destination at all.
   const visibleSections =
-    activeRecord?.recordKind === "managed"
-      ? allVisibleSections.filter(
-          (section) =>
-            classifySettingsDestination(section.slug).kind ===
-            "managed-guardian",
-        )
-      : allVisibleSections;
+    activeRecord === null
+      ? allVisibleSections
+      : allVisibleSections.filter((section) => {
+          const kind = classifySettingsDestination(section.slug).kind;
+          // Every destination on either list needs MANAGE, so the level is
+          // checked once for both record kinds rather than only for the adult
+          // one. A guardian grant is always MANAGE today, which is exactly why
+          // the check was easy to leave out — and a managed entry that ever
+          // arrived below it would have listed destinations the section gate
+          // refuses, sending somebody to a page that explains it cannot open.
+          if (activeRecord.level !== "manage") return false;
+          if (activeRecord.recordKind === "managed") {
+            return kind === "managed-guardian" || kind === "manage-writable";
+          }
+          return kind === "manage-writable";
+        });
   const activeSection = allVisibleSections.find(
     (section) => section.slug === activeSlug,
   );

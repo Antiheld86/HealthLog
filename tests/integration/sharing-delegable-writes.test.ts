@@ -117,7 +117,7 @@ async function signIn(userId: string) {
 async function switchInto(
   ownerId: string,
   delegateId: string,
-  access: "READ" | "WRITE",
+  access: "READ" | "WRITE" | "MANAGE",
 ) {
   const { inviteGrant, acceptGrant } = await import("@/lib/sharing/grants");
   const invited = await inviteGrant({
@@ -421,82 +421,155 @@ writeContract("POST /api/biomarkers", {
 });
 
 /* -------------------------------------------------------------------------- */
-/* 4 + 5 — allergies and family history, the two that are NOT delegable       */
+/* 4 + 5 — allergies and family history, admitted at MANAGE                    */
 /* -------------------------------------------------------------------------- */
 
 /**
- * The opposite contract, and it earns its place beside the admitted ones.
+ * The MANAGE contract, and why the WRITE one will not do.
  *
- * Both of these verbs were admitted and then withdrawn, and the argument for
- * admitting them was never wrong: an allergy is a plain statement about the
- * record's own body and the single most useful thing a caregiver could
- * contribute. What they lack is a caller. The only surface in the product that
- * posts to either lives in Settings, and a switch closes `/settings` — so no
- * delegate can reach the form at any grant level, and admitting the write
- * would freeze a permission ahead of anything that exercises it.
+ * `writeContract` above asserts that a WRITE grant writes. A route that
+ * declares `requireRecordAuth("manage", …)` must REFUSE a WRITE grant, so the
+ * two contracts differ in their first leg and agree on every other: the row
+ * lands under the owner and under nobody else, the audit row is filed under the
+ * owner with the delegate named as actor, the refusals are the stable
+ * `sharing.access.denied`, revocation takes effect on the very next request,
+ * and an unswitched owner is unaffected.
  *
- * Both READ arms stay delegable; the read suite pins them. What is pinned here
- * is the pair that has to move together: the route refuses, and the owner's own
- * unswitched write still lands. Withdrawing a delegated write by breaking the
- * ordinary one would be the worse bug, and no other test in this file would
- * have noticed.
+ * Two legs are new coverage rather than a rewrite, and they are the reason this
+ * block exists. Nothing in the repository drove a MANAGE delegate against
+ * either of these routes before, and nothing drove a Guardian against them at
+ * all — the routes had admitted the write since the level shipped while the
+ * only form that posts to them was classified unavailable, so the permission
+ * had no reachable caller. Plan 13 opened the surface; these are the legs that
+ * say the write it leads to actually lands.
  *
- * Re-admitting means flipping `requireAuth()` back to `requireRecordAuth`,
- * re-listing the route in `sharing-surface-guard.test.ts`, and replacing this
- * block with a `writeContract` — in the same diff as the caregiver-reachable
- * surface that made it worth doing.
+ * What this block replaces is a `refusedWriteContract` whose legs asserted
+ * `sharing.not_permitted` — the refusal a route that declares NO sharing mode
+ * returns. These routes declare one, so a READ or WRITE delegate gets
+ * `sharing.access.denied` instead, and those four assertions had been failing
+ * against the shipped routes for a release.
  */
-function refusedWriteContract<C = undefined>(
-  name: string,
-  c: {
-    /** Seed whatever the write needs, owned by the RECORD. Mirrors `writeContract`. */
-    prepare?: (recordOwnerId: string) => Promise<C>;
-    call: (ctx: C) => Promise<Response>;
-    ok: number;
-    count: (userId: string) => Promise<number>;
-  },
-) {
+function manageWriteContract<C>(name: string, c: WriteCase<C>) {
   const prepare = c.prepare ?? (async () => undefined as C);
 
   describe(name, () => {
+    it("writes into the owner's record under a live MANAGE grant", async () => {
+      const owner = await makeUser("owner");
+      const delegate = await makeUser("delegate");
+      const ctx = await prepare(owner.id);
+
+      await switchInto(owner.id, delegate.id, "MANAGE");
+      const response = await c.call(ctx);
+
+      expect(response.status).toBe(c.ok);
+      // Under the owner, and under nobody else.
+      expect(await c.count(owner.id)).toBe(1);
+      expect(await c.count(delegate.id)).toBe(0);
+    });
+
+    it("writes into a managed profile for its Guardian", async () => {
+      // The population the surface exists for, driven through the shipped
+      // creation service rather than a hand-planted grant: a Guardian is a
+      // MANAGE holder on a credential-less record, and this is the only place
+      // in the suite that puts one against these routes.
+      const guardian = await makeUser("guardian");
+      const { createManagedProfile } =
+        await import("@/lib/managed-profiles/create");
+      const { profile } = await createManagedProfile({
+        creatorId: guardian.id,
+        displayName: "Managed profile",
+        dateOfBirth: null,
+        locale: "de",
+        timezone: "Europe/Berlin",
+      });
+      const ctx = await prepare(profile.id);
+
+      const session = await signIn(guardian.id);
+      await switchSessionTo(session.id, profile.id);
+
+      expect((await c.call(ctx)).status).toBe(c.ok);
+      expect(await c.count(profile.id)).toBe(1);
+      expect(await c.count(guardian.id)).toBe(0);
+    });
+
+    it("files the audit row under the owner and names the delegate as actor", async () => {
+      const owner = await makeUser("owner");
+      const delegate = await makeUser("delegate");
+      const ctx = await prepare(owner.id);
+
+      await switchInto(owner.id, delegate.id, "MANAGE");
+      expect((await c.call(ctx)).status).toBe(c.ok);
+
+      const row = await getPrismaClient().auditLog.findFirst({
+        where: { action: c.auditAction },
+        orderBy: { createdAt: "desc" },
+      });
+      expect(row, `no ${c.auditAction} row was written`).not.toBeNull();
+      expect(row?.userId).toBe(owner.id);
+      expect(row?.actorUserId).toBe(delegate.id);
+    });
+
     for (const access of ["READ", "WRITE"] as const) {
-      it(`refuses a delegate holding a ${access} grant, and writes nothing`, async () => {
+      it(`refuses a ${access} delegate with sharing.access.denied, and writes nothing`, async () => {
         const owner = await makeUser("owner");
         const delegate = await makeUser("delegate");
         const ctx = await prepare(owner.id);
 
         await switchInto(owner.id, delegate.id, access);
-        const response = await c.call(ctx);
+        // The insufficient-level refusal, not the undeclared-mode one. The
+        // route names a mode; what the delegate lacks is the level.
+        await expectDenied(await c.call(ctx));
 
-        // The undeclared-mode refusal, not the no-grant one: the route names
-        // no sharing mode at all, so the carrier is refused before any grant
-        // is consulted. A WRITE grant makes no difference, which is the point.
-        expect(response.status).toBe(403);
-        expect((await payload(response)).meta?.errorCode).toBe(
-          "sharing.not_permitted",
-        );
-
-        // Neither account, not just not the owner's — a handler that fell
-        // back to the caller would have written a row somewhere.
         expect(await c.count(owner.id)).toBe(0);
         expect(await c.count(delegate.id)).toBe(0);
       });
     }
 
-    it("still lets the owner write it themselves", async () => {
+    it("refuses a caller who names a record they were never granted", async () => {
       const owner = await makeUser("owner");
+      const stranger = await makeUser("stranger");
       const ctx = await prepare(owner.id);
-      await signIn(owner.id);
+
+      await claimWithoutGrant(owner.id, stranger.id);
+      await expectDenied(await c.call(ctx));
+
+      expect(await c.count(owner.id)).toBe(0);
+      expect(await c.count(stranger.id)).toBe(0);
+    });
+
+    it("refuses the next request after the grant is revoked", async () => {
+      const owner = await makeUser("owner");
+      const delegate = await makeUser("delegate");
+      const ctx = await prepare(owner.id);
+
+      const { grant } = await switchInto(owner.id, delegate.id, "MANAGE");
+      expect((await c.call(ctx)).status).toBe(c.ok);
+
+      await revoke(grant.id, owner.id);
+      await expectDenied(await c.call(ctx));
+      expect(await c.count(owner.id)).toBe(1);
+    });
+
+    it("is unchanged for a caller who has not switched", async () => {
+      const plain = await makeUser("plain");
+      const ctx = await prepare(plain.id);
+      await signIn(plain.id);
 
       const response = await c.call(ctx);
-
       expect(response.status).toBe(c.ok);
-      expect(await c.count(owner.id)).toBe(1);
+      expect(await c.count(plain.id)).toBe(1);
+
+      const row = await getPrismaClient().auditLog.findFirst({
+        where: { action: c.auditAction },
+        orderBy: { createdAt: "desc" },
+      });
+      expect(row?.userId).toBe(plain.id);
+      expect(row?.actorUserId).toBeNull();
     });
   });
 }
 
-refusedWriteContract("POST /api/allergies", {
+manageWriteContract("POST /api/allergies", {
   call: async () => {
     const { POST } = await import("@/app/api/allergies/route");
     return post(POST as Handler, "/api/allergies", {
@@ -506,10 +579,11 @@ refusedWriteContract("POST /api/allergies", {
     });
   },
   ok: 201,
+  auditAction: "allergy.create",
   count: (userId) => getPrismaClient().allergy.count({ where: { userId } }),
 });
 
-refusedWriteContract("POST /api/family-history", {
+manageWriteContract("POST /api/family-history", {
   call: async () => {
     const { POST } = await import("@/app/api/family-history/route");
     return post(POST as Handler, "/api/family-history", {
@@ -518,6 +592,7 @@ refusedWriteContract("POST /api/family-history", {
     });
   },
   ok: 201,
+  auditAction: "family-history.create",
   count: (userId) =>
     getPrismaClient().familyHistoryEntry.count({ where: { userId } }),
 });
@@ -577,6 +652,69 @@ describe("POST /api/illness/episodes — the module gate", () => {
 /* -------------------------------------------------------------------------- */
 /* 7 — custom-metric entries, the third that is NOT delegable                 */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * The contract for a route that declares NO sharing mode at all.
+ *
+ * Its legs assert `sharing.not_permitted` — the refusal the carrier collects
+ * before any grant is consulted — which is a different fact from
+ * `sharing.access.denied` and is what makes the pair worth keeping apart. A
+ * route that names a mode and refuses a level answers the second; a route that
+ * names nothing answers the first, and a WRITE grant makes no difference to it.
+ *
+ * v1.37.0 — allergies and family history left this helper for
+ * `manageWriteContract` above, in the same diff as the surface that made their
+ * admitted writes reachable. One caller remains.
+ */
+function refusedWriteContract<C = undefined>(
+  name: string,
+  c: {
+    /** Seed whatever the write needs, owned by the RECORD. Mirrors `writeContract`. */
+    prepare?: (recordOwnerId: string) => Promise<C>;
+    call: (ctx: C) => Promise<Response>;
+    ok: number;
+    count: (userId: string) => Promise<number>;
+  },
+) {
+  const prepare = c.prepare ?? (async () => undefined as C);
+
+  describe(name, () => {
+    for (const access of ["READ", "WRITE"] as const) {
+      it(`refuses a delegate holding a ${access} grant, and writes nothing`, async () => {
+        const owner = await makeUser("owner");
+        const delegate = await makeUser("delegate");
+        const ctx = await prepare(owner.id);
+
+        await switchInto(owner.id, delegate.id, access);
+        const response = await c.call(ctx);
+
+        // The undeclared-mode refusal, not the no-grant one: the route names
+        // no sharing mode at all, so the carrier is refused before any grant
+        // is consulted. A WRITE grant makes no difference, which is the point.
+        expect(response.status).toBe(403);
+        expect((await payload(response)).meta?.errorCode).toBe(
+          "sharing.not_permitted",
+        );
+
+        // Neither account, not just not the owner's — a handler that fell
+        // back to the caller would have written a row somewhere.
+        expect(await c.count(owner.id)).toBe(0);
+        expect(await c.count(delegate.id)).toBe(0);
+      });
+    }
+
+    it("still lets the owner write it themselves", async () => {
+      const owner = await makeUser("owner");
+      const ctx = await prepare(owner.id);
+      await signIn(owner.id);
+
+      const response = await c.call(ctx);
+
+      expect(response.status).toBe(c.ok);
+      expect(await c.count(owner.id)).toBe(1);
+    });
+  });
+}
 
 /**
  * The third withdrawal, one release after the other two, and the delay is what

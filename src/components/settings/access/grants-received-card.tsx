@@ -2,6 +2,11 @@
 
 import { FolderOpen, Loader2 } from "lucide-react";
 
+import {
+  GrantActionAlert,
+  grantActionErrorKey,
+  type GrantAction,
+} from "@/components/settings/access/grant-action-error";
 import { GrantRowItem } from "@/components/settings/access/grant-row";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
@@ -34,6 +39,18 @@ import {
  *     at the row and should not have to go hunting for the switcher.
  *   * **Hand back.** The delegate's own way out, attributed as theirs so the
  *     owner's record can tell "I withdrew it" from "he gave it back".
+ *
+ * v1.37.0 — both acts can now be refused in ways the person can do something
+ * about, and both used to fail in silence. An invitation that lapsed before it
+ * was opened, and the last Guardian being told they may not hand back a
+ * profile that would then have nobody looking after it. The refusal renders on
+ * its own row, announced, with the row's control still there.
+ *
+ * The failed state is read off the mutation rather than copied into a
+ * `useState` from `onError`. TanStack keeps `isError` / `error` / `variables`
+ * until something resets it, and `variables` is what says which row failed — a
+ * local copy would be a second version of that fact, and it is the copy that
+ * goes stale when an unrelated invalidation re-renders the panel.
  */
 export function GrantsReceivedCard() {
   const { t } = useTranslations();
@@ -78,7 +95,12 @@ export function GrantsReceivedCard() {
                 key={grant.id}
                 grant={grant}
                 side="received"
-                notice={renderConsent(grant)}
+                notice={
+                  <>
+                    {renderConsent(grant)}
+                    {renderFailure(grant)}
+                  </>
+                }
                 actions={renderActions(grant)}
               />
             ))}
@@ -87,6 +109,52 @@ export function GrantsReceivedCard() {
       </div>
     </SettingsCard>
   );
+
+  /**
+   * The refusal this row is carrying, if it is the row that was refused.
+   *
+   * Guarded on `variables` rather than rendered under the list, because a
+   * panel with two pending invitations would otherwise show one row's failure
+   * with no way to tell which act it belonged to.
+   */
+  function renderFailure(grant: GrantRow) {
+    const failure = failedAction(grant.id);
+    if (!failure) return null;
+    return (
+      <GrantActionAlert
+        grantId={grant.id}
+        message={t(grantActionErrorKey(failure.error, failure.action))}
+        retrying={failure.pending}
+        onRetry={failure.retry}
+      />
+    );
+  }
+
+  /** Which of the two acts failed on this row, and how to run it again. */
+  function failedAction(grantId: string): {
+    action: GrantAction;
+    error: unknown;
+    pending: boolean;
+    retry: () => void;
+  } | null {
+    if (accept.isError && accept.variables === grantId) {
+      return {
+        action: "accept",
+        error: accept.error,
+        pending: accept.isPending,
+        retry: () => accept.mutate(grantId),
+      };
+    }
+    if (renounce.isError && renounce.variables === grantId) {
+      return {
+        action: "renounce",
+        error: renounce.error,
+        pending: renounce.isPending,
+        retry: () => renounce.mutate(grantId),
+      };
+    }
+    return null;
+  }
 
   /**
    * The delegate's half of the consent, on the screen where they give it.

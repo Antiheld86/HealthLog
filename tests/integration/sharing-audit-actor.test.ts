@@ -14,6 +14,9 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { cookieJar, headerJar } from "./mock-next-headers";
@@ -328,5 +331,167 @@ describe("the lifecycle verbs leave their own trail", () => {
       owner.id,
     ]);
     expect(trail.every((r) => r.actorUserId === null)).toBe(true);
+  });
+});
+
+/**
+ * A view-only delegate sends a query the route cannot parse.
+ *
+ * This is the sharpest case the activity feed has, and it shipped saying the
+ * wrong thing. `GET /api/mood-entries` resolves `requireRecordAuth("read",
+ * "mind")` and files `mood-entries.list.validation-failed` through `auditLog`
+ * on a malformed query — deliberately through the helper, because that is what
+ * stamps `actorUserId` and the row is meant to be attributable. The feed
+ * selects every actor-stamped row with no action allowlist, and the verb map
+ * had no arm for any `*.validation-failed` action, so the owner was told that
+ * a person holding VIEW-ONLY access had made a change in their record.
+ *
+ * Nothing had changed. Nothing could have: the request was refused at the
+ * schema. So the whole round trip is asserted here rather than only the map —
+ * that the row lands, that it is attributed, and that the sentence the owner
+ * would read is an attempt rather than an act.
+ */
+describe("a refused read is reported as a refused read", () => {
+  it("files an attributable row and renders it as an attempt, not a change", async () => {
+    const { owner, delegate } = await household();
+
+    const { GET } = await import("@/app/api/mood-entries/route");
+    const response = await GET(
+      new NextRequest("http://localhost/api/mood-entries?limit=not-a-number", {
+        method: "GET",
+      }),
+    );
+    expect(response.status).toBe(422);
+
+    // The breadcrumb is fire-and-forget, which is the property that made it
+    // invisible to a guard reading only awaited calls.
+    await settle();
+    const rows = await rowsFor("mood-entries.list.validation-failed");
+    expect(rows, "no breadcrumb row was written").toHaveLength(1);
+    expect(rows[0]?.userId).toBe(owner.id);
+    expect(rows[0]?.actorUserId).toBe(delegate.id);
+
+    // Which means it reaches the owner's feed: same predicate the route uses.
+    const feedRows = await getPrismaClient().auditLog.findMany({
+      where: {
+        userId: owner.id,
+        actorUserId: { not: null },
+        NOT: { actorUserId: owner.id },
+      },
+    });
+    expect(feedRows.map((r) => r.action)).toContain(
+      "mood-entries.list.validation-failed",
+    );
+
+    // And what it says there. The English bundle is read rather than a key
+    // asserted, because the defect was the SENTENCE, not the wiring.
+    const { recordActivityVerbLine } =
+      await import("@/lib/record-activity/activity-verb");
+    const en = JSON.parse(
+      await readFile(join(process.cwd(), "messages/en.json"), "utf8"),
+    ) as Record<string, Record<string, Record<string, string>>>;
+    const sentence = recordActivityVerbLine(
+      (key, params) =>
+        (en.recordSharing.activityVerb[key.split(".").pop()!] ?? key).replace(
+          "{name}",
+          String(params?.name ?? ""),
+        ),
+      rows[0]!.action,
+      "Alex",
+    );
+
+    expect(sentence).not.toContain("made a change");
+    expect(sentence).toBe("Alex sent a mood search this record could not read");
+  });
+});
+
+/**
+ * What the owner's activity feed claims, and what it can actually see.
+ *
+ * Two completeness claims live on this response and the surface states both.
+ * They were both wrong in the same direction — too confident — and in opposite
+ * ways:
+ *
+ *   * the copy promised a window ("who entered what stays answerable for N
+ *     days") while the query had no date filter at all, so on an instance
+ *     whose retention was shortened the view showed rows the sentence said
+ *     were gone;
+ *   * the query stopped at a hundred rows and said nothing, so an owner who
+ *     scrolled to the bottom read the oldest visible line as the beginning.
+ *
+ * Driven against real rows rather than a mocked Prisma, because both claims
+ * are about what the DATABASE returns for a given `where` — a stubbed client
+ * would answer whatever the stub was told and prove neither.
+ */
+describe("the activity feed states its own limits", () => {
+  async function feed() {
+    const { GET } = await import("@/app/api/account/activity/route");
+    const response = await GET();
+    expect(response.status).toBe(200);
+    return (await response.json()) as {
+      data: {
+        entries: { action: string }[];
+        retentionDays: number;
+        truncated: boolean;
+      };
+    };
+  }
+
+  /** One delegated row, back-dated. */
+  async function stampedRow(
+    ownerId: string,
+    delegateId: string,
+    createdAt: Date,
+    action = "measurement.update",
+  ) {
+    await getPrismaClient().auditLog.create({
+      data: { userId: ownerId, actorUserId: delegateId, action, createdAt },
+    });
+  }
+
+  it("does not show a row older than the window it promises", async () => {
+    const { owner, delegate } = await household();
+    await signIn(owner.id);
+
+    const days = (await feed()).data.retentionDays;
+    expect(days).toBeGreaterThan(0);
+
+    const inside = new Date(Date.now() - 60_000);
+    const outside = new Date(Date.now() - (days + 2) * 86_400_000);
+    await stampedRow(owner.id, delegate.id, inside, "measurement.update");
+    await stampedRow(owner.id, delegate.id, outside, "measurement.delete");
+
+    const { data } = await feed();
+    const actions = data.entries.map((e) => e.action);
+    // The positive control matters more than the absence: a filter that
+    // excluded everything would satisfy the second assertion alone.
+    expect(actions).toContain("measurement.update");
+    expect(actions).not.toContain("measurement.delete");
+  });
+
+  it("says when the list is the most recent rows rather than all of them", async () => {
+    const { owner, delegate } = await household();
+    await signIn(owner.id);
+
+    // Under the ceiling: the list IS everything, and says so.
+    for (let i = 0; i < 3; i += 1) {
+      await stampedRow(owner.id, delegate.id, new Date(Date.now() - i * 1000));
+    }
+    const small = await feed();
+    expect(small.data.entries).toHaveLength(3);
+    expect(small.data.truncated).toBe(false);
+
+    // Over it: same shape, different claim.
+    await getPrismaClient().auditLog.createMany({
+      data: Array.from({ length: 120 }, (_, i) => ({
+        userId: owner.id,
+        actorUserId: delegate.id,
+        action: "measurement.update",
+        createdAt: new Date(Date.now() - (i + 10) * 1000),
+      })),
+    });
+    const large = await feed();
+    expect(large.data.entries).toHaveLength(100);
+    expect(large.data.truncated).toBe(true);
   });
 });

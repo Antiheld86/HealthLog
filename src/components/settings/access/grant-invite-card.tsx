@@ -654,10 +654,15 @@ function useInvitationOwnerTimezone(): string {
  * field" and "you already have your own record".
  */
 export function inviteErrorKey(err: unknown): string {
+  // Nothing that is not an `ApiError` ever reached a response, so no
+  // invitation was refused — the request did not arrive. Said as its own case
+  // because "the invitation could not be sent" invites somebody to change the
+  // form, and the form is fine. The typed identifier, the level and the ticked
+  // sections all survive a failed mutation, so the retry is the same button.
+  if (!(err instanceof ApiError)) return "recordSharing.invite.errorOffline";
+
   const code =
-    err instanceof ApiError && typeof err.meta?.errorCode === "string"
-      ? err.meta.errorCode
-      : null;
+    typeof err.meta?.errorCode === "string" ? err.meta.errorCode : null;
   switch (code) {
     case "sharing.invite.self":
       return "recordSharing.invite.errorSelf";

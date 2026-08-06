@@ -65,6 +65,16 @@ export interface GrantList {
   given: GrantRow[];
   /** Grants offered to this account on somebody else's. */
   received: GrantRow[];
+  /**
+   * How long the activity feed can still say who entered what, in days —
+   * resolved by the server from the same setting the purge job reads.
+   *
+   * On this payload rather than fetched beside it, because the revoke dialog
+   * has to disclose the window and a client holding a grant to revoke is
+   * already holding the answer. Reading it off a second request made the
+   * sentence appear or not depending on which read landed first.
+   */
+  retentionDays: number;
 }
 
 export interface RecordActivityEntry {
@@ -83,6 +93,15 @@ export interface RecordActivity {
    * the list is everything that ever happened.
    */
   retentionDays: number;
+  /**
+   * True when the read hit its row ceiling, so the list is the most recent
+   * activity inside the window rather than all of it.
+   *
+   * Two different completeness claims, and both have to be stated: the window
+   * bounds how far back, this bounds how many. A list that silently stopped at
+   * its own cap would let the oldest line read as the beginning.
+   */
+  truncated: boolean;
 }
 
 export function useAccountGrants(enabled = true) {

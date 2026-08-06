@@ -14,6 +14,7 @@ import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useRecordSessionTransition } from "@/hooks/use-record-session-transition";
 import { useTranslations } from "@/lib/i18n/context";
 import { CoachLaunchProvider } from "@/lib/insights/coach-launch-context";
+import { isManageDelegateSettingsDestination } from "@/lib/record-settings";
 import { isDestinationInSharedRecord } from "./nav-model";
 import { BottomNav } from "./bottom-nav";
 import { DemoBanner } from "./demo-banner";
@@ -84,15 +85,35 @@ export function AuthShell({
   const {
     inSharedRecord,
     recordKind,
+    level,
     sections,
     accessRefused,
     recordSessionPending,
   } = useRecordCapabilities();
-  // A managed profile has a deliberately small Settings surface of its own.
-  // Let that route family reach its record-aware gate; adult shared records
-  // stay in the generic refusal branch even at MANAGE.
-  const isManagedRecordSettingsPath =
-    recordKind === "managed" && pathname.startsWith("/settings");
+  // A shared record has a deliberately small Settings surface of its own, and
+  // which routes belong to it depends on the record.
+  //
+  // A managed profile keeps the whole `/settings` family reaching its
+  // record-aware gate: guardian configuration lives there and the gate refuses
+  // per destination.
+  //
+  // v1.37.0 — an ordinary shared record at MANAGE reaches exactly the
+  // destinations classified `manage-writable`, which today is Settings →
+  // Anamnese and nothing else. That is not a widening of what a delegate may
+  // do: `POST /api/allergies` and `POST /api/family-history` already resolve
+  // `requireRecordAuth("manage", "profile")` and have done since the level
+  // shipped. What was missing was any page from which to call them, and an
+  // admitted write with no reachable caller is the half-wired state this
+  // repository keeps rediscovering. Every other `/settings` path in an adult
+  // share stays in the generic refusal branch, at every level.
+  const settingsSlug = pathname.startsWith("/settings")
+    ? (pathname.split("/")[2] ?? "")
+    : null;
+  const isRecordSettingsPath =
+    settingsSlug !== null &&
+    (recordKind === "managed" ||
+      (level === "manage" &&
+        isManageDelegateSettingsDestination(settingsSlug)));
   // v1.36.0 — a page reached while acting on somebody else's record that
   // sharing does not cover. The nav already drops these entries, so arriving
   // here means a bookmark or a browser back button; the panel below explains
@@ -101,7 +122,7 @@ export function AuthShell({
   const outsideSharedRecord =
     inSharedRecord &&
     !isDestinationInSharedRecord(pathname, sections) &&
-    !isManagedRecordSettingsPath;
+    !isRecordSettingsPath;
   const isOnboardingPage = pathname === "/onboarding";
   const showUnlockNotifier = isAuthenticated && !isPublicPage && !!user?.id;
 

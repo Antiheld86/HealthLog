@@ -4461,7 +4461,9 @@
           "dateMdy": "Miesiąc / dzień / rok",
           "dateYmd": "Rok / miesiąc / dzień"
         },
-        "modules": { "title": "Moduły" },
+        "modules": {
+          "title": "Moduły"
+        },
         "notifications": {
           "title": "Powiadomienia",
           "moodReminder": "Włącz przypomnienie nastroju",
@@ -9520,7 +9522,7 @@
     },
     "unavailable": {
       "title": "Nie należy do udostępnionego dostępu",
-      "description": "Udostępniana jest sama karta zdrowia. Ustawienia, połączone usługi, powiadomienia i funkcje SI pozostają przy osobie, do której należy konto.",
+      "description": "Udostępniana jest sama karta zdrowia, w tym wywiad zdrowotny w sekcji Anamneza. Ustawienia konta, połączone usługi, powiadomienia i funkcje SI pozostają przy osobie, do której należy konto.",
       "leave": "Wróć do mojej karty"
     },
     "state": {
@@ -9583,7 +9585,8 @@
       "errorFailed": "Nie udało się wysłać zaproszenia. Spróbuj ponownie.",
       "errorScope": "Tych sekcji nie da się udostępnić w ten sposób. Wybierz co najmniej jedną sekcję albo udostępnij całą kartotekę.",
       "errorManageBrowserOnly": "Dostęp zarządzający można przyznać tylko w przeglądarce, ponieważ wymaga drugiego składnika logowania.",
-      "errorStepUp": "Potwierdź drugi składnik logowania i spróbuj ponownie."
+      "errorStepUp": "Potwierdź drugi składnik logowania i spróbuj ponownie.",
+      "errorOffline": "To nie dotarło do serwera. Twoje zaproszenie nadal tu jest — sprawdź połączenie i spróbuj ponownie."
     },
     "given": {
       "title": "Kto może otworzyć moją kartę",
@@ -9624,7 +9627,8 @@
       "loadError": "Nie udało się wczytać aktywności.",
       "opened": "{name} otworzył twoją kartę {count}×",
       "acted": "{name} wprowadził zmianę w twojej karcie",
-      "deletedAccount": "Usunięte konto"
+      "deletedAccount": "Usunięte konto",
+      "truncated": "Ta lista pokazuje najnowszą aktywność, a nie całą."
     },
     "delegate": {
       "addOnlyNote": "Możesz dodawać wpisy do tej karty. Zmieniać je i usuwać może tylko {name}."
@@ -9652,7 +9656,88 @@
       "medicationSideEffectCreate": "{name} zanotował działanie niepożądane",
       "medicationCreate": "{name} dodał lek",
       "medicationIntake": "{name} zapisał przyjęcie dawki",
-      "medicationIntakeRefused": "{name} próbował(a) zmienić dawkę lub odłożyć przypomnienie i został(a) odrzucony(-a)"
+      "medicationIntakeRefused": "{name} próbował(a) zmienić dawkę lub odłożyć przypomnienie i został(a) odrzucony(-a)",
+      "measurementUpdate": "{name} zmienił pomiar",
+      "measurementDelete": "{name} usunął pomiar",
+      "measurementDeleteBulk": "{name} usunął kilka pomiarów naraz",
+      "measurementRestore": "{name} przywrócił pomiar",
+      "measurementReminderCreate": "{name} dodał przypomnienie o pomiarze",
+      "measurementReminderUpdate": "{name} zmienił przypomnienie o pomiarze",
+      "measurementReminderDelete": "{name} usunął przypomnienie o pomiarze",
+      "measurementReminderComplete": "{name} zrealizował przypomnienie o pomiarze",
+      "measurementReminderSatisfy": "{name} zamknął przypomnienie o pomiarze",
+      "labResultUpdate": "{name} zmienił wynik badania",
+      "labResultDelete": "{name} usunął wynik badania",
+      "labResultRestore": "{name} przywrócił wynik badania",
+      "biomarkerUpdate": "{name} zmienił biomarker",
+      "biomarkerDelete": "{name} usunął biomarker",
+      "allergyUpdate": "{name} zmienił alergię",
+      "allergyDelete": "{name} usunął alergię",
+      "familyHistoryUpdate": "{name} zmienił wpis w wywiadzie rodzinnym",
+      "familyHistoryDelete": "{name} usunął wpis w wywiadzie rodzinnym",
+      "illnessEpisodeUpdate": "{name} zmienił wpis o chorobie",
+      "illnessEpisodeDelete": "{name} usunął wpis o chorobie",
+      "illnessEpisodeResolve": "{name} oznaczył chorobę jako zakończoną",
+      "illnessEpisodeRestore": "{name} przywrócił wpis o chorobie",
+      "illnessDayLogUpsert": "{name} zapisał dzień choroby",
+      "medicationUpdate": "{name} zmienił lek",
+      "medicationDelete": "{name} usunął lek",
+      "medicationGlp1Update": "{name} zmienił terapię GLP-1",
+      "medicationScheduleCreate": "{name} dodał schemat dawkowania",
+      "medicationScheduleUpdate": "{name} zmienił schemat dawkowania",
+      "medicationScheduleDelete": "{name} usunął schemat dawkowania",
+      "medicationInventoryCreate": "{name} dodał opakowanie leku",
+      "medicationInventoryUpdate": "{name} zmienił opakowanie leku",
+      "medicationInventoryDelete": "{name} usunął opakowanie leku",
+      "medicationSideEffectDelete": "{name} usunął działanie niepożądane",
+      "medicationIntakeUpdate": "{name} zmienił przyjęcie dawki",
+      "medicationIntakeDelete": "{name} usunął przyjęcie dawki",
+      "medicationIntakeBulkDelete": "{name} usunął kilka przyjęć dawek naraz",
+      "medicationIntakePurge": "{name} skasował całą historię przyjmowania leku",
+      "medicationIntakeImport": "{name} rozpoczął import przyjęć dla jednego leku",
+      "medicationIntakeHistoryImport": "{name} rozpoczął import historii przyjmowania",
+      "moodEntryCreate": "{name} dodał wpis nastroju",
+      "moodEntryUpdate": "{name} zmienił wpis nastroju",
+      "moodEntryDelete": "{name} usunął wpis nastroju",
+      "moodDeleteBulk": "{name} usunął kilka wpisów nastroju naraz",
+      "moodRestore": "{name} przywrócił wpis nastroju",
+      "mentalHealthCreate": "{name} zapisał wynik kwestionariusza",
+      "cycleDelete": "{name} usunął cykl",
+      "cycleDayLogUpsert": "{name} zapisał dzień cyklu",
+      "cycleDayLogUpdate": "{name} zmienił dzień cyklu",
+      "cycleDayLogDelete": "{name} usunął dzień cyklu",
+      "cyclePeriodBoundary": "{name} zmienił początek lub koniec miesiączki",
+      "cycleSymptomCreate": "{name} dodał objaw cyklu",
+      "nutrientWaterWrite": "{name} zapisał ilość wypitej wody",
+      "healthRecordExport": "{name} wyeksportował kartę",
+      "rejectedMeasurementQuery": "{name} wysłał zapytanie o pomiary, którego ta karta nie mogła odczytać",
+      "rejectedDoseQuery": "{name} wysłał zapytanie o dawki, którego ta karta nie mogła odczytać",
+      "rejectedMoodQuery": "{name} wysłał zapytanie o nastrój, którego ta karta nie mogła odczytać",
+      "rejectedMeasurementCreate": "{name} próbował dodać pomiar i został odrzucony",
+      "rejectedMeasurementBatch": "{name} próbował dodać kilka pomiarów i został odrzucony",
+      "rejectedMeasurementUpdate": "{name} próbował zmienić pomiar i został odrzucony",
+      "rejectedLabCreate": "{name} próbował dodać wynik badania i został odrzucony",
+      "rejectedLabUpdate": "{name} próbował zmienić wynik badania i został odrzucony",
+      "rejectedBiomarkerCreate": "{name} próbował dodać biomarker i został odrzucony",
+      "rejectedBiomarkerUpdate": "{name} próbował zmienić biomarker i został odrzucony",
+      "rejectedReminderCreate": "{name} próbował dodać przypomnienie o pomiarze i został odrzucony",
+      "rejectedReminderUpdate": "{name} próbował zmienić przypomnienie o pomiarze i został odrzucony",
+      "rejectedMoodCreate": "{name} próbował dodać wpis nastroju i został odrzucony",
+      "rejectedMoodUpdate": "{name} próbował zmienić wpis nastroju i został odrzucony",
+      "rejectedDoseCreate": "{name} próbował zapisać przyjęcie dawki i został odrzucony",
+      "rejectedDoseUpdate": "{name} próbował zmienić przyjęcie dawki i został odrzucony",
+      "rejectedDoseImport": "{name} próbował zaimportować przyjęcia dawek i został odrzucony",
+      "rejectedTrackedValue": "{name} próbował zapisać własny pomiar i został odrzucony",
+      "deniedDoseImport": "Import przyjęć rozpoczęty przez {name} nie mógł zostać zakolejkowany",
+      "anamnesisFactCreate": "{name} dodał fakt z wywiadu zdrowotnego",
+      "customMetricCreate": "{name} dodał własny typ pomiaru",
+      "customMetricUpdate": "{name} zmienił własny typ pomiaru",
+      "customMetricDelete": "{name} usunął własny typ pomiaru",
+      "documentStore": "{name} dodał dokument",
+      "documentUpdate": "{name} zmienił dokument",
+      "documentDiscard": "{name} odrzucił dokument",
+      "medicationIntakeImportFinished": "Import przyjęć rozpoczęty przez {name} zakończył się",
+      "medicationOneShotReconciled": "Lek jednorazowy został otwarty lub zamknięty po dawce zapisanej przez {name}"
     },
     "section": {
       "measurements": {
@@ -9687,6 +9772,24 @@
         "label": "Dokumenty",
         "detail": "Wszystko, co jest przechowywane w sejfie dokumentów."
       }
+    },
+    "actionError": {
+      "retry": "Spróbuj ponownie",
+      "offline": "To nie dotarło do serwera. Nic się nie zmieniło — sprawdź połączenie i spróbuj ponownie.",
+      "rateLimited": "Zbyt wiele prób pod rząd. Odczekaj minutę i spróbuj ponownie.",
+      "acceptExpired": "To zaproszenie wygasło. Poproś o nowe.",
+      "acceptWithdrawn": "To zaproszenie zostało wycofane.",
+      "acceptNotPending": "To zaproszenie zostało już przyjęte.",
+      "acceptNotFound": "Tego zaproszenia już nie ma.",
+      "acceptFailed": "Nie udało się przyjąć zaproszenia.",
+      "lastGuardian": "Ta osoba jako jedyna opiekuje się tym profilem, więc ten dostęp nie może się jeszcze zakończyć. Dodaj najpierw kolejną osobę opiekującą się profilem albo usuń profil.",
+      "alreadyEnded": "Ten dostęp już się zakończył.",
+      "notFound": "Tego dostępu już nie ma.",
+      "revokeFailed": "Nie udało się zakończyć dostępu.",
+      "renounceFailed": "Nie udało się zwrócić dostępu."
+    },
+    "anamnesis": {
+      "relativeNote": "Wpis w wywiadzie rodzinnym opisuje bliskich tej osoby. Dodaj go tylko wtedy, gdy chciałaby, żeby został tu zapisany."
     }
   }
 }

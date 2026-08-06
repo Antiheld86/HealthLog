@@ -4461,7 +4461,9 @@
           "dateMdy": "Mes / día / año",
           "dateYmd": "Año / mes / día"
         },
-        "modules": { "title": "Módulos" },
+        "modules": {
+          "title": "Módulos"
+        },
         "notifications": {
           "title": "Notificaciones",
           "moodReminder": "Activar recordatorio de ánimo",
@@ -9520,7 +9522,7 @@
     },
     "unavailable": {
       "title": "No forma parte del acceso compartido",
-      "description": "Se comparte el historial de salud en sí. Los ajustes, los servicios conectados, las notificaciones y las funciones de IA siguen siendo de la persona propietaria de la cuenta.",
+      "description": "Se comparte el historial de salud en sí, incluidos los antecedentes que hay en Anamnesis. Los ajustes de la cuenta, los servicios conectados, las notificaciones y las funciones de IA siguen siendo de la persona propietaria de la cuenta.",
       "leave": "Volver a mi historial"
     },
     "state": {
@@ -9583,7 +9585,8 @@
       "errorFailed": "No se pudo enviar la invitación. Inténtalo de nuevo.",
       "errorScope": "Esas secciones no se pueden compartir así. Elige al menos una sección o comparte todo el historial.",
       "errorManageBrowserOnly": "El acceso de gestión solo se puede ofrecer desde un navegador, porque pide tu segundo factor.",
-      "errorStepUp": "Confirma tu segundo factor y vuelve a intentarlo."
+      "errorStepUp": "Confirma tu segundo factor y vuelve a intentarlo.",
+      "errorOffline": "Esto no llegó al servidor. Tu invitación sigue aquí: comprueba tu conexión e inténtalo de nuevo."
     },
     "given": {
       "title": "Quién puede abrir mi historial",
@@ -9624,7 +9627,8 @@
       "loadError": "No se pudo cargar la actividad.",
       "opened": "{name} abrió tu historial {count}×",
       "acted": "{name} hizo un cambio en tu historial",
-      "deletedAccount": "Una cuenta eliminada"
+      "deletedAccount": "Una cuenta eliminada",
+      "truncated": "Esta lista muestra la actividad más reciente, no toda."
     },
     "delegate": {
       "addOnlyNote": "Puedes añadir cosas a este historial. Modificar o borrar entradas solo lo puede hacer {name}."
@@ -9652,7 +9656,88 @@
       "medicationSideEffectCreate": "{name} anotó un efecto secundario",
       "medicationCreate": "{name} añadió un medicamento",
       "medicationIntake": "{name} registró una dosis",
-      "medicationIntakeRefused": "{name} intentó cambiar una dosis o aplazar un recordatorio, y fue rechazado"
+      "medicationIntakeRefused": "{name} intentó cambiar una dosis o aplazar un recordatorio, y fue rechazado",
+      "measurementUpdate": "{name} cambió una medición",
+      "measurementDelete": "{name} eliminó una medición",
+      "measurementDeleteBulk": "{name} eliminó varias mediciones a la vez",
+      "measurementRestore": "{name} restauró una medición",
+      "measurementReminderCreate": "{name} añadió un recordatorio de medición",
+      "measurementReminderUpdate": "{name} cambió un recordatorio de medición",
+      "measurementReminderDelete": "{name} eliminó un recordatorio de medición",
+      "measurementReminderComplete": "{name} completó un recordatorio de medición",
+      "measurementReminderSatisfy": "{name} cerró un recordatorio de medición",
+      "labResultUpdate": "{name} cambió un resultado de laboratorio",
+      "labResultDelete": "{name} eliminó un resultado de laboratorio",
+      "labResultRestore": "{name} restauró un resultado de laboratorio",
+      "biomarkerUpdate": "{name} cambió un biomarcador",
+      "biomarkerDelete": "{name} eliminó un biomarcador",
+      "allergyUpdate": "{name} cambió una alergia",
+      "allergyDelete": "{name} eliminó una alergia",
+      "familyHistoryUpdate": "{name} cambió un antecedente familiar",
+      "familyHistoryDelete": "{name} eliminó un antecedente familiar",
+      "illnessEpisodeUpdate": "{name} cambió una enfermedad",
+      "illnessEpisodeDelete": "{name} eliminó una enfermedad",
+      "illnessEpisodeResolve": "{name} marcó una enfermedad como terminada",
+      "illnessEpisodeRestore": "{name} restauró una enfermedad",
+      "illnessDayLogUpsert": "{name} registró un día de enfermedad",
+      "medicationUpdate": "{name} cambió un medicamento",
+      "medicationDelete": "{name} eliminó un medicamento",
+      "medicationGlp1Update": "{name} cambió un tratamiento con GLP-1",
+      "medicationScheduleCreate": "{name} añadió una pauta de dosificación",
+      "medicationScheduleUpdate": "{name} cambió una pauta de dosificación",
+      "medicationScheduleDelete": "{name} eliminó una pauta de dosificación",
+      "medicationInventoryCreate": "{name} añadió un envase de medicamento",
+      "medicationInventoryUpdate": "{name} cambió un envase de medicamento",
+      "medicationInventoryDelete": "{name} eliminó un envase de medicamento",
+      "medicationSideEffectDelete": "{name} eliminó un efecto secundario",
+      "medicationIntakeUpdate": "{name} cambió una dosis",
+      "medicationIntakeDelete": "{name} eliminó una dosis",
+      "medicationIntakeBulkDelete": "{name} eliminó varias dosis a la vez",
+      "medicationIntakePurge": "{name} borró todo el historial de dosis de un medicamento",
+      "medicationIntakeImport": "{name} inició una importación de dosis de un medicamento",
+      "medicationIntakeHistoryImport": "{name} inició una importación del historial de dosis",
+      "moodEntryCreate": "{name} añadió una entrada de ánimo",
+      "moodEntryUpdate": "{name} cambió una entrada de ánimo",
+      "moodEntryDelete": "{name} eliminó una entrada de ánimo",
+      "moodDeleteBulk": "{name} eliminó varias entradas de ánimo a la vez",
+      "moodRestore": "{name} restauró una entrada de ánimo",
+      "mentalHealthCreate": "{name} registró el resultado de un cuestionario",
+      "cycleDelete": "{name} eliminó un ciclo",
+      "cycleDayLogUpsert": "{name} registró un día del ciclo",
+      "cycleDayLogUpdate": "{name} cambió un día del ciclo",
+      "cycleDayLogDelete": "{name} eliminó un día del ciclo",
+      "cyclePeriodBoundary": "{name} cambió el inicio o el final de una regla",
+      "cycleSymptomCreate": "{name} añadió un síntoma del ciclo",
+      "nutrientWaterWrite": "{name} registró la ingesta de agua",
+      "healthRecordExport": "{name} exportó el historial",
+      "rejectedMeasurementQuery": "{name} envió una búsqueda de mediciones que este historial no pudo leer",
+      "rejectedDoseQuery": "{name} envió una búsqueda de dosis que este historial no pudo leer",
+      "rejectedMoodQuery": "{name} envió una búsqueda de ánimo que este historial no pudo leer",
+      "rejectedMeasurementCreate": "{name} intentó añadir una medición y fue rechazado",
+      "rejectedMeasurementBatch": "{name} intentó añadir varias mediciones y fue rechazado",
+      "rejectedMeasurementUpdate": "{name} intentó cambiar una medición y fue rechazado",
+      "rejectedLabCreate": "{name} intentó añadir un resultado de laboratorio y fue rechazado",
+      "rejectedLabUpdate": "{name} intentó cambiar un resultado de laboratorio y fue rechazado",
+      "rejectedBiomarkerCreate": "{name} intentó añadir un biomarcador y fue rechazado",
+      "rejectedBiomarkerUpdate": "{name} intentó cambiar un biomarcador y fue rechazado",
+      "rejectedReminderCreate": "{name} intentó añadir un recordatorio de medición y fue rechazado",
+      "rejectedReminderUpdate": "{name} intentó cambiar un recordatorio de medición y fue rechazado",
+      "rejectedMoodCreate": "{name} intentó añadir una entrada de ánimo y fue rechazado",
+      "rejectedMoodUpdate": "{name} intentó cambiar una entrada de ánimo y fue rechazado",
+      "rejectedDoseCreate": "{name} intentó registrar una dosis y fue rechazado",
+      "rejectedDoseUpdate": "{name} intentó cambiar una dosis y fue rechazado",
+      "rejectedDoseImport": "{name} intentó importar dosis y fue rechazado",
+      "rejectedTrackedValue": "{name} intentó registrar un valor propio y fue rechazado",
+      "deniedDoseImport": "Una importación de dosis iniciada por {name} no se pudo poner en cola",
+      "anamnesisFactCreate": "{name} añadió un dato de antecedentes de salud",
+      "customMetricCreate": "{name} añadió un tipo de valor propio",
+      "customMetricUpdate": "{name} cambió un tipo de valor propio",
+      "customMetricDelete": "{name} eliminó un tipo de valor propio",
+      "documentStore": "{name} añadió un documento",
+      "documentUpdate": "{name} cambió un documento",
+      "documentDiscard": "{name} descartó un documento",
+      "medicationIntakeImportFinished": "La importación de dosis que inició {name} ha terminado",
+      "medicationOneShotReconciled": "Un medicamento de una sola toma se abrió o se cerró tras una dosis que registró {name}"
     },
     "section": {
       "measurements": {
@@ -9687,6 +9772,24 @@
         "label": "Documentos",
         "detail": "Todo lo que está guardado en el archivo de documentos."
       }
+    },
+    "actionError": {
+      "retry": "Inténtalo de nuevo",
+      "offline": "Esto no llegó al servidor. No ha cambiado nada: comprueba tu conexión e inténtalo de nuevo.",
+      "rateLimited": "Demasiados intentos seguidos. Espera un minuto e inténtalo de nuevo.",
+      "acceptExpired": "Esa invitación ha caducado. Pide una nueva.",
+      "acceptWithdrawn": "Esa invitación fue retirada.",
+      "acceptNotPending": "Esa invitación ya se aceptó.",
+      "acceptNotFound": "Esa invitación ya no existe.",
+      "acceptFailed": "No se pudo aceptar la invitación.",
+      "lastGuardian": "Esta es la única persona que cuida de ese perfil, así que este acceso todavía no puede terminar. Añade otra persona responsable primero, o elimina el perfil.",
+      "alreadyEnded": "Ese acceso ya ha terminado.",
+      "notFound": "Ese acceso ya no existe.",
+      "revokeFailed": "No se pudo terminar el acceso.",
+      "renounceFailed": "No se pudo devolver el acceso."
+    },
+    "anamnesis": {
+      "relativeNote": "Una entrada de antecedentes familiares describe a los familiares de esta persona. Añádela solo si querría que quedara registrada aquí."
     }
   }
 }

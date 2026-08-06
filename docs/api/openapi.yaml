@@ -12538,12 +12538,14 @@ paths:
                   default: READ
                   description: "READ can read the record and change nothing. WRITE can additionally ADD entries (readings, results,
                     observations, a medication, a marked dose) and can still edit or delete nothing, including its own.
-                    MANAGE can additionally change and remove entries, including ones the owner wrote, and read the
-                    generated insights; it never reaches the identity surfaces (login, second factor, connections,
-                    tokens, settings, or who else has access). Omitted means READ, so a client that predates the field
-                    keeps working. The level is fixed when the invitation is written: no endpoint raises a live grant,
-                    because that would widen what the delegate accepted without asking them again. The way up is a new
-                    invitation the delegate accepts."
+                    MANAGE can additionally change and remove entries, including ones the owner wrote, read the
+                    generated insights, and record the record's own health background (allergies, family history). The
+                    boundary is record content versus account configuration: MANAGE never reaches login, the second
+                    factor, provider connections, API tokens, notification routing, module and threshold configuration,
+                    or who else has access. Omitted means READ, so a client that predates the field keeps working. The
+                    level is fixed when the invitation is written: no endpoint raises a live grant, because that would
+                    widen what the delegate accepted without asking them again. The way up is a new invitation the
+                    delegate accepts."
                   type: string
                   enum:
                     - READ
@@ -36916,11 +36918,17 @@ components:
           minimum: -9007199254740991
           maximum: 9007199254740991
           description: How far back this feed can see, in days. Resolved from the instance's audit retention setting (365 by
-            default, operator-configurable), NOT a constant — an instance running a 90-day window sends 90. Show it
-            beside the rows.
+            default, operator-configurable), NOT a constant — an instance running a 90-day window sends 90. The query is
+            bounded to this window, so it is the real limit of the list and not only a caption. Show it beside the rows.
+        truncated:
+          type: boolean
+          description: True when the read reached its row ceiling, so `entries` is the most recent activity inside the window
+            rather than all of it. A client must say so — a list that stops at its own cap in silence lets the oldest
+            row read as the beginning. False means the list is everything inside the window.
       required:
         - entries
         - retentionDays
+        - truncated
       additionalProperties: false
       description: The owner's record of what somebody else did in their record, bounded by the instance's audit retention.
     RecordActivityEntry:
@@ -37000,9 +37008,18 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AccountGrant"
+        retentionDays:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: How long the record's activity feed can still attribute an entry to the person who made it, in days.
+            Resolved from the instance's audit retention setting (365 by default, operator-configurable), NOT a
+            constant. It rides this payload so a client ending an access can state the window in the same breath,
+            without a second request whose timing would decide whether the owner was told.
       required:
         - given
         - received
+        - retentionDays
       additionalProperties: false
       description: "Both directions at once: `given` are the grants this account has offered on its own record, `received` are
         the ones offered to it. Capped at 100 rows per direction, newest first."
