@@ -215,8 +215,30 @@ describe("the epoch has one writer and a closed reader set", () => {
         "lib/api-handler.ts",
         // Compares it. The one place that decides anything from it.
         "lib/sharing/record-session-fence.ts",
+        // Reads it off the same session lookup the idempotency wrapper already
+        // makes, so the fence can be evaluated above the replay cache without a
+        // second round trip.
+        "lib/auth/acting-carrier.ts",
       ].sort(),
     );
+  });
+
+  it("is consulted by the idempotency wrapper, above the cache", () => {
+    const src = read("lib/idempotency.ts");
+    const fence = src.indexOf("refuseStaleRecordSessionClaim(claim)");
+    const cache = src.indexOf("findCached(ctx)");
+    const claimRow = src.indexOf("claimKey(ctx)");
+    expect(fence).toBeGreaterThan(-1);
+    expect(cache).toBeGreaterThan(-1);
+    expect(claimRow).toBeGreaterThan(-1);
+    // A stale request must not learn whether a cell exists, replay a body out
+    // of one, or insert a claim row. The runtime proof is the zero-call
+    // instrument in `src/lib/__tests__/idempotency.test.ts`; this is the
+    // tripwire that says the line moved.
+    expect(fence).toBeLessThan(cache);
+    expect(fence).toBeLessThan(claimRow);
+    // And it comes from the fence module, not from a second copy of the rule.
+    expect(src).toContain('from "@/lib/sharing/record-session-fence"');
   });
 
   it("does not leak the raw counter into the browser's vocabulary", () => {

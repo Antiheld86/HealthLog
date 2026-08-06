@@ -40,9 +40,11 @@
  * discards a response whose echoed context contradicts the one it is now on.
  */
 import { headers } from "next/headers";
+import { NextResponse } from "next/server";
 
 import {
   RECORD_EPOCH_HEADER,
+  RECORD_FENCE_ERROR_CODE,
   RECORD_SCOPE_HEADER,
   parseAssertedContext,
   recordScopeHeaderValue,
@@ -143,23 +145,10 @@ export function recordSessionForPayload(
 export async function assertRecordSessionFence(
   auth: AuthContext,
 ): Promise<void> {
-  const transport = auth.authMethod === "bearer" ? "bearer" : "cookie";
-  const sessionEpoch = auth.session.recordEpoch ?? 0;
-  const sessionScope = auth.session.actingAsUserId ?? null;
-
-  // Stamped before the verdict, so a refusal echoes the truth too. The Bearer
-  // transport carries no session context to echo and gets none: the frozen
-  // native contract sends no fence header and receives none back.
-  if (transport === "cookie") {
-    getEvent()?.setRecordContext({ epoch: sessionEpoch, scope: sessionScope });
-  }
-
-  const asserted = await readAssertedRecordContext();
-  const verdict = recordSessionFenceVerdict({
-    transport,
-    sessionEpoch,
-    sessionScope,
-    asserted,
+  const verdict = await decide({
+    transport: auth.authMethod === "bearer" ? "bearer" : "cookie",
+    sessionEpoch: auth.session.recordEpoch ?? 0,
+    sessionScope: auth.session.actingAsUserId ?? null,
   });
 
   if (verdict === "pass") return;
@@ -182,4 +171,69 @@ export async function assertRecordSessionFence(
   // reloads, and the reload is the designed outcome.
   annotate({ meta: { sharing_refusal: "unfenced_client" } });
   throw new SharingAccessDeniedError();
+}
+
+/**
+ * The same verdict, for the idempotency wrapper, returning bytes instead of
+ * throwing.
+ *
+ * `withIdempotency` is composed OUTSIDE `apiHandler` on at least one route
+ * (`POST /api/admin/backups/[id]/restore`), so a throw from the wrapper would
+ * escape the envelope and become a 500 rather than the documented refusal. It
+ * therefore returns a response, hand-built to the same
+ * `{ data, error, meta.errorCode }` shape `apiHandler`'s `SharingAuthError` arm
+ * emits, so a client cannot tell which layer refused it.
+ *
+ * Only the `stale` arm produces a response. `unfenced-client` deliberately
+ * falls through to the handler, whose `requireRecordAuth` issues the 403 a
+ * pre-fence bundle recovers from — along with the wide-event annotation and the
+ * audit posture that belong to the route, not to a cache wrapper.
+ *
+ * This is the SECOND, INDEPENDENT evaluation of the fence on such a request,
+ * and its result is deliberately NOT carried into the handler's own. Carrying
+ * it would need request-scoped mutable state shared across the wrapper/handler
+ * boundary, which is a second source of truth for the same question. Two
+ * independent evaluations against the same client assertion are sufficient: a
+ * switch landing between the two fails the second, so no handler body runs
+ * under a scope the asserted epoch does not imply.
+ */
+export async function refuseStaleRecordSessionClaim(
+  claim: RecordSessionInputs,
+): Promise<Response | null> {
+  const verdict = await decide(claim);
+  if (verdict !== "stale") return null;
+  annotate({ meta: { sharing_refusal: "record_context_stale_idempotent" } });
+  return NextResponse.json(
+    {
+      data: null,
+      error: "The record this session is on has changed",
+      meta: { errorCode: RECORD_FENCE_ERROR_CODE },
+    },
+    { status: 409 },
+  );
+}
+
+/** What the fence needs to know about the session, from either caller. */
+interface RecordSessionInputs {
+  transport: "cookie" | "bearer";
+  sessionEpoch: number;
+  sessionScope: string | null;
+}
+
+/** Stamp the echo and read the verdict. The one place either happens. */
+async function decide(input: RecordSessionInputs) {
+  // Stamped before the verdict, so a refusal echoes the truth too. The Bearer
+  // transport carries no session context to echo and gets none: the frozen
+  // native contract sends no fence header and receives none back.
+  if (input.transport === "cookie") {
+    getEvent()?.setRecordContext({
+      epoch: input.sessionEpoch,
+      scope: input.sessionScope,
+    });
+  }
+
+  return recordSessionFenceVerdict({
+    ...input,
+    asserted: await readAssertedRecordContext(),
+  });
 }

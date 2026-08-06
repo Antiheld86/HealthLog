@@ -18,9 +18,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import {
-  readClaimedActingAccount,
+  readClaimedRecordContext,
   selectorNamesAnAccount,
 } from "@/lib/auth/acting-carrier";
+import { refuseStaleRecordSessionClaim } from "@/lib/sharing/record-session-fence";
 import { hashToken } from "@/lib/auth/hmac";
 import { annotate } from "@/lib/logging/context";
 import { isP2002 } from "@/lib/prisma-errors";
@@ -327,7 +328,7 @@ export function isCachableStatus(status: number): boolean {
  * the handler again and creating duplicate measurements (audit C-4).
  *
  * It resolves the CALLER and only the caller — which record they are aiming at
- * is a separate question, answered by `readClaimedActingAccount()` above and
+ * is a separate question, answered by `readClaimedRecordContext()` above and
  * folded into the key. Neither answer authorises anything: the handler runs
  * its own `requireAuth()` / `requireRecordAuth()` either way.
  *
@@ -456,7 +457,28 @@ export function withIdempotency<
     // A claim only chooses the cache cell. It never carries authority: a
     // completed delegated cell is checked against the current grant again
     // immediately before its body can be returned below.
-    const claimedRecord = await readClaimedActingAccount();
+    const claim = await readClaimedRecordContext();
+
+    // v1.37.0 — the record-session fence, evaluated HERE and not one line
+    // lower. A stale request must not learn whether a cell exists, must not
+    // replay a body out of one, and must not insert a claim row — so the
+    // verdict sits above `findCached` and above the two carrier arms below,
+    // which choose the cell. It is the second, independent evaluation of the
+    // same client assertion (the handler's own `requireRecordAuth` is the
+    // other) and nothing is carried between them; see the note on
+    // `refuseStaleRecordSessionClaim`.
+    //
+    // Only `stale` refuses here. An `unfenced-client` verdict falls through so
+    // the route issues the 403 a pre-fence bundle already recovers from, with
+    // the annotation and audit posture that belong to the route.
+    //
+    // A never-switched session and every Bearer request are untouched: both
+    // pass the verdict without a header, which is what keeps every existing
+    // own-record and delegated-cell contract byte-identical.
+    const staleContext = await refuseStaleRecordSessionClaim(claim);
+    if (staleContext) return staleContext;
+
+    const claimedRecord = claim.claimedRecord;
     if (claimedRecord === undefined) {
       // The carrier cannot safely name a record. In particular, a selector on
       // a cookie request is a misplaced claim, not an own-record request.

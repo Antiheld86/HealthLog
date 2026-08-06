@@ -20,8 +20,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NextRequest, NextResponse } from "next/server";
 
-import { cookieJar, headerJar } from "./mock-next-headers";
-import { getPrismaClient, truncateAllTables } from "./setup";
+import { assertRecordContext, cookieJar, headerJar } from "./mock-next-headers";
+import { getPrismaClient, truncateAllTables, switchSessionTo } from "./setup";
 
 vi.mock("next/headers", async () => {
   const { cookieJar, headerJar } = await import("./mock-next-headers");
@@ -71,6 +71,11 @@ async function signIn(userId: string) {
     data: { userId, expiresAt: new Date(Date.now() + 60_000) },
   });
   cookieJar.set("healthlog_session", session.id);
+  // A new session is a new browser, and a new browser has adopted nothing. The
+  // reset matters where one test drives two of them: a stale adopted epoch
+  // carried across would make the second browser's first switch lose a
+  // compare-and-set it was never in.
+  adoptedEpoch = 0;
   return session;
 }
 
@@ -147,12 +152,38 @@ async function renounce(grantId: string): Promise<Response> {
   );
 }
 
+/**
+ * Switch the way the shipped browser switches: name the epoch the client
+ * believes it is on, and ADOPT the context the response publishes.
+ *
+ * v1.37.0 — the adoption is not decoration. `POST /api/account/switch` and
+ * `GET /api/auth/me` are the only two responses a client may learn its record
+ * context from, and every same-origin request after a switch has to assert it
+ * or the record-session fence refuses. A fixture that switched and did not
+ * adopt would be testing the fence's pre-fence-bundle arm rather than the
+ * handshake this file is about — so the round trip is exercised here, which is
+ * the property the feature actually ships.
+ */
 async function switchTo(accountId: string | null): Promise<Response> {
   const { POST } = await import("@/app/api/account/switch/route");
-  return POST(
-    jsonRequest("http://localhost/api/account/switch", "POST", { accountId }),
+  const response = await POST(
+    jsonRequest("http://localhost/api/account/switch", "POST", {
+      accountId,
+      expectedEpoch: adoptedEpoch,
+    }),
   );
+  if (response.status === 200) {
+    const { recordSession } = (await response.clone().json()).data;
+    if (recordSession) {
+      adoptedEpoch = recordSession.epoch;
+      assertRecordContext(recordSession.epoch, recordSession.scope);
+    }
+  }
+  return response;
 }
+
+/** The epoch this fixture's browser currently believes it is on. */
+let adoptedEpoch = 0;
 
 /** A delegable read, exactly as a migrated route builds one. */
 const delegableRead: (request: NextRequest) => Promise<Response> = apiHandler(
@@ -205,6 +236,8 @@ beforeEach(async () => {
   await truncateAllTables(getPrismaClient());
   cookieJar.clear();
   headerJar.clear();
+  // Every test starts on a fresh browser that has adopted nothing.
+  adoptedEpoch = 0;
 });
 
 describe("the handshake, end to end", () => {
@@ -276,10 +309,7 @@ describe("the handshake, end to end", () => {
     // And the delegate's next request is refused on the grant, independently
     // of the session having been cleared.
     cookieJar.set("healthlog_session", delegateSession.id);
-    await getPrismaClient().session.update({
-      where: { id: delegateSession.id },
-      data: { actingAsUserId: owner.id },
-    });
+    await switchSessionTo(delegateSession.id, owner.id);
     const afterRevoke = await readRecord();
     expect(afterRevoke.status).toBe(403);
     expect((await afterRevoke.json()).meta.errorCode).toBe(

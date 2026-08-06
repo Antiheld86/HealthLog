@@ -26,6 +26,11 @@ vi.mock("@/lib/db", () => ({
 
 vi.mock("@/lib/logging/context", () => ({
   annotate: vi.fn(),
+  // v1.37.0 — the record-session fence stamps the response echo on the
+  // request-scoped wide event. There is no event outside a request scope and
+  // the fence handles that with an optional call, so `undefined` is the honest
+  // stub rather than a fake builder.
+  getEvent: vi.fn(() => undefined),
 }));
 
 vi.mock("@/lib/auth/session", () => ({
@@ -672,5 +677,160 @@ describe("withIdempotency — record-scoped cells", () => {
 
     expect(prisma.idempotencyKey.findUnique).not.toHaveBeenCalled();
     expect(prisma.idempotencyKey.create).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * v1.37.0 — the record-session fence, above the replay cache.
+ *
+ * The property is a PLACEMENT, and a status-code assertion cannot see it: a
+ * wrapper that read the cell, replayed nothing, released its claim and then
+ * returned 409 would look identical from outside. `findCached` and `claimKey`
+ * are module-private, so the instrument is one layer lower and falsifiable: the
+ * two Prisma calls they make must receive zero calls for a refused request and
+ * non-zero for a passing one.
+ *
+ * The first draft of this plan proposed asserting "no row exists for the target
+ * cell" instead. That assertion cannot fail: `releaseClaim` deletes the pending
+ * row whenever the handler throws, so it would pass with the fence placed after
+ * `claimKey` too.
+ *
+ * Break it by moving the fence call below `findCached` in `withIdempotency`:
+ * the `findUnique` zero-call assertion fails.
+ */
+describe("the record-session fence sits above the replay cache", () => {
+  function fencedSession(recordEpoch: number, actingAsUserId: string | null) {
+    vi.mocked(getSession).mockResolvedValue({
+      session: {
+        id: "s-1",
+        expiresAt: new Date(Date.now() + 60_000),
+        actingAsUserId,
+        recordEpoch,
+      },
+      user: { id: "u-1" },
+    } as never);
+  }
+
+  function asserts(epoch: string | null, scope: string | null) {
+    vi.mocked(headers).mockResolvedValue({
+      get: vi.fn((name: string) => {
+        if (name.toLowerCase() === "x-healthlog-record-epoch") return epoch;
+        if (name.toLowerCase() === "x-healthlog-record-scope") return scope;
+        return null;
+      }),
+    } as never);
+  }
+
+  it("refuses a stale claim without reading or claiming a cell", async () => {
+    fencedSession(4, "owner-1");
+    asserts("3", "owner-1");
+    const handler = vi.fn(async () =>
+      NextResponse.json({ data: "ok", error: null }, { status: 201 }),
+    );
+    const wrapped = withIdempotency<[NextRequest]>(handler);
+
+    const res = await wrapped(
+      makeRequest("POST", { "idempotency-key": "abc-12345678" }),
+    );
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).meta.errorCode).toBe("sharing.session.changed");
+    // The placement, stated as the only thing that can prove it.
+    expect(prisma.idempotencyKey.findUnique).not.toHaveBeenCalled();
+    expect(prisma.idempotencyKey.create).not.toHaveBeenCalled();
+    // And the side effect the whole wrapper exists to run once never ran.
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("POSITIVE CONTROL: a matching claim reads the cell and claims it", async () => {
+    // Without this the assertion above would pass for a wrapper that never
+    // touched the cache at all.
+    fencedSession(4, "owner-1");
+    asserts("4", "owner-1");
+    const handler = vi.fn(async () =>
+      NextResponse.json({ data: "ok", error: null }, { status: 201 }),
+    );
+    const wrapped = withIdempotency<[NextRequest]>(handler);
+
+    const res = await wrapped(
+      makeRequest("POST", { "idempotency-key": "abc-12345678" }),
+    );
+
+    expect(res.status).toBe(201);
+    expect(prisma.idempotencyKey.findUnique).toHaveBeenCalledTimes(1);
+    expect(prisma.idempotencyKey.create).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets an unfenced client through to the route's own refusal", async () => {
+    // `unfenced-client` is deliberately NOT refused here: the route owns the
+    // 403 a pre-fence bundle recovers from, together with its annotation and
+    // audit posture. The wrapper still files the cell, because the handler is
+    // about to answer.
+    fencedSession(4, "owner-1");
+    asserts(null, null);
+    const handler = vi.fn(async () =>
+      NextResponse.json(
+        { data: null, error: "Account access denied" },
+        { status: 403 },
+      ),
+    );
+    const wrapped = withIdempotency<[NextRequest]>(handler);
+
+    const res = await wrapped(
+      makeRequest("POST", { "idempotency-key": "abc-12345678" }),
+    );
+
+    expect(res.status).toBe(403);
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a never-switched session byte-identical", async () => {
+    fencedSession(0, null);
+    asserts(null, null);
+    const handler = vi.fn(async () =>
+      NextResponse.json({ data: "ok", error: null }, { status: 201 }),
+    );
+    const wrapped = withIdempotency<[NextRequest]>(handler);
+
+    const res = await wrapped(
+      makeRequest("POST", { "idempotency-key": "abc-12345678" }),
+    );
+
+    expect(res.status).toBe(201);
+    expect(prisma.idempotencyKey.findUnique).toHaveBeenCalledTimes(1);
+    expect(prisma.idempotencyKey.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the Bearer transport byte-identical", async () => {
+    // No session row at all, so no context to be stale about — and a fence
+    // header on this transport is neither read nor honoured.
+    vi.mocked(getSession).mockResolvedValue(null);
+    vi.mocked(prisma.apiToken.findUnique).mockResolvedValue({
+      userId: "u-bearer",
+      revoked: false,
+      expiresAt: null,
+    } as never);
+    vi.mocked(headers).mockResolvedValue({
+      get: vi.fn((name: string) => {
+        if (name.toLowerCase() === "authorization")
+          return `Bearer hlk_${"a".repeat(64)}`;
+        if (name.toLowerCase() === "x-healthlog-record-epoch") return "1";
+        if (name.toLowerCase() === "x-healthlog-record-scope") return "owner-1";
+        return null;
+      }),
+    } as never);
+    const handler = vi.fn(async () =>
+      NextResponse.json({ data: "ok", error: null }, { status: 201 }),
+    );
+    const wrapped = withIdempotency<[NextRequest]>(handler);
+
+    const res = await wrapped(
+      makeRequest("POST", { "idempotency-key": "abc-12345678" }),
+    );
+
+    expect(res.status).toBe(201);
+    expect(prisma.idempotencyKey.findUnique).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledTimes(1);
   });
 });

@@ -39,7 +39,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 import { cookieJar, headerJar } from "./mock-next-headers";
-import { getPrismaClient, truncateAllTables } from "./setup";
+import { getPrismaClient, truncateAllTables, switchSessionTo } from "./setup";
 
 vi.mock("next/headers", async () => {
   const { cookieJar, headerJar } = await import("./mock-next-headers");
@@ -134,20 +134,14 @@ async function switchInto(
   expect(grant.acceptedAt).not.toBeNull();
 
   const session = await signIn(delegateId);
-  await getPrismaClient().session.update({
-    where: { id: session.id },
-    data: { actingAsUserId: ownerId },
-  });
+  await switchSessionTo(session.id, ownerId);
   return { grant, session };
 }
 
 /** A session inside a record nobody ever shared with this caller. */
 async function claimWithoutGrant(ownerId: string, callerId: string) {
   const session = await signIn(callerId);
-  await getPrismaClient().session.update({
-    where: { id: session.id },
-    data: { actingAsUserId: ownerId },
-  });
+  await switchSessionTo(session.id, ownerId);
 }
 
 async function revoke(grantId: string, ownerId: string) {

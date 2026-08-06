@@ -139,7 +139,7 @@ describe("the acting-account carrier is read in one place", () => {
    * Who may ask "which record does this request claim" without an auth
    * context in hand.
    *
-   * `readClaimedActingAccount()` answers before any grant check has run, so a
+   * `readClaimedRecordContext()` answers before any grant check has run, so a
    * caller that treats its answer as permission has skipped the only thing
    * that grants any. Exactly one caller exists, beside the file that declares
    * it: the idempotency wrapper, which uses the claim to pick a cache cell and
@@ -147,9 +147,17 @@ describe("the acting-account carrier is read in one place", () => {
    * acting account has an auth context by then and goes through
    * `requireRecordAuth`, which checks a live grant before returning. A second
    * caller here is a design question, not a patch.
+   *
+   * The matcher names the v1.36.0 spelling (`readClaimedActingAccount`) as well
+   * as today's. That function was removed in v1.37.0 when the wrapper started
+   * needing the session's record context on the same read; matching both means
+   * a reintroduced narrow copy trips this leg instead of quietly becoming a
+   * second answer.
    */
   it("the unchecked claim has exactly two consumers", () => {
-    const consumers = filesMatching(/readClaimedActingAccount/);
+    const consumers = filesMatching(
+      /readClaimedRecordContext|readClaimedActingAccount/,
+    );
     expect(consumers.length).toBeGreaterThan(0);
     expect(consumers).toEqual([
       "lib/auth/acting-carrier.ts",
