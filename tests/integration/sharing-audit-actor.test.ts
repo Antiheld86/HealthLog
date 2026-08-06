@@ -404,3 +404,94 @@ describe("a refused read is reported as a refused read", () => {
     expect(sentence).toBe("Alex sent a mood search this record could not read");
   });
 });
+
+/**
+ * What the owner's activity feed claims, and what it can actually see.
+ *
+ * Two completeness claims live on this response and the surface states both.
+ * They were both wrong in the same direction — too confident — and in opposite
+ * ways:
+ *
+ *   * the copy promised a window ("who entered what stays answerable for N
+ *     days") while the query had no date filter at all, so on an instance
+ *     whose retention was shortened the view showed rows the sentence said
+ *     were gone;
+ *   * the query stopped at a hundred rows and said nothing, so an owner who
+ *     scrolled to the bottom read the oldest visible line as the beginning.
+ *
+ * Driven against real rows rather than a mocked Prisma, because both claims
+ * are about what the DATABASE returns for a given `where` — a stubbed client
+ * would answer whatever the stub was told and prove neither.
+ */
+describe("the activity feed states its own limits", () => {
+  async function feed() {
+    const { GET } = await import("@/app/api/account/activity/route");
+    const response = await GET();
+    expect(response.status).toBe(200);
+    return (await response.json()) as {
+      data: {
+        entries: { action: string }[];
+        retentionDays: number;
+        truncated: boolean;
+      };
+    };
+  }
+
+  /** One delegated row, back-dated. */
+  async function stampedRow(
+    ownerId: string,
+    delegateId: string,
+    createdAt: Date,
+    action = "measurement.update",
+  ) {
+    await getPrismaClient().auditLog.create({
+      data: { userId: ownerId, actorUserId: delegateId, action, createdAt },
+    });
+  }
+
+  it("does not show a row older than the window it promises", async () => {
+    const { owner, delegate } = await household();
+    await signIn(owner.id);
+
+    const days = (await feed()).data.retentionDays;
+    expect(days).toBeGreaterThan(0);
+
+    const inside = new Date(Date.now() - 60_000);
+    const outside = new Date(Date.now() - (days + 2) * 86_400_000);
+    await stampedRow(owner.id, delegate.id, inside, "measurement.update");
+    await stampedRow(owner.id, delegate.id, outside, "measurement.delete");
+
+    const { data } = await feed();
+    const actions = data.entries.map((e) => e.action);
+    // The positive control matters more than the absence: a filter that
+    // excluded everything would satisfy the second assertion alone.
+    expect(actions).toContain("measurement.update");
+    expect(actions).not.toContain("measurement.delete");
+  });
+
+  it("says when the list is the most recent rows rather than all of them", async () => {
+    const { owner, delegate } = await household();
+    await signIn(owner.id);
+
+    // Under the ceiling: the list IS everything, and says so.
+    for (let i = 0; i < 3; i += 1) {
+      await stampedRow(owner.id, delegate.id, new Date(Date.now() - i * 1000));
+    }
+    const small = await feed();
+    expect(small.data.entries).toHaveLength(3);
+    expect(small.data.truncated).toBe(false);
+
+    // Over it: same shape, different claim.
+    await getPrismaClient().auditLog.createMany({
+      data: Array.from({ length: 120 }, (_, i) => ({
+        userId: owner.id,
+        actorUserId: delegate.id,
+        action: "measurement.update",
+        createdAt: new Date(Date.now() - (i + 10) * 1000),
+      })),
+    });
+    const large = await feed();
+    expect(large.data.entries).toHaveLength(100);
+    expect(large.data.truncated).toBe(true);
+  });
+});

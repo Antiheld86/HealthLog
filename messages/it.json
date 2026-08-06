@@ -9627,7 +9627,8 @@
       "loadError": "Non è stato possibile caricare l'attività.",
       "opened": "{name} ha aperto la tua cartella {count}×",
       "acted": "{name} ha fatto una modifica nella tua cartella",
-      "deletedAccount": "Un account eliminato"
+      "deletedAccount": "Un account eliminato",
+      "truncated": "Questo elenco mostra l'attività più recente, non tutta."
     },
     "delegate": {
       "addOnlyNote": "Puoi aggiungere voci a questa cartella. Solo {name} può modificarle o eliminarle."

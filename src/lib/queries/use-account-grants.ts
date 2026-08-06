@@ -93,6 +93,15 @@ export interface RecordActivity {
    * the list is everything that ever happened.
    */
   retentionDays: number;
+  /**
+   * True when the read hit its row ceiling, so the list is the most recent
+   * activity inside the window rather than all of it.
+   *
+   * Two different completeness claims, and both have to be stated: the window
+   * bounds how far back, this bounds how many. A list that silently stopped at
+   * its own cap would let the oldest line read as the beginning.
+   */
+  truncated: boolean;
 }
 
 export function useAccountGrants(enabled = true) {

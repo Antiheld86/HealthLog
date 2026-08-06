@@ -9627,7 +9627,8 @@
       "loadError": "Die Aktivität konnte nicht geladen werden.",
       "opened": "{name} hat deine Akte {count}× geöffnet",
       "acted": "{name} hat etwas in deiner Akte geändert",
-      "deletedAccount": "Ein gelöschtes Konto"
+      "deletedAccount": "Ein gelöschtes Konto",
+      "truncated": "Diese Liste zeigt die neueste Aktivität, nicht die gesamte."
     },
     "delegate": {
       "addOnlyNote": "Du kannst zu dieser Akte etwas hinzufügen. Einträge ändern oder löschen kann nur {name}."

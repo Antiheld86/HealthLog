@@ -9627,7 +9627,8 @@
       "loadError": "Nie udało się wczytać aktywności.",
       "opened": "{name} otworzył twoją kartę {count}×",
       "acted": "{name} wprowadził zmianę w twojej karcie",
-      "deletedAccount": "Usunięte konto"
+      "deletedAccount": "Usunięte konto",
+      "truncated": "Ta lista pokazuje najnowszą aktywność, a nie całą."
     },
     "delegate": {
       "addOnlyNote": "Możesz dodawać wpisy do tej karty. Zmieniać je i usuwać może tylko {name}."

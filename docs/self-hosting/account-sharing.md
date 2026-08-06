@@ -104,9 +104,21 @@ Below that, a list of the days somebody else opened it and how many times
 That list is bounded by the instance's audit retention, and the page says
 so with the actual number rather than a hardcoded one. The default is 365
 days (`AUDIT_LOG_RETENTION_DAYS`); an operator who shortens it shortens
-this view too, and the sentence under the heading changes to match. An
-empty list means nobody opened the record within that window — not that
-nobody ever did.
+this view too, and the sentence under the heading changes to match. The
+query is bounded to that window, so the sentence is the real limit of the
+list rather than a caption over an unbounded one.
+
+Two things the list does not claim, both worth reading before treating it
+as an answer:
+
+- **An empty list is not proof that nobody opened the record.** It means
+  nobody did so within the window, and that any earlier row has been
+  purged.
+- **The list is capped.** It returns at most the hundred most recent rows
+  inside the window; when it hits that ceiling it says so under the
+  heading. A busy household can reach the cap in far less time than the
+  retention window, and the oldest line on screen is then the oldest line
+  shown, not the oldest that exists.
 
 ## What this does not change about the instance
 

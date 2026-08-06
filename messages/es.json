@@ -9627,7 +9627,8 @@
       "loadError": "No se pudo cargar la actividad.",
       "opened": "{name} abrió tu historial {count}×",
       "acted": "{name} hizo un cambio en tu historial",
-      "deletedAccount": "Una cuenta eliminada"
+      "deletedAccount": "Una cuenta eliminada",
+      "truncated": "Esta lista muestra la actividad más reciente, no toda."
     },
     "delegate": {
       "addOnlyNote": "Puedes añadir cosas a este historial. Modificar o borrar entradas solo lo puede hacer {name}."

@@ -9627,7 +9627,8 @@
       "loadError": "L'activité n'a pas pu être chargée.",
       "opened": "{name} a ouvert votre dossier {count}×",
       "acted": "{name} a fait une modification dans votre dossier",
-      "deletedAccount": "Un compte supprimé"
+      "deletedAccount": "Un compte supprimé",
+      "truncated": "Cette liste montre l'activité la plus récente, pas la totalité."
     },
     "delegate": {
       "addOnlyNote": "Vous pouvez ajouter des éléments à ce dossier. Seul {name} peut modifier ou supprimer des entrées."

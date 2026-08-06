@@ -9627,7 +9627,8 @@
       "loadError": "The activity could not be loaded.",
       "opened": "{name} opened your record {count}×",
       "acted": "{name} made a change in your record",
-      "deletedAccount": "A deleted account"
+      "deletedAccount": "A deleted account",
+      "truncated": "This list shows the most recent activity, not all of it."
     },
     "delegate": {
       "addOnlyNote": "You can add to this record. Changing or removing entries is something only {name} can do."

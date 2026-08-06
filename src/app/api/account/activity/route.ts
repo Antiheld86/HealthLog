@@ -16,6 +16,20 @@
  * purge job uses, so the sentence in the UI cannot drift from the job that
  * makes it true — an instance running a 90-day window says 90.
  *
+ * **And the window is now enforced, not only stated.** The query is bounded to
+ * it. Without the filter the two halves of the same sentence disagreed: the
+ * revoke dialog promised attribution "for the next N days" while this read
+ * returned whatever the last hundred rows happened to be, which on a quiet
+ * record reaches back past a shortened retention window and on a busy one
+ * covers a fortnight. The bound the copy states is the bound the query uses.
+ *
+ * **The row cap says when it was hit.** A hundred rows is a display bound, and
+ * a list that silently stops at its own ceiling is the more dangerous of the
+ * two completeness lies — an owner scrolling to the bottom reads the oldest
+ * line as the beginning. `truncated` is true when the cap was reached, and the
+ * view says it is showing the most recent activity rather than all of it.
+ * `false` means the list IS everything inside the window.
+ *
  * Not delegable: bare `requireAuth()` refuses under a switch. A delegate must
  * not be able to read the owner's record of who has been in it — that list
  * names other delegates, and a grant is not an introduction to the household.
@@ -34,6 +48,9 @@ export const dynamic = "force-dynamic";
  * How many rows the feed returns. One row per (delegate, day) for reads, so a
  * hundred covers months of a busy household — and a longer list answers a
  * question nobody asked while making the recent activity harder to see.
+ *
+ * The cap is a display bound, not a completeness claim, and the response says
+ * which it hit. See {@link GET}.
  */
 const MAX_ROWS = 100;
 
@@ -77,6 +94,11 @@ function readAccessCount(
 export const GET = apiHandler(async () => {
   const { user } = await requireAuth();
 
+  // The same number the response publishes and the purge job reads, resolved
+  // once so the filter and the sentence cannot disagree.
+  const retentionDays = getAuditLogRetentionDays();
+  const windowStart = new Date(Date.now() - retentionDays * 86_400_000);
+
   const rows = await prisma.auditLog.findMany({
     where: {
       userId: user.id,
@@ -85,6 +107,10 @@ export const GET = apiHandler(async () => {
       // report. `actingActorFor` already refuses to stamp one, so this is the
       // second end of that rule rather than its only enforcement.
       NOT: { actorUserId: user.id },
+      // The window the copy promises. The purge job makes it true eventually;
+      // this makes it true now, which matters on an instance whose retention
+      // was shortened after rows were already written.
+      createdAt: { gte: windowStart },
     },
     orderBy: { createdAt: "desc" },
     take: MAX_ROWS,
@@ -114,15 +140,23 @@ export const GET = apiHandler(async () => {
     createdAt: row.createdAt.toISOString(),
   }));
 
+  // Equality, not `>=`: `take` cannot return more than it was given, and a
+  // `>` would be a comparison that can never be true.
+  const truncated = rows.length === MAX_ROWS;
+
   annotate({
     action: { name: "sharing.activity.list" },
-    meta: { entry_count: entries.length },
+    meta: { entry_count: entries.length, truncated },
   });
 
   return apiSuccess({
     entries,
     // The bound the view states out loud. Resolved here so the UI never has to
     // hardcode a number the operator can change.
-    retentionDays: getAuditLogRetentionDays(),
+    retentionDays,
+    // Whether the list is everything inside that window, or its most recent
+    // hundred rows. The view says which; silence would let the oldest line
+    // read as the beginning.
+    truncated,
   });
 });

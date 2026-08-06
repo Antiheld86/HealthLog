@@ -210,7 +210,12 @@ const recordActivityResponse = z
       .number()
       .int()
       .describe(
-        "How far back this feed can see, in days. Resolved from the instance's audit retention setting (365 by default, operator-configurable), NOT a constant — an instance running a 90-day window sends 90. Show it beside the rows.",
+        "How far back this feed can see, in days. Resolved from the instance's audit retention setting (365 by default, operator-configurable), NOT a constant — an instance running a 90-day window sends 90. The query is bounded to this window, so it is the real limit of the list and not only a caption. Show it beside the rows.",
+      ),
+    truncated: z
+      .boolean()
+      .describe(
+        "True when the read reached its row ceiling, so `entries` is the most recent activity inside the window rather than all of it. A client must say so — a list that stops at its own cap in silence lets the oldest row read as the beginning. False means the list is everything inside the window.",
       ),
   })
   .meta({
