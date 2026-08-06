@@ -50,6 +50,10 @@
  */
 
 import { readError } from "./read-error";
+import {
+  validateResponseContext,
+  withRecordFenceHeaders,
+} from "./record-fence";
 
 /** HTTP-level failure from an `/api/...` route — non-OK status. */
 export class ApiError extends Error {
@@ -113,7 +117,9 @@ export async function apiFetch<T = unknown>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const res = await fetch(path, withDefaultTimeout(init));
+  const res = validateResponseContext(
+    await fetch(path, withRecordFenceHeaders(withDefaultTimeout(init))),
+  );
   if (!res.ok) await throwApiError(res);
   const envelope = await parseEnvelope<T, unknown>(res);
   return (envelope === undefined ? undefined : envelope.data) as T;
@@ -127,7 +133,9 @@ export async function apiFetchEnvelope<
   T = unknown,
   M = Record<string, unknown>,
 >(path: string, init?: RequestInit): Promise<{ data: T; meta: M | undefined }> {
-  const res = await fetch(path, withDefaultTimeout(init));
+  const res = validateResponseContext(
+    await fetch(path, withRecordFenceHeaders(withDefaultTimeout(init))),
+  );
   if (!res.ok) await throwApiError(res);
   const envelope = await parseEnvelope<T, M>(res);
   return {
@@ -142,11 +150,20 @@ export async function apiFetchEnvelope<
  * Performs no `.ok` check, no envelope unwrap, and applies no default
  * timeout (SSE streams legitimately outlive any fixed window).
  */
-export function apiFetchRaw(
+export async function apiFetchRaw(
   path: string,
   init?: RequestInit,
 ): Promise<Response> {
-  return fetch(path, init);
+  // The record-session assertion is attached HERE and not at the ~25 call
+  // sites, several of which are record traffic (the Coach SSE stream, the
+  // document inbound upload, blob exports). A call site that had to classify
+  // itself would be wrong the first time a route changed mode.
+  //
+  // The echo is validated from headers only — the body is never touched, so an
+  // SSE stream and a blob download reach their reader intact.
+  return validateResponseContext(
+    await fetch(path, withRecordFenceHeaders(init)),
+  );
 }
 
 function withJsonBody(

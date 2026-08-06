@@ -39,6 +39,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** The record-session assertion the transport attached to a `fetch` call. */
+function recordFenceHeadersOf(call: unknown[]): {
+  epoch: string | null;
+  scope: string | null;
+} {
+  const headers = new Headers((call[1] as RequestInit | undefined)?.headers);
+  return {
+    epoch: headers.get("x-healthlog-record-epoch"),
+    scope: headers.get("x-healthlog-record-scope"),
+  };
+}
+
 describe("apiFetch", () => {
   it("unwraps the data payload from the envelope", async () => {
     fetchMock.mockResolvedValueOnce(
@@ -48,8 +60,17 @@ describe("apiFetch", () => {
     const data = await apiFetch<{ id: string }>("/api/measurements/m1");
 
     expect(data).toEqual({ id: "m1" });
-    expect(fetchMock).toHaveBeenCalledWith("/api/measurements/m1", {
-      signal: expect.any(AbortSignal),
+    // v1.37.0 — `headers` is now always present: the transport attaches the
+    // record-session assertion to every same-origin request, so no call site
+    // has to classify itself as record traffic. `objectContaining` rather than
+    // an exact object so the assertion stays about what THIS test is for.
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/measurements/m1",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(recordFenceHeadersOf(fetchMock.mock.calls[0])).toEqual({
+      epoch: "bootstrap",
+      scope: "bootstrap",
     });
   });
 
@@ -62,10 +83,13 @@ describe("apiFetch", () => {
       signal: controller.signal,
     });
 
-    expect(fetchMock).toHaveBeenCalledWith("/api/version", {
-      cache: "no-store",
-      signal: controller.signal,
-    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/version",
+      expect.objectContaining({
+        cache: "no-store",
+        signal: controller.signal,
+      }),
+    );
   });
 
   it("resolves undefined for a 204 response", async () => {
@@ -242,10 +266,13 @@ describe("verb helpers", () => {
 
     await apiGet("/api/foo");
 
-    expect(fetchMock).toHaveBeenCalledWith("/api/foo", {
-      method: "GET",
-      signal: expect.any(AbortSignal),
-    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/foo",
+      expect.objectContaining({
+        method: "GET",
+        signal: expect.any(AbortSignal),
+      }),
+    );
   });
 
   it.each([
@@ -272,10 +299,17 @@ describe("verb helpers", () => {
 
     await apiPost("/api/foo");
 
-    expect(fetchMock).toHaveBeenCalledWith("/api/foo", {
-      method: "POST",
-      signal: expect.any(AbortSignal),
-    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/foo",
+      expect.objectContaining({
+        method: "POST",
+        signal: expect.any(AbortSignal),
+      }),
+    );
+    // Still no body and no Content-Type — the fence headers are the only ones.
+    const [, bodylessInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(bodylessInit.body).toBeUndefined();
+    expect(new Headers(bodylessInit.headers).get("Content-Type")).toBeNull();
   });
 
   it("merges caller headers with the JSON Content-Type", async () => {

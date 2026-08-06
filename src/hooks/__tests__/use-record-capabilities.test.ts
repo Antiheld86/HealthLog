@@ -17,7 +17,10 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { resolveRecordCapabilities } from "@/hooks/use-record-capabilities";
+import {
+  recordContextIsUnproven,
+  resolveRecordCapabilities,
+} from "@/hooks/use-record-capabilities";
 import type { AccountAccessEntry } from "@/lib/sharing/account-access-view";
 
 const READ_ONLY: AccountAccessEntry = {
@@ -153,5 +156,70 @@ describe("resolveRecordCapabilities", () => {
       canWrite: false,
     };
     expect(resolveRecordCapabilities(disagreeing).canAdd).toBe(false);
+  });
+});
+
+/**
+ * v1.37.0 — the record context has to be PROVABLE before the controls appear.
+ *
+ * `/api/auth/me` publishes the same question from two angles: `accountAccess.active`
+ * is the re-decided answer (it survived a live-grant pass), and `recordSession.scope`
+ * is the raw selector the fence compares a request's assertion against. When
+ * they disagree the session is pointed at a record the grant no longer opens:
+ * every delegable route will refuse, while `active` being null would otherwise
+ * make this hook answer "your own record, all controls". That combination
+ * paints an add button on a page whose every write is about to 403 — the exact
+ * failure `canAdd` exists to end.
+ */
+describe("an unprovable record context withholds every control", () => {
+  it("holds when the raw selector names a record the grant no longer opens", () => {
+    expect(
+      recordContextIsUnproven({ epoch: 3, scope: "acct-owner" }, null),
+    ).toBe(true);
+    const held = resolveRecordCapabilities(null, false, false, true);
+    expect(held.canAdd).toBe(false);
+    expect(held.canManage).toBe(false);
+    expect(held.recordSessionPending).toBe(true);
+  });
+
+  it("holds when the resolved entry names a record the selector has left", () => {
+    // The mirror image: the grant resolved, but the session is back on its own
+    // record. Painting the owner's controls here would be the reverse mix-up.
+    expect(recordContextIsUnproven({ epoch: 4, scope: null }, READ_ONLY)).toBe(
+      true,
+    );
+  });
+
+  it("agrees when both answers name the same record", () => {
+    expect(
+      recordContextIsUnproven(
+        { epoch: 3, scope: READ_ONLY.accountId },
+        READ_ONLY,
+      ),
+    ).toBe(false);
+    expect(recordContextIsUnproven({ epoch: 0, scope: null }, null)).toBe(
+      false,
+    );
+  });
+
+  it("does not hold when there is no context to cross-check", () => {
+    // Null is the Bearer transport (no session row, no switch state) and
+    // undefined is a server image that predates the field. Neither is a
+    // disagreement, and neither is a reason to blank the app for everybody.
+    expect(recordContextIsUnproven(null, null)).toBe(false);
+    expect(recordContextIsUnproven(undefined, READ_ONLY)).toBe(false);
+    // The positive control for the two above: without it, a
+    // `recordContextIsUnproven` that always returned false would pass them.
+    expect(recordContextIsUnproven({ epoch: 1, scope: "someone" }, null)).toBe(
+      true,
+    );
+  });
+
+  it("leaves every existing arm untouched when the two agree", () => {
+    // The fourth argument defaults to false, so every case above this block
+    // means exactly what it meant before the fence existed.
+    expect(resolveRecordCapabilities(READ_ONLY)).toEqual(
+      resolveRecordCapabilities(READ_ONLY, false, false, false),
+    );
   });
 });

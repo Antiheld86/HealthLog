@@ -245,6 +245,29 @@ export function resolveUnknownRecordSessionTransition(id: string): void {
   publish({ id, phase: "resolving", at: Date.now() });
 }
 
+/**
+ * v1.37.0 — hold every tab because a response contradicted the record context
+ * this browser is on, with no transition of our own to attach it to.
+ *
+ * The switch paths above always hold FIRST and get an id back. This one starts
+ * from the other end: a 409 from the record-session fence, or a 2xx whose
+ * echoed context disagrees with the adopted one, means the server has moved and
+ * nobody told us. There is no prior id because this browser did not begin the
+ * transition — another tab did, or the referential action behind an account
+ * deletion did, or an operator did.
+ *
+ * A narrow export rather than a second store: `resolving` already means exactly
+ * "held, outcome unknown, `/me` decides", and `expectedScope` is deliberately
+ * left unset so `settleRecordSessionTransition` releases on whatever the server
+ * turns out to say rather than on a scope this browser guessed.
+ */
+export function holdForRecordSessionReconcile(): void {
+  seed();
+  ensureTransport();
+  if (transition.phase === "resolving") return;
+  publish({ id: makeId(), phase: "resolving", at: Date.now() });
+}
+
 /** Release only the `/me` response that confirms the committed record. */
 export function settleRecordSessionTransition(
   resolvedScope: string | null,

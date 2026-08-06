@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { queryKeys } from "@/lib/query-keys";
 import { apiGet, apiFetchRaw, ApiError } from "@/lib/api/api-fetch";
+import { adoptRecordFenceState } from "@/lib/api/record-fence";
 import { retryOnceOnTransientError } from "@/lib/queries/retry-transient";
 import { useMounted } from "@/hooks/use-mounted";
 import { useTranslations } from "@/lib/i18n/context";
@@ -332,6 +333,13 @@ export async function fetchMe(): Promise<AuthUser> {
   // whatever the switch flow stamped before its reload, the block is what the
   // resolver will actually honour on the next request, so the mirror tracks it
   // rather than the client's memory of what it asked for.
+  // v1.37.0 — adopt the record-session context BEFORE anything releases a
+  // hold. `/api/auth/me` is one of exactly two responses a client may learn
+  // its context from, and a hold released onto an unadopted context would put
+  // the shell back on screen with every subsequent request still asserting
+  // `bootstrap`. Adoption first means a released hold is always released onto
+  // a context the next request can prove.
+  adoptRecordFenceState(data.recordSession);
   const { accountAccess, status: accountAccessStatus } =
     resolveAccountAccess(data);
   if (accountAccessStatus === "invalid") {

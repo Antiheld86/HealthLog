@@ -22,6 +22,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { VersionPoller } from "@/components/version-poller";
 import { ServiceWorkerRegistrar } from "@/components/service-worker-registrar";
 import { SharedRecordGrantLossBridge } from "@/components/layout/shared-record-grant-loss-bridge";
+import { RecordSessionFenceBridge } from "@/components/layout/record-session-fence-bridge";
 import { useAuth, type AccountAccessStatus } from "@/hooks/use-auth";
 import { useRecordSessionTransition } from "@/hooks/use-record-session-transition";
 import { isDashboardSnapshotEnabled } from "@/lib/dashboard/snapshot-flag";
@@ -394,6 +395,7 @@ export function Providers({
               subscriber notices the stable errorCode and puts the browser back
               in its own account, rather than asking every call site to. */}
           <SharedRecordGrantLossBridge />
+          <RecordSessionFenceBridge />
           {children}
           <Toaster position="bottom-right" richColors />
           <VersionPoller />

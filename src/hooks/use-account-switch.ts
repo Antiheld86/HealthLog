@@ -37,6 +37,11 @@ import { useCallback } from "react";
 import { toast } from "sonner";
 
 import { ApiError, apiPost } from "@/lib/api/api-fetch";
+import {
+  adoptRecordFenceState,
+  currentRecordFenceState,
+} from "@/lib/api/record-fence";
+import { fetchMe } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
 import { clearOfflineCachesForRecordSwitch } from "@/lib/pwa/query-persister";
 import { queryKeys } from "@/lib/query-keys";
@@ -88,6 +93,20 @@ export function isSharingNotPermitted(error: unknown): boolean {
   return errorCodeOf(error) === SHARING_NOT_PERMITTED;
 }
 
+/**
+ * v1.37.0 — the record-session fence's 409. Not a refusal of access: another
+ * tab moved the selector first, or this tab's context is older than the row.
+ * The response is to reconcile through `/api/auth/me` and try again, NOT to
+ * leave the record — which is why it is deliberately absent from the set
+ * `subscribeToGrantLoss` fires on below.
+ */
+export const SHARING_SESSION_CHANGED = "sharing.session.changed";
+
+/** True when the server refused because this session's record context moved. */
+export function isRecordSessionChanged(error: unknown): boolean {
+  return errorCodeOf(error) === SHARING_SESSION_CHANGED;
+}
+
 interface SwitchResponse {
   actingAs: {
     accountId: string;
@@ -95,10 +114,54 @@ interface SwitchResponse {
     displayName: string | null;
     access: "READ" | "WRITE";
   } | null;
+  /**
+   * The context this session is now in. Null when the request carried no
+   * `expectedEpoch` — which a fence-aware client never does, so in this bundle
+   * it is always present on a 200.
+   */
+  recordSession: { epoch: number; scope: string | null } | null;
 }
 
+/**
+ * Ask the server to move the selector, naming the epoch this browser believes
+ * it is on, and adopt whatever context comes back.
+ *
+ * The epoch turns the write into a compare-and-set: two tabs pressing the
+ * switcher at the same moment resolve to one monotonic outcome and the loser
+ * gets a 409 instead of silently overwriting the winner. Adopting the response
+ * is what lets the very next request prove its context — this endpoint and
+ * `/api/auth/me` are the only two a client may adopt from.
+ */
 async function postSwitch(accountId: string | null): Promise<SwitchResponse> {
-  return apiPost<SwitchResponse>("/api/account/switch", { accountId });
+  const response = await apiPost<SwitchResponse>("/api/account/switch", {
+    accountId,
+    expectedEpoch: currentRecordFenceState()?.epoch ?? 0,
+  });
+  adoptRecordFenceState(response.recordSession);
+  return response;
+}
+
+/**
+ * The switch, with one reconcile-and-retry.
+ *
+ * A lost compare-and-set is not a failure the person at the keyboard caused or
+ * can act on: another tab of the same browser moved first. Surfacing that as a
+ * failed toast would make the switcher look broken while nothing was wrong. So
+ * a 409 reconciles through a network-only `/api/auth/me` — which re-adopts the
+ * true epoch — and retries exactly once. A SECOND 409 means the browser is
+ * genuinely racing itself faster than it can settle, and that does surface,
+ * because retrying forever would spin rather than tell anybody.
+ */
+async function postSwitchWithReconcile(
+  accountId: string | null,
+): Promise<SwitchResponse> {
+  try {
+    return await postSwitch(accountId);
+  } catch (error) {
+    if (!isRecordSessionChanged(error)) throw error;
+    await fetchMe();
+    return postSwitch(accountId);
+  }
 }
 
 /**
@@ -148,7 +211,7 @@ export function useAccountSwitch() {
       void queryClient.cancelQueries();
       queryClient.clear();
       try {
-        await postSwitch(accountId);
+        await postSwitchWithReconcile(accountId);
       } catch (error) {
         // A client error cannot prove that the server left the session alone:
         // its response may have been lost after the server committed. Keep all
@@ -227,7 +290,7 @@ export function useLeaveSharedRecordOnGrantLoss() {
     void queryClient.cancelQueries();
     queryClient.clear();
     try {
-      await postSwitch(null);
+      await postSwitchWithReconcile(null);
       commitRecordSessionTransition(transitionId, null);
     } catch {
       // The grant-loss path deliberately still reloads, but it cannot claim

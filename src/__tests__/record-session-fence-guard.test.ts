@@ -13,7 +13,9 @@
  *     a carrier or look up a grant;
  *   * the helpers that deliberately do not consult it still do not;
  *   * one file writes the epoch and a closed list reads it;
- *   * the header names live in four files and no fifth.
+ *   * the header names live in four files and no fifth: declared in the contract
+ *     module, read by the server fence, attached by the browser transport, and
+ *     published by the OpenAPI route module.
  *
  * ## What these matchers cannot see
  *
@@ -268,6 +270,8 @@ describe("the header names live in a closed set of files", () => {
     );
     expect(namers.length).toBeGreaterThan(0);
     expect(namers).toEqual([
+      // Attaches them to every same-origin request, and validates the echo.
+      "lib/api/record-fence.ts",
       // Publishes them to the clients that have to send them.
       "lib/openapi/routes/account-sharing.ts",
       // Declares them.
