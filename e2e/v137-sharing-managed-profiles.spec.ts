@@ -1,39 +1,74 @@
+import type { Page } from "@playwright/test";
+
 import { expect, test } from "./setup/test";
+import {
+  E2E_SCOPE_RECORDS,
+  SCOPE_DELEGATE_STORAGE_STATE_PATH,
+} from "./setup/test-helpers";
 
-import { RELEASE_JOURNEYS } from "../tests/fixtures/v137/e2e-journeys";
+const DOMAIN_READS = {
+  measurements: "/api/measurements",
+  medications: "/api/medications",
+  labs: "/api/labs",
+  profile: "/api/profile/summary",
+  illness: "/api/illness/episodes",
+  mind: "/api/mood-entries",
+  cycle: "/api/cycle/calendar",
+  documents: "/api/documents/inbound",
+} as const;
 
-test.describe("sharing release journey anchors", () => {
-  for (const journey of RELEASE_JOURNEYS) {
-    test(`anchor: ${journey.name}`, () => {
-      expect(journey.contract).toBe("inventory-only");
+async function openSwitcher(page: Page) {
+  await page.getByRole("button", { name: "User menu" }).first().click();
+  await page.locator('[data-slot="account-switcher-trigger"]').click();
+  await expect(
+    page.locator('[data-slot="account-switcher-menu"]'),
+  ).toBeVisible();
+}
+
+test.describe("scoped sharing browser journeys", () => {
+  test.describe.configure({ mode: "serial" });
+  test.use({ storageState: SCOPE_DELEGATE_STORAGE_STATE_PATH });
+
+  test.beforeEach(({}, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "chromium-desktop",
+      "scoped sharing seed has one session and runs once",
+    );
+  });
+
+  for (const record of E2E_SCOPE_RECORDS) {
+    test(`opens only the ${record.domain} record doorway`, async ({ page }) => {
+      await page.goto("/");
+      await openSwitcher(page);
+
+      const entry = page
+        .locator('[data-slot="account-switcher-entry"]')
+        .filter({ hasText: record.username });
+      await expect(entry).toHaveCount(1);
+
+      const read = page.waitForResponse(
+        (response) =>
+          response.request().method() === "GET" &&
+          new URL(response.url()).pathname === DOMAIN_READS[record.domain],
+      );
+      await entry.click();
+
+      await expect(page).toHaveURL(new RegExp(`${record.href}$`));
+      await expect(
+        page.locator('[data-slot="shared-record-banner"]'),
+      ).toContainText(record.username);
+      await expect(
+        page.locator(`a[href="${record.href}"]`).first(),
+      ).toBeVisible();
+      await expect(
+        page.locator('[data-slot="shared-record-unavailable"]'),
+      ).toHaveCount(0);
+      await read;
+
+      await page.locator('[data-slot="shared-record-banner-exit"]').click();
+      await expect(
+        page.locator('[data-slot="shared-record-banner"]'),
+      ).toHaveCount(0);
     });
   }
-
-  test("adult levels and lifecycle", () => {
-    const adultJourneyNames = RELEASE_JOURNEYS.filter((journey) =>
-      [
-        "adult-full-read-scoped-read-write-and-manage",
-        "manage-mutation-activity-and-fenced-settings",
-      ].includes(journey.name),
-    ).map((journey) => journey.name);
-
-    expect(adultJourneyNames).toEqual([
-      "adult-full-read-scoped-read-write-and-manage",
-      "manage-mutation-activity-and-fenced-settings",
-    ]);
-  });
-
-  test("managed profile lifecycle", () => {
-    const managedJourneyNames = RELEASE_JOURNEYS.filter((journey) =>
-      [
-        "managed-profile-creation-delegation-and-revocation",
-        "manage-mutation-activity-and-fenced-settings",
-      ].includes(journey.name),
-    ).map((journey) => journey.name);
-
-    expect(managedJourneyNames).toEqual([
-      "managed-profile-creation-delegation-and-revocation",
-      "manage-mutation-activity-and-fenced-settings",
-    ]);
-  });
 });
