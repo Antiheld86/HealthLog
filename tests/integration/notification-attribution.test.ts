@@ -17,6 +17,27 @@ async function createUser(label: string, managed = false) {
   });
 }
 
+async function createGuardianGrant(input: {
+  recordUserId: string;
+  recipientUserId: string;
+  access?: "READ" | "WRITE" | "MANAGE";
+  acceptedAt?: Date | null;
+  revokedAt?: Date | null;
+  expiresAt?: Date | null;
+}) {
+  return getPrismaClient().accountGrant.create({
+    data: {
+      grantorId: input.recordUserId,
+      granteeId: input.recipientUserId,
+      access: input.access ?? "MANAGE",
+      acceptedAt: input.acceptedAt ?? new Date(),
+      revokedAt: input.revokedAt ?? null,
+      revokedBy: input.revokedAt ? "GRANTOR" : null,
+      expiresAt: input.expiresAt ?? null,
+    },
+  });
+}
+
 beforeEach(async () => {
   await truncateAllTables(getPrismaClient());
 });
@@ -175,10 +196,26 @@ describe("notification attribution (real Postgres)", () => {
     ).toBeNull();
   });
 
-  it("principal resolution accepts only an explicit managed subject and human recipient", async () => {
+  it("principal resolution requires an active MANAGE grant for managed delivery", async () => {
     const recordUser = await createUser("record", true);
     const recipientUser = await createUser("recipient");
     const ordinaryRecord = await createUser("ordinary");
+
+    await expect(
+      resolveNotificationDeliveryIdentity({
+        eventType: "MEDICATION_REMINDER",
+        userId: recordUser.id,
+        recordUserId: recordUser.id,
+        recipientUserId: recipientUser.id,
+        title: "Record content",
+        message: "Record schedule",
+      }),
+    ).resolves.toBeNull();
+
+    await createGuardianGrant({
+      recordUserId: recordUser.id,
+      recipientUserId: recipientUser.id,
+    });
 
     await expect(
       resolveNotificationDeliveryIdentity({
@@ -214,5 +251,81 @@ describe("notification attribution (real Postgres)", () => {
         message: "Record schedule",
       }),
     ).resolves.toBeNull();
+  });
+
+  it("principal resolution rejects inactive, insufficient, wrong-record, and managed-recipient grants", async () => {
+    const recordUser = await createUser("record", true);
+    const otherRecord = await createUser("other-record", true);
+    const pendingRecipient = await createUser("pending-recipient");
+    const revokedRecipient = await createUser("revoked-recipient");
+    const expiredRecipient = await createUser("expired-recipient");
+    const writeRecipient = await createUser("write-recipient");
+    const wrongRecordRecipient = await createUser("wrong-record-recipient");
+    const managedRecipient = await createUser("managed-recipient", true);
+
+    await Promise.all([
+      createGuardianGrant({
+        recordUserId: recordUser.id,
+        recipientUserId: pendingRecipient.id,
+        acceptedAt: null,
+      }),
+      createGuardianGrant({
+        recordUserId: recordUser.id,
+        recipientUserId: revokedRecipient.id,
+        revokedAt: new Date(),
+      }),
+      createGuardianGrant({
+        recordUserId: recordUser.id,
+        recipientUserId: expiredRecipient.id,
+        expiresAt: new Date(Date.now() - 1_000),
+      }),
+      createGuardianGrant({
+        recordUserId: recordUser.id,
+        recipientUserId: writeRecipient.id,
+        access: "WRITE",
+      }),
+      createGuardianGrant({
+        recordUserId: otherRecord.id,
+        recipientUserId: wrongRecordRecipient.id,
+      }),
+      createGuardianGrant({
+        recordUserId: recordUser.id,
+        recipientUserId: managedRecipient.id,
+      }),
+    ]);
+
+    for (const recipientUserId of [
+      pendingRecipient.id,
+      revokedRecipient.id,
+      expiredRecipient.id,
+      writeRecipient.id,
+      wrongRecordRecipient.id,
+      managedRecipient.id,
+    ]) {
+      await expect(
+        resolveNotificationDeliveryIdentity({
+          eventType: "MEDICATION_REMINDER",
+          userId: recordUser.id,
+          recordUserId: recordUser.id,
+          recipientUserId,
+          title: "Record content",
+          message: "Record schedule",
+        }),
+      ).resolves.toBeNull();
+    }
+
+    const ordinaryUser = await createUser("ordinary-self");
+    await expect(
+      resolveNotificationDeliveryIdentity({
+        eventType: "MEDICATION_REMINDER",
+        userId: ordinaryUser.id,
+        title: "Personal content",
+        message: "Personal schedule",
+      }),
+    ).resolves.toEqual({
+      recordUserId: ordinaryUser.id,
+      recipientUserId: ordinaryUser.id,
+      managed: false,
+    });
   });
 });
