@@ -179,7 +179,30 @@ describe("an unprovable record context withholds every control", () => {
     const held = resolveRecordCapabilities(null, false, false, true);
     expect(held.canAdd).toBe(false);
     expect(held.canManage).toBe(false);
-    expect(held.recordSessionPending).toBe(true);
+    // REFUSED, not pending. `recordSessionPending` renders a bare spinner with
+    // no controls, which is right for a switch in flight and a wedge here: this
+    // state reports the same thing on every `/api/auth/me`, so it never ends on
+    // its own. `accessRefused` renders the door with the way back out.
+    expect(held.accessRefused).toBe(true);
+    expect(held.recordSessionPending).toBeUndefined();
+  });
+
+  it("routes an EXPIRED grant to the refusal door, not the spinner", () => {
+    // The second trigger, and the one that arrives without anybody doing
+    // anything: revocation clears the selector inside its transaction, expiry
+    // does NOT. So the session stays pointed at a record whose grant has
+    // lapsed, `/api/auth/me` resolves `active: null` because the entry no
+    // longer survives the live-grant pass, and `recordSession.scope` still
+    // names the owner. Every delegable read 403s from here.
+    const expired = recordContextIsUnproven(
+      { epoch: 3, scope: "acct-owner" },
+      null,
+    );
+    expect(expired).toBe(true);
+    const capabilities = resolveRecordCapabilities(null, false, false, expired);
+    expect(capabilities.accessRefused).toBe(true);
+    expect(capabilities.recordSessionPending).toBeUndefined();
+    expect(capabilities.inSharedRecord).toBe(true);
   });
 
   it("holds when the resolved entry names a record the selector has left", () => {

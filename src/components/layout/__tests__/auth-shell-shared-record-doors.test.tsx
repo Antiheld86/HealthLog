@@ -39,6 +39,8 @@
  *     "removed".
  */
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -288,5 +290,50 @@ describe("<AuthShell> — the owner-only doors", () => {
 
     expect(html).toContain("sentinel-page");
     expect(html).not.toContain("sentinel-unavailable");
+  });
+});
+
+/**
+ * v1.37.0 — a refusal must never render behind the hydration gate.
+ *
+ * The two branches look interchangeable and are not. `RecordScopeHydrationGate`
+ * is a bare spinner with no controls, which is correct for a transition that
+ * ends on its own. A refusal does not end on its own — `/api/auth/me` reports
+ * the same disagreement on every boot — so behind the gate it renders as a
+ * permanent "Loading…" with no way out, which is what an audit found on the
+ * grant-expiry path.
+ *
+ * Asserted on source order rather than by rendering, because the shell's
+ * branches are early returns: whichever `if` comes first wins, and that is
+ * exactly the fact worth freezing. Break it by moving the `accessRefused`
+ * block back below the gate.
+ */
+describe("the refusal door is reachable", () => {
+  const SHELL = readFileSync(
+    join(process.cwd(), "src/components/layout/auth-shell.tsx"),
+    "utf8",
+  );
+
+  it("checks accessRefused before the hydration gate", () => {
+    const refusal = SHELL.indexOf("if (accessRefused) {");
+    const gate = SHELL.indexOf("<RecordScopeHydrationGate");
+    // Non-zero proof: a renamed branch must fail here rather than agree with
+    // two -1s.
+    expect(refusal).toBeGreaterThan(-1);
+    expect(gate).toBeGreaterThan(-1);
+    expect(refusal).toBeLessThan(gate);
+  });
+
+  it("gives the refusal door an actual way out", () => {
+    // A door with no handle is the same wedge wearing different paint.
+    const door = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/layout/shared-record-unavailable.tsx",
+      ),
+      "utf8",
+    );
+    expect(door).toContain("shared-record-unavailable-leave");
+    expect(door).toMatch(/switchAccount\.mutate\(null\)/);
   });
 });

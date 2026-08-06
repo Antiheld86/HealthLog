@@ -122,9 +122,16 @@ export function resolveRecordCapabilities(
 ): RecordCapabilities {
   if (accessRefused || recordSessionPending || contextUnproven) {
     return {
-      accessRefused: accessRefused || undefined,
-      recordSessionPending:
-        recordSessionPending || contextUnproven || undefined,
+      // An unprovable context is a REFUSAL, not a transient hold, and the
+      // difference is whether there is a way out. `recordSessionPending`
+      // renders `RecordScopeHydrationGate` — a bare spinner with no controls,
+      // correct while a switch is genuinely in flight because it ends on its
+      // own. This state does not end on its own: `/api/auth/me` reports the
+      // same disagreement on every boot, so a spinner here is a wedge with no
+      // exit. `accessRefused` renders `SharedRecordUnavailable`, which carries
+      // a "leave this record" button that posts `switch(null)`.
+      accessRefused: accessRefused || contextUnproven || undefined,
+      recordSessionPending: recordSessionPending || undefined,
       inSharedRecord: true,
       canWrite: false,
       canAdd: false,

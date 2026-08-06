@@ -234,6 +234,36 @@ export function AuthShell({
     );
   }
 
+  // A refused record context comes FIRST, ahead of the hydration gate.
+  //
+  // Both used to be checked in the other order, and it mattered: the gate is a
+  // bare spinner with no controls, which is right for a transition that ends on
+  // its own and wrong for a state that does not. A refusal — a malformed access
+  // block, or a selector pointed at a record whose grant has lapsed — reports
+  // the same thing on every `/api/auth/me`, so behind the gate it renders as a
+  // permanent "Loading…" with no way out. Ahead of it, the same state renders
+  // the refusal door, which carries the button back to one's own record.
+  //
+  // Safe against the loading race by construction: every input to
+  // `accessRefused` comes from a resolved account payload, so it cannot be true
+  // while `isLoading` is.
+  // A present but malformed access block is not the older-server case. The
+  // server may still be switched, so mounting children here could fetch target
+  // data under owner controls. Offer only the actor-scoped way out.
+  if (accessRefused) {
+    return (
+      <div
+        data-slot="invalid-record-access-refusal"
+        className="flex min-h-dvh flex-col"
+      >
+        <MaintainershipBanner />
+        <main className="mx-auto w-full max-w-screen-xl px-4 py-10 md:px-6">
+          <SharedRecordUnavailable />
+        </main>
+      </div>
+    );
+  }
+
   // Every protected route waits for `/api/auth/me`, not only Settings and
   // Admin. The payload resolves the active record as well as identity, so a
   // child mounted before it could issue an actor-scoped read before the shell
@@ -253,23 +283,6 @@ export function AuthShell({
       <div className="flex h-dvh items-center justify-center" role="status">
         <Loader2 className="text-primary h-6 w-6 animate-spin motion-reduce:animate-none" />
         <span className="sr-only">{t("nav.loadingScreen")}</span>
-      </div>
-    );
-  }
-
-  // A present but malformed access block is not the older-server case. The
-  // server may still be switched, so mounting children here could fetch target
-  // data under owner controls. Offer only the actor-scoped way out.
-  if (accessRefused) {
-    return (
-      <div
-        data-slot="invalid-record-access-refusal"
-        className="flex min-h-dvh flex-col"
-      >
-        <MaintainershipBanner />
-        <main className="mx-auto w-full max-w-screen-xl px-4 py-10 md:px-6">
-          <SharedRecordUnavailable />
-        </main>
       </div>
     );
   }
