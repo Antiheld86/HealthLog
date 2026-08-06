@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/hooks/use-auth";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { PageAuthGate } from "@/components/ui/page-auth-gate";
 import { MentalWellbeing } from "@/components/mental-health/mental-wellbeing";
 
@@ -26,9 +27,10 @@ import { MentalWellbeing } from "@/components/mental-health/mental-wellbeing";
  */
 export default function MentalWellbeingPage() {
   const { user, isLoading, isAuthenticated } = useAuth();
+  const { inSharedRecord } = useRecordCapabilities();
   const router = useRouter();
 
-  const enabled = user?.modules?.mentalHealth === true;
+  const enabled = inSharedRecord || user?.modules?.mentalHealth === true;
 
   useEffect(() => {
     if (isLoading) return;

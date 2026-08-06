@@ -25,9 +25,10 @@ import type {
 } from "./types";
 
 /** Newest-first episode list. */
-export function useIllnessEpisodes(includeResolved = true) {
+export function useIllnessEpisodes(includeResolved = true, enabled = true) {
   return useQuery({
     queryKey: queryKeys.illnessEpisodes(includeResolved),
+    enabled,
     queryFn: () =>
       apiGet<IllnessEpisodeDTO[]>(
         `/api/illness/episodes?includeResolved=${includeResolved}`,
