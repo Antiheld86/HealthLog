@@ -417,6 +417,10 @@ export const USER_KEPT_FIELDS: Readonly<Record<string, string>> = {
  * {@link resolveWipeDelegate} translates; the route is unaware.
  */
 export const WIPE_OWNER_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  // The record owner owns the import payload. The actor is durable audit
+  // attribution and must not let deleting a manager erase another record's
+  // import history.
+  MedicationIntakeImportJob: ["recordUserId"],
   // Both sides. Wiping only the grantor side would leave the account still
   // holding read access to other people's records after it asked for
   // everything of its own to be deleted.

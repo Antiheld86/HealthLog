@@ -643,7 +643,8 @@ describe("withIdempotency — record-scoped cells", () => {
 
     await run();
 
-    expect(claimed().key).toBe(CLIENT_KEY);
+    expect(prisma.idempotencyKey.findUnique).not.toHaveBeenCalled();
+    expect(prisma.idempotencyKey.create).not.toHaveBeenCalled();
   });
 
   it("refuses a client key that carries the separator", async () => {
