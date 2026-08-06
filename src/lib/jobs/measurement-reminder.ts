@@ -329,12 +329,21 @@ export async function runMeasurementReminderTick(
         reminder.label,
         reminder.location,
       );
+      const renderForRecipient = (locale: Locale) => {
+        const rendered = buildMeasurementReminderPayload(
+          locale,
+          reminder.label,
+          reminder.location,
+        );
+        return { title: rendered.title, message: rendered.body };
+      };
 
       const outcome = await dispatchImpl({
         eventType: "MEASUREMENT_REMINDER",
         userId: reminder.user.id,
         title,
         message: body,
+        renderForRecipient,
         metadata: {
           scheduledAt: now.toISOString(),
           reminderId: reminder.id,

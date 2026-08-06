@@ -1,3 +1,5 @@
+import type { Locale } from "@/lib/i18n/config";
+
 /**
  * Notification system type definitions.
  * Channels: Telegram, ntfy, Web Push
@@ -285,6 +287,15 @@ export interface NotificationPayload {
    * paths may set it, and safety-floor is the only SYSTEM_ALERT admission.
    */
   managedFanoutEvent?: ManagedGuardianFanoutEvent;
+  /**
+   * Internal rendering hook for record-owned notification content. The
+   * dispatcher invokes it only after choosing a recipient, then removes it
+   * before handing the payload to a channel adapter.
+   */
+  renderForRecipient?: (locale: Locale) => {
+    title: string;
+    message: string;
+  };
   /**
    * Discreet mode (cycle privacy). When true, the lock-screen-visible
    * routing metadata the senders would otherwise derive from `eventType`

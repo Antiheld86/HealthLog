@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { decrypt, encrypt } from "@/lib/crypto";
+import { defaultLocale, locales, type Locale } from "@/lib/i18n/config";
 import type {
   NotificationPayload,
   TelegramChannelConfig,
@@ -60,6 +61,26 @@ export interface DispatchOutcome {
   channelsSucceeded: number;
 }
 
+function isLocale(value: string | null | undefined): value is Locale {
+  return (locales as readonly string[]).includes(value ?? "");
+}
+
+/** Render record-owned content only after the delivery recipient is known. */
+async function renderForRecipient(
+  payload: NotificationPayload,
+  recipientUserId: string,
+): Promise<NotificationPayload> {
+  const { renderForRecipient: render, ...deliveryPayload } = payload;
+  if (!render) return deliveryPayload;
+
+  const recipient = await prisma.user.findUnique({
+    where: { id: recipientUserId },
+    select: { locale: true },
+  });
+  const locale = isLocale(recipient?.locale) ? recipient.locale : defaultLocale;
+  return { ...deliveryPayload, ...render(locale) };
+}
+
 export async function dispatchNotification(
   payload: NotificationPayload,
 ): Promise<DispatchOutcome> {
@@ -101,11 +122,15 @@ export async function dispatchNotification(
       recordUserId: delivery.recordUserId,
       recipientUserId: delivery.recipientUserId,
     };
+    const recipientPayload = await renderForRecipient(
+      deliveryPayload,
+      delivery.recipientUserId,
+    );
     const channels = await prisma.notificationChannel.findMany({
       where: { userId: delivery.recipientUserId, enabled: true },
       include: {
         preferences: {
-          where: { eventType: deliveryPayload.eventType },
+          where: { eventType: recipientPayload.eventType },
         },
       },
     });
@@ -155,7 +180,7 @@ export async function dispatchNotification(
             },
             include: {
               preferences: {
-                where: { eventType: deliveryPayload.eventType },
+                where: { eventType: recipientPayload.eventType },
               },
             },
           });
@@ -186,7 +211,7 @@ export async function dispatchNotification(
     // from /settings/notifications once they've seen the badge a few
     // times and decided they want push.
     let defaultEnabled =
-      EVENT_DEFAULT_ENABLED[deliveryPayload.eventType as EventType] ?? true;
+      EVENT_DEFAULT_ENABLED[recipientPayload.eventType as EventType] ?? true;
 
     // v1.7.0 — MOOD_REMINDER single source of truth = the visible card.
     // The event used to default OFF, layered on top of the per-user
@@ -197,7 +222,7 @@ export async function dispatchNotification(
     // opt-out (a `NotificationPreference` row with `enabled = false`) is
     // still honoured below via `pref.enabled` — only the no-row default
     // is derived from the card.
-    if (deliveryPayload.eventType === "MOOD_REMINDER") {
+    if (recipientPayload.eventType === "MOOD_REMINDER") {
       const user = await prisma.user.findUnique({
         where: { id: delivery.recipientUserId },
         select: { moodReminderEnabled: true },
@@ -211,7 +236,7 @@ export async function dispatchNotification(
     let clientManagedApns: boolean | null = null;
     const resolveClientManagedApns = async (): Promise<boolean> => {
       if (clientManagedApns !== null) return clientManagedApns;
-      const gate = CLIENT_MANAGED_APNS_EVENTS[deliveryPayload.eventType];
+      const gate = CLIENT_MANAGED_APNS_EVENTS[recipientPayload.eventType];
       if (!gate) {
         clientManagedApns = false;
         return false;
@@ -251,22 +276,22 @@ export async function dispatchNotification(
       if (
         channel.type === "APNS" &&
         !delivery.managed &&
-        hasClientManagedApnsGate(deliveryPayload.eventType) &&
+        hasClientManagedApnsGate(recipientPayload.eventType) &&
         (await resolveClientManagedApns())
       ) {
-        const gate = CLIENT_MANAGED_APNS_EVENTS[deliveryPayload.eventType];
-        getEvent()?.addMeta(gate.metaKey, gate.tag(deliveryPayload.metadata));
+        const gate = CLIENT_MANAGED_APNS_EVENTS[recipientPayload.eventType];
+        getEvent()?.addMeta(gate.metaKey, gate.tag(recipientPayload.metadata));
         if (gate.detail && gate.detailKey) {
           getEvent()?.addMeta(
             gate.detailKey,
-            gate.detail(deliveryPayload.userId, deliveryPayload.metadata),
+            gate.detail(recipientPayload.userId, recipientPayload.metadata),
           );
         }
         recordPushAttempt({
           recordUserId: delivery.recordUserId,
           recipientUserId: delivery.recipientUserId,
           channel: "APNS",
-          eventType: deliveryPayload.eventType,
+          eventType: recipientPayload.eventType,
           result: "skipped",
           reason: "client_managed",
         });
@@ -280,7 +305,7 @@ export async function dispatchNotification(
           channel.type as ChannelType,
           channel.config,
           delivery.recipientUserId,
-          deliveryPayload,
+          recipientPayload,
         );
 
         if (outcome.ok) {

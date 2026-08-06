@@ -154,10 +154,14 @@ export async function dispatchLocalisedNotification(
   const locale = await resolveRecipientLocale(
     opts.recipientUserId ?? opts.userId,
   );
-  const t = getServerTranslator(locale).t;
-
-  const title = t(opts.titleKey, opts.params);
-  const message = t(opts.messageKey, opts.params);
+  const renderForRecipient = (recipientLocale: Locale) => {
+    const t = getServerTranslator(recipientLocale).t;
+    return {
+      title: t(opts.titleKey, opts.params),
+      message: t(opts.messageKey, opts.params),
+    };
+  };
+  const { title, message } = renderForRecipient(locale);
 
   // Warn when a translation key falls back to its own raw string —
   // that signals a missing entry in `messages/{locale}.json` (or a
@@ -183,6 +187,7 @@ export async function dispatchLocalisedNotification(
     recipientUserId: opts.recipientUserId,
     title,
     message,
+    renderForRecipient,
     metadata,
     managedFanoutEvent: opts.managedFanoutEvent,
     urgent: opts.urgent,

@@ -5,6 +5,7 @@
  * schedules, and boss.work registrations.
  */
 import { type Job } from "pg-boss";
+import type { Locale } from "@/lib/i18n/config";
 import { recordError, recordReminderCheck } from "@/lib/jobs/worker-status";
 import { recomputeMedicationComplianceForEvent } from "@/lib/rollups/medication-compliance-rollups";
 import { decrypt } from "@/lib/crypto";
@@ -630,6 +631,15 @@ export async function handleReminderCheck(
                 Math.ceil(minutesToEnd),
                 med.user.locale,
               );
+              const renderForRecipient = (locale: Locale) =>
+                getPhaseMessage(
+                  currentPhase,
+                  med.name,
+                  doseInfo,
+                  timeWindow,
+                  Math.ceil(minutesToEnd),
+                  locale,
+                );
 
               const keyboard = getPhaseKeyboard(
                 currentPhase,
@@ -652,6 +662,7 @@ export async function handleReminderCheck(
                   userId: med.user.id,
                   title,
                   message,
+                  renderForRecipient,
                   metadata: {
                     medicationId: med.id,
                     scheduleId: schedule.id,
