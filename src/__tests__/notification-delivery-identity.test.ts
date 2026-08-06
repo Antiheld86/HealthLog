@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const transactionMock = vi.fn();
+
 vi.mock("@/lib/db", () => ({
   prisma: {
     notificationChannel: {
@@ -9,6 +11,7 @@ vi.mock("@/lib/db", () => ({
     },
     user: { findUnique: vi.fn() },
     auditLog: { create: vi.fn() },
+    $transaction: (...args: unknown[]) => transactionMock(...args),
   },
 }));
 
@@ -76,6 +79,20 @@ beforeEach(() => {
   vi.mocked(prisma.notificationChannel.update).mockResolvedValue({
     consecutiveFailures: 0,
   } as never);
+  transactionMock.mockImplementation(
+    async (operation: (tx: unknown) => Promise<unknown>) =>
+      operation({
+        $queryRaw: vi.fn(),
+        user: {
+          findUnique: vi.fn(async ({ where }: { where: { id: string } }) =>
+            where.id === recordUserId
+              ? { managedProfileAt: new Date() }
+              : { managedProfileAt: null },
+          ),
+        },
+        accountGrant: { findFirst: vi.fn(async () => ({ id: "grant" })) },
+      }),
+  );
   sendViaWebPushMock.mockResolvedValue({ ok: true });
 });
 
@@ -110,6 +127,7 @@ describe("notification delivery identity", () => {
         message: "Record schedule",
       }),
     );
+    expect(transactionMock).toHaveBeenCalledTimes(1);
   });
 
   it("refuses a managed record without an explicit recipient", async () => {

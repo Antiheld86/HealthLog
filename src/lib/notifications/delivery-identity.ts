@@ -1,4 +1,8 @@
 import { prisma } from "@/lib/db";
+import {
+  activeGuardianWhere,
+  withManagedProfileLock,
+} from "@/lib/managed-profiles/lifecycle";
 import type { NotificationPayload } from "@/lib/notifications/types";
 
 export interface NotificationDeliveryIdentity {
@@ -10,7 +14,13 @@ export interface NotificationDeliveryIdentity {
 /**
  * Resolve notification identities without treating a managed record as its
  * own destination. Legacy payloads remain valid only for ordinary self
- * delivery; a managed record must name its recipient explicitly.
+ * delivery; a managed record must name an active Guardian explicitly.
+ *
+ * Cross-principal authorization linearizes at the locked grant read below,
+ * immediately before the dispatcher selects a channel. A revocation that
+ * commits before that read prevents delivery; one that commits afterwards
+ * affects later dispatches but cannot recall provider work already in flight.
+ * The provider call deliberately runs outside the short database transaction.
  */
 export async function resolveNotificationDeliveryIdentity(
   payload: NotificationPayload,
@@ -32,14 +42,35 @@ export async function resolveNotificationDeliveryIdentity(
   });
   if (!record) return null;
 
-  const managed = record.managedProfileAt != null;
-  if (managed) {
+  if (record.managedProfileAt == null) {
     return recipientUserId === recordUserId
-      ? null
-      : { recordUserId, recipientUserId, managed };
+      ? { recordUserId, recipientUserId, managed: false }
+      : null;
   }
 
-  return recipientUserId === recordUserId
-    ? { recordUserId, recipientUserId, managed }
-    : null;
+  if (recipientUserId === recordUserId) return null;
+
+  return prisma.$transaction(async (tx) =>
+    withManagedProfileLock(tx, recordUserId, async (lockedRecord) => {
+      if (lockedRecord?.managedProfileAt == null) return null;
+
+      const recipient = await tx.user.findUnique({
+        where: { id: recipientUserId },
+        select: { managedProfileAt: true },
+      });
+      if (!recipient || recipient.managedProfileAt != null) return null;
+
+      const guardian = await tx.accountGrant.findFirst({
+        where: {
+          grantorId: recordUserId,
+          granteeId: recipientUserId,
+          ...activeGuardianWhere(new Date()),
+        },
+        select: { id: true },
+      });
+      if (!guardian) return null;
+
+      return { recordUserId, recipientUserId, managed: true };
+    }),
+  );
 }

@@ -30,7 +30,7 @@ async function createGuardianGrant(input: {
       grantorId: input.recordUserId,
       granteeId: input.recipientUserId,
       access: input.access ?? "MANAGE",
-      acceptedAt: input.acceptedAt ?? new Date(),
+      acceptedAt: input.acceptedAt === undefined ? new Date() : input.acceptedAt,
       revokedAt: input.revokedAt ?? null,
       revokedBy: input.revokedAt ? "GRANTOR" : null,
       expiresAt: input.expiresAt ?? null,
