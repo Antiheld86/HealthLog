@@ -14,6 +14,11 @@ const sent = vi.hoisted(() => ({
   apns: [] as Array<{ recipientUserId: string; recordUserId?: string }>,
 }));
 
+const ntfyEgress = vi.hoisted(() => ({
+  block: null as Promise<void> | null,
+  onStart: null as (() => void) | null,
+}));
+
 vi.mock("@/lib/notifications/senders/ntfy", async () => {
   const { recordPushAttemptForPayload } = await vi.importActual<
     typeof import("@/lib/notifications/senders/push-attempt-record")
@@ -28,9 +33,11 @@ vi.mock("@/lib/notifications/senders/ntfy", async () => {
         eventType: string;
         title: string;
         message: string;
-      },
-    ) => {
-      const recipientUserId = payload.recipientUserId ?? payload.userId;
+    },
+  ) => {
+    ntfyEgress.onStart?.();
+    if (ntfyEgress.block) await ntfyEgress.block;
+    const recipientUserId = payload.recipientUserId ?? payload.userId;
       sent.ntfy.push({
         recipientUserId,
         title: payload.title,
@@ -136,7 +143,9 @@ vi.mock("@/lib/notifications/senders/telegram", async () => {
 
 import { encrypt } from "@/lib/crypto";
 import type { Locale } from "@/lib/i18n/config";
+import { withManagedProfileLock } from "@/lib/managed-profiles/lifecycle";
 import { dispatchNotification } from "@/lib/notifications/dispatcher";
+import { revokeGrant } from "@/lib/sharing/grants";
 import { getPrismaClient, truncateAllTables } from "./setup";
 
 let sequence = 0;
@@ -188,6 +197,8 @@ async function addChannel(
 }
 
 beforeEach(async () => {
+  ntfyEgress.block = null;
+  ntfyEgress.onStart = null;
   sent.deliveries.length = 0;
   sent.ntfy.length = 0;
   sent.apns.length = 0;
@@ -379,4 +390,107 @@ describe("Guardian fan-out (real Postgres)", () => {
       }),
     ).resolves.toBe(expected.length);
   });
+
+  it("keeps a Guardian revocation from committing while its channel egress is in flight", async () => {
+    const [record, recipient, reserveGuardian] = await Promise.all([
+      createUser({ label: "record", locale: "en", managed: true }),
+      createUser({ label: "recipient", locale: "en" }),
+      createUser({ label: "reserve-guardian", locale: "de" }),
+    ]);
+    await Promise.all([
+      addGuardian(record.id, recipient.id),
+      addGuardian(record.id, reserveGuardian.id),
+      addChannel(recipient.id, "NTFY"),
+    ]);
+    const recipientGrant = await getPrismaClient().accountGrant.findFirstOrThrow({
+      where: { grantorId: record.id, granteeId: recipient.id },
+      select: { id: true },
+    });
+    let releaseEgress!: () => void;
+    let markEgressStarted!: () => void;
+    ntfyEgress.block = new Promise<void>((resolve) => {
+      releaseEgress = resolve;
+    });
+    const egressStarted = new Promise<void>((resolve) => {
+      markEgressStarted = resolve;
+    });
+    ntfyEgress.onStart = markEgressStarted;
+
+    const delivery = dispatchNotification({
+      eventType: "MEDICATION_REMINDER",
+      userId: record.id,
+      title: "record reminder",
+      message: "record message",
+    });
+    await egressStarted;
+
+    const revocation = revokeGrant({
+      grantId: recipientGrant.id,
+      grantorId: record.id,
+    });
+    await expectPromiseToRemainPending(revocation);
+
+    releaseEgress();
+    await delivery;
+    await revocation;
+  });
+
+  it("keeps a Guardian expiry transition from committing while its channel egress is in flight", async () => {
+    const [record, recipient, reserveGuardian] = await Promise.all([
+      createUser({ label: "record", locale: "en", managed: true }),
+      createUser({ label: "recipient", locale: "en" }),
+      createUser({ label: "reserve-guardian", locale: "de" }),
+    ]);
+    await Promise.all([
+      addGuardian(record.id, recipient.id),
+      addGuardian(record.id, reserveGuardian.id),
+      addChannel(recipient.id, "NTFY"),
+    ]);
+    const recipientGrant = await getPrismaClient().accountGrant.findFirstOrThrow({
+      where: { grantorId: record.id, granteeId: recipient.id },
+      select: { id: true },
+    });
+    let releaseEgress!: () => void;
+    let markEgressStarted!: () => void;
+    ntfyEgress.block = new Promise<void>((resolve) => {
+      releaseEgress = resolve;
+    });
+    const egressStarted = new Promise<void>((resolve) => {
+      markEgressStarted = resolve;
+    });
+    ntfyEgress.onStart = markEgressStarted;
+
+    const delivery = dispatchNotification({
+      eventType: "MEDICATION_REMINDER",
+      userId: record.id,
+      title: "record reminder",
+      message: "record message",
+    });
+    await egressStarted;
+
+    const expiry = getPrismaClient().$transaction((tx) =>
+      withManagedProfileLock(tx, record.id, () =>
+        tx.accountGrant.update({
+          where: { id: recipientGrant.id },
+          data: { expiresAt: new Date() },
+        }),
+      ),
+    );
+    await expectPromiseToRemainPending(expiry);
+
+    releaseEgress();
+    await delivery;
+    await expiry;
+  });
 });
+
+async function expectPromiseToRemainPending(promise: Promise<unknown>) {
+  const settled = await Promise.race([
+    promise.then(
+      () => true,
+      () => true,
+    ),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 25)),
+  ]);
+  expect(settled).toBe(false);
+}

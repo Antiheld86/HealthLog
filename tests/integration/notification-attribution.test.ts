@@ -141,6 +141,21 @@ describe("notification attribution (real Postgres)", () => {
     ).toBeNull();
   });
 
+  it("provides the created-at index used by global notification event retention", async () => {
+    const indexes = await getPrismaClient().$queryRaw<
+      Array<{ indexname: string }>
+    >`
+      SELECT indexname
+      FROM pg_indexes
+      WHERE schemaname = current_schema()
+        AND tablename = 'notification_events'
+    `;
+
+    expect(indexes.map(({ indexname }) => indexname)).toContain(
+      "notification_events_created_at_idx",
+    );
+  });
+
   it("allows exactly one concurrent claim for a notification event", async () => {
     const recordUser = await createUser("claim-record", true);
     const client = getPrismaClient();
