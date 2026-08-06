@@ -115,7 +115,7 @@ describe("what the browser asserts on a request", () => {
 });
 
 describe("what the browser does with an echoed context", () => {
-  it("serves a response carrying no echo, and enters no hold", () => {
+  it("FENCE-AC-06 serves a response carrying no echo, and enters no hold", () => {
     // The `/api/version` case, named because it is the concrete thing a
     // discard-on-absence rule breaks: it is polled on a timer.
     adoptRecordFenceState({ epoch: 4, scope: OWNER });
@@ -137,7 +137,7 @@ describe("what the browser does with an echoed context", () => {
     expect(hold).not.toHaveBeenCalled();
   });
 
-  it("discards a response delayed across a switch, and enters the hold", () => {
+  it("FENCE-AC-06 discards a response delayed across a switch, and enters the hold", () => {
     // Acceptance case 6: the response was already past the fence when the
     // switch committed, so the server served it honestly under the old context
     // and said so. The browser is on epoch 5 now.

@@ -199,8 +199,9 @@ describe("FENCE-AC-05 an idempotent write under a moved record context", () => {
     expect(body.meta.errorCode).toBe(RECORD_FENCE_ERROR_CODE);
 
     // (b) the seeded cell is untouched — nothing read it, claimed it, or
-    // rewrote it. `updatedAt` is the falsifiable half: a wrapper that reached
-    // the cache and released a claim would leave the row present but moved.
+    // rewrote it. `expiresAt` is the falsifiable half: completion rewrites it
+    // to now+24h and a fresh claim to now+2min, so a wrapper that reached the
+    // cache at all would move it.
     const after = await cells();
     expect(after).toHaveLength(1);
     expect(after[0].id).toBe(before.id);
