@@ -62,11 +62,11 @@ model User {
   /// former and stay shut for the latter, and the gate is this column rather
   /// than the grant, so no argument about a grant level can reach them.
   ///
-  /// A timestamp rather than a boolean, for a reason the schema has to keep
-  /// possible: it says since when, and clearing it is the emancipation act —
-  /// the day the person takes their own record over, credentials attach and
-  /// this goes back to NULL, with the grants and the whole activity trail
-  /// spanning the transition untouched.
+  /// A timestamp rather than a boolean: it says since when, and preserves a
+  /// future-compatible null state without adding a transition surface here.
+  /// This release does not expose a way to clear the marker or attach
+  /// credentials; the grants and activity trail remain intact if a later,
+  /// separately designed handover ever needs that state.
   ///
   /// Consumers land in this release: the guardian resolver in
   /// `src/lib/api-handler.ts` reads it on every guardian request, the

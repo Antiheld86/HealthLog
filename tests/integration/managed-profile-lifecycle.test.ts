@@ -131,7 +131,7 @@ describe("managed profile lifecycle (real Postgres)", () => {
     expect(profile.dateOfBirth).toBeNull();
   });
 
-  it("rolls the profile back when creating its Guardian grant fails", async () => {
+  it("creation rolls the profile back when its Guardian grant fails", async () => {
     await signInWithFreshMfa();
     const prisma = getPrismaClient();
     await prisma.$executeRawUnsafe(
