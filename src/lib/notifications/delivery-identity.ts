@@ -3,12 +3,78 @@ import {
   activeGuardianWhere,
   withManagedProfileLock,
 } from "@/lib/managed-profiles/lifecycle";
-import type { NotificationPayload } from "@/lib/notifications/types";
+import type {
+  ManagedGuardianFanoutEvent,
+  NotificationPayload,
+} from "@/lib/notifications/types";
 
 export interface NotificationDeliveryIdentity {
   recordUserId: string;
   recipientUserId: string;
   managed: boolean;
+}
+
+/**
+ * The policy is deliberately closed. `SYSTEM_ALERT` by itself is never a
+ * Guardian event: the safety-floor producer must name its narrow admission
+ * marker, while illness red flags continue to remain record-local.
+ */
+export function isManagedGuardianFanoutAllowed(
+  payload: Pick<NotificationPayload, "eventType" | "managedFanoutEvent">,
+): boolean {
+  if (payload.managedFanoutEvent === "SAFETY_FLOOR_ALERT") {
+    return payload.eventType === "SYSTEM_ALERT";
+  }
+
+  return (
+    payload.managedFanoutEvent === undefined &&
+    (payload.eventType === "MEDICATION_REMINDER" ||
+      payload.eventType === "MEASUREMENT_REMINDER" ||
+      payload.eventType === "MEDICATION_LOW_STOCK")
+  );
+}
+
+/**
+ * Enumerate candidate Guardians only for a legacy record-addressed delivery.
+ * Each candidate is still re-authorized under the managed-profile advisory
+ * lock immediately before its own channel selection and provider egress.
+ */
+export async function resolveManagedGuardianRecipientIds(
+  payload: NotificationPayload,
+): Promise<string[] | null> {
+  if (
+    payload.recordUserId !== undefined ||
+    payload.recipientUserId !== undefined ||
+    !isManagedGuardianFanoutAllowed(payload)
+  ) {
+    return null;
+  }
+
+  const record = await prisma.user.findUnique({
+    where: { id: payload.userId },
+    select: { managedProfileAt: true },
+  });
+  if (record?.managedProfileAt == null) return null;
+
+  const grants = await prisma.accountGrant.findMany({
+    where: {
+      grantorId: payload.userId,
+      ...activeGuardianWhere(new Date()),
+      grantee: { managedProfileAt: null },
+    },
+    select: {
+      granteeId: true,
+      grantee: { select: { managedProfileAt: true } },
+    },
+  });
+
+  return grants
+    .filter(
+      (grant) =>
+        grant.granteeId !== payload.userId &&
+        grant.grantee.managedProfileAt == null,
+    )
+    .map((grant) => grant.granteeId);
 }
 
 /**
@@ -49,6 +115,8 @@ export async function resolveNotificationDeliveryIdentity(
   }
 
   if (recipientUserId === recordUserId) return null;
+
+  if (!isManagedGuardianFanoutAllowed(payload)) return null;
 
   return prisma.$transaction(async (tx) =>
     withManagedProfileLock(tx, recordUserId, async (lockedRecord) => {

@@ -32,7 +32,9 @@ function payload(over: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.resetAllMocks();
   findUnique.mockResolvedValue({ managedProfileAt: new Date() });
-  findMany.mockResolvedValue([{ granteeId: "guardian-one" }]);
+  findMany.mockResolvedValue([
+    { granteeId: "guardian-one", grantee: { managedProfileAt: null } },
+  ]);
 });
 
 describe("guardian notification policy — allowlist and eligibility", () => {
@@ -76,19 +78,24 @@ describe("guardian notification policy — allowlist and eligibility", () => {
   });
 
   it("enumerates only active Guardians of the marked record", async () => {
-    await expect(resolveManagedGuardianRecipientIds(payload())).resolves.toEqual(
-      ["guardian-one"],
-    );
+    await expect(
+      resolveManagedGuardianRecipientIds(payload()),
+    ).resolves.toEqual(["guardian-one"]);
 
     expect(findMany).toHaveBeenCalledWith({
       where: expect.objectContaining({ grantorId: recordUserId }),
-      select: { granteeId: true },
+      select: {
+        granteeId: true,
+        grantee: { select: { managedProfileAt: true } },
+      },
     });
   });
 
   it("does not fan out unmarked records, disallowed events, self delivery, or invalid Guardians", async () => {
     findUnique.mockResolvedValueOnce({ managedProfileAt: null });
-    await expect(resolveManagedGuardianRecipientIds(payload())).resolves.toBeNull();
+    await expect(
+      resolveManagedGuardianRecipientIds(payload()),
+    ).resolves.toBeNull();
 
     await expect(
       resolveManagedGuardianRecipientIds(
@@ -97,12 +104,15 @@ describe("guardian notification policy — allowlist and eligibility", () => {
     ).resolves.toBeNull();
 
     findMany.mockResolvedValueOnce([
-      { granteeId: recordUserId },
-      { granteeId: "managed-guardian", managedProfileAt: new Date() },
-      { granteeId: "guardian-two" },
+      { granteeId: recordUserId, grantee: { managedProfileAt: null } },
+      {
+        granteeId: "managed-guardian",
+        grantee: { managedProfileAt: new Date() },
+      },
+      { granteeId: "guardian-two", grantee: { managedProfileAt: null } },
     ]);
-    await expect(resolveManagedGuardianRecipientIds(payload())).resolves.toEqual([
-      "guardian-two",
-    ]);
+    await expect(
+      resolveManagedGuardianRecipientIds(payload()),
+    ).resolves.toEqual(["guardian-two"]);
   });
 });

@@ -41,8 +41,9 @@ import {
 import { getWorkerPrisma } from "./shared";
 
 const MOOD_REMINDER_RETENTION_DAYS = 90;
-// v1.4.49 — daily prune for the push-attempt ledger. Same 90-day
-// retention as the mood-reminder dispatch ledger; both surfaces are
+// v1.4.49 — daily prune for the notification delivery ledger. The attempt
+// diagnostics and record-only event anchors share the same 90-day horizon;
+// both surfaces are
 // behavioural footprints we keep long enough to debug a duplicate-push
 // report (~one billing cycle) but no longer. Slots at 03:35 between
 // mood-reminder cleanup (03:25) and drain-cumulative (03:45) so the
@@ -116,13 +117,15 @@ export async function handleMoodReminderCleanup(
 }
 
 /**
- * v1.4.49 — daily prune for the per-attempt push-delivery ledger.
+ * Daily prune for the bounded notification-delivery ledger.
  *
  * Every sender (APNS, WEB_PUSH, TELEGRAM, NTFY) writes one
  * fire-and-forget row to `push_attempts` per dispatch. The admin
  * diagnostic endpoint only ever reads the trailing 20 rows per user,
  * so anything older than the 90-day retention window is dead weight
- * inflating the table and the `(user_id, created_at DESC)` index.
+ * inflating the table and the `(user_id, created_at DESC)` index. Record-only
+ * notification events are claims rather than delivery diagnostics, but after
+ * the same horizon their dedup windows have elapsed and they have no reader.
  *
  * The DELETE is unbounded by user — the index covers `created_at`
  * directly, so a `WHERE created_at < cutoff` scan is bounded by the
@@ -144,11 +147,16 @@ export async function handlePushAttemptCleanup(
     try {
       const cutoff = new Date();
       cutoff.setUTCDate(cutoff.getUTCDate() - PUSH_ATTEMPT_RETENTION_DAYS);
-      const deleted = await p.pushAttempt.deleteMany({
+      const deletedAttempts = await p.pushAttempt.deleteMany({
         where: { createdAt: { lt: cutoff } },
       });
-      evt.addMeta("push_attempt_cleanup_deleted", deleted.count);
-      return jobDone({ deleted: deleted.count });
+      const deletedEvents = await p.notificationEvent.deleteMany({
+        where: { createdAt: { lt: cutoff } },
+      });
+      const deleted = deletedAttempts.count + deletedEvents.count;
+      evt.addMeta("push_attempt_cleanup_deleted", deletedAttempts.count);
+      evt.addMeta("notification_event_cleanup_deleted", deletedEvents.count);
+      return jobDone({ deleted });
     } catch (err) {
       evt.addWarning(`push-attempt-cleanup failed: ${err}`);
       return jobFailed("push-attempt cleanup failed", err);

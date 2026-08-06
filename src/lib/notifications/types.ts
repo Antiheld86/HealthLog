@@ -126,6 +126,20 @@ export const EVENT_TYPES = [
 export type EventType = (typeof EVENT_TYPES)[number];
 
 /**
+ * The closed set of managed-record events that may reach Guardians. A
+ * `SYSTEM_ALERT` needs the explicit safety-floor discriminator because
+ * illness red flags use the same broad delivery event but do not fan out.
+ */
+export const MANAGED_GUARDIAN_FANOUT_EVENTS = [
+  "MEDICATION_REMINDER",
+  "MEASUREMENT_REMINDER",
+  "MEDICATION_LOW_STOCK",
+  "SAFETY_FLOOR_ALERT",
+] as const;
+export type ManagedGuardianFanoutEvent =
+  (typeof MANAGED_GUARDIAN_FANOUT_EVENTS)[number];
+
+/**
  * Per-event default policy when no `NotificationPreference` row
  * exists. The dispatcher reads this to decide whether to fire on a
  * channel that has never been explicitly toggled for the event.
@@ -265,6 +279,12 @@ export interface NotificationPayload {
   message: string;
   /** Channel-specific extras (e.g. medicationId for Telegram inline buttons) */
   metadata?: Record<string, unknown>;
+  /**
+   * Internal admission marker for managed-record delivery. It is deliberately
+   * absent from public request contracts: only the four allowlisted producer
+   * paths may set it, and safety-floor is the only SYSTEM_ALERT admission.
+   */
+  managedFanoutEvent?: ManagedGuardianFanoutEvent;
   /**
    * Discreet mode (cycle privacy). When true, the lock-screen-visible
    * routing metadata the senders would otherwise derive from `eventType`

@@ -114,14 +114,6 @@ export async function notifySafetyFloor(input: {
   if (!decision) return;
 
   try {
-    // Plan 11 adds approved guardian fanout for this safety signal. Until
-    // then, managed profiles must not produce a direct delivery or anchor.
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { managedProfileAt: true },
-    });
-    if (user?.managedProfileAt) return;
-
     const reason = `${LEDGER_REASON_PREFIX}${decision.reason}`;
     const since = new Date(Date.now() - DEDUPE_WINDOW_MS);
     const claimed = await claimNotificationEvent(prisma, {
@@ -139,6 +131,7 @@ export async function notifySafetyFloor(input: {
       messageKey,
       params: paramsFor(decision, input.glucoseUnit ?? "mg/dL"),
       eventType: "SYSTEM_ALERT",
+      managedFanoutEvent: "SAFETY_FLOOR_ALERT",
       urgent: true,
     });
 

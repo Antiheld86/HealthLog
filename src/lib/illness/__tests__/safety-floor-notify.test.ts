@@ -124,15 +124,24 @@ describe("notifySafetyFloor", () => {
     );
   });
 
-  it("does not dispatch or write an anchor for a managed profile", async () => {
+  it("claims then admits an anchored Guardian fan-out for a managed profile", async () => {
     userFindUniqueMock.mockResolvedValueOnce({
       managedProfileAt: new Date("2026-08-06T00:00:00.000Z"),
     });
 
     await notifySafetyFloor({ userId: "managed-record", decision: bpHigh });
 
-    expect(claimMock).not.toHaveBeenCalled();
-    expect(dispatchMock).not.toHaveBeenCalled();
+    expect(claimMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ recordUserId: "managed-record" }),
+    );
+    expect(dispatchMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "managed-record",
+        eventType: "SYSTEM_ALERT",
+        managedFanoutEvent: "SAFETY_FLOOR_ALERT",
+      }),
+    );
   });
 
   it("never throws when dispatch fails", async () => {

@@ -29,7 +29,10 @@ import {
   hasClientManagedApnsGate,
 } from "@/lib/notifications/client-managed-apns";
 import { recordPushAttempt } from "@/lib/notifications/senders/push-attempt-record";
-import { resolveNotificationDeliveryIdentity } from "@/lib/notifications/delivery-identity";
+import {
+  resolveManagedGuardianRecipientIds,
+  resolveNotificationDeliveryIdentity,
+} from "@/lib/notifications/delivery-identity";
 
 /**
  * Dispatch a notification to all enabled channels for a user.
@@ -64,6 +67,30 @@ export async function dispatchNotification(
   let channelsSucceeded = 0;
 
   try {
+    const guardianRecipientIds =
+      await resolveManagedGuardianRecipientIds(payload);
+    if (guardianRecipientIds !== null) {
+      const outcomes = await Promise.all(
+        guardianRecipientIds.map((recipientUserId) =>
+          dispatchNotification({
+            ...payload,
+            recordUserId: payload.userId,
+            recipientUserId,
+          }),
+        ),
+      );
+      return outcomes.reduce<DispatchOutcome>(
+        (aggregate, outcome) => ({
+          dispatched: aggregate.dispatched || outcome.dispatched,
+          channelsAttempted:
+            aggregate.channelsAttempted + outcome.channelsAttempted,
+          channelsSucceeded:
+            aggregate.channelsSucceeded + outcome.channelsSucceeded,
+        }),
+        { dispatched: false, channelsAttempted: 0, channelsSucceeded: 0 },
+      );
+    }
+
     const delivery = await resolveNotificationDeliveryIdentity(payload);
     if (!delivery) {
       getEvent()?.addWarning("Notification delivery identity was invalid");
