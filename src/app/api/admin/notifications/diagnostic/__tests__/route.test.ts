@@ -97,6 +97,8 @@ interface DiagnosticEnvelope {
       configPresent: boolean;
     }>;
     recentPushAttempts: Array<{
+      recordUserId: string;
+      recipientUserId: string;
       eventType: string;
       channel: string;
       result: string;
@@ -341,6 +343,8 @@ describe("GET /api/admin/notifications/diagnostic — recentPushAttempts", () =>
     // mapping step normalises to an ISO string under `at`.
     vi.mocked(prisma.pushAttempt.findMany).mockResolvedValue([
       {
+        recordUserId: "managed-record",
+        recipientUserId: ADMIN_USER_ID,
         eventType: "MEDICATION_REMINDER",
         channel: "APNS",
         result: "ok",
@@ -348,6 +352,8 @@ describe("GET /api/admin/notifications/diagnostic — recentPushAttempts", () =>
         createdAt: new Date("2026-05-22T09:00:00.000Z"),
       },
       {
+        recordUserId: ADMIN_USER_ID,
+        recipientUserId: ADMIN_USER_ID,
         eventType: "MOOD_REMINDER",
         channel: "TELEGRAM",
         result: "error",
@@ -362,6 +368,8 @@ describe("GET /api/admin/notifications/diagnostic — recentPushAttempts", () =>
     expect(res.status).toBe(200);
     expect(body.data.recentPushAttempts).toEqual([
       {
+        recordUserId: "managed-record",
+        recipientUserId: ADMIN_USER_ID,
         eventType: "MEDICATION_REMINDER",
         channel: "APNS",
         result: "ok",
@@ -369,6 +377,8 @@ describe("GET /api/admin/notifications/diagnostic — recentPushAttempts", () =>
         at: "2026-05-22T09:00:00.000Z",
       },
       {
+        recordUserId: ADMIN_USER_ID,
+        recipientUserId: ADMIN_USER_ID,
         eventType: "MOOD_REMINDER",
         channel: "TELEGRAM",
         result: "error",
@@ -386,11 +396,11 @@ describe("GET /api/admin/notifications/diagnostic — recentPushAttempts", () =>
 
     expect(vi.mocked(prisma.pushAttempt.findMany)).toHaveBeenCalledTimes(1);
     const args = vi.mocked(prisma.pushAttempt.findMany).mock.calls[0]?.[0] as {
-      where: { userId: string };
+      where: { recipientUserId: string };
       orderBy: { createdAt: "desc" };
       take: number;
     };
-    expect(args.where.userId).toBe(ADMIN_USER_ID);
+    expect(args.where.recipientUserId).toBe(ADMIN_USER_ID);
     expect(args.orderBy).toEqual({ createdAt: "desc" });
     expect(args.take).toBe(20);
   });
