@@ -27,6 +27,10 @@ import {
   setRecordScope,
   setRefusedRecordScope,
 } from "@/lib/query-keys/record-scope";
+import {
+  settleRecordSessionTransition,
+  settleRefusedRecordSessionTransition,
+} from "@/lib/query-keys/record-session-transition";
 import type { AccountAccess } from "@/lib/sharing/account-access-view";
 import { parseAccountAccess } from "@/lib/sharing/account-access-schema";
 
@@ -319,6 +323,15 @@ export async function fetchMe(): Promise<AuthUser> {
     setRefusedRecordScope();
   } else {
     setRecordScope(accountAccess.active?.accountId ?? null);
+  }
+  // A cross-tab switch holds the shell until this server-resolved payload
+  // confirms the record the transition committed. The malformed branch has
+  // already installed its refusal sentinel, so it may release only into the
+  // refusal door rather than being mistaken for the caller's own record.
+  if (accountAccessStatus === "invalid") {
+    settleRefusedRecordSessionTransition();
+  } else {
+    settleRecordSessionTransition(accountAccess.active?.accountId ?? null);
   }
   return {
     ...(data as AuthUser),

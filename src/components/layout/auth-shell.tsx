@@ -11,6 +11,7 @@ import { LayoutCoachMount } from "@/components/insights/layout-coach-mount";
 import { TourLauncher } from "@/components/onboarding/tour-launcher";
 import { clearCachesForSessionEnd, useAuth } from "@/hooks/use-auth";
 import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
+import { useRecordSessionTransition } from "@/hooks/use-record-session-transition";
 import { useTranslations } from "@/lib/i18n/context";
 import { CoachLaunchProvider } from "@/lib/insights/coach-launch-context";
 import { isDestinationInSharedRecord } from "./nav-model";
@@ -58,6 +59,7 @@ export function AuthShell({
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const recordSessionTransition = useRecordSessionTransition();
 
   const isPublicPage = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
   // v1.4.26 — `/privacy` is a long-form legal page that brings its own
@@ -79,8 +81,13 @@ export function AuthShell({
   // decides what to mount and the surfaces beneath it decide what to offer,
   // and the two disagreeing is the whole class of defect this hook exists to
   // close.
-  const { inSharedRecord, recordKind, sections, accessRefused } =
-    useRecordCapabilities();
+  const {
+    inSharedRecord,
+    recordKind,
+    sections,
+    accessRefused,
+    recordSessionPending,
+  } = useRecordCapabilities();
   // A managed profile has a deliberately small Settings surface of its own.
   // Let that route family reach its record-aware gate; adult shared records
   // stay in the generic refusal branch even at MANAGE.
@@ -231,7 +238,11 @@ export function AuthShell({
   // Admin. The payload resolves the active record as well as identity, so a
   // child mounted before it could issue an actor-scoped read before the shell
   // knows that a switched record must be refused or scoped differently.
-  if (isLoading) {
+  if (
+    isLoading ||
+    recordSessionTransition.phase !== "ready" ||
+    recordSessionPending
+  ) {
     return <RecordScopeHydrationGate label={t("nav.loadingScreen")} />;
   }
 

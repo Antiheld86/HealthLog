@@ -55,6 +55,9 @@ const mockAuthLoadingRef = { value: false };
 const mockAccountAccessStatusRef = {
   value: "valid" as "absent" | "valid" | "invalid",
 };
+const mockRecordSessionPhaseRef = {
+  value: "ready" as "ready" | "blocking" | "resolving",
+};
 
 vi.mock("@/hooks/use-auth", () => ({
   useAuth: () => ({
@@ -74,6 +77,14 @@ vi.mock("@/hooks/use-auth", () => ({
     refetch: vi.fn(),
   }),
   clearCachesForSessionEnd: vi.fn(),
+}));
+
+vi.mock("@/hooks/use-record-session-transition", () => ({
+  useRecordSessionTransition: () => ({
+    id: "cross-tab-switch",
+    phase: mockRecordSessionPhaseRef.value,
+    expectedScope: "record-a",
+  }),
 }));
 
 const mockPathRef = { value: "/" };
@@ -189,6 +200,21 @@ describe("<AuthShell> — the owner-only doors", () => {
       expect(html).not.toContain("sentinel-coach-fab");
     } finally {
       mockAuthLoadingRef.value = false;
+    }
+  });
+
+  it("holds protected children and owner-only doors while a peer tab changes the session", () => {
+    mockRecordSessionPhaseRef.value = "blocking";
+    try {
+      const html = render(OWN_RECORD, "/labs");
+
+      expect(html).toContain('data-slot="record-scope-hydration-gate"');
+      expect(html).not.toContain("sentinel-page");
+      for (const slot of DOORS) {
+        expect(html).not.toContain(slot);
+      }
+    } finally {
+      mockRecordSessionPhaseRef.value = "ready";
     }
   });
 

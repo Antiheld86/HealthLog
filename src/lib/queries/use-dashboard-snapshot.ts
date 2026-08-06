@@ -78,6 +78,11 @@ export function _resetDashboardSnapshotPreloadForTests(): void {
   preloadedSnapshot = null;
 }
 
+/** Drop a handoff when a tab begins or receives a record-session switch. */
+export function discardDashboardSnapshotPreload(): void {
+  preloadedSnapshot = null;
+}
+
 /**
  * Kick the snapshot fetch off ahead of the dashboard page chunk.
  *

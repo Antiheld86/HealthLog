@@ -23,8 +23,16 @@ import { VersionPoller } from "@/components/version-poller";
 import { ServiceWorkerRegistrar } from "@/components/service-worker-registrar";
 import { SharedRecordGrantLossBridge } from "@/components/layout/shared-record-grant-loss-bridge";
 import { useAuth, type AccountAccessStatus } from "@/hooks/use-auth";
+import { useRecordSessionTransition } from "@/hooks/use-record-session-transition";
 import { isDashboardSnapshotEnabled } from "@/lib/dashboard/snapshot-flag";
-import { prefetchDashboardSnapshot } from "@/lib/queries/use-dashboard-snapshot";
+import {
+  discardDashboardSnapshotPreload,
+  prefetchDashboardSnapshot,
+} from "@/lib/queries/use-dashboard-snapshot";
+import {
+  getRecordSessionTransition,
+  subscribeToRecordSessionTransition,
+} from "@/lib/query-keys/record-session-transition";
 import { prefetchMedicationsList } from "@/lib/queries/prefetch-medications";
 import {
   getRecordScope,
@@ -208,16 +216,19 @@ function DashboardSnapshotPreloader() {
   const queryClient = useQueryClient();
   const pathname = usePathname();
   const { user, isLoading } = useAuth();
+  const transition = useRecordSessionTransition();
   const recordScope = useSyncExternalStore(
     subscribeToClientRecordScope,
     getClientRecordScope,
     getServerRecordScope,
   );
-  const ready = isRecordPreloadReady({
-    isLoading,
-    accountAccessStatus: user?.accountAccessStatus,
-    activeAccountId: user?.accountAccess?.active?.accountId ?? null,
-  });
+  const ready =
+    transition.phase === "ready" &&
+    isRecordPreloadReady({
+      isLoading,
+      accountAccessStatus: user?.accountAccessStatus,
+      activeAccountId: user?.accountAccess?.active?.accountId ?? null,
+    });
 
   useEffect(() => {
     if (!ready) return;
@@ -237,7 +248,7 @@ function DashboardSnapshotPreloader() {
     // A transition to an unresolved, refused, or different record scope must
     // abort a preloader before its response can be adopted by the next route.
     return () => controller.abort();
-  }, [pathname, queryClient, ready, recordScope]);
+  }, [pathname, queryClient, ready, recordScope, transition.phase]);
   return null;
 }
 
@@ -245,9 +256,13 @@ function DashboardSnapshotPreloader() {
 
 function QueryVisibilityRefreshBridge() {
   const queryClient = useQueryClient();
+  const transition = useRecordSessionTransition();
   useEffect(
-    () => subscribeToMeaningfulVisibilityRefresh(queryClient),
-    [queryClient],
+    () =>
+      transition.phase === "ready"
+        ? subscribeToMeaningfulVisibilityRefresh(queryClient)
+        : undefined,
+    [queryClient, transition.phase],
   );
   return null;
 }
@@ -261,10 +276,16 @@ function QueryVisibilityRefreshBridge() {
 // empty skeletons. Build-version + age gated; cleared on logout.
 function QueryPersistenceBridge() {
   const queryClient = useQueryClient();
+  const transition = useRecordSessionTransition();
   useEffect(() => {
+    if (transition.phase !== "ready") return;
     let stop: (() => void) | undefined;
     let cancelled = false;
-    void restorePersistedQueryCache(queryClient, SHELL_VERSION).finally(() => {
+    void restorePersistedQueryCache(
+      queryClient,
+      SHELL_VERSION,
+      () => !cancelled,
+    ).finally(() => {
       if (!cancelled) {
         stop = startPersistingQueryCache(queryClient, SHELL_VERSION);
       }
@@ -273,7 +294,42 @@ function QueryPersistenceBridge() {
       cancelled = true;
       stop?.();
     };
+  }, [queryClient, transition.phase]);
+  return null;
+}
+
+/**
+ * Clear tab-local reads immediately whenever the browser-wide transition
+ * store enters its hold. The AuthShell consumes the same store synchronously,
+ * so protected children unmount while this bridge cancels their observers.
+ */
+function RecordSessionTransitionBridge() {
+  const queryClient = useQueryClient();
+  const { refetch } = useAuth();
+  const transition = useRecordSessionTransition();
+
+  useEffect(() => {
+    const clearForTransition = () => {
+      if (getRecordSessionTransition().phase === "ready") return;
+      discardDashboardSnapshotPreload();
+      void queryClient.cancelQueries();
+      queryClient.clear();
+    };
+    // A tab opened while another tab is already switching needs the same
+    // cache purge even though it has no future broadcast to receive.
+    clearForTransition();
+    return subscribeToRecordSessionTransition(clearForTransition);
   }, [queryClient]);
+
+  useEffect(() => {
+    if (
+      transition.phase === "resolving" ||
+      (transition.phase === "ready" && transition.id !== null)
+    ) {
+      void refetch();
+    }
+  }, [refetch, transition.id, transition.phase]);
+
   return null;
 }
 
@@ -329,6 +385,7 @@ export function Providers({
       <ThemeProvider>
         <I18nProvider initialLocale={initialLocale}>
           <QueryPersistenceBridge />
+          <RecordSessionTransitionBridge />
           <QueryVisibilityRefreshBridge />
           <DashboardSnapshotPreloader />
           <OfflineMutationToaster />

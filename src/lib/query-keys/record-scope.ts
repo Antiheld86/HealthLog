@@ -51,7 +51,7 @@
  */
 import type { QueryKey } from "@tanstack/react-query";
 
-const STORAGE_KEY = "healthlog-record-scope";
+export const RECORD_SCOPE_STORAGE_KEY = "healthlog-record-scope";
 const REFUSED_RECORD_SCOPE = "__healthlog_refused_record__";
 
 /**
@@ -68,7 +68,7 @@ function notifyScopeListeners(): void {
 
 function readMirror(): string | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(RECORD_SCOPE_STORAGE_KEY);
     return raw === null || raw.length === 0 ? null : raw;
   } catch {
     // Private mode, disabled storage, or SSR. "Own record" is the safe
@@ -110,9 +110,9 @@ export function setRecordScope(accountId: string | null): void {
   if (typeof window === "undefined") return;
   try {
     if (accountId === null) {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(RECORD_SCOPE_STORAGE_KEY);
     } else {
-      localStorage.setItem(STORAGE_KEY, accountId);
+      localStorage.setItem(RECORD_SCOPE_STORAGE_KEY, accountId);
     }
   } catch {
     /* storage unavailable — the in-process copy still partitions this tab */
@@ -132,7 +132,7 @@ export function subscribeToRecordScope(listener: () => void): () => void {
     return () => scopeListeners.delete(listener);
   }
   const onStorage = (event: StorageEvent) => {
-    if (event.key !== STORAGE_KEY) return;
+    if (event.key !== RECORD_SCOPE_STORAGE_KEY) return;
     scope =
       event.newValue === null || event.newValue.length === 0
         ? null

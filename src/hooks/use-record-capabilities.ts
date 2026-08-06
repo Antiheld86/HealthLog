@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/hooks/use-auth";
+import { useRecordSessionTransition } from "@/hooks/use-record-session-transition";
 import {
   accountLabel,
   type AccountAccessEntry,
@@ -71,6 +72,8 @@ import {
  * search a button in gets a sentence.
  */
 export interface RecordCapabilities {
+  /** A tab is awaiting a fresh `/me` after another tab changed the session. */
+  recordSessionPending?: boolean;
   /** A present account-access block was malformed and must not mount a record. */
   accessRefused?: boolean;
   /** Is this browser acting on somebody else's record right now. */
@@ -114,10 +117,12 @@ export interface RecordCapabilities {
 export function resolveRecordCapabilities(
   active: AccountAccessEntry | null | undefined,
   accessRefused = false,
+  recordSessionPending = false,
 ): RecordCapabilities {
-  if (accessRefused) {
+  if (accessRefused || recordSessionPending) {
     return {
-      accessRefused: true,
+      accessRefused: accessRefused || undefined,
+      recordSessionPending: recordSessionPending || undefined,
       inSharedRecord: true,
       canWrite: false,
       canAdd: false,
@@ -171,9 +176,11 @@ export function resolveRecordCapabilities(
  */
 export function useRecordCapabilities(): RecordCapabilities {
   const { user } = useAuth();
+  const transition = useRecordSessionTransition();
   return resolveRecordCapabilities(
     user?.accountAccess?.active,
     user?.accountAccessStatus === "invalid",
+    transition.phase !== "ready",
   );
 }
 

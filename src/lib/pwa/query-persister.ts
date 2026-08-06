@@ -172,6 +172,7 @@ function currentUserId(queryClient: QueryClient): string | null {
 export async function restorePersistedQueryCache(
   queryClient: QueryClient,
   buildVersion: string,
+  canHydrate: () => boolean = () => true,
 ): Promise<void> {
   if (typeof indexedDB === "undefined") return;
   // v1.36.0 — a browser inside somebody else's record restores nothing. The
@@ -219,7 +220,7 @@ export async function restorePersistedQueryCache(
         (q) => cache.get(q.queryHash) === undefined,
       ),
     };
-    if (filtered.queries.length === 0) return;
+    if (filtered.queries.length === 0 || !canHydrate()) return;
 
     hydrate(queryClient, filtered);
     // Restored queries carry their original `dataUpdatedAt`, so with the

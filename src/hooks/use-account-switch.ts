@@ -3,20 +3,22 @@
 /**
  * v1.36.0 — entering and leaving somebody else's record, from the browser.
  *
- * The switch is three acts in a fixed order, and the order is the whole
- * safety argument:
+ * The switch is four acts in a fixed browser-coordination order:
  *
- *   1. **Ask the server.** `POST /api/account/switch` validates the grant and
- *      stamps the session. Nothing local changes until it answers, so a switch
- *      the server refuses leaves the browser exactly where it was.
- *   2. **Empty every cache that survives a reload.** The IndexedDB query
+ *   1. **Hold every tab.** Publish a cross-tab `blocking` transition and clear
+ *      local reads before the POST can change the shared server session.
+ *   2. **Ask the server.** `POST /api/account/switch` validates the grant and
+ *      stamps the session. Any client-visible failure stays held until a
+ *      fresh `/api/auth/me` resolves the record the server actually kept; it
+ *      never restores stale caches.
+ *   3. **Empty every cache that survives a reload.** The IndexedDB query
  *      snapshot and the service worker's `healthlog-data-*` cache both answer
  *      reads from disk. Left in place, the first paint on the other side can
  *      be the PREVIOUS record's numbers under a banner naming the new one —
  *      and nothing in the page's own code would be wrong, because the answer
  *      would not have come from the page. Awaited, not fired: a wipe racing
  *      the navigation is a wipe that sometimes does not happen.
- *   3. **Reload the document.** Not `router.refresh()`, not a query
+ *   4. **Reload the document.** Not `router.refresh()`, not a query
  *      invalidation. A hard navigation is what discards the in-memory cache,
  *      every React state tree holding a rendered value, and every in-flight
  *      request that was issued against the old record. The reload IS the cache
@@ -38,7 +40,11 @@ import { ApiError, apiPost } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
 import { clearOfflineCachesForRecordSwitch } from "@/lib/pwa/query-persister";
 import { queryKeys } from "@/lib/query-keys";
-import { setRecordScope } from "@/lib/query-keys/record-scope";
+import {
+  beginRecordSessionTransition,
+  commitRecordSessionTransition,
+  resolveUnknownRecordSessionTransition,
+} from "@/lib/query-keys/record-session-transition";
 
 /**
  * The two stable sharing error codes, as the envelope publishes them
@@ -96,17 +102,13 @@ async function postSwitch(accountId: string | null): Promise<SwitchResponse> {
 }
 
 /**
- * Complete the switch: stamp the cache scope, empty the disk layers, reload.
+ * Complete a server-confirmed switch: empty the disk layers, reload.
  *
  * Extracted from the mutation so the grant-loss reset can reuse the exact same
  * sequence. Two copies of "wipe, then reload" is one copy too many for a step
  * whose order is the safety property.
  */
-async function landOnRecord(
-  accountId: string | null,
-  destination = "/",
-): Promise<never> {
-  setRecordScope(accountId);
+async function landOnRecord(destination = "/"): Promise<never> {
   await clearOfflineCachesForRecordSwitch();
   window.location.assign(destination);
   // The document is being replaced. Nothing after this runs, and the promise
@@ -136,12 +138,26 @@ export function useAccountSwitch() {
       accountId: string | null;
       destination: string;
     }) => {
-      await postSwitch(accountId);
+      // Publish the browser-wide hold before the server sees the session
+      // change. Every recipient blocks its shell and clears local reads before
+      // it reconciles the committed scope through a fresh `/me`.
+      const transitionId = beginRecordSessionTransition(accountId);
       // The in-memory cache holds the record we are leaving. Clearing it here
       // as well as reloading costs nothing and closes the window in which a
       // failed navigation would leave the old entries reachable.
+      void queryClient.cancelQueries();
       queryClient.clear();
-      return landOnRecord(accountId, destination);
+      try {
+        await postSwitch(accountId);
+      } catch (error) {
+        // A client error cannot prove that the server left the session alone:
+        // its response may have been lost after the server committed. Keep all
+        // tabs held until a fresh `/me` resolves the record the server kept.
+        resolveUnknownRecordSessionTransition(transitionId);
+        throw error;
+      }
+      commitRecordSessionTransition(transitionId, accountId);
+      return landOnRecord(destination);
     },
     onError: (error: unknown) => {
       toast.error(
@@ -168,14 +184,15 @@ export function useAccountSwitch() {
  *
  * The switcher-reset the contract asks for: on `sharing.access.denied` the
  * session is still stamped with an account it may no longer act on, and every
- * delegable read from here on is a 403. Clearing the stamp puts the browser
- * back in its own account rather than leaving somebody staring at a wall of
- * refusals under a banner that says they are somewhere they are not.
+ * delegable read from here on is a 403. When the server confirms the reset,
+ * its own-record scope replaces the stamp rather than leaving somebody
+ * staring at refusals under a banner that says they are somewhere they are
+ * not.
  *
  * `POST /api/account/switch` with `null` is an actor surface and always
  * succeeds — it is the way out, by design. If even that fails (offline, server
- * down) the reload still happens: the stamp survives, but so does the honest
- * refusal, and the alternative is a page that neither recovers nor says why.
+ * down), the browser keeps the transition unresolved and reloads. A fresh
+ * `/api/auth/me`, not a local scope guess, decides what may render next.
  */
 /**
  * Watch the cache for the moment the server stops honouring the switch.
@@ -204,12 +221,20 @@ export function subscribeToGrantLoss(
 }
 
 export function useLeaveSharedRecordOnGrantLoss() {
+  const queryClient = useQueryClient();
   return useCallback(async () => {
+    const transitionId = beginRecordSessionTransition(null);
+    void queryClient.cancelQueries();
+    queryClient.clear();
     try {
       await postSwitch(null);
+      commitRecordSessionTransition(transitionId, null);
     } catch {
-      /* the reload below is the part that matters */
+      // The grant-loss path deliberately still reloads, but it cannot claim
+      // an own-record scope when the POST outcome is unknown. The next `/me`
+      // is the only authority that may release this resolving hold.
+      resolveUnknownRecordSessionTransition(transitionId);
     }
-    await landOnRecord(null);
-  }, []);
+    await landOnRecord();
+  }, [queryClient]);
 }
