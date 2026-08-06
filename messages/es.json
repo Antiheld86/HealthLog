@@ -9642,6 +9642,29 @@
       "kindManaged": "Perfil administrado",
       "open": "Abrir el historial de {name}"
     },
+    "managed": {
+      "title": "Perfiles de los que te ocupas",
+      "description": "Historiales de salud sin inicio de sesión propio.",
+      "explainer": "Un perfil administrado es un historial de salud para alguien que no inicia sesión — una criatura, o una persona a la que cuidas. No tiene inicio de sesión ni dirección de correo, y tú pasas a ser su primera persona responsable. Más adelante puedes añadir otras, y cualquiera de vosotras puede entrar en el historial para mantenerlo al día.",
+      "nameLabel": "Nombre",
+      "namePlaceholder": "El nombre con el que reconocerás este historial",
+      "nameHint": "Hasta 80 caracteres. Se muestra allá donde aparezca este historial.",
+      "nameRequired": "Dale un nombre al historial.",
+      "nameTooLong": "Ese nombre tiene más de 80 caracteres.",
+      "dobLabel": "Fecha de nacimiento (opcional)",
+      "dobHint": "Déjala vacía si prefieres no registrarla. No se deduce nada a partir de un año.",
+      "localeLabel": "Idioma de este historial",
+      "localeHint": "El idioma de los textos que se escriben en este historial. Tus propias pantallas siguen en tu idioma.",
+      "timezoneHint": "La zona en la que se miden los días de este historial.",
+      "timezoneInvalid": "Este navegador no conoce esa zona horaria.",
+      "create": "Crear perfil",
+      "creating": "Creando…",
+      "created": "{name} ya está listo. Puedes entrar en ese historial desde el menú de la cuenta.",
+      "errorStepUp": "Confirma tu segundo factor y vuelve a intentarlo.",
+      "errorOffline": "Esto no llegó al servidor. No ha cambiado nada — revisa tu conexión y vuelve a intentarlo.",
+      "errorInvalid": "El servidor rechazó esos datos. Revisa el nombre, la fecha y la zona horaria.",
+      "errorFailed": "No se pudo crear el perfil."
+    },
     "toast": {
       "savedTo": "Guardado en el historial de {name}."
     },

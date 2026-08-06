@@ -9642,6 +9642,29 @@
       "kindManaged": "Profilo gestito",
       "open": "Apri la cartella di {name}"
     },
+    "managed": {
+      "title": "Profili di cui ti occupi",
+      "description": "Cartelle sanitarie senza credenziali proprie.",
+      "explainer": "Un profilo gestito è una cartella sanitaria per qualcuno che non accede da sé — un bambino, o una persona di cui ti prendi cura. Non ha credenziali né indirizzo e-mail, e tu ne diventi la prima persona responsabile. Più avanti puoi aggiungerne altre, e ognuna può entrare nella cartella per tenerla aggiornata.",
+      "nameLabel": "Nome",
+      "namePlaceholder": "Il nome con cui riconoscerai questa cartella",
+      "nameHint": "Fino a 80 caratteri. Compare ovunque appaia questa cartella.",
+      "nameRequired": "Dai un nome alla cartella.",
+      "nameTooLong": "Questo nome supera gli 80 caratteri.",
+      "dobLabel": "Data di nascita (facoltativa)",
+      "dobHint": "Lascia il campo vuoto se preferisci non registrarla. Da un anno di nascita non si deduce nulla.",
+      "localeLabel": "Lingua di questa cartella",
+      "localeHint": "La lingua dei testi scritti in questa cartella. Le tue schermate restano nella tua lingua.",
+      "timezoneHint": "Il fuso in cui si contano le giornate di questa cartella.",
+      "timezoneInvalid": "Questo browser non conosce quel fuso orario.",
+      "create": "Crea profilo",
+      "creating": "Creazione in corso…",
+      "created": "{name} è pronto. Puoi entrare in quella cartella dal menu dell'account.",
+      "errorStepUp": "Conferma il tuo secondo fattore e riprova.",
+      "errorOffline": "Non è arrivato al server. Non è cambiato nulla — controlla la connessione e riprova.",
+      "errorInvalid": "Il server ha rifiutato questi dati. Controlla nome, data e fuso orario.",
+      "errorFailed": "Non è stato possibile creare il profilo."
+    },
     "toast": {
       "savedTo": "Salvato nella cartella di {name}."
     },

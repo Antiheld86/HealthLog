@@ -9642,6 +9642,29 @@
       "kindManaged": "Zarządzany profil",
       "open": "Otwórz kartę użytkownika {name}"
     },
+    "managed": {
+      "title": "Profile, którymi się opiekujesz",
+      "description": "Karty zdrowia bez własnego logowania.",
+      "explainer": "Zarządzany profil to karta zdrowia osoby, która sama się nie loguje — dziecka albo kogoś, kim się opiekujesz. Nie ma logowania ani adresu e-mail, a Ty stajesz się pierwszą osobą opiekującą się profilem. Później możesz dodać kolejne, a każda z was może wejść do karty i ją uzupełniać.",
+      "nameLabel": "Nazwa",
+      "namePlaceholder": "Nazwa, po której rozpoznasz tę kartę",
+      "nameHint": "Do 80 znaków. Wyświetla się wszędzie tam, gdzie pojawia się ta karta.",
+      "nameRequired": "Nadaj karcie nazwę.",
+      "nameTooLong": "Ta nazwa ma więcej niż 80 znaków.",
+      "dobLabel": "Data urodzenia (opcjonalnie)",
+      "dobHint": "Zostaw puste, jeśli wolisz jej nie zapisywać. Z samego rocznika nic nie jest wyliczane.",
+      "localeLabel": "Język tej karty",
+      "localeHint": "Język tekstów zapisywanych w tej karcie. Twoje własne widoki pozostają w Twoim języku.",
+      "timezoneHint": "Strefa, w której liczone są dni tej karty.",
+      "timezoneInvalid": "Ta przeglądarka nie zna takiej strefy czasowej.",
+      "create": "Utwórz profil",
+      "creating": "Tworzenie…",
+      "created": "{name} jest gotowy. Do tej karty przejdziesz z menu konta.",
+      "errorStepUp": "Potwierdź drugi składnik logowania i spróbuj ponownie.",
+      "errorOffline": "To nie dotarło do serwera. Nic się nie zmieniło — sprawdź połączenie i spróbuj ponownie.",
+      "errorInvalid": "Serwer odrzucił te dane. Sprawdź nazwę, datę i strefę czasową.",
+      "errorFailed": "Nie udało się utworzyć profilu."
+    },
     "toast": {
       "savedTo": "Zapisano w karcie użytkownika {name}."
     },

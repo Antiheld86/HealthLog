@@ -9642,6 +9642,29 @@
       "kindManaged": "Managed profile",
       "open": "Open {name}'s record"
     },
+    "managed": {
+      "title": "Records you look after",
+      "description": "Health records with no login of their own.",
+      "explainer": "A managed profile is a health record for somebody who does not sign in themselves — a child, or a person you care for. It has no login and no e-mail address, and you become its first guardian. You can add more guardians later, and any of you can switch into the record to keep it up to date.",
+      "nameLabel": "Name",
+      "namePlaceholder": "The name you will recognise this record by",
+      "nameHint": "Up to 80 characters. Shown wherever this record appears.",
+      "nameRequired": "Give the record a name.",
+      "nameTooLong": "That name is longer than 80 characters.",
+      "dobLabel": "Date of birth (optional)",
+      "dobHint": "Leave it empty if you would rather not record one. Nothing is guessed from a year.",
+      "localeLabel": "Language of this record",
+      "localeHint": "The language used for text written into this record. Your own screens stay in your language.",
+      "timezoneHint": "The zone this record's days are measured in.",
+      "timezoneInvalid": "This browser does not know that timezone.",
+      "create": "Create profile",
+      "creating": "Creating…",
+      "created": "{name} is set up. You can switch into that record from the account menu.",
+      "errorStepUp": "Confirm your second factor, then try again.",
+      "errorOffline": "That did not reach the server. Nothing has changed — check your connection and try again.",
+      "errorInvalid": "The server refused those details. Check the name, the date and the timezone.",
+      "errorFailed": "The profile could not be created."
+    },
     "toast": {
       "savedTo": "Saved to {name}'s record."
     },

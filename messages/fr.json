@@ -9642,6 +9642,29 @@
       "kindManaged": "Profil géré",
       "open": "Ouvrir le dossier de {name}"
     },
+    "managed": {
+      "title": "Profils dont vous vous occupez",
+      "description": "Dossiers de santé sans identifiants propres.",
+      "explainer": "Un profil géré est un dossier de santé pour quelqu'un qui ne se connecte pas lui-même — un enfant, ou une personne dont vous vous occupez. Il n'a ni identifiants ni adresse e-mail, et vous en devenez la première personne responsable. Vous pourrez en ajouter d'autres plus tard, et chacune pourra entrer dans le dossier pour le tenir à jour.",
+      "nameLabel": "Nom",
+      "namePlaceholder": "Le nom sous lequel vous reconnaîtrez ce dossier",
+      "nameHint": "Jusqu'à 80 caractères. Affiché partout où ce dossier apparaît.",
+      "nameRequired": "Donnez un nom au dossier.",
+      "nameTooLong": "Ce nom dépasse 80 caractères.",
+      "dobLabel": "Date de naissance (facultatif)",
+      "dobHint": "Laissez le champ vide si vous préférez ne pas en enregistrer. Rien n'est déduit d'une année.",
+      "localeLabel": "Langue de ce dossier",
+      "localeHint": "La langue des textes écrits dans ce dossier. Vos propres écrans restent dans votre langue.",
+      "timezoneHint": "Le fuseau dans lequel les journées de ce dossier sont comptées.",
+      "timezoneInvalid": "Ce navigateur ne connaît pas ce fuseau horaire.",
+      "create": "Créer le profil",
+      "creating": "Création…",
+      "created": "{name} est en place. Vous pouvez entrer dans ce dossier depuis le menu du compte.",
+      "errorStepUp": "Confirmez votre deuxième facteur, puis réessayez.",
+      "errorOffline": "Cela n'a pas atteint le serveur. Rien n'a changé — vérifiez votre connexion et réessayez.",
+      "errorInvalid": "Le serveur a refusé ces informations. Vérifiez le nom, la date et le fuseau horaire.",
+      "errorFailed": "Le profil n'a pas pu être créé."
+    },
     "toast": {
       "savedTo": "Enregistré dans le dossier de {name}."
     },
