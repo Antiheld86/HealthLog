@@ -2,9 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getPrismaClient, truncateAllTables } from "./setup";
 import { resolveNotificationDeliveryIdentity } from "@/lib/notifications/delivery-identity";
-import {
-  claimNotificationEvent,
-} from "@/lib/notifications/reminder-dedup";
+import { claimNotificationEvent } from "@/lib/notifications/reminder-dedup";
 import { recordPushAttempt } from "@/lib/notifications/senders/push-attempt-record";
 
 let sequence = 0;
