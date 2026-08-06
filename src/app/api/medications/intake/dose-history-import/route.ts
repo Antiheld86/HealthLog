@@ -197,7 +197,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
   };
 
   const admission = await admitIntakeImportJob({
-    userId: user.id,
+    recordUserId: user.id,
+    actorUserId: actor.id,
     medicationId: null,
     payload,
     progress,

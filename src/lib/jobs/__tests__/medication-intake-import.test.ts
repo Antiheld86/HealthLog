@@ -125,13 +125,14 @@ describe("medication intake import worker bounds", () => {
           medicationIntakeImportJob: {
             findUnique: async () => ({
               id: "job-many-days",
-              userId: "user-1",
+              recordUserId: "user-1",
+              actorUserId: "user-1",
               medicationId: "medication-1",
               status,
               payload: { entries: [] },
               progress: persistedProgress,
               startedAt: new Date(),
-              user: { timezone: "UTC" },
+              recordUser: { timezone: "UTC" },
             }),
             update: async (args: {
               data: { progress?: unknown; status?: string };

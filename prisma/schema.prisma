@@ -816,7 +816,7 @@ model User {
   // pg-boss job state so the polling endpoint can read live per-
   // phase progress without round-tripping through pg-boss internals.
   importJobs                     ImportJob[]
-  medicationIntakeImportJobs     MedicationIntakeImportJob[]
+  medicationIntakeImportJobs     MedicationIntakeImportJob[] @relation("MedicationIntakeImportRecord")
   // v1.5.0 — persistent measurement rollup table. Carries the
   // count/min/max/mean/sd/slope/r2 stats per (type, granularity,
   // bucketStart) so the analytics + comprehensive read paths bypass
@@ -4715,7 +4715,8 @@ model ImportJob {
 // stays in Postgres so retries never depend on request-process memory.
 model MedicationIntakeImportJob {
   id            String    @id @default(cuid())
-  userId        String    @map("user_id")
+  recordUserId  String    @map("record_user_id")
+  actorUserId   String    @map("actor_user_id")
   /// v1.33.0 (migration 0278) — nullable. The per-medication import route
   /// scopes its job to one medication and names it here. A dose history
   /// exported from another tracker covers a whole regimen in one file — the
@@ -4736,10 +4737,11 @@ model MedicationIntakeImportJob {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recordUser User        @relation("MedicationIntakeImportRecord", fields: [recordUserId], references: [id], onDelete: Cascade)
   medication Medication? @relation(fields: [medicationId], references: [id], onDelete: Cascade)
 
-  @@index([userId, createdAt])
+  @@index([recordUserId, createdAt])
+  @@index([actorUserId, createdAt])
   @@index([medicationId, createdAt])
   @@index([status, heartbeatAt])
   @@map("medication_intake_import_jobs")

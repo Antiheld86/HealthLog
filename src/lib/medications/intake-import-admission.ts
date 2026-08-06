@@ -33,7 +33,8 @@ import { auditLog } from "@/lib/auth/audit";
 import { prisma, toJson } from "@/lib/db";
 
 export interface IntakeImportAdmissionInput {
-  userId: string;
+  recordUserId: string;
+  actorUserId: string;
   /** `null` = the account-wide dose-history import. */
   medicationId: string | null;
   payload: MedicationImportPayload;
@@ -60,7 +61,8 @@ export type IntakeImportAdmission =
  * submissions serialise against each other without blocking an unrelated one.
  */
 export async function admitIntakeImportJob({
-  userId,
+  recordUserId,
+  actorUserId,
   medicationId,
   payload,
   progress,
@@ -71,7 +73,7 @@ export async function admitIntakeImportJob({
       await tx.$queryRaw`
         SELECT "id"
         FROM "users"
-        WHERE "id" = ${userId}
+        WHERE "id" = ${recordUserId}
         FOR UPDATE
       `;
     } else {
@@ -79,7 +81,7 @@ export async function admitIntakeImportJob({
         SELECT "id"
         FROM "medications"
         WHERE "id" = ${medicationId}
-          AND "user_id" = ${userId}
+          AND "user_id" = ${recordUserId}
         FOR UPDATE
       `;
     }
@@ -94,7 +96,7 @@ export async function admitIntakeImportJob({
     // heartbeat, after the start, and before either.
     await tx.medicationIntakeImportJob.updateMany({
       where: {
-        userId,
+        recordUserId,
         medicationId,
         status: { in: ["queued", "running"] },
         OR: [
@@ -117,7 +119,7 @@ export async function admitIntakeImportJob({
 
     const activeJob = await tx.medicationIntakeImportJob.findFirst({
       where: {
-        userId,
+        recordUserId,
         medicationId,
         status: { in: ["queued", "running"] },
       },
@@ -127,7 +129,8 @@ export async function admitIntakeImportJob({
 
     const importJob = await tx.medicationIntakeImportJob.create({
       data: {
-        userId,
+        recordUserId,
+        actorUserId,
         medicationId,
         status: "queued",
         payload: toJson(payload),
@@ -169,7 +172,8 @@ export async function admitIntakeImportJob({
       },
     });
     await auditLog("medication.intake.import.kickoff.denied", {
-      userId,
+      userId: recordUserId,
+      actorUserId,
       ipAddress,
       details: {
         jobId,

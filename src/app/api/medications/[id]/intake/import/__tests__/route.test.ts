@@ -237,7 +237,8 @@ describe("POST /api/medications/[id]/intake/import — durable kickoff", () => {
 
     expect(prisma.medicationIntakeImportJob.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        userId: "user-1",
+        recordUserId: "user-1",
+        actorUserId: "user-1",
         medicationId: "m1",
         status: "queued",
         // A legacy `zaehler` on the first row rides along and decides nothing:
@@ -303,7 +304,7 @@ describe("POST /api/medications/[id]/intake/import — durable kickoff", () => {
       expect(prisma.medicationIntakeImportJob.updateMany).toHaveBeenCalledWith({
         where: expect.objectContaining({
           medicationId: "m1",
-          userId: "user-1",
+          recordUserId: "user-1",
           status: { in: ["queued", "running"] },
           OR: expect.arrayContaining([
             {

@@ -148,7 +148,8 @@ describe("POST /api/medications/intake/dose-history-import", () => {
     await POST(postReq(CSV));
     expect(prisma.medicationIntakeImportJob.create).toHaveBeenCalledWith({
       data: {
-        userId: "user-1",
+        recordUserId: "user-1",
+        actorUserId: "user-1",
         // No medication owns a file covering a regimen; each entry names its own.
         medicationId: null,
         status: "queued",
@@ -258,7 +259,7 @@ describe("POST /api/medications/intake/dose-history-import", () => {
     // reach across and fail it.
     expect(prisma.medicationIntakeImportJob.findFirst).toHaveBeenCalledWith({
       where: {
-        userId: "user-1",
+        recordUserId: "user-1",
         medicationId: null,
         status: { in: ["queued", "running"] },
       },
@@ -267,7 +268,7 @@ describe("POST /api/medications/intake/dose-history-import", () => {
     expect(prisma.medicationIntakeImportJob.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          userId: "user-1",
+          recordUserId: "user-1",
           medicationId: null,
         }),
       }),

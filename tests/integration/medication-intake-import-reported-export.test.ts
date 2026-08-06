@@ -93,7 +93,8 @@ describe("medication intake import — the reported 28-dose export", () => {
 
     const job = await prisma.medicationIntakeImportJob.create({
       data: {
-        userId: user.id,
+        recordUserId: user.id,
+        actorUserId: user.id,
         medicationId: medication.id,
         payload: toJson(payload),
         progress: toJson({
@@ -140,7 +141,8 @@ describe("medication intake import — the reported 28-dose export", () => {
 
     const first = await prisma.medicationIntakeImportJob.create({
       data: {
-        userId: user.id,
+        recordUserId: user.id,
+        actorUserId: user.id,
         medicationId: medication.id,
         payload: toJson(payload),
         progress: toJson(progress),
@@ -150,7 +152,8 @@ describe("medication intake import — the reported 28-dose export", () => {
 
     const second = await prisma.medicationIntakeImportJob.create({
       data: {
-        userId: user.id,
+        recordUserId: user.id,
+        actorUserId: user.id,
         medicationId: medication.id,
         payload: toJson(payload),
         progress: toJson(progress),
@@ -211,7 +214,8 @@ describe("medication intake import — the reported 28-dose export", () => {
 
     const job = await prisma.medicationIntakeImportJob.create({
       data: {
-        userId: user.id,
+        recordUserId: user.id,
+        actorUserId: user.id,
         medicationId: medication.id,
         payload: toJson({ entries }),
         progress: toJson({

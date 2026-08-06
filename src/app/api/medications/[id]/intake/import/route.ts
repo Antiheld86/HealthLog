@@ -187,7 +187,8 @@ export const POST = apiHandler(
       rollupProcessed: 0,
     };
     const admission = await admitIntakeImportJob({
-      userId: user.id,
+      recordUserId: user.id,
+      actorUserId: actor.id,
       medicationId: id,
       payload: normalized,
       progress,

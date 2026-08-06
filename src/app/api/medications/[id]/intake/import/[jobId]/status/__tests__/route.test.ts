@@ -61,7 +61,11 @@ describe("GET medication intake import status", () => {
 
     expect(response.status).toBe(404);
     expect(prisma.medicationIntakeImportJob.findFirst).toHaveBeenCalledWith({
-      where: { id: "job-1", medicationId: "med-1", userId: "user-1" },
+      where: {
+        id: "job-1",
+        medicationId: "med-1",
+        recordUserId: "user-1",
+      },
     });
   });
 

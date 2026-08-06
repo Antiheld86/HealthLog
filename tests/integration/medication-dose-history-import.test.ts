@@ -98,7 +98,8 @@ async function enqueue(userId: string) {
   );
   const job = await prisma.medicationIntakeImportJob.create({
     data: {
-      userId,
+      recordUserId: userId,
+      actorUserId: userId,
       // Account-wide: the file covers sixteen medications, so no single one owns
       // the job and each entry names its own.
       medicationId: null,

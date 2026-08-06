@@ -109,18 +109,18 @@ export function projectMedicationImportResult(
  * Read one job the caller owns, or `null`.
  *
  * `medicationId` narrows to a job scoped to that medication; omit it for the
- * account-wide import. `userId` is always in the `where`, so a job id belonging
+ * account-wide import. `recordUserId` is always in the `where`, so a job id belonging
  * to somebody else is a 404 and not a leak.
  */
 export async function readMedicationIntakeImportJob(
-  userId: string,
+  recordUserId: string,
   jobId: string,
   medicationId?: string,
 ): Promise<MedicationIntakeImportJobStatus | null> {
   const row = await prisma.medicationIntakeImportJob.findFirst({
     where: {
       id: jobId,
-      userId,
+      recordUserId,
       // An account-wide job carries no medication, and asking for one by id must
       // not resolve to the other kind. `null` is the explicit narrowing.
       medicationId: medicationId ?? null,

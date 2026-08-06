@@ -1603,7 +1603,7 @@ proveManageRoute("POST /api/medications/[id]/intake/import", {
   auditAction: "medication.intake.import.kickoff",
   applied: async ({ ownerId }) =>
     (await getPrismaClient().medicationIntakeImportJob.count({
-      where: { userId: ownerId },
+      where: { recordUserId: ownerId },
     })) === 1,
 });
 
@@ -1637,7 +1637,7 @@ manageContract("POST /api/medications/intake/dose-history-import", {
   auditAction: "medication.intake.history.import.kickoff",
   applied: async ({ ownerId }) =>
     (await getPrismaClient().medicationIntakeImportJob.count({
-      where: { userId: ownerId },
+      where: { recordUserId: ownerId },
     })) === 1,
 });
 
