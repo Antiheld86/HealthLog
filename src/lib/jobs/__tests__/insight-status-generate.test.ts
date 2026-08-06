@@ -87,10 +87,9 @@ describe("runInsightStatusGenerate", () => {
   it("skips (does not throw) an unknown metric", async () => {
     await expect(
       runInsightStatusGenerate(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         {
           userId: "u1",
-          metric: "nope" as any,
+          metric: "nope" as never,
           locale: "de",
           authority: {
             origin: "owner",
@@ -99,8 +98,7 @@ describe("runInsightStatusGenerate", () => {
             grantId: null,
           },
         },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        {} as any,
+        {} as never,
       ),
     ).resolves.toBeUndefined();
   });

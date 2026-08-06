@@ -11,7 +11,6 @@ import {
   sanitiseZodIssues,
 } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
-import { prisma } from "@/lib/db";
 import {
   type MedicationImportPayload,
   type MedicationImportProgress,
