@@ -208,7 +208,11 @@ describe("sendViaTelegram — per-slot delete scope (H2)", () => {
       reminderPayload(),
     );
 
-    expect(deleteMessageMock).toHaveBeenCalledWith("bot-token", "old-chat", 123);
+    expect(deleteMessageMock).toHaveBeenCalledWith(
+      "bot-token",
+      "old-chat",
+      123,
+    );
     expect(upsertMock).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {

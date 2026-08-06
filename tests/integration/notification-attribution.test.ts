@@ -34,7 +34,8 @@ async function createGuardianGrant(input: {
       grantorId: input.recordUserId,
       granteeId: input.recipientUserId,
       access: input.access ?? "MANAGE",
-      acceptedAt: input.acceptedAt === undefined ? new Date() : input.acceptedAt,
+      acceptedAt:
+        input.acceptedAt === undefined ? new Date() : input.acceptedAt,
       revokedAt: input.revokedAt ?? null,
       revokedBy: input.revokedAt ? "GRANTOR" : null,
       expiresAt: input.expiresAt ?? null,
@@ -137,6 +138,91 @@ describe("notification attribution (real Postgres)", () => {
     expect(
       await client.notificationEvent.findUnique({ where: { id: event.id } }),
     ).toBeNull();
+  });
+
+  it("keeps Telegram reminder tracking independent for each recipient slot", async () => {
+    const recordUser = await createUser("telegram-record", true);
+    const firstRecipient = await createUser("telegram-recipient-a");
+    const secondRecipient = await createUser("telegram-recipient-b");
+    const client = getPrismaClient();
+    const medication = await client.medication.create({
+      data: {
+        userId: recordUser.id,
+        name: "Tracking medication",
+        dose: "1 tablet",
+        schedules: {
+          create: { windowStart: "08:00", windowEnd: "08:00" },
+        },
+      },
+      include: { schedules: true },
+    });
+    const scheduleId = medication.schedules[0]!.id;
+    const slot = {
+      medicationId: medication.id,
+      scheduleId,
+      date: "2026-08-06",
+      phase: "YELLOW" as const,
+      timeOfDay: "08:00",
+    };
+
+    await client.telegramReminderMessage.createMany({
+      data: [
+        {
+          recipientUserId: firstRecipient.id,
+          ...slot,
+          chatId: "first-chat",
+          messageId: 101,
+        },
+        {
+          recipientUserId: secondRecipient.id,
+          ...slot,
+          chatId: "second-chat",
+          messageId: 202,
+        },
+      ],
+    });
+
+    await client.telegramReminderMessage.upsert({
+      where: {
+        recipientUserId_medicationId_scheduleId_date_phase_timeOfDay: {
+          recipientUserId: firstRecipient.id,
+          ...slot,
+        },
+      },
+      create: {
+        recipientUserId: firstRecipient.id,
+        ...slot,
+        chatId: "unused-create-chat",
+        messageId: 303,
+      },
+      update: { chatId: "first-chat-new", messageId: 303 },
+    });
+
+    expect(
+      await client.telegramReminderMessage.findMany({
+        where: { medicationId: medication.id },
+        orderBy: { recipientUserId: "asc" },
+        select: { recipientUserId: true, chatId: true, messageId: true },
+      }),
+    ).toEqual([
+      {
+        recipientUserId: firstRecipient.id,
+        chatId: "first-chat-new",
+        messageId: 303,
+      },
+      {
+        recipientUserId: secondRecipient.id,
+        chatId: "second-chat",
+        messageId: 202,
+      },
+    ]);
+
+    await client.user.delete({ where: { id: firstRecipient.id } });
+    expect(
+      await client.telegramReminderMessage.count({
+        where: { medicationId: medication.id },
+      }),
+    ).toBe(1);
   });
 
   it("persistence maps an omitted pair from the legacy recipient", async () => {

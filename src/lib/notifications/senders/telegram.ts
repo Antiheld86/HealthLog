@@ -90,7 +90,6 @@ async function deleteExistingReminders(
     } catch {
       // Best-effort: message may already be deleted
     }
-
   } catch (err) {
     getEvent()?.addWarning(`Failed to delete existing reminders: ${err}`);
   }

@@ -222,15 +222,11 @@ async function flushMicrotasks(): Promise<void> {
 
 describe("recordPushAttemptForPayload — attribution boundary", () => {
   it("rejects a partial delivery identity without writing a ledger row", async () => {
-    recordPushAttemptForPayload(
-      { recordUserId: "record-1" },
-      "recipient-1",
-      {
-        channel: "TELEGRAM",
-        eventType: "MEDICATION_REMINDER",
-        result: "ok",
-      },
-    );
+    recordPushAttemptForPayload({ recordUserId: "record-1" }, "recipient-1", {
+      channel: "TELEGRAM",
+      eventType: "MEDICATION_REMINDER",
+      result: "ok",
+    });
     recordPushAttemptForPayload(
       { recipientUserId: "recipient-1" },
       "recipient-1",
