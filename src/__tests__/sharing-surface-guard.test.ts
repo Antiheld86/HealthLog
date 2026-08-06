@@ -1148,9 +1148,17 @@ const DELEGABLE_ROUTES: Record<string, DelegableEntry> = {
     domain: "medications",
     why: "Importing a dose history for one medication. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
   },
+  "app/api/medications/[id]/intake/import/[jobId]/status/route.ts": {
+    domain: "medications",
+    why: "Polling the one-medication import the manager admitted. The row stays scoped to the record and medication, so its progress is part of the same MANAGE capability rather than an actor-only job lookup.",
+  },
   "app/api/medications/intake/dose-history-import/route.ts": {
     domain: "medications",
     why: "The whole-regimen form of the same import, same worker, same properties. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/medications/intake/dose-history-import/[jobId]/status/route.ts": {
+    domain: "medications",
+    why: "Polling the account-wide import the manager admitted. The row remains record-scoped, while the null medication scope prevents resolving a one-medication job through this route.",
   },
   "app/api/nutrients/water/route.ts": {
     domain: "measurements",
@@ -1553,10 +1561,20 @@ const DELEGABLE_MANAGE_ROUTES: Record<string, ManageEntry> = {
     conditions: ["C1", "C9"],
     why: "Importing a dose history for one medication. Additive with duplicates skipped and honest provenance. C1, C9.",
   },
+  "app/api/medications/[id]/intake/import/[jobId]/status/route.ts": {
+    domain: "medications",
+    conditions: [],
+    why: "Polling a one-medication import requires the same record MANAGE capability that admitted it, but creates no data or audit row.",
+  },
   "app/api/medications/intake/dose-history-import/route.ts": {
     domain: "medications",
     conditions: ["C1", "C9"],
     why: "The whole-regimen form of the same import, same worker, same properties. C1, C9.",
+  },
+  "app/api/medications/intake/dose-history-import/[jobId]/status/route.ts": {
+    domain: "medications",
+    conditions: [],
+    why: "Polling an account-wide import requires the same record MANAGE capability that admitted it, but creates no data or audit row.",
   },
   "app/api/nutrients/water/route.ts": {
     domain: "measurements",
@@ -1765,9 +1783,10 @@ const ACTOR_ROUTES: Record<string, string> = {
  * literal is still empty, so the number moves again when it fills. It is one
  * number rather than one per list on purpose: filling either of the new
  * literals collides here by construction, so two people filling them at once
- * find out from the merge rather than from production.
+ * find out from the merge rather than from production. Import-status polling
+ * adds two record entries and two MANAGE entries: 190 → 194.
  */
-const FROZEN_ENTRY_COUNT = 190;
+const FROZEN_ENTRY_COUNT = 194;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —
@@ -2697,14 +2716,11 @@ describe("(g) the MANAGE route set is frozen", () => {
     }
   });
 
-  it("C5 is enforced at the enqueue, not at the ten call sites", () => {
-    // The condition that costs the owner money if it is wrong, and the one
-    // place it is implemented. Ten frozen entries carry C5; nine of them
-    // reach the provider through `resolveReadOnlyStatusMiss` and the tenth
-    // (the narrative) enqueues in its own handler. Asserting the choke point
-    // rather than the ten modules is deliberate — a generator added later
-    // inherits the suppression without knowing it exists — so the anchor has
-    // to be exactly here.
+  it("C5 keeps its read-path suppression and queue authority boundary", () => {
+    // The C5 request-path check still prevents work before an old status or
+    // narrative caller reaches the queue. The queue now repeats that refusal
+    // with a bounded authority envelope, so an invalidation path or injected
+    // payload cannot turn a delegated record mutation into provider egress.
     expect(manageModulesWith("C5").length).toBe(10);
 
     const miss = functionSource(
@@ -2729,6 +2745,85 @@ describe("(g) the MANAGE route set is frozen", () => {
     );
     expect(resolver.length).toBeGreaterThan(0);
     expect(resolver).toContain("setDelegatedGenerationSuppressed");
+    expect(resolver).toContain("setProviderWorkAuthority");
+  });
+
+  it("provider work validates every admission and dispatch boundary", () => {
+    // Status invalidation is a mutation-only path outside the status-cache
+    // miss. It must use the same shared admission point, not send directly.
+    expect(
+      callsSymbol(
+        "lib/insights/status-invalidation.ts",
+        "enqueueStatusGeneration",
+      ),
+    ).toBe(true);
+
+    const statusAdmission = functionSource(
+      "lib/jobs/insight-status-generate-shared.ts",
+      "enqueueStatusGeneration",
+    );
+    expect(statusAdmission.length).toBeGreaterThan(0);
+    expect(statusAdmission).toContain("providerWorkAuthorityForRecord");
+    expect(statusAdmission).toContain("mayEnqueueProviderWork");
+    expect(statusAdmission).toContain("authority");
+
+    const statusDispatch = functionSource(
+      "lib/jobs/insight-status-generate.ts",
+      "runInsightStatusGenerate",
+    );
+    expect(statusDispatch.length).toBeGreaterThan(0);
+    expect(statusDispatch).toContain("mayDispatchProviderWork");
+    expect(statusDispatch).toContain("withProviderWorkAuthority");
+
+    const narrativeDispatch = functionSource(
+      "lib/jobs/period-narrative-warm.ts",
+      "warmOneNarrative",
+    );
+    expect(narrativeDispatch.length).toBeGreaterThan(0);
+    expect(narrativeDispatch).toContain("mayDispatchProviderWork");
+    expect(narrativeDispatch).toContain("withProviderWorkAuthority");
+
+    // A shared comprehensive read calls the resolver even before it decides
+    // whether there is enough context to generate. Credential policy belongs
+    // inside every resolver helper so a delegate or managed system job cannot
+    // select a personal BYOK key or custom base URL first.
+    expect(
+      callsSymbol("app/api/insights/comprehensive/route.ts", "resolveProvider"),
+    ).toBe(true);
+    for (const name of [
+      "resolveProvider",
+      "resolveProviderChain",
+      "hasAnyConfiguredProvider",
+      "resolveProviderAvailability",
+    ]) {
+      const resolver = functionSource("lib/ai/provider.ts", name);
+      expect(resolver.length, `${name} not found`).toBeGreaterThan(0);
+      expect(resolver, `${name} ignores sharing authority`).toContain(
+        "providerCredentialPolicy",
+      );
+    }
+  });
+
+  it("import completion retains bounded record and actor attribution", () => {
+    const admission = functionSource(
+      "lib/medications/intake-import-admission.ts",
+      "admitIntakeImportJob",
+    );
+    expect(admission.length).toBeGreaterThan(0);
+    expect(admission).toContain("recordUserId");
+    expect(admission).toContain("actorUserId");
+
+    const completion = functionSource(
+      "lib/jobs/medication-intake-import.ts",
+      "processNextChunk",
+    );
+    expect(completion.length).toBeGreaterThan(0);
+    expect(completion).toContain('auditLog("medication.intake.import"');
+    expect(completion).toContain("client: tx");
+    expect(completion).toContain("recordUserId: row.recordUserId");
+    expect(completion).toContain("actorUserId: row.actorUserId");
+    expect(completion).toContain("jobId: row.id");
+    expect(completion).not.toContain("tx.auditLog.create");
   });
 
   it("the remaining conditions are carried where they were argued", () => {
