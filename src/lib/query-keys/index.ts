@@ -36,6 +36,7 @@ import { mentalHealthKeys } from "./mental-health";
 import { moodKeys } from "./mood";
 import { nutrientKeys } from "./nutrients";
 import { recordSettingsKeys } from "./record-settings";
+import { profileKeys } from "./profile";
 import { settingsKeys } from "./settings";
 import { sharingKeys } from "./sharing";
 import { workoutKeys } from "./workouts";
@@ -65,6 +66,7 @@ export const queryKeys = {
   ...customMetrics,
   ...nutrientKeys,
   ...recordSettingsKeys,
+  ...profileKeys,
   ...sharingKeys,
 };
 

@@ -984,7 +984,11 @@ export function ManagedRecordSettingsSection({
   }
 
   return (
-    <SettingsCard aria-busy={query.isLoading}>
+    <SettingsCard
+      aria-busy={query.isLoading}
+      data-record-id={recordId ?? undefined}
+      data-record-settings-family={family}
+    >
       <SettingsCardHeader
         icon={Settings}
         title={t(`settings.sharedRecord.managedSettings.${family}.title`)}

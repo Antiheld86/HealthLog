@@ -51,6 +51,13 @@ import type {
 const mockAccessRef: { value: AccountAccess } = {
   value: { accounts: [], active: null, canSwitch: false },
 };
+const mockAuthLoadingRef = { value: false };
+const mockAccountAccessStatusRef = {
+  value: "valid" as "absent" | "valid" | "invalid",
+};
+const mockRecordSessionPhaseRef = {
+  value: "ready" as "ready" | "blocking" | "resolving",
+};
 
 vi.mock("@/hooks/use-auth", () => ({
   useAuth: () => ({
@@ -62,13 +69,22 @@ vi.mock("@/hooks/use-auth", () => ({
       avatarUrl: null,
       modules: {},
       accountAccess: mockAccessRef.value,
+      accountAccessStatus: mockAccountAccessStatusRef.value,
     },
     isAuthenticated: true,
     isAuthUnknown: false,
-    isLoading: false,
+    isLoading: mockAuthLoadingRef.value,
     refetch: vi.fn(),
   }),
   clearCachesForSessionEnd: vi.fn(),
+}));
+
+vi.mock("@/hooks/use-record-session-transition", () => ({
+  useRecordSessionTransition: () => ({
+    id: "cross-tab-switch",
+    phase: mockRecordSessionPhaseRef.value,
+    expectedScope: "record-a",
+  }),
 }));
 
 const mockPathRef = { value: "/" };
@@ -137,9 +153,14 @@ const MANAGED_GUARDIAN: AccountAccessEntry = {
   canWrite: true,
 };
 
-function render(access: AccountAccess, pathname = "/"): string {
+function render(
+  access: AccountAccess,
+  pathname = "/",
+  accountAccessStatus: "absent" | "valid" | "invalid" = "valid",
+): string {
   mockAccessRef.value = access;
   mockPathRef.value = pathname;
+  mockAccountAccessStatusRef.value = accountAccessStatus;
   return renderToStaticMarkup(
     <QueryClientProvider client={new QueryClient()}>
       <I18nProvider initialLocale="en">
@@ -169,6 +190,46 @@ const DOORS = [
 ] as const;
 
 describe("<AuthShell> — the owner-only doors", () => {
+  it("holds protected children until record capabilities resolve", () => {
+    mockAuthLoadingRef.value = true;
+    try {
+      const html = render(OWN_RECORD, "/medications");
+
+      expect(html).toContain('data-slot="record-scope-hydration-gate"');
+      expect(html).not.toContain("sentinel-page");
+      expect(html).not.toContain("sentinel-coach-fab");
+    } finally {
+      mockAuthLoadingRef.value = false;
+    }
+  });
+
+  it("holds protected children and owner-only doors while a peer tab changes the session", () => {
+    mockRecordSessionPhaseRef.value = "blocking";
+    try {
+      const html = render(OWN_RECORD, "/labs");
+
+      expect(html).toContain('data-slot="record-scope-hydration-gate"');
+      expect(html).not.toContain("sentinel-page");
+      for (const slot of DOORS) {
+        expect(html).not.toContain(slot);
+      }
+    } finally {
+      mockRecordSessionPhaseRef.value = "ready";
+    }
+  });
+
+  it("does not delay public routes for record capability resolution", () => {
+    mockAuthLoadingRef.value = true;
+    try {
+      const html = render(OWN_RECORD, "/auth/login");
+
+      expect(html).toContain("sentinel-page");
+      expect(html).not.toContain('data-slot="record-scope-hydration-gate"');
+    } finally {
+      mockAuthLoadingRef.value = false;
+    }
+  });
+
   it("mounts all three in the caller's own record", () => {
     // The half that makes the rest mean something. Without it, a shell that
     // had simply dropped the Coach and the tour for everybody would satisfy
@@ -176,6 +237,18 @@ describe("<AuthShell> — the owner-only doors", () => {
     const html = render(OWN_RECORD);
     for (const slot of DOORS) {
       expect(html, `${slot} must exist in one's own record`).toContain(slot);
+    }
+  });
+
+  it("refuses an invalid record block without mounting owner-only doors or children", () => {
+    const html = render(OWN_RECORD, "/", "invalid");
+
+    expect(html).toContain("sentinel-unavailable");
+    expect(html).not.toContain("sentinel-page");
+    for (const slot of DOORS) {
+      expect(html, `${slot} must not paint for a refused record`).not.toContain(
+        slot,
+      );
     }
   });
 

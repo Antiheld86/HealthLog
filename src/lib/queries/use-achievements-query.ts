@@ -5,6 +5,7 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { apiGet } from "@/lib/api/api-fetch";
 import { queryKeys } from "@/lib/query-keys";
+import type { AccountAccessEntry } from "@/lib/sharing/account-access-view";
 import type {
   AchievementMetrics,
   AchievementProgress,
@@ -71,15 +72,27 @@ function fetchAchievements(): Promise<AchievementsPayload> {
 }
 
 /**
+ * Achievements aggregate more than one record section, so a narrowed grant
+ * never reaches the endpoint. Keep its shell-level poll dormant instead of
+ * turning a correctly refused background read into an apparent grant loss.
+ */
+export function canFetchAchievements(
+  active: Pick<AccountAccessEntry, "sections"> | null | undefined,
+): boolean {
+  return active === null || active === undefined || active.sections === null;
+}
+
+/**
  * Shared hook. Returns the unwrapped `data` payload typed as
  * `AchievementsPayload`. Consumers narrow at the call site.
  */
 export function useAchievementsQuery(
   options: UseAchievementsQueryOptions = {},
 ): UseQueryResult<AchievementsPayload, Error> {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const enabled =
-    options.enabled !== undefined ? options.enabled : isAuthenticated;
+    (options.enabled !== undefined ? options.enabled : isAuthenticated) &&
+    canFetchAchievements(user?.accountAccess?.active);
   const refetchInterval = options.refetchInterval ?? false;
 
   return useQuery({

@@ -8,6 +8,11 @@ import { useAccountSwitch } from "@/hooks/use-account-switch";
 import { useAccountOnceMounted } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
 import {
+  resolveRecordPresentation,
+  type RecordPresentation,
+} from "@/lib/navigation/record-presentation";
+import { sharedRecordLandingHref } from "@/lib/navigation/shared-record";
+import {
   accountLabel,
   type AccountAccessEntry,
 } from "@/lib/sharing/account-access-view";
@@ -77,42 +82,61 @@ export function LookingAfterCard() {
           {t("recordSharing.lookingAfter.description")}
         </p>
         <ul className="divide-y">
-          {accounts.map((entry) => (
-            <li key={entry.accountId}>
-              <button
-                type="button"
-                data-slot="looking-after-row"
-                data-account-id={entry.accountId}
-                disabled={switchAccount.isPending}
-                onClick={() => switchAccount.mutate(entry.accountId)}
-                aria-label={t("recordSharing.lookingAfter.open", {
-                  name: accountLabel(entry),
-                })}
-                className="hover:bg-accent/40 focus-visible:ring-ring/50 flex min-h-11 w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="text-foreground block truncate text-sm font-medium">
-                    {accountLabel(entry)}
+          {accounts.map((entry) => {
+            const presentation = resolveRecordPresentation(entry);
+            const level = levelLabel(entry, presentation, t);
+            const kind = recordKindLabel(entry, t);
+            const scope = scopeLabel(entry, t);
+
+            return (
+              <li key={entry.accountId}>
+                <button
+                  type="button"
+                  data-slot="looking-after-row"
+                  data-account-id={entry.accountId}
+                  data-access-level={presentation.access}
+                  data-record-kind={presentation.recordKind}
+                  disabled={switchAccount.isPending}
+                  onClick={() =>
+                    switchAccount.switchTo(
+                      entry.accountId,
+                      sharedRecordLandingHref(entry.sections),
+                    )
+                  }
+                  aria-label={[
+                    t("recordSharing.lookingAfter.open", {
+                      name: accountLabel(entry),
+                    }),
+                    level,
+                    kind,
+                    scope,
+                  ].join("; ")}
+                  className="hover:bg-accent/40 focus-visible:ring-ring/50 flex min-h-11 w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="text-foreground block truncate text-sm font-medium">
+                      {accountLabel(entry)}
+                    </span>
+                    <span className="text-muted-foreground block truncate text-xs">
+                      {level}
+                    </span>
+                    <span className="text-muted-foreground block truncate text-xs">
+                      {kind}
+                    </span>
+                    <span className="text-muted-foreground block truncate text-xs">
+                      {scope}
+                    </span>
                   </span>
-                  <span className="text-muted-foreground block truncate text-xs">
-                    {levelLabel(entry, t)}
-                  </span>
-                  <span className="text-muted-foreground block truncate text-xs">
-                    {recordKindLabel(entry, t)}
-                  </span>
-                  <span className="text-muted-foreground block truncate text-xs">
-                    {scopeLabel(entry, t)}
-                  </span>
-                </span>
-                {switchAccount.isPending && (
-                  <Loader2
-                    className="text-muted-foreground size-4 shrink-0 animate-spin motion-reduce:animate-none"
-                    aria-hidden="true"
-                  />
-                )}
-              </button>
-            </li>
-          ))}
+                  {switchAccount.isPending && (
+                    <Loader2
+                      className="text-muted-foreground size-4 shrink-0 animate-spin motion-reduce:animate-none"
+                      aria-hidden="true"
+                    />
+                  )}
+                </button>
+              </li>
+            );
+          })}
         </ul>
       </CardContent>
     </Card>
@@ -132,12 +156,13 @@ export function LookingAfterCard() {
  */
 function levelLabel(
   entry: AccountAccessEntry,
+  presentation: RecordPresentation,
   t: (key: string) => string,
 ): string {
   if (entry.level === "manage") {
     return t("recordSharing.row.canManage");
   }
-  return entry.canWrite
+  return presentation.access === "view-and-add"
     ? t("recordSharing.lookingAfter.levelWrite")
     : t("recordSharing.lookingAfter.levelRead");
 }

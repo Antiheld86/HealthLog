@@ -65,6 +65,61 @@ export const E2E_OWNER = {
   role: "USER",
 } as const;
 
+/** A separate delegate session for the eight scoped-record browser journeys. */
+export const E2E_SCOPE_DELEGATE = {
+  email: "e2e-scope-delegate@healthlog.test",
+  username: "e2e-scope-delegate",
+  password: "Qz8!Vp4rL2nX7mKs",
+  role: "USER",
+} as const;
+
+/** One non-personal target record per closed sharing domain. */
+export const E2E_SCOPE_RECORDS = [
+  {
+    domain: "measurements",
+    username: "e2e-scope-measurements",
+    href: "/measurements",
+  },
+  {
+    domain: "medications",
+    username: "e2e-scope-medications",
+    href: "/medications",
+  },
+  { domain: "labs", username: "e2e-scope-labs", href: "/labs" },
+  { domain: "profile", username: "e2e-scope-profile", href: "/profile" },
+  { domain: "illness", username: "e2e-scope-illness", href: "/illness" },
+  { domain: "mind", username: "e2e-scope-mind", href: "/mood" },
+  { domain: "cycle", username: "e2e-scope-cycle", href: "/cycle" },
+  { domain: "documents", username: "e2e-scope-documents", href: "/documents" },
+] as const;
+
+/**
+ * Whole-record grants used to prove the three adult access levels and the
+ * separate managed-profile boundary in a real browser session.
+ */
+export const E2E_LEVEL_RECORDS = [
+  {
+    username: "e2e-level-read",
+    access: "READ",
+    recordKind: "shared",
+  },
+  {
+    username: "e2e-level-write",
+    access: "WRITE",
+    recordKind: "shared",
+  },
+  {
+    username: "e2e-level-manage",
+    access: "MANAGE",
+    recordKind: "shared",
+  },
+  {
+    username: "e2e-level-managed",
+    access: "MANAGE",
+    recordKind: "managed",
+  },
+] as const;
+
 /**
  * Weights seeded one per account, chosen so neither can be mistaken for the
  * other in rendered markup and neither collides with a value any other spec
@@ -103,6 +158,16 @@ export const OWNER_STORAGE_STATE_PATH = resolve(
 export const DELEGATE_STORAGE_STATE_PATH = resolve(
   process.cwd(),
   "e2e/setup/storageStateDelegate.json",
+);
+
+export const SCOPE_DELEGATE_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateScopeDelegate.json",
+);
+
+export const SCOPE_A11Y_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateScopeA11y.json",
 );
 
 async function hashPassword(password: string): Promise<string> {
@@ -201,6 +266,163 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
       ],
     );
 
+    // The scoped-record journey uses a dedicated delegate so its preseeded
+    // grants cannot affect the invitation lifecycle exercised by the sharing
+    // journey above. Its own module preferences are explicitly off: a target
+    // record's resolved scope, rather than the actor's preferences, must keep
+    // each granted doorway visible.
+    await pool.query(
+      `INSERT INTO users
+        (id, username, email, password_hash, role, created_at, updated_at,
+         onboarding_completed_at, onboarding_tour_completed,
+         module_preferences_json)
+       VALUES ($1, $2, $3, $4, 'USER', $5, $5, $5, true, $6::jsonb)
+       ON CONFLICT (username) DO UPDATE SET
+         email = EXCLUDED.email,
+         password_hash = EXCLUDED.password_hash,
+         updated_at = EXCLUDED.updated_at,
+         onboarding_completed_at = EXCLUDED.onboarding_completed_at,
+         onboarding_tour_completed = EXCLUDED.onboarding_tour_completed,
+         module_preferences_json = EXCLUDED.module_preferences_json`,
+      [
+        cuid(),
+        E2E_SCOPE_DELEGATE.username,
+        E2E_SCOPE_DELEGATE.email,
+        await hashPassword(E2E_SCOPE_DELEGATE.password),
+        now,
+        JSON.stringify({
+          medications: false,
+          labs: false,
+          illness: false,
+          mood: false,
+          mentalHealth: false,
+          inboundDocuments: false,
+        }),
+      ],
+    );
+
+    await pool.query(
+      `DELETE FROM account_grants
+       WHERE grantee_id = (SELECT id FROM users WHERE username = $1)`,
+      [E2E_SCOPE_DELEGATE.username],
+    );
+    await pool.query(
+      `UPDATE sessions SET acting_as_user_id = NULL
+       WHERE user_id = (SELECT id FROM users WHERE username = $1)`,
+      [E2E_SCOPE_DELEGATE.username],
+    );
+
+    for (const record of E2E_SCOPE_RECORDS) {
+      await pool.query(
+        `INSERT INTO users
+          (id, username, email, password_hash, role, created_at, updated_at,
+           onboarding_completed_at, onboarding_tour_completed,
+           module_preferences_json)
+         VALUES ($1, $2, $3, NULL, 'USER', $4, $4, $4, true, $5::jsonb)
+         ON CONFLICT (username) DO UPDATE SET
+           email = EXCLUDED.email,
+           updated_at = EXCLUDED.updated_at,
+           onboarding_completed_at = EXCLUDED.onboarding_completed_at,
+           onboarding_tour_completed = EXCLUDED.onboarding_tour_completed,
+           module_preferences_json = EXCLUDED.module_preferences_json`,
+        [
+          cuid(),
+          record.username,
+          `${record.username}@healthlog.test`,
+          now,
+          JSON.stringify({
+            medications: true,
+            labs: true,
+            illness: true,
+            mood: true,
+            mentalHealth: true,
+            inboundDocuments: true,
+          }),
+        ],
+      );
+
+      await pool.query(
+        `INSERT INTO account_grants
+          (id, grantor_id, grantee_id, access, scope_json, invited_at,
+           accepted_at, created_at)
+         SELECT $1, owner.id, delegate.id, 'READ', $2::jsonb, $3, $3, $3
+         FROM users owner, users delegate
+         WHERE owner.username = $4 AND delegate.username = $5`,
+        [
+          cuid(),
+          JSON.stringify([record.domain]),
+          now,
+          record.username,
+          E2E_SCOPE_DELEGATE.username,
+        ],
+      );
+    }
+
+    // Whole-record fixtures intentionally sit beside the narrow records
+    // above. They make the browser prove the presentation and mutation
+    // boundaries of READ, WRITE, MANAGE, and a guardian-managed record
+    // without changing the invitation lifecycle fixture below.
+    for (const record of E2E_LEVEL_RECORDS) {
+      await pool.query(
+        `INSERT INTO users
+          (id, username, email, password_hash, role, created_at, updated_at,
+           managed_profile_at, onboarding_completed_at,
+           onboarding_tour_completed, module_preferences_json)
+         VALUES ($1, $2, $3, NULL, 'USER', $4, $4, $5, $4, true, $6::jsonb)
+         ON CONFLICT (username) DO UPDATE SET
+           email = EXCLUDED.email,
+           password_hash = NULL,
+           updated_at = EXCLUDED.updated_at,
+           managed_profile_at = EXCLUDED.managed_profile_at,
+           onboarding_completed_at = EXCLUDED.onboarding_completed_at,
+           onboarding_tour_completed = EXCLUDED.onboarding_tour_completed,
+           module_preferences_json = EXCLUDED.module_preferences_json`,
+        [
+          cuid(),
+          record.username,
+          `${record.username}@healthlog.test`,
+          now,
+          record.recordKind === "managed" ? now : null,
+          JSON.stringify({
+            medications: true,
+            labs: true,
+            illness: true,
+            mood: true,
+            mentalHealth: true,
+            inboundDocuments: true,
+          }),
+        ],
+      );
+
+      await pool.query(
+        `INSERT INTO account_grants
+          (id, grantor_id, grantee_id, access, scope_json, invited_at,
+           accepted_at, created_at)
+         SELECT $1, owner.id, delegate.id, $2, NULL, $3, $3, $3
+         FROM users owner, users delegate
+         WHERE owner.username = $4 AND delegate.username = $5`,
+        [
+          cuid(),
+          record.access,
+          now,
+          record.username,
+          E2E_SCOPE_DELEGATE.username,
+        ],
+      );
+    }
+
+    // Cycle is delegated to its profile gate rather than module preferences.
+    await pool.query(
+      `INSERT INTO cycle_profiles
+        (id, user_id, cycle_tracking_enabled, created_at, updated_at)
+       SELECT $1, u.id, true, $2, $2
+       FROM users u WHERE u.username = $3
+       ON CONFLICT (user_id) DO UPDATE SET
+         cycle_tracking_enabled = true,
+         updated_at = EXCLUDED.updated_at`,
+      [cuid(), now, "e2e-scope-cycle"],
+    );
+
     // Repeated local E2E runs reuse the same seeded account and database.
     // Its owner-scoped share-link bucket lasts an hour, so otherwise the third
     // run can start above the 20-operation ceiling and fail before exercising
@@ -281,7 +503,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
        WHERE key LIKE 'sharing:%'`,
     );
 
-    // The login bucket, for the same reason. This setup signs in THREE times
+    // The login bucket, for the same reason. This setup signs in FOUR times
     // now (the shared jar, the owner, and the sharing journey's own delegate
     // jar), and the ceiling is five attempts per IP per quarter-hour — so two
     // local runs in a row would otherwise end with a 429 from the fixture
@@ -345,6 +567,17 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
   // deliberately a different session row — see DELEGATE_STORAGE_STATE_PATH for
   // what happens when the journey switches the shared row instead.
   await captureAuthState(baseURL, E2E_USER, DELEGATE_STORAGE_STATE_PATH);
+
+  await captureAuthState(
+    baseURL,
+    E2E_SCOPE_DELEGATE,
+    SCOPE_DELEGATE_STORAGE_STATE_PATH,
+  );
+  await captureAuthState(
+    baseURL,
+    E2E_SCOPE_DELEGATE,
+    SCOPE_A11Y_STORAGE_STATE_PATH,
+  );
 }
 
 /**

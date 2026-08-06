@@ -10,6 +10,8 @@ import type { CoachLaunchScope } from "@/lib/insights/coach-launch-context";
 import { useCoachLaunch } from "@/lib/insights/coach-launch-context";
 import { useFeatureFlags } from "@/hooks/use-feature-flags";
 import { useDisableCoach } from "@/hooks/use-disable-coach";
+import { useAuth } from "@/hooks/use-auth";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { queryKeys } from "@/lib/query-keys";
 import { apiGet } from "@/lib/api/api-fetch";
 import { coachScopeSourceSchema } from "@/lib/ai/coach/types";
@@ -163,6 +165,8 @@ export default function CoachPageClient() {
   const launch = useCoachLaunch();
   const flags = useFeatureFlags();
   const disableCoach = useDisableCoach();
+  const { user, isLoading } = useAuth();
+  const { inSharedRecord } = useRecordCapabilities();
 
   const coachUnavailable = !flags.coach || disableCoach;
 
@@ -170,11 +174,13 @@ export default function CoachPageClient() {
   // operator master flag OR per-user opt-out hides the Coach entirely.
   // Send a direct navigator back to the Insights mother page so the
   // route is never a dead-end.
+  const canRenderOwnCoach = user !== null && !isLoading && !inSharedRecord;
+
   useEffect(() => {
-    if (coachUnavailable) {
+    if (canRenderOwnCoach && coachUnavailable) {
       router.replace("/insights");
     }
-  }, [coachUnavailable, router]);
+  }, [canRenderOwnCoach, coachUnavailable, router]);
 
   // Reopening the bottom-right FAB drawer is no longer wired to a page
   // control, but keep the launch context referenced so the lint rule does
@@ -182,7 +188,7 @@ export default function CoachPageClient() {
   // the shared `<AuthShell>`.
   void launch;
 
-  if (coachUnavailable) return null;
+  if (!canRenderOwnCoach || coachUnavailable) return null;
 
   return (
     <div

@@ -51,7 +51,8 @@
  */
 import type { QueryKey } from "@tanstack/react-query";
 
-const STORAGE_KEY = "healthlog-record-scope";
+export const RECORD_SCOPE_STORAGE_KEY = "healthlog-record-scope";
+const REFUSED_RECORD_SCOPE = "__healthlog_refused_record__";
 
 /**
  * The in-process copy. Seeded from storage on first read so the hash function
@@ -59,10 +60,15 @@ const STORAGE_KEY = "healthlog-record-scope";
  */
 let scope: string | null = null;
 let seeded = false;
+const scopeListeners = new Set<() => void>();
+
+function notifyScopeListeners(): void {
+  for (const listener of scopeListeners) listener();
+}
 
 function readMirror(): string | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(RECORD_SCOPE_STORAGE_KEY);
     return raw === null || raw.length === 0 ? null : raw;
   } catch {
     // Private mode, disabled storage, or SSR. "Own record" is the safe
@@ -104,13 +110,53 @@ export function setRecordScope(accountId: string | null): void {
   if (typeof window === "undefined") return;
   try {
     if (accountId === null) {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(RECORD_SCOPE_STORAGE_KEY);
     } else {
-      localStorage.setItem(STORAGE_KEY, accountId);
+      localStorage.setItem(RECORD_SCOPE_STORAGE_KEY, accountId);
     }
   } catch {
     /* storage unavailable — the in-process copy still partitions this tab */
   }
+  notifyScopeListeners();
+}
+
+/**
+ * React bridge for consumers that must stop work as soon as another tab moves
+ * the session to a different record. `storage` never fires in the tab that
+ * wrote the mirror, so local writes notify directly above; other tabs adopt
+ * the new value before notifying their subscribers.
+ */
+export function subscribeToRecordScope(listener: () => void): () => void {
+  scopeListeners.add(listener);
+  if (typeof window === "undefined") {
+    return () => scopeListeners.delete(listener);
+  }
+  const onStorage = (event: StorageEvent) => {
+    if (event.key !== RECORD_SCOPE_STORAGE_KEY) return;
+    scope =
+      event.newValue === null || event.newValue.length === 0
+        ? null
+        : event.newValue;
+    seeded = true;
+    notifyScopeListeners();
+  };
+  window.addEventListener("storage", onStorage);
+  return () => {
+    scopeListeners.delete(listener);
+    window.removeEventListener("storage", onStorage);
+  };
+}
+
+/**
+ * Keep a malformed active-record response out of the caller's own cache slot.
+ *
+ * No record id from an invalid payload is trusted, but `null` would make
+ * record-scoped reads share the caller's own cache identity. This sentinel is
+ * a cache partition only; the shell refuses the presentation until the caller
+ * leaves the server-side switch.
+ */
+export function setRefusedRecordScope(): void {
+  setRecordScope(REFUSED_RECORD_SCOPE);
 }
 
 /** True while this browser is reading somebody else's record. */
@@ -138,6 +184,10 @@ export function recordScopedQueryKeyHashFn(queryKey: QueryKey): string {
           }, {})
       : val,
   );
+  // `/api/auth/me` identifies the caller, never the record they are reading.
+  // Its query begins before `fetchMe` can resolve or refuse the record scope,
+  // so it must remain reachable across that transition.
+  if (queryKey[0] === "auth") return key;
   const record = getRecordScope();
   return record === null ? key : `record:${record}|${key}`;
 }

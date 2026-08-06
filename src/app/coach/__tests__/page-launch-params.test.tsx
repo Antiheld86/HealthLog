@@ -44,6 +44,12 @@ vi.mock("@/hooks/use-feature-flags", () => ({
 vi.mock("@/hooks/use-disable-coach", () => ({
   useDisableCoach: () => false,
 }));
+vi.mock("@/hooks/use-auth", () => ({
+  useAuth: () => ({ user: {}, isLoading: false }),
+}));
+vi.mock("@/hooks/use-record-capabilities", () => ({
+  useRecordCapabilities: () => ({ inSharedRecord: false }),
+}));
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({ data: undefined }),
 }));

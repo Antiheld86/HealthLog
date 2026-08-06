@@ -22,9 +22,22 @@ import { Toaster } from "@/components/ui/sonner";
 import { VersionPoller } from "@/components/version-poller";
 import { ServiceWorkerRegistrar } from "@/components/service-worker-registrar";
 import { SharedRecordGrantLossBridge } from "@/components/layout/shared-record-grant-loss-bridge";
+import { useAuth, type AccountAccessStatus } from "@/hooks/use-auth";
+import { useRecordSessionTransition } from "@/hooks/use-record-session-transition";
 import { isDashboardSnapshotEnabled } from "@/lib/dashboard/snapshot-flag";
-import { prefetchDashboardSnapshot } from "@/lib/queries/use-dashboard-snapshot";
+import {
+  discardDashboardSnapshotPreload,
+  prefetchDashboardSnapshot,
+} from "@/lib/queries/use-dashboard-snapshot";
+import {
+  getRecordSessionTransition,
+  subscribeToRecordSessionTransition,
+} from "@/lib/query-keys/record-session-transition";
 import { prefetchMedicationsList } from "@/lib/queries/prefetch-medications";
+import {
+  getRecordScope,
+  subscribeToRecordScope,
+} from "@/lib/query-keys/record-scope";
 import {
   restorePersistedQueryCache,
   startPersistingQueryCache,
@@ -168,15 +181,60 @@ function ThemeProvider({ children }: { children: ReactNode }) {
 // the router commits to "/" instead of waiting for the dashboard page
 // chunk to download + mount (~450 ms later on a 4G / 4x-CPU profile).
 // The proxy has already enforced auth + onboarding for "/" before any
-// client code runs here, so the prefetch cannot fire for an
-// unauthenticated visitor; a racing edge case just yields a swallowed
-// 401 prefetch and the mounted cell re-resolves normally.
+// client code runs here. It does not, however, resolve the active shared
+// record: that verdict arrives from `/api/auth/me`. Do not begin a record read
+// until that answer and the local cache scope agree.
+export function isRecordPreloadReady({
+  isLoading,
+  accountAccessStatus,
+  activeAccountId = null,
+}: {
+  isLoading: boolean;
+  accountAccessStatus: AccountAccessStatus | undefined;
+  activeAccountId?: string | null;
+}): boolean {
+  return (
+    !isLoading &&
+    (accountAccessStatus === "absent" || accountAccessStatus === "valid") &&
+    getRecordScope() === activeAccountId
+  );
+}
+
+function subscribeToClientRecordScope(onStoreChange: () => void): () => void {
+  return subscribeToRecordScope(onStoreChange);
+}
+
+function getClientRecordScope(): string | null {
+  return getRecordScope();
+}
+
+function getServerRecordScope(): string | null {
+  return null;
+}
+
 function DashboardSnapshotPreloader() {
   const queryClient = useQueryClient();
   const pathname = usePathname();
+  const { user, isLoading } = useAuth();
+  const transition = useRecordSessionTransition();
+  const recordScope = useSyncExternalStore(
+    subscribeToClientRecordScope,
+    getClientRecordScope,
+    getServerRecordScope,
+  );
+  const ready =
+    transition.phase === "ready" &&
+    isRecordPreloadReady({
+      isLoading,
+      accountAccessStatus: user?.accountAccessStatus,
+      activeAccountId: user?.accountAccess?.active?.accountId ?? null,
+    });
+
   useEffect(() => {
+    if (!ready) return;
+    const controller = new AbortController();
     if (pathname === "/" && isDashboardSnapshotEnabled()) {
-      prefetchDashboardSnapshot(queryClient);
+      prefetchDashboardSnapshot(queryClient, controller.signal);
     }
     // v1.16.7 — same waterfall cut for the medications page: its list
     // query (which carries the per-medication `nextDueAt` the due cells
@@ -185,9 +243,12 @@ function DashboardSnapshotPreloader() {
     // download; the nav links additionally prefetch on hover/touch
     // intent, so this is the fallback for direct loads + reloads.
     if (pathname === "/medications") {
-      prefetchMedicationsList(queryClient);
+      prefetchMedicationsList(queryClient, controller.signal);
     }
-  }, [pathname, queryClient]);
+    // A transition to an unresolved, refused, or different record scope must
+    // abort a preloader before its response can be adopted by the next route.
+    return () => controller.abort();
+  }, [pathname, queryClient, ready, recordScope, transition.phase]);
   return null;
 }
 
@@ -195,9 +256,13 @@ function DashboardSnapshotPreloader() {
 
 function QueryVisibilityRefreshBridge() {
   const queryClient = useQueryClient();
+  const transition = useRecordSessionTransition();
   useEffect(
-    () => subscribeToMeaningfulVisibilityRefresh(queryClient),
-    [queryClient],
+    () =>
+      transition.phase === "ready"
+        ? subscribeToMeaningfulVisibilityRefresh(queryClient)
+        : undefined,
+    [queryClient, transition.phase],
   );
   return null;
 }
@@ -211,10 +276,16 @@ function QueryVisibilityRefreshBridge() {
 // empty skeletons. Build-version + age gated; cleared on logout.
 function QueryPersistenceBridge() {
   const queryClient = useQueryClient();
+  const transition = useRecordSessionTransition();
   useEffect(() => {
+    if (transition.phase !== "ready") return;
     let stop: (() => void) | undefined;
     let cancelled = false;
-    void restorePersistedQueryCache(queryClient, SHELL_VERSION).finally(() => {
+    void restorePersistedQueryCache(
+      queryClient,
+      SHELL_VERSION,
+      () => !cancelled,
+    ).finally(() => {
       if (!cancelled) {
         stop = startPersistingQueryCache(queryClient, SHELL_VERSION);
       }
@@ -223,7 +294,42 @@ function QueryPersistenceBridge() {
       cancelled = true;
       stop?.();
     };
+  }, [queryClient, transition.phase]);
+  return null;
+}
+
+/**
+ * Clear tab-local reads immediately whenever the browser-wide transition
+ * store enters its hold. The AuthShell consumes the same store synchronously,
+ * so protected children unmount while this bridge cancels their observers.
+ */
+function RecordSessionTransitionBridge() {
+  const queryClient = useQueryClient();
+  const { refetch } = useAuth();
+  const transition = useRecordSessionTransition();
+
+  useEffect(() => {
+    const clearForTransition = () => {
+      if (getRecordSessionTransition().phase === "ready") return;
+      discardDashboardSnapshotPreload();
+      void queryClient.cancelQueries();
+      queryClient.clear();
+    };
+    // A tab opened while another tab is already switching needs the same
+    // cache purge even though it has no future broadcast to receive.
+    clearForTransition();
+    return subscribeToRecordSessionTransition(clearForTransition);
   }, [queryClient]);
+
+  useEffect(() => {
+    if (
+      transition.phase === "resolving" ||
+      (transition.phase === "ready" && transition.id !== null)
+    ) {
+      void refetch();
+    }
+  }, [refetch, transition.id, transition.phase]);
+
   return null;
 }
 
@@ -279,6 +385,7 @@ export function Providers({
       <ThemeProvider>
         <I18nProvider initialLocale={initialLocale}>
           <QueryPersistenceBridge />
+          <RecordSessionTransitionBridge />
           <QueryVisibilityRefreshBridge />
           <DashboardSnapshotPreloader />
           <OfflineMutationToaster />

@@ -48,6 +48,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useMounted } from "@/hooks/use-mounted";
 import { useTranslations } from "@/lib/i18n/context";
 import type { ModuleKey } from "@/lib/modules/registry";
+import { classifySettingsDestination } from "@/lib/record-settings";
 import {
   SETTINGS_SECTION_SLUGS,
   isSettingsSectionSlug,
@@ -430,13 +431,28 @@ export function SettingsShell({
   // the two passes disagreeing.
   const hydrated = useMounted();
   const modules = user?.modules;
-  const visibleSections = SETTINGS_SECTIONS.filter(
+  const activeRecord = user?.accountAccess?.active ?? null;
+  const allVisibleSections = SETTINGS_SECTIONS.filter(
     (section) =>
       !hydrated ||
       !section.moduleGate ||
       modules?.[section.moduleGate] !== false,
   );
-  const activeSection = visibleSections.find(
+
+  // The server has already resolved which record is active. In a managed
+  // profile, only guardian settings are a navigation destination; the section
+  // gate remains responsible for refusing any direct URL that is not here.
+  // Keep `allVisibleSections` for the active heading so a direct unavailable
+  // link identifies itself before the gate explains why it cannot open.
+  const visibleSections =
+    activeRecord?.recordKind === "managed"
+      ? allVisibleSections.filter(
+          (section) =>
+            classifySettingsDestination(section.slug).kind ===
+            "managed-guardian",
+        )
+      : allVisibleSections;
+  const activeSection = allVisibleSections.find(
     (section) => section.slug === activeSlug,
   );
 
@@ -539,7 +555,11 @@ export function SettingsShell({
   // producing visibly more top/bottom whitespace on Settings/Admin
   // pages than on Dashboard/Insights/Measurements.
   return (
-    <div className="mx-auto w-full max-w-screen-xl">
+    <div
+      className="mx-auto w-full max-w-screen-xl"
+      data-active-record-id={activeRecord?.accountId}
+      data-record-kind={activeRecord?.recordKind}
+    >
       {/* v1.18.6.1 — on mobile the heading sits above the chip strip; on
           desktop it is rendered inside the grid (row 1 / content column) so
           it does not paint twice. */}
