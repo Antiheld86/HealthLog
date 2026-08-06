@@ -171,18 +171,30 @@ function formNumber(form: FormData, name: string, fallback: number): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function ownStringValue(inventory: object, id: string): string | undefined {
+  if (!Object.hasOwn(inventory, id)) return undefined;
+  const value = Reflect.get(inventory, id);
+  return typeof value === "string" ? value : undefined;
+}
+
 function coachMetricLabel(
   t: ReturnType<typeof useTranslations>["t"],
   metric: (typeof COACH_EXCLUDE_METRICS)[number],
 ): string {
-  return t(COACH_EXCLUDE_METRIC_LABEL_KEYS[metric]);
+  const labelKey = ownStringValue(COACH_EXCLUDE_METRIC_LABEL_KEYS, metric);
+  return labelKey
+    ? t(labelKey)
+    : t("settings.sharedRecord.managedSettings.insights.unknownItem");
 }
 
 function coachClusterLabel(
   t: ReturnType<typeof useTranslations>["t"],
   cluster: (typeof COACH_DATA_CLUSTERS)[number],
 ): string {
-  return t(COACH_DATA_CLUSTER_LABEL_KEYS[cluster]);
+  const labelKey = ownStringValue(COACH_DATA_CLUSTER_LABEL_KEYS, cluster);
+  return labelKey
+    ? t(labelKey)
+    : t("settings.sharedRecord.managedSettings.insights.unknownItem");
 }
 
 function insightItemLabel(
@@ -191,7 +203,7 @@ function insightItemLabel(
   id: string,
 ): string {
   if (kind === "section") {
-    const labelKey = INSIGHTS_SECTION_LABEL_KEYS[id as InsightsSectionId];
+    const labelKey = ownStringValue(INSIGHTS_SECTION_LABEL_KEYS, id);
     return labelKey
       ? t(labelKey)
       : t("settings.sharedRecord.managedSettings.insights.unknownItem");
@@ -199,9 +211,14 @@ function insightItemLabel(
 
   const normalizedId = normalizeInsightsTileId(id);
   if (normalizedId === "overview") return t("insights.navOverview");
-  const tab = SUB_PAGE_TABS[normalizedId as keyof typeof SUB_PAGE_TABS];
-  return tab
-    ? t(tab.labelKey)
+  if (!Object.hasOwn(SUB_PAGE_TABS, normalizedId)) {
+    return t("settings.sharedRecord.managedSettings.insights.unknownItem");
+  }
+
+  const labelKey =
+    SUB_PAGE_TABS[normalizedId as keyof typeof SUB_PAGE_TABS]?.labelKey;
+  return typeof labelKey === "string"
+    ? t(labelKey)
     : t("settings.sharedRecord.managedSettings.insights.unknownItem");
 }
 

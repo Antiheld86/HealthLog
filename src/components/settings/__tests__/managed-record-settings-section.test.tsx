@@ -125,4 +125,28 @@ describe("managed record settings forms", () => {
       expect(insights).not.toContain("settings.sharedRecord");
     }
   });
+
+  it.each(["toString", "constructor", "__proto__"])(
+    "renders the unavailable label for prototype property %s",
+    (id) => {
+      const coach = render("coach", {
+        preferences: {
+          excludeMetrics: [id],
+          dataClusters: [id],
+        },
+      });
+      const insights = render("insights", {
+        layout: {
+          version: 2,
+          sections: [{ id, visible: true, order: 0 }],
+          tiles: [{ id, visible: true, order: 0 }],
+        },
+      });
+
+      expect(coach).not.toContain(`>${id}<`);
+      expect(insights).toContain("Unavailable insight");
+      expect(insights).not.toContain(`>${id}<`);
+      expect(insights).not.toContain("settings.sharedRecord");
+    },
+  );
 });
