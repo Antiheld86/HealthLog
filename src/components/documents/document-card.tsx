@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useFencedObjectUrl } from "@/hooks/use-fenced-object-url";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 import type { InboundDocumentDto } from "@/lib/validations/inbound-documents";
@@ -75,6 +76,16 @@ export function DocumentCard({
   // A preview thumbnail that fails to load (still rendering, decrypt error,
   // 404) falls back to the kind icon — never a broken image.
   const [thumbFailed, setThumbFailed] = useState(false);
+  // v1.37.0 — fetched through the app transport rather than issued by the
+  // browser as a subresource, so it carries the record-session assertion. The
+  // null path means "this card has no thumbnail, or one already failed", which
+  // is what keeps the timeline from firing a request per card for documents
+  // that have nothing to show.
+  const { url: thumbnailUrl, failed: thumbnailFailed } = useFencedObjectUrl(
+    document.hasThumbnail && !thumbFailed
+      ? `/api/documents/inbound/${document.id}/thumbnail`
+      : null,
+  );
 
   // Touch long-press selects instead of opening; the click that the
   // browser fires after the release is swallowed once.
@@ -128,24 +139,26 @@ export function DocumentCard({
     >
       <CardContent className="flex h-full flex-col gap-2 px-4">
         <div className="flex items-start gap-2">
-          {document.hasThumbnail && !thumbFailed ? (
-            // Leading-edge preview tile. `loading="lazy"` + the timeline's
-            // virtualization means only cards near the viewport fetch their
-            // thumbnail. Decorative (alt="") — the title beside it names the
-            // document; an authed same-origin subresource, never cached
-            // cross-user. onError falls back to the kind icon.
+          {thumbnailUrl && !thumbnailFailed ? (
+            // Leading-edge preview tile. Decorative (alt="") — the title
+            // beside it names the document. The laziness that `loading="lazy"`
+            // used to provide now lives in the hook's null path: a card with no
+            // thumbnail, or one whose thumbnail already failed, issues no
+            // request at all. onError falls back to the kind icon.
             <span
               data-slot="document-thumbnail"
               className="bg-muted mt-0.5 block size-12 shrink-0 overflow-hidden rounded-md"
             >
-              {/* Authed, private (no-store) same-origin subresource — next/image
-                  would try to proxy/optimize it, which is wrong for a PHI blob
-                  we deliberately never cache. */}
+              {/* An object URL over bytes the app transport already fetched,
+                  not a `/api/…` subresource: the browser issues a subresource
+                  itself and so cannot carry the record-session assertion, which
+                  the fence refuses on any session that has been inside a shared
+                  record. `next/image` is wrong here for the older reason too —
+                  it would proxy a PHI blob we deliberately never cache. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={`/api/documents/inbound/${document.id}/thumbnail`}
+                src={thumbnailUrl}
                 alt=""
-                loading="lazy"
                 decoding="async"
                 onError={() => setThumbFailed(true)}
                 className="size-full object-cover"

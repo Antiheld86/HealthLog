@@ -30,7 +30,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 import { cookieJar, headerJar } from "./mock-next-headers";
-import { getPrismaClient, truncateAllTables } from "./setup";
+import { getPrismaClient, truncateAllTables, switchSessionTo } from "./setup";
 
 import { SHARE_DOMAINS } from "@/lib/sharing/scope";
 import type { ShareDomain } from "@/lib/sharing/scope";
@@ -117,10 +117,7 @@ async function switchInto(
   });
   const session = await signIn(delegateId);
   cookieJar.set("healthlog_session", session.id);
-  await getPrismaClient().session.update({
-    where: { id: session.id },
-    data: { actingAsUserId: ownerId },
-  });
+  await switchSessionTo(session.id, ownerId);
   return grant;
 }
 
@@ -393,10 +390,7 @@ describe("the refusal does not distinguish itself", () => {
     const stranger = await makeUser("stranger");
     const session = await signIn(stranger.id);
     cookieJar.set("healthlog_session", session.id);
-    await getPrismaClient().session.update({
-      where: { id: session.id },
-      data: { actingAsUserId: owner.id },
-    });
+    await switchSessionTo(session.id, owner.id);
     const noGrant = await PROBES.labs.call();
 
     expect(outOfScope.status).toBe(noGrant.status);

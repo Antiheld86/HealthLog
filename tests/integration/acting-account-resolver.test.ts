@@ -181,6 +181,25 @@ async function switchTo(sessionId: string, ownerId: string | null) {
     where: { id: sessionId },
     data: { actingAsUserId: ownerId },
   });
+  await assertCurrentContext(sessionId);
+}
+
+/**
+ * v1.37.0 — attach the record-session assertion the shipped browser client
+ * attaches to every same-origin request.
+ *
+ * Without it every switched case in this file would be exercising the fence's
+ * pre-fence-bundle arm rather than the resolver arm it was written for: a
+ * session pointed at a record is fenced, and a request carrying no assertion is
+ * refused with 403 before the resolver decides anything. The assertion is read
+ * back off the row rather than computed, so it is truthful by construction.
+ */
+async function assertCurrentContext(sessionId: string) {
+  const row = await getPrismaClient().session.findUniqueOrThrow({
+    where: { id: sessionId },
+  });
+  headerJar.set("x-healthlog-record-epoch", String(row.recordEpoch));
+  headerJar.set("x-healthlog-record-scope", row.actingAsUserId ?? "self");
 }
 
 beforeEach(async () => {
@@ -415,6 +434,12 @@ describe("acting-account resolver — the carrier column", () => {
     expect(row).not.toBeNull();
     expect(row!.actingAsUserId).toBeNull();
 
+    // The deletion also moved the record epoch, so a browser still asserting
+    // the pre-deletion context is refused by the fence — that transition is
+    // proved in `tests/integration/record-session-fence.test.ts`. What THIS
+    // test is about is the column, so it reconciles first (the browser's own
+    // `/api/auth/me` bootstrap) and then reads.
+    await assertCurrentContext(session.id);
     const body = await (await call()).json();
     expect(body.data.scopeUserId).toBe(delegate.id);
   });

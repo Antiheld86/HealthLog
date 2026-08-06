@@ -75,6 +75,9 @@ export default defineConfig({
   projects: [
     {
       name: "chromium-desktop",
+      // The disk-layer spec needs a live service worker, which the shared
+      // `use` block blocks for every other spec. It runs in its own project.
+      testIgnore: ["v137-record-session-fence-offline.spec.ts"],
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 1280, height: 720 },
@@ -82,7 +85,53 @@ export default defineConfig({
       },
     },
     {
+      // v1.37.0 — the one project that lets the service worker run.
+      //
+      // Every other project blocks it, and the reason is written in the `use`
+      // block above: a worker-originated `fetch` is not subject to
+      // `page.route`, so the SW would bypass the per-spec route mocks. The
+      // record-session fence's disk-layer case is the exact inverse — its whole
+      // claim is about what the `healthlog-data-*` cache can and cannot serve
+      // across a switch, and with the worker blocked that cache is never
+      // populated, so its positive control could never pass. A check that
+      // cannot pass is worse than no check, so the spec gets a project rather
+      // than a caveat.
+      //
+      // It uses no route mocks for exactly this reason, and it is the only
+      // spec in this project.
+      name: "chromium-service-worker",
+      testMatch: ["v137-record-session-fence-offline.spec.ts"],
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1280, height: 720 },
+        colorScheme: "dark",
+        serviceWorkers: "allow",
+      },
+    },
+    {
       name: "chromium-mobile",
+      // The scoped-sharing journeys each carry a persistent server-side
+      // session stamp. They use isolated desktop jars and are not responsive
+      // layout checks, so running a second project against the same stamps
+      // would test session interference rather than the record journeys.
+      testIgnore: [
+        "v137-sharing-managed-profiles.spec.ts",
+        "v137-sharing-managed-profiles-a11y.spec.ts",
+        // v1.37.0 — every spec that MOVES a session's record selector runs in
+        // exactly one project.
+        //
+        // Each of these now has its own login and its own session row (see
+        // `FENCE_STORAGE_STATE_PATH` in `e2e/setup/global-setup.ts`), which is
+        // what lets them run beside each other at any worker count. A second
+        // PROJECT is the one thing a separate jar cannot fix: it would drive
+        // the very same row from two browsers at once, moving the epoch under
+        // itself. The scoped-sharing journeys above are excluded for the same
+        // reason, one release earlier.
+        "v137-record-session-fence.spec.ts",
+        "v137-sharing-cross-tab-session.spec.ts",
+        // Runs only in the service-worker project.
+        "v137-record-session-fence-offline.spec.ts",
+      ],
       use: {
         // Pixel 5 — Chromium-based mobile profile so CI only needs
         // `playwright install chromium` instead of also pulling

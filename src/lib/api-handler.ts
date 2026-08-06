@@ -37,6 +37,11 @@ import {
   type GrantNeed,
 } from "./sharing/grants";
 import type { ShareScope } from "./sharing/scope";
+import { RECORD_FENCE_ERROR_CODE } from "./sharing/record-session-fence-contract";
+import {
+  assertRecordSessionFence,
+  attachRecordContextEcho,
+} from "./sharing/record-session-fence";
 
 /**
  * HTTP methods a read-only credential may use on the REST surface. A request
@@ -136,6 +141,38 @@ export class SharingNotPermittedError extends SharingAuthError {
   constructor() {
     super(403, "This endpoint cannot be used while acting on another account");
     this.name = "SharingNotPermittedError";
+  }
+}
+
+/**
+ * v1.37.0 — "the record this session is on is not the record you asserted."
+ *
+ * A third sibling rather than a branch, so it rides the existing
+ * `SharingAuthError` arm below with no new serialisation code. The status is
+ * the one thing that differs and it differs on purpose: 409, not 403, because
+ * this is not a refusal of access. The caller may well be entitled to both
+ * records. What failed is agreement about WHICH one, and the instruction the
+ * code carries is "reconcile through `/api/auth/me` and try again", not "you
+ * have lost this record".
+ *
+ * That distinction is load-bearing for deploy compatibility: the currently
+ * shipped bundle reacts to `sharing.access.denied` by leaving the record and
+ * hard-navigating, which is exactly the wrong response to a transient
+ * disagreement and exactly the right one for a bundle too old to reconcile. See
+ * `src/lib/sharing/record-session-fence-contract.ts` for why the fence hands
+ * each bundle the code it can act on.
+ *
+ * The body carries `meta.errorCode` and nothing else — no current epoch, no
+ * current scope. A client may learn its context from exactly two responses
+ * (`GET /api/auth/me` and `POST /api/account/switch`), and putting the truth in
+ * this refusal would open a third path, one that arrives on the very requests
+ * whose context is in doubt.
+ */
+export class RecordSessionChangedError extends SharingAuthError {
+  readonly errorCode = RECORD_FENCE_ERROR_CODE;
+  constructor() {
+    super(409, "The record this session is on has changed");
+    this.name = "RecordSessionChangedError";
   }
 }
 
@@ -366,6 +403,28 @@ export function apiHandler<T extends (...args: any[]) => Promise<Response>>(
       }
       const nr = response as NextResponse;
       nr.headers.set("x-request-id", evt.getRequestId());
+      // v1.37.0 — echo the record context this response was actually served
+      // under, when one was decided. The value comes from the wide event and
+      // from nowhere else: the fence stamps it on every call it makes, so
+      // exactly the responses that resolved a record scope carry it and
+      // everything else — public routes, actor surfaces, admin, `/me`, static —
+      // carries nothing.
+      //
+      // Deliberately NOT derived here with a `getSession()`. That would put a
+      // session read on every public route, and it would make the echo a second
+      // derivation of the context rather than a report of the one that was
+      // used, which is the difference between "what this response served" and
+      // "what a later read thinks is true".
+      //
+      // Absence is therefore meaningful and safe: the client discards a
+      // response whose echo CONTRADICTS its adopted context, and serves one
+      // that carries no echo normally. A discard-on-absence rule would throw
+      // away the `/api/version` poll on every cycle.
+      //
+      // The two header names stay inside the fence module, which is what keeps
+      // them to four files overall (declared, read, attached client-side,
+      // published) — see `src/__tests__/record-session-fence-guard.test.ts`.
+      attachRecordContextEcho(nr.headers, evt.getRecordContext());
       return nr;
     });
   };
@@ -393,6 +452,16 @@ export type AuthContext = {
      * below reads it.
      */
     readonly actingAsUserId?: string | null;
+    /**
+     * v1.37.0 — how many times this session's record selector has moved. The
+     * record-session fence compares it against what the request asserted.
+     *
+     * Optional for the same reason as `actingAsUserId` above, and `undefined`
+     * reads as `0` — which is the fence's exemption, so a hand-built test
+     * context keeps meaning "a session that never switched". Read only by the
+     * fence.
+     */
+    readonly recordEpoch?: number;
   };
   user: User;
   /**
@@ -788,6 +857,21 @@ export async function requireRecordAuth(
   domain: ShareScope,
 ): Promise<RecordAuthContext> {
   const auth = await authenticateCaller();
+  // v1.37.0 — before any carrier is read, any grant is looked up, or any record
+  // row is touched: does this request still believe what its session believes?
+  //
+  // The atomicity that makes this a tautology rather than a race: the epoch the
+  // fence compares and the `actingAsUserId` the carrier below is built from are
+  // BOTH projected off the one session row `authenticateCaller()` already
+  // loaded. The scope this handler serves under and the epoch it validated are
+  // therefore the same fact read at the same instant, not two reads a commit
+  // can land between. Do not add a second session read here to "refresh" it —
+  // that would reintroduce exactly the window this ordering removes.
+  //
+  // `authenticateCaller` necessarily runs first because it supplies the row the
+  // fence reads, so the invariant is "before the carrier", not "before the
+  // first database await".
+  await assertRecordSessionFence(auth);
   const carrier = await readActingCarrier(auth);
 
   if (carrier.kind === "none") {
@@ -859,6 +943,11 @@ function escalate(need: GrantNeed): GrantNeed {
  */
 export async function requireGuardianAuth(): Promise<RecordAuthContext> {
   const auth = await authenticateCaller();
+  // Same placement and the same reason as `requireRecordAuth` above: the
+  // guardian surfaces administer a managed profile, so a request arriving under
+  // a context that has since moved must be refused before the marker is read,
+  // not after.
+  await assertRecordSessionFence(auth);
   const carrier = await readActingCarrier(auth);
 
   if (carrier.kind === "none") {

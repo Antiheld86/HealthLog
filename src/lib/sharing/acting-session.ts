@@ -24,8 +24,27 @@ import type { Prisma } from "@/generated/prisma/client";
 /**
  * The narrow client slice these functions need, so a caller can hand them a
  * transaction handle. Same shape as `grants.ts` uses for `accountGrant`.
+ *
+ * v1.37.0 — widened by one member. The conditional switch below needs
+ * `RETURNING`, which no model delegate can express, so it goes through
+ * `$queryRaw`. Widening the slice is what keeps the raw statement in THIS file:
+ * the alternative is a caller that names `record_epoch` itself, and "only
+ * `acting-session.ts` writes the selector" is the property the boundary guard
+ * in `src/__tests__/acting-account-boundary-guard.test.ts` exists to hold. Both
+ * existing call sites already pass `prisma` or a transaction handle, and both
+ * satisfy the wider shape unchanged.
  */
-type SessionDb = Pick<Prisma.TransactionClient, "session">;
+type SessionDb = Pick<Prisma.TransactionClient, "session" | "$queryRaw">;
+
+/**
+ * The outcome of a conditional switch.
+ *
+ * `stale` is not a failure of the write; it is another tab having got there
+ * first. The caller turns it into the same 409 the fence raises, and the
+ * browser reconciles through `/api/auth/me` rather than retrying blind.
+ */
+export type PointSessionOutcome =
+  { kind: "applied"; epoch: number } | { kind: "stale" };
 
 /**
  * Point one browser session at an account's record, or (with `null`) back at
@@ -46,6 +65,46 @@ export async function pointSessionAt(
     where: { id: sessionId, userId },
     data: { actingAsUserId },
   });
+}
+
+/**
+ * v1.37.0 — the same write, conditional on the epoch the caller believes the
+ * session is at.
+ *
+ * One statement, and that is the whole design. Two tabs pressing the switcher
+ * at the same moment both name the epoch they saw; exactly one `UPDATE` matches
+ * the `WHERE`, and the loser gets zero rows back. That is the monotonic
+ * ordering guarantee, expressed as a compare-and-set rather than as a
+ * server-side pending lease with an expiry and an intermediate state that a
+ * crashed initiator can strand.
+ *
+ * `RETURNING "record_epoch"` reads the value the TRIGGER assigned, in the same
+ * statement that assigned it. So the epoch handed back to the client is the one
+ * the database committed and not a number this file computed — which matters,
+ * because a client that adopts a computed epoch would then assert a context the
+ * row does not hold and refuse itself on its very next request.
+ *
+ * Parameter-bound throughout: `$queryRaw` as a tagged template, no
+ * interpolation, no `Unsafe` variant.
+ */
+export async function pointSessionAtIfUnchanged(
+  sessionId: string,
+  userId: string,
+  actingAsUserId: string | null,
+  expectedEpoch: number,
+  db: SessionDb = prisma,
+): Promise<PointSessionOutcome> {
+  const rows = await db.$queryRaw<{ record_epoch: number }[]>`
+    UPDATE "sessions"
+       SET "acting_as_user_id" = ${actingAsUserId}
+     WHERE "id" = ${sessionId}
+       AND "user_id" = ${userId}
+       AND "record_epoch" = ${expectedEpoch}
+    RETURNING "record_epoch"
+  `;
+  const applied = rows[0];
+  if (!applied) return { kind: "stale" };
+  return { kind: "applied", epoch: Number(applied.record_epoch) };
 }
 
 /**

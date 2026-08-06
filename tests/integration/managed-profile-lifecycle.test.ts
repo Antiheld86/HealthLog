@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { cookieJar, headerJar, queuedSessionIds } from "./mock-next-headers";
-import { getPrismaClient, truncateAllTables } from "./setup";
+import { getPrismaClient, truncateAllTables, switchSessionTo } from "./setup";
 import { createManagedProfile } from "@/lib/managed-profiles/create";
 import {
   acceptGrant,
@@ -324,10 +324,7 @@ describe("managed profile lifecycle (real Postgres)", () => {
         where: { id: invitation.id },
       }),
     ).toMatchObject({ acceptedAt: expect.any(Date), expiresAt: null });
-    await getPrismaClient().session.update({
-      where: { id: secondGuardian.sessionId },
-      data: { actingAsUserId: profile.id },
-    });
+    await switchSessionTo(secondGuardian.sessionId, profile.id);
 
     cookieJar.set("healthlog_session", creator.sessionId);
     const { DELETE: revokeGuardian } =
@@ -505,10 +502,7 @@ describe("managed profile lifecycle (real Postgres)", () => {
     const { creator, profile, secondGuardian, secondGrant } =
       await createTwoGuardians();
     cookieJar.set("healthlog_session", creator.sessionId);
-    await getPrismaClient().session.update({
-      where: { id: secondGuardian.sessionId },
-      data: { actingAsUserId: profile.id },
-    });
+    await switchSessionTo(secondGuardian.sessionId, profile.id);
     const prisma = getPrismaClient();
     await prisma.$executeRawUnsafe(
       "CREATE FUNCTION fail_managed_guardian_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action = 'managed_profile.guardian.revoked' THEN RAISE EXCEPTION 'managed Guardian audit failure'; END IF; RETURN NEW; END; $$",

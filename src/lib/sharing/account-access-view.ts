@@ -28,6 +28,7 @@ export type LegacyAccountAccessLevel = "read" | "write";
 
 /** The server-resolved kind of record a presentation is naming. */
 export type AccountRecordKind = "self" | "shared" | "managed";
+export type SharedAccountRecordKind = Exclude<AccountRecordKind, "self">;
 
 /**
  * Read the portion of an account-access entry that an older whole-record
@@ -68,7 +69,7 @@ export interface AccountAccessEntry {
    * What kind of record this is. This is presentation metadata only; it is
    * resolved by the server and never accepted as an authorization input.
    */
-  recordKind: AccountRecordKind;
+  recordKind: SharedAccountRecordKind;
   /**
    * v1.37.0 — which sections of the record this grant opens, or `null` for
    * the entire record.

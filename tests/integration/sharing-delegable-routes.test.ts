@@ -30,7 +30,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 import { cookieJar, headerJar } from "./mock-next-headers";
-import { getPrismaClient, truncateAllTables } from "./setup";
+import { getPrismaClient, truncateAllTables, switchSessionTo } from "./setup";
 
 vi.mock("next/headers", async () => {
   const { cookieJar, headerJar } = await import("./mock-next-headers");
@@ -99,10 +99,7 @@ async function switchInto(ownerId: string, delegateId: string) {
     },
   });
   const session = await signIn(delegateId);
-  await getPrismaClient().session.update({
-    where: { id: session.id },
-    data: { actingAsUserId: ownerId },
-  });
+  await switchSessionTo(session.id, ownerId);
   return { grant, session };
 }
 
@@ -199,10 +196,7 @@ function contract<T>(
       await route.seed(owner.id, route.ownerMarker);
 
       const session = await signIn(stranger.id);
-      await getPrismaClient().session.update({
-        where: { id: session.id },
-        data: { actingAsUserId: owner.id },
-      });
+      await switchSessionTo(session.id, owner.id);
 
       await expectDenied(await route.call());
     });
@@ -1108,10 +1102,7 @@ describe("GET /api/sleep/night", () => {
     const owner = await makeUser("owner");
     const stranger = await makeUser("stranger");
     const session = await signIn(stranger.id);
-    await getPrismaClient().session.update({
-      where: { id: session.id },
-      data: { actingAsUserId: owner.id },
-    });
+    await switchSessionTo(session.id, owner.id);
 
     const { GET } = await import("@/app/api/sleep/night/route");
     await expectDenied(await call(GET as Handler, "/api/sleep/night"));
@@ -1550,10 +1541,7 @@ describe("GET /api/medications/intake", () => {
     await seedTodaysDose(owner.id, "owner-statin");
 
     const session = await signIn(stranger.id);
-    await getPrismaClient().session.update({
-      where: { id: session.id },
-      data: { actingAsUserId: owner.id },
-    });
+    await switchSessionTo(session.id, owner.id);
 
     await expectDenied(await today());
   });
@@ -1682,10 +1670,7 @@ describe("the per-medication reads", () => {
     });
 
     const session = await signIn(stranger.id);
-    await getPrismaClient().session.update({
-      where: { id: session.id },
-      data: { actingAsUserId: owner.id },
-    });
+    await switchSessionTo(session.id, owner.id);
 
     const detail = await import("@/app/api/medications/[id]/route");
     await expectDenied(
@@ -1882,10 +1867,7 @@ describe("GET /api/documents/inbound", () => {
       },
     });
     const session = await signIn(delegate.id);
-    await getPrismaClient().session.update({
-      where: { id: session.id },
-      data: { actingAsUserId: owner.id },
-    });
+    await switchSessionTo(session.id, owner.id);
     expect(grant.access).toBe("WRITE");
 
     const { POST } = await import("@/app/api/documents/inbound/route");

@@ -171,6 +171,7 @@ describe("<ResearchModeAcknowledgmentDialog>", () => {
 
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
+      headers: new Headers(),
       json: async () => ({ data: { enabled: true } }),
       // The apiFetch wrapper reads the envelope via `text()`.
       text: async () => JSON.stringify({ data: { enabled: true } }),

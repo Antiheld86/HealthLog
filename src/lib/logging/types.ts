@@ -80,6 +80,18 @@ export interface WideEvent {
     delegated_generation?: "suppressed";
     /** Durable authority copied into provider queue payloads. */
     provider_work_authority?: ProviderWorkAuthority;
+    /**
+     * v1.37.0 — the record context this request was actually served under, as
+     * the record-session fence read it off the session row.
+     *
+     * Stamped by the fence on every call it makes, pass or refuse, and by
+     * nothing else. `apiHandler` copies it onto two response headers so the
+     * browser can discard a response that resolved a different record than the
+     * one it is now showing. Present exactly on the responses that resolved a
+     * record scope; absent everywhere else, which is what makes "no echo" mean
+     * "nothing about a record was decided here" rather than "unknown".
+     */
+    record_context?: { epoch: number; scope: string | null };
   };
 
   // Business-Daten (was wurde getan)

@@ -24,6 +24,8 @@ import type { ZodOpenApiObject } from "zod-openapi";
 import {
   accountSelectorParameter,
   accountSharingPaths,
+  recordEpochParameter,
+  recordScopeParameter,
 } from "./account-sharing";
 import { adminDiagnosticPaths, adminInvitePaths } from "./admin";
 import { allergyPaths } from "./allergies";
@@ -156,7 +158,14 @@ export const openApiComponents: NonNullable<ZodOpenApiObject["components"]> = {
   // module so that `src/__tests__/acting-account-boundary-guard.test.ts` keeps
   // holding the header's name to two files: the resolver that reads it, and
   // the one place that publishes it.
-  parameters: { AccountSelector: accountSelectorParameter },
+  // v1.37.0 — the record-session fence's two request headers, defined in the
+  // same module for the same reason: the fence guard holds their names to four
+  // files, and this index references rather than restates them.
+  parameters: {
+    AccountSelector: accountSelectorParameter,
+    RecordEpoch: recordEpochParameter,
+    RecordScope: recordScopeParameter,
+  },
   securitySchemes: {
     bearerAuth: {
       type: "http",

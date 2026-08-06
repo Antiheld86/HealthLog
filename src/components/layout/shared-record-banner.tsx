@@ -5,6 +5,7 @@ import { Eye, Loader2, LogOut } from "lucide-react";
 import { useAccountSwitch } from "@/hooks/use-account-switch";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
+import { resolveRecordPresentation } from "@/lib/navigation/record-presentation";
 import { accountLabel } from "@/lib/sharing/account-access-view";
 
 /**
@@ -14,7 +15,7 @@ import { accountLabel } from "@/lib/sharing/account-access-view";
  * are switched will log their own blood pressure into somebody else's record,
  * and there is no undo for a reading that was never theirs. So the banner
  * states three things in one line — that this is not your record, whose it is,
- * and that you can only read it — and carries the way out beside them.
+ * and what sharing level applies — and carries the way out beside them.
  *
  * ## Why it looks like this
  *
@@ -28,9 +29,9 @@ import { accountLabel } from "@/lib/sharing/account-access-view";
  * somebody stops seeing after the third switch, and the failure mode here is
  * a person who has stopped noticing.
  *
- * The name is `text-foreground` and the qualifier `text-muted-foreground`, per
- * the two-tier text rule — the person's name is content, the read-only note is
- * meta.
+ * The name and qualifier both use `text-foreground`: the warning wash is too
+ * dark for the muted token at this text size, while the foreground token keeps
+ * the context legible at the same contrast floor as the name.
  *
  * The row is the inline-action shape from UI-STANDARDS §11 rather than a
  * centred wrapping stack: sentence `min-w-0 flex-1`, action `shrink-0`, so the
@@ -59,12 +60,15 @@ export function SharedRecordBanner() {
   if (!active) return null;
 
   const name = accountLabel(active);
+  const presentation = resolveRecordPresentation(active);
 
   return (
     <div
       role="status"
       data-slot="shared-record-banner"
       data-account-id={active.accountId}
+      data-access-level={presentation.access}
+      data-record-kind={presentation.recordKind}
       className="bg-warning/15 border-warning/40 flex items-start gap-3 border-b px-3 py-2 text-xs sm:items-center"
     >
       <Eye
@@ -75,18 +79,12 @@ export function SharedRecordBanner() {
         <span className="text-foreground font-medium">
           {t("recordSharing.banner.viewing", { name })}
         </span>{" "}
-        {/* Resolved server-side, and it says something at BOTH levels now.
-            v1.36.1 is the release that made `canWrite` true, and until this
-            line changed the write case rendered nothing at all: a delegate who
-            could add to somebody's health record was told only whose record it
-            was. That matters more than the read case, not less, and the rest of
-            the product leans on it — a control the record refuses is absent
-            rather than disabled, on the stated grounds that the banner names
-            the mode globally. It has to actually do that. */}
-        <span className="text-muted-foreground">
-          {active.canWrite
-            ? t("recordSharing.banner.canAdd")
-            : t("recordSharing.banner.readOnly")}
+        <span
+          data-slot="shared-record-banner-context"
+          className="text-foreground"
+        >
+          {recordKindLabel(presentation.recordKind, t)}.{" "}
+          {accessLabel(presentation.access, t)}
         </span>
       </p>
       <button
@@ -108,4 +106,23 @@ export function SharedRecordBanner() {
       </button>
     </div>
   );
+}
+
+function accessLabel(
+  access: ReturnType<typeof resolveRecordPresentation>["access"],
+  t: ReturnType<typeof useTranslations>["t"],
+): string {
+  if (access === "manage") return t("recordSharing.row.canManage");
+  return access === "view-and-add"
+    ? t("recordSharing.banner.canAdd")
+    : t("recordSharing.banner.readOnly");
+}
+
+function recordKindLabel(
+  recordKind: ReturnType<typeof resolveRecordPresentation>["recordKind"],
+  t: ReturnType<typeof useTranslations>["t"],
+): string {
+  return recordKind === "managed"
+    ? t("recordSharing.lookingAfter.kindManaged")
+    : t("recordSharing.lookingAfter.kindShared");
 }

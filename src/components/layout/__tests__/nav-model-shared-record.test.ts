@@ -78,7 +78,14 @@ describe("the destination list under a switch", () => {
 
   it("changes nothing for a session in its own record", () => {
     const own = visibleNavDestinations(ALL_MODULES, true).map((d) => d.href);
-    expect(own).toEqual(NAV_DESTINATIONS.map((d) => d.href));
+    expect(own).toEqual(
+      NAV_DESTINATIONS.filter((d) => !d.sharedRecordOnly).map((d) => d.href),
+    );
+    expect(own).not.toContain("/profile");
+  });
+
+  it("offers the read-only profile summary only inside a shared record", () => {
+    expect(hrefsInSharedRecord()).toContain("/profile");
   });
 });
 

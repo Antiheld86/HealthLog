@@ -1179,6 +1179,24 @@ model Session {
   /// into its own account.
   actingAsUserId String? @map("acting_as_user_id")
 
+  /// v1.37.0 — how many times this session's record selector has moved.
+  ///
+  /// Monotonic, starts at 0, and NEVER written by application code: migration
+  /// 0302 installs a `BEFORE UPDATE OF acting_as_user_id` trigger that sets it,
+  /// so the increment also happens on the paths where no application code runs
+  /// at all — the `ON DELETE SET NULL` referential action above, a raw fixture
+  /// `UPDATE`, an operator at `psql`. A convention that every writer must
+  /// remember is a convention those three break silently.
+  ///
+  /// Consumer: the record-session fence
+  /// (`src/lib/sharing/record-session-fence.ts`), which refuses a cookie
+  /// request whose asserted epoch no longer matches the row. `0` additionally
+  /// means "this session has never been pointed at another record", which is
+  /// the fence's exemption for browser tabs that predate the feature; the
+  /// migration normalises existing rows so that invariant holds from the first
+  /// request after deploy.
+  recordEpoch Int @default(0) @map("record_epoch")
+
   user     User  @relation("SessionOwner", fields: [userId], references: [id], onDelete: Cascade)
   actingAs User? @relation("SessionActingAs", fields: [actingAsUserId], references: [id], onDelete: SetNull)
 

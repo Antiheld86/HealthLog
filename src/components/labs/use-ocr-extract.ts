@@ -40,6 +40,23 @@ export interface OcrCommitResult extends OcrCommitResponseDto {
   inserted: LabResultDto[];
 }
 
+/** The capability route resolves the caller's own provider configuration. */
+export function shouldProbeOcrCapability({
+  isAuthenticated,
+  isLoading,
+  labsEnabled,
+  mounted,
+  canManage,
+}: {
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  labsEnabled: boolean;
+  mounted: boolean;
+  canManage: boolean;
+}): boolean {
+  return isAuthenticated && !isLoading && labsEnabled && mounted && canManage;
+}
+
 /** Capability probe — refetched when the scan dialog opens. */
 export function useOcrCapability(enabled: boolean) {
   return useQuery<OcrCapabilityDto>({

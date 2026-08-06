@@ -184,14 +184,15 @@ export function DocumentsView() {
   // about it are none of them delegated verbs. Inside somebody else's record
   // the vault reads and nothing more: no upload path, no selection, no bulk
   // bar, no corpus backfill.
-  const { canManage } = useRecordCapabilities();
+  const { canManage, inSharedRecord, sections } = useRecordCapabilities();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const coachLaunch = useCoachLaunch();
 
-  const moduleEnabled = user?.modules?.inboundDocuments === true;
+  const moduleEnabled =
+    inSharedRecord || user?.modules?.inboundDocuments === true;
 
   // UX redirect only — the API routes enforce the gate server-side.
   useEffect(() => {
@@ -377,7 +378,10 @@ export function DocumentsView() {
   );
   const { dropActive } = usePageFileDrop(canManage ? enqueueFiles : undefined);
 
-  const episodes = useIllnessEpisodes(true);
+  const episodes = useIllnessEpisodes(
+    true,
+    !inSharedRecord || sections === null || sections.includes("illness"),
+  );
 
   // Content-search coverage: fire the corpus backfill when indexing is
   // available and some documents are not yet searchable. The list search

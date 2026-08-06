@@ -17,7 +17,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 
 import { cookieJar, headerJar } from "./mock-next-headers";
-import { getPrismaClient, truncateAllTables } from "./setup";
+import { getPrismaClient, truncateAllTables, switchSessionTo } from "./setup";
 
 vi.mock("next/headers", async () => {
   const { cookieJar, headerJar } = await import("./mock-next-headers");
@@ -103,10 +103,7 @@ async function household() {
   });
   await acceptGrant({ grantId: invited.id, granteeId: delegate.id });
   const session = await signIn(delegate.id);
-  await getPrismaClient().session.update({
-    where: { id: session.id },
-    data: { actingAsUserId: owner.id },
-  });
+  await switchSessionTo(session.id, owner.id);
   return { owner, delegate, session };
 }
 
@@ -185,10 +182,7 @@ describe("who the trail says did it", () => {
     const delegate = await makeUser("delegate");
     const stranger = await makeUser("stranger");
     const session = await signIn(delegate.id);
-    await getPrismaClient().session.update({
-      where: { id: session.id },
-      data: { actingAsUserId: stranger.id },
-    });
+    await switchSessionTo(session.id, stranger.id);
 
     expect((await act()).status).toBe(403);
     await settle();
@@ -232,10 +226,7 @@ describe("delegated reads coalesce to one row a day", () => {
 
     await act();
     const secondSession = await signIn(second.id);
-    await getPrismaClient().session.update({
-      where: { id: secondSession.id },
-      data: { actingAsUserId: owner.id },
-    });
+    await switchSessionTo(secondSession.id, owner.id);
     await act();
     await settle();
 

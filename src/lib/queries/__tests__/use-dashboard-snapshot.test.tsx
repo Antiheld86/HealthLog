@@ -43,6 +43,10 @@ import {
 } from "../use-dashboard-snapshot";
 import { retryOnceOnTransientError } from "../retry-transient";
 import { queryKeys } from "@/lib/query-keys";
+import {
+  __resetRecordScopeForTests,
+  setRecordScope,
+} from "@/lib/query-keys/record-scope";
 import type { QueryClient } from "@tanstack/react-query";
 
 /** Envelope-shaped Response — the snapshot fetch rides `apiGet` now. */
@@ -58,6 +62,7 @@ afterEach(() => {
   getQueryDataMock.mockReset();
   setQueryDataMock.mockClear();
   _resetDashboardSnapshotPreloadForTests();
+  __resetRecordScopeForTests();
   vi.unstubAllGlobals();
 });
 
@@ -255,6 +260,32 @@ describe("prefetchDashboardSnapshot — hydration-safe promise handoff", () => {
     const opts = lastOptsOf(useQueryMock);
     const snap = await (opts.queryFn as () => Promise<{ layout: unknown }>)();
     expect(snap.layout).toEqual(layout);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("drops a parked shared-record response after the record scope changes", async () => {
+    setRecordScope("shared-record");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        envelopeResponse({ layout: { owner: true }, tiles: {} }),
+      )
+      .mockResolvedValueOnce(
+        envelopeResponse({ layout: { owner: false }, tiles: {} }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    getQueryDataMock.mockReturnValue({ widgets: [{ id: "existing" }] });
+
+    prefetchDashboardSnapshot(fakeQueryClient());
+    setRecordScope(null);
+
+    useDashboardSnapshot();
+    const opts = lastOptsOf(useQueryMock);
+    const snapshot = await (
+      opts.queryFn as () => Promise<{ layout: unknown }>
+    )();
+
+    expect(snapshot.layout).toEqual({ owner: false });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

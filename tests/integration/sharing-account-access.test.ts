@@ -17,7 +17,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { cookieJar, headerJar } from "./mock-next-headers";
-import { getPrismaClient, truncateAllTables } from "./setup";
+import { getPrismaClient, truncateAllTables, switchSessionTo } from "./setup";
 
 vi.mock("next/headers", async () => {
   const { cookieJar, headerJar } = await import("./mock-next-headers");
@@ -298,10 +298,7 @@ describe("accountAccess — the active record", () => {
     const delegate = await makeUser("delegate");
     await grantAccess(owner.id, delegate.id);
     const session = await signIn(delegate.id);
-    await getPrismaClient().session.update({
-      where: { id: session.id },
-      data: { actingAsUserId: owner.id },
-    });
+    await switchSessionTo(session.id, owner.id);
 
     const { accountAccess, id } = await readMe();
 
@@ -327,10 +324,7 @@ describe("accountAccess — the active record", () => {
     const delegate = await makeUser("delegate");
     const grant = await grantAccess(owner.id, delegate.id);
     const session = await signIn(delegate.id);
-    await getPrismaClient().session.update({
-      where: { id: session.id },
-      data: { actingAsUserId: owner.id },
-    });
+    await switchSessionTo(session.id, owner.id);
     // The grant lapses while the browser sits inside the record. Expiry has
     // no session cleanup — only revocation does — so the stamp survives it.
     await getPrismaClient().accountGrant.update({

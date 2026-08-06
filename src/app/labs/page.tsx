@@ -17,7 +17,10 @@ import {
 import { LabForm } from "@/components/labs/lab-form";
 import { LabList } from "@/components/labs/lab-list";
 import { OcrReviewDialog } from "@/components/labs/ocr-review-dialog";
-import { useOcrCapability } from "@/components/labs/use-ocr-extract";
+import {
+  shouldProbeOcrCapability,
+  useOcrCapability,
+} from "@/components/labs/use-ocr-extract";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -41,7 +44,7 @@ export default function LabsPage() {
   // Scanning a report is not: it files a document and commits through the OCR
   // route, and neither is delegated. So a WRITE delegate keeps the manual add
   // and loses the choice menu around it.
-  const { canAdd, canManage } = useRecordCapabilities();
+  const { canAdd, canManage, inSharedRecord } = useRecordCapabilities();
   const mounted = useMounted();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -53,14 +56,22 @@ export default function LabsPage() {
   // v1.18.9 — Lab-OCR "Scan a report" dialog. The scan affordance only shows
   // when the user's configured AI provider can read images (capability probe).
   const [scanOpen, setScanOpen] = useState(false);
-  const ocrCapability = useOcrCapability(isAuthenticated);
 
   // Gated on the resolved `modules.labs` flag from `GET /api/auth/me` (the
   // per-user toggle AND the operator server-wide kill-switch). Default-on: an
   // absent key reads as enabled, so a direct URL hit only bounces on an
   // explicit `false`. Every `/api/labs/*` route also enforces the gate
   // server-side, so this is a UX redirect, not the security boundary.
-  const enabled = user?.modules?.labs !== false;
+  const enabled = inSharedRecord || user?.modules?.labs !== false;
+  const ocrCapability = useOcrCapability(
+    shouldProbeOcrCapability({
+      isAuthenticated,
+      isLoading,
+      labsEnabled: enabled,
+      mounted,
+      canManage,
+    }),
+  );
 
   const refreshVisible = useCallback(
     () => queryClient.invalidateQueries({ type: "active" }),

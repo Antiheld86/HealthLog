@@ -21,6 +21,7 @@ import {
   getRecordScope,
   isReadingSharedRecord,
   recordScopedQueryKeyHashFn,
+  setRefusedRecordScope,
   setRecordScope,
 } from "@/lib/query-keys/record-scope";
 
@@ -99,6 +100,24 @@ describe("the cache cannot serve one record's data while reading another", () =>
     setRecordScope(null);
 
     expect(client.getQueryData(queryKeys.dashboardSnapshot())).toBeUndefined();
+  });
+
+  it("never puts data from a refused record into the caller's own cache slot", () => {
+    const client = appClient();
+    client.setQueryData(queryKeys.dashboardSnapshot(), { weightKg: 71 });
+
+    setRefusedRecordScope();
+
+    expect(isReadingSharedRecord()).toBe(true);
+    expect(client.getQueryData(queryKeys.dashboardSnapshot())).toBeUndefined();
+  });
+
+  it("keeps the auth identity reachable when a refused record changes scope", () => {
+    const ownAuthHash = recordScopedQueryKeyHashFn(queryKeys.authMe());
+
+    setRefusedRecordScope();
+
+    expect(recordScopedQueryKeyHashFn(queryKeys.authMe())).toBe(ownAuthHash);
   });
 
   it("keeps two records' entries apart at the same time", () => {
