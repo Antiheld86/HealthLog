@@ -35,6 +35,7 @@ import { medicationKeys } from "./medications";
 import { mentalHealthKeys } from "./mental-health";
 import { moodKeys } from "./mood";
 import { nutrientKeys } from "./nutrients";
+import { recordSettingsKeys } from "./record-settings";
 import { settingsKeys } from "./settings";
 import { sharingKeys } from "./sharing";
 import { workoutKeys } from "./workouts";
@@ -63,8 +64,11 @@ export const queryKeys = {
   ...documentKeys,
   ...customMetrics,
   ...nutrientKeys,
+  ...recordSettingsKeys,
   ...sharingKeys,
 };
+
+export { recordSettingsKeys } from "./record-settings";
 
 /**
  * v1.36.0 — every read a grant transition can make stale.
