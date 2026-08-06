@@ -19,6 +19,7 @@ import { DemoBanner } from "./demo-banner";
 import { OfflineBanner } from "./offline-banner";
 import { SharedRecordBanner } from "./shared-record-banner";
 import { SharedRecordUnavailable } from "./shared-record-unavailable";
+import { RecordScopeHydrationGate } from "./record-scope-hydration-gate";
 import { SidebarNav } from "./sidebar-nav";
 import { TopBar } from "./top-bar";
 
@@ -225,17 +226,12 @@ export function AuthShell({
     );
   }
 
-  // Admin pages stay behind the auth gate while `/api/auth/me` is in
-  // flight: the role is unknown until the payload lands, and mounting
-  // `/admin/*` children early would fire admin queries that 403 for a
-  // non-admin before the redirect effect can move them away.
-  if (isLoading && (isAdminPage || pathname.startsWith("/settings"))) {
-    return (
-      <div className="flex h-dvh items-center justify-center" role="status">
-        <Loader2 className="text-primary h-6 w-6 animate-spin motion-reduce:animate-none" />
-        <span className="sr-only">{t("nav.loadingScreen")}</span>
-      </div>
-    );
+  // Every protected route waits for `/api/auth/me`, not only Settings and
+  // Admin. The payload resolves the active record as well as identity, so a
+  // child mounted before it could issue an actor-scoped read before the shell
+  // knows that a switched record must be refused or scoped differently.
+  if (isLoading) {
+    return <RecordScopeHydrationGate label={t("nav.loadingScreen")} />;
   }
 
   // Auth RESOLVED as unauthenticated — hold a spinner while the
@@ -248,16 +244,6 @@ export function AuthShell({
       </div>
     );
   }
-
-  // While `/api/auth/me` is still in flight the shell renders the full
-  // app chrome + children immediately (the chrome components own their
-  // null-user skeletons, pages own their data skeletons). This takes the
-  // auth round-trip off the first-paint critical path: page-level
-  // queries fire in parallel with `/api/auth/me` instead of behind it.
-  // `src/proxy.ts` has already refused cookie-less requests to
-  // protected routes, so the unauthenticated-flash window is limited to
-  // expired/invalid sessions — those resolve into the redirect branch
-  // above as soon as the 401 lands.
 
   // Onboarding page — minimal shell, no sidebar/nav
   if (isOnboardingPage) {
