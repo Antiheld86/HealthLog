@@ -476,7 +476,17 @@ describe("every call the managed-profile card can make", () => {
     expect(response.status).toBe(201);
     const grant = (await response.json()).data;
     expect(grant.acceptedAt).toBeNull();
-    expect(new Date(grant.expiresAt).toISOString()).toBe(expiresAt);
+
+    // Read the stored row, because the entry the route answers with does not
+    // carry the expiry: a Guardian is published in one shape everywhere, and
+    // that shape is the roster's five fields. Asserting the column is the
+    // stronger claim anyway — it proves the offset instant was persisted
+    // rather than that it was echoed.
+    const stored = await getPrismaClient().accountGrant.findUniqueOrThrow({
+      where: { id: grant.grantId },
+      select: { expiresAt: true },
+    });
+    expect(stored.expiresAt?.toISOString()).toBe(expiresAt);
 
     // PENDING, and therefore not counted by the floor — which is the sentence
     // the card states before anybody tries to leave.
@@ -521,6 +531,70 @@ describe("every call the managed-profile card can make", () => {
     );
     expect(response.status).toBe(201);
     expect((await response.json()).data.acceptedAt).toBeNull();
+  });
+
+  it("answers an invitation with the roster's shape, not the grant row", async () => {
+    // `Object.keys`, for the same reason the roster read asserts it that way:
+    // the handler used to answer with the `AccountGrant` row straight out of
+    // Prisma — `grantorId`, `granteeId`, `scopeJson`, `lastUsedAt` and the
+    // rest — and every presence assertion in this file passed while it did.
+    // The invitation now answers with the entry the roster publishes, so one
+    // shape describes a Guardian everywhere and the published contract does
+    // not pin a table's columns to the wire.
+    const creator = await person("creator");
+    const invitee = await person("invitee");
+    signIn(creator);
+    const { profile } = await createManagedProfile({
+      creatorId: creator.id,
+      displayName: "Managed record",
+      dateOfBirth: null,
+      locale: "en",
+      timezone: "UTC",
+    });
+
+    const response = await inviteGuardian(profile.id, {
+      identifier: invitee.username,
+      expiresAt: null,
+    });
+    expect(response.status).toBe(201);
+
+    const entry = (await response.json()).data as Record<string, unknown>;
+    expect(Object.keys(entry).sort()).toEqual([
+      "acceptedAt",
+      "account",
+      "grantId",
+      "invitedAt",
+      "state",
+    ]);
+    expect(Object.keys(entry.account as object).sort()).toEqual([
+      "displayName",
+      "id",
+      "username",
+    ]);
+    expect(entry.state).toBe("PENDING");
+    expect((entry.account as { username: string }).username).toBe(
+      invitee.username,
+    );
+
+    // The pipe, not the ends: the entry the invitation answered with is the
+    // entry the roster read answers with a moment later.
+    const roster = (await (await listGuardians(profile.id)).json())
+      .data as Array<Record<string, unknown>>;
+    expect(roster).toContainEqual(entry);
+  });
+
+  it("answers a removal with the access it ended and when", async () => {
+    const { creator, profile, invitation } =
+      await profileWithPendingSecondGuardian();
+    signIn(creator);
+
+    const response = await removeGuardian(profile.id, invitation.id);
+    expect(response.status).toBe(200);
+
+    const ended = (await response.json()).data as Record<string, unknown>;
+    expect(Object.keys(ended).sort()).toEqual(["grantId", "revokedAt"]);
+    expect(ended.grantId).toBe(invitation.id);
+    expect(ended.revokedAt).toEqual(expect.any(String));
   });
 
   it("refuses a bare calendar date as an expiry", async () => {

@@ -25,6 +25,32 @@ describe("managed-profile contract", () => {
     expect(source).not.toContain("requireFreshMfaIfEnrolled");
   });
 
+  it("publishes no Guardian refusal a request cannot produce", async () => {
+    // `managed_profile.guardian.self` was written, shipped and never
+    // reachable: `self_grant` needs the grantor to equal the grantee, and the
+    // grantor of a Guardian grant is the PROFILE. Inviting yourself lands on
+    // the duplicate refusal; naming the profile is refused a step earlier as
+    // `managed_grantee`. Both doors are asserted in
+    // `tests/integration/managed-profile-surface.test.ts`, so the arm was
+    // known to be dead rather than assumed to be, and it was removed rather
+    // than frozen into the published contract.
+    const route = await readFile(
+      path.join(root, "src/app/api/managed-profiles/[id]/guardians/route.ts"),
+      "utf8",
+    );
+    const spec = await readFile(
+      path.join(root, "docs/api/openapi.yaml"),
+      "utf8",
+    );
+
+    // Non-zero control: the codes that ARE reachable are still named, so this
+    // cannot pass by matching an empty file or a renamed family.
+    expect(route).toContain("managed_profile.guardian.duplicate");
+    expect(route).toContain("managed_profile.guardian.managed_invitee");
+    expect(route).not.toContain('errorCode: "managed_profile.guardian.self"');
+    expect(spec).not.toContain("managed_profile.guardian.self");
+  });
+
   it("does not publish an emancipation API surface", async () => {
     const source = await readFile(
       path.join(root, "prisma/schema.prisma"),
