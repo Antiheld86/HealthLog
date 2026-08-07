@@ -104,6 +104,46 @@ const MEASUREMENT_BACKUP_SELECT = {
 } as const satisfies Prisma.MeasurementSelect;
 
 /**
+ * Every restorable `MoodEntry` scalar. `userId` is absent for the same reason
+ * it is absent above: the backup is user-scoped and the owner is re-derived
+ * from the restoring account.
+ *
+ * Named rather than inlined so `mood-backup-completeness.test.ts` can compare
+ * it field-by-field against the model in `prisma/schema.prisma`, exactly as the
+ * measurement guard does for the select above.
+ */
+const MOOD_ENTRY_BACKUP_SELECT = {
+  id: true,
+  date: true,
+  mood: true,
+  score: true,
+  tags: true,
+  note: true,
+  noteEncrypted: true,
+  source: true,
+  externalId: true,
+  moodLoggedAt: true,
+  tz: true,
+  syncedAt: true,
+  syncVersion: true,
+  deletedAt: true,
+  createdAt: true,
+  updatedAt: true,
+} as const satisfies Prisma.MoodEntrySelect;
+
+/**
+ * A structured-tag link, as it rides the wire. The link is carried by the
+ * tag's KEY, not by its id: a restore resolves the key against the target
+ * instance's catalogue, where the source instance's row id may not exist at
+ * all. `kind` comes along so the mapper can split RATED factors from BINARY
+ * tags without a second query.
+ */
+const MOOD_ENTRY_TAG_LINK_SELECT = {
+  rating: true,
+  moodTag: { select: { key: true, kind: true } },
+} as const satisfies Prisma.MoodEntryTagLinkSelect;
+
+/**
  * Build the canonical full-backup payload for `userId`. Portable exports omit
  * tombstones and document ciphertext; disaster-recovery payloads preserve
  * both so weekly and off-host snapshots share one restorable wire format.
@@ -207,13 +247,11 @@ export async function buildFullBackupPayload(
     prisma.moodEntry.findMany({
       where: disasterRecovery ? { userId } : { userId, deletedAt: null },
       orderBy: { moodLoggedAt: "desc" },
-      include: {
+      select: {
+        ...MOOD_ENTRY_BACKUP_SELECT,
         tagLinks: {
           where: { rating: { not: null } },
-          select: {
-            rating: true,
-            moodTag: { select: { key: true } },
-          },
+          select: MOOD_ENTRY_TAG_LINK_SELECT,
         },
       },
     }),
@@ -394,19 +432,24 @@ export async function buildFullBackupPayload(
       skipped: e.skipped,
       source: e.source,
     })),
-    moodEntries: moodEntries.map((e) => ({
-      id: e.id,
-      date: e.date,
-      mood: e.mood,
-      score: e.score,
-      tags: e.tags,
-      source: e.source,
-      loggedAt: e.moodLoggedAt.toISOString(),
-      externalId: e.externalId,
-      deletedAt: e.deletedAt?.toISOString() ?? null,
-      factors: e.tagLinks.map((link) => ({
-        key: link.moodTag.key,
-        rating: link.rating!,
+    // The parameter is spelled out rather than the `e` every other mapper here
+    // uses, and deliberately: `mood-backup-completeness.test.ts` proves a
+    // selected column reaches a payload by matching `: moodEntry.`. A matcher
+    // on `: e.` would also match the intake-event mapper above it and could
+    // therefore never fail.
+    moodEntries: moodEntries.map((moodEntry) => ({
+      id: moodEntry.id,
+      date: moodEntry.date,
+      mood: moodEntry.mood,
+      score: moodEntry.score,
+      tags: moodEntry.tags,
+      source: moodEntry.source,
+      loggedAt: moodEntry.moodLoggedAt.toISOString(),
+      externalId: moodEntry.externalId,
+      deletedAt: moodEntry.deletedAt?.toISOString() ?? null,
+      factors: moodEntry.tagLinks.map((tagLink) => ({
+        key: tagLink.moodTag.key,
+        rating: tagLink.rating!,
       })),
     })),
     customMoodTags: customMoodTags.map((tag) => ({

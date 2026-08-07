@@ -409,7 +409,13 @@ describe("buildFullBackupPayload disaster-recovery mode", () => {
     expect(prisma.moodEntry.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { userId: "user-1" },
-        include: expect.any(Object),
+        select: expect.objectContaining({
+          id: true,
+          noteEncrypted: true,
+          tz: true,
+          syncVersion: true,
+          deletedAt: true,
+        }),
       }),
     );
     expect(mocks.buildRecordsBackupSection).toHaveBeenCalledWith(
