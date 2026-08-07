@@ -2,7 +2,78 @@
 
 ## [Unreleased]
 
+## [1.37.0] — 2026-08-07
+
 ### Added
+
+- Sharing a record no longer has to mean sharing the whole of it. An invitation
+  can name the parts it opens: readings, medications, lab results, health
+  background, illness, mood and mind, cycle, documents. Everything you do not
+  pick stays closed, and a section you kept back is refused the same way a
+  record nobody shared with you is, so what you held back is not visible from
+  the outside.
+
+  Two things the invitation screen says out loud rather than leaving you to
+  work them out. A section can mention the rest of your health in its notes and
+  its names, so sharing a section shares whatever was written in it. And the
+  dashboard overview, the health score and the daily digest appear only when
+  the entire record is shared, because a figure computed from part of a record
+  would read as a figure about the person.
+
+  Every grant written before this release opens the entire record and is
+  untouched. Nobody has to agree to anything again.
+
+- A third level of access. Read access looks at the record. Write access adds
+  to it. Manage access can also change and remove what is already there,
+  including entries you made yourself, and can read the insights generated from
+  the record. The line it stops at is the account around the record: your
+  login, your second factor, your connected services, your API tokens, where
+  your notifications go, which modules and thresholds are on, and who else has
+  access.
+
+  Offering manage access asks for your second factor, so it can only be done in
+  a browser. Accepting it can be done anywhere. It always covers the entire
+  record. There is no way to hand somebody everything about part of you, because
+  a note in one section can be about any other.
+
+  Everything a manager does is recorded under their own name, with a verb that
+  says what it was rather than "made a change".
+
+- A health record for somebody who does not sign in. @balajiv113 asked in #360
+  for a way to look after a family member, and a grant between two accounts only
+  ever covered half of that. The other half is the person who has no account to
+  begin with: a child, or somebody you care for.
+
+  A managed profile has no login and no e-mail address. You give it a name,
+  optionally a real date of birth, and the language and timezone its own days
+  and reminders are measured in. Nothing is invented from a year you did not
+  give. Creating one asks for your second factor, and you become its first
+  guardian in the same transaction, so there is no moment where the record
+  exists and nobody is looking after it.
+
+  You can invite a second guardian, who accepts the invitation the way any
+  other is accepted. The record can never be left with nobody: the last
+  guardian cannot hand it back and cannot be removed, and the screen says so
+  where the refusal happens. The way out is to add somebody else, or to delete
+  the profile.
+
+- The reminders a managed profile produces reach the people looking after it. A
+  record with no login has no phone and no chat of its own, so medication
+  reminders, measurement reminders, safety-floor alerts and low-stock alerts go
+  to its guardians, each in their own language and over the channels they had
+  already chosen. The message names whose record it is about. It carries no
+  buttons: opening the app takes you through the ordinary switch into that
+  record rather than acting on it from a lock screen.
+
+  One guardian turning off their own reminders on their own phone does not
+  silence the others.
+
+- A guardian can keep a managed profile's settings. Its modules, its units, its
+  language and timezone, its thresholds and its notification preferences, read
+  and written as that record's settings rather than as yours. Your own screens
+  stay in your own language while you do it. Connected services show a status
+  and nothing else for now: connecting, syncing and disconnecting a wearable on
+  somebody else's behalf is not part of this release.
 
 - The document vault opens inside a shared record. `/documents` was offered in
   the navigation of somebody else's record and then refused every read behind
@@ -32,6 +103,15 @@
   level actually admits. Reading those values stays.
 
 ### Fixed
+
+- Two tabs of one browser could disagree about which record they were in.
+  Switching records moves a session rather than a tab, so a tab left open on
+  the record you just left went on reading and writing there until somebody
+  reloaded it. Every request now carries the record the tab believes it is in,
+  and one naming the record it has left is refused with an answer the tab
+  recovers from by re-reading who it is. A session that has never opened
+  somebody else's record is unaffected, and so is the phone app, which carries
+  the record on the request itself and never held a selector to go stale.
 
 - Somebody with write access could still overturn a dose you had already
   recorded. The rule that keeps that with the owner was on one request and the

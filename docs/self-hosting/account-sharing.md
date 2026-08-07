@@ -5,8 +5,12 @@ can open the other's health record. A parent and an adult child, two
 partners, somebody keeping an eye on a relative's blood pressure — the
 case this exists for is a household, not an organisation.
 
-This page describes what that connection does, what it deliberately does
-not do, and which of the instance's existing trust properties it leaves
+Since v1.37.0 there is a second arrangement beside it: a **managed
+profile**, a health record for somebody who has no account at all. That
+half is described further down, under "Records with no login".
+
+This page describes what these arrangements do, what they deliberately do
+not do, and which of the instance's existing trust properties they leave
 exactly as they were.
 
 ## The shape of it
@@ -25,7 +29,7 @@ the settings copy these are the owner and the person they invited.
 - Once accepted, the record shows up in that person's user menu under
   "Open a record". Opening it reloads the app into the owner's record.
 - A banner across the top of every page names whose record is open and
-  says it is read-only, with a button back to the person's own. It is
+  what the access admits, with a button back to the person's own. It is
   loud on purpose: somebody who forgets they are switched will log their
   own reading into another person's record, and there is no undo for an
   entry that was never theirs.
@@ -36,11 +40,61 @@ the settings copy these are the owner and the person they invited.
 
 ## What the other person can and cannot do
 
-**Read the health record.** Measurements, medications, mood, labs, the
-illness journal, preventive-care reminders, documents. In this release
-that is the whole of it: every grant is read-only. The write level exists
-in the data model so that adding it later is enforcement work rather than
-a migration, and no invitation can create one today.
+An invitation carries two answers: how much of the record it opens, and
+what may be done inside it.
+
+### How much of the record
+
+Either the entire record, which is what sharing has always meant and what
+every grant written before v1.37.0 carries, or a set of named sections
+chosen when the invitation is written:
+
+| Section           | What it covers                                                             |
+| ----------------- | -------------------------------------------------------------------------- |
+| Readings          | Weight, blood pressure, pulse, glucose, sleep, workouts and custom metrics |
+| Medications       | The medication list, its schedules, doses taken, side effects and stock    |
+| Lab results       | Lab results and the analytes behind them                                   |
+| Health background | Allergies, family history and the facts in the health profile              |
+| Illness           | Illness episodes and the day logs kept under them                          |
+| Mood and mind     | Mood entries and the mental-health questionnaire history                   |
+| Cycle             | Cycle tracking                                                             |
+| Documents         | Everything in the document vault                                           |
+
+A section that was not shared is refused exactly the way a record nobody
+shared is, so the shape of what was held back is not readable from
+outside. Sections are route families and nothing finer: there is no row
+filtering, no field filtering and no redaction inside a section that WAS
+shared. The invitation screen says this in as many words, because a note
+or a document name inside one section can be about any other.
+
+Aggregate surfaces (the dashboard overview, the health score, the daily
+digest) appear only on a whole-record grant. A figure derived from part of
+a record reads as a figure about the person, and it would not be one.
+
+A stored scope never grows. A section added by a later release is not in
+a set somebody ticked before it existed.
+
+### What may be done inside it
+
+Three levels, fixed when the invitation is written. Raising one means
+revoking and inviting again, because widening a grant in place would carry
+a consent the other person never gave.
+
+| Level  | Adds                                                                                                                                                                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Read   | Read what the grant opens, and change nothing.                                                                                                                                       |
+| Write  | Add entries: a reading, a lab result, an analyte, an illness entry, a side effect, a medication, and marking a dose taken or skipped. Editing, deleting and restoring stay with you. |
+| Manage | Change and remove entries, including ones the owner wrote; record the health background; read the insights generated from the record. Always the entire record.                      |
+
+Offering **manage** asks the owner for a fresh second factor if they have
+one enrolled, which makes it a browser-only act either way: a Bearer
+caller is refused before anything else happens and told to use a browser.
+Accepting it has no such restriction. Manage never carries a section
+scope, because "they can do anything, but only to part of you" promises a
+boundary an edit cannot keep.
+
+Everything a manager does is written to the trail under their own name,
+with a verb naming the act rather than a generic "made a change".
 
 **Nothing about the account around the record.** This is the line the
 whole feature is built on, and it is drawn on the server:
@@ -53,9 +107,15 @@ whole feature is built on, and it is drawn on the server:
 | Connected services (Withings, Fitbit, WHOOP, Google Health, Polar, Oura, Strava, Nightscout) | Re-pointing a sync, or feeding somebody else's wearable into this record |
 | Notification channels and push devices                                                       | The owner's health alerts redirected to another phone or chat            |
 | Exports, the health-record archive, clinician share links                                    | A one-click copy of everything, or a new door that outlives the access   |
-| Insights and the Coach                                                                       | AI processing of the owner's data, under the owner's own consent         |
+| Asking an AI provider anything                                                               | AI processing of the owner's data, under the owner's own consent         |
+| Modules, thresholds, units, the record's language and timezone                               | Configuration of the account, not content of the record                  |
 | Sharing itself                                                                               | Inviting somebody else, widening the access, or passing it on            |
 | Locale, theme, dashboard layout                                                              | Presentation belongs to the person, not to the record                    |
+
+This table is about a grant between two accounts. A managed profile is
+the one place where some of it is deliberately different, because a record
+with no login has nobody else to keep its own configuration: see "Records
+with no login" below for exactly which part of it a guardian may reach.
 
 The last two rows are worth a sentence each. Sharing is not
 transferable: somebody given access cannot invite a third person, cannot
@@ -66,8 +126,11 @@ does not change your own theme, language or dashboard.
 The AI row is the one that looks arbitrary and is not. Server-managed AI
 features send the record's data to a provider under a consent the record's
 OWNER gave, for their own use. Somebody else triggering that would create
-a consent-shaped act the owner never made, so those surfaces stay
-owner-only.
+a consent-shaped act the owner never made. So a manage grant can READ
+insights that were already generated, and nothing a delegate does at any
+level causes an outbound provider call or queues a generation job. The
+owner's own path is unchanged and is the control that proves the
+difference.
 
 These are not checks that a page forgot to render. Every route in the
 product refuses by default while a browser is acting on another account;
@@ -93,6 +156,62 @@ Ending access never deletes the record of it. The row stays with the
 dates and with who ended it, because "who had access, from when to when,
 and who ended it" is a question a deleted row cannot answer. Re-inviting
 the same person creates a new row beside the old one.
+
+## Records with no login
+
+A **managed profile** is a health record for somebody who does not sign
+in: a child, or an adult who is cared for. It is a real account row with
+no password, no passkey and no e-mail address, and it is never presented
+as something to log in as.
+
+- It is created from **Settings → Shared access**, under a fresh second
+  factor. An account with no second factor enrolled is refused rather than
+  waved through, because the act creates a permanent management
+  relationship over a person who cannot object to it.
+- Creation takes a display name, optionally a real date of birth, and the
+  language and timezone the record's own days and reminders are measured
+  in. A year on its own is never turned into the first of January. The
+  language belongs to the record, not to the guardian reading it, so the
+  guardian's own screens stay in their own language.
+- The creator becomes the first **guardian** in the same transaction, over
+  an ordinary accepted MANAGE grant with the profile as grantor. If either
+  half fails, neither happens: there is no window in which the profile
+  exists with nobody looking after it.
+- A second guardian is invited and accepts exactly like any other
+  invitation. An accepted guardian grant does not expire; the invitation
+  token still can.
+- **A managed profile can never be left guardian-less.** Revoking,
+  handing back, deleting a guardian's own account and deleting the
+  profile all take the same lock on the profile and re-check the count
+  inside it, so two people cannot both leave at once. The last guardian is
+  refused, with a message naming the two ways out: add another guardian,
+  or delete the profile under a fresh second factor. Deleting the profile
+  deletes everything recorded for it.
+- A guardian may keep that record's settings: modules, units, thresholds,
+  its language and timezone, and its notification preferences. Connected
+  services are visible as a status only. Connect, callback, sync,
+  credential, disconnect, resume and test are not guardian surfaces in
+  this release, and their deep links land on the shared-record unavailable
+  page rather than on a raw refusal.
+- **Its reminders go to its guardians.** A record with no login has no
+  channels of its own, so medication reminders, measurement reminders,
+  safety-floor alerts and low-stock alerts fan out to every active
+  guardian, in that guardian's own language and over the channels that
+  guardian already configured. Nothing else fans out; every other event
+  stays on the path it was already on. The payloads carry no take or skip
+  action, on any channel, so a notification about somebody else's record
+  cannot be acted on from a lock screen. One guardian suppressing
+  server-side reminders on their own device does not suppress anybody
+  else's.
+- Delivery attempts record both the record the message is about and the
+  person it was sent to, so the admin notification diagnostic can answer
+  "who was this for" and "whose record was it about" separately.
+
+There is no emancipation flow: no route, no control and no copy suggests
+a managed profile can be turned into an ordinary account. The data model
+leaves room for it (the credentials are nullable and the managed marker
+can be cleared) and clearing that marker stops the notification fan-out,
+but nothing in v1.37.0 exercises any of that.
 
 ## Seeing what happened
 
@@ -142,8 +261,9 @@ re-reads the trust model:
 
 Nothing to configure. Sharing is available on every instance, needs no
 environment variable, and does nothing until one account invites another.
+The same is true of managed profiles.
 
-Two operational notes:
+Four operational notes:
 
 - **Invitations disclose whether a username exists.** An invitation to a
   name nobody uses is refused with "no account with that name". That is
@@ -155,4 +275,20 @@ Two operational notes:
   rows naming that account as the one who opened somebody's record stay,
   and render as "a deleted account" — nulling them would turn "your
   daughter opened your record" into "you opened your record", which is
-  worse than an unresolvable id.
+  worse than an unresolvable id. Deleting the last guardian's account is
+  refused while the managed profile would survive it, so an account
+  deletion cannot strand a record.
+- **A managed profile is a user row and appears as one.** It is listed in
+  the admin user list like any other account, with no e-mail address
+  beside it and an internal username nobody is ever asked to type. No
+  login path will accept it: there is no password hash to verify against
+  and no address to look it up by.
+- **The second-factor requirement is not the same on both features, and
+  the difference is deliberate.** Creating a managed profile, deleting
+  one and inviting a second guardian require a second factor
+  unconditionally: an account with none enrolled is refused and told to
+  set one up, because those acts create or end a permanent relationship
+  over somebody who cannot object. Offering manage access on an ordinary
+  invitation asks for a fresh factor only from an account that has one, so
+  an instance where nobody has enrolled a factor can still use every level
+  of ordinary sharing. All of them are browser-only either way.
