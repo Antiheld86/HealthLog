@@ -11,6 +11,7 @@ import { ManagedProfileGuardians } from "@/components/settings/access/managed-pr
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { ConfirmButton } from "@/components/ui/confirm-button";
+import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
 import {
@@ -169,6 +170,20 @@ function ManagedProfileRow({
           message={t(grantActionErrorKey(remove.error, "deleteProfile"))}
           retrying={remove.isPending}
           onRetry={() => remove.mutate(profile.accountId)}
+        />
+      )}
+      {/* A failed roster read is not an absent roster.
+          Without this branch a 500 renders exactly as a still-loading one —
+          the row with no guardian panel and no delete control — and the person
+          waits for something that is never coming. UI-STANDARDS §6: a read
+          that failed says so and offers the way back. It is deliberately NOT
+          the same as the 404 arm: a 404 means this account is no longer a
+          Guardian of that profile, which is an answer, and the row correctly
+          shows no destructive control for it. */}
+      {guardians.isError && (
+        <QueryErrorCard
+          title={t("recordSharing.managed.rosterLoadError")}
+          onRetry={() => void guardians.refetch()}
         />
       )}
       {guardians.data && (

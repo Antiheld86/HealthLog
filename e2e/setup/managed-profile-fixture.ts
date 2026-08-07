@@ -64,15 +64,20 @@ export async function refreshGuardianStepUp(): Promise<void> {
     );
     // The guardian-invitation bucket, for the same reason `global-setup.ts`
     // clears the auth bucket between its own logins: the ceiling is ten
-    // invitations an hour per caller, and this journey spends one every time it
+    // invitations an hour per caller (and ten creations), and this journey spends
+    // one of each every time it
     // runs. On CI that never matters; locally, the eleventh run inside an hour
     // is answered by the product's own 429 rather than by what the test is
     // about, and the failure reads as a broken invitation form. Only this one
     // fixture account's bucket is touched.
     await pool.query(
       `DELETE FROM rate_limits
-       WHERE key = 'managed-profile:guardian-invite:' ||
-         (SELECT id FROM users WHERE username = $1)`,
+       WHERE key IN (
+         'managed-profile:guardian-invite:' ||
+           (SELECT id FROM users WHERE username = $1),
+         'managed-profile:create:' ||
+           (SELECT id FROM users WHERE username = $1)
+       )`,
       [E2E_GUARDIAN.username],
     );
   } finally {

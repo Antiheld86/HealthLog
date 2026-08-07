@@ -19,7 +19,7 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { cookieJar, headerJar, queuedSessionIds } from "./mock-next-headers";
-import { getPrismaClient, truncateAllTables } from "./setup";
+import { getPrismaClient, switchSessionTo, truncateAllTables } from "./setup";
 import { createManagedProfile } from "@/lib/managed-profiles/create";
 import { acceptGrant, inviteGrant } from "@/lib/sharing/grants";
 
@@ -723,5 +723,165 @@ describe("every call the managed-profile card can make", () => {
     expect(await errorCodeOf(self)).not.toBe(
       "managed_profile.guardian.required",
     );
+  });
+});
+
+describe("the three caller states the roster read has to refuse", () => {
+  it("refuses a Guardian whose invitation has not been accepted", async () => {
+    // PENDING confers nothing. `activeGuardianWhere` requires `acceptedAt`, so
+    // an invitee who can see the invitation on their own panel still cannot
+    // read the roster of the record it is for — and must not be able to, or
+    // an invitation would disclose the household before it was accepted.
+    const { invitee, profile } = await profileWithPendingSecondGuardian();
+    signIn(invitee);
+
+    const response = await listGuardians(profile.id);
+    expect(response.status).toBe(404);
+    expect(await errorCodeOf(response)).toBe("managed_profile.not_found");
+  });
+
+  it("refuses a Guardian whose grant has expired", async () => {
+    // The other half of the same predicate, and the one a `revokedAt IS NULL`
+    // check alone would miss: nobody ended this grant, the clock did.
+    const { invitee, profile, invitation } =
+      await profileWithPendingSecondGuardian();
+    await acceptGrant({ grantId: invitation.id, granteeId: invitee.id });
+    await getPrismaClient().accountGrant.update({
+      where: { id: invitation.id },
+      data: { expiresAt: new Date(Date.now() - 60_000) },
+    });
+    signIn(invitee);
+
+    const response = await listGuardians(profile.id);
+    expect(response.status).toBe(404);
+    expect(await errorCodeOf(response)).toBe("managed_profile.not_found");
+  });
+
+  it("refuses a holder of MANAGE on an ordinary record, against a real managed profile", async () => {
+    // Distinct from the leg above that points a delegate at THEIR OWN grantor:
+    // this caller holds a live MANAGE grant somewhere, and aims it at somebody
+    // else's managed profile. Holding the level is not holding this record.
+    const { profile } = await profileWithPendingSecondGuardian();
+    const owner = await person("owner");
+    const manager = await person("manager");
+    const invitation = await inviteGrant({
+      grantorId: owner.id,
+      granteeId: manager.id,
+      access: "MANAGE",
+      scope: null,
+    });
+    await acceptGrant({ grantId: invitation.id, granteeId: manager.id });
+    signIn(manager);
+
+    const response = await listGuardians(profile.id);
+    expect(response.status).toBe(404);
+    expect(await errorCodeOf(response)).toBe("managed_profile.not_found");
+  });
+});
+
+describe("what deletion does to a Guardian who is standing inside the record", () => {
+  it("puts their session back in their own account rather than nowhere", async () => {
+    // The composition worth an integration leg: `Session.actingAsUserId` is a
+    // foreign key with ON DELETE SET NULL, and the epoch is bumped by a
+    // database trigger on that column. Deleting the profile therefore has to
+    // leave the other Guardian's browser in a state it can prove — back in
+    // their own record, on a NEW epoch — rather than pointed at a row that is
+    // gone. A session left holding a dangling selector is the shape that
+    // strands somebody behind the fence with no way out.
+    const { creator, invitee, profile, invitation } =
+      await profileWithPendingSecondGuardian();
+    await acceptGrant({ grantId: invitation.id, granteeId: invitee.id });
+    await switchSessionTo(invitee.sessionId, profile.id);
+
+    const before = await getPrismaClient().session.findUniqueOrThrow({
+      where: { id: invitee.sessionId },
+    });
+    // Non-zero proof: they really were inside the record before the delete.
+    expect(before.actingAsUserId).toBe(profile.id);
+
+    signIn(creator);
+    expect((await deleteProfile(profile.id)).status).toBe(200);
+
+    const after = await getPrismaClient().session.findUniqueOrThrow({
+      where: { id: invitee.sessionId },
+    });
+    // The session survives — deleting a record must not sign anybody out —
+    // and it is back in its own account.
+    expect(after.actingAsUserId).toBeNull();
+    // And the context moved, so a request formed inside the deleted record is
+    // refused as stale rather than served against nothing.
+    expect(after.recordEpoch).toBeGreaterThan(before.recordEpoch);
+  });
+});
+
+describe("how many profiles one account may create in an hour", () => {
+  it("refuses the eleventh, with the same ceiling the guardian route carries", async () => {
+    // Ten an hour. The guardian invitation has been bounded since it shipped;
+    // this route creates a real account row per call and was not, which is the
+    // kind of asymmetry between two endpoints of one family that nobody
+    // notices until it is used.
+    const creator = await person("creator");
+    signIn(creator);
+
+    for (let i = 0; i < 10; i += 1) {
+      const allowed = await createProfile({
+        displayName: `Managed record ${i}`,
+        locale: "en",
+        timezone: "UTC",
+      });
+      expect(allowed.status, `creation ${i}`).toBe(201);
+    }
+
+    const refused = await createProfile({
+      displayName: "One too many",
+      locale: "en",
+      timezone: "UTC",
+    });
+    expect(refused.status).toBe(429);
+    // No error code, like every other rate-limit refusal in this family — the
+    // client branches on status, which is recorded in the findings.
+    expect(await errorCodeOf(refused)).toBeUndefined();
+    // And nothing was created by the refused call.
+    expect(
+      await getPrismaClient().user.count({
+        where: { managedProfileAt: { not: null } },
+      }),
+    ).toBe(10);
+  });
+
+  it("bounds the caller and not the instance", async () => {
+    // A per-user bucket, so one busy account cannot stop another from creating
+    // a record. `checkRateLimit` is keyed by caller id; this proves the key
+    // really carries it rather than being a single global bucket.
+    const first = await person("creator");
+    signIn(first);
+    for (let i = 0; i < 10; i += 1) {
+      await createProfile({
+        displayName: `Managed record ${i}`,
+        locale: "en",
+        timezone: "UTC",
+      });
+    }
+    expect(
+      (
+        await createProfile({
+          displayName: "One too many",
+          locale: "en",
+          timezone: "UTC",
+        })
+      ).status,
+    ).toBe(429);
+
+    const second = await person("creator");
+    signIn(second);
+    expect(
+      (
+        await createProfile({
+          displayName: "Somebody else's first",
+          locale: "en",
+          timezone: "UTC",
+        })
+      ).status,
+    ).toBe(201);
   });
 });
