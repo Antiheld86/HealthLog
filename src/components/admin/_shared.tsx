@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { StatTile } from "@/components/admin/_stat-tile";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Cpu, Fingerprint, Globe, KeyRound } from "lucide-react";
@@ -149,8 +150,14 @@ export function ConfiguredBadge() {
   );
 }
 
+/**
+ * The console's label/value tile. Four hand-rolled variants of this box used
+ * to exist side by side; `StatTile` is the one, and this is the thin adapter
+ * the status grids call (the `className` they pass tints the VALUE, which is
+ * why it cannot just be `StatTile` under a different name).
+ */
 export function StatusItem({
-  icon: Icon,
+  icon,
   label,
   value,
   className,
@@ -161,13 +168,12 @@ export function StatusItem({
   className?: string;
 }) {
   return (
-    <div className="bg-muted/50 rounded-lg p-3">
-      <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
-        <Icon className="h-3.5 w-3.5" />
-        {label}
-      </div>
-      <p className={`mt-1 text-sm font-semibold ${className ?? ""}`}>{value}</p>
-    </div>
+    <StatTile
+      icon={icon}
+      label={label}
+      value={value}
+      valueClassName={className}
+    />
   );
 }
 

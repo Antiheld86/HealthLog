@@ -6361,7 +6361,6 @@
     "invites": {
       "title": "Invitations",
       "description": "Liens d'invitation pour l'inscription — ils fonctionnent même lorsque les inscriptions sont fermées. Le lien n'est affiché qu'une seule fois.",
-      "adminOnlyHint": "Seuls les administrateurs peuvent créer et révoquer des invitations.",
       "create": "Créer une invitation",
       "createTitle": "Créer une invitation",
       "createDescription": "Le lien permet une inscription même lorsque les inscriptions sont fermées.",
@@ -6516,15 +6515,10 @@
       "sectionsNav": "Sections d'administration"
     },
     "overview": {
-      "welcomeTitle": "Bienvenue,{name}",
-      "welcomeSubtitle": "Vous êtes connecté en tant qu'administrateur. Choisissez une section pour gérer HealthLog.",
       "snapshotTitle": "Instantané du système",
-      "snapshotVersion": "Version",
       "snapshotDatabase": "Base de données",
       "snapshotWorker": "Worker",
       "snapshotStarted": "Démarré",
-      "snapshotBuildSha": "Build SHA",
-      "snapshotBuiltAt": "Compilé le",
       "snapshotOfflineGeo": "Données géographiques",
       "snapshotOfflineGeoOn": "Hors ligne (GeoLite2)",
       "snapshotOfflineGeoOff": "En ligne ({host})",

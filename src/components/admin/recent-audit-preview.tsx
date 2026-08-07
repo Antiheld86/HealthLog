@@ -62,7 +62,7 @@ export function RecentAuditPreview() {
         status={
           <Link
             href="/admin/login-overview"
-            className="text-primary hover:text-primary/80 inline-flex items-center gap-1 text-sm"
+            className="text-primary inline-flex items-center gap-1 text-sm underline-offset-2 hover:underline"
           >
             {t("admin.overview.auditViewAll")}
             <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />

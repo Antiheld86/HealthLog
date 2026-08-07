@@ -6361,7 +6361,6 @@
     "invites": {
       "title": "Inviti",
       "description": "Link di invito per la registrazione: funzionano anche quando la registrazione è chiusa. Il link viene mostrato una sola volta.",
-      "adminOnlyHint": "Solo gli amministratori possono creare e revocare gli inviti.",
       "create": "Crea invito",
       "createTitle": "Crea invito",
       "createDescription": "Il link consente una registrazione anche quando la registrazione è chiusa.",
@@ -6516,15 +6515,10 @@
       "sectionsNav": "Sezioni di amministrazione"
     },
     "overview": {
-      "welcomeTitle": "Benvenuto,{name}",
-      "welcomeSubtitle": "Hai effettuato l'accesso come amministratore. Scegli una sezione per gestire HealthLog.",
       "snapshotTitle": "Istantanea del sistema",
-      "snapshotVersion": "Versione",
       "snapshotDatabase": "Database",
       "snapshotWorker": "Worker",
       "snapshotStarted": "Avviato",
-      "snapshotBuildSha": "Build SHA",
-      "snapshotBuiltAt": "Compilato il",
       "snapshotOfflineGeo": "Dati geografici",
       "snapshotOfflineGeoOn": "Offline (GeoLite2)",
       "snapshotOfflineGeoOff": "Online ({host})",

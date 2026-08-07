@@ -36,6 +36,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -505,21 +506,6 @@ export function BackupsSection() {
             </Badge>
           ) : null
         }
-        status={
-          <Button
-            size="sm"
-            disabled={runBackup.isPending}
-            onClick={() => runBackup.mutate()}
-            className="min-h-11"
-          >
-            {runBackup.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-            ) : (
-              <PlayCircle className="h-3.5 w-3.5" />
-            )}
-            {t("admin.section.backups.runNow")}
-          </Button>
-        }
         description={
           <p>
             {t("admin.section.backups.description")}{" "}
@@ -776,6 +762,22 @@ export function BackupsSection() {
           </p>
         </div>
       )}
+
+      <SettingsCardActions>
+        <Button
+          size="sm"
+          disabled={runBackup.isPending}
+          onClick={() => runBackup.mutate()}
+          className="min-h-11"
+        >
+          {runBackup.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+          ) : (
+            <PlayCircle className="h-3.5 w-3.5" />
+          )}
+          {t("admin.section.backups.runNow")}
+        </Button>
+      </SettingsCardActions>
     </SettingsCard>
   );
 }

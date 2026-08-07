@@ -123,8 +123,9 @@ export function AppLogPreviewSection() {
         description={t("admin.section.app-logs.processNote")}
         status={
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
+            className="min-h-11 sm:min-h-9"
             onClick={() => refetch()}
             disabled={isFetching}
             aria-label={t("admin.section.app-logs.refresh")}

@@ -6361,7 +6361,6 @@
     "invites": {
       "title": "Einladungen",
       "description": "Einladungslinks für die Registrierung — funktionieren auch bei geschlossener Registrierung. Der Link wird nur einmal angezeigt.",
-      "adminOnlyHint": "Nur Admins können Einladungen erstellen und widerrufen.",
       "create": "Einladung erstellen",
       "createTitle": "Einladung erstellen",
       "createDescription": "Der Link erlaubt eine Registrierung auch bei geschlossener Registrierung.",
@@ -6516,15 +6515,10 @@
       "sectionsNav": "Admin-Bereiche"
     },
     "overview": {
-      "welcomeTitle": "Willkommen, {name}",
-      "welcomeSubtitle": "Du bist als Administrator angemeldet. Wähle einen Bereich, um HealthLog zu verwalten.",
       "snapshotTitle": "System-Snapshot",
-      "snapshotVersion": "Version",
       "snapshotDatabase": "Datenbank",
       "snapshotWorker": "Worker",
       "snapshotStarted": "Gestartet",
-      "snapshotBuildSha": "Build-SHA",
-      "snapshotBuiltAt": "Gebaut am",
       "snapshotOfflineGeo": "Geodaten",
       "snapshotOfflineGeoOn": "Offline (GeoLite2)",
       "snapshotOfflineGeoOff": "Online ({host})",

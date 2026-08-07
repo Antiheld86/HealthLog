@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -282,23 +283,28 @@ export function UserManagementSection() {
             </Badge>
           ) : null
         }
-        status={
-          <div className="flex flex-wrap items-center gap-1.5">
-            {(["all", "admin", "user"] as const).map((value) => (
-              <Button
-                key={value}
-                variant={filter === value ? "default" : "ghost"}
-                size="sm"
-                className="min-h-11 min-w-11 px-3 text-xs"
-                onClick={() => setFilter(value)}
-                aria-pressed={filter === value}
-              >
-                {t(`admin.section.users.filter.${value}`)}
-              </Button>
-            ))}
-          </div>
-        }
       />
+
+      {/* Filter toolbar. It used to sit in the header's status slot, which is
+          where the neighbouring sections put a primary, a destructive, and a
+          badge — three different meanings for one position. */}
+      <div
+        className="flex flex-wrap items-center gap-1.5"
+        data-slot="admin-users-filter"
+      >
+        {(["all", "admin", "user"] as const).map((value) => (
+          <Button
+            key={value}
+            variant={filter === value ? "default" : "outline"}
+            size="sm"
+            className="min-h-11 min-w-11 px-3 text-xs sm:min-h-9"
+            onClick={() => setFilter(value)}
+            aria-pressed={filter === value}
+          >
+            {t(`admin.section.users.filter.${value}`)}
+          </Button>
+        ))}
+      </div>
 
       {filteredUsers ? (
         filteredUsers.length === 0 ? (
@@ -454,8 +460,8 @@ export function UserManagementSection() {
 
       {/* Edit Dialog */}
       {editingUser && (
-        <div className="bg-muted/80 rounded-lg p-4">
-          <h3 className="mb-3 text-sm font-semibold">
+        <div className="bg-muted/50 space-y-3 rounded-lg p-3">
+          <h3 className="text-sm font-semibold">
             {t("admin.editUserTitle", { name: editingUser.username })}
           </h3>
           {/* v1.16.4 — a real form so Enter in the username / email
@@ -535,10 +541,25 @@ export function UserManagementSection() {
                 {t("admin.userDocumentQuotaHint")}
               </p>
             </div>
-            <div className="flex gap-2">
+            {updateUser.isError && (
+              <p className="text-destructive text-sm">
+                {(updateUser.error as Error).message}
+              </p>
+            )}
+            <SettingsCardActions>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-11 sm:min-h-9"
+                onClick={() => setEditingUser(null)}
+              >
+                {t("common.cancel")}
+              </Button>
               <Button
                 type="submit"
                 size="sm"
+                className="min-h-11 sm:min-h-9"
                 disabled={updateUser.isPending}
                 aria-busy={updateUser.isPending || undefined}
               >
@@ -547,28 +568,15 @@ export function UserManagementSection() {
                 )}
                 {t("common.save")}
               </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setEditingUser(null)}
-              >
-                {t("common.cancel")}
-              </Button>
-              {updateUser.isError && (
-                <span className="text-destructive self-center text-sm">
-                  {(updateUser.error as Error).message}
-                </span>
-              )}
-            </div>
+            </SettingsCardActions>
           </form>
         </div>
       )}
 
       {/* Password Reset Dialog */}
       {resetUser && (
-        <div className="bg-muted/80 rounded-lg p-4">
-          <h3 className="mb-3 text-sm font-semibold">
+        <div className="bg-muted/50 space-y-3 rounded-lg p-3">
+          <h3 className="text-sm font-semibold">
             {t("admin.resetPasswordTitle", { name: resetUser.username })}
           </h3>
           <div className="space-y-3">
@@ -582,9 +590,25 @@ export function UserManagementSection() {
               />
               <PasswordStrength password={resetPassword} />
             </div>
-            <div className="flex gap-2">
+            {resetMsg && (
+              <p
+                className={`text-sm ${resetMsg === t("admin.passwordReset") ? "text-success" : "text-destructive"}`}
+              >
+                {resetMsg}
+              </p>
+            )}
+            <SettingsCardActions>
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-11 sm:min-h-9"
+                onClick={() => setResetUser(null)}
+              >
+                {t("common.cancel")}
+              </Button>
               <Button
                 size="sm"
+                className="min-h-11 sm:min-h-9"
                 disabled={resetPw.isPending || !resetPassword}
                 onClick={() =>
                   resetPw.mutate({
@@ -598,21 +622,7 @@ export function UserManagementSection() {
                 )}
                 {t("admin.reset")}
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setResetUser(null)}
-              >
-                {t("common.cancel")}
-              </Button>
-            </div>
-            {resetMsg && (
-              <p
-                className={`text-sm ${resetMsg === t("admin.passwordReset") ? "text-success" : "text-destructive"}`}
-              >
-                {resetMsg}
-              </p>
-            )}
+            </SettingsCardActions>
           </div>
         </div>
       )}

@@ -6361,7 +6361,6 @@
     "invites": {
       "title": "Invites",
       "description": "Registration invite links — they work even while registration is closed. The link is shown only once.",
-      "adminOnlyHint": "Only admins can create and revoke invites.",
       "create": "Create invite",
       "createTitle": "Create invite",
       "createDescription": "The link admits a signup even while registration is closed.",
@@ -6516,15 +6515,10 @@
       "sectionsNav": "Admin sections"
     },
     "overview": {
-      "welcomeTitle": "Welcome, {name}",
-      "welcomeSubtitle": "You are signed in as administrator. Pick a section to manage HealthLog.",
       "snapshotTitle": "System snapshot",
-      "snapshotVersion": "Version",
       "snapshotDatabase": "Database",
       "snapshotWorker": "Worker",
       "snapshotStarted": "Started",
-      "snapshotBuildSha": "Build SHA",
-      "snapshotBuiltAt": "Built at",
       "snapshotOfflineGeo": "Geo data",
       "snapshotOfflineGeoOn": "Offline (GeoLite2)",
       "snapshotOfflineGeoOff": "Online ({host})",

@@ -55,7 +55,7 @@ function NotificationHealthPanel() {
   });
 
   return (
-    <SettingsCard className="mt-6">
+    <SettingsCard>
       <SettingsCardHeader
         icon={HeartPulse}
         title={t("admin.notificationHealth.title")}
@@ -261,63 +261,6 @@ export function RemindersSection() {
           </div>
         </div>
 
-        <SettingsCardActions>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => testNotification.mutate()}
-            disabled={testNotification.isPending}
-          >
-            {testNotification.isPending && (
-              <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-            )}
-            <Bell className="h-3.5 w-3.5" />
-            {t("admin.notificationTestSend")}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => reminderCheck.mutate()}
-            disabled={reminderCheck.isPending}
-          >
-            {reminderCheck.isPending && (
-              <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-            )}
-            <Activity className="h-3.5 w-3.5" />
-            {t("admin.reminderCheckRun")}
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => {
-              updateSettings.mutate(
-                {
-                  ...(reminderLateDraft != null && {
-                    reminderLateMinutes: reminderLateDraft,
-                  }),
-                  ...(reminderMissedDraft != null && {
-                    reminderMissedMinutes: reminderMissedDraft,
-                  }),
-                },
-                {
-                  onSuccess: () => {
-                    setReminderLateDraft(null);
-                    setReminderMissedDraft(null);
-                  },
-                },
-              );
-            }}
-            disabled={
-              updateSettings.isPending ||
-              (reminderLateDraft == null && reminderMissedDraft == null)
-            }
-          >
-            {updateSettings.isPending && (
-              <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-            )}
-            {t("common.save")}
-          </Button>
-        </SettingsCardActions>
-
         {testNotification.data?.results &&
           testNotification.data.results.length > 0 && (
             <div className="space-y-1">
@@ -406,6 +349,63 @@ export function RemindersSection() {
               </div>
             </div>
           )}
+
+        <SettingsCardActions>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => testNotification.mutate()}
+            disabled={testNotification.isPending}
+          >
+            {testNotification.isPending && (
+              <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+            )}
+            <Bell className="h-3.5 w-3.5" />
+            {t("admin.notificationTestSend")}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => reminderCheck.mutate()}
+            disabled={reminderCheck.isPending}
+          >
+            {reminderCheck.isPending && (
+              <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+            )}
+            <Activity className="h-3.5 w-3.5" />
+            {t("admin.reminderCheckRun")}
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              updateSettings.mutate(
+                {
+                  ...(reminderLateDraft != null && {
+                    reminderLateMinutes: reminderLateDraft,
+                  }),
+                  ...(reminderMissedDraft != null && {
+                    reminderMissedMinutes: reminderMissedDraft,
+                  }),
+                },
+                {
+                  onSuccess: () => {
+                    setReminderLateDraft(null);
+                    setReminderMissedDraft(null);
+                  },
+                },
+              );
+            }}
+            disabled={
+              updateSettings.isPending ||
+              (reminderLateDraft == null && reminderMissedDraft == null)
+            }
+          >
+            {updateSettings.isPending && (
+              <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+            )}
+            {t("common.save")}
+          </Button>
+        </SettingsCardActions>
       </SettingsCard>
       <NotificationHealthPanel />
     </>

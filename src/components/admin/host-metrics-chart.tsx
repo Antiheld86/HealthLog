@@ -39,7 +39,10 @@ import { useMemo } from "react";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Activity } from "lucide-react";
+
 import { SettingsCard } from "@/components/settings/settings-card";
+import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { apiGet } from "@/lib/api/api-fetch";
 import { readStoredTimezone } from "@/lib/timezone-mirror";
 
@@ -164,14 +167,16 @@ export function HostMetricsChart() {
   if (isLoading) {
     return (
       <SettingsCard as="section" aria-labelledby="admin-host-metrics-heading">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 id="admin-host-metrics-heading" className="text-sm font-semibold">
-            {t("admin.hostMetrics.title")}
-          </h2>
-          <span className="text-muted-foreground text-xs">
-            {t("admin.hostMetrics.last2hours")}
-          </span>
-        </div>
+        <SettingsCardHeader
+          icon={Activity}
+          titleId="admin-host-metrics-heading"
+          title={t("admin.hostMetrics.title")}
+          status={
+            <span className="text-muted-foreground text-xs">
+              {t("admin.hostMetrics.last2hours")}
+            </span>
+          }
+        />
         <Skeleton className="bg-muted/40 h-[180px] w-full" />
       </SettingsCard>
     );
@@ -180,9 +185,16 @@ export function HostMetricsChart() {
   if (isError) {
     return (
       <SettingsCard as="section" aria-labelledby="admin-host-metrics-heading">
-        <h2 id="admin-host-metrics-heading" className="text-sm font-semibold">
-          {t("admin.hostMetrics.title")}
-        </h2>
+        <SettingsCardHeader
+          icon={Activity}
+          titleId="admin-host-metrics-heading"
+          title={t("admin.hostMetrics.title")}
+          status={
+            <span className="text-muted-foreground text-xs">
+              {t("admin.hostMetrics.last2hours")}
+            </span>
+          }
+        />
         <p
           role="alert"
           className="text-destructive bg-destructive/10 border-destructive/30 rounded-md border px-3 py-2 text-xs"
@@ -199,14 +211,16 @@ export function HostMetricsChart() {
   if (rows.length === 0) {
     return (
       <SettingsCard as="section" aria-labelledby="admin-host-metrics-heading">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 id="admin-host-metrics-heading" className="text-sm font-semibold">
-            {t("admin.hostMetrics.title")}
-          </h2>
-          <span className="text-muted-foreground text-xs">
-            {t("admin.hostMetrics.last2hours")}
-          </span>
-        </div>
+        <SettingsCardHeader
+          icon={Activity}
+          titleId="admin-host-metrics-heading"
+          title={t("admin.hostMetrics.title")}
+          status={
+            <span className="text-muted-foreground text-xs">
+              {t("admin.hostMetrics.last2hours")}
+            </span>
+          }
+        />
         <p className="text-muted-foreground text-xs">
           {t("admin.hostMetrics.empty")}
         </p>
@@ -216,14 +230,16 @@ export function HostMetricsChart() {
 
   return (
     <SettingsCard as="section" aria-labelledby="admin-host-metrics-heading">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 id="admin-host-metrics-heading" className="text-sm font-semibold">
-          {t("admin.hostMetrics.title")}
-        </h2>
-        <span className="text-muted-foreground text-xs">
-          {t("admin.hostMetrics.last2hours")}
-        </span>
-      </div>
+      <SettingsCardHeader
+        icon={Activity}
+        titleId="admin-host-metrics-heading"
+        title={t("admin.hostMetrics.title")}
+        status={
+          <span className="text-muted-foreground text-xs">
+            {t("admin.hostMetrics.last2hours")}
+          </span>
+        }
+      />
 
       <div className="h-[200px] w-full touch-pan-y">
         <ResponsiveContainer width="100%" height="100%">

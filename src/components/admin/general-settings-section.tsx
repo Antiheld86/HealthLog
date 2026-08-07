@@ -103,7 +103,7 @@ export function GeneralSettingsSection() {
         {(settings?.registrationEnabled ?? true) && (
           <p
             data-slot="registration-open-hint"
-            className="text-muted-foreground -mt-2 text-xs"
+            className="text-muted-foreground text-xs"
           >
             {t("admin.registrationOpenHint")}
           </p>

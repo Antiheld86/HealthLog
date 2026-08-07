@@ -12,16 +12,7 @@
  * don't re-fetch.
  */
 
-import {
-  Clock,
-  Cog,
-  Database,
-  GitCommit,
-  Globe,
-  Loader2,
-  Server,
-  Tag,
-} from "lucide-react";
+import { Clock, Cog, Database, Globe, Loader2, Server } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
@@ -46,11 +37,6 @@ export function SystemStatusSummary() {
 
       {status ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <StatusItem
-            icon={Tag}
-            label={t("admin.overview.snapshotVersion")}
-            value={version?.version ?? status.version}
-          />
           <StatusItem
             icon={Database}
             label={t("admin.overview.snapshotDatabase")}
@@ -82,20 +68,6 @@ export function SystemStatusSummary() {
             label={t("admin.overview.snapshotStarted")}
             value={formatDateTime(status.startTime)}
           />
-          {(version?.buildSha ?? status.gitCommit) && (
-            <StatusItem
-              icon={GitCommit}
-              label={t("admin.overview.snapshotBuildSha")}
-              value={version?.buildSha ?? status.gitCommit}
-            />
-          )}
-          {version?.builtAt && (
-            <StatusItem
-              icon={Clock}
-              label={t("admin.overview.snapshotBuiltAt")}
-              value={formatDateTime(version.builtAt)}
-            />
-          )}
           {/* v1.4.27 R5 — surface the offline-geo state so the maintainer
               spots the missing MAXMIND_LICENSE_KEY without crawling logs.
               The field is undefined on legacy responses; the row only

@@ -121,9 +121,16 @@ export function NotificationStatusCard() {
   // post-hydration client update, not a hydration-time branch.
   if (!hydrated || !isAuthenticated) return null;
 
+  // The header paints in every state, so resolving the channel list does not
+  // move the page under the cursor.
   if (isLoading) {
     return (
       <SettingsCard>
+        <SettingsCardHeader
+          icon={Bell}
+          title={t("settings.notificationStatus.title")}
+          description={t("settings.notificationStatus.description")}
+        />
         <Loader2 className="text-muted-foreground h-4 w-4 animate-spin motion-reduce:animate-none" />
       </SettingsCard>
     );

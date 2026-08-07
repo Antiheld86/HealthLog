@@ -27,6 +27,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
+import { StatTile } from "@/components/admin/_stat-tile";
 import { Button } from "@/components/ui/button";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
@@ -99,20 +101,31 @@ export function EncryptionSection() {
     },
   });
 
-  if (statusQuery.isLoading) {
+  // The card + header stay rendered across every query state so the heading
+  // keeps a constant Y-offset — the loading branch used to return a bare
+  // spinner row and the error branch a bare paragraph, so the section jumped
+  // downward the moment the status resolved. Same shape as
+  // `coach-feedback-section.tsx`, which fixed this for itself and never had
+  // the fix carried across.
+  if (statusQuery.isLoading || statusQuery.isError || !statusQuery.data) {
     return (
-      <div className="text-muted-foreground flex items-center gap-2 text-sm">
-        <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-        {t("admin.section.encryption.loading")}
-      </div>
-    );
-  }
-
-  if (statusQuery.isError || !statusQuery.data) {
-    return (
-      <p role="alert" className="text-destructive text-sm">
-        {t("admin.section.encryption.loadError")}
-      </p>
+      <SettingsCard>
+        <SettingsCardHeader
+          icon={ShieldCheck}
+          title={t("admin.section.encryption.coverageTitle")}
+          description={t("admin.section.encryption.coverageDescription")}
+        />
+        {statusQuery.isLoading ? (
+          <div className="text-muted-foreground flex items-center gap-2 text-sm">
+            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+            {t("admin.section.encryption.loading")}
+          </div>
+        ) : (
+          <p role="alert" className="text-destructive text-sm">
+            {t("admin.section.encryption.loadError")}
+          </p>
+        )}
+      </SettingsCard>
     );
   }
 
@@ -187,46 +200,48 @@ export function EncryptionSection() {
           )}
         </div>
 
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              className="min-h-11 sm:min-h-9"
-              disabled={running}
-              data-testid="admin-encryption-rotate"
-            >
-              {running ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-              ) : (
-                <RotateCw className="h-3.5 w-3.5" />
-              )}
-              {t("admin.section.encryption.rotateNow")}
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                {t("admin.section.encryption.rotateConfirmTitle")}
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                {t("admin.section.encryption.rotateConfirmDescription")}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>
-                {t("admin.section.encryption.cancel")}
-              </AlertDialogCancel>
-              <AlertDialogAction onClick={() => rotate.mutate()}>
-                {t("admin.section.encryption.rotateConfirm")}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
         <p className="text-muted-foreground text-xs">
           {t("admin.section.encryption.cliNote")}
         </p>
+
+        <SettingsCardActions>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-11 sm:min-h-9"
+                disabled={running}
+                data-testid="admin-encryption-rotate"
+              >
+                {running ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <RotateCw className="h-3.5 w-3.5" />
+                )}
+                {t("admin.section.encryption.rotateNow")}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {t("admin.section.encryption.rotateConfirmTitle")}
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {t("admin.section.encryption.rotateConfirmDescription")}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>
+                  {t("admin.section.encryption.cancel")}
+                </AlertDialogCancel>
+                <AlertDialogAction onClick={() => rotate.mutate()}>
+                  {t("admin.section.encryption.rotateConfirm")}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </SettingsCardActions>
       </SettingsCard>
 
       {/* ── Per-column coverage table ──────────────────────────────── */}
@@ -286,10 +301,5 @@ export function EncryptionSection() {
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-muted/40 rounded-lg px-3 py-2">
-      <p className="text-muted-foreground text-xs">{label}</p>
-      <p className="text-foreground font-mono text-sm font-medium">{value}</p>
-    </div>
-  );
+  return <StatTile label={label} value={value} valueClassName="font-mono" />;
 }

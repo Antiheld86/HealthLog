@@ -97,7 +97,7 @@ export function VersionTileSection() {
               }
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-warning/15 text-warning border-warning/30 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-80"
+              className="bg-warning/15 text-warning border-warning/30 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium underline-offset-2 hover:underline"
             >
               <ArrowUpCircle className="h-3.5 w-3.5" aria-hidden="true" />
               {t("admin.overview.versionTileUpdateAvailable", {

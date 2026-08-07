@@ -6361,7 +6361,6 @@
     "invites": {
       "title": "Zaproszenia",
       "description": "Linki z zaproszeniem do rejestracji — działają nawet przy zamkniętej rejestracji. Link jest wyświetlany tylko raz.",
-      "adminOnlyHint": "Tylko administratorzy mogą tworzyć i unieważniać zaproszenia.",
       "create": "Utwórz zaproszenie",
       "createTitle": "Utwórz zaproszenie",
       "createDescription": "Link umożliwia rejestrację nawet przy zamkniętej rejestracji.",
@@ -6516,15 +6515,10 @@
       "sectionsNav": "Sekcje administracyjne"
     },
     "overview": {
-      "welcomeTitle": "Witamy,{name}",
-      "welcomeSubtitle": "Zalogowano jako administrator. Wybierz sekcję, aby zarządzać HealthLog.",
       "snapshotTitle": "Migawka systemu",
-      "snapshotVersion": "Wersja",
       "snapshotDatabase": "Baza danych",
       "snapshotWorker": "Worker",
       "snapshotStarted": "Uruchomiono",
-      "snapshotBuildSha": "Build SHA",
-      "snapshotBuiltAt": "Skompilowano",
       "snapshotOfflineGeo": "Dane geograficzne",
       "snapshotOfflineGeoOn": "Offline (GeoLite2)",
       "snapshotOfflineGeoOff": "Online ({host})",
