@@ -154,3 +154,86 @@ export function useDeleteManagedProfile() {
     onSuccess: invalidate,
   });
 }
+
+/**
+ * Exactly the body `POST /api/managed-profiles/{id}/guardians` accepts, plus
+ * the profile the request is addressed to.
+ *
+ * The route's schema is `.strict()` and names two fields. `identifier` is the
+ * invitee's username OR e-mail, matched case-insensitively — the same
+ * identifier the ordinary grant invitation takes. `expiresAt` is an ISO
+ * datetime WITH an offset: a bare `YYYY-MM-DD` is a 422, which is why the
+ * caller runs it through the shared end-of-day helper rather than sending the
+ * date field's raw value.
+ */
+export interface InviteManagedProfileGuardianInput {
+  profileId: string;
+  identifier: string;
+  expiresAt: string | null;
+}
+
+/**
+ * Offer somebody else a share in looking after this profile.
+ *
+ * The grant is created PENDING and reaches the invitee's ordinary "invitations
+ * to you" card, where they accept it exactly as they would any other. Nothing
+ * here accepts on their behalf, and until they accept they do not count toward
+ * the last-Guardian floor.
+ */
+export function useInviteManagedProfileGuardian() {
+  const invalidate = useInvalidateManagedProfiles();
+  return useMutation({
+    mutationKey: queryKeys.managedProfileGuardianInvite(),
+    mutationFn: (input: InviteManagedProfileGuardianInput) =>
+      apiPost(
+        `/api/managed-profiles/${input.profileId}/guardians`,
+        guardianInviteBody(input),
+      ),
+    onSuccess: invalidate,
+  });
+}
+
+/**
+ * The wire body, composed once and exported.
+ *
+ * Pure and separate from the mutation so the integration suite can post the
+ * REAL body through the REAL route rather than a hand-written copy of it. A
+ * hand-written copy is the shape of test that stays green while the client
+ * renames a field: both ends prove themselves and the assembly between them is
+ * what dropped it.
+ *
+ * `profileId` addresses the request and is deliberately not in the body: the
+ * route's schema is `.strict()` and would refuse it.
+ */
+export function guardianInviteBody(input: InviteManagedProfileGuardianInput): {
+  identifier: string;
+  expiresAt: string | null;
+} {
+  return { identifier: input.identifier, expiresAt: input.expiresAt };
+}
+
+/**
+ * End another Guardian's access.
+ *
+ * Another Guardian's, never one's own: the service refuses a target grant whose
+ * grantee is the caller and the route turns that into the same 404 an unknown
+ * profile gets. A Guardian steps away through the renounce control on the
+ * shared-access panel instead.
+ *
+ * `variables` carries both ids so a refusal can be rendered on the guardian row
+ * it belongs to rather than on the panel.
+ */
+export function useRemoveManagedProfileGuardian() {
+  const invalidate = useInvalidateManagedProfiles();
+  return useMutation({
+    mutationKey: queryKeys.managedProfileGuardianRemove(),
+    mutationFn: ({
+      profileId,
+      grantId,
+    }: {
+      profileId: string;
+      grantId: string;
+    }) => apiDelete(`/api/managed-profiles/${profileId}/guardians/${grantId}`),
+    onSuccess: invalidate,
+  });
+}

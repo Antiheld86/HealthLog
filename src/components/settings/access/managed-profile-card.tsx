@@ -7,6 +7,7 @@ import {
   grantActionErrorKey,
 } from "@/components/settings/access/grant-action-error";
 import { ManagedProfileCreateForm } from "@/components/settings/access/managed-profile-create-form";
+import { ManagedProfileGuardians } from "@/components/settings/access/managed-profile-guardians";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { ConfirmButton } from "@/components/ui/confirm-button";
@@ -168,6 +169,13 @@ function ManagedProfileRow({
           message={t(grantActionErrorKey(remove.error, "deleteProfile"))}
           retrying={remove.isPending}
           onRetry={() => remove.mutate(profile.accountId)}
+        />
+      )}
+      {guardians.data && (
+        <ManagedProfileGuardians
+          profileId={profile.accountId}
+          profileName={name}
+          roster={guardians.data}
         />
       )}
     </li>

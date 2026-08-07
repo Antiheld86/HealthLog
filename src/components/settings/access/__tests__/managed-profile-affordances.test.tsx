@@ -106,6 +106,14 @@ const rosterRef: { value: ManagedProfileGuardian[] | undefined } = {
 };
 /** The deletion mutation, idle unless a case says otherwise. */
 const deleteRef = { value: idle() };
+/** The guardian invitation, idle unless a case says otherwise. */
+const inviteRef: { value: FakeMutation } = { value: idle() };
+/** The guardian removal, whose `variables` name a profile and a grant. */
+const removeGuardianRef: {
+  value: Omit<FakeMutation, "variables"> & {
+    variables: { grantId: string } | undefined;
+  };
+} = { value: { ...idle(), variables: undefined } };
 
 vi.mock("@/lib/queries/use-managed-profiles", async (importOriginal) => {
   const actual =
@@ -114,6 +122,8 @@ vi.mock("@/lib/queries/use-managed-profiles", async (importOriginal) => {
     ...actual,
     useCreateManagedProfile: () => idle(),
     useDeleteManagedProfile: () => deleteRef.value,
+    useInviteManagedProfileGuardian: () => inviteRef.value,
+    useRemoveManagedProfileGuardian: () => removeGuardianRef.value,
     useManagedProfileGuardians: () => ({
       data: rosterRef.value,
       isLoading: false,
@@ -173,6 +183,7 @@ import {
   deleteProfileBody,
   managedProfilesOf,
 } from "../managed-profile-card";
+import { guardianInviteErrorKey } from "../managed-profile-guardians";
 
 function render(node: React.ReactNode): string {
   return renderToStaticMarkup(
@@ -205,9 +216,16 @@ function entry(partial: Partial<AccountAccessEntry> = {}): AccountAccessEntry {
 
 beforeEach(() => {
   authRef.value = { accounts: [], active: null };
-  rosterRef.value = [guardian()];
+  // The caller is always an active Guardian of the profile: it is the only way
+  // to have the roster at all.
+  rosterRef.value = [guardian({ account: SELF })];
   deleteRef.value = idle();
+  inviteRef.value = idle();
+  removeGuardianRef.value = { ...idle(), variables: undefined };
 });
+
+/** The signed-in account, as the roster names it. */
+const SELF = { id: "guardian", username: "guardian", displayName: "You" };
 
 describe("the managed-profile card, in the shared-access section", () => {
   it("renders inside the section, after the invitation card", () => {
@@ -474,6 +492,220 @@ describe("what the confirmation says before it deletes", () => {
     ).toBe(1);
     expect(activeGuardianCount([])).toBe(0);
     expect(activeGuardianCount(undefined)).toBe(0);
+  });
+});
+
+describe("managing the guardians of a profile", () => {
+  const OTHER = { id: "other", username: "housemate", displayName: "Jo" };
+
+  beforeEach(() => {
+    authRef.value = { accounts: [entry()], active: null };
+  });
+
+  it("renders one row per guardian and says which of them is you", () => {
+    rosterRef.value = [
+      guardian({ account: SELF }),
+      guardian({ grantId: "g2", account: OTHER }),
+    ];
+    const html = renderGatedSection();
+    expect(html.match(/data-slot="managed-profile-guardian"/g)).toHaveLength(2);
+    expect(html).toContain('data-guardian-grant-id="g2"');
+    expect(html).toContain("(you)");
+  });
+
+  it("states the floor before the act when nobody else has accepted", () => {
+    // The whole point of the roster read. Discovering this as a 409 after
+    // inviting somebody is the state the release goal asks us to end.
+    rosterRef.value = [
+      guardian({ account: SELF }),
+      guardian({
+        grantId: "g2",
+        account: OTHER,
+        state: "PENDING",
+        acceptedAt: null,
+      }),
+    ];
+    const html = renderGatedSection();
+    expect(html).toContain('data-slot="managed-profile-sole-guardian"');
+    expect(html).toContain("only person looking after");
+    // And it names all three ways forward rather than only refusing.
+    expect(html).toContain("wait for them to accept");
+    expect(html).toContain("Records I can open");
+    expect(html).toContain("delete the profile");
+  });
+
+  it("stops stating the floor once a second guardian has accepted", () => {
+    rosterRef.value = [
+      guardian({ account: SELF }),
+      guardian({ grantId: "g2", account: OTHER }),
+    ];
+    expect(renderGatedSection()).not.toContain(
+      'data-slot="managed-profile-sole-guardian"',
+    );
+  });
+
+  it("offers no control to end one's own access, and says where that lives", () => {
+    // `revokeManagedProfileGuardian` refuses a target grant whose grantee is
+    // the caller, and the route answers the same 404 an unknown profile gets.
+    // A self-removal button would be one that always fails.
+    rosterRef.value = [guardian({ account: SELF })];
+    const html = renderGatedSection();
+    expect(html).not.toContain('data-slot="managed-profile-guardian-remove"');
+    expect(html).toContain('data-slot="managed-profile-sole-guardian"');
+  });
+
+  it("offers a confirmed removal on another guardian's row", () => {
+    rosterRef.value = [
+      guardian({ account: SELF }),
+      guardian({ grantId: "g2", account: OTHER }),
+    ];
+    const html = renderGatedSection();
+    expect(
+      html.match(/data-slot="managed-profile-guardian-remove"/g),
+    ).toHaveLength(1);
+    expect(html).toMatch(
+      /data-slot="managed-profile-guardian-remove"[^>]*class="[^"]*min-h-11/,
+    );
+  });
+
+  it("offers to withdraw an invitation that has not been accepted", () => {
+    // A pending invitation confers nothing, so withdrawing it can never
+    // strand the record and the control is not withheld.
+    rosterRef.value = [
+      guardian({ account: SELF }),
+      guardian({
+        grantId: "g2",
+        account: OTHER,
+        state: "PENDING",
+        acceptedAt: null,
+      }),
+    ];
+    const html = renderGatedSection();
+    expect(
+      html.match(/data-slot="managed-profile-guardian-remove"/g),
+    ).toHaveLength(1);
+  });
+
+  it("says an invitation only counts once it is accepted", () => {
+    const html = renderGatedSection();
+    expect(html).toContain('data-slot="managed-profile-pending-note"');
+    expect(html).toContain("counts only once they accept");
+    // In document order the sentence sits ahead of the control it qualifies.
+    expect(
+      html.indexOf('data-slot="managed-profile-pending-note"'),
+    ).toBeLessThan(html.indexOf('data-slot="managed-profile-guardian-submit"'));
+  });
+
+  it("announces a refused removal on the guardian row it belongs to", () => {
+    rosterRef.value = [
+      guardian({ account: SELF }),
+      guardian({ grantId: "g2", account: OTHER }),
+      guardian({ grantId: "g3", account: { ...OTHER, id: "third" } }),
+    ];
+    removeGuardianRef.value = {
+      ...idle(),
+      isError: true,
+      error: new ApiError("refused", 409, {
+        errorCode: "managed_profile.guardian.required",
+      }),
+      variables: { grantId: "g2" },
+    };
+    const html = renderGatedSection();
+    expect(html).toContain('data-grant-error-for="g2"');
+    expect(html).not.toContain('data-grant-error-for="g3"');
+    // The floor, still handled as a refusal even though the panel states it
+    // in advance: the roster can be stale by the time the click lands.
+    expect(html).toContain("Add another guardian first");
+  });
+
+  it("announces a refused invitation on the form, without clearing it", () => {
+    inviteRef.value = failed(
+      new ApiError("refused", 409, {
+        errorCode: "managed_profile.guardian.duplicate",
+      }),
+      "ignored",
+    );
+    const html = renderGatedSection();
+    expect(html).toContain('data-slot="managed-profile-guardian-error"');
+    expect(html).toContain("already has access to this record");
+    expect(html).toContain('data-slot="managed-profile-guardian-identifier"');
+  });
+});
+
+describe("what a refused guardian invitation says", () => {
+  const cases: Array<{ err: unknown; key: string; why: string }> = [
+    {
+      err: new ApiError("refused", 409, {
+        errorCode: "managed_profile.guardian.duplicate",
+      }),
+      key: "recordSharing.managed.guardianErrorDuplicate",
+      why: "that account already has access — which is also what inviting yourself answers, because the grantor is the profile and never the caller",
+    },
+    {
+      err: new ApiError("refused", 422, {
+        errorCode: "managed_profile.guardian.managed_invitee",
+      }),
+      key: "recordSharing.managed.guardianErrorManagedInvitee",
+      why: "a managed profile cannot look after another record",
+    },
+    {
+      err: new ApiError("refused", 404, {
+        errorCode: "managed_profile.not_found",
+      }),
+      key: "recordSharing.actionError.profileNotFound",
+      why: "a 404 WITH a code — not the same as an unknown identifier",
+    },
+    {
+      err: new ApiError("refused", 404),
+      key: "recordSharing.managed.guardianErrorNoAccount",
+      why: "the codeless 404: no account carries that name or e-mail",
+    },
+    {
+      err: new ApiError("refused", 429),
+      key: "recordSharing.managed.guardianErrorRateLimit",
+      why: "the other codeless arm, where waiting is the whole recovery",
+    },
+    {
+      err: new ApiError("refused", 401, {
+        errorCode: "auth.stepup.required",
+      }),
+      key: "recordSharing.managed.errorStepUp",
+      why: "the step-up gate every route in this family carries",
+    },
+    {
+      err: new ApiError("refused", 500),
+      key: "recordSharing.managed.guardianErrorFailed",
+      why: "an unclassified failure still says which act failed",
+    },
+    {
+      err: new TypeError("Failed to fetch"),
+      key: "recordSharing.managed.errorOffline",
+      why: "never reached the server, so nothing was invited",
+    },
+  ];
+
+  for (const { err, key, why } of cases) {
+    it(why, () => {
+      expect(guardianInviteErrorKey(err)).toBe(key);
+    });
+  }
+
+  it("tells the two 404s apart, which is the whole reason for the order", () => {
+    // The route publishes a code on one 404 and not on the other. Branching on
+    // status first would tell somebody to check a spelling when the real
+    // answer is that they are no longer a Guardian of that profile.
+    expect(
+      guardianInviteErrorKey(
+        new ApiError("refused", 404, {
+          errorCode: "managed_profile.not_found",
+        }),
+      ),
+    ).not.toBe(guardianInviteErrorKey(new ApiError("refused", 404)));
+    // And all nine cases above resolve to distinct sentences rather than one:
+    // the failure this table is written against is one message for everything.
+    expect(
+      new Set(cases.map(({ err }) => guardianInviteErrorKey(err))).size,
+    ).toBe(cases.length);
   });
 });
 

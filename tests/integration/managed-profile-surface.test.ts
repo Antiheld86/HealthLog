@@ -122,6 +122,63 @@ async function listGuardians(profileId: string) {
   );
 }
 
+/** `POST /api/managed-profiles`, with the body the card composes. */
+async function createProfile(body: unknown) {
+  const { POST } = await import("@/app/api/managed-profiles/route");
+  return POST(
+    new NextRequest("http://localhost/api/managed-profiles", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+async function deleteProfile(profileId: string) {
+  const { DELETE } = await import("@/app/api/managed-profiles/[id]/route");
+  return DELETE(
+    new NextRequest(`http://localhost/api/managed-profiles/${profileId}`, {
+      method: "DELETE",
+    }),
+    { params: Promise.resolve({ id: profileId }) },
+  );
+}
+
+async function inviteGuardian(
+  profileId: string,
+  body: { identifier: string; expiresAt?: string | null },
+) {
+  const { POST } =
+    await import("@/app/api/managed-profiles/[id]/guardians/route");
+  return POST(
+    new NextRequest(
+      `http://localhost/api/managed-profiles/${profileId}/guardians`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
+    { params: Promise.resolve({ id: profileId }) },
+  );
+}
+
+async function removeGuardian(profileId: string, grantId: string) {
+  const { DELETE } =
+    await import("@/app/api/managed-profiles/[id]/guardians/[grantId]/route");
+  return DELETE(
+    new NextRequest(
+      `http://localhost/api/managed-profiles/${profileId}/guardians/${grantId}`,
+      { method: "DELETE" },
+    ),
+    { params: Promise.resolve({ id: profileId, grantId }) },
+  );
+}
+
+async function errorCodeOf(response: Response): Promise<unknown> {
+  return (await response.json()).meta?.errorCode;
+}
+
 /** A profile with its creator as sole Guardian, plus a pending second one. */
 async function profileWithPendingSecondGuardian() {
   const creator = await person("creator");
@@ -309,5 +366,362 @@ describe("who looks after a managed profile (real Postgres)", () => {
     // still no answer here: `requireCookieAuth` never falls through to the
     // Bearer branch.
     expect((await listGuardians(profile.id)).status).toBe(401);
+  });
+});
+
+describe("every call the managed-profile card can make", () => {
+  it("creates a profile from exactly the body the form composes", async () => {
+    const creator = await person("creator");
+    signIn(creator);
+
+    const response = await createProfile({
+      displayName: "Managed record",
+      dateOfBirth: null,
+      locale: "de",
+      timezone: "Europe/Zurich",
+    });
+    expect(response.status).toBe(201);
+    const created = (await response.json()).data;
+    expect(created.recordKind).toBe("managed");
+
+    // The creator is its Guardian, accepted, from the same transaction — which
+    // is why the card can read the profile off the account payload rather than
+    // from a list endpoint that does not exist.
+    signIn(creator);
+    const roster = (await (await listGuardians(created.id)).json())
+      .data as Array<{ state: string; account: { id: string } }>;
+    expect(roster).toEqual([
+      expect.objectContaining({
+        state: "ACTIVE",
+        account: expect.objectContaining({ id: creator.id }),
+      }),
+    ]);
+  });
+
+  it("refuses a body carrying a field the form does not collect", async () => {
+    // The schema is `.strict()`. This is the reason the client names its four
+    // fields one at a time instead of spreading its form state: a helpful
+    // extra key is a 422 about something nobody filled in.
+    signIn(await person("creator"));
+    const response = await createProfile({
+      displayName: "Managed record",
+      locale: "en",
+      timezone: "UTC",
+      heightCm: 120,
+    });
+    expect(response.status).toBe(422);
+  });
+
+  it("refuses a display name that is only whitespace", async () => {
+    // The bound the form mirrors before it sends: the route trims first.
+    signIn(await person("creator"));
+    expect(
+      (
+        await createProfile({
+          displayName: "   ",
+          locale: "en",
+          timezone: "UTC",
+        })
+      ).status,
+    ).toBe(422);
+  });
+
+  it("deletes a profile, and answers a second attempt with the same 404", async () => {
+    const { creator, profile } = await profileWithPendingSecondGuardian();
+    signIn(creator);
+
+    expect((await deleteProfile(profile.id)).status).toBe(200);
+    expect(
+      await getPrismaClient().user.findUnique({ where: { id: profile.id } }),
+    ).toBeNull();
+
+    const second = await deleteProfile(profile.id);
+    expect(second.status).toBe(404);
+    expect(await errorCodeOf(second)).toBe("managed_profile.not_found");
+  });
+
+  it("refuses deletion by somebody who is not a Guardian", async () => {
+    const { profile } = await profileWithPendingSecondGuardian();
+    signIn(await person("stranger"));
+
+    const response = await deleteProfile(profile.id);
+    expect(response.status).toBe(404);
+    expect(await errorCodeOf(response)).toBe("managed_profile.not_found");
+    // And the record is still there.
+    expect(
+      await getPrismaClient().user.findUnique({ where: { id: profile.id } }),
+    ).not.toBeNull();
+  });
+
+  it("invites a second Guardian as PENDING, with the offset expiry the form sends", async () => {
+    const creator = await person("creator");
+    const invitee = await person("invitee");
+    signIn(creator);
+    const { profile } = await createManagedProfile({
+      creatorId: creator.id,
+      displayName: "Managed record",
+      dateOfBirth: null,
+      locale: "en",
+      timezone: "UTC",
+    });
+
+    // The shape `endOfDayIso` produces: an ISO instant, offset-bearing. A bare
+    // `YYYY-MM-DD` is a 422 here, which is why the client never sends the date
+    // field's raw value.
+    const expiresAt = new Date(Date.now() + 86_400_000).toISOString();
+    const response = await inviteGuardian(profile.id, {
+      identifier: invitee.username,
+      expiresAt,
+    });
+    expect(response.status).toBe(201);
+    const grant = (await response.json()).data;
+    expect(grant.acceptedAt).toBeNull();
+    expect(new Date(grant.expiresAt).toISOString()).toBe(expiresAt);
+
+    // PENDING, and therefore not counted by the floor — which is the sentence
+    // the card states before anybody tries to leave.
+    const roster = (await (await listGuardians(profile.id)).json())
+      .data as Array<{ state: string }>;
+    expect(roster.filter((r) => r.state === "ACTIVE")).toHaveLength(1);
+    expect(roster.filter((r) => r.state === "PENDING")).toHaveLength(1);
+  });
+
+  it("accepts the body the client actually composes, field names and all", async () => {
+    // Both ends and the pipe between them. The route's schema is `.strict()`,
+    // so a client that renamed `identifier` would be refused with a 422 — and
+    // a test that posted a hand-written copy of the body would stay green
+    // through exactly that rename. This posts the composer's own output.
+    const { guardianInviteBody } =
+      await import("@/lib/queries/use-managed-profiles");
+    const creator = await person("creator");
+    const invitee = await person("invitee");
+    signIn(creator);
+    const { profile } = await createManagedProfile({
+      creatorId: creator.id,
+      displayName: "Managed record",
+      dateOfBirth: null,
+      locale: "en",
+      timezone: "UTC",
+    });
+
+    const body = guardianInviteBody({
+      profileId: profile.id,
+      identifier: invitee.username,
+      expiresAt: null,
+    });
+    // Non-zero proof, deliberately name-agnostic: an empty body would be
+    // refused for the wrong reason and would make the 201 below prove nothing.
+    // The NAMES are proved by the route accepting it, not by a second copy of
+    // them written here.
+    expect(Object.keys(body)).toHaveLength(2);
+
+    const response = await inviteGuardian(
+      profile.id,
+      body as { identifier: string; expiresAt: string | null },
+    );
+    expect(response.status).toBe(201);
+    expect((await response.json()).data.acceptedAt).toBeNull();
+  });
+
+  it("refuses a bare calendar date as an expiry", async () => {
+    const creator = await person("creator");
+    const invitee = await person("invitee");
+    signIn(creator);
+    const { profile } = await createManagedProfile({
+      creatorId: creator.id,
+      displayName: "Managed record",
+      dateOfBirth: null,
+      locale: "en",
+      timezone: "UTC",
+    });
+    expect(
+      (
+        await inviteGuardian(profile.id, {
+          identifier: invitee.username,
+          expiresAt: "2027-01-30",
+        })
+      ).status,
+    ).toBe(422);
+  });
+
+  it("answers an invitation addressed to yourself with the duplicate refusal", async () => {
+    // NOT `managed_profile.guardian.self`, and the plan predicted otherwise.
+    // `self_grant` fires when the grantor equals the grantee, and the grantor
+    // here is the PROFILE — never the caller. So inviting yourself is simply
+    // an account that already has access, which is what the person is told,
+    // and the route's 422 self arm cannot be reached. Recorded as a finding;
+    // the client has no arm for a code the server cannot send.
+    const { creator, profile } = await profileWithPendingSecondGuardian();
+    signIn(creator);
+    const response = await inviteGuardian(profile.id, {
+      identifier: creator.username,
+    });
+    expect(response.status).toBe(409);
+    expect(await errorCodeOf(response)).toBe(
+      "managed_profile.guardian.duplicate",
+    );
+  });
+
+  it("cannot be made to answer the self-invitation 422 either", async () => {
+    // The other door to `self_grant` is naming the profile itself, and that
+    // one is closed by the managed-invitee check one line earlier. Both paths
+    // are asserted so the arm is known to be dead rather than assumed to be.
+    const { creator, profile } = await profileWithPendingSecondGuardian();
+    signIn(creator);
+    const response = await inviteGuardian(profile.id, {
+      identifier: profile.username,
+    });
+    expect(response.status).toBe(422);
+    expect(await errorCodeOf(response)).toBe(
+      "managed_profile.guardian.managed_invitee",
+    );
+  });
+
+  it("refuses an invitation to somebody who already has access", async () => {
+    const { creator, invitee, profile } =
+      await profileWithPendingSecondGuardian();
+    signIn(creator);
+    const response = await inviteGuardian(profile.id, {
+      identifier: invitee.username,
+    });
+    expect(response.status).toBe(409);
+    expect(await errorCodeOf(response)).toBe(
+      "managed_profile.guardian.duplicate",
+    );
+  });
+
+  it("refuses a managed profile as a Guardian", async () => {
+    const { creator, profile } = await profileWithPendingSecondGuardian();
+    const { profile: other } = await createManagedProfile({
+      creatorId: creator.id,
+      displayName: "Second record",
+      dateOfBirth: null,
+      locale: "en",
+      timezone: "UTC",
+    });
+    signIn(creator);
+    const response = await inviteGuardian(profile.id, {
+      identifier: other.username,
+    });
+    expect(response.status).toBe(422);
+    expect(await errorCodeOf(response)).toBe(
+      "managed_profile.guardian.managed_invitee",
+    );
+  });
+
+  it("answers an unknown identifier with a 404 carrying NO error code", async () => {
+    // The asymmetry the client has to branch on status for. Four arms of this
+    // route publish a code; this one and the rate limit do not.
+    const { creator, profile } = await profileWithPendingSecondGuardian();
+    signIn(creator);
+    const response = await inviteGuardian(profile.id, {
+      identifier: "nobody-here",
+    });
+    expect(response.status).toBe(404);
+    expect(await errorCodeOf(response)).toBeUndefined();
+  });
+
+  it("refuses an invitation from somebody who is not a Guardian", async () => {
+    const { profile, invitee } = await profileWithPendingSecondGuardian();
+    signIn(await person("stranger"));
+    const response = await inviteGuardian(profile.id, {
+      identifier: invitee.username,
+    });
+    expect(response.status).toBe(404);
+    expect(await errorCodeOf(response)).toBe("managed_profile.not_found");
+  });
+
+  it("ends another Guardian's access and clears their switched sessions", async () => {
+    const { creator, invitee, profile, invitation } =
+      await profileWithPendingSecondGuardian();
+    await acceptGrant({ grantId: invitation.id, granteeId: invitee.id });
+    signIn(creator);
+
+    const response = await removeGuardian(profile.id, invitation.id);
+    expect(response.status).toBe(200);
+    expect(
+      await getPrismaClient().accountGrant.findUniqueOrThrow({
+        where: { id: invitation.id },
+      }),
+    ).toMatchObject({ revokedBy: "GRANTOR" });
+
+    // And the roster the card re-reads no longer carries them.
+    const roster = (await (await listGuardians(profile.id)).json())
+      .data as unknown[];
+    expect(roster).toHaveLength(1);
+  });
+
+  it("withdraws a pending invitation without touching the accepted count", async () => {
+    const { creator, profile, invitation } =
+      await profileWithPendingSecondGuardian();
+    signIn(creator);
+
+    expect((await removeGuardian(profile.id, invitation.id)).status).toBe(200);
+    const roster = (await (await listGuardians(profile.id)).json())
+      .data as Array<{ state: string }>;
+    expect(roster).toHaveLength(1);
+    expect(roster[0].state).toBe("ACTIVE");
+  });
+
+  it("refuses a Guardian ending their OWN access, and leaves the grant alone", async () => {
+    // This is the shape the card's missing self-removal control comes from.
+    // `revokeManagedProfileGuardian` refuses a target whose grantee is the
+    // caller, and the route turns that into `managed_profile.not_found` — NOT
+    // into the last-Guardian 409. A self-removal button would therefore be one
+    // that always fails, with a message that does not describe what happened.
+    // Stepping away is the renounce control on the shared-access panel.
+    const { creator, profile } = await profileWithPendingSecondGuardian();
+    const own = await getPrismaClient().accountGrant.findFirstOrThrow({
+      where: { grantorId: profile.id, granteeId: creator.id },
+    });
+    signIn(creator);
+
+    const response = await removeGuardian(profile.id, own.id);
+    expect(response.status).toBe(404);
+    expect(await errorCodeOf(response)).toBe("managed_profile.not_found");
+    expect(
+      await getPrismaClient().accountGrant.findUniqueOrThrow({
+        where: { id: own.id },
+      }),
+    ).toMatchObject({ revokedAt: null, revokedBy: null });
+  });
+
+  it("refuses removal by somebody who is not a Guardian of the profile", async () => {
+    const { profile, invitation } = await profileWithPendingSecondGuardian();
+    signIn(await person("stranger"));
+    const response = await removeGuardian(profile.id, invitation.id);
+    expect(response.status).toBe(404);
+    expect(await errorCodeOf(response)).toBe("managed_profile.not_found");
+  });
+
+  it("cannot be made to answer the last-Guardian 409 through this route", async () => {
+    // Recorded as a property rather than as a gap in coverage. The refusal
+    // fires only when the TARGET is active and the accepted count is at most
+    // one — and the caller must be an accepted Guardian to get this far, and
+    // may not target themselves. Two accepted Guardians is therefore the
+    // minimum for the branch to be evaluated at all, and two is never one.
+    //
+    // The floor is real; it is enforced on the renounce route, on account
+    // deletion and on a data wipe. It is this ROUTE that cannot express it,
+    // which is why the card states the floor from the roster instead of
+    // waiting for a refusal that will not come.
+    const { creator, invitee, profile, invitation } =
+      await profileWithPendingSecondGuardian();
+    await acceptGrant({ grantId: invitation.id, granteeId: invitee.id });
+    signIn(creator);
+
+    // Two accepted Guardians: the removal is allowed rather than refused.
+    expect((await removeGuardian(profile.id, invitation.id)).status).toBe(200);
+
+    // And with one left, the only target available to that Guardian is
+    // themselves — which is the 404 above, not the 409.
+    const own = await getPrismaClient().accountGrant.findFirstOrThrow({
+      where: { grantorId: profile.id, granteeId: creator.id },
+    });
+    const self = await removeGuardian(profile.id, own.id);
+    expect(self.status).toBe(404);
+    expect(await errorCodeOf(self)).not.toBe(
+      "managed_profile.guardian.required",
+    );
   });
 });
