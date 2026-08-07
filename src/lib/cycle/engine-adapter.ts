@@ -18,6 +18,8 @@ import {
   type CyclePhase,
   type PhaseCycle,
   resolveLuteal,
+  clampLuteal,
+  POPULATION_DEFAULT_CYCLE,
 } from "@/lib/cycle";
 import type {
   CycleProfile,
@@ -32,6 +34,13 @@ export interface CalendarDayDTO {
   isFertileWindow: boolean;
   isPredictedOvulation: boolean;
   isPeriodLogged: boolean;
+  /**
+   * Whether a logged cycle opens on this day. The client uses it to say what a
+   * delete would take: removing the day-log of a cycle start removes the start
+   * too, and a confirm dialog that does not name that is asking about the
+   * wrong thing.
+   */
+  isCycleStart: boolean;
   flow: string | null;
   hasSymptoms: boolean;
   confidence: number;
@@ -129,9 +138,30 @@ function periodLengthOf(
 }
 
 /**
- * Build a contiguous `PhaseCycle[]` from the observed cycles (each cycle's
- * span ends where the next begins; the latest open cycle runs to the
- * predicted next-period start). Used to label every calendar day's phase.
+ * Build a contiguous `PhaseCycle[]` from the observed cycles: each closed
+ * cycle's span ends where the next begins, and the latest open cycle runs to
+ * the predicted next-period start — or, when that day has come and gone with
+ * no period logged, on through `today`.
+ *
+ * That trailing extension is the difference between a late period and no
+ * record at all. A cycle stays open until the next one starts, and a forecast
+ * is a forecast: the day after a missed prediction is still a day of the cycle
+ * the person is in. Ending the span at the predicted start instead made every
+ * day past it carry no phase, which the verdict resolver could only read as
+ * "today falls outside every known cycle window" — so an ordinary three-days-
+ * late period reported INSUFFICIENT_DATA, and the honest OVERDUE state was
+ * unreachable unless the engine itself forecast a cycle longer than the grace
+ * window. The count is bounded on the other side: `resolveCycleVerdict` stops
+ * claiming a cycle day once the run passes the profile's typical length plus
+ * its grace window.
+ *
+ * The extension deliberately does NOT move the ovulation estimate. Left to
+ * `phaseForDay`, an ovulation with no confirmed date is back-calculated from
+ * the span's own length, so a window that grows a day per day of delay would
+ * walk the estimate — and every FOLLICULAR/OVULATORY/LUTEAL boundary already
+ * drawn for that cycle — forward with it. The open cycle therefore carries an
+ * explicit anchor derived from the PREDICTED length, which is the same date
+ * `phaseForDay` computes when the span ends where the forecast said it would.
  */
 export function buildPhaseCycles(
   cycles: readonly Pick<
@@ -140,18 +170,37 @@ export function buildPhaseCycles(
   >[],
   predictedNextStart: string | null,
   lutealLength: number,
+  /** Today in the USER's timezone. The open cycle runs at least this far. */
+  today: string,
 ): PhaseCycle[] {
   const sorted = [...cycles].sort((a, b) => dayDiff(a.startDate, b.startDate));
   const out: PhaseCycle[] = [];
   for (let i = 0; i < sorted.length; i++) {
     const c = sorted[i];
     const next = sorted[i + 1];
+    if (next) {
+      out.push({
+        startDate: c.startDate,
+        nextStart: next.startDate,
+        ovulationDate: c.ovulationDate,
+        periodLength: periodLengthOf(c),
+        lutealLength,
+      });
+      continue;
+    }
+
+    // The open cycle. `phaseForDay` treats `nextStart` as exclusive, so the
+    // window has to reach the day AFTER today for today to carry a phase.
+    const forecastEnd =
+      predictedNextStart ?? addDays(c.startDate, POPULATION_DEFAULT_CYCLE);
+    const throughToday = addDays(today, 1);
     const nextStart =
-      next?.startDate ?? predictedNextStart ?? addDays(c.startDate, 28);
+      dayDiff(throughToday, forecastEnd) > 0 ? throughToday : forecastEnd;
     out.push({
       startDate: c.startDate,
       nextStart,
-      ovulationDate: c.ovulationDate,
+      ovulationDate:
+        c.ovulationDate ?? addDays(forecastEnd, -clampLuteal(lutealLength)),
       periodLength: periodLengthOf(c),
       lutealLength,
     });
@@ -186,11 +235,14 @@ export function phaseForDate(
   >[],
   predictedNextStart: string | null,
   lutealLength: number,
+  /** Today in the USER's timezone — how far a still-open cycle runs. */
+  today: string,
 ): { phase: CyclePhase | null; dayOfCycle: number | null } {
   const phaseCycles = buildPhaseCycles(
     cycles,
     predictedNextStart,
     lutealLength,
+    today,
   );
   for (const pc of phaseCycles) {
     const r = phaseForDay(date, pc);
@@ -219,11 +271,14 @@ export function buildPhaseDayMap(
   lutealLength: number,
   from: string,
   to: string,
+  /** Today in the USER's timezone — how far a still-open cycle runs. */
+  today: string,
 ): Map<string, CyclePhase> {
   const phaseCycles = buildPhaseCycles(
     cycles,
     predictedNextStart,
     lutealLength,
+    today,
   );
   const out = new Map<string, CyclePhase>();
   const span = dayDiff(to, from);
@@ -304,6 +359,7 @@ export function buildCalendar(
     cycles,
     prediction?.nextPeriodStart ?? null,
     lutealLength,
+    today,
   );
 
   // Forward predicted period bar: [nextPeriodStart, +predictedPeriodLength).
@@ -318,6 +374,8 @@ export function buildCalendar(
 
   const logByDate = new Map<string, CalendarDayLogRow>();
   for (const l of dayLogs) logByDate.set(l.date, l);
+
+  const cycleStartDates = new Set(cycles.map((c) => c.startDate));
 
   const days: CalendarDayDTO[] = [];
   const span = dayDiff(to, from);
@@ -356,6 +414,7 @@ export function buildCalendar(
       isFertileWindow,
       isPredictedOvulation,
       isPeriodLogged: log?.flow != null && log.flow !== "NONE",
+      isCycleStart: cycleStartDates.has(date),
       flow: log?.flow ?? null,
       hasSymptoms: log?.hasSymptoms ?? false,
       confidence: prediction?.confidence ?? 0,

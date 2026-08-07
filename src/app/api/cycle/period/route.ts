@@ -37,26 +37,20 @@ import {
   dayLogSymptomInclude,
 } from "@/lib/cycle/dto";
 import { DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
-import { addDays, dayDiff } from "@/lib/cycle/day-math";
+import { openCycleAt, type MovedAnchors } from "@/lib/cycle/cycle-boundaries";
 
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postPeriod));
 
 /**
  * v1.37.0 — the anchors a boundary write moves, carried out of the
- * transaction so the audit row can name them (C4).
+ * transaction so the audit row can name them (C4). The `start` arm's own
+ * anchors live with the shared boundary helper; the `end` arm adds the one
+ * column it overwrites.
  */
-interface MovedAnchors {
-  priorCycleId?: string;
-  /** Day keys, the shape this domain stores its dates in. */
-  priorEndDateBefore?: string | null;
-  priorEndDateAfter?: string | null;
-  priorLengthBefore?: number | null;
-  priorLengthAfter?: number | null;
-  openedEndDateBefore?: string | null;
-  openedEndDateAfter?: string | null;
+type PeriodMovedAnchors = MovedAnchors & {
   periodEndDateBefore?: string | null;
   periodEndDateAfter?: string | null;
-}
+};
 
 async function postPeriod(request: NextRequest): Promise<Response> {
   // v1.37.0 — MANAGE. Setting a boundary re-anchors the neighbouring cycles,
@@ -97,73 +91,15 @@ async function postPeriod(request: NextRequest): Promise<Response> {
   // exact-key replay; the transaction guards the interleaving case.
   const txResult = await prisma.$transaction(async (db) => {
     if (action === "start") {
-      // Close the prior open cycle (its end is the day before this start)
-      // and record its observed length.
-      const prior = await db.menstrualCycle.findFirst({
-        where: { userId: user.id, deletedAt: null, startDate: { lt: date } },
-        orderBy: { startDate: "desc" },
-        // v1.37.0 — `endDate` and `lengthDays` are read for the audit row:
-        // this write overwrites both on the prior cycle and they are the
-        // dates C4 exists to name.
-        select: {
-          id: true,
-          startDate: true,
-          endDate: true,
-          lengthDays: true,
-        },
-      });
-      const moved: MovedAnchors = {};
-      if (prior) {
-        moved.priorCycleId = prior.id;
-        moved.priorEndDateBefore = prior.endDate;
-        moved.priorEndDateAfter = addDays(date, -1);
-        moved.priorLengthBefore = prior.lengthDays;
-        moved.priorLengthAfter = dayDiff(date, prior.startDate);
-        await db.menstrualCycle.update({
-          where: { id: prior.id },
-          data: {
-            endDate: addDays(date, -1),
-            lengthDays: dayDiff(date, prior.startDate),
-            syncVersion: { increment: 1 },
-          },
-        });
-      }
-
-      // Upsert the new cycle on the `(userId, startDate)` unique so a
-      // re-tap on the same day is idempotent.
-      const cycle = await db.menstrualCycle.upsert({
-        where: { userId_startDate: { userId: user.id, startDate: date } },
-        create: { userId: user.id, startDate: date, tz, isPredicted: false },
-        update: {
-          deletedAt: null,
-          isPredicted: false,
-          syncVersion: { increment: 1 },
-        },
-      });
-
-      // Re-anchor the FOLLOWING neighbour: when this start is back-filled
-      // between two existing cycles, the new cycle's end + length are already
-      // known from its successor's start. Without this the inserted cycle keeps
-      // endDate/lengthDays = null even though the next start exists, and the
-      // iOS mirror + history surfaces read a stale open cycle (QA M-1).
-      const next = await db.menstrualCycle.findFirst({
-        where: { userId: user.id, deletedAt: null, startDate: { gt: date } },
-        orderBy: { startDate: "asc" },
-        select: { startDate: true },
-      });
-      if (next) {
-        moved.openedEndDateBefore = cycle.endDate;
-        moved.openedEndDateAfter = addDays(next.startDate, -1);
-        await db.menstrualCycle.update({
-          where: { id: cycle.id },
-          data: {
-            endDate: addDays(next.startDate, -1),
-            lengthDays: dayDiff(next.startDate, date),
-            syncVersion: { increment: 1 },
-          },
-        });
-      }
-      return { cycleId: cycle.id as string | null, moved };
+      // Close the prior open cycle, open this one, and re-anchor the following
+      // neighbour when the start is back-filled between two existing cycles.
+      // The same helper runs when a first bleeding day is captured as flow, so
+      // a period start means one thing however it was entered.
+      const { cycleId, moved } = await openCycleAt(db, user.id, date, tz);
+      return {
+        cycleId: cycleId as string | null,
+        moved: moved as PeriodMovedAnchors,
+      };
     }
 
     // `end`: stamp the current cycle's periodEndDate.
@@ -174,7 +110,7 @@ async function postPeriod(request: NextRequest): Promise<Response> {
       select: { id: true, periodEndDate: true },
     });
     if (!current) {
-      return { cycleId: null, moved: {} satisfies MovedAnchors };
+      return { cycleId: null, moved: {} satisfies PeriodMovedAnchors };
     }
     await db.menstrualCycle.update({
       where: { id: current.id },
@@ -185,7 +121,7 @@ async function postPeriod(request: NextRequest): Promise<Response> {
       moved: {
         periodEndDateBefore: current.periodEndDate,
         periodEndDateAfter: date,
-      } satisfies MovedAnchors,
+      } satisfies PeriodMovedAnchors,
     };
   });
 

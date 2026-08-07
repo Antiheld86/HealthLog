@@ -10,18 +10,21 @@ permissions:
   contents: read
 
 jobs:
-  integration:
+  # The suite outgrew a single runner: 128 files took ~13 minutes when the
+  # 25-minute guard was written, and the v1.37 sharing work took it to 173
+  # files and past 25 minutes of wall clock, so every run died at the timeout
+  # with every test to that point green. The guard's own rule applies — split,
+  # don't raise — so the files run as two vitest shards. Each shard boots its
+  # own Postgres testcontainer; the timeout stays a hang detector, sized so a
+  # healthy half-suite clears it on a slow runner.
+  shard:
     runs-on: ubuntu-latest
-    # This guard exists to kill a hung testcontainer or a deadlocked query, not
-    # to hold the suite to a performance budget. At 15 it had stopped telling
-    # those apart: the suite itself takes around 13 minutes of job time (128
-    # files against a real Postgres), so two consecutive runs of the SAME
-    # commit range came in at 12m50s and then over 15m, and the second was
-    # killed mid-run with every test to that point green. A cap that a healthy
-    # run clears only on a fast runner reports runner weather, not health.
-    # 25 leaves real headroom and still catches a hang inside one CI cycle.
-    # If the suite ever approaches this number, split it rather than raise it.
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    name: integration shard ${{ matrix.shard }}/2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -36,7 +39,12 @@ jobs:
 
       - run: pnpm db:generate
 
-      - run: pnpm test:integration
+      # vitest is invoked directly: pnpm passes the `--` separator through to
+      # the script literally, so `pnpm test:integration -- --shard=…` hands
+      # vitest a stray positional argument and the shard flag never applies —
+      # both "shards" then run the full suite. Proven by a paired local run
+      # before this workflow shipped.
+      - run: pnpm exec vitest run --config vitest.integration.config.mts --shard=${{ matrix.shard }}/2
         env:
           # The integration suite boots a Postgres testcontainer and points
           # Prisma at it via DATABASE_URL set inside `tests/integration/setup.ts`.
@@ -50,3 +58,19 @@ jobs:
           API_TOKEN_HMAC_KEY: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
           ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
           SESSION_SECRET: "integration-tests"
+
+  # Branch protection requires a check named exactly "integration". This job
+  # carries that name and answers for both shards: it fails when any shard
+  # failed or was cancelled, so a half-green matrix cannot satisfy the gate.
+  integration:
+    runs-on: ubuntu-latest
+    needs: shard
+    if: always()
+    timeout-minutes: 5
+    steps:
+      - name: Every shard finished green
+        run: |
+          if [ "${{ needs.shard.result }}" != "success" ]; then
+            echo "shard result: ${{ needs.shard.result }}"
+            exit 1
+          fi

@@ -181,6 +181,10 @@ const cycleCalendarDayDto = z.object({
   isFertileWindow: z.boolean(),
   isPredictedOvulation: z.boolean(),
   isPeriodLogged: z.boolean(),
+  isCycleStart: z.boolean().meta({
+    description:
+      "Whether a logged cycle opens on this day. Deleting this day's log removes that cycle start with it.",
+  }),
   flow: flowLevelEnum.nullable(),
   hasSymptoms: z.boolean(),
   confidence: z.number(),

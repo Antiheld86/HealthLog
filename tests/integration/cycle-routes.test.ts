@@ -636,3 +636,110 @@ describe("sync/changes — cycle domains", () => {
     expect(cycleTombs[0].id).toBe(cycle.id);
   });
 });
+
+describe("back-filling an entry months into the past", () => {
+  /** `YYYY-MM-DD`, `days` from today, in the process zone the route resolves. */
+  function dayKey(offset: number): string {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+      d.getDate(),
+    ).padStart(2, "0")}`;
+  }
+
+  // Far enough back to fall outside the page's anchored ninety-day read, the
+  // way an April entry does in August. Dates are relative so the case cannot
+  // slide out of the window it is about as the calendar moves on.
+  const BACK_DATED = dayKey(-111);
+
+  it("writes the day and hands it back on a window that covers it", async () => {
+    await loginAs(FEMALE_USER_ID);
+    const prisma = getPrismaClient();
+
+    const dayLogs = await import("@/app/api/cycle/day-logs/route");
+    const written = await dayLogs.POST(
+      jsonRequest("/api/cycle/day-logs", "POST", {
+        date: BACK_DATED,
+        flow: "HEAVY",
+        loggedAt: `${BACK_DATED}T08:00:00.000Z`,
+      }),
+    );
+    // The route accepts a past date: only the future is refused.
+    expect(written.status).toBe(201);
+
+    // The row is really there, not just an accepted response.
+    const row = await prisma.cycleDayLog.findFirstOrThrow({
+      where: { userId: FEMALE_USER_ID, date: BACK_DATED, deletedAt: null },
+    });
+    expect(row.flow).toBe("HEAVY");
+
+    const { GET } = await import("@/app/api/cycle/calendar/route");
+    // The page's own window. The entry exists and this read cannot show it,
+    // which is the whole of what the client saw as "nothing was saved".
+    const anchored = await GET(
+      new NextRequest(
+        `http://localhost/api/cycle/calendar?from=${dayKey(-90)}&to=${dayKey(180)}`,
+      ),
+    );
+    const anchoredDays = (await anchored.json()).data.days as {
+      date: string;
+    }[];
+    expect(anchoredDays.some((d) => d.date === BACK_DATED)).toBe(false);
+
+    // A window over the month the grid is showing carries it, flow and all.
+    const month = BACK_DATED.slice(0, 7);
+    const lastDay = new Date(
+      Number(month.slice(0, 4)),
+      Number(month.slice(5, 7)),
+      0,
+    ).getDate();
+    const scoped = await GET(
+      new NextRequest(
+        `http://localhost/api/cycle/calendar?from=${month}-01&to=${month}-${lastDay}`,
+      ),
+    );
+    expect(scoped.status).toBe(200);
+    const scopedDays = (await scoped.json()).data.days as {
+      date: string;
+      flow: string | null;
+      isPeriodLogged: boolean;
+    }[];
+    const hit = scopedDays.find((d) => d.date === BACK_DATED);
+    expect(hit).toBeDefined();
+    expect(hit?.flow).toBe("HEAVY");
+    expect(hit?.isPeriodLogged).toBe(true);
+  });
+
+  it("opens a back-dated cycle and marks the day as its start", async () => {
+    await loginAs(FEMALE_USER_ID);
+    const period = await import("@/app/api/cycle/period/route");
+    const res = await period.POST(
+      jsonRequest("/api/cycle/period", "POST", {
+        action: "start",
+        date: BACK_DATED,
+        loggedAt: `${BACK_DATED}T08:00:00.000Z`,
+      }),
+    );
+    expect(res.status).toBe(200);
+
+    const month = BACK_DATED.slice(0, 7);
+    const lastDay = new Date(
+      Number(month.slice(0, 4)),
+      Number(month.slice(5, 7)),
+      0,
+    ).getDate();
+    const { GET } = await import("@/app/api/cycle/calendar/route");
+    const scoped = await GET(
+      new NextRequest(
+        `http://localhost/api/cycle/calendar?from=${month}-01&to=${month}-${lastDay}`,
+      ),
+    );
+    const days = (await scoped.json()).data.days as {
+      date: string;
+      isCycleStart: boolean;
+    }[];
+    // The flag the log sheet reads to say what a delete would take.
+    expect(days.find((d) => d.date === BACK_DATED)?.isCycleStart).toBe(true);
+    expect(days.filter((d) => d.isCycleStart)).toHaveLength(1);
+  });
+});
