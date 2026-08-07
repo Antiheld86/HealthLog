@@ -38,8 +38,12 @@ import { hourCycleOptions } from "@/lib/format-locale";
 
 const FIELD_HEIGHT_CLASSES = "min-h-11 h-11 sm:min-h-10 sm:h-10";
 
+// `min-w-0` mirrors `<DateField>` and carries the same reason: a flex item's
+// automatic minimum size would otherwise be the 20-character intrinsic width of
+// the text input inside, which floors the whole field at ~230 px and overflows
+// the dialog that hosts it. See the note in `date-field.tsx`.
 const FIELD_BASE_CLASSES =
-  "border-input bg-background text-foreground ring-offset-background placeholder:text-muted-foreground focus-within:ring-ring relative flex w-full items-center rounded-md border ps-3 pe-2 text-sm shadow-xs transition-[color,box-shadow] focus-within:ring-2 focus-within:ring-offset-2 focus-within:outline-none";
+  "border-input bg-background text-foreground ring-offset-background placeholder:text-muted-foreground focus-within:ring-ring relative flex w-full min-w-0 items-center rounded-md border ps-3 pe-2 text-sm shadow-xs transition-[color,box-shadow] focus-within:ring-2 focus-within:ring-offset-2 focus-within:outline-none";
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -153,7 +157,9 @@ export const TimeField = React.forwardRef<HTMLInputElement, TimeFieldProps>(
             inputMode="numeric"
             autoComplete="off"
             data-testid={dataTestId}
-            className="placeholder:text-muted-foreground h-full flex-1 bg-transparent py-1 outline-none disabled:cursor-not-allowed"
+            // See `date-field.tsx`: without `min-w-0` the input's intrinsic
+            // 20-character width becomes the field's floor.
+            className="placeholder:text-muted-foreground h-full min-w-0 flex-1 bg-transparent py-1 outline-none disabled:cursor-not-allowed"
             value={overlayValue}
             placeholder={placeholder ?? (use12h ? "--:-- --" : "--:--")}
             disabled={disabled}

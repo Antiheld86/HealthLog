@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Security
+
+- The PDF renderer behind the document vault moves to a release that closes a
+  script-execution flaw. A crafted PDF could get JavaScript to run inside the
+  renderer, and the vault feeds it every PDF that is uploaded. Two things
+  limited what that reached, and neither is a substitute for the fix: the
+  renderer runs server-side only, because a PDF is displayed through the
+  browser's own viewer rather than this library, and it already ran with font
+  evaluation turned off. A second copy of the same library, pulled in by a
+  development dependency, is pinned past the flaw as well, since the runtime
+  image ships every copy it finds rather than only the one that gets used.
+
+- The container image now runs the version of the PDF renderer the project
+  pins. The build had been taking whichever copy the filesystem listed first,
+  and more than one copy reaches the image, so the pinned version was not
+  reliably the one that ran. It is selected by name now, and a copy that never
+  arrived fails the build instead of quietly leaving another one in its place.
+
 ## [1.37.0] — 2026-08-07
 
 ### Added

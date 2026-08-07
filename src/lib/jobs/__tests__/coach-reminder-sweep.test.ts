@@ -1,10 +1,12 @@
 /**
  * v1.22 (M4) — daily Coach-reminder sweep.
  *
- * Covers: overdue active date-reminders flip to `due`; a passed CoachPlan
- * reviewDate mints a one-off reminder from the plan's own cue→action text and
- * clears the reviewDate (activating the dangling B1 column); an undecryptable
- * plan is skipped (counted errored) without sinking the tick.
+ * Covers: a passed CoachPlan reviewDate mints a one-off reminder from the
+ * plan's own cue→action text and clears the reviewDate (activating the dangling
+ * B1 column); an undecryptable plan is skipped (counted errored) without
+ * sinking the tick; and — v1.37 — surfacing writes the reminder into a
+ * conversation and flips its status in one transaction, so a badge can never
+ * point at a message that was never written.
  */
 import { describe, it, expect, vi } from "vitest";
 
@@ -25,84 +27,179 @@ function bytes(tag: string): Uint8Array {
   return new Uint8Array(Buffer.from(tag, "utf8"));
 }
 
+/**
+ * A prisma double whose `$transaction` accepts BOTH shapes the sweep uses: an
+ * array of pre-built operations (the plan-review mint) and an interactive
+ * callback (the surfacing step).
+ */
+function makePrisma(options: {
+  overdue?: {
+    id: string;
+    userId: string;
+    noteEncrypted: Uint8Array;
+  }[];
+  plans?: {
+    id: string;
+    userId: string;
+    metric: string;
+    ifCueEncrypted: Uint8Array;
+    thenActionEncrypted: Uint8Array;
+  }[];
+}) {
+  const tx = {
+    coachConversation: { create: vi.fn(async () => ({ id: "c1" })) },
+    coachMessage: { create: vi.fn(async () => ({ id: "m1" })) },
+    coachReminder: { updateMany: vi.fn(async () => ({ count: 0 })) },
+  };
+  const prisma = {
+    coachReminder: {
+      findMany: vi.fn(async () => options.overdue ?? []),
+      create: vi.fn(async () => ({ id: "r-new" })),
+      updateMany: vi.fn(async () => ({ count: 0 })),
+    },
+    coachPlan: {
+      findMany: vi.fn(async () => options.plans ?? []),
+      update: vi.fn(async () => ({})),
+    },
+    coachConversation: { create: vi.fn(async () => ({ id: "c1" })) },
+    coachMessage: { create: vi.fn(async () => ({ id: "m1" })) },
+    user: { findUnique: vi.fn(async () => ({ locale: "en" })) },
+    $transaction: vi.fn(async (arg: unknown) => {
+      if (typeof arg === "function") {
+        return (arg as (t: typeof tx) => Promise<unknown>)(tx);
+      }
+      return Promise.all(arg as Promise<unknown>[]);
+    }),
+    tx,
+  };
+  return prisma;
+}
+
 describe("runCoachReminderSweep", () => {
-  it("flips overdue active date-reminders to due and mints plan-review reminders", async () => {
-    const prisma = {
-      coachReminder: {
-        updateMany: vi.fn(async () => ({ count: 3 })),
-        create: vi.fn(async () => ({ id: "r-new" })),
-      },
-      coachPlan: {
-        findMany: vi.fn(async () => [
-          {
-            id: "p1",
-            userId: "u1",
-            metric: "WEIGHT",
-            ifCueEncrypted: bytes("every morning"),
-            thenActionEncrypted: bytes("weigh in"),
-          },
-        ]),
-        update: vi.fn(async () => ({})),
-      },
-      // The mint runs as one atomic batch; resolve the built ops together.
-      $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
-    };
+  it("mints a plan-review reminder from the plan's own prose and clears the reviewDate", async () => {
+    const prisma = makePrisma({
+      plans: [
+        {
+          id: "p1",
+          userId: "u1",
+          metric: "WEIGHT",
+          ifCueEncrypted: bytes("every morning"),
+          thenActionEncrypted: bytes("weigh in"),
+        },
+      ],
+    });
 
     const summary = await runCoachReminderSweep(prisma as never, NOW);
-    expect(summary.remindersDue).toBe(3);
     expect(summary.planReviewsMinted).toBe(1);
     expect(summary.errored).toBe(0);
 
-    // The flip query is scoped to active, date-triggered, overdue rows.
-    const flipArgs = prisma.coachReminder.updateMany.mock
-      .calls[0] as unknown as [
-      { where: { status: string; triggerKind: string; dueAt: unknown } },
-    ];
-    const where = flipArgs[0].where;
-    expect(where.status).toBe("active");
-    expect(where.triggerKind).toBe("date");
-    expect(where.dueAt).toEqual({ not: null, lte: NOW });
-
-    // The minted reminder carries the plan's own prose + relatedPlanId.
     const createArgs = prisma.coachReminder.create.mock.calls[0] as unknown as [
       { data: { relatedPlanId: string; source: string; status: string } },
     ];
     const data = createArgs[0].data;
     expect(data.relatedPlanId).toBe("p1");
     expect(data.source).toBe("extractor");
-    expect(data.status).toBe("due");
+    // Minted `active`, not `due`: the surfacing pass in this same tick is what
+    // takes it to the conversation, and there is only one such path.
+    expect(data.status).toBe("active");
 
-    // The plan's reviewDate is cleared so the review fires exactly once.
     expect(prisma.coachPlan.update).toHaveBeenCalledWith({
       where: { id: "p1" },
       data: { reviewDate: null },
     });
+  });
 
-    // The create + clear commit atomically — a half-applied mint would let the
-    // next tick re-select the plan and duplicate the review reminder.
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  it("writes the reminder into a conversation and flips its status in ONE transaction", async () => {
+    const prisma = makePrisma({
+      overdue: [
+        { id: "r1", userId: "u1", noteEncrypted: bytes("ask about my sleep") },
+      ],
+    });
+
+    const summary = await runCoachReminderSweep(prisma as never, NOW);
+    expect(summary.remindersDue).toBe(1);
+    expect(summary.errored).toBe(0);
+
+    // A conversation with the note as an ASSISTANT message — the row the
+    // unread badge is derived from.
+    expect(prisma.tx.coachConversation.create).toHaveBeenCalledTimes(1);
+    const msgArgs = prisma.tx.coachMessage.create.mock.calls[0] as unknown as [
+      { data: { role: string; encryptedContent: Uint8Array } },
+    ];
+    expect(msgArgs[0].data.role).toBe("assistant");
+    const body = Buffer.from(msgArgs[0].data.encryptedContent).toString("utf8");
+    expect(body).toContain("dec:ask about my sleep");
+
+    // …and the status flip rides the SAME transaction, so neither half can
+    // land without the other.
+    const flip = prisma.tx.coachReminder.updateMany.mock
+      .calls[0] as unknown as [
+      { where: { id: { in: string[] } }; data: { status: string } },
+    ];
+    expect(flip[0].where.id.in).toEqual(["r1"]);
+    expect(flip[0].data.status).toBe("surfaced");
+  });
+
+  it("picks up rows an older build left stuck on `due`", async () => {
+    const prisma = makePrisma({
+      overdue: [{ id: "r-old", userId: "u1", noteEncrypted: bytes("stuck") }],
+    });
+
+    await runCoachReminderSweep(prisma as never, NOW);
+
+    const where = (
+      prisma.coachReminder.findMany.mock.calls[0] as unknown as [
+        { where: { status: { in: string[] } } },
+      ]
+    )[0].where;
+    expect(where.status.in).toEqual(["active", "due"]);
+  });
+
+  it("leaves the reminder alone when the conversation write fails", async () => {
+    const prisma = makePrisma({
+      overdue: [{ id: "r1", userId: "u1", noteEncrypted: bytes("note") }],
+    });
+    prisma.$transaction = vi.fn(async (arg: unknown) => {
+      if (typeof arg === "function") throw new Error("db down");
+      return Promise.all(arg as Promise<unknown>[]);
+    }) as never;
+
+    const summary = await runCoachReminderSweep(prisma as never, NOW);
+    // Not counted as surfaced — the next tick retries, and until it succeeds
+    // nothing claims a message that does not exist.
+    expect(summary.remindersDue).toBe(0);
+    expect(summary.errored).toBe(1);
+    expect(prisma.tx.coachReminder.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("skips an undecryptable note without losing the ones beside it", async () => {
+    const prisma = makePrisma({
+      overdue: [
+        { id: "r-bad", userId: "u1", noteEncrypted: bytes("__bad__") },
+        { id: "r-ok", userId: "u1", noteEncrypted: bytes("fine") },
+      ],
+    });
+
+    const summary = await runCoachReminderSweep(prisma as never, NOW);
+    expect(summary.remindersDue).toBe(1);
+    expect(summary.errored).toBe(1);
+    const flip = prisma.tx.coachReminder.updateMany.mock
+      .calls[0] as unknown as [{ where: { id: { in: string[] } } }];
+    expect(flip[0].where.id.in).toEqual(["r-ok"]);
   });
 
   it("skips an undecryptable plan without sinking the tick", async () => {
-    const prisma = {
-      coachReminder: {
-        updateMany: vi.fn(async () => ({ count: 0 })),
-        create: vi.fn(async () => ({ id: "r-new" })),
-      },
-      coachPlan: {
-        findMany: vi.fn(async () => [
-          {
-            id: "p1",
-            userId: "u1",
-            metric: "SLEEP",
-            ifCueEncrypted: bytes("__bad__"),
-            thenActionEncrypted: bytes("lights out"),
-          },
-        ]),
-        update: vi.fn(async () => ({})),
-      },
-      $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
-    };
+    const prisma = makePrisma({
+      plans: [
+        {
+          id: "p1",
+          userId: "u1",
+          metric: "SLEEP",
+          ifCueEncrypted: bytes("__bad__"),
+          thenActionEncrypted: bytes("lights out"),
+        },
+      ],
+    });
 
     const summary = await runCoachReminderSweep(prisma as never, NOW);
     expect(summary.planReviewsMinted).toBe(0);

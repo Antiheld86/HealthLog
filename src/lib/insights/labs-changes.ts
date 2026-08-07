@@ -9,8 +9,9 @@
  * numeric value, so they are skipped — a delta is meaningless for them.
  *
  * Pure + Prisma-free so the present / absent states are unit-testable: it is
- * absent when there are fewer than two panel dates or no analyte is shared.
- * Neutral framing only — a delta is not a diagnosis.
+ * absent when there are fewer than two panel dates, no analyte is shared, or
+ * the newest panel is older than `LAB_CHANGE_RECENCY_DAYS`. Neutral framing
+ * only — a delta is not a diagnosis.
  */
 import {
   classifyReferenceRange,
@@ -47,6 +48,29 @@ export interface LabChangesSummary {
   changes: LabChange[];
 }
 
+/**
+ * How long the comparison keeps calling itself "since your last panel".
+ *
+ * The card's whole claim is time-bound: a delta between the two newest panels
+ * is news for a while, and then it is simply history the labs page already
+ * holds. Someone whose newest panel is years old was still being shown "what
+ * changed since your last panel", which is not a stale piece of UI state — it
+ * is a stale STATEMENT.
+ *
+ * A year, and not less, because routine panels are commonly drawn annually. A
+ * shorter window would hide a comparison that is genuinely the newest thing
+ * the person has for months of every year. Past a year the wording cannot be
+ * defended at all, so the comparison stops being surfaced rather than being
+ * re-worded into something nobody asked for.
+ *
+ * Expressed on the DATA, not per user: nothing to acknowledge, nothing to
+ * persist, no housekeeping asked of anyone, and every client — web and iOS —
+ * reads the same answer through the existing `present: false` contract.
+ */
+export const LAB_CHANGE_RECENCY_DAYS = 365;
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 const ABSENT: LabChangesSummary = {
   present: false,
   latestDate: null,
@@ -73,6 +97,7 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
  */
 export function summariseLabChanges(
   rows: readonly LabChangeRow[],
+  now: Date = new Date(),
 ): LabChangesSummary {
   const numeric = rows.filter((r) => Number.isFinite(r.value));
   if (numeric.length === 0) return ABSENT;
@@ -100,6 +125,16 @@ export function summariseLabChanges(
   const previousDate = days[1];
   const latest = byDay.get(latestDate)!;
   const previous = byDay.get(previousDate)!;
+
+  // Read the freshness off the newest actual sample instant in that panel, not
+  // off the day key: the key is a UTC calendar day and re-parsing it would put
+  // the boundary a few hours out for anyone east or west of UTC.
+  const newestSampleAt = Math.max(
+    ...[...latest.values()].map((r) => r.takenAt.getTime()),
+  );
+  if (now.getTime() - newestSampleAt > LAB_CHANGE_RECENCY_DAYS * MS_PER_DAY) {
+    return ABSENT;
+  }
 
   const changes: LabChange[] = [];
   for (const [key, latestRow] of latest) {

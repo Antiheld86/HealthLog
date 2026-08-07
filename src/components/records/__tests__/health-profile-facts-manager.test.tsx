@@ -114,7 +114,12 @@ describe("health-profile fact removal control", () => {
       .filter(
         (props) =>
           props.type === "button" &&
-          props.variant === "outline" &&
+          // The Save control is the entry's PRIMARY action, so it carries the
+          // default variant. Matching on `variant === "outline"` used to be the
+          // discriminator and silently stopped matching anything when the
+          // action row was rebuilt — the button was still there, the selector
+          // was not.
+          props.variant === undefined &&
           typeof props.onClick === "function",
       )
       .map((props) => {
@@ -132,12 +137,18 @@ describe("health-profile fact removal control", () => {
     const { html } = render();
 
     expect(confirmButtons).toHaveLength(1);
+    // The visible label is short — three entries side by side each carrying
+    // their own field name read as one run of words — but the ACCESSIBLE name
+    // still says which entry it removes, and so does the dialog it opens.
     expect(confirmButtons[0]).toMatchObject({
       slot: "health-profile-fact-remove-SMOKING_STATUS",
-      label: "Remove Smoking status",
+      label: "Remove",
+      ariaLabel: "Remove Smoking status",
+      confirmLabel: "Remove Smoking status",
+      title: "Remove Smoking status?",
       body: "The current value will become not recorded. Its dated history will be retained.",
     });
-    expect(html).toContain("Remove Smoking status");
+    expect(html).toContain("Remove");
     expect(apiDelete).not.toHaveBeenCalled();
   });
 
@@ -173,7 +184,7 @@ describe("health-profile fact removal control", () => {
     const saveButton = renderedButtons.find(
       (props) =>
         props.type === "button" &&
-        props.variant === "outline" &&
+        props.variant === undefined &&
         typeof props.onClick === "function",
     );
 
@@ -207,7 +218,7 @@ describe("health-profile fact removal control", () => {
     const saveButton = renderedButtons.find(
       (props) =>
         props.type === "button" &&
-        props.variant === "outline" &&
+        props.variant === undefined &&
         typeof props.onClick === "function",
     );
 

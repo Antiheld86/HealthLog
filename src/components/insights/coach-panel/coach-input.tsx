@@ -427,9 +427,15 @@ export function CoachInput({
           // hold: focus follows DOM order, and the DOM order (textarea,
           // actions, Send) is identical in both layouts. Nothing jumps.
           //
-          // `items-end` keeps the controls beside the LAST line as the textarea
-          // grows, so the send button stays where the thumb left it.
-          "flex flex-row items-end gap-1.5 p-1.5",
+          // `items-center` with the controls pinned `self-end` below. The row
+          // used to be `items-end` throughout, which bottom-aligned an empty
+          // one-line textarea against a 44 px touch target: the placeholder sat
+          // roughly 6 px low in the pill, reading as if the text had slipped.
+          // Centring the textarea fixes the empty and single-line cases, and
+          // `self-end` on the controls preserves the reason `items-end` was
+          // there — as the textarea grows, the send button stays beside the
+          // LAST line rather than drifting to the middle.
+          "flex flex-row items-center gap-1.5 p-1.5",
         )}
       >
         <textarea
@@ -455,7 +461,7 @@ export function CoachInput({
         />
         <div
           data-slot="coach-input-controls"
-          className="order-2 flex shrink-0 items-center gap-1.5"
+          className="order-2 flex shrink-0 items-center gap-1.5 self-end"
         >
           <div
             data-slot="coach-input-leading"
