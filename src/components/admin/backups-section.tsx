@@ -223,7 +223,7 @@ export function RestoreSkipReport({
     <div
       role="status"
       data-slot="restore-skip-report"
-      className="border-warning/40 bg-warning/10 mt-4 rounded-md border px-3 py-2 text-sm"
+      className="border-warning/40 bg-warning/10 rounded-md border px-3 py-2 text-sm"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2">

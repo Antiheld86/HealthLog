@@ -92,6 +92,14 @@ const ACCOUNT_ENTRY_CONSUMERS = [
   join(SRC, "components", "layout", "account-switcher-menu.tsx"),
 ];
 const ACTIVE_RECORD_CONSUMER = join(SRC, "hooks", "use-record-capabilities.ts");
+
+/**
+ * The names an access ENTRY is bound to at the two consumer sites. Pinning
+ * these is what stops the matcher from accepting `.level` on an unrelated
+ * object; a new consumer that binds it under a third name adds that name here,
+ * which is a deliberate edit rather than a silent widening.
+ */
+const ENTRY_BINDINGS = ["entry", "account"];
 const ACCOUNT_ACCESS_ADDITIVE_FIELDS = [
   "level",
   "sections",
@@ -245,14 +253,18 @@ describe("account payload consumer guard", () => {
 
     const readerCount = ACCOUNT_ACCESS_ADDITIVE_FIELDS.reduce(
       (count, field) => {
-        // The reader binds the entry under its own name (`entry`, `account`,
-        // …), so the matcher pins the property access, not the variable. An
-        // empty match set fails rather than passing quietly.
-        const read = new RegExp(`\\w\\.${field}(?![\\w$])`);
+        // The read has to be a read OF THE PAYLOAD ENTRY, so the matcher names
+        // the bindings the entry actually arrives under. `\w\.<field>` would
+        // have accepted `.level` on any object in the file — a chart's zoom
+        // level, a log record's level — and reported a consumer that does not
+        // exist. An empty match set fails rather than passing quietly.
+        const read = new RegExp(
+          `\\b(?:${ENTRY_BINDINGS.join("|")})\\.${field}(?![\\w$])`,
+        );
         const readers = entrySources.filter((source) => read.test(source));
         expect(
           readers.length,
-          `no client reader for account access field \`${field}\``,
+          `no client reader for account access field \`${field}\` bound as ${ENTRY_BINDINGS.join(" / ")}`,
         ).toBeGreaterThan(0);
         expect(activeSource).toMatch(new RegExp(`active\\.${field}(?![\\w$])`));
         return count + readers.length + 1;

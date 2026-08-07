@@ -170,9 +170,17 @@ describe("the abolished body gutter stays abolished", () => {
         const source = readFileSync(file, "utf8");
         for (const [i, line] of source.split("\n").entries()) {
           // Comments may name the class they retired; class strings may not.
+          // Skipping any line that CONTAINS `//` was too coarse — a class
+          // string on the same line as a URL (`https://…`) would have been
+          // waved through. Only the part of the line after a line-comment
+          // marker is exempt, and a marker inside a string is not one.
           if (line.trimStart().startsWith("*")) continue;
-          if (line.includes("//")) continue;
-          if (/\bpl-7\b/.test(line)) {
+          const marker = line.indexOf("//");
+          const code =
+            marker === -1 || /["'`]/.test(line.slice(0, marker))
+              ? line
+              : line.slice(0, marker);
+          if (/\bpl-7\b/.test(code)) {
             offenders.push(`${file.slice(ROOT.length + 1)}:${i + 1}`);
           }
         }

@@ -311,8 +311,8 @@ export function LowStockCard({
           aria-live="polite"
           className={
             msgType === "error"
-              ? "text-destructive mt-3 text-sm"
-              : "text-muted-foreground mt-3 text-sm"
+              ? "text-destructive text-sm"
+              : "text-muted-foreground text-sm"
           }
         >
           {msg}
