@@ -370,28 +370,43 @@ test.describe.serial("FENCE-AC-07 record-fence disk layers", () => {
       await expectShellReady(page);
 
       // The context those bytes were stored under, read off the entry itself.
-      const stored = await page.evaluate(async () => {
-        for (const name of (await caches.keys()).filter((n) =>
-          n.startsWith("healthlog-data-"),
-        )) {
-          const cache = await caches.open(name);
-          for (const request of await cache.keys()) {
-            if (!new URL(request.url).pathname.startsWith("/api/measurements"))
-              continue;
-            const response = await cache.match(request);
-            if (!response) continue;
-            return {
-              cacheName: name,
-              url: request.url,
-              vary: response.headers.get("Vary"),
-              epoch: response.headers.get("x-healthlog-record-epoch"),
-              scope: response.headers.get("x-healthlog-record-scope"),
-            };
+      //
+      // Polled, not sampled once. The service worker writes its `healthlog-data-*`
+      // entry AFTER the response has been handed to the page, so
+      // `expectShellReady` returning is not evidence that the write has landed —
+      // it is evidence that the read arrived. Sampling here read `null` on a
+      // loaded machine and failed the positive control below, which then said
+      // "there is no cache entry" about a cache that was about to have one.
+      // Waiting on the entry itself waits for the signal rather than for a
+      // number of milliseconds, and it still fails if the entry never appears.
+      const readStoredEntry = async () =>
+        page.evaluate(async () => {
+          for (const name of (await caches.keys()).filter((n) =>
+            n.startsWith("healthlog-data-"),
+          )) {
+            const cache = await caches.open(name);
+            for (const request of await cache.keys()) {
+              if (
+                !new URL(request.url).pathname.startsWith("/api/measurements")
+              )
+                continue;
+              const response = await cache.match(request);
+              if (!response) continue;
+              return {
+                cacheName: name,
+                url: request.url,
+                vary: response.headers.get("Vary"),
+                epoch: response.headers.get("x-healthlog-record-epoch"),
+                scope: response.headers.get("x-healthlog-record-scope"),
+              };
+            }
           }
-        }
-        return null;
-      });
+          return null;
+        });
+
       // POSITIVE CONTROL: there really is an entry, stored with a context.
+      await expect.poll(readStoredEntry, { timeout: 20_000 }).not.toBeNull();
+      const stored = await readStoredEntry();
       expect(stored).not.toBeNull();
       expect(stored!.epoch).toMatch(/^\d+$/);
       expect(stored!.scope).not.toBe("self");
