@@ -80,12 +80,17 @@ const NOT_A_CONSUMER = new Set([
   join(SRC, "app", "api", "auth", "me", "route.ts"),
 ]);
 
-const ACCOUNT_ENTRY_CONSUMER = join(
-  SRC,
-  "components",
-  "dashboard",
-  "looking-after-card.tsx",
-);
+/**
+ * The surfaces that read a per-account access ENTRY. This was one file (the
+ * dashboard's caring-for card) until that card came off the dashboard —
+ * records other people share are reached from the account switcher instead.
+ * A single named file was the fragile part: the guarantee is "every additive
+ * field has a reader", not "this one component still exists".
+ */
+const ACCOUNT_ENTRY_CONSUMERS = [
+  join(SRC, "lib", "navigation", "record-presentation.ts"),
+  join(SRC, "components", "layout", "account-switcher-menu.tsx"),
+];
 const ACTIVE_RECORD_CONSUMER = join(SRC, "hooks", "use-record-capabilities.ts");
 const ACCOUNT_ACCESS_ADDITIVE_FIELDS = [
   "level",
@@ -231,8 +236,8 @@ describe("account payload consumer guard", () => {
   });
 
   it("has non-zero entry and active-record readers for additive access fields", () => {
-    const entrySource = stripComments(
-      readFileSync(ACCOUNT_ENTRY_CONSUMER, "utf8"),
+    const entrySources = ACCOUNT_ENTRY_CONSUMERS.map((file) =>
+      stripComments(readFileSync(file, "utf8")),
     );
     const activeSource = stripComments(
       readFileSync(ACTIVE_RECORD_CONSUMER, "utf8"),
@@ -240,9 +245,17 @@ describe("account payload consumer guard", () => {
 
     const readerCount = ACCOUNT_ACCESS_ADDITIVE_FIELDS.reduce(
       (count, field) => {
-        expect(entrySource).toMatch(new RegExp(`entry\\.${field}(?![\\w$])`));
+        // The reader binds the entry under its own name (`entry`, `account`,
+        // …), so the matcher pins the property access, not the variable. An
+        // empty match set fails rather than passing quietly.
+        const read = new RegExp(`\\w\\.${field}(?![\\w$])`);
+        const readers = entrySources.filter((source) => read.test(source));
+        expect(
+          readers.length,
+          `no client reader for account access field \`${field}\``,
+        ).toBeGreaterThan(0);
         expect(activeSource).toMatch(new RegExp(`active\\.${field}(?![\\w$])`));
-        return count + 2;
+        return count + readers.length + 1;
       },
       0,
     );

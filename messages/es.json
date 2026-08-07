@@ -9637,13 +9637,8 @@
       "addOnlyNote": "Puedes añadir cosas a este historial. Modificar o borrar entradas solo lo puede hacer {name}."
     },
     "lookingAfter": {
-      "title": "Estoy cuidando de",
-      "description": "Historiales que otras personas han compartido contigo.",
-      "levelRead": "Puede ver",
-      "levelWrite": "Puede ver y añadir",
       "kindShared": "Registro compartido",
-      "kindManaged": "Perfil administrado",
-      "open": "Abrir el historial de {name}"
+      "kindManaged": "Perfil administrado"
     },
     "managed": {
       "title": "Perfiles de los que te ocupas",

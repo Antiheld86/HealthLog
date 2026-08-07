@@ -9637,13 +9637,8 @@
       "addOnlyNote": "You can add to this record. Changing or removing entries is something only {name} can do."
     },
     "lookingAfter": {
-      "title": "Looking after",
-      "description": "Records other people have shared with you.",
-      "levelRead": "Can view",
-      "levelWrite": "Can view and add",
       "kindShared": "Shared record",
-      "kindManaged": "Managed profile",
-      "open": "Open {name}'s record"
+      "kindManaged": "Managed profile"
     },
     "managed": {
       "title": "Records you look after",

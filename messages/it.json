@@ -9637,13 +9637,8 @@
       "addOnlyNote": "Puoi aggiungere voci a questa cartella. Solo {name} può modificarle o eliminarle."
     },
     "lookingAfter": {
-      "title": "Mi prendo cura di",
-      "description": "Cartelle che altre persone hanno condiviso con te.",
-      "levelRead": "Può consultare",
-      "levelWrite": "Può consultare e aggiungere",
       "kindShared": "Cartella condivisa",
-      "kindManaged": "Profilo gestito",
-      "open": "Apri la cartella di {name}"
+      "kindManaged": "Profilo gestito"
     },
     "managed": {
       "title": "Profili di cui ti occupi",

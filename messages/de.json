@@ -9637,13 +9637,8 @@
       "addOnlyNote": "Du kannst zu dieser Akte etwas hinzufügen. Einträge ändern oder löschen kann nur {name}."
     },
     "lookingAfter": {
-      "title": "Ich kümmere mich um",
-      "description": "Akten, die andere mit dir geteilt haben.",
-      "levelRead": "Darf lesen",
-      "levelWrite": "Darf lesen und hinzufügen",
       "kindShared": "Geteilte Akte",
-      "kindManaged": "Verwaltetes Profil",
-      "open": "Akte von {name} öffnen"
+      "kindManaged": "Verwaltetes Profil"
     },
     "managed": {
       "title": "Profile, die du betreust",

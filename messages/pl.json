@@ -9637,13 +9637,8 @@
       "addOnlyNote": "Możesz dodawać wpisy do tej karty. Zmieniać je i usuwać może tylko {name}."
     },
     "lookingAfter": {
-      "title": "Opiekuję się",
-      "description": "Karty, które udostępniły ci inne osoby.",
-      "levelRead": "Może przeglądać",
-      "levelWrite": "Może przeglądać i dodawać",
       "kindShared": "Udostępniona karta",
-      "kindManaged": "Zarządzany profil",
-      "open": "Otwórz kartę użytkownika {name}"
+      "kindManaged": "Zarządzany profil"
     },
     "managed": {
       "title": "Profile, którymi się opiekujesz",
