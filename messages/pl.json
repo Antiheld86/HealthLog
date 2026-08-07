@@ -3114,6 +3114,7 @@
         "hrMaxMarker": "Maks. {bpm}",
         "hrRangeValue": "{low} do {high} bpm",
         "hrRangeLabel": "Zakres",
+        "hrNoProfile": "Brak pojedynczych pomiarów tętna dla tej sesji.",
         "sportAverageLabel": "Twoja ostatnia średnia:",
         "zonesTitle": "Strefy wysiłku",
         "zonesCaption": "Jak Twój wysiłek rozłożył się na strefy tętna.",

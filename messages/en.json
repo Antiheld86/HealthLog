@@ -3114,6 +3114,7 @@
         "hrMaxMarker": "Peak {bpm}",
         "hrRangeValue": "{low} to {high} bpm",
         "hrRangeLabel": "Range",
+        "hrNoProfile": "No reading-by-reading heart-rate data covers this session.",
         "sportAverageLabel": "Your recent average:",
         "zonesTitle": "Effort zones",
         "zonesCaption": "How your effort was distributed across heart-rate zones.",

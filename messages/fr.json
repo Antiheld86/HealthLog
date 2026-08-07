@@ -3114,6 +3114,7 @@
         "hrMaxMarker": "Max. {bpm}",
         "hrRangeValue": "{low} à {high} bpm",
         "hrRangeLabel": "Plage",
+        "hrNoProfile": "Aucune valeur de pouls détaillée ne couvre cette séance.",
         "sportAverageLabel": "Votre moyenne récente :",
         "zonesTitle": "Zones d'effort",
         "zonesCaption": "Répartition de votre effort entre les zones de fréquence cardiaque.",

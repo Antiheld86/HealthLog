@@ -3114,6 +3114,7 @@
         "hrMaxMarker": "Max {bpm}",
         "hrRangeValue": "da {low} a {high} bpm",
         "hrRangeLabel": "Intervallo",
+        "hrNoProfile": "Nessun valore di battito dettagliato copre questa sessione.",
         "sportAverageLabel": "La tua media recente:",
         "zonesTitle": "Zone di sforzo",
         "zonesCaption": "Come si è distribuito il tuo sforzo tra le zone di frequenza cardiaca.",

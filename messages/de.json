@@ -3114,6 +3114,7 @@
         "hrMaxMarker": "Max. {bpm}",
         "hrRangeValue": "{low} bis {high} bpm",
         "hrRangeLabel": "Spanne",
+        "hrNoProfile": "Für diese Einheit liegen keine einzelnen Pulswerte vor.",
         "sportAverageLabel": "Dein aktueller Durchschnitt:",
         "zonesTitle": "Belastungszonen",
         "zonesCaption": "Wie sich deine Belastung auf die Herzfrequenzzonen verteilt hat.",

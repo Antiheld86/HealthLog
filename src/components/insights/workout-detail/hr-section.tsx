@@ -37,15 +37,33 @@ export interface WorkoutDetailHrSectionProps {
  * Heart-rate curve card — mean line + optional min→max envelope + %HRmax
  * zone bands + average and peak reference lines. A muted provenance chip
  * discloses when the curve was reconstructed from pulse data around the
- * session rather than the workout's own sensor stream. Returns `null`
- * when no series is available (hide, don't render empty).
+ * session rather than the workout's own sensor stream.
+ *
+ * Three states, and the middle one is the reason this is not a plain
+ * hide-when-empty section:
+ *
+ *   - a curve, when the server resolved one;
+ *   - a named absence, when the session HAS heart-rate figures (the
+ *     stats grid is showing an average, a peak) but no reading-by-reading
+ *     profile behind them. Silence there reads as "this page has no
+ *     heart-rate section", which is wrong — the data exists, the shape of
+ *     it does not, and saying so is the difference between an honest gap
+ *     and an invisible one;
+ *   - nothing at all, when the session carries no heart rate of any kind.
+ *     There is no absence to report where nothing was ever measured, and
+ *     an empty card would be a shell (page contract: hide, don't render
+ *     empty).
  */
 export function WorkoutDetailHrSection({
   workout,
 }: WorkoutDetailHrSectionProps) {
   const { t } = useTranslations();
   const series = workout.hrSeries;
-  if (!series || series.points.length < 2) return null;
+  const hasCurve = Boolean(series && series.points.length >= 2);
+  const hasHeartRateAtAll =
+    workout.avgHr != null || workout.maxHr != null || workout.minHr != null;
+
+  if (!hasCurve && !hasHeartRateAtAll) return null;
 
   return (
     <Card data-slot="workout-detail-hr">
@@ -55,7 +73,7 @@ export function WorkoutDetailHrSection({
           title={t("insights.workouts.detail.hrChartTitle")}
           titleAs="h2"
         />
-        {series.source === "pulse_window" ? (
+        {hasCurve && series!.source === "pulse_window" ? (
           <p
             data-slot="workout-detail-hr-provenance"
             className="text-muted-foreground text-xs"
@@ -65,14 +83,23 @@ export function WorkoutDetailHrSection({
         ) : null}
       </CardHeader>
       <CardContent>
-        <WorkoutHrChart
-          points={series.points}
-          bucketSec={series.bucketSec}
-          envelope={series.envelope}
-          avgHr={workout.avgHr}
-          maxHr={workout.maxHr}
-          zones={workout.zones?.zones ?? null}
-        />
+        {hasCurve ? (
+          <WorkoutHrChart
+            points={series!.points}
+            bucketSec={series!.bucketSec}
+            envelope={series!.envelope}
+            avgHr={workout.avgHr}
+            maxHr={workout.maxHr}
+            zones={workout.zones?.zones ?? null}
+          />
+        ) : (
+          <p
+            data-slot="workout-detail-hr-empty"
+            className="text-muted-foreground text-sm"
+          >
+            {t("insights.workouts.detail.hrNoProfile")}
+          </p>
+        )}
       </CardContent>
     </Card>
   );

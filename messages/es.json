@@ -3114,6 +3114,7 @@
         "hrMaxMarker": "Máx. {bpm}",
         "hrRangeValue": "{low} a {high} bpm",
         "hrRangeLabel": "Rango",
+        "hrNoProfile": "No hay valores de pulso individuales que cubran esta sesión.",
         "sportAverageLabel": "Tu promedio reciente:",
         "zonesTitle": "Zonas de esfuerzo",
         "zonesCaption": "Cómo se distribuyó tu esfuerzo entre las zonas de frecuencia cardíaca.",
