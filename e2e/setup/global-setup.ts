@@ -65,6 +65,28 @@ export const E2E_OWNER = {
   role: "USER",
 } as const;
 
+/**
+ * v1.37.0 — the account that creates and administers managed profiles.
+ *
+ * Its own account, and not one of the others, for one reason: every route in
+ * the managed-profile family resolves `requireFreshMfa`, which refuses an
+ * account with NO second factor enrolled (`auth.stepup.mfa_not_enrolled`). So
+ * this account carries a confirmed TOTP secret, and an account with a confirmed
+ * secret cannot be logged in by the password-only capture below. The setup
+ * therefore logs it in FIRST and stamps the factor afterwards — see the
+ * enrolment step at the end of `globalSetup`.
+ *
+ * Enrolling the factor on a shared account would have changed behaviour for
+ * every spec that touches a step-up-gated surface, starting with the MANAGE
+ * invitation on the sharing panel.
+ */
+export const E2E_GUARDIAN = {
+  email: "e2e-guardian@healthlog.test",
+  username: "e2e-guardian",
+  password: "Rt5!Nm8xQ3wZ6bJp",
+  role: "USER",
+} as const;
+
 /** A separate delegate session for the eight scoped-record browser journeys. */
 export const E2E_SCOPE_DELEGATE = {
   email: "e2e-scope-delegate@healthlog.test",
@@ -196,6 +218,16 @@ export const FENCE_OFFLINE_STORAGE_STATE_PATH = resolve(
   "e2e/setup/storageStateFenceOffline.json",
 );
 
+/**
+ * The managed-profile journey's own jar. Its own session row, like every other
+ * switching spec, so a run at CI's worker count cannot have two specs moving
+ * the same session's record selector.
+ */
+export const GUARDIAN_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateGuardian.json",
+);
+
 export const CROSS_TAB_STORAGE_STATE_PATH = resolve(
   process.cwd(),
   "e2e/setup/storageStateCrossTab.json",
@@ -295,6 +327,45 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
         now,
         dob,
       ],
+    );
+
+    // v1.37.0 — the managed-profile guardian. Seeded exactly like the other
+    // fixture accounts; its second factor is stamped AFTER the login capture,
+    // because the password-only capture cannot complete a TOTP login.
+    await pool.query(
+      `INSERT INTO users
+        (id, username, email, password_hash, role, created_at, updated_at,
+         onboarding_completed_at, onboarding_tour_completed)
+       VALUES ($1, $2, $3, $4, 'USER', $5, $5, $5, true)
+       ON CONFLICT (username) DO UPDATE SET
+         email = EXCLUDED.email,
+         password_hash = EXCLUDED.password_hash,
+         updated_at = EXCLUDED.updated_at,
+         onboarding_completed_at = EXCLUDED.onboarding_completed_at,
+         onboarding_tour_completed = EXCLUDED.onboarding_tour_completed,
+         totp_confirmed_at = NULL`,
+      [
+        cuid(),
+        E2E_GUARDIAN.username,
+        E2E_GUARDIAN.email,
+        await hashPassword(E2E_GUARDIAN.password),
+        now,
+      ],
+    );
+
+    // Whatever a previous run created. A managed profile is a real account row,
+    // so a suite that left one behind would find the guardian looking after two
+    // records on the next run and the roster assertions would read the wrong
+    // one. Deleting the profile takes its grants with it.
+    await pool.query(
+      `DELETE FROM users
+       WHERE managed_profile_at IS NOT NULL
+         AND id IN (
+           SELECT g.grantor_id FROM account_grants g
+           JOIN users u ON u.id = g.grantee_id
+           WHERE u.username = $1
+         )`,
+      [E2E_GUARDIAN.username],
     );
 
     // The scoped-record journey uses a dedicated delegate so its preseeded
@@ -645,6 +716,21 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     await capture(E2E_SCOPE_DELEGATE, FENCE_STORAGE_STATE_PATH);
     await capture(E2E_SCOPE_DELEGATE, FENCE_OFFLINE_STORAGE_STATE_PATH);
     await capture(E2E_SCOPE_DELEGATE, CROSS_TAB_STORAGE_STATE_PATH);
+
+    // v1.37.0 — the guardian's jar, and only then its second factor.
+    //
+    // Order is the whole of it. `requireFreshMfa` refuses an account with no
+    // factor enrolled, so the managed-profile routes are unreachable without
+    // this; and `captureAuthState` posts a password to `/api/auth/login`, which
+    // for a TOTP account answers with a challenge rather than a session. Log in
+    // first, enrol second. The freshness stamp on the session is refreshed by
+    // the spec immediately before it acts — the window is five minutes and a
+    // full suite run is longer than that.
+    await capture(E2E_GUARDIAN, GUARDIAN_STORAGE_STATE_PATH);
+    await pool.query(
+      `UPDATE users SET totp_confirmed_at = $2 WHERE username = $1`,
+      [E2E_GUARDIAN.username, now],
+    );
   } finally {
     await pool.end();
   }

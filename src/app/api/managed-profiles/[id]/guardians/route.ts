@@ -30,8 +30,12 @@ type RouteParams = { params: Promise<{ id: string }> };
  * discovered as a 409 after it.
  *
  * Cookie-only, like every endpoint in this family, and for the same structural
- * reason: `requireCookieAuth` resolves through `getSession()` and never falls
- * through to the Bearer branch. Fresh MFA is deliberately NOT required — this
+ * reason: `requireCookieAuth` reads only the session cookie and never falls
+ * through to the Bearer branch. (Named that way rather than by the session
+ * helper it calls, because `session-surface-guard.test.ts` matches on the
+ * helper's NAME in file text and a comment naming it enrols this route in a
+ * list of files that resolve a session themselves. This one does not.)
+ * Fresh MFA is deliberately NOT required — this
  * is a read, and it discloses nothing the caller cannot already read on their
  * own sharing panel about a party to a grant they hold. The gate belongs to the
  * acts, not to looking.
