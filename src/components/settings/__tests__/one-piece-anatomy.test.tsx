@@ -85,6 +85,16 @@ describe("SettingsCardHeader — one description sentence, one text run", () => 
     const html = render(<SettingsCardHeader icon={Bell} title="Channels" />);
     expect(html).toMatch(/<h2[^>]*class="text-lg font-semibold"/);
   });
+
+  it("names the description slot so a browser test can target it", () => {
+    // A spec that asserted the sentence's bytes broke on the text diet while
+    // the thing it was actually about — the card rendering its explainer —
+    // never changed. This attribute is the stable target that replaced it.
+    const html = render(
+      <SettingsCardHeader icon={Bell} title="Channels" description="One." />,
+    );
+    expect(html).toContain('data-slot="settings-card-description"');
+  });
 });
 
 describe("SettingsCardActions — one row, one shape", () => {

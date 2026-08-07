@@ -94,9 +94,17 @@ export function SettingsCardHeader({
         </div>
         {/* One sentence, one text run. This slot deliberately carries no
             `space-y-*`: the vertical rhythm was the licence call sites used
-            to stack explainer paragraphs into a muted `text-xs` slot. */}
+            to stack explainer paragraphs into a muted `text-xs` slot.
+            The `data-slot` is what a browser test targets — asserting the
+            sentence's bytes couples the suite to wording, and a text diet
+            then breaks specs that were never about the words. */}
         {description ? (
-          <div className="text-muted-foreground text-xs">{description}</div>
+          <div
+            data-slot="settings-card-description"
+            className="text-muted-foreground text-xs"
+          >
+            {description}
+          </div>
         ) : null}
       </div>
     </header>
