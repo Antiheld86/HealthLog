@@ -4,6 +4,11 @@ import {
   type MeasurementAggregationProvenance,
   type Prisma as PrismaTypes,
 } from "@/generated/prisma/client";
+import {
+  classifyRangeRejection,
+  recordRangeRejections,
+  type MeasurementRangeRejection,
+} from "@/lib/measurements/plausibility-gate";
 
 const SAVEPOINT = "measurement_identity_reconcile";
 
@@ -50,6 +55,18 @@ export type MeasurementReconciliationVerdict =
   | {
       status: "failed";
       error: { message: string; code?: string };
+    }
+  | {
+      /**
+       * The incoming value sits outside the metric's declared plausibility
+       * band, so nothing was written and no existing row was touched. Not a
+       * failure: the write was refused on purpose and the caller must carry
+       * on with the rest of its batch. Every caller narrows on this status
+       * because it carries no `row` — the compiler is what makes a future
+       * provider handle it rather than dereference a row that does not exist.
+       */
+      status: "rejected_range";
+      rejection: MeasurementRangeRejection;
     };
 
 export type FailedMeasurementReconciliation = Extract<
@@ -219,12 +236,26 @@ async function retireCollision(
  * advisory lock serializes cooperative writers sharing either identity, and a
  * savepoint turns a non-benign database error into a structured `failed`
  * verdict without poisoning the caller's surrounding transaction.
+ *
+ * This is also the plausibility gate for every provider that reconciles rather
+ * than writing Prisma directly. Gating HERE rather than at each caller is the
+ * point: a provider added tomorrow inherits the refusal by construction, and
+ * cannot land an impossible reading by forgetting a check it never knew about.
  */
 export async function reconcileExternalMeasurement(
   tx: PrismaTypes.TransactionClient,
   desired: ExternalMeasurementWrite,
   options: MeasurementReconciliationOptions = {},
 ): Promise<MeasurementReconciliationVerdict> {
+  const rejection = classifyRangeRejection(desired.type, desired.value);
+  if (rejection) {
+    recordRangeRejections(
+      desired.source ? String(desired.source).toLowerCase() : "external",
+      [rejection],
+    );
+    return { status: "rejected_range", rejection };
+  }
+
   await tx.$executeRawUnsafe(`SAVEPOINT ${SAVEPOINT}`);
 
   try {

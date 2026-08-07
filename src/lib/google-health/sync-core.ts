@@ -20,6 +20,7 @@ import { prisma } from "@/lib/db";
 import type { MeasurementType } from "@/generated/prisma/client";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { getEvent } from "@/lib/logging/context";
+import { dropImplausibleMeasurements } from "@/lib/measurements/plausibility-gate";
 import { emitInsertedMeasurementArrivals } from "@/lib/arrivals/measurement-emit";
 import { recordSyncFailure, type FailureKind } from "@/lib/integrations/status";
 import {
@@ -487,7 +488,7 @@ export async function replaceStaleGoogleHealthSleep(
  */
 export async function upsertGoogleHealthMeasurements(
   userId: string,
-  readings: GoogleHealthMeasurementUpsert[],
+  incoming: GoogleHealthMeasurementUpsert[],
   opts: { deferRollup?: boolean } = {},
 ): Promise<{
   imported: number;
@@ -498,7 +499,17 @@ export async function upsertGoogleHealthMeasurements(
     measuredAt: Date;
   }>;
 }> {
-  noteGoogleHealthMapped(readings.length);
+  noteGoogleHealthMapped(incoming.length);
+  // Every resource leg funnels through here, so this is the one place the
+  // provider's numbers have to clear the app's declared plausibility band
+  // before they can become rows. A refused reading is dropped and tallied on
+  // the ambient event, never clamped and never written for a later reader to
+  // discover.
+  const readings = dropImplausibleMeasurements(
+    "googleHealth",
+    incoming,
+    (r) => ({ type: r.type, value: r.value }),
+  );
   if (readings.length === 0) return { imported: 0, touched: [], inserted: [] };
 
   // Probe EVERY existing row (live AND tombstoned) for the batch's externalIds

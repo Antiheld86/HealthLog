@@ -22,6 +22,7 @@
 import { prisma } from "@/lib/db";
 import type { MeasurementType } from "@/generated/prisma/client";
 import { getEvent } from "@/lib/logging/context";
+import { dropImplausibleMeasurements } from "@/lib/measurements/plausibility-gate";
 import {
   markSyncFailureRecorded,
   recordSyncFailure,
@@ -221,7 +222,16 @@ export async function upsertNightscoutEntries(
   if (entries.length === 0) return { inserted: 0, failedRows: 0 };
 
   const type = "BLOOD_GLUCOSE" as MeasurementType;
-  const mapped = entries.map((entry) => mapSgvEntryToMeasurement(entry));
+  // A CGM that reports a glucose the app's own band calls impossible is
+  // reporting a sensor fault or a unit slip, not a reading. Drop it: the row
+  // would otherwise be immutable (first-write-wins), so an impossible sample
+  // that lands here never corrects itself on a later pass.
+  const mapped = dropImplausibleMeasurements(
+    "nightscout",
+    entries.map((entry) => mapSgvEntryToMeasurement(entry)),
+    (m) => ({ type, value: m.value }),
+  );
+  if (mapped.length === 0) return { inserted: 0, failedRows: 0 };
 
   // Probe which keys already exist so a re-confirmed reading (the upsert's
   // no-op update branch) is not miscounted as a fresh import and the arrival
