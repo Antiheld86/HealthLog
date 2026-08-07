@@ -113,8 +113,13 @@ export function AvatarSection() {
         title={t("settings.avatar.title")}
         className="mb-4"
       />
+      {/* The accepted formats and limits belong to the sentence that explains
+          what this card does, not to a caption of their own under the buttons.
+          Two strings rather than one merged key: the same wording is the
+          upload's own constraint copy, and a translator keeps the shorter unit
+          either way. */}
       <p className="text-muted-foreground mb-4 pl-7 text-sm">
-        {t("settings.avatar.description")}
+        {t("settings.avatar.description")} {t("settings.avatar.hint")}
       </p>
       <div className="flex items-center gap-4 pl-7">
         <Avatar className="size-16">
@@ -167,9 +172,6 @@ export function AvatarSection() {
           )}
         </div>
       </div>
-      <p className="text-muted-foreground mt-3 text-xs">
-        {t("settings.avatar.hint")}
-      </p>
       {msg && (
         <p
           role="alert"

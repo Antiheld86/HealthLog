@@ -69,7 +69,24 @@ function DialogContent({
           // viewport on short / soft-keyboard-collapsed mobile screens.
           // Consumers that need a different ceiling can override via
           // `className`.
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border p-6 shadow-lg duration-200 outline-none sm:max-w-lg",
+          //
+          // `grid-cols-[minmax(0,1fr)]` pins the implicit column. A bare
+          // `grid` gives its single column an `auto` track, which sizes to the
+          // widest child's max-content and grows the box past the dialog's own
+          // `max-w-*` — and because `overflow-y:auto` makes `overflow-x`
+          // compute to `auto`, that surplus becomes a horizontal scrollbar
+          // rather than a visible spill. `minmax(0,1fr)` caps the track at the
+          // dialog width so an over-wide child is contained instead of
+          // dragging the surface out with it.
+          //
+          // `overflow-x-clip` pairs with it: `overflow-y-auto` alone promotes
+          // the other axis from `visible` to `auto`, so a single over-wide
+          // child made the whole dialog pannable sideways. A dialog scrolls
+          // vertically; anything that genuinely needs sideways scroll brings
+          // its own `overflow-x-auto` wrapper. Consumers that set `overflow-*`
+          // themselves still win — `<ResponsiveSheet>` passes
+          // `overflow-hidden` and scrolls its body instead.
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] grid-cols-[minmax(0,1fr)] gap-4 overflow-x-clip overflow-y-auto rounded-lg border p-6 shadow-lg duration-200 outline-none sm:max-w-lg",
           className,
         )}
         {...props}

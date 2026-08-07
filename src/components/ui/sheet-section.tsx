@@ -60,7 +60,15 @@ export function SheetSection({
     >
       <CollapsiblePrimitive.Trigger
         data-slot="sheet-section-trigger"
-        className="group focus-visible:ring-ring/50 -mx-1 flex w-[calc(100%+0.5rem)] items-center gap-2 rounded-md px-1 py-1.5 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
+        // `w-full`, not `-mx-1 w-[calc(100%+0.5rem)] px-1`. The old pair held
+        // the row's text at the section's own left edge while pushing the box
+        // 4 px outward on each side, purely to hold the focus ring off the
+        // label — but a Tailwind ring is drawn OUTSIDE the border box anyway,
+        // so the bleed bought nothing and made every row 8 px wider than the
+        // sheet body that scrolls it. In the desktop dialog, whose body has no
+        // horizontal padding to absorb it, that surfaced as a sideways-
+        // scrollable form on the cycle and mood sheets.
+        className="group focus-visible:ring-ring/50 flex w-full items-center gap-2 rounded-md py-1.5 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
       >
         {icon ? (
           <span

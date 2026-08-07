@@ -48,8 +48,16 @@ import {
 // only applies to the native value text — here no native input is rendered).
 const FIELD_HEIGHT_CLASSES = "min-h-11 h-11 sm:min-h-10 sm:h-10";
 
+// `min-w-0` is load-bearing, not cosmetic. A field is almost always a flex item
+// (the date/time row, a form grid cell), and a flex item's `min-width: auto`
+// resolves to its content-based minimum. The content here contains a text
+// `<input>`, whose intrinsic width comes from the `size` attribute's default of
+// 20 characters (~180 px) — so without this the field refuses to render below
+// ~230 px no matter what width the parent hands it, and the surplus spills out
+// of whatever dialog or sheet it sits in. See the matching note on the overlay
+// input below; both ends are needed, one alone still floors the box.
 const FIELD_BASE_CLASSES =
-  "border-input bg-background text-foreground ring-offset-background placeholder:text-muted-foreground focus-within:ring-ring relative flex w-full items-center rounded-md border ps-3 pe-2 text-sm shadow-xs transition-[color,box-shadow] focus-within:ring-2 focus-within:ring-offset-2 focus-within:outline-none";
+  "border-input bg-background text-foreground ring-offset-background placeholder:text-muted-foreground focus-within:ring-ring relative flex w-full min-w-0 items-center rounded-md border ps-3 pe-2 text-sm shadow-xs transition-[color,box-shadow] focus-within:ring-2 focus-within:ring-offset-2 focus-within:outline-none";
 
 export interface DateFieldProps {
   id?: string;
@@ -182,7 +190,11 @@ export const DateField = React.forwardRef<HTMLInputElement, DateFieldProps>(
             inputMode="numeric"
             autoComplete="off"
             data-testid={dataTestId}
-            className="placeholder:text-muted-foreground h-full flex-1 bg-transparent py-1 outline-none disabled:cursor-not-allowed"
+            // `min-w-0` releases the input's own automatic minimum size (the
+            // 20-character intrinsic width of a text input). Without it the
+            // input is the widest thing in the field and the field cannot
+            // shrink to the width its parent offers.
+            className="placeholder:text-muted-foreground h-full min-w-0 flex-1 bg-transparent py-1 outline-none disabled:cursor-not-allowed"
             value={overlayValue}
             placeholder={placeholder ?? formatPlaceholder(dateFormat, locale)}
             disabled={disabled}
