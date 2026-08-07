@@ -21,7 +21,12 @@ import {
   updateCustomMetricSchema,
 } from "@/lib/validations/custom-metrics";
 
-import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
+import {
+  dataEnvelope,
+  errorEnvelope,
+  recordRefusal,
+  stdResponses,
+} from "./shared";
 
 createCustomMetricSchema.meta({
   id: "CreateCustomMetricRequest",
@@ -137,6 +142,7 @@ export const customMetricPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "Returns every custom metric the caller has defined, name-ordered, each with its latest logged value and total value count.",
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Custom-metric catalog.",
           content: {
@@ -182,6 +188,7 @@ export const customMetricPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Returns the custom-metric definition. Cross-user rows surface as 404.",
       requestParams: { path: z.object({ id: z.string() }) },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Custom-metric detail.",
           content: {
@@ -259,6 +266,7 @@ export const customMetricPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         }),
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Logged values.",
           content: {

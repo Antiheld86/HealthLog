@@ -24,7 +24,12 @@ import {
   cyclePeriodSchema,
   cyclePrefsSchema,
 } from "@/lib/validations/cycle";
-import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
+import {
+  dataEnvelope,
+  errorEnvelope,
+  recordRefusal,
+  stdResponses,
+} from "./shared";
 
 // ── Cycle tracking (v1.15.0) ─────────────────────────────────────────
 // The `/api/cycle/*` capture / calendar / history / settings surface +
@@ -404,13 +409,24 @@ const cycleBulkResponse = z.object({
 });
 
 // A reusable 403 the cycle routes carry (the feature gate).
+const CYCLE_DISABLED_DESCRIPTION =
+  "Cycle tracking is not enabled for this account (errorCode `cycle.disabled`). Resolved against the RECORD being read, not the caller: a delegate inside somebody else's record sees the owner's setting.";
+
 const cycleDisabledResponse = {
   "403": {
-    description:
-      "Cycle tracking is not enabled for this account (errorCode `cycle.disabled`).",
+    description: CYCLE_DISABLED_DESCRIPTION,
     content: { "application/json": { schema: errorEnvelope } },
   },
 } as const;
+
+/**
+ * The same gate on a delegable route, sharing its status with the sharing
+ * refusal. One 403 per operation is all OpenAPI allows, so the two reasons
+ * arrive in one description rather than one of them going unpublished.
+ */
+const cycleDisabledOnADelegableRoute = recordRefusal(
+  CYCLE_DISABLED_DESCRIPTION,
+);
 
 export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
   "/api/cycle/day-logs": {
@@ -432,7 +448,7 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...cycleDisabledResponse,
+        ...cycleDisabledOnADelegableRoute,
         ...stdResponses,
       },
     },
@@ -465,7 +481,7 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...cycleDisabledResponse,
+        ...cycleDisabledOnADelegableRoute,
         ...stdResponses,
       },
     },
@@ -494,7 +510,7 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
           description: "Day-log not found / not owned.",
           content: { "application/json": { schema: errorEnvelope } },
         },
-        ...cycleDisabledResponse,
+        ...cycleDisabledOnADelegableRoute,
         ...stdResponses,
       },
     },
@@ -510,7 +526,7 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
           description: "Day-log not found / not owned.",
           content: { "application/json": { schema: errorEnvelope } },
         },
-        ...cycleDisabledResponse,
+        ...cycleDisabledOnADelegableRoute,
         ...stdResponses,
       },
     },
@@ -558,7 +574,7 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...cycleDisabledResponse,
+        ...cycleDisabledOnADelegableRoute,
         ...stdResponses,
       },
     },
@@ -587,7 +603,7 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...cycleDisabledResponse,
+        ...cycleDisabledOnADelegableRoute,
         ...stdResponses,
       },
     },
@@ -615,7 +631,7 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...cycleDisabledResponse,
+        ...cycleDisabledOnADelegableRoute,
         ...stdResponses,
       },
     },
@@ -638,7 +654,7 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...cycleDisabledResponse,
+        ...cycleDisabledOnADelegableRoute,
         ...stdResponses,
       },
     },
@@ -656,7 +672,7 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
           description: "Cycle not found / not owned.",
           content: { "application/json": { schema: errorEnvelope } },
         },
-        ...cycleDisabledResponse,
+        ...cycleDisabledOnADelegableRoute,
         ...stdResponses,
       },
     },
@@ -705,7 +721,7 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...cycleDisabledResponse,
+        ...cycleDisabledOnADelegableRoute,
         ...stdResponses,
       },
     },

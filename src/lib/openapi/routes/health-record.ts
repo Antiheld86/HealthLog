@@ -12,7 +12,12 @@ import {
   createShareLinkSchema,
   unlockShareLinkSchema,
 } from "@/lib/validations/clinician-share-link";
-import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
+import {
+  dataEnvelope,
+  errorEnvelope,
+  recordRefusal,
+  stdResponses,
+} from "./shared";
 
 // v1.11.0 — clinician share-link owner-facing summary (never the raw token).
 const shareLinkSummary = z.object({
@@ -90,6 +95,7 @@ export const healthRecordPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description:
             "Export generated. Content-Type varies by `format`: application/pdf, application/fhir+json, or application/zip.",
