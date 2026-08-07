@@ -207,8 +207,27 @@ describe("<WorkoutDetailRoute>", () => {
 });
 
 describe("<WorkoutDetailHrSection>", () => {
-  it("returns null without an HR series", () => {
-    expect(render(<WorkoutDetailHrSection workout={FIXTURE} />)).toBe("");
+  it("names the absence when the session has heart-rate figures but no profile", () => {
+    // The stats grid is showing an average and a peak for this session,
+    // so the reader can see heart rate WAS recorded. Rendering nothing
+    // here would read as "this page has no heart-rate section" rather
+    // than as "the shape behind those numbers is not on record".
+    const html = render(<WorkoutDetailHrSection workout={FIXTURE} />);
+    expect(html).toContain('data-slot="workout-detail-hr-empty"');
+    expect(html).toContain("No reading-by-reading heart-rate data");
+    expect(html).not.toContain('data-slot="workout-hr-chart"');
+  });
+
+  it("returns null when the session carries no heart rate at all", () => {
+    // Nothing was measured, so there is no absence to report and an
+    // empty card would be a shell.
+    const noHr: WorkoutDetailPayload = {
+      ...FIXTURE,
+      avgHr: null,
+      maxHr: null,
+      minHr: null,
+    };
+    expect(render(<WorkoutDetailHrSection workout={noHr} />)).toBe("");
   });
 
   it("renders the card and a provenance chip for a pulse-window series", () => {
