@@ -16,8 +16,14 @@
  * that short.
  *
  * The storage unit stays minutes. The conversion belongs at the entry
- * boundary, in one place, with the inverse beside it so a future editing
- * surface cannot land on a different answer.
+ * boundary, in one place, so a second surface that starts taking sleep by hand
+ * has one answer to reach for rather than its own.
+ *
+ * Only the direction that exists is here. An inverse and a "does this type
+ * convert" predicate shipped alongside it at first, written for an editing
+ * surface that does not exist and has no ticket; they were nothing but two
+ * more things to keep true. The git history holds them if that surface ever
+ * arrives.
  */
 
 export const MINUTES_PER_HOUR = 60;
@@ -29,11 +35,6 @@ export const MINUTES_PER_HOUR = 60;
 const ENTRY_TO_CANONICAL_FACTOR: Readonly<Record<string, number>> = {
   SLEEP_DURATION: MINUTES_PER_HOUR,
 };
-
-/** Whether the type's entry unit differs from the unit its column stores. */
-export function hasEntryUnitConversion(type: string): boolean {
-  return type in ENTRY_TO_CANONICAL_FACTOR;
-}
 
 /**
  * Convert a value as typed in the entry form to the unit the column stores.
@@ -47,13 +48,6 @@ export function entryValueToCanonical(type: string, entered: number): number {
   const factor = ENTRY_TO_CANONICAL_FACTOR[type];
   if (factor === undefined || !Number.isFinite(entered)) return entered;
   return Math.round(entered * factor);
-}
-
-/** The inverse: a stored value expressed in the unit the entry form asks for. */
-export function canonicalValueToEntry(type: string, canonical: number): number {
-  const factor = ENTRY_TO_CANONICAL_FACTOR[type];
-  if (factor === undefined || !Number.isFinite(canonical)) return canonical;
-  return canonical / factor;
 }
 
 /**
