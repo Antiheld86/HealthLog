@@ -110,13 +110,17 @@ export const DateTimeField = React.forwardRef<
     <div
       className={cn(
         // v1.25.10 — stack the date and time halves on a narrow viewport and
-        // only sit them side-by-side from `sm:` up. A native `<input
-        // type="date">` keeps its intrinsic width on mobile WebKit and won't
-        // shrink below it, so the `date + w-32 time` row overran a phone-width
-        // sheet (the time field + clock icon spilled ~70px past the edge,
-        // forcing a sideways scroll on every add form). Stacked, each half
-        // takes the full sheet width and nothing overflows.
-        "flex flex-col gap-2 sm:flex-row sm:items-stretch",
+        // only sit them side-by-side from `sm:` up. Stacked, each half takes
+        // the full sheet width, which is what a phone-width sheet can give.
+        //
+        // The side-by-side row above `sm:` needs `min-w-0` on both halves as
+        // well, and that lives in the field primitives themselves: each field
+        // wraps a text `<input>` whose 20-character intrinsic width was the
+        // field's automatic minimum size, so `date + w-32 time` demanded
+        // ~470 px inside a 400 px dialog body and spilled past the edge on
+        // every add / edit form. `min-w-0` here lets the row itself shrink
+        // inside whatever grid or flex cell hosts it.
+        "flex min-w-0 flex-col gap-2 sm:flex-row sm:items-stretch",
         className,
       )}
       data-slot="date-time-field"

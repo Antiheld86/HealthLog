@@ -822,10 +822,12 @@ export async function registerStatusQueues(
     },
   );
 
-  // v1.22 (M4) — daily Coach-reminder sweep. Single-flight; flipping an overdue
-  // reminder to `due` and minting plan-review reminders are both idempotent
-  // across re-fires (an already-due reminder is not re-flipped; a plan whose
-  // reviewDate was cleared is not re-minted). No provider call, no push.
+  // v1.22 (M4) — daily Coach-reminder sweep. Single-flight; surfacing an
+  // overdue reminder into the user's Coach thread and minting plan-review
+  // reminders are both idempotent across re-fires (an already-surfaced
+  // reminder is not re-written; a plan whose reviewDate was cleared is not
+  // re-minted). No provider call, no push — the message body is a
+  // deterministic localized template around the user's own note.
   await createAndWork(
     boss,
     COACH_REMINDER_SWEEP_QUEUE,

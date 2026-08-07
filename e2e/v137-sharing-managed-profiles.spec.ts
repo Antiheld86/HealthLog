@@ -79,6 +79,48 @@ async function openSwitcher(page: Page) {
   ).toBeVisible();
 }
 
+/**
+ * Run `act` and wait for the document it replaces to be gone.
+ *
+ * Entering or leaving a record is a server write followed by
+ * `window.location.assign`, so the click that starts it returns long before the
+ * document it produces exists. Everything a test does next races the app's own
+ * navigation, and both ways of losing that race are silent:
+ *
+ *   - a `page.goto` issued into the gap is cancelled when the assign commits,
+ *     which Chromium reports as `net::ERR_ABORTED`;
+ *   - or the goto wins, and the page it lands on belongs to the CALLER'S OWN
+ *     record, where a route that is ungranted in somebody else's record is
+ *     simply granted. Measured: `/coach` opened in that gap issued all four of
+ *     the protected reads the test asserts never happen. The assertion was
+ *     reading the wrong record, and it could as easily have passed there.
+ *
+ * Neither is visible in the DOM the click leaves behind, which is why waiting
+ * on the banner cannot settle it — the pre-navigation document already shows
+ * whatever the next assertion looks for, so the wait returns immediately and
+ * proves nothing. A marker on `window` can settle it, because a document
+ * replacement is the one thing that destroys it, and no amount of re-rendering
+ * inside the old document will.
+ *
+ * If the navigation never happens the wait fails, which is the right outcome:
+ * a switch that did not land is a failure and not something to paper over.
+ */
+async function withDocumentReplacement(
+  page: Page,
+  act: () => Promise<void>,
+): Promise<void> {
+  await page.evaluate(() => {
+    (window as Window & { __hlNavToken?: true }).__hlNavToken = true;
+  });
+  await act();
+  await page.waitForFunction(
+    () =>
+      (window as Window & { __hlNavToken?: true }).__hlNavToken === undefined,
+    undefined,
+    { timeout: 30_000 },
+  );
+}
+
 async function openRecord(page: Page, username: string) {
   await page.goto("/");
   await openSwitcher(page);
@@ -93,14 +135,26 @@ async function openRecord(page: Page, username: string) {
   }
   const accessLevel = await entry.getAttribute("data-access-level");
   const recordKind = await entry.getAttribute("data-record-kind");
-  await entry.click();
+  await withDocumentReplacement(page, () => entry.click());
+  // The switch landed AND the record it landed in is the one on screen. Callers
+  // may navigate away immediately after this, and until both are true there is
+  // no record to navigate away from.
+  await expect(page.locator('[data-slot="shared-record-banner"]')).toBeVisible({
+    timeout: 30_000,
+  });
   return { accountId, accessLevel, recordKind };
 }
 
 async function leaveRecord(page: Page) {
-  await page.locator('[data-slot="shared-record-banner-exit"]').click();
+  // Leaving is the same act pointed the other way, and it has the same gap.
+  // The banner being gone is satisfied by the document that is on its way out,
+  // so on its own it is not a wait at all.
+  await withDocumentReplacement(page, () =>
+    page.locator('[data-slot="shared-record-banner-exit"]').click(),
+  );
   await expect(page.locator('[data-slot="shared-record-banner"]')).toHaveCount(
     0,
+    { timeout: 30_000 },
   );
 }
 
@@ -636,13 +690,11 @@ test.describe.serial("managed profile browser journey", () => {
 
     // And back out, with the record still on the list.
     //
-    // Leaving ends in a full document reload, and a `goto` issued while that
-    // reload is still in flight is aborted by Chromium — `net::ERR_ABORTED`,
-    // reproducibly at CI's worker count and not at one. The banner being gone
-    // is satisfied by the pre-reload DOM, so it cannot be the thing waited on.
-    // Retrying the navigation is the honest fix: the claim is that the record
-    // survives the round trip, not that the first navigation attempt wins a
-    // race with the app's own.
+    // `leaveRecord` now waits for the app's own reload to land before it
+    // returns, so the `goto` below is no longer issued into that gap — see
+    // `withDocumentReplacement`. The retry stays: the claim here is that the
+    // record survives the round trip, not that one navigation attempt wins,
+    // and a loop that has nothing left to absorb costs a single pass.
     await leaveRecord(page);
     await expect(async () => {
       await page.goto("/settings/access");
