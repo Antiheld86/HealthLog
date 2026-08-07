@@ -434,6 +434,46 @@ export const WIPE_OWNER_FIELDS: Readonly<Record<string, readonly string[]>> = {
   AccountGrant: ["grantorId", "granteeId"],
 };
 
+/**
+ * Models the ADMIN wipe keeps although the per-account wipe deletes them.
+ *
+ * `DELETE /api/admin/data` is the same action pointed at every account at
+ * once: the operator clearing a box before handing it on. It therefore reads
+ * {@link WIPE_MODELS} rather than a list of its own — that list was written
+ * inline once and had drifted to nine tables against a schema of a hundred and
+ * twenty-two by the time anybody counted.
+ *
+ * The two actions differ in exactly one place, and it is written here rather
+ * than folded into the route so the difference has to be argued for.
+ */
+export const ADMIN_WIPE_EXEMPT: Readonly<Record<string, string>> = {
+  AccountGrant:
+    "a grant is the only way into a managed profile — that record has no credentials of its own, so deleting every grant at once would leave a set of accounts nobody can open, administer or delete. This action preserves accounts by definition, and an access edge without the record behind it is not personal data: everything those profiles hold is wiped with everyone else's.",
+};
+
+/**
+ * Every model the admin wipe deletes, for all accounts, children first.
+ *
+ * Derived, so a model added to {@link WIPE_MODELS} is in both wipes at once
+ * and a model excused from this one has to say why above.
+ */
+export const ADMIN_WIPE_MODELS: readonly string[] = WIPE_MODELS.filter(
+  (model) => !(model in ADMIN_WIPE_EXEMPT),
+);
+
+/**
+ * Budget for a wipe transaction.
+ *
+ * Prisma's default interactive-transaction timeout is 5 s, which was already
+ * optimistic for thirteen `deleteMany` statements and is not survivable for
+ * the full model set on an account with a large import behind it — let alone
+ * for the admin wipe, which runs the same set across every account. The whole
+ * action is one transaction on purpose: a half-applied wipe is worse than
+ * none, because the person is told it succeeded either way.
+ */
+export const WIPE_TRANSACTION_TIMEOUT_MS = 120_000;
+export const WIPE_TRANSACTION_MAX_WAIT_MS = 15_000;
+
 /** Prisma client delegate key for a model name (`MoodEntry` → `moodEntry`). */
 export function wipeDelegateKey(model: string): string {
   return model.charAt(0).toLowerCase() + model.slice(1);
@@ -456,13 +496,36 @@ export interface UserScopedDeleteDelegate {
   deleteMany(args: { where: { userId: string } }): Promise<{ count: number }>;
 }
 
+/** The same slice for the admin wipe, which selects no account at all. */
+export interface UnscopedDeleteDelegate {
+  deleteMany(args: Record<string, never>): Promise<{ count: number }>;
+}
+
+interface RawDeleteDelegate {
+  deleteMany(args: { where?: object }): Promise<{ count: number }>;
+}
+
+/**
+ * The Prisma delegate for a model name, or a thrown error naming the model.
+ *
+ * One documented cast: {@link WIPE_MODELS} is a literal list of model names
+ * checked against `schema.prisma` by the completeness test, and every entry
+ * indexes a delegate that exposes `deleteMany`. The test also asserts every
+ * entry resolves, so an unresolvable name fails the build rather than the
+ * request.
+ */
+function rawDelegate(client: object, model: string): RawDeleteDelegate {
+  const delegate = (client as Record<string, RawDeleteDelegate>)[
+    wipeDelegateKey(model)
+  ];
+  if (!delegate || typeof delegate.deleteMany !== "function") {
+    throw new Error(`No Prisma delegate for wipe model "${model}"`);
+  }
+  return delegate;
+}
+
 /**
  * Resolve a model name to its delegate on a client or transaction handle.
- *
- * One documented cast: `WIPE_MODELS` is a literal list of model names checked
- * against `schema.prisma` by the completeness test, and every entry indexes a
- * delegate that exposes `deleteMany`. The test also asserts every entry
- * resolves, so an unresolvable name fails the build rather than the request.
  *
  * A model listed in {@link WIPE_OWNER_FIELDS} gets a wrapper that rewrites the
  * caller's `{ userId }` into that model's own ownership predicate. The caller
@@ -474,15 +537,7 @@ export function resolveWipeDelegate(
   client: object,
   model: string,
 ): UserScopedDeleteDelegate {
-  const delegate = (
-    client as Record<
-      string,
-      { deleteMany(args: { where: object }): Promise<{ count: number }> }
-    >
-  )[wipeDelegateKey(model)];
-  if (!delegate || typeof delegate.deleteMany !== "function") {
-    throw new Error(`No Prisma delegate for wipe model "${model}"`);
-  }
+  const delegate = rawDelegate(client, model);
   if (!WIPE_OWNER_FIELDS[model]) {
     return delegate as UserScopedDeleteDelegate;
   }
@@ -490,4 +545,21 @@ export function resolveWipeDelegate(
     deleteMany: ({ where }) =>
       delegate.deleteMany({ where: wipeWhere(model, where.userId) }),
   };
+}
+
+/**
+ * Resolve a model name to a delegate that deletes every row of it.
+ *
+ * The admin wipe asks a different question from the per-account one — "every
+ * row of this model" rather than "this account's rows" — so it gets its own
+ * resolver instead of a `where` the caller has to remember to leave out.
+ * {@link WIPE_OWNER_FIELDS} is irrelevant here by construction: with no
+ * account to select, a row that belongs to two of them is deleted once.
+ */
+export function resolveGlobalWipeDelegate(
+  client: object,
+  model: string,
+): UnscopedDeleteDelegate {
+  const delegate = rawDelegate(client, model);
+  return { deleteMany: () => delegate.deleteMany({}) };
 }
