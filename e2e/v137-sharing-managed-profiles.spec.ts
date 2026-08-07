@@ -317,7 +317,7 @@ test.describe.serial("scoped sharing browser journeys", () => {
     }
   });
 
-  test("keeps an adult READ grant read-only and outside Settings", async ({
+  test("[J1-adult-levels-lifecycle] keeps an adult READ grant read-only and outside Settings", async ({
     page,
   }) => {
     const record = E2E_LEVEL_RECORDS.find(
@@ -344,7 +344,7 @@ test.describe.serial("scoped sharing browser journeys", () => {
     await leaveRecord(page);
   });
 
-  test("lets an adult WRITE grant add only to the selected record", async ({
+  test("[J1-adult-levels-lifecycle] lets an adult WRITE grant add only to the selected record", async ({
     page,
   }) => {
     const record = E2E_LEVEL_RECORDS.find(
@@ -400,7 +400,7 @@ test.describe.serial("scoped sharing browser journeys", () => {
     await leaveRecord(page);
   });
 
-  test("opens MANAGE-only generated reads without opening adult Settings", async ({
+  test("[J2-manage-edits-without-settings] opens MANAGE-only generated reads without opening adult Settings", async ({
     page,
   }) => {
     const fenceHeaders = trackFenceAssertion(page);
@@ -435,7 +435,7 @@ test.describe.serial("scoped sharing browser journeys", () => {
     await leaveRecord(page);
   });
 
-  test("keeps managed Settings on the active record and integrations status-only", async ({
+  test("[J2-manage-edits-without-settings] keeps managed Settings on the active record and integrations status-only", async ({
     page,
   }) => {
     const record = E2E_LEVEL_RECORDS.find(
@@ -492,7 +492,7 @@ test.describe.serial("scoped sharing browser journeys", () => {
     await expect(banner).toHaveCount(0);
   });
 
-  test("refuses direct ungranted routes before coach reads start", async ({
+  test("[J1-adult-levels-lifecycle] refuses direct ungranted routes before coach reads start", async ({
     page,
   }) => {
     await openRecord(page, "e2e-scope-measurements");

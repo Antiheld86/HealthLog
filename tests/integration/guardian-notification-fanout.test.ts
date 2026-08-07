@@ -212,7 +212,7 @@ beforeEach(async () => {
 });
 
 describe("Guardian fan-out (real Postgres)", () => {
-  it("isolates recipient locale and global preference across two Guardians and two records", async () => {
+  it("[J4-guardian-notification-matrix] isolates recipient locale and global preference across two Guardians and two records", async () => {
     const [recordA, recordB, guardianEn, guardianDe] = await Promise.all([
       createUser({ label: "record-a", locale: "en", managed: true }),
       createUser({ label: "record-b", locale: "de", managed: true }),
@@ -319,7 +319,7 @@ describe("Guardian fan-out (real Postgres)", () => {
     );
   });
 
-  it("writes the complete two-record, two-Guardian, four-channel attribution matrix", async () => {
+  it("[J4-guardian-notification-matrix] writes the complete two-record, two-Guardian, four-channel attribution matrix", async () => {
     const [recordA, recordB, guardianOne, guardianTwo, ordinaryRecord] =
       await Promise.all([
         createUser({ label: "record-a", locale: "en", managed: true }),

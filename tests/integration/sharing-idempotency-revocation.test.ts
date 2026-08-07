@@ -146,7 +146,7 @@ beforeEach(async () => {
 });
 
 describe("delegated idempotency replay", () => {
-  it("replays an active delegated retry without a second mutation", async () => {
+  it("[J5-revoked-idempotent-replay] replays an active delegated retry without a second mutation", async () => {
     const principal = SECURITY_PRINCIPALS.activeDelegation;
     await createUser(principal.identities.actorUserId);
     await createUser(principal.identities.recordUserId);
@@ -177,7 +177,7 @@ describe("delegated idempotency replay", () => {
     ).toBe(1);
   });
 
-  it("refuses a revoked delegated retry without returning the cached DTO", async () => {
+  it("[J5-revoked-idempotent-replay] refuses a revoked delegated retry without returning the cached DTO", async () => {
     const principal = SECURITY_PRINCIPALS.revokedDelegation;
     await createUser(principal.identities.actorUserId);
     await createUser(principal.identities.recordUserId);
