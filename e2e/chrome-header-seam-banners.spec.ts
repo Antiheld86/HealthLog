@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 
 import { expect, test } from "./setup/test";
 
-import { STORAGE_STATE_PATH } from "./setup/global-setup";
+import { SEAM_BANNERS_STORAGE_STATE_PATH } from "./setup/global-setup";
 
 /**
  * The seam again, this time with chrome above it.
@@ -33,18 +33,24 @@ import { STORAGE_STATE_PATH } from "./setup/global-setup";
  *     alive (`about:blank`): `I18nProvider` rewrites `healthlog-locale` from
  *     its own active locale on mount, so a cookie written under a live English
  *     page is reverted within the second.
- *   - **Shared record** paints from `accountAccess.active` on `/api/auth/me`.
- *     The real payload is captured first and served back with that block
- *     filled, rather than performing a real switch: the switch is stamped on
- *     the SESSION ROW, so switching the shared cookie jar would switch it for
- *     every other spec holding the same cookie (see
- *     `DELEGATE_STORAGE_STATE_PATH` in `global-setup.ts` for what that costs).
- *     A captured-and-patched payload keeps this file's reach inside this file,
- *     and it keeps working after the offline stage because it never touches the
- *     network again.
+ *   - **Shared record** paints while this session is inside somebody else's
+ *     record, so this file switches into one. It used to fake the state instead
+ *     — capture `/api/auth/me`, serve it back with the sharing block filled —
+ *     because the switch is stamped on the SESSION ROW and moving the shared
+ *     jar's row would move it for every spec holding that cookie. v1.37.0 took
+ *     that shortcut away and gave back the thing that made it necessary: the
+ *     record context is now proved across the payload, the fence store and the
+ *     transition machine together, so a payload alone cannot produce it; and a
+ *     spec that switches gets a login of its own
+ *     (`SEAM_BANNERS_STORAGE_STATE_PATH`), which is what keeps this file's reach
+ *     inside this file. The grant is the seeded whole-record READ on
+ *     `e2e-level-read` — whole-record deliberately, because a narrowed one drops
+ *     nav destinations and that is a different spec's subject.
  *   - **Offline** paints while `navigator.onLine` is false, which
  *     `context.setOffline(true)` produces for real, event and all. It is armed
- *     last because it is the only stage a navigation cannot follow.
+ *     last because it is the only stage a navigation cannot follow, and it is
+ *     armed after the switch for the same reason: entering a record is a
+ *     network act.
  *
  * The demo banner is the one that cannot be forced from a spec: `DEMO_MODE` is
  * a server env var read by the root layout, and the suite shares one server
@@ -65,9 +71,16 @@ import { STORAGE_STATE_PATH } from "./setup/global-setup";
  *      `h-dvh` budget, not added on top of it, so no depth of stack introduces
  *      a page-level scrollbar. `<main>` remains the only vertical scroller.
  *
- * Property 2 runs on mobile too, where there is no sidebar and therefore no
- * seam, because the scroll model is the half of the layout that the hoist could
- * have broken at that breakpoint.
+ * Property 2 is measured below `md` as well as above it, where there is no
+ * sidebar and therefore no seam, because the scroll model is the half of the
+ * layout that the hoist could have broken at that breakpoint. It used to get
+ * there by running the file in the `chromium-mobile` project. It cannot any
+ * more: this file moves a session's record selector, and a second PROJECT is
+ * the one thing a separate cookie jar cannot fix — it would drive the same
+ * session row from two browsers at once. So the narrow viewport is measured
+ * inside the desktop project instead. Nothing is lost by that: the shell picks
+ * its column layout and its scroller from width-driven rules, and the property
+ * under test is a scroll height in CSS pixels.
  */
 
 const LOCALE_COOKIE = "healthlog-locale";
@@ -130,46 +143,81 @@ async function readShell(page: Page): Promise<ShellGeometry> {
   );
 }
 
+/** The seeded whole-record READ grant this file switches into. */
+const TARGET_USERNAME = "e2e-level-read";
+
+const sharedRecordBanner = (page: Page) =>
+  page.locator('[data-slot="shared-record-banner"]');
+
 /**
- * The live `/api/auth/me` body, read through the page so it carries the page's
- * own cookies. Captured before anything else is armed, so the mock that later
- * replaces it differs from the real payload in exactly one block.
+ * Wait until the shell is usable rather than merely present.
+ *
+ * The hydration gate is the shell's own hold while it settles which record it
+ * is showing. Measuring geometry through it would measure the placeholder. The
+ * budget is deliberately larger than the suite default: ten seconds is a
+ * statement about machine load, thirty about the gate never releasing.
+ *
+ * The paired positive control is the top bar and not an accessible name: half
+ * of this file runs under the French strip, and a helper that reached for an
+ * English label would be a helper that only works before the locale swap.
  */
-async function captureAccountPayload(page: Page): Promise<string> {
-  const raw = await page.evaluate(async () => {
-    const res = await fetch("/api/auth/me", { credentials: "same-origin" });
-    return res.ok ? await res.text() : null;
+async function expectShellReady(page: Page): Promise<void> {
+  await expect(
+    page.locator('[data-slot="record-scope-hydration-gate"]'),
+  ).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.locator('[data-slot="top-bar"]')).toBeVisible({
+    timeout: 30_000,
   });
-  expect(
-    raw,
-    "could not capture /api/auth/me for the sharing mock",
-  ).not.toBeNull();
-  return raw!;
 }
 
 /**
- * Serve the captured payload back with the sharing block filled in, so the
- * shell believes this session is inside somebody else's record. Everything else
- * the shell reads (modules, role, onboarding flags) stays what the server said.
+ * Start outside any record.
+ *
+ * The first stage asserts that nothing is painted above the top bar, and this
+ * jar's session row keeps whatever the previous test — or the previous attempt,
+ * on a CI retry — left it pointed at. Without this the "no banner" stage is a
+ * statement about run order.
  */
-async function armSharedRecord(page: Page, captured: string): Promise<void> {
-  const payload = JSON.parse(captured) as { data: Record<string, unknown> };
-  const entry = {
-    accountId: "seam-fixture-account",
-    username: "seam-owner",
-    displayName: null,
-    access: "read" as const,
-    canWrite: false,
-  };
-  payload.data.accountAccess = {
-    accounts: [entry],
-    active: entry,
-    canSwitch: true,
-  };
-  const body = JSON.stringify(payload);
-  await page.route("**/api/auth/me", (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body }),
-  );
+async function ensureOwnRecord(page: Page): Promise<void> {
+  const banner = sharedRecordBanner(page);
+  if ((await banner.count()) === 0) return;
+  await page.locator('[data-slot="shared-record-banner-exit"]').click();
+  await expect(banner).toHaveCount(0, { timeout: 30_000 });
+  await expectShellReady(page);
+}
+
+/**
+ * Switch into the target record, and re-press the button if the switch did not
+ * land.
+ *
+ * `POST /api/account/switch` is a compare-and-set on the session's record epoch
+ * and the client reconciles and retries exactly once, which is the right call
+ * for a person at a keyboard and one attempt short for a fixture that has just
+ * navigated. Bounded at three and asserted: if the record is not entered by
+ * then, that is a failure and it fails.
+ */
+async function enterSharedRecord(page: Page): Promise<void> {
+  const banner = sharedRecordBanner(page);
+  if ((await banner.count()) > 0) return;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page.getByRole("button", { name: "User menu" }).first().click();
+    await page.locator('[data-slot="account-switcher-trigger"]').click();
+    const entry = page.locator(
+      `[data-slot="account-switcher-entry"][data-account-username="${TARGET_USERNAME}"]`,
+    );
+    await expect(entry).toBeVisible();
+    await entry.click();
+    try {
+      await expect(banner).toBeVisible({ timeout: 15_000 });
+      await expectShellReady(page);
+      return;
+    } catch {
+      // The switcher menu may still be open over the page; start clean.
+      await page.goto("/");
+      await expectShellReady(page);
+    }
+  }
+  await expect(banner).toBeVisible({ timeout: 15_000 });
 }
 
 /**
@@ -225,21 +273,22 @@ async function armOffline(page: Page): Promise<void> {
   await page.evaluate(() => window.dispatchEvent(new Event("offline")));
 }
 
-test.describe("app-chrome header seam under banners", () => {
-  test.use({ storageState: STORAGE_STATE_PATH });
+/**
+ * Serial, and for the same reason the file has its own jar: both tests move
+ * this session row's record selector, and two workers running them at once
+ * would move it under each other.
+ */
+test.describe.serial("app-chrome header seam under banners", () => {
+  test.use({ storageState: SEAM_BANNERS_STORAGE_STATE_PATH });
 
   test("the header seam survives every depth of the banner stack", async ({
     page,
   }) => {
-    test.skip(
-      test.info().project.name === "chromium-mobile",
-      "the sidebar is desktop-only (md+), so below md there is no seam to measure",
-    );
-    // Four stages measured at two widths, with a full page load per stage and
-    // a network settle either side of the offline one. Comfortably inside the
-    // suite default when it runs alone; the default 30s is not enough headroom
-    // for it on a loaded machine.
-    test.setTimeout(60_000);
+    // Four stages measured at two widths, with a full page load per stage, a
+    // real record switch and a network settle either side of the offline one.
+    // Comfortably inside the suite default when it runs alone; the default 30s
+    // is not enough headroom for it on a loaded machine.
+    test.setTimeout(90_000);
 
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
@@ -247,8 +296,8 @@ test.describe("app-chrome header seam under banners", () => {
     const sidebarHeader = page.locator('[data-slot="sidebar-header"]');
     await expect(topBar).toBeVisible();
     await expect(sidebarHeader).toBeVisible();
-
-    const captured = await captureAccountPayload(page);
+    await expectShellReady(page);
+    await ensureOwnRecord(page);
 
     // Each stage adds one banner and leaves the previous ones up, so the last
     // stage measures the whole stack rather than one banner at a time.
@@ -266,26 +315,30 @@ test.describe("app-chrome header seam under banners", () => {
       beforeResize?: () => Promise<void>;
       afterResize?: () => Promise<void>;
     };
+    // The shared record is armed FIRST, before the locale swap: entering a
+    // record is done through the switcher, and the switcher's controls are
+    // reached by their accessible names. Under the French strip those names are
+    // French, and a spec that drove the UI in one language while asserting the
+    // labels of another would be testing the translation bundle.
     const stages: Stage[] = [
       { label: "no banner", arm: async () => {} },
       {
-        label: "1 banner (maintainership)",
+        label: "1 banner (shared record)",
         arm: async () => {
-          await armUnmaintainedLocale(page);
-          await page.goto("/", { waitUntil: "domcontentloaded" });
-          await expect(
-            page.locator('[data-slot="maintainership-banner"]'),
-          ).toBeVisible();
+          await enterSharedRecord(page);
+          await expect(sharedRecordBanner(page)).toBeVisible();
         },
       },
       {
-        label: "2 banners (+ shared record)",
+        label: "2 banners (+ maintainership)",
         arm: async () => {
-          await armSharedRecord(page, captured);
-          await page.reload({ waitUntil: "domcontentloaded" });
+          await armUnmaintainedLocale(page);
+          await page.goto("/", { waitUntil: "domcontentloaded" });
+          await expectShellReady(page);
           await expect(
-            page.locator('[data-slot="shared-record-banner"]'),
+            page.locator('[data-slot="maintainership-banner"]'),
           ).toBeVisible();
+          await expect(sharedRecordBanner(page)).toBeVisible();
         },
       },
       {
@@ -380,43 +433,64 @@ test.describe("app-chrome header seam under banners", () => {
   test("the banner stack never pushes the shell past the viewport", async ({
     page,
   }) => {
-    // Mobile as well as desktop. Below `md` the shell stacks in a column and
-    // there is no sidebar, so there is no seam to measure — but the scroll
-    // model is what hoisting the banners could have broken there, and that
-    // half is measurable at both breakpoints.
+    // A real switch, a page load either side of it and a network settle before
+    // the offline stage, at two widths.
+    test.setTimeout(90_000);
+
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.locator('[data-slot="top-bar"]')).toBeVisible();
+    await expectShellReady(page);
 
-    const captured = await captureAccountPayload(page);
-    await armSharedRecord(page, captured);
+    await enterSharedRecord(page);
     await armUnmaintainedLocale(page);
     await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expectShellReady(page);
     await expect(
       page.locator('[data-slot="maintainership-banner"]'),
     ).toBeVisible();
-    await expect(
-      page.locator('[data-slot="shared-record-banner"]'),
-    ).toBeVisible();
+    await expect(sharedRecordBanner(page)).toBeVisible();
     await armOffline(page);
     await expect(page.locator('[data-slot="offline-banner"]')).toBeVisible();
 
-    const shell = await readShell(page);
-    expect(shell.bannerCount, "the stack did not arm").toBe(3);
-    expect(shell.bannerHeight).toBeGreaterThan(0);
-    expect(
-      shell.documentOverflow,
-      `the document scrolls by ${shell.documentOverflow.toFixed(
-        2,
-      )}px under a ${shell.bannerHeight.toFixed(2)}px banner stack`,
-    ).toBeLessThan(1);
+    // 393px is the narrow end — a Pixel-5 viewport, below `md`, where the shell
+    // stacks in a column and there is no sidebar. 1280px is the wide end. The
+    // network comes back for the resize and the stage re-arms after it, for the
+    // reason written at the offline stage of the test above: a chunk fetch that
+    // fails with no network takes the whole shell down to the error boundary.
+    for (const [width, height] of [
+      [393, 851],
+      [1280, 900],
+    ] as const) {
+      await page.context().setOffline(false);
+      await expect.poll(() => page.evaluate(() => navigator.onLine)).toBe(true);
+      await page.setViewportSize({ width, height });
+      await expect
+        .poll(() => page.evaluate(() => window.innerWidth))
+        .toBe(width);
+      await armOffline(page);
+      await expect(page.locator('[data-slot="offline-banner"]')).toBeVisible();
 
-    // The top bar is still fully painted below the stack rather than pushed
-    // off the bottom of the viewport.
-    const top = shell.topBar!;
-    expect(top.height).toBeGreaterThan(32);
-    expect(
-      top.bottom,
-      "the banner stack pushed the top bar out of the viewport",
-    ).toBeLessThanOrEqual(shell.viewportHeight);
+      const shell = await readShell(page);
+      const at = `at ${width}px`;
+      expect(shell.bannerCount, `${at}: the stack did not arm`).toBe(3);
+      expect(shell.bannerHeight).toBeGreaterThan(0);
+      expect(
+        shell.documentOverflow,
+        `${at}: the document scrolls by ${shell.documentOverflow.toFixed(
+          2,
+        )}px under a ${shell.bannerHeight.toFixed(2)}px banner stack`,
+      ).toBeLessThan(1);
+
+      // The top bar is still fully painted below the stack rather than pushed
+      // off the bottom of the viewport.
+      const top = shell.topBar!;
+      expect(top.height, `${at}: the top bar paints no height`).toBeGreaterThan(
+        32,
+      );
+      expect(
+        top.bottom,
+        `${at}: the banner stack pushed the top bar out of the viewport`,
+      ).toBeLessThanOrEqual(shell.viewportHeight);
+    }
   });
 });

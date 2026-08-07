@@ -233,6 +233,29 @@ export const CROSS_TAB_STORAGE_STATE_PATH = resolve(
   "e2e/setup/storageStateCrossTab.json",
 );
 
+/**
+ * The banner-geometry spec's jar, and the reason it exists is a release-shaped
+ * one rather than a load-shaped one.
+ *
+ * `chrome-header-seam-banners.spec.ts` needs a session that is INSIDE somebody
+ * else's record, because one of the strips it stacks only paints there. It used
+ * to produce that state by capturing `/api/auth/me` and serving it back with
+ * the sharing block filled — cheaper than a switch, and self-contained, which is
+ * exactly why it was written that way.
+ *
+ * v1.37.0 ended that. The record context is now proved across three places at
+ * once — the payload's own validator (fail-closed, no partial credit), the fence
+ * store's scope, and the transition machine that has to agree with both — so a
+ * payload claiming a shared record while the session row still says `self` is a
+ * state the shell refuses on purpose. A single route mock can no longer make it,
+ * and the honest fix is to stop faking it: switch for real, and take a jar of
+ * its own so moving one session row cannot move anybody else's.
+ */
+export const SEAM_BANNERS_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateSeamBanners.json",
+);
+
 async function hashPassword(password: string): Promise<string> {
   return hash(password, {
     memoryCost: 19456,
@@ -605,12 +628,12 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
        WHERE key LIKE 'sharing:%'`,
     );
 
-    // The login bucket, for the same reason. This setup signs in FOUR times
-    // now (the shared jar, the owner, and the sharing journey's own delegate
-    // jar), and the ceiling is five attempts per IP per quarter-hour — so two
-    // local runs in a row would otherwise end with a 429 from the fixture
-    // rather than a failure from the product. Only the auth surfaces' own
-    // buckets are cleared; nothing else in the table is touched.
+    // The login bucket, for the same reason. This setup signs in TEN times now
+    // (the shared jar, the owner, and one jar apiece for every spec that moves
+    // a session's record selector), and the ceiling is five attempts per IP per
+    // quarter-hour — so two local runs in a row would otherwise end with a 429
+    // from the fixture rather than a failure from the product. Only the auth
+    // surfaces' own buckets are cleared; nothing else in the table is touched.
     await pool.query(`DELETE FROM rate_limits WHERE key LIKE 'auth:%'`);
 
     // One marker weight per record. Re-seeded by delete-then-insert so a
@@ -680,7 +703,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
      * Log one account in, clearing the login bucket first.
      *
      * The ceiling is FIVE attempts per IP per quarter-hour and this setup now
-     * signs in eight times, so clearing once before the batch is no longer
+     * signs in ten times, so clearing once before the batch is no longer
      * enough — the sixth would be answered by the fixture's own 429 rather
      * than by the product. Only the auth surfaces' buckets are touched, and
      * only between logins this setup is itself performing.
@@ -716,6 +739,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     await capture(E2E_SCOPE_DELEGATE, FENCE_STORAGE_STATE_PATH);
     await capture(E2E_SCOPE_DELEGATE, FENCE_OFFLINE_STORAGE_STATE_PATH);
     await capture(E2E_SCOPE_DELEGATE, CROSS_TAB_STORAGE_STATE_PATH);
+    await capture(E2E_SCOPE_DELEGATE, SEAM_BANNERS_STORAGE_STATE_PATH);
 
     // v1.37.0 — the guardian's jar, and only then its second factor.
     //

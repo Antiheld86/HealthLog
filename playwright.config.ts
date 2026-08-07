@@ -129,6 +129,13 @@ export default defineConfig({
         // reason, one release earlier.
         "v137-record-session-fence.spec.ts",
         "v137-sharing-cross-tab-session.spec.ts",
+        // The banner-geometry spec joined that list in v1.37.0, because it
+        // stopped faking the shared-record strip and started switching for
+        // real. It is the one entry here that measures a MOBILE property, so
+        // it does not simply lose it: it measures both widths inside the
+        // desktop project instead, where the shell below `md` renders from the
+        // same width-driven rules. Its file comment carries the reasoning.
+        "chrome-header-seam-banners.spec.ts",
         // Runs only in the service-worker project.
         "v137-record-session-fence-offline.spec.ts",
       ],
