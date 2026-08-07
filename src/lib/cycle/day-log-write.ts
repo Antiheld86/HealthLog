@@ -31,6 +31,7 @@
 import { prisma } from "@/lib/db";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { getOrCreateCycleProfile } from "@/lib/cycle/profile";
+import { ensureCycleForBleedingDay } from "@/lib/cycle/cycle-boundaries";
 import type { CycleDayLogInput } from "@/lib/validations/cycle";
 import type {
   CervicalMucus,
@@ -387,6 +388,25 @@ async function writeDayLog(args: WriteArgs): Promise<DayLogWriteResult> {
       ? (entry.cervixOpening ?? null)
       : (existing?.cervixOpening ?? null);
 
+  // A first bleeding day opens the cycle it belongs to. Cycle rows used to
+  // come only from the one-tap period boundary, so a person who logged every
+  // period as flow had a module that held none had ever happened — no lengths,
+  // no forecast, an empty chart. This is the one shared seam behind the single
+  // capture, the bulk drain, the Apple Health fold and the boundary itself, so
+  // all four infer a start the same way (the boundary's own write lands on a
+  // date that already has a cycle, which the detector declines). The day is
+  // then attributed to the cycle it just opened rather than the one before it.
+  const openedCycleId = await ensureCycleForBleedingDay(
+    userId,
+    entry.date,
+    tz,
+    {
+      flow,
+      intermenstrualBleeding,
+    },
+  );
+  const attributedCycleId = openedCycleId ?? cycleId;
+
   // Was any of the five sensitive fields actually supplied in THIS update?
   // Used to decide whether an undecryptable existing envelope may be preserved
   // verbatim (an unrelated-field edit) or must be rewritten (the user is
@@ -479,7 +499,7 @@ async function writeDayLog(args: WriteArgs): Promise<DayLogWriteResult> {
   const updateData: Prisma.CycleDayLogUncheckedUpdateInput = {
     ...baseData,
     ...(entry.externalId ? { date: entry.date } : {}),
-    ...(cycleId !== null ? { cycleId } : {}),
+    ...(attributedCycleId !== null ? { cycleId: attributedCycleId } : {}),
     deletedAt: null,
     // Only bump syncVersion when a field actually changed — an unchanged
     // re-post must be a true no-op on the /api/sync/changes feed so other
@@ -498,7 +518,7 @@ async function writeDayLog(args: WriteArgs): Promise<DayLogWriteResult> {
         tz,
         source,
         externalId: entry.externalId ?? null,
-        cycleId,
+        cycleId: attributedCycleId,
         flow,
         intermenstrualBleeding,
         basalBodyTempC,

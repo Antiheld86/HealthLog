@@ -15,6 +15,11 @@ import {
 } from "recharts";
 
 import { useTranslations } from "@/lib/i18n/context";
+import {
+  buildWorkoutHrChartData,
+  workoutHrAxisDomain,
+  type WorkoutHrCurvePoint,
+} from "./workout-hr-chart-data";
 
 /**
  * Per-workout heart-rate curve. Rendered ONLY through the shared
@@ -22,20 +27,15 @@ import { useTranslations } from "@/lib/i18n/context";
  * library stays a single shared chunk — never import this file directly
  * at a call site.
  *
- * `ComposedChart`: an `Area` for the min→max envelope (drawn only when
- * the series is dense enough to be honest), a `Line` for the bucket
- * mean, optional %HRmax zone bands behind them, and a dashed reference
- * line at the workout's average HR. Gaps stay gaps (`connectNulls`
+ * `ComposedChart`: a range `Area` for the min→max envelope (drawn only
+ * when the series is dense enough to be honest), a `Line` for the bucket
+ * mean, optional %HRmax zone bands behind them, and dashed reference
+ * lines at the session's average and peak. Gaps stay gaps (`connectNulls`
  * false) — a hole in the recording never reads as an interpolated
  * curve.
  */
 
-export interface WorkoutHrChartPoint {
-  tSec: number;
-  mean: number;
-  min: number;
-  max: number;
-}
+export type WorkoutHrChartPoint = WorkoutHrCurvePoint;
 
 export interface WorkoutHrZoneBand {
   zone: number;
@@ -50,6 +50,8 @@ export interface WorkoutHrChartProps {
   envelope: boolean;
   /** Workout average HR for the reference line. */
   avgHr: number | null;
+  /** Workout peak HR for the reference line. */
+  maxHr?: number | null;
   /** Optional %HRmax zone bands for the shaded background. */
   zones?: WorkoutHrZoneBand[] | null;
 }
@@ -71,33 +73,19 @@ export function WorkoutHrChart({
   bucketSec,
   envelope,
   avgHr,
+  maxHr,
   zones,
 }: WorkoutHrChartProps) {
   const { t } = useTranslations();
 
-  // Build a full elapsed-time grid so a gap of missing buckets breaks
-  // the line rather than interpolating across it.
-  const data = useMemo(() => {
-    if (points.length === 0) return [];
-    const byT = new Map(points.map((p) => [p.tSec, p]));
-    const maxT = points[points.length - 1].tSec;
-    const grid: Array<{
-      tSec: number;
-      mean: number | null;
-      lo: number | null;
-      hi: number | null;
-    }> = [];
-    for (let tSec = 0; tSec <= maxT; tSec += bucketSec) {
-      const p = byT.get(tSec);
-      grid.push({
-        tSec,
-        mean: p ? p.mean : null,
-        lo: p ? p.min : null,
-        hi: p && envelope ? p.max - p.min : null,
-      });
-    }
-    return grid;
-  }, [points, bucketSec, envelope]);
+  const data = useMemo(
+    () => buildWorkoutHrChartData(points, bucketSec, envelope),
+    [points, bucketSec, envelope],
+  );
+  const yDomain = useMemo(
+    () => workoutHrAxisDomain(data, [avgHr, maxHr]),
+    [data, avgHr, maxHr],
+  );
 
   return (
     <div
@@ -137,7 +125,7 @@ export function WorkoutHrChart({
             unit=""
           />
           <YAxis
-            domain={["dataMin - 10", "dataMax + 10"]}
+            domain={yDomain ?? ["dataMin - 10", "dataMax + 10"]}
             tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
             tickLine={false}
             axisLine={false}
@@ -154,37 +142,41 @@ export function WorkoutHrChart({
             labelFormatter={(tSec) =>
               `${minuteTick(Number(tSec))} ${t("insights.workouts.detail.hrAxisMinutes")}`
             }
-            formatter={(value, name) =>
-              name === "mean"
-                ? [`${value} bpm`, t("insights.workouts.detail.hrChartTitle")]
-                : [null, null]
-            }
+            formatter={(value, name) => {
+              if (name === "mean") {
+                return [
+                  `${value} bpm`,
+                  t("insights.workouts.detail.hrChartTitle"),
+                ];
+              }
+              // The envelope's own `[min, max]` pair, read back as the
+              // spread inside that bucket rather than as a second series.
+              if (name === "band" && Array.isArray(value)) {
+                return [
+                  t("insights.workouts.detail.hrRangeValue", {
+                    low: String(value[0]),
+                    high: String(value[1]),
+                  }),
+                  t("insights.workouts.detail.hrRangeLabel"),
+                ];
+              }
+              return [null, null];
+            }}
           />
-          {/* Envelope band: a transparent base at `lo` plus a stacked
-              `hi` (= max − min) renders the min→max ribbon. Only present
-              when `envelope` gated it in. */}
+          {/* Envelope band: one range `Area` over the bucket's own
+              `[min, max]` pair. Deliberately not a stack — a stacked pair
+              is measured from zero and drags the y-axis domain down with
+              it, squashing the curve (see `workout-hr-chart-data.ts`). */}
           {envelope ? (
-            <>
-              <Area
-                type="monotone"
-                dataKey="lo"
-                stackId="band"
-                stroke="none"
-                fill="transparent"
-                connectNulls={false}
-                isAnimationActive={false}
-              />
-              <Area
-                type="monotone"
-                dataKey="hi"
-                stackId="band"
-                stroke="none"
-                fill="var(--chart-1)"
-                fillOpacity={0.15}
-                connectNulls={false}
-                isAnimationActive={false}
-              />
-            </>
+            <Area
+              type="monotone"
+              dataKey="band"
+              stroke="none"
+              fill="var(--chart-1)"
+              fillOpacity={0.15}
+              connectNulls={false}
+              isAnimationActive={false}
+            />
           ) : null}
           {avgHr != null ? (
             <ReferenceLine
@@ -192,6 +184,33 @@ export function WorkoutHrChart({
               stroke="var(--muted-foreground)"
               strokeDasharray="5 5"
               strokeOpacity={0.7}
+              label={{
+                value: t("insights.workouts.detail.hrAvgMarker", {
+                  bpm: String(Math.round(avgHr)),
+                }),
+                position: "insideTopLeft",
+                fill: "var(--muted-foreground)",
+                fontSize: 11,
+              }}
+            />
+          ) : null}
+          {/* The session's peak, the second number the stats grid already
+              names. Drawn so the curve can be read against it rather than
+              leaving the reader to eyeball where the top was. */}
+          {maxHr != null ? (
+            <ReferenceLine
+              y={maxHr}
+              stroke="var(--chart-4)"
+              strokeDasharray="4 4"
+              strokeOpacity={0.6}
+              label={{
+                value: t("insights.workouts.detail.hrMaxMarker", {
+                  bpm: String(Math.round(maxHr)),
+                }),
+                position: "insideBottomLeft",
+                fill: "var(--muted-foreground)",
+                fontSize: 11,
+              }}
             />
           ) : null}
           <Line

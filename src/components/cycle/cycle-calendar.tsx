@@ -76,6 +76,13 @@ export interface CycleCalendarProps {
    * rather than opening a sheet whose every button the server would refuse.
    */
   onSelectDay?: (date: string) => void;
+  /**
+   * The month the grid moved to (`YYYY-MM`). The page's anchored read covers
+   * a fixed span around today, so a month outside it arrives with no days —
+   * the caller uses this to fetch that month rather than render empty cells
+   * over entries that exist.
+   */
+  onVisibleMonthChange?: (month: string) => void;
   className?: string;
 }
 
@@ -84,6 +91,7 @@ export function CycleCalendar({
   today,
   confirmedOvulation,
   onSelectDay,
+  onVisibleMonthChange,
   className,
 }: CycleCalendarProps) {
   const { t, locale } = useTranslations();
@@ -125,7 +133,17 @@ export function CycleCalendar({
   });
 
   function shiftMonth(delta: number) {
-    setMonthAnchor((a) => new Date(a.getFullYear(), a.getMonth() + delta, 1));
+    const next = new Date(
+      monthAnchor.getFullYear(),
+      monthAnchor.getMonth() + delta,
+      1,
+    );
+    setMonthAnchor(next);
+    // The page reads a window anchored on today, so a month outside it has no
+    // days until somebody asks for them.
+    onVisibleMonthChange?.(
+      `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`,
+    );
   }
 
   return (

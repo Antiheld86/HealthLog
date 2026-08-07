@@ -314,6 +314,53 @@ async function postIntake(request: NextRequest, { params }: RouteParams) {
     // A band decision (slot or ad-hoc) is an AUTO binding; it also resets a
     // stale USER_PIN when this write converges onto a previously-pinned row.
     attributionSource = "AUTO";
+
+    // The client can NAME the dose it is recording, and when it does, that
+    // answer outranks the band. The Verlauf ledger's "Genommen" posts the
+    // displayed slot's own anchor, and the medication card posts its
+    // display-due slot; both mean "record THIS dose". Band attribution answers
+    // a different question — which slot the take's clock time falls into — so
+    // backfilling a slot from an earlier day matched no band, fell through to
+    // the standalone insert, and left the named slot unserved: the entry
+    // reverted to missed on the next read and the dose the user recorded was
+    // filed on the wrong day.
+    //
+    // Only a REAL slot of this medication is honoured (the same band-anchor
+    // validation the "diesem Slot zuordnen" pin runs), so an arbitrary client
+    // instant still records ad-hoc rather than parking a live row on a
+    // fabricated anchor. And only a slot that does not sit ahead of the take,
+    // by the same forward guard the convergence probe below uses — a
+    // late-morning dose must never consume the evening slot.
+    if (
+      scheduledFor !== undefined &&
+      mayConvergeOntoSuppliedSlot({
+        skipped,
+        takenAt: resolvedTakenAt,
+        suppliedSlot: incomingScheduledFor,
+      })
+    ) {
+      const namedSlot = await resolveForcedSlotForWrite({
+        userId: user.id,
+        medicationId: id,
+        userTz: user.timezone,
+        slotInstant: incomingScheduledFor,
+      });
+      // Only when the naming actually decides something the clock did not.
+      // A dose taken inside its own window resolves to the same anchor either
+      // way and stays an AUTO binding, so an ordinary on-time take is
+      // unchanged. When the two disagree the binding rests on the user's
+      // choice, which is what USER_PIN records — and the read ledger binds a
+      // USER_PIN take by its stored anchor rather than by the clock, so a
+      // backfilled dose reads under the slot it was recorded for instead of
+      // falling back to ad-hoc.
+      if (
+        namedSlot !== null &&
+        namedSlot.getTime() !== canonicalSlot?.getTime()
+      ) {
+        canonicalSlot = namedSlot;
+        attributionSource = "USER_PIN";
+      }
+    }
   }
 
   // Idempotency check (explicit key or server-side dedup window)

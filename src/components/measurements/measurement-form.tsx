@@ -27,6 +27,10 @@ import { toast } from "sonner";
 import { useTranslations } from "@/lib/i18n/context";
 import { useUnitDisplay } from "@/hooks/use-unit-display";
 import {
+  entryValueToCanonical,
+  parseDecimalEntry,
+} from "@/lib/measurements/entry-units";
+import {
   invalidateKeys,
   measurementDependentKeys,
   refetchInactiveDailyReads,
@@ -343,7 +347,17 @@ export function MeasurementForm({
         // identity path — `fromDisplay` returns the typed number unchanged, so
         // the payload is byte-identical to before. Round only the converted
         // imperial value so 210 lb stores as 95.25 kg, not 95.25439770….
-        const typed = parseFloat(value);
+        //
+        // A second boundary sits beside it: a few types are stored in a unit
+        // the form does not ask for. Sleep is entered in hours and stored in
+        // minutes, and sending the typed number through unconverted filed a
+        // 7.5-hour night as seven and a half minutes — inside the column's
+        // plausibility band, so nothing objected.
+        const typed = parseDecimalEntry(value);
+        if (typed === null) {
+          setError(t("measurements.saveError"));
+          return;
+        }
         let canonicalValue = typed;
         if (unitDisplay.isTransformed(type)) {
           const inverted = unitDisplay.fromDisplay(type, typed);
@@ -352,6 +366,7 @@ export function MeasurementForm({
               ? Math.round(inverted * 100) / 100
               : inverted;
         }
+        canonicalValue = entryValueToCanonical(type, canonicalValue);
         await apiPost("/api/measurements", {
           type,
           value: canonicalValue,
@@ -533,9 +548,13 @@ export function MeasurementForm({
         >
           <Input
             id="value"
-            type="number"
+            // Not `type="number"`: its sanitisation drops a decimal comma on
+            // the engines that do not localise the field, and "7,5" then
+            // arrives as an empty string with no explanation. `inputMode`
+            // still raises the numeric keypad, and the submit path reads the
+            // comma — the same shape the labs and custom-metric fields use.
+            inputMode="decimal"
             enterKeyHint="next"
-            step="any"
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder={

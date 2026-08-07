@@ -17,6 +17,7 @@
 import type { MeasurementType } from "@/generated/prisma/client";
 import type { VitalDeviation } from "@/lib/insights/derived/coincident-deviation";
 import type { ChangepointSignal } from "@/lib/insights/derived/changepoint";
+import { isCurrentForTodayClaim } from "@/lib/insights/measurement-freshness";
 
 /** One vital sitting outside its personal band today. */
 export interface HealthStatusDeviation {
@@ -58,7 +59,15 @@ export function summariseHealthStatus(
   shifts: readonly ChangepointSignal[],
 ): HealthStatusSummary {
   const deviations: HealthStatusDeviation[] = vitals
-    .filter((v) => v.outside && v.direction !== "in")
+    // Present tense, so present readings only. "Your pulse is above your usual
+    // range" describes now; a reading from last week describes last week, and
+    // the card carried no date to say which. A vital whose freshest reading is
+    // outside the claim window is left out rather than dressed as current —
+    // the changepoint shifts below are dated by construction and unaffected.
+    .filter(
+      (v) =>
+        v.outside && v.direction !== "in" && isCurrentForTodayClaim(v.daysAgo),
+    )
     .map((v) => ({
       type: v.type,
       value: v.value,

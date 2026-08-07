@@ -19,6 +19,7 @@ function day(date: string, overrides: Partial<CalendarDay> = {}): CalendarDay {
     isFertileWindow: false,
     isPredictedOvulation: false,
     isPeriodLogged: false,
+    isCycleStart: false,
     flow: null,
     hasSymptoms: false,
     confidence: 1,

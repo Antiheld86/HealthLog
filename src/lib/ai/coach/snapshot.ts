@@ -29,6 +29,7 @@ import type { SleepStageRow } from "@/lib/analytics/sleep-night";
 import { compactSections } from "@/lib/ai/prompts/compact-sections";
 import { annotate } from "@/lib/logging/context";
 import { memoizePerRequest } from "@/lib/request-cache";
+import { annotateSnapshotFreshness } from "./snapshot-freshness";
 import { buildGlp1SnapshotBlock } from "./glp1-snapshot";
 import { buildDerivedSnapshotBlock } from "./derived-snapshot";
 import { buildCorrelationsSnapshotBlock } from "./correlations-snapshot";
@@ -1208,6 +1209,19 @@ async function buildCoachSnapshotImpl(
   // matches the contract the /insights/generate route applies on its
   // side of the prompt.
   const compactSnapshot = compactSections(snapshot);
+
+  // Date the end of every metric series before anything narrates it. Without
+  // this each block reads as if its newest number were taken just now, and the
+  // hero line said "today" about a metric last measured five days earlier. The
+  // stamp sits on the block itself so the age travels with the numbers into
+  // every surface the snapshot feeds — hero, briefing, Coach reply, tools.
+  const staleBlocks = annotateSnapshotFreshness(compactSnapshot);
+  if (staleBlocks.length > 0) {
+    annotate({
+      action: { name: "coach.snapshot.stale_blocks" },
+      meta: { blocks: staleBlocks.sort() },
+    });
+  }
 
   // v1.7.0 — assembled-snapshot soft cap. Enabling every cluster at a
   // long window can balloon the prompt; degrade progressively by

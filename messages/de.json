@@ -3111,6 +3111,11 @@
         "notFound": "Workout nicht gefunden.",
         "hrFromPulse": "Aus deinen Herzfrequenzdaten rund um diese Einheit",
         "hrAxisMinutes": "Min.",
+        "hrAvgMarker": "Ø {bpm}",
+        "hrMaxMarker": "Max. {bpm}",
+        "hrRangeValue": "{low} bis {high} bpm",
+        "hrRangeLabel": "Spanne",
+        "hrNoProfile": "Für diese Einheit liegen keine einzelnen Pulswerte vor.",
         "sportAverageLabel": "Dein aktueller Durchschnitt:",
         "zonesTitle": "Belastungszonen",
         "zonesCaption": "Wie sich deine Belastung auf die Herzfrequenzzonen verteilt hat.",
@@ -7712,7 +7717,7 @@
     },
     "sheet": {
       "title": "Tag erfassen",
-      "description": "Erfasse Stärke, Symptome und Notizen von heute.",
+      "description": "Stärke, Symptome und Notizen für diesen Tag.",
       "flow": "Stärke",
       "symptoms": "Symptome",
       "temperature": "Basaltemperatur",
@@ -7747,7 +7752,10 @@
       "intimacySection": "Intimität & Verhütung",
       "testsSection": "Tests",
       "phaseDayHeader": "Tag {day} · {phase}",
-      "bbtHint": "Miss sie morgens als Erstes, noch vor dem Aufstehen."
+      "bbtHint": "Miss sie morgens als Erstes, noch vor dem Aufstehen.",
+      "titleForDate": "Eintrag für {date}",
+      "descriptionToday": "Heute. Stärke, Symptome und Notizen.",
+      "deleteBodyCycleStart": "Dieser Tag eröffnet einen Zyklus. Beim Löschen geht der Periodenbeginn mit, sodass der vorherige Zyklus wie zuvor weiterläuft. Alles hier Erfasste geht ebenfalls: Stärke, Temperatur, Symptome und deine Notiz. Es gibt keinen Weg zurück."
     },
     "settings": {
       "title": "Zyklus-Einstellungen",
@@ -7824,7 +7832,13 @@
       "intercourseLabel": "Was erfasst Geschlechtsverkehr?",
       "protected": "Ob beim Verkehr verhütet wurde.",
       "protectedLabel": "Was bedeutet geschützt?"
-    }
+    },
+    "saveSuccess": "Eintrag gespeichert.",
+    "deleteSuccess": "Eintrag gelöscht.",
+    "periodStartSaved": "Periodenbeginn gespeichert.",
+    "periodEndSaved": "Periodenende gespeichert.",
+    "startedPeriodOnDate": "Periode hat an diesem Tag begonnen",
+    "endedPeriodOnDate": "Periode an diesem Tag beendet"
   },
   "cycleReminders": {
     "periodSoonTitle": "Periode steht wahrscheinlich bevor",

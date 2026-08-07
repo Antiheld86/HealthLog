@@ -20,6 +20,7 @@ import {
   apiPost,
 } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
+import { toastWrittenOutcome } from "@/components/outcome/outcome-toast";
 
 import {
   cycleDependentKeys,
@@ -93,9 +94,16 @@ export function useCycleDayLog(date: string | null) {
   });
 }
 
-export function useCycleCalendar(from: string, to: string) {
+/**
+ * The calendar read for one window. `enabled` exists for the month grid's own
+ * read: the page's anchored window covers today, and a month the grid
+ * navigates outside it needs a second, bounded read rather than a widened
+ * anchor the route's span cap would refuse.
+ */
+export function useCycleCalendar(from: string, to: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.cycleCalendar(from, to),
+    enabled,
     queryFn: () =>
       apiGet<CalendarResponse>(`/api/cycle/calendar?from=${from}&to=${to}`),
     staleTime: 60_000,
@@ -220,15 +228,28 @@ function idempotencyKey(): string {
   return crypto.randomUUID();
 }
 
+/**
+ * Capture one day.
+ *
+ * The success toast is not decoration. A day-log write is silent by nature —
+ * the sheet closes and the grid repaints — and for a back-dated entry the grid
+ * had nothing to repaint, so a save that worked and a save that never happened
+ * looked identical. A write says so now, either way: this names the success and
+ * the sheet's inline strip names the failure.
+ */
 export function useLogDay() {
   const qc = useQueryClient();
+  const { t } = useTranslations();
   return useMutation({
     mutationFn: async (input: CycleDayLogInput) => {
       return apiPost<unknown>("/api/cycle/day-logs", input, {
         headers: { "Idempotency-Key": idempotencyKey() },
       });
     },
-    onSuccess: () => invalidateKeys(qc, cycleDependentKeys),
+    onSuccess: () => {
+      void invalidateKeys(qc, cycleDependentKeys);
+      toastWrittenOutcome("success", t("cycle.saveSuccess"));
+    },
   });
 }
 
@@ -260,6 +281,7 @@ export interface CycleDayLogPatch {
 /** Edit an existing day-log by id (PATCH — accepts explicit null to clear). */
 export function usePatchDayLog() {
   const qc = useQueryClient();
+  const { t } = useTranslations();
   return useMutation({
     mutationFn: async ({
       id,
@@ -270,7 +292,10 @@ export function usePatchDayLog() {
     }) => {
       return apiPatch<CycleDayLogDTO>(`/api/cycle/day-logs/${id}`, patch);
     },
-    onSuccess: () => invalidateKeys(qc, cycleDependentKeys),
+    onSuccess: () => {
+      void invalidateKeys(qc, cycleDependentKeys);
+      toastWrittenOutcome("success", t("cycle.saveSuccess"));
+    },
   });
 }
 
@@ -285,7 +310,10 @@ export function useStartPeriod() {
         loggedAt: new Date().toISOString(),
       });
     },
-    onSuccess: () => invalidateKeys(qc, cycleDependentKeys),
+    onSuccess: () => {
+      void invalidateKeys(qc, cycleDependentKeys);
+      toastWrittenOutcome("success", t("cycle.periodStartSaved"));
+    },
     // v1.16.4 — period boundaries had no failure signal at all (the sheet
     // simply stayed open); a toast names the rejection.
     onError: () => toast.error(t("cycle.saveError")),
@@ -304,7 +332,10 @@ export function useEndPeriod() {
         loggedAt: new Date().toISOString(),
       });
     },
-    onSuccess: () => invalidateKeys(qc, cycleDependentKeys),
+    onSuccess: () => {
+      void invalidateKeys(qc, cycleDependentKeys);
+      toastWrittenOutcome("success", t("cycle.periodEndSaved"));
+    },
     onError: () => toast.error(t("cycle.saveError")),
   });
 }
@@ -317,7 +348,10 @@ export function useDeleteDayLog() {
     mutationFn: async (id: string) => {
       await apiDelete(`/api/cycle/day-logs/${id}`);
     },
-    onSuccess: () => invalidateKeys(qc, cycleDependentKeys),
+    onSuccess: () => {
+      void invalidateKeys(qc, cycleDependentKeys);
+      toastWrittenOutcome("success", t("cycle.deleteSuccess"));
+    },
     onError: () => toast.error(t("cycle.deleteError")),
   });
 }
