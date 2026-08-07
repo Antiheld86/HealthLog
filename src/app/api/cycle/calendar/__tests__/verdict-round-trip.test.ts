@@ -103,6 +103,16 @@ const LONG_CYCLE_STARTS = [
   "2026-04-30",
 ];
 
+/**
+ * Four period starts exactly 28 days apart — the textbook regular record. The
+ * last start is open, so where "today" sits relative to `lastStart + 28`
+ * decides what the verdict may claim. Built from a supplied last start so a
+ * test can place today a chosen number of days past the predicted one.
+ */
+function regularStarts(lastStart: string): string[] {
+  return [-84, -56, -28, 0].map((offset) => addDays(lastStart, offset));
+}
+
 function cycleRows(starts: readonly string[]) {
   return starts.map((startDate, i) => ({
     id: `cyc-${i}`,
@@ -249,6 +259,7 @@ describe("GET /api/cycle/calendar carries the resolved verdict", () => {
       cycleRows(LONG_CYCLE_STARTS) as never,
       prediction?.nextPeriodStart ?? null,
       resolveLuteal(profile() as never),
+      "2026-05-20",
     );
     expect(verdict.dayOfCycle).toBe(fromEngine.dayOfCycle);
     expect(verdict.phase).toBe(fromEngine.phase);
@@ -274,6 +285,120 @@ describe("GET /api/cycle/calendar carries the resolved verdict", () => {
     expect(verdict.daysUntilNext).toBeGreaterThan(0);
     // Sanity: the predicted start really is ahead of today.
     expect(prediction!.nextPeriodStart).toBe(addDays("2026-05-20", expected));
+  });
+
+  /**
+   * D-list edge 1 — the verdict at and after the predicted start day, driven
+   * through the real route.
+   *
+   * A regular 28-day record whose period has not arrived is the ORDINARY way
+   * to be late, and it is the case the ring was silent about: the engine ends
+   * the open cycle's phase window at the predicted start, so the day after it
+   * carried no phase, and the verdict resolver read "no phase today" as "no
+   * data at all". The person saw an empty ring and the words insufficient data
+   * on the third day of a late period. `OVERDUE` was only ever reachable when
+   * the engine itself forecast a cycle longer than the grace window.
+   */
+  describe("a period that has not arrived", () => {
+    /** Place today N days past `lastStart + 28`, the predicted next start. */
+    function overdueBy(days: number): { today: string; lastStart: string } {
+      const today = "2026-06-11";
+      return { today, lastStart: addDays(today, -(28 + days)) };
+    }
+
+    function seedRegular(lastStart: string): void {
+      vi.mocked(prisma.menstrualCycle.findMany).mockResolvedValue(
+        cycleRows(regularStarts(lastStart)) as never,
+      );
+    }
+
+    it("keeps counting the open cycle past the predicted start", async () => {
+      const { today, lastStart } = overdueBy(3);
+      seedRegular(lastStart);
+      vi.mocked(getSession).mockResolvedValue(session("UTC") as never);
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(`${today}T12:00:00Z`));
+
+      const { body } = await callCalendar();
+      const data = body.data as Record<string, unknown>;
+      const verdict = data.verdict as Record<string, unknown>;
+      const prediction = data.prediction as { nextPeriodStart: string } | null;
+
+      // The predicted start really is behind us — otherwise this asserts nothing.
+      expect(prediction?.nextPeriodStart).toBe(addDays(today, -3));
+
+      expect(verdict.state).toBe("IN_CYCLE");
+      expect(verdict.dayOfCycle).toBe(32);
+      expect(verdict.phase).toBe("LUTEAL");
+      expect(verdict.cycleStartDate).toBe(lastStart);
+      // There is no "until" once the predicted start is behind us.
+      expect(verdict.daysUntilNext).toBeNull();
+    });
+
+    it("says OVERDUE, with the day count, once the grace window is spent", async () => {
+      // Typical 28 + 14 days of grace = 42. Day 44 is past it.
+      const { today, lastStart } = overdueBy(15);
+      seedRegular(lastStart);
+      vi.mocked(getSession).mockResolvedValue(session("UTC") as never);
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(`${today}T12:00:00Z`));
+
+      const { body } = await callCalendar();
+      const verdict = (body.data as Record<string, unknown>).verdict as Record<
+        string,
+        unknown
+      >;
+
+      expect(verdict.state).toBe("OVERDUE");
+      expect(verdict.dayOfCycle).toBeNull();
+      expect(verdict.phase).toBeNull();
+      expect(verdict.overdueDays).toBe(16);
+      expect(verdict.cycleStartDate).toBe(lastStart);
+      expect(verdict.spans).toHaveLength(4);
+    });
+
+    it("holds the count on the predicted start day itself", async () => {
+      const { today, lastStart } = overdueBy(0);
+      seedRegular(lastStart);
+      vi.mocked(getSession).mockResolvedValue(session("UTC") as never);
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(`${today}T12:00:00Z`));
+
+      const { body } = await callCalendar();
+      const verdict = (body.data as Record<string, unknown>).verdict as Record<
+        string,
+        unknown
+      >;
+
+      // Day 29 of a 28-day cycle: the period is due today and has not been
+      // logged, which is a cycle day, not an absence of data.
+      expect(verdict.state).toBe("IN_CYCLE");
+      expect(verdict.dayOfCycle).toBe(29);
+      expect(verdict.daysUntilNext).toBe(0);
+    });
+
+    it("stops extending the open window once the next period is logged", async () => {
+      // The same record with one more start logged four days ago: the earlier
+      // cycle closes at that start and today is day 5 of the new one.
+      const { today, lastStart } = overdueBy(3);
+      const withNewStart = [...regularStarts(lastStart), addDays(today, -4)];
+      vi.mocked(prisma.menstrualCycle.findMany).mockResolvedValue(
+        cycleRows(withNewStart) as never,
+      );
+      vi.mocked(getSession).mockResolvedValue(session("UTC") as never);
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(`${today}T12:00:00Z`));
+
+      const { body } = await callCalendar();
+      const verdict = (body.data as Record<string, unknown>).verdict as Record<
+        string,
+        unknown
+      >;
+
+      expect(verdict.state).toBe("IN_CYCLE");
+      expect(verdict.dayOfCycle).toBe(5);
+      expect(verdict.cycleStartDate).toBe(addDays(today, -4));
+    });
   });
 
   it("says INSUFFICIENT_DATA when nothing has been logged", async () => {
