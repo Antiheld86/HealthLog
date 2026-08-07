@@ -244,15 +244,14 @@ export function recordRefusal(...alsoRefusesFor: string[]): RefusalResponse {
 // grant-consent notice and call POST /api/consent/ai (or, on web, POST
 // /api/consent/ai/web) to mint the receipt. BYOK / local / ChatGPT-OAuth
 // chains are the user's own egress and never trip this gate.
+//
+// There is no `consentRequiredResponse` beside this description any more, and
+// the absence is deliberate. Every route that could answer it is also a route
+// the sharing fence can refuse, and OpenAPI allows one response per status, so
+// the two 403s share a single description built by `recordRefusal(...)`. A
+// second exported 403 body would be a second way to write the same operation.
 export const AI_CONSENT_REQUIRED_DESCRIPTION =
   "AI consent required: no active ConsentReceipt for the server-managed provider. `meta.errorCode` = `consent.ai.required`. Mint a receipt via POST /api/consent/ai before retrying.";
-
-export const consentRequiredResponse = {
-  "403": {
-    description: AI_CONSENT_REQUIRED_DESCRIPTION,
-    content: { "application/json": { schema: errorEnvelope } },
-  },
-};
 
 // ── Module-disabled gate (v1.18.0) ───────────────────────────────────
 // Every module-scoped route runs `requireModuleEnabled(userId, key)`,

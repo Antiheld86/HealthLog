@@ -60,19 +60,3 @@ export const SECURITY_PRINCIPALS = {
     job: { id: "job-owner-idempotency", origin: "owner-request" },
   },
 } as const satisfies Record<string, SecurityPrincipalFixture>;
-
-export async function mutateThenRestore<T>(
-  mutate: () => Promise<T>,
-  restore: (result: T) => Promise<void>,
-): Promise<T> {
-  let result: T | undefined;
-  let completed = false;
-
-  try {
-    result = await mutate();
-    completed = true;
-    return result;
-  } finally {
-    if (completed) await restore(result as T);
-  }
-}
