@@ -35,7 +35,7 @@ export interface WorkoutDetailHrSectionProps {
 
 /**
  * Heart-rate curve card — mean line + optional min→max envelope + %HRmax
- * zone bands + an average-HR reference line. A muted provenance chip
+ * zone bands + average and peak reference lines. A muted provenance chip
  * discloses when the curve was reconstructed from pulse data around the
  * session rather than the workout's own sensor stream. Returns `null`
  * when no series is available (hide, don't render empty).
@@ -70,6 +70,7 @@ export function WorkoutDetailHrSection({
           bucketSec={series.bucketSec}
           envelope={series.envelope}
           avgHr={workout.avgHr}
+          maxHr={workout.maxHr}
           zones={workout.zones?.zones ?? null}
         />
       </CardContent>
