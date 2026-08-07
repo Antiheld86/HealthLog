@@ -34,6 +34,13 @@ import { describe, expect, it } from "vitest";
  * `scripts/check-env.ts` owns that question and CI runs it against
  * `.env.production.example`. This is the narrower one that check-env cannot
  * answer, because it reads a file rather than the compose whitelist.
+ *
+ * v1.37.0 — a fourth place joined the three. Both of these variables were
+ * documented in the two example files and whitelisted in compose, and NEITHER
+ * was in `scripts/env-manifest.json` — so `pnpm check-env` had never heard of
+ * them, and an operator running the pre-deploy check against their own
+ * environment was told nothing about the two settings this guard exists for.
+ * Three places held them in step and the fourth, the one CI runs, did not.
  */
 const ROOT = process.cwd();
 const COMPOSE = readFileSync(join(ROOT, "docker-compose.yml"), "utf8");
@@ -41,6 +48,19 @@ const ENV_EXAMPLE = readFileSync(join(ROOT, ".env.example"), "utf8");
 const PROD_EXAMPLE = readFileSync(
   join(ROOT, ".env.production.example"),
   "utf8",
+);
+const MANIFEST = readFileSync(join(ROOT, "scripts/env-manifest.json"), "utf8");
+
+/** Every variable name the manifest declares, in any group. */
+const MANIFEST_NAMES: string[] = (
+  JSON.parse(MANIFEST) as {
+    groups: Array<{ variables: Array<{ name: string; anyOf?: string[] }> }>;
+  }
+).groups.flatMap((group) =>
+  group.variables.flatMap((variable) => [
+    variable.name,
+    ...(variable.anyOf ?? []),
+  ]),
 );
 
 /**
@@ -72,6 +92,11 @@ describe("a variable the product publishes reaches the container", () => {
     expect(COMPOSE).toContain("environment:");
     expect(ENV_EXAMPLE.length).toBeGreaterThan(1000);
     expect(PROD_EXAMPLE.length).toBeGreaterThan(1000);
+    // The manifest really parsed, and really carries names. An empty list
+    // would make the manifest leg below a quiet pass for every entry.
+    expect(MANIFEST_NAMES.length).toBeGreaterThan(20);
+    expect(MANIFEST_NAMES).toContain("DATABASE_URL");
+    expect(MANIFEST_NAMES).not.toContain("HEALTHLOG_NOT_A_REAL_VARIABLE");
     // And a name nothing declares is genuinely absent from all three, so the
     // matchers below are not passing on a substring that is everywhere.
     for (const file of [COMPOSE, ENV_EXAMPLE, PROD_EXAMPLE]) {
@@ -95,6 +120,13 @@ describe("a variable the product publishes reaches the container", () => {
 
       it("is documented in the production example", () => {
         expect(PROD_EXAMPLE).toContain(name);
+      });
+
+      it("is declared in the manifest, so `pnpm check-env` reports it", () => {
+        // The fourth place, and the one CI actually runs. A variable an
+        // operator is told to set, and which the pre-deploy check has never
+        // heard of, is documented everywhere except where it would be checked.
+        expect(MANIFEST_NAMES).toContain(name);
       });
     });
   }
