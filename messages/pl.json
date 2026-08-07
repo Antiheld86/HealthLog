@@ -4560,7 +4560,6 @@
         "description": "Połączone usługi, kanały dostarczania i priorytet źródeł w jednym miejscu.",
         "subtitle": "Połącz i zarządzaj źródłami danych oraz urządzeniami.",
         "connectionsHeading": "Połączenia",
-        "connectionsDescription": "Połącz i zarządzaj źródłami danych oraz urządzeniami.",
         "channelsHeading": "Kanały dostarczania",
         "channelsDescription": "Gdzie dostarczane są przypomnienia i powiadomienia.",
         "matrixLink": "Powiadomienia wg kanału"
@@ -4570,7 +4569,6 @@
         "description": "Wszystkie przypomnienia w jednym miejscu — co i kiedy oraz gdzie są dostarczane.",
         "subtitle": "Wybierz, które przypomnienia otrzymujesz i gdzie są dostarczane.",
         "remindersHeading": "Przypomnienia",
-        "remindersDescription": "Co otrzymujesz.",
         "matrixLink": "Powiadomienia wg kanału",
         "channelsLink": "Kanały dostarczania"
       },
@@ -5550,7 +5548,6 @@
     "googleHealthTag": "Fitbit i Pixel",
     "googleHealthBetaBadge": "Beta",
     "googleHealthDescription": "Połącz Fitbit, Pixel Watch i Fitbit Air przez konto Google — waga, tętno, sen i aktywność. Zastępuje to klasyczne połączenie Fitbit, które Google wyłącza we wrześniu 2026.",
-    "googleHealthDescriptionSecondary": "Rejestrujesz własnego klienta Google Cloud i wprowadzasz tutaj dane logowania. API nie udostępnia stresu ani gotowości, a Google może od czasu do czasu poprosić o ponowne połączenie. Pierwsza konfiguracja? Skorzystaj z",
     "googleHealthCredentials": "Dane API",
     "googleHealthClientId": "Identyfikator klienta",
     "googleHealthClientSecret": "Sekret klienta",
@@ -5947,13 +5944,6 @@
         "saveError": "Nie udało się zapisać zmiany. Spróbuj ponownie."
       }
     },
-    "withingsDescriptionSecondary": "Odczyty trafiają do panelu w tle. Pierwszy raz? Skorzystaj z",
-    "whoopDescriptionSecondary": "Odczyty trafiają do panelu w tle. Pierwszy raz? Skorzystaj z",
-    "fitbitDescriptionSecondary": "Odczyty trafiają do panelu w tle. Pierwszy raz? Skorzystaj z",
-    "polarDescriptionSecondary": "Odczyty trafiają do panelu w tle. Pierwszy raz? Skorzystaj z",
-    "ouraDescriptionSecondary": "Odczyty trafiają do panelu w tle. Pierwszy raz? Skorzystaj z",
-    "nightscoutDescriptionSecondary": "Odczyty trafiają do panelu w tle. Pierwszy raz? Skorzystaj z",
-    "integrationCredentialsHint": "Gdzie znaleźć te dane logowania i jak zarejestrować własną aplikację, opisano w przewodniku konfiguracji powyżej.",
     "integrationRedirectGuide": {
       "intro": "To połączenie działa przez Twoją własną aplikację deweloperską {provider} — około 5 minut konfiguracji:",
       "step1": "Utwórz aplikację w portalu deweloperskim {provider}.",
@@ -6139,7 +6129,6 @@
     },
     "strava": "Strava",
     "stravaDescription": "Połącz konto Strava, aby synchronizować aktywności z historią treningów.",
-    "stravaDescriptionSecondary": "Aktywności trafiają na pulpit w tle. Nowy w konfiguracji? Skorzystaj z",
     "stravaViewData": "Zobacz treningi",
     "stravaCredentials": "Dane API",
     "stravaClientId": "Identyfikator klienta",

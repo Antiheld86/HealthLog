@@ -24,6 +24,7 @@ import { Loader2, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -335,7 +336,7 @@ export function CoachPrefsSection({ isAuthenticated }: CoachPrefsSectionProps) {
           </div>
         </div>
       )}
-      <div className="flex justify-end">
+      <SettingsCardActions>
         <Button
           type="button"
           size="sm"
@@ -352,7 +353,7 @@ export function CoachPrefsSection({ isAuthenticated }: CoachPrefsSectionProps) {
           ) : null}
           {t("insights.coach.settingsSave")}
         </Button>
-      </div>
+      </SettingsCardActions>
     </SettingsCard>
   );
 }

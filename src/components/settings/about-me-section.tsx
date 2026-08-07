@@ -49,6 +49,7 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { SettingsInfoTile } from "@/components/settings/_info-tile";
 import { Label } from "@/components/ui/label";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { SettingsCard } from "@/components/settings/settings-card";
@@ -301,18 +302,13 @@ export function AboutMeSection({
       </div>
 
       {pendingQuestions.length > 0 && (
-        <div
+        <SettingsInfoTile
+          icon={MessageCircleQuestion}
+          tone="primary"
           data-testid="settings-about-me-questions"
-          className="border-primary/30 bg-primary/5 rounded-lg border p-4"
+          title={t("settings.ai.aboutMe.questionsTitle")}
         >
-          <p className="flex items-center gap-2 text-sm font-medium">
-            <MessageCircleQuestion
-              className="text-primary size-4 shrink-0"
-              aria-hidden="true"
-            />
-            {t("settings.ai.aboutMe.questionsTitle")}
-          </p>
-          <ul className="text-muted-foreground mt-2 list-disc space-y-1 pl-5 text-sm">
+          <ul className="list-disc space-y-1 pl-6">
             {pendingQuestions.map((q) => (
               <li key={q}>{q}</li>
             ))}
@@ -325,7 +321,7 @@ export function AboutMeSection({
               {t("settings.ai.aboutMe.questionsOpenCoach")}
             </Link>
           </p>
-        </div>
+        </SettingsInfoTile>
       )}
 
       {query.isError && (

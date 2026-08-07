@@ -227,7 +227,7 @@ export function EnvironmentSection() {
           icon={MapPin}
           title={t("settings.sections.environment.home.title")}
         />
-        <p className="text-muted-foreground mb-3 text-sm leading-relaxed">
+        <p className="text-sm leading-relaxed">
           {t("settings.sections.environment.home.description")}
         </p>
         <div className="space-y-3">
@@ -271,7 +271,9 @@ export function EnvironmentSection() {
             />
             <Button
               type="submit"
-              variant="secondary"
+              variant="outline"
+              size="sm"
+              className="min-h-11 sm:min-h-9"
               disabled={homeQuery.trim().length === 0 || searchHome.isPending}
             >
               {t("settings.sections.environment.search")}
@@ -314,7 +316,7 @@ export function EnvironmentSection() {
           icon={Plane}
           title={t("settings.sections.environment.travel.title")}
         />
-        <p className="text-muted-foreground mb-3 text-sm leading-relaxed">
+        <p className="text-sm leading-relaxed">
           {t("settings.sections.environment.travel.description")}
         </p>
         <div className="space-y-3">
@@ -377,7 +379,9 @@ export function EnvironmentSection() {
             />
             <Button
               type="submit"
-              variant="secondary"
+              variant="outline"
+              size="sm"
+              className="min-h-11 sm:min-h-9"
               disabled={
                 travelQuery.trim().length === 0 || searchTravel.isPending
               }
@@ -439,6 +443,8 @@ export function EnvironmentSection() {
               </div>
               <Button
                 type="button"
+                size="sm"
+                className="min-h-11 sm:min-h-9"
                 disabled={travelStart > travelEnd || addTravel.isPending}
                 onClick={() => addTravel.mutate()}
               >
@@ -457,7 +463,7 @@ export function EnvironmentSection() {
           icon={CloudSun}
           title={t("settings.sections.environment.backfill.title")}
         />
-        <p className="text-muted-foreground mb-3 text-sm leading-relaxed">
+        <p className="text-sm leading-relaxed">
           {t("settings.sections.environment.backfill.description")}
         </p>
         <div className="flex flex-wrap items-end gap-2">
@@ -483,6 +489,8 @@ export function EnvironmentSection() {
           </div>
           <Button
             type="button"
+            size="sm"
+            className="min-h-11 sm:min-h-9"
             disabled={
               !home ||
               effectiveBackfillStart.length === 0 ||

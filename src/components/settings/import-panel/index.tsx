@@ -17,7 +17,10 @@
  * announce progress to assistive tech via `aria-live` regions.
  */
 
+import { Upload } from "lucide-react";
+
 import { useTranslations } from "@/lib/i18n/context";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { AppleHealthImportCard } from "./apple-health-import-card";
 import { JsonImportCard } from "./json-import-card";
 import { CsvImportCard } from "./csv-import-card";
@@ -35,19 +38,14 @@ export function ImportPanel() {
   return (
     <section
       aria-labelledby="settings-section-import-title"
-      className="space-y-3"
+      className="space-y-4"
     >
-      <div className="space-y-1">
-        <h2
-          id="settings-section-import-title"
-          className="text-base font-semibold tracking-tight"
-        >
-          {t("settings.sections.export.import.heading")}
-        </h2>
-        <p className="text-muted-foreground text-xs">
-          {t("settings.sections.export.import.description")}
-        </p>
-      </div>
+      <SectionHeading
+        icon={Upload}
+        id="settings-section-import-title"
+        title={t("settings.sections.export.import.heading")}
+        subtitle={t("settings.sections.export.import.description")}
+      />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <AppleHealthImportCard />
         <JsonImportCard />

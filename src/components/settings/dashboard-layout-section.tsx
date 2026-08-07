@@ -28,6 +28,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -441,28 +442,9 @@ export function DashboardLayoutSection({ id }: { id: string }) {
 
   return (
     <SettingsCard id={id} className="scroll-mt-28">
-      {/* v1.4.19 A6 — title / action row uses the same stack-on-mobile,
-          right-align-on-desktop contract as Account → Password +
-          Restart onboarding tour. Avoids the long German "Auf Standard
-          zurücksetzen" copy clipping the card edge at narrow widths. */}
       <SettingsCardHeader
         icon={LayoutDashboard}
         title={t("dashboard.customizeTitle")}
-        status={
-          <ConfirmButton
-            slot="settings-dashboard-layout-reset"
-            variant="ghost"
-            size="sm"
-            className="min-h-11 self-end sm:min-h-9 sm:self-auto"
-            icon={<RotateCcw className="h-3.5 w-3.5" />}
-            label={t("dashboard.layoutReset")}
-            title={t("dashboard.layoutResetTitle")}
-            body={t("dashboard.layoutResetBody")}
-            confirmLabel={t("dashboard.layoutResetConfirm")}
-            pending={resetMutation.isPending}
-            onConfirm={() => resetMutation.mutate()}
-          />
-        }
       />
       {hydrated && layout && (
         <fieldset
@@ -702,30 +684,47 @@ export function DashboardLayoutSection({ id }: { id: string }) {
         </div>
       )}
 
-      {dirty && (
-        <div className="flex items-center justify-end gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="min-h-11 sm:min-h-9"
-            onClick={() => setDraft(null)}
-            disabled={saveMutation.isPending}
-          >
-            {t("common.cancel")}
-          </Button>
-          <Button
-            size="sm"
-            className="min-h-11 sm:min-h-9"
-            onClick={() => layout && saveMutation.mutate(layout)}
-            disabled={saveMutation.isPending}
-          >
-            {saveMutation.isPending && (
-              <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-            )}
-            {t("common.save")}
-          </Button>
-        </div>
-      )}
+      {/* Reset is a secondary action, so it reads in the same row as save
+          rather than from the header's status slot. */}
+      <SettingsCardActions>
+        <ConfirmButton
+          slot="settings-dashboard-layout-reset"
+          variant="outline"
+          size="sm"
+          className="min-h-11 sm:min-h-9"
+          icon={<RotateCcw className="h-3.5 w-3.5" />}
+          label={t("dashboard.layoutReset")}
+          title={t("dashboard.layoutResetTitle")}
+          body={t("dashboard.layoutResetBody")}
+          confirmLabel={t("dashboard.layoutResetConfirm")}
+          pending={resetMutation.isPending}
+          onConfirm={() => resetMutation.mutate()}
+        />
+        {dirty && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-11 sm:min-h-9"
+              onClick={() => setDraft(null)}
+              disabled={saveMutation.isPending}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              size="sm"
+              className="min-h-11 sm:min-h-9"
+              onClick={() => layout && saveMutation.mutate(layout)}
+              disabled={saveMutation.isPending}
+            >
+              {saveMutation.isPending && (
+                <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+              )}
+              {t("common.save")}
+            </Button>
+          </>
+        )}
+      </SettingsCardActions>
 
       {!dirty && remote && (
         <p className="text-muted-foreground text-xs">

@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, Loader2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Progress } from "@/components/ui/progress";
 import { queryKeys } from "@/lib/query-keys";
 import { useTranslations } from "@/lib/i18n/context";
@@ -308,7 +309,7 @@ export function AppleHealthImportCard() {
         )}
       </div>
 
-      <div className="mt-auto flex flex-wrap items-center gap-3 pt-1">
+      <SettingsCardActions className="mt-auto" align="start">
         <Button
           type="button"
           variant="outline"
@@ -325,7 +326,7 @@ export function AppleHealthImportCard() {
           )}
           {t("settings.sections.export.import.appleHealth.choose")}
         </Button>
-      </div>
+      </SettingsCardActions>
     </ImportCardShell>
   );
 }

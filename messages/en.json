@@ -4560,7 +4560,6 @@
         "description": "Connected services, delivery channels, and source priority in one place.",
         "subtitle": "Connect and manage your data sources and devices.",
         "connectionsHeading": "Connections",
-        "connectionsDescription": "Connect and manage your data sources and devices.",
         "channelsHeading": "Delivery channels",
         "channelsDescription": "Where reminders and alerts are delivered.",
         "matrixLink": "Per-channel notifications"
@@ -4570,7 +4569,6 @@
         "description": "Every reminder in one place — what gets reminded and when, and where it's delivered.",
         "subtitle": "Choose which reminders you receive and where they're delivered.",
         "remindersHeading": "Reminders",
-        "remindersDescription": "What you receive.",
         "matrixLink": "Per-channel notifications",
         "channelsLink": "Delivery channels"
       },
@@ -5550,7 +5548,6 @@
     "googleHealthTag": "Fitbit & Pixel",
     "googleHealthBetaBadge": "Beta",
     "googleHealthDescription": "Connect Fitbit, Pixel Watch and Fitbit Air through your Google account — weight, heart rate, sleep and activity. This replaces the classic Fitbit connection, which Google retires in September 2026.",
-    "googleHealthDescriptionSecondary": "You register your own Google Cloud client and bring the credentials here. Stress and readiness are not offered by the API, and Google may ask you to reconnect from time to time. New to the setup? Follow the",
     "googleHealthCredentials": "API Credentials",
     "googleHealthClientId": "Client ID",
     "googleHealthClientSecret": "Client Secret",
@@ -5947,13 +5944,6 @@
         "saveError": "Could not save the change. Please try again."
       }
     },
-    "withingsDescriptionSecondary": "Readings flow into your dashboard in the background. New to the setup? Follow the",
-    "whoopDescriptionSecondary": "Readings flow into your dashboard in the background. New to the setup? Follow the",
-    "fitbitDescriptionSecondary": "Readings flow into your dashboard in the background. New to the setup? Follow the",
-    "polarDescriptionSecondary": "Readings flow into your dashboard in the background. New to the setup? Follow the",
-    "ouraDescriptionSecondary": "Readings flow into your dashboard in the background. New to the setup? Follow the",
-    "nightscoutDescriptionSecondary": "Readings flow into your dashboard in the background. New to the setup? Follow the",
-    "integrationCredentialsHint": "Where to find these credentials and how to register your own app is covered in the setup guide above.",
     "integrationRedirectGuide": {
       "intro": "This connects through your own {provider} developer app — about 5 minutes to set up:",
       "step1": "Create an app in the {provider} developer portal.",
@@ -6139,7 +6129,6 @@
     },
     "strava": "Strava",
     "stravaDescription": "Connect your Strava account to sync your activities into your workout history.",
-    "stravaDescriptionSecondary": "Activities flow into your dashboard in the background. New to the setup? Follow the",
     "stravaViewData": "View your workouts",
     "stravaCredentials": "API Credentials",
     "stravaClientId": "Client ID",

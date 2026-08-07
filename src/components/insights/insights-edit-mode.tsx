@@ -23,6 +23,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 import { Button } from "@/components/ui/button";
+import { SettingsCard } from "@/components/settings/settings-card";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { cn } from "@/lib/utils";
 import { prefersReducedMotion } from "@/lib/charts/reduced-motion";
@@ -213,10 +214,7 @@ export function InsightsEditMode({
   const allHidden = draft.sections.every((s) => !s.visible);
 
   return (
-    <div
-      data-slot="insights-edit-mode"
-      className="bg-card border-border space-y-4 rounded-xl border p-4 sm:p-6"
-    >
+    <SettingsCard data-slot="insights-edit-mode">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <div>
           <h2
@@ -312,7 +310,7 @@ export function InsightsEditMode({
           {t("insights.editMode.manageInSettings")}
         </Link>
       </p>
-    </div>
+    </SettingsCard>
   );
 }
 

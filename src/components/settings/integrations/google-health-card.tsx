@@ -40,6 +40,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -415,8 +416,6 @@ export function GoogleHealthCard({
         }
       />
 
-      <hr data-testid="integration-card-divider" className="border-border/60" />
-
       <div className="space-y-4">
         {errorMessage && <IntegrationErrorMessage message={errorMessage} />}
 
@@ -553,10 +552,7 @@ export function GoogleHealthCard({
                 />
               </div>
             </div>
-            <p className="text-muted-foreground text-xs">
-              {t("settings.integrationCredentialsHint")}
-            </p>
-            <div className="flex justify-end">
+            <SettingsCardActions>
               <Button
                 type="submit"
                 variant="outline"
@@ -573,7 +569,7 @@ export function GoogleHealthCard({
                 )}
                 {t("settings.googleHealthSaveCredentials")}
               </Button>
-            </div>
+            </SettingsCardActions>
             {credsMsg && (
               <p
                 role="alert"
@@ -740,19 +736,26 @@ export function GoogleHealthCard({
             </Link>
           </>
         ) : status?.configured ? (
-          <Button
-            variant="outline"
-            onClick={() => {
-              window.location.href = "/api/google-health/connect";
-            }}
-          >
-            <Link2 className="h-4 w-4" />
-            {t("settings.googleHealthConnect")}
-          </Button>
+          <SettingsCardActions>
+            <Button
+              size="sm"
+              className="min-h-11 w-full sm:w-auto"
+              data-testid="googlehealth-connect"
+              onClick={() => {
+                window.location.href = "/api/google-health/connect";
+              }}
+            >
+              <Link2 className="h-3.5 w-3.5" />
+              {t("settings.googleHealthConnect")}
+            </Button>
+          </SettingsCardActions>
         ) : (
-          <div className="bg-muted/50 text-muted-foreground rounded-lg p-3 text-sm">
+          <p
+            className="text-muted-foreground text-xs"
+            data-testid="integration-unavailable"
+          >
             {t("settings.googleHealthNoCredentials")}
-          </div>
+          </p>
         )}
       </div>
     </SettingsCard>

@@ -5,11 +5,11 @@ import { useMemo } from "react";
 import { LayoutGrid, Loader2 } from "lucide-react";
 
 import { useTranslations } from "@/lib/i18n/context";
-import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useAuth } from "@/hooks/use-auth";
 import { useFeatureFlags } from "@/hooks/use-feature-flags";
 import { useInsightsLayoutQuery } from "@/hooks/use-insights-layout";
 import { InsightsEditMode } from "@/components/insights/insights-edit-mode";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { type InsightsSectionId } from "@/lib/insights-layout";
 
@@ -51,11 +51,11 @@ export function InsightsOverviewArrangeSection({ id }: { id?: string }) {
       aria-labelledby="insights-overview-arrange-title"
       className="space-y-3"
     >
-      <SettingsCardHeader
+      <SectionHeading
         icon={LayoutGrid}
-        titleId="insights-overview-arrange-title"
+        id="insights-overview-arrange-title"
         title={t("insights.settings.overviewTitle")}
-        description={t("insights.settings.overviewDescription")}
+        subtitle={t("insights.settings.overviewDescription")}
       />
 
       {/* Gate the editor mount until the layout GET settles. The editor seeds

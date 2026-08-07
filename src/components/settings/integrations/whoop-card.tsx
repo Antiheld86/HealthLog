@@ -25,6 +25,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -224,8 +225,6 @@ export function WhoopCard({
         }
       />
 
-      <hr data-testid="integration-card-divider" className="border-border/60" />
-
       <div className="space-y-4">
         {errorMessage && <IntegrationErrorMessage message={errorMessage} />}
         {/* Parked-integration resume CTA. Surfaces only when the row
@@ -342,10 +341,7 @@ export function WhoopCard({
                 />
               </div>
             </div>
-            <p className="text-muted-foreground text-xs">
-              {t("settings.integrationCredentialsHint")}
-            </p>
-            <div className="flex justify-end">
+            <SettingsCardActions>
               <Button
                 type="submit"
                 variant="outline"
@@ -362,7 +358,7 @@ export function WhoopCard({
                 )}
                 {t("settings.whoopSaveCredentials")}
               </Button>
-            </div>
+            </SettingsCardActions>
             {credsMsg && (
               <p
                 role="alert"
@@ -485,19 +481,26 @@ export function WhoopCard({
             </Link>
           </>
         ) : status?.configured ? (
-          <Button
-            variant="outline"
-            onClick={() => {
-              window.location.href = "/api/whoop/connect";
-            }}
-          >
-            <Link2 className="h-4 w-4" />
-            {t("settings.whoopConnect")}
-          </Button>
+          <SettingsCardActions>
+            <Button
+              size="sm"
+              className="min-h-11 w-full sm:w-auto"
+              data-testid="whoop-connect"
+              onClick={() => {
+                window.location.href = "/api/whoop/connect";
+              }}
+            >
+              <Link2 className="h-3.5 w-3.5" />
+              {t("settings.whoopConnect")}
+            </Button>
+          </SettingsCardActions>
         ) : (
-          <div className="bg-muted/50 text-muted-foreground rounded-lg p-3 text-sm">
+          <p
+            className="text-muted-foreground text-xs"
+            data-testid="integration-unavailable"
+          >
             {t("settings.whoopNoCredentials")}
-          </div>
+          </p>
         )}
       </div>
     </SettingsCard>

@@ -50,6 +50,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { toastWrittenOutcome } from "@/components/outcome/outcome-toast";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Gauge, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -443,7 +444,7 @@ export function ScoreSection() {
 
           {/* Bottom-right, in its own row, like every other settings card
               that saves a form. */}
-          <div className="flex justify-end">
+          <SettingsCardActions>
             <Button
               size="sm"
               type="button"
@@ -460,7 +461,7 @@ export function ScoreSection() {
               ) : null}
               {t("settings.sections.score.save")}
             </Button>
-          </div>
+          </SettingsCardActions>
         </SettingsCard>
       )}
     </div>

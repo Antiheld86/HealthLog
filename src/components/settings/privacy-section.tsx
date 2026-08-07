@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
@@ -157,7 +158,7 @@ export function PrivacySection() {
           title={t("settings.privacy.export.title")}
           description={t("settings.privacy.export.description")}
         />
-        <div className="flex flex-wrap gap-2">
+        <SettingsCardActions align="start">
           <Button asChild variant="outline" size="sm">
             <Link href="/settings/export">
               {t("settings.privacy.export.openExport")}
@@ -168,7 +169,7 @@ export function PrivacySection() {
               {t("settings.privacy.export.openHealthRecord")}
             </Link>
           </Button>
-        </div>
+        </SettingsCardActions>
       </SettingsCard>
 
       {/* Delete / reset — with the honest backup lag disclosure */}
@@ -178,16 +179,16 @@ export function PrivacySection() {
           title={t("settings.privacy.delete.title")}
           description={t("settings.privacy.delete.description")}
         />
-        <div className="space-y-3">
-          <SettingsInfoTile icon={Info} tone="warning">
-            {t("settings.privacy.delete.backupLag")}
-          </SettingsInfoTile>
+        <SettingsInfoTile icon={Info} tone="warning">
+          {t("settings.privacy.delete.backupLag")}
+        </SettingsInfoTile>
+        <SettingsCardActions align="start">
           <Button asChild variant="outline" size="sm">
             <Link href="/settings/advanced">
               {t("settings.privacy.delete.openAdvanced")}
             </Link>
           </Button>
-        </div>
+        </SettingsCardActions>
       </SettingsCard>
 
       {/* Privacy posture (AI privacy mode + research mode live on their pages) */}
@@ -197,7 +198,7 @@ export function PrivacySection() {
           title={t("settings.privacy.posture.title")}
           description={t("settings.privacy.posture.description")}
         />
-        <div className="flex flex-wrap gap-2">
+        <SettingsCardActions align="start">
           <Button asChild variant="outline" size="sm">
             <Link href="/settings/ai">
               {t("settings.privacy.posture.openAi")}
@@ -208,7 +209,7 @@ export function PrivacySection() {
               {t("settings.privacy.posture.openResearch")}
             </Link>
           </Button>
-        </div>
+        </SettingsCardActions>
       </SettingsCard>
 
       {/* Active sessions + trusted devices + security activity (embedded) */}

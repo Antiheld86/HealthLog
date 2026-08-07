@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Save, Shield, User } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
 import {
   SeededFormDiscardDialog,
@@ -555,7 +556,7 @@ export function AccountSection() {
             </p>
           )}
 
-          <div className="flex justify-end">
+          <SettingsCardActions>
             <Button
               type="submit"
               className="min-h-11 sm:min-h-9"
@@ -568,7 +569,7 @@ export function AccountSection() {
               )}
               {t("common.save")}
             </Button>
-          </div>
+          </SettingsCardActions>
         </form>
       </SettingsCard>
 
@@ -588,31 +589,26 @@ export function AccountSection() {
           reachable. */}
       <CycleTrackingCard isAuthenticated={isAuthenticated} />
 
-      {/* Password card. v1.4.19 A6: action-button placement contract —
-          on mobile (`<sm`) the action button stacks below the title +
-          description and renders full-width; on desktop (`>=sm`) it
-          right-aligns next to the title. The previous
-          `flex items-center justify-between` pattern overflowed the
-          card edge on Pixel 5 once button copy got longer than ~24 ch
-          (the German "Passwort ändern" already pushes it; the tour
-          card's "Restart onboarding tour" actually broke through the
-          right border by ~48 px). */}
+      {/* Password card. The action is this card's only one, so it sits in
+          the card's action row like every other primary. It stays full-width
+          under `sm` — the German "Passwort ändern" is long enough that a
+          right-hugging button used to break through the card's right border
+          on a narrow phone. */}
       <SettingsCard>
         <SettingsCardHeader
           icon={Shield}
           title={t("settings.passwordReset")}
           description={t("settings.changePasswordDescription")}
-          status={
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setPasswordDialogOpen(true)}
-              className="min-h-11 w-full shrink-0 sm:min-h-9 sm:w-auto"
-            >
-              {t("settings.changePassword")}
-            </Button>
-          }
         />
+        <SettingsCardActions>
+          <Button
+            type="button"
+            onClick={() => setPasswordDialogOpen(true)}
+            className="min-h-11 w-full sm:min-h-9 sm:w-auto"
+          >
+            {t("settings.changePassword")}
+          </Button>
+        </SettingsCardActions>
       </SettingsCard>
 
       {/* v1.25.7 — active-session management + the security-activity feed

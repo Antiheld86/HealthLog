@@ -102,11 +102,14 @@ export function IntegrationRedirectGuide({
 }
 
 /**
- * v1.18.7 (Wave F) — the one description skeleton every integration card paints:
- * a WHITE primary sentence (`${i18nPrefix}Description`), then a GREY secondary
- * sentence (`${i18nPrefix}DescriptionSecondary`) that ends with the setup-guide
- * link rendered INLINE at the very end of the grey copy — not a standalone
- * bottom-of-card element. Single-sourced so all six cards read as one family.
+ * The one description every integration card paints: ONE sentence, then the
+ * setup-guide link inline at the end of it.
+ *
+ * It used to be two paragraphs stacked in the description slot — a white
+ * primary sentence and a grey secondary one whose only job was to carry the
+ * link. The secondary sentence was byte-identical across six of the eight
+ * cards, which is the tell: it said nothing about the provider it sat under.
+ * The link is the part that carried information, so the link is what stayed.
  */
 export function IntegrationCardDescription({
   i18nPrefix,
@@ -118,21 +121,18 @@ export function IntegrationCardDescription({
   const { t } = useTranslations();
   return (
     <>
-      <p className="text-foreground">{t(`${i18nPrefix}Description`)}</p>
-      <p className="text-muted-foreground">
-        {t(`${i18nPrefix}DescriptionSecondary`)}{" "}
-        <a
-          href={integrationDocsHref(provider)}
-          target="_blank"
-          rel="noopener noreferrer"
-          data-testid={`${provider}-setup-guide`}
-          data-slot="integration-setup-guide"
-          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 underline underline-offset-2"
-        >
-          {t("settings.integrationSetupGuide")}
-          <ExternalLink className="h-3 w-3" aria-hidden="true" />
-        </a>
-      </p>
+      {t(`${i18nPrefix}Description`)}{" "}
+      <a
+        href={integrationDocsHref(provider)}
+        target="_blank"
+        rel="noopener noreferrer"
+        data-testid={`${provider}-setup-guide`}
+        data-slot="integration-setup-guide"
+        className="hover:text-foreground inline-flex items-center gap-1 underline underline-offset-2"
+      >
+        {t("settings.integrationSetupGuide")}
+        <ExternalLink className="h-3 w-3" aria-hidden="true" />
+      </a>
     </>
   );
 }

@@ -4560,7 +4560,6 @@
         "description": "Servizi collegati, canali di consegna e priorità delle fonti in un unico posto.",
         "subtitle": "Collega e gestisci le tue fonti di dati e i dispositivi.",
         "connectionsHeading": "Connessioni",
-        "connectionsDescription": "Collega e gestisci le tue fonti di dati e i dispositivi.",
         "channelsHeading": "Canali di recapito",
         "channelsDescription": "Dove vengono recapitati promemoria e avvisi.",
         "matrixLink": "Notifiche per canale"
@@ -4570,7 +4569,6 @@
         "description": "Tutti i promemoria in un unico posto — cosa e quando, e dove vengono recapitati.",
         "subtitle": "Scegli quali promemoria ricevere e dove vengono recapitati.",
         "remindersHeading": "Promemoria",
-        "remindersDescription": "Ciò che ricevi.",
         "matrixLink": "Notifiche per canale",
         "channelsLink": "Canali di recapito"
       },
@@ -5550,7 +5548,6 @@
     "googleHealthTag": "Fitbit e Pixel",
     "googleHealthBetaBadge": "Beta",
     "googleHealthDescription": "Collega Fitbit, Pixel Watch e Fitbit Air tramite il tuo account Google — peso, frequenza cardiaca, sonno e attività. Sostituisce la connessione Fitbit classica, che Google ritira a settembre 2026.",
-    "googleHealthDescriptionSecondary": "Registri il tuo client Google Cloud e inserisci qui le credenziali. L'API non offre stress né prontezza, e Google può chiederti di riconnetterti di tanto in tanto. Prima configurazione? Segui la",
     "googleHealthCredentials": "Credenziali API",
     "googleHealthClientId": "ID client",
     "googleHealthClientSecret": "Client secret",
@@ -5947,13 +5944,6 @@
         "saveError": "Impossibile salvare la modifica. Riprova."
       }
     },
-    "withingsDescriptionSecondary": "Le misurazioni arrivano nella dashboard in background. È la prima volta? Segui la",
-    "whoopDescriptionSecondary": "Le misurazioni arrivano nella dashboard in background. È la prima volta? Segui la",
-    "fitbitDescriptionSecondary": "Le misurazioni arrivano nella dashboard in background. È la prima volta? Segui la",
-    "polarDescriptionSecondary": "Le misurazioni arrivano nella dashboard in background. È la prima volta? Segui la",
-    "ouraDescriptionSecondary": "Le misurazioni arrivano nella dashboard in background. È la prima volta? Segui la",
-    "nightscoutDescriptionSecondary": "Le misurazioni arrivano nella dashboard in background. È la prima volta? Segui la",
-    "integrationCredentialsHint": "Dove trovare queste credenziali e come registrare la tua app è spiegato nella guida alla configurazione qui sopra.",
     "integrationRedirectGuide": {
       "intro": "Questa connessione passa dalla tua app sviluppatore {provider} — circa 5 minuti di configurazione:",
       "step1": "Crea un'app nel portale sviluppatori {provider}.",
@@ -6139,7 +6129,6 @@
     },
     "strava": "Strava",
     "stravaDescription": "Collega il tuo account Strava per sincronizzare le tue attività con la cronologia degli allenamenti.",
-    "stravaDescriptionSecondary": "Le attività arrivano nella tua dashboard in background. Nuovo alla configurazione? Segui la",
     "stravaViewData": "Vedi i tuoi allenamenti",
     "stravaCredentials": "Credenziali API",
     "stravaClientId": "ID client",

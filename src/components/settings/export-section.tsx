@@ -34,6 +34,8 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -80,14 +82,13 @@ export function ExportSection() {
           CSV/JSON data-out paths and the import surface. */}
       <section
         aria-labelledby="settings-section-export-other-title"
-        className="space-y-3"
+        className="space-y-4"
       >
-        <h2
+        <SectionHeading
+          icon={Download}
           id="settings-section-export-other-title"
-          className="text-base font-semibold tracking-tight"
-        >
-          {t("settings.sections.export.otherOptionsHeading")}
-        </h2>
+          title={t("settings.sections.export.otherOptionsHeading")}
+        />
         <div className="grid gap-4 md:grid-cols-2">
           <MeasurementsCsvCard />
           <MedicationsCsvCard />
@@ -113,7 +114,7 @@ interface ExportCardShellProps {
   description: string;
   format: ExportFormat;
   children?: React.ReactNode;
-  /** Footer slot — typically the "Download" button + status text. */
+  /** The card's action row — the "Download" button, and nothing after it. */
   footer: React.ReactNode;
   /** Extra grid-position classes applied to the outer card div. */
   outerClassName?: string;
@@ -145,7 +146,7 @@ function ExportCardShell({
         }
       />
       {children && <div className="space-y-3">{children}</div>}
-      <div className="flex flex-wrap items-center gap-3">{footer}</div>
+      <SettingsCardActions>{footer}</SettingsCardActions>
     </SettingsCard>
   );
 }
@@ -258,7 +259,6 @@ function CsvCard({
       footer={
         <Button
           data-testid={actionTestId}
-          variant="outline"
           size="sm"
           className="min-h-11 sm:min-h-9"
           onClick={handleDownload}
@@ -346,7 +346,6 @@ function MedicationsCsvCard() {
       footer={
         <Button
           data-testid="export-action-medications-csv"
-          variant="outline"
           size="sm"
           className="min-h-11 sm:min-h-9"
           onClick={handleDownload}
@@ -471,7 +470,6 @@ function FullBackupCard() {
       footer={
         <Button
           data-testid="export-action-full-backup"
-          variant="outline"
           size="sm"
           className="min-h-11 sm:min-h-9"
           onClick={handleDownload}

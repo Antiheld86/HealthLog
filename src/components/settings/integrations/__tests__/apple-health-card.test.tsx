@@ -146,12 +146,12 @@ describe("<AppleHealthCard>", () => {
     expect(html).toContain("quiet");
   });
 
-  it("carries the shared card divider like every sibling", () => {
+  it("carries no card divider — the card gap does that job", () => {
     statusPayload = {
       lastSyncedAt: null,
       syncHealth: { verdict: "pending_first_sync", since: null },
     };
-    expect(render()).toContain('data-testid="integration-card-divider"');
+    expect(render()).not.toContain('data-testid="integration-card-divider"');
   });
 
   it("links to the existing one-shot Apple Health import fallback", () => {

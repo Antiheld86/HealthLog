@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -260,7 +261,7 @@ export function RemindersSection() {
           </div>
         </div>
 
-        <div className="flex justify-end gap-2">
+        <SettingsCardActions>
           <Button
             size="sm"
             variant="outline"
@@ -315,7 +316,7 @@ export function RemindersSection() {
             )}
             {t("common.save")}
           </Button>
-        </div>
+        </SettingsCardActions>
 
         {testNotification.data?.results &&
           testNotification.data.results.length > 0 && (

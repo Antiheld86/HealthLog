@@ -4560,7 +4560,6 @@
         "description": "Verbundene Dienste, Zustellkanäle und die Quellen-Priorität an einem Ort.",
         "subtitle": "Datenquellen und Geräte verbinden und verwalten.",
         "connectionsHeading": "Verbindungen",
-        "connectionsDescription": "Datenquellen und Geräte verbinden und verwalten.",
         "channelsHeading": "Zustellkanäle",
         "channelsDescription": "Wohin Erinnerungen und Hinweise zugestellt werden.",
         "matrixLink": "Benachrichtigungen je Kanal"
@@ -4570,7 +4569,6 @@
         "description": "Alle Erinnerungen an einem Ort — was wann erinnert wird und wohin es zugestellt wird.",
         "subtitle": "Wähle, welche Erinnerungen du erhältst und wohin sie zugestellt werden.",
         "remindersHeading": "Erinnerungen",
-        "remindersDescription": "Was du erhältst.",
         "matrixLink": "Benachrichtigungen je Kanal",
         "channelsLink": "Zustellkanäle"
       },
@@ -5550,7 +5548,6 @@
     "googleHealthTag": "Fitbit & Pixel",
     "googleHealthBetaBadge": "Beta",
     "googleHealthDescription": "Verbinde Fitbit, Pixel Watch und Fitbit Air über dein Google-Konto — Gewicht, Herzfrequenz, Schlaf und Aktivität. Das ersetzt die klassische Fitbit-Verbindung, die Google im September 2026 abschaltet.",
-    "googleHealthDescriptionSecondary": "Du registrierst deinen eigenen Google-Cloud-Client und hinterlegst die Zugangsdaten hier. Stress und Erholung liefert die API nicht, und Google kann dich von Zeit zu Zeit erneut um Zustimmung bitten. Neu bei der Einrichtung? Folge der",
     "googleHealthCredentials": "API-Zugangsdaten",
     "googleHealthClientId": "Client-ID",
     "googleHealthClientSecret": "Client-Secret",
@@ -5947,13 +5944,6 @@
         "saveError": "Speichern fehlgeschlagen. Bitte erneut versuchen."
       }
     },
-    "withingsDescriptionSecondary": "Werte fließen im Hintergrund in dein Dashboard. Neu beim Einrichten? Folge der",
-    "whoopDescriptionSecondary": "Werte fließen im Hintergrund in dein Dashboard. Neu beim Einrichten? Folge der",
-    "fitbitDescriptionSecondary": "Werte fließen im Hintergrund in dein Dashboard. Neu beim Einrichten? Folge der",
-    "polarDescriptionSecondary": "Werte fließen im Hintergrund in dein Dashboard. Neu beim Einrichten? Folge der",
-    "ouraDescriptionSecondary": "Werte fließen im Hintergrund in dein Dashboard. Neu beim Einrichten? Folge der",
-    "nightscoutDescriptionSecondary": "Werte fließen im Hintergrund in dein Dashboard. Neu beim Einrichten? Folge der",
-    "integrationCredentialsHint": "Wo du diese Zugangsdaten findest und wie du deine eigene App registrierst, steht in der Einrichtungsanleitung oben.",
     "integrationRedirectGuide": {
       "intro": "Die Verbindung läuft über deine eigene {provider}-Entwickler-App – etwa 5 Minuten Einrichtung:",
       "step1": "Erstelle eine App im {provider}-Entwicklerportal.",
@@ -6139,7 +6129,6 @@
     },
     "strava": "Strava",
     "stravaDescription": "Verbinde dein Strava-Konto, um deine Aktivitäten in deinen Trainingsverlauf zu übernehmen.",
-    "stravaDescriptionSecondary": "Aktivitäten fließen im Hintergrund in dein Dashboard. Neu bei der Einrichtung? Folge der",
     "stravaViewData": "Trainings ansehen",
     "stravaCredentials": "API-Zugangsdaten",
     "stravaClientId": "Client-ID",

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertCircle, Download, FileJson, Loader2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useTranslations } from "@/lib/i18n/context";
@@ -196,7 +197,7 @@ export function JsonImportCard() {
         )}
       </div>
 
-      <div className="mt-auto flex flex-wrap items-center gap-3 pt-1">
+      <SettingsCardActions className="mt-auto" align="start">
         <Button
           type="button"
           variant="outline"
@@ -210,7 +211,7 @@ export function JsonImportCard() {
         </Button>
         <Button
           asChild
-          variant="ghost"
+          variant="outline"
           size="sm"
           className="min-h-11 sm:min-h-9"
         >
@@ -238,7 +239,7 @@ export function JsonImportCard() {
           )}
           {t("settings.sections.export.import.json.import")}
         </Button>
-      </div>
+      </SettingsCardActions>
     </ImportCardShell>
   );
 }

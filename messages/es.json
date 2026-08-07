@@ -4560,7 +4560,6 @@
         "description": "Servicios conectados, canales de entrega y prioridad de fuentes en un solo lugar.",
         "subtitle": "Conecta y gestiona tus fuentes de datos y dispositivos.",
         "connectionsHeading": "Conexiones",
-        "connectionsDescription": "Conecta y gestiona tus fuentes de datos y dispositivos.",
         "channelsHeading": "Canales de entrega",
         "channelsDescription": "Dónde se entregan los recordatorios y avisos.",
         "matrixLink": "Notificaciones por canal"
@@ -4570,7 +4569,6 @@
         "description": "Todos los recordatorios en un solo lugar: qué se recuerda y cuándo, y dónde se entrega.",
         "subtitle": "Elige qué recordatorios recibes y dónde se entregan.",
         "remindersHeading": "Recordatorios",
-        "remindersDescription": "Lo que recibes.",
         "matrixLink": "Notificaciones por canal",
         "channelsLink": "Canales de entrega"
       },
@@ -5550,7 +5548,6 @@
     "googleHealthTag": "Fitbit y Pixel",
     "googleHealthBetaBadge": "Beta",
     "googleHealthDescription": "Conecta Fitbit, Pixel Watch y Fitbit Air a través de tu cuenta de Google: peso, frecuencia cardíaca, sueño y actividad. Sustituye a la conexión clásica de Fitbit, que Google retira en septiembre de 2026.",
-    "googleHealthDescriptionSecondary": "Registras tu propio cliente de Google Cloud y traes aquí las credenciales. La API no ofrece estrés ni preparación, y Google puede pedirte que vuelvas a conectar de vez en cuando. ¿Es tu primera vez? Sigue la",
     "googleHealthCredentials": "Credenciales de API",
     "googleHealthClientId": "ID de cliente",
     "googleHealthClientSecret": "Secreto de cliente",
@@ -5947,13 +5944,6 @@
         "saveError": "No se pudo guardar el cambio. Inténtalo de nuevo."
       }
     },
-    "withingsDescriptionSecondary": "Las lecturas llegan a tu panel en segundo plano. ¿Es tu primera vez? Sigue la",
-    "whoopDescriptionSecondary": "Las lecturas llegan a tu panel en segundo plano. ¿Es tu primera vez? Sigue la",
-    "fitbitDescriptionSecondary": "Las lecturas llegan a tu panel en segundo plano. ¿Es tu primera vez? Sigue la",
-    "polarDescriptionSecondary": "Las lecturas llegan a tu panel en segundo plano. ¿Es tu primera vez? Sigue la",
-    "ouraDescriptionSecondary": "Las lecturas llegan a tu panel en segundo plano. ¿Es tu primera vez? Sigue la",
-    "nightscoutDescriptionSecondary": "Las lecturas llegan a tu panel en segundo plano. ¿Es tu primera vez? Sigue la",
-    "integrationCredentialsHint": "Dónde encontrar estas credenciales y cómo registrar tu propia aplicación se explica en la guía de configuración de arriba.",
     "integrationRedirectGuide": {
       "intro": "Esto se conecta mediante tu propia app de desarrollador de {provider} — unos 5 minutos de configuración:",
       "step1": "Crea una app en el portal de desarrolladores de {provider}.",
@@ -6139,7 +6129,6 @@
     },
     "strava": "Strava",
     "stravaDescription": "Conecta tu cuenta de Strava para sincronizar tus actividades con tu historial de entrenamientos.",
-    "stravaDescriptionSecondary": "Las actividades llegan a tu panel en segundo plano. ¿Nuevo en la configuración? Sigue la",
     "stravaViewData": "Ver tus entrenamientos",
     "stravaCredentials": "Credenciales de API",
     "stravaClientId": "ID de cliente",

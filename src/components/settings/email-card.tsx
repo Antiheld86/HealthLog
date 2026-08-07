@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Mail } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -162,7 +163,7 @@ export function EmailCard({ isAuthenticated }: { isAuthenticated: boolean }) {
             </p>
           )}
 
-          <div className="flex flex-wrap items-start justify-end gap-2">
+          <SettingsCardActions>
             <TestConnectionButton
               endpoint="/api/settings/email/test"
               disabled={!settings?.enabled}
@@ -177,7 +178,7 @@ export function EmailCard({ isAuthenticated }: { isAuthenticated: boolean }) {
               )}
               {t("common.save")}
             </Button>
-          </div>
+          </SettingsCardActions>
         </form>
       </div>
     </SettingsCard>

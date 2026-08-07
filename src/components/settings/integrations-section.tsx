@@ -32,8 +32,8 @@ import Link from "next/link";
 import { Link2, Send } from "lucide-react";
 
 import { useTranslations } from "@/lib/i18n/context";
-import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { ConnectionsPanel } from "@/components/settings/integrations/connections-panel";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { NotificationChannelsPanel } from "@/components/settings/integrations/notification-channels-panel";
 import { NutrientIntakeCard } from "@/components/settings/nutrient-intake-card";
 import { Button } from "@/components/ui/button";
@@ -55,12 +55,9 @@ export function IntegrationsSection() {
           sources. A labelled group header gives this block parity with the
           delivery-channels group below it. */}
       <section className="space-y-4">
-        <SettingsCardHeader
+        <SectionHeading
           icon={Link2}
           title={t("settings.sections.integrations.connectionsHeading")}
-          description={t(
-            "settings.sections.integrations.connectionsDescription",
-          )}
         />
         <ConnectionsPanel />
 
@@ -79,10 +76,10 @@ export function IntegrationsSection() {
           `/settings/channels` redirect; the per-channel anchors stay inside
           the panel. */}
       <section id="channels" className="scroll-mt-28 space-y-4">
-        <SettingsCardHeader
+        <SectionHeading
           icon={Send}
           title={t("settings.sections.integrations.channelsHeading")}
-          description={t("settings.sections.integrations.channelsDescription")}
+          subtitle={t("settings.sections.integrations.channelsDescription")}
         />
         {/* Names the per-event notification matrix so the three notification
             surfaces (matrix, reminder types, channels) cross-reference. */}

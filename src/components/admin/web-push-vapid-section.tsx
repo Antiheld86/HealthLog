@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { BellRing, KeyRound, Loader2 } from "lucide-react";
 import { SettingsCard } from "@/components/settings/settings-card";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -191,7 +192,7 @@ export function WebPushVapidSection() {
         </div>
       </div>
 
-      <div className="flex justify-end gap-2">
+      <SettingsCardActions>
         <Button
           variant="outline"
           size="sm"
@@ -217,7 +218,7 @@ export function WebPushVapidSection() {
           )}
           {t("common.save")}
         </Button>
-      </div>
+      </SettingsCardActions>
 
       <AlertDialog
         open={overwriteConfirmOpen}

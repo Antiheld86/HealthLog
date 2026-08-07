@@ -64,7 +64,7 @@ function TruncatedCell({
 /**
  * v1.4.22 W5 reconcile (S-03) — the revoked / isExpired / active
  * 3-way ternary is identical between the desktop table and the
- * mobile card list; the only difference is `text-xs` vs `text-[10px]`.
+ * mobile card list; the only difference is `text-xs` vs `text-2xs`.
  * Centralise so the two surfaces stay in lock-step.
  */
 function TokenStatusBadge({
@@ -77,7 +77,7 @@ function TokenStatusBadge({
   const { t } = useTranslations();
   const expired =
     token.expiresAt != null && new Date(token.expiresAt) < new Date();
-  const sizeClass = size === "xs" ? "text-[10px]" : "text-xs";
+  const sizeClass = size === "xs" ? "text-2xs" : "text-xs";
   if (token.revoked) {
     return (
       <Badge variant="destructive" className={`shrink-0 ${sizeClass}`}>
@@ -317,7 +317,7 @@ export function ApiTokenOverviewSection() {
                           <Badge
                             key={p}
                             variant="secondary"
-                            className="max-w-full truncate text-[10px]"
+                            className="text-2xs max-w-full truncate"
                             title={
                               p === "*"
                                 ? t("admin.tokenPermissionAllTooltip")

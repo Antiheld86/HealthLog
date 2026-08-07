@@ -5,6 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Activity, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { SettingsCard } from "@/components/settings/settings-card";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -131,7 +132,7 @@ export function UmamiSection() {
         </div>
       </div>
 
-      <div className="flex justify-end gap-2">
+      <SettingsCardActions>
         <Button
           size="sm"
           variant="outline"
@@ -153,7 +154,7 @@ export function UmamiSection() {
           )}
           {t("common.save")}
         </Button>
-      </div>
+      </SettingsCardActions>
     </SettingsCard>
   );
 }

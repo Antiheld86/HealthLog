@@ -219,7 +219,7 @@ export function LowStockCard({
       // (`/settings/notifications#low-stock`) — keep it stable.
       id="low-stock"
       aria-labelledby="settings-low-stock-title"
-      className="scroll-mt-20"
+      className="scroll-mt-28"
     >
       <SettingsCardHeader
         icon={PackageOpen}

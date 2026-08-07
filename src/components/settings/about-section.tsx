@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
@@ -272,7 +273,7 @@ export function AboutSection() {
             title={t("settings.about.linksHeading")}
             description={t("settings.about.linksDescription")}
           />
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <SettingsCardActions align="start">
             <Button
               asChild
               variant="outline"
@@ -317,7 +318,7 @@ export function AboutSection() {
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
             </Button>
-          </div>
+          </SettingsCardActions>
         </SettingsCard>
       )}
 
