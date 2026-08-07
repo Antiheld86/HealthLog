@@ -20,6 +20,7 @@ import {
   apiPost,
 } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
+import { toastWrittenOutcome } from "@/components/outcome/outcome-toast";
 
 import {
   cycleDependentKeys,
@@ -247,7 +248,7 @@ export function useLogDay() {
     },
     onSuccess: () => {
       void invalidateKeys(qc, cycleDependentKeys);
-      toast.success(t("cycle.saveSuccess"));
+      toastWrittenOutcome("success", t("cycle.saveSuccess"));
     },
   });
 }
@@ -293,7 +294,7 @@ export function usePatchDayLog() {
     },
     onSuccess: () => {
       void invalidateKeys(qc, cycleDependentKeys);
-      toast.success(t("cycle.saveSuccess"));
+      toastWrittenOutcome("success", t("cycle.saveSuccess"));
     },
   });
 }
@@ -311,7 +312,7 @@ export function useStartPeriod() {
     },
     onSuccess: () => {
       void invalidateKeys(qc, cycleDependentKeys);
-      toast.success(t("cycle.periodStartSaved"));
+      toastWrittenOutcome("success", t("cycle.periodStartSaved"));
     },
     // v1.16.4 — period boundaries had no failure signal at all (the sheet
     // simply stayed open); a toast names the rejection.
@@ -333,7 +334,7 @@ export function useEndPeriod() {
     },
     onSuccess: () => {
       void invalidateKeys(qc, cycleDependentKeys);
-      toast.success(t("cycle.periodEndSaved"));
+      toastWrittenOutcome("success", t("cycle.periodEndSaved"));
     },
     onError: () => toast.error(t("cycle.saveError")),
   });
@@ -349,7 +350,7 @@ export function useDeleteDayLog() {
     },
     onSuccess: () => {
       void invalidateKeys(qc, cycleDependentKeys);
-      toast.success(t("cycle.deleteSuccess"));
+      toastWrittenOutcome("success", t("cycle.deleteSuccess"));
     },
     onError: () => toast.error(t("cycle.deleteError")),
   });

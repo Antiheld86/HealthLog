@@ -479,10 +479,19 @@ function CervixRow<T extends string>({
  * deliberately: it is how people recognise a date they are recalling.
  */
 export function formatSheetDate(date: string, locale: Locale): string {
-  const [year, month, day] = date.split("-").map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString(
+  // A cycle day key is a calendar day, not an instant, so it is anchored at
+  // noon UTC and rendered in UTC — the same anchor the domain's day arithmetic
+  // uses. Formatting it in the browser's zone would let a reader east or west
+  // of it see the sheet name a different day than the one it writes to.
+  return new Date(`${date}T12:00:00Z`).toLocaleDateString(
     resolveIntlLocale(locale),
-    { weekday: "long", day: "numeric", month: "long", year: "numeric" },
+    {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    },
   );
 }
 
