@@ -41,6 +41,7 @@ import { recomputeMoodBucketsForEntry } from "@/lib/rollups/mood-rollups";
 import { MOOD_ENUM_BY_SCORE } from "@/lib/mood/labels";
 import { getScoreForMood } from "@/lib/validations/mood";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
+import { deriveA1 } from "@/lib/mood/level-a";
 import {
   classifyExternalId,
   unstableExternalIdMessage,
@@ -648,6 +649,10 @@ export async function logMcpMood(input: {
       tz,
       mood,
       score,
+      // v1.37 — pleasantness derived from the same label the score comes
+      // from. The tool still takes a 1-5 score; that is its input and it is
+      // unchanged.
+      moodA1: deriveA1(mood),
       note: null,
       noteEncrypted: encryptNote(note),
       source: MCP_SOURCE,

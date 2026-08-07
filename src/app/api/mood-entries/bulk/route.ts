@@ -51,6 +51,7 @@ import {
   type UnstableExternalIdShape,
 } from "@/lib/validations/external-id";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
+import { deriveA1 } from "@/lib/mood/level-a";
 import { encryptNote } from "@/lib/crypto/note-cipher";
 import { invalidateUserMood } from "@/lib/cache/invalidate";
 import { recomputeMoodBucketsForEntry } from "@/lib/rollups/mood-rollups";
@@ -276,6 +277,11 @@ async function postBulk(request: NextRequest): Promise<Response> {
 
     const date = moodDateKey(entry.moodLoggedAt, tz);
     const score = getScoreForMood(entry.mood);
+    // v1.37 — pleasantness derived from the same label the score comes from.
+    // The batch request shape is unchanged: this path carries no level-A
+    // input, so A2 to A5 are left alone rather than written as nulls, and a
+    // row that already carries hand-set values keeps them across a re-import.
+    const moodA1 = deriveA1(entry.mood);
 
     try {
       // v1.12.1 — when the entry carries a source-stable `externalId`,
@@ -347,6 +353,7 @@ async function postBulk(request: NextRequest): Promise<Response> {
             tz,
             mood: entry.mood,
             score,
+            moodA1,
             tags: entry.tags ? JSON.stringify(entry.tags) : null,
             note: null,
             noteEncrypted: encryptNote(entry.note ?? null),
@@ -363,6 +370,7 @@ async function postBulk(request: NextRequest): Promise<Response> {
             // the same row.
             mood: entry.mood,
             score,
+            moodA1,
             tags: entry.tags ? JSON.stringify(entry.tags) : null,
             note: null,
             noteEncrypted: encryptNote(entry.note ?? null),

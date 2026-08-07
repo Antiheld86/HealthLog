@@ -15,6 +15,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
+import { deriveA1, levelAForWire } from "@/lib/mood/level-a";
 import { encryptNote, shapeMoodNote } from "@/lib/crypto/note-cipher";
 import { invalidateUserMood } from "@/lib/cache/invalidate";
 import { recomputeMoodBucketsForEntry } from "@/lib/rollups/mood-rollups";
@@ -57,7 +58,12 @@ export const GET = apiHandler(
       meta: { moodEntryId: id },
     });
 
-    return apiSuccess({ ...shapeMoodNote(entry), tags: parseTags(entry.tags) });
+    return apiSuccess({
+      ...shapeMoodNote(entry),
+      // v1.37 — level-A values under the keys the write path takes.
+      ...levelAForWire(entry),
+      tags: parseTags(entry.tags),
+    });
   },
 );
 
@@ -120,7 +126,19 @@ export const PUT = apiHandler(
     if (data.mood !== undefined) {
       updateData.mood = data.mood;
       updateData.score = getScoreForMood(data.mood);
+      // v1.37 — pleasantness follows the label the same way `score` does, so
+      // an entry corrected from "okay" to "bad" cannot keep yesterday's A1.
+      // An explicit `a1` in the same request overrides it below.
+      updateData.moodA1 = deriveA1(data.mood);
     }
+    // v1.37 — level-A values are per-field on this path: omitted keeps the
+    // stored value, an explicit number replaces it, an explicit null clears
+    // it. Built one at a time from the parsed body, never spread.
+    if (data.a1 !== undefined) updateData.moodA1 = data.a1;
+    if (data.a2 !== undefined) updateData.stressA2 = data.a2;
+    if (data.a3 !== undefined) updateData.energyA3 = data.a3;
+    if (data.a4 !== undefined) updateData.connectionA4 = data.a4;
+    if (data.a5 !== undefined) updateData.stabilityA5 = data.a5;
     if (data.moodLoggedAt !== undefined) {
       // v1.4.25 W7b — re-anchor the row's `date` to the user's current
       // displayTimezone. Also refresh the `tz` column so the row's
@@ -291,6 +309,8 @@ export const PUT = apiHandler(
 
     return apiSuccess({
       ...entry,
+      // v1.37 — level-A values under the keys the write path takes.
+      ...levelAForWire(entry),
       tags: parseTags(entry.tags),
       // v1.8.5 — surface the persisted structured-tag keys so a client
       // hydrating from the update response renders the tag set without a

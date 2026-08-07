@@ -106,6 +106,14 @@ const ratedFactor = z.object({
 });
 const ratedFactors = z.array(ratedFactor).max(30);
 
+// v1.37 — the five level-A self-state values, each 0-10. Optional on every
+// path: a client that sends only a five-point label still writes a complete
+// entry, because the server derives A1 from the label. A2 to A5 are only ever
+// what the user set, so an omitted one stays absent rather than defaulting to
+// the middle of the scale. The bound is the scale itself; `MOOD_DIMENSIONS`
+// (`src/lib/mood/dimensions.ts`) carries the anchors the numbers mean.
+const levelADimension = z.number().int().min(0).max(10);
+
 export const createMoodEntrySchema = z
   .object({
     mood: moodLevelEnum,
@@ -120,6 +128,14 @@ export const createMoodEntrySchema = z
     // `MoodEntryTagLink.rating`. Out-of-scale or non-RATED keys are
     // rejected (422) / dropped server-side per the catalog.
     ratedFactors: ratedFactors.optional(),
+    // v1.37 — the five level-A values the detail sliders capture. Absent
+    // means the user did not answer; `a1` absent means the server derives it
+    // from `mood`, which keeps the one-tap check-in a full entry.
+    a1: levelADimension.optional(),
+    a2: levelADimension.optional(),
+    a3: levelADimension.optional(),
+    a4: levelADimension.optional(),
+    a5: levelADimension.optional(),
     // v1.4.30 H-5 — first-class free-text note. Replaces the
     // `tags: ["note:<text>"]` workaround. Capped at 500 chars so the
     // Coach evidence shelf renders cleanly without truncating chips.
@@ -155,6 +171,15 @@ export const updateMoodEntrySchema = z.object({
   // v1.12.0 — full replacement of the rated-factor set when present.
   // `null` clears every rated link; omit to leave them untouched.
   ratedFactors: ratedFactors.nullable().optional(),
+  // v1.37 — level-A values on the edit path. Omitted leaves the stored value
+  // alone; an explicit `null` clears it, which is how a user takes back an
+  // answer they did not mean to give. Editing the five-point label without
+  // sending `a1` re-derives A1, the same way it re-derives `score`.
+  a1: levelADimension.nullable().optional(),
+  a2: levelADimension.nullable().optional(),
+  a3: levelADimension.nullable().optional(),
+  a4: levelADimension.nullable().optional(),
+  a5: levelADimension.nullable().optional(),
   note: z.string().max(500).nullable().optional(),
   // v1.17 W1b — same plausibility bound on the edit path.
   moodLoggedAt: validateEntryInstant(

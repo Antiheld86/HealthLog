@@ -24,6 +24,7 @@ import { annotate } from "@/lib/logging/context";
 import { withIdempotency } from "@/lib/idempotency";
 import { encryptNote, shapeMoodNote } from "@/lib/crypto/note-cipher";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
+import { levelAForWire, levelAForWrite } from "@/lib/mood/level-a";
 import { invalidateUserMood } from "@/lib/cache/invalidate";
 import { recomputeMoodBucketsForEntry } from "@/lib/rollups/mood-rollups";
 import {
@@ -126,6 +127,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const entriesWithParsedTags = entries.map(({ tagLinks, ...e }) => ({
     // v1.23 — decrypt `noteEncrypted` onto `note`, strip the ciphertext.
     ...shapeMoodNote(e),
+    // v1.37 — the five level-A values under the keys the create path takes,
+    // so the edit form reads back what it wrote instead of mapping column
+    // names to wire names by hand.
+    ...levelAForWire(e),
     tags: parseTags(e.tags),
     // v1.8.5 — flat list of binary structured-tag keys attached to the
     // entry (rated factors are surfaced separately below).
@@ -206,6 +211,17 @@ async function postMoodEntry(request: NextRequest) {
     source,
     externalId,
   } = parsed.data;
+  // v1.37 — the five level-A values, built field by field from the parsed
+  // body (never spread) and resolved once for every branch below. A1 falls
+  // back to the derivation from `mood`; the other four are whatever the user
+  // set, or nothing.
+  const levelA = levelAForWrite(mood, {
+    a1: parsed.data.a1,
+    a2: parsed.data.a2,
+    a3: parsed.data.a3,
+    a4: parsed.data.a4,
+    a5: parsed.data.a5,
+  });
   // v1.4.25 W7b (Decision A) — anchor the `date` string to the user's
   // current displayTimezone and store the resolved zone on the row.
   // Legacy rows with `tz IS NULL` continue to read as Europe/Berlin
@@ -265,6 +281,11 @@ async function postMoodEntry(request: NextRequest) {
                 tz,
                 mood,
                 score,
+                moodA1: levelA.moodA1,
+                stressA2: levelA.stressA2,
+                energyA3: levelA.energyA3,
+                connectionA4: levelA.connectionA4,
+                stabilityA5: levelA.stabilityA5,
                 tags: tags ? JSON.stringify(tags) : null,
                 note: null,
                 noteEncrypted: encryptNote(note ?? null),
@@ -272,11 +293,20 @@ async function postMoodEntry(request: NextRequest) {
                 externalId,
                 moodLoggedAt,
               },
+              // A re-post replaces the row, so the level-A values are restated
+              // here too. Omitting them would leave a stress reading from an
+              // earlier post sitting beside a mood the user has since changed
+              // — the same staleness the `score` restatement already avoids.
               update: {
                 date,
                 tz,
                 mood,
                 score,
+                moodA1: levelA.moodA1,
+                stressA2: levelA.stressA2,
+                energyA3: levelA.energyA3,
+                connectionA4: levelA.connectionA4,
+                stabilityA5: levelA.stabilityA5,
                 tags: tags ? JSON.stringify(tags) : null,
                 note: null,
                 noteEncrypted: encryptNote(note ?? null),
@@ -290,6 +320,11 @@ async function postMoodEntry(request: NextRequest) {
                 tz,
                 mood,
                 score,
+                moodA1: levelA.moodA1,
+                stressA2: levelA.stressA2,
+                energyA3: levelA.energyA3,
+                connectionA4: levelA.connectionA4,
+                stabilityA5: levelA.stabilityA5,
                 tags: tags ? JSON.stringify(tags) : null,
                 note: null,
                 noteEncrypted: encryptNote(note ?? null),
@@ -375,6 +410,8 @@ async function postMoodEntry(request: NextRequest) {
       {
         // v1.23 — decrypt `noteEncrypted` onto `note`, strip the ciphertext.
         ...shapeMoodNote(entry),
+        // v1.37 — level-A values under their wire keys (see the list read).
+        ...levelAForWire(entry),
         tags: parseTags(entry.tags),
         // v1.8.5 — surface the persisted structured-tag keys so a client
         // hydrating from the create response renders the tag set without a
