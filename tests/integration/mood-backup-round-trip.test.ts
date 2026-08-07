@@ -186,6 +186,15 @@ describe("mood backup round trip", () => {
         date: "2026-07-19",
         mood: "OKAY",
         score: 3,
+        // All five level-A values, and deliberately not the ones the label
+        // would derive: a restore that re-derived them instead of carrying
+        // them would look right on this row and be wrong on every row where
+        // the person disagreed with their own five-point pick.
+        moodA1: 4,
+        stressA2: 9,
+        energyA3: 2,
+        connectionA4: 6,
+        stabilityA5: 0,
         tags: JSON.stringify(["free-text-tag"]),
         note: null,
         noteEncrypted: encryptNote(NOTE),
@@ -268,6 +277,14 @@ describe("mood backup round trip", () => {
     expect(restored.updatedAt).toEqual(UPDATED_AT);
     expect(restored.date).toBe("2026-07-19");
     expect(restored.score).toBe(3);
+    // Each of the five asserted by value. Zero is included on purpose: it is a
+    // real answer on this scale, and a carrier that treated it as absence
+    // would round-trip it as NULL and pass a truthiness check.
+    expect(restored.moodA1).toBe(4);
+    expect(restored.stressA2).toBe(9);
+    expect(restored.energyA3).toBe(2);
+    expect(restored.connectionA4).toBe(6);
+    expect(restored.stabilityA5).toBe(0);
     expect(restored.tags).toBe(JSON.stringify(["free-text-tag"]));
     expect(restored.deletedAt).toBeNull();
 
@@ -276,6 +293,11 @@ describe("mood backup round trip", () => {
     });
     expect(tombstone.deletedAt).toEqual(DELETED_AT);
     expect(tombstone.syncVersion).toBe(5);
+    // The tombstone was written without level-A values and comes back without
+    // them. A restore filling these in would put an answer nobody gave into a
+    // row the person had already deleted.
+    expect(tombstone.moodA1).toBeNull();
+    expect(tombstone.stressA2).toBeNull();
 
     const links = await prisma.moodEntryTagLink.findMany({
       where: { moodEntryId: "mood-rt-entry" },
@@ -338,6 +360,7 @@ describe("mood backup round trip", () => {
     expect(parsed.moodEntries[0].structuredTags).toEqual([]);
     expect(parsed.moodEntries[0].tz).toBeUndefined();
     expect(parsed.moodEntries[0].syncVersion).toBeUndefined();
+    expect(parsed.moodEntries[0].a1).toBeUndefined();
 
     const response = await restoreFromPayload(
       prisma,
@@ -360,6 +383,14 @@ describe("mood backup round trip", () => {
     expect(restored.score).toBe(4);
     expect(restored.externalId).toBe("moodlog-legacy");
     expect(restored.deletedAt).toBeNull();
+    // A file from before these columns carries no answer for them, and the
+    // restore does not invent one. `GUT` would derive to 7; a restore that
+    // derived instead of carrying would write a number this file never held.
+    expect(restored.moodA1).toBeNull();
+    expect(restored.stressA2).toBeNull();
+    expect(restored.energyA3).toBeNull();
+    expect(restored.connectionA4).toBeNull();
+    expect(restored.stabilityA5).toBeNull();
 
     const links = await prisma.moodEntryTagLink.findMany({
       where: { moodEntryId: "mood-rt-legacy" },

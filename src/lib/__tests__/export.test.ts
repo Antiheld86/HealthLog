@@ -400,3 +400,51 @@ describe("formatMoodEntriesForExport with userTz", () => {
     expect(result[0].loggedAt).toBe("2026-05-15T14:30:00-04:00");
   });
 });
+
+describe("formatMoodEntriesForExport level-A columns", () => {
+  const base = {
+    date: "2026-05-15",
+    mood: "OKAY",
+    score: 3,
+    tags: null,
+    source: "MANUAL",
+    moodLoggedAt: new Date("2026-05-15T18:30:00Z"),
+  };
+
+  it("appends the five values without moving an existing column", () => {
+    const csv = toCSV(
+      formatMoodEntriesForExport([
+        { ...base, moodA1: 4, stressA2: 9, energyA3: 0 },
+      ]),
+    );
+    const [header, row] = csv.split("\n");
+    // The pre-existing columns keep their order and their positions. Somebody's
+    // spreadsheet has a formula pointed at column D.
+    expect(header).toBe(
+      "date,mood,score,tags,note,source,loggedAt,a1,a2,a3,a4,a5",
+    );
+    expect(row.split(",").slice(0, 3)).toEqual(["2026-05-15", "OKAY", "3"]);
+  });
+
+  it("writes an empty cell for an unanswered value and a zero for a zero", () => {
+    const csv = toCSV(
+      formatMoodEntriesForExport([
+        { ...base, moodA1: 4, stressA2: 9, energyA3: 0 },
+      ]),
+    );
+    const cells = csv.split("\n")[1].split(",");
+    // a1, a2, a3, a4, a5 — the last two were never answered.
+    expect(cells.slice(-5)).toEqual(["4", "9", "0", "", ""]);
+  });
+
+  it("leaves every level-A cell empty for an entry written before the columns", () => {
+    const csv = toCSV(formatMoodEntriesForExport([base]));
+    expect(csv.split("\n")[1].split(",").slice(-5)).toEqual([
+      "",
+      "",
+      "",
+      "",
+      "",
+    ]);
+  });
+});

@@ -774,6 +774,15 @@ const handler = apiHandler(
                 date: entry.date,
                 mood: entry.mood,
                 score: entry.score,
+                // The five level-A values. `?? null` rather than a derivation:
+                // a file that carries none is a file from before they existed,
+                // and filling them in here would put a number the person never
+                // gave into a restored row and call it their answer.
+                moodA1: entry.a1 ?? null,
+                stressA2: entry.a2 ?? null,
+                energyA3: entry.a3 ?? null,
+                connectionA4: entry.a4 ?? null,
+                stabilityA5: entry.a5 ?? null,
                 tags: entry.tags ?? null,
                 // The note comes back the way every other dual-column note
                 // does: ciphertext verbatim when the file carries it, and a

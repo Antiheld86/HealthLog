@@ -117,6 +117,11 @@ const MOOD_ENTRY_BACKUP_SELECT = {
   date: true,
   mood: true,
   score: true,
+  moodA1: true,
+  stressA2: true,
+  energyA3: true,
+  connectionA4: true,
+  stabilityA5: true,
   tags: true,
   note: true,
   noteEncrypted: true,
@@ -480,6 +485,15 @@ export async function buildFullBackupPayload(
         date: moodEntry.date,
         mood: moodEntry.mood,
         score: moodEntry.score,
+        // The five level-A values, under the keys the write path takes. Both
+        // arms carry them: they are the entry's own answers, not a storage
+        // detail, and a portable export that dropped them would hand back a
+        // file describing the day less well than the row it came from.
+        a1: moodEntry.moodA1,
+        a2: moodEntry.stressA2,
+        a3: moodEntry.energyA3,
+        a4: moodEntry.connectionA4,
+        a5: moodEntry.stabilityA5,
         tags: moodEntry.tags,
         source: moodEntry.source,
         loggedAt: moodEntry.moodLoggedAt.toISOString(),
