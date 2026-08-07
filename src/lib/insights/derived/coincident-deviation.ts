@@ -41,6 +41,10 @@ import { VITALS_BASELINE_TYPES } from "./registry";
 import type { Derived, DerivedProvenanceSource } from "./types";
 import { resolveRestMode } from "@/lib/illness/rest-mode";
 import { isPlausibleMetricValue } from "@/lib/measurements/value-domain";
+import {
+  dayKeyAgeInDays,
+  isCurrentForTodayClaim,
+} from "@/lib/insights/measurement-freshness";
 import { DEFAULT_TIMEZONE, userDayKey } from "@/lib/tz/format";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -70,6 +74,16 @@ export interface VitalDeviation {
   outside: boolean;
   /** "above" / "below" the band, or "in" when inside. */
   direction: "above" | "below" | "in";
+  /**
+   * Whole days between the reading this standing was computed from and the
+   * caller's own local today. `0` is today, `1` yesterday.
+   *
+   * The value used to be presented with no age at all, so a vital last taken
+   * five days ago was narrated as "outside its range today" on a day that
+   * carried no reading. Consumers making a present-tense claim check this;
+   * `contributing` below already does.
+   */
+  daysAgo: number;
 }
 
 export interface CoincidentDeviationValue {
@@ -102,6 +116,7 @@ export function classifyDeviation(
   low: number,
   high: number,
   center: number,
+  daysAgo: number = 0,
 ): VitalDeviation {
   const above = value > high;
   const below = value < low;
@@ -113,6 +128,7 @@ export function classifyDeviation(
     high,
     outside: above || below,
     direction: above ? "above" : below ? "below" : "in",
+    daysAgo,
   };
 }
 
@@ -210,6 +226,9 @@ export async function computeCoincidentDeviation(
   let latestDay = "";
   let anyDaySource = false;
   let maxHistoryDays = 0;
+  // The reader's own calendar day — the anchor every vital's age is measured
+  // against, so "today" means the day the reader is having.
+  const todayKey = userDayKey(now, tz);
 
   // Fan the baseline engine across the supported vitals. Each baseline read
   // shares the one coverage probe (no per-vital re-probe).
@@ -235,6 +254,7 @@ export async function computeCoincidentDeviation(
         baseline.value.low,
         baseline.value.high,
         baseline.value.center,
+        dayKeyAgeInDays(latest.day, todayKey) ?? Number.POSITIVE_INFINITY,
       ),
     );
   }
@@ -263,7 +283,16 @@ export async function computeCoincidentDeviation(
     });
   }
 
-  const contributing = vitals.filter((v) => v.outside);
+  // Everything this flag says is about TODAY — the card is literally called
+  // "signals of the day" and every line it renders is present tense. A vital
+  // whose freshest reading is older than that cannot contribute to it: the
+  // reading describes the day it was taken on, and saying otherwise tells the
+  // reader something about a day on which nothing was measured. Stale vitals
+  // stay in `vitals` with their age, so the anatomy view still lists them and
+  // nothing silently disappears.
+  const contributing = vitals.filter(
+    (v) => v.outside && isCurrentForTodayClaim(v.daysAgo),
+  );
   const fired = contributing.length >= COINCIDENT_FIRE_THRESHOLD;
 
   // v1.18.1 P4 — when the flag fired, reframe it as illness-explained if an
