@@ -35,25 +35,45 @@ import {
 } from "@/lib/validations/managed-profiles";
 import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
 
-inviteGrantSchema.meta({
+/**
+ * The four request bodies this table publishes, and the one thing to know about
+ * writing another.
+ *
+ * `.meta()` does not annotate the schema it is called on. Zod 4 returns a NEW
+ * schema carrying the metadata and registers THAT one, so a bare
+ * `schema.meta({ id, description })` whose return value is dropped registers an
+ * instance nothing references: the id never becomes a component, the
+ * description never reaches the document, and the call site looks exactly like
+ * a working one. These four were written that way, which is how the clause
+ * below — the one scoping every rule on this endpoint to an INVITED grant —
+ * came to be recorded in the source and absent from the artifact the native
+ * client reads.
+ *
+ * So each one is bound to a const and the const is what the route references.
+ * `openapi-account-sharing-components.test.ts` asserts every id declared in
+ * this file reaches the built document, which is the assertion that would have
+ * caught it.
+ */
+const accountGrantInvite = inviteGrantSchema.meta({
   id: "AccountGrantInvite",
   description:
-    "Offer access to another account on this instance. Every sentence here describes an INVITED grant on this endpoint, and nothing else: a Guardian of a managed profile also holds MANAGE over a whole record, but that grant is minted by `POST /api/managed-profiles/{id}/guardians` under its own gate and answers with its own shape, so none of the rules below — the step-up, the transport, the refusals — may be carried across to it. `identifier` is the invitee's username or e-mail, matched case-insensitively — the same identifier they sign in with. `expiresAt` is optional; omitted or null means the grant runs until somebody ends it. `access` is READ when omitted, so a client that does not know about the field keeps working: READ can read the record and change nothing, WRITE can additionally ADD entries (readings, results, observations, a medication, a marked dose) and can still edit or delete nothing, including its own, and MANAGE can additionally change and remove entries, including ones the owner wrote, and read the generated insights — never the identity surfaces (login, second factor, connections, tokens, settings, or who else has access). `scope` narrows a READ or WRITE grant to named sections; omitted or null is the entire record, which is what every grant written before v1.37.0 means. An empty array, an unknown key, and any `scope` at all beside `access: MANAGE` are each 422 — management is whole-record by construction. Offering MANAGE additionally requires a fresh second factor when the account has one enrolled, which makes it cookie-only: a Bearer caller is refused with 403 `sharing.invite.manage_browser_only` and should send the person to a browser. The level and the scope are fixed when the invitation is written — no endpoint raises a live grant, because that would widen what the delegate accepted without asking them again. The way up is a new invitation the delegate accepts.",
+    "Offer access to another account on this instance. Every sentence here describes an INVITED grant on this endpoint, and nothing else: a Guardian of a managed profile also holds MANAGE over a whole record, but that grant is minted by `POST /api/managed-profiles/{id}/guardians` under its own gate and answers with its own shape, so none of the rules below — the step-up, the transport, the refusals — may be carried across to it. `identifier` is the invitee's username or e-mail, matched case-insensitively — the same identifier they sign in with. `expiresAt` is optional; omitted or null means the grant runs until somebody ends it. `access` is READ when omitted, so a client that does not know about the field keeps working: READ can read the record and change nothing, WRITE can additionally ADD entries (readings, results, observations, a medication, a marked dose) and can still edit or delete nothing, including its own, and MANAGE can additionally change and remove entries, including ones the owner wrote, read the generated insights, and record the record's own health background (allergies, family history). The boundary is record content versus account configuration: MANAGE never reaches login, the second factor, provider connections, API tokens, notification routing, module and threshold configuration, or who else has access. `scope` narrows a READ or WRITE grant to named sections; omitted or null is the entire record, which is what every grant written before v1.37.0 means. An empty array, an unknown key, and any `scope` at all beside `access: MANAGE` are each 422 — management is whole-record by construction. Offering MANAGE additionally requires a fresh second factor when the account has one enrolled, which makes it cookie-only: a Bearer caller is refused with 403 `sharing.invite.manage_browser_only` and should send the person to a browser. The level and the scope are fixed when the invitation is written — no endpoint raises a live grant, because that would widen what the delegate accepted without asking them again. The way up is a new invitation the delegate accepts.",
 });
 
-createManagedProfileSchema.meta({
+const createManagedProfileRequest = createManagedProfileSchema.meta({
   id: "CreateManagedProfileRequest",
   description:
     "Create a health record for somebody who has no login of their own — a child, a dependent adult, an animal. The caller becomes its first Guardian in the same transaction, through an ordinary MANAGE grant with the new record as grantor, so the profile appears in `accountAccess.accounts` on the next `GET /api/auth/me` and is switched into like any other shared record. `displayName` is the only required text; `dateOfBirth` is an optional `YYYY-MM-DD` and is never synthesised from a year. `locale` and `timezone` belong to the RECORD and not to the Guardian reading it: they decide how the profile's own reminders are worded and when its day starts. Strict — an unexpected field is a 422 rather than an ignored key. Cookie transport only and step-up gated (`requireFreshMfa`, unconditional): a Bearer caller cannot mint a credential-less person and a permanent management relationship, and an account with no second factor enrolled is refused rather than waved through. Rate-limited to ten an hour per caller.",
 });
 
-inviteManagedProfileGuardianSchema.meta({
-  id: "InviteManagedProfileGuardianRequest",
-  description:
-    "Offer somebody else a share in looking after this profile. `identifier` is their username or e-mail, matched case-insensitively. `expiresAt` is an ISO instant WITH an offset — a bare `YYYY-MM-DD` is a 422 — or null for an invitation that runs until somebody ends it. The grant is created PENDING at MANAGE over the whole record; the invitee accepts it on their own invitations card exactly as they would any other, and until they do they do not satisfy the last-Guardian floor. Strict, cookie-only, step-up gated and rate-limited to ten an hour, like every act in this family.",
-});
+const inviteManagedProfileGuardianRequest =
+  inviteManagedProfileGuardianSchema.meta({
+    id: "InviteManagedProfileGuardianRequest",
+    description:
+      "Offer somebody else a share in looking after this profile. `identifier` is their username or e-mail, matched case-insensitively. `expiresAt` is an ISO instant WITH an offset — a bare `YYYY-MM-DD` is a 422 — or null for an invitation that runs until somebody ends it. The grant is created PENDING at MANAGE over the whole record; the invitee accepts it on their own invitations card exactly as they would any other, and until they do they do not satisfy the last-Guardian floor. Strict, cookie-only, step-up gated and rate-limited to ten an hour, like every act in this family.",
+  });
 
-switchAccountSchema.meta({
+const accountSwitchRequest = switchAccountSchema.meta({
   id: "AccountSwitchRequest",
   description:
     "Point this browser session at an account, or (with `accountId: null`) back at its own. Cookie transport only.",
@@ -490,7 +510,7 @@ export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Offers access to somebody already registered on this instance, at READ, WRITE or MANAGE and over the whole record or named sections; the grant confers nothing until they accept it. An identifier that names no account answers 404 — a deliberate disclosure to an authenticated caller on a household instance, rate-limited to 10 invitations an hour, and the alternative (a silent pending row for a mistyped username) is worse. Refused while acting on another account, so a delegate can neither invite nor re-delegate. Offering MANAGE is step-up gated (`requireFreshMfaIfEnrolled`, cookie-only): an enrolled account without a fresh factor gets 401 `auth.stepup.required`, and a Bearer caller gets 403 `sharing.invite.manage_browser_only` before anything else happens, because the gate it would hit resolves through the session cookie and would otherwise answer 'not authenticated' to a caller it had just authenticated.",
       requestBody: {
         required: true,
-        content: { "application/json": { schema: inviteGrantSchema } },
+        content: { "application/json": { schema: accountGrantInvite } },
       },
       responses: {
         ...stdResponses,
@@ -647,7 +667,7 @@ export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: createManagedProfileSchema },
+          "application/json": { schema: createManagedProfileRequest },
         },
       },
       responses: {
@@ -752,7 +772,7 @@ export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         required: true,
         content: {
           "application/json": {
-            schema: inviteManagedProfileGuardianSchema,
+            schema: inviteManagedProfileGuardianRequest,
           },
         },
       },
@@ -846,7 +866,7 @@ export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Cookie transport only; a Bearer caller gets 400 (`meta.errorCode: sharing.switch.wrong_transport`) and should send the `X-HealthLog-Account` header on the requests it wants scoped instead. The grant is validated here so the client gets an honest refusal immediately, but the stamp authorises nothing on its own — every following request re-checks the grant. `accountId: null` clears the switch and always works, including from inside a switched session: this endpoint is the way out, and it is deliberately not fenced for that reason — a session whose context cannot be proved must still be able to leave. Supply `expectedEpoch` to make the write conditional: two tabs switching at once resolve to one monotonic outcome, and the loser is refused with 409 `sharing.session.changed` rather than silently overwriting the winner. Reconcile through GET /api/auth/me and retry once against the reconciled epoch.",
       requestBody: {
         required: true,
-        content: { "application/json": { schema: switchAccountSchema } },
+        content: { "application/json": { schema: accountSwitchRequest } },
       },
       responses: {
         ...stdResponses,

@@ -12711,58 +12711,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                identifier:
-                  type: string
-                  minLength: 1
-                  maxLength: 255
-                expiresAt:
-                  anyOf:
-                    - type: string
-                      format: date-time
-                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                    - type: "null"
-                access:
-                  default: READ
-                  description: "READ can read the record and change nothing. WRITE can additionally ADD entries (readings, results,
-                    observations, a medication, a marked dose) and can still edit or delete nothing, including its own.
-                    MANAGE can additionally change and remove entries, including ones the owner wrote, read the
-                    generated insights, and record the record's own health background (allergies, family history). The
-                    boundary is record content versus account configuration: MANAGE never reaches login, the second
-                    factor, provider connections, API tokens, notification routing, module and threshold configuration,
-                    or who else has access. Omitted means READ, so a client that predates the field keeps working. The
-                    level is fixed when the invitation is written: no endpoint raises a live grant, because that would
-                    widen what the delegate accepted without asking them again. The way up is a new invitation the
-                    delegate accepts."
-                  type: string
-                  enum:
-                    - READ
-                    - WRITE
-                    - MANAGE
-                scope:
-                  description: "The sections of the record this invitation opens. Omitted or null means the entire record, which is what
-                    every grant written before v1.37.0 means and what an owner who does not narrow still gets. A
-                    non-null value is a non-empty array of section keys from the closed vocabulary; an empty array, an
-                    unknown key and the whole-record sentinel `record` are each refused. A stored scope never grows: a
-                    section added by a later release is not in a set an owner ticked before it existed."
-                  anyOf:
-                    - minItems: 1
-                      type: array
-                      items:
-                        type: string
-                        enum:
-                          - measurements
-                          - medications
-                          - labs
-                          - profile
-                          - illness
-                          - mind
-                          - cycle
-                          - documents
-                    - type: "null"
-              required:
-                - identifier
+              $ref: "#/components/schemas/AccountGrantInvite"
       responses:
         "201":
           description: The pending grant.
@@ -12957,36 +12906,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                displayName:
-                  type: string
-                  minLength: 1
-                  maxLength: 80
-                dateOfBirth:
-                  anyOf:
-                    - type: string
-                      format: date
-                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
-                    - type: "null"
-                locale:
-                  type: string
-                  enum:
-                    - de
-                    - en
-                    - es
-                    - fr
-                    - it
-                    - pl
-                timezone:
-                  type: string
-                  minLength: 1
-                  maxLength: 64
-              required:
-                - displayName
-                - locale
-                - timezone
-              additionalProperties: false
+              $ref: "#/components/schemas/CreateManagedProfileRequest"
       responses:
         "201":
           description: The new record.
@@ -13108,21 +13028,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                identifier:
-                  type: string
-                  minLength: 1
-                  maxLength: 255
-                expiresAt:
-                  anyOf:
-                    - type: string
-                      format: date-time
-                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                    - type: "null"
-              required:
-                - identifier
-              additionalProperties: false
+              $ref: "#/components/schemas/InviteManagedProfileGuardianRequest"
       responses:
         "201":
           description: The pending Guardian, in the shape the roster publishes.
@@ -13248,25 +13154,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                accountId:
-                  anyOf:
-                    - type: string
-                      minLength: 1
-                      maxLength: 64
-                    - type: "null"
-                expectedEpoch:
-                  description: "The record epoch the caller believes this browser session is at, as published by GET /api/auth/me or a
-                    previous switch. Present makes the write conditional: if another tab moved the selector first the
-                    switch is refused with 409 sharing.session.changed and the caller reconciles through /api/auth/me.
-                    Omitted keeps the unconditional write, which is what a client predating the record-session fence
-                    sends. Cookie transport only."
-                  type: integer
-                  minimum: 0
-                  maximum: 9007199254740991
-              required:
-                - accountId
+              $ref: "#/components/schemas/AccountSwitchRequest"
       responses:
         "200":
           description: The account this session is now acting on, or null.
@@ -16173,6 +16061,162 @@ components:
         - version
       description: PUT body for the dashboard layout — the layout fields plus the optional optimistic-concurrency base token
         (`baseUpdatedAt`). Omit the token for the legacy unconditional write.
+    AccountGrantInvite:
+      type: object
+      properties:
+        identifier:
+          type: string
+          minLength: 1
+          maxLength: 255
+        expiresAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+        access:
+          default: READ
+          description: "READ can read the record and change nothing. WRITE can additionally ADD entries (readings, results,
+            observations, a medication, a marked dose) and can still edit or delete nothing, including its own. MANAGE
+            can additionally change and remove entries, including ones the owner wrote, read the generated insights, and
+            record the record's own health background (allergies, family history). The boundary is record content versus
+            account configuration: MANAGE never reaches login, the second factor, provider connections, API tokens,
+            notification routing, module and threshold configuration, or who else has access. Omitted means READ, so a
+            client that predates the field keeps working. The level is fixed when the invitation is written: no endpoint
+            raises a live grant, because that would widen what the delegate accepted without asking them again. The way
+            up is a new invitation the delegate accepts."
+          type: string
+          enum:
+            - READ
+            - WRITE
+            - MANAGE
+        scope:
+          description: "The sections of the record this invitation opens. Omitted or null means the entire record, which is what
+            every grant written before v1.37.0 means and what an owner who does not narrow still gets. A non-null value
+            is a non-empty array of section keys from the closed vocabulary; an empty array, an unknown key and the
+            whole-record sentinel `record` are each refused. A stored scope never grows: a section added by a later
+            release is not in a set an owner ticked before it existed."
+          anyOf:
+            - minItems: 1
+              type: array
+              items:
+                type: string
+                enum:
+                  - measurements
+                  - medications
+                  - labs
+                  - profile
+                  - illness
+                  - mind
+                  - cycle
+                  - documents
+            - type: "null"
+      required:
+        - identifier
+      description: "Offer access to another account on this instance. Every sentence here describes an INVITED grant on this
+        endpoint, and nothing else: a Guardian of a managed profile also holds MANAGE over a whole record, but that
+        grant is minted by `POST /api/managed-profiles/{id}/guardians` under its own gate and answers with its own
+        shape, so none of the rules below — the step-up, the transport, the refusals — may be carried across to it.
+        `identifier` is the invitee's username or e-mail, matched case-insensitively — the same identifier they sign in
+        with. `expiresAt` is optional; omitted or null means the grant runs until somebody ends it. `access` is READ
+        when omitted, so a client that does not know about the field keeps working: READ can read the record and change
+        nothing, WRITE can additionally ADD entries (readings, results, observations, a medication, a marked dose) and
+        can still edit or delete nothing, including its own, and MANAGE can additionally change and remove entries,
+        including ones the owner wrote, read the generated insights, and record the record's own health background
+        (allergies, family history). The boundary is record content versus account configuration: MANAGE never reaches
+        login, the second factor, provider connections, API tokens, notification routing, module and threshold
+        configuration, or who else has access. `scope` narrows a READ or WRITE grant to named sections; omitted or null
+        is the entire record, which is what every grant written before v1.37.0 means. An empty array, an unknown key,
+        and any `scope` at all beside `access: MANAGE` are each 422 — management is whole-record by construction.
+        Offering MANAGE additionally requires a fresh second factor when the account has one enrolled, which makes it
+        cookie-only: a Bearer caller is refused with 403 `sharing.invite.manage_browser_only` and should send the person
+        to a browser. The level and the scope are fixed when the invitation is written — no endpoint raises a live
+        grant, because that would widen what the delegate accepted without asking them again. The way up is a new
+        invitation the delegate accepts."
+    CreateManagedProfileRequest:
+      type: object
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 80
+        dateOfBirth:
+          anyOf:
+            - type: string
+              format: date
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+            - type: "null"
+        locale:
+          type: string
+          enum:
+            - de
+            - en
+            - es
+            - fr
+            - it
+            - pl
+        timezone:
+          type: string
+          minLength: 1
+          maxLength: 64
+      required:
+        - displayName
+        - locale
+        - timezone
+      additionalProperties: false
+      description: "Create a health record for somebody who has no login of their own — a child, a dependent adult, an animal.
+        The caller becomes its first Guardian in the same transaction, through an ordinary MANAGE grant with the new
+        record as grantor, so the profile appears in `accountAccess.accounts` on the next `GET /api/auth/me` and is
+        switched into like any other shared record. `displayName` is the only required text; `dateOfBirth` is an
+        optional `YYYY-MM-DD` and is never synthesised from a year. `locale` and `timezone` belong to the RECORD and not
+        to the Guardian reading it: they decide how the profile's own reminders are worded and when its day starts.
+        Strict — an unexpected field is a 422 rather than an ignored key. Cookie transport only and step-up gated
+        (`requireFreshMfa`, unconditional): a Bearer caller cannot mint a credential-less person and a permanent
+        management relationship, and an account with no second factor enrolled is refused rather than waved through.
+        Rate-limited to ten an hour per caller."
+    InviteManagedProfileGuardianRequest:
+      type: object
+      properties:
+        identifier:
+          type: string
+          minLength: 1
+          maxLength: 255
+        expiresAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+      required:
+        - identifier
+      additionalProperties: false
+      description: Offer somebody else a share in looking after this profile. `identifier` is their username or e-mail,
+        matched case-insensitively. `expiresAt` is an ISO instant WITH an offset — a bare `YYYY-MM-DD` is a 422 — or
+        null for an invitation that runs until somebody ends it. The grant is created PENDING at MANAGE over the whole
+        record; the invitee accepts it on their own invitations card exactly as they would any other, and until they do
+        they do not satisfy the last-Guardian floor. Strict, cookie-only, step-up gated and rate-limited to ten an hour,
+        like every act in this family.
+    AccountSwitchRequest:
+      type: object
+      properties:
+        accountId:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 64
+            - type: "null"
+        expectedEpoch:
+          description: "The record epoch the caller believes this browser session is at, as published by GET /api/auth/me or a
+            previous switch. Present makes the write conditional: if another tab moved the selector first the switch is
+            refused with 409 sharing.session.changed and the caller reconciles through /api/auth/me. Omitted keeps the
+            unconditional write, which is what a client predating the record-session fence sends. Cookie transport
+            only."
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+      required:
+        - accountId
+      description: "Point this browser session at an account, or (with `accountId: null`) back at its own. Cookie transport only."
     MedicationTreatmentClass:
       type: string
       enum:
