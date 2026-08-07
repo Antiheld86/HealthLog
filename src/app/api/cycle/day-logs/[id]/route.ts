@@ -23,6 +23,7 @@ import {
   safeJson,
 } from "@/lib/api-response";
 import { requireCycleEnabled } from "@/lib/cycle/gate";
+import { reanchorAfterRemovedStart } from "@/lib/cycle/cycle-boundaries";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { getOrCreateCycleProfile } from "@/lib/cycle/profile";
 import { replaceSymptomLinks } from "@/lib/cycle/day-log-write";
@@ -202,7 +203,7 @@ export const DELETE = apiHandler(
 
     const existing = await prisma.cycleDayLog.findUnique({
       where: { id },
-      select: { id: true, userId: true },
+      select: { id: true, userId: true, date: true },
     });
     if (!existing || existing.userId !== user.id) {
       return apiError("Day-log not found", 404);
@@ -211,15 +212,56 @@ export const DELETE = apiHandler(
     // Soft-delete: leave the row in place so the `/api/sync/changes`
     // delta feed surfaces it as a tombstone. A re-delete re-bumps
     // `syncVersion` harmlessly (idempotent).
-    await prisma.cycleDayLog.update({
-      where: { id },
-      data: { deletedAt: new Date(), syncVersion: { increment: 1 } },
+    //
+    // A day that OPENS a cycle takes that cycle with it. The one-tap "started
+    // my period" writes both rows, and this delete is the only way the web
+    // offers to take it back — leaving the cycle behind meant the previous one
+    // stayed closed against a start whose last trace had just been removed, and
+    // the forecast never came back. The cycle boundary is then re-derived for
+    // the preceding cycle, the same repair the cycle delete does.
+    const removed = await prisma.$transaction(async (db) => {
+      await db.cycleDayLog.update({
+        where: { id },
+        data: { deletedAt: new Date(), syncVersion: { increment: 1 } },
+      });
+      const openedCycle = await db.menstrualCycle.findFirst({
+        where: { userId: user.id, deletedAt: null, startDate: existing.date },
+        select: { id: true },
+      });
+      if (!openedCycle) return { cycleId: null, reanchored: null };
+      await db.menstrualCycle.update({
+        where: { id: openedCycle.id },
+        data: { deletedAt: new Date(), syncVersion: { increment: 1 } },
+      });
+      return {
+        cycleId: openedCycle.id,
+        reanchored: await reanchorAfterRemovedStart(db, user.id, existing.date),
+      };
     });
 
     await auditLog("cycle.day-log.delete", {
       userId: user.id,
       ipAddress: getClientIp(request),
-      details: { dayLogId: id },
+      details: {
+        dayLogId: id,
+        date: existing.date,
+        ...(removed.cycleId ? { removedCycleId: removed.cycleId } : {}),
+        ...(removed.reanchored
+          ? {
+              reanchoredCycleId: removed.reanchored.cycleId,
+              ...overwriteDetails({
+                before: {
+                  endDate: removed.reanchored.endDateBefore,
+                  lengthDays: removed.reanchored.lengthDaysBefore,
+                },
+                after: {
+                  endDate: removed.reanchored.endDateAfter,
+                  lengthDays: removed.reanchored.lengthDaysAfter,
+                },
+              }),
+            }
+          : {}),
+      },
     });
 
     annotate({
@@ -227,6 +269,10 @@ export const DELETE = apiHandler(
         name: "cycle.day-log.delete",
         entity_type: "cycle_day_log",
         entity_id: id,
+      },
+      meta: {
+        removed_cycle: removed.cycleId !== null,
+        reanchored_prior: removed.reanchored !== null,
       },
     });
 
