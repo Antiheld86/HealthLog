@@ -18,7 +18,7 @@ import {
   listAssessmentsSchema,
 } from "@/lib/validations/mental-health";
 
-import { dataEnvelope, stdResponses } from "./shared";
+import { dataEnvelope, recordRefusal, stdResponses } from "./shared";
 
 createAssessmentSchema.meta({
   id: "CreateMentalHealthAssessmentRequest",
@@ -90,6 +90,7 @@ export const mentalHealthPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Returns PHQ-9 / GAD-7 / WHO-5 / SCI administrations (newest first). Totals + bands + flags only; raw item answers are never returned.",
       requestParams: { query: listAssessmentsSchema },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Screener history.",
           content: {
@@ -115,6 +116,7 @@ export const mentalHealthPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...recordRefusal(),
         "201": {
           description: "Assessment recorded.",
           content: {

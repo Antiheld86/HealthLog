@@ -17,9 +17,10 @@ import {
 import { seriesBatchQuerySchema } from "@/lib/validations/series-batch";
 import { deviceTypeEnum } from "@/lib/validations/source-priority";
 import {
+  MODULE_DISABLED_DESCRIPTION,
   dataEnvelope,
   errorEnvelope,
-  moduleDisabledResponse,
+  recordRefusal,
   stdResponses,
 } from "./shared";
 
@@ -686,6 +687,7 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         query: seriesBatchQuerySchema,
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Per-type daily series.",
           content: {
@@ -711,6 +713,7 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         query: seriesQuerySchema,
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Resolved series.",
           content: {
@@ -736,6 +739,7 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         query: listMeasurementsSchema,
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Measurement page.",
           content: {
@@ -772,6 +776,7 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...recordRefusal(),
         "201": {
           description:
             "Created. A single resource for the object body; an array of resources, in request order, for the array body.",
@@ -801,6 +806,7 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Single stored row, scoped to the caller. A row owned by another user surfaces as 404 (existence channel sealed).",
       requestParams: { path: z.object({ id: z.string() }) },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Measurement.",
           content: {
@@ -830,6 +836,7 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: updateMeasurementSchema } },
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Updated measurement.",
           content: {
@@ -860,6 +867,7 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Soft-deletes the row (tombstone) so paired clients can reconcile the deletion.",
       requestParams: { path: z.object({ id: z.string() }) },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Deleted.",
           content: {
@@ -943,6 +951,7 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Bulk delete processed.",
           content: {
@@ -971,6 +980,7 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Restore processed.",
           content: {
@@ -1012,7 +1022,7 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...moduleDisabledResponse,
+        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
         ...stdResponses,
       },
     },
@@ -1032,7 +1042,7 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...moduleDisabledResponse,
+        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
         ...stdResponses,
       },
     },

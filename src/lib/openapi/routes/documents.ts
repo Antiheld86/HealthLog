@@ -28,7 +28,12 @@ import {
   INBOUND_DOCUMENT_STATUSES,
 } from "@/lib/validations/inbound-documents";
 
-import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
+import {
+  dataEnvelope,
+  errorEnvelope,
+  recordRefusal,
+  stdResponses,
+} from "./shared";
 
 const kindEnum = z.enum(INBOUND_DOCUMENT_KINDS);
 const statusEnum = z.enum(INBOUND_DOCUMENT_STATUSES);
@@ -309,6 +314,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       ],
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "A page of documents.",
           content: {
@@ -425,6 +431,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "The caller's vault usage and effective limits: `usedBytes` (every non-purged row — tombstones inside the 30-day undo grace still count), `quotaBytes` (per-user override ?? instance default), `maxFileBytes` (admin-tunable per-file cap), `acceptedExtensions` for picker `accept` lists, and `linkedEpisodes` (episodes carrying at least one live document link — the condition-filter chips). Read this before offering an upload.",
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Usage + limits.",
           content: {
@@ -510,6 +517,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       ],
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Document detail.",
           content: {
@@ -635,6 +643,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       ],
       responses: {
+        ...recordRefusal(),
         "200": {
           description:
             "The decrypted original document bytes. Inline types carry the stored MIME type; attachment types are served as application/octet-stream.",
@@ -669,6 +678,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       ],
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "The decrypted JPEG preview thumbnail bytes.",
           content: {

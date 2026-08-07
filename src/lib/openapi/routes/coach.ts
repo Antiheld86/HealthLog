@@ -42,12 +42,13 @@ import {
   coachSuggestedActionSchema,
 } from "@/lib/validations/coach-reminder";
 import {
-  dataEnvelope,
-  errorEnvelope,
-  stdResponses,
   baseUpdatedAtField,
   conflictResponse409,
+  dataEnvelope,
+  errorEnvelope,
   invalidBaseTokenResponse,
+  recordRefusal,
+  stdResponses,
 } from "./shared";
 
 // ── Coach cadence suggestions (v1.18.1) ──────────────────────────────
@@ -1105,6 +1106,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         'v1.18.6 (CCH-03) — server-authoritative unread signal for the Coach FAB. `unread` is true when the caller\'s newest Coach ASSISTANT message (a proactive nudge or any reply) is newer than `User.coachLastSeenAt`; a user who has never opened the Coach reads an existing nudge as unread exactly once. `nudgedAt` carries that newest assistant-message timestamp (null when none exists) so the client can key a local seen-mirror on a stable value. Coach-gated (`requireAssistantSurface("coach")`); a disabled surface 403s. Auth via cookie or Bearer; the owner is narrowed from the session.',
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "The current unread state.",
           content: {
@@ -1247,6 +1249,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "Returns the current value and immutable revision history for the caller's smoking status, alcohol pattern and shift schedule. Values are decrypted server-side; unreadable ciphertext returns `value: null` with `unreadable: true`.",
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Current facts and their revision history.",
           content: {
@@ -1565,10 +1568,9 @@ export const coachReminderPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        "403": {
-          description: "Coach surface disabled.",
-          content: { "application/json": { schema: errorEnvelope } },
-        },
+        // The read is delegable and the create beside it is not, so only this
+        // one shares its 403 with the sharing refusal.
+        ...recordRefusal("Coach surface disabled."),
         ...stdResponses,
       },
     },

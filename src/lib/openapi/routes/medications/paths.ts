@@ -23,11 +23,12 @@ import {
   medicationEfficacyResponseSchema,
 } from "@/lib/validations/medication-efficacy";
 import {
+  conflictResponse409,
   dataEnvelope,
   errorEnvelope,
-  stdResponses,
-  conflictResponse409,
   invalidBaseTokenResponse,
+  recordRefusal,
+  stdResponses,
 } from "../shared";
 
 efficacyTargetOverrideSchema.meta({
@@ -200,6 +201,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "Returns every medication owned by the caller (active + paused), ordered by `createdAt DESC`. Each row carries its nested `schedules`, the joined clinical `category`, the latest non-skipped `lastTakenAt`, and the count of today's actioned intake events (`todayEventCount`). The response is cached server-side for 60 s per user; writes flush the cache.",
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Medication list.",
           content: {
@@ -224,6 +226,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: createMedicationSchema } },
       },
       responses: {
+        ...recordRefusal(),
         "201": {
           description: "Created medication with its schedules.",
           content: {
@@ -246,6 +249,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "Returns the per-user /medications presentation (card/table view + manual order) plus the optimistic-concurrency `updatedAt` token. Falls back to the defaults (cards, empty order) when the user has not customised it. Mirrors the insights-layout contract.",
       responses: {
+        ...recordRefusal(),
         "200": {
           description:
             "The resolved presentation (custom or default) plus its token.",
@@ -324,6 +328,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         path: z.object({ id: z.string() }),
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Medication detail.",
           content: {
@@ -355,6 +360,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: updateMedicationSchema } },
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Updated medication.",
           content: {
@@ -415,6 +421,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: intakeSchema } },
       },
       responses: {
+        ...recordRefusal(),
         "201": {
           description: "Intake event created.",
           content: {
@@ -456,6 +463,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         path: z.object({ id: z.string() }),
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Inventory item list.",
           content: {
@@ -493,6 +501,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...recordRefusal(),
         "201": {
           description: "Created inventory item.",
           content: {
@@ -528,6 +537,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Updated inventory item.",
           content: {
@@ -556,6 +566,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         path: z.object({ id: z.string(), itemId: z.string() }),
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Deletion succeeded.",
           content: {
@@ -634,6 +645,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         }),
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Cadence response.",
           content: {
@@ -660,6 +672,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "Returns one compact adherence row per medication the caller owns (active + paused), ordered by `createdAt DESC` — the single round trip the medication cards consume instead of fanning out one `/api/medications/{id}/compliance` request per card. Each row carries the 7-/30-day summaries and the cadence-scaled display block; the per-day grid stays on the per-medication endpoint. Pure computation — no writes. Served through the same per-medication server cache as the per-id read, so the two endpoints warm each other.",
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "One adherence row per medication.",
           content: {
@@ -811,6 +824,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         path: z.object({ id: z.string() }),
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Era list.",
           content: {
@@ -844,6 +858,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...recordRefusal(),
         "201": {
           description: "Manual era created.",
           content: {
@@ -879,6 +894,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Era corrected.",
           content: {
@@ -912,6 +928,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         path: z.object({ id: z.string(), revisionId: z.string() }),
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Deletion succeeded.",
           content: {
@@ -961,6 +978,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Dry-run verdict (nothing written).",
           content: {
@@ -1018,6 +1036,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         path: z.object({ id: z.string(), jobId: z.string() }),
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Current job status.",
           content: {
@@ -1045,6 +1064,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         path: z.object({ jobId: z.string() }),
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Current job status.",
           content: {

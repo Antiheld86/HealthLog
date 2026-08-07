@@ -6,10 +6,12 @@
 import type { ZodOpenApiObject } from "zod-openapi";
 import { z } from "zod/v4";
 import {
-  consentRequiredResponse,
+  AI_CONSENT_REQUIRED_DESCRIPTION,
+  MODULE_DISABLED_DESCRIPTION,
   dataEnvelope,
   errorEnvelope,
   moduleDisabledResponse,
+  recordRefusal,
   stdResponses,
 } from "../shared";
 import {
@@ -52,6 +54,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "Assembles every above-the-fold tile field in one round-trip from the rollup / mood / widget helpers plus a read-only lift of the pre-generated daily briefing. Two-phase: `tiles` always present, `extras` nullable on a rollup-coverage miss. No LLM is reachable from this path. Cookie or Bearer auth.",
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Dashboard snapshot.",
           content: {
@@ -86,7 +89,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         ...stdResponses,
-        ...consentRequiredResponse,
+        ...recordRefusal(AI_CONSENT_REQUIRED_DESCRIPTION),
       },
     },
   },
@@ -108,7 +111,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...moduleDisabledResponse,
+        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
         ...stdResponses,
       },
     },
@@ -177,6 +180,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         query: insightStatusQuery,
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Assessment envelope (fresh, cached, or preparing).",
           content: {
@@ -202,6 +206,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         query: insightStatusQuery,
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Assessment envelope (fresh, cached, or preparing).",
           content: {
@@ -227,6 +232,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         query: insightStatusQuery,
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Assessment envelope (fresh, cached, or preparing).",
           content: {
@@ -252,6 +258,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         query: insightStatusQuery,
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Assessment envelope (fresh, cached, or preparing).",
           content: {
@@ -277,6 +284,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         query: insightStatusQuery,
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Assessment envelope (fresh, cached, or preparing).",
           content: {
@@ -302,6 +310,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         query: insightStatusQuery,
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description:
             "Compliance assessment envelope (fresh, cached, or preparing).",
@@ -328,6 +337,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         query: metricStatusQuery,
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Assessment envelope (fresh, cached, or preparing).",
           content: {
@@ -353,6 +363,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         query: biomarkerAssessmentQuery,
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Assessment envelope (fresh, cached, or preparing).",
           content: {
@@ -378,6 +389,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         query: derivedMetricQuery,
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "The flat derived-metric value (ok or insufficient).",
           content: {
@@ -403,6 +415,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         query: derivedBatchQuery,
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "The map of derived-metric values, keyed by token.",
           content: {
@@ -425,6 +438,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "Deterministic (non-LLM) weight-plateau read for users on an active GLP-1 medication: flags a stable dose held for at least the trailing window with no weight loss beyond the threshold. `plateau` is null whenever the condition does not hold, so clients hide the note cleanly. Association only — no verdict, no dose advice. Auth via cookie or Bearer.",
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Plateau context (or null) plus the window length.",
           content: {
@@ -455,7 +469,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...moduleDisabledResponse,
+        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
         ...stdResponses,
       },
     },
@@ -529,7 +543,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             "No ECG recording with that id for the authenticated user (existence sealed — a foreign id is indistinguishable from a missing one).",
           content: { "application/json": { schema: errorEnvelope } },
         },
-        ...moduleDisabledResponse,
+        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
         ...stdResponses,
       },
     },
@@ -552,7 +566,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...moduleDisabledResponse,
+        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
         ...stdResponses,
       },
     },
@@ -564,6 +578,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "v1.10.0 — scans a curated behaviour × outcome matrix (daylight / mood / glucose / BP / steps × sleep / HRV / resting HR / weight), lag-joins each behaviour day to the next day's outcome, runs Pearson with the exact Student-t p-value, and applies Benjamini-Hochberg FDR control across every tested pair. Only statistically-defensible pairs surface, each carrying n, r, p, and the BH-adjusted q. Descriptive, never causal. Gated by the operator `correlations` assistant surface. Auth via cookie or Bearer.",
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "The discovered correlations + the tested-pair count.",
           content: {
@@ -597,7 +612,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...moduleDisabledResponse,
+        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
         ...stdResponses,
       },
     },
@@ -631,7 +646,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           description: "No current pattern with that id for this account.",
           content: { "application/json": { schema: errorEnvelope } },
         },
-        ...moduleDisabledResponse,
+        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
         ...stdResponses,
       },
     },

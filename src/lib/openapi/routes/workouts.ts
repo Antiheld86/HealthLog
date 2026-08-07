@@ -10,9 +10,11 @@ import type { ZodOpenApiObject } from "zod-openapi";
 import { measurementSourceEnum } from "@/lib/validations/measurement";
 import { createBatchWorkoutSchema } from "@/lib/validations/workout";
 import {
+  MODULE_DISABLED_DESCRIPTION,
   dataEnvelope,
   errorEnvelope,
   moduleDisabledResponse,
+  recordRefusal,
   stdResponses,
 } from "./shared";
 
@@ -233,7 +235,7 @@ export const workoutPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...moduleDisabledResponse,
+        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
         ...stdResponses,
       },
     },

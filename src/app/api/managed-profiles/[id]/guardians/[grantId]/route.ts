@@ -31,7 +31,21 @@ export const DELETE = apiHandler(
         action: { name: "managed_profile.guardian.revoked" },
         meta: { profile_id: id, grant_id: grant.id },
       });
-      return apiSuccess(grant);
+      // Two fields, not the grant row this used to hand back whole. What ended
+      // and when is the entire answer; the party who held it is already on the
+      // roster the caller is about to re-read, and `grantorId`, `granteeId` and
+      // `scopeJson` are a table's columns rather than a contract.
+      const { revokedAt } = grant;
+      if (!revokedAt) {
+        // The service stamps it inside the transaction it returns from, so
+        // this cannot happen — and if it ever does, an invented timestamp
+        // would be worse than the operator hearing about it.
+        throw new Error("A revoked Guardian grant carries no revocation time");
+      }
+      return apiSuccess({
+        grantId: grant.id,
+        revokedAt: revokedAt.toISOString(),
+      });
     } catch (error) {
       if (error instanceof LastManagedGuardianError) {
         return apiError("Add another Guardian before ending this access", 409, {

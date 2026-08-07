@@ -177,6 +177,64 @@ export const stdResponses = {
   },
 };
 
+// ── The delegated-record refusal (v1.37.0) ───────────────────────────
+
+/**
+ * What a route that can act on somebody else's record answers when it may not.
+ *
+ * One string, published on every such path, byte for byte. The refusal carries
+ * no reason on the wire and the description says why: a selector naming an
+ * account that does not exist, one naming an account that granted nothing, a
+ * grant whose sections do not reach the surface and a read grant on a write are
+ * all the same status, the same code and the same bytes, because a
+ * distinguishable refusal is an account-enumeration oracle for anybody with a
+ * login. Ninety paraphrases of that would invite a client to tell them apart.
+ *
+ * `src/__tests__/openapi-sharing-denial.test.ts` recomputes the set of routes
+ * that resolve through `requireRecordAuth` / `requireGuardianAuth` and holds
+ * every one of them to this exact sentence.
+ */
+export const SHARING_ACCESS_DENIED_DESCRIPTION =
+  "Refused: this request named a record the caller may not act on (`meta.errorCode` = `sharing.access.denied`). Byte-identical for an account that does not exist, an account that granted nothing, a grant whose sections do not reach this surface, and a read grant on a request that writes — the response carries no reason, so it is not an account-enumeration oracle. The reason reaches the record owner's activity feed and the operator's audit trail instead. On the cookie transport the same code answers one further case: a session that has entered a shared record and sends a request without its record-context assertion, which is a client older than the fence — leave the record and reload. A request that names no record but the caller's own never reaches this response, so a client that never switches and never sends the per-request account selector will not see it.";
+
+/**
+ * The 403 above, optionally sharing the status with the reasons a route already
+ * refuses for.
+ *
+ * OpenAPI allows one response per status, so a module-gated delegable route
+ * cannot publish two 403 objects. The other reasons come first, in their own
+ * words, and the shared sentence is spliced on the end — which keeps it
+ * byte-identical everywhere and keeps the module gate's own prose intact.
+ *
+ * Memoised by the composed text so identical responses are one object: the YAML
+ * emitter aliases by identity, and a fresh object per call site would print
+ * this paragraph a hundred and eighteen times.
+ */
+interface RefusalResponse {
+  "403": {
+    description: string;
+    content: { "application/json": { schema: typeof errorEnvelope } };
+  };
+}
+
+const refusalCache = new Map<string, RefusalResponse>();
+
+export function recordRefusal(...alsoRefusesFor: string[]): RefusalResponse {
+  const description = [...alsoRefusesFor, SHARING_ACCESS_DENIED_DESCRIPTION]
+    .filter(Boolean)
+    .join("\n\n");
+  const cached = refusalCache.get(description);
+  if (cached) return cached;
+  const response = {
+    "403": {
+      description,
+      content: { "application/json": { schema: errorEnvelope } },
+    },
+  };
+  refusalCache.set(description, response);
+  return response;
+}
+
 // ── AI-consent precondition (v1.16.13) ───────────────────────────────
 // The server-managed AI-egress gate requires an active ConsentReceipt
 // (`ai_full`, or the surface-specific `ai_insights_only` / `ai_coach`)
@@ -186,10 +244,12 @@ export const stdResponses = {
 // grant-consent notice and call POST /api/consent/ai (or, on web, POST
 // /api/consent/ai/web) to mint the receipt. BYOK / local / ChatGPT-OAuth
 // chains are the user's own egress and never trip this gate.
+export const AI_CONSENT_REQUIRED_DESCRIPTION =
+  "AI consent required: no active ConsentReceipt for the server-managed provider. `meta.errorCode` = `consent.ai.required`. Mint a receipt via POST /api/consent/ai before retrying.";
+
 export const consentRequiredResponse = {
   "403": {
-    description:
-      "AI consent required: no active ConsentReceipt for the server-managed provider. `meta.errorCode` = `consent.ai.required`. Mint a receipt via POST /api/consent/ai before retrying.",
+    description: AI_CONSENT_REQUIRED_DESCRIPTION,
     content: { "application/json": { schema: errorEnvelope } },
   },
 };
@@ -202,10 +262,12 @@ export const consentRequiredResponse = {
 // module key) so the iOS retry classifier branches on it and the client
 // can drop the whole surface. The errorEnvelope shape already declares
 // `meta.errorCode`; `meta.module` is documented here in prose.
+export const MODULE_DISABLED_DESCRIPTION =
+  'Module disabled for this account: the user (or operator) has the module turned off. `meta.errorCode` = `module.disabled` and `meta.module` carries the disabled module key (e.g. "sleep"). Returned even for a valid Bearer token. Clients hide the whole module surface end-to-end rather than retry.';
+
 export const moduleDisabledResponse = {
   "403": {
-    description:
-      'Module disabled for this account: the user (or operator) has the module turned off. `meta.errorCode` = `module.disabled` and `meta.module` carries the disabled module key (e.g. "sleep"). Returned even for a valid Bearer token. Clients hide the whole module surface end-to-end rather than retry.',
+    description: MODULE_DISABLED_DESCRIPTION,
     content: { "application/json": { schema: errorEnvelope } },
   },
 };

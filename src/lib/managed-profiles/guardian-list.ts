@@ -46,6 +46,44 @@ export interface ManagedProfileGuardianView {
   acceptedAt: string | null;
 }
 
+/** The lifecycle columns this view derives its state from. */
+type GuardianGrantRow = {
+  id: string;
+  invitedAt: Date;
+  acceptedAt: Date | null;
+  expiresAt: Date | null;
+  revokedAt: Date | null;
+};
+
+/**
+ * One live Guardian grant, as every surface publishes it.
+ *
+ * Exported because the invitation route answers with it too. That route used to
+ * return the `AccountGrant` row Prisma handed it — `grantorId`, `granteeId`,
+ * `scopeJson`, `lastUsedAt` and the rest — which made a table's columns the
+ * wire contract of a route nobody had described. One mapper means the roster
+ * and the invitation cannot describe a Guardian differently.
+ *
+ * `null` for a row that is neither PENDING nor ACTIVE, so an ended grant cannot
+ * reach a list the last-Guardian floor is counted from. The caller decides what
+ * an ended row means for it; here it simply is not a Guardian.
+ */
+export function toManagedProfileGuardianView(
+  grant: GuardianGrantRow,
+  account: GrantParty,
+  now: Date = new Date(),
+): ManagedProfileGuardianView | null {
+  const state = grantState(grant, now);
+  if (state !== "PENDING" && state !== "ACTIVE") return null;
+  return {
+    grantId: grant.id,
+    account,
+    state,
+    invitedAt: grant.invitedAt.toISOString(),
+    acceptedAt: grant.acceptedAt?.toISOString() ?? null,
+  };
+}
+
 /**
  * The roster, or `null` when the caller may not have it.
  *
@@ -107,19 +145,12 @@ export async function listManagedProfileGuardians(input: {
 
   const roster: ManagedProfileGuardianView[] = [];
   for (const grant of grants) {
-    const state = grantState(grant, now);
-    // The `where` above already excludes both, so this is the belt on the
-    // derivation rather than the filter itself: `grantState` is the authority
-    // on what a row IS, and a row it calls ended must not reach a roster the
-    // last-Guardian floor is counted from.
-    if (state !== "PENDING" && state !== "ACTIVE") continue;
-    roster.push({
-      grantId: grant.id,
-      account: grant.grantee,
-      state,
-      invitedAt: grant.invitedAt.toISOString(),
-      acceptedAt: grant.acceptedAt?.toISOString() ?? null,
-    });
+    // The `where` above already excludes an ended row, so the mapper's null is
+    // the belt on the derivation rather than the filter itself: `grantState` is
+    // the authority on what a row IS, and a row it calls ended must not reach a
+    // roster the last-Guardian floor is counted from.
+    const view = toManagedProfileGuardianView(grant, grant.grantee, now);
+    if (view) roster.push(view);
   }
   return roster;
 }

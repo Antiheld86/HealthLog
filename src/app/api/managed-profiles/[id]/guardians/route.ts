@@ -1,5 +1,4 @@
 import { NextRequest } from "next/server";
-import { z } from "zod/v4";
 
 import {
   apiHandler,
@@ -15,10 +14,15 @@ import {
 } from "@/lib/api-response";
 import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
-import { listManagedProfileGuardians } from "@/lib/managed-profiles/guardian-list";
+import {
+  listManagedProfileGuardians,
+  toManagedProfileGuardianView,
+} from "@/lib/managed-profiles/guardian-list";
 import { ManagedProfileLifecycleError } from "@/lib/managed-profiles/lifecycle";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { GRANT_PARTY_SELECT } from "@/lib/sharing/grant-view";
 import { GrantError, inviteManagedProfileGuardian } from "@/lib/sharing/grants";
+import { inviteManagedProfileGuardianSchema } from "@/lib/validations/managed-profiles";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -73,13 +77,6 @@ export const GET = apiHandler(
 const INVITE_LIMIT = 10;
 const INVITE_WINDOW_MS = 60 * 60 * 1000;
 
-const guardianInviteSchema = z
-  .object({
-    identifier: z.string().trim().min(1).max(255),
-    expiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
-  })
-  .strict();
-
 /** Invite another Guardian from a cookie-backed, freshly verified session. */
 export const POST = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
@@ -96,7 +93,7 @@ export const POST = apiHandler(
       maxBytes: 8 * 1024,
     });
     if (jsonError) return jsonError;
-    const parsed = guardianInviteSchema.safeParse(body);
+    const parsed = inviteManagedProfileGuardianSchema.safeParse(body);
     if (!parsed.success) return returnAllZodIssues(parsed.error, 422);
     const { id } = await params;
 
@@ -107,8 +104,17 @@ export const POST = apiHandler(
           { email: { equals: parsed.data.identifier, mode: "insensitive" } },
         ],
       },
-      select: { id: true },
+      select: GRANT_PARTY_SELECT,
     });
+    // No `errorCode`, deliberately, and the same for the 429 above. Rate-limit
+    // refusals carry none anywhere in this application, and the sibling
+    // invitation route (`POST /api/account/grants`) answers an unknown
+    // identifier with a bare 404 too. A code here would make one route in the
+    // family unlike both. The published contract says so, and says that a
+    // client resolves on `meta.errorCode` FIRST: this route's other 404 —
+    // "you are not a Guardian of that profile" — does carry one, and branching
+    // on the status would tell somebody to check a spelling when the real
+    // answer is that the profile is no longer theirs to administer.
     if (!invitee) return apiError("No account with that name or e-mail", 404);
 
     try {
@@ -124,18 +130,31 @@ export const POST = apiHandler(
         action: { name: "managed_profile.guardian.invited" },
         meta: { profile_id: id, grant_id: grant.id },
       });
-      return apiSuccess(grant, 201);
+      // The roster's entry, not the grant row. A fresh invitation is always
+      // PENDING, so the mapper cannot answer null here — but it decides that
+      // rather than this route asserting it.
+      const view = toManagedProfileGuardianView(grant, invitee);
+      if (!view) throw new Error("A new invitation resolved to an ended grant");
+      return apiSuccess(view, 201);
     } catch (error) {
-      if (error instanceof GrantError && error.code === "self_grant") {
-        return apiError("An account cannot be shared with itself", 422, {
-          errorCode: "managed_profile.guardian.self",
-        });
-      }
-      if (error instanceof GrantError) {
+      if (
+        error instanceof GrantError &&
+        error.code === "duplicate_live_grant"
+      ) {
         return apiError("That account already has access", 409, {
           errorCode: "managed_profile.guardian.duplicate",
         });
       }
+      // No arm for `self_grant`, and its absence is a decision. It fires when
+      // the grantor equals the grantee; in this family the grantor is the
+      // PROFILE, never the caller, so inviting yourself names somebody who is
+      // not the grantor and lands on the duplicate refusal above, while naming
+      // the profile itself is refused one step earlier as `managed_grantee`.
+      // The 422 that used to sit here published `managed_profile.guardian.self`
+      // — a code no request could elicit, on a route this release freezes. A
+      // grant refusal nothing can produce is not caught into a sentence that
+      // would then be wrong; it reaches the operator as a 500 with its wide
+      // event, which is what an impossible state deserves.
       if (error instanceof ManagedProfileLifecycleError) {
         if (error.code === "managed_grantee") {
           return apiError("A managed profile cannot be a Guardian", 422, {
