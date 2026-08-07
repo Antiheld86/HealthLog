@@ -34,6 +34,13 @@ export interface CalendarDayDTO {
   isFertileWindow: boolean;
   isPredictedOvulation: boolean;
   isPeriodLogged: boolean;
+  /**
+   * Whether a logged cycle opens on this day. The client uses it to say what a
+   * delete would take: removing the day-log of a cycle start removes the start
+   * too, and a confirm dialog that does not name that is asking about the
+   * wrong thing.
+   */
+  isCycleStart: boolean;
   flow: string | null;
   hasSymptoms: boolean;
   confidence: number;
@@ -368,6 +375,8 @@ export function buildCalendar(
   const logByDate = new Map<string, CalendarDayLogRow>();
   for (const l of dayLogs) logByDate.set(l.date, l);
 
+  const cycleStartDates = new Set(cycles.map((c) => c.startDate));
+
   const days: CalendarDayDTO[] = [];
   const span = dayDiff(to, from);
   for (let i = 0; i <= span; i++) {
@@ -405,6 +414,7 @@ export function buildCalendar(
       isFertileWindow,
       isPredictedOvulation,
       isPeriodLogged: log?.flow != null && log.flow !== "NONE",
+      isCycleStart: cycleStartDates.has(date),
       flow: log?.flow ?? null,
       hasSymptoms: log?.hasSymptoms ?? false,
       confidence: prediction?.confidence ?? 0,

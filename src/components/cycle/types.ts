@@ -29,6 +29,8 @@ export interface CalendarDay {
   isFertileWindow: boolean;
   isPredictedOvulation: boolean;
   isPeriodLogged: boolean;
+  /** Whether a logged cycle opens on this day. */
+  isCycleStart: boolean;
   flow: string | null;
   hasSymptoms: boolean;
   confidence: number;

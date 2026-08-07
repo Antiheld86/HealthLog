@@ -7709,7 +7709,7 @@
     },
     "sheet": {
       "title": "Log your day",
-      "description": "Capture today's flow, symptoms, and notes.",
+      "description": "Flow, symptoms and notes for this day.",
       "flow": "Flow",
       "symptoms": "Symptoms",
       "temperature": "Basal body temperature",
@@ -7744,7 +7744,10 @@
       "intimacySection": "Intimacy & contraception",
       "testsSection": "Tests",
       "phaseDayHeader": "Day {day} · {phase}",
-      "bbtHint": "Take it first thing in the morning, before getting up."
+      "bbtHint": "Take it first thing in the morning, before getting up.",
+      "titleForDate": "Log for {date}",
+      "descriptionToday": "Today. Flow, symptoms and notes.",
+      "deleteBodyCycleStart": "This day opens a cycle. Deleting it takes the period start with it, so the previous cycle runs on as before. Everything logged here goes too: flow, temperature, symptoms and your note. There is no way to bring it back."
     },
     "testResult": {
       "POSITIVE": "Positive",
@@ -7821,7 +7824,13 @@
       "intercourseLabel": "What does intercourse track?",
       "protected": "Whether contraception was used during intercourse.",
       "protectedLabel": "What does protected mean?"
-    }
+    },
+    "saveSuccess": "Entry saved.",
+    "deleteSuccess": "Entry deleted.",
+    "periodStartSaved": "Period start saved.",
+    "periodEndSaved": "End of period saved.",
+    "startedPeriodOnDate": "My period started this day",
+    "endedPeriodOnDate": "My period ended this day"
   },
   "cycleReminders": {
     "periodSoonTitle": "Period likely soon",

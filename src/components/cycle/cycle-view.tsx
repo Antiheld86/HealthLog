@@ -3,13 +3,7 @@
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import {
-  Loader2,
-  Plus,
-  RefreshCw,
-  SlidersHorizontal,
-  Sparkles,
-} from "lucide-react";
+import { Loader2, Plus, RefreshCw, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,6 +23,7 @@ import { CyclePhaseHeadline, CyclePhaseCrosstab } from "./cycle-phase-crosstab";
 import { CycleSymptomPatterns } from "./cycle-symptom-patterns";
 import { CycleSettings } from "./cycle-settings";
 import { PHASE_HUE } from "./phase-tokens";
+import { monthOf, monthWindowOutside } from "./calendar-window";
 import {
   localYmd,
   useCycleCalendar,
@@ -110,9 +105,7 @@ export function CycleView() {
       : "calendar";
   }, [searchParams]);
 
-  // Controlled so the header "cycle settings" wrench (parity with the
-  // labs/medications/illness modules, which expose a customize glyph) can jump
-  // to the settings tab. Initialised from the `?tab=` deep-link, matching the
+  // Controlled tabs, initialised from the `?tab=` deep-link and matching the
   // prior uncontrolled `defaultValue` behaviour (the initial param is honoured;
   // a later param change does not force-switch a tab the user is reading).
   const [tab, setTab] = useState<CycleTab>(initialTab);
@@ -125,6 +118,29 @@ export function CycleView() {
   const history = useCycleHistory();
   const profileQuery = useCycleProfile();
   const insights = useCycleInsights();
+
+  // The month grid navigates freely; the anchored read above does not follow
+  // it, because every other surface on this page (the ring, the forecast panel,
+  // the temperature chart) is about today and the route caps a span at 400
+  // days. A month outside the anchor therefore gets its own bounded read, and
+  // the two grids merge by date. Without it a back-dated entry landed on the
+  // server and had nothing on screen to land in.
+  const [visibleMonth, setVisibleMonth] = useState(() => monthOf(today));
+  const monthWindow = useMemo(
+    () => monthWindowOutside(visibleMonth, { from, to }),
+    [visibleMonth, from, to],
+  );
+  const monthCalendar = useCycleCalendar(
+    monthWindow?.from ?? from,
+    monthWindow?.to ?? to,
+    monthWindow !== null,
+  );
+  // Month days last: on the edge months the two reads overlap and the grid
+  // keys by date, so the later entry wins and both carry the same answer.
+  const calendarDays = useMemo(
+    () => [...(calendar.data?.days ?? []), ...(monthCalendar.data?.days ?? [])],
+    [calendar.data?.days, monthCalendar.data?.days],
+  );
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(today);
@@ -167,30 +183,18 @@ export function CycleView() {
         title={<span data-tour-id="cycle-hero">{t("cycle.title")}</span>}
         description={t("cycle.subtitle")}
         actions={
-          <>
-            {canManage && (
-              <>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
-                  aria-label={t("cycle.tabs.settings")}
-                  title={t("cycle.tabs.settings")}
-                  data-slot="cycle-settings-wrench"
-                  onClick={() => setTab("settings")}
-                >
-                  <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-                </Button>
-                <Button
-                  onClick={() => openSheet(today)}
-                  className="min-h-11 sm:min-h-9"
-                >
-                  <Plus className="h-4 w-4" />
-                  {t("cycle.logToday")}
-                </Button>
-              </>
-            )}
-          </>
+          // One action. The settings glyph that used to sit beside it was a
+          // second door to the tab directly below, and no other page in the
+          // app carries a gear in that corner.
+          canManage ? (
+            <Button
+              onClick={() => openSheet(today)}
+              className="min-h-11 sm:min-h-9"
+            >
+              <Plus className="h-4 w-4" />
+              {t("cycle.logToday")}
+            </Button>
+          ) : null
         }
       />
 
@@ -365,7 +369,7 @@ export function CycleView() {
                       </div>
                     ) : null}
                     <CycleCalendar
-                      days={calendar.data?.days ?? []}
+                      days={calendarDays}
                       today={today}
                       confirmedOvulation={
                         calendar.data?.prediction?.ovulationConfirmed
@@ -374,6 +378,7 @@ export function CycleView() {
                           : null
                       }
                       onSelectDay={canManage ? openSheet : undefined}
+                      onVisibleMonthChange={setVisibleMonth}
                     />
                   </>
                 )}
@@ -458,6 +463,10 @@ export function CycleView() {
         onOpenChange={setSheetOpen}
         date={selectedDate}
         today={today}
+        startsCycle={
+          calendarDays.find((d) => d.date === selectedDate)?.isCycleStart ??
+          false
+        }
         activePeriod={verdict?.phase === "MENSTRUAL"}
         phase={verdict?.phase ?? null}
         dayOfCycle={verdict?.dayOfCycle ?? null}
