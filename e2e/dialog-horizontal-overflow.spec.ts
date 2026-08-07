@@ -57,6 +57,8 @@ interface DialogCase {
   path: string;
   /** Accessible name of the control that opens the dialog. */
   trigger: RegExp;
+  /** Reach the state the report describes, when the form does not open in it. */
+  prepare?: (page: import("@playwright/test").Page) => Promise<void>;
   /** Something inside the dialog that proves it rendered its form, not a shell. */
   ready: string;
 }
@@ -72,6 +74,16 @@ const DIALOGS: DialogCase[] = [
     name: "mood add",
     path: "/mood",
     trigger: /^add$/i,
+    // The mood sheet opens on the five-face quick check; the timestamp row
+    // (and everything else) appears once a face is picked. Measuring the
+    // quick check alone would measure a sheet that has almost nothing in it.
+    prepare: async (page) => {
+      await page.locator('[data-slot="mood-face"]').first().click();
+      await page
+        .locator('[data-slot="mood-annotate-panel"]')
+        .first()
+        .waitFor({ state: "visible" });
+    },
     ready: '[data-slot="date-time-field"]',
   },
   {
@@ -199,6 +211,7 @@ test.describe("add/edit dialogs do not scroll sideways", () => {
 
         const surface = page.locator(SURFACE).first();
         await expect(surface).toBeVisible();
+        await dialog.prepare?.(page);
         // Gate on the form's own content, not the shell: the surface mounts
         // before the fields do, and measuring the empty frame would pass
         // against exactly the layout this spec exists to catch.
