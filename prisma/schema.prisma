@@ -4016,6 +4016,41 @@ model MoodEntry {
   date          String // YYYY-MM-DD — anchored to `tz` when not null, else legacy Europe/Berlin
   mood          String // SUPER_GUT, GUT, OKAY, SCHLECHT, LAUSIG
   score         Int // 1-5
+  /// v1.37 — the five level-A self-state values, each 0-10 with its own
+  /// anchors. `MOOD_DIMENSIONS` (`src/lib/mood/dimensions.ts`) is the one
+  /// table binding a column to its label, its anchors and its orientation.
+  ///
+  /// `score` above stays the 1-5 legacy axis and is not re-scaled: eleven
+  /// surfaces derive numbers from it on that assumption, three of them into
+  /// prose an assistant then states as fact. The two axes coexist by design.
+  /// `moodA1` is derived from the five-point label on every write, so a quick
+  /// check-in is a full entry rather than a degraded one; A2 to A5 are only
+  /// ever set by hand, and stay NULL when nobody answered them. Absence reads
+  /// as absence — a fabricated middle value would poison both the trend and
+  /// any later model trained on these columns.
+  ///
+  /// Queryable plaintext, deliberately — the same trade `CycleDayLog`
+  /// documents at its `basalBodyTempC`. Encrypting them would remove the
+  /// trend read, the factor crosstab and every aggregate at once, and the
+  /// values are self-ratings on a fixed scale rather than prose. The free-text
+  /// note beside them stays encrypted, because that is where the prose is.
+  ///
+  /// `stressA2` is stored literally, exactly as the user set it against the
+  /// anchors they read, so a higher value means more stress and a worse day.
+  /// A surface that needs "up is better" flips the sign through the `inverse`
+  /// flag on the dimension table, never inline. The same rule already governs
+  /// `MoodTag.inverse`, and it exists because a stored value that disagrees
+  /// with the label the user saw cannot be recovered afterwards.
+  ///
+  /// A delegate holding a READ grant sees these columns, because a grant is
+  /// whole-record by design and carries no per-domain scope. That is
+  /// deliberate, not an oversight: withholding part of a record from a
+  /// delegate would be a new capability, not a field select.
+  moodA1        Int?      @map("mood_a1") // 0-10, pleasantness
+  stressA2      Int?      @map("stress_a2") // 0-10, inverse-oriented
+  energyA3      Int?      @map("energy_a3") // 0-10
+  connectionA4  Int?      @map("connection_a4") // 0-10
+  stabilityA5   Int?      @map("stability_a5") // 0-10
   tags          String? // JSON array of tag keys
   /// v1.4.30 — first-class free-text note. Replaces the
   /// `tags: ["note:<text>"]` workaround the iOS app shipped through
