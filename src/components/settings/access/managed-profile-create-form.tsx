@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { TimezonePicker } from "@/components/settings/timezone-picker";
+import { stepUpErrorKey } from "@/components/settings/access/grant-action-error";
 import { ApiError } from "@/lib/api/api-fetch";
 import { locales, localeLabels, type Locale } from "@/lib/i18n/config";
 import { useTranslations } from "@/lib/i18n/context";
@@ -138,15 +139,16 @@ export function ManagedProfileCreateForm() {
           }
           aria-describedby="managed-profile-name-hint"
         />
-        <p
-          id="managed-profile-name-hint"
-          data-slot="managed-profile-name-hint"
-          className="text-muted-foreground text-xs"
-        >
-          {displayName.length > 0 && nameIssue !== null
-            ? t(nameIssue)
-            : t("recordSharing.managed.nameHint")}
-        </p>
+        <FieldGuidance
+          slot="managed-profile-name"
+          hintId="managed-profile-name-hint"
+          hint={t("recordSharing.managed.nameHint")}
+          // Only once somebody has typed. "Give the record a name" on an empty
+          // field they have not reached yet is a telling-off, not guidance.
+          error={
+            displayName.length > 0 && nameIssue !== null ? t(nameIssue) : null
+          }
+        />
       </div>
 
       <div className="space-y-1.5">
@@ -191,20 +193,28 @@ export function ManagedProfileCreateForm() {
         </p>
       </div>
 
-      <TimezonePicker
-        id="managed-profile-timezone"
-        value={timezone}
-        onChange={(next) => {
-          setTimezone(next);
-          setError(null);
-        }}
-        // The picker's own list comes from the engine, so the select branch
-        // cannot produce an unknown zone. Its free-text fallback (older
-        // engines without `Intl.supportedValuesOf`) can, and the submit button
-        // is inert for one — so the hint slot says why rather than leaving a
-        // dead button with no explanation beside it.
-        hint={t(timezoneIssue ?? "recordSharing.managed.timezoneHint")}
-      />
+      <div className="space-y-1.5">
+        <TimezonePicker
+          id="managed-profile-timezone"
+          value={timezone}
+          onChange={(next) => {
+            setTimezone(next);
+            setError(null);
+          }}
+          hint={t("recordSharing.managed.timezoneHint")}
+        />
+        {/* The picker's own list comes from the engine, so the select branch
+            cannot produce an unknown zone. Its free-text fallback (older
+            engines without `Intl.supportedValuesOf`) can, and this sentence is
+            then the ONLY explanation for a submit button that will not press.
+            It rides beside the picker rather than through its `hint` prop,
+            because that prop renders muted meta and a refusal rendered as meta
+            is a refusal nobody reads. */}
+        <FieldGuidance
+          slot="managed-profile-timezone"
+          error={timezoneIssue === null ? null : t(timezoneIssue)}
+        />
+      </div>
 
       <Button
         type="submit"
@@ -235,6 +245,65 @@ export function ManagedProfileCreateForm() {
         </p>
       )}
     </form>
+  );
+}
+
+/**
+ * A field's standing hint, and its refusal when there is one.
+ *
+ * Two nodes, never one that swaps. The form used to render a single muted
+ * `<p>` whose TEXT changed from hint to error, which is wrong twice over:
+ *
+ *   * a refusal is content somebody has to act on, and UI-STANDARDS §3
+ *     reserves `text-muted-foreground` for meta. The same reasoning is written
+ *     out at `grant-action-error.tsx` — a refusal rendered as meta is a
+ *     refusal nobody reads;
+ *   * a node whose text changes in place is not announced. `role="alert"` is
+ *     reliable when the node MOUNTS, which is why the panel's own alert is a
+ *     separate element rather than a class on an existing one. Somebody who
+ *     cannot see the screen pressed a button and got nothing, again.
+ *
+ * The hint stays where it was, muted, and keeps the id `aria-describedby`
+ * points at. `hint` is optional for the one caller whose control renders its
+ * own (the timezone picker), which needs only the error half.
+ *
+ * Exported and pure because the form's error states are not reachable from a
+ * static render — there is no click, so no field is ever invalid — and a
+ * rendering nobody can test is a rendering that drifts back to muted.
+ */
+export function FieldGuidance({
+  slot,
+  hintId,
+  hint,
+  error,
+}: {
+  /** `data-slot` stem: `<slot>-hint` and `<slot>-error`. */
+  slot: string;
+  hintId?: string;
+  hint?: string;
+  error: string | null;
+}) {
+  return (
+    <>
+      {hint !== undefined && (
+        <p
+          id={hintId}
+          data-slot={`${slot}-hint`}
+          className="text-muted-foreground text-xs"
+        >
+          {hint}
+        </p>
+      )}
+      {error !== null && (
+        <p
+          data-slot={`${slot}-error`}
+          role="alert"
+          className="text-destructive text-sm"
+        >
+          {error}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -281,7 +350,11 @@ export function createManagedProfileErrorKey(err: unknown): string {
   // The step-up gate. `requireFreshMfa` throws `StepUpRequiredError`, which is
   // a 401 carrying a stable code, and the request was authenticated enough to
   // reach it — so this is never a lapsed session.
-  if (err.status === 401) return "recordSharing.managed.errorStepUp";
+  if (err.status === 401) return stepUpErrorKey(err);
   if (err.status === 422) return "recordSharing.managed.errorInvalid";
+  // Ten an hour, the same ceiling the guardian invitation carries. Waiting is
+  // the whole recovery, so it must not read as a failure — and it carries no
+  // `errorCode`, like every other rate-limit refusal in this family.
+  if (err.status === 429) return "recordSharing.managed.errorRateLimit";
   return "recordSharing.managed.errorFailed";
 }

@@ -100,10 +100,17 @@ vi.mock("@/lib/queries/use-account-grants", async (importOriginal) => {
   };
 });
 
-/** The roster read, as each profile row sees it. */
-const rosterRef: { value: ManagedProfileGuardian[] | undefined } = {
-  value: [],
-};
+/**
+ * The roster read, as each profile row sees it.
+ *
+ * Three states, not two. `"loading"` and `"error"` used to share `undefined`,
+ * which is precisely the conflation the error branch exists to end: a failed
+ * read that renders as a slow one is a person waiting for something that is
+ * never coming.
+ */
+const rosterRef: {
+  value: ManagedProfileGuardian[] | "loading" | "error";
+} = { value: [] };
 /** The deletion mutation, idle unless a case says otherwise. */
 const deleteRef = { value: idle() };
 /** The guardian invitation, idle unless a case says otherwise. */
@@ -125,9 +132,9 @@ vi.mock("@/lib/queries/use-managed-profiles", async (importOriginal) => {
     useInviteManagedProfileGuardian: () => inviteRef.value,
     useRemoveManagedProfileGuardian: () => removeGuardianRef.value,
     useManagedProfileGuardians: () => ({
-      data: rosterRef.value,
-      isLoading: false,
-      isError: rosterRef.value === undefined,
+      data: Array.isArray(rosterRef.value) ? rosterRef.value : undefined,
+      isLoading: rosterRef.value === "loading",
+      isError: rosterRef.value === "error",
       refetch: vi.fn(),
     }),
   };
@@ -177,6 +184,7 @@ import { RecordSettingsSectionGate } from "@/components/settings/record-settings
 import {
   createManagedProfileErrorKey,
   displayNameIssue,
+  FieldGuidance,
 } from "../managed-profile-create-form";
 import {
   activeGuardianCount,
@@ -324,6 +332,80 @@ describe("who can reach the section at all", () => {
   });
 });
 
+describe("how a field says what is wrong with it", () => {
+  /**
+   * The form's invalid states are not reachable from a static render — there
+   * is no click, so nothing is ever invalid — which is why the two nodes were
+   * pulled out into a pure component. These legs are the whole of the claim
+   * the HIGH finding was about: a refusal is content and it is announced.
+   */
+  it("renders the hint as muted meta and nothing else when the field is fine", () => {
+    const html = render(
+      <FieldGuidance
+        slot="f"
+        hintId="f-hint"
+        hint="Up to 80 characters."
+        error={null}
+      />,
+    );
+    expect(html).toContain('data-slot="f-hint"');
+    expect(html).toContain("text-muted-foreground");
+    expect(html).not.toContain('data-slot="f-error"');
+    expect(html).not.toContain('role="alert"');
+  });
+
+  it("announces the refusal, in content contrast, on its own node", () => {
+    const html = render(
+      <FieldGuidance
+        slot="f"
+        hintId="f-hint"
+        hint="Up to 80 characters."
+        error="That name is longer than 80 characters."
+      />,
+    );
+    const alert = /<p[^>]*data-slot="f-error"[^>]*>/.exec(html)?.[0];
+    expect(alert).toBeDefined();
+    // Announced, because it MOUNTS with the role rather than a class being
+    // swapped onto a node that was already there.
+    expect(alert).toContain('role="alert"');
+    // Content, not meta. UI-STANDARDS §3, and the same reasoning
+    // `grant-action-error.tsx` spells out: a refusal rendered as muted is a
+    // refusal nobody reads.
+    expect(alert).toContain("text-destructive");
+    expect(alert).not.toContain("text-muted-foreground");
+    // And the hint survives beside it rather than being overwritten, so the
+    // bound the person is being held to is still on screen.
+    expect(html).toContain('data-slot="f-hint"');
+    expect(html).toContain("Up to 80 characters.");
+  });
+
+  it("renders the error alone for a control that brings its own hint", () => {
+    // The timezone picker labels itself; the form owes only the refusal, and
+    // that refusal is the only explanation for a submit button that will not
+    // press.
+    const html = render(
+      <FieldGuidance slot="tz" error="This browser does not know that zone." />,
+    );
+    expect(html).toContain('data-slot="tz-error"');
+    expect(html).toContain('role="alert"');
+    expect(html).not.toContain('data-slot="tz-hint"');
+  });
+
+  it("keeps the standing hint muted on the rendered form", () => {
+    // The other half, on the real component: the default state is guidance,
+    // and guidance IS meta.
+    authRef.value = { accounts: [], active: null };
+    const html = renderGatedSection();
+    const hint = /<p[^>]*data-slot="managed-profile-name-hint"[^>]*>/.exec(
+      html,
+    )?.[0];
+    expect(hint).toBeDefined();
+    expect(hint).toContain("text-muted-foreground");
+    expect(html).not.toContain('data-slot="managed-profile-name-error"');
+    expect(html).not.toContain('data-slot="managed-profile-timezone-error"');
+  });
+});
+
 describe("what the form decides before it sends", () => {
   it("treats a whitespace-only name as empty, because the route does", () => {
     // The route trims and then requires 1..80. A client that did not trim
@@ -415,7 +497,7 @@ describe("ending a managed profile", () => {
     // the sentence's presence at the mercy of which request landed first —
     // the defect the retention disclosure already paid for once.
     authRef.value = { accounts: [entry()], active: null };
-    rosterRef.value = undefined;
+    rosterRef.value = "loading";
     const html = renderGatedSection();
     expect(html).toContain('data-managed-profile-id="p1"');
     expect(html).not.toContain('data-slot="managed-profile-delete"');
@@ -451,6 +533,51 @@ describe("ending a managed profile", () => {
     expect(renderGatedSection()).not.toContain(
       'data-slot="grant-action-error"',
     );
+  });
+
+  it("names the step-up gate rather than reporting a failure", () => {
+    // The likeliest refusal of all, and the one that read as a defect. Both
+    // destructive acts sit behind a `ConfirmButton`, so the request that
+    // reaches the server is the second click — minutes after the panel was
+    // opened, and easily outside the five-minute window.
+    authRef.value = { accounts: [entry()], active: null };
+    deleteRef.value = failed(
+      new ApiError("refused", 401, { errorCode: "auth.stepup.required" }),
+      "p1",
+    );
+    const html = renderGatedSection();
+    expect(html).toContain("Confirm your second factor");
+    expect(html).not.toContain("The profile could not be deleted");
+  });
+
+  it("tells a guardian with no second factor where to get one", () => {
+    // `requireFreshMfa` refuses an unenrolled account with its own code, and
+    // "confirm your second factor" to somebody who has none is a dead end
+    // offered by the surface that owns the way out of it.
+    authRef.value = { accounts: [entry()], active: null };
+    deleteRef.value = failed(
+      new ApiError("refused", 401, {
+        errorCode: "auth.stepup.mfa_not_enrolled",
+      }),
+      "p1",
+    );
+    const html = renderGatedSection();
+    expect(html).toContain("does not have one yet");
+    expect(html).toContain("Security");
+  });
+
+  it("says a failed roster read failed, rather than looking like a slow one", () => {
+    // Without this branch a 500 renders exactly as a still-loading roster —
+    // no panel, no delete control — and the person waits for something that is
+    // never coming.
+    authRef.value = { accounts: [entry()], active: null };
+    rosterRef.value = "error";
+    const html = renderGatedSection();
+    expect(html).toContain('data-slot="query-error-card"');
+    expect(html).toContain("Could not load who looks after this record");
+    // And the way back is reachable, which is what UI-STANDARDS §6 asks of an
+    // error state.
+    expect(html).toContain('data-slot="query-error-retry"');
   });
 });
 
