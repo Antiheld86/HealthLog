@@ -263,26 +263,62 @@ test.describe("shared record accessibility states", () => {
   test("[loading] the hold before the active record is known is announced", async ({
     page,
   }) => {
-    await page.route("**/api/auth/me", async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      await route.continue();
+    const gate = '[data-slot="record-scope-hydration-gate"]';
+
+    // Hold `/api/auth/me` open for exactly as long as the assertions need,
+    // then release it once.
+    //
+    // A fixed sleep in the handler cannot do that, and it was the cause of a
+    // CI-only failure here. Three things go wrong with it. The hold ends 1500
+    // ms after the FIRST request whatever the axe scan is doing, so on a slow
+    // runner the state being scanned is not the state the test names. Every
+    // retry and every refetch queues another sleeping handler, so the number
+    // of live handlers is a function of machine speed. And a handler still
+    // sleeping when its request is cancelled — a navigation, a React Query
+    // abort, teardown — answers `route.continue()` with "Route is already
+    // handled", which is what the runner reported.
+    //
+    // An explicit gate fixes all three: one release, at a point the test
+    // chooses, after which the hold is provably over.
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
     });
+    let holds = 0;
+
+    await page.route("**/api/auth/me", async (route) => {
+      holds += 1;
+      await held;
+      // Continuing a route the browser has already given up on is not a
+      // failure of anything this test asserts, and it is the one call here
+      // that can reject for a reason that has nothing to do with the subject.
+      await route.continue().catch(() => {});
+    });
+
     await page.goto("/measurements");
-    await expect(
-      page.locator('[data-slot="record-scope-hydration-gate"]'),
-    ).toBeVisible();
+    await expect(page.locator(gate)).toBeVisible();
 
     await scanForViolations(page);
-    await expectAnnounced(page, '[data-slot="record-scope-hydration-gate"]');
+    await expectAnnounced(page, gate);
     // The label lives inside the region, so a reader that reaches the region
     // reaches the sentence. A label rendered as a sibling would be announced
     // separately or not at all.
-    await expectReaderOrder(page, [
-      '[data-slot="record-scope-hydration-gate"]',
-      '[data-slot="record-scope-hydration-gate"] .sr-only',
-    ]);
+    await expectReaderOrder(page, [gate, `${gate} .sr-only`]);
 
+    // The hold was real. Without this the whole test passes on a page that was
+    // merely slow, and the state it claims to have scanned would be a
+    // coincidence rather than something it caused.
+    expect(
+      holds,
+      "nothing was held, so the gate was not this test's doing",
+    ).toBeGreaterThan(0);
+
+    release();
     await page.unroute("**/api/auth/me");
+    // And the gate was waiting on that hold rather than on something else:
+    // releasing it ends the state. An entry assertion with no exit assertion
+    // cannot tell a hold apart from a stuck page.
+    await expect(page.locator(gate)).toHaveCount(0);
   });
 
   test("[error] a failed read says so and hands the retry to a keyboard", async ({

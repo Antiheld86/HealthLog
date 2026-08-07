@@ -156,15 +156,30 @@ test.describe.serial("scoped sharing browser journeys", () => {
       );
       await expect(entry).toHaveCount(1);
 
-      const unexpectedOcrCapability =
-        record.domain === "labs"
-          ? page.waitForRequest(
-              (request) =>
-                request.method() === "GET" &&
-                new URL(request.url()).pathname === "/api/labs/ocr/capability",
-              { timeout: 500 },
-            )
-          : null;
+      // The labs doorway must not pull the OCR capability probe: OCR is an
+      // owner surface and a scoped READ grant does not reach it.
+      //
+      // Proved with a listener rather than `waitForRequest(…, { timeout })`,
+      // and the difference is not stylistic. A timed wait is an instrument
+      // that FAILS by its own mechanics: the rejection it produces is the
+      // pass condition, so it has to be created early and awaited late, and in
+      // between it is an unhandled rejection that lands on whichever test
+      // happens to be finishing. Its window is wrong too — the 500 ms starts
+      // before the switch is even clicked, so on a slow runner it can expire
+      // before the labs page has loaded, which is the one moment it exists to
+      // watch.
+      //
+      // A listener has no timer to lose. It covers everything from before the
+      // click to after the record read has landed, which is strictly more than
+      // 500 ms, and it is asserted below with a paired positive control: the
+      // domain's own read must appear in the same set, so a matcher that
+      // stopped seeing requests fails instead of reporting an absence.
+      const seenPaths = new Set<string>();
+      page.on("request", (request) => {
+        if (request.method() !== "GET") return;
+        seenPaths.add(new URL(request.url()).pathname);
+      });
+
       const read = page.waitForResponse(
         (response) =>
           response.request().method() === "GET" &&
@@ -183,8 +198,19 @@ test.describe.serial("scoped sharing browser journeys", () => {
         page.locator('[data-slot="shared-record-unavailable"]'),
       ).toHaveCount(0);
       await read;
-      if (unexpectedOcrCapability) {
-        await expect(unexpectedOcrCapability).rejects.toThrow(/Timeout/);
+
+      // The positive control first: if this path is missing the listener saw
+      // nothing useful and the absence below would be a statement about the
+      // matcher rather than about the product.
+      expect(
+        [...seenPaths],
+        `the ${record.domain} read never reached the request listener`,
+      ).toContain(DOMAIN_READS[record.domain]);
+      if (record.domain === "labs") {
+        expect(
+          [...seenPaths],
+          "a scoped labs grant pulled the owner-only OCR capability probe",
+        ).not.toContain("/api/labs/ocr/capability");
       }
 
       await leaveRecord(page);
