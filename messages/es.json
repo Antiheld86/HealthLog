@@ -9692,7 +9692,10 @@
       "guardianErrorManagedInvitee": "Un perfil administrado no puede ocuparse de otro historial. Invita a una cuenta que inicie sesión.",
       "guardianErrorNoAccount": "En esta instancia no hay ninguna cuenta con ese nombre o correo.",
       "guardianErrorRateLimit": "Demasiadas invitaciones en la última hora. Espera un poco y vuelve a intentarlo.",
-      "guardianErrorFailed": "No se pudo enviar la invitación."
+      "guardianErrorFailed": "No se pudo enviar la invitación.",
+      "errorMfaRequired": "Esto necesita un segundo factor y tu cuenta aún no tiene ninguno. Configura uno en Ajustes → Seguridad y vuelve a intentarlo.",
+      "rosterLoadError": "No se pudo cargar quién se ocupa de este historial.",
+      "errorRateLimit": "Demasiados perfiles creados en la última hora. Espera un poco y vuelve a intentarlo."
     },
     "toast": {
       "savedTo": "Guardado en el historial de {name}."

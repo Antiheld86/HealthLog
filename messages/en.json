@@ -9692,7 +9692,10 @@
       "guardianErrorManagedInvitee": "A managed profile cannot look after another record. Invite an account that signs in.",
       "guardianErrorNoAccount": "No account on this instance carries that name or e-mail.",
       "guardianErrorRateLimit": "Too many invitations in the last hour. Wait a while and try again.",
-      "guardianErrorFailed": "The invitation could not be sent."
+      "guardianErrorFailed": "The invitation could not be sent.",
+      "errorMfaRequired": "This needs a second factor, and your account does not have one yet. Set one up under Settings → Security, then try again.",
+      "rosterLoadError": "Could not load who looks after this record.",
+      "errorRateLimit": "Too many profiles created in the last hour. Wait a while and try again."
     },
     "toast": {
       "savedTo": "Saved to {name}'s record."

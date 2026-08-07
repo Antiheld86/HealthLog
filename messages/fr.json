@@ -9692,7 +9692,10 @@
       "guardianErrorManagedInvitee": "Un profil géré ne peut pas s'occuper d'un autre dossier. Invitez un compte qui se connecte.",
       "guardianErrorNoAccount": "Aucun compte de cette instance ne porte ce nom ou cette adresse e-mail.",
       "guardianErrorRateLimit": "Trop d'invitations dans la dernière heure. Patientez un peu et réessayez.",
-      "guardianErrorFailed": "L'invitation n'a pas pu être envoyée."
+      "guardianErrorFailed": "L'invitation n'a pas pu être envoyée.",
+      "errorMfaRequired": "Cela demande un deuxième facteur, et votre compte n'en a pas encore. Configurez-en un dans Réglages → Sécurité, puis réessayez.",
+      "rosterLoadError": "Impossible de charger qui s'occupe de ce dossier.",
+      "errorRateLimit": "Trop de profils créés dans la dernière heure. Patientez un peu et réessayez."
     },
     "toast": {
       "savedTo": "Enregistré dans le dossier de {name}."

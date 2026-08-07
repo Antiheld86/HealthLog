@@ -9692,7 +9692,10 @@
       "guardianErrorManagedInvitee": "Zarządzany profil nie może opiekować się inną kartą. Zaproś konto, które samo się loguje.",
       "guardianErrorNoAccount": "W tej instancji nie ma konta o takiej nazwie ani takim adresie e-mail.",
       "guardianErrorRateLimit": "Zbyt wiele zaproszeń w ostatniej godzinie. Odczekaj chwilę i spróbuj ponownie.",
-      "guardianErrorFailed": "Nie udało się wysłać zaproszenia."
+      "guardianErrorFailed": "Nie udało się wysłać zaproszenia.",
+      "errorMfaRequired": "To wymaga drugiego składnika logowania, a Twoje konto jeszcze go nie ma. Skonfiguruj go w Ustawieniach → Bezpieczeństwo i spróbuj ponownie.",
+      "rosterLoadError": "Nie udało się wczytać, kto opiekuje się tą kartą.",
+      "errorRateLimit": "Zbyt wiele profili utworzonych w ostatniej godzinie. Odczekaj chwilę i spróbuj ponownie."
     },
     "toast": {
       "savedTo": "Zapisano w karcie użytkownika {name}."

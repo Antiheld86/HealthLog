@@ -9692,7 +9692,10 @@
       "guardianErrorManagedInvitee": "Ein verwaltetes Profil kann keine andere Akte betreuen. Lade ein Konto ein, das sich anmeldet.",
       "guardianErrorNoAccount": "Auf dieser Instanz gibt es kein Konto mit diesem Namen oder dieser E-Mail-Adresse.",
       "guardianErrorRateLimit": "Zu viele Einladungen in der letzten Stunde. Warte etwas und versuche es erneut.",
-      "guardianErrorFailed": "Die Einladung konnte nicht gesendet werden."
+      "guardianErrorFailed": "Die Einladung konnte nicht gesendet werden.",
+      "errorMfaRequired": "Dafür ist ein zweiter Faktor nötig, und dein Konto hat noch keinen. Richte unter Einstellungen → Sicherheit einen ein und versuche es dann erneut.",
+      "rosterLoadError": "Es ließ sich nicht laden, wer sich um diese Akte kümmert.",
+      "errorRateLimit": "Zu viele Profile in der letzten Stunde angelegt. Warte etwas und versuche es erneut."
     },
     "toast": {
       "savedTo": "In der Akte von {name} gespeichert."

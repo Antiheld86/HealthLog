@@ -5,6 +5,7 @@ import { useState } from "react";
 import {
   GrantActionAlert,
   grantActionErrorKey,
+  stepUpErrorKey,
 } from "@/components/settings/access/grant-action-error";
 import { endOfDayIso } from "@/components/settings/access/grant-invite-card";
 import { Button } from "@/components/ui/button";
@@ -334,7 +335,8 @@ export function guardianInviteErrorKey(err: unknown): string {
   // identifier is the recovery for the other, so they must not collapse.
   if (err.status === 429) return "recordSharing.managed.guardianErrorRateLimit";
   if (err.status === 404) return "recordSharing.managed.guardianErrorNoAccount";
-  // The step-up gate this whole family carries. Not a failure.
-  if (err.status === 401) return "recordSharing.managed.errorStepUp";
+  // The step-up gate this whole family carries. Not a failure — and it comes
+  // in two shapes, because an account with no factor enrolled cannot clear it.
+  if (err.status === 401) return stepUpErrorKey(err);
   return "recordSharing.managed.guardianErrorFailed";
 }

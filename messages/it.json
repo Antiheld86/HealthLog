@@ -9692,7 +9692,10 @@
       "guardianErrorManagedInvitee": "Un profilo gestito non può occuparsi di un'altra cartella. Invita un account che accede da sé.",
       "guardianErrorNoAccount": "Su questa istanza non esiste un account con quel nome o quella e-mail.",
       "guardianErrorRateLimit": "Troppi inviti nell'ultima ora. Aspetta un po' e riprova.",
-      "guardianErrorFailed": "Non è stato possibile inviare l'invito."
+      "guardianErrorFailed": "Non è stato possibile inviare l'invito.",
+      "errorMfaRequired": "Serve un secondo fattore e il tuo account non ne ha ancora uno. Impostane uno in Impostazioni → Sicurezza e riprova.",
+      "rosterLoadError": "Non è stato possibile caricare chi si occupa di questa cartella.",
+      "errorRateLimit": "Troppi profili creati nell'ultima ora. Aspetta un po' e riprova."
     },
     "toast": {
       "savedTo": "Salvato nella cartella di {name}."

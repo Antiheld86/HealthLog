@@ -232,6 +232,36 @@ describe("what a refused sharing action says", () => {
       why: "anything the delete route does not classify becomes the generic envelope and must not borrow a diagnosis",
     },
     {
+      action: "deleteProfile",
+      err: apiError(401, "auth.stepup.required"),
+      key: "recordSharing.managed.errorStepUp",
+      why: "the step-up window lapsed while the confirm dialog was open — the likeliest refusal of the two acts that carry a gate",
+    },
+    {
+      action: "removeGuardian",
+      err: apiError(401, "auth.stepup.required"),
+      key: "recordSharing.managed.errorStepUp",
+      why: "the same gate on the other confirmed act",
+    },
+    {
+      action: "deleteProfile",
+      err: apiError(401, "auth.stepup.mfa_not_enrolled"),
+      key: "recordSharing.managed.errorMfaRequired",
+      why: "no second factor at all: 'confirm your second factor' is a dead end, and enrolling is the only way through",
+    },
+    {
+      action: "accept",
+      err: apiError(401),
+      key: "recordSharing.actionError.acceptFailed",
+      why: "a 401 on a route with NO step-up gate is a lapsed session, and must not tell somebody to confirm a factor",
+    },
+    {
+      action: "renounce",
+      err: apiError(401),
+      key: "recordSharing.actionError.renounceFailed",
+      why: "same, from the delegate's side",
+    },
+    {
       action: "removeGuardian",
       err: new TypeError("Failed to fetch"),
       key: "recordSharing.actionError.offline",
