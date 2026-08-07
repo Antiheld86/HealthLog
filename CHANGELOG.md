@@ -104,6 +104,14 @@
 
 ### Fixed
 
+- Switching records with more than one tab open could leave every tab on a
+  spinner for half a minute. While a switch is in flight the other tabs hold,
+  and they are released by the answer the server gives afterwards. A tab that
+  reloaded during the switch was mistaken for somebody else starting a second
+  one, which quietly detached the hold from the switch it belonged to, so no
+  answer could release it and the tabs waited out the timeout instead. The
+  release now stays attached to the switch that opened it.
+
 - Closing a document could leave it named in the address bar. Opening a
   document from a card adds a step to the browser's history so that Back closes
   it again, and closing it asks the browser to consume that step. The browser
