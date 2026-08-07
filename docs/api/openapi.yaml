@@ -16789,6 +16789,9 @@ components:
                     type: boolean
                   isPeriodLogged:
                     type: boolean
+                  isCycleStart:
+                    type: boolean
+                    description: Whether a logged cycle opens on this day. Deleting this day's log removes that cycle start with it.
                   flow:
                     anyOf:
                       - type: string
@@ -16856,6 +16859,7 @@ components:
                   - isFertileWindow
                   - isPredictedOvulation
                   - isPeriodLogged
+                  - isCycleStart
                   - flow
                   - hasSymptoms
                   - confidence
