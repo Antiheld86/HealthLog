@@ -822,6 +822,26 @@ describe("a route declaring manage refuses everything below it", () => {
     );
     expect(ctx.user.id).toBe(OWNER);
   });
+
+  it("admits a MANAGE grant over the Bearer transport too", async () => {
+    // The native half of the third level, and the asymmetry worth pinning:
+    // a token cannot MINT a MANAGE grant (the step-up that gates the
+    // invitation resolves through the session cookie — see
+    // `src/app/api/account/grants/__tests__/invite-scope-and-manage.test.ts`),
+    // and it EXERCISES one exactly as a browser does. Nothing about the level
+    // is transport-dependent once the grant exists; a client that could not
+    // use what its user was given would be a second authorization model.
+    signedInBearer();
+    selector(OWNER);
+    liveGrant({ access: "MANAGE" });
+
+    const ctx = await resolveInRoute(
+      () => requireRecordAuth("manage", "measurements"),
+      "DELETE",
+    );
+    expect(ctx.user.id).toBe(OWNER);
+    expect(ctx.actor.id).toBe(DELEGATE);
+  });
 });
 
 /**
@@ -843,6 +863,20 @@ describe("the guardian resolver gates on the marker, not the grant", () => {
     expect(ctx.user.id).toBe(OWNER);
     expect(ctx.actor.id).toBe(DELEGATE);
     expect(ctx.grantId).toBe("grant-1");
+  });
+
+  it("admits a Guardian over the Bearer transport, per request", async () => {
+    // A Guardian's phone administers the profile it looks after, with the
+    // selector on each request rather than a switch it accumulates. The
+    // marker still decides; the transport does not.
+    signedInBearer();
+    selector(OWNER);
+    userRows.set(OWNER, user(OWNER, "USER", new Date("2026-08-04T00:00:00Z")));
+    liveGrant({ access: "MANAGE" });
+
+    const ctx = await resolveInRoute(() => requireGuardianAuth());
+    expect(ctx.user.id).toBe(OWNER);
+    expect(ctx.actor.id).toBe(DELEGATE);
   });
 
   it("refuses a MANAGE grant on an ordinary adult's record", async () => {

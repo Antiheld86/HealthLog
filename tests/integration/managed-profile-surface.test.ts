@@ -370,6 +370,31 @@ describe("who looks after a managed profile (real Postgres)", () => {
 });
 
 describe("every call the managed-profile card can make", () => {
+  it("cannot be reached with a token, however wide its permissions", async () => {
+    // The native half of the contract, and the reason the freeze can promise
+    // it: `requireFreshMfa` resolves the session cookie and never falls
+    // through to the Bearer branch, so a wildcard token — the widest a client
+    // can hold — cannot mint a credential-less person and a permanent
+    // management relationship. The positive control is the very next case:
+    // the same body, from a cookie session that has proved its factor,
+    // creates the record.
+    const creator = await person("creator");
+    await signInWithBearer(creator);
+
+    const response = await createProfile({
+      displayName: "Managed record",
+      dateOfBirth: null,
+      locale: "en",
+      timezone: "UTC",
+    });
+    expect(response.status).toBe(401);
+    expect(
+      await getPrismaClient().user.count({
+        where: { managedProfileAt: { not: null } },
+      }),
+    ).toBe(0);
+  });
+
   it("creates a profile from exactly the body the form composes", async () => {
     const creator = await person("creator");
     signIn(creator);
