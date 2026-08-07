@@ -8589,8 +8589,7 @@
   },
   "mentalHealth": {
     "pageTitle": "Dobrostan psychiczny",
-    "pageDescription": "Cztery zwalidowane, dobrowolne testy — PHQ-9 (nastrój), GAD-7 (lęk), WHO-5 (samopoczucie) i SCI (sen) — obok Twojego dziennika nastroju. Liczy się trend w czasie, a nie pojedynczy wynik.",
-    "moodLink": "Zobacz historię swojego nastroju",
+    "pageDescription": "Cztery zwalidowane, dobrowolne testy — liczy się przebieg w czasie, nie pojedynczy wynik.",
     "attributionLabel": "Źródło",
     "attributionShow": "Źródło i licencja: {instrument}",
     "choosePrompt": "Wybierz sprawdzenie",

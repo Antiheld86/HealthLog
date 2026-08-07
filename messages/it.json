@@ -8589,8 +8589,7 @@
   },
   "mentalHealth": {
     "pageTitle": "Benessere mentale",
-    "pageDescription": "Quattro autovalutazioni validate e facoltative — PHQ-9 (umore), GAD-7 (preoccupazione), WHO-5 (benessere) e SCI (sonno) — accanto al tuo diario dell'umore. Ciò che conta è l'andamento nel tempo, non un singolo numero.",
-    "moodLink": "Vedi il tuo andamento dell'umore",
+    "pageDescription": "Quattro autovalutazioni validate e facoltative: conta l’andamento, non il singolo punteggio.",
     "attributionLabel": "Fonte",
     "attributionShow": "Fonte e licenza di {instrument}",
     "choosePrompt": "Scegli un check-in",

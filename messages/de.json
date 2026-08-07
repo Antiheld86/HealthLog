@@ -8589,8 +8589,7 @@
   },
   "mentalHealth": {
     "pageTitle": "Seelisches Wohlbefinden",
-    "pageDescription": "Vier validierte, freiwillige Selbsttests — PHQ-9 (Stimmung), GAD-7 (Sorgen), WHO-5 (Wohlbefinden) und SCI (Schlaf) — ergänzend zu deinem Stimmungstagebuch. Aussagekräftig ist der Verlauf über die Zeit, nicht ein einzelner Wert.",
-    "moodLink": "Deinen Stimmungsverlauf ansehen",
+    "pageDescription": "Vier validierte, freiwillige Selbsttests — aussagekräftig ist der Verlauf, nicht ein einzelner Wert.",
     "attributionLabel": "Quelle",
     "attributionShow": "Quelle und Lizenz für {instrument}",
     "choosePrompt": "Check-in auswählen",

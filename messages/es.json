@@ -8589,8 +8589,7 @@
   },
   "mentalHealth": {
     "pageTitle": "Bienestar mental",
-    "pageDescription": "Cuatro autoevaluaciones validadas y opcionales — PHQ-9 (estado de ánimo), GAD-7 (preocupación), WHO-5 (bienestar) y SCI (sueño) — junto a tu registro de ánimo. Lo valioso es la tendencia en el tiempo, no un único número.",
-    "moodLink": "Ver tu historial de estado de ánimo",
+    "pageDescription": "Cuatro autoevaluaciones validadas y voluntarias: cuenta la evolución, no un valor aislado.",
     "attributionLabel": "Fuente",
     "attributionShow": "Fuente y licencia de {instrument}",
     "choosePrompt": "Elige una revisión",

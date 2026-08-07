@@ -8589,8 +8589,7 @@
   },
   "mentalHealth": {
     "pageTitle": "Mental wellbeing",
-    "pageDescription": "Validated, opt-in self-checks — PHQ-9 (mood), GAD-7 (worry), WHO-5 (well-being) and SCI (sleep) — that sit beside your mood tracking. The value is the trend over time, not any single number.",
-    "moodLink": "View your mood history",
+    "pageDescription": "Four validated, voluntary self-checks — the trend over time says more than any single score.",
     "attributionLabel": "Attribution",
     "attributionShow": "Source and licence for {instrument}",
     "choosePrompt": "Choose a check-in",

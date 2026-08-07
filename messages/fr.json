@@ -8589,8 +8589,7 @@
   },
   "mentalHealth": {
     "pageTitle": "Bien-être mental",
-    "pageDescription": "Quatre auto-évaluations validées et facultatives — PHQ-9 (humeur), GAD-7 (inquiétude), WHO-5 (bien-être) et SCI (sommeil) — en complément de ton suivi de l'humeur. Ce qui compte, c'est la tendance dans le temps, pas un chiffre isolé.",
-    "moodLink": "Voir ton historique d'humeur",
+    "pageDescription": "Quatre auto-évaluations validées et facultatives : l’évolution compte plus qu’un score isolé.",
     "attributionLabel": "Source",
     "attributionShow": "Source et licence pour {instrument}",
     "choosePrompt": "Choisis un bilan",
