@@ -64,7 +64,7 @@ For more details, see the [security documentation](https://docs.healthlog.dev/se
 
 HealthLog Docker images are built and published from this repository's CI:
 
-- **Source**: [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml) — runs on every push to `main` and every `v*` tag
+- **Source**: [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml) — publishes on every `v*` tag; pull requests build the image without publishing it
 - **Registry**: [`ghcr.io/mbombeck/healthlog`](https://github.com/MBombeck/HealthLog/pkgs/container/healthlog)
 - **Architectures**: `linux/amd64` and `linux/arm64`
 - **Provenance attestation**: each image carries a [SLSA build provenance](https://slsa.dev/spec/v1.0/provenance) statement linking it back to the GitHub Actions run, the commit SHA, and the workflow definition
