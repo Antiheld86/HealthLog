@@ -91,6 +91,9 @@ export function ManagedIntegrationStatus() {
           title={t("settings.sections.integrations.title")}
           description={t("settings.sharedRecord.integrationStatusDescription")}
         />
+        <p className="text-sm">
+          {t("settings.sharedRecord.integrationStatusDetail")}
+        </p>
       </SettingsCard>
     );
   }

@@ -148,6 +148,7 @@ function ResearchModeCard() {
         title={t("settings.researchMode.sectionTitle")}
         description={t("settings.researchMode.subtitle")}
       />
+      <p className="text-sm">{t("settings.researchMode.subtitleDetail")}</p>
 
       {showRePrompt && (
         <SettingsInfoTile
@@ -262,6 +263,7 @@ function DataResetCard() {
         title={t("settings.dangerZone")}
         description={t("settings.dangerZoneDescription")}
       />
+      <p className="text-sm">{t("settings.dangerZoneDetail")}</p>
 
       {msg && (
         <p
@@ -399,6 +401,7 @@ function AccountDeleteCard() {
         title={t("settings.deleteAccountCardTitle")}
         description={t("settings.deleteAccountCardDescription")}
       />
+      <p className="text-sm">{t("settings.deleteAccountCardDetail")}</p>
 
       {msg && (
         <p

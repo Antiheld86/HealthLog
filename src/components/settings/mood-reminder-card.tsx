@@ -193,6 +193,8 @@ export function MoodReminderCard({
               disabled={!isAuthenticated || saving}
               aria-label={t("notifications.moodReminder.toggleAria")}
             />
+            <p className="text-sm">{t("notifications.moodReminder.detail")}</p>
+
             <span className="text-muted-foreground text-xs">
               {enabled
                 ? t("notifications.moodReminder.statusOn")

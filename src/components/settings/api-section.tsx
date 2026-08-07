@@ -213,9 +213,7 @@ function ApiTokensCard() {
             authenticated route accepted. The per-medication API-endpoint
             toggle issues the pair that actually works, scoped to one
             medication. This card lists and revokes. */}
-        <p className="text-muted-foreground text-sm">
-          {t("settings.tokenMintMovedDescription")}
-        </p>
+        <p className="text-sm">{t("settings.tokenMintMovedDescription")}</p>
 
         <div>
           <p className="mb-2 text-sm font-medium">

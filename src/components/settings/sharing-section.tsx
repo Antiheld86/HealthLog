@@ -138,6 +138,7 @@ function ShareLinksCard() {
         title={t("settings.sharing.createTitle")}
         description={t("settings.sharing.createDescription")}
       />
+      <p className="text-sm">{t("settings.sharing.createDetail")}</p>
 
       <ShareLinkCreateForm
         key={prefill?.key ?? "new"}

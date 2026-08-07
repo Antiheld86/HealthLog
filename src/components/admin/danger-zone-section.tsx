@@ -97,6 +97,8 @@ export function DangerZoneSection() {
         title={t("admin.deleteAllData")}
         description={t("admin.deleteAllDescription")}
       />
+      <p className="text-sm">{t("admin.deleteAllDetail")}</p>
+
       {wipeMsg && (
         <p
           className={`mt-3 text-sm ${

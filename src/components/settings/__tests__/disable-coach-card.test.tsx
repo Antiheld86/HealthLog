@@ -150,6 +150,6 @@ describe("Settings — DisableCoachCard", () => {
     const html = render();
     // v1.18.1 (D7) — polarity flipped to activate/default-on.
     expect(html).toContain("Activate Coach");
-    expect(html).toContain("Show the Coach button and drawer. On by default");
+    expect(html).toContain("Show the Coach button and drawer");
   });
 });

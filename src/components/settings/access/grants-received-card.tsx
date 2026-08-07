@@ -68,6 +68,8 @@ export function GrantsReceivedCard() {
         title={t("recordSharing.received.title")}
         description={t("recordSharing.received.description")}
       />
+      <p className="text-sm">{t("recordSharing.received.detail")}</p>
+
       <div>
         {isLoading && (
           <Loader2

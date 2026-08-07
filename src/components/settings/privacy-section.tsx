@@ -16,7 +16,6 @@ import Link from "next/link";
 import {
   Database,
   Download,
-  Lock,
   ShieldCheck,
   Trash2,
   Clock,
@@ -67,21 +66,11 @@ export function PrivacySection() {
 
   return (
     <div className="space-y-6">
-      {/* Intro */}
-      <SettingsInfoTile
-        icon={Lock}
-        tone="info"
-        title={t("settings.privacy.intro.title")}
-      >
-        {t("settings.privacy.intro.body")}
-      </SettingsInfoTile>
-
       {/* Encryption at rest */}
       <SettingsCard>
         <SettingsCardHeader
           icon={ShieldCheck}
           title={t("settings.privacy.encryption.title")}
-          description={t("settings.privacy.encryption.description")}
         />
         <div className="space-y-3">
           <p className="text-sm">
@@ -101,7 +90,6 @@ export function PrivacySection() {
         <SettingsCardHeader
           icon={Database}
           title={t("settings.privacy.stored.title")}
-          description={t("settings.privacy.stored.description")}
         />
         <ul className="text-muted-foreground list-disc space-y-1 text-sm">
           <li>{t("settings.privacy.stored.measurements")}</li>

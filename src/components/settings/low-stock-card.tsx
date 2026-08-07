@@ -234,6 +234,8 @@ export function LowStockCard({
               disabled={!isAuthenticated || saving}
               aria-label={t("notifications.lowStock.toggleAria")}
             />
+            <p className="text-sm">{t("notifications.lowStock.detail")}</p>
+
             <span className="text-muted-foreground text-xs">
               {enabled
                 ? t("notifications.lowStock.statusOn")

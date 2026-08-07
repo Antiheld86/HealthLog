@@ -133,6 +133,9 @@ export function AppLogPreviewSection() {
             <RefreshCw
               className={`h-4 w-4 ${isFetching ? "animate-spin" : ""} motion-reduce:animate-none`}
             />
+            <p className="text-sm">
+              {t("admin.section.app-logs.processDetail")}
+            </p>
           </Button>
         }
       />

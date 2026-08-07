@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useMounted } from "@/hooks/use-mounted";
@@ -148,6 +149,10 @@ export function NotificationStatusCard() {
         <SettingsCardHeader
           icon={Bell}
           title={t("settings.notificationStatus.title")}
+        />
+        <EmptyState
+          size="compact"
+          title={t("settings.notificationStatus.emptyTitle")}
           description={t("settings.notificationStatus.emptyDescription")}
         />
       </SettingsCard>

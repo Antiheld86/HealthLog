@@ -107,6 +107,7 @@ function McpConnectionsCard() {
         title={t("settings.mcp.connectionsTitle")}
         description={t("settings.mcp.connectionsDescription")}
       />
+      <p className="text-sm">{t("settings.mcp.connectionsDetail")}</p>
 
       <div className="space-y-4">
         {list.length === 0 ? (
@@ -336,6 +337,7 @@ function McpTokensCard() {
         title={t("settings.mcp.tokensTitle")}
         description={t("settings.mcp.tokensDescription")}
       />
+      <p className="text-sm">{t("settings.mcp.tokensDetail")}</p>
 
       <div className="space-y-4">
         <p className="text-muted-foreground text-xs leading-relaxed">

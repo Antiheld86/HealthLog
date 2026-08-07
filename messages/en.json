@@ -3925,12 +3925,13 @@
     },
     "pillOrder": {
       "title": "Sort the navigation pills",
-      "description": "Drag the pills into the order you want and show or hide them via the eye icon. Hidden detail pages are also removed from the top navigation.",
+      "description": "Drag the pills into the order you want and show or hide them via the eye icon.",
       "dragHandle": "Reorder",
       "saveSuccess": "Pill order saved.",
       "saveError": "Saving the pill order failed.",
       "save": "Save",
-      "empty": "No navigation pills available yet."
+      "empty": "No navigation pills available yet.",
+      "detail": "Hidden detail pages are also removed from the top navigation."
     },
     "customize": "Customize Insights",
     "regenerateRateLimited": "Refresh limit reached — please try again later.",
@@ -4412,7 +4413,7 @@
   "settings": {
     "researchMode": {
       "sectionTitle": "Research Mode",
-      "subtitle": "Opt-in display of an estimated GLP-1 drug-level curve, derived from EMA-published population pharmacokinetics. Reading-only — never a measurement or medical advice.",
+      "subtitle": "Opt-in curve of the estimated GLP-1 drug level, from EMA-published data.",
       "toggleLabel": "Show the estimated drug-level chart",
       "disabledStatus": "Disabled. The drug-level chart is hidden.",
       "enabledStaleStatus": "The disclaimer was updated. Re-acknowledge below to bring the chart back.",
@@ -4420,7 +4421,8 @@
       "rePromptTitle": "Disclaimer updated",
       "rePromptBody": "The Research Mode disclaimer was updated since you last acknowledged it. Re-read and re-confirm to keep the chart visible.",
       "rePromptCta": "Re-acknowledge disclaimer",
-      "disableError": "Could not disable Research Mode. Please try again."
+      "disableError": "Could not disable Research Mode. Please try again.",
+      "subtitleDetail": "Reading-only — never a measurement or medical advice."
     },
     "shell": {
       "sectionsNav": "Settings sections",
@@ -4547,7 +4549,8 @@
       },
       "unavailableTitle": "Unavailable in this shared record",
       "unavailableDescription": "This Settings area is intentionally unavailable while viewing another person's record.",
-      "integrationStatusDescription": "Connection status for this managed record. Connection controls are unavailable."
+      "integrationStatusDescription": "Connection status for this managed record.",
+      "integrationStatusDetail": "Connection controls are unavailable."
     },
     "sections": {
       "account": {
@@ -4622,7 +4625,7 @@
         "integrationsHint": "Connect or disconnect data sources on the Integrations page.",
         "integrationsHintLink": "Open integrations",
         "cardTitle": "Source priority by metric",
-        "help": "When several sources deliver the same value on the same day, the top source counts as canonical. The others stay stored for the audit trail.",
+        "help": "When several sources deliver the same value on the same day, the top source counts as canonical.",
         "resetDefaults": "Reset to defaults",
         "resetDefaultsTitle": "Reset the source order?",
         "resetDefaultsBody": "Every ladder you arranged goes back to the default order, for all metrics and device types at once. This is saved immediately and cannot be brought back.",
@@ -4682,13 +4685,15 @@
         "subtitle": "Decide which source wins when two report the same metric.",
         "nutrients": {
           "title": "Synced nutrient intake",
-          "description": "Daily totals synced from Apple Health over the last {days} days. Read-only — the source app owns the numbers.",
+          "description": "Daily totals synced from Apple Health over the last {days} days.",
           "empty": "No nutrient data has been synced yet.",
           "latest": "{amount} {unit} on {date}",
           "daysWithData": "{count} of {days} days",
           "moduleHint": "Syncing is controlled by the Nutrient intake module.",
-          "moduleHintLink": "Manage modules"
-        }
+          "moduleHintLink": "Manage modules",
+          "detail": "Read-only — the source app owns the numbers."
+        },
+        "helpDetail": "The others stay stored for the audit trail."
       },
       "ai": {
         "title": "AI provider",
@@ -4938,7 +4943,7 @@
         "error": "Couldn't save. Please try again.",
         "toggleable": {
           "title": "What you track",
-          "description": "Optional areas. Disabled modules drop out of the navigation, tiles, and insights — your data stays untouched."
+          "description": "Disabled modules drop out of the navigation, tiles, and insights — your data stays untouched."
         },
         "manageIn": "Manage in {section}",
         "operatorDisabled": "Disabled server-wide",
@@ -5326,7 +5331,7 @@
       "testReasonUnreachable": "Could not reach the AI provider.",
       "coachMemory": {
         "title": "What the Coach remembers",
-        "description": "Durable facts you have told the Coach. It uses these to keep its replies relevant. Remove anything you would rather it forgot.",
+        "description": "Durable facts you have told the Coach.",
         "empty": "The Coach has not stored any facts yet. As you chat, it remembers durable details you share — your goals, conditions, preferences — and you can clear them here at any time.",
         "learnedPrefix": "learned {when}",
         "categoryPreference": "Preferences",
@@ -5349,11 +5354,12 @@
         "forgotToast": "Fact forgotten.",
         "forgotError": "Could not forget that fact. Please try again.",
         "clearedToast": "Forgot {count} stored facts.",
-        "clearError": "Could not clear the stored facts. Please try again."
+        "clearError": "Could not clear the stored facts. Please try again.",
+        "detail": "It uses these to keep its replies relevant. Remove anything you would rather it forgot."
       },
       "coachReminders": {
         "title": "Your reminders",
-        "description": "Things you asked the Coach to bring back later. Due ones show up here and on the Coach.",
+        "description": "Things you asked the Coach to bring back later.",
         "empty": "No reminders yet. Ask the Coach to remind you about something and it will appear here.",
         "loadError": "Could not load your reminders.",
         "dueHeading": "Due now",
@@ -5374,7 +5380,8 @@
         },
         "deleteConfirmTitle": "Delete this reminder?",
         "deleteConfirmBody": "It stops being raised. Anything you have already recorded is untouched.",
-        "deleteConfirmAction": "Delete"
+        "deleteConfirmAction": "Delete",
+        "detail": "Due ones show up here and on the Coach."
       },
       "aboutMe": {
         "title": "About me",
@@ -5647,7 +5654,7 @@
       "workouts": "Workouts"
     },
     "integrationFallback": {
-      "description": "Configured on this account without a settings card of its own. This row exists so a connection cannot stop working unnoticed.",
+      "description": "Configured on this account without a settings card of its own.",
       "lastAttempt": "Last attempt {relative}",
       "noAttempt": "No sync attempt recorded"
     },
@@ -5656,7 +5663,7 @@
     "fitbitViewData": "View your sleep",
     "googleHealthViewData": "View your steps",
     "apiTokens": "API Tokens",
-    "apiTokensDescription": "Review and revoke API tokens for external medication intake. Tokens are issued per medication from the medication's API endpoint toggle.",
+    "apiTokensDescription": "Review and revoke API tokens for external medication intake.",
     "tokenMintMovedDescription": "Tokens are issued per medication. Open a medication and enable its API endpoint to get a token scoped to that medication alone.",
     "tokenNamePlaceholder": "Token name (e.g., iPhone Shortcut)",
     "tokenCreated": "Token created — copy it now! It won't be shown again.",
@@ -5687,14 +5694,14 @@
     "apiEndpointAuth": "Authentication",
     "apiEndpointExample": "Body example",
     "dangerZone": "Delete All Data",
-    "dangerZoneDescription": "Erases your whole health record and every integration connection. Your account and the credentials you sign in with are kept.",
+    "dangerZoneDescription": "Erases your whole health record and every integration connection.",
     "dangerZoneConfirm": "Delete all data?",
     "dangerZoneConfirmDescription": "This permanently deletes everything in your record: measurements, medications, mood entries, lab results, cycle entries, documents, AI conversations and every integration connection, together with everything derived from them and anything you deleted earlier. Share links you gave to a doctor stop working immediately. Your account stays, along with the credentials you sign in with and display settings such as language, timezone and units. This cannot be undone.",
     "dangerZoneSuccess": "Your health record has been deleted. Your account and sign-in are unchanged.",
     "dangerZoneDeleteFailed": "Deletion failed",
     "finalDelete": "Delete permanently",
     "deleteAccountCardTitle": "Delete account entirely",
-    "deleteAccountCardDescription": "Deletes your account along with passkeys, audit log, and sessions. This cannot be undone.",
+    "deleteAccountCardDescription": "Deletes your account along with passkeys, audit log, and sessions.",
     "deleteAccountCta": "Delete account",
     "deleteAccountConfirmTitle": "Delete account permanently?",
     "deleteAccountConfirmDescription": "Your account, all health data, passkeys, sessions, and audit entries will be permanently deleted. You will be signed out immediately after.",
@@ -5712,8 +5719,6 @@
       "changelog": "Changelog",
       "docs": "Documentation",
       "linksHeading": "Sources & docs",
-      "identityDescription": "Version, license, and build details for this instance.",
-      "linksDescription": "Source code, changelog, and documentation.",
       "newerAvailable": "Newer version: {tag}"
     },
     "testConnection": {
@@ -5741,7 +5746,7 @@
     "notificationStatus": {
       "title": "Delivery status",
       "description": "Per-channel state; \"Auto-disabled\" stops retries after permanent errors.",
-      "emptyDescription": "No channels configured yet. Set one up under Delivery channels to start tracking delivery.",
+      "emptyDescription": "Set up a channel under Settings › Integrations › Delivery channels.",
       "stateActive": "Active",
       "stateAutoDisabled": "Auto-disabled",
       "stateSendingPaused": "Sending paused",
@@ -5752,7 +5757,8 @@
       "disabledReason": "Reason",
       "nextRetry": "Next retry",
       "reEnable": "Re-enable",
-      "sendTest": "Send test"
+      "sendTest": "Send test",
+      "emptyTitle": "No channels configured yet"
     },
     "identity": {
       "description": "Optional details for the health-record export (PDF cover + FHIR export). All fields are optional.",
@@ -5765,7 +5771,7 @@
     },
     "healthRecord": {
       "title": "Export health record",
-      "description": "Generate a complete health record for your doctor — as a PDF, structured (FHIR), or a combined package.",
+      "description": "A complete record for your doctor — as a PDF, as FHIR, or both.",
       "format": "Format",
       "format_pdf": "PDF",
       "format_fhir": "Structured (FHIR)",
@@ -5790,10 +5796,10 @@
       "errorModuleDisabled": "The health record export is switched off for this account."
     },
     "globalExcludedInjectionSitesLabel": "Globally excluded injection sites",
-    "globalExcludedInjectionSitesHint": "Sites listed here are never offered for any medication and rejected when logging a dose, even if a medication prefers them.",
+    "globalExcludedInjectionSitesHint": "These sites are never offered and are rejected when a dose is logged.",
     "sharing": {
       "createTitle": "New share link",
-      "createDescription": "The link is read-only and time-boxed. The token is shown once on creation — store it then; it cannot be recovered.",
+      "createDescription": "The link is read-only and time-boxed.",
       "label": "Label",
       "labelPlaceholder": "e.g. Dr. Smith — annual check-up",
       "range": "Days of history",
@@ -5843,15 +5849,17 @@
       "scopeInsuranceExcluded": "Insurance details are never shared through a link.",
       "statusNeedsReselect": "Pick contents again",
       "reselectReason": "This link served a scope that was never chosen, so it was closed. Create a new one and pick what it should contain.",
-      "reselectAction": "Create a replacement"
+      "reselectAction": "Create a replacement",
+      "createDetail": "The token is shown once on creation — store it then; it cannot be recovered."
     },
     "genderOther": "Other",
     "cycleTracking": {
       "title": "Cycle tracking",
-      "description": "Track your menstrual cycle, predictions, symptoms, and phase insights. On by default for accounts set to female; available to everyone.",
+      "description": "Track your menstrual cycle, predictions, symptoms, and phase insights.",
       "enable": "Enable cycle tracking",
       "manage": "Open cycle tracking",
-      "error": "Couldn't update cycle tracking."
+      "error": "Couldn't update cycle tracking.",
+      "detail": "On by default for accounts set to female; available to everyone."
     },
     "nightscout": "Nightscout",
     "nightscoutTag": "CGM",
@@ -5937,7 +5945,7 @@
     "coach": {
       "activate": {
         "title": "Activate Coach",
-        "description": "Show the Coach button and drawer. On by default — turn it off to hide the Coach everywhere.",
+        "description": "Show the Coach button and drawer.",
         "toggleAria": "Activate the Coach button and drawer",
         "savedOn": "Coach activated.",
         "savedOff": "Coach hidden.",
@@ -6057,19 +6065,13 @@
       "signOutEverywhereConfirmBody": "Every device except this one will need to sign in again. This device stays signed in. Nothing you have recorded is affected."
     },
     "privacy": {
-      "intro": {
-        "title": "Your data stays yours",
-        "body": "HealthLog is self-hosted. This page brings together how your data is protected, how long it is kept, how to get it out, and how to delete it."
-      },
       "encryption": {
         "title": "Encrypted at rest",
-        "description": "Sensitive fields are encrypted in the database.",
         "summary": "Your sensitive data is encrypted at rest with {algorithm} across {columns} fields in {models} record types.",
         "statement": "Your sensitive data is encrypted at rest with AES-256-GCM."
       },
       "stored": {
         "title": "What's stored",
-        "description": "The categories of data this account holds.",
         "measurements": "Measurements (weight, blood pressure, pulse, glucose, sleep, body composition)",
         "medications": "Medications and intake history",
         "moodLabs": "Mood entries and lab results",
@@ -6087,7 +6089,7 @@
       },
       "export": {
         "title": "Download my data",
-        "description": "Export your records as CSV or JSON, optionally passphrase-encrypted, or generate a full health record.",
+        "description": "Your records as CSV or JSON, optionally passphrase-encrypted.",
         "openExport": "Export & backup",
         "openHealthRecord": "Health record"
       },
@@ -6106,26 +6108,28 @@
     },
     "mcp": {
       "enableTitle": "Remote MCP endpoint",
-      "enableDescription": "Let an MCP-capable assistant (Claude.ai, ChatGPT) read your health data over a scoped token. Off by default.",
+      "enableDescription": "Let an MCP-capable assistant (Claude.ai, ChatGPT) read your health data over a scoped token.",
       "enabled": "Enabled",
       "disabled": "Disabled",
       "enableToggleLabel": "Enable the MCP endpoint",
       "endpointLabel": "Connector URL",
       "connectDescription": "Paste this URL into your assistant's custom-connector setup, then authorize with the token below or sign in when prompted.",
       "tokensTitle": "Connector tokens",
-      "tokensDescription": "Mint a read-only token to connect an assistant. The token is shown once.",
+      "tokensDescription": "Mint a read-only token to connect an assistant.",
       "scopeNote": "Tokens are scoped to health:read — read-only access to your own records. They can never reach admin functions.",
       "writeScopeToggleLabel": "Allow logging (health:write)",
       "writeScopeNote": "Adds the health:write scope so the assistant can log new measurements and mood entries to your account. Every write is confirmed first. The token still can't delete or edit existing entries, change medications, or reach REST or admin functions. Leave off for read-only access.",
       "connectionsTitle": "Connected assistants",
-      "connectionsDescription": "Assistants you authorized through the sign-in flow. Revoking a connection ends its access immediately, including its ability to refresh.",
+      "connectionsDescription": "Assistants you authorized through the sign-in flow.",
       "noConnections": "No connected assistants.",
       "connectionConnected": "Connected",
       "connectionLastUsed": "Last used",
       "connectionNeverUsed": "Never used",
       "connectionRevoke": "Disconnect",
       "connectionRevokeDescription": "This ends the assistant's access immediately and stops it from renewing. It will need to be re-authorized to reconnect.",
-      "connectionRevokeFailed": "Could not disconnect the assistant."
+      "connectionRevokeFailed": "Could not disconnect the assistant.",
+      "connectionsDetail": "Revoking a connection ends its access immediately, including its ability to refresh.",
+      "tokensDetail": "The token is shown once."
     },
     "strava": "Strava",
     "stravaDescription": "Connect your Strava account to sync your activities into your workout history.",
@@ -6158,7 +6162,7 @@
     },
     "appleHealth": {
       "title": "Apple Health",
-      "description": "Live sync comes from the HealthLog iOS app. It is not a web or OAuth connection.",
+      "description": "Live sync comes from the HealthLog iOS app, not from a web or OAuth connection.",
       "status": {
         "unavailable": "Apple Health status unavailable"
       },
@@ -6194,7 +6198,9 @@
       "explainer": "Off, readings are judged against the general non-diabetic reference band. On, they are judged against the tighter glycaemic goal band from the ADA Standards of Care, and the Coach grounds its glucose remarks on that band instead. Your own target overrides below still take precedence.",
       "disclaimer": "This selects a reference band. It is not a diagnosis, it is never inferred from a reading, and the app takes no clinical action on it. Which targets apply to you is a question for your clinician.",
       "error": "Could not save the setting."
-    }
+    },
+    "dangerZoneDetail": "Your account and the credentials you sign in with are kept.",
+    "deleteAccountCardDetail": "This cannot be undone."
   },
   "admin": {
     "title": "Administration",
@@ -6225,7 +6231,7 @@
     },
     "aiServerKey": {
       "title": "AI server key",
-      "description": "An operator-wide provider key every account can fall back to when no personal key is configured.",
+      "description": "An operator key for accounts that have not configured one of their own.",
       "byokHint": "A user's own key (BYOK, ChatGPT login or local provider) always takes precedence — the server key is the last step in the provider chain.",
       "consentHint": "Requests over the server key require the user's active AI consent; without a consent receipt nothing is sent.",
       "statusConfigured": "Configured",
@@ -6331,7 +6337,7 @@
     "monitoringTestFailed": "Monitoring test failed",
     "assistant": {
       "title": "Assistant Surfaces",
-      "description": "Each toggle hides a model-driven surface app-wide without removing the provider configuration. The master kills every sub-flag at once.",
+      "description": "Each toggle hides a model-driven surface app-wide without removing the provider configuration.",
       "master": {
         "title": "Assistant enabled",
         "description": "Master switch for every model-driven surface. When off, every sub-flag below is forced off."
@@ -6355,12 +6361,13 @@
     },
     "modules": {
       "title": "Module availability",
-      "description": "Turn a module off for the whole server. A module disabled here is off for every account regardless of personal preference. Core domains (weight, blood pressure, pulse, medications) are always on and cannot be disabled.",
-      "saveError": "Could not update module availability."
+      "description": "Turn a module off for the whole server.",
+      "saveError": "Could not update module availability.",
+      "detail": "A module disabled here is off for every account regardless of personal preference. Core domains (weight, blood pressure, pulse, medications) are always on and cannot be disabled."
     },
     "invites": {
       "title": "Invites",
-      "description": "Registration invite links — they work even while registration is closed. The link is shown only once.",
+      "description": "Registration invite links — they work even while registration is closed.",
       "create": "Create invite",
       "createTitle": "Create invite",
       "createDescription": "The link admits a signup even while registration is closed.",
@@ -6466,7 +6473,7 @@
     "outcomeFailed": "Failed",
     "auditDetails": "Details",
     "deleteAllData": "Delete all data globally",
-    "deleteAllDescription": "Deletes all measurement, medication, integration, and log data for all users. User accounts will be preserved.",
+    "deleteAllDescription": "Deletes all measurement, medication, integration, and log data for all users.",
     "deleteAllConfirm": "Really delete all data?",
     "deleteAllConfirmDescription": "This will permanently delete all measurements, medications, intake events, API tokens, Withings connections, open authentication challenges, notification channels (Telegram, ntfy, Web Push), push subscriptions, and queued Telegram message deletions for all users. User accounts, the audit log, and submitted feedback are preserved so the wipe itself remains traceable and bug reports stay triageable.",
     "deleteButton": "Delete all data",
@@ -6611,7 +6618,7 @@
       "app-logs": {
         "title": "App Logs",
         "subtitle": "Tail the most recent structured wide-events emitted by this process.",
-        "processNote": "Showing app-process logs only — worker-process logs go to Loki when that integration is configured. Buffer is volatile and capped at 500 entries.",
+        "processNote": "Showing app-process logs only — worker-process logs go to Loki when that integration is configured.",
         "filterTraceId": "Trace ID",
         "filterAction": "Action contains…",
         "filterLevel": "Level",
@@ -6632,7 +6639,8 @@
         "emptyDescription": "No events match the current filters yet. Hit refresh after triggering some traffic.",
         "refresh": "Refresh",
         "eventDetails": "Event details",
-        "closeDetails": "Close details"
+        "closeDetails": "Close details",
+        "processDetail": "Buffer is volatile and capped at 500 entries."
       },
       "backups": {
         "title": "Backups",
@@ -6699,7 +6707,7 @@
         "loading": "Loading encryption status…",
         "loadError": "Failed to load encryption status.",
         "coverageTitle": "Coverage",
-        "coverageDescription": "How many encrypted rows sit under each key id. Only key ids and counts are shown — never key material.",
+        "coverageDescription": "How many encrypted rows sit under each key id.",
         "activeKeyId": "Active key id",
         "configuredKeys": "Configured keys",
         "totalRows": "Encrypted rows",
@@ -6707,7 +6715,7 @@
         "safeToDropLegacy": "Safe to drop the legacy key",
         "rotationIncomplete": "{count} rows still need rotation",
         "rotationTitle": "Key rotation",
-        "rotationDescription": "Re-encrypt every encrypted column to the active key. The command-line tool stays the canonical path; this trigger is a convenience.",
+        "rotationDescription": "Re-encrypt every encrypted column to the active key.",
         "rotationState": "State",
         "lastRun": "Last run: scanned {scanned}, rotated {rotated}, errors {errors}.",
         "rotateNow": "Rotate now",
@@ -6730,7 +6738,8 @@
           "running": "Running",
           "completed": "Completed",
           "failed": "Failed"
-        }
+        },
+        "coverageDetail": "Only key ids and counts are shown — never key material."
       }
     },
     "carrier": "Carrier",
@@ -6776,7 +6785,8 @@
       "countFew": "{count} failures",
       "countOther": "{count} failures",
       "lastFailed": "Last failure {when}"
-    }
+    },
+    "deleteAllDetail": "User accounts will be preserved."
   },
   "achievements": {
     "title": "Achievements",
@@ -7102,7 +7112,7 @@
     },
     "moodReminder": {
       "title": "Daily mood reminder",
-      "description": "A gentle nudge at your chosen time when you haven't logged a mood for the day. Routes only through channels you've already configured (Telegram, ntfy, Web Push, Apple Push) and stays silent once you've logged today.",
+      "description": "A gentle nudge at your chosen time when you haven't logged a mood for the day.",
       "toggleAria": "Toggle daily mood reminder",
       "statusOn": "Active at your chosen time",
       "statusOff": "Off",
@@ -7111,11 +7121,12 @@
       "saveError": "Save failed. Please try again.",
       "hourLabel": "Reminder time",
       "hourAria": "Mood reminder hour",
-      "hourSavedToast": "Reminder time updated."
+      "hourSavedToast": "Reminder time updated.",
+      "detail": "Routes only through channels you've already configured (Telegram, ntfy, Web Push, Apple Push) and stays silent once you've logged today."
     },
     "coachNudge": {
       "title": "Proactive Coach",
-      "description": "Reaches out when your data suggests a look at the Coach — for example low medication adherence or an elevated weekly blood-pressure average. Topics and frequency are adjustable.",
+      "description": "Reaches out when your data suggests a look at the Coach.",
       "toggleAria": "Toggle proactive Coach nudges",
       "statusOn": "Active",
       "statusOff": "Off",
@@ -7142,7 +7153,7 @@
     },
     "lowStock": {
       "title": "Low-stock alert",
-      "description": "Checks your tracked medication supplies once a day and notifies you when one covers fewer days than this threshold. One notification per shortage; it re-arms after a refill.",
+      "description": "Reports daily when a supply covers fewer days than this threshold.",
       "toggleAria": "Toggle low-stock alerts",
       "statusOn": "Active",
       "statusOff": "Off",
@@ -7156,7 +7167,8 @@
       "enabledToast": "Low-stock alerts enabled.",
       "disabledToast": "Low-stock alerts disabled.",
       "saveError": "Could not save. Please try again.",
-      "medicationsLink": "Go to your medications"
+      "medicationsLink": "Go to your medications",
+      "detail": "One notification per shortage; it re-arms after a refill."
     },
     "eventMedicationReminder": "Medication reminder",
     "eventMedicationReminderDesc": "Sent at each scheduled dose time.",
@@ -9536,7 +9548,7 @@
     },
     "invite": {
       "title": "Invite someone",
-      "description": "Nothing is shared until they accept. Until then the invitation sits in their settings and gives them nothing.",
+      "description": "Nothing is shared until they accept.",
       "identifierLabel": "Username or e-mail",
       "identifierPlaceholder": "The name they sign in with",
       "identifierHint": "They need an account on this instance. Invitations cannot be sent to an e-mail address that has not registered.",
@@ -9590,7 +9602,7 @@
     },
     "received": {
       "title": "Records I can open",
-      "description": "An invitation gives you nothing until you accept it. You can hand access back whenever you want.",
+      "description": "An invitation gives you nothing until you accept it.",
       "emptyTitle": "Nobody has shared a record with you",
       "emptyDescription": "When someone invites you, the invitation appears here.",
       "loadError": "The list could not be loaded.",
@@ -9602,7 +9614,8 @@
       "renounce": "Hand back",
       "renounceTitle": "Hand {name}'s record back?",
       "renounceBody": "You lose access immediately. They can invite you again at any time.",
-      "renounceConfirm": "Hand back"
+      "renounceConfirm": "Hand back",
+      "detail": "You can hand access back whenever you want."
     },
     "activity": {
       "title": "When my record was opened",

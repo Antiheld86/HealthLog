@@ -265,6 +265,7 @@ export function InsightsPillOrderSection({ id }: { id?: string }) {
         title={t("insights.pillOrder.title")}
         description={t("insights.pillOrder.description")}
       />
+      <p className="text-sm">{t("insights.pillOrder.detail")}</p>
 
       {isLoading ? (
         <p

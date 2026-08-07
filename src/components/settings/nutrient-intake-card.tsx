@@ -78,6 +78,9 @@ export function NutrientIntakeCard() {
           days: WINDOW_DAYS,
         })}
       />
+      <p className="text-sm">
+        {t("settings.sections.sources.nutrients.detail")}
+      </p>
       {overview.isLoading ? (
         <div className="space-y-1" aria-hidden="true">
           <Skeleton className="h-9 w-full rounded-md" />

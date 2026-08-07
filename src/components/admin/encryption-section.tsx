@@ -115,6 +115,10 @@ export function EncryptionSection() {
           title={t("admin.section.encryption.coverageTitle")}
           description={t("admin.section.encryption.coverageDescription")}
         />
+        <p className="text-sm">
+          {t("admin.section.encryption.coverageDetail")}
+        </p>
+
         {statusQuery.isLoading ? (
           <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />

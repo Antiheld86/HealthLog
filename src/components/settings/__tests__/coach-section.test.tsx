@@ -55,7 +55,7 @@ describe("<CoachSection> — SSR smoke", () => {
     expect(html).toContain('data-testid="settings-disable-coach-switch"');
     // v1.18.1 (D7) — polarity flipped to activate/default-on.
     expect(html).toContain("Activate Coach");
-    expect(html).toContain("Show the Coach button and drawer. On by default");
+    expect(html).toContain("Show the Coach button and drawer");
     // v1.18.6 (W9) — the proactive Coach nudge card moved here from
     // Benachrichtigungen; its anchor renders under the enabled-coach gate.
     expect(html).toContain('id="coach-nudge"');
@@ -68,7 +68,6 @@ describe("<CoachSection> — SSR smoke", () => {
     authState.disableCoach = false;
     const html = render("de");
     expect(html).toContain("Coach aktivieren");
-    expect(html).toContain("Standardmäßig an");
     expect(html).not.toContain("settings.sections.coach.");
     expect(html).not.toContain("settings.coach.activate.");
   });

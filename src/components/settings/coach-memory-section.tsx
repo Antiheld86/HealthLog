@@ -149,6 +149,7 @@ export function CoachMemorySection({
         title={t("settings.ai.coachMemory.title")}
         description={t("settings.ai.coachMemory.description")}
       />
+      <p className="text-sm">{t("settings.ai.coachMemory.detail")}</p>
 
       {query.isError && (
         <p

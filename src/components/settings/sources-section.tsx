@@ -315,6 +315,8 @@ export function SourcesSection() {
           }
         />
 
+        <p className="text-sm">{t("settings.sections.sources.helpDetail")}</p>
+
         {isLoading || !priority ? (
           <SourcesSkeletonList />
         ) : (

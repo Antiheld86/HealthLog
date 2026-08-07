@@ -61,7 +61,7 @@ describe("<AppleHealthCard>", () => {
 
     expect(html).toContain('data-testid="apple-health-card"');
     expect(html).toContain("HealthLog iOS app");
-    expect(html).toContain("not a web or OAuth connection");
+    expect(html).toContain("not from a web or OAuth connection");
     expect(html).toContain("Settings → Apple Health");
     expect(html).toContain("when iOS grants background time");
     expect(html).not.toContain(">Connected<");

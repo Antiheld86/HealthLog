@@ -3925,12 +3925,13 @@
     },
     "pillOrder": {
       "title": "Sortuj pigułki nawigacyjne",
-      "description": "Przeciągnij pigułki w wybranej kolejności i pokaż lub ukryj je ikoną oka. Ukryte strony szczegółów znikają również z górnej nawigacji.",
+      "description": "Przeciągnij pigułki w wybranej kolejności i pokaż lub ukryj je ikoną oka.",
       "dragHandle": "Zmień kolejność",
       "saveSuccess": "Zapisano kolejność pigułek.",
       "saveError": "Zapisanie kolejności pigułek nie powiodło się.",
       "save": "Zapisz",
-      "empty": "Brak dostępnych pigułek nawigacyjnych."
+      "empty": "Brak dostępnych pigułek nawigacyjnych.",
+      "detail": "Ukryte strony szczegółów znikają również z górnej nawigacji."
     },
     "customize": "Dostosuj Analizy",
     "regenerateRateLimited": "Osiągnięto limit odświeżeń — spróbuj ponownie później.",
@@ -4412,7 +4413,7 @@
   "settings": {
     "researchMode": {
       "sectionTitle": "Tryb Badawczy",
-      "subtitle": "Opcjonalne wyświetlanie szacowanej krzywej poziomu leku GLP-1, wyprowadzonej z farmakokinetyki populacyjnej opublikowanej przez EMA. Tylko do odczytu — nigdy pomiar ani porada medyczna.",
+      "subtitle": "Opcjonalna krzywa szacowanego poziomu leku GLP-1 wg danych EMA.",
       "toggleLabel": "Pokaż szacowaną krzywą poziomu leku",
       "disabledStatus": "Wyłączone. Krzywa jest ukryta.",
       "enabledStaleStatus": "Disclaimer został zaktualizowany. Potwierdź ponownie poniżej, aby przywrócić krzywą.",
@@ -4420,7 +4421,8 @@
       "rePromptTitle": "Zaktualizowano disclaimer",
       "rePromptBody": "Disclaimer trybu Badawczego został zaktualizowany od czasu twojego ostatniego potwierdzenia. Przeczytaj go ponownie i potwierdź, aby krzywa pozostała widoczna.",
       "rePromptCta": "Potwierdź ponownie disclaimer",
-      "disableError": "Nie udało się wyłączyć trybu Badawczego. Spróbuj ponownie."
+      "disableError": "Nie udało się wyłączyć trybu Badawczego. Spróbuj ponownie.",
+      "subtitleDetail": "Tylko do odczytu — nigdy pomiar ani porada medyczna."
     },
     "shell": {
       "sectionsNav": "Sekcje ustawień",
@@ -4547,7 +4549,8 @@
       },
       "unavailableTitle": "Niedostępne w tym udostępnionym rekordzie",
       "unavailableDescription": "Ten obszar Ustawień jest celowo niedostępny podczas przeglądania rekordu innej osoby.",
-      "integrationStatusDescription": "Stan połączenia dla tego zarządzanego rekordu. Elementy sterujące połączeniem są niedostępne."
+      "integrationStatusDescription": "Stan połączenia dla tego zarządzanego rekordu.",
+      "integrationStatusDetail": "Elementy sterujące połączeniem są niedostępne."
     },
     "sections": {
       "account": {
@@ -4622,7 +4625,7 @@
         "integrationsHint": "Źródła danych podłączysz lub odłączysz na stronie integracji.",
         "integrationsHintLink": "Otwórz integracje",
         "cardTitle": "Priorytet źródeł według metryki",
-        "help": "Gdy kilka źródeł dostarcza tę samą wartość tego samego dnia, źródło na górze liczy się jako kanoniczne. Pozostałe pozostają zapisane na potrzeby audytu.",
+        "help": "Gdy kilka źródeł dostarcza tę samą wartość tego samego dnia, źródło na górze liczy się jako kanoniczne.",
         "resetDefaults": "Przywróć wartości domyślne",
         "resetDefaultsTitle": "Zresetować kolejność źródeł?",
         "resetDefaultsBody": "Każda ustawiona przez ciebie kolejność wraca do domyślnej, dla wszystkich metryk i typów urządzeń naraz. Zapis następuje natychmiast i nie da się go cofnąć.",
@@ -4682,13 +4685,15 @@
         "subtitle": "Zdecyduj, które źródło wygrywa, gdy dwa podają tę samą metrykę.",
         "nutrients": {
           "title": "Zsynchronizowane spożycie składników",
-          "description": "Dzienne sumy z Apple Health z ostatnich {days} dni. Tylko do odczytu — wartości należą do aplikacji źródłowej.",
+          "description": "Dzienne sumy z Apple Health z ostatnich {days} dni.",
           "empty": "Nie zsynchronizowano jeszcze danych o składnikach odżywczych.",
           "latest": "{amount} {unit} dnia {date}",
           "daysWithData": "{count} z {days} dni",
           "moduleHint": "Synchronizacją steruje moduł spożycia składników odżywczych.",
-          "moduleHintLink": "Zarządzaj modułami"
-        }
+          "moduleHintLink": "Zarządzaj modułami",
+          "detail": "Tylko do odczytu — wartości należą do aplikacji źródłowej."
+        },
+        "helpDetail": "Pozostałe pozostają zapisane na potrzeby audytu."
       },
       "ai": {
         "title": "Dostawca AI",
@@ -4938,7 +4943,7 @@
         "error": "Nie udało się zapisać. Spróbuj ponownie.",
         "toggleable": {
           "title": "Co śledzisz",
-          "description": "Obszary opcjonalne. Wyłączone moduły znikają z nawigacji, kafelków i analiz — Twoje dane pozostają nienaruszone."
+          "description": "Wyłączone moduły znikają z nawigacji, kafelków i analiz — Twoje dane pozostają nienaruszone."
         },
         "manageIn": "Zarządzaj w {section}",
         "operatorDisabled": "Wyłączone na całym serwerze",
@@ -5326,7 +5331,7 @@
       "testReasonUnreachable": "Nie udało się połączyć z dostawcą AI.",
       "coachMemory": {
         "title": "Co Coach pamięta",
-        "description": "Trwałe informacje, które przekazałeś Coachowi. Wykorzystuje je, aby jego odpowiedzi pozostawały trafne. Usuń wszystko, o czym wolisz, by zapomniał.",
+        "description": "Trwałe informacje, które przekazałeś Coachowi.",
         "empty": "Coach nie zapisał jeszcze żadnych informacji. Podczas rozmowy zapamiętuje trwałe szczegóły, którymi się dzielisz — Twoje cele, dolegliwości, preferencje — i możesz je tutaj w każdej chwili usunąć.",
         "learnedPrefix": "zapamiętano {when}",
         "categoryPreference": "Preferencje",
@@ -5349,11 +5354,12 @@
         "forgotToast": "Informacja zapomniana.",
         "forgotError": "Nie udało się zapomnieć tej informacji. Spróbuj ponownie.",
         "clearedToast": "Zapomniano {count} zapisanych informacji.",
-        "clearError": "Nie udało się usunąć zapisanych informacji. Spróbuj ponownie."
+        "clearError": "Nie udało się usunąć zapisanych informacji. Spróbuj ponownie.",
+        "detail": "Wykorzystuje je, aby jego odpowiedzi pozostawały trafne. Usuń wszystko, o czym wolisz, by zapomniał."
       },
       "coachReminders": {
         "title": "Twoje przypomnienia",
-        "description": "Rzeczy, o których przypomnienie poprosiłeś Coacha. Te, których termin nadszedł, pojawiają się tutaj i w Coachu.",
+        "description": "Rzeczy, o których przypomnienie poprosiłeś Coacha.",
         "empty": "Brak przypomnień. Poproś Coacha, aby przypomniał Ci o czymś, a pojawi się tutaj.",
         "loadError": "Nie udało się wczytać Twoich przypomnień.",
         "dueHeading": "Termin teraz",
@@ -5374,7 +5380,8 @@
         },
         "deleteConfirmTitle": "Usunąć to przypomnienie?",
         "deleteConfirmBody": "Przestanie się pojawiać. Zapisane wcześniej dane pozostają bez zmian.",
-        "deleteConfirmAction": "Usuń"
+        "deleteConfirmAction": "Usuń",
+        "detail": "Te, których termin nadszedł, pojawiają się tutaj i w Coachu."
       },
       "aboutMe": {
         "title": "O mnie",
@@ -5647,7 +5654,7 @@
       "workouts": "Treningi"
     },
     "integrationFallback": {
-      "description": "Skonfigurowane na tym koncie, ale bez własnej karty ustawień. Ten wiersz istnieje po to, by przerwane połączenie nie pozostało niezauważone.",
+      "description": "Skonfigurowane na tym koncie, ale bez własnej karty ustawień.",
       "lastAttempt": "Ostatnia próba {relative}",
       "noAttempt": "Brak zapisanej próby synchronizacji"
     },
@@ -5656,7 +5663,7 @@
     "fitbitViewData": "Zobacz swój sen",
     "googleHealthViewData": "Zobacz swoje kroki",
     "apiTokens": "Tokeny API",
-    "apiTokensDescription": "Przeglądaj i unieważniaj tokeny API do zewnętrznego rejestrowania przyjęć leków. Tokeny są wydawane dla pojedynczego leku z jego przełącznika punktu końcowego API.",
+    "apiTokensDescription": "Przeglądaj i unieważniaj tokeny API do zewnętrznego rejestrowania przyjęć leków.",
     "tokenMintMovedDescription": "Tokeny są wydawane dla pojedynczego leku. Otwórz lek i włącz jego punkt końcowy API, aby otrzymać token obejmujący wyłącznie ten lek.",
     "tokenNamePlaceholder": "Nazwa tokena (np. Skrót iPhone)",
     "tokenCreated": "Token utworzony — skopiuj go teraz! Nie zostanie pokazany ponownie.",
@@ -5687,14 +5694,14 @@
     "apiEndpointAuth": "Uwierzytelnianie",
     "apiEndpointExample": "Przykład treści",
     "dangerZone": "Usuń wszystkie dane",
-    "dangerZoneDescription": "Kasuje całą Twoją dokumentację zdrowotną i wszystkie połączenia integracji. Konto i dane logowania zostają zachowane.",
+    "dangerZoneDescription": "Kasuje całą Twoją dokumentację zdrowotną i wszystkie połączenia integracji.",
     "dangerZoneConfirm": "Usunąć wszystkie dane?",
     "dangerZoneConfirmDescription": "Ta czynność trwale usuwa wszystko z Twojej dokumentacji: pomiary, leki, wpisy nastroju, wyniki badań, wpisy cyklu, dokumenty, rozmowy z SI oraz wszystkie połączenia integracji, a wraz z nimi wszystko, co z nich wyliczono, i wszystko, co usunięto wcześniej. Linki udostępnione poradni natychmiast przestają działać. Konto zostaje, razem z danymi logowania i ustawieniami wyświetlania, takimi jak język, strefa czasowa i jednostki. Nie można tego cofnąć.",
     "dangerZoneSuccess": "Twoja dokumentacja zdrowotna została usunięta. Konto i logowanie pozostają bez zmian.",
     "dangerZoneDeleteFailed": "Usuwanie nie powiodło się",
     "finalDelete": "Usuń trwale",
     "deleteAccountCardTitle": "Usuń całe konto",
-    "deleteAccountCardDescription": "Usuwa Twoje konto wraz z kluczami dostępu, dziennikiem audytu i sesjami. Tej operacji nie można cofnąć.",
+    "deleteAccountCardDescription": "Usuwa Twoje konto wraz z kluczami dostępu, dziennikiem audytu i sesjami.",
     "deleteAccountCta": "Usuń konto",
     "deleteAccountConfirmTitle": "Trwale usunąć konto?",
     "deleteAccountConfirmDescription": "Twoje konto, wszystkie dane zdrowotne, klucze dostępu, sesje i wpisy audytu zostaną trwale usunięte. Zostaniesz wylogowany natychmiast po tym.",
@@ -5712,8 +5719,6 @@
       "changelog": "Changelog",
       "docs": "Dokumentacja",
       "linksHeading": "Źródła i dokumentacja",
-      "identityDescription": "Wersja, licencja i szczegóły kompilacji tej instancji.",
-      "linksDescription": "Kod źródłowy, dziennik zmian i dokumentacja.",
       "newerAvailable": "Nowa wersja: {tag}"
     },
     "testConnection": {
@@ -5741,7 +5746,7 @@
     "notificationStatus": {
       "title": "Niezawodność kanałów",
       "description": "Stan każdego kanału; „Automatycznie wyłączone” przerywa ponawianie po trwałych błędach.",
-      "emptyDescription": "Nie skonfigurowano jeszcze żadnych kanałów. Dodaj kanał w sekcji Kanały dostarczania, aby śledzić dostarczalność.",
+      "emptyDescription": "Dodaj kanał w Ustawienia › Integracje › Kanały dostarczania.",
       "stateActive": "Aktywne",
       "stateAutoDisabled": "Automatycznie wyłączone",
       "stateSendingPaused": "Wysyłanie wstrzymane",
@@ -5752,7 +5757,8 @@
       "disabledReason": "Powód",
       "nextRetry": "Następna próba",
       "reEnable": "Włącz ponownie",
-      "sendTest": "Wyślij test"
+      "sendTest": "Wyślij test",
+      "emptyTitle": "Nie skonfigurowano jeszcze kanałów"
     },
     "identity": {
       "description": "Opcjonalne dane do eksportu dokumentacji zdrowotnej (okładka PDF + eksport FHIR). Wszystkie pola są opcjonalne.",
@@ -5765,7 +5771,7 @@
     },
     "healthRecord": {
       "title": "Eksportuj dokumentację zdrowotną",
-      "description": "Wygeneruj pełną dokumentację zdrowotną dla lekarza — jako PDF, ustrukturyzowaną (FHIR) lub łączny pakiet.",
+      "description": "Pełna dokumentacja dla lekarza — jako PDF, jako FHIR lub oba.",
       "format": "Format",
       "format_pdf": "PDF",
       "format_fhir": "Ustrukturyzowany (FHIR)",
@@ -5790,10 +5796,10 @@
       "errorModuleDisabled": "Eksport dokumentacji jest wyłączony dla tego konta."
     },
     "globalExcludedInjectionSitesLabel": "Globalnie wykluczone miejsca iniekcji",
-    "globalExcludedInjectionSitesHint": "Miejsca wymienione tutaj nie są proponowane dla żadnego leku i są odrzucane przy rejestrowaniu dawki, nawet jeśli lek je preferuje.",
+    "globalExcludedInjectionSitesHint": "Te miejsca nigdy nie są proponowane i są odrzucane przy rejestrowaniu dawki.",
     "sharing": {
       "createTitle": "Nowy link udostępniania",
-      "createDescription": "Link jest tylko do odczytu i ograniczony czasowo. Token jest pokazywany tylko raz przy tworzeniu — zapisz go wtedy; nie można go odzyskać.",
+      "createDescription": "Link jest tylko do odczytu i ograniczony czasowo.",
       "label": "Etykieta",
       "labelPlaceholder": "np. dr Kowalski — kontrola roczna",
       "range": "Dni historii",
@@ -5843,15 +5849,17 @@
       "scopeInsuranceExcluded": "Dane ubezpieczenia nigdy nie są udostępniane przez link.",
       "statusNeedsReselect": "Wybierz zawartość ponownie",
       "reselectReason": "Ten link udostępniał zakres, którego nikt nie wybrał, więc został zamknięty. Utwórz nowy i wybierz jego zawartość.",
-      "reselectAction": "Utwórz zamiennik"
+      "reselectAction": "Utwórz zamiennik",
+      "createDetail": "Token jest pokazywany tylko raz przy tworzeniu — zapisz go wtedy; nie można go odzyskać."
     },
     "genderOther": "Inna",
     "cycleTracking": {
       "title": "Śledzenie cyklu",
-      "description": "Śledź swój cykl menstruacyjny, prognozy, objawy i analizy faz. Domyślnie włączone dla kont ustawionych jako kobiece; dostępne dla wszystkich.",
+      "description": "Śledź swój cykl menstruacyjny, prognozy, objawy i analizy faz.",
       "enable": "Włącz śledzenie cyklu",
       "manage": "Otwórz śledzenie cyklu",
-      "error": "Nie udało się zaktualizować śledzenia cyklu."
+      "error": "Nie udało się zaktualizować śledzenia cyklu.",
+      "detail": "Domyślnie włączone dla kont ustawionych jako kobiece; dostępne dla wszystkich."
     },
     "nightscout": "Nightscout",
     "nightscoutTag": "CGM",
@@ -5937,7 +5945,7 @@
     "coach": {
       "activate": {
         "title": "Włącz Coacha",
-        "description": "Pokazuje przycisk i panel Coacha. Domyślnie włączony — wyłącz, aby ukryć Coacha wszędzie.",
+        "description": "Pokazuje przycisk i panel Coacha.",
         "toggleAria": "Włącz przycisk i panel Coacha",
         "savedOn": "Coach włączony.",
         "savedOff": "Coach ukryty.",
@@ -6057,19 +6065,13 @@
       "signOutEverywhereConfirmBody": "Każde urządzenie poza tym będzie musiało zalogować się ponownie. To urządzenie pozostaje zalogowane. Zapisane dane pozostają bez zmian."
     },
     "privacy": {
-      "intro": {
-        "title": "Twoje dane pozostają Twoje",
-        "body": "HealthLog jest hostowany samodzielnie. Ta strona zbiera w jednym miejscu informacje o tym, jak chronione są Twoje dane, jak długo są przechowywane, jak je wyeksportować i jak je usunąć."
-      },
       "encryption": {
         "title": "Szyfrowane w spoczynku",
-        "description": "Wrażliwe pola są szyfrowane w bazie danych.",
         "summary": "Twoje wrażliwe dane są szyfrowane w spoczynku algorytmem {algorithm} w {columns} polach w {models} typach rekordów.",
         "statement": "Twoje wrażliwe dane są szyfrowane w spoczynku algorytmem AES-256-GCM."
       },
       "stored": {
         "title": "Co jest przechowywane",
-        "description": "Kategorie danych przechowywanych na tym koncie.",
         "measurements": "Pomiary (waga, ciśnienie, tętno, glukoza, sen, skład ciała)",
         "medications": "Leki i historia przyjmowania",
         "moodLabs": "Wpisy nastroju i wyniki badań laboratoryjnych",
@@ -6087,7 +6089,7 @@
       },
       "export": {
         "title": "Pobierz moje dane",
-        "description": "Wyeksportuj swoje rekordy jako CSV lub JSON, opcjonalnie zaszyfrowane hasłem, albo wygeneruj pełną dokumentację medyczną.",
+        "description": "Twoje rekordy jako CSV lub JSON, opcjonalnie zaszyfrowane hasłem.",
         "openExport": "Eksport i kopia zapasowa",
         "openHealthRecord": "Dokumentacja medyczna"
       },
@@ -6106,26 +6108,28 @@
     },
     "mcp": {
       "enableTitle": "Zdalny punkt końcowy MCP",
-      "enableDescription": "Zezwól asystentowi obsługującemu MCP (Claude.ai, ChatGPT) na odczyt danych zdrowotnych za pomocą ograniczonego tokenu. Domyślnie wyłączone.",
+      "enableDescription": "Zezwól asystentowi obsługującemu MCP (Claude.ai, ChatGPT) na odczyt danych zdrowotnych za pomocą ograniczonego tokenu.",
       "enabled": "Włączony",
       "disabled": "Wyłączony",
       "enableToggleLabel": "Włącz punkt końcowy MCP",
       "endpointLabel": "Adres URL łącznika",
       "connectDescription": "Wklej ten adres URL w konfiguracji własnego łącznika asystenta, a następnie autoryzuj za pomocą poniższego tokenu lub zaloguj się po wyświetleniu monitu.",
       "tokensTitle": "Tokeny łącznika",
-      "tokensDescription": "Wygeneruj token tylko do odczytu, aby połączyć asystenta. Token jest wyświetlany tylko raz.",
+      "tokensDescription": "Wygeneruj token tylko do odczytu, aby połączyć asystenta.",
       "scopeNote": "Tokeny są ograniczone do health:read — dostęp tylko do odczytu własnych danych. Nigdy nie mogą uzyskać dostępu do funkcji administracyjnych.",
       "writeScopeToggleLabel": "Zezwól na zapis (health:write)",
       "writeScopeNote": "Dodaje zakres health:write, aby asystent mógł zapisywać nowe pomiary i wpisy nastroju na Twoim koncie. Każdy zapis jest najpierw potwierdzany. Token nadal nie może usuwać ani edytować istniejących wpisów, zmieniać leków ani uzyskiwać dostępu do funkcji REST lub administracyjnych. Pozostaw wyłączone, aby uzyskać dostęp tylko do odczytu.",
       "connectionsTitle": "Połączeni asystenci",
-      "connectionsDescription": "Asystenci autoryzowani podczas logowania. Cofnięcie połączenia natychmiast kończy dostęp, w tym możliwość odnawiania.",
+      "connectionsDescription": "Asystenci autoryzowani podczas logowania.",
       "noConnections": "Brak połączonych asystentów.",
       "connectionConnected": "Połączono",
       "connectionLastUsed": "Ostatnio użyto",
       "connectionNeverUsed": "Nigdy nie użyto",
       "connectionRevoke": "Rozłącz",
       "connectionRevokeDescription": "To natychmiast kończy dostęp asystenta i uniemożliwia odnawianie. Ponowne połączenie będzie wymagać nowej autoryzacji.",
-      "connectionRevokeFailed": "Nie udało się rozłączyć asystenta."
+      "connectionRevokeFailed": "Nie udało się rozłączyć asystenta.",
+      "tokensDetail": "Token jest wyświetlany tylko raz.",
+      "connectionsDetail": "Cofnięcie połączenia natychmiast kończy dostęp, w tym możliwość odnawiania."
     },
     "strava": "Strava",
     "stravaDescription": "Połącz konto Strava, aby synchronizować aktywności z historią treningów.",
@@ -6194,7 +6198,9 @@
       "explainer": "Wyłączone — wyniki są oceniane względem ogólnego zakresu referencyjnego dla osób bez cukrzycy. Włączone — są oceniane względem węższego zakresu docelowego glikemii z ADA Standards of Care, a Coach opiera na nim swoje uwagi o glukozie. Twoje własne wartości docelowe poniżej nadal mają pierwszeństwo.",
       "disclaimer": "To wybiera zakres referencyjny. Nie jest to diagnoza, nigdy nie jest wywnioskowane z pomiaru, a aplikacja nie podejmuje na tej podstawie działań klinicznych. O to, jakie cele dotyczą ciebie, zapytaj swojego lekarza.",
       "error": "Nie udało się zapisać ustawienia."
-    }
+    },
+    "dangerZoneDetail": "Konto i dane logowania zostają zachowane.",
+    "deleteAccountCardDetail": "Tej operacji nie można cofnąć."
   },
   "admin": {
     "title": "Administracja",
@@ -6225,7 +6231,7 @@
     },
     "aiServerKey": {
       "title": "Serwerowy klucz AI",
-      "description": "Klucz dostawcy na poziomie operatora, z którego może skorzystać każde konto, gdy nie skonfigurowano klucza osobistego.",
+      "description": "Klucz operatora dla kont, które nie mają własnego.",
       "byokHint": "Własny klucz użytkownika (BYOK, logowanie ChatGPT lub dostawca lokalny) zawsze ma pierwszeństwo — klucz serwera jest ostatnim ogniwem łańcucha dostawców.",
       "consentHint": "Żądania przez klucz serwera wymagają aktywnej zgody użytkownika na AI; bez potwierdzenia zgody nic nie jest wysyłane.",
       "statusConfigured": "Skonfigurowany",
@@ -6331,7 +6337,7 @@
     "monitoringTestFailed": "Test monitorowania nie powiódł się",
     "assistant": {
       "title": "Powierzchnie asystenta",
-      "description": "Każdy przełącznik ukrywa powierzchnię opartą na modelu w całej aplikacji bez usuwania konfiguracji dostawcy. Główny wyłącznik wymusza wyłączenie każdej opcji podrzędnej.",
+      "description": "Każdy przełącznik ukrywa powierzchnię opartą na modelu w całej aplikacji bez usuwania konfiguracji dostawcy.",
       "master": {
         "title": "Asystent włączony",
         "description": "Główny wyłącznik dla każdej powierzchni opartej na modelu. Gdy wyłączony, każda opcja podrzędna jest wymuszana na off."
@@ -6355,12 +6361,13 @@
     },
     "modules": {
       "title": "Dostępność modułów",
-      "description": "Wyłącz moduł dla całego serwera. Moduł wyłączony tutaj jest nieaktywny dla każdego konta, niezależnie od preferencji użytkownika. Domeny podstawowe (waga, ciśnienie, tętno, leki) są zawsze włączone i nie można ich wyłączyć.",
-      "saveError": "Nie udało się zaktualizować dostępności modułów."
+      "description": "Wyłącz moduł dla całego serwera.",
+      "saveError": "Nie udało się zaktualizować dostępności modułów.",
+      "detail": "Moduł wyłączony tutaj jest nieaktywny dla każdego konta, niezależnie od preferencji użytkownika. Domeny podstawowe (waga, ciśnienie, tętno, leki) są zawsze włączone i nie można ich wyłączyć."
     },
     "invites": {
       "title": "Zaproszenia",
-      "description": "Linki z zaproszeniem do rejestracji — działają nawet przy zamkniętej rejestracji. Link jest wyświetlany tylko raz.",
+      "description": "Linki z zaproszeniem do rejestracji — działają nawet przy zamkniętej rejestracji.",
       "create": "Utwórz zaproszenie",
       "createTitle": "Utwórz zaproszenie",
       "createDescription": "Link umożliwia rejestrację nawet przy zamkniętej rejestracji.",
@@ -6466,7 +6473,7 @@
     "outcomeFailed": "Nieudane",
     "auditDetails": "Szczegóły",
     "deleteAllData": "Usuń wszystkie dane globalnie",
-    "deleteAllDescription": "Usuwa wszystkie dane pomiarów, leków, integracji i logów wszystkich użytkowników. Konta użytkowników zostaną zachowane.",
+    "deleteAllDescription": "Usuwa wszystkie dane pomiarów, leków, integracji i logów wszystkich użytkowników.",
     "deleteAllConfirm": "Na pewno usunąć wszystkie dane?",
     "deleteAllConfirmDescription": "Spowoduje to trwałe usunięcie wszystkich pomiarów, leków, zdarzeń przyjęcia, tokenów API, połączeń Withings, otwartych wyzwań uwierzytelniania, kanałów powiadomień (Telegram, ntfy, Web Push), subskrypcji push oraz zakolejkowanych usunięć wiadomości Telegram wszystkich użytkowników. Konta użytkowników, dziennik audytu i przesłane opinie zostają zachowane, aby samo usunięcie pozostało możliwe do prześledzenia, a zgłoszenia błędów — do obsłużenia.",
     "deleteButton": "Usuń wszystkie dane",
@@ -6611,7 +6618,7 @@
       "app-logs": {
         "title": "Logi aplikacji",
         "subtitle": "Wyświetl najnowsze ustrukturyzowane wide-events emitowane przez ten proces.",
-        "processNote": "Wyświetlane są tylko logi procesu aplikacji — logi procesu workera trafiają do Loki, gdy ta integracja jest skonfigurowana. Bufor jest ulotny i ograniczony do 500 wpisów.",
+        "processNote": "Wyświetlane są tylko logi procesu aplikacji — logi procesu workera trafiają do Loki, gdy ta integracja jest skonfigurowana.",
         "filterTraceId": "Identyfikator śladu",
         "filterAction": "Akcja zawiera…",
         "filterLevel": "Poziom",
@@ -6632,7 +6639,8 @@
         "emptyDescription": "Żadne zdarzenie nie pasuje jeszcze do bieżących filtrów. Kliknij Odśwież po wygenerowaniu ruchu.",
         "refresh": "Odśwież",
         "eventDetails": "Szczegóły zdarzenia",
-        "closeDetails": "Zamknij szczegóły"
+        "closeDetails": "Zamknij szczegóły",
+        "processDetail": "Bufor jest ulotny i ograniczony do 500 wpisów."
       },
       "backups": {
         "title": "Kopie zapasowe",
@@ -6699,7 +6707,7 @@
         "loading": "Ładowanie statusu szyfrowania...",
         "loadError": "Nie udało się wczytać statusu szyfrowania.",
         "coverageTitle": "Pokrycie",
-        "coverageDescription": "Ile zaszyfrowanych wierszy przypada na każdy identyfikator klucza. Pokazywane są tylko identyfikatory kluczy i liczby — nigdy materiał klucza.",
+        "coverageDescription": "Ile zaszyfrowanych wierszy przypada na każdy identyfikator klucza.",
         "activeKeyId": "Identyfikator aktywnego klucza",
         "configuredKeys": "Skonfigurowane klucze",
         "totalRows": "Zaszyfrowane wiersze",
@@ -6707,7 +6715,7 @@
         "safeToDropLegacy": "Można bezpiecznie usunąć stary klucz",
         "rotationIncomplete": "Pozostało {count} wierszy do rotacji",
         "rotationTitle": "Rotacja kluczy",
-        "rotationDescription": "Ponownie szyfruje każdą zaszyfrowaną kolumnę aktywnym kluczem. Narzędzie wiersza poleceń pozostaje kanoniczną drogą; ten przycisk to udogodnienie.",
+        "rotationDescription": "Ponownie szyfruje każdą zaszyfrowaną kolumnę aktywnym kluczem.",
         "rotationState": "Status",
         "lastRun": "Ostatni przebieg: sprawdzono {scanned}, zrotowano {rotated}, błędy {errors}.",
         "rotateNow": "Rotuj teraz",
@@ -6730,7 +6738,8 @@
           "running": "W toku",
           "completed": "Zakończono",
           "failed": "Niepowodzenie"
-        }
+        },
+        "coverageDetail": "Pokazywane są tylko identyfikatory kluczy i liczby — nigdy materiał klucza."
       }
     },
     "carrier": "Operator",
@@ -6776,7 +6785,8 @@
       "countFew": "{count} niepowodzenia",
       "countOther": "{count} niepowodzeń",
       "lastFailed": "Ostatnie niepowodzenie {when}"
-    }
+    },
+    "deleteAllDetail": "Konta użytkowników zostaną zachowane."
   },
   "achievements": {
     "title": "Osiągnięcia",
@@ -7102,7 +7112,7 @@
     },
     "moodReminder": {
       "title": "Codzienne przypomnienie o nastroju",
-      "description": "Delikatne przypomnienie o wybranej przez Ciebie godzinie, jeśli dziś jeszcze nie zapisano nastroju. Wysyłane tylko skonfigurowanymi już kanałami (Telegram, ntfy, Web Push, Apple Push) i milknie, gdy dziś zapisano nastrój.",
+      "description": "Delikatne przypomnienie o wybranej przez Ciebie godzinie, jeśli dziś jeszcze nie zapisano nastroju.",
       "toggleAria": "Włącz lub wyłącz codzienne przypomnienie o nastroju",
       "statusOn": "Aktywne o wybranej godzinie",
       "statusOff": "Wyłączone",
@@ -7111,11 +7121,12 @@
       "saveError": "Zapis nieudany. Spróbuj ponownie.",
       "hourLabel": "Godzina przypomnienia",
       "hourAria": "Godzina przypomnienia o nastroju",
-      "hourSavedToast": "Godzina przypomnienia zaktualizowana."
+      "hourSavedToast": "Godzina przypomnienia zaktualizowana.",
+      "detail": "Wysyłane tylko skonfigurowanymi już kanałami (Telegram, ntfy, Web Push, Apple Push) i milknie, gdy dziś zapisano nastrój."
     },
     "coachNudge": {
       "title": "Proaktywny Coach",
-      "description": "Odzywa się, gdy Twoje dane sugerują zajrzenie do Coacha — np. niska systematyczność przyjmowania leków lub podwyższona tygodniowa średnia ciśnienia. Tematy i częstotliwość można dostosować.",
+      "description": "Odzywa się, gdy Twoje dane sugerują zajrzenie do Coacha.",
       "toggleAria": "Przełącz proaktywne podpowiedzi Coacha",
       "statusOn": "Aktywne",
       "groupsLabel": "Tematy",
@@ -7142,7 +7153,7 @@
     },
     "lowStock": {
       "title": "Alert niskiego zapasu",
-      "description": "Raz dziennie sprawdza śledzone zapasy leków i powiadamia, gdy któryś wystarcza na mniej dni niż ten próg. Jedno powiadomienie na niedobór; po uzupełnieniu uzbraja się ponownie.",
+      "description": "Codziennie zgłasza zapas wystarczający na mniej dni niż ten próg.",
       "toggleAria": "Przełącz alerty niskiego zapasu",
       "statusOn": "Aktywne",
       "statusOff": "Wyłączone",
@@ -7156,7 +7167,8 @@
       "enabledToast": "Alerty niskiego zapasu włączone.",
       "disabledToast": "Alerty niskiego zapasu wyłączone.",
       "saveError": "Zapis nieudany. Spróbuj ponownie.",
-      "medicationsLink": "Przejdź do swoich leków"
+      "medicationsLink": "Przejdź do swoich leków",
+      "detail": "Jedno powiadomienie na niedobór; po uzupełnieniu uzbraja się ponownie."
     },
     "eventMedicationReminder": "Przypomnienie o leku",
     "eventMedicationReminderDesc": "Wysyłane o każdej zaplanowanej godzinie dawki.",
@@ -9536,7 +9548,7 @@
     },
     "invite": {
       "title": "Zaproś kogoś",
-      "description": "Nic nie jest udostępniane, dopóki ta osoba nie zaakceptuje. Do tego czasu zaproszenie leży w jej ustawieniach i nic jej nie daje.",
+      "description": "Nic nie jest udostępniane, dopóki ta osoba nie zaakceptuje.",
       "identifierLabel": "Nazwa użytkownika lub e-mail",
       "identifierPlaceholder": "Nazwa, którą się loguje",
       "identifierHint": "Ta osoba potrzebuje konta na tej instancji. Nie można wysłać zaproszenia na niezarejestrowany adres.",
@@ -9590,7 +9602,7 @@
     },
     "received": {
       "title": "Karty, które mogę otworzyć",
-      "description": "Zaproszenie nic ci nie daje, dopóki go nie zaakceptujesz. Dostęp możesz zwrócić w dowolnej chwili.",
+      "description": "Zaproszenie nic ci nie daje, dopóki go nie zaakceptujesz.",
       "emptyTitle": "Nikt nie udostępnił ci karty",
       "emptyDescription": "Kiedy ktoś cię zaprosi, zaproszenie pojawi się tutaj.",
       "loadError": "Nie udało się wczytać listy.",
@@ -9602,7 +9614,8 @@
       "renounce": "Zwróć",
       "renounceTitle": "Zwrócić kartę użytkownika {name}?",
       "renounceBody": "Tracisz dostęp natychmiast. Ta osoba może zaprosić cię ponownie w dowolnej chwili.",
-      "renounceConfirm": "Zwróć"
+      "renounceConfirm": "Zwróć",
+      "detail": "Dostęp możesz zwrócić w dowolnej chwili."
     },
     "activity": {
       "title": "Kiedy otwierano moją kartę",

@@ -94,6 +94,8 @@ export function ModuleAvailabilitySection() {
         title={t("admin.modules.title")}
         description={t("admin.modules.description")}
       />
+      <p className="text-sm">{t("admin.modules.detail")}</p>
+
       <div className="space-y-4">
         {MODULE_KEYS
           // A module switched off in code (pending a rebuild) is hard-off

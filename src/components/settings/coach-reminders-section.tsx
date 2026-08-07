@@ -162,6 +162,7 @@ export function CoachRemindersSection({
         title={t("settings.ai.coachReminders.title")}
         description={t("settings.ai.coachReminders.description")}
       />
+      <p className="text-sm">{t("settings.ai.coachReminders.detail")}</p>
 
       {query.isError && (
         <p
