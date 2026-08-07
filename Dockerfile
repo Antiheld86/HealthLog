@@ -48,6 +48,13 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # starts fresh and therefore does not inherit this setting.
 RUN NODE_OPTIONS=--max-old-space-size=8192 pnpm build
 
+# Record which pdfjs-dist the top-level dependency actually resolves to. pnpm
+# links a direct dependency at `node_modules/<name>`, so this reads the exact
+# pinned copy rather than guessing. The runner stage hoists that version by
+# name; see the note there for why guessing was wrong.
+RUN node -p "require('/app/node_modules/pdfjs-dist/package.json').version" \
+      > /app/.pdfjs-version
+
 # ── Stage 3: Production runner ─────────────────────────────
 FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS runner
 # `tzdata` is required so Europe/Berlin schedules (pg-boss cron, locale-aware
@@ -116,13 +123,30 @@ RUN set -e; \
 # path breaks in the standalone image), so the server does a runtime bare
 # `import('pdfjs-dist/legacy/build/pdf.mjs')`. Node resolves that up to
 # /app/node_modules, so hoist the real pnpm-store copy to the top level too.
+#
+# Hoist the version the app pins, by name. More than one pdfjs-dist reaches the
+# store — `pdf-parse` carries its own, older copy for the text-extraction path —
+# and this step used to take whatever `find | head -1` returned first. That is
+# readdir order, so it could hoist the OLDER copy and the version named in
+# package.json would never run in the image: the renderer resolving one version
+# while every local check exercised another. Name the version and fail the build
+# when it is absent, instead of degrading to whichever copy comes back first.
+COPY --from=builder /app/.pdfjs-version /tmp/.pdfjs-version
 RUN set -e; \
-    PDFJS_DIR="$(find /app/node_modules/.pnpm -maxdepth 4 -type d -path '*pdfjs-dist@*/node_modules/pdfjs-dist' 2>/dev/null | head -1)"; \
-    if [ -n "$PDFJS_DIR" ]; then \
-      ln -sfn "$PDFJS_DIR" /app/node_modules/pdfjs-dist; \
-      chown -h nextjs:nodejs /app/node_modules/pdfjs-dist; \
-      echo "pdfjs-dist hoisted: $PDFJS_DIR"; \
-    else echo "WARN: pdfjs-dist not found; PDF rasterization will degrade to local text"; fi
+    PDFJS_VERSION="$(cat /tmp/.pdfjs-version)"; \
+    PDFJS_DIR="/app/node_modules/.pnpm/pdfjs-dist@${PDFJS_VERSION}/node_modules/pdfjs-dist"; \
+    if [ ! -d "$PDFJS_DIR" ]; then \
+      echo "ERROR: pinned pdfjs-dist@${PDFJS_VERSION} did not reach the traced image."; \
+      echo "Present instead:"; \
+      find /app/node_modules/.pnpm -maxdepth 4 -type d -path '*pdfjs-dist@*/node_modules/pdfjs-dist' 2>/dev/null; \
+      exit 1; \
+    fi; \
+    ln -sfn "$PDFJS_DIR" /app/node_modules/pdfjs-dist; \
+    chown -h nextjs:nodejs /app/node_modules/pdfjs-dist; \
+    rm -f /tmp/.pdfjs-version; \
+    RESOLVED="$(node -p "require('/app/node_modules/pdfjs-dist/package.json').version")"; \
+    [ "$RESOLVED" = "$PDFJS_VERSION" ] || { echo "ERROR: hoisted pdfjs-dist is $RESOLVED, expected $PDFJS_VERSION"; exit 1; }; \
+    echo "pdfjs-dist hoisted: $PDFJS_DIR (resolves as $RESOLVED)"
 
 # Copy Prisma for migrations (schema, migration SQL, config, engines)
 COPY --from=builder /app/prisma ./prisma
