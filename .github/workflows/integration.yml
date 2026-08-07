@@ -10,21 +10,21 @@ permissions:
   contents: read
 
 jobs:
-  # The suite outgrew a single runner: 128 files took ~13 minutes when the
-  # 25-minute guard was written, and the v1.37 sharing work took it to 173
-  # files and past 25 minutes of wall clock, so every run died at the timeout
-  # with every test to that point green. The guard's own rule applies — split,
-  # don't raise — so the files run as two vitest shards. Each shard boots its
-  # own Postgres testcontainer; the timeout stays a hang detector, sized so a
-  # healthy half-suite clears it on a slow runner.
+  # The suite outgrew a single runner, and then a half-suite outgrew a slow
+  # one: two shards cleared in ~14 minutes on a quiet day, but with six pull
+  # requests running side by side the larger shard hit the same 25-minute
+  # guard the split was meant to escape. Three shards keep the biggest slice
+  # around 60 files, which clears the guard with real headroom even on the
+  # slowest runner observed. Each shard boots its own Postgres testcontainer;
+  # the timeout stays a hang detector, not a performance budget.
   shard:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
-    name: integration shard ${{ matrix.shard }}/2
+        shard: [1, 2, 3]
+    name: integration shard ${{ matrix.shard }}/3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -44,7 +44,7 @@ jobs:
       # vitest a stray positional argument and the shard flag never applies —
       # both "shards" then run the full suite. Proven by a paired local run
       # before this workflow shipped.
-      - run: pnpm exec vitest run --config vitest.integration.config.mts --shard=${{ matrix.shard }}/2
+      - run: pnpm exec vitest run --config vitest.integration.config.mts --shard=${{ matrix.shard }}/3
         env:
           # The integration suite boots a Postgres testcontainer and points
           # Prisma at it via DATABASE_URL set inside `tests/integration/setup.ts`.
