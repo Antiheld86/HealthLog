@@ -50,7 +50,7 @@ export function SettingsCard<E extends React.ElementType = typeof Card>({
         // Mirror the ui Card shell so a semantic landmark card paints
         // identically to the default <Card>-backed one.
         className={cn(
-          "bg-card text-card-foreground flex flex-col gap-4 rounded-xl border p-4 shadow-sm md:p-6",
+          "bg-card text-card-foreground flex flex-col gap-4 rounded-xl border p-4 shadow-sm md:gap-6 md:p-6",
           className,
         )}
         {...props}

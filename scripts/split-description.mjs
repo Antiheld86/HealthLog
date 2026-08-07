@@ -64,7 +64,9 @@ for (const locale of LOCALES) {
     const head = parts[0].trim();
     const tail = parts.slice(1).join(" ").trim();
     if (dry) {
-      console.log(`${locale} ${key}\n  head(${head.length}): ${head}\n  tail: ${tail}`);
+      console.log(
+        `${locale} ${key}\n  head(${head.length}): ${head}\n  tail: ${tail}`,
+      );
       continue;
     }
     set(bundle, key, head);

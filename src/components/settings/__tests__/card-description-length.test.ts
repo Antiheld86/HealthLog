@@ -110,7 +110,9 @@ describe("card header descriptions — one sentence, ≤120 characters", () => {
         const value = resolve(bundle, key);
         if (value === undefined) continue; // the i18n coverage guard owns this
         if (sentenceCount(value) > 1) {
-          offenders.push(`${key} (${sentenceCount(value)} sentences) — ${files[0]}`);
+          offenders.push(
+            `${key} (${sentenceCount(value)} sentences) — ${files[0]}`,
+          );
         }
       }
       expect(offenders).toEqual([]);
@@ -134,8 +136,10 @@ describe("card header descriptions — one sentence, ≤120 characters", () => {
       readFileSync(join(ROOT, "messages", "en.json"), "utf8"),
     );
     for (const [key, reason] of Object.entries(LENGTH_EXCEPTIONS)) {
-      expect(keys.has(key), `${key} is allowlisted but no longer a description`)
-        .toBe(true);
+      expect(
+        keys.has(key),
+        `${key} is allowlisted but no longer a description`,
+      ).toBe(true);
       expect(
         resolve(bundle, key)!.length,
         `${key} is allowlisted but now fits the guideline`,

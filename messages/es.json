@@ -6562,7 +6562,7 @@
       },
       "coach": {
         "title": "Coach",
-        "subtitle": "Superficies del asistente, clave del servidor y las tablas de calidad de comentarios del Coach y de los análisis, en un solo lugar."
+        "subtitle": "Superficies del asistente, clave del servidor y calidad del feedback."
       },
       "reminders": {
         "title": "Recordatorios",
