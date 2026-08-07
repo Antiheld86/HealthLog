@@ -180,6 +180,27 @@ export function closeDocumentSelectionHistoryEntry(
   );
 }
 
+/**
+ * The selection is being KEPT on purpose, as the way back.
+ *
+ * Maximizing the Coach drawer hands the conversation to `/coach` and carries
+ * `?doc=` with it, so browser-Back can reconstruct the sheet. That is the one
+ * close-shaped transition that must leave the parameter exactly where it is.
+ *
+ * Named, and used by both the close and the check that follows it, because
+ * those two disagreeing is a bug with no symptom until it has one: the check
+ * would strip the return URL a few hundred milliseconds after the close
+ * deliberately preserved it, and whether it won that race was a question about
+ * how fast the machine navigated.
+ */
+export function coachHandoffRetainsSelection(
+  documentId: string,
+  handedOffDocumentId: string | null,
+  closeIntent: CoachCloseIntent | null | undefined,
+): boolean {
+  return handedOffDocumentId === documentId && closeIntent === "navigate";
+}
+
 export function closeDocumentSelectionAfterCoachHandoff(
   history: Parameters<typeof closeDocumentSelectionHistoryEntry>[0],
   pathname: string,
@@ -188,7 +209,9 @@ export function closeDocumentSelectionAfterCoachHandoff(
   handedOffDocumentId: string | null,
   closeIntent: CoachCloseIntent | null | undefined,
 ): string | null {
-  if (handedOffDocumentId === documentId && closeIntent === "navigate") {
+  if (
+    coachHandoffRetainsSelection(documentId, handedOffDocumentId, closeIntent)
+  ) {
     return handedOffDocumentId;
   }
 
@@ -727,6 +750,14 @@ export function DocumentsView() {
       handedOffDocumentRef.current = docParam;
       return;
     }
+    // Read before the call below reassigns the ref: the same inputs the close
+    // itself decides on.
+    const retainedAsReturnUrl = coachHandoffRetainsSelection(
+      docParam,
+      handedOffDocumentRef.current,
+      coachLaunch?.closeIntent,
+    );
+
     handedOffDocumentRef.current = closeDocumentSelectionAfterCoachHandoff(
       window.history,
       pathname,
@@ -735,6 +766,10 @@ export function DocumentsView() {
       handedOffDocumentRef.current,
       coachLaunch?.closeIntent,
     );
+
+    // Nothing was closed: the selection is the way back from `/coach` and is
+    // meant to stay. Checking for it here would delete it.
+    if (retainedAsReturnUrl) return;
 
     // Consuming the pushed entry is a REQUEST to the browser, not a guarantee.
     //
