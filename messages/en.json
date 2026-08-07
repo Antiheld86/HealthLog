@@ -5744,7 +5744,7 @@
     "notificationStatus": {
       "title": "Delivery status",
       "description": "Per-channel state; \"Auto-disabled\" stops retries after permanent errors.",
-      "emptyDescription": "No channels configured yet. Add a channel below to start tracking its delivery health.",
+      "emptyDescription": "No channels configured yet. Set one up under Delivery channels to start tracking delivery.",
       "stateActive": "Active",
       "stateAutoDisabled": "Auto-disabled",
       "stateSendingPaused": "Sending paused",

@@ -5742,9 +5742,9 @@
       }
     },
     "notificationStatus": {
-      "title": "Channel reliability",
-      "description": "Live status of every notification channel — Auto-disabled means HealthLog stopped retrying after a permanent error.",
-      "emptyDescription": "Nessun canale ancora configurato. Aggiungi un canale qui sotto per iniziare a monitorarne la consegna.",
+      "title": "Affidabilità dei canali",
+      "description": "Stato per canale; «Disattivato automaticamente» interrompe i tentativi dopo errori permanenti.",
+      "emptyDescription": "Nessun canale ancora configurato. Aggiungine uno in Canali di recapito per monitorarne la consegna.",
       "stateActive": "Attivo",
       "stateAutoDisabled": "Disattivato automaticamente",
       "stateSendingPaused": "Invio in pausa",
