@@ -90,14 +90,45 @@ function resolveBotLocale(value: string | null | undefined): Locale {
   return "de";
 }
 
-async function cleanupReminderTracking(medicationId: string): Promise<void> {
+async function cleanupReminderTracking(
+  recipientUserId: string,
+  medicationId: string,
+): Promise<void> {
   try {
     await prisma.telegramReminderMessage.deleteMany({
-      where: { medicationId },
+      where: {
+        recipientUserId,
+        medicationId,
+        medication: { userId: recipientUserId },
+      },
     });
   } catch {
     // Best-effort cleanup
   }
+}
+
+/**
+ * A managed-record reminder is tracked under the Guardian recipient so a
+ * replacement can delete the prior message. Its callback must never mutate
+ * the managed record, even if a crafted Telegram update supplies action data.
+ */
+async function isManagedReminderCallback(input: {
+  recipientUserId: string;
+  chatId: string;
+  messageId: number;
+}): Promise<boolean> {
+  const reminder = await prisma.telegramReminderMessage.findFirst({
+    where: {
+      recipientUserId: input.recipientUserId,
+      chatId: input.chatId,
+      messageId: input.messageId,
+    },
+    select: { medication: { select: { userId: true } } },
+  });
+  return (
+    reminder?.medication?.userId !== undefined &&
+    reminder.medication.userId !== input.recipientUserId
+  );
 }
 
 // v1.19.0 — the auto-delete window dropped from 1 h to ~30 min and moved to
@@ -153,6 +184,7 @@ async function resolveReminderSlot(input: {
 }): Promise<Date | null> {
   const reminder = await prisma.telegramReminderMessage.findFirst({
     where: {
+      recipientUserId: input.userId,
       medicationId: input.medicationId,
       chatId: input.chatId,
       messageId: input.messageId,
@@ -371,6 +403,23 @@ export async function handleCallback(update: TelegramUpdate) {
   const data = callback.data ?? "";
   const messageId = callback.message?.message_id;
 
+  if (
+    messageId !== undefined &&
+    /^(taken|snooze|skip|ack):/.test(data) &&
+    (await isManagedReminderCallback({
+      recipientUserId: user.id,
+      chatId,
+      messageId,
+    }))
+  ) {
+    await answerTelegramCallbackQuery(
+      botToken,
+      callback.id,
+      t("telegram.errorInvalidAction"),
+    );
+    return;
+  }
+
   if (data.startsWith("taken:")) {
     const medicationId = data.slice("taken:".length).trim();
     if (!medicationId) {
@@ -398,7 +447,7 @@ export async function handleCallback(update: TelegramUpdate) {
     if (messageId) {
       await deleteMessage(botToken, chatId, messageId);
     }
-    await cleanupReminderTracking(medicationId);
+    await cleanupReminderTracking(user.id, medicationId);
   } else if (data.startsWith("snooze:")) {
     // Format: "snooze:{medicationId}:{minutes}"
     const parts = data.split(":");
@@ -443,7 +492,7 @@ export async function handleCallback(update: TelegramUpdate) {
     if (messageId) {
       await deleteMessage(botToken, chatId, messageId);
     }
-    await cleanupReminderTracking(medicationId);
+    await cleanupReminderTracking(user.id, medicationId);
   } else if (data.startsWith("skip:")) {
     const medicationId = data.slice("skip:".length).trim();
     if (!medicationId) {
@@ -586,7 +635,7 @@ export async function handleCallback(update: TelegramUpdate) {
     if (messageId) {
       await deleteMessage(botToken, chatId, messageId);
     }
-    await cleanupReminderTracking(medicationId);
+    await cleanupReminderTracking(user.id, medicationId);
   } else if (data.startsWith("ack:")) {
     const medicationId = data.slice("ack:".length).trim();
     if (!medicationId) {
@@ -613,7 +662,7 @@ export async function handleCallback(update: TelegramUpdate) {
     if (messageId) {
       await deleteMessage(botToken, chatId, messageId);
     }
-    await cleanupReminderTracking(medicationId);
+    await cleanupReminderTracking(user.id, medicationId);
   } else if (data.startsWith("add:")) {
     // Format: "add:{medicationId}" or "add:{medicationId}:umid:{userMsgId}"
     const withoutPrefix = data.slice("add:".length);

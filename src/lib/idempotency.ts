@@ -18,12 +18,14 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import {
-  readClaimedActingAccount,
+  readClaimedRecordContext,
   selectorNamesAnAccount,
 } from "@/lib/auth/acting-carrier";
+import { refuseStaleRecordSessionClaim } from "@/lib/sharing/record-session-fence";
 import { hashToken } from "@/lib/auth/hmac";
 import { annotate } from "@/lib/logging/context";
 import { isP2002 } from "@/lib/prisma-errors";
+import { findActiveGrant } from "@/lib/sharing/grants";
 import { decrypt, encrypt } from "@/lib/crypto";
 
 const TTL_MS = 24 * 60 * 60 * 1000;
@@ -326,7 +328,7 @@ export function isCachableStatus(status: number): boolean {
  * the handler again and creating duplicate measurements (audit C-4).
  *
  * It resolves the CALLER and only the caller — which record they are aiming at
- * is a separate question, answered by `readClaimedActingAccount()` above and
+ * is a separate question, answered by `readClaimedRecordContext()` above and
  * folded into the key. Neither answer authorises anything: the handler runs
  * its own `requireAuth()` / `requireRecordAuth()` either way.
  *
@@ -396,6 +398,34 @@ function inflightConflictResponse(): Response {
   );
 }
 
+/**
+ * Whether a cached delegated response may still be returned.
+ *
+ * The wrapper runs before a route can call `requireRecordAuth`, but it must
+ * not become an alternate way around that fresh grant check. A completed cell
+ * carries the caller and claimed record; the grant row is the only authority
+ * that decides whether that pair is live now. A missing, expired, revoked, or
+ * unreadable grant deliberately falls through to the handler, whose normal
+ * refusal is the only response the caller receives.
+ */
+async function canReplayDelegatedResponse(
+  actorUserId: string,
+  recordUserId: string,
+): Promise<boolean> {
+  try {
+    return (
+      (await findActiveGrant({
+        grantorId: recordUserId,
+        granteeId: actorUserId,
+      })) !== null
+    );
+  } catch {
+    // The cache is an accelerator. A failed lookup must never return a body
+    // that the route would refuse once the database is available again.
+    return false;
+  }
+}
+
 export function withIdempotency<
   Args extends [Request | NextRequest, ...unknown[]],
 >(
@@ -424,12 +454,38 @@ export function withIdempotency<
     // person's record, and reports success. Nothing errors and nothing logs a
     // conflict, which is why it is folded here rather than left to call sites.
     //
-    // The consequence of using the CLAIM: inside the 24h window a delegate
-    // whose grant has since ended can still replay a key they already
-    // completed, without the grant check running. They receive bytes they
-    // already had and nothing new is written — a fresh key from them is
-    // refused, because that request reaches the handler.
-    const claimedRecord = await readClaimedActingAccount();
+    // A claim only chooses the cache cell. It never carries authority: a
+    // completed delegated cell is checked against the current grant again
+    // immediately before its body can be returned below.
+    const claim = await readClaimedRecordContext();
+
+    // v1.37.0 — the record-session fence, evaluated HERE and not one line
+    // lower. A stale request must not learn whether a cell exists, must not
+    // replay a body out of one, and must not insert a claim row — so the
+    // verdict sits above `findCached` and above the two carrier arms below,
+    // which choose the cell. It is the second, independent evaluation of the
+    // same client assertion (the handler's own `requireRecordAuth` is the
+    // other) and nothing is carried between them; see the note on
+    // `refuseStaleRecordSessionClaim`.
+    //
+    // Only `stale` refuses here. An `unfenced-client` verdict falls through so
+    // the route issues the 403 a pre-fence bundle already recovers from, with
+    // the annotation and audit posture that belong to the route.
+    //
+    // A never-switched session and every Bearer request are untouched: both
+    // pass the verdict without a header, which is what keeps every existing
+    // own-record and delegated-cell contract byte-identical.
+    const staleContext = await refuseStaleRecordSessionClaim(claim);
+    if (staleContext) return staleContext;
+
+    const claimedRecord = claim.claimedRecord;
+    if (claimedRecord === undefined) {
+      // The carrier cannot safely name a record. In particular, a selector on
+      // a cookie request is a misplaced claim, not an own-record request.
+      // Let the route return its normal refusal instead of exposing a cached
+      // body from the own-record cell.
+      return handler(...args);
+    }
     if (claimedRecord !== null && !selectorNamesAnAccount(claimedRecord)) {
       // A claim that names no account that could exist. The request is refused
       // downstream; skipping the cache keeps a caller from writing an
@@ -447,7 +503,17 @@ export function withIdempotency<
     };
 
     const cached = await findCached(ctx);
-    if (cached?.kind === "replay") return cached.response;
+    if (cached?.kind === "replay") {
+      if (
+        claimedRecord !== null &&
+        !(await canReplayDelegatedResponse(userId, claimedRecord))
+      ) {
+        // Do not replace the route's refusal with a cache-specific response:
+        // it owns the stable 403 envelope and the associated audit trail.
+        return handler(...args);
+      }
+      return cached.response;
+    }
     if (cached?.kind === "pending") {
       // A concurrent request is mid-flight on this exact key. Refuse
       // rather than run the side-effect a second time. The client should

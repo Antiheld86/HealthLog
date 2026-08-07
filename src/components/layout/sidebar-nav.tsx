@@ -29,6 +29,7 @@ import { Logo } from "@/components/ui/logo";
 import { useAuth, useLogout } from "@/hooks/use-auth";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useMounted } from "@/hooks/use-mounted";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useTheme } from "@/components/providers";
 import { useTranslations } from "@/lib/i18n/context";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -306,10 +307,11 @@ export function SidebarNav() {
   // v1.36.0 — while this browser is acting on somebody else's record, the nav
   // shows only what sharing covers. The server refuses the rest regardless;
   // dropping the entries spares a delegate a click that ends in a 403.
-  const sharedRecord = user?.accountAccess?.active != null;
+  const { inSharedRecord: sharedRecord, sections } = useRecordCapabilities();
   const visibleNavItems = useMemo(
-    () => visibleNavDestinations(user?.modules, mounted, sharedRecord),
-    [user?.modules, mounted, sharedRecord],
+    () =>
+      visibleNavDestinations(user?.modules, mounted, sharedRecord, sections),
+    [user?.modules, mounted, sharedRecord, sections],
   );
   // Collapsed = the user's stored choice, or — with no stored choice — a
   // viewport default: tablet widths (md–lg, e.g. an iPad held upright)

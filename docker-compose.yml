@@ -98,6 +98,16 @@ x-healthlog-env: &healthlog_env
   BACKUP_S3_SECRET_KEY: "${BACKUP_S3_SECRET_KEY:-}"
   BACKUP_S3_REGION: "${BACKUP_S3_REGION:-auto}"
   BACKUP_RETENTION_DAYS: "${BACKUP_RETENTION_DAYS:-30}"
+  # How long the audit trail is kept, in days. Default 365, floor 7 (a value
+  # below the floor is ignored rather than obeyed, so a window set in seconds
+  # by mistake cannot empty a fresh table). It is not only a retention knob:
+  # the shared-access panel PUBLISHES this number — "who entered what stays
+  # answerable for N days" is on the dialog that ends somebody's access, and
+  # the activity view states the same window. An instance running 90 says 90,
+  # so the var has to actually reach the container. Listed here for the reason
+  # the block exists: `environment:` is a whitelist, and a value in .env that
+  # is not named here never arrives.
+  AUDIT_LOG_RETENTION_DAYS: "${AUDIT_LOG_RETENTION_DAYS:-}"
   # Per-export ceiling on MedicationAdministration rows in the FHIR
   # health-record Bundle. Bounded 1..50000, default 5000. Listed here so
   # an operator override in .env actually reaches the container (the

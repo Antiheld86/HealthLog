@@ -41,10 +41,12 @@ import { getEvent } from "@/lib/logging/context";
 import { defaultLocale, type Locale } from "@/lib/i18n/config";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 import { dispatchNotification } from "@/lib/notifications/dispatcher";
-import type { EventType } from "@/lib/notifications/types";
+import type { EventType, NotificationPayload } from "@/lib/notifications/types";
 
 interface DispatchLocalisedOptions {
   userId: string;
+  recordUserId?: string;
+  recipientUserId?: string;
   titleKey: string;
   messageKey: string;
   params?: Record<string, string | number>;
@@ -59,6 +61,8 @@ interface DispatchLocalisedOptions {
   eventType?: EventType;
   /** Channel-specific extras forwarded to the dispatcher metadata. */
   metadata?: Record<string, unknown>;
+  /** Closed internal marker for an admitted managed-record event. */
+  managedFanoutEvent?: NotificationPayload["managedFanoutEvent"];
   /**
    * Escalate to every channel's highest urgency (v1.18.4). Forwarded to
    * the dispatcher so APNs goes time-sensitive, ntfy max, Web Push
@@ -147,11 +151,17 @@ async function resolveRecipientLocale(userId: string): Promise<Locale> {
 export async function dispatchLocalisedNotification(
   opts: DispatchLocalisedOptions,
 ): Promise<void> {
-  const locale = await resolveRecipientLocale(opts.userId);
-  const t = getServerTranslator(locale).t;
-
-  const title = t(opts.titleKey, opts.params);
-  const message = t(opts.messageKey, opts.params);
+  const locale = await resolveRecipientLocale(
+    opts.recipientUserId ?? opts.userId,
+  );
+  const renderForRecipient = (recipientLocale: Locale) => {
+    const t = getServerTranslator(recipientLocale).t;
+    return {
+      title: t(opts.titleKey, opts.params),
+      message: t(opts.messageKey, opts.params),
+    };
+  };
+  const { title, message } = renderForRecipient(locale);
 
   // Warn when a translation key falls back to its own raw string —
   // that signals a missing entry in `messages/{locale}.json` (or a
@@ -173,9 +183,13 @@ export async function dispatchLocalisedNotification(
   await dispatchNotification({
     eventType: opts.eventType ?? "SYSTEM_ALERT",
     userId: opts.userId,
+    recordUserId: opts.recordUserId,
+    recipientUserId: opts.recipientUserId,
     title,
     message,
+    renderForRecipient,
     metadata,
+    managedFanoutEvent: opts.managedFanoutEvent,
     urgent: opts.urgent,
   });
 }

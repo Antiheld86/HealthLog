@@ -14,7 +14,12 @@ import {
   measurementReminderDto,
   measurementReminderCompletionDto,
 } from "@/lib/validations/measurement-reminders";
-import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
+import {
+  dataEnvelope,
+  errorEnvelope,
+  recordRefusal,
+  stdResponses,
+} from "./shared";
 
 const reminderNotFound = {
   "404": {
@@ -32,6 +37,7 @@ export const measurementReminderPaths: NonNullable<ZodOpenApiObject["paths"]> =
         description:
           "Returns the owner's live (non-tombstoned) Vorsorge reminders, sorted by server-computed nextDueAt ascending (nulls last). Each row carries the canonical nextDueAt the client renders without recomputing.",
         responses: {
+          ...recordRefusal(),
           "200": {
             description: "The owner's measurement reminders.",
             content: {
@@ -58,6 +64,7 @@ export const measurementReminderPaths: NonNullable<ZodOpenApiObject["paths"]> =
           },
         },
         responses: {
+          ...recordRefusal(),
           "201": {
             description: "Reminder created.",
             content: {
@@ -80,6 +87,7 @@ export const measurementReminderPaths: NonNullable<ZodOpenApiObject["paths"]> =
         description: "Owner-scoped; a cross-user or tombstoned id 404s.",
         requestParams: { path: z.object({ id: z.string() }) },
         responses: {
+          ...recordRefusal(),
           "200": {
             description: "The reminder.",
             content: {
@@ -108,6 +116,7 @@ export const measurementReminderPaths: NonNullable<ZodOpenApiObject["paths"]> =
           },
         },
         responses: {
+          ...recordRefusal(),
           "200": {
             description: "Reminder updated.",
             content: {
@@ -129,6 +138,7 @@ export const measurementReminderPaths: NonNullable<ZodOpenApiObject["paths"]> =
         description: "Sets deletedAt (tombstone). Idempotent. Owner-scoped.",
         requestParams: { path: z.object({ id: z.string() }) },
         responses: {
+          ...recordRefusal(),
           "200": {
             description: "Soft-deleted.",
             content: {
@@ -153,6 +163,7 @@ export const measurementReminderPaths: NonNullable<ZodOpenApiObject["paths"]> =
           "Manual 'Erledigt': stamps lastSatisfiedAt = now and recomputes nextDueAt past now. Free-text reminders resolve only through this path; typed reminders also auto-resolve in the cron when a matching reading lands.",
         requestParams: { path: z.object({ id: z.string() }) },
         responses: {
+          ...recordRefusal(),
           "200": {
             description: "Reminder satisfied; next-due re-anchored.",
             content: {
@@ -177,6 +188,7 @@ export const measurementReminderPaths: NonNullable<ZodOpenApiObject["paths"]> =
           "Explicit user-action completion (iOS #23): the app marks a reminder done server-side instead of only dismissing it locally. Routes through the same satisfaction primitive as the cron auto-resolve — stamps lastSatisfiedAt = now, re-anchors nextDueAt, fires no notification. Idempotent: completing an already-completed / auto-satisfied reminder returns 200 with completed=false. Owner-scoped.",
         requestParams: { path: z.object({ id: z.string() }) },
         responses: {
+          ...recordRefusal(),
           "200": {
             description:
               "Completion applied (completed=true) or already-satisfied no-op (completed=false); reminder carries the canonical post-completion DTO.",

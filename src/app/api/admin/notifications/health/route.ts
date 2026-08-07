@@ -2,7 +2,6 @@ import { prisma } from "@/lib/db";
 import { apiHandler, requireAdmin } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { apiSuccess } from "@/lib/api-response";
-import { REMINDER_DEDUP_CHANNEL } from "@/lib/notifications/reminder-dedup";
 
 export const dynamic = "force-dynamic";
 
@@ -59,12 +58,8 @@ export const GET = apiHandler(async (request) => {
   const [grouped, disabled] = await Promise.all([
     prisma.pushAttempt.groupBy({
       by: ["channel", "result"],
-      // The reminder tick anchors its per-slot dedup in the same table
-      // under a sentinel channel. Those rows record a decision, not a
-      // delivery, so they stay out of the per-channel health picture.
       where: {
         createdAt: { gte: since },
-        channel: { not: REMINDER_DEDUP_CHANNEL },
       },
       _count: { _all: true },
     }),

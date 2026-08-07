@@ -14,7 +14,13 @@ import type { ZodOpenApiObject } from "zod-openapi";
 import { ARRIVAL_KINDS } from "@/lib/arrivals/types";
 import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
 import { dismissPriorityItemSchema } from "@/lib/validations/daily";
-import { dataEnvelope, moduleDisabledResponse, stdResponses } from "./shared";
+import {
+  MODULE_DISABLED_DESCRIPTION,
+  dataEnvelope,
+  moduleDisabledResponse,
+  recordRefusal,
+  stdResponses,
+} from "./shared";
 
 const priorityItemSchema = z
   .object({
@@ -169,7 +175,7 @@ export const dailyPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...moduleDisabledResponse,
+        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
         ...stdResponses,
       },
     },

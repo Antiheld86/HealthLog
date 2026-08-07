@@ -56,6 +56,10 @@ import {
   type InsightStatusMetric,
   type InsightStatusGeneratePayload,
 } from "@/lib/jobs/insight-status-generate-shared";
+import {
+  mayDispatchProviderWork,
+  withProviderWorkAuthority,
+} from "@/lib/sharing/provider-work-authority";
 
 export {
   INSIGHT_STATUS_GENERATE_QUEUE,
@@ -91,6 +95,23 @@ const GENERATORS: Record<InsightStatusMetric, StatusGenerator> = {
  * annotated and skipped rather than thrown.
  */
 export async function runInsightStatusGenerate(
+  payload: InsightStatusGeneratePayload,
+  generators: Record<InsightStatusMetric, StatusGenerator> = GENERATORS,
+): Promise<void> {
+  const authority = payload.authority;
+  if (!authority || !(await mayDispatchProviderWork(authority))) {
+    annotate({
+      action: { name: "insights.status.generate.refused" },
+      meta: { metric: payload.metric, reason: "provider_authority" },
+    });
+    return;
+  }
+  await withProviderWorkAuthority(authority, () =>
+    dispatchInsightStatusGenerate(payload, generators),
+  );
+}
+
+async function dispatchInsightStatusGenerate(
   payload: InsightStatusGeneratePayload,
   generators: Record<InsightStatusMetric, StatusGenerator> = GENERATORS,
 ): Promise<void> {

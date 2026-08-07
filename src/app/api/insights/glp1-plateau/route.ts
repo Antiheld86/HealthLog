@@ -13,7 +13,7 @@
  * beyond auth. Auth via cookie or Bearer.
  */
 
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import {
@@ -24,7 +24,9 @@ import {
 export const dynamic = "force-dynamic";
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE-level read: computed over the whole record, with no
+  // provider anywhere on the path.
+  const { user } = await requireRecordAuth("manage", "record");
 
   const plateau = await detectGlp1Plateau(user.id);
 

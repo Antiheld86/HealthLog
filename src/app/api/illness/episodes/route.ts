@@ -33,7 +33,7 @@ import {
 import { toIllnessEpisodeDTO } from "@/lib/illness/dto";
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "illness");
 
   const gate = await requireIllnessEnabled(user.id);
   if (!gate.enabled) return gate.response;
@@ -78,7 +78,7 @@ async function postEpisode(request: NextRequest): Promise<Response> {
   // the caller: whether illness tracking exists is a property of the record, so
   // a delegate who runs the module on their own account does not thereby gain
   // an episode surface inside somebody else's.
-  const { user } = await requireRecordAuth("write");
+  const { user } = await requireRecordAuth("write", "illness");
 
   const gate = await requireIllnessEnabled(user.id);
   if (!gate.enabled) return gate.response;

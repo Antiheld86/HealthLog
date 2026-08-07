@@ -25,11 +25,12 @@ import {
 } from "@/lib/dashboard-layout";
 import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
 import {
-  dataEnvelope,
-  stdResponses,
   baseUpdatedAtField,
   conflictResponse409,
+  dataEnvelope,
   invalidBaseTokenResponse,
+  recordRefusal,
+  stdResponses,
 } from "./shared";
 
 const dashboardWidgetConfig = z.object({
@@ -106,6 +107,7 @@ export const dashboardWidgetPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "Returns the resolved effective layout (defaults merged in if the user has not customised it) plus the optimistic-concurrency `updatedAt` token.",
       responses: {
+        ...recordRefusal(),
         "200": {
           description:
             "The resolved layout (custom or default) plus its token.",

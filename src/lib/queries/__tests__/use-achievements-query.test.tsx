@@ -26,7 +26,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import { I18nProvider } from "@/lib/i18n/context";
-import { useAchievementsQuery } from "../use-achievements-query";
+import {
+  canFetchAchievements,
+  useAchievementsQuery,
+} from "../use-achievements-query";
 
 vi.mock("@/hooks/use-auth", () => ({
   useAuth: () => ({ isAuthenticated: true }),
@@ -90,6 +93,13 @@ function withQueryClient(node: ReactNode): string {
 }
 
 describe("useAchievementsQuery — consumer collapse", () => {
+  it("does not start the whole-record poll in a narrowed shared record", () => {
+    expect(canFetchAchievements({ sections: ["profile"] })).toBe(false);
+    expect(canFetchAchievements({ sections: [] })).toBe(false);
+    expect(canFetchAchievements({ sections: null })).toBe(true);
+    expect(canFetchAchievements(null)).toBe(true);
+  });
+
   it("fires a single network call when three consumers mount together", async () => {
     withQueryClient(
       <>

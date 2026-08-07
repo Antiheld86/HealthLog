@@ -25,7 +25,10 @@ vi.mock("@/lib/ai/codex-oauth", () => ({
   encryptCodexCreds: vi.fn(),
   decryptCodexCreds: vi.fn(),
 }));
-vi.mock("@/lib/logging/context", () => ({ annotate: vi.fn() }));
+vi.mock("@/lib/logging/context", () => ({
+  annotate: vi.fn(),
+  getEvent: vi.fn(() => undefined),
+}));
 vi.mock("undici", async (importOriginal) => {
   const actual = await importOriginal<typeof import("undici")>();
   return {

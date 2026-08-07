@@ -36,7 +36,7 @@ const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "measurements");
   annotate({ action: { name: "personalRecords.list" } });
 
   const { searchParams } = new URL(request.url);

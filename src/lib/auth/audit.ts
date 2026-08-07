@@ -49,16 +49,24 @@ export async function auditLog(
   action: string,
   opts: {
     userId?: string | null;
+    /** Explicit worker attribution when no request context remains. */
+    actorUserId?: string | null;
+    /** Use the active transaction when the audit must commit atomically. */
+    client?: Pick<typeof prisma, "auditLog">;
     details?: Record<string, unknown>;
     ipAddress?: string | null;
   } = {},
 ) {
   const userId = opts.userId ?? null;
-  const entry = await prisma.auditLog.create({
+  const client = opts.client ?? prisma;
+  const entry = await client.auditLog.create({
     data: {
       action,
       userId,
-      actorUserId: actingActorFor(userId),
+      actorUserId:
+        opts.actorUserId === undefined
+          ? actingActorFor(userId)
+          : opts.actorUserId,
       details: opts.details ? JSON.stringify(opts.details) : null,
       ipAddress: opts.ipAddress ?? null,
     },

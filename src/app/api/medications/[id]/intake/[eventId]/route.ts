@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
+import { overwriteDetails } from "@/lib/sharing/audit-details";
 import {
   apiSuccess,
   apiError,
@@ -32,7 +33,10 @@ type RouteParams = { params: Promise<{ id: string; eventId: string }> };
 
 export const PUT = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Correcting a dose tombstones the original and
+    // re-creates it on the corrected slot, so the write is reconstructable by
+    // the rows; what it must not do is restamp where the dose came from (C8).
+    const { user } = await requireRecordAuth("manage", "medications");
 
     const { id, eventId } = await params;
 
@@ -65,21 +69,20 @@ export const PUT = apiHandler(
           event_id: eventId,
         },
       });
-      prisma.auditLog
-        .create({
-          data: {
-            userId: user.id,
-            action: "medications.intake.event.update.validation-failed",
-            details: JSON.stringify({
-              issues,
-              medicationId: id,
-              eventId,
-            }),
-          },
-        })
-        .catch(() => {
-          /* swallow — 422 response is the contract */
-        });
+      // v1.37.0 — through `auditLog()` rather than a bare `prisma.auditLog
+      // .create`, because that helper is the only writer that stamps
+      // `actorUserId`. Filed under the resolved record either way; without the
+      // stamp a manager's malformed payload would read as the owner's own.
+      void auditLog("medications.intake.event.update.validation-failed", {
+        userId: user.id,
+        details: {
+          issues,
+          medicationId: id,
+          eventId,
+        },
+      }).catch(() => {
+        /* swallow — 422 response is the contract */
+      });
       return returnAllZodIssues(parsed.error, 422);
     }
 
@@ -307,7 +310,11 @@ export const PUT = apiHandler(
         isExplicitTaken: !nextSkipped && nextTakenAt !== null,
         isExplicitSkip: nextSkipped,
         idempotencyKey: null,
-        createSource: "WEB",
+        // C8 — the converged row keeps the ORIGINAL's provenance. This used
+        // to be a hardcoded `"WEB"`, which said "somebody typed this in the
+        // browser" about an Apple Health dose whose time was corrected. Under
+        // MANAGE the sentence would be wrong about a second person as well.
+        createSource: event.source,
         attributionSource,
         // v1.16.9 — a slot move is a re-binding, not a new dose: the
         // original row's recorded injection site and dose override ride
@@ -339,7 +346,28 @@ export const PUT = apiHandler(
     await auditLog("medication.intake.update", {
       userId: user.id,
       ipAddress: getClientIp(request),
-      details: { eventId, medicationId: id },
+      // C4 — what the correction moved. A dose edit changes when a dose is
+      // recorded as taken, which is exactly what a clinician reads back.
+      details: {
+        eventId,
+        medicationId: id,
+        ...overwriteDetails({
+          before: {
+            scheduledFor: event.scheduledFor,
+            takenAt: event.takenAt,
+            skipped: event.skipped,
+          },
+          // The slot-write result carries the canonical four. The injection
+          // site and the dose override are not compared here because the move
+          // path copies them onto the converged row by construction — there is
+          // no edit of them to report.
+          after: {
+            scheduledFor: updated.scheduledFor,
+            takenAt: updated.takenAt,
+            skipped: updated.skipped,
+          },
+        }),
+      },
     });
 
     annotate({
@@ -394,7 +422,9 @@ export const PUT = apiHandler(
 
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Soft delete: the row stays, the sync feed carries the
+    // tombstone, and the inventory stamp is refunded.
+    const { user } = await requireRecordAuth("manage", "medications");
 
     const { id, eventId } = await params;
 

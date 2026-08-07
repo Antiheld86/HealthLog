@@ -196,8 +196,11 @@ describe("POST /api/cycle/period — external-id stability floor", () => {
   });
 
   it("accepts the real HealthKit id and reaches the write transaction", async () => {
+    // v1.37.0 — the boundary transaction reports the anchors it moved so the
+    // audit row can name them (C4); an empty set is the no-neighbour case.
     vi.mocked(prisma.$transaction).mockResolvedValue({
       cycleId: "cycle-1",
+      moved: {},
     } as never);
     const res = await postPeriod(
       req("/api/cycle/period", {

@@ -17,7 +17,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { cookieJar, headerJar } from "./mock-next-headers";
-import { getPrismaClient, truncateAllTables } from "./setup";
+import { getPrismaClient, truncateAllTables, switchSessionTo } from "./setup";
 
 vi.mock("next/headers", async () => {
   const { cookieJar, headerJar } = await import("./mock-next-headers");
@@ -70,13 +70,22 @@ interface AccountAccessEntry {
   accountId: string;
   username: string;
   displayName: string | null;
+  /**
+   * The legacy name, and deliberately narrower than `level`: it carries only
+   * `read` and `write`, because that is the union v1.36.0 published and
+   * shipped clients still decode. A MANAGE grant is a `write` here.
+   */
   access: "read" | "write";
+  level: "read" | "write" | "manage";
+  recordKind: "shared" | "managed";
+  sections: string[] | null;
   canWrite: boolean;
 }
 
 interface AccountAccessBlock {
   accounts: AccountAccessEntry[];
   active: AccountAccessEntry | null;
+  recordKind: "self" | "shared" | "managed";
   canSwitch: boolean;
 }
 
@@ -101,17 +110,25 @@ async function readMe(): Promise<{
 async function grantAccess(
   grantorId: string,
   granteeId: string,
-  extra: { expiresAt?: Date | null; acceptedAt?: Date | null } = {},
+  extra: {
+    expiresAt?: Date | null;
+    acceptedAt?: Date | null;
+    access?: "READ" | "WRITE" | "MANAGE";
+    scopeJson?: unknown;
+  } = {},
 ) {
   return getPrismaClient().accountGrant.create({
     data: {
       grantorId,
       granteeId,
-      access: "READ",
+      access: extra.access ?? "READ",
       invitedAt: new Date(),
       acceptedAt:
         extra.acceptedAt === undefined ? new Date() : extra.acceptedAt,
       expiresAt: extra.expiresAt ?? null,
+      ...(extra.scopeJson === undefined
+        ? {}
+        : { scopeJson: extra.scopeJson as never }),
     },
   });
 }
@@ -136,6 +153,9 @@ describe("accountAccess — what the payload publishes", () => {
     expect(accountAccess).toEqual({
       accounts: [],
       active: null,
+      // The record in view is this account's own, and the block says so
+      // rather than leaving the client to infer it from `active` being null.
+      recordKind: "self",
       canSwitch: false,
     });
   });
@@ -154,6 +174,12 @@ describe("accountAccess — what the payload publishes", () => {
         username: owner.username,
         displayName: owner.displayName,
         access: "read",
+        level: "read",
+        // An adult who shared their own record. `managed` is reserved for a
+        // profile that has no login of its own, and the two are not
+        // interchangeable on any surface that renders a name.
+        recordKind: "shared",
+        sections: null,
         canWrite: false,
       },
     ]);
@@ -201,6 +227,82 @@ describe("accountAccess — what the payload publishes", () => {
     expect(accountAccess.accounts).toEqual([]);
   });
 
+  it("publishes the sections a scoped grant opens, exactly as stored", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await grantAccess(owner.id, delegate.id, {
+      // Stored out of the consent screen's order on purpose: what the payload
+      // publishes is a resolved value in the reading order, not the column.
+      scopeJson: ["labs", "medications"],
+    });
+    await signIn(delegate.id);
+
+    const { accountAccess } = await readMe();
+
+    expect(accountAccess.accounts[0].sections).toEqual(["medications", "labs"]);
+    expect(accountAccess.accounts[0].level).toBe("read");
+  });
+
+  it("publishes the whole record as null, never as a list of eight", async () => {
+    // Null is the answer every pre-v1.37.0 grant carries and the one an owner
+    // who does not narrow still gives. Expanding it into all eight sections
+    // would turn a first-class value into a choice nobody made, and would
+    // start growing by release — a grant would quietly gain a section the
+    // owner never agreed to.
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await grantAccess(owner.id, delegate.id);
+    await signIn(delegate.id);
+
+    const { accountAccess } = await readMe();
+
+    expect(accountAccess.accounts[0].sections).toBeNull();
+  });
+
+  it("publishes nothing at all for a scope it cannot read", async () => {
+    // Fail-closed, end to end. A blob this build cannot parse resolves to the
+    // empty set in the resolver, so the payload says the same: the grant
+    // opens nothing. A payload that reported null here would paint a full
+    // switcher entry for a grant the server refuses on every request.
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await grantAccess(owner.id, delegate.id, { scopeJson: "garbage" });
+    await signIn(delegate.id);
+
+    const { accountAccess } = await readMe();
+
+    expect(accountAccess.accounts[0].sections).toEqual([]);
+  });
+
+  it("publishes a manage grant as manage on level, and as write on the legacy name", async () => {
+    // The shipped expression was `access === "WRITE" ? "write" : "read"`,
+    // which would have published a grant that can delete entries as read-only
+    // — the payload understating access is the direction that reads as safe
+    // and is not, because the server would have gone on admitting the writes.
+    //
+    // The correction is on `level`, and only there. `access` is the v1.36.0
+    // name, and its union is `read | write`: a client built against that
+    // release decodes it as a closed set and fails on a third value it has
+    // never seen. So MANAGE publishes as `write` on the legacy name — an
+    // understatement a shipped client can act on, beside the exact answer on
+    // `level` for a client that knows to read it. The narrowing is enforced
+    // rather than incidental: `accountAccessEntrySchema` raises an issue
+    // unless a `manage` entry carries exactly legacy write access and whole
+    // scope (`src/lib/sharing/account-access-schema.ts`).
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await grantAccess(owner.id, delegate.id, { access: "MANAGE" });
+    await signIn(delegate.id);
+
+    const { accountAccess } = await readMe();
+
+    expect(accountAccess.accounts[0].level).toBe("manage");
+    expect(accountAccess.accounts[0].access).toBe("write");
+    expect(accountAccess.accounts[0].canWrite).toBe(true);
+    expect(accountAccess.accounts[0].sections).toBeNull();
+    expect(accountAccess.accounts[0].recordKind).toBe("shared");
+  });
+
   it("never lists a grant this account GAVE — the block is about what it may open", async () => {
     const owner = await makeUser("owner");
     const delegate = await makeUser("delegate");
@@ -221,10 +323,7 @@ describe("accountAccess — the active record", () => {
     const delegate = await makeUser("delegate");
     await grantAccess(owner.id, delegate.id);
     const session = await signIn(delegate.id);
-    await getPrismaClient().session.update({
-      where: { id: session.id },
-      data: { actingAsUserId: owner.id },
-    });
+    await switchSessionTo(session.id, owner.id);
 
     const { accountAccess, id } = await readMe();
 
@@ -236,11 +335,18 @@ describe("accountAccess — the active record", () => {
       username: owner.username,
       displayName: owner.displayName,
       access: "read",
+      level: "read",
+      recordKind: "shared",
+      sections: null,
       canWrite: false,
     });
     // The active entry is one of the listed ones, by construction. A banner
     // that had to join the two could render unnamed when they disagreed.
     expect(accountAccess.accounts).toContainEqual(accountAccess.active);
+    // The block-level kind moves with the switch. It reads `self` in the
+    // empty case above, so a value stuck on one of the two would show up as
+    // one of these two cases disagreeing with the session.
+    expect(accountAccess.recordKind).toBe("shared");
   });
 
   it("reads as not-switched when the stamp outlives the grant", async () => {
@@ -248,10 +354,7 @@ describe("accountAccess — the active record", () => {
     const delegate = await makeUser("delegate");
     const grant = await grantAccess(owner.id, delegate.id);
     const session = await signIn(delegate.id);
-    await getPrismaClient().session.update({
-      where: { id: session.id },
-      data: { actingAsUserId: owner.id },
-    });
+    await switchSessionTo(session.id, owner.id);
     // The grant lapses while the browser sits inside the record. Expiry has
     // no session cleanup — only revocation does — so the stamp survives it.
     await getPrismaClient().accountGrant.update({

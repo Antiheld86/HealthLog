@@ -341,4 +341,10 @@ describe("data-wipe completeness", () => {
     });
     expect(wipeWhere("Measurement", "u1")).toEqual({ userId: "u1" });
   });
+
+  it("selects both record and recipient ownership of a Guardian egress claim", () => {
+    expect(wipeWhere("NotificationEgressAuthorization", "u1")).toEqual({
+      OR: [{ recordUserId: "u1" }, { recipientUserId: "u1" }],
+    });
+  });
 });

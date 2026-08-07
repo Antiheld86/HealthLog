@@ -22,6 +22,10 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getAssistantFlags } from "@/lib/feature-flags";
+import {
+  mayDispatchProviderWork,
+  withProviderWorkAuthority,
+} from "@/lib/sharing/provider-work-authority";
 import { annotate } from "@/lib/logging/context";
 import {
   generatePeriodNarrative,
@@ -254,13 +258,18 @@ function tally(
  */
 export async function warmOneNarrative(
   payload: PeriodNarrativePayload,
+  generate: typeof generatePeriodNarrative = generatePeriodNarrative,
 ): Promise<NarrativeGenerateOutcome | null> {
   if (!payload.userId || !payload.period) return null;
+  const authority = payload.authority;
+  if (!authority || !(await mayDispatchProviderWork(authority))) return null;
   const flags = await getAssistantFlags();
   if (!flags.briefing && !flags.insightStatus) return null;
-  return generatePeriodNarrative(payload.userId, {
-    period: payload.period,
-    locale: payload.locale ?? defaultLocale,
-    force: true,
-  });
+  return withProviderWorkAuthority(authority, () =>
+    generate(payload.userId!, {
+      period: payload.period!,
+      locale: payload.locale ?? defaultLocale,
+      force: true,
+    }),
+  );
 }

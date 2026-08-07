@@ -46,7 +46,7 @@ const POST_WINDOW_MS = 60_000;
 
 export const GET = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireRecordAuth("read");
+    const { user } = await requireRecordAuth("read", "medications");
     const { id } = await params;
 
     const guard = await assertMedicationOwnership(id, user.id);
@@ -100,7 +100,7 @@ export const POST = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
     // v1.36.x — a delegated write. `user` is the record the entry lands under;
     // `actor` is whoever is typing, and the two differ only under a switch.
-    const { user, actor } = await requireRecordAuth("write");
+    const { user, actor } = await requireRecordAuth("write", "medications");
     const { id } = await params;
 
     const guard = await assertMedicationOwnership(id, user.id);

@@ -160,7 +160,7 @@ function stdDev(values: number[]): number {
 }
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "measurements");
 
   const rawQuery = Object.fromEntries(request.nextUrl.searchParams);
   const parsed = querySchema.safeParse(rawQuery);

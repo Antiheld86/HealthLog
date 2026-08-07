@@ -21,12 +21,19 @@ import {
   nutrientWaterWriteSchema,
   nutrientWaterWriteResponseSchema,
 } from "@/lib/validations/nutrients";
-import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
+import {
+  dataEnvelope,
+  errorEnvelope,
+  recordRefusal,
+  stdResponses,
+} from "./shared";
+
+const NUTRIENTS_DISABLED_DESCRIPTION =
+  "The opt-in `nutrients` module is off for this account (errorCode `module.disabled`). Stop syncing and do not retry; offer the enable-in-settings hint. Only run the HealthKit read-authorization flow while the module is on.";
 
 const moduleDisabled = {
   "403": {
-    description:
-      "The opt-in `nutrients` module is off for this account (errorCode `module.disabled`). Stop syncing and do not retry; offer the enable-in-settings hint. Only run the HealthKit read-authorization flow while the module is on.",
+    description: NUTRIENTS_DISABLED_DESCRIPTION,
     content: { "application/json": { schema: errorEnvelope } },
   },
 } as const;
@@ -89,7 +96,7 @@ export const nutrientPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...moduleDisabled,
+        ...recordRefusal(NUTRIENTS_DISABLED_DESCRIPTION),
         ...stdResponses,
       },
     },
@@ -113,7 +120,7 @@ export const nutrientPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...moduleDisabled,
+        ...recordRefusal(NUTRIENTS_DISABLED_DESCRIPTION),
         ...stdResponses,
       },
     },
@@ -142,7 +149,7 @@ export const nutrientPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...moduleDisabled,
+        ...recordRefusal(NUTRIENTS_DISABLED_DESCRIPTION),
         ...stdResponses,
       },
     },

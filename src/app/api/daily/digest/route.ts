@@ -31,7 +31,7 @@ export const GET = apiHandler(async () => {
   // matters — a delegate gets the hero only where the owner switched insights
   // on, never where the delegate did. Re-examine with the snapshot when
   // per-module scope lands; a digest is a summary of several modules at once.
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "record");
   const m = await requireModuleEnabled(user.id, "insights");
   if (!m.enabled) return m.response;
 

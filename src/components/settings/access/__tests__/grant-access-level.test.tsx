@@ -21,7 +21,18 @@ import { describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/lib/i18n/context";
 import type { GrantList, GrantRow } from "@/lib/queries/use-account-grants";
 
-const grantsRef: { value: GrantList } = { value: { given: [], received: [] } };
+const grantsRef: { value: GrantList } = { value: grantList() };
+/**
+ * A grant payload, with the audit window every real one carries.
+ *
+ * v1.37.0 — `retentionDays` rides `GET /api/account/grants` so the revoke
+ * dialog can state how long attribution survives without waiting on a second
+ * request. A fixture that omitted it would be describing a payload the server
+ * cannot send.
+ */
+function grantList(partial: Partial<GrantList> = {}): GrantList {
+  return { given: [], received: [], retentionDays: 365, ...partial };
+}
 
 vi.mock("@/lib/queries/use-account-grants", async (importOriginal) => {
   const actual =
@@ -65,6 +76,7 @@ const BASE: GrantRow = {
   id: "g1",
   account: { id: "acct-1", username: "housemate", displayName: "Jo" },
   access: "READ",
+  scope: null,
   state: "PENDING",
   invitedAt: "2026-01-02T10:00:00.000Z",
   acceptedAt: null,
@@ -75,31 +87,55 @@ const BASE: GrantRow = {
 };
 
 describe("offering a level", () => {
-  it("offers both levels and preselects the narrower one", () => {
+  it("offers all three levels and preselects the narrowest", () => {
     const html = render(<GrantInviteCard />);
     expect(html).toContain('data-slot="grant-invite-access"');
     expect(html).toContain('data-access="READ"');
     expect(html).toContain('data-access="WRITE"');
+    expect(html).toContain('data-access="MANAGE"');
     // The narrow level is the one somebody chooses their way out of.
     expect(html).toContain('data-access="READ" data-selected="true"');
     expect(html).toContain('data-access="WRITE" data-selected="false"');
+    expect(html).toContain('data-access="MANAGE" data-selected="false"');
   });
 
-  it("shows keyboard focus on the option the radio is hidden inside", () => {
+  it("shows keyboard focus on every option the radio is hidden inside", () => {
     // The radio is `sr-only`, so the browser's own ring lands on a zero-size
     // box and tabbing through this fieldset moved an invisible selection —
     // WCAG 2.4.7, on the screen where somebody grants write access to their
     // health record. The label wears the ring instead, and `has-[:focus-visible]`
     // is what carries it from the input to the label.
+    //
+    // Both fieldsets are checked, not only the level one: v1.37.0 added a
+    // second group of radios in the same idiom, and a group that lost the ring
+    // would be the same defect shipped again one section further down.
     const html = render(<GrantInviteCard />);
-    const options = html.match(
+    const levels = html.match(
       /<label[^>]*data-slot="grant-invite-access-option"[^>]*>/g,
     );
-    expect(options).toHaveLength(2);
-    for (const option of options ?? []) {
+    const scopes = html.match(
+      /<label[^>]*data-slot="grant-invite-scope-option"[^>]*>/g,
+    );
+    expect(levels).toHaveLength(3);
+    expect(scopes).toHaveLength(2);
+    for (const option of [...(levels ?? []), ...(scopes ?? [])]) {
       expect(option, option).toContain("has-[:focus-visible]:ring-2");
       expect(option, option).toContain("has-[:focus-visible]:ring-ring/50");
     }
+  });
+
+  it("says plainly that manage can change and delete what the owner wrote", () => {
+    const html = render(<GrantInviteCard />);
+    // The clause that separates this level from the one below it. A rewrite
+    // that keeps "manage" and drops this is a rewrite that stops describing
+    // a delete button.
+    expect(html).toContain("add, change and remove entries in your record");
+    expect(html).toContain("including ones you entered yourself");
+    // And the fence, in the same breath. Consent to management is only
+    // meaningful beside what management does not reach.
+    expect(html).toContain("They cannot change your login");
+    expect(html).toContain("who else has access");
+    expect(html).toContain("You can end this at any time.");
   });
 
   it("says what the wider level actually does, and what it does not", () => {
@@ -129,10 +165,10 @@ describe("offering a level", () => {
 
 describe("accepting a level", () => {
   it("states the level and what accepting it means before the button", () => {
-    grantsRef.value = {
+    grantsRef.value = grantList({
       given: [],
       received: [{ ...BASE, access: "WRITE" }],
-    };
+    });
     const html = render(<GrantsReceivedCard />);
 
     expect(html).toContain('data-grant-access="WRITE"');
@@ -144,8 +180,26 @@ describe("accepting a level", () => {
     );
   });
 
+  it("asks a manage invitation for its own, heavier consent", () => {
+    grantsRef.value = grantList({ received: [{ ...BASE, access: "MANAGE" }] });
+    const html = render(<GrantsReceivedCard />);
+
+    expect(html).toContain('data-grant-access="MANAGE"');
+    // The row states the level in its own words, not the write level's.
+    expect(html).toContain("change or remove what is in it");
+    expect(html).toContain('data-slot="grant-manage-consent"');
+    // Not the write sentence wearing a stronger adjective: a different
+    // responsibility gets a different sentence.
+    expect(html).not.toContain('data-slot="grant-write-consent"');
+    expect(html).toContain("change or remove what is already in it");
+    expect(html).toContain("recorded under your name");
+    expect(html.indexOf('data-slot="grant-manage-consent"')).toBeLessThan(
+      html.indexOf('data-slot="grant-accept"'),
+    );
+  });
+
   it("does not ask a read invitation for a write consent", () => {
-    grantsRef.value = { given: [], received: [{ ...BASE, access: "READ" }] };
+    grantsRef.value = grantList({ received: [{ ...BASE, access: "READ" }] });
     const html = render(<GrantsReceivedCard />);
     expect(html).toContain('data-grant-access="READ"');
     expect(html).not.toContain('data-slot="grant-write-consent"');
@@ -153,7 +207,7 @@ describe("accepting a level", () => {
 
   it("stops saying it once the invitation has been answered", () => {
     // A sentence about a decision already taken is nagging, not consent.
-    grantsRef.value = {
+    grantsRef.value = grantList({
       given: [],
       received: [
         {
@@ -163,7 +217,7 @@ describe("accepting a level", () => {
           acceptedAt: "2026-01-02T11:00:00.000Z",
         },
       ],
-    };
+    });
     const html = render(<GrantsReceivedCard />);
     expect(html).not.toContain('data-slot="grant-write-consent"');
   });
@@ -196,11 +250,39 @@ describe("ending an access, and what it says about what was entered", () => {
     expect(body).toContain('revokeAttribution({"days":90})');
   });
 
-  it("omits the window rather than inventing one", () => {
-    // The number is the operator's setting. A compiled-in 365 here would be
-    // exactly the invented value the sentence exists to avoid.
-    const body = revokeBody({ t, access: "WRITE", name: "Jo" });
+  it("tells a manage owner the same, because the question is sharper there", () => {
+    // The condition is "not READ" rather than "is WRITE". A manager put things
+    // in the record AND changed things in it, so "what happens to what they
+    // did" is the sentence this owner most needs, and a level check that
+    // listed WRITE by name would have dropped it exactly where it matters.
+    const body = revokeBody({
+      t,
+      access: "MANAGE",
+      name: "Jo",
+      retentionDays: 90,
+    });
     expect(body).toContain("recordSharing.given.revokeEntriesStay");
-    expect(body).not.toContain("revokeAttribution");
+    expect(body).toContain('revokeAttribution({"days":90})');
+  });
+
+  it("states the operator's window rather than a compiled-in one", () => {
+    // The number is the operator's setting, so an instance running 90 days
+    // says 90 and this file would fail on a hardcoded 365.
+    //
+    // v1.37.0 replaced the case that used to live here. It asserted that the
+    // sentence was OMITTED when the number had not arrived, which was true and
+    // was the defect: the number came off a second query, so whether an owner
+    // was told how long attribution survives depended on which of two requests
+    // landed first. The window rides the grant list now — a caller with a row
+    // to revoke has it — so there is no absent case left to assert.
+    const body = revokeBody({
+      t,
+      access: "WRITE",
+      name: "Jo",
+      retentionDays: 7,
+    });
+    expect(body).toContain("recordSharing.given.revokeEntriesStay");
+    expect(body).toContain('revokeAttribution({"days":7})');
+    expect(body).not.toContain("365");
   });
 });

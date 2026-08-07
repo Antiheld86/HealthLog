@@ -287,9 +287,36 @@ describe("Telegram webhook — rate limit", () => {
 });
 
 describe("Telegram webhook — callback dispatch", () => {
+  it("rejects a callback tied to a managed Guardian reminder without mutating the record", async () => {
+    vi.mocked(prisma.telegramReminderMessage.findFirst).mockResolvedValueOnce({
+      medication: { userId: "managed-record" },
+    } as never);
+
+    const res = await POST(tgRequest(callbackUpdate("taken:med-1")));
+
+    expect(res.status).toBe(200);
+    expect(prisma.medication.findFirst).not.toHaveBeenCalled();
+    expect(prisma.medicationIntakeEvent.create).not.toHaveBeenCalled();
+    expect(prisma.medication.update).not.toHaveBeenCalled();
+    expect(deleteMessage).not.toHaveBeenCalled();
+    expect(answerTelegramCallbackQuery).toHaveBeenCalledWith(
+      "decrypted:ENC(token-blob)",
+      "cb-1",
+      "Invalid action.",
+    );
+  });
+
   it("'taken:<medId>' creates a MedicationIntakeEvent + clears snoozedUntil + acks the callback", async () => {
     const res = await POST(tgRequest(callbackUpdate("taken:med-1")));
     expect(res.status).toBe(200);
+
+    expect(prisma.telegramReminderMessage.deleteMany).toHaveBeenCalledWith({
+      where: {
+        recipientUserId: "user-1",
+        medicationId: "med-1",
+        medication: { userId: "user-1" },
+      },
+    });
 
     // No schedules wired → the take is ad-hoc and inserts standalone.
     expect(prisma.medicationIntakeEvent.create).toHaveBeenCalledTimes(1);
@@ -778,6 +805,16 @@ describe("Telegram webhook — slot convergence (v1.16.9)", () => {
 
     const res = await POST(tgRequest(callbackUpdate("taken:med-1")));
     expect(res.status).toBe(200);
+
+    expect(prisma.telegramReminderMessage.findFirst).toHaveBeenCalledWith({
+      where: {
+        recipientUserId: "user-1",
+        medicationId: "med-1",
+        chatId: "7777",
+        messageId: 555,
+      },
+      select: { date: true, timeOfDay: true },
+    });
 
     // The pending row was updated in place — never a duplicate insert.
     expect(prisma.medicationIntakeEvent.create).not.toHaveBeenCalled();

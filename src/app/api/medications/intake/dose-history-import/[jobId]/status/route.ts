@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiError, apiSuccess } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { readMedicationIntakeImportJob } from "@/lib/medications/intake-import-job-status";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 export const GET = apiHandler(
   async (_request: NextRequest, { params }: RouteContext) => {
-    const { user } = await requireAuth();
+    const { user } = await requireRecordAuth("manage", "medications");
     const { jobId } = await params;
     annotate({
       action: { name: "medication.intake.history.import.status" },

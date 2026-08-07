@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
-import type { User } from "@/generated/prisma/client";
+import type { AccountGrant, User } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { WideEventBuilder } from "./logging/event-builder";
 import { annotate, eventStorage, getEvent } from "./logging/context";
@@ -32,9 +32,16 @@ import { SCOPE_HEALTH_READ, SCOPE_HEALTH_WRITE } from "./mcp/oauth/config";
 import {
   findActiveGrant,
   grantAllows,
+  grantCoversDomain,
   touchGrantUsage,
   type GrantNeed,
 } from "./sharing/grants";
+import type { ShareScope } from "./sharing/scope";
+import { RECORD_FENCE_ERROR_CODE } from "./sharing/record-session-fence-contract";
+import {
+  assertRecordSessionFence,
+  attachRecordContextEcho,
+} from "./sharing/record-session-fence";
 
 /**
  * HTTP methods a read-only credential may use on the REST surface. A request
@@ -134,6 +141,38 @@ export class SharingNotPermittedError extends SharingAuthError {
   constructor() {
     super(403, "This endpoint cannot be used while acting on another account");
     this.name = "SharingNotPermittedError";
+  }
+}
+
+/**
+ * v1.37.0 — "the record this session is on is not the record you asserted."
+ *
+ * A third sibling rather than a branch, so it rides the existing
+ * `SharingAuthError` arm below with no new serialisation code. The status is
+ * the one thing that differs and it differs on purpose: 409, not 403, because
+ * this is not a refusal of access. The caller may well be entitled to both
+ * records. What failed is agreement about WHICH one, and the instruction the
+ * code carries is "reconcile through `/api/auth/me` and try again", not "you
+ * have lost this record".
+ *
+ * That distinction is load-bearing for deploy compatibility: the currently
+ * shipped bundle reacts to `sharing.access.denied` by leaving the record and
+ * hard-navigating, which is exactly the wrong response to a transient
+ * disagreement and exactly the right one for a bundle too old to reconcile. See
+ * `src/lib/sharing/record-session-fence-contract.ts` for why the fence hands
+ * each bundle the code it can act on.
+ *
+ * The body carries `meta.errorCode` and nothing else — no current epoch, no
+ * current scope. A client may learn its context from exactly two responses
+ * (`GET /api/auth/me` and `POST /api/account/switch`), and putting the truth in
+ * this refusal would open a third path, one that arrives on the very requests
+ * whose context is in doubt.
+ */
+export class RecordSessionChangedError extends SharingAuthError {
+  readonly errorCode = RECORD_FENCE_ERROR_CODE;
+  constructor() {
+    super(409, "The record this session is on has changed");
+    this.name = "RecordSessionChangedError";
   }
 }
 
@@ -364,6 +403,28 @@ export function apiHandler<T extends (...args: any[]) => Promise<Response>>(
       }
       const nr = response as NextResponse;
       nr.headers.set("x-request-id", evt.getRequestId());
+      // v1.37.0 — echo the record context this response was actually served
+      // under, when one was decided. The value comes from the wide event and
+      // from nowhere else: the fence stamps it on every call it makes, so
+      // exactly the responses that resolved a record scope carry it and
+      // everything else — public routes, actor surfaces, admin, `/me`, static —
+      // carries nothing.
+      //
+      // Deliberately NOT derived here with a `getSession()`. That would put a
+      // session read on every public route, and it would make the echo a second
+      // derivation of the context rather than a report of the one that was
+      // used, which is the difference between "what this response served" and
+      // "what a later read thinks is true".
+      //
+      // Absence is therefore meaningful and safe: the client discards a
+      // response whose echo CONTRADICTS its adopted context, and serves one
+      // that carries no echo normally. A discard-on-absence rule would throw
+      // away the `/api/version` poll on every cycle.
+      //
+      // The two header names stay inside the fence module, which is what keeps
+      // them to four files overall (declared, read, attached client-side,
+      // published) — see `src/__tests__/record-session-fence-guard.test.ts`.
+      attachRecordContextEcho(nr.headers, evt.getRecordContext());
       return nr;
     });
   };
@@ -391,6 +452,16 @@ export type AuthContext = {
      * below reads it.
      */
     readonly actingAsUserId?: string | null;
+    /**
+     * v1.37.0 — how many times this session's record selector has moved. The
+     * record-session fence compares it against what the request asserted.
+     *
+     * Optional for the same reason as `actingAsUserId` above, and `undefined`
+     * reads as `0` — which is the fence's exemption, so a hand-built test
+     * context keeps meaning "a session that never switched". Read only by the
+     * fence.
+     */
+    readonly recordEpoch?: number;
   };
   user: User;
   /**
@@ -770,17 +841,48 @@ export interface RecordAuthContext extends AuthContext {
  *   method must BOTH be satisfiable, so a delegable GET handler that grows a
  *   POST export cannot quietly inherit the read grant's permission. An unknown
  *   method (no event context) counts as a write and is refused, the same
- *   fail-closed posture as the MCP audience guard above.
+ *   fail-closed posture as the MCP audience guard above. A route declaring
+ *   `"manage"` refuses everything below it regardless of method: the method
+ *   can only escalate what the declaration asked for, never satisfy it.
+ * @param domain v1.37.0 — which section of the record the route touches, or
+ *   `"record"` when it reads across sections. Required, and the requirement is
+ *   the fail-closed lever: a delegable route without a classification does not
+ *   typecheck, so the set of routes carrying one cannot fall behind the set of
+ *   routes that are delegable. The value is frozen per module by
+ *   `src/__tests__/sharing-surface-guard.test.ts` and reviewed against the
+ *   design's clustering table; this function only enforces what was declared.
  */
 export async function requireRecordAuth(
   need: GrantNeed,
+  domain: ShareScope,
 ): Promise<RecordAuthContext> {
   const auth = await authenticateCaller();
+  // v1.37.0 — before any carrier is read, any grant is looked up, or any record
+  // row is touched: does this request still believe what its session believes?
+  //
+  // The atomicity that makes this a tautology rather than a race: the epoch the
+  // fence compares and the `actingAsUserId` the carrier below is built from are
+  // BOTH projected off the one session row `authenticateCaller()` already
+  // loaded. The scope this handler serves under and the epoch it validated are
+  // therefore the same fact read at the same instant, not two reads a commit
+  // can land between. Do not add a second session read here to "refresh" it —
+  // that would reintroduce exactly the window this ordering removes.
+  //
+  // `authenticateCaller` necessarily runs first because it supplies the row the
+  // fence reads, so the invariant is "before the carrier", not "before the
+  // first database await".
+  await assertRecordSessionFence(auth);
   const carrier = await readActingCarrier(auth);
 
   if (carrier.kind === "none") {
     // Do no harm: without a carrier this is byte-for-byte the pre-v1.36.0
     // request, resolved by the same `authenticateCaller` every other mode uses.
+    getEvent()?.setProviderWorkAuthority({
+      origin: "owner",
+      recordUserId: auth.user.id,
+      actorUserId: auth.user.id,
+      grantId: null,
+    });
     return { ...auth, actor: auth.user, grantId: null };
   }
   if (carrier.kind === "misplaced-header") {
@@ -789,6 +891,106 @@ export async function requireRecordAuth(
     throw refuseUndeclaredMode(auth, carrier, "misplaced_selector");
   }
 
+  const method = (getEvent()?.getHttpMethod() ?? "").toUpperCase();
+  const effectiveNeed: GrantNeed =
+    need !== "read" || !READ_HTTP_METHODS.has(method) ? escalate(need) : "read";
+
+  return resolveSwitchedRecord(auth, carrier, (grant) => {
+    if (!grantAllows(grant, effectiveNeed)) return "insufficient_access";
+    // Level first, then scope, and the order is visible on the wire in exactly
+    // one way: not at all. Both refusals are the same error with the same
+    // bytes, and only the audit reason differs — so the ordering is a choice
+    // about what the operator's trail says happened, not about what the caller
+    // learns. It says the bigger thing: a delegate who was never given this
+    // level is a different story from one whose sections do not reach here.
+    if (!grantCoversDomain(grant, domain)) return "out_of_scope";
+    return null;
+  });
+}
+
+/**
+ * The need a non-safe method implies, for a route that declared `need`.
+ *
+ * A PUT on a route declaring `"read"` needs a write grant, which is what this
+ * has always done. A PUT on a route declaring `"manage"` needs a MANAGE grant
+ * and must not be reduced to a write — so the escalation raises the floor to
+ * `"write"` and never lowers a declaration that already sits above it.
+ */
+function escalate(need: GrantNeed): GrantNeed {
+  return need === "manage" ? "manage" : "write";
+}
+
+/**
+ * v1.37.0 — a guardian surface: this route administers a managed profile.
+ *
+ * The other declaration, and a separate function rather than a flag on the one
+ * above, for the reason `requireActorAuth` is also separate: the guard freezes
+ * each declaration as its own list, so a route moving between them is a diff a
+ * human reviews rather than an argument about a parameter.
+ *
+ * What it admits is narrower than it looks. An active MANAGE grant is
+ * necessary and NOT sufficient — the record must also carry the managed-profile
+ * marker. That second condition is the identity fence, and it is the line
+ * between "manage my data" and "own my account": an adult who granted
+ * management of their own record reaches none of this, at any level, by any
+ * argument, because their record has no marker and never will while they hold
+ * it. A managed profile has no self to reserve these surfaces for, so its
+ * guardian holds them.
+ *
+ * The fence is gated on the marker rather than on the grant precisely so that
+ * no future change to what MANAGE means can reach through it. Widening MANAGE
+ * would widen `requireRecordAuth`; it would not touch this function.
+ */
+export async function requireGuardianAuth(): Promise<RecordAuthContext> {
+  const auth = await authenticateCaller();
+  // Same placement and the same reason as `requireRecordAuth` above: the
+  // guardian surfaces administer a managed profile, so a request arriving under
+  // a context that has since moved must be refused before the marker is read,
+  // not after.
+  await assertRecordSessionFence(auth);
+  const carrier = await readActingCarrier(auth);
+
+  if (carrier.kind === "none") {
+    // The owner of an ordinary record, reaching their own settings. Same
+    // do-no-harm posture as the record resolver: without a carrier this is the
+    // request it always was.
+    return { ...auth, actor: auth.user, grantId: null };
+  }
+  if (carrier.kind === "misplaced-header") {
+    throw refuseUndeclaredMode(auth, carrier, "misplaced_selector");
+  }
+
+  return resolveSwitchedRecord(auth, carrier, (grant, owner) => {
+    if (!grantAllows(grant, "manage")) return "insufficient_access";
+    if (owner.managedProfileAt === null) return "guardian_only";
+    return null;
+  });
+}
+
+/**
+ * The shared body of both record resolvers: turn a selector into an owner, or
+ * refuse.
+ *
+ * Everything either resolver does with a carrier lives here except the
+ * admission rule itself, which arrives as `admit` — a function of the grant
+ * and the owner returning an audit reason to refuse with, or null to proceed.
+ * The split is where it is because the two resolvers differ in exactly that
+ * one decision and in nothing else, and two copies of the grant lookup, the
+ * refusal shape, the usage stamp and the owner's access row would be two
+ * copies to keep in step.
+ *
+ * The owner row is loaded BEFORE the admission runs, which is a change from
+ * v1.36.0's ordering and a deliberate one: the guardian rule is a fact about
+ * the owner, so it cannot be decided before the owner is known. Nothing about
+ * the refusal moved — every arm below is the same error with the same bytes,
+ * and an admission that refuses after the load costs one query it does not use
+ * and tells the caller nothing extra.
+ */
+async function resolveSwitchedRecord(
+  auth: AuthContext,
+  carrier: Extract<ActingCarrier, { accountId: string }>,
+  admit: (grant: AccountGrant, owner: User) => string | null,
+): Promise<RecordAuthContext> {
   /** Every refusal below is this one error, with the reason kept off the wire. */
   const denied = (reason: string): SharingAccessDeniedError => {
     annotate({ meta: { sharing_refusal: reason } });
@@ -799,10 +1001,6 @@ export async function requireRecordAuth(
   if (!selectorNamesAnAccount(carrier.accountId)) {
     throw denied("malformed_selector");
   }
-
-  const method = (getEvent()?.getHttpMethod() ?? "").toUpperCase();
-  const effectiveNeed: GrantNeed =
-    need === "write" || !READ_HTTP_METHODS.has(method) ? "write" : "read";
 
   // Loaded here, on this request, every request. Not memoised on the session,
   // not cached in the process, not carried on the token: a revocation has to
@@ -818,7 +1016,6 @@ export async function requireRecordAuth(
     granteeId: auth.user.id,
   });
   if (!grant) throw denied("no_active_grant");
-  if (!grantAllows(grant, effectiveNeed)) throw denied("insufficient_access");
 
   const owner = await prisma.user.findUnique({
     where: { id: grant.grantorId },
@@ -828,7 +1025,26 @@ export async function requireRecordAuth(
   // to a person is not one to act on.
   if (!owner) throw denied("owner_missing");
 
+  const refusal = admit(grant, owner);
+  if (refusal !== null) throw denied(refusal);
+
   getEvent()?.setActingAs(owner.id);
+  // v1.37.0 — and whether this request may spend the owner's provider budget.
+  // MANAGE opens the generated reads; it does not open the generation behind
+  // them, because the owner would pay for and consent to an egress they did
+  // not cause. A managed profile is the exception and the reason the marker is
+  // read here rather than the grant: it has no self to protect from its own
+  // guardian. Stamped where the owner row is already loaded, so no generator
+  // has to be told; see `src/lib/sharing/delegated-generation.ts`.
+  if (owner.id !== auth.user.id && owner.managedProfileAt === null) {
+    getEvent()?.setDelegatedGenerationSuppressed();
+  }
+  getEvent()?.setProviderWorkAuthority({
+    origin: owner.managedProfileAt === null ? "delegate" : "guardian",
+    recordUserId: owner.id,
+    actorUserId: auth.user.id,
+    grantId: grant.id,
+  });
   // Fire-and-forget, the `ApiToken.lastUsedAt` posture: the read must not wait
   // on the bookkeeping, and the bookkeeping failing must not fail the read.
   void touchGrantUsage(grant.id);

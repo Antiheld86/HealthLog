@@ -25,6 +25,9 @@ const GRANDMOTHER = {
   username: "gran",
   displayName: "Margarethe",
   access: "read" as const,
+  level: "read" as const,
+  sections: null,
+  recordKind: "shared" as const,
   canWrite: false,
 };
 const FATHER = {
@@ -32,6 +35,19 @@ const FATHER = {
   username: "dad",
   displayName: null,
   access: "write" as const,
+  level: "write" as const,
+  sections: null,
+  recordKind: "shared" as const,
+  canWrite: true,
+};
+const MANAGED_PROFILE = {
+  accountId: "managed-profile",
+  username: "managed-profile",
+  displayName: "Managed profile",
+  access: "write" as const,
+  level: "manage" as const,
+  sections: null,
+  recordKind: "managed" as const,
   canWrite: true,
 };
 
@@ -114,12 +130,39 @@ describe("<LookingAfterCard>", () => {
     // about it this second. A grant that lapsed, or a level this build does
     // not honour, must not promise an add the next request would refuse.
     const html = render({
-      accounts: [{ ...FATHER, access: "write", canWrite: false }],
+      accounts: [
+        { ...FATHER, access: "write", level: "write", canWrite: false },
+      ],
       active: null,
       canSwitch: true,
     });
     expect(html).toContain("Can view");
     expect(html).not.toContain("Can view and add");
+  });
+
+  it("keeps MANAGE and managed profile labels separate", () => {
+    const html = render({
+      accounts: [MANAGED_PROFILE],
+      active: null,
+      canSwitch: true,
+    });
+
+    expect(html).toContain('data-access-level="manage"');
+    expect(html).toContain('data-record-kind="managed"');
+    expect(html).toContain("Can read the record, add to it, and change");
+    expect(html).toContain("Managed profile");
+  });
+
+  it("names the record button with its action, access, and kind", () => {
+    const html = render({
+      accounts: [MANAGED_PROFILE],
+      active: null,
+      canSwitch: true,
+    });
+
+    expect(html).toMatch(
+      /aria-label="Open Managed profile&#x27;s record; Can read the record, add to it, and change or remove what is in it; Managed profile;/,
+    );
   });
 
   it("shows no health data, only a doorway", () => {

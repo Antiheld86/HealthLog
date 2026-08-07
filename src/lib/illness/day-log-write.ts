@@ -26,6 +26,21 @@ export interface IllnessDayLogWriteResult {
   existed: boolean;
   /** The full DTO of the written row — no second round-trip needed. */
   dto: IllnessDayLogDTO;
+  /**
+   * v1.37.0 — what this write destroyed, for the caller's audit row.
+   *
+   * The upsert is a rewrite wearing a create's verb: its UPDATE branch forces
+   * `deletedAt: null`, so it revives a day the owner deliberately deleted, and
+   * the symptom write is a full replacement of that day's links. Under MANAGE
+   * somebody other than the owner can do both, so the two facts that would
+   * otherwise vanish silently travel back with the result.
+   */
+  replaced: {
+    /** Symptom keys the day carried before this write, sorted. */
+    previousSymptomKeys: string[];
+    /** True when the write brought a tombstoned day back. */
+    revived: boolean;
+  };
 }
 
 /** A symptom selection carrying its catalog key + optional 0–3 severity. */
@@ -105,7 +120,7 @@ export async function upsertIllnessDayLog(
   // run in ONE interactive transaction: no torn state between the link delete
   // + create halves, and no second round-trip — the written row (with its
   // flattened symptom links) comes straight back as the DTO.
-  const { row, existed } = await prisma.$transaction(async (tx) => {
+  const { row, existed, replaced } = await prisma.$transaction(async (tx) => {
     const existing = await tx.illnessDayLog.findUnique({
       where,
       select: {
@@ -113,6 +128,11 @@ export async function upsertIllnessDayLog(
         functionalImpact: true,
         feverC: true,
         noteEncrypted: true,
+        // v1.37.0 — the two facts the caller's audit row needs. Read inside
+        // the same transaction as the write, so what is reported is what was
+        // actually replaced rather than what a second read happened to see.
+        deletedAt: true,
+        symptomLinks: { select: { symptom: { select: { key: true } } } },
       },
     });
 
@@ -171,8 +191,17 @@ export async function upsertIllnessDayLog(
       include: dayLogSymptomInclude,
     });
 
-    return { row: full, existed: existing !== null };
+    return {
+      row: full,
+      existed: existing !== null,
+      replaced: {
+        previousSymptomKeys: (existing?.symptomLinks ?? [])
+          .map((link) => link.symptom.key)
+          .sort(),
+        revived: existing?.deletedAt != null,
+      },
+    };
   });
 
-  return { id: row.id, existed, dto: toIllnessDayLogDTO(row) };
+  return { id: row.id, existed, dto: toIllnessDayLogDTO(row), replaced };
 }

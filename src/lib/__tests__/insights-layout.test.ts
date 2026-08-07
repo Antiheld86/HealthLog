@@ -16,8 +16,19 @@ import {
   resolveInsightsLayout,
   serializeInsightsLayout,
   orderedVisibleSectionIds,
+  normalizeInsightsTileId,
   resolveTileLayout,
 } from "@/lib/insights-layout";
+
+describe("normalizeInsightsTileId", () => {
+  it("only resolves own legacy aliases", () => {
+    expect(normalizeInsightsTileId("blutdruck")).toBe("blood-pressure");
+
+    for (const id of ["toString", "constructor", "__proto__"]) {
+      expect(normalizeInsightsTileId(id)).toBe(id);
+    }
+  });
+});
 
 describe("insights-layout v2 — section id universe", () => {
   it("carries exactly the default sections in render order", () => {

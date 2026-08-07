@@ -241,6 +241,23 @@
           "purpose": "Separate AES key for the backup body — MUST NOT match ENCRYPTION_KEY."
         }
       ]
+    },
+    {
+      "name": "Operational windows and cookie flags",
+      "description": "Values the product states back to a user or that decide whether a session cookie is accepted. Optional: each has a documented default. They are listed so `pnpm check-env` reports them, and so the compose whitelist and the example files can be held in step with this manifest.",
+      "required": false,
+      "variables": [
+        {
+          "name": "AUDIT_LOG_RETENTION_DAYS",
+          "purpose": "How long audit rows survive, in days (365 by default). Published, not merely enforced: the shared-access activity feed and the dialog that ends somebody's access both state the number back to the user.",
+          "example": "365"
+        },
+        {
+          "name": "SESSION_COOKIE_SECURE",
+          "purpose": "Forces the Secure flag on every cookie the app issues. Unset, it tracks NODE_ENV. Set false for a LAN / VPN-only self-host served over plain HTTP, where the default makes login look broken.",
+          "example": "false"
+        }
+      ]
     }
   ]
 }

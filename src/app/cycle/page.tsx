@@ -4,6 +4,7 @@ import { Suspense, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/hooks/use-auth";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { PageAuthGate } from "@/components/ui/page-auth-gate";
 import { CycleView } from "@/components/cycle/cycle-view";
 
@@ -22,9 +23,10 @@ import { CycleView } from "@/components/cycle/cycle-view";
  */
 export default function CyclePage() {
   const { user, isLoading, isAuthenticated } = useAuth();
+  const { inSharedRecord } = useRecordCapabilities();
   const router = useRouter();
 
-  const enabled = user?.modules?.cycle !== false;
+  const enabled = inSharedRecord || user?.modules?.cycle !== false;
 
   useEffect(() => {
     if (isLoading) return;

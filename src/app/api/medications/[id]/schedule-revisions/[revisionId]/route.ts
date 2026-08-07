@@ -25,9 +25,13 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
+import {
+  destroyedDetails,
+  overwriteDetails,
+} from "@/lib/sharing/audit-details";
 import {
   apiError,
   apiSuccess,
@@ -37,7 +41,10 @@ import {
 } from "@/lib/api-response";
 import { assertMedicationOwnership } from "@/lib/medications/route-guards";
 import { scheduleRevisionUpdateSchema } from "@/lib/validations/schedule-revision";
-import { toRevisionPayloadEntry } from "@/lib/medications/scheduling/schedule-eras";
+import {
+  toRevisionPayloadEntry,
+  type ScheduleRevisionEntry,
+} from "@/lib/medications/scheduling/schedule-eras";
 import { enqueueUserMedicationComplianceBackfill } from "@/lib/rollups/medication-compliance-rollups";
 import { invalidateUserMedications } from "@/lib/cache/invalidate";
 import type { Prisma } from "@/generated/prisma/client";
@@ -46,7 +53,9 @@ type RouteParams = { params: Promise<{ id: string; revisionId: string }> };
 
 export const PATCH = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Correcting an era the compliance engine reads back
+    // over months of somebody's history.
+    const { user } = await requireRecordAuth("manage", "medications");
     const { id, revisionId } = await params;
 
     const guard = await assertMedicationOwnership(id, user.id);
@@ -116,6 +125,8 @@ export const PATCH = apiHandler(
           source: true,
           supersededByRevisionId: true,
           validUntil: true,
+          // v1.37.0 — the pre-image the audit row carries (C4).
+          validFrom: true,
         },
       });
       if (!target || target.medicationId !== id) {
@@ -182,6 +193,10 @@ export const PATCH = apiHandler(
         source: true,
       } as const;
 
+      const previousBounds = {
+        validFrom: target.validFrom,
+        validUntil: target.validUntil,
+      };
       if (target.source === "MANUAL") {
         const revision = await tx.medicationScheduleRevision.update({
           where: { id: revisionId },
@@ -192,7 +207,12 @@ export const PATCH = apiHandler(
           },
           select: revisionSelect,
         });
-        return { ok: true as const, revision, mode: "in_place" as const };
+        return {
+          ok: true as const,
+          revision,
+          mode: "in_place" as const,
+          previousBounds,
+        };
       }
 
       // ARCHIVED — immutable. Mint the correction as a MANUAL row and
@@ -211,7 +231,12 @@ export const PATCH = apiHandler(
         where: { id: revisionId },
         data: { supersededByRevisionId: revision.id },
       });
-      return { ok: true as const, revision, mode: "supersede" as const };
+      return {
+        ok: true as const,
+        revision,
+        mode: "supersede" as const,
+        previousBounds,
+      };
     });
 
     if (!outcome.ok) {
@@ -221,12 +246,25 @@ export const PATCH = apiHandler(
     await auditLog("medication.schedule_revision.updated", {
       userId: user.id,
       ipAddress: getClientIp(request),
+      // C4 — the era boundaries the correction replaced. An era is a window
+      // the compliance engine reads months of history through; moving it
+      // silently re-scores days nobody looked at again.
       details: {
         medicationId: id,
         revisionId,
         mode: outcome.mode,
         ...(outcome.mode === "supersede" && {
           correctionRevisionId: outcome.revision.id,
+        }),
+        ...overwriteDetails({
+          before: {
+            validFrom: outcome.previousBounds.validFrom,
+            validUntil: outcome.previousBounds.validUntil,
+          },
+          after: {
+            validFrom: outcome.revision.validFrom,
+            validUntil: outcome.revision.validUntil,
+          },
         }),
       },
     });
@@ -273,9 +311,32 @@ export const PATCH = apiHandler(
   },
 );
 
+/**
+ * v1.37.0 — a one-line rendering of an era's dosing plan, for the audit row
+ * a hard delete leaves behind (C3). Defensive by construction: a malformed
+ * payload degrades to an empty string rather than throwing on a delete path.
+ */
+function summarisePayloadForAudit(payload: unknown): string {
+  if (!Array.isArray(payload)) return "";
+  return payload
+    .map((raw) => {
+      const entry = (raw ?? {}) as Partial<ScheduleRevisionEntry>;
+      const times = Array.isArray(entry.timesOfDay)
+        ? entry.timesOfDay.filter((t): t is string => typeof t === "string")
+        : [];
+      const dose = typeof entry.dose === "string" ? entry.dose : null;
+      return [times.join(","), dose].filter(Boolean).join(" ");
+    })
+    .filter((part) => part !== "")
+    .join(" | ");
+}
+
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE, and a hard delete: the era row goes and the
+    // supersede chain is repaired behind it. C3 below is what makes the era
+    // readable back out of the feed.
+    const { user } = await requireRecordAuth("manage", "medications");
     const { id, revisionId } = await params;
 
     const guard = await assertMedicationOwnership(id, user.id);
@@ -283,7 +344,16 @@ export const DELETE = apiHandler(
 
     const revision = await prisma.medicationScheduleRevision.findUnique({
       where: { id: revisionId },
-      select: { id: true, medicationId: true, source: true },
+      // v1.37.0 — the era's own dates and payload summary go into the audit
+      // row (C3); the row itself does not survive the delete.
+      select: {
+        id: true,
+        medicationId: true,
+        source: true,
+        validFrom: true,
+        validUntil: true,
+        payload: true,
+      },
     });
     if (!revision || revision.medicationId !== id) {
       return apiError("Schedule revision not found", 404);
@@ -309,7 +379,20 @@ export const DELETE = apiHandler(
     await auditLog("medication.schedule_revision.deleted", {
       userId: user.id,
       ipAddress: getClientIp(request),
-      details: { medicationId: id, revisionId },
+      // C3 — the era's dates and its dosing summary. Without them the feed
+      // says an era was deleted and the compliance history it explained
+      // becomes unexplainable.
+      details: {
+        medicationId: id,
+        revisionId,
+        ...destroyedDetails({
+          model: "MedicationScheduleRevision",
+          id: revisionId,
+          label: summarisePayloadForAudit(revision.payload),
+          effectiveAt: revision.validFrom,
+          extra: { validUntil: revision.validUntil },
+        }),
+      },
     });
 
     annotate({

@@ -42,6 +42,7 @@ vi.mock("next/headers", () => ({
 
 import { PUT } from "../route";
 import { prisma } from "@/lib/db";
+import { auditLog } from "@/lib/auth/audit";
 import { getSession } from "@/lib/auth/session";
 import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
 
@@ -74,7 +75,11 @@ const EXISTING = {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-  vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never);
+  // v1.37.0 — the breadcrumb goes through `auditLog()` now (the only writer
+  // that stamps the actor). `resetAllMocks` clears the factory's resolved
+  // value and the route chains `.catch()` on the call, so it has to resolve
+  // again here or every 422 path throws.
+  vi.mocked(auditLog).mockResolvedValue(undefined as never);
   // resetAllMocks clears the factory implementation; the route chains
   // `.catch()` on this fire-and-forget call, so it must resolve again.
   vi.mocked(invalidateStatusInsightsForTypes).mockResolvedValue(
@@ -136,18 +141,17 @@ describe("PUT /api/measurements/[id] — 422 multi-issue (v1.4.43 W6)", () => {
     );
     expect(res.status).toBe(422);
     await new Promise((r) => setTimeout(r, 5));
-    expect(prisma.auditLog.create).toHaveBeenCalledTimes(1);
-    const call = vi.mocked(prisma.auditLog.create).mock.calls[0]?.[0] as {
-      data: { userId: string; action: string };
-    };
-    expect(call.data.userId).toBe("user-1");
-    expect(call.data.action).toBe("measurements.update.validation-failed");
+    expect(auditLog).toHaveBeenCalledTimes(1);
+    const [action, opts] = vi.mocked(auditLog).mock.calls[0] as [
+      string,
+      { userId: string },
+    ];
+    expect(action).toBe("measurements.update.validation-failed");
+    expect(opts.userId).toBe("user-1");
   });
 
   it("does not block the 422 when the audit-row write rejects", async () => {
-    vi.mocked(prisma.auditLog.create).mockRejectedValueOnce(
-      new Error("db down"),
-    );
+    vi.mocked(auditLog).mockRejectedValueOnce(new Error("db down"));
     const res = await PUT(
       putReq({ value: "junk", measuredAt: "junk" }),
       ROUTE_CTX,

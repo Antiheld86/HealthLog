@@ -24,7 +24,7 @@ export const GET = apiHandler(async () => {
   //
   // No write arm exists, so there is nothing to split: a delegate cannot move
   // the owner's threshold, only read the one the owner set.
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "medications");
 
   // Operator-level singleton (`lateMinutes` / `missedMinutes`) — the same for
   // every account on the deployment, so the switch does not touch it.

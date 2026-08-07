@@ -16,7 +16,12 @@ import {
   updateLabResultSchema,
 } from "@/lib/validations/labs";
 
-import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
+import {
+  dataEnvelope,
+  errorEnvelope,
+  recordRefusal,
+  stdResponses,
+} from "./shared";
 
 createLabResultSchema.meta({
   id: "CreateLabResultRequest",
@@ -104,6 +109,7 @@ export const labsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Returns the caller's live (non-deleted) lab results, newest first, with optional analyte / panel / date-range filters. Each row carries a server-computed neutral `rangeStatus` and a `hasNote` flag (the encrypted note itself is not echoed).",
       requestParams: { query: listLabResultsSchema },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Lab-result list.",
           content: {
@@ -125,6 +131,7 @@ export const labsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: createLabResultSchema } },
       },
       responses: {
+        ...recordRefusal(),
         "201": {
           description: "Created lab result.",
           content: {
@@ -145,6 +152,7 @@ export const labsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Returns the lab result including its decrypted `note`. Cross-user rows surface as 404.",
       requestParams: { path: z.object({ id: z.string() }) },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Lab-result detail.",
           content: {
@@ -168,6 +176,7 @@ export const labsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: updateLabResultSchema } },
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Updated lab result.",
           content: {
@@ -187,6 +196,7 @@ export const labsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Soft-deletes the lab result (stamps `deletedAt`). Idempotent. Audits as `labResult.delete`.",
       requestParams: { path: z.object({ id: z.string() }) },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Deletion succeeded.",
           content: {
@@ -220,6 +230,7 @@ export const labsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Restore count.",
           content: {

@@ -105,7 +105,7 @@ function serializeSession(s: SleepSession) {
 }
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "measurements");
 
   // Per-domain gate: the hypnogram read serves only the sleep module's
   // view surfaces, so it gates on the sleep module. Disabled ⇒ 403.

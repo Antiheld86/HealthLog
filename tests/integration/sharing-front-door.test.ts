@@ -32,7 +32,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 import { cookieJar, headerJar } from "./mock-next-headers";
-import { getPrismaClient, truncateAllTables } from "./setup";
+import { getPrismaClient, truncateAllTables, switchSessionTo } from "./setup";
 
 vi.mock("next/headers", async () => {
   const { cookieJar, headerJar } = await import("./mock-next-headers");
@@ -98,16 +98,14 @@ async function switchInto(
     grantorId: ownerId,
     granteeId: delegateId,
     access,
+    scope: null,
   });
   const grant = await acceptGrant({
     grantId: invited.id,
     granteeId: delegateId,
   });
   const session = await signIn(delegateId);
-  await getPrismaClient().session.update({
-    where: { id: session.id },
-    data: { actingAsUserId: ownerId },
-  });
+  await switchSessionTo(session.id, ownerId);
   return { grant, session };
 }
 
@@ -241,10 +239,7 @@ function frontDoorRead(name: string, route: FrontDoorRead) {
       await route.seed(owner.id, "owner");
 
       const session = await signIn(stranger.id);
-      await getPrismaClient().session.update({
-        where: { id: session.id },
-        data: { actingAsUserId: owner.id },
-      });
+      await switchSessionTo(session.id, owner.id);
 
       await expectAccessDenied(await route.call());
     });

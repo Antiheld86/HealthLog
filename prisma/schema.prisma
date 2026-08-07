@@ -52,6 +52,28 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
+  /// v1.37.0 — since when this account is a record somebody else runs.
+  ///
+  /// A managed profile is a person who cannot run their own record: it has a
+  /// display name and no credentials, never signs in, and is administered
+  /// end to end by whoever holds an active MANAGE grant on it. The marker is
+  /// what separates that case from an ordinary adult who granted management
+  /// of their own record — the identity and reach surfaces open for the
+  /// former and stay shut for the latter, and the gate is this column rather
+  /// than the grant, so no argument about a grant level can reach them.
+  ///
+  /// A timestamp rather than a boolean: it says since when, and preserves a
+  /// future-compatible null state without adding a transition surface here.
+  /// This release does not expose a way to clear the marker or attach
+  /// credentials; the grants and activity trail remain intact if a later,
+  /// separately designed handover ever needs that state.
+  ///
+  /// Consumers land in this release: the guardian resolver in
+  /// `src/lib/api-handler.ts` reads it on every guardian request, and the
+  /// creation flow is what writes it. A later notification plan may add
+  /// delivery fanout after it defines consent and preference semantics.
+  managedProfileAt DateTime? @map("managed_profile_at")
+
   // Profile
   heightCm    Float?    @map("height_cm")
   dateOfBirth DateTime? @map("date_of_birth")
@@ -794,7 +816,7 @@ model User {
   // pg-boss job state so the polling endpoint can read live per-
   // phase progress without round-tripping through pg-boss internals.
   importJobs                     ImportJob[]
-  medicationIntakeImportJobs     MedicationIntakeImportJob[]
+  medicationIntakeImportJobs     MedicationIntakeImportJob[] @relation("MedicationIntakeImportRecord")
   // v1.5.0 — persistent measurement rollup table. Carries the
   // count/min/max/mean/sd/slope/r2 stats per (type, granularity,
   // bucketStart) so the analytics + comprehensive read paths bypass
@@ -838,7 +860,12 @@ model User {
   // 20 attempts ordered by recency. Daily prune at 03:35 Europe/Berlin
   // retires rows older than 90 days (see `handlePushAttemptCleanup` in
   // `reminder-worker.ts`).
-  pushAttempts                   PushAttempt[]
+  pushAttemptsForRecord          PushAttempt[]                  @relation("PushAttemptRecordUser")
+  pushAttemptsReceived           PushAttempt[]                  @relation("PushAttemptRecipientUser")
+  notificationEvents             NotificationEvent[]
+  notificationEgressAuthorizationsForRecord NotificationEgressAuthorization[] @relation("NotificationEgressAuthorizationRecordUser")
+  notificationEgressAuthorizationsReceived  NotificationEgressAuthorization[] @relation("NotificationEgressAuthorizationRecipientUser")
+  telegramReminderMessages       TelegramReminderMessage[]
   // v1.10.3 — per-(user, day) Strain personal-anchor cache (day-total
   // TRIMP + running EWMA reference) so the nightly Strain engine anchors
   // the 0–100 map to the user's own training load without re-integrating
@@ -1151,6 +1178,24 @@ model Session {
   /// not delete the delegate's browser session, it must put that browser back
   /// into its own account.
   actingAsUserId String? @map("acting_as_user_id")
+
+  /// v1.37.0 — how many times this session's record selector has moved.
+  ///
+  /// Monotonic, starts at 0, and NEVER written by application code: migration
+  /// 0302 installs a `BEFORE UPDATE OF acting_as_user_id` trigger that sets it,
+  /// so the increment also happens on the paths where no application code runs
+  /// at all — the `ON DELETE SET NULL` referential action above, a raw fixture
+  /// `UPDATE`, an operator at `psql`. A convention that every writer must
+  /// remember is a convention those three break silently.
+  ///
+  /// Consumer: the record-session fence
+  /// (`src/lib/sharing/record-session-fence.ts`), which refuses a cookie
+  /// request whose asserted epoch no longer matches the row. `0` additionally
+  /// means "this session has never been pointed at another record", which is
+  /// the fence's exemption for browser tabs that predate the feature; the
+  /// migration normalises existing rows so that invariant holds from the first
+  /// request after deploy.
+  recordEpoch Int @default(0) @map("record_epoch")
 
   user     User  @relation("SessionOwner", fields: [userId], references: [id], onDelete: Cascade)
   actingAs User? @relation("SessionActingAs", fields: [actingAsUserId], references: [id], onDelete: SetNull)
@@ -3340,24 +3385,26 @@ model ReminderPhaseConfig {
 }
 
 model TelegramReminderMessage {
-  id           String        @id @default(cuid())
-  medicationId String        @map("medication_id")
-  scheduleId   String        @map("schedule_id")
-  chatId       String        @map("chat_id")
-  messageId    Int           @map("message_id")
-  phase        ReminderPhase
-  sentAt       DateTime      @default(now()) @map("sent_at")
-  date         String // YYYY-MM-DD for day grouping
+  id              String        @id @default(cuid())
+  recipientUserId String        @map("recipient_user_id")
+  medicationId    String        @map("medication_id")
+  scheduleId      String        @map("schedule_id")
+  chatId          String        @map("chat_id")
+  messageId       Int           @map("message_id")
+  phase           ReminderPhase
+  sentAt          DateTime      @default(now()) @map("sent_at")
+  date            String // YYYY-MM-DD for day grouping
   /// v1.7.0 — time-of-day this reminder belongs to (HH:mm, user-local).
   /// Empty string = the single legacy window (pre-v1.7 rows + single-time
   /// schedules). Part of the dedup key so a multi-time schedule dispatches
   /// once per time-of-day per phase per day instead of once per day.
-  timeOfDay    String        @default("") @map("time_of_day")
+  timeOfDay       String        @default("") @map("time_of_day")
 
-  medication Medication         @relation(fields: [medicationId], references: [id], onDelete: Cascade)
-  schedule   MedicationSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  recipientUser User               @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
+  medication    Medication         @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+  schedule      MedicationSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
 
-  @@unique([medicationId, scheduleId, date, phase, timeOfDay], map: "telegram_reminder_messages_med_sched_date_phase_tod_key")
+  @@unique([recipientUserId, medicationId, scheduleId, date, phase, timeOfDay], map: "telegram_reminder_messages_recipient_slot_key")
   @@index([medicationId, date])
   @@map("telegram_reminder_messages")
 }
@@ -4693,7 +4740,8 @@ model ImportJob {
 // stays in Postgres so retries never depend on request-process memory.
 model MedicationIntakeImportJob {
   id            String    @id @default(cuid())
-  userId        String    @map("user_id")
+  recordUserId  String    @map("record_user_id")
+  actorUserId   String    @map("actor_user_id")
   /// v1.33.0 (migration 0278) — nullable. The per-medication import route
   /// scopes its job to one medication and names it here. A dose history
   /// exported from another tracker covers a whole regimen in one file — the
@@ -4714,10 +4762,11 @@ model MedicationIntakeImportJob {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recordUser User        @relation("MedicationIntakeImportRecord", fields: [recordUserId], references: [id], onDelete: Cascade)
   medication Medication? @relation(fields: [medicationId], references: [id], onDelete: Cascade)
 
-  @@index([userId, createdAt])
+  @@index([recordUserId, createdAt])
+  @@index([actorUserId, createdAt])
   @@index([medicationId, createdAt])
   @@index([status, heartbeatAt])
   @@map("medication_intake_import_jobs")
@@ -5779,6 +5828,50 @@ model ConsentReceipt {
 // `channel` is the dispatcher `ChannelType` string (`APNS`,
 // `WEB_PUSH`, `TELEGRAM`, `NTFY`).
 //
+// Record-scoped notification events are durable event anchors rather than
+// channel delivery records. They intentionally name no recipient, which keeps
+// scheduler deduplication independent from future Guardian fan-out.
+model NotificationEvent {
+  id           String   @id @default(cuid())
+  recordUserId String   @map("record_user_id")
+  eventType    String   @map("event_type")
+  dedupKey     String   @map("dedup_key")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  recordUser User @relation(fields: [recordUserId], references: [id], onDelete: Cascade)
+
+  @@index([recordUserId, eventType, dedupKey, createdAt(sort: Desc)])
+  @@index([createdAt], map: "notification_events_created_at_idx")
+  @@map("notification_events")
+}
+
+// A managed Guardian channel send crosses a revocable authorization boundary.
+// The dispatcher creates this claim while it holds the managed-profile
+// lifecycle lock, then commits before starting provider I/O. That committed
+// claim is the linearization point: a revocation that commits first prevents
+// the send, while a revocation that commits later does not cancel the one
+// already-authorized provider operation. No notification content, channel
+// credentials, or event deduplication keys are retained here. Completion is
+// observational only; authorization and retry decisions never read it.
+model NotificationEgressAuthorization {
+  id              String   @id @default(cuid())
+  recordUserId    String   @map("record_user_id")
+  recipientUserId String   @map("recipient_user_id")
+  channel         String
+  eventType       String   @map("event_type")
+  authorizedAt    DateTime @default(now()) @map("authorized_at")
+  completedAt     DateTime? @map("completed_at")
+  outcome         String?
+
+  recordUser    User @relation("NotificationEgressAuthorizationRecordUser", fields: [recordUserId], references: [id], onDelete: Cascade)
+  recipientUser User @relation("NotificationEgressAuthorizationRecipientUser", fields: [recipientUserId], references: [id], onDelete: Cascade)
+
+  @@index([authorizedAt], map: "notification_egress_authorizations_authorized_at_idx")
+  @@index([recordUserId, recipientUserId, authorizedAt(sort: Desc)])
+  @@index([recipientUserId, authorizedAt(sort: Desc)], map: "notification_egress_auth_recipient_authorized_at_idx")
+  @@map("notification_egress_authorizations")
+}
+
 // `result` is one of `"ok"` | `"error"` | `"skipped"` — `skipped`
 // covers the "no recipient" / "config missing" soft cases.
 //
@@ -5788,17 +5881,38 @@ model ConsentReceipt {
 // classified `web_push_*` reason; Telegram / NTFY likewise mirror
 // their sender-side `SendOutcome.reason`.
 model PushAttempt {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  channel   String // "APNS" | "WEB_PUSH" | "TELEGRAM" | "NTFY"
-  eventType String   @map("event_type") // dispatcher event-type string
-  result    String // "ok" | "error" | "skipped"
-  reason    String? // sender-side reason on error/skip; null on ok
-  createdAt DateTime @default(now()) @map("created_at")
+  id              String   @id @default(cuid())
+  /// Legacy recipient mirror. Migration 0298 preserves established writers
+  /// while the database trigger requires it to equal `recipientUserId`.
+  userId          String   @map("user_id")
+  /// The health-record subject. This supplies calculation context and content.
+  ///
+  /// Optional HERE and `NOT NULL` in the database, deliberately, and the two do
+  /// not disagree: `push_attempt_attribution_guard` is a BEFORE INSERT trigger,
+  /// so a write that omits both principals has them filled from `userId` before
+  /// the constraint is checked. Declaring them required would force every
+  /// established self-delivery writer to name a pair it has no opinion about;
+  /// making the columns nullable in SQL would let a partial pair reach the
+  /// table, which the trigger exists to refuse. `prisma migrate diff` reports
+  /// the difference because it cannot see the trigger — that report is expected,
+  /// and `notification-attribution.test.ts` ("persistence maps an omitted pair
+  /// from the legacy recipient") is what proves the accommodation still works.
+  recordUserId    String?  @map("record_user_id")
+  /// The account whose channel, preferences, and locale receive the delivery.
+  /// Nullable for the same reason as `recordUserId` above.
+  recipientUserId String?  @map("recipient_user_id")
+  channel         String // "APNS" | "WEB_PUSH" | "TELEGRAM" | "NTFY"
+  eventType       String   @map("event_type") // dispatcher event-type string
+  result          String // "ok" | "error" | "skipped"
+  reason          String? // sender-side reason on error/skip; null on ok
+  createdAt       DateTime @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recordUser    User? @relation("PushAttemptRecordUser", fields: [recordUserId], references: [id], onDelete: Cascade)
+  recipientUser User? @relation("PushAttemptRecipientUser", fields: [recipientUserId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt(sort: Desc)])
+  @@index([recordUserId, createdAt(sort: Desc)])
+  @@index([recipientUserId, createdAt(sort: Desc)])
   @@map("push_attempts")
 }
 
@@ -5904,6 +6018,14 @@ model ClinicianShareLinkDocument {
 enum AccountGrantAccess {
   READ
   WRITE
+  /// v1.37.0 — full management of the record's data: everything WRITE reaches,
+  /// plus the edit, delete and restore verbs beside it, plus the record-wide
+  /// derived surfaces. Never the identity and reach surfaces — credentials,
+  /// channels, tokens, integrations, grant management, AI configuration —
+  /// which stay unreachable at every invited level, because a manager who
+  /// could mint a credential would survive their own revocation. MANAGE is
+  /// whole-record by construction: `scopeJson` must be NULL on a MANAGE row.
+  MANAGE
 
   @@map("account_grant_access")
 }
@@ -5970,6 +6092,24 @@ model AccountGrant {
 
   access AccountGrantAccess @default(READ)
 
+  /// v1.37.0 — which sections of the record this grant opens.
+  ///
+  /// NULL means the entire record, which is exactly what every row written
+  /// before this column existed was consented as — so there is no backfill and
+  /// nobody is asked to consent again. A non-NULL value is a non-empty array
+  /// of `ShareDomain` keys (`src/lib/sharing/scope.ts`).
+  ///
+  /// Read fail-closed through `normaliseScope` in `src/lib/sharing/grants.ts`
+  /// and nowhere else: a malformed non-NULL blob resolves to the empty set and
+  /// refuses every section, the opposite direction from the module preference
+  /// normaliser, because this column answers an authorization question and
+  /// that one answers a presentation question.
+  ///
+  /// Always NULL on a MANAGE row. Management is whole-record: "they can do
+  /// anything, but only to part of you" promises a boundary that cannot be
+  /// kept once edits are in play.
+  scopeJson Json? @map("scope_json")
+
   /// When the invitation was offered. A domain event, so re-offering an
   /// invitation on the same pending row moves it; `createdAt` below is row
   /// bookkeeping and never moves. They agree the day the row is written and
@@ -5986,7 +6126,10 @@ model AccountGrant {
   revokedBy AccountGrantRevoker? @map("revoked_by")
 
   /// Optional lapse date. Checked live on every resolution, so an expired
-  /// grant stops conferring access without anything having to sweep it.
+  /// grant stops conferring access without anything having to sweep it. A
+  /// managed-profile invitation may carry an expiry while awaiting consent;
+  /// accepting its MANAGE grant clears this field because an active Guardian
+  /// ends only through an explicit lifecycle transition.
   expiresAt  DateTime? @map("expires_at")
   /// Refreshed fire-and-forget when the grant is exercised, the same posture
   /// as `ApiToken.lastUsedAt`. The owner's panel reads it to answer "is this

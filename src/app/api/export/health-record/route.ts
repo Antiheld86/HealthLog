@@ -7,8 +7,9 @@
  *   - `fhir`    → `application/fhir+json` (HL7 FHIR R4 document Bundle)
  *   - `package` → `application/zip` (PDF + Bundle + README)
  *
- * Auth: cookie session OR Bearer token (`requireAuth`).
- * Rate-limit: shared `export:<userId>` bucket (10/h).
+ * Auth: cookie session OR Bearer token, resolved through `requireRecordAuth`
+ *   at MANAGE — the report is reachable on a record the caller manages.
+ * Rate-limit: shared `export:<actorId>` bucket (10/h).
  * Audit: `health-record.export` — format, window, and the chosen leaf ids,
  *   never the values behind them.
  *
@@ -21,7 +22,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -84,7 +85,10 @@ async function rememberChoices(
 }
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE: the doctor report is the one export an invited manager
+  // reaches, because it renders a prepared artefact from a declared selection
+  // rather than handing over the record whole.
+  const { user, actor } = await requireRecordAuth("manage", "record");
   annotate({ action: { name: "export.health-record.build" } });
 
   // The whole doctor-report surface is the `doctorReport` module. Refuse with
@@ -93,7 +97,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const gate = await requireModuleEnabled(user.id, "doctorReport");
   if (!gate.enabled) return gate.response;
 
-  const rl = await checkRateLimit(`export:${user.id}`, 10, 60 * 60 * 1000);
+  // v1.37.0 — the shared export bucket keys on the ACTOR. A manager burns
+  // their own hourly allowance rather than the owner's, and switching records
+  // does not hand them a fresh one.
+  const rl = await checkRateLimit(`export:${actor.id}`, 10, 60 * 60 * 1000);
   if (!rl.allowed) {
     return apiError("Maximum 10 exports per hour", 429);
   }

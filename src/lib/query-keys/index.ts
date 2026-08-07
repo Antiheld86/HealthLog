@@ -35,6 +35,8 @@ import { medicationKeys } from "./medications";
 import { mentalHealthKeys } from "./mental-health";
 import { moodKeys } from "./mood";
 import { nutrientKeys } from "./nutrients";
+import { recordSettingsKeys } from "./record-settings";
+import { profileKeys } from "./profile";
 import { settingsKeys } from "./settings";
 import { sharingKeys } from "./sharing";
 import { workoutKeys } from "./workouts";
@@ -63,8 +65,12 @@ export const queryKeys = {
   ...documentKeys,
   ...customMetrics,
   ...nutrientKeys,
+  ...recordSettingsKeys,
+  ...profileKeys,
   ...sharingKeys,
 };
+
+export { recordSettingsKeys } from "./record-settings";
 
 /**
  * v1.36.0 — every read a grant transition can make stale.
@@ -75,11 +81,20 @@ export const queryKeys = {
  * and the banner. A revoke that refreshed the panel but not the payload would
  * leave a switcher entry pointing at a record the server had just closed: the
  * affordance still on screen, the click already refused.
+ *
+ * v1.37.0 — the managed-profile family joins the bundle as a prefix. A
+ * Guardian invitation is accepted through the ordinary
+ * `POST /api/account/grants/{id}/accept`, and that acceptance moves a row on a
+ * roster the accept route knows nothing about: the invitee stops being PENDING
+ * and starts counting toward the last-Guardian floor. Listing the prefix here
+ * keeps the roster in step with the act that changed it, rather than asking
+ * every future grant transition to remember one more read.
  */
 export const grantDependentKeys = [
   queryKeys.accountGrants(),
   queryKeys.accountActivity(),
   queryKeys.authMe(),
+  queryKeys.managedProfiles(),
 ];
 
 /**

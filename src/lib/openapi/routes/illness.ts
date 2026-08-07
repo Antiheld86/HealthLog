@@ -29,7 +29,12 @@ import {
   illnessLifecycleEnum,
 } from "@/lib/validations/illness";
 
-import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
+import {
+  dataEnvelope,
+  errorEnvelope,
+  recordRefusal,
+  stdResponses,
+} from "./shared";
 
 illnessEpisodeCreateSchema.meta({
   id: "CreateIllnessEpisodeRequest",
@@ -293,6 +298,7 @@ export const illnessPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Returns the caller's live (non-deleted) illness/condition episodes, newest-first by onset. `includeResolved=false` hides episodes that already carry a `resolvedAt`. Born-gated.",
       requestParams: { query: illnessEpisodeListQuerySchema },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "The caller's illness episodes.",
           content: {
@@ -319,6 +325,7 @@ export const illnessPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...recordRefusal(),
         "201": {
           description: "Episode created.",
           content: {
@@ -342,6 +349,7 @@ export const illnessPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Returns the episode including its decrypted `note`. Owner-scoped; a cross-user or tombstoned id 404s. Born-gated.",
       requestParams: { path: z.object({ id: z.string() }) },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "The episode.",
           content: {
@@ -367,6 +375,7 @@ export const illnessPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Episode updated.",
           content: {
@@ -389,6 +398,7 @@ export const illnessPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Stamps `deletedAt` (tombstone). Idempotent — a re-delete is a no-op. Returns the `{ deleted: true }` envelope (the cross-module DELETE shape). Audits as `illness.episode.delete`. Owner-scoped + module-gated.",
       requestParams: { path: z.object({ id: z.string() }) },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Soft-deleted.",
           content: {
@@ -413,6 +423,7 @@ export const illnessPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Clears `deletedAt`, bringing the episode and its preserved day-logs + encrypted note back into every read. A soft-delete keeps the row and children intact, so restore is a pure flag flip — nothing is re-created (the delete-Undo affordance). Idempotent — restoring a live episode is a no-op. Audits as `illness.episode.restore`. Owner-scoped + born-gated.",
       requestParams: { path: z.object({ id: z.string() }) },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Episode restored.",
           content: {
@@ -443,6 +454,7 @@ export const illnessPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Episode resolved.",
           content: {
@@ -470,6 +482,7 @@ export const illnessPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         query: illnessDayLogGetQuery,
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description:
             "With `date`: the day-log or null. Without `date`: the paged day-log list.",
@@ -499,6 +512,7 @@ export const illnessPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Existing day-log updated.",
           content: {

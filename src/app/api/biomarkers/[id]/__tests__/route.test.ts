@@ -38,6 +38,7 @@ vi.mock("next/headers", () => ({
 
 import { PUT, DELETE } from "../route";
 import { getSession } from "@/lib/auth/session";
+import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 
 const SESSION_OK = {
@@ -78,6 +79,9 @@ function delReq(): NextRequest {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never);
+  // v1.37.0 — the 422 breadcrumb goes through `auditLog()` and the route
+  // chains `.catch()` on it; `resetAllMocks` clears the factory's resolution.
+  vi.mocked(auditLog).mockResolvedValue(undefined as never);
   vi.mocked(prisma.$transaction).mockImplementation((async (
     ops: Promise<unknown>[],
   ) => Promise.all(ops)) as never);

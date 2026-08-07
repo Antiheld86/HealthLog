@@ -39,6 +39,8 @@
  *     "removed".
  */
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -51,6 +53,13 @@ import type {
 const mockAccessRef: { value: AccountAccess } = {
   value: { accounts: [], active: null, canSwitch: false },
 };
+const mockAuthLoadingRef = { value: false };
+const mockAccountAccessStatusRef = {
+  value: "valid" as "absent" | "valid" | "invalid",
+};
+const mockRecordSessionPhaseRef = {
+  value: "ready" as "ready" | "blocking" | "resolving",
+};
 
 vi.mock("@/hooks/use-auth", () => ({
   useAuth: () => ({
@@ -62,13 +71,22 @@ vi.mock("@/hooks/use-auth", () => ({
       avatarUrl: null,
       modules: {},
       accountAccess: mockAccessRef.value,
+      accountAccessStatus: mockAccountAccessStatusRef.value,
     },
     isAuthenticated: true,
     isAuthUnknown: false,
-    isLoading: false,
+    isLoading: mockAuthLoadingRef.value,
     refetch: vi.fn(),
   }),
   clearCachesForSessionEnd: vi.fn(),
+}));
+
+vi.mock("@/hooks/use-record-session-transition", () => ({
+  useRecordSessionTransition: () => ({
+    id: "cross-tab-switch",
+    phase: mockRecordSessionPhaseRef.value,
+    expectedScope: "record-a",
+  }),
 }));
 
 const mockPathRef = { value: "/" };
@@ -115,17 +133,36 @@ const OWNER_READ: AccountAccessEntry = {
   username: "grandma",
   displayName: "Margarethe",
   access: "read" as const,
+  level: "read" as const,
+  sections: null,
+  recordKind: "shared" as const,
   canWrite: false,
 };
 const OWNER_WRITE: AccountAccessEntry = {
   ...OWNER_READ,
   access: "write",
+  level: "write",
+  canWrite: true,
+};
+const MANAGED_GUARDIAN: AccountAccessEntry = {
+  accountId: "managed-record",
+  username: "managed-record",
+  displayName: "Managed profile",
+  access: "write" as const,
+  level: "manage" as const,
+  sections: null,
+  recordKind: "managed" as const,
   canWrite: true,
 };
 
-function render(access: AccountAccess, pathname = "/"): string {
+function render(
+  access: AccountAccess,
+  pathname = "/",
+  accountAccessStatus: "absent" | "valid" | "invalid" = "valid",
+): string {
   mockAccessRef.value = access;
   mockPathRef.value = pathname;
+  mockAccountAccessStatusRef.value = accountAccessStatus;
   return renderToStaticMarkup(
     <QueryClientProvider client={new QueryClient()}>
       <I18nProvider initialLocale="en">
@@ -155,6 +192,46 @@ const DOORS = [
 ] as const;
 
 describe("<AuthShell> — the owner-only doors", () => {
+  it("holds protected children until record capabilities resolve", () => {
+    mockAuthLoadingRef.value = true;
+    try {
+      const html = render(OWN_RECORD, "/medications");
+
+      expect(html).toContain('data-slot="record-scope-hydration-gate"');
+      expect(html).not.toContain("sentinel-page");
+      expect(html).not.toContain("sentinel-coach-fab");
+    } finally {
+      mockAuthLoadingRef.value = false;
+    }
+  });
+
+  it("holds protected children and owner-only doors while a peer tab changes the session", () => {
+    mockRecordSessionPhaseRef.value = "blocking";
+    try {
+      const html = render(OWN_RECORD, "/labs");
+
+      expect(html).toContain('data-slot="record-scope-hydration-gate"');
+      expect(html).not.toContain("sentinel-page");
+      for (const slot of DOORS) {
+        expect(html).not.toContain(slot);
+      }
+    } finally {
+      mockRecordSessionPhaseRef.value = "ready";
+    }
+  });
+
+  it("does not delay public routes for record capability resolution", () => {
+    mockAuthLoadingRef.value = true;
+    try {
+      const html = render(OWN_RECORD, "/auth/login");
+
+      expect(html).toContain("sentinel-page");
+      expect(html).not.toContain('data-slot="record-scope-hydration-gate"');
+    } finally {
+      mockAuthLoadingRef.value = false;
+    }
+  });
+
   it("mounts all three in the caller's own record", () => {
     // The half that makes the rest mean something. Without it, a shell that
     // had simply dropped the Coach and the tour for everybody would satisfy
@@ -162,6 +239,18 @@ describe("<AuthShell> — the owner-only doors", () => {
     const html = render(OWN_RECORD);
     for (const slot of DOORS) {
       expect(html, `${slot} must exist in one's own record`).toContain(slot);
+    }
+  });
+
+  it("refuses an invalid record block without mounting owner-only doors or children", () => {
+    const html = render(OWN_RECORD, "/", "invalid");
+
+    expect(html).toContain("sentinel-unavailable");
+    expect(html).not.toContain("sentinel-page");
+    for (const slot of DOORS) {
+      expect(html, `${slot} must not paint for a refused record`).not.toContain(
+        slot,
+      );
     }
   });
 
@@ -194,5 +283,57 @@ describe("<AuthShell> — the owner-only doors", () => {
     for (const slot of DOORS) {
       expect(html).not.toContain(slot);
     }
+  });
+
+  it("admits a switched Guardian to the record-aware Settings gate", () => {
+    const html = render(SWITCHED(MANAGED_GUARDIAN), "/settings/integrations");
+
+    expect(html).toContain("sentinel-page");
+    expect(html).not.toContain("sentinel-unavailable");
+  });
+});
+
+/**
+ * v1.37.0 — a refusal must never render behind the hydration gate.
+ *
+ * The two branches look interchangeable and are not. `RecordScopeHydrationGate`
+ * is a bare spinner with no controls, which is correct for a transition that
+ * ends on its own. A refusal does not end on its own — `/api/auth/me` reports
+ * the same disagreement on every boot — so behind the gate it renders as a
+ * permanent "Loading…" with no way out, which is what an audit found on the
+ * grant-expiry path.
+ *
+ * Asserted on source order rather than by rendering, because the shell's
+ * branches are early returns: whichever `if` comes first wins, and that is
+ * exactly the fact worth freezing. Break it by moving the `accessRefused`
+ * block back below the gate.
+ */
+describe("the refusal door is reachable", () => {
+  const SHELL = readFileSync(
+    join(process.cwd(), "src/components/layout/auth-shell.tsx"),
+    "utf8",
+  );
+
+  it("checks accessRefused before the hydration gate", () => {
+    const refusal = SHELL.indexOf("if (accessRefused) {");
+    const gate = SHELL.indexOf("<RecordScopeHydrationGate");
+    // Non-zero proof: a renamed branch must fail here rather than agree with
+    // two -1s.
+    expect(refusal).toBeGreaterThan(-1);
+    expect(gate).toBeGreaterThan(-1);
+    expect(refusal).toBeLessThan(gate);
+  });
+
+  it("gives the refusal door an actual way out", () => {
+    // A door with no handle is the same wedge wearing different paint.
+    const door = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/layout/shared-record-unavailable.tsx",
+      ),
+      "utf8",
+    );
+    expect(door).toContain("shared-record-unavailable-leave");
+    expect(door).toMatch(/switchAccount\.mutate\(null\)/);
   });
 });

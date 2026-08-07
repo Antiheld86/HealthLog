@@ -25,7 +25,7 @@
  * provider call — this is a pure DB read).
  */
 import { apiSuccess } from "@/lib/api-response";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { requireAssistantSurface } from "@/lib/feature-flags";
 import { requireModuleEnabled } from "@/lib/modules/gate";
@@ -44,7 +44,9 @@ const EVENT_TYPE_LIST = Array.from(
 ) as MeasurementType[];
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE-level read: computed over the whole record, with no
+  // provider anywhere on the path.
+  const { user } = await requireRecordAuth("manage", "record");
   const m = await requireModuleEnabled(user.id, "insights");
   if (!m.enabled) return m.response;
   await requireAssistantSurface("insightStatus");

@@ -66,6 +66,83 @@ export const E2E_OWNER = {
 } as const;
 
 /**
+ * v1.37.0 — the account that creates and administers managed profiles.
+ *
+ * Its own account, and not one of the others, for one reason: every route in
+ * the managed-profile family resolves `requireFreshMfa`, which refuses an
+ * account with NO second factor enrolled (`auth.stepup.mfa_not_enrolled`). So
+ * this account carries a confirmed TOTP secret, and an account with a confirmed
+ * secret cannot be logged in by the password-only capture below. The setup
+ * therefore logs it in FIRST and stamps the factor afterwards — see the
+ * enrolment step at the end of `globalSetup`.
+ *
+ * Enrolling the factor on a shared account would have changed behaviour for
+ * every spec that touches a step-up-gated surface, starting with the MANAGE
+ * invitation on the sharing panel.
+ */
+export const E2E_GUARDIAN = {
+  email: "e2e-guardian@healthlog.test",
+  username: "e2e-guardian",
+  password: "Rt5!Nm8xQ3wZ6bJp",
+  role: "USER",
+} as const;
+
+/** A separate delegate session for the eight scoped-record browser journeys. */
+export const E2E_SCOPE_DELEGATE = {
+  email: "e2e-scope-delegate@healthlog.test",
+  username: "e2e-scope-delegate",
+  password: "Qz8!Vp4rL2nX7mKs",
+  role: "USER",
+} as const;
+
+/** One non-personal target record per closed sharing domain. */
+export const E2E_SCOPE_RECORDS = [
+  {
+    domain: "measurements",
+    username: "e2e-scope-measurements",
+    href: "/measurements",
+  },
+  {
+    domain: "medications",
+    username: "e2e-scope-medications",
+    href: "/medications",
+  },
+  { domain: "labs", username: "e2e-scope-labs", href: "/labs" },
+  { domain: "profile", username: "e2e-scope-profile", href: "/profile" },
+  { domain: "illness", username: "e2e-scope-illness", href: "/illness" },
+  { domain: "mind", username: "e2e-scope-mind", href: "/mood" },
+  { domain: "cycle", username: "e2e-scope-cycle", href: "/cycle" },
+  { domain: "documents", username: "e2e-scope-documents", href: "/documents" },
+] as const;
+
+/**
+ * Whole-record grants used to prove the three adult access levels and the
+ * separate managed-profile boundary in a real browser session.
+ */
+export const E2E_LEVEL_RECORDS = [
+  {
+    username: "e2e-level-read",
+    access: "READ",
+    recordKind: "shared",
+  },
+  {
+    username: "e2e-level-write",
+    access: "WRITE",
+    recordKind: "shared",
+  },
+  {
+    username: "e2e-level-manage",
+    access: "MANAGE",
+    recordKind: "shared",
+  },
+  {
+    username: "e2e-level-managed",
+    access: "MANAGE",
+    recordKind: "managed",
+  },
+] as const;
+
+/**
  * Weights seeded one per account, chosen so neither can be mistaken for the
  * other in rendered markup and neither collides with a value any other spec
  * writes.
@@ -103,6 +180,80 @@ export const OWNER_STORAGE_STATE_PATH = resolve(
 export const DELEGATE_STORAGE_STATE_PATH = resolve(
   process.cwd(),
   "e2e/setup/storageStateDelegate.json",
+);
+
+export const SCOPE_DELEGATE_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateScopeDelegate.json",
+);
+
+export const SCOPE_A11Y_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateScopeA11y.json",
+);
+
+/**
+ * v1.37.0 — one jar per SWITCHING spec, for the reason spelled out at
+ * `DELEGATE_STORAGE_STATE_PATH` above and now applied to the scope delegate as
+ * well.
+ *
+ * The record-session fence made the cost visible. Four specs moved the same
+ * session row's record selector — the two fence specs, the cross-tab journey
+ * and the scoped-sharing journey — and the fence's whole subject is that row's
+ * context and its monotonic epoch. On one worker they never overlapped; on two
+ * they moved the epoch under each other, and the failure was the harness racing
+ * itself. Passing only at `--workers=1` is not a passing suite: CI runs two.
+ *
+ * A separate LOGIN, not a separate account: the selector lives on the session
+ * row, so two jars for one account are two independent contexts. The grants,
+ * the fixtures and the assertions all stay exactly as they were.
+ */
+export const FENCE_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateFence.json",
+);
+
+export const FENCE_OFFLINE_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateFenceOffline.json",
+);
+
+/**
+ * The managed-profile journey's own jar. Its own session row, like every other
+ * switching spec, so a run at CI's worker count cannot have two specs moving
+ * the same session's record selector.
+ */
+export const GUARDIAN_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateGuardian.json",
+);
+
+export const CROSS_TAB_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateCrossTab.json",
+);
+
+/**
+ * The banner-geometry spec's jar, and the reason it exists is a release-shaped
+ * one rather than a load-shaped one.
+ *
+ * `chrome-header-seam-banners.spec.ts` needs a session that is INSIDE somebody
+ * else's record, because one of the strips it stacks only paints there. It used
+ * to produce that state by capturing `/api/auth/me` and serving it back with
+ * the sharing block filled — cheaper than a switch, and self-contained, which is
+ * exactly why it was written that way.
+ *
+ * v1.37.0 ended that. The record context is now proved across three places at
+ * once — the payload's own validator (fail-closed, no partial credit), the fence
+ * store's scope, and the transition machine that has to agree with both — so a
+ * payload claiming a shared record while the session row still says `self` is a
+ * state the shell refuses on purpose. A single route mock can no longer make it,
+ * and the honest fix is to stop faking it: switch for real, and take a jar of
+ * its own so moving one session row cannot move anybody else's.
+ */
+export const SEAM_BANNERS_STORAGE_STATE_PATH = resolve(
+  process.cwd(),
+  "e2e/setup/storageStateSeamBanners.json",
 );
 
 async function hashPassword(password: string): Promise<string> {
@@ -201,6 +352,202 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
       ],
     );
 
+    // v1.37.0 — the managed-profile guardian. Seeded exactly like the other
+    // fixture accounts; its second factor is stamped AFTER the login capture,
+    // because the password-only capture cannot complete a TOTP login.
+    await pool.query(
+      `INSERT INTO users
+        (id, username, email, password_hash, role, created_at, updated_at,
+         onboarding_completed_at, onboarding_tour_completed)
+       VALUES ($1, $2, $3, $4, 'USER', $5, $5, $5, true)
+       ON CONFLICT (username) DO UPDATE SET
+         email = EXCLUDED.email,
+         password_hash = EXCLUDED.password_hash,
+         updated_at = EXCLUDED.updated_at,
+         onboarding_completed_at = EXCLUDED.onboarding_completed_at,
+         onboarding_tour_completed = EXCLUDED.onboarding_tour_completed,
+         totp_confirmed_at = NULL`,
+      [
+        cuid(),
+        E2E_GUARDIAN.username,
+        E2E_GUARDIAN.email,
+        await hashPassword(E2E_GUARDIAN.password),
+        now,
+      ],
+    );
+
+    // Whatever a previous run created. A managed profile is a real account row,
+    // so a suite that left one behind would find the guardian looking after two
+    // records on the next run and the roster assertions would read the wrong
+    // one. Deleting the profile takes its grants with it.
+    await pool.query(
+      `DELETE FROM users
+       WHERE managed_profile_at IS NOT NULL
+         AND id IN (
+           SELECT g.grantor_id FROM account_grants g
+           JOIN users u ON u.id = g.grantee_id
+           WHERE u.username = $1
+         )`,
+      [E2E_GUARDIAN.username],
+    );
+
+    // The scoped-record journey uses a dedicated delegate so its preseeded
+    // grants cannot affect the invitation lifecycle exercised by the sharing
+    // journey above. Its own module preferences are explicitly off: a target
+    // record's resolved scope, rather than the actor's preferences, must keep
+    // each granted doorway visible.
+    await pool.query(
+      `INSERT INTO users
+        (id, username, email, password_hash, role, created_at, updated_at,
+         onboarding_completed_at, onboarding_tour_completed,
+         module_preferences_json)
+       VALUES ($1, $2, $3, $4, 'USER', $5, $5, $5, true, $6::jsonb)
+       ON CONFLICT (username) DO UPDATE SET
+         email = EXCLUDED.email,
+         password_hash = EXCLUDED.password_hash,
+         updated_at = EXCLUDED.updated_at,
+         onboarding_completed_at = EXCLUDED.onboarding_completed_at,
+         onboarding_tour_completed = EXCLUDED.onboarding_tour_completed,
+         module_preferences_json = EXCLUDED.module_preferences_json`,
+      [
+        cuid(),
+        E2E_SCOPE_DELEGATE.username,
+        E2E_SCOPE_DELEGATE.email,
+        await hashPassword(E2E_SCOPE_DELEGATE.password),
+        now,
+        JSON.stringify({
+          medications: false,
+          labs: false,
+          illness: false,
+          mood: false,
+          mentalHealth: false,
+          inboundDocuments: false,
+        }),
+      ],
+    );
+
+    await pool.query(
+      `DELETE FROM account_grants
+       WHERE grantee_id = (SELECT id FROM users WHERE username = $1)`,
+      [E2E_SCOPE_DELEGATE.username],
+    );
+    await pool.query(
+      `UPDATE sessions SET acting_as_user_id = NULL
+       WHERE user_id = (SELECT id FROM users WHERE username = $1)`,
+      [E2E_SCOPE_DELEGATE.username],
+    );
+
+    for (const record of E2E_SCOPE_RECORDS) {
+      await pool.query(
+        `INSERT INTO users
+          (id, username, email, password_hash, role, created_at, updated_at,
+           onboarding_completed_at, onboarding_tour_completed,
+           module_preferences_json)
+         VALUES ($1, $2, $3, NULL, 'USER', $4, $4, $4, true, $5::jsonb)
+         ON CONFLICT (username) DO UPDATE SET
+           email = EXCLUDED.email,
+           updated_at = EXCLUDED.updated_at,
+           onboarding_completed_at = EXCLUDED.onboarding_completed_at,
+           onboarding_tour_completed = EXCLUDED.onboarding_tour_completed,
+           module_preferences_json = EXCLUDED.module_preferences_json`,
+        [
+          cuid(),
+          record.username,
+          `${record.username}@healthlog.test`,
+          now,
+          JSON.stringify({
+            medications: true,
+            labs: true,
+            illness: true,
+            mood: true,
+            mentalHealth: true,
+            inboundDocuments: true,
+          }),
+        ],
+      );
+
+      await pool.query(
+        `INSERT INTO account_grants
+          (id, grantor_id, grantee_id, access, scope_json, invited_at,
+           accepted_at, created_at)
+         SELECT $1, owner.id, delegate.id, 'READ', $2::jsonb, $3, $3, $3
+         FROM users owner, users delegate
+         WHERE owner.username = $4 AND delegate.username = $5`,
+        [
+          cuid(),
+          JSON.stringify([record.domain]),
+          now,
+          record.username,
+          E2E_SCOPE_DELEGATE.username,
+        ],
+      );
+    }
+
+    // Whole-record fixtures intentionally sit beside the narrow records
+    // above. They make the browser prove the presentation and mutation
+    // boundaries of READ, WRITE, MANAGE, and a guardian-managed record
+    // without changing the invitation lifecycle fixture below.
+    for (const record of E2E_LEVEL_RECORDS) {
+      await pool.query(
+        `INSERT INTO users
+          (id, username, email, password_hash, role, created_at, updated_at,
+           managed_profile_at, onboarding_completed_at,
+           onboarding_tour_completed, module_preferences_json)
+         VALUES ($1, $2, $3, NULL, 'USER', $4, $4, $5, $4, true, $6::jsonb)
+         ON CONFLICT (username) DO UPDATE SET
+           email = EXCLUDED.email,
+           password_hash = NULL,
+           updated_at = EXCLUDED.updated_at,
+           managed_profile_at = EXCLUDED.managed_profile_at,
+           onboarding_completed_at = EXCLUDED.onboarding_completed_at,
+           onboarding_tour_completed = EXCLUDED.onboarding_tour_completed,
+           module_preferences_json = EXCLUDED.module_preferences_json`,
+        [
+          cuid(),
+          record.username,
+          `${record.username}@healthlog.test`,
+          now,
+          record.recordKind === "managed" ? now : null,
+          JSON.stringify({
+            medications: true,
+            labs: true,
+            illness: true,
+            mood: true,
+            mentalHealth: true,
+            inboundDocuments: true,
+          }),
+        ],
+      );
+
+      await pool.query(
+        `INSERT INTO account_grants
+          (id, grantor_id, grantee_id, access, scope_json, invited_at,
+           accepted_at, created_at)
+         SELECT $1, owner.id, delegate.id, $2, NULL, $3, $3, $3
+         FROM users owner, users delegate
+         WHERE owner.username = $4 AND delegate.username = $5`,
+        [
+          cuid(),
+          record.access,
+          now,
+          record.username,
+          E2E_SCOPE_DELEGATE.username,
+        ],
+      );
+    }
+
+    // Cycle is delegated to its profile gate rather than module preferences.
+    await pool.query(
+      `INSERT INTO cycle_profiles
+        (id, user_id, cycle_tracking_enabled, created_at, updated_at)
+       SELECT $1, u.id, true, $2, $2
+       FROM users u WHERE u.username = $3
+       ON CONFLICT (user_id) DO UPDATE SET
+         cycle_tracking_enabled = true,
+         updated_at = EXCLUDED.updated_at`,
+      [cuid(), now, "e2e-scope-cycle"],
+    );
+
     // Repeated local E2E runs reuse the same seeded account and database.
     // Its owner-scoped share-link bucket lasts an hour, so otherwise the third
     // run can start above the 20-operation ceiling and fail before exercising
@@ -281,12 +628,12 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
        WHERE key LIKE 'sharing:%'`,
     );
 
-    // The login bucket, for the same reason. This setup signs in THREE times
-    // now (the shared jar, the owner, and the sharing journey's own delegate
-    // jar), and the ceiling is five attempts per IP per quarter-hour — so two
-    // local runs in a row would otherwise end with a 429 from the fixture
-    // rather than a failure from the product. Only the auth surfaces' own
-    // buckets are cleared; nothing else in the table is touched.
+    // The login bucket, for the same reason. This setup signs in TEN times now
+    // (the shared jar, the owner, and one jar apiece for every spec that moves
+    // a session's record selector), and the ceiling is five attempts per IP per
+    // quarter-hour — so two local runs in a row would otherwise end with a 429
+    // from the fixture rather than a failure from the product. Only the auth
+    // surfaces' own buckets are cleared; nothing else in the table is touched.
     await pool.query(`DELETE FROM rate_limits WHERE key LIKE 'auth:%'`);
 
     // One marker weight per record. Re-seeded by delete-then-insert so a
@@ -313,6 +660,29 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
       );
     }
 
+    // v1.37.0 — clear what the browser suite WRITES, so the suite can be run
+    // twice.
+    //
+    // The adult-WRITE journey saves a blood-pressure reading through the real
+    // form, and the form stamps a minute-rounded `measuredAt`. Two runs inside
+    // the same minute therefore collide on the natural key
+    // (user, type, measured_at, source) — the second save is a duplicate, and
+    // the journey asserts its POST succeeded. It has always been that way; it
+    // used to surface as a 500 and now surfaces as the 409 the route learned to
+    // give, which is what made it legible. A suite that cannot be re-run is a
+    // suite whose green is a statement about the clock.
+    //
+    // Only rows the journey itself creates: MANUAL, and carrying no
+    // `external_id`, which is what distinguishes them from the seeded markers
+    // above.
+    await pool.query(
+      `DELETE FROM measurements
+        WHERE user_id = (SELECT id FROM users WHERE username = $1)
+          AND source = 'MANUAL'
+          AND external_id IS NULL`,
+      ["e2e-level-write"],
+    );
+
     // Console (instead of structured logging) is intentional here —
     // global-setup runs outside the app's logging context, and the
     // line is useful when debugging a CI failure where the seed didn't
@@ -320,31 +690,74 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     console.log(
       `[e2e/global-setup] seeded user ${E2E_USER.username} (${E2E_USER.email})`,
     );
+    // Log the fixture accounts in here and persist their cookie jars so specs
+    // can reuse them via `test.use({ storageState })`. This is the documented
+    // Playwright pattern (`docs/auth.md`) and the only way to avoid the
+    // per-spec login + rate-limit dance.
+    const baseURL =
+      config.projects[0]?.use.baseURL ??
+      process.env.E2E_BASE_URL ??
+      "http://localhost:3000";
+
+    /**
+     * Log one account in, clearing the login bucket first.
+     *
+     * The ceiling is FIVE attempts per IP per quarter-hour and this setup now
+     * signs in ten times, so clearing once before the batch is no longer
+     * enough — the sixth would be answered by the fixture's own 429 rather
+     * than by the product. Only the auth surfaces' buckets are touched, and
+     * only between logins this setup is itself performing.
+     */
+    const capture = async (
+      account: { username: string; password: string },
+      path: string,
+    ): Promise<void> => {
+      await pool.query(`DELETE FROM rate_limits WHERE key LIKE 'auth:%'`);
+      await captureAuthState(baseURL, account, path);
+    };
+
+    // The shared jar every authenticated spec reads.
+    await capture(E2E_USER, STORAGE_STATE_PATH);
+
+    // v1.36.0 — the owner's jar. The sharing journey needs both sides of a
+    // grant signed in at once, and the login endpoint is IP-rate-limited, so
+    // the owner is logged in here rather than inside the spec.
+    await capture(E2E_OWNER, OWNER_STORAGE_STATE_PATH);
+
+    // The delegate's own jar for that journey. Same account as the shared one,
+    // deliberately a different session row — see DELEGATE_STORAGE_STATE_PATH
+    // for what happens when the journey switches the shared row instead.
+    await capture(E2E_USER, DELEGATE_STORAGE_STATE_PATH);
+
+    await capture(E2E_SCOPE_DELEGATE, SCOPE_DELEGATE_STORAGE_STATE_PATH);
+    await capture(E2E_SCOPE_DELEGATE, SCOPE_A11Y_STORAGE_STATE_PATH);
+
+    // v1.37.0 — one jar per switching spec. See the block comment on
+    // FENCE_STORAGE_STATE_PATH: these three used to share the scope delegate's
+    // row with the scoped-sharing journey, which is why the suite only passed
+    // on a single worker.
+    await capture(E2E_SCOPE_DELEGATE, FENCE_STORAGE_STATE_PATH);
+    await capture(E2E_SCOPE_DELEGATE, FENCE_OFFLINE_STORAGE_STATE_PATH);
+    await capture(E2E_SCOPE_DELEGATE, CROSS_TAB_STORAGE_STATE_PATH);
+    await capture(E2E_SCOPE_DELEGATE, SEAM_BANNERS_STORAGE_STATE_PATH);
+
+    // v1.37.0 — the guardian's jar, and only then its second factor.
+    //
+    // Order is the whole of it. `requireFreshMfa` refuses an account with no
+    // factor enrolled, so the managed-profile routes are unreachable without
+    // this; and `captureAuthState` posts a password to `/api/auth/login`, which
+    // for a TOTP account answers with a challenge rather than a session. Log in
+    // first, enrol second. The freshness stamp on the session is refreshed by
+    // the spec immediately before it acts — the window is five minutes and a
+    // full suite run is longer than that.
+    await capture(E2E_GUARDIAN, GUARDIAN_STORAGE_STATE_PATH);
+    await pool.query(
+      `UPDATE users SET totp_confirmed_at = $2 WHERE username = $1`,
+      [E2E_GUARDIAN.username, now],
+    );
   } finally {
     await pool.end();
   }
-
-  // Log the fixture accounts in here and persist their cookie jars so specs
-  // can reuse them via `test.use({ storageState })`. This is the documented
-  // Playwright pattern (`docs/auth.md`) and the only way to avoid the per-spec
-  // login + rate-limit dance.
-  const baseURL =
-    config.projects[0]?.use.baseURL ??
-    process.env.E2E_BASE_URL ??
-    "http://localhost:3000";
-
-  // The shared jar every authenticated spec reads.
-  await captureAuthState(baseURL, E2E_USER, STORAGE_STATE_PATH);
-
-  // v1.36.0 — the owner's jar. The sharing journey needs both sides of a grant
-  // signed in at once, and the login endpoint is IP-rate-limited, so the owner
-  // is logged in here rather than inside the spec.
-  await captureAuthState(baseURL, E2E_OWNER, OWNER_STORAGE_STATE_PATH);
-
-  // The delegate's own jar for that journey. Same account as the shared one,
-  // deliberately a different session row — see DELEGATE_STORAGE_STATE_PATH for
-  // what happens when the journey switches the shared row instead.
-  await captureAuthState(baseURL, E2E_USER, DELEGATE_STORAGE_STATE_PATH);
 }
 
 /**

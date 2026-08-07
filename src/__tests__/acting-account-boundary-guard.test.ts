@@ -94,6 +94,20 @@ describe("the acting-account carrier is read in one place", () => {
     // whole auth context for exactly this reason: had it taken the id, the
     // route would name the column too, and the list would grow per surface.
     "lib/sharing/account-access.ts",
+    // v1.37.0 — the record-session fence COMPARES it and never writes it. It
+    // reads the value off the `AuthContext` the resolver already holds rather
+    // than from the row, which is the property the fence rests on: the scope
+    // the handler serves under and the epoch the fence validated are one row
+    // read, so they cannot straddle a switch. A version of this file that
+    // resolved its own session would be a second answer to "whose record is
+    // this" and would also be wrong more often.
+    "lib/sharing/record-session-fence.ts",
+    // v1.37.0 — names the column in prose only. The matcher does not exempt
+    // comments and is left that way on purpose (see the note above), so the
+    // module that explains the fence has to be listed. It imports nothing at
+    // all, which the fence's own unit test asserts, so it can read no column
+    // even in principle.
+    "lib/sharing/record-session-fence-contract.ts",
   ].sort();
 
   it("no other file reads or writes the carrier column", () => {
@@ -125,7 +139,7 @@ describe("the acting-account carrier is read in one place", () => {
    * Who may ask "which record does this request claim" without an auth
    * context in hand.
    *
-   * `readClaimedActingAccount()` answers before any grant check has run, so a
+   * `readClaimedRecordContext()` answers before any grant check has run, so a
    * caller that treats its answer as permission has skipped the only thing
    * that grants any. Exactly one caller exists, beside the file that declares
    * it: the idempotency wrapper, which uses the claim to pick a cache cell and
@@ -133,9 +147,17 @@ describe("the acting-account carrier is read in one place", () => {
    * acting account has an auth context by then and goes through
    * `requireRecordAuth`, which checks a live grant before returning. A second
    * caller here is a design question, not a patch.
+   *
+   * The matcher names the v1.36.0 spelling (`readClaimedActingAccount`) as well
+   * as today's. That function was removed in v1.37.0 when the wrapper started
+   * needing the session's record context on the same read; matching both means
+   * a reintroduced narrow copy trips this leg instead of quietly becoming a
+   * second answer.
    */
   it("the unchecked claim has exactly two consumers", () => {
-    const consumers = filesMatching(/readClaimedActingAccount/);
+    const consumers = filesMatching(
+      /readClaimedRecordContext|readClaimedActingAccount/,
+    );
     expect(consumers.length).toBeGreaterThan(0);
     expect(consumers).toEqual([
       "lib/auth/acting-carrier.ts",
@@ -168,16 +190,25 @@ describe("the cookie-only helpers cannot see the acting account", () => {
     expect(body).not.toContain("readActingCarrier");
   });
 
-  it("substitutes a data-scope user in exactly one function", () => {
+  it("substitutes a data-scope user in exactly two functions", () => {
     const src = read("lib/api-handler.ts");
     const record = functionBody(src, "requireRecordAuth");
     expect(record).toContain("readActingCarrier");
 
+    // v1.37.0 — the guardian resolver is the second function that acts on the
+    // carrier, and it is a second declaration rather than a level on the
+    // first: it admits the surfaces of a record NOBODY runs themselves, gated
+    // on the managed-profile marker rather than on the grant.
+    const guardian = functionBody(src, "requireGuardianAuth");
+    expect(guardian.length).toBeGreaterThan(0);
+    expect(guardian).toContain("readActingCarrier");
+    expect(guardian).toContain("managedProfileAt");
+
     // `readActingCarrier` is what turns a request into "acting as somebody
-    // else". Two callers: the bare path, which refuses on it, and the record
-    // path, which acts on it. A third would be a mode nobody declared.
+    // else". Three callers: the bare path, which refuses on it, and the two
+    // record paths, which act on it. A fourth would be a mode nobody declared.
     const callers = (src.match(/await readActingCarrier\(/g) ?? []).length;
-    expect(callers).toBe(2);
+    expect(callers).toBe(3);
   });
 });
 

@@ -17,7 +17,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod/v4";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -43,10 +43,16 @@ const bulkDeleteSchema = z.object({
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postBulkDelete));
 
 async function postBulkDelete(request: NextRequest): Promise<Response> {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE. Tombstoning a selection; every row stays and `mood-entries/restore`
+  // puts it back.
+  const { user, actor } = await requireRecordAuth("manage", "mind");
 
+  // v1.37.0 — C1: the bucket keys on the ACTOR, the frozen precedent from
+  // `medications/compliance`. A manager burns their own allowance rather than
+  // locking the owner out of their own record, and cannot collect a fresh one
+  // by switching records.
   const rl = await checkRateLimit(
-    `mood-entries:bulk-delete:${user.id}`,
+    `mood-entries:bulk-delete:${actor.id}`,
     RATE_LIMIT_MAX,
     RATE_LIMIT_WINDOW_MS,
   );

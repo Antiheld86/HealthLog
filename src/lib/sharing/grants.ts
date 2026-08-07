@@ -37,11 +37,13 @@
  *     the shape it does. Re-inviting the same person mints a NEW row; the
  *     partial unique index in migration 0292 keeps at most one LIVE row per
  *     pair while the history piles up underneath.
- *   * **The level never widens.** A row is READ or WRITE from the moment it is
- *     offered, and no transition here raises it. Widening a grant somebody has
- *     already accepted would change what they agreed to without asking them
- *     again, and the delegate's consent is half of what makes a write grant
- *     legitimate. {@link inviteGrant} carries the reasoning.
+ *   * **The level never widens, and neither does the scope.** A row is READ,
+ *     WRITE or MANAGE from the moment it is offered, over the sections it
+ *     named at that moment, and no transition here raises either. Widening a
+ *     grant somebody has already accepted would change what they agreed to
+ *     without asking them again, and the delegate's consent is half of what
+ *     makes a write grant legitimate. {@link inviteGrant} carries the
+ *     reasoning.
  *
  * Every write below is a CONDITIONAL update — the state the transition
  * requires is in the `where`, not in a read the caller performed a moment
@@ -50,12 +52,22 @@
  * transition computed against the stale row.
  */
 import { prisma } from "@/lib/db";
+import { auditLog } from "@/lib/auth/audit";
 import { isP2002 } from "@/lib/prisma-errors";
 import { clearActingSessions } from "@/lib/sharing/acting-session";
+import {
+  activeGuardianWhere,
+  LastManagedGuardianError,
+  ManagedProfileLifecycleError,
+  reduceManagedProfileGuardian,
+  withManagedProfileLock,
+} from "@/lib/managed-profiles/lifecycle";
+import { ENTIRE_RECORD, isShareDomain } from "@/lib/sharing/scope";
+import type { ShareDomain, ShareScope } from "@/lib/sharing/scope";
+import { Prisma } from "@/generated/prisma/client";
 import type {
   AccountGrant,
   AccountGrantAccess,
-  Prisma,
 } from "@/generated/prisma/client";
 
 /** The slice of a grant row the pure predicates read. */
@@ -77,7 +89,7 @@ export interface GrantLifecycle {
 export type GrantState = "REVOKED" | "EXPIRED" | "PENDING" | "ACTIVE";
 
 /** What a caller needs the grant to permit. */
-export type GrantNeed = "read" | "write";
+export type GrantNeed = "read" | "write" | "manage";
 
 export type GrantErrorCode =
   /** An account cannot share its record with itself. */
@@ -95,7 +107,13 @@ export type GrantErrorCode =
   /** Accept ran against an invitation that had already lapsed. */
   | "expired"
   /** Revoke or renounce ran against a grant that was already ended. */
-  | "already_revoked";
+  | "already_revoked"
+  /**
+   * v1.37.0 — the invitation named a scope that cannot mean anything: an
+   * empty array, a key outside the vocabulary, or any scope at all on a
+   * MANAGE invitation, which is whole-record by construction.
+   */
+  | "invalid_scope";
 
 /**
  * A refused transition, with a stable code.
@@ -147,12 +165,41 @@ export function isGrantActive(
 }
 
 /**
+ * The three levels, ordered. Higher reaches everything lower.
+ *
+ * A total order rather than a set of capabilities per level, because that is
+ * what the consent screen says out loud: view, view and add, manage. Written
+ * as two tables rather than as a chain of comparisons so that a fourth level
+ * cannot be added without deciding where it sits — an unlisted key does not
+ * typecheck, and the exhaustiveness is the point of the `Record` type.
+ */
+const ACCESS_RANK: Record<AccountGrantAccess, number> = {
+  READ: 0,
+  WRITE: 1,
+  MANAGE: 2,
+};
+
+const NEED_RANK: Record<GrantNeed, number> = {
+  read: 0,
+  write: 1,
+  manage: 2,
+};
+
+/**
  * Does this grant permit what the caller is about to do?
  *
  * Active first, then the level. A READ grant permits reads only; a WRITE grant
  * permits both, because write access to a record without read access describes
- * nothing anyone asked for. The state outranks the level in both directions: a
- * revoked WRITE grant permits nothing at all, and no level survives an expiry.
+ * nothing anyone asked for; a MANAGE grant permits all three, because managing
+ * a record it cannot read or add to describes nothing either. The state
+ * outranks the level in both directions: a revoked MANAGE grant permits
+ * nothing at all, and no level survives an expiry.
+ *
+ * The comparison is `>=` on the ranks above and not equality, and the
+ * difference matters in exactly one direction: a WRITE grant must never
+ * satisfy `"manage"`. That is the whole of the third level's meaning — an
+ * accepted WRITE grant carries a consent to add, and nothing about it carries
+ * a consent to rewrite or remove.
  */
 export function grantAllows(
   grant: GrantLifecycle & { access: AccountGrantAccess },
@@ -160,7 +207,99 @@ export function grantAllows(
   now: Date = new Date(),
 ): boolean {
   if (!isGrantActive(grant, now)) return false;
-  return need === "read" ? true : grant.access === "WRITE";
+  return ACCESS_RANK[grant.access] >= NEED_RANK[need];
+}
+
+// ── Scope ───────────────────────────────────────────────────────────────────
+
+/** The slice of a grant row the scope predicate reads. */
+export interface GrantScope {
+  scopeJson: Prisma.JsonValue | null;
+}
+
+/**
+ * What a stored scope actually opens.
+ *
+ * `null` — the whole record. Not a default standing in for a missing answer:
+ * it is the answer every grant written before the column existed was consented
+ * as, and the answer an owner who ticks "entire record" gives today. It is a
+ * first-class value everywhere, never a legacy badge.
+ *
+ * A set — those sections and nothing else, `record` included (see
+ * {@link grantCoversDomain}).
+ */
+export type ResolvedScope = ReadonlySet<ShareDomain> | null;
+
+const EMPTY_SCOPE: ReadonlySet<ShareDomain> = new Set<ShareDomain>();
+
+/**
+ * Turn the stored blob into what it opens, refusing anything it cannot read.
+ *
+ * Fail-closed, and this is the deliberate inverse of `normalisePrefs` in the
+ * module gate: that one resolves a malformed preference blob to "everything
+ * on", because a presentation preference nobody can read should not hide a
+ * person's own data from them. This one answers an authorization question, so
+ * a value it cannot read resolves to the EMPTY set — every section refused,
+ * including any the garbage might have happened to name. Both directions are
+ * "do the safe thing with a value we do not understand"; they only look
+ * opposite because the safe thing differs.
+ *
+ * What counts as unreadable is deliberately wide: anything that is not an
+ * array, an empty array, an array holding a key outside the vocabulary, an
+ * array holding a non-string. There is no partial credit — a set that is half
+ * recognisable is a set somebody wrote in a shape this file does not
+ * understand, and honouring the half we recognise would be guessing at
+ * consent. `record` is not a member of the vocabulary, so a stored `["record"]`
+ * is unreadable too, which is the correct reading: a scope that means "no
+ * scope" is a thing the invite path refuses to write, and one that reached
+ * the column by any other route opens nothing.
+ */
+export function normaliseScope(stored: Prisma.JsonValue | null): ResolvedScope {
+  if (stored === null || stored === undefined) return null;
+  if (!Array.isArray(stored) || stored.length === 0) return EMPTY_SCOPE;
+
+  const domains = new Set<ShareDomain>();
+  for (const entry of stored) {
+    if (!isShareDomain(entry)) return EMPTY_SCOPE;
+    // A scope is a subset, not merely an array of recognisable values. A
+    // duplicated key is malformed rather than a second consent to the same
+    // domain, so it receives no partial credit.
+    if (domains.has(entry)) return EMPTY_SCOPE;
+    domains.add(entry);
+  }
+  return domains;
+}
+
+/**
+ * Does this grant open the section the route declared?
+ *
+ * Three rules, and the second is the one that carries the invariant:
+ *
+ *   * A NULL scope covers everything, `record` included. That is what every
+ *     grant in the product was until this release and what most will stay.
+ *   * A non-NULL scope NEVER covers `record`. A route that declares `record`
+ *     reads across sections — a health score, a digest, an achievement set —
+ *     and there is no honest way to answer one of those for a delegate who was
+ *     given part of a record. A score that says 70 to the owner and 64 to the
+ *     delegate is a support case and a clinical hazard, so the scoped delegate
+ *     does not get a filtered answer, they get no answer.
+ *   * Otherwise, membership. A key that postdates the invitation is not in the
+ *     stored set and so is not covered, which is why a new section is a
+ *     consent question rather than a schema question.
+ *
+ * The level is a separate question, asked by {@link grantAllows}. This one
+ * knows nothing about READ, WRITE or MANAGE — and MANAGE rows carry a NULL
+ * scope by construction, so it answers true for them by the first rule rather
+ * than by a special case.
+ */
+export function grantCoversDomain(
+  grant: GrantScope,
+  domain: ShareScope,
+): boolean {
+  const scope = normaliseScope(grant.scopeJson);
+  if (scope === null) return true;
+  if (domain === ENTIRE_RECORD) return false;
+  return scope.has(domain);
 }
 
 // ── Lifecycle transitions ───────────────────────────────────────────────────
@@ -178,6 +317,22 @@ export interface InviteGrantInput {
    * how they disagree later.
    */
   access: AccountGrantAccess;
+  /**
+   * v1.37.0 — which sections the invitation opens. `null` is the entire
+   * record, and it is a choice rather than an omission: same no-default
+   * posture as `access` above, for the same reason. A scope nobody named is a
+   * scope nobody chose, and two modules that both default it are two modules
+   * that will disagree about it later.
+   *
+   * Refused here, as `invalid_scope`: an empty array (a grant that opens
+   * nothing is not a grant, it is a mistake wearing one), a key outside the
+   * vocabulary, and any scope at all beside MANAGE. The request-shape
+   * validator refuses the same three earlier and more legibly; this is the
+   * floor under it, because the column's meaning is decided in this file and
+   * a caller that never went through a Zod schema must not be able to write a
+   * row the resolver would have to interpret.
+   */
+  scope: ShareDomain[] | null;
   /** Optional lapse date. Null = the grant runs until somebody ends it. */
   expiresAt?: Date | null;
 }
@@ -209,6 +364,20 @@ export async function inviteGrant(
     throw new GrantError("self_grant");
   }
 
+  const scope = input.scope;
+  if (scope !== null) {
+    // Whole-record by construction, and the refusal is here rather than in a
+    // comment: "they can do anything, but only to part of you" promises a
+    // boundary that cannot survive an edit, so the product does not offer it
+    // and this file does not store it.
+    if (input.access === "MANAGE") throw new GrantError("invalid_scope");
+    if (scope.length === 0) throw new GrantError("invalid_scope");
+    if (!scope.every(isShareDomain)) throw new GrantError("invalid_scope");
+    if (new Set(scope).size !== scope.length) {
+      throw new GrantError("invalid_scope");
+    }
+  }
+
   const now = new Date();
   try {
     return await db.accountGrant.create({
@@ -216,6 +385,14 @@ export async function inviteGrant(
         grantorId: input.grantorId,
         granteeId: input.granteeId,
         access: input.access,
+        // `DbNull` and not `null`: on a nullable Json column Prisma reads a
+        // bare `null` as the JSON value `null`, which is a stored blob that
+        // is not an array and would resolve through `normaliseScope` to the
+        // empty set — a grant that opens nothing, written by the path meant
+        // to open everything. The two nulls are one keystroke apart and mean
+        // opposite things here.
+        //
+        scopeJson: scope === null ? Prisma.DbNull : scope,
         invitedAt: now,
         expiresAt: input.expiresAt ?? null,
       },
@@ -245,25 +422,170 @@ export interface AcceptGrantInput {
  */
 export async function acceptGrant(
   input: AcceptGrantInput,
-  db: GrantDb = prisma,
 ): Promise<AccountGrant> {
-  const now = new Date();
-  const { count } = await db.accountGrant.updateMany({
-    where: {
-      id: input.grantId,
-      granteeId: input.granteeId,
-      acceptedAt: null,
-      revokedAt: null,
-      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-    },
-    data: { acceptedAt: now },
-  });
+  return prisma.$transaction((tx) => acceptGrantInTransaction(input, tx));
+}
 
-  if (count === 0) {
-    throw await refusalFor(input.grantId, { granteeId: input.granteeId }, db);
+async function acceptGrantInTransaction(
+  input: AcceptGrantInput,
+  tx: Prisma.TransactionClient,
+): Promise<AccountGrant> {
+  const candidate = await tx.accountGrant.findUnique({
+    where: { id: input.grantId },
+    select: { grantorId: true, access: true },
+  });
+  if (!candidate) {
+    throw await refusalFor(input.grantId, { granteeId: input.granteeId }, tx);
   }
 
-  return db.accountGrant.findUniqueOrThrow({ where: { id: input.grantId } });
+  const accept = async (managedProfile: boolean) => {
+    const now = new Date();
+    const { count } = await tx.accountGrant.updateMany({
+      where: {
+        id: input.grantId,
+        granteeId: input.granteeId,
+        acceptedAt: null,
+        revokedAt: null,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      },
+      data: {
+        acceptedAt: now,
+        ...(managedProfile ? { expiresAt: null } : {}),
+      },
+    });
+    if (count === 0) {
+      throw await refusalFor(input.grantId, { granteeId: input.granteeId }, tx);
+    }
+    return tx.accountGrant.findUniqueOrThrow({ where: { id: input.grantId } });
+  };
+
+  if (candidate.access !== "MANAGE") return accept(false);
+
+  return withManagedProfileLock(tx, candidate.grantorId, async (profile) =>
+    accept(Boolean(profile?.managedProfileAt)),
+  );
+}
+
+export async function inviteManagedProfileGuardian(input: {
+  profileId: string;
+  guardianId: string;
+  granteeId: string;
+  expiresAt?: Date | null;
+}): Promise<AccountGrant> {
+  return prisma.$transaction(async (tx) => {
+    return withManagedProfileLock(tx, input.profileId, async (profile) => {
+      if (!profile) throw new ManagedProfileLifecycleError("not_found");
+      if (!profile.managedProfileAt) {
+        throw new ManagedProfileLifecycleError("not_managed");
+      }
+      const guardian = await tx.accountGrant.findFirst({
+        where: {
+          grantorId: profile.id,
+          granteeId: input.guardianId,
+          ...activeGuardianWhere(new Date()),
+        },
+        select: { id: true },
+      });
+      if (!guardian) throw new ManagedProfileLifecycleError("not_guardian");
+      const grantee = await tx.user.findUnique({
+        where: { id: input.granteeId },
+        select: { managedProfileAt: true },
+      });
+      if (grantee?.managedProfileAt) {
+        throw new ManagedProfileLifecycleError("managed_grantee");
+      }
+      const grant = await inviteGrant(
+        {
+          grantorId: profile.id,
+          granteeId: input.granteeId,
+          access: "MANAGE",
+          scope: null,
+          expiresAt: input.expiresAt ?? null,
+        },
+        tx,
+      );
+      await auditLog("managed_profile.guardian.invited", {
+        userId: profile.id,
+        actorUserId: input.guardianId,
+        details: { grantId: grant.id },
+        client: tx,
+      });
+      return grant;
+    });
+  });
+}
+
+export async function revokeManagedProfileGuardian(input: {
+  profileId: string;
+  guardianId: string;
+  grantId: string;
+}): Promise<AccountGrant> {
+  return prisma.$transaction(async (tx) => {
+    return withManagedProfileLock(tx, input.profileId, async (profile) => {
+      if (!profile) throw new ManagedProfileLifecycleError("not_found");
+      if (!profile.managedProfileAt) {
+        throw new ManagedProfileLifecycleError("not_managed");
+      }
+      const requester = await tx.accountGrant.findFirst({
+        where: {
+          grantorId: profile.id,
+          granteeId: input.guardianId,
+          ...activeGuardianWhere(new Date()),
+        },
+        select: { id: true },
+      });
+      if (!requester) throw new ManagedProfileLifecycleError("not_guardian");
+
+      const target = await tx.accountGrant.findFirst({
+        where: {
+          id: input.grantId,
+          grantorId: profile.id,
+          access: "MANAGE",
+          revokedAt: null,
+        },
+        select: {
+          id: true,
+          granteeId: true,
+          acceptedAt: true,
+          expiresAt: true,
+        },
+      });
+      if (!target) throw new ManagedProfileLifecycleError("not_guardian");
+      if (target.granteeId === input.guardianId) {
+        throw new ManagedProfileLifecycleError("not_guardian");
+      }
+
+      const now = new Date();
+      const targetIsActive =
+        target.acceptedAt !== null &&
+        (target.expiresAt === null || target.expiresAt > now);
+      if (targetIsActive) {
+        const activeGuardians = await tx.accountGrant.count({
+          where: { grantorId: profile.id, ...activeGuardianWhere(now) },
+        });
+        if (activeGuardians <= 1) throw new LastManagedGuardianError();
+      }
+
+      await tx.accountGrant.update({
+        where: { id: target.id },
+        // `revokedBy` records which grant party withdrew access. The managed
+        // profile is the grantor; the individual Guardian is durable audit
+        // attribution below rather than an overloaded enum value.
+        data: { revokedAt: now, revokedBy: "GRANTOR" },
+      });
+      await clearActingSessions(
+        { grantorId: profile.id, granteeId: target.granteeId },
+        tx,
+      );
+      await auditLog("managed_profile.guardian.revoked", {
+        userId: profile.id,
+        actorUserId: input.guardianId,
+        details: { grantId: target.id },
+        client: tx,
+      });
+      return tx.accountGrant.findUniqueOrThrow({ where: { id: target.id } });
+    });
+  });
 }
 
 export interface RevokeGrantInput {
@@ -282,9 +604,10 @@ export interface RevokeGrantInput {
  */
 export async function revokeGrant(
   input: RevokeGrantInput,
-  db: GrantDb = prisma,
 ): Promise<AccountGrant> {
-  return endGrant(input.grantId, { grantorId: input.grantorId }, "GRANTOR", db);
+  return prisma.$transaction((tx) =>
+    endGrant(input.grantId, { grantorId: input.grantorId }, "GRANTOR", tx),
+  );
 }
 
 export interface RenounceGrantInput {
@@ -303,9 +626,10 @@ export interface RenounceGrantInput {
  */
 export async function renounceGrant(
   input: RenounceGrantInput,
-  db: GrantDb = prisma,
 ): Promise<AccountGrant> {
-  return endGrant(input.grantId, { granteeId: input.granteeId }, "GRANTEE", db);
+  return prisma.$transaction((tx) =>
+    endGrant(input.grantId, { granteeId: input.granteeId }, "GRANTEE", tx),
+  );
 }
 
 /**
@@ -342,7 +666,9 @@ export interface EndedGrant {
 export async function revokeGrantAndClearSwitch(
   input: RevokeGrantInput,
 ): Promise<EndedGrant> {
-  return endAndClear((tx) => revokeGrant(input, tx));
+  return endAndClear((tx) =>
+    endGrant(input.grantId, { grantorId: input.grantorId }, "GRANTOR", tx),
+  );
 }
 
 /**
@@ -356,7 +682,9 @@ export async function revokeGrantAndClearSwitch(
 export async function renounceGrantAndClearSwitch(
   input: RenounceGrantInput,
 ): Promise<EndedGrant> {
-  return endAndClear((tx) => renounceGrant(input, tx));
+  return endAndClear((tx) =>
+    endGrant(input.grantId, { granteeId: input.granteeId }, "GRANTEE", tx),
+  );
 }
 
 // ── Resolution ──────────────────────────────────────────────────────────────
@@ -434,16 +762,42 @@ async function endGrant(
   grantId: string,
   actor: { grantorId: string } | { granteeId: string },
   revokedBy: "GRANTOR" | "GRANTEE",
-  db: GrantDb,
+  db: Prisma.TransactionClient,
 ): Promise<AccountGrant> {
-  const { count } = await db.accountGrant.updateMany({
-    where: { id: grantId, ...actor, revokedAt: null },
-    data: { revokedAt: new Date(), revokedBy },
+  const current = await db.accountGrant.findUnique({
+    where: { id: grantId },
+    select: {
+      grantorId: true,
+      granteeId: true,
+      access: true,
+      acceptedAt: true,
+      revokedAt: true,
+      expiresAt: true,
+    },
   });
 
-  if (count === 0) throw await refusalFor(grantId, actor, db);
+  const end = async () => {
+    const { count } = await db.accountGrant.updateMany({
+      where: { id: grantId, ...actor, revokedAt: null },
+      data: { revokedAt: new Date(), revokedBy },
+    });
+    if (count === 0) throw await refusalFor(grantId, actor, db);
+    return db.accountGrant.findUniqueOrThrow({ where: { id: grantId } });
+  };
 
-  return db.accountGrant.findUniqueOrThrow({ where: { id: grantId } });
+  const actorOwnsGrant =
+    current &&
+    ("grantorId" in actor
+      ? current.grantorId === actor.grantorId
+      : current.granteeId === actor.granteeId);
+  const isActiveManagedGuardian =
+    current?.access === "MANAGE" &&
+    current.acceptedAt !== null &&
+    current.revokedAt === null &&
+    (current.expiresAt === null || current.expiresAt > new Date());
+
+  if (!actorOwnsGrant || !isActiveManagedGuardian) return end();
+  return reduceManagedProfileGuardian(db, current.grantorId, end);
 }
 
 /**

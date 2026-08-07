@@ -5,10 +5,11 @@ import type { SendOutcome } from "@/lib/notifications/retry-policy";
 import { classifyHttpStatus } from "@/lib/notifications/retry-policy";
 import { getVapidConfig } from "@/lib/notifications/vapid-config";
 import { getEvent } from "@/lib/logging/context";
-import { recordPushAttempt } from "@/lib/notifications/senders/push-attempt-record";
+import { recordPushAttemptForPayload } from "@/lib/notifications/senders/push-attempt-record";
 import { isPublicUrl } from "@/lib/validations/notifications";
 import { safeFetch } from "@/lib/safe-fetch";
 import { plainPushText } from "@/lib/notifications/strip-emoji";
+import { isManagedGuardianDelivery } from "@/lib/notifications/managed-delivery";
 
 /**
  * Send Web Push notification to all subscribed devices of a user.
@@ -30,13 +31,14 @@ export async function sendViaWebPush(
   payload: NotificationPayload,
 ): Promise<SendOutcome> {
   try {
+    const managedDelivery = isManagedGuardianDelivery(payload);
     // Lazy import to avoid issues when web-push is not installed
     const webpush = await import("web-push");
 
     const config = await getVapidConfig();
     if (!config) {
       getEvent()?.addWarning("Web Push: VAPID keys not configured");
-      recordPushAttempt({
+      recordPushAttemptForPayload(payload, userId, {
         userId,
         channel: "WEB_PUSH",
         eventType: payload.eventType,
@@ -65,7 +67,7 @@ export async function sendViaWebPush(
       // may simply not have hit "Subscribe" on this browser. Counting
       // this as a give-up signal would lock the user out of the channel
       // they just configured. Treat it as a soft "no recipient" instead.
-      recordPushAttempt({
+      recordPushAttemptForPayload(payload, userId, {
         userId,
         channel: "WEB_PUSH",
         eventType: payload.eventType,
@@ -116,6 +118,7 @@ export async function sendViaWebPush(
       // target. Only relative paths are honoured so a poisoned metadata
       // value can never point the SW at a foreign origin.
       url:
+        !managedDelivery &&
         typeof payload.metadata?.url === "string" &&
         payload.metadata.url.startsWith("/")
           ? payload.metadata.url
@@ -231,7 +234,7 @@ export async function sendViaWebPush(
     }
 
     if (anySuccess) {
-      recordPushAttempt({
+      recordPushAttemptForPayload(payload, userId, {
         userId,
         channel: "WEB_PUSH",
         eventType: payload.eventType,
@@ -243,7 +246,7 @@ export async function sendViaWebPush(
     // Every sub returned a permanent 410/404 → channel is dead until
     // the user re-pairs a device. This is a hard reject.
     if (allPermanentReject && expiredIds.length === subscriptions.length) {
-      recordPushAttempt({
+      recordPushAttemptForPayload(payload, userId, {
         userId,
         channel: "WEB_PUSH",
         eventType: payload.eventType,
@@ -260,7 +263,7 @@ export async function sendViaWebPush(
 
     // Soft failure (5xx / 429 / fetch error) on at least one sub.
     const classified = classifyHttpStatus(lastTransientStatus, "web-push");
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId,
       channel: "WEB_PUSH",
       eventType: payload.eventType,
@@ -279,7 +282,7 @@ export async function sendViaWebPush(
         ? err
         : new Error("[web-push] sendViaWebPush failed"),
     );
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId,
       channel: "WEB_PUSH",
       eventType: payload.eventType,

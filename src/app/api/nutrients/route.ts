@@ -92,7 +92,7 @@ function pickTopSkipReason(byReason: Record<string, number>): string | null {
 }
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "measurements");
 
   const gate = await requireModuleEnabled(user.id, "nutrients");
   if (!gate.enabled) return gate.response;

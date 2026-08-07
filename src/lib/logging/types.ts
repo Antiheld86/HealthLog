@@ -1,3 +1,5 @@
+import type { ProviderWorkAuthority } from "@/lib/sharing/provider-work-authority";
+
 /** Log-Levels in aufsteigender Schwere */
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -66,6 +68,30 @@ export interface WideEvent {
      * dashboard that conflates them cannot answer either.
      */
     acting_as?: string;
+    /**
+     * v1.37.0 — set when this request is acting on somebody else's record and
+     * that somebody could have asked for the generation themselves. It is the
+     * one fact the generated reads consult before enqueuing a provider job:
+     * a manager's navigation must not spend the owner's budget or ship the
+     * owner's record to the owner's provider. Absent means "generate as
+     * usual", which is what every self-request, every guardian request on a
+     * managed profile and every background job is.
+     */
+    delegated_generation?: "suppressed";
+    /** Durable authority copied into provider queue payloads. */
+    provider_work_authority?: ProviderWorkAuthority;
+    /**
+     * v1.37.0 — the record context this request was actually served under, as
+     * the record-session fence read it off the session row.
+     *
+     * Stamped by the fence on every call it makes, pass or refuse, and by
+     * nothing else. `apiHandler` copies it onto two response headers so the
+     * browser can discard a response that resolved a different record than the
+     * one it is now showing. Present exactly on the responses that resolved a
+     * record scope; absent everywhere else, which is what makes "no echo" mean
+     * "nothing about a record was decided here" rather than "unknown".
+     */
+    record_context?: { epoch: number; scope: string | null };
   };
 
   // Business-Daten (was wurde getan)

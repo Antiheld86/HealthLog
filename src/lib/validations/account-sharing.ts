@@ -12,6 +12,8 @@
  */
 import { z } from "zod/v4";
 
+import { SHARE_DOMAINS } from "@/lib/sharing/scope";
+
 /**
  * How long a value naming an account may be.
  *
@@ -31,32 +33,70 @@ const MAX_ACCOUNT_ID_LENGTH = 64;
  * The 255 bound is the e-mail column's practical ceiling; anything past it is
  * refused before it reaches a query.
  */
-export const inviteGrantSchema = z.object({
-  identifier: z.string().trim().min(1).max(255),
-  /**
-   * Optional lapse date. Absent or null means the grant runs until somebody
-   * ends it — the common household case, where an expiry the owner has to
-   * remember to renew is worse than one that does not exist.
-   */
-  expiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
-  /**
-   * What the invitation offers, and the ONLY place the level is defaulted.
-   *
-   * `inviteGrant` takes the level as a required argument, so the domain module
-   * never guesses; this line is the single answer to "what does an omitted
-   * field mean", which keeps an older client's payload valid without a second
-   * copy of the same decision further down. A grant is READ or WRITE from the
-   * moment it is offered and stays that way: there is no endpoint that widens
-   * a live grant, because widening it would carry one consent and it would not
-   * be the delegate's. The way up is a new invitation, accepted again.
-   */
-  access: z
-    .enum(["READ", "WRITE"])
-    .default("READ")
-    .describe(
-      "READ can read the record and change nothing. WRITE can additionally ADD entries (readings, results, observations, a medication, a marked dose) and can still edit or delete nothing, including its own. Omitted means READ, so a client that predates the field keeps working. The level is fixed when the invitation is written: no endpoint raises a live grant, because that would widen what the delegate accepted without asking them again. The way up is a new invitation the delegate accepts.",
-    ),
-});
+export const inviteGrantSchema = z
+  .object({
+    identifier: z.string().trim().min(1).max(255),
+    /**
+     * Optional lapse date. Absent or null means the grant runs until somebody
+     * ends it — the common household case, where an expiry the owner has to
+     * remember to renew is worse than one that does not exist.
+     */
+    expiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
+    /**
+     * What the invitation offers, and the ONLY place the level is defaulted.
+     *
+     * `inviteGrant` takes the level as a required argument, so the domain module
+     * never guesses; this line is the single answer to "what does an omitted
+     * field mean", which keeps an older client's payload valid without a second
+     * copy of the same decision further down. A grant carries one of the three
+     * levels from the moment it is offered and stays that way: there is no
+     * endpoint that widens a live grant, because widening it would carry one
+     * consent and it would not be the delegate's. The way up is a new
+     * invitation, accepted again.
+     */
+    access: z
+      .enum(["READ", "WRITE", "MANAGE"])
+      .default("READ")
+      .describe(
+        "READ can read the record and change nothing. WRITE can additionally ADD entries (readings, results, observations, a medication, a marked dose) and can still edit or delete nothing, including its own. MANAGE can additionally change and remove entries, including ones the owner wrote, read the generated insights, and record the record's own health background (allergies, family history). The boundary is record content versus account configuration: MANAGE never reaches login, the second factor, provider connections, API tokens, notification routing, module and threshold configuration, or who else has access. Omitted means READ, so a client that predates the field keeps working. The level is fixed when the invitation is written: no endpoint raises a live grant, because that would widen what the delegate accepted without asking them again. The way up is a new invitation the delegate accepts.",
+      ),
+    /**
+     * v1.37.0 — which sections of the record the invitation opens.
+     *
+     * Absent or null is the entire record: the shape every invitation had
+     * before this field existed, and the one an owner who does not narrow keeps
+     * getting. A client that predates the field therefore mints exactly what it
+     * used to mint, which is why this is optional where `access` is defaulted —
+     * there is no third state to default to.
+     *
+     * `.min(1)` rather than a bare array, because an empty selection is not a
+     * narrow grant, it is a grant that opens nothing: a row nobody could use,
+     * written by somebody who thought they were sharing something. The enum is
+     * the closed vocabulary itself, so an unknown key and the distinguished
+     * `record` value (which is deliberately not a member) are both refused here
+     * as a 422 naming the field, rather than reaching the domain module as an
+     * opaque refusal.
+     */
+    scope: z
+      .array(z.enum(SHARE_DOMAINS))
+      .min(1)
+      .refine((scope) => new Set(scope).size === scope.length, {
+        message: "Each section can be selected only once",
+      })
+      .nullable()
+      .optional()
+      .describe(
+        "The sections of the record this invitation opens. Omitted or null means the entire record, which is what every grant written before v1.37.0 means and what an owner who does not narrow still gets. A non-null value is a non-empty array of section keys from the closed vocabulary; an empty array, an unknown key and the whole-record sentinel `record` are each refused. A stored scope never grows: a section added by a later release is not in a set an owner ticked before it existed.",
+      ),
+  })
+  .refine((body) => !(body.access === "MANAGE" && body.scope != null), {
+    // Whole-record by construction, and refused at the request shape as well as
+    // in the domain module. "They can do anything, but only to part of you"
+    // promises a boundary an edit cannot keep — a note in one section can concern
+    // any other — so the product does not offer it and neither end accepts it.
+    path: ["scope"],
+    message: "Manage access always covers the entire record",
+  });
 
 export type InviteGrantBody = z.infer<typeof inviteGrantSchema>;
 
@@ -68,6 +108,28 @@ export type InviteGrantBody = z.infer<typeof inviteGrantSchema>;
  */
 export const switchAccountSchema = z.object({
   accountId: z.string().min(1).max(MAX_ACCOUNT_ID_LENGTH).nullable(),
+  /**
+   * v1.37.0 — the record epoch the caller believes this session is at.
+   *
+   * Present turns the selector write into a compare-and-set: exactly one of two
+   * tabs pressing the switcher at the same moment lands, and the loser gets a
+   * 409 rather than silently overwriting the winner. It is not a credential —
+   * the epoch is server-issued, monotonic, and scoped to the caller's own
+   * session, so naming it can only ever refuse the caller's own write.
+   *
+   * Absent keeps the pre-fence unconditional write, and that arm is reachable
+   * only by a bundle that predates the fence: the switcher is rendered from
+   * `/api/auth/me` data, so a fence-aware client has necessarily adopted a
+   * context before it can offer a switch at all.
+   */
+  expectedEpoch: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe(
+      "The record epoch the caller believes this browser session is at, as published by GET /api/auth/me or a previous switch. Present makes the write conditional: if another tab moved the selector first the switch is refused with 409 sharing.session.changed and the caller reconciles through /api/auth/me. Omitted keeps the unconditional write, which is what a client predating the record-session fence sends. Cookie transport only.",
+    ),
 });
 
 export type SwitchAccountBody = z.infer<typeof switchAccountSchema>;

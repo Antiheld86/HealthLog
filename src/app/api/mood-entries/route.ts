@@ -19,7 +19,7 @@ import {
 } from "@/lib/validations/external-id";
 import { NextRequest } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { withIdempotency } from "@/lib/idempotency";
 import { encryptNote, shapeMoodNote } from "@/lib/crypto/note-cipher";
@@ -41,7 +41,7 @@ function parseTags(tags: string | null): string[] {
 }
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "mind");
 
   const params = Object.fromEntries(request.nextUrl.searchParams);
   const parsed = listMoodEntriesSchema.safeParse(params);
@@ -151,7 +151,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postMoodEntry));
 
 async function postMoodEntry(request: NextRequest) {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE. A mood row entered by a manager is an observation
+  // transcribed, and the audit trail says so for the retention window. What
+  // the delegated arm does not get is the sync client's upsert handle; see
+  // the `externalId` refusal below.
+  const { user, actor } = await requireRecordAuth("manage", "mind");
 
   const { data: body, error: jsonError } = await safeJson(request, {
     maxBytes: 64 * 1024,
@@ -177,17 +181,16 @@ async function postMoodEntry(request: NextRequest) {
     const auditIssues = sanitiseZodIssues(parsed.error.issues, {
       stripValuesFromMessage: true,
     });
-    prisma.auditLog
-      .create({
-        data: {
-          userId: user.id,
-          action: "mood-entries.create.validation-failed",
-          details: JSON.stringify({ issues: auditIssues }),
-        },
-      })
-      .catch(() => {
-        /* swallow — 422 response is the contract */
-      });
+    // v1.37.0 — through `auditLog()` rather than a bare `prisma.auditLog
+    // .create`, because that helper is the only writer that stamps
+    // `actorUserId`. Filed under the resolved record either way; without the
+    // stamp a manager's malformed payload would read as the owner's own.
+    void auditLog("mood-entries.create.validation-failed", {
+      userId: user.id,
+      details: { issues: auditIssues },
+    }).catch(() => {
+      /* swallow — 422 response is the contract */
+    });
     return returnAllZodIssues(parsed.error, 422, {
       errorCode: "mood.create.invalid",
     });
@@ -214,6 +217,23 @@ async function postMoodEntry(request: NextRequest) {
   // once so the externalId upsert key (`(userId, source, externalId)`)
   // and the row write agree on the exact value.
   const resolvedSource = source ?? "MANUAL";
+
+  // C6 — the delegated arm refuses `externalId`. It is the sync client's dedup
+  // handle: supplying it turns this create into an upsert on
+  // `(userId, source, externalId)`, which is a device's contract with its own
+  // rows and not something a second person should be able to aim at somebody
+  // else's record. A person entering a mood through the UI never sends one.
+  if (actor.id !== user.id && externalId) {
+    annotate({
+      action: { name: "mood-entries.create.external-id-refused" },
+      meta: { delegated: true },
+    });
+    return apiError(
+      "externalId cannot be supplied on a record you manage",
+      422,
+      { errorCode: "mood.create.external_id_not_delegable" },
+    );
+  }
 
   try {
     // v1.8.5 — write the entry and its structured-tag links in one

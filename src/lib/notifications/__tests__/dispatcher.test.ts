@@ -44,6 +44,7 @@ vi.mock("@/lib/logging/context", () => ({
 const sendViaTelegramMock = vi.fn();
 const sendViaNtfyMock = vi.fn();
 const sendViaWebPushMock = vi.fn();
+const sendViaApnsMock = vi.fn();
 
 vi.mock("@/lib/notifications/senders/telegram", () => ({
   sendViaTelegram: (...args: unknown[]) => sendViaTelegramMock(...args),
@@ -54,6 +55,9 @@ vi.mock("@/lib/notifications/senders/ntfy", () => ({
 vi.mock("@/lib/notifications/senders/web-push", () => ({
   sendViaWebPush: (...args: unknown[]) => sendViaWebPushMock(...args),
 }));
+vi.mock("@/lib/notifications/senders/apns", () => ({
+  sendViaApns: (...args: unknown[]) => sendViaApnsMock(...args),
+}));
 
 import { dispatchNotification } from "@/lib/notifications/dispatcher";
 import { prisma } from "@/lib/db";
@@ -62,7 +66,7 @@ import { auditLog } from "@/lib/auth/audit";
 type MockChannel = {
   id: string;
   userId: string;
-  type: "TELEGRAM" | "NTFY" | "WEB_PUSH";
+  type: "TELEGRAM" | "NTFY" | "WEB_PUSH" | "APNS";
   enabled: boolean;
   config: string;
   consecutiveFailures: number;
@@ -86,7 +90,9 @@ function makeChannel(over: Partial<MockChannel> = {}): MockChannel {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(prisma.user.findUnique).mockResolvedValue(null as never);
+  vi.mocked(prisma.user.findUnique).mockResolvedValue({
+    managedProfileAt: null,
+  } as never);
   // Default: every update returns a counter of 1 — individual tests
   // override the resolved value when they need to drive a specific
   // failure count (e.g. the "5th in a row" give-up test).
@@ -198,6 +204,36 @@ describe("dispatchNotification — soft reject (web-push 429)", () => {
       (call) => call[0] === "notification.channel.auto_disabled",
     );
     expect(autoDisabledAudits).toHaveLength(0);
+  });
+});
+
+describe("dispatchNotification — bounded APNs fallback", () => {
+  it("continues to the next channel after an APNs timeout", async () => {
+    vi.mocked(prisma.notificationChannel.findMany).mockResolvedValueOnce([
+      makeChannel({ id: "apns", type: "APNS" }),
+      makeChannel({ id: "ntfy", type: "NTFY" }),
+    ] as never);
+    sendViaApnsMock.mockResolvedValueOnce({
+      ok: false,
+      hardReject: false,
+      reason: "apns_timeout",
+    });
+    sendViaNtfyMock.mockResolvedValueOnce({ ok: true });
+
+    const result = await dispatchNotification({
+      eventType: "MEDICATION_REMINDER",
+      userId: "u-1",
+      title: "t",
+      message: "m",
+    });
+
+    expect(sendViaApnsMock).toHaveBeenCalledTimes(1);
+    expect(sendViaNtfyMock).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      dispatched: true,
+      channelsAttempted: 2,
+      channelsSucceeded: 1,
+    });
   });
 });
 

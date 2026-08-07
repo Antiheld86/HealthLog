@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { WideEvent, LogLevel, EventKind } from "./types";
+import type { ProviderWorkAuthority } from "@/lib/sharing/provider-work-authority";
 import { LOG_LEVEL_PRIORITY } from "./types";
 import { getDeployContext } from "./config";
 import { redactOptional, redactSecrets } from "./redact";
@@ -99,6 +100,48 @@ export class WideEventBuilder {
    */
   setActingAs(userId: string): this {
     this.event.auth = { ...(this.event.auth ?? {}), acting_as: userId };
+    return this;
+  }
+
+  /**
+   * v1.37.0 — record that provider generation is closed on this request.
+   *
+   * Merges for the same reason `setActingAs` does, and is stamped in the same
+   * place: the record resolver, which is where the owner row is in hand. It is
+   * read back through `delegatedGenerationSuppressed()`.
+   */
+  setDelegatedGenerationSuppressed(): this {
+    this.event.auth = {
+      ...(this.event.auth ?? {}),
+      delegated_generation: "suppressed",
+    };
+    return this;
+  }
+
+  /**
+   * v1.37.0 — record the record context this request resolved.
+   *
+   * Merges for the same reason `setActingAs` does. Written by exactly one
+   * caller, the record-session fence, and read back by `apiHandler` to attach
+   * the response echo. `apiHandler` deliberately does NOT derive the context
+   * itself: doing so would put a session read on every public route and make
+   * the echo a second derivation rather than a report of the one that was used.
+   */
+  setRecordContext(context: { epoch: number; scope: string | null }): this {
+    this.event.auth = { ...(this.event.auth ?? {}), record_context: context };
+    return this;
+  }
+
+  /** The record context the fence stamped, or undefined if it never ran. */
+  getRecordContext(): { epoch: number; scope: string | null } | undefined {
+    return this.event.auth?.record_context;
+  }
+
+  setProviderWorkAuthority(authority: ProviderWorkAuthority): this {
+    this.event.auth = {
+      ...(this.event.auth ?? {}),
+      provider_work_authority: authority,
+    };
     return this;
   }
 

@@ -24,7 +24,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod/v4";
 import pLimit from "p-limit";
 import { apiSuccess, apiError, returnAllZodIssues } from "@/lib/api-response";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { annotate } from "@/lib/logging/context";
 import { cachedSwr, caches, type ServerCache } from "@/lib/cache/server-cache";
@@ -115,17 +115,24 @@ function parseBatchItems(csv: string): {
 }
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE-level read: the deterministic batch form, no provider on
+  // the path.
+  const { user, actor } = await requireRecordAuth("manage", "record");
   const m = await requireModuleEnabled(user.id, "insights");
   if (!m.enabled) return m.response;
   await requireAssistantSurface("insightStatus");
 
-  // Per-user limiter, same posture as the compliance routes: the cold
+  // Per-caller limiter, same posture as the compliance routes: the cold
   // build fans out up to 24 rollup walks, so an unthrottled caller could
   // hammer the pool past the cache. 30/min covers the dashboard's one
   // canonical read plus retries with a wide margin.
+  //
+  // v1.37.0 — the bucket keys on the ACTOR, the frozen precedent from
+  // `medications/compliance`: a manager hammering this route burns their own
+  // allowance rather than locking the owner out, and cannot collect a fresh
+  // one by switching records.
   const rl = await checkRateLimit(
-    `insights-derived-batch:${user.id}`,
+    `insights-derived-batch:${actor.id}`,
     30,
     60_000,
   );

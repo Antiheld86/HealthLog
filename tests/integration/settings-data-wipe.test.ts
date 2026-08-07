@@ -41,6 +41,10 @@ import {
   WIPE_OWNER_FIELDS,
 } from "@/lib/data-wipe/wipe-plan";
 import type { PrismaClient } from "@/generated/prisma/client";
+import {
+  claimManagedGuardianEgressAuthorization,
+  resolveNotificationDeliveryIdentity,
+} from "@/lib/notifications/delivery-identity";
 
 vi.mock("next/headers", async () => {
   const { cookieJar, headerJar } = await import("./mock-next-headers");
@@ -309,6 +313,18 @@ async function countRows(
   return Number(rows[0].n);
 }
 
+async function managedProfileLockIsHeld(
+  prisma: PrismaClient,
+  profileId: string,
+): Promise<boolean> {
+  const rows = await prisma.$queryRaw<Array<{ locked: boolean }>>`
+    SELECT NOT pg_try_advisory_xact_lock(
+      hashtextextended(${`managed-profile:${profileId}`}, 0)
+    ) AS locked
+  `;
+  return rows[0]?.locked === true;
+}
+
 describe("DELETE /api/settings/data leaves nothing it promised to delete", () => {
   beforeEach(async () => {
     await truncateAllTables(getPrismaClient());
@@ -467,6 +483,182 @@ describe("DELETE /api/settings/data leaves nothing it promised to delete", () =>
     ).toEqual([]);
   });
 
+  it("refuses a wipe that would remove a managed profile's last Guardian", async () => {
+    const prisma = getPrismaClient();
+    const [guardian, profile] = await Promise.all([
+      prisma.user.create({
+        data: {
+          username: "wipe-last-guardian",
+          email: "wipe-last-guardian@example.test",
+        },
+      }),
+      prisma.user.create({
+        data: {
+          username: "wipe-last-profile",
+          email: "wipe-last-profile@example.test",
+          managedProfileAt: new Date(),
+        },
+      }),
+    ]);
+    await prisma.accountGrant.create({
+      data: {
+        grantorId: profile.id,
+        granteeId: guardian.id,
+        access: "MANAGE",
+        acceptedAt: new Date(),
+      },
+    });
+    await prisma.measurement.create({
+      data: {
+        userId: guardian.id,
+        type: "WEIGHT",
+        value: 80,
+        unit: "kg",
+        measuredAt: new Date(),
+      },
+    });
+    const session = await prisma.session.create({
+      data: { userId: guardian.id, expiresAt: new Date(Date.now() + 60_000) },
+    });
+    cookieJar.set("healthlog_session", session.id);
+
+    const { DELETE } = await import("@/app/api/settings/data/route");
+    const response = await DELETE(
+      new Request("http://localhost/api/settings/data", {
+        method: "DELETE",
+        body: JSON.stringify({ confirm: "DELETE" }),
+      }) as never,
+    );
+
+    expect(response.status).toBe(409);
+    expect(
+      await prisma.accountGrant.count({
+        where: { grantorId: profile.id, granteeId: guardian.id },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.measurement.count({ where: { userId: guardian.id } }),
+    ).toBe(1);
+  });
+
+  it("makes a queued Guardian claim observe a completed data wipe", async () => {
+    const prisma = getPrismaClient();
+    const [guardian, reserveGuardian, profile] = await Promise.all([
+      prisma.user.create({
+        data: {
+          username: "wipe-race-guardian",
+          email: "wipe-race-guardian@example.test",
+        },
+      }),
+      prisma.user.create({
+        data: {
+          username: "wipe-race-reserve",
+          email: "wipe-race-reserve@example.test",
+        },
+      }),
+      prisma.user.create({
+        data: {
+          username: "wipe-race-profile",
+          email: "wipe-race-profile@example.test",
+          managedProfileAt: new Date(),
+        },
+      }),
+    ]);
+    await Promise.all([
+      prisma.accountGrant.create({
+        data: {
+          grantorId: profile.id,
+          granteeId: guardian.id,
+          access: "MANAGE",
+          acceptedAt: new Date(),
+        },
+      }),
+      prisma.accountGrant.create({
+        data: {
+          grantorId: profile.id,
+          granteeId: reserveGuardian.id,
+          access: "MANAGE",
+          acceptedAt: new Date(),
+        },
+      }),
+    ]);
+    expect(
+      await prisma.accountGrant.count({
+        where: {
+          grantorId: profile.id,
+          access: "MANAGE",
+          acceptedAt: { not: null },
+          revokedAt: null,
+        },
+      }),
+    ).toBe(2);
+    const measurement = await prisma.measurement.create({
+      data: {
+        userId: guardian.id,
+        type: "WEIGHT",
+        value: 80,
+        unit: "kg",
+        measuredAt: new Date(),
+      },
+    });
+    const session = await prisma.session.create({
+      data: { userId: guardian.id, expiresAt: new Date(Date.now() + 60_000) },
+    });
+    cookieJar.set("healthlog_session", session.id);
+    const delivery = await resolveNotificationDeliveryIdentity({
+      eventType: "MEDICATION_REMINDER",
+      userId: profile.id,
+      recordUserId: profile.id,
+      recipientUserId: guardian.id,
+      title: "record reminder",
+      message: "record message",
+    });
+    expect(delivery).toMatchObject({ managed: true });
+
+    let releaseMeasurement!: () => void;
+    let markMeasurementLocked!: () => void;
+    const measurementLocked = new Promise<void>((resolve) => {
+      markMeasurementLocked = resolve;
+    });
+    const holdMeasurement = new Promise<void>((resolve) => {
+      releaseMeasurement = resolve;
+    });
+    const blocker = prisma.$transaction(async (tx) => {
+      await tx.measurement.update({
+        where: { id: measurement.id },
+        data: { value: 81 },
+      });
+      markMeasurementLocked();
+      await holdMeasurement;
+    });
+    await measurementLocked;
+
+    const { DELETE } = await import("@/app/api/settings/data/route");
+    const wipe = DELETE(
+      new Request("http://localhost/api/settings/data", {
+        method: "DELETE",
+        body: JSON.stringify({ confirm: "DELETE" }),
+      }) as never,
+    );
+    await vi.waitFor(async () => {
+      expect(await managedProfileLockIsHeld(prisma, profile.id)).toBe(true);
+    });
+
+    const claim = claimManagedGuardianEgressAuthorization(
+      delivery!,
+      "NTFY",
+      "MEDICATION_REMINDER",
+    );
+    await expectPromiseToRemainPending(claim);
+
+    releaseMeasurement();
+    await blocker;
+    expect((await wipe).status).toBe(200);
+    await expect(claim).resolves.toBeNull();
+    expect(await prisma.notificationEgressAuthorization.count()).toBe(0);
+    expect(await prisma.pushAttempt.count()).toBe(0);
+  });
+
   it("refuses without the typed confirmation and leaves the record alone", async () => {
     const prisma = getPrismaClient();
 
@@ -542,3 +734,14 @@ describe("DELETE /api/settings/data leaves nothing it promised to delete", () =>
     expect(await resolveShareToken(rawToken)).toBeNull();
   });
 });
+
+async function expectPromiseToRemainPending(promise: Promise<unknown>) {
+  const settled = await Promise.race([
+    promise.then(
+      () => true,
+      () => true,
+    ),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 25)),
+  ]);
+  expect(settled).toBe(false);
+}

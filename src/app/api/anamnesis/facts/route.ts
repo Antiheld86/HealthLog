@@ -19,7 +19,7 @@ import {
 import { healthProfileFactWriteSchema } from "@/lib/validations/health-profile-facts";
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "profile");
   const payload = await readHealthProfileFacts(user.id);
   annotate({
     action: { name: "anamnesis.facts.get" },

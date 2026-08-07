@@ -137,7 +137,8 @@ describe("dispatchNotification — client-managed APNs suppression", () => {
       },
     );
     expect(recordPushAttemptMock).toHaveBeenCalledWith({
-      userId: "u-1",
+      recordUserId: "u-1",
+      recipientUserId: "u-1",
       channel: "APNS",
       eventType: "MEDICATION_REMINDER",
       result: "skipped",

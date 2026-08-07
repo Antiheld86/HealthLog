@@ -43,7 +43,7 @@ export const GET = apiHandler(async () => {
   // switch and that is not in tension with this: chat spends the owner's AI
   // budget and writes into their conversation, and reading whether the thread
   // has something unopened does neither.
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "record");
   // Operator-level flag — an `AppSettings` singleton, unaffected by whose
   // record is open.
   await requireAssistantSurface("coach");

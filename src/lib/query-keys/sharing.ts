@@ -28,10 +28,38 @@ export const sharingKeys = {
    */
   accountActivity: () => ["account", "activity"] as const,
 
+  /**
+   * v1.37.0 — the managed-profile family, as one prefix.
+   *
+   * Present so a grant transition can invalidate the whole family at once:
+   * accepting a Guardian invitation is an ordinary `POST
+   * /api/account/grants/{id}/accept`, and it moves a row on a roster that
+   * endpoint knows nothing about. Listing this prefix in `grantDependentKeys`
+   * is what keeps the two in step without the accept path having to know a
+   * managed profile exists.
+   */
+  managedProfiles: () => ["managed-profiles"] as const,
+
+  /**
+   * Who looks after one managed profile (`GET
+   * /api/managed-profiles/{id}/guardians`). Keyed by profile because a
+   * Guardian may look after more than one, and a single key for all of them
+   * would be the same-key-different-shape collision the factory exists to
+   * prevent.
+   */
+  managedProfileGuardians: (profileId: string) =>
+    ["managed-profiles", profileId, "guardians"] as const,
+
   /** Mutation keys — kept in the factory so no bare array reaches a call site. */
   accountGrantInvite: () => ["account", "grants", "invite"] as const,
   accountGrantAccept: () => ["account", "grants", "accept"] as const,
   accountGrantRevoke: () => ["account", "grants", "revoke"] as const,
   accountGrantRenounce: () => ["account", "grants", "renounce"] as const,
   accountSwitchMutation: () => ["account", "switch"] as const,
+  managedProfileCreate: () => ["managed-profiles", "create"] as const,
+  managedProfileDelete: () => ["managed-profiles", "delete"] as const,
+  managedProfileGuardianInvite: () =>
+    ["managed-profiles", "guardian", "invite"] as const,
+  managedProfileGuardianRemove: () =>
+    ["managed-profiles", "guardian", "remove"] as const,
 };

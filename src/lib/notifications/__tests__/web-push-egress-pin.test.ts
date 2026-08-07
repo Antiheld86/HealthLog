@@ -38,6 +38,7 @@ vi.mock("@/lib/logging/context", () => ({
 
 vi.mock("@/lib/notifications/senders/push-attempt-record", () => ({
   recordPushAttempt: vi.fn(),
+  recordPushAttemptForPayload: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({

@@ -81,6 +81,7 @@ function signedIn() {
       id: "s1",
       expiresAt: new Date(Date.now() + 1e6),
       actingAsUserId: null,
+      recordEpoch: 0,
     },
     user: { id: "user-1" } as never,
   });

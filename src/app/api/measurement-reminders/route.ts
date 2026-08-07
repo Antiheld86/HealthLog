@@ -8,7 +8,7 @@ import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
 import { auditLog } from "@/lib/auth/audit";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiSuccess,
   getClientIp,
@@ -36,7 +36,7 @@ async function resolveTimezone(userId: string): Promise<string> {
 }
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "measurements");
 
   const reminders = await prisma.measurementReminder.findMany({
     where: { userId: user.id, deletedAt: null },
@@ -57,7 +57,10 @@ export const GET = apiHandler(async () => {
 });
 
 async function postReminder(request: NextRequest): Promise<Response> {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE. A reminder armed by a manager rings the record's own
+  // phone, which is the person the reminder is about, and it is additive: the
+  // row is listed, editable and removable by the owner.
+  const { user } = await requireRecordAuth("manage", "measurements");
 
   const { data: body, error: jsonError } = await safeJson(request, {
     maxBytes: 16 * 1024,
@@ -74,17 +77,16 @@ async function postReminder(request: NextRequest): Promise<Response> {
     const auditIssues = sanitiseZodIssues(parsed.error.issues, {
       stripValuesFromMessage: true,
     });
-    prisma.auditLog
-      .create({
-        data: {
-          userId: user.id,
-          action: "measurement-reminders.create.validation-failed",
-          details: JSON.stringify({ issues: auditIssues }),
-        },
-      })
-      .catch(() => {
-        /* swallow — 422 response is the contract */
-      });
+    // v1.37.0 — through `auditLog()` rather than a bare `prisma.auditLog
+    // .create`, because that helper is the only writer that stamps
+    // `actorUserId`. Filed under the resolved record either way; without the
+    // stamp a manager's malformed payload would read as the owner's own.
+    void auditLog("measurement-reminders.create.validation-failed", {
+      userId: user.id,
+      details: { issues: auditIssues },
+    }).catch(() => {
+      /* swallow — 422 response is the contract */
+    });
     return returnAllZodIssues(parsed.error, 422);
   }
 

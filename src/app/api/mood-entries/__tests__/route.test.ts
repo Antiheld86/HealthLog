@@ -239,17 +239,17 @@ describe("POST /api/mood-entries — 422 multi-issue (v1.4.43 W6)", () => {
     const res = await POST(postReq({ mood: "junk" }));
     expect(res.status).toBe(422);
     await new Promise((r) => setTimeout(r, 5));
-    expect(prisma.auditLog.create).toHaveBeenCalledTimes(1);
-    const call = vi.mocked(prisma.auditLog.create).mock.calls[0]?.[0] as {
-      data: { userId: string; action: string };
-    };
-    expect(call.data.action).toBe("mood-entries.create.validation-failed");
+    // v1.37.0 — the breadcrumb goes through `auditLog()`, the only writer
+    // that stamps `actorUserId`.
+    const breadcrumbs = vi
+      .mocked(auditLog)
+      .mock.calls.filter(([name]) => name.endsWith("validation-failed"));
+    expect(breadcrumbs).toHaveLength(1);
+    expect(breadcrumbs[0]?.[0]).toBe("mood-entries.create.validation-failed");
   });
 
   it("does not block the 422 when the audit-row write rejects", async () => {
-    vi.mocked(prisma.auditLog.create).mockRejectedValueOnce(
-      new Error("db down"),
-    );
+    vi.mocked(auditLog).mockRejectedValueOnce(new Error("db down"));
     const res = await POST(postReq({ mood: "junk" }));
     expect(res.status).toBe(422);
   });

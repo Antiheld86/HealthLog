@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod/v4";
 
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
@@ -21,7 +21,11 @@ const patternIdSchema = z.string().min(1).max(128);
 
 export const PATCH = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE: dismissing a pattern hides a finding on somebody
+    // else's front door, so it opens at the level that manages the record and
+    // at no level below. The dismissal stores its own evidence hash and effect
+    // size, so it reads back and reverses.
+    const { user } = await requireRecordAuth("manage", "record");
     const gate = await requireModuleEnabled(user.id, "insights");
     if (!gate.enabled) return gate.response;
     const parsedId = patternIdSchema.safeParse((await params).id);

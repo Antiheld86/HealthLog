@@ -92,7 +92,8 @@ describe("medication intake import job — concurrent retry", () => {
     };
     const job = await prisma.medicationIntakeImportJob.create({
       data: {
-        userId: user.id,
+        recordUserId: user.id,
+        actorUserId: user.id,
         medicationId: medication.id,
         payload: toJson(payload),
         progress: toJson(progress),
@@ -218,7 +219,8 @@ describe("medication intake import job — concurrent retry", () => {
     };
     const job = await prisma.medicationIntakeImportJob.create({
       data: {
-        userId: user.id,
+        recordUserId: user.id,
+        actorUserId: user.id,
         medicationId: medication.id,
         payload: toJson(payload),
         progress: toJson(progress),

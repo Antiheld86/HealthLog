@@ -22,7 +22,11 @@ import {
 } from "@/lib/analytics/compliance";
 import { getMedicationCategories } from "@/lib/medication-category";
 import { resolveRestingPulseSeries } from "@/lib/analytics/resting-pulse";
-import { apiHandler, requireAuth, type AuthContext } from "@/lib/api-handler";
+import {
+  apiHandler,
+  requireRecordAuth,
+  type AuthContext,
+} from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { requireAssistantSurface } from "@/lib/feature-flags";
 import { checkAnalyticsReadRateLimit } from "@/lib/rate-limit";
@@ -41,7 +45,9 @@ import { userDayKey } from "@/lib/tz/format";
 export const dynamic = "force-dynamic";
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE-level read: computed over the whole record, with no
+  // provider anywhere on the path.
+  const { user } = await requireRecordAuth("manage", "record");
 
   // v1.15.20 — shared analytics-read budget (generous; caps runaway loops).
   const rl = await checkAnalyticsReadRateLimit(user.id);

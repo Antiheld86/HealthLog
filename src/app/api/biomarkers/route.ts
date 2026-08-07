@@ -71,7 +71,7 @@ function serialiseBiomarker(row: {
 }
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "labs");
 
   // Visible markers first, then hidden — the manager renders them in two
   // sections and the lab-entry pickers drop the hidden tail client-side.
@@ -95,7 +95,7 @@ async function postBiomarker(request: NextRequest) {
   // duplicate pre-check and the `@@unique([userId, name])` backstop both scope
   // to the same resolved id, so a delegate adding a marker the owner already
   // tracks gets the ordinary 409 rather than a second copy.
-  const { user } = await requireRecordAuth("write");
+  const { user } = await requireRecordAuth("write", "labs");
 
   const { data: body, error: jsonError } = await safeJson(request, {
     maxBytes: 16 * 1024,

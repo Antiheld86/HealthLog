@@ -12,9 +12,10 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
+import { overwriteDetails } from "@/lib/sharing/audit-details";
 import {
   apiSuccess,
   getClientIp,
@@ -40,8 +41,28 @@ import { addDays, dayDiff } from "@/lib/cycle/day-math";
 
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postPeriod));
 
+/**
+ * v1.37.0 — the anchors a boundary write moves, carried out of the
+ * transaction so the audit row can name them (C4).
+ */
+interface MovedAnchors {
+  priorCycleId?: string;
+  /** Day keys, the shape this domain stores its dates in. */
+  priorEndDateBefore?: string | null;
+  priorEndDateAfter?: string | null;
+  priorLengthBefore?: number | null;
+  priorLengthAfter?: number | null;
+  openedEndDateBefore?: string | null;
+  openedEndDateAfter?: string | null;
+  periodEndDateBefore?: string | null;
+  periodEndDateAfter?: string | null;
+}
+
 async function postPeriod(request: NextRequest): Promise<Response> {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE. Setting a boundary re-anchors the neighbouring cycles,
+  // which is the destructive part of it: a handful of dates move and nothing
+  // else records what they were. The audit row below carries them (C4).
+  const { user } = await requireRecordAuth("manage", "cycle");
 
   const gate = await requireCycleEnabled(user.id, user.gender);
   if (!gate.enabled) return gate.response;
@@ -81,9 +102,23 @@ async function postPeriod(request: NextRequest): Promise<Response> {
       const prior = await db.menstrualCycle.findFirst({
         where: { userId: user.id, deletedAt: null, startDate: { lt: date } },
         orderBy: { startDate: "desc" },
-        select: { id: true, startDate: true },
+        // v1.37.0 — `endDate` and `lengthDays` are read for the audit row:
+        // this write overwrites both on the prior cycle and they are the
+        // dates C4 exists to name.
+        select: {
+          id: true,
+          startDate: true,
+          endDate: true,
+          lengthDays: true,
+        },
       });
+      const moved: MovedAnchors = {};
       if (prior) {
+        moved.priorCycleId = prior.id;
+        moved.priorEndDateBefore = prior.endDate;
+        moved.priorEndDateAfter = addDays(date, -1);
+        moved.priorLengthBefore = prior.lengthDays;
+        moved.priorLengthAfter = dayDiff(date, prior.startDate);
         await db.menstrualCycle.update({
           where: { id: prior.id },
           data: {
@@ -117,6 +152,8 @@ async function postPeriod(request: NextRequest): Promise<Response> {
         select: { startDate: true },
       });
       if (next) {
+        moved.openedEndDateBefore = cycle.endDate;
+        moved.openedEndDateAfter = addDays(next.startDate, -1);
         await db.menstrualCycle.update({
           where: { id: cycle.id },
           data: {
@@ -126,23 +163,30 @@ async function postPeriod(request: NextRequest): Promise<Response> {
           },
         });
       }
-      return { cycleId: cycle.id as string | null };
+      return { cycleId: cycle.id as string | null, moved };
     }
 
     // `end`: stamp the current cycle's periodEndDate.
     const current = await db.menstrualCycle.findFirst({
       where: { userId: user.id, deletedAt: null, startDate: { lte: date } },
       orderBy: { startDate: "desc" },
-      select: { id: true },
+      // v1.37.0 — `periodEndDate` for the audit row: this arm overwrites it.
+      select: { id: true, periodEndDate: true },
     });
     if (!current) {
-      return { cycleId: null };
+      return { cycleId: null, moved: {} satisfies MovedAnchors };
     }
     await db.menstrualCycle.update({
       where: { id: current.id },
       data: { periodEndDate: date, syncVersion: { increment: 1 } },
     });
-    return { cycleId: current.id as string | null };
+    return {
+      cycleId: current.id as string | null,
+      moved: {
+        periodEndDateBefore: current.periodEndDate,
+        periodEndDateAfter: date,
+      } satisfies MovedAnchors,
+    };
   });
 
   if (txResult.cycleId === null) {
@@ -188,7 +232,32 @@ async function postPeriod(request: NextRequest): Promise<Response> {
   await auditLog("cycle.period.boundary", {
     userId: user.id,
     ipAddress: getClientIp(request),
-    details: { action, date, cycleId },
+    // C4 — the dates this boundary moved on the neighbouring cycles. They are
+    // the only unrecoverable part of the write: the day log it upserts is a
+    // row, the re-anchoring is an overwrite of two columns on somebody else's
+    // cycle history.
+    details: {
+      action,
+      date,
+      cycleId,
+      ...(txResult.moved.priorCycleId
+        ? { priorCycleId: txResult.moved.priorCycleId }
+        : {}),
+      ...overwriteDetails({
+        before: {
+          priorEndDate: txResult.moved.priorEndDateBefore,
+          priorLengthDays: txResult.moved.priorLengthBefore,
+          openedEndDate: txResult.moved.openedEndDateBefore,
+          periodEndDate: txResult.moved.periodEndDateBefore,
+        },
+        after: {
+          priorEndDate: txResult.moved.priorEndDateAfter,
+          priorLengthDays: txResult.moved.priorLengthAfter,
+          openedEndDate: txResult.moved.openedEndDateAfter,
+          periodEndDate: txResult.moved.periodEndDateAfter,
+        },
+      }),
+    },
   });
 
   annotate({

@@ -1,4 +1,4 @@
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
 import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
@@ -7,7 +7,9 @@ import { requireModuleEnabled } from "@/lib/modules/gate";
 export const dynamic = "force-dynamic";
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE-level read: computed over the whole record, with no
+  // provider anywhere on the path.
+  const { user } = await requireRecordAuth("manage", "record");
   const gate = await requireModuleEnabled(user.id, "insights");
   if (!gate.enabled) return gate.response;
   const patterns = await prisma.correlationPattern.findMany({

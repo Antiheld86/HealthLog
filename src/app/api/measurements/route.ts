@@ -30,6 +30,7 @@ import {
   localDayWindow,
 } from "@/lib/measurements/drain-per-sample-cumulative";
 import { withIdempotency } from "@/lib/idempotency";
+import { isP2002 } from "@/lib/prisma-errors";
 import { encryptNote, shapeMeasurementNotes } from "@/lib/crypto/note-cipher";
 import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
 import { emitInsertedMeasurementArrivals } from "@/lib/arrivals/measurement-emit";
@@ -58,7 +59,7 @@ import type {
 import { Prisma } from "@/generated/prisma/client";
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "measurements");
 
   const params = Object.fromEntries(request.nextUrl.searchParams);
   const parsed = listMeasurementsSchema.safeParse(params);
@@ -755,7 +756,7 @@ async function postMeasurement(request: NextRequest) {
   // who may or may not be that person. Nothing else in this handler reads the
   // caller: the safety-floor check, the reminder satisfaction, the rollup
   // recompute and the cache eviction are all statements about the record.
-  const { user } = await requireRecordAuth("write");
+  const { user } = await requireRecordAuth("write", "measurements");
 
   const { data: body, error: jsonError } = await safeJson(request, {
     maxBytes: 64 * 1024,
@@ -797,30 +798,45 @@ async function postMeasurement(request: NextRequest) {
       });
     }
 
-    const results = await prisma.$transaction(
-      parsed.data.measurements.map((m) =>
-        prisma.measurement.create({
-          data: {
-            userId: user.id,
-            type: m.type as MeasurementType,
-            value: m.value,
-            unit: getUnitForType(m.type),
-            source: (m.source ?? "MANUAL") as MeasurementSource,
-            measuredAt: m.measuredAt,
-            // v1.23 — encrypt the note at rest; the legacy plaintext column is
-            // written null for new rows.
-            notes: null,
-            notesEncrypted: encryptNote(m.notes ?? null),
-            glucoseContext:
-              (m.glucoseContext as GlucoseContext | undefined) ?? null,
-            // v1.4.25 W10 reconcile (code-review M4): mirror the
-            // single-entry path so the multi-entry batch persists
-            // `deviceType` instead of silently dropping it.
-            deviceType: m.deviceType ?? null,
-          },
-        }),
-      ),
-    );
+    // The whole batch is one transaction, so a duplicate anywhere in it rolls
+    // the rest back — and the caller has to be told which condition it hit.
+    // Untouched, that duplicate escaped as an unhandled error and the batch
+    // answered 500, which is indistinguishable from a server fault and is what
+    // every client retries against.
+    let results;
+    try {
+      results = await prisma.$transaction(
+        parsed.data.measurements.map((m) =>
+          prisma.measurement.create({
+            data: {
+              userId: user.id,
+              type: m.type as MeasurementType,
+              value: m.value,
+              unit: getUnitForType(m.type),
+              source: (m.source ?? "MANUAL") as MeasurementSource,
+              measuredAt: m.measuredAt,
+              // v1.23 — encrypt the note at rest; the legacy plaintext column is
+              // written null for new rows.
+              notes: null,
+              notesEncrypted: encryptNote(m.notes ?? null),
+              glucoseContext:
+                (m.glucoseContext as GlucoseContext | undefined) ?? null,
+              // v1.4.25 W10 reconcile (code-review M4): mirror the
+              // single-entry path so the multi-entry batch persists
+              // `deviceType` instead of silently dropping it.
+              deviceType: m.deviceType ?? null,
+            },
+          }),
+        ),
+      );
+    } catch (err) {
+      if (isP2002(err)) {
+        return apiError("A measurement with this data already exists", 409, {
+          errorCode: "measurement.duplicate_timestamp",
+        });
+      }
+      throw err;
+    }
 
     const shapedResults = results.map(shapeMeasurementNotes);
 
@@ -984,10 +1000,13 @@ async function postMeasurement(request: NextRequest) {
       },
     });
   } catch (err) {
-    if (
-      err instanceof Prisma.PrismaClientKnownRequestError &&
-      err.code === "P2002"
-    ) {
+    // `isP2002` rather than `instanceof Prisma.PrismaClientKnownRequestError`.
+    // The helper's own docblock says why it exists: the structural check
+    // survives client-bundling quirks, and the `instanceof` form does not —
+    // when it misses, a duplicate escapes as an unhandled error and the caller
+    // gets a 500 for a condition the route has always meant to answer with a
+    // 409. A retry loop that meets a 500 keeps retrying.
+    if (isP2002(err)) {
       return apiError("A measurement with this data already exists", 409, {
         errorCode: "measurement.duplicate_timestamp",
       });

@@ -48,7 +48,16 @@ export function QueryErrorCard({
           <p className="text-muted-foreground text-sm">{description}</p>
         ) : null}
         {onRetry ? (
-          <Button variant="outline" size="sm" onClick={onRetry}>
+          // The slot is the accessibility suite's handle on the one control
+          // this card offers: the error state has to be recoverable by
+          // keyboard, and asserting that against viewport text would pin the
+          // copy instead of the affordance.
+          <Button
+            data-slot="query-error-retry"
+            variant="outline"
+            size="sm"
+            onClick={onRetry}
+          >
             <RotateCw className="h-3.5 w-3.5" aria-hidden="true" />
             {retryLabel ?? t("common.retry")}
           </Button>

@@ -16,6 +16,7 @@ import {
 } from "@/lib/insights/correlation-discovery";
 import { MAX_CUSTOM_CORRELATION_CHANNELS } from "@/lib/insights/correlation-channel-series";
 import { annotate } from "@/lib/logging/context";
+import { delegatedGenerationSuppressed } from "@/lib/sharing/delegated-generation";
 import type { SupportedLocale } from "@/lib/insights/status-shared";
 
 /**
@@ -559,6 +560,30 @@ export async function resolveReadOnlyStatusMiss(args: {
   metric: InsightStatusScope;
   locale: SupportedLocale;
 }): Promise<ReadOnlyMissOutcome> {
+  // v1.37.0 — the one gate on the delegated path, and it sits here rather
+  // than in the ten generators that reach this function precisely because it
+  // is one gate: a generator added next year inherits it without knowing it
+  // exists. A manager holding a MANAGE grant may READ the record's generated
+  // assessments; the miss behind that read must not ship the owner's data to
+  // the owner's provider on the owner's budget. Served the same way the
+  // negative-cache branch below serves it: last-good text if there is any,
+  // `preparing` if there is not, and nothing enqueued either way.
+  if (delegatedGenerationSuppressed()) {
+    const lastGood = await readLastGoodStatusText({
+      userId: args.userId,
+      cacheAction: statusCacheAction(args.metric, args.locale),
+    });
+    annotate({
+      action: { name: "insights.status.preparing" },
+      meta: {
+        metric: args.metric,
+        suppressed_enqueue: true,
+        delegated: true,
+      },
+    });
+    return { kind: "preparing", lastGood, revalidating: false };
+  }
+
   const hasProvider = await hasUsableStatusProvider(args.userId);
   if (!hasProvider) return { kind: "no-provider" };
 

@@ -29,8 +29,9 @@ import apn from "@parse/node-apn";
 import { prisma } from "@/lib/db";
 import { getEvent } from "@/lib/logging/context";
 import type { SendOutcome } from "@/lib/notifications/retry-policy";
-import { recordPushAttempt } from "@/lib/notifications/senders/push-attempt-record";
+import { recordPushAttemptForPayload } from "@/lib/notifications/senders/push-attempt-record";
 import { plainPushText } from "@/lib/notifications/strip-emoji";
+import { isManagedGuardianDelivery } from "@/lib/notifications/managed-delivery";
 
 export interface ApnsPayload {
   /** APNs `aps.alert.title` + `aps.alert.body`. */
@@ -144,6 +145,53 @@ const PERMANENT_APNS_REASONS = new Set<string>([
  * value is rejected with `BadCollapseId`, i.e. the push is lost.
  */
 const APNS_COLLAPSE_ID_MAX_BYTES = 64;
+
+/**
+ * node-apn owns an HTTP/2 connection pool but exposes no AbortSignal on
+ * Provider.send(). Bound the promise at this boundary so a stuck Apple
+ * connection cannot prevent the dispatcher's later fallback channels.
+ */
+const APNS_PROVIDER_SEND_TIMEOUT_MS = 5_000;
+
+class ApnsProviderTimeoutError extends Error {
+  constructor() {
+    super(
+      `APNs provider send timed out after ${APNS_PROVIDER_SEND_TIMEOUT_MS}ms`,
+    );
+    this.name = "ApnsProviderTimeoutError";
+  }
+}
+
+/**
+ * Observe both branches of the provider promise even after the timeout wins.
+ * That prevents a late rejection from becoming an unhandled rejection while
+ * retaining a hard upper bound for the dispatcher.
+ */
+function awaitBoundedApnsProviderSend<T>(operation: Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new ApnsProviderTimeoutError());
+    }, APNS_PROVIDER_SEND_TIMEOUT_MS);
+
+    operation.then(
+      (result) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve(result);
+      },
+      (error: unknown) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
+}
 
 let cachedConfig: ApnsConfig | null | undefined;
 const providers = new Map<"sandbox" | "production", apn.Provider>();
@@ -466,16 +514,28 @@ export async function sendApnsPush(
   const start = performance.now();
   let result: Awaited<ReturnType<apn.Provider["send"]>>;
   try {
-    result = await provider.send(note, input.deviceToken);
+    result = await awaitBoundedApnsProviderSend(
+      provider.send(note, input.deviceToken),
+    );
   } catch (err) {
-    const message = err instanceof Error ? err.message : "send_failed";
+    const timedOut = err instanceof ApnsProviderTimeoutError;
+    const message = timedOut
+      ? `APNs provider send timed out after ${APNS_PROVIDER_SEND_TIMEOUT_MS}ms`
+      : err instanceof Error
+        ? err.message
+        : "send_failed";
     getEvent()?.addExternalCall({
       service: "apns",
       method: "send",
       duration_ms: Math.round(performance.now() - start),
-      error: message,
+      error: timedOut ? "timeout" : message,
     });
-    return { ok: false, reason: "apns_network_error", message };
+    return {
+      ok: false,
+      reason: timedOut ? "apns_timeout" : "apns_network_error",
+      shouldDisable: false,
+      message,
+    };
   }
 
   const duration = Math.round(performance.now() - start);
@@ -532,11 +592,13 @@ export async function sendViaApns(
     metadata?: Record<string, unknown>;
     discreet?: boolean;
     urgent?: boolean;
+    recordUserId?: string;
+    recipientUserId?: string;
   },
 ): Promise<SendOutcome> {
   const config = loadApnsConfig();
   if (!config) {
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId,
       channel: "APNS",
       eventType: payload.eventType,
@@ -565,7 +627,7 @@ export async function sendViaApns(
   if (devices.length === 0) {
     // Same rationale as web-push: a user who hasn't paired an iPhone yet
     // shouldn't see the channel auto-disabled. Treat as soft "no recipient".
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId,
       channel: "APNS",
       eventType: payload.eventType,
@@ -626,6 +688,7 @@ export async function sendViaApns(
       process.env.APNS_CRITICAL_ENTITLEMENT === "true";
 
     let result: Awaited<ReturnType<typeof sendApnsPush>> | null = null;
+    const managedDelivery = isManagedGuardianDelivery(payload);
     // Discreet mode (cycle privacy): the lock-screen-visible routing
     // metadata must not carry the event name. Collapse the category /
     // threadId / collapseId and the data eventType to a generic value so
@@ -665,10 +728,16 @@ export async function sendViaApns(
             // In discreet mode also drop cycle-semantic metadata (e.g. `phase`)
             // so a future cycle push can't name a cycle concept on the wire even
             // though the allowlist permits `phase` (QA LOW).
+            // A Guardian may read a managed record but must never receive
+            // an iOS action identifier or deep link that can mutate it.
+            // Keep the ordinary event envelope so opening the notification
+            // follows the normal authorised record-selection flow.
             ...pickIosMetadata(
-              payload.discreet
-                ? stripCycleMetadata(payload.metadata)
-                : payload.metadata,
+              managedDelivery
+                ? undefined
+                : payload.discreet
+                  ? stripCycleMetadata(payload.metadata)
+                  : payload.metadata,
             ),
           },
           threadId: routingEvent,
@@ -677,7 +746,7 @@ export async function sendViaApns(
           // ignores categories it doesn't know about, so adding the key
           // here is safe for event-types that don't have an actionable
           // category registered yet — they fall back to a plain alert.
-          category: routingEvent,
+          category: managedDelivery ? undefined : routingEvent,
           // Future-proof for an iOS Notification Service Extension. iOS
           // ignores the flag when no extension is registered, so it's a
           // no-op on today's binary but unblocks NSE work without a
@@ -742,7 +811,7 @@ export async function sendViaApns(
   }
 
   if (anySuccess) {
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId,
       channel: "APNS",
       eventType: payload.eventType,
@@ -755,7 +824,7 @@ export async function sendViaApns(
   // until the user re-registers from a fresh iOS install.
   if (deadDeviceIds.length === devices.length) {
     const reason = lastFailureReason ?? "apns_all_devices_unregistered";
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId,
       channel: "APNS",
       eventType: payload.eventType,
@@ -771,7 +840,7 @@ export async function sendViaApns(
   }
 
   const reason = lastFailureReason ?? "apns_send_failed";
-  recordPushAttempt({
+  recordPushAttemptForPayload(payload, userId, {
     userId,
     channel: "APNS",
     eventType: payload.eventType,
@@ -854,16 +923,28 @@ export async function sendApnsRawPush(
   const start = performance.now();
   let result: Awaited<ReturnType<apn.Provider["send"]>>;
   try {
-    result = await provider.send(note, input.deviceToken);
+    result = await awaitBoundedApnsProviderSend(
+      provider.send(note, input.deviceToken),
+    );
   } catch (err) {
-    const message = err instanceof Error ? err.message : "send_failed";
+    const timedOut = err instanceof ApnsProviderTimeoutError;
+    const message = timedOut
+      ? `APNs provider send timed out after ${APNS_PROVIDER_SEND_TIMEOUT_MS}ms`
+      : err instanceof Error
+        ? err.message
+        : "send_failed";
     getEvent()?.addExternalCall({
       service: "apns",
       method: `send_${input.pushType}`,
       duration_ms: Math.round(performance.now() - start),
-      error: message,
+      error: timedOut ? "timeout" : message,
     });
-    return { ok: false, reason: "apns_network_error", message };
+    return {
+      ok: false,
+      reason: timedOut ? "apns_timeout" : "apns_network_error",
+      shouldDisable: false,
+      message,
+    };
   }
 
   const duration = Math.round(performance.now() - start);

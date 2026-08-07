@@ -29,7 +29,7 @@ const DEFAULT_LIMIT = 24;
 const REGULAR_MAD_THRESHOLD = 2;
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "cycle");
 
   const gate = await requireCycleEnabled(user.id, user.gender);
   if (!gate.enabled) return gate.response;

@@ -12,6 +12,8 @@ import {
 import { useAccountSwitch } from "@/hooks/use-account-switch";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
+import { resolveRecordPresentation } from "@/lib/navigation/record-presentation";
+import { sharedRecordLandingHref } from "@/lib/navigation/shared-record";
 import { accountLabel } from "@/lib/sharing/account-access-view";
 
 /**
@@ -64,7 +66,7 @@ export function AccountSwitcherMenuItems() {
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent
           data-slot="account-switcher-menu"
-          className="w-60"
+          className="max-h-(--radix-dropdown-menu-content-available-height) w-60 overflow-x-hidden overflow-y-auto"
         >
           <DropdownMenuItem
             data-slot="account-switcher-own"
@@ -79,32 +81,62 @@ export function AccountSwitcherMenuItems() {
               <span className="text-primary ml-auto text-xs">&#10003;</span>
             )}
           </DropdownMenuItem>
-          {access.accounts.map((account) => (
-            <DropdownMenuItem
-              key={account.accountId}
-              data-slot="account-switcher-entry"
-              data-account-id={account.accountId}
-              className="cursor-pointer"
-              disabled={switchAccount.isPending}
-              onClick={() => switchAccount.mutate(account.accountId)}
-            >
-              <div className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate">{accountLabel(account)}</span>
-                {/* Meta, so muted: what the grant lets this person do, in the
-                    words the server resolved rather than a level code. */}
-                <span className="text-muted-foreground truncate text-xs">
-                  {account.canWrite
-                    ? t("recordSharing.switcher.canWrite")
-                    : t("recordSharing.switcher.readOnly")}
-                </span>
-              </div>
-              {activeId === account.accountId && (
-                <Check className="text-primary ml-2 size-4 shrink-0" />
-              )}
-            </DropdownMenuItem>
-          ))}
+          {access.accounts.map((account) => {
+            const presentation = resolveRecordPresentation(account);
+
+            return (
+              <DropdownMenuItem
+                key={account.accountId}
+                data-slot="account-switcher-entry"
+                data-account-id={account.accountId}
+                data-account-username={account.username}
+                data-access-level={presentation.access}
+                data-record-kind={presentation.recordKind}
+                className="cursor-pointer"
+                disabled={switchAccount.isPending}
+                onClick={() =>
+                  switchAccount.switchTo(
+                    account.accountId,
+                    sharedRecordLandingHref(account.sections),
+                  )
+                }
+              >
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate">{accountLabel(account)}</span>
+                  <span className="text-muted-foreground truncate text-xs">
+                    {accessLabel(presentation.access, t)}
+                  </span>
+                  <span className="text-muted-foreground truncate text-xs">
+                    {recordKindLabel(presentation.recordKind, t)}
+                  </span>
+                </div>
+                {activeId === account.accountId && (
+                  <Check className="text-primary ml-2 size-4 shrink-0" />
+                )}
+              </DropdownMenuItem>
+            );
+          })}
         </DropdownMenuSubContent>
       </DropdownMenuSub>
     </>
   );
+}
+
+function accessLabel(
+  access: ReturnType<typeof resolveRecordPresentation>["access"],
+  t: ReturnType<typeof useTranslations>["t"],
+): string {
+  if (access === "manage") return t("recordSharing.row.canManage");
+  return access === "view-and-add"
+    ? t("recordSharing.switcher.canWrite")
+    : t("recordSharing.switcher.readOnly");
+}
+
+function recordKindLabel(
+  recordKind: ReturnType<typeof resolveRecordPresentation>["recordKind"],
+  t: ReturnType<typeof useTranslations>["t"],
+): string {
+  return recordKind === "managed"
+    ? t("recordSharing.lookingAfter.kindManaged")
+    : t("recordSharing.lookingAfter.kindShared");
 }

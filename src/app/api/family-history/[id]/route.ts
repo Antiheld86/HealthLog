@@ -10,9 +10,10 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
+import { overwriteDetails } from "@/lib/sharing/audit-details";
 import {
   apiSuccess,
   apiError,
@@ -29,7 +30,7 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 export const GET = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireRecordAuth("read");
+    const { user } = await requireRecordAuth("read", "profile");
 
     const { id } = await params;
     const row = await prisma.familyHistoryEntry.findUnique({ where: { id } });
@@ -51,12 +52,21 @@ export const GET = apiHandler(
 
 export const PATCH = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Correcting one relative's entry.
+    const { user } = await requireRecordAuth("manage", "profile");
 
     const { id } = await params;
+    // Widened for the audit row (C4); the encrypted note stays out.
     const existing = await prisma.familyHistoryEntry.findUnique({
       where: { id },
-      select: { id: true, userId: true, deletedAt: true },
+      select: {
+        id: true,
+        userId: true,
+        deletedAt: true,
+        relationship: true,
+        condition: true,
+        ageAtOnset: true,
+      },
     });
     if (
       !existing ||
@@ -98,7 +108,23 @@ export const PATCH = apiHandler(
     await auditLog("family-history.update", {
       userId: user.id,
       ipAddress: getClientIp(request),
-      details: { entryId: id },
+      // C4 — the replaced fields; the note is named and never quoted.
+      details: {
+        entryId: id,
+        ...overwriteDetails({
+          before: {
+            relationship: existing.relationship,
+            condition: existing.condition,
+            ageAtOnset: existing.ageAtOnset,
+          },
+          after: {
+            relationship: updated.relationship,
+            condition: updated.condition,
+            ageAtOnset: updated.ageAtOnset,
+          },
+          redacted: entry.note !== undefined ? ["note"] : [],
+        }),
+      },
     });
 
     annotate({
@@ -115,7 +141,8 @@ export const PATCH = apiHandler(
 
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Soft delete: the row stays and reconstructs itself.
+    const { user } = await requireRecordAuth("manage", "profile");
 
     const { id } = await params;
     const existing = await prisma.familyHistoryEntry.findUnique({

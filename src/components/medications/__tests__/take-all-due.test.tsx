@@ -399,6 +399,7 @@ describe("runTakeAllDue — per-medication loop with failure isolation", () => {
   function okResponse(id: string) {
     return {
       ok: true,
+      headers: new Headers(),
       json: vi.fn().mockResolvedValue({ data: { id } }),
       text: vi.fn().mockResolvedValue(JSON.stringify({ data: { id } })),
     };
@@ -454,7 +455,12 @@ describe("runTakeAllDue — per-medication loop with failure isolation", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(okResponse("evt-a"))
-      .mockResolvedValueOnce({ ok: false, json: vi.fn(), text: vi.fn() });
+      .mockResolvedValueOnce({
+        ok: false,
+        headers: new Headers(),
+        json: vi.fn(),
+        text: vi.fn(),
+      });
     vi.stubGlobal("fetch", fetchMock);
     const queryClient = fakeQueryClient();
 
@@ -509,7 +515,12 @@ describe("runTakeAllDue — per-medication loop with failure isolation", () => {
   it("reports total failure without invalidating (nothing changed server-side)", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({ ok: false, json: vi.fn(), text: vi.fn() }),
+      vi.fn().mockResolvedValue({
+        ok: false,
+        headers: new Headers(),
+        json: vi.fn(),
+        text: vi.fn(),
+      }),
     );
     const queryClient = fakeQueryClient();
 

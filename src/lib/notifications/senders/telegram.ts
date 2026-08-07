@@ -8,7 +8,7 @@ import { classifyTelegramError } from "@/lib/notifications/retry-policy";
 import { prisma } from "@/lib/db";
 import type { ReminderPhase } from "@/generated/prisma/client";
 import { getEvent } from "@/lib/logging/context";
-import { recordPushAttempt } from "@/lib/notifications/senders/push-attempt-record";
+import { recordPushAttemptForPayload } from "@/lib/notifications/senders/push-attempt-record";
 import { scheduleTelegramAutoDelete } from "@/lib/telegram-cleanup";
 import {
   buildMoodKeyboard,
@@ -18,8 +18,8 @@ import { defaultLocale, locales, type Locale } from "@/lib/i18n/config";
 
 /**
  * v1.19.0 — resolve the bot locale for an interactive reminder. The
- * sender knows the user via `payload.userId`; the keyboard labels need
- * the user's locale. Defaults to "de" (the historical bot default) when
+ * sender knows the recipient through the delivery identity; keyboard labels
+ * need that account's locale. Defaults to "de" when
  * unset, matching the webhook's `resolveBotLocale`.
  */
 async function resolveSenderLocale(userId: string): Promise<Locale> {
@@ -52,7 +52,7 @@ export interface TelegramSendResult extends SendOutcome {
 /**
  * Delete the existing Telegram reminder message for a single dose slot
  * before re-sending it. v1.7.0 SB-SCHED-4 — scoped to the exact slot
- * `{ medicationId, scheduleId, date, phase, timeOfDay }` (the same
+ * `{ recipientUserId, medicationId, scheduleId, date, phase, timeOfDay }` (the same
  * composite the tracking upsert keys on), NOT the whole medication. A
  * medication with `timesOfDay = ["08:00","20:00"]` has two distinct
  * ledger rows per day; the pre-v1.7 whole-medication wipe deleted the
@@ -62,6 +62,7 @@ export interface TelegramSendResult extends SendOutcome {
  */
 async function deleteExistingReminders(
   botToken: string,
+  recipientUserId: string,
   medicationId: string,
   scheduleId: string,
   date: string,
@@ -71,7 +72,8 @@ async function deleteExistingReminders(
   try {
     const existing = await prisma.telegramReminderMessage.findUnique({
       where: {
-        medicationId_scheduleId_date_phase_timeOfDay: {
+        recipientUserId_medicationId_scheduleId_date_phase_timeOfDay: {
+          recipientUserId,
           medicationId,
           scheduleId,
           date,
@@ -88,18 +90,6 @@ async function deleteExistingReminders(
     } catch {
       // Best-effort: message may already be deleted
     }
-
-    await prisma.telegramReminderMessage.delete({
-      where: {
-        medicationId_scheduleId_date_phase_timeOfDay: {
-          medicationId,
-          scheduleId,
-          date,
-          phase,
-          timeOfDay,
-        },
-      },
-    });
   } catch (err) {
     getEvent()?.addWarning(`Failed to delete existing reminders: ${err}`);
   }
@@ -118,6 +108,7 @@ export async function sendViaTelegram(
   config: TelegramChannelConfig,
   payload: NotificationPayload,
 ): Promise<TelegramSendResult> {
+  const userId = payload.recipientUserId ?? payload.userId;
   const medicationId = payload.metadata?.medicationId as string | undefined;
   const scheduleId = payload.metadata?.scheduleId as string | undefined;
   const phase = payload.metadata?.phase as string | undefined;
@@ -135,6 +126,7 @@ export async function sendViaTelegram(
   if (medicationId && scheduleId && phase && date) {
     await deleteExistingReminders(
       config.botToken,
+      userId,
       medicationId,
       scheduleId,
       date,
@@ -152,24 +144,25 @@ export async function sendViaTelegram(
   let interactiveKeyboard:
     | { inline_keyboard: { text: string; callback_data: string }[][] }
     | undefined;
-  if (!replyMarkup) {
+  const selfDelivery = payload.recordUserId === payload.recipientUserId;
+  if (selfDelivery && !replyMarkup) {
     if (payload.eventType === "MOOD_REMINDER") {
       interactiveKeyboard = buildMoodKeyboard(
-        await resolveSenderLocale(payload.userId),
+        await resolveSenderLocale(userId),
       );
     } else if (payload.eventType === "MEASUREMENT_REMINDER" && reminderId) {
       interactiveKeyboard = buildMeasurementKeyboard(
         reminderId,
-        await resolveSenderLocale(payload.userId),
+        await resolveSenderLocale(userId),
       );
     }
   }
 
   // Build reply markup
   const keyboard =
-    replyMarkup ??
+    (selfDelivery ? replyMarkup : undefined) ??
     interactiveKeyboard ??
-    (payload.eventType === "MEDICATION_REMINDER" && medicationId
+    (selfDelivery && payload.eventType === "MEDICATION_REMINDER" && medicationId
       ? {
           inline_keyboard: [
             [
@@ -218,7 +211,8 @@ export async function sendViaTelegram(
     try {
       await prisma.telegramReminderMessage.upsert({
         where: {
-          medicationId_scheduleId_date_phase_timeOfDay: {
+          recipientUserId_medicationId_scheduleId_date_phase_timeOfDay: {
+            recipientUserId: userId,
             medicationId,
             scheduleId,
             date,
@@ -227,6 +221,7 @@ export async function sendViaTelegram(
           },
         },
         create: {
+          recipientUserId: userId,
           medicationId,
           scheduleId,
           chatId: config.chatId,
@@ -251,13 +246,11 @@ export async function sendViaTelegram(
   // tapped prompt is deleted immediately by the webhook callback handler;
   // this row is the fallback and is harmless once the message is gone.
   if (result.ok && result.messageId && interactiveKeyboard) {
-    await scheduleTelegramAutoDelete(payload.userId, config.chatId, [
-      result.messageId,
-    ]);
+    await scheduleTelegramAutoDelete(userId, config.chatId, [result.messageId]);
   }
 
   if (result.ok) {
-    recordPushAttempt({
+    recordPushAttemptForPayload(payload, userId, {
       userId: payload.userId,
       channel: "TELEGRAM",
       eventType: payload.eventType,
@@ -266,7 +259,7 @@ export async function sendViaTelegram(
     return { ok: true, messageId: result.messageId };
   }
   const classified = classifyTelegramError(result.errorDescription);
-  recordPushAttempt({
+  recordPushAttemptForPayload(payload, userId, {
     userId: payload.userId,
     channel: "TELEGRAM",
     eventType: payload.eventType,

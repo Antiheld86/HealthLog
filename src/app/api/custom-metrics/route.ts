@@ -29,7 +29,7 @@ import { createCustomMetricSchema } from "@/lib/validations/custom-metrics";
  */
 
 export const GET = apiHandler(async () => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "measurements");
 
   const rows = await prisma.customMetric.findMany({
     where: { userId: user.id, deletedAt: null },

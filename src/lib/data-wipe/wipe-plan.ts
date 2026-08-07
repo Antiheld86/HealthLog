@@ -161,6 +161,11 @@ export const WIPE_MODELS = [
   "NotificationChannel",
   "PushSubscription",
   "PushAttempt",
+  "NotificationEvent",
+  // A Guardian egress claim belongs to both the record whose data prompted
+  // the notification and the recipient whose channel would receive it. A
+  // wipe by either account must remove it; see WIPE_OWNER_FIELDS below.
+  "NotificationEgressAuthorization",
   "Device",
   "TelegramScheduledDeletion",
   "TelegramPromptContext",
@@ -379,6 +384,8 @@ export const USER_KEPT_FIELDS: Readonly<Record<string, string>> = {
   oidcSub: "a sign-in credential — the external identity binding",
   createdAt: "when the account was created; the account is preserved",
   updatedAt: "row bookkeeping maintained by Prisma",
+  managedProfileAt:
+    "whether this record is one somebody else runs — account shape, not record content. Clearing it would strip the guardian's reach from a record that has no credentials of its own, leaving an account nobody can open, administer or delete. Emptying a record is not emancipating the person in it.",
   totpSecretEncrypted: "a second-factor credential",
   totpConfirmedAt: "second-factor enrolment state",
   totpLastStep:
@@ -415,6 +422,12 @@ export const USER_KEPT_FIELDS: Readonly<Record<string, string>> = {
  * {@link resolveWipeDelegate} translates; the route is unaware.
  */
 export const WIPE_OWNER_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  // The record owner owns the import payload. The actor is durable audit
+  // attribution and must not let deleting a manager erase another record's
+  // import history.
+  MedicationIntakeImportJob: ["recordUserId"],
+  NotificationEvent: ["recordUserId"],
+  NotificationEgressAuthorization: ["recordUserId", "recipientUserId"],
   // Both sides. Wiping only the grantor side would leave the account still
   // holding read access to other people's records after it asked for
   // everything of its own to be deleted.

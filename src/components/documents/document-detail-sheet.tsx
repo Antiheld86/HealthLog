@@ -64,6 +64,10 @@ import {
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import { useCoachLaunch } from "@/lib/insights/coach-launch-context";
 import { invalidateKeys, queryKeys } from "@/lib/query-keys";
+import {
+  createFencedBlobLoader,
+  useFencedObjectUrl,
+} from "@/hooks/use-fenced-object-url";
 import { cn } from "@/lib/utils";
 import {
   INBOUND_DOCUMENT_KINDS,
@@ -94,18 +98,119 @@ type PatchInput = {
   episodeIds?: string[];
 };
 
+/**
+ * Download the stored original.
+ *
+ * v1.37.0 — a real button, not an anchor wearing `aria-disabled`.
+ *
+ * Two things were wrong with the anchor. `aria-disabled` tells a screen reader
+ * the control is unavailable and stops nothing: `href="#"` is still activated
+ * by a click and by Enter, so a person got a jump to the top of the page
+ * instead of a file. And it ignored the failure flag entirely, so a document
+ * whose original could not be fetched left a control that looked fine and
+ * silently did nothing, for good.
+ *
+ * It also fetches at CLICK time unless the bytes are already in hand. The
+ * sheet loads the original eagerly only for documents it is going to render
+ * inline; for everything else — a large scan, a download-only format — nothing
+ * is fetched or decrypted until somebody asks for it, which is what the plain
+ * `href` used to cost and what the first fix accidentally gave up.
+ */
+function DocumentDownloadButton({
+  documentId,
+  filename,
+  readyUrl,
+  unavailable,
+  slot,
+  ...buttonProps
+}: {
+  documentId: string;
+  filename: string | null;
+  /** Already-fetched bytes to reuse (the inline preview's), or null. */
+  readyUrl: string | null;
+  /** A prior fetch of these bytes failed for good. */
+  unavailable: boolean;
+  slot: string;
+} & React.ComponentProps<typeof Button>) {
+  const { t } = useTranslations();
+  const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const loaderRef = useRef<ReturnType<typeof createFencedBlobLoader> | null>(
+    null,
+  );
+
+  useEffect(() => () => loaderRef.current?.dispose(), []);
+
+  const save = (url: string) => {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename ?? "document";
+    anchor.click();
+  };
+
+  const onClick = async () => {
+    if (readyUrl) {
+      save(readyUrl);
+      return;
+    }
+    setPending(true);
+    setFailed(false);
+    // One loader for the lifetime of the button: loading again revokes the
+    // previous object URL, and unmounting revokes the live one. Without that a
+    // decrypted health document stays in the tab's memory until it closes.
+    loaderRef.current ??= createFencedBlobLoader();
+    const result = await loaderRef.current.load(
+      `/api/documents/inbound/${documentId}/original`,
+    );
+    setPending(false);
+    if (result.kind === "loaded") save(result.url);
+    else if (result.kind === "failed") setFailed(true);
+  };
+
+  const blocked = unavailable || failed;
+
+  return (
+    <Button
+      {...buttonProps}
+      data-slot={slot}
+      disabled={blocked || pending}
+      aria-label={t("documents.detail.download")}
+      title={blocked ? t("documents.detail.loadError") : undefined}
+      onClick={() => void onClick()}
+    >
+      <Download className="size-4" aria-hidden />
+      <span className="hidden sm:inline">
+        {blocked
+          ? t("documents.detail.loadError")
+          : t("documents.detail.download")}
+      </span>
+    </Button>
+  );
+}
+
 /** Inline preview for Class A documents; skeleton until the blob paints. */
 function InlinePreview({
-  documentId,
+  src,
+  failed,
   mimeType,
   title,
 }: {
-  documentId: string;
+  /**
+   * v1.37.0 — the object URL, fetched ONCE by the sheet and handed down.
+   *
+   * The bytes come through the app transport because it carries the
+   * record-session assertion and a browser-issued `src="/api/…"` cannot. What
+   * changed since: this component used to fetch them itself while the sheet
+   * fetched the SAME original again for the download link, so opening a
+   * document decrypted and held two copies of it — and a large scan is a large
+   * copy. One loader now, lifted to the sheet.
+   */
+  src: string | null;
+  failed: boolean;
   mimeType: string;
   title: string;
 }) {
   const [loaded, setLoaded] = useState(false);
-  const src = `/api/documents/inbound/${documentId}/original`;
   const isPdf = mimeType === "application/pdf";
   // Chromium's PDF viewer grabs focus while it initialises — BEFORE the
   // frame's `load` event — stranding keyboard events inside the embedded
@@ -144,12 +249,23 @@ function InlinePreview({
 
   return (
     <div className="relative max-h-[55vh] overflow-auto overscroll-contain rounded-lg">
-      {!loaded ? (
+      {failed ? (
+        // The preview could not be fetched — refused, offline, or still
+        // rendering server-side. A permanent skeleton would read as "loading
+        // forever"; the sheet's own metadata and the download control below
+        // still work.
+        <p
+          data-slot="document-preview-unavailable"
+          className="text-muted-foreground py-8 text-center text-sm"
+        >
+          {title}
+        </p>
+      ) : !loaded || src === null ? (
         <Skeleton
           className={cn("w-full rounded-lg", isPdf ? "h-[55vh]" : "h-64")}
         />
       ) : null}
-      {isPdf ? (
+      {src === null || failed ? null : isPdf ? (
         // No `sandbox` attribute by design: Chromium force-downloads PDFs
         // in sandboxed frames instead of rendering them. The serve
         // response itself carries `default-src 'none'` +
@@ -487,7 +603,20 @@ export function DocumentDetailSheet({
 
   const title = doc?.title ?? doc?.filename ?? t("documents.card.untitled");
   const Icon = doc ? DOCUMENT_KIND_ICONS[doc.kind] : null;
-  const originalHref = doc ? `/api/documents/inbound/${doc.id}/original` : "#";
+  // v1.37.0 — the ONE eager fetch of the original, and only for a document
+  // that is going to render it.
+  //
+  // A `<iframe src="/api/…">` carries no record-session assertion, so the
+  // fence refuses it once the session has been inside a shared record; the
+  // bytes therefore come through the app transport as an object URL. The
+  // narrow path is the point: a non-inline document (a large scan, a
+  // download-only format) fetched nothing until somebody clicked, and it must
+  // stay that way — this used to fetch for every document on open, twice.
+  const { url: inlineSrc, failed: inlineFailed } = useFencedObjectUrl(
+    doc && doc.servingClass === "inline"
+      ? `/api/documents/inbound/${doc.id}/original`
+      : null,
+  );
 
   return (
     <>
@@ -584,19 +713,14 @@ export function DocumentDetailSheet({
                     </span>
                   </Button>
                 )}
-                <Button
+                <DocumentDownloadButton
+                  documentId={doc.id}
+                  filename={doc.filename}
+                  readyUrl={inlineSrc}
+                  unavailable={inlineFailed}
                   variant="outline"
-                  asChild
-                  data-slot="document-download"
-                  aria-label={t("documents.detail.download")}
-                >
-                  <a href={originalHref} download={doc.filename ?? undefined}>
-                    <Download className="size-4" aria-hidden />
-                    <span className="hidden sm:inline">
-                      {t("documents.detail.download")}
-                    </span>
-                  </a>
-                </Button>
+                  slot="document-download"
+                />
               </div>
             </div>
           ) : undefined
@@ -620,7 +744,8 @@ export function DocumentDetailSheet({
           <div className="space-y-6">
             {doc.servingClass === "inline" ? (
               <InlinePreview
-                documentId={doc.id}
+                src={inlineSrc}
+                failed={inlineFailed}
                 mimeType={doc.mimeType}
                 title={title}
               />
@@ -636,12 +761,15 @@ export function DocumentDetailSheet({
                   {t("documents.detail.previewUnavailable")} ·{" "}
                   {formatBytes(doc.byteSize, locale)}
                 </p>
-                <Button asChild size="sm" className="mt-1">
-                  <a href={originalHref} download={doc.filename ?? undefined}>
-                    <Download className="size-4" aria-hidden />
-                    {t("documents.detail.download")}
-                  </a>
-                </Button>
+                <DocumentDownloadButton
+                  documentId={doc.id}
+                  filename={doc.filename}
+                  readyUrl={null}
+                  unavailable={false}
+                  size="sm"
+                  className="mt-1"
+                  slot="document-download-inline"
+                />
               </div>
             )}
 

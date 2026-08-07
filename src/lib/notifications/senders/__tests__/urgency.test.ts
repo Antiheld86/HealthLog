@@ -35,6 +35,11 @@ vi.mock("@/lib/logging/context", () => ({
 
 vi.mock("@/lib/notifications/senders/push-attempt-record", () => ({
   recordPushAttempt: (...args: unknown[]) => recordPushAttemptMock(...args),
+  recordPushAttemptForPayload: (
+    _payload: unknown,
+    _recipientUserId: string,
+    attempt: unknown,
+  ) => recordPushAttemptMock(attempt),
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -140,6 +145,24 @@ describe("ntfy urgent mapping", () => {
     ).headers;
     expect(headers.Priority).toBe("5");
     expect(headers.Tags).toBe("reminder");
+  });
+
+  it("does not send ntfy action headers to a managed Guardian", async () => {
+    safeFetchMock.mockResolvedValue({ ok: true, status: 200 });
+    await sendViaNtfy(
+      { serverUrl: "https://ntfy.example.com", topic: "t" },
+      payload({
+        userId: "record-1",
+        recordUserId: "record-1",
+        recipientUserId: "guardian-1",
+      }),
+    );
+    const headers = (
+      safeFetchMock.mock.calls[0][1] as {
+        headers: Record<string, string>;
+      }
+    ).headers;
+    expect(headers.Actions).toBeUndefined();
   });
 });
 

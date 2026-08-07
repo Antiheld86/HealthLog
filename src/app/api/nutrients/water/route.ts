@@ -17,9 +17,10 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
+import { overwriteDetails } from "@/lib/sharing/audit-details";
 import {
   apiError,
   apiSuccess,
@@ -53,13 +54,18 @@ function isRealCalendarDay(day: string): boolean {
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postWater));
 
 async function postWater(request: NextRequest): Promise<Response> {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE. Hydration is a day TOTAL with no per-entry ledger, so a
+  // `set` overwrites the day with nothing behind it; C4 on the audit row is
+  // what makes the previous total readable back.
+  const { user, actor } = await requireRecordAuth("manage", "measurements");
 
   const gate = await requireModuleEnabled(user.id, "nutrients");
   if (!gate.enabled) return gate.response;
 
+  // v1.37.0 — C1: keyed on the ACTOR, so a manager burns their own allowance
+  // and cannot collect a fresh one by switching records.
   const rl = await checkRateLimit(
-    `nutrients:water:${user.id}`,
+    `nutrients:water:${actor.id}`,
     WRITE_RATE_LIMIT_MAX,
     WRITE_RATE_LIMIT_WINDOW_MS,
   );
@@ -103,6 +109,17 @@ async function postWater(request: NextRequest): Promise<Response> {
     },
   };
 
+  // v1.37.0 — the day total as this request found it, for the audit row (C4).
+  // Read rather than derived: the upsert below is atomic and deliberately does
+  // not read first, so this is a separate, best-effort pre-image. A concurrent
+  // write can move the true total between the two statements; what the row
+  // says is what this caller replaced as far as this request could see, which
+  // is the honest claim and the one the feed needs.
+  const before = await prisma.nutrientIntakeDay.findUnique({
+    where: key,
+    select: { amount: true },
+  });
+
   let row = await prisma.nutrientIntakeDay.upsert({
     where: key,
     create: {
@@ -145,7 +162,18 @@ async function postWater(request: NextRequest): Promise<Response> {
   await auditLog("nutrient.water.write", {
     userId: user.id,
     ipAddress: getClientIp(request),
-    details: { day, mode, amountMl, resultingAmount: row.amount },
+    // C4 — the day total that was there before. A `set` replaces it outright
+    // and no per-entry ledger exists to reconstruct it from.
+    details: {
+      day,
+      mode,
+      amountMl,
+      resultingAmount: row.amount,
+      ...overwriteDetails({
+        before: { dayTotal: before?.amount ?? null },
+        after: { dayTotal: row.amount },
+      }),
+    },
   });
 
   annotate({

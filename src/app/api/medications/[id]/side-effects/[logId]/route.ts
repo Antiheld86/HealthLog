@@ -15,7 +15,7 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { auditLog } from "@/lib/auth/audit";
 import { annotate } from "@/lib/logging/context";
 import { apiError, apiSuccess, getClientIp } from "@/lib/api-response";
@@ -38,7 +38,10 @@ async function loadOwnedRow(
 
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. The one hard delete in the tree whose audit details
+    // already reconstruct the row: entry, severity and the date it happened
+    // are on the row this handler writes.
+    const { user } = await requireRecordAuth("manage", "medications");
     const { id, logId } = await params;
 
     const existing = await loadOwnedRow(id, logId, user.id);

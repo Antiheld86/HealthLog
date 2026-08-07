@@ -11,14 +11,17 @@ import { LayoutCoachMount } from "@/components/insights/layout-coach-mount";
 import { TourLauncher } from "@/components/onboarding/tour-launcher";
 import { clearCachesForSessionEnd, useAuth } from "@/hooks/use-auth";
 import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
+import { useRecordSessionTransition } from "@/hooks/use-record-session-transition";
 import { useTranslations } from "@/lib/i18n/context";
 import { CoachLaunchProvider } from "@/lib/insights/coach-launch-context";
+import { isManageDelegateSettingsDestination } from "@/lib/record-settings";
 import { isDestinationInSharedRecord } from "./nav-model";
 import { BottomNav } from "./bottom-nav";
 import { DemoBanner } from "./demo-banner";
 import { OfflineBanner } from "./offline-banner";
 import { SharedRecordBanner } from "./shared-record-banner";
 import { SharedRecordUnavailable } from "./shared-record-unavailable";
+import { RecordScopeHydrationGate } from "./record-scope-hydration-gate";
 import { SidebarNav } from "./sidebar-nav";
 import { TopBar } from "./top-bar";
 
@@ -57,6 +60,7 @@ export function AuthShell({
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const recordSessionTransition = useRecordSessionTransition();
 
   const isPublicPage = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
   // v1.4.26 — `/privacy` is a long-form legal page that brings its own
@@ -78,14 +82,47 @@ export function AuthShell({
   // decides what to mount and the surfaces beneath it decide what to offer,
   // and the two disagreeing is the whole class of defect this hook exists to
   // close.
-  const { inSharedRecord } = useRecordCapabilities();
+  const {
+    inSharedRecord,
+    recordKind,
+    level,
+    sections,
+    accessRefused,
+    recordSessionPending,
+  } = useRecordCapabilities();
+  // A shared record has a deliberately small Settings surface of its own, and
+  // which routes belong to it depends on the record.
+  //
+  // A managed profile keeps the whole `/settings` family reaching its
+  // record-aware gate: guardian configuration lives there and the gate refuses
+  // per destination.
+  //
+  // v1.37.0 — an ordinary shared record at MANAGE reaches exactly the
+  // destinations classified `manage-writable`, which today is Settings →
+  // Anamnese and nothing else. That is not a widening of what a delegate may
+  // do: `POST /api/allergies` and `POST /api/family-history` already resolve
+  // `requireRecordAuth("manage", "profile")` and have done since the level
+  // shipped. What was missing was any page from which to call them, and an
+  // admitted write with no reachable caller is the half-wired state this
+  // repository keeps rediscovering. Every other `/settings` path in an adult
+  // share stays in the generic refusal branch, at every level.
+  const settingsSlug = pathname.startsWith("/settings")
+    ? (pathname.split("/")[2] ?? "")
+    : null;
+  const isRecordSettingsPath =
+    settingsSlug !== null &&
+    (recordKind === "managed" ||
+      (level === "manage" &&
+        isManageDelegateSettingsDestination(settingsSlug)));
   // v1.36.0 — a page reached while acting on somebody else's record that
   // sharing does not cover. The nav already drops these entries, so arriving
   // here means a bookmark or a browser back button; the panel below explains
   // it instead of letting the page paint a row of 403 error cards. Paint only
   // — every route behind these pages refuses on its own.
   const outsideSharedRecord =
-    inSharedRecord && !isDestinationInSharedRecord(pathname);
+    inSharedRecord &&
+    !isDestinationInSharedRecord(pathname, sections) &&
+    !isRecordSettingsPath;
   const isOnboardingPage = pathname === "/onboarding";
   const showUnlockNotifier = isAuthenticated && !isPublicPage && !!user?.id;
 
@@ -218,17 +255,46 @@ export function AuthShell({
     );
   }
 
-  // Admin pages stay behind the auth gate while `/api/auth/me` is in
-  // flight: the role is unknown until the payload lands, and mounting
-  // `/admin/*` children early would fire admin queries that 403 for a
-  // non-admin before the redirect effect can move them away.
-  if (isLoading && isAdminPage) {
+  // A refused record context comes FIRST, ahead of the hydration gate.
+  //
+  // Both used to be checked in the other order, and it mattered: the gate is a
+  // bare spinner with no controls, which is right for a transition that ends on
+  // its own and wrong for a state that does not. A refusal — a malformed access
+  // block, or a selector pointed at a record whose grant has lapsed — reports
+  // the same thing on every `/api/auth/me`, so behind the gate it renders as a
+  // permanent "Loading…" with no way out. Ahead of it, the same state renders
+  // the refusal door, which carries the button back to one's own record.
+  //
+  // Safe against the loading race by construction: every input to
+  // `accessRefused` comes from a resolved account payload, so it cannot be true
+  // while `isLoading` is.
+  // A present but malformed access block is not the older-server case. The
+  // server may still be switched, so mounting children here could fetch target
+  // data under owner controls. Offer only the actor-scoped way out.
+  if (accessRefused) {
     return (
-      <div className="flex h-dvh items-center justify-center" role="status">
-        <Loader2 className="text-primary h-6 w-6 animate-spin motion-reduce:animate-none" />
-        <span className="sr-only">{t("nav.loadingScreen")}</span>
+      <div
+        data-slot="invalid-record-access-refusal"
+        className="flex min-h-dvh flex-col"
+      >
+        <MaintainershipBanner />
+        <main className="mx-auto w-full max-w-screen-xl px-4 py-10 md:px-6">
+          <SharedRecordUnavailable />
+        </main>
       </div>
     );
+  }
+
+  // Every protected route waits for `/api/auth/me`, not only Settings and
+  // Admin. The payload resolves the active record as well as identity, so a
+  // child mounted before it could issue an actor-scoped read before the shell
+  // knows that a switched record must be refused or scoped differently.
+  if (
+    isLoading ||
+    recordSessionTransition.phase !== "ready" ||
+    recordSessionPending
+  ) {
+    return <RecordScopeHydrationGate label={t("nav.loadingScreen")} />;
   }
 
   // Auth RESOLVED as unauthenticated — hold a spinner while the
@@ -241,16 +307,6 @@ export function AuthShell({
       </div>
     );
   }
-
-  // While `/api/auth/me` is still in flight the shell renders the full
-  // app chrome + children immediately (the chrome components own their
-  // null-user skeletons, pages own their data skeletons). This takes the
-  // auth round-trip off the first-paint critical path: page-level
-  // queries fire in parallel with `/api/auth/me` instead of behind it.
-  // `src/proxy.ts` has already refused cookie-less requests to
-  // protected routes, so the unauthenticated-flash window is limited to
-  // expired/invalid sessions — those resolve into the redirect branch
-  // above as soon as the 401 lands.
 
   // Onboarding page — minimal shell, no sidebar/nav
   if (isOnboardingPage) {

@@ -19,7 +19,12 @@ import {
   updateBiomarkerSchema,
 } from "@/lib/validations/biomarkers";
 
-import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
+import {
+  dataEnvelope,
+  errorEnvelope,
+  recordRefusal,
+  stdResponses,
+} from "./shared";
 
 createBiomarkerSchema.meta({
   id: "CreateBiomarkerRequest",
@@ -79,6 +84,7 @@ export const biomarkerPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "Returns every biomarker the caller has defined, name-ordered. Each carries its unit, reference bounds, and decrypted context.",
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Biomarker catalog.",
           content: {
@@ -100,6 +106,7 @@ export const biomarkerPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: createBiomarkerSchema } },
       },
       responses: {
+        ...recordRefusal(),
         "201": {
           description: "Created biomarker.",
           content: {
@@ -121,6 +128,7 @@ export const biomarkerPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Returns the biomarker including its decrypted `context`. Cross-user rows surface as 404.",
       requestParams: { path: z.object({ id: z.string() }) },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Biomarker detail.",
           content: {
@@ -144,6 +152,7 @@ export const biomarkerPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: updateBiomarkerSchema } },
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Updated biomarker.",
           content: {

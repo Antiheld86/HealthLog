@@ -184,10 +184,40 @@ export async function getUnswitchedSession(): Promise<Awaited<
  * session through that seam would make every custom resolver responsible for a
  * question none of them asks.
  *
- * Returns the CLAIMED account, unverified and unchecked. The grant check
- * happens later, inside the handler, on every request.
+ * Returns the CLAIMED account, unverified and unchecked. `undefined` means
+ * the carrier was unsafe to resolve: today, that is a selector header on a
+ * cookie request. The idempotency wrapper must then skip replay and let the
+ * handler issue its normal refusal instead of treating ambiguity as an
+ * unswitched own-record request. The grant check happens later, inside the
+ * handler, on every request.
  */
-export async function readClaimedActingAccount(): Promise<string | null> {
+/**
+ * v1.37.0 — and, on the same read, what that request's session actually holds.
+ *
+ * This replaced a narrower `readClaimedActingAccount()` that returned only the
+ * claim. The idempotency wrapper — still the one caller — now needs a second
+ * fact: the session's own record context, so the record-session fence can be
+ * evaluated above the replay cache. Widening the existing function rather than
+ * adding a second one is what keeps that from costing a second `getSession()`
+ * on every idempotent write, and keeps "what does this request say it is acting
+ * as" to one implementation, which is the thing this file exists to ensure.
+ *
+ * The narrow function is gone rather than kept as a shim: it had no caller left,
+ * and a wrapper nobody calls is a second answer waiting for somebody to reach
+ * for it.
+ */
+export interface ClaimedRecordContext {
+  /** The claimed record, or `undefined` when the carrier was unsafe to resolve. */
+  claimedRecord: string | null | undefined;
+  /** Which credential the request authenticated with. */
+  transport: "cookie" | "bearer";
+  /** The session's selector-move counter. Always 0 on the Bearer transport. */
+  sessionEpoch: number;
+  /** The account the session is pointed at, or null. Always null on Bearer. */
+  sessionScope: string | null;
+}
+
+export async function readClaimedRecordContext(): Promise<ClaimedRecordContext> {
   const header = await readSelectorHeader();
   let session: Awaited<ReturnType<typeof getSession>> = null;
   try {
@@ -198,11 +228,17 @@ export async function readClaimedActingAccount(): Promise<string | null> {
     // unauthenticated request claims nothing.
     session = null;
   }
-  return carrierTarget(
-    decideActingCarrier({
-      transport: session ? "cookie" : "bearer",
-      stamped: session?.session.actingAsUserId ?? null,
-      header,
-    }),
-  );
+  const transport: "cookie" | "bearer" = session ? "cookie" : "bearer";
+  const carrier = decideActingCarrier({
+    transport,
+    stamped: session?.session.actingAsUserId ?? null,
+    header,
+  });
+  return {
+    claimedRecord:
+      carrier.kind === "misplaced-header" ? undefined : carrierTarget(carrier),
+    transport,
+    sessionEpoch: session?.session.recordEpoch ?? 0,
+    sessionScope: session?.session.actingAsUserId ?? null,
+  };
 }

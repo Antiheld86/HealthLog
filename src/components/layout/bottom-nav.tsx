@@ -97,8 +97,12 @@ export function BottomNav() {
   // v1.36.0 — acting on somebody else's record. Same gate as the sidebar, from
   // the same resolved payload, so the two bars cannot disagree about what a
   // delegate is offered.
-  const sharedRecord = user?.accountAccess?.active != null;
-  const { canAdd, canManage } = useRecordCapabilities();
+  const {
+    inSharedRecord: sharedRecord,
+    sections,
+    canAdd,
+    canManage,
+  } = useRecordCapabilities();
   const canCapture = canAdd || canManage;
 
   // v1.17.1 (F-1) — the More hub is the model-computed hub: every visible
@@ -111,8 +115,9 @@ export function BottomNav() {
         modules: user?.modules,
         mounted,
         sharedRecord,
+        sections,
       }),
-    [user?.modules, mounted, sharedRecord],
+    [user?.modules, mounted, sharedRecord, sections],
   );
 
   // v1.18.0 — drop a module-gated primary slot (Insights) when the account
@@ -127,11 +132,11 @@ export function BottomNav() {
           // v1.36.0 — the fixed slot asks the shared destination model
           // whether sharing covers it, rather than carrying its own answer:
           // Insights is an AI surface and drops out under a switch.
-          (!sharedRecord || isDestinationInSharedRecord(item.href)) &&
+          (!sharedRecord || isDestinationInSharedRecord(item.href, sections)) &&
           (!item.requiresModule ||
             (mounted && user?.modules?.[item.requiresModule] !== false)),
       ),
-    [user?.modules, mounted, sharedRecord],
+    [user?.modules, mounted, sharedRecord, sections],
   );
 
   function isActiveLink(href: string) {

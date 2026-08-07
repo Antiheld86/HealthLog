@@ -235,6 +235,19 @@ test.describe("document vault", () => {
     await expect(openButton(page, "MRT Knie")).toBeVisible();
     await openButton(page, "MRT Knie").click();
     const detail = page.getByRole("dialog", { name: "MRT Knie" });
+    // The sheet is CLOSED is a different claim from the sheet is showing this
+    // document, and only one of them can be made by a name-matched locator.
+    //
+    // The sheet takes its accessible name from the document title and falls
+    // back to "Untitled document" while the detail read is pending, so
+    // `expect(detail).not.toBeVisible()` also passes on an OPEN sheet that has
+    // gone back to its skeleton — measured, not theorised: a slow detail read
+    // reports the named dialog invisible and the unnamed one visible at the
+    // same instant. That resolves immediately instead of waiting, which is the
+    // wait this test needs after a history traversal, and the assertion that
+    // depended on it then reads a URL the app has not finished with. The
+    // deep-link test above already uses the unnamed role for this reason.
+    const sheet = page.getByRole("dialog");
 
     await expect
       .poll(() => new URL(page.url()).searchParams.get("doc"))
@@ -246,15 +259,18 @@ test.describe("document vault", () => {
     expect(new URL(page.url()).searchParams.get("q")).toBe("MRT");
 
     await page.goBack();
-    await expect(detail).not.toBeVisible();
+    await expect(sheet).not.toBeVisible();
     expect(new URL(page.url()).searchParams.get("doc")).toBeNull();
     expect(new URL(page.url()).searchParams.get("view")).toBe("compact");
 
     await page.goForward();
+    // Both: the sheet is open AND it is this document, so Escape is pressed on
+    // a settled sheet rather than on one still resolving its title.
+    await expect(sheet).toBeVisible();
     await expect(detail).toBeVisible();
 
     await page.keyboard.press("Escape");
-    await expect(detail).not.toBeVisible();
+    await expect(sheet).not.toBeVisible();
     await expect
       .poll(() => new URL(page.url()).searchParams.get("doc"))
       .toBeNull();

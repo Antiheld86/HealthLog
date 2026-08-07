@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod/v4";
 
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
@@ -11,7 +11,6 @@ import {
   sanitiseZodIssues,
 } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
-import { prisma } from "@/lib/db";
 import {
   type MedicationImportPayload,
   type MedicationImportProgress,
@@ -98,7 +97,12 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 export const POST = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. The import is additive with duplicates skipped, every
+    // written row tombstones, and the provenance it stamps (`IMPORT`) stays
+    // true under delegation because it describes where the data came from and
+    // not who typed it. C9: the enqueued job outlives this request, so the
+    // kickoff audit row below joins it by `jobId`.
+    const { user, actor } = await requireRecordAuth("manage", "medications");
 
     const { id } = await params;
     // v1.5.5 C-E3-3 — route ownership through the shared helper so the
@@ -106,8 +110,10 @@ export const POST = apiHandler(
     const guard = await assertMedicationOwnership(id, user.id);
     if (guard) return guard;
 
+    // v1.37.0 — C1: keyed on the ACTOR, so a manager burns their own
+    // allowance and cannot collect a fresh one by switching records.
     const rl = await checkRateLimit(
-      `medications:intake:import:${user.id}`,
+      `medications:intake:import:${actor.id}`,
       IMPORT_RATE_LIMIT_MAX,
       IMPORT_RATE_LIMIT_WINDOW_MS,
     );
@@ -147,20 +153,19 @@ export const POST = apiHandler(
       const auditIssues = sanitiseZodIssues(parsed.error.issues, {
         stripValuesFromMessage: true,
       });
-      prisma.auditLog
-        .create({
-          data: {
-            userId: user.id,
-            action: "medications.intake.import.validation-failed",
-            details: JSON.stringify({
-              issues: auditIssues,
-              medicationId: id,
-            }),
-          },
-        })
-        .catch(() => {
-          /* swallow — 422 response is the contract */
-        });
+      // v1.37.0 — through `auditLog()` rather than a bare `prisma.auditLog
+      // .create`, because that helper is the only writer that stamps
+      // `actorUserId`. Filed under the resolved record either way; without the
+      // stamp a manager's malformed payload would read as the owner's own.
+      void auditLog("medications.intake.import.validation-failed", {
+        userId: user.id,
+        details: {
+          issues: auditIssues,
+          medicationId: id,
+        },
+      }).catch(() => {
+        /* swallow — 422 response is the contract */
+      });
       return returnAllZodIssues(parsed.error, 422, {
         errorCode: "medication.intake.import.invalid_format",
       });
@@ -181,7 +186,8 @@ export const POST = apiHandler(
       rollupProcessed: 0,
     };
     const admission = await admitIntakeImportJob({
-      userId: user.id,
+      recordUserId: user.id,
+      actorUserId: actor.id,
       medicationId: id,
       payload: normalized,
       progress,

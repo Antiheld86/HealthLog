@@ -23,19 +23,57 @@
 import type { ZodOpenApiObject } from "zod-openapi";
 import { z } from "zod/v4";
 
+import { accountAccessBlockSchema } from "@/lib/sharing/account-access-schema";
+import { SHARE_DOMAINS } from "@/lib/sharing/scope";
 import {
   inviteGrantSchema,
   switchAccountSchema,
 } from "@/lib/validations/account-sharing";
+import {
+  createManagedProfileSchema,
+  inviteManagedProfileGuardianSchema,
+} from "@/lib/validations/managed-profiles";
 import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
 
-inviteGrantSchema.meta({
+/**
+ * The four request bodies this table publishes, and the one thing to know about
+ * writing another.
+ *
+ * `.meta()` does not annotate the schema it is called on. Zod 4 returns a NEW
+ * schema carrying the metadata and registers THAT one, so a bare
+ * `schema.meta({ id, description })` whose return value is dropped registers an
+ * instance nothing references: the id never becomes a component, the
+ * description never reaches the document, and the call site looks exactly like
+ * a working one. These four were written that way, which is how the clause
+ * below — the one scoping every rule on this endpoint to an INVITED grant —
+ * came to be recorded in the source and absent from the artifact the native
+ * client reads.
+ *
+ * So each one is bound to a const and the const is what the route references.
+ * `openapi-account-sharing-components.test.ts` asserts every id declared in
+ * this file reaches the built document, which is the assertion that would have
+ * caught it.
+ */
+const accountGrantInvite = inviteGrantSchema.meta({
   id: "AccountGrantInvite",
   description:
-    "Offer access to another account on this instance. `identifier` is the invitee's username or e-mail, matched case-insensitively — the same identifier they sign in with. `expiresAt` is optional; omitted or null means the grant runs until somebody ends it. `access` is READ when omitted, so a client that does not know about the field keeps working: READ can read the record and change nothing, WRITE can additionally ADD entries (readings, results, observations, a medication, a marked dose) and can still edit or delete nothing, including its own. The level is fixed when the invitation is written — no endpoint raises a live grant, because that would widen what the delegate accepted without asking them again. The way up is a new invitation the delegate accepts.",
+    "Offer access to another account on this instance. Every sentence here describes an INVITED grant on this endpoint, and nothing else: a Guardian of a managed profile also holds MANAGE over a whole record, but that grant is minted by `POST /api/managed-profiles/{id}/guardians` under its own gate and answers with its own shape, so none of the rules below — the step-up, the transport, the refusals — may be carried across to it. `identifier` is the invitee's username or e-mail, matched case-insensitively — the same identifier they sign in with. `expiresAt` is optional; omitted or null means the grant runs until somebody ends it. `access` is READ when omitted, so a client that does not know about the field keeps working: READ can read the record and change nothing, WRITE can additionally ADD entries (readings, results, observations, a medication, a marked dose) and can still edit or delete nothing, including its own, and MANAGE can additionally change and remove entries, including ones the owner wrote, read the generated insights, and record the record's own health background (allergies, family history). The boundary is record content versus account configuration: MANAGE never reaches login, the second factor, provider connections, API tokens, notification routing, module and threshold configuration, or who else has access. `scope` narrows a READ or WRITE grant to named sections; omitted or null is the entire record, which is what every grant written before v1.37.0 means. An empty array, an unknown key, and any `scope` at all beside `access: MANAGE` are each 422 — management is whole-record by construction. Offering MANAGE additionally requires a fresh second factor when the account has one enrolled, which makes it cookie-only: a Bearer caller is refused with 403 `sharing.invite.manage_browser_only` and should send the person to a browser. The level and the scope are fixed when the invitation is written — no endpoint raises a live grant, because that would widen what the delegate accepted without asking them again. The way up is a new invitation the delegate accepts.",
 });
 
-switchAccountSchema.meta({
+const createManagedProfileRequest = createManagedProfileSchema.meta({
+  id: "CreateManagedProfileRequest",
+  description:
+    "Create a health record for somebody who has no login of their own — a child, a dependent adult, an animal. The caller becomes its first Guardian in the same transaction, through an ordinary MANAGE grant with the new record as grantor, so the profile appears in `accountAccess.accounts` on the next `GET /api/auth/me` and is switched into like any other shared record. `displayName` is the only required text; `dateOfBirth` is an optional `YYYY-MM-DD` and is never synthesised from a year. `locale` and `timezone` belong to the RECORD and not to the Guardian reading it: they decide how the profile's own reminders are worded and when its day starts. Strict — an unexpected field is a 422 rather than an ignored key. Cookie transport only and step-up gated (`requireFreshMfa`, unconditional): a Bearer caller cannot mint a credential-less person and a permanent management relationship, and an account with no second factor enrolled is refused rather than waved through. Rate-limited to ten an hour per caller.",
+});
+
+const inviteManagedProfileGuardianRequest =
+  inviteManagedProfileGuardianSchema.meta({
+    id: "InviteManagedProfileGuardianRequest",
+    description:
+      "Offer somebody else a share in looking after this profile. `identifier` is their username or e-mail, matched case-insensitively. `expiresAt` is an ISO instant WITH an offset — a bare `YYYY-MM-DD` is a 422 — or null for an invitation that runs until somebody ends it. The grant is created PENDING at MANAGE over the whole record; the invitee accepts it on their own invitations card exactly as they would any other, and until they do they do not satisfy the last-Guardian floor. Strict, cookie-only, step-up gated and rate-limited to ten an hour, like every act in this family.",
+  });
+
+const accountSwitchRequest = switchAccountSchema.meta({
   id: "AccountSwitchRequest",
   description:
     "Point this browser session at an account, or (with `accountId: null`) back at its own. Cookie transport only.",
@@ -59,11 +97,23 @@ const grantState = z.enum(["PENDING", "ACTIVE", "EXPIRED", "REVOKED"]).meta({
     "What the grant is right now, resolved server-side against the request clock. Only ACTIVE confers anything. Ordering is stated rather than implied: a revoked grant reads REVOKED even if it also sat past its expiry, and an unaccepted invitation past its expiry reads EXPIRED rather than PENDING because it can no longer be accepted. Clients render this value and never re-derive it from the timestamps.",
 });
 
+const shareSection = z.enum(SHARE_DOMAINS).meta({
+  id: "ShareSection",
+  description:
+    "One section of a health record, as a grant may name it. A closed vocabulary of eight, derived by clustering the delegable read surfaces rather than from the module list — the two answer different questions and never share a spelling. The whole-record case is `null` on the field that carries these, never a member of this enum: a scope that named the whole record would be a narrowing that means its own absence.",
+});
+
 const grantView = z
   .object({
     id: z.string(),
     account: grantParty,
-    access: z.enum(["READ", "WRITE"]),
+    access: z.enum(["READ", "WRITE", "MANAGE"]),
+    scope: z
+      .array(shareSection)
+      .nullable()
+      .describe(
+        "The sections this grant opens, or null for the entire record. Null is a first-class value and the one every grant written before v1.37.0 carries; render it as the whole record, never as a legacy or unknown state. A MANAGE grant always carries null. An EMPTY array means the grant opens nothing — the fail-closed reading of a stored scope the server cannot parse — and the server will refuse every section for it, so render it as nothing rather than as everything. Ordered by the consent screen's own reading order.",
+      ),
     state: grantState,
     invitedAt: z.string(),
     acceptedAt: z.string().nullable(),
@@ -93,10 +143,83 @@ const endedGrantView = grantView
       "A grant that has just been ended, plus what the cleanup did. Nothing is deleted: the row survives as the consent record and DELETE names the act, not the storage.",
   });
 
+/**
+ * v1.37.0 — one Guardian of a managed profile, as the roster publishes them.
+ *
+ * Deliberately narrower than {@link grantView}, and the narrowing is the
+ * privacy decision rather than an omission. `access` and `scope` are constants
+ * for a Guardian grant (MANAGE, whole record) and publishing a constant invites
+ * a client to branch on it; `lastUsedAt`, `revokedAt` and `revokedBy` describe
+ * a history this list is not about; and the party block is the same
+ * `{ id, username, displayName }` one sharing party already sees of another,
+ * with no e-mail.
+ */
+const managedProfileGuardian = z
+  .object({
+    grantId: z
+      .string()
+      .describe(
+        "The grant row. This is the value `DELETE /api/managed-profiles/{id}/guardians/{grantId}` takes.",
+      ),
+    account: grantParty,
+    state: z
+      .enum(["PENDING", "ACTIVE"])
+      .describe(
+        "PENDING means the invitation has been sent and not yet accepted. A PENDING Guardian does NOT count toward the last-Guardian floor: the server counts accepted, unexpired MANAGE grants, so inviting somebody and then trying to leave is still refused until they accept. Say so before the act rather than letting it arrive as a 409.",
+      ),
+    invitedAt: z.string(),
+    acceptedAt: z.string().nullable(),
+  })
+  .meta({
+    id: "ManagedProfileGuardian",
+    description:
+      "One person who looks after a managed profile. Ended grants — revoked or expired — are absent rather than listed with a state: the question is who looks after this record now. The invitation route answers with this same shape, so a Guardian is described one way everywhere; it carries no `expiresAt`, because an expiry bounds one invitation rather than describing who is looking after the record.",
+  });
+
+const managedProfileCreated = z
+  .object({
+    id: z
+      .string()
+      .describe(
+        "The profile's account id — the value `POST /api/account/switch` and the `X-HealthLog-Account` selector take, and the `{id}` in this family's paths.",
+      ),
+    displayName: z.string(),
+    dateOfBirth: z.string().nullable(),
+    locale: z.string(),
+    timezone: z.string(),
+    recordKind: z
+      .literal("managed")
+      .describe(
+        "Always `managed` here. Published so a client can file the new record without re-deriving what it just created; the same value arrives on the account payload's entry for it.",
+      ),
+  })
+  .meta({
+    id: "ManagedProfile",
+    description:
+      "A record somebody looks after, as its creation answers with it. There is deliberately no list endpoint: the profiles a Guardian looks after are the `managed` entries of `accountAccess.accounts` on GET /api/auth/me, because a Guardian's relationship to a profile IS a MANAGE grant. Re-read the account payload after any change here; a client that refreshed only its own panel would leave the new record out of the switcher and the banner until the next boot.",
+  });
+
+const endedGuardianGrant = z
+  .object({
+    grantId: z.string(),
+    revokedAt: z.string(),
+  })
+  .meta({
+    id: "EndedManagedProfileGuardian",
+    description:
+      "What ended, and when. Two fields on purpose: who held it is on the roster the caller re-reads, and the grant row's remaining columns are storage rather than contract. Nothing is deleted — the row survives as the consent record with `revokedBy: GRANTOR`, the managed profile being the grantor of every Guardian grant.",
+  });
+
 const grantListResponse = z
   .object({
     given: z.array(grantView),
     received: z.array(grantView),
+    retentionDays: z
+      .number()
+      .int()
+      .describe(
+        "How long the record's activity feed can still attribute an entry to the person who made it, in days. Resolved from the instance's audit retention setting (365 by default, operator-configurable), NOT a constant. It rides this payload so a client ending an access can state the window in the same breath, without a second request whose timing would decide whether the owner was told.",
+      ),
   })
   .meta({
     id: "AccountGrantList",
@@ -104,14 +227,56 @@ const grantListResponse = z
       "Both directions at once: `given` are the grants this account has offered on its own record, `received` are the ones offered to it. Capped at 100 rows per direction, newest first.",
   });
 
+/**
+ * The record-session context, as the two surfaces a client may ADOPT one from
+ * publish it.
+ *
+ * Both carry it in the response BODY, and that is the rule rather than a
+ * coincidence: every other response reports its context in headers, and those
+ * are for validating a response the client already has, never for learning one.
+ * Two body-carrying sources, both actor surfaces that resolve canonical session
+ * state, and no third path — which is why the 409 refusal below carries only an
+ * error code and never the current epoch.
+ */
+const recordSessionState = z
+  .object({
+    epoch: z
+      .number()
+      .int()
+      .describe(
+        "How many times this browser session's record selector has moved. Monotonic, server-issued, and scoped to this session. Send it back as the `X-HealthLog-Record-Epoch` header on every subsequent same-origin request, and as `expectedEpoch` when switching.",
+      ),
+    scope: z
+      .string()
+      .nullable()
+      .describe(
+        "The account this session is pointed at, or null for its own record. Send it back as the `X-HealthLog-Record-Scope` header, with `self` standing for null.",
+      ),
+  })
+  .meta({
+    id: "RecordSessionState",
+    description:
+      "Where the record-session fence says this browser session is. Cookie transport only — null on Bearer, which carries its selector per request and accumulates no session state to be stale about. A client adopts this and then asserts it on every same-origin request, so a request formed under a context that has since moved is refused rather than served against the wrong record.",
+  });
+
 const switchResponse = z
   .object({
+    recordSession: recordSessionState
+      .nullable()
+      .describe(
+        "The context this session is now in, when the request supplied `expectedEpoch`. Null when it did not: an unconditional switch does not read the new epoch back, and a number computed client-side would be wrong the moment the target equalled the current selector. Adopt this value; do not derive it.",
+      ),
     actingAs: z
       .object({
         accountId: z.string(),
         username: z.string(),
         displayName: z.string().nullable(),
-        access: z.enum(["READ", "WRITE"]),
+        // The stored spelling, straight off the grant row the switch resolved
+        // — not the lower-case resolved level the account payload publishes.
+        // Two spellings of one fact is a wart this endpoint has carried since
+        // v1.36.0; it is documented rather than papered over, because a client
+        // reading either has to know which one it is holding.
+        access: z.enum(["READ", "WRITE", "MANAGE"]),
       })
       .nullable(),
   })
@@ -148,7 +313,12 @@ const recordActivityResponse = z
       .number()
       .int()
       .describe(
-        "How far back this feed can see, in days. Resolved from the instance's audit retention setting (365 by default, operator-configurable), NOT a constant — an instance running a 90-day window sends 90. Show it beside the rows.",
+        "How far back this feed can see, in days. Resolved from the instance's audit retention setting (365 by default, operator-configurable), NOT a constant — an instance running a 90-day window sends 90. The query is bounded to this window, so it is the real limit of the list and not only a caption. Show it beside the rows.",
+      ),
+    truncated: z
+      .boolean()
+      .describe(
+        "True when the read reached its row ceiling, so `entries` is the most recent activity inside the window rather than all of it. A client must say so — a list that stops at its own cap in silence lets the oldest row read as the beginning. False means the list is everything inside the window.",
       ),
   })
   .meta({
@@ -160,6 +330,12 @@ const recordActivityResponse = z
 const sharingRefusal = {
   description:
     "Refused. `meta.errorCode` is `sharing.not_permitted` when the request was made while acting on another account (grant management is never delegable), or `sharing.access.denied` when the caller may not act as the account they named. The latter is byte-identical for an account that does not exist and one that granted nothing — the refusal is not an enumeration oracle.",
+  content: { "application/json": { schema: errorEnvelope } },
+};
+
+const recordSessionChanged = {
+  description:
+    "The record this browser session is on is not the record the request asserted. `meta.errorCode` is `sharing.session.changed`. It is not a refusal of access — the caller may well be entitled to both records — so do not leave the record and do not clear the session. Re-read GET /api/auth/me with a network-only request, adopt the `recordSession` it returns, and retry. The body deliberately carries no epoch or scope: a client may adopt a context from GET /api/auth/me and POST /api/account/switch only, and a refusal is not a third source of truth.",
   content: { "application/json": { schema: errorEnvelope } },
 };
 
@@ -190,49 +366,50 @@ export const accountSelectorParameter: NonNullable<
     "Act on another account's record for THIS request. Bearer transport only — the browser session carries its switch on the session row, and sending this header alongside a cookie is refused rather than ignored. The value is an `accountId` from `accountAccess.accounts` on GET /api/auth/me. It is a SELECTOR and not a permission: the grant is re-checked on every request, so a revocation lands on the next one rather than at the next login, and a selector naming an account that granted nothing is refused with 403 `sharing.access.denied` — byte-identical to one naming an account that does not exist, so the refusal is not an enumeration oracle. NEVER attach it to the sync engine, device or notification registration, or any auth/refresh call: those are about the person holding the token, not the record being read, and the account payload refuses the header outright for exactly that reason.",
 };
 
+/**
+ * The record-session fence's two request headers, published once.
+ *
+ * Cookie transport only, and stated as such in both descriptions: a Bearer
+ * client neither sends these nor receives them back, and the native contract is
+ * unchanged by the fence in every direction. A browser client attaches both to
+ * every same-origin request — there is no per-route opt-in, because a route
+ * that had to remember is a route that will forget.
+ *
+ * Defined here rather than inline for the same reason the account selector
+ * above is: `src/__tests__/record-session-fence-guard.test.ts` holds the header
+ * names to exactly four files — the contract module that declares them, the
+ * server fence that reads them, the client module that attaches them, and this
+ * one, which publishes them.
+ */
+export const recordEpochParameter: NonNullable<
+  NonNullable<ZodOpenApiObject["components"]>["parameters"]
+>[string] = {
+  name: "X-HealthLog-Record-Epoch",
+  in: "header",
+  required: false,
+  schema: { type: "string", maxLength: 15 },
+  description:
+    "The record-session epoch this client believes it is on, taken from `recordSession.epoch` on GET /api/auth/me or POST /api/account/switch. Cookie transport only; a Bearer client neither sends nor receives it. Send the literal `bootstrap` before the account payload has resolved. A browser session that has never been pointed at another record is served without either header, which is what keeps a tab open across the deploy working. Once a session HAS entered a shared record it stays fenced permanently, in both directions: a mismatching epoch is refused with 409 `sharing.session.changed` (reconcile through GET /api/auth/me and retry), and an absent header is refused with 403 `sharing.access.denied` (a client predating the fence, which recovers by leaving the record and reloading).",
+};
+
+export const recordScopeParameter: NonNullable<
+  NonNullable<ZodOpenApiObject["components"]>["parameters"]
+>[string] = {
+  name: "X-HealthLog-Record-Scope",
+  in: "header",
+  required: false,
+  schema: { type: "string", maxLength: 64 },
+  description:
+    "The record this client believes it is inside, taken from `recordSession.scope`, with the literal `self` standing for one's own record. Sent alongside `X-HealthLog-Record-Epoch` on every same-origin request; one without the other is treated as a stale assertion, not as an absent one. Cookie transport only. Both headers are echoed back on any response that actually resolved a record scope, and a client discards a response whose echo contradicts the context it is now on — a response carrying no echo resolved no record scope and is served normally.",
+};
+
 // ── What the client is told it may do ────────────────────────────────────────
 
-const accountAccessEntry = z
-  .object({
-    accountId: z
-      .string()
-      .describe(
-        "The account whose record it is — the value POST /api/account/switch takes, and the value the X-HealthLog-Account header carries.",
-      ),
-    username: z.string(),
-    displayName: z.string().nullable(),
-    access: z.enum(["read", "write"]),
-    canWrite: z
-      .boolean()
-      .describe(
-        "Whether this caller may ADD to that record: true for an accepted WRITE grant, false for a READ one. It never means edit or delete, which stay with the owner at both levels. Resolved server-side. Render it; never derive it.",
-      ),
-  })
-  .meta({
-    id: "AccountAccessEntry",
-    description:
-      "One account this caller may act on. No avatar is published: the avatar bytes are owner-scoped, so a URL here would resolve to a refusal. Clients paint their initials fallback.",
-  });
-
-export const accountAccessBlock = z
-  .object({
-    accounts: z
-      .array(accountAccessEntry)
-      .describe("Every record this caller may open, newest grant first."),
-    active: accountAccessEntry
-      .nullable()
-      .describe(
-        "The record this session is inside right now, resolved to a full entry rather than an id to look up — so a banner can name the person without joining two fields. Null when the caller is in their own record, and ALWAYS null on the Bearer transport: a token carries its selector per request and this endpoint refuses one.",
-      ),
-    canSwitch: z
-      .boolean()
-      .describe("Whether there is anywhere to switch to. Bind it directly."),
-  })
-  .meta({
-    id: "AccountAccess",
-    description:
-      "Account sharing, resolved. This block is the ONLY source of switchability and writability: the server publishes what the caller may do and the client renders it. A client that computed either from grant data would be a second program deciding one person's access to a health record, and the two answer differently the first time an expiry or a revocation appears. Always present — an account nobody has shared with gets an empty list, not a missing field.",
-  });
+export const accountAccessBlock = accountAccessBlockSchema.meta({
+  id: "AccountAccess",
+  description:
+    "Account sharing, resolved. This block is the ONLY source of switchability and writability: the server publishes what the caller may do and the client renders it. A client that computed either from grant data would be a second program deciding one person's access to a health record, and the two answer differently the first time an expiry or a revocation appears. Always present — an account nobody has shared with gets an empty list, not a missing field.",
+});
 
 /**
  * The account payload, documented for the one field this release adds.
@@ -248,6 +425,7 @@ const accountPayload = z
     id: z.string(),
     username: z.string(),
     accountAccess: accountAccessBlock,
+    recordSession: recordSessionState.nullable(),
   })
   .meta({
     id: "AccountPayload",
@@ -329,10 +507,10 @@ export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Account sharing"],
       summary: "Invite an account to this record",
       description:
-        "Offers access to somebody already registered on this instance, at READ or WRITE; the grant confers nothing until they accept it. An identifier that names no account answers 404 — a deliberate disclosure to an authenticated caller on a household instance, rate-limited to 10 invitations an hour, and the alternative (a silent pending row for a mistyped username) is worse. Refused while acting on another account, so a delegate can neither invite nor re-delegate.",
+        "Offers access to somebody already registered on this instance, at READ, WRITE or MANAGE and over the whole record or named sections; the grant confers nothing until they accept it. An identifier that names no account answers 404 — a deliberate disclosure to an authenticated caller on a household instance, rate-limited to 10 invitations an hour, and the alternative (a silent pending row for a mistyped username) is worse. Refused while acting on another account, so a delegate can neither invite nor re-delegate. Offering MANAGE is step-up gated (`requireFreshMfaIfEnrolled`, cookie-only): an enrolled account without a fresh factor gets 401 `auth.stepup.required`, and a Bearer caller gets 403 `sharing.invite.manage_browser_only` before anything else happens, because the gate it would hit resolves through the session cookie and would otherwise answer 'not authenticated' to a caller it had just authenticated.",
       requestBody: {
         required: true,
-        content: { "application/json": { schema: inviteGrantSchema } },
+        content: { "application/json": { schema: accountGrantInvite } },
       },
       responses: {
         ...stdResponses,
@@ -344,7 +522,16 @@ export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        "403": sharingRefusal,
+        "401": {
+          description:
+            "Offering MANAGE from an MFA-enrolled account without a recent second-factor proof (`meta.errorCode: auth.stepup.required`). Re-prove the factor and retry; READ and WRITE invitations are never gated.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "403": {
+          description:
+            "Refused. `meta.errorCode` is `sharing.not_permitted` when the request was made while acting on another account (grant management is never delegable), or `sharing.invite.manage_browser_only` when a Bearer caller tried to offer MANAGE — the step-up that gates it is cookie-only by construction, so the native client cannot mint it and should route the person to a browser rather than surface an error.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
         "404": {
           description: "No account on this instance carries that identifier.",
           content: { "application/json": { schema: errorEnvelope } },
@@ -356,7 +543,7 @@ export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         "422": {
           description:
-            "Validation failed, or the invitation named the caller's own account (`meta.errorCode: sharing.invite.self`).",
+            "Validation failed, the invitation named the caller's own account (`meta.errorCode: sharing.invite.self`), or the scope cannot mean anything (`meta.errorCode: sharing.invite.invalid_scope` from the domain module; the request-shape refusal for an empty array, an unknown section or a scope beside MANAGE arrives as the ordinary multi-issue envelope naming the `scope` field).",
           content: { "application/json": { schema: errorEnvelope } },
         },
         "429": {
@@ -429,7 +616,8 @@ export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: { "application/json": { schema: errorEnvelope } },
         },
         "409": {
-          description: "That access had already ended.",
+          description:
+            "Two refusals share this status. `meta.errorCode: sharing.revoke.already_ended` — that access had already ended, and nothing changed. `meta.errorCode: managed_profile.guardian.required` — the grant is the last active Guardian grant on a managed profile, and ending it would leave a record with nobody able to open it. The floor is real and this is one of the four routes that enforce it; the way past it is to invite another Guardian and wait for them to accept, or to delete the profile.",
           content: { "application/json": { schema: errorEnvelope } },
         },
       },
@@ -463,7 +651,208 @@ export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: { "application/json": { schema: errorEnvelope } },
         },
         "409": {
-          description: "That access had already ended.",
+          description:
+            "Two refusals share this status. `meta.errorCode: sharing.renounce.already_ended` — that access had already ended, and nothing changed. `meta.errorCode: managed_profile.guardian.required` — the caller is the last active Guardian of a managed profile, so handing this access back would strand the record. Invite somebody and wait for them to accept, or delete the profile; a Guardian may not simply walk away from a record that has no self.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
+  "/api/managed-profiles": {
+    post: {
+      tags: ["Account sharing"],
+      summary: "Create a record somebody looks after",
+      description:
+        "The one way a managed profile comes into existence. It has no password, no passkey and no second factor of its own, and it never gains one: an account with no self is reachable only through its Guardians, which is what makes the step-up below a boundary rather than a formality. The creator's own Guardian grant is minted in the same transaction, so the record is switchable immediately and the caller is never left holding a profile nobody administers. Cookie transport only — `requireFreshMfa` resolves through the session cookie, so a Bearer caller is refused as unauthenticated; a native client sends the person to a browser rather than surfacing that as an error.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: createManagedProfileRequest },
+        },
+      },
+      responses: {
+        ...stdResponses,
+        "201": {
+          description: "The new record.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                managedProfileCreated,
+                "ManagedProfileEnvelope",
+              ),
+            },
+          },
+        },
+        "401": {
+          description:
+            "No fresh second-factor proof (`meta.errorCode: auth.stepup.required`), or none enrolled at all (`meta.errorCode: auth.stepup.mfa_not_enrolled`) — this gate is unconditional, so an account without a second factor cannot create a managed profile until it enrols one. The ordinary unauthenticated 401 arrives here too, including for a Bearer caller, whose transport this gate does not read.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "429": {
+          description:
+            "More than ten profiles from one caller within the hour. No error code — rate-limit refusals carry none anywhere in this API; branch on the status. Nothing was created.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
+  "/api/managed-profiles/{id}": {
+    delete: {
+      tags: ["Account sharing"],
+      summary: "Delete a managed record",
+      description:
+        "Ends the record and everything in it. This is the documented way OUT of the last-Guardian floor, which is why it carries no last-Guardian refusal of its own: a Guardian may not strand a record with nobody looking after it, but they may end the record. Any active Guardian may do it, from a cookie session with a fresh second factor.",
+      requestParams: {
+        path: z.object({ id: z.string() }),
+      },
+      responses: {
+        ...stdResponses,
+        "200": {
+          description: "The record is gone.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ deleted: z.literal(true) }),
+                "DeletedManagedProfileEnvelope",
+              ),
+            },
+          },
+        },
+        "401": {
+          description:
+            "No fresh second-factor proof, or none enrolled. Same unconditional gate as creation.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "404": {
+          description:
+            "No such managed profile, or the caller is not one of its Guardians (`meta.errorCode: managed_profile.not_found`). The two are byte-identical, so the refusal is not an enumeration oracle — and an ordinary record whose owner granted somebody MANAGE is not a managed profile, so it answers here too.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
+  "/api/managed-profiles/{id}/guardians": {
+    get: {
+      tags: ["Account sharing"],
+      summary: "Who looks after a managed profile",
+      description:
+        "The live Guardians of one managed profile — every unexpired, unrevoked MANAGE grant on it, PENDING and ACTIVE alike. Cookie transport only, by the same structural argument as the rest of this family: it resolves through the session and never falls through to the Bearer branch. A fresh second factor is NOT required, unlike every act on the same profile: this is a read, and it discloses nothing about a party the caller cannot already read on their own sharing panel. An ACTOR surface — the profile is named in the path and the caller acts as themselves, so it answers from the Guardian's own account rather than only while switched into the record. Anyone who is not an active Guardian of THIS profile gets the same 404 as an unknown id, including a READ, WRITE or MANAGE delegate of an ordinary record: the refusal is not an enumeration oracle. Count the ACTIVE rows to know whether removing a Guardian is possible — a PENDING invitation does not satisfy the last-Guardian floor.",
+      requestParams: {
+        path: z.object({ id: z.string() }),
+      },
+      responses: {
+        ...stdResponses,
+        "200": {
+          description: "The profile's live Guardians, oldest invitation first.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.array(managedProfileGuardian),
+                "ManagedProfileGuardianListEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description:
+            "No such managed profile, or the caller is not one of its Guardians (`meta.errorCode: managed_profile.not_found`). The two are byte-identical.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+    post: {
+      tags: ["Account sharing"],
+      summary: "Invite another Guardian",
+      description:
+        "Offers somebody else a share in looking after this profile, at MANAGE over the whole record. Cookie-only and step-up gated, like every act in this family — the read beside it is not. **Resolve refusals on `meta.errorCode` first and fall back to the status only for the two arms that carry none**, because this route answers 404 twice and the codeless one is the less serious of the two: an identifier that matches no account carries no code, while `managed_profile.not_found` means the caller is not a Guardian of that profile at all. A client branching on the status first would tell somebody to check a spelling when the real answer is that the record is no longer theirs to administer.",
+      requestParams: {
+        path: z.object({ id: z.string() }),
+      },
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: inviteManagedProfileGuardianRequest,
+          },
+        },
+      },
+      responses: {
+        ...stdResponses,
+        "201": {
+          description:
+            "The pending Guardian, in the shape the roster publishes.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                managedProfileGuardian,
+                "ManagedProfileGuardianEnvelope",
+              ),
+            },
+          },
+        },
+        "401": {
+          description:
+            "No fresh second-factor proof, or none enrolled. Same unconditional gate as creation.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "404": {
+          description:
+            "Two refusals share this status and only one carries a code. **No `meta.errorCode`**: no account on this instance carries that identifier — the same deliberate disclosure to an authenticated caller that `POST /api/account/grants` makes, and codeless there too, so this family does not answer one way here and another way one page over. `meta.errorCode: managed_profile.not_found`: no such managed profile, or the caller is not one of its Guardians.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "409": {
+          description:
+            "That account already holds a live grant on this record (`meta.errorCode: managed_profile.guardian.duplicate`). Inviting YOURSELF lands here rather than on a refusal of its own: a Guardian grant's grantor is the profile, never the caller, so naming yourself names an account that already has access — which is both true and the useful sentence.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "422": {
+          description:
+            "Validation failed (the multi-issue envelope; a bare `YYYY-MM-DD` expiry arrives here), or the invitee is itself a managed profile (`meta.errorCode: managed_profile.guardian.managed_invitee`) — a record with no self cannot look after another one.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "429": {
+          description:
+            "More than ten invitations from one caller within the hour. No error code, as above; branch on the status.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
+  "/api/managed-profiles/{id}/guardians/{grantId}": {
+    delete: {
+      tags: ["Account sharing"],
+      summary: "End another Guardian's access",
+      description:
+        "Ends one Guardian grant on this profile — a pending invitation or an accepted one. Another person's, never the caller's own: the service refuses a target grant whose grantee is the caller, and that refusal is the same 404 an unknown profile gets, so a self-removal control would be a button that always fails with a sentence describing something else. A Guardian steps away through `POST /api/account/grants/{id}/renounce` instead, which carries the last-Guardian refusal properly. Count the ACTIVE rows on the roster BEFORE offering this: the floor is stated ahead of the act rather than discovered as a refusal, and on this route it cannot arrive as one — see the 409.",
+      requestParams: {
+        path: z.object({ id: z.string(), grantId: z.string() }),
+      },
+      responses: {
+        ...stdResponses,
+        "200": {
+          description: "What ended, and when.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                endedGuardianGrant,
+                "EndedManagedProfileGuardianEnvelope",
+              ),
+            },
+          },
+        },
+        "401": {
+          description:
+            "No fresh second-factor proof, or none enrolled. Same unconditional gate as creation.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "404": {
+          description:
+            "`meta.errorCode: managed_profile.not_found`, for four situations the caller cannot tell apart: no such profile, no such grant on it, the caller is not one of its Guardians, or the target grant is the caller's OWN. The last is the one to design around — a client must not offer this control on the caller's own row, because the refusal it earns describes a missing profile rather than what actually happened.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "409": {
+          description:
+            "The record would be left with nobody looking after it (`meta.errorCode: managed_profile.guardian.required`). **Not reachable through this route today**, and published anyway rather than silently: the caller must already be one active Guardian and the target is never the caller, so an active target is always a second one — and two is never the one the floor refuses. The routes that DO emit this code are `DELETE /api/account/grants/{id}` (the owner withdrawing the last Guardian grant), `POST /api/account/grants/{id}/renounce` (a Guardian handing their own access back), Guardian account deletion and a data wipe — a client resolves the code the same way wherever it arrives, which is why this arm stays. It is documented here so that a change making it reachable through this route is a change somebody notices.",
           content: { "application/json": { schema: errorEnvelope } },
         },
       },
@@ -474,10 +863,10 @@ export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Account sharing"],
       summary: "Act on a granted record, or return to your own",
       description:
-        "Cookie transport only; a Bearer caller gets 400 (`meta.errorCode: sharing.switch.wrong_transport`) and should send the `X-HealthLog-Account` header on the requests it wants scoped instead. The grant is validated here so the client gets an honest refusal immediately, but the stamp authorises nothing on its own — every following request re-checks the grant. `accountId: null` clears the switch and always works, including from inside a switched session: this endpoint is the way out.",
+        "Cookie transport only; a Bearer caller gets 400 (`meta.errorCode: sharing.switch.wrong_transport`) and should send the `X-HealthLog-Account` header on the requests it wants scoped instead. The grant is validated here so the client gets an honest refusal immediately, but the stamp authorises nothing on its own — every following request re-checks the grant. `accountId: null` clears the switch and always works, including from inside a switched session: this endpoint is the way out, and it is deliberately not fenced for that reason — a session whose context cannot be proved must still be able to leave. Supply `expectedEpoch` to make the write conditional: two tabs switching at once resolve to one monotonic outcome, and the loser is refused with 409 `sharing.session.changed` rather than silently overwriting the winner. Reconcile through GET /api/auth/me and retry once against the reconciled epoch.",
       requestBody: {
         required: true,
-        content: { "application/json": { schema: switchAccountSchema } },
+        content: { "application/json": { schema: accountSwitchRequest } },
       },
       responses: {
         ...stdResponses,
@@ -495,6 +884,7 @@ export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: { "application/json": { schema: errorEnvelope } },
         },
         "403": sharingRefusal,
+        "409": recordSessionChanged,
         "422": {
           description: "Validation failed.",
           content: { "application/json": { schema: errorEnvelope } },

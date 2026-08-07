@@ -26,6 +26,7 @@ import {
 
 import { apiDelete, apiGet, apiPost } from "@/lib/api/api-fetch";
 import { grantDependentKeys, queryKeys } from "@/lib/query-keys";
+import type { ShareDomain } from "@/lib/sharing/scope";
 
 /** The other party to a grant, as far as anyone is told about them. */
 export interface GrantParty {
@@ -36,10 +37,20 @@ export interface GrantParty {
 
 export type GrantState = "PENDING" | "ACTIVE" | "EXPIRED" | "REVOKED";
 
+/** The three levels an invitation can carry, spelled as the wire spells them. */
+export type GrantAccess = "READ" | "WRITE" | "MANAGE";
+
 export interface GrantRow {
   id: string;
   account: GrantParty;
-  access: "READ" | "WRITE";
+  access: GrantAccess;
+  /**
+   * The sections the grant opens, or null for the entire record. Resolved by
+   * the server in the consent screen's reading order; an empty array means the
+   * grant opens nothing, which is the fail-closed reading of a stored scope
+   * the server could not parse.
+   */
+  scope: ShareDomain[] | null;
   state: GrantState;
   invitedAt: string;
   acceptedAt: string | null;
@@ -54,6 +65,16 @@ export interface GrantList {
   given: GrantRow[];
   /** Grants offered to this account on somebody else's. */
   received: GrantRow[];
+  /**
+   * How long the activity feed can still say who entered what, in days —
+   * resolved by the server from the same setting the purge job reads.
+   *
+   * On this payload rather than fetched beside it, because the revoke dialog
+   * has to disclose the window and a client holding a grant to revoke is
+   * already holding the answer. Reading it off a second request made the
+   * sentence appear or not depending on which read landed first.
+   */
+  retentionDays: number;
 }
 
 export interface RecordActivityEntry {
@@ -72,6 +93,15 @@ export interface RecordActivity {
    * the list is everything that ever happened.
    */
   retentionDays: number;
+  /**
+   * True when the read hit its row ceiling, so the list is the most recent
+   * activity inside the window rather than all of it.
+   *
+   * Two different completeness claims, and both have to be stated: the window
+   * bounds how far back, this bounds how many. A list that silently stopped at
+   * its own cap would let the oldest line read as the beginning.
+   */
+  truncated: boolean;
 }
 
 export function useAccountGrants(enabled = true) {
@@ -126,7 +156,16 @@ export interface InviteInput {
    * level has not decided it, and this is the one moment the level can be
    * decided at all.
    */
-  access: "READ" | "WRITE";
+  access: GrantAccess;
+  /**
+   * Which sections it opens, or null for the entire record.
+   *
+   * Required for the same reason as `access` and stated as `null` rather than
+   * omitted, so that "the whole record" is something a caller says out loud.
+   * The server refuses an empty array, an unknown key, and any scope at all
+   * beside MANAGE.
+   */
+  scope: ShareDomain[] | null;
 }
 
 export function useInviteGrant() {

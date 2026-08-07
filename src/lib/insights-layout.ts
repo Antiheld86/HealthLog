@@ -87,7 +87,9 @@ export const ACCEPTED_INSIGHTS_TILE_IDS = [
  * resolver's known-id filter drops anything truly unrecognised.
  */
 export function normalizeInsightsTileId(id: string): string {
-  return LEGACY_INSIGHTS_TILE_ID_ALIASES[id] ?? id;
+  return Object.hasOwn(LEGACY_INSIGHTS_TILE_ID_ALIASES, id)
+    ? LEGACY_INSIGHTS_TILE_ID_ALIASES[id]
+    : id;
 }
 
 /**

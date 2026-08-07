@@ -109,6 +109,7 @@ describe("runRecordIntake — shared C1 failure toast + C2 Undo", () => {
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
+        headers: new Headers(),
         json: vi.fn().mockResolvedValue({ data: { id: "evt-99" } }),
         // The apiFetch wrapper reads the envelope via `text()`.
         text: vi
@@ -154,6 +155,7 @@ describe("runRecordIntake — shared C1 failure toast + C2 Undo", () => {
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
+        headers: new Headers(),
         json: vi.fn().mockResolvedValue({ data: { id: "evt-1" } }),
         text: vi
           .fn()
@@ -186,6 +188,7 @@ describe("runRecordIntake — shared C1 failure toast + C2 Undo", () => {
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
+        headers: new Headers(),
         json: vi.fn().mockResolvedValue({ data: { id: "evt-1" } }),
         text: vi
           .fn()
@@ -212,6 +215,7 @@ describe("runRecordIntake — shared C1 failure toast + C2 Undo", () => {
   it("sends the displayed dose's scheduledFor on the POST so the server marks THAT slot (v1.12.3)", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
+      headers: new Headers(),
       json: vi.fn().mockResolvedValue({ data: { id: "evt-am" } }),
       text: vi
         .fn()
@@ -243,6 +247,7 @@ describe("runRecordIntake — shared C1 failure toast + C2 Undo", () => {
   it("targets the morning vs evening slot purely from the supplied scheduledFor, not the wall-clock", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
+      headers: new Headers(),
       json: vi.fn().mockResolvedValue({ data: { id: "evt" } }),
       text: vi.fn().mockResolvedValue(JSON.stringify({ data: { id: "evt" } })),
     });
@@ -285,6 +290,7 @@ describe("runRecordIntake — shared C1 failure toast + C2 Undo", () => {
   it("omits scheduledFor entirely on a PRN / unscheduled dose (null), preserving the server now-snap path", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
+      headers: new Headers(),
       json: vi.fn().mockResolvedValue({ data: { id: "evt-prn" } }),
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -311,6 +317,7 @@ describe("runRecordIntake — shared C1 failure toast + C2 Undo", () => {
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
+        headers: new Headers(),
         json: vi.fn().mockResolvedValue({ data: {} }),
         text: vi.fn().mockResolvedValue(JSON.stringify({ data: {} })),
       }),
@@ -334,6 +341,7 @@ describe("runLogIntake — manual backdated intake from the Add choice", () => {
   it("posts a backdated takenAt against the medication's intake route and returns true", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
+      headers: new Headers(),
       json: vi.fn(),
       text: vi.fn().mockResolvedValue(""),
     });
@@ -367,6 +375,7 @@ describe("runLogIntake — manual backdated intake from the Add choice", () => {
   it("threads scheduledFor (the chosen slot) so the write routes through the canonical slot upsert", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
+      headers: new Headers(),
       json: vi.fn(),
       text: vi.fn().mockResolvedValue(""),
     });
@@ -394,6 +403,7 @@ describe("runLogIntake — manual backdated intake from the Add choice", () => {
   it("omits takenAt on a skipped log and shows the skipped toast", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
+      headers: new Headers(),
       json: vi.fn(),
       text: vi.fn().mockResolvedValue(""),
     });
@@ -445,6 +455,7 @@ describe("runUndoIntake — shared soft-delete", () => {
   it("reverts via DELETE and confirms on success", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
+      headers: new Headers(),
       text: vi.fn().mockResolvedValue(""),
     });
     vi.stubGlobal("fetch", fetchMock);

@@ -120,6 +120,30 @@ export function withoutDocumentSelectionHref(
   return search ? `${pathname}?${search}` : pathname;
 }
 
+/**
+ * How long to wait before checking that `history.back()` actually happened.
+ *
+ * Long enough for a traversal to commit on a loaded machine, short enough that
+ * a reader who closed the sheet does not see the selection linger in the
+ * address bar. The window is bounded on the other side too: the effect that
+ * arms this cancels it as soon as the sheet re-opens.
+ */
+export const CLOSE_TRAVERSAL_GRACE_MS = 250;
+
+/**
+ * The selection this close was meant to consume is still in the address bar.
+ *
+ * Matched on the id rather than on the presence of `doc`, so a traversal that
+ * landed somewhere carrying a DIFFERENT selection is not mistaken for a
+ * dropped one and stripped.
+ */
+export function documentSelectionSurvivedClose(
+  search: string,
+  documentId: string,
+): boolean {
+  return new URLSearchParams(search).get("doc") === documentId;
+}
+
 export function closeDocumentSelectionHistoryEntry(
   history: {
     readonly state: unknown;
@@ -156,6 +180,27 @@ export function closeDocumentSelectionHistoryEntry(
   );
 }
 
+/**
+ * The selection is being KEPT on purpose, as the way back.
+ *
+ * Maximizing the Coach drawer hands the conversation to `/coach` and carries
+ * `?doc=` with it, so browser-Back can reconstruct the sheet. That is the one
+ * close-shaped transition that must leave the parameter exactly where it is.
+ *
+ * Named, and used by both the close and the check that follows it, because
+ * those two disagreeing is a bug with no symptom until it has one: the check
+ * would strip the return URL a few hundred milliseconds after the close
+ * deliberately preserved it, and whether it won that race was a question about
+ * how fast the machine navigated.
+ */
+export function coachHandoffRetainsSelection(
+  documentId: string,
+  handedOffDocumentId: string | null,
+  closeIntent: CoachCloseIntent | null | undefined,
+): boolean {
+  return handedOffDocumentId === documentId && closeIntent === "navigate";
+}
+
 export function closeDocumentSelectionAfterCoachHandoff(
   history: Parameters<typeof closeDocumentSelectionHistoryEntry>[0],
   pathname: string,
@@ -164,7 +209,9 @@ export function closeDocumentSelectionAfterCoachHandoff(
   handedOffDocumentId: string | null,
   closeIntent: CoachCloseIntent | null | undefined,
 ): string | null {
-  if (handedOffDocumentId === documentId && closeIntent === "navigate") {
+  if (
+    coachHandoffRetainsSelection(documentId, handedOffDocumentId, closeIntent)
+  ) {
     return handedOffDocumentId;
   }
 
@@ -184,14 +231,15 @@ export function DocumentsView() {
   // about it are none of them delegated verbs. Inside somebody else's record
   // the vault reads and nothing more: no upload path, no selection, no bulk
   // bar, no corpus backfill.
-  const { canManage } = useRecordCapabilities();
+  const { canManage, inSharedRecord, sections } = useRecordCapabilities();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const coachLaunch = useCoachLaunch();
 
-  const moduleEnabled = user?.modules?.inboundDocuments === true;
+  const moduleEnabled =
+    inSharedRecord || user?.modules?.inboundDocuments === true;
 
   // UX redirect only — the API routes enforce the gate server-side.
   useEffect(() => {
@@ -377,7 +425,10 @@ export function DocumentsView() {
   );
   const { dropActive } = usePageFileDrop(canManage ? enqueueFiles : undefined);
 
-  const episodes = useIllnessEpisodes(true);
+  const episodes = useIllnessEpisodes(
+    true,
+    !inSharedRecord || sections === null || sections.includes("illness"),
+  );
 
   // Content-search coverage: fire the corpus backfill when indexing is
   // available and some documents are not yet searchable. The list search
@@ -699,6 +750,14 @@ export function DocumentsView() {
       handedOffDocumentRef.current = docParam;
       return;
     }
+    // Read before the call below reassigns the ref: the same inputs the close
+    // itself decides on.
+    const retainedAsReturnUrl = coachHandoffRetainsSelection(
+      docParam,
+      handedOffDocumentRef.current,
+      coachLaunch?.closeIntent,
+    );
+
     handedOffDocumentRef.current = closeDocumentSelectionAfterCoachHandoff(
       window.history,
       pathname,
@@ -707,6 +766,37 @@ export function DocumentsView() {
       handedOffDocumentRef.current,
       coachLaunch?.closeIntent,
     );
+
+    // Nothing was closed: the selection is the way back from `/coach` and is
+    // meant to stay. Checking for it here would delete it.
+    if (retainedAsReturnUrl) return;
+
+    // Consuming the pushed entry is a REQUEST to the browser, not a guarantee.
+    //
+    // `history.back()` is queued against the session history, and a traversal
+    // asked for while another is still settling can be dropped — closing the
+    // sheet immediately after pressing the browser's Forward button is exactly
+    // that shape. Nothing raises when it happens: the sheet is closed, React
+    // is consistent, and the URL still names the document. A reload or a
+    // shared link then re-opens the sheet the reader just closed.
+    //
+    // So the request is checked rather than trusted. If the selection is still
+    // in the address bar shortly afterwards, it is removed the synchronous
+    // way. The guard is the document id, so a traversal that landed on some
+    // other selection is left alone, and the cleanup below cancels the check
+    // the moment the sheet re-opens or the parameter changes — which is what
+    // makes re-opening within the window safe.
+    const verify = window.setTimeout(() => {
+      if (!documentSelectionSurvivedClose(window.location.search, docParam)) {
+        return;
+      }
+      window.history.replaceState(
+        null,
+        "",
+        withoutDocumentSelectionHref(pathname, window.location.search),
+      );
+    }, CLOSE_TRAVERSAL_GRACE_MS);
+    return () => window.clearTimeout(verify);
   }, [
     authLoading,
     coachOwnsDocument,

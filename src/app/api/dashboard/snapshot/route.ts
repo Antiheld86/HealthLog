@@ -54,7 +54,7 @@ export const GET = apiHandler(async () => {
   //
   // The cache cell keys on the resolved id, so the owner's snapshot lands in
   // the owner's cell and a delegated read neither reads nor poisons their own.
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "record");
   annotate({ action: { name: "dashboard.snapshot" } });
 
   const timings: Record<string, number> = {};

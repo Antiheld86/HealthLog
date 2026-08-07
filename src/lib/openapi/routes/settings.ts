@@ -7,7 +7,7 @@
  */
 import { z } from "zod/v4";
 import type { ZodOpenApiObject } from "zod-openapi";
-import { dataEnvelope, stdResponses } from "./shared";
+import { dataEnvelope, recordRefusal, stdResponses } from "./shared";
 
 // v1.16.11 — the one threshold read every dose-status consumer makes
 // (cards, table, take-all-due derivation). `lateMinutes` /
@@ -60,6 +60,7 @@ export const settingsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "Returns the operator-level late/missed minute thresholds that tier an open dose's status, plus the calling user's low-stock runway threshold (days; null = alert off). One endpoint so every threshold consumer reads one shape. Auth via cookie or Bearer.",
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Resolved thresholds.",
           content: {

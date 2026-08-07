@@ -14,7 +14,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod/v4";
 import { apiSuccess, returnAllZodIssues } from "@/lib/api-response";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
 import { locales, defaultLocale, type Locale } from "@/lib/i18n/config";
@@ -26,6 +26,7 @@ import {
   type NarrativePeriod,
 } from "@/lib/insights/narrative/period-narrative";
 import { enqueueNarrativeWarm } from "@/lib/jobs/period-narrative-shared";
+import { delegatedGenerationSuppressed } from "@/lib/sharing/delegated-generation";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +53,10 @@ function narrowLocale(locale: Locale): Locale {
 }
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE-level read: a generated assessment over the whole
+  // record, which is not a section a scoped grant can name. The miss behind it
+  // enqueues nothing while a delegate is holding the request.
+  const { user } = await requireRecordAuth("manage", "record");
   const m = await requireModuleEnabled(user.id, "insights");
   if (!m.enabled) return m.response;
   await requireAssistantSurface("insightStatus");
@@ -87,15 +91,26 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // provider-less account (incl. the no-key demo) gets a non-empty
   // retrospective on the next read. The enqueue's singletonKey + the 20 h
   // freshness window bound this to at most one warm per period per ~day.
+  //
+  // v1.37.0 — except on a delegated request. This route warms unconditionally
+  // rather than on a miss, so without the check a manager's first navigation
+  // here is an egress of the owner's record that the owner did not ask for.
+  // The stale row is still served; only the warm is withheld.
   let revalidating = false;
-  if (!isFresh) {
+  const generationSuppressed = delegatedGenerationSuppressed();
+  if (!isFresh && !generationSuppressed) {
     void enqueueNarrativeWarm({ userId: user.id, period, locale });
     revalidating = true;
   }
 
   annotate({
     action: { name: "insights.narrative" },
-    meta: { period, has_narrative: existing !== null, revalidating },
+    meta: {
+      period,
+      has_narrative: existing !== null,
+      revalidating,
+      generation_suppressed: generationSuppressed,
+    },
   });
 
   return apiSuccess({

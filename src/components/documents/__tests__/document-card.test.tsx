@@ -118,7 +118,20 @@ describe("<DocumentCard>", () => {
     expect(html).toContain("befund.docx");
   });
 
-  it("renders the preview thumbnail image when hasThumbnail is set", () => {
+  it("never emits a browser-issued /api subresource for the thumbnail", () => {
+    // v1.37.0 — this used to assert `src="/api/documents/inbound/…/thumbnail"`
+    // in the markup, and that contract is deliberately gone. A `<img src>` is
+    // issued by the BROWSER, so it cannot carry the record-session assertion,
+    // and the fence refuses an unasserted request on any session that has been
+    // inside a shared record — a thumbnail that silently stops rendering for
+    // good. The bytes now come through the app transport as an object URL
+    // (`useFencedObjectUrl`), which means nothing paints on a server render.
+    //
+    // The assertion is inverted rather than deleted: the markup must contain no
+    // `/api/` reference at all. `src/__tests__/record-fence-headerless-transport-guard.test.ts`
+    // holds the same property across the whole client tree, and
+    // `src/hooks/__tests__/use-fenced-object-url.test.ts` proves the request
+    // really does carry the headers.
     const html = render(
       <DocumentCard
         document={doc({ hasThumbnail: true })}
@@ -128,9 +141,11 @@ describe("<DocumentCard>", () => {
         highlighted={false}
       />,
     );
-    expect(html).toContain('data-slot="document-thumbnail"');
-    expect(html).toContain('src="/api/documents/inbound/doc-1/thumbnail"');
-    expect(html).toContain('loading="lazy"');
+    expect(html).not.toContain("/api/documents");
+    // Until the blob lands the card shows its kind icon, exactly as a card
+    // with no thumbnail does — never a broken image.
+    expect(html).not.toContain('data-slot="document-thumbnail"');
+    expect(html).toContain("lucide-scan-line");
   });
 
   it("shows the kind icon (no thumbnail image) when hasThumbnail is false", () => {

@@ -10,7 +10,7 @@
  */
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
 import { readNote } from "@/lib/crypto/note-cipher";
 import { NextRequest } from "next/server";
@@ -66,7 +66,9 @@ function parseTagList(raw: string | null): string[] {
 }
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE-level read: computed over the whole record, with no
+  // provider anywhere on the path.
+  const { user } = await requireRecordAuth("manage", "record");
   const url = new URL(request.url);
   const rawLimit = Number(url.searchParams.get("limit"));
   const limit =

@@ -70,7 +70,7 @@ const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "measurements");
   annotate({ action: { name: "workouts.list" } });
 
   // v1.18.0 B1 — the workouts surface is a toggleable module. A disabled

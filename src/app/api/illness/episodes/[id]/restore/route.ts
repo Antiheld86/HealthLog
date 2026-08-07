@@ -13,7 +13,7 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import { apiSuccess, apiError, getClientIp } from "@/lib/api-response";
@@ -25,7 +25,9 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 export const POST = apiHandler(
   withIdempotency<[NextRequest, RouteParams]>(async (request, { params }) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Reopening a deleted episode with its day logs
+    // intact; the undo beside a delete the level admits.
+    const { user } = await requireRecordAuth("manage", "illness");
 
     const gate = await requireIllnessEnabled(user.id);
     if (!gate.enabled) return gate.response;

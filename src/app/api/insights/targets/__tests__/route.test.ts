@@ -100,6 +100,7 @@ const SESSION_OK = {
     id: "sess-1",
     expiresAt: new Date(Date.now() + 3_600_000),
     actingAsUserId: null,
+    recordEpoch: 0,
   },
   user: SESSION_USER as never,
 };

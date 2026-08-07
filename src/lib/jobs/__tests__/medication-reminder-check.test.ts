@@ -103,9 +103,9 @@ vi.mock("@/lib/rollups/medication-compliance-rollups", () => ({
   recomputeMedicationComplianceForEvent: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/lib/notifications/reminder-dedup", () => ({
-  hasReminderDedupAnchor: vi.fn().mockResolvedValue(false),
+  claimNotificationEvent: vi.fn().mockResolvedValue(true),
   medicationReminderDedupKey: vi.fn(() => "dedup-key"),
-  writeReminderDedupAnchor: vi.fn().mockResolvedValue(undefined),
+  REMINDER_DEDUP_LOOKBACK_MS: 48 * 60 * 60 * 1000,
 }));
 
 import { handleReminderCheck } from "@/lib/jobs/reminder/medication-reminder-check";

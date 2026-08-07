@@ -33,7 +33,7 @@ import {
 } from "@/lib/validations/series-batch";
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "measurements");
 
   const params = Object.fromEntries(request.nextUrl.searchParams);
   const parsed = seriesBatchQuerySchema.safeParse(params);

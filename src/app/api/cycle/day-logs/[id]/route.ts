@@ -11,9 +11,10 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
+import { overwriteDetails } from "@/lib/sharing/audit-details";
 import {
   apiSuccess,
   apiError,
@@ -32,7 +33,8 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 export const PATCH = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Editing one day of the cycle log.
+    const { user } = await requireRecordAuth("manage", "cycle");
 
     const gate = await requireCycleEnabled(user.id, user.gender);
     if (!gate.enabled) return gate.response;
@@ -44,6 +46,8 @@ export const PATCH = apiHandler(
       select: {
         id: true,
         userId: true,
+        // v1.37.0 — the day the audit row names (C4).
+        date: true,
         sexualActivity: true,
         protectedSex: true,
         pregnancyTest: true,
@@ -156,7 +160,21 @@ export const PATCH = apiHandler(
     await auditLog("cycle.day-log.update", {
       userId: user.id,
       ipAddress: getClientIp(request),
-      details: { dayLogId: id },
+      // C4 in this domain's shape: the date and the fields replaced, named
+      // and never valued. See the sibling create route for why the values
+      // stay off the audit table in this domain.
+      details: {
+        dayLogId: id,
+        date: existing.date,
+        ...overwriteDetails({
+          before: {},
+          after: {},
+          redacted: Object.entries(body)
+            .filter(([, value]) => value !== undefined)
+            .map(([key]) => key)
+            .sort(),
+        }),
+      },
     });
 
     annotate({
@@ -173,7 +191,9 @@ export const PATCH = apiHandler(
 
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Soft delete: the row stays and the sync feed carries
+    // it as a tombstone.
+    const { user } = await requireRecordAuth("manage", "cycle");
 
     const gate = await requireCycleEnabled(user.id, user.gender);
     if (!gate.enabled) return gate.response;

@@ -16,7 +16,7 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { apiError, apiSuccess } from "@/lib/api-response";
 import { requireCycleEnabled } from "@/lib/cycle/gate";
@@ -43,7 +43,7 @@ const DEFAULT_FORWARD_DAYS = 180;
 const MAX_SPAN_DAYS = 400;
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  const { user } = await requireRecordAuth("read", "cycle");
 
   const gate = await requireCycleEnabled(user.id, user.gender);
   if (!gate.enabled) return gate.response;

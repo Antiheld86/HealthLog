@@ -146,6 +146,15 @@ describe("every schema model has a backup verdict", () => {
       "a one-word reason is how a decision stops being reviewable",
     ).toEqual([]);
   });
+
+  it("excludes Guardian egress claims rather than exporting delivery metadata", () => {
+    expect(backupVerdict("NotificationEgressAuthorization")).toBe(
+      "NOT_IN_BACKUP",
+    );
+    expect(NOT_IN_BACKUP_MODELS.NotificationEgressAuthorization).toMatch(
+      /no notification content, credentials, or deduplication key/i,
+    );
+  });
 });
 
 /**

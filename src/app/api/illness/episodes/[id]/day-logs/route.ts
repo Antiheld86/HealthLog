@@ -16,7 +16,7 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -55,7 +55,7 @@ async function loadOwnedEpisode(
 
 export const GET = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireRecordAuth("read");
+    const { user } = await requireRecordAuth("read", "illness");
 
     const gate = await requireIllnessEnabled(user.id);
     if (!gate.enabled) return gate.response;
@@ -138,7 +138,11 @@ export const GET = apiHandler(
 
 export const POST = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE, and this one is an edit wearing a create's verb: the
+    // upsert revives a tombstoned day and replaces that day's symptom links.
+    // Admitted at the level that admits editing, on the condition that the
+    // audit row says what the write replaced.
+    const { user } = await requireRecordAuth("manage", "illness");
 
     const gate = await requireIllnessEnabled(user.id);
     if (!gate.enabled) return gate.response;
@@ -169,7 +173,18 @@ export const POST = apiHandler(
     await auditLog("illness.day-log.upsert", {
       userId: user.id,
       ipAddress: getClientIp(request),
-      details: { dayLogId: result.id, episodeId: id, existed: result.existed },
+      // C3 in this domain's shape: the date, the symptom set that was there
+      // before, and whether the write brought back a day the owner deleted.
+      // Without those three the feed says "updated a day log" about a day
+      // somebody deliberately removed.
+      details: {
+        dayLogId: result.id,
+        episodeId: id,
+        existed: result.existed,
+        date: parsed.data.date,
+        previousSymptoms: result.replaced.previousSymptomKeys,
+        revived: result.replaced.revived,
+      },
     });
 
     annotate({

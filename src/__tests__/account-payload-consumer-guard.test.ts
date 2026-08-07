@@ -80,6 +80,19 @@ const NOT_A_CONSUMER = new Set([
   join(SRC, "app", "api", "auth", "me", "route.ts"),
 ]);
 
+const ACCOUNT_ENTRY_CONSUMER = join(
+  SRC,
+  "components",
+  "dashboard",
+  "looking-after-card.tsx",
+);
+const ACTIVE_RECORD_CONSUMER = join(SRC, "hooks", "use-record-capabilities.ts");
+const ACCOUNT_ACCESS_ADDITIVE_FIELDS = [
+  "level",
+  "sections",
+  "recordKind",
+] as const;
+
 /**
  * Fields with no client reader, each with the reason it is nonetheless
  * correct for the payload to carry it. An entry here is a claim; write one
@@ -191,5 +204,49 @@ describe("account payload consumer guard", () => {
       ).toContain(field);
       expect(reason.length).toBeGreaterThan(20);
     }
+  });
+
+  it("has a consumer that ADOPTS the record-session context, not only a type for it", () => {
+    // `recordSession` is the field the fence hands the browser, and the whole
+    // point of it is that a client adopts the server's value rather than
+    // deriving one. The generic sweep above is satisfied by any read anywhere;
+    // this leg names the two places that have to do the adopting, because a
+    // payload field read only by the transport type is the shape the file's
+    // opening paragraph is about.
+    expect(fields).toContain("recordSession");
+
+    const adopters = [
+      join(SRC, "hooks", "use-account-switch.ts"),
+      join(SRC, "hooks", "use-record-capabilities.ts"),
+    ];
+    let reads = 0;
+    for (const file of adopters) {
+      expect(stripComments(readFileSync(file, "utf8"))).toMatch(
+        /recordSession/,
+      );
+      reads += 1;
+    }
+    expect(reads).toBe(adopters.length);
+    expect(reads).toBeGreaterThan(0);
+  });
+
+  it("has non-zero entry and active-record readers for additive access fields", () => {
+    const entrySource = stripComments(
+      readFileSync(ACCOUNT_ENTRY_CONSUMER, "utf8"),
+    );
+    const activeSource = stripComments(
+      readFileSync(ACTIVE_RECORD_CONSUMER, "utf8"),
+    );
+
+    const readerCount = ACCOUNT_ACCESS_ADDITIVE_FIELDS.reduce(
+      (count, field) => {
+        expect(entrySource).toMatch(new RegExp(`entry\\.${field}(?![\\w$])`));
+        expect(activeSource).toMatch(new RegExp(`active\\.${field}(?![\\w$])`));
+        return count + 2;
+      },
+      0,
+    );
+
+    expect(readerCount).toBeGreaterThan(0);
   });
 });

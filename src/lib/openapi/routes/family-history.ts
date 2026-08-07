@@ -21,7 +21,12 @@ import {
   familyRelationshipEnum,
 } from "@/lib/validations/family-history";
 
-import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
+import {
+  dataEnvelope,
+  errorEnvelope,
+  recordRefusal,
+  stdResponses,
+} from "./shared";
 
 familyHistoryCreateSchema.meta({
   id: "CreateFamilyHistoryRequest",
@@ -73,6 +78,7 @@ export const familyHistoryPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Returns the caller's live (non-deleted) family-history entries, newest-first.",
       requestParams: { query: familyHistoryListQuerySchema },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "The caller's family-history entries.",
           content: {
@@ -99,6 +105,7 @@ export const familyHistoryPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...recordRefusal(),
         "201": {
           description: "Entry created.",
           content: {
@@ -122,6 +129,7 @@ export const familyHistoryPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Returns the entry including its decrypted `note`. Owner-scoped; a cross-user or tombstoned id 404s.",
       requestParams: { path: z.object({ id: z.string() }) },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "The family-history entry.",
           content: {
@@ -150,6 +158,7 @@ export const familyHistoryPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Entry updated.",
           content: {
@@ -172,6 +181,7 @@ export const familyHistoryPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Stamps `deletedAt` (tombstone). Idempotent — a re-delete is a no-op. Returns the `{ deleted: true }` envelope. Audits as `family-history.delete`. Owner-scoped.",
       requestParams: { path: z.object({ id: z.string() }) },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Soft-deleted.",
           content: {

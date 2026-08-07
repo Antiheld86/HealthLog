@@ -24,7 +24,12 @@ import {
   allergyStatusEnum,
 } from "@/lib/validations/allergy";
 
-import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
+import {
+  dataEnvelope,
+  errorEnvelope,
+  recordRefusal,
+  stdResponses,
+} from "./shared";
 
 allergyCreateSchema.meta({
   id: "CreateAllergyRequest",
@@ -80,6 +85,7 @@ export const allergyPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Returns the caller's live (non-deleted) allergy/intolerance records, newest-first. `includeInactive=false` returns only ACTIVE records.",
       requestParams: { query: allergyListQuerySchema },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "The caller's allergy records.",
           content: {
@@ -101,6 +107,7 @@ export const allergyPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: allergyCreateSchema } },
       },
       responses: {
+        ...recordRefusal(),
         "201": {
           description: "Allergy created.",
           content: {
@@ -121,6 +128,7 @@ export const allergyPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Returns the record including its decrypted `reaction` + `note`. Owner-scoped; a cross-user or tombstoned id 404s.",
       requestParams: { path: z.object({ id: z.string() }) },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "The allergy record.",
           content: {
@@ -144,6 +152,7 @@ export const allergyPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: allergyUpdateSchema } },
       },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Allergy updated.",
           content: {
@@ -163,6 +172,7 @@ export const allergyPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Stamps `deletedAt` (tombstone). Idempotent — a re-delete is a no-op. Returns the `{ deleted: true }` envelope. Audits as `allergy.delete`. Owner-scoped.",
       requestParams: { path: z.object({ id: z.string() }) },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "Soft-deleted.",
           content: {

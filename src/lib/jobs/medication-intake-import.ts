@@ -2,6 +2,7 @@ import type { Job, JobWithMetadata } from "pg-boss";
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
 
 import { invalidateUserMedications } from "@/lib/cache/invalidate";
+import { auditLog } from "@/lib/auth/audit";
 import { prisma, toJson } from "@/lib/db";
 import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { consumeImportedIntakesBatch } from "@/lib/medications/inventory/consumption";
@@ -584,14 +585,14 @@ async function processNextChunk(
 
       const row = await tx.medicationIntakeImportJob.findUnique({
         where: { id: jobId },
-        include: { user: { select: { timezone: true } } },
+        include: { recordUser: { select: { timezone: true } } },
       });
       if (!row || row.status === "done" || row.status === "failed") {
         return {
           terminal: true,
           finalized: false,
           result: null,
-          userId: row?.userId ?? null,
+          userId: row?.recordUserId ?? null,
         };
       }
 
@@ -604,9 +605,9 @@ async function processNextChunk(
         );
         await recomputeTouchedDays(
           tx,
-          row.userId,
+          row.recordUserId,
           row.medicationId,
-          row.user.timezone,
+          row.recordUser.timezone,
           rollupDays,
         );
         const finalizedProgress: MedicationImportProgress = {
@@ -629,7 +630,7 @@ async function processNextChunk(
             terminal: false,
             finalized: false,
             result: null,
-            userId: row.userId,
+            userId: row.recordUserId,
           };
         }
         const result: MedicationImportResult = {
@@ -644,18 +645,17 @@ async function processNextChunk(
             : { skippedDetailsOmitted: progress.skippedDetailsOmitted }),
         };
         const completedAt = new Date();
-        await tx.auditLog.create({
-          data: {
-            userId: row.userId,
-            action: "medication.intake.import",
-            details: JSON.stringify({
-              jobId: row.id,
-              medicationId: row.medicationId,
-              imported: result.imported,
-              skipped: result.skipped,
-              skipReasons: result.skipReasons,
-              total: progress.total,
-            }),
+        await auditLog("medication.intake.import", {
+          client: tx,
+          userId: row.recordUserId,
+          actorUserId: row.actorUserId,
+          details: {
+            jobId: row.id,
+            recordUserId: row.recordUserId,
+            actorUserId: row.actorUserId,
+            imported: result.imported,
+            skipped: result.skipped,
+            total: progress.total,
           },
         });
         await tx.medicationIntakeImportJob.update({
@@ -673,7 +673,7 @@ async function processNextChunk(
           terminal: true,
           finalized: true,
           result,
-          userId: row.userId,
+          userId: row.recordUserId,
         };
       }
 
@@ -714,7 +714,7 @@ async function processNextChunk(
           const takenAt =
             entry.takenAt === null ? null : new Date(entry.takenAt);
           return {
-            userId: row.userId,
+            userId: row.recordUserId,
             medicationId: resolveMedicationId(entry),
             // The scheduled slot and the time taken are two separate facts, and
             // the export states both. Writing the take into both columns — which
@@ -774,7 +774,7 @@ async function processNextChunk(
       for (const [medicationId, events] of consumedByMedication) {
         await consumeImportedIntakesBatch({
           client: tx,
-          userId: row.userId,
+          userId: row.recordUserId,
           medicationId,
           events,
         });
@@ -783,7 +783,7 @@ async function processNextChunk(
       const touchedDays = created.map((event) =>
         encodeTouchedDay(
           event.medicationId,
-          dayKeyForScheduledFor(event.scheduledFor, row.user.timezone),
+          dayKeyForScheduledFor(event.scheduledFor, row.recordUser.timezone),
         ),
       );
       // Two different facts, counted apart. The Map collapse above is entries
@@ -818,7 +818,7 @@ async function processNextChunk(
         terminal: false,
         finalized: false,
         result: null,
-        userId: row.userId,
+        userId: row.recordUserId,
       };
     },
     { timeout: 60_000 },

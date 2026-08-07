@@ -59,8 +59,15 @@ export interface ApplyCanonicalSlotWriteInput {
    * the worker-minted pending row like every other write, and a fresh
    * create keeps the historical reminder provenance. `APPLE_HEALTH`
    * (v1.28) is the bulk route's HealthKit dose-event import.
+   *
+   * v1.37.0 — `IMPORT` joined the union because the per-event edit route
+   * re-creates a moved dose and must carry the ORIGINAL row's provenance onto
+   * the converged row (C8). A dose that came in through a history import and
+   * had its time corrected is still an imported dose; stamping it `WEB`
+   * because a human moved it is a small lie the compliance history then
+   * repeats forever.
    */
-  createSource: "WEB" | "API" | "REMINDER" | "APPLE_HEALTH";
+  createSource: "WEB" | "API" | "REMINDER" | "APPLE_HEALTH" | "IMPORT";
   /**
    * v1.36.x — refuse a write that would change an outcome the owner has
    * already recorded, instead of applying it last-write-wins.

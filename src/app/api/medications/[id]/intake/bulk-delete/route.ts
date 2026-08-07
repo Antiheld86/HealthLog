@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -59,17 +59,22 @@ const BULK_DELETE_WINDOW_MS = 60_000;
  */
 export const POST = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Tombstoning a run of doses; every row stays and the
+    // sync feed carries each one.
+    const { user, actor } = await requireRecordAuth("manage", "medications");
 
     const { id } = await params;
     const guard = await assertMedicationOwnership(id, user.id);
     if (guard) return guard;
 
-    // v1.5.5 F-1 H-6 — per-user cap matches the glp1 POST so a caller
+    // v1.5.5 F-1 H-6 — per-caller cap matches the glp1 POST so a caller
     // firing repeated 500-id bulk deletes cannot pin the per-dayKey
     // recompute path.
+    //
+    // v1.37.0 — C1: keyed on the ACTOR, so a manager burns their own
+    // allowance and cannot collect a fresh one by switching records.
     const rl = await checkRateLimit(
-      `medication-intake-bulk-delete:${user.id}`,
+      `medication-intake-bulk-delete:${actor.id}`,
       BULK_DELETE_RATE_LIMIT,
       BULK_DELETE_WINDOW_MS,
     );

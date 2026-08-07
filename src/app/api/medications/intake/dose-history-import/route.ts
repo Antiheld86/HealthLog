@@ -29,7 +29,7 @@
  */
 import { NextRequest } from "next/server";
 
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiError, apiSuccess, getClientIp } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
@@ -97,7 +97,11 @@ function describePlan(plan: AutoExportPlan) {
 }
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireAuth();
+  // v1.37.0 — MANAGE. The whole-regimen form of the per-medication import:
+  // same worker, same additive-with-skip-duplicates properties, same honest
+  // `IMPORT` provenance. C9: the kickoff audit row below joins the job by id,
+  // so work that outlives the grant is still attributable.
+  const { user, actor } = await requireRecordAuth("manage", "medications");
   const dryRunParam = new URL(request.url).searchParams.get("dryRun");
   const dryRun = dryRunParam === "1" || dryRunParam === "true";
   annotate({
@@ -105,8 +109,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
     meta: { dry_run: dryRun },
   });
 
+  // v1.37.0 — C1: keyed on the ACTOR. The bucket is shared with the other
+  // import surfaces, so keying it on the record would let a manager consume
+  // the owner's hourly import budget.
   const rl = await checkRateLimit(
-    `import:${user.id}`,
+    `import:${actor.id}`,
     RATE_LIMIT_MAX,
     RATE_LIMIT_WINDOW_MS,
   );
@@ -190,7 +197,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
   };
 
   const admission = await admitIntakeImportJob({
-    userId: user.id,
+    recordUserId: user.id,
+    actorUserId: actor.id,
     medicationId: null,
     payload,
     progress,

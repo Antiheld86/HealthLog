@@ -84,7 +84,7 @@ export const GET = apiHandler(async () => {
   // owner's list would fall back to default order — a preference that cannot
   // apply is not a preference, it is noise. `/medications` is a shared
   // destination, so this is a list a delegate really does see.
-  const { user } = await requireRecordAuth("read");
+  const { user } = await requireRecordAuth("read", "medications");
 
   // 5-minute TTL matches the dashboard-widgets / insights-layout caches; the
   // blob changes only on a view toggle or an order save, which invalidates via

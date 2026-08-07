@@ -20,8 +20,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NextRequest, NextResponse } from "next/server";
 
-import { cookieJar, headerJar } from "./mock-next-headers";
-import { getPrismaClient, truncateAllTables } from "./setup";
+import { assertRecordContext, cookieJar, headerJar } from "./mock-next-headers";
+import { getPrismaClient, truncateAllTables, switchSessionTo } from "./setup";
 
 vi.mock("next/headers", async () => {
   const { cookieJar, headerJar } = await import("./mock-next-headers");
@@ -71,6 +71,11 @@ async function signIn(userId: string) {
     data: { userId, expiresAt: new Date(Date.now() + 60_000) },
   });
   cookieJar.set("healthlog_session", session.id);
+  // A new session is a new browser, and a new browser has adopted nothing. The
+  // reset matters where one test drives two of them: a stale adopted epoch
+  // carried across would make the second browser's first switch lose a
+  // compare-and-set it was never in.
+  adoptedEpoch = 0;
   return session;
 }
 
@@ -105,12 +110,14 @@ async function listGrants(): Promise<Response> {
 async function invite(
   identifier: string,
   expiresAt?: string | null,
+  extra: Record<string, unknown> = {},
 ): Promise<Response> {
   const { POST } = await import("@/app/api/account/grants/route");
   return POST(
     jsonRequest("http://localhost/api/account/grants", "POST", {
       identifier,
       ...(expiresAt === undefined ? {} : { expiresAt }),
+      ...extra,
     }),
   );
 }
@@ -145,17 +152,43 @@ async function renounce(grantId: string): Promise<Response> {
   );
 }
 
+/**
+ * Switch the way the shipped browser switches: name the epoch the client
+ * believes it is on, and ADOPT the context the response publishes.
+ *
+ * v1.37.0 — the adoption is not decoration. `POST /api/account/switch` and
+ * `GET /api/auth/me` are the only two responses a client may learn its record
+ * context from, and every same-origin request after a switch has to assert it
+ * or the record-session fence refuses. A fixture that switched and did not
+ * adopt would be testing the fence's pre-fence-bundle arm rather than the
+ * handshake this file is about — so the round trip is exercised here, which is
+ * the property the feature actually ships.
+ */
 async function switchTo(accountId: string | null): Promise<Response> {
   const { POST } = await import("@/app/api/account/switch/route");
-  return POST(
-    jsonRequest("http://localhost/api/account/switch", "POST", { accountId }),
+  const response = await POST(
+    jsonRequest("http://localhost/api/account/switch", "POST", {
+      accountId,
+      expectedEpoch: adoptedEpoch,
+    }),
   );
+  if (response.status === 200) {
+    const { recordSession } = (await response.clone().json()).data;
+    if (recordSession) {
+      adoptedEpoch = recordSession.epoch;
+      assertRecordContext(recordSession.epoch, recordSession.scope);
+    }
+  }
+  return response;
 }
+
+/** The epoch this fixture's browser currently believes it is on. */
+let adoptedEpoch = 0;
 
 /** A delegable read, exactly as a migrated route builds one. */
 const delegableRead: (request: NextRequest) => Promise<Response> = apiHandler(
   async () => {
-    const { user, actor } = await requireRecordAuth("read");
+    const { user, actor } = await requireRecordAuth("read", "measurements");
     const rows = await prisma.measurement.findMany({
       where: { userId: user.id },
       orderBy: { value: "asc" },
@@ -203,10 +236,12 @@ beforeEach(async () => {
   await truncateAllTables(getPrismaClient());
   cookieJar.clear();
   headerJar.clear();
+  // Every test starts on a fresh browser that has adopted nothing.
+  adoptedEpoch = 0;
 });
 
 describe("the handshake, end to end", () => {
-  it("carries a household from invitation to revocation and leaves the right rows", async () => {
+  it("[J1-adult-levels-lifecycle] carries a household from invitation to revocation and leaves the right rows", async () => {
     const owner = await makeUser("owner");
     const delegate = await makeUser("delegate");
     await seedWeight(owner.id, 81);
@@ -274,10 +309,7 @@ describe("the handshake, end to end", () => {
     // And the delegate's next request is refused on the grant, independently
     // of the session having been cleared.
     cookieJar.set("healthlog_session", delegateSession.id);
-    await getPrismaClient().session.update({
-      where: { id: delegateSession.id },
-      data: { actingAsUserId: owner.id },
-    });
+    await switchSessionTo(delegateSession.id, owner.id);
     const afterRevoke = await readRecord();
     expect(afterRevoke.status).toBe(403);
     expect((await afterRevoke.json()).meta.errorCode).toBe(
@@ -462,6 +494,197 @@ describe("who may do what to a grant", () => {
   });
 });
 
+describe("what an invitation opens, over the real route", () => {
+  /**
+   * The sections and the third level, from the posted body to the stored
+   * column. The unit suite reads the `data` object handed to Prisma; this
+   * reads the ROW, which is the only thing that proves the two nulls did not
+   * swap places on the way down — a JSON `null` in that column resolves
+   * fail-closed to "opens nothing", one keystroke from the value that means
+   * "opens everything".
+   */
+  it("stores the picked sections and hands them back on the grant view", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await signIn(owner.id);
+
+    const response = await invite(delegate.username, undefined, {
+      scope: ["labs", "medications"],
+    });
+    expect(response.status).toBe(201);
+    expect((await response.json()).data.scope).toEqual(["medications", "labs"]);
+
+    const row = await getPrismaClient().accountGrant.findFirstOrThrow({
+      where: { grantorId: owner.id },
+    });
+    expect(row.scopeJson).toEqual(["labs", "medications"]);
+  });
+
+  it("stores the whole record as a SQL null, not as a JSON null", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await signIn(owner.id);
+
+    expect((await invite(delegate.username)).status).toBe(201);
+
+    // Read through raw SQL: the Prisma client surfaces both nulls as `null`
+    // in JS, so the only way to tell "no scope" from "the JSON value null" is
+    // to ask the column itself. The distinction is the whole difference
+    // between a grant that opens everything and one that opens nothing.
+    const rows = await getPrismaClient().$queryRaw<
+      { is_null: boolean }[]
+    >`SELECT scope_json IS NULL AS is_null FROM account_grants WHERE grantor_id = ${owner.id}`;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].is_null).toBe(true);
+  });
+
+  it("refuses an unknown section and writes nothing", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await signIn(owner.id);
+
+    const response = await invite(delegate.username, undefined, {
+      scope: ["labs", "bank_details"],
+    });
+    expect(response.status).toBe(422);
+    expect(await getPrismaClient().accountGrant.count()).toBe(0);
+  });
+
+  it("refuses a scope beside MANAGE and writes nothing", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await signIn(owner.id);
+
+    const response = await invite(delegate.username, undefined, {
+      access: "MANAGE",
+      scope: ["labs"],
+    });
+    expect(response.status).toBe(422);
+    expect(await getPrismaClient().accountGrant.count()).toBe(0);
+  });
+
+  it("refuses MANAGE over Bearer with a code the client can act on", async () => {
+    // The decided consequence of a cookie-only step-up. Not a bug to work
+    // around: the native client cannot offer management of a health record,
+    // and it is told so in a code rather than by an authentication error on a
+    // request that authenticated fine.
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    const token = await mintToken(owner.id);
+    cookieJar.clear();
+    headerJar.set("authorization", `Bearer ${token}`);
+
+    const response = await invite(delegate.username, undefined, {
+      access: "MANAGE",
+    });
+    expect(response.status).toBe(403);
+    expect((await response.json()).meta.errorCode).toBe(
+      "sharing.invite.manage_browser_only",
+    );
+    expect(await getPrismaClient().accountGrant.count()).toBe(0);
+  });
+
+  it("lets the same Bearer caller keep minting the two levels it always could", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    const token = await mintToken(owner.id);
+    cookieJar.clear();
+    headerJar.set("authorization", `Bearer ${token}`);
+
+    const response = await invite(delegate.username, undefined, {
+      access: "WRITE",
+      scope: ["measurements"],
+    });
+    expect(response.status).toBe(201);
+    expect((await response.json()).data.access).toBe("WRITE");
+  });
+
+  it("mints MANAGE from a browser session that carries no second factor", async () => {
+    // `requireFreshMfaIfEnrolled` gates the enrolled cohort only. An account
+    // with no second factor cannot produce a fresh-factor proof, so gating it
+    // would lock it out of a level it is entitled to offer — the same posture
+    // account deletion and the encrypted export already take.
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await signIn(owner.id);
+
+    const response = await invite(delegate.username, undefined, {
+      access: "MANAGE",
+    });
+    expect(response.status).toBe(201);
+
+    const row = await getPrismaClient().accountGrant.findFirstOrThrow({
+      where: { grantorId: owner.id },
+    });
+    expect(row.access).toBe("MANAGE");
+    expect(row.scopeJson).toBeNull();
+  });
+
+  it("refuses MANAGE from an enrolled session whose factor has gone stale", async () => {
+    // The step-up itself, over the real gate. The session below has a
+    // confirmed TOTP secret and a `mfaVerifiedAt` well outside the window, so
+    // the only thing standing between it and a manage grant is the gate.
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await getPrismaClient().user.update({
+      where: { id: owner.id },
+      data: { totpConfirmedAt: new Date() },
+    });
+    const session = await signIn(owner.id);
+    await getPrismaClient().session.update({
+      where: { id: session.id },
+      data: { mfaVerifiedAt: new Date(Date.now() - 60 * 60 * 1000) },
+    });
+
+    const response = await invite(delegate.username, undefined, {
+      access: "MANAGE",
+    });
+    expect(response.status).toBe(401);
+    expect((await response.json()).meta.errorCode).toBe("auth.stepup.required");
+    expect(await getPrismaClient().accountGrant.count()).toBe(0);
+  });
+
+  it("mints MANAGE once that same session has proved the factor", async () => {
+    // The other half, so the leg above proves a GATE rather than a broken
+    // route: same account, same enrolment, a fresh stamp.
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await getPrismaClient().user.update({
+      where: { id: owner.id },
+      data: { totpConfirmedAt: new Date() },
+    });
+    const session = await signIn(owner.id);
+    await getPrismaClient().session.update({
+      where: { id: session.id },
+      data: { mfaVerifiedAt: new Date() },
+    });
+
+    const response = await invite(delegate.username, undefined, {
+      access: "MANAGE",
+    });
+    expect(response.status).toBe(201);
+    expect(await getPrismaClient().accountGrant.count()).toBe(1);
+  });
+
+  it("does not ask a read invitation for a factor at all", async () => {
+    // Same stale-factor account. Reducing the friction to the level that
+    // needs it is the point; an owner sharing a reading re-proves nothing.
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    await getPrismaClient().user.update({
+      where: { id: owner.id },
+      data: { totpConfirmedAt: new Date() },
+    });
+    const session = await signIn(owner.id);
+    await getPrismaClient().session.update({
+      where: { id: session.id },
+      data: { mfaVerifiedAt: new Date(Date.now() - 60 * 60 * 1000) },
+    });
+
+    expect((await invite(delegate.username)).status).toBe(201);
+  });
+});
+
 describe("grant management cannot be reached from inside a switch", () => {
   /**
    * The property the design states as "a delegate must never grant, widen, or
@@ -518,7 +741,7 @@ describe("grant management cannot be reached from inside a switch", () => {
 });
 
 describe("the switch endpoint", () => {
-  it("refuses a switch into a grant that is not active", async () => {
+  it("[J1-adult-levels-lifecycle] refuses a switch into a grant that is not active", async () => {
     const owner = await makeUser("owner");
     const delegate = await makeUser("delegate");
     await signIn(owner.id);

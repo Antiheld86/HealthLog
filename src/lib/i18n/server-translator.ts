@@ -24,7 +24,16 @@ export function getServerTranslator(locale: Locale): ServerTranslator {
       if (value === undefined) return key;
       if (params) {
         for (const [k, v] of Object.entries(params)) {
-          value = value.replace(new RegExp(`\\{${k}\\}`, "g"), String(v));
+          // A REPLACER FUNCTION, not a replacement string. `String.replace`
+          // reads `$&`, `$\``, `$'`, `$1` and `$$` out of a replacement
+          // STRING, so a value carrying one of them rewrites the sentence
+          // around it: a display name of `$\'` splices everything after the
+          // placeholder back in, and `$\`` splices everything before it. Every
+          // interpolated value here is user-controlled — a person's display
+          // name is the common one, and it lands in sentences on the sharing
+          // panel that describe who did what. A function replacement is
+          // substituted verbatim and has no `$` grammar at all.
+          value = value.replace(new RegExp(`\\{${k}\\}`, "g"), () => String(v));
         }
       }
       return value;

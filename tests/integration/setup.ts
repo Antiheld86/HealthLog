@@ -4,6 +4,7 @@
  * environment-setup.ts before application modules load.
  */
 import { prisma } from "@/lib/db";
+import { assertRecordContext } from "./mock-next-headers";
 import type { PrismaClient } from "@/generated/prisma/client";
 
 /**
@@ -117,4 +118,32 @@ export async function truncateAllTables(client: PrismaClient): Promise<void> {
       skipDuplicates: true,
     });
   }
+}
+
+/**
+ * v1.37.0 — point a session at a record the way a test needs it pointed, and
+ * leave the request headers agreeing with the row.
+ *
+ * Every sharing fixture used to do this with a bare `session.update`. That is
+ * still the write, but since the record-session fence a cookie request also has
+ * to ASSERT the context it believes it is in: a session pointed at a record and
+ * a request carrying no assertion is a bundle that predates the fence, and it is
+ * refused with 403 before any resolver decides anything. A fixture that switched
+ * and did not assert would therefore be testing the deploy-compatibility arm
+ * rather than whatever it was written for.
+ *
+ * The assertion is read back off the row rather than computed, so it is
+ * truthful by construction and cannot drift from the trigger's idea of the
+ * epoch. Tests that WANT a stale or absent assertion set the headers themselves;
+ * those live in `tests/integration/record-session-fence*.test.ts`.
+ */
+export async function switchSessionTo(
+  sessionId: string,
+  actingAsUserId: string | null,
+): Promise<void> {
+  const row = await prisma.session.update({
+    where: { id: sessionId },
+    data: { actingAsUserId },
+  });
+  assertRecordContext(row.recordEpoch, row.actingAsUserId);
 }

@@ -57,6 +57,9 @@ const OWNER = {
   username: "grandma",
   displayName: "Margarethe",
   access: "read" as const,
+  level: "read" as const,
+  sections: null,
+  recordKind: "shared" as const,
   canWrite: false,
 };
 
@@ -117,13 +120,43 @@ describe("<SharedRecordBanner>", () => {
   it("drops the read-only line when the server says the grant can write", () => {
     // Resolved server-side. The banner never decides what a grant permits; the
     // day a WRITE grant exists this line stops claiming otherwise on its own.
-    const writable = { ...OWNER, access: "write" as const, canWrite: true };
+    const writable = {
+      ...OWNER,
+      access: "write" as const,
+      level: "write" as const,
+      canWrite: true,
+    };
     const html = render(
       { accounts: [writable], active: writable, canSwitch: true },
       <SharedRecordBanner />,
     );
     expect(html).toContain('data-slot="shared-record-banner"');
     expect(html).not.toContain("read it, not change it");
+  });
+
+  it("names MANAGE and a managed profile without reducing either to add access", () => {
+    const managedProfile = {
+      ...OWNER,
+      accountId: "managed-profile",
+      access: "write" as const,
+      level: "manage" as const,
+      recordKind: "managed" as const,
+      canWrite: true,
+    };
+    const html = render(
+      {
+        accounts: [managedProfile],
+        active: managedProfile,
+        canSwitch: true,
+      },
+      <SharedRecordBanner />,
+    );
+
+    expect(html).toContain('data-access-level="manage"');
+    expect(html).toContain('data-record-kind="managed"');
+    expect(html).toContain("Managed profile");
+    expect(html).toContain("change or remove what is in it");
+    expect(html).not.toContain("add to it, but not change");
   });
 
   it("uses the warning register, not a subtle tint", () => {
@@ -135,6 +168,19 @@ describe("<SharedRecordBanner>", () => {
     );
     expect(html).toContain("bg-warning/15");
     expect(html).toContain("border-warning/40");
+  });
+
+  it("keeps the warning-banner context copy at the foreground contrast floor", () => {
+    const html = render(
+      { accounts: [OWNER], active: OWNER, canSwitch: true },
+      <SharedRecordBanner />,
+    );
+    const context = html.match(
+      /<span[^>]*data-slot="shared-record-banner-context"[^>]*>/,
+    )?.[0];
+
+    expect(context).toContain("text-foreground");
+    expect(context).not.toContain("text-muted-foreground");
   });
 });
 

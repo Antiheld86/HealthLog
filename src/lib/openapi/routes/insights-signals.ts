@@ -13,7 +13,7 @@
 import { z } from "zod/v4";
 import type { ZodOpenApiObject } from "zod-openapi";
 
-import { dataEnvelope, stdResponses } from "./shared";
+import { dataEnvelope, recordRefusal, stdResponses } from "./shared";
 
 const healthStatusResponse = z
   .object({
@@ -115,6 +115,7 @@ export const insightsSignalPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "Surfaces vitals drifting from the user's personal normal — out-of-band deviations from the personal-baseline engine plus dated, sustained level shifts from the changepoint detector. Pure compute over the rollup tier; awareness only, never a diagnosis. Requires the insights module. Cookie or Bearer auth.",
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "The drift summary.",
           content: {
@@ -137,6 +138,7 @@ export const insightsSignalPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "Summarises the last ~30 nights of the per-night sleep-breathing-disturbance index plus device-flagged events into a calm awareness read. A screening signal only — never a HealthLog diagnosis. Requires the insights module. Cookie or Bearer auth.",
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "The breathing-screening summary.",
           content: {
@@ -159,6 +161,7 @@ export const insightsSignalPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "Pairs the two most-recent numeric lab panels and reports each shared analyte's signed delta plus its reference-band standing. Absent when there are fewer than two panels or no analyte is shared. Neutral framing, never a diagnosis. Cookie or Bearer auth.",
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "The lab-change summary.",
           content: {

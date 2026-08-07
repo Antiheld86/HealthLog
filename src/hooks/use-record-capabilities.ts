@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/hooks/use-auth";
+import { useRecordSessionTransition } from "@/hooks/use-record-session-transition";
 import {
   accountLabel,
   type AccountAccessEntry,
@@ -30,7 +31,7 @@ import {
  * no reachable caller. Logging a value on a tracked metric left for the same
  * reason one release later: its only form sits on `/custom-metrics/{id}`,
  * which a switch closes too.
- * `delegable-surface-guard.test.ts` carries that argument
+ * `sharing-surface-guard.test.ts` carries that argument
  * in full and is the list that binds; this paragraph has to agree with it. Editing, deleting, restoring, purging, importing and
  * bulk-acting stay with the owner, including on an entry the delegate added
  * themselves a minute ago, and so does every create the list does not name
@@ -47,6 +48,19 @@ import {
  * only which class of affordance a resolved level covers, and that mapping is
  * a property of the release, not of the caller.
  *
+ * ## The two facts this hook carries but does not yet act on
+ *
+ * v1.37.0 gives a grant a section set and a third level, and both arrive here
+ * (`sections`, `level`) as resolved values beside the booleans. Nothing in
+ * this file turns either into a capability, and that is the state of the
+ * release rather than an omission: the nav narrowing that reads `sections`
+ * and the return of the edit and delete affordances that reads `level` are
+ * the shared-session UX work, which lands after the routes that answer for a
+ * MANAGE grant exist. Publishing the facts here first is what lets those be
+ * a rendering change rather than a second access decision — and a control
+ * that appeared before its route answered would be the failure the two
+ * booleans above were written to end.
+ *
  * ## Absent, not disabled
  *
  * The consuming rule, stated once here because it belongs to the whole sweep:
@@ -58,6 +72,10 @@ import {
  * search a button in gets a sentence.
  */
 export interface RecordCapabilities {
+  /** A tab is awaiting a fresh `/me` after another tab changed the session. */
+  recordSessionPending?: boolean;
+  /** A present account-access block was malformed and must not mount a record. */
+  accessRefused?: boolean;
   /** Is this browser acting on somebody else's record right now. */
   inSharedRecord: boolean;
   /** The grant's resolved level for the record on screen. */
@@ -66,6 +84,27 @@ export interface RecordCapabilities {
   canAdd: boolean;
   /** May the caller change what exists, or add what the delegation excludes. */
   canManage: boolean;
+  /**
+   * v1.37.0 — the resolved level of the grant on screen, or `null` in one's
+   * own record (which is not a grant and has no level).
+   *
+   * Bound from `accountAccess.active.level`, never derived. `canManage` is
+   * deliberately NOT computed from it in this release: the edit and delete
+   * affordances come back for `"manage"` when the routes that answer them
+   * land, and a control that appears before its route answers is the exact
+   * failure the two booleans above exist to prevent.
+   */
+  level: AccountAccessEntry["level"] | null;
+  /**
+   * v1.37.0 — the sections the grant opens, or `null` for the entire record
+   * (which is also what one's own record answers).
+   *
+   * Bound from `accountAccess.sections`. An empty array means the grant opens
+   * nothing; it is a real answer and reads as one.
+   */
+  sections: AccountAccessEntry["sections"];
+  /** The server-resolved kind of the record currently in view. */
+  recordKind: AccountAccessEntry["recordKind"] | "self";
 }
 
 /**
@@ -77,13 +116,44 @@ export interface RecordCapabilities {
  */
 export function resolveRecordCapabilities(
   active: AccountAccessEntry | null | undefined,
+  accessRefused = false,
+  recordSessionPending = false,
+  contextUnproven = false,
 ): RecordCapabilities {
+  if (accessRefused || recordSessionPending || contextUnproven) {
+    return {
+      // An unprovable context is a REFUSAL, not a transient hold, and the
+      // difference is whether there is a way out. `recordSessionPending`
+      // renders `RecordScopeHydrationGate` — a bare spinner with no controls,
+      // correct while a switch is genuinely in flight because it ends on its
+      // own. This state does not end on its own: `/api/auth/me` reports the
+      // same disagreement on every boot, so a spinner here is a wedge with no
+      // exit. `accessRefused` renders `SharedRecordUnavailable`, which carries
+      // a "leave this record" button that posts `switch(null)`.
+      accessRefused: accessRefused || contextUnproven || undefined,
+      recordSessionPending: recordSessionPending || undefined,
+      inSharedRecord: true,
+      canWrite: false,
+      canAdd: false,
+      canManage: false,
+      level: null,
+      sections: [],
+      recordKind: "shared",
+    };
+  }
   if (!active) {
     return {
       inSharedRecord: false,
       canWrite: false,
       canAdd: true,
       canManage: true,
+      // One's own record has no grant, so it has no level, and it is open in
+      // full. Null on both counts rather than a fabricated "manage" over all
+      // eight sections: the caller is not a delegate, and a consumer that had
+      // to tell those apart would have to guess.
+      level: null,
+      sections: null,
+      recordKind: "self",
     };
   }
   return {
@@ -91,6 +161,9 @@ export function resolveRecordCapabilities(
     canWrite: active.canWrite,
     canAdd: active.canWrite,
     canManage: false,
+    level: active.level,
+    sections: active.sections,
+    recordKind: active.recordKind,
   };
 }
 
@@ -110,9 +183,45 @@ export function resolveRecordCapabilities(
  * withdraws is a much smaller lie than one that stays and 403s, and the
  * banner lands from the same query in the same frame.
  */
+/**
+ * v1.37.0 — do the two answers about "which record is this" agree.
+ *
+ * `/api/auth/me` publishes the question twice, from two different angles, and
+ * that is deliberate rather than redundant:
+ *
+ *   * `accountAccess.active` is the RE-DECIDED answer. An entry reaches it only
+ *     by surviving a live-grant pass, so a selector left behind by a lapsed
+ *     grant reads as "not switched".
+ *   * `recordSession.scope` is the RAW selector, the same value the fence
+ *     compares a request's assertion against.
+ *
+ * When they disagree the session is pointed at a record the grant no longer
+ * opens: every delegable route will refuse, while `active` being null makes
+ * this hook answer "your own record, all controls". That combination paints an
+ * add button on a page whose every write is about to 403 — the exact failure
+ * `canAdd` was introduced to end. So a disagreement holds instead.
+ *
+ * A null or absent `recordSession` is not a disagreement. It is the Bearer
+ * transport (no session row, no switch state) or a server image that predates
+ * the field, and neither is a reason to blank the app.
+ */
+export function recordContextIsUnproven(
+  recordSession: { epoch: number; scope: string | null } | null | undefined,
+  active: AccountAccessEntry | null | undefined,
+): boolean {
+  if (recordSession == null) return false;
+  return recordSession.scope !== (active?.accountId ?? null);
+}
+
 export function useRecordCapabilities(): RecordCapabilities {
   const { user } = useAuth();
-  return resolveRecordCapabilities(user?.accountAccess?.active);
+  const transition = useRecordSessionTransition();
+  return resolveRecordCapabilities(
+    user?.accountAccess?.active,
+    user?.accountAccessStatus === "invalid",
+    transition.phase !== "ready",
+    recordContextIsUnproven(user?.recordSession, user?.accountAccess?.active),
+  );
 }
 
 /**

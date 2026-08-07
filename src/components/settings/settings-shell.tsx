@@ -48,6 +48,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useMounted } from "@/hooks/use-mounted";
 import { useTranslations } from "@/lib/i18n/context";
 import type { ModuleKey } from "@/lib/modules/registry";
+import { classifySettingsDestination } from "@/lib/record-settings";
 import {
   SETTINGS_SECTION_SLUGS,
   isSettingsSectionSlug,
@@ -430,13 +431,48 @@ export function SettingsShell({
   // the two passes disagreeing.
   const hydrated = useMounted();
   const modules = user?.modules;
-  const visibleSections = SETTINGS_SECTIONS.filter(
+  const activeRecord = user?.accountAccess?.active ?? null;
+  const allVisibleSections = SETTINGS_SECTIONS.filter(
     (section) =>
       !hydrated ||
       !section.moduleGate ||
       modules?.[section.moduleGate] !== false,
   );
-  const activeSection = visibleSections.find(
+
+  // The server has already resolved which record is active, and which
+  // destinations that record offers depends on what kind of record it is. The
+  // section gate remains responsible for refusing any direct URL that is not
+  // on the list; this filter only stops the nav from offering one.
+  //
+  // Keep `allVisibleSections` for the active heading so a direct unavailable
+  // link identifies itself before the gate explains why it cannot open.
+  //
+  //   * A managed profile shows its guardian configuration AND the record
+  //     content a MANAGE holder may write — the guardian holds MANAGE, so the
+  //     second set is theirs as well.
+  //   * An ordinary shared record at MANAGE shows only the record content. A
+  //     delegate manages somebody's health record, not their account: modules,
+  //     thresholds and notification routing stay with the owner.
+  //   * Every other shared record shows nothing here, because it reaches no
+  //     Settings destination at all.
+  const visibleSections =
+    activeRecord === null
+      ? allVisibleSections
+      : allVisibleSections.filter((section) => {
+          const kind = classifySettingsDestination(section.slug).kind;
+          // Every destination on either list needs MANAGE, so the level is
+          // checked once for both record kinds rather than only for the adult
+          // one. A guardian grant is always MANAGE today, which is exactly why
+          // the check was easy to leave out — and a managed entry that ever
+          // arrived below it would have listed destinations the section gate
+          // refuses, sending somebody to a page that explains it cannot open.
+          if (activeRecord.level !== "manage") return false;
+          if (activeRecord.recordKind === "managed") {
+            return kind === "managed-guardian" || kind === "manage-writable";
+          }
+          return kind === "manage-writable";
+        });
+  const activeSection = allVisibleSections.find(
     (section) => section.slug === activeSlug,
   );
 
@@ -539,7 +575,11 @@ export function SettingsShell({
   // producing visibly more top/bottom whitespace on Settings/Admin
   // pages than on Dashboard/Insights/Measurements.
   return (
-    <div className="mx-auto w-full max-w-screen-xl">
+    <div
+      className="mx-auto w-full max-w-screen-xl"
+      data-active-record-id={activeRecord?.accountId}
+      data-record-kind={activeRecord?.recordKind}
+    >
       {/* v1.18.6.1 — on mobile the heading sits above the chip strip; on
           desktop it is rendered inside the grid (row 1 / content column) so
           it does not paint twice. */}

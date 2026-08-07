@@ -51,7 +51,10 @@ async function postIntake(request: NextRequest, { params }: RouteParams) {
   // v1.36.x — a delegated write, the per-medication form of the same verb.
   // `user` is the record the dose belongs to; `actor` is whoever pressed the
   // button, and is used for nothing but the owner's notification below.
-  const { user, actor, authMethod } = await requireRecordAuth("write");
+  const { user, actor, authMethod } = await requireRecordAuth(
+    "write",
+    "medications",
+  );
 
   // v1.36.1 follow-up — the sibling route `POST /api/medications/intake`
   // refuses a delegate changing a dose the owner already recorded. This route
@@ -588,7 +591,7 @@ async function postIntake(request: NextRequest, { params }: RouteParams) {
 
 export const GET = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireRecordAuth("read");
+    const { user } = await requireRecordAuth("read", "medications");
 
     const { id } = await params;
     // v1.4.25 W21 Fix-N — privacy gate hoisted to the shared helper.

@@ -16,14 +16,15 @@
  *       min/max of the times) so the era minter — ledger, compliance,
  *       cadence chips — reads it like any other revision.
  *
- * Auth: cookie-session or Bearer via requireAuth(); the medication is
+ * Auth: cookie-session or Bearer, resolved through `requireRecordAuth`; the
+ *   medication is
  * verified to belong to the caller before any read or write. Deleting
  * a manual era lives in the `[revisionId]` sub-route.
  */
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -73,7 +74,7 @@ function summariseEntries(payload: unknown): Array<{
 
 export const GET = apiHandler(
   async (_request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireRecordAuth("read");
+    const { user } = await requireRecordAuth("read", "medications");
     const { id } = await params;
 
     const guard = await assertMedicationOwnership(id, user.id);
@@ -135,7 +136,9 @@ export const GET = apiHandler(
 
 export const POST = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // v1.37.0 — MANAGE. Archiving a schedule era the compliance engine reads:
+    // additive, audited, and reversible through the DELETE beside it.
+    const { user } = await requireRecordAuth("manage", "medications");
     const { id } = await params;
 
     const guard = await assertMedicationOwnership(id, user.id);

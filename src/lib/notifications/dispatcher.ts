@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { decrypt, encrypt } from "@/lib/crypto";
+import { defaultLocale, locales, type Locale } from "@/lib/i18n/config";
 import type {
   NotificationPayload,
   TelegramChannelConfig,
@@ -29,6 +30,12 @@ import {
   hasClientManagedApnsGate,
 } from "@/lib/notifications/client-managed-apns";
 import { recordPushAttempt } from "@/lib/notifications/senders/push-attempt-record";
+import {
+  claimManagedGuardianEgressAuthorization,
+  completeManagedGuardianEgressAuthorization,
+  resolveManagedGuardianRecipientIds,
+  resolveNotificationDeliveryIdentity,
+} from "@/lib/notifications/delivery-identity";
 
 /**
  * Dispatch a notification to all enabled channels for a user.
@@ -56,6 +63,26 @@ export interface DispatchOutcome {
   channelsSucceeded: number;
 }
 
+function isLocale(value: string | null | undefined): value is Locale {
+  return (locales as readonly string[]).includes(value ?? "");
+}
+
+/** Render record-owned content only after the delivery recipient is known. */
+async function renderForRecipient(
+  payload: NotificationPayload,
+  recipientUserId: string,
+): Promise<NotificationPayload> {
+  const { renderForRecipient: render, ...deliveryPayload } = payload;
+  if (!render) return deliveryPayload;
+
+  const recipient = await prisma.user.findUnique({
+    where: { id: recipientUserId },
+    select: { locale: true },
+  });
+  const locale = isLocale(recipient?.locale) ? recipient.locale : defaultLocale;
+  return { ...deliveryPayload, ...render(locale) };
+}
+
 export async function dispatchNotification(
   payload: NotificationPayload,
 ): Promise<DispatchOutcome> {
@@ -63,11 +90,49 @@ export async function dispatchNotification(
   let channelsSucceeded = 0;
 
   try {
+    const guardianRecipientIds =
+      await resolveManagedGuardianRecipientIds(payload);
+    if (guardianRecipientIds !== null) {
+      const outcomes = await Promise.all(
+        guardianRecipientIds.map((recipientUserId) =>
+          dispatchNotification({
+            ...payload,
+            recordUserId: payload.userId,
+            recipientUserId,
+          }),
+        ),
+      );
+      return outcomes.reduce<DispatchOutcome>(
+        (aggregate, outcome) => ({
+          dispatched: aggregate.dispatched || outcome.dispatched,
+          channelsAttempted:
+            aggregate.channelsAttempted + outcome.channelsAttempted,
+          channelsSucceeded:
+            aggregate.channelsSucceeded + outcome.channelsSucceeded,
+        }),
+        { dispatched: false, channelsAttempted: 0, channelsSucceeded: 0 },
+      );
+    }
+
+    const delivery = await resolveNotificationDeliveryIdentity(payload);
+    if (!delivery) {
+      getEvent()?.addWarning("Notification delivery identity was invalid");
+      return { dispatched: false, channelsAttempted, channelsSucceeded };
+    }
+    const deliveryPayload: NotificationPayload = {
+      ...payload,
+      recordUserId: delivery.recordUserId,
+      recipientUserId: delivery.recipientUserId,
+    };
+    const recipientPayload = await renderForRecipient(
+      deliveryPayload,
+      delivery.recipientUserId,
+    );
     const channels = await prisma.notificationChannel.findMany({
-      where: { userId: payload.userId, enabled: true },
+      where: { userId: delivery.recipientUserId, enabled: true },
       include: {
         preferences: {
-          where: { eventType: payload.eventType },
+          where: { eventType: recipientPayload.eventType },
         },
       },
     });
@@ -79,7 +144,7 @@ export async function dispatchNotification(
     if (!hasTelegramChannel) {
       try {
         const user = await prisma.user.findUnique({
-          where: { id: payload.userId },
+          where: { id: delivery.recipientUserId },
           select: {
             telegramBotToken: true,
             telegramChatId: true,
@@ -101,12 +166,12 @@ export async function dispatchNotification(
           const created = await prisma.notificationChannel.upsert({
             where: {
               userId_type: {
-                userId: payload.userId,
+                userId: delivery.recipientUserId,
                 type: "TELEGRAM",
               },
             },
             create: {
-              userId: payload.userId,
+              userId: delivery.recipientUserId,
               type: "TELEGRAM",
               enabled: true,
               config: channelConfig,
@@ -117,13 +182,16 @@ export async function dispatchNotification(
             },
             include: {
               preferences: {
-                where: { eventType: payload.eventType },
+                where: { eventType: recipientPayload.eventType },
               },
             },
           });
 
           channels.push(created);
-          getEvent()?.addMeta("telegram_legacy_migration", payload.userId);
+          getEvent()?.addMeta(
+            "telegram_legacy_migration",
+            delivery.recipientUserId,
+          );
         }
       } catch (err) {
         getEvent()?.addWarning(`Legacy Telegram migration failed: ${err}`);
@@ -145,7 +213,7 @@ export async function dispatchNotification(
     // from /settings/notifications once they've seen the badge a few
     // times and decided they want push.
     let defaultEnabled =
-      EVENT_DEFAULT_ENABLED[payload.eventType as EventType] ?? true;
+      EVENT_DEFAULT_ENABLED[recipientPayload.eventType as EventType] ?? true;
 
     // v1.7.0 — MOOD_REMINDER single source of truth = the visible card.
     // The event used to default OFF, layered on top of the per-user
@@ -156,9 +224,9 @@ export async function dispatchNotification(
     // opt-out (a `NotificationPreference` row with `enabled = false`) is
     // still honoured below via `pref.enabled` — only the no-row default
     // is derived from the card.
-    if (payload.eventType === "MOOD_REMINDER") {
+    if (recipientPayload.eventType === "MOOD_REMINDER") {
       const user = await prisma.user.findUnique({
-        where: { id: payload.userId },
+        where: { id: delivery.recipientUserId },
         select: { moodReminderEnabled: true },
       });
       defaultEnabled = user?.moodReminderEnabled === true;
@@ -170,13 +238,13 @@ export async function dispatchNotification(
     let clientManagedApns: boolean | null = null;
     const resolveClientManagedApns = async (): Promise<boolean> => {
       if (clientManagedApns !== null) return clientManagedApns;
-      const gate = CLIENT_MANAGED_APNS_EVENTS[payload.eventType];
+      const gate = CLIENT_MANAGED_APNS_EVENTS[recipientPayload.eventType];
       if (!gate) {
         clientManagedApns = false;
         return false;
       }
       const row = await prisma.user.findUnique({
-        where: { id: payload.userId },
+        where: { id: delivery.recipientUserId },
         select: { notificationPrefs: true },
       });
       clientManagedApns = gate.isClientManaged(row?.notificationPrefs);
@@ -209,36 +277,78 @@ export async function dispatchNotification(
       // about whether anything actually reached the user.
       if (
         channel.type === "APNS" &&
-        hasClientManagedApnsGate(payload.eventType) &&
+        !delivery.managed &&
+        hasClientManagedApnsGate(recipientPayload.eventType) &&
         (await resolveClientManagedApns())
       ) {
-        const gate = CLIENT_MANAGED_APNS_EVENTS[payload.eventType];
-        getEvent()?.addMeta(gate.metaKey, gate.tag(payload.metadata));
+        const gate = CLIENT_MANAGED_APNS_EVENTS[recipientPayload.eventType];
+        getEvent()?.addMeta(gate.metaKey, gate.tag(recipientPayload.metadata));
         if (gate.detail && gate.detailKey) {
           getEvent()?.addMeta(
             gate.detailKey,
-            gate.detail(payload.userId, payload.metadata),
+            gate.detail(recipientPayload.userId, recipientPayload.metadata),
           );
         }
         recordPushAttempt({
-          userId: payload.userId,
+          recordUserId: delivery.recordUserId,
+          recipientUserId: delivery.recipientUserId,
           channel: "APNS",
-          eventType: payload.eventType,
+          eventType: recipientPayload.eventType,
           result: "skipped",
           reason: "client_managed",
         });
         continue;
       }
 
-      channelsAttempted += 1;
-
       try {
-        const outcome = await sendToChannel(
+        const prepared = prepareChannelSend(
           channel.type as ChannelType,
           channel.config,
-          payload,
+          delivery.recipientUserId,
+          recipientPayload,
         );
+        let outcome: SendOutcome;
+        if ("outcome" in prepared) {
+          outcome = prepared.outcome;
+          channelsAttempted += 1;
+        } else {
+          const authorization = delivery.managed
+            ? await claimManagedGuardianEgressAuthorization(
+                delivery,
+                channel.type as ChannelType,
+                recipientPayload.eventType,
+              )
+            : null;
+          if (delivery.managed && authorization === null) {
+            getEvent()?.addWarning(
+              "Guardian notification authorization changed before channel egress",
+            );
+            continue;
+          }
 
+          channelsAttempted += 1;
+          try {
+            outcome = await prepared.send();
+          } catch (err) {
+            if (authorization) {
+              await completeManagedGuardianEgressAuthorization(
+                authorization.id,
+                "sender_threw",
+              );
+            }
+            throw err;
+          }
+          if (authorization) {
+            await completeManagedGuardianEgressAuthorization(
+              authorization.id,
+              outcome.ok
+                ? "ok"
+                : outcome.hardReject
+                  ? "hard_reject"
+                  : "transient_failure",
+            );
+          }
+        }
         if (outcome.ok) {
           await recordChannelSuccess({
             id: channel.id,
@@ -307,11 +417,20 @@ export async function dispatchNotification(
   };
 }
 
-async function sendToChannel(
+type PreparedChannelSend =
+  { send: () => Promise<SendOutcome> } | { outcome: SendOutcome };
+
+/**
+ * Decrypt and validate a recipient-owned channel before the final managed
+ * Guardian authorization claim. The returned closure is the only code that
+ * can begin provider I/O, and is invoked immediately after that claim commits.
+ */
+function prepareChannelSend(
   type: ChannelType,
   encryptedConfig: string,
+  recipientUserId: string,
   payload: NotificationPayload,
-): Promise<SendOutcome> {
+): PreparedChannelSend {
   let decrypted: string;
   try {
     decrypted = decrypt(encryptedConfig);
@@ -325,9 +444,11 @@ async function sendToChannel(
     // a key-rotation gap every channel would otherwise auto-disable for the
     // wrong reason.
     return {
-      ok: false,
-      hardReject: true,
-      reason: `${type.toLowerCase()}_config_decrypt_failed`,
+      outcome: {
+        ok: false,
+        hardReject: true,
+        reason: `${type.toLowerCase()}_config_decrypt_failed`,
+      },
     };
   }
 
@@ -340,12 +461,14 @@ async function sendToChannel(
         getEvent()?.addWarning("Failed to parse Telegram channel config");
         // Malformed config decodes the same on every retry — permanent.
         return {
-          ok: false,
-          hardReject: true,
-          reason: "telegram_config_parse_failed",
+          outcome: {
+            ok: false,
+            hardReject: true,
+            reason: "telegram_config_parse_failed",
+          },
         };
       }
-      return sendViaTelegram(config, payload);
+      return { send: () => sendViaTelegram(config, payload) };
     }
     case "NTFY": {
       let config: NtfyChannelConfig;
@@ -355,12 +478,14 @@ async function sendToChannel(
         getEvent()?.addWarning("Failed to parse ntfy channel config");
         // Malformed config decodes the same on every retry — permanent.
         return {
-          ok: false,
-          hardReject: true,
-          reason: "ntfy_config_parse_failed",
+          outcome: {
+            ok: false,
+            hardReject: true,
+            reason: "ntfy_config_parse_failed",
+          },
         };
       }
-      return sendViaNtfy(config, payload);
+      return { send: () => sendViaNtfy(config, payload) };
     }
     case "WEBHOOK": {
       let config: WebhookChannelConfig;
@@ -370,12 +495,14 @@ async function sendToChannel(
         getEvent()?.addWarning("Failed to parse webhook channel config");
         // Malformed config decodes the same on every retry — permanent.
         return {
-          ok: false,
-          hardReject: true,
-          reason: "webhook_config_parse_failed",
+          outcome: {
+            ok: false,
+            hardReject: true,
+            reason: "webhook_config_parse_failed",
+          },
         };
       }
-      return sendViaWebhook(config, payload);
+      return { send: () => sendViaWebhook(config, payload) };
     }
     case "EMAIL": {
       let config: EmailChannelConfig;
@@ -385,15 +512,17 @@ async function sendToChannel(
         getEvent()?.addWarning("Failed to parse email channel config");
         // Malformed config decodes the same on every retry — permanent.
         return {
-          ok: false,
-          hardReject: true,
-          reason: "email_config_parse_failed",
+          outcome: {
+            ok: false,
+            hardReject: true,
+            reason: "email_config_parse_failed",
+          },
         };
       }
-      return sendViaEmail(config, payload);
+      return { send: () => sendViaEmail(config, payload) };
     }
     case "WEB_PUSH": {
-      return sendViaWebPush(payload.userId, payload);
+      return { send: () => sendViaWebPush(recipientUserId, payload) };
     }
     case "APNS": {
       // APNs config lives on the Device row, not in the channel config.
@@ -401,14 +530,16 @@ async function sendToChannel(
       // we just keep the symmetric path so future per-user overrides
       // (e.g. a custom APNs topic) can hang off the channel without
       // changing the dispatcher shape.
-      return sendViaApns(payload.userId, payload);
+      return { send: () => sendViaApns(recipientUserId, payload) };
     }
     default:
       getEvent()?.addWarning(`Unknown notification channel type: ${type}`);
       return {
-        ok: false,
-        hardReject: false,
-        reason: "unknown_channel_type",
+        outcome: {
+          ok: false,
+          hardReject: false,
+          reason: "unknown_channel_type",
+        },
       };
   }
 }
