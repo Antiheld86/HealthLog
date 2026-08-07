@@ -249,10 +249,11 @@ export async function buildFullBackupPayload(
       orderBy: { moodLoggedAt: "desc" },
       select: {
         ...MOOD_ENTRY_BACKUP_SELECT,
-        tagLinks: {
-          where: { rating: { not: null } },
-          select: MOOD_ENTRY_TAG_LINK_SELECT,
-        },
+        // Every link, not only the rated ones. This read used to filter
+        // `rating: { not: null }`, and a BINARY link carries a NULL rating by
+        // definition — so the present/absent tags, the kind most people pick,
+        // were absent from the file and could not come back from it.
+        tagLinks: { select: MOOD_ENTRY_TAG_LINK_SELECT },
       },
     }),
     // The account's OWN mood tags. The seeded catalogue is reference data every
@@ -437,21 +438,61 @@ export async function buildFullBackupPayload(
     // selected column reaches a payload by matching `: moodEntry.`. A matcher
     // on `: e.` would also match the intake-event mapper above it and could
     // therefore never fail.
-    moodEntries: moodEntries.map((moodEntry) => ({
-      id: moodEntry.id,
-      date: moodEntry.date,
-      mood: moodEntry.mood,
-      score: moodEntry.score,
-      tags: moodEntry.tags,
-      source: moodEntry.source,
-      loggedAt: moodEntry.moodLoggedAt.toISOString(),
-      externalId: moodEntry.externalId,
-      deletedAt: moodEntry.deletedAt?.toISOString() ?? null,
-      factors: moodEntry.tagLinks.map((tagLink) => ({
-        key: tagLink.moodTag.key,
-        rating: tagLink.rating!,
-      })),
-    })),
+    moodEntries: moodEntries.map((moodEntry) => {
+      // The two link arms partition the entry's links exhaustively: a link is
+      // a rated factor when its tag is RATED and it actually carries a score,
+      // and a structured tag otherwise. Total on purpose — a malformed link
+      // (a RATED tag whose rating went missing) rides as a tag key and comes
+      // back NAMED as unresolvable on restore, rather than falling between the
+      // two arms and disappearing the way every BINARY link used to.
+      const isRatedFactor = (link: (typeof moodEntry.tagLinks)[number]) =>
+        link.moodTag.kind === "RATED" && link.rating !== null;
+
+      const factors = moodEntry.tagLinks
+        .filter(isRatedFactor)
+        .map((tagLink) => ({
+          key: tagLink.moodTag.key,
+          rating: tagLink.rating as number,
+        }));
+      // BINARY link keys. Their own array rather than a nullable rating inside
+      // `factors`: the restore resolves `factors` against `kind: "RATED"` and
+      // reports what it cannot resolve, so a rating-less entry in that array
+      // would collide with both. A separate key leaves every backup file
+      // written before this parsing and restoring exactly as it did.
+      const structuredTags = moodEntry.tagLinks
+        .filter((link) => !isRatedFactor(link))
+        .map((tagLink) => tagLink.moodTag.key);
+
+      return {
+        ...(disasterRecovery
+          ? {
+              note: moodEntry.note,
+              noteEncrypted: moodEntry.noteEncrypted
+                ? Buffer.from(moodEntry.noteEncrypted).toString("base64")
+                : null,
+              syncedAt: moodEntry.syncedAt.toISOString(),
+              syncVersion: moodEntry.syncVersion,
+              createdAt: moodEntry.createdAt.toISOString(),
+              updatedAt: moodEntry.updatedAt.toISOString(),
+            }
+          : { note: readNote(moodEntry.noteEncrypted, moodEntry.note) }),
+        id: moodEntry.id,
+        date: moodEntry.date,
+        mood: moodEntry.mood,
+        score: moodEntry.score,
+        tags: moodEntry.tags,
+        source: moodEntry.source,
+        loggedAt: moodEntry.moodLoggedAt.toISOString(),
+        externalId: moodEntry.externalId,
+        // The zone the `date` string is anchored to. Without it a restored row
+        // falls back to the legacy Europe/Berlin reading and an account that
+        // logged elsewhere gets its day boundaries quietly moved.
+        tz: moodEntry.tz,
+        deletedAt: moodEntry.deletedAt?.toISOString() ?? null,
+        factors,
+        structuredTags,
+      };
+    }),
     customMoodTags: customMoodTags.map((tag) => ({
       ...(disasterRecovery ? { id: tag.id } : {}),
       key: tag.key,

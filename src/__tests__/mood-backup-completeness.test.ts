@@ -111,6 +111,31 @@ function selectFields(source: string, constant: string): string[] {
 }
 
 /**
+ * The builder with its comment lines removed.
+ *
+ * Every matcher below runs against this rather than against the raw file,
+ * because prose describing the defect reads exactly like the defect: the first
+ * draft of this guard went red on its own explanation of the filter it exists
+ * to forbid. Whole comment lines only — a trailing comment after code is left
+ * alone, which is safe here because the only risk it carries is a matcher
+ * accepting a column named in prose, and the select comparison beside it is
+ * literal either way.
+ */
+function stripCommentLines(source: string): string {
+  return source
+    .split("\n")
+    .filter((line) => {
+      const trimmed = line.trim();
+      return !(
+        trimmed.startsWith("//") ||
+        trimmed.startsWith("/*") ||
+        trimmed.startsWith("*")
+      );
+    })
+    .join("\n");
+}
+
+/**
  * Columns either serialization arm actually reads off the mapped row.
  *
  * The capture is the RIGHT-hand side — the column — not the payload key, which
@@ -138,7 +163,7 @@ function serialisedFields(source: string, variable: string): Set<string> {
 
 describe("mood backup completeness", () => {
   const schema = readFileSync(SCHEMA, "utf8");
-  const source = readFileSync(BACKUP_BUILDER, "utf8");
+  const source = stripCommentLines(readFileSync(BACKUP_BUILDER, "utf8"));
   const models = declaredModels(schema);
 
   const entryColumns = scalarFields(modelBlock(schema, "MoodEntry"), models);
@@ -225,16 +250,22 @@ describe("mood backup completeness", () => {
   });
 
   it("both structured-tag arms are carried, not just the rated one", () => {
-    // The defect this file was written for: the tag-link read filtered
-    // `rating: { not: null }`, and a BINARY link carries a NULL rating by
-    // definition. Every present/absent tag — the kind most people pick — was
-    // excluded from the file and could not come back.
+    // The defect this file was written for: the tag-link read carried a
+    // filter, and a BINARY link's rating is NULL by definition, so every
+    // present/absent tag — the kind most people pick — was excluded from the
+    // file and could not come back from it. The claim is therefore about the
+    // read itself: it takes the links whole, unfiltered.
     //
-    // Asserted on a boolean rather than on the file contents so a failure
-    // reads as one line instead of printing the whole builder back.
+    // Asserted on booleans rather than on the file contents so a failure reads
+    // as one line instead of printing the whole builder back.
+    const tagLinkRead = /tagLinks:\s*\{([\s\S]*?)\}/.exec(source);
     expect(
-      source.includes("rating: { not: null }"),
-      "the tag-link read filters out NULL ratings again; BINARY links are being dropped from the backup",
+      tagLinkRead,
+      "no `tagLinks:` read found in the backup builder — this matcher proves nothing",
+    ).not.toBeNull();
+    expect(
+      /where/.test(tagLinkRead![1]),
+      "the tag-link read filters again; a filter here is what dropped every BINARY link from the backup",
     ).toBe(false);
     expect(
       source.includes("structuredTags"),
