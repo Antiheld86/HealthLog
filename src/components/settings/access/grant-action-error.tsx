@@ -35,13 +35,16 @@ import { useTranslations } from "@/lib/i18n/context";
  * not an `ApiError` never reached a response at all, which is what makes the
  * offline test a type check rather than a status check.
  */
-export type GrantAction = "accept" | "revoke" | "renounce";
+export type GrantAction =
+  "accept" | "revoke" | "renounce" | "deleteProfile" | "removeGuardian";
 
 /** The generic sentence for each act, when nothing more specific applies. */
 const FAILED_KEY: Record<GrantAction, string> = {
   accept: "recordSharing.actionError.acceptFailed",
   revoke: "recordSharing.actionError.revokeFailed",
   renounce: "recordSharing.actionError.renounceFailed",
+  deleteProfile: "recordSharing.actionError.deleteProfileFailed",
+  removeGuardian: "recordSharing.actionError.removeGuardianFailed",
 };
 
 /**
@@ -68,6 +71,15 @@ export function grantActionErrorKey(err: unknown, action: GrantAction): string {
     // it is the same sentence.
     case "managed_profile.guardian.required":
       return "recordSharing.actionError.lastGuardian";
+    // v1.37.0 — the only refusal the delete route classifies, and the only one
+    // the guardian-removal route classifies besides the floor. It covers three
+    // situations the server deliberately does not tell apart (no such profile,
+    // not a managed one, the caller is not its Guardian), so the sentence
+    // promises no diagnosis: it says the profile is not reachable and leaves
+    // it there. Anything the route does NOT classify becomes the generic 500
+    // envelope and must not borrow this sentence.
+    case "managed_profile.not_found":
+      return "recordSharing.actionError.profileNotFound";
     case "sharing.accept.expired":
       return "recordSharing.actionError.acceptExpired";
     case "sharing.accept.revoked":

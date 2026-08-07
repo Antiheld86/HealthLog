@@ -208,6 +208,36 @@ describe("what a refused sharing action says", () => {
       why: "the row is gone",
     },
     {
+      action: "deleteProfile",
+      err: apiError(404, "managed_profile.not_found"),
+      key: "recordSharing.actionError.profileNotFound",
+      why: "the only refusal the delete route classifies, and it covers three situations the server will not tell apart",
+    },
+    {
+      action: "removeGuardian",
+      err: apiError(404, "managed_profile.not_found"),
+      key: "recordSharing.actionError.profileNotFound",
+      why: "the same refusal reached from the guardian-removal route",
+    },
+    {
+      action: "removeGuardian",
+      err: apiError(409, "managed_profile.guardian.required"),
+      key: "recordSharing.actionError.lastGuardian",
+      why: "the floor, still enforced by the server after the card has hidden the control",
+    },
+    {
+      action: "deleteProfile",
+      err: apiError(500),
+      key: "recordSharing.actionError.deleteProfileFailed",
+      why: "anything the delete route does not classify becomes the generic envelope and must not borrow a diagnosis",
+    },
+    {
+      action: "removeGuardian",
+      err: new TypeError("Failed to fetch"),
+      key: "recordSharing.actionError.offline",
+      why: "never reached the server, so the guardian still has access and the row is unchanged",
+    },
+    {
       action: "accept",
       err: new TypeError("Failed to fetch"),
       key: "recordSharing.actionError.offline",

@@ -9663,7 +9663,15 @@
       "errorStepUp": "Confirmez votre deuxième facteur, puis réessayez.",
       "errorOffline": "Cela n'a pas atteint le serveur. Rien n'a changé — vérifiez votre connexion et réessayez.",
       "errorInvalid": "Le serveur a refusé ces informations. Vérifiez le nom, la date et le fuseau horaire.",
-      "errorFailed": "Le profil n'a pas pu être créé."
+      "errorFailed": "Le profil n'a pas pu être créé.",
+      "delete": "Supprimer le profil",
+      "deleteTitle": "Supprimer {name} ?",
+      "deleteBody": "Tout ce qui a été enregistré pour {name} disparaît avec le profil — mesures, médicaments, documents et notes. Cette action est irréversible.",
+      "deleteGuardiansOne": "{count} personne s'occupe aujourd'hui de ce dossier et le perdra.",
+      "deleteGuardiansFew": "{count} personnes s'occupent aujourd'hui de ce dossier et le perdront.",
+      "deleteGuardiansOther": "{count} personnes s'occupent aujourd'hui de ce dossier et le perdront.",
+      "deleteFloorNote": "C'est aussi l'issue lorsque vous êtes la dernière personne responsable : vous pouvez mettre fin au dossier, mais pas le laisser sans personne.",
+      "deleteConfirm": "Supprimer le profil"
     },
     "toast": {
       "savedTo": "Enregistré dans le dossier de {name}."
@@ -9809,7 +9817,10 @@
       "alreadyEnded": "Cet accès a déjà pris fin.",
       "notFound": "Cet accès n'existe plus.",
       "revokeFailed": "L'accès n'a pas pu être terminé.",
-      "renounceFailed": "L'accès n'a pas pu être rendu."
+      "renounceFailed": "L'accès n'a pas pu être rendu.",
+      "profileNotFound": "Ce profil n'existe plus — il a peut-être été supprimé, ou votre accès a pris fin.",
+      "deleteProfileFailed": "Le profil n'a pas pu être supprimé.",
+      "removeGuardianFailed": "Cet accès n'a pas pu prendre fin."
     },
     "anamnesis": {
       "relativeNote": "Un antécédent familial décrit les proches de cette personne. Ne l'ajoutez que si elle voudrait le voir consigné ici."

@@ -38,6 +38,7 @@ import { I18nProvider } from "@/lib/i18n/context";
 import { ApiError } from "@/lib/api/api-fetch";
 import type { AccountAccessEntry } from "@/lib/sharing/account-access-view";
 import type { GrantList } from "@/lib/queries/use-account-grants";
+import type { ManagedProfileGuardian } from "@/lib/queries/use-managed-profiles";
 
 /** The account payload, as the cards under test read it. */
 const authRef: {
@@ -99,17 +100,42 @@ vi.mock("@/lib/queries/use-account-grants", async (importOriginal) => {
   };
 });
 
+/** The roster read, as each profile row sees it. */
+const rosterRef: { value: ManagedProfileGuardian[] | undefined } = {
+  value: [],
+};
+/** The deletion mutation, idle unless a case says otherwise. */
+const deleteRef = { value: idle() };
+
 vi.mock("@/lib/queries/use-managed-profiles", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/lib/queries/use-managed-profiles")>();
-  return { ...actual, useCreateManagedProfile: () => idle() };
+  return {
+    ...actual,
+    useCreateManagedProfile: () => idle(),
+    useDeleteManagedProfile: () => deleteRef.value,
+    useManagedProfileGuardians: () => ({
+      data: rosterRef.value,
+      isLoading: false,
+      isError: rosterRef.value === undefined,
+      refetch: vi.fn(),
+    }),
+  };
 });
 
 vi.mock("@/hooks/use-account-switch", () => ({
   useAccountSwitch: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-function idle() {
+interface FakeMutation {
+  mutate: ReturnType<typeof vi.fn>;
+  isPending: boolean;
+  isError: boolean;
+  error: unknown;
+  variables: string | undefined;
+}
+
+function idle(): FakeMutation {
   return {
     mutate: vi.fn(),
     isPending: false,
@@ -119,13 +145,34 @@ function idle() {
   };
 }
 
+function failed(error: unknown, variables: string): FakeMutation {
+  return { ...idle(), isError: true, error, variables };
+}
+
+function guardian(
+  partial: Partial<ManagedProfileGuardian> = {},
+): ManagedProfileGuardian {
+  return {
+    grantId: "g1",
+    account: { id: "acct-1", username: "guardian", displayName: "Alex" },
+    state: "ACTIVE",
+    invitedAt: "2026-01-02T10:00:00.000Z",
+    acceptedAt: "2026-01-02T11:00:00.000Z",
+    ...partial,
+  };
+}
+
 import { AccessSection } from "@/components/settings/access-section";
 import { RecordSettingsSectionGate } from "@/components/settings/record-settings-section-gate";
 import {
   createManagedProfileErrorKey,
   displayNameIssue,
 } from "../managed-profile-create-form";
-import { managedProfilesOf } from "../managed-profile-card";
+import {
+  activeGuardianCount,
+  deleteProfileBody,
+  managedProfilesOf,
+} from "../managed-profile-card";
 
 function render(node: React.ReactNode): string {
   return renderToStaticMarkup(
@@ -158,6 +205,8 @@ function entry(partial: Partial<AccountAccessEntry> = {}): AccountAccessEntry {
 
 beforeEach(() => {
   authRef.value = { accounts: [], active: null };
+  rosterRef.value = [guardian()];
+  deleteRef.value = idle();
 });
 
 describe("the managed-profile card, in the shared-access section", () => {
@@ -328,6 +377,103 @@ describe("what the form decides before it sends", () => {
       expect(onSuccess, reset).toContain(reset);
       expect(onError, reset).not.toContain(reset);
     }
+  });
+});
+
+describe("ending a managed profile", () => {
+  it("offers a confirmed delete on the profile's own row", () => {
+    authRef.value = { accounts: [entry()], active: null };
+    const html = renderGatedSection();
+    expect(html).toContain('data-slot="managed-profile-delete"');
+    // The mobile tap floor UI-STANDARDS §11 asks of an inline action.
+    expect(html).toMatch(
+      /data-slot="managed-profile-delete"[^>]*class="[^"]*min-h-11/,
+    );
+  });
+
+  it("withholds the control until the roster has answered", () => {
+    // The confirm copy states how many people lose the record, and that number
+    // comes from the roster. A control that existed before the read would put
+    // the sentence's presence at the mercy of which request landed first —
+    // the defect the retention disclosure already paid for once.
+    authRef.value = { accounts: [entry()], active: null };
+    rosterRef.value = undefined;
+    const html = renderGatedSection();
+    expect(html).toContain('data-managed-profile-id="p1"');
+    expect(html).not.toContain('data-slot="managed-profile-delete"');
+  });
+
+  it("announces a refused deletion on the row it was refused for", () => {
+    authRef.value = {
+      accounts: [entry(), entry({ accountId: "p2", displayName: "Second" })],
+      active: null,
+    };
+    deleteRef.value = failed(
+      new ApiError("refused", 404, {
+        errorCode: "managed_profile.not_found",
+      }),
+      "p1",
+    );
+    const html = renderGatedSection();
+
+    expect(html).toContain('data-slot="grant-action-error"');
+    expect(html).toContain('data-grant-error-for="p1"');
+    // Not painted onto the profile that did not fail.
+    expect(html).not.toContain('data-grant-error-for="p2"');
+    expect(html.match(/data-slot="grant-action-error"/g)).toHaveLength(1);
+    // Specific, not the generic "could not be deleted".
+    expect(html).toContain("That profile is not there any more");
+    // Retryable, and the row keeps its control.
+    expect(html).toContain('data-slot="grant-action-retry"');
+    expect(html).toContain('data-slot="managed-profile-delete"');
+  });
+
+  it("shows nothing at all while the deletion is idle", () => {
+    authRef.value = { accounts: [entry()], active: null };
+    expect(renderGatedSection()).not.toContain(
+      'data-slot="grant-action-error"',
+    );
+  });
+});
+
+describe("what the confirmation says before it deletes", () => {
+  const t = (key: string, params?: Record<string, string | number>): string =>
+    params ? `${key}(${JSON.stringify(params)})` : key;
+  const tCount = (
+    base: string,
+    count: number,
+    params?: Record<string, string | number>,
+  ): string => `${base}:${count}(${JSON.stringify(params)})`;
+
+  it("names what goes, how many people lose it, and the way out", () => {
+    const body = deleteProfileBody({
+      t,
+      tCount,
+      name: "Managed record",
+      activeGuardians: 2,
+    });
+    expect(body).toContain(
+      'recordSharing.managed.deleteBody({"name":"Managed record"})',
+    );
+    expect(body).toContain("recordSharing.managed.deleteGuardians:2");
+    // The delete route emits no last-Guardian refusal, because deleting IS the
+    // way out of the floor. The copy says so rather than duplicating a refusal
+    // this route never sends.
+    expect(body).toContain("recordSharing.managed.deleteFloorNote");
+  });
+
+  it("counts the guardians who actually hold the record", () => {
+    // A pending invitation confers nothing, and the server counts the same
+    // way. Counting it would tell somebody two people lose the record when
+    // one does.
+    expect(
+      activeGuardianCount([
+        guardian(),
+        guardian({ grantId: "g2", state: "PENDING", acceptedAt: null }),
+      ]),
+    ).toBe(1);
+    expect(activeGuardianCount([])).toBe(0);
+    expect(activeGuardianCount(undefined)).toBe(0);
   });
 });
 

@@ -22,13 +22,15 @@
 
 import {
   useMutation,
+  useQuery,
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
 
-import { apiPost } from "@/lib/api/api-fetch";
+import { apiDelete, apiGet, apiPost } from "@/lib/api/api-fetch";
 import { queryKeys } from "@/lib/query-keys";
 import { invalidateGrantReads } from "@/lib/queries/use-account-grants";
+import type { GrantParty } from "@/lib/queries/use-account-grants";
 import type { Locale } from "@/lib/i18n/config";
 
 /**
@@ -93,6 +95,62 @@ export function useCreateManagedProfile() {
     mutationKey: queryKeys.managedProfileCreate(),
     mutationFn: (input: CreateManagedProfileInput) =>
       apiPost<ManagedProfileCreated>("/api/managed-profiles", input),
+    onSuccess: invalidate,
+  });
+}
+
+/** One person who looks after a profile, as the roster publishes them. */
+export interface ManagedProfileGuardian {
+  /** The grant row — what `DELETE .../guardians/{grantId}` takes. */
+  grantId: string;
+  account: GrantParty;
+  /**
+   * PENDING or ACTIVE. Only ACTIVE counts toward the last-Guardian floor, and
+   * the server counts the same way — a pending invitation does not let the
+   * last Guardian leave.
+   */
+  state: "PENDING" | "ACTIVE";
+  invitedAt: string;
+  acceptedAt: string | null;
+}
+
+/**
+ * Who else looks after this profile.
+ *
+ * The read the removal control needs to exist at all: a Guardian grant has the
+ * PROFILE as grantor, so it never appears in the caller's own given-list and
+ * `GET /api/account/grants` cannot supply the `grantId`. It is also where the
+ * last-Guardian floor is counted from BEFORE the act rather than discovered as
+ * a 409 after it.
+ */
+export function useManagedProfileGuardians(profileId: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.managedProfileGuardians(profileId),
+    queryFn: () =>
+      apiGet<ManagedProfileGuardian[]>(
+        `/api/managed-profiles/${profileId}/guardians`,
+      ),
+    enabled,
+  });
+}
+
+/**
+ * Delete a managed profile, and everything recorded in it.
+ *
+ * The variable is the profile id, which is what lets a refusal be rendered on
+ * the row it was refused for rather than somewhere near it.
+ *
+ * This route emits no last-Guardian refusal, and that is deliberate rather
+ * than an omission: deleting the profile is the documented way OUT of the
+ * floor. A Guardian may not strand a record with nobody looking after it, but
+ * they may end the record.
+ */
+export function useDeleteManagedProfile() {
+  const invalidate = useInvalidateManagedProfiles();
+  return useMutation({
+    mutationKey: queryKeys.managedProfileDelete(),
+    mutationFn: (profileId: string) =>
+      apiDelete<{ deleted: true }>(`/api/managed-profiles/${profileId}`),
     onSuccess: invalidate,
   });
 }

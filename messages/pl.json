@@ -9663,7 +9663,15 @@
       "errorStepUp": "Potwierdź drugi składnik logowania i spróbuj ponownie.",
       "errorOffline": "To nie dotarło do serwera. Nic się nie zmieniło — sprawdź połączenie i spróbuj ponownie.",
       "errorInvalid": "Serwer odrzucił te dane. Sprawdź nazwę, datę i strefę czasową.",
-      "errorFailed": "Nie udało się utworzyć profilu."
+      "errorFailed": "Nie udało się utworzyć profilu.",
+      "delete": "Usuń profil",
+      "deleteTitle": "Usunąć {name}?",
+      "deleteBody": "Wszystko, co zapisano dla {name}, znika razem z profilem — pomiary, leki, dokumenty i notatki. Tego nie da się cofnąć.",
+      "deleteGuardiansOne": "{count} osoba opiekuje się dziś tą kartą i ją straci.",
+      "deleteGuardiansFew": "{count} osoby opiekują się dziś tą kartą i ją stracą.",
+      "deleteGuardiansOther": "{count} osób opiekuje się dziś tą kartą i ją straci.",
+      "deleteFloorNote": "To także wyjście, gdy jesteś ostatnią osobą opiekującą się profilem: możesz zamknąć kartę, ale nie zostawić jej bez opieki.",
+      "deleteConfirm": "Usuń profil"
     },
     "toast": {
       "savedTo": "Zapisano w karcie użytkownika {name}."
@@ -9809,7 +9817,10 @@
       "alreadyEnded": "Ten dostęp już się zakończył.",
       "notFound": "Tego dostępu już nie ma.",
       "revokeFailed": "Nie udało się zakończyć dostępu.",
-      "renounceFailed": "Nie udało się zwrócić dostępu."
+      "renounceFailed": "Nie udało się zwrócić dostępu.",
+      "profileNotFound": "Tego profilu już nie ma — mógł zostać usunięty albo Twój dostęp do niego się zakończył.",
+      "deleteProfileFailed": "Nie udało się usunąć profilu.",
+      "removeGuardianFailed": "Nie udało się zakończyć tego dostępu."
     },
     "anamnesis": {
       "relativeNote": "Wpis w wywiadzie rodzinnym opisuje bliskich tej osoby. Dodaj go tylko wtedy, gdy chciałaby, żeby został tu zapisany."

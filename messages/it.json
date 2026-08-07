@@ -9663,7 +9663,15 @@
       "errorStepUp": "Conferma il tuo secondo fattore e riprova.",
       "errorOffline": "Non è arrivato al server. Non è cambiato nulla — controlla la connessione e riprova.",
       "errorInvalid": "Il server ha rifiutato questi dati. Controlla nome, data e fuso orario.",
-      "errorFailed": "Non è stato possibile creare il profilo."
+      "errorFailed": "Non è stato possibile creare il profilo.",
+      "delete": "Elimina profilo",
+      "deleteTitle": "Eliminare {name}?",
+      "deleteBody": "Tutto ciò che è stato registrato per {name} sparisce insieme al profilo — misurazioni, farmaci, documenti e note. Non si può annullare.",
+      "deleteGuardiansOne": "{count} persona si occupa oggi di questa cartella e la perderà.",
+      "deleteGuardiansFew": "{count} persone si occupano oggi di questa cartella e la perderanno.",
+      "deleteGuardiansOther": "{count} persone si occupano oggi di questa cartella e la perderanno.",
+      "deleteFloorNote": "È anche la via d'uscita quando sei l'ultima persona responsabile: puoi chiudere la cartella, ma non lasciarla senza nessuno.",
+      "deleteConfirm": "Elimina profilo"
     },
     "toast": {
       "savedTo": "Salvato nella cartella di {name}."
@@ -9809,7 +9817,10 @@
       "alreadyEnded": "Questo accesso è già terminato.",
       "notFound": "Questo accesso non esiste più.",
       "revokeFailed": "Non è stato possibile terminare l'accesso.",
-      "renounceFailed": "Non è stato possibile restituire l'accesso."
+      "renounceFailed": "Non è stato possibile restituire l'accesso.",
+      "profileNotFound": "Quel profilo non c'è più — potrebbe essere già stato eliminato, o il tuo accesso è terminato.",
+      "deleteProfileFailed": "Non è stato possibile eliminare il profilo.",
+      "removeGuardianFailed": "Non è stato possibile terminare quell'accesso."
     },
     "anamnesis": {
       "relativeNote": "Una voce di anamnesi familiare descrive i parenti di questa persona. Aggiungila solo se vorrebbe vederla registrata qui."
