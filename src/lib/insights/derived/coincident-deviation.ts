@@ -40,6 +40,7 @@ import { computeVitalsBaseline, type BaselineProfile } from "./baseline";
 import { VITALS_BASELINE_TYPES } from "./registry";
 import type { Derived, DerivedProvenanceSource } from "./types";
 import { resolveRestMode } from "@/lib/illness/rest-mode";
+import { isPlausibleMetricValue } from "@/lib/measurements/value-domain";
 import { DEFAULT_TIMEZONE, userDayKey } from "@/lib/tz/format";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -154,15 +155,36 @@ async function readLatestDayMean(
     take: MAX_LATEST_DAY_ROWS,
     select: { value: true, measuredAt: true },
   });
-  if (rows.length === 0) return null;
+  return latestDayMeanFromRows(rows, type, tz);
+}
+
+/**
+ * The pure half of the read above: pick the most recent day present in the
+ * rows and mean that day's readings.
+ *
+ * Readings outside the metric's declared plausibility domain are not means
+ * material. This side of the comparison had no gate at all, so one impossible
+ * stored value became "your pulse today" and was then held against a band the
+ * same value had already inflated — the two numbers in the sentence were both
+ * wrong, and wrong by different amounts, which is why the line read as
+ * nonsense rather than as an exaggeration. A day left with no plausible
+ * reading contributes nothing and the vital drops out of the comparison.
+ */
+export function latestDayMeanFromRows(
+  rows: readonly { value: number; measuredAt: Date }[],
+  type: MeasurementType,
+  tz: string,
+): { value: number; day: string } | null {
+  const usable = rows.filter((r) => isPlausibleMetricValue(type, r.value));
+  if (usable.length === 0) return null;
   // Derive the most-recent day defensively (do not assume the DB ordering)
   // so the "today" reading is always the genuine latest, then mean its rows.
   let day = "";
-  for (const r of rows) {
+  for (const r of usable) {
     const d = userDayKey(r.measuredAt, tz);
     if (d > day) day = d;
   }
-  const sameDay = rows.filter((r) => userDayKey(r.measuredAt, tz) === day);
+  const sameDay = usable.filter((r) => userDayKey(r.measuredAt, tz) === day);
   return {
     value: sameDay.reduce((s, r) => s + r.value, 0) / sameDay.length,
     day,

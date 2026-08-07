@@ -3,8 +3,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Activity, ArrowDownRight, ArrowUpRight } from "lucide-react";
 
-import { useTranslations } from "@/lib/i18n/context";
+import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import { useAuth } from "@/hooks/use-auth";
+import { metricFractionDigits } from "@/lib/measurements/value-domain";
 import { cn } from "@/lib/utils";
 import { apiGet } from "@/lib/api/api-fetch";
 import { queryKeys } from "@/lib/query-keys";
@@ -44,6 +45,7 @@ export function HealthStatusCard({
   className,
 }: HealthStatusCardProps) {
   const { t } = useTranslations();
+  const fmt = useFormatters();
   const { isAuthenticated } = useAuth();
 
   const { data } = useQuery({
@@ -59,6 +61,14 @@ export function HealthStatusCard({
     const key = MEASUREMENT_TYPE_LABEL_KEYS[type];
     return key ? t(key) : type;
   };
+
+  // The engines hand over raw doubles. Interpolating one straight into the
+  // sentence prints whatever floating-point produced — a pulse mean reads
+  // "68.33333333333333" — and reads in the wrong number convention for every
+  // locale that does not use a dot. Render each figure at the metric's own
+  // decimal precision, through the same formatter the rest of the app uses.
+  const metricValue = (type: string, value: number): string =>
+    fmt.number(value, metricFractionDigits(type));
 
   return (
     <section
@@ -100,9 +110,9 @@ export function HealthStatusCard({
               </p>
               <p className="text-muted-foreground text-xs leading-snug">
                 {t("insights.healthStatus.rangeContext", {
-                  value: d.value,
-                  low: d.low,
-                  high: d.high,
+                  value: metricValue(d.type, d.value),
+                  low: metricValue(d.type, d.low),
+                  high: metricValue(d.type, d.high),
                 })}
               </p>
             </div>
@@ -137,8 +147,8 @@ export function HealthStatusCard({
               </p>
               <p className="text-muted-foreground text-xs leading-snug">
                 {t("insights.healthStatus.shiftContext", {
-                  before: s.beforeMean,
-                  after: s.afterMean,
+                  before: metricValue(s.metric, s.beforeMean),
+                  after: metricValue(s.metric, s.afterMean),
                 })}
               </p>
             </div>
